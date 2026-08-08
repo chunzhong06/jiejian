@@ -1,0 +1,4 @@
+[jiejian]
+schema_version = "1"
+var_dir = "var"
+log_level = "INFO"

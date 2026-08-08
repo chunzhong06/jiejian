@@ -1,0 +1,51 @@
+"""阶段 0 领域模型与状态机。"""
+
+from .models import (
+    CaseLifecycle,
+    CaseVerdict,
+    Contract,
+    ContractStatus,
+    Job,
+    JobState,
+    Project,
+    ProjectStatus,
+    Recording,
+    RecordingState,
+    Run,
+    RunLifecycle,
+    RunVerdict,
+    StateTransitionEvent,
+    TestCase,
+)
+from .state_machines import (
+    allowed_transitions,
+    revise_contract,
+    set_case_verdict,
+    set_run_verdict,
+    transition_state,
+    update_contract_rules,
+)
+
+__all__ = [
+    "CaseLifecycle",
+    "CaseVerdict",
+    "Contract",
+    "ContractStatus",
+    "Job",
+    "JobState",
+    "Project",
+    "ProjectStatus",
+    "Recording",
+    "RecordingState",
+    "Run",
+    "RunLifecycle",
+    "RunVerdict",
+    "StateTransitionEvent",
+    "TestCase",
+    "allowed_transitions",
+    "revise_contract",
+    "set_case_verdict",
+    "set_run_verdict",
+    "transition_state",
+    "update_contract_rules",
+]

@@ -1,0 +1,29 @@
+# Python environments and build outputs
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Runtime data
+var/
+
+# Frontend dependencies and outputs
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
