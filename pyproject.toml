@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jiejian"
+version = "0.1.0"
+description = "界鉴阶段 0 工程骨架"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.10,<3",
+    "typer>=0.15,<1",
+]
+
+[project.scripts]
+jiejian = "jiejian.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/src/jiejian"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
