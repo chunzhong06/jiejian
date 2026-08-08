@@ -38,3 +38,25 @@ def redact(value: Any) -> Any:
             lambda match: f"{match.group(1)}{match.group(2)}{REDACTED}", value
         )
     return value
+
+
+def redact_known_secrets(value: Any, secrets: tuple[str, ...]) -> Any:
+    """递归替换运行时已解析秘密的精确值及其字符串包含形式。"""
+
+    normalized = tuple(
+        sorted({secret for secret in secrets if secret}, key=len, reverse=True)
+    )
+
+    def replace(item: Any) -> Any:
+        if isinstance(item, Mapping):
+            return {replace(key): replace(nested) for key, nested in item.items()}
+        if isinstance(item, list):
+            return [replace(nested) for nested in item]
+        if isinstance(item, tuple):
+            return tuple(replace(nested) for nested in item)
+        if isinstance(item, str):
+            for secret in normalized:
+                item = item.replace(secret, REDACTED)
+        return item
+
+    return replace(redact(value))

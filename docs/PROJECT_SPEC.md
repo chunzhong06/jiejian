@@ -154,7 +154,8 @@ API 进程不得直接向目标应用发起测试请求。所有主动验证流�
 
 | 层次 | V1 基线 |
 | --- | --- |
-| 后端语言 | Python 3.12 或项目锁定的兼容版本 |
+| 后端语言 | Python 3.13，项目元数据保持 `>=3.12` 兼容约束 |
+| Python 环境 | Conda `jiejian_env` |
 | API | FastAPI |
 | 数据模型 | Pydantic v2 |
 | ORM 与迁移 | SQLAlchemy 2、Alembic |
@@ -164,7 +165,7 @@ API 进程不得直接向目标应用发起测试请求。所有主动验证流�
 | 浏览器执行 | Playwright |
 | CLI | Typer |
 | 前端 | React、TypeScript、Vite、Ant Design |
-| Python 依赖 | uv |
+| Python 依赖 | Conda 环境内的 pip 从 `pyproject.toml` 安装；`uv.lock` 仅保留为未启用的兼容配置 |
 | 前端依赖 | pnpm |
 | 报告 | JSON、HTML、SARIF、JUnit |
 | 测试 | pytest、Vitest、Playwright |
@@ -386,43 +387,52 @@ API 进程不得直接向目标应用发起测试请求。所有主动验证流�
 ## 9. 状态机规范
 
 生命周期状态和安全结论必须分开存储，避免把“执行成功”误解为“安全通过”。
+下表是阶段 0、阶段 1 当前生产状态机的完整允许边；表中未列出的目标（包括自环）均为非法转换。
 
 ### 9.1 项目
 
-~~~text
-DRAFT → READY → ARCHIVED
-~~~
+| 当前状态 | 允许目标状态 |
+| --- | --- |
+| DRAFT | READY |
+| READY | ARCHIVED |
+| ARCHIVED | 无 |
 
 - DRAFT：配置尚未通过校验。
 - READY：授权边界、身份引用和最低运行配置有效。
 - ARCHIVED：只读保留，不再接受新任务。
 
-### 9.2 录制
+### 9.2 录制（阶段 3 预留）
 
-~~~text
-CREATED → STARTING → RECORDING → PROCESSING → REVIEWABLE → COMPLETED
-              ↘ FAILED      ↘ FAILED          ↘ CANCELLED
-~~~
-
-录制结束后必须先脱敏、标准化和依赖解析，才能进入人工审阅。
+阶段 0 和阶段 1 不实现 `Recording`、`RecordingState` 或录制状态机。阶段 3 引入浏览器录制时，再依据可见浏览器启动、处理中间态、失败恢复、取消和清理实验结果确定完整允许边，并同步更新本节与独立状态机矩阵测试。录制结束后仍必须先脱敏、标准化和依赖解析，才能进入人工审阅。
 
 ### 9.3 契约
 
-~~~text
-DRAFT → REVIEW → ACTIVE → SUPERSEDED
-          ↘ REJECTED
-~~~
+| 当前状态 | 允许目标状态 |
+| --- | --- |
+| DRAFT | REVIEW |
+| REVIEW | ACTIVE、REJECTED |
+| ACTIVE | SUPERSEDED |
+| SUPERSEDED | 无 |
+| REJECTED | 无 |
 
 只有 ACTIVE 契约可用于正式门禁。激活后内容不可变；修改产生新版本。
 
 ### 9.4 运行生命周期
 
-~~~text
-QUEUED → PREFLIGHT → PLANNING → EXECUTING → VERIFYING → REPORTING → COMPLETED
-           ↘ FAILED     ↘ FAILED      ↘ FAILED      ↘ FAILED
-                         ↘ CANCELLED
-                         ↘ SAFETY_STOPPED
-~~~
+| 当前状态 | 允许目标状态 |
+| --- | --- |
+| QUEUED | PREFLIGHT、CANCELLED |
+| PREFLIGHT | PLANNING、FAILED、CANCELLED、SAFETY_STOPPED |
+| PLANNING | EXECUTING、FAILED、CANCELLED、SAFETY_STOPPED |
+| EXECUTING | VERIFYING、FAILED、CANCELLED、SAFETY_STOPPED |
+| VERIFYING | REPORTING、FAILED、CANCELLED、SAFETY_STOPPED |
+| REPORTING | COMPLETED、FAILED、CANCELLED |
+| COMPLETED | 无 |
+| FAILED | 无 |
+| CANCELLED | 无 |
+| SAFETY_STOPPED | 无 |
+
+进入 COMPLETED 前必须已经设置独立运行结论。
 
 ### 9.5 运行结论
 
@@ -432,10 +442,17 @@ QUEUED → PREFLIGHT → PLANNING → EXECUTING → VERIFYING → REPORTING → 
 
 ### 9.6 用例生命周期
 
-~~~text
-PLANNED → SNAPSHOTTED → EXECUTED → OBSERVED → CLEANED → DONE
-             ↘ ERROR       ↘ ERROR       ↘ ERROR
-~~~
+| 当前状态 | 允许目标状态 |
+| --- | --- |
+| PLANNED | SNAPSHOTTED、ERROR |
+| SNAPSHOTTED | EXECUTED、ERROR |
+| EXECUTED | OBSERVED、ERROR |
+| OBSERVED | CLEANED、ERROR |
+| CLEANED | DONE、ERROR |
+| DONE | 无 |
+| ERROR | 无 |
+
+进入 DONE 前必须已经设置独立用例结论。
 
 ### 9.7 用例结论
 
@@ -449,12 +466,14 @@ ERROR 表示执行问题，INCONCLUSIVE 表示执行完成但证据不足，两�
 
 ### 9.8 任务
 
-~~~text
-PENDING → RUNNING → SUCCEEDED
-              ↘ RETRY_WAIT → RUNNING
-              ↘ FAILED
-              ↘ CANCELLED
-~~~
+| 当前状态 | 允许目标状态 |
+| --- | --- |
+| PENDING | RUNNING、CANCELLED |
+| RUNNING | SUCCEEDED、RETRY_WAIT、FAILED、CANCELLED |
+| RETRY_WAIT | RUNNING、CANCELLED |
+| SUCCEEDED | 无 |
+| FAILED | 无 |
+| CANCELLED | 无 |
 
 状态转换必须通过单一状态机函数完成，验证来源状态、目标状态、操作者和必要数据，并写入事件记录。不得在路由或 UI 中任意赋值。
 
@@ -467,6 +486,7 @@ PENDING → RUNNING → SUCCEEDED
 ~~~yaml
 schema_version: "1"
 project:
+  id: ownership-safe
   name: demo-shop
 target:
   base_url: http://127.0.0.1:8080
@@ -478,12 +498,9 @@ target:
     - 8080
   allow_private_network: true
   follow_redirects: false
-source:
-  kind: local
-  path: ../demo-shop
-requirements:
-  files:
-    - requirements/security.md
+  timeout_seconds: 5
+  max_requests: 64
+  max_response_bytes: 262144
 identities:
   - id: owner
     role: user
@@ -491,24 +508,28 @@ identities:
   - id: attacker
     role: user
     secret_ref: env:JIEJIAN_DEMO_ATTACKER
-reset:
-  kind: http
-  endpoint: /__test/reset
-safety:
-  max_requests: 200
-  max_duration_seconds: 600
-  max_parallel_cases: 2
-  destructive_actions: deny
+resources:
+  - id: owner-resource
+    owner_identity_id: owner
+  - id: attacker-resource
+    owner_identity_id: attacker
+flow: flow.yaml
+contract: contract.yaml
+observers:
+  owner_api: true
+mutation_seed: 7
 ~~~
 
 规则：
 
 - schema_version 必须显式提供。
 - target 先经过标准化再做授权校验。
+- 阶段 1 的 base_url、allowed_hosts 和 allowed_origins 只接受规范化 IPv4 字面量；域名和 IPv6 在具备地址固定传输层后再开放。
 - secret_ref 只引用外部秘密，配置文件不得保存明文。
-- source.path 解析后必须处于允许的项目目录。
-- reset 必须说明恢复策略；正式运行缺少恢复策略时，只允许只读测试集。
+- flow 和默认 contract 必须是相对于项目文件目录的路径，解析后不得越出该目录；CLI 显式提供的 `--contract` 是独立用户选择。
+- reset 在 Flow 中声明；阶段 1 只允许环回测试样例的显式 reset，缺少恢复策略时只允许只读测试集。
 - 未显式允许的目标、端口、重定向和协议一律拒绝。
+- `project validate` 只做 Schema、路径与交叉引用校验，不解析 DNS、不发出请求。
 
 ### 10.2 契约来源
 
@@ -525,71 +546,71 @@ safety:
 ### 10.3 契约规则最小结构
 
 ~~~yaml
-id: order-read-ownership
-subject:
-  identity_role: user
-action:
-  method: GET
-  route: /api/orders/{order_id}
-resource:
-  type: order
-  id_from: path.order_id
-relation:
-  baseline: owner
-  mutation: non_owner
-expected:
-  http:
-    allowed_status: [401, 403, 404]
-  side_effect:
-    must_not_read_foreign_resource: true
-observers:
-  required: [http, owner_api]
-severity: high
+schema_version: "1"
+contract:
+  id: ownership-contract
+  version: 1
+  status: ACTIVE
+  rules:
+    - id: foreign-read
+      kind: foreign_read
+      required_observers: [http]
+      severity: high
+    - id: unauthorized-side-effect
+      kind: unauthorized_side_effect
+      required_observers: [http, owner_api]
+      severity: critical
+    - id: privileged-field
+      kind: privileged_field
+      required_observers: [http, owner_api]
+      severity: critical
 ~~~
 
 ### 10.4 流程输入
 
-Flow 由有序步骤和显式依赖组成。动态值必须由提取器提供，禁止通过全局文本替换猜测。
+阶段 1 Flow 是人工提供的有序 HTTP 步骤，不支持脚本、动态提取器或任意请求头：
 
-每一步至少包含：
+~~~yaml
+schema_version: "1"
+flow:
+  id: ownership-flow
+  owner_observer_path: /owner/resources/{resource_id}
+  reset_path: /reset
+  steps:
+    - id: update-resource
+      method: PATCH
+      path: /resources/{resource_id}
+      identity_id: owner
+      resource_id: owner-resource
+      alternate_identity_id: attacker
+      alternate_resource_id: attacker-resource
+      json_body: {value: baseline-value}
+      expected_statuses: [200]
+~~~
 
-- 动作类型。
-- 目标模板。
-- 输入模板。
-- 身份。
-- 前置依赖。
-- 可提取变量。
-- 脱敏字段。
-- 超时。
-- 是否允许重试。
-- 清理动作引用。
+动态值只能在后续阶段由显式提取器提供，禁止通过全局文本替换猜测。身份秘密由执行器根据 `secret_ref` 在内存解析，Flow 不得配置 Authorization、Cookie 或明文凭据字段。
 
 ## 11. 输出和证据规范
 
 ### 11.1 单次运行目录
 
+阶段 1 同步纵切只创建已经具有真实内容的最小子集：
+
 ~~~text
 var/projects/<project_id>/runs/<run_id>/
 ├─ manifest.json
 ├─ mutation-plan.json
-├─ events.ndjson
+├─ events.json
 ├─ cases/
 │  └─ <case_id>/
-│     ├─ input.json
-│     ├─ request.json
-│     ├─ response.json
-│     ├─ observations.json
-│     ├─ verdict.json
-│     └─ artifacts/
+│     └─ evidence.json
 ├─ evidence/
 │  └─ <evidence_id>.json
-├─ regression.json
 └─ report/
-   ├─ report.json
-   ├─ index.html
-   ├─ results.sarif
-   └─ junit.xml
+   └─ report.json
 ~~~
+
+HTML、SARIF、JUnit、回归快照和浏览器工件在其对应阶段实现；不得为满足目标目录树而创建空文件。阶段 1 在同一文件系统的临时运行目录内逐文件原子写入，最后写 manifest 并原子替换为最终运行目录。
 
 ### 11.2 manifest 必含字段
 
@@ -611,17 +632,18 @@ var/projects/<project_id>/runs/<run_id>/
   "evidence_id": "ev_...",
   "run_id": "run_...",
   "case_id": "case_...",
-  "rule_id": "order-read-ownership",
-  "baseline": {"identity": "owner", "resource": "order-a"},
-  "mutation": {"identity": "attacker", "resource": "order-a"},
-  "observations": [],
-  "reasoning": {
-    "oracle": "ownership_relation",
-    "decision": "VULNERABLE",
-    "reason_codes": ["FOREIGN_RESOURCE_OBSERVED"]
-  },
-  "causal_tag": "jj-...",
-  "content_hash": "sha256:..."
+  "fingerprint": "...",
+  "rule_id": "unauthorized-side-effect",
+  "mutation": "identity_swap",
+  "verdict": "VULNERABLE",
+  "reason_codes": ["UNAUTHORIZED_SIDE_EFFECT"],
+  "request": {"method": "PATCH", "path": "/resources/owner-resource"},
+  "observations": [
+    {"observer": "http", "phase": "mutation", "status_code": 403},
+    {"observer": "owner_api", "phase": "before", "data": {"value": "old"}},
+    {"observer": "owner_api", "phase": "after", "data": {"value": "new"}}
+  ],
+  "evidence_hash": "..."
 }
 ~~~
 
@@ -741,7 +763,7 @@ READY → EVICTED
 ### 14.2 录制
 
 1. 用户创建录制任务。
-2. 服务写入 Recording 和 Job。
+2. 阶段 3 录制服务在引入录制领域对象后写入 Recording 和 Job；阶段 0、阶段 1 不执行此流程。
 3. Worker 获取租约并启动隔离 Runner。
 4. Runner 创建独立浏览器上下文和短期会话材料。
 5. 用户完成正常业务流程。
@@ -856,8 +878,8 @@ Oracle 采用显式规则，不使用自由文本模型直接判定。一个高�
 
 - 规范化 scheme、host、port 和 path。
 - 每次请求和每次重定向都重新校验。
-- DNS 解析结果必须落在允许地址集合；解析变化时重新判断。
-- 默认拒绝云元数据地址、环回以外的私网和链路本地地址；仅在项目配置显式授权时开放。
+- 阶段 1 不接受 DNS 主机名，只执行规范化 IPv4 字面量，避免授权检查与 HTTP 客户端再次解析之间的重绑定窗口。后续支持域名时必须由能够固定已授权地址的传输层执行，不能恢复“先校验 DNS、连接时重新解析”的实现。
+- 默认拒绝私网和环回；仅在项目配置显式授权时开放 RFC1918、ULA 或环回。云元数据、链路本地、组播、保留和未指定地址即使启用私网也拒绝。
 - 浏览器子资源和 WebSocket 同样受范围约束。
 
 ### 16.2 预算
@@ -870,6 +892,8 @@ Oracle 采用显式规则，不使用自由文本模型直接判定。一个高�
 - 浏览器页数和上下文数。
 - 重试次数。
 
+阶段 1 将清理请求计入总请求预算，并在计划开始时从同一预算中预留每个用例的前后清理额度；普通请求不得挤占清理额度。
+
 超出预算进入 SAFETY_STOPPED，不得伪装为普通失败。
 
 ### 16.3 秘密
@@ -877,6 +901,7 @@ Oracle 采用显式规则，不使用自由文本模型直接判定。一个高�
 - 秘密通过环境变量、系统密钥环或受控秘密适配器解析。
 - Runner 只获得当前用例最小必要秘密。
 - 日志、事件、错误和报告统一经过脱敏器。
+- HTTP 响应进入 Observation 前，必须对本次运行已解析的全部秘密值做大小写敏感的精确递归替换；无论秘密位于普通字段、嵌套容器还是字符串片段中，都不得进入 Evidence、报告或 CLI。
 - 浏览器存储状态按身份与运行隔离，运行结束销毁。
 - 用户提供 API Key 时在保存前明确提示权限和用途。
 
@@ -961,6 +986,7 @@ GET    /runs/{run_id}/report
 ## 19. CLI 规范
 
 - 命令输出默认适合人阅读；提供 --json 供脚本使用。
+- 阶段 1 的 `project validate`、`contract validate`、`run`、`report --format json` 和 `ci` 先固定输出单个规范 JSON 对象；`doctor` 保持人类输出并支持 `--json`。后续增加人类报告格式时不得改变 JSON 字段和退出码。
 - stdout 输出正常结果，stderr 输出诊断。
 - 无交互命令不得突然请求输入。
 - 所有写操作支持 --yes 或显式交互确认。
@@ -1078,6 +1104,7 @@ V1 内部先使用稳定协议，不急于公开插件市场。
 - 配置优先级：内置默认值 < 配置文件 < 环境变量 < CLI 参数。
 - 每个配置来源可追踪，但秘密值不回显。
 - schema_version、engine_version、contract_version 和 plugin_version 必须独立。
+- 阶段 1 起，engine_version 从已安装发行包元数据读取；根包不得维护重复版本常量。
 - 数据库迁移只向前执行，降级需显式方案。
 - 报告读取器至少兼容当前版本和前一稳定版本。
 
@@ -1119,5 +1146,10 @@ V1 内部先使用稳定协议，不急于公开插件市场。
 
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |
+| 2026-08-08 | V1.6 | 环境流程收敛为 Conda 创建、激活后由环境内 pip 安装依赖，不再使用 uv 配置环境 |
+| 2026-08-08 | V1.5 | 项目运行环境迁移为 `jiejian_env` Conda 环境，保留 uv 锁文件作为幂等依赖同步入口 |
+| 2026-08-08 | V1.4 | 阶段 1 收紧为 IPv4 字面量目标，并在 HTTP 响应边界按运行时秘密值递归脱敏 |
+| 2026-08-08 | V1.3 | 固化阶段 1 可执行 YAML 子集、目标范围、同步证据目录、JSON CLI 与黄金场景判定 |
+| 2026-08-08 | V1.2 | 延后录制领域对象，明确五台状态机完整允许边，并收敛错误、配置和版本真源 |
 | 2026-08-08 | V1.1 | 明确私有辅助函数复用、零调用符号清理与模块行数审查规则 |
 | 2026-08-08 | V1 | 建立产品定位、目录、分层、状态机、输入输出、缓存、调用链、安全边界、入口和修订机制 |

@@ -12,13 +12,6 @@ from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from .errors import ErrorCode, JiejianError
 
-_BUILT_IN_DEFAULTS: dict[str, Any] = {
-    "schema_version": "1",
-    "var_dir": Path("var"),
-    "log_level": "INFO",
-    "trace_id": None,
-}
-
 _ENVIRONMENT_KEYS = {
     "JIEJIAN_SCHEMA_VERSION": "schema_version",
     "JIEJIAN_VAR_DIR": "var_dir",
@@ -108,7 +101,7 @@ def load_settings(
 ) -> LoadedSettings:
     """按内置、默认文件、显式文件、环境变量、CLI 的顺序加载配置。"""
 
-    merged = dict(_BUILT_IN_DEFAULTS)
+    merged: dict[str, Any] = Settings().model_dump()
     sources = {key: "built-in" for key in merged}
 
     selected_default = default_path if default_path is not None else default_config_path()

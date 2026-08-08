@@ -231,6 +231,20 @@ jiejian ci samples/projects/ownership/project.yaml
 - 证据中不存在测试口令、Cookie 或令牌。
 - CI 退出码与规范一致。
 
+### 4.8 当前实现映射
+
+阶段 1 首版按真实职责合并为少数模块，不机械复制 4.3 的目标目录树：
+
+- `domain/stage1.py`：输入、变异、观察、证据与运行结果模型。
+- `inputs.py`：安全 YAML、项目内相对引用和跨文件校验。
+- `safety.py`：TargetScope、IPv4 字面量、origin、端口与重定向边界；阶段 1 拒绝域名和 IPv6，避免 DNS 重绑定窗口。
+- `engine.py`：确定性变异、HTTP 预算执行、ownership oracle 与证据哈希。
+- `services.py`：同步基线、变异、前后观察、清理和门禁聚合。
+- `artifacts.py`：规范 JSON、哈希校验和临时目录原子提交。
+- `sample_app.py`：只绑定 127.0.0.1 的 safe/vulnerable 标准库样例。
+
+阶段 1 不创建数据库、队列、Worker、Runner、Playwright、API、GUI、LLM、插件或完整 SARIF/HTML/JUnit 报告；这些能力仍按后续阶段验收后引入。
+
 ## 5. 阶段 2：持久化任务、Worker 与 Runner
 
 ### 5.1 目标
@@ -528,7 +542,8 @@ LLM 放在最后接入，先证明没有模型也能完成契约的创建、验�
 ### 12.2 安全内核
 
 - origin、端口、协议、重定向和 DNS 边界。
-- IPv4、IPv6 和混合表示。
+- 阶段 1 允许规范化 IPv4 字面量，拒绝域名、IPv6 和混合表示；后续只有在传输层能固定已授权地址时才扩展。
+- 目标把任一已解析身份秘密回显到普通字段、嵌套结构或字符串片段时，Evidence、报告和 CLI 均只出现 `[REDACTED]`。
 - URL 用户信息、编码和路径标准化。
 - 请求预算、响应体预算和超时。
 - 日志脱敏与异常脱敏。

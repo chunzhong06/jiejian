@@ -16,8 +16,6 @@ from .models import (
     JobState,
     Project,
     ProjectStatus,
-    Recording,
-    RecordingState,
     Run,
     RunLifecycle,
     RunVerdict,
@@ -26,7 +24,7 @@ from .models import (
 )
 from ..errors import ErrorCode, JiejianError
 
-DomainEntity: TypeAlias = Project | Recording | Contract | Run | TestCase | Job
+DomainEntity: TypeAlias = Project | Contract | Run | TestCase | Job
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,25 +41,6 @@ _MACHINES: dict[type[EntityModel], _Machine] = {
         {
             ProjectStatus.DRAFT: frozenset({ProjectStatus.READY}),
             ProjectStatus.READY: frozenset({ProjectStatus.ARCHIVED}),
-        },
-    ),
-    Recording: _Machine(
-        "state",
-        RecordingState,
-        {
-            RecordingState.CREATED: frozenset({RecordingState.STARTING}),
-            RecordingState.STARTING: frozenset(
-                {RecordingState.RECORDING, RecordingState.FAILED, RecordingState.CANCELLED}
-            ),
-            RecordingState.RECORDING: frozenset(
-                {RecordingState.PROCESSING, RecordingState.FAILED, RecordingState.CANCELLED}
-            ),
-            RecordingState.PROCESSING: frozenset(
-                {RecordingState.REVIEWABLE, RecordingState.FAILED, RecordingState.CANCELLED}
-            ),
-            RecordingState.REVIEWABLE: frozenset(
-                {RecordingState.COMPLETED, RecordingState.CANCELLED}
-            ),
         },
     ),
     Contract: _Machine(
@@ -187,12 +166,6 @@ def _target_state(machine: _Machine, target: Enum | str) -> Enum:
             "目标状态不存在",
             details={"target": str(target)},
         ) from exc
-
-
-def allowed_transitions(entity: DomainEntity) -> frozenset[Enum]:
-    machine = _machine_for(entity)
-    current = getattr(entity, machine.field)
-    return machine.transitions.get(current, frozenset())
 
 
 def _validate_precondition(entity: DomainEntity, target: Enum) -> None:
