@@ -2,7 +2,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jiejian.config import load_settings
+import jiejian.config as config_module
+from jiejian.config import Settings, load_settings
+
+
+def test_built_in_defaults_are_generated_from_settings(
+    isolated_environment: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(config_module, "default_config_path", lambda: None)
+
+    loaded = load_settings(environ={})
+
+    assert loaded.settings == Settings()
+    assert loaded.sources == {
+        "schema_version": "built-in",
+        "var_dir": "built-in",
+        "log_level": "built-in",
+        "trace_id": "built-in",
+    }
 
 
 def test_configuration_source_precedence(

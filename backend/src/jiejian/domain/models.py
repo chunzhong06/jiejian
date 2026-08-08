@@ -16,17 +16,6 @@ class ProjectStatus(StrEnum):
     ARCHIVED = "ARCHIVED"
 
 
-class RecordingState(StrEnum):
-    CREATED = "CREATED"
-    STARTING = "STARTING"
-    RECORDING = "RECORDING"
-    PROCESSING = "PROCESSING"
-    REVIEWABLE = "REVIEWABLE"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
-
-
 class ContractStatus(StrEnum):
     DRAFT = "DRAFT"
     REVIEW = "REVIEW"
@@ -104,11 +93,6 @@ class EntityModel(DomainModel):
 class Project(EntityModel):
     name: str = Field(min_length=1)
     status: ProjectStatus = ProjectStatus.DRAFT
-
-
-class Recording(EntityModel):
-    project_id: UUID
-    state: RecordingState = RecordingState.CREATED
 
 
 class Contract(EntityModel):

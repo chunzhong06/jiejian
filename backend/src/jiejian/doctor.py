@@ -55,7 +55,7 @@ def _python_check() -> DoctorCheck:
 def _dependency_check() -> DoctorCheck:
     installed: dict[str, str] = {}
     missing: list[str] = []
-    for package in ("pydantic", "typer"):
+    for package in ("httpx", "PyYAML", "pydantic", "typer"):
         try:
             installed[package] = version(package)
         except PackageNotFoundError:
@@ -181,7 +181,7 @@ def _playwright_check() -> DoctorCheck:
         name="playwright",
         required=False,
         ok=available,
-        message="Playwright 可用" if available else "Playwright 未安装（阶段 0 可选）",
+        message="Playwright 可用" if available else "Playwright 未安装（当前阶段可选）",
     )
 
 

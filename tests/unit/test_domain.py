@@ -14,8 +14,6 @@ from jiejian.domain import (
     JobState,
     Project,
     ProjectStatus,
-    Recording,
-    RecordingState,
     Run,
     RunLifecycle,
     RunVerdict,
@@ -43,35 +41,6 @@ EXPECTED_TRANSITIONS = {
             ProjectStatus.DRAFT: (ProjectStatus.READY,),
             ProjectStatus.READY: (ProjectStatus.ARCHIVED,),
             ProjectStatus.ARCHIVED: (),
-        },
-    ),
-    Recording: (
-        "state",
-        RecordingState,
-        {
-            RecordingState.CREATED: (RecordingState.STARTING,),
-            RecordingState.STARTING: (
-                RecordingState.RECORDING,
-                RecordingState.FAILED,
-                RecordingState.CANCELLED,
-            ),
-            RecordingState.RECORDING: (
-                RecordingState.PROCESSING,
-                RecordingState.FAILED,
-                RecordingState.CANCELLED,
-            ),
-            RecordingState.PROCESSING: (
-                RecordingState.REVIEWABLE,
-                RecordingState.FAILED,
-                RecordingState.CANCELLED,
-            ),
-            RecordingState.REVIEWABLE: (
-                RecordingState.COMPLETED,
-                RecordingState.CANCELLED,
-            ),
-            RecordingState.COMPLETED: (),
-            RecordingState.FAILED: (),
-            RecordingState.CANCELLED: (),
         },
     ),
     Contract: (
@@ -197,8 +166,6 @@ ILLEGAL_TRANSITION_CASES = [
 def _entity_at_state(entity_type, state):
     if entity_type is Project:
         return Project(name="demo", status=state)
-    if entity_type is Recording:
-        return Recording(project_id=uuid4(), state=state)
     if entity_type is Contract:
         return Contract(rules=("ownership",), status=state)
     if entity_type is Run:
@@ -221,16 +188,6 @@ def _entity_at_state(entity_type, state):
 
 def test_state_sets_match_project_spec_section_9() -> None:
     assert {state.value for state in ProjectStatus} == {"DRAFT", "READY", "ARCHIVED"}
-    assert {state.value for state in RecordingState} == {
-        "CREATED",
-        "STARTING",
-        "RECORDING",
-        "PROCESSING",
-        "REVIEWABLE",
-        "COMPLETED",
-        "FAILED",
-        "CANCELLED",
-    }
     assert {state.value for state in ContractStatus} == {
         "DRAFT",
         "REVIEW",
@@ -316,16 +273,6 @@ def test_all_other_same_machine_transitions_are_rejected(
 def test_all_primary_legal_lifecycle_paths() -> None:
     project = _advance(Project(name="demo"), ProjectStatus.READY, ProjectStatus.ARCHIVED)
     assert project.status is ProjectStatus.ARCHIVED
-
-    recording = _advance(
-        Recording(project_id=project.id),
-        RecordingState.STARTING,
-        RecordingState.RECORDING,
-        RecordingState.PROCESSING,
-        RecordingState.REVIEWABLE,
-        RecordingState.COMPLETED,
-    )
-    assert recording.state is RecordingState.COMPLETED
 
     contract = _advance(
         Contract(rules=("ownership",)), ContractStatus.REVIEW, ContractStatus.ACTIVE

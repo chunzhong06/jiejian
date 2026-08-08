@@ -1,0 +1,6 @@
+name: jiejian_env
+channels:
+  - defaults
+dependencies:
+  - python=3.13
+  - pip

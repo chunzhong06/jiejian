@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
+from secrets import token_urlsafe
+from threading import Thread
+from types import SimpleNamespace
+from typing import Any, Callable
 
 import pytest
+import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = PROJECT_ROOT / "backend" / "src"
 sys.path.insert(0, str(SOURCE_ROOT))
+
+from jiejian.sample_app import create_sample_server
 
 
 @pytest.fixture
@@ -18,3 +26,79 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Pat
             monkeypatch.delenv(key, raising=False)
     monkeypatch.chdir(tmp_path)
     return tmp_path
+
+
+@pytest.fixture
+def sample_server_factory(request: pytest.FixtureRequest) -> Callable[..., Any]:
+    running: list[tuple[Any, Thread]] = []
+
+    def start(
+        variant: str = "safe",
+        *,
+        fail_cleanup: bool = False,
+        echo_identity: str | None = None,
+    ) -> Any:
+        tokens = {
+            "owner": f"owner-{token_urlsafe(18)}",
+            "attacker": f"attacker-{token_urlsafe(18)}",
+        }
+        server = create_sample_server(
+            variant=variant,
+            tokens=tokens,
+            fail_cleanup=fail_cleanup,
+            echo_secret=tokens.get(echo_identity) if echo_identity else None,
+        )
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        running.append((server, thread))
+        return SimpleNamespace(
+            server=server,
+            port=server.server_port,
+            tokens=tokens,
+            environ={
+                "JIEJIAN_SAMPLE_OWNER_TOKEN": tokens["owner"],
+                "JIEJIAN_SAMPLE_ATTACKER_TOKEN": tokens["attacker"],
+            },
+        )
+
+    def stop_all() -> None:
+        for server, thread in running:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    request.addfinalizer(stop_all)
+    return start
+
+
+@pytest.fixture
+def stage1_project_factory(tmp_path: Path) -> Callable[..., Path]:
+    created = 0
+
+    def create(
+        port: int,
+        *,
+        owner_observer: bool = True,
+        max_requests: int = 64,
+        max_response_bytes: int = 262_144,
+    ) -> Path:
+        nonlocal created
+        created += 1
+        target = tmp_path / f"project-{created}"
+        shutil.copytree(PROJECT_ROOT / "samples" / "projects" / "ownership-safe", target)
+        project_path = target / "project.yaml"
+        document = yaml.safe_load(project_path.read_text(encoding="utf-8"))
+        document["project"]["id"] = f"test-project-{created}"
+        document["target"]["base_url"] = f"http://127.0.0.1:{port}"
+        document["target"]["allowed_origins"] = [f"http://127.0.0.1:{port}"]
+        document["target"]["allowed_ports"] = [port]
+        document["target"]["max_requests"] = max_requests
+        document["target"]["max_response_bytes"] = max_response_bytes
+        document["observers"]["owner_api"] = owner_observer
+        project_path.write_text(
+            yaml.safe_dump(document, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        return project_path
+
+    return create
