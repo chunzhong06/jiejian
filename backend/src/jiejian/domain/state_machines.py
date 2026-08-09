@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, TypeAlias
 
-from .models import (
+from .lifecycle import (
     CaseLifecycle,
     CaseVerdict,
     Contract,

@@ -1,12 +1,18 @@
 # 界鉴
 
-当前仓库已实现“阶段 1：CLI 安全验证纵切”。在阶段 0 配置、状态机、日志和脱敏基础上，可从人工 YAML 加载项目、Flow 与 Contract，在明确授权的本机目标上执行关系变异，并生成带哈希的 JSON 证据和 PASS/BLOCK/INCONCLUSIVE 门禁。
+界鉴用于验证 Vibe Coding Web 应用是否真正满足安全意图。当前核心链路是：
 
-## 环境与安装
+```text
+安全意图 -> 可执行契约 -> 关系变异 -> 多面观察 -> 确认证据 -> 回归门禁
+```
 
-- Conda
+仓库已完成阶段 1 安全验证和阶段 2 基础链路：Runner 协议、SQLite 持久化、Job 控制面、隔离 Runner、原子工件发布与恢复。`run` 与 `ci` 提交持久 Job，由独立 Worker 启动 Runner；所有目标流量只由 Runner 进程发出。
 
-项目统一使用名为 `jiejian_env` 的 Conda 环境，Python 固定为 3.13。首次配置或依赖变化后，在项目根目录执行：
+第一次了解项目，依次阅读 [项目总览](docs/项目总览.md)、[架构说明](docs/架构说明.md)和[模块地图](docs/模块地图.md)。按开发、审查和比赛展示分类的完整入口见[文档导航](docs/README.md)。
+
+## 环境
+
+项目使用 Python 3.13 的 Conda 环境 `jiejian_env`：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-conda.ps1
@@ -14,62 +20,30 @@ conda activate jiejian_env
 jiejian --help
 ```
 
-脚本根据 `environment.yml` 创建 Conda 环境，再使用该环境自己的 pip 从 `pyproject.toml` 安装项目及 `dev` 依赖组。重复运行脚本会复用现有环境。`uv.lock` 继续保留，但不参与 Conda 环境的创建、安装或运行。
+脚本使用环境内 pip 从 `pyproject.toml` 安装项目和开发依赖。`uv.lock` 只保留为未启用的兼容锁，不用于创建或运行环境。
 
-不用脚本时，等价的手动流程是：
+## 当前入口
 
-```powershell
-conda env create --file .\environment.yml
-conda activate jiejian_env
-python -B -m pip install --group dev --editable .
-```
-
-## 当前可用命令
+唯一安装的产品命令入口是 `jiejian`：
 
 ```powershell
-jiejian doctor
 jiejian doctor --json
-jiejian project validate .\samples\projects\ownership-safe\project.yaml
-jiejian contract validate .\samples\projects\ownership-safe\contract.yaml
-jiejian run .\samples\projects\ownership-safe\project.yaml --contract .\samples\projects\ownership-safe\contract.yaml
+jiejian project validate .\samples\fixed_apps\ownership\project.yaml
+jiejian contract validate .\samples\fixed_apps\ownership\contract.yaml
+jiejian run .\samples\fixed_apps\ownership\project.yaml --contract .\samples\fixed_apps\ownership\contract.yaml
 jiejian report <run_id> --format json
-jiejian ci .\samples\projects\ownership-safe\project.yaml
+jiejian ci .\samples\fixed_apps\ownership\project.yaml
 ```
 
-全局配置覆盖参数必须写在子命令之前：
+本机黄金样例入口保持为：
 
 ```powershell
-jiejian --config .\config\default.toml --var-dir .\var --log-level INFO doctor --json
-```
-
-配置优先级固定为：内置默认值 `<` `config/default.toml` `<` 显式配置文件 `<` `JIEJIAN_` 环境变量 `<` CLI 参数。相对 `var_dir` 按当前工作目录解析，目录由程序按需创建。
-
-## 本机黄金样例
-
-样例应用只绑定 `127.0.0.1`，身份值从环境变量读取。先在一个终端启动 safe 版本：
-
-```powershell
-$env:JIEJIAN_SAMPLE_OWNER_TOKEN = "local-owner-token"
-$env:JIEJIAN_SAMPLE_ATTACKER_TOKEN = "local-attacker-token"
 python -B -m jiejian.sample_app --variant safe --port 8765
-```
-
-再在另一个终端执行 safe 项目，预期 `PASS` 和 CI 退出码 0。vulnerable 项目使用端口 8766：
-
-```powershell
 python -B -m jiejian.sample_app --variant vulnerable --port 8766
-jiejian ci .\samples\projects\ownership-vulnerable\project.yaml
 ```
 
-缺陷版本会先写资源再返回 HTTP 403；owner_api 的前后观察仍会确认副作用，最终输出 `BLOCK`，CI 退出码为 1。关闭项目文件中的 `observers.owner_api` 时输出 `INCONCLUSIVE`，退出码为 2。
+safe 预期 `PASS`/退出码 0，vulnerable 预期 `BLOCK`/退出码 1；缺少必要观察时为 `INCONCLUSIVE`/退出码 2。
 
-运行测试时禁止写入 Python 字节码缓存：
+阶段 2.1 的生产建库入口是 `jiejian.storage.upgrade_database()`，默认数据库路径为 `<var_dir>/jiejian.db`。持久请求和 attempt staging 位于 `<var_dir>/jobs/<job_id>/`；验证通过的完整 staging 原子发布到 `<var_dir>/projects/<project_id>/runs/<run_id>/`，随后才写数据库完成态。真实秘密只进入当前 Runner 的最小环境。
 
-```powershell
-$env:PYTHONDONTWRITEBYTECODE = "1"
-python -B -m pytest -p no:cacheprovider
-```
-
-## 当前限制
-
-阶段 1 只支持以 IPv4 字面量声明的同步 HTTP 目标、IdentitySwap、ResourceSwap、特权字段变异、HTTP/owner_api 观察和 JSON 报告。域名和 IPv6 暂不进入可执行目标；这是为了避免 DNS 校验与实际连接之间的重绑定窗口。HTTP 响应进入 Observation 前会按本次运行已解析的全部身份秘密做精确递归脱敏。尚未实现 API、业务数据库、Worker、Runner、浏览器录制、GUI、TUI、LLM、插件、SARIF、HTML 或 JUnit。`doctor` 只报告 Playwright 是否可用，缺失不会导致必要检查失败。
+`report <run_id>` 会校验已发布 manifest、文件哈希和数据库完成态。发布后提交失败的目录由 reconciliation 幂等补齐；旧 fencing token 和孤儿目录不能写完成态，只能进入受控 quarantine。当前仍没有 API、浏览器录制、GUI、LLM、插件或完整 HTML/SARIF/JUnit 报告。

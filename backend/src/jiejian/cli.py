@@ -4,19 +4,44 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
+import time
 from typing import NoReturn
+from uuid import uuid4
+
+from functools import partial
 
 import typer
 
-from .config import Settings, load_settings
-from .doctor import human_lines, run_doctor
-from .domain.models import RunVerdict
+from .domain.lifecycle import RunLifecycle, RunVerdict
+from .domain.verification import RunResult
 from .errors import ErrorCode, JiejianError
-from .artifacts import load_report
-from .inputs import load_contract, load_project_bundle
-from .logging import configure_logging
-from .services import RunService
+from .runtime.config import Settings, load_settings
+from .runtime.diagnostics import human_lines, run_doctor
+from .runtime.logging import configure_logging
+from .protocols import (
+    ExecutionBudgetV1,
+    ExecutionProjectSnapshotV1,
+    RunnerResultType,
+)
+from .storage import (
+    StorageUnitOfWork,
+    create_session_factory,
+    create_sqlite_engine,
+    default_database_path,
+    upgrade_database,
+)
+from .verification.artifacts import load_report
+from .verification.inputs import ProjectBundle, load_contract, load_project_bundle
+from .worker import (
+    ExecutionRequestStore,
+    ExecutionSubmissionService,
+    PersistedExecutionRequestV1,
+    SubmitExecutionV1,
+    WorkerDispatcher,
+    required_secret_names,
+)
 
 app = typer.Typer(
     name="jiejian",
@@ -119,14 +144,12 @@ def run_command(
     project_path: Path,
     contract_path: Path = typer.Option(..., "--contract", help="显式契约文件"),
 ) -> None:
-    """同步执行安全验证并写入不可变 JSON 产物。"""
+    """提交持久任务并等待隔离 Runner 的已发布结果。"""
 
     try:
         settings = _runtime_settings(context)
-        result = RunService(settings.var_dir).run(
-            project_path,
-            contract_path=contract_path,
-        )
+        bundle = load_project_bundle(project_path, contract_path=contract_path)
+        result = _run_persisted_job(settings, bundle)
         _emit_json(result.model_dump(mode="json"))
     except JiejianError as exc:
         _fail(exc)
@@ -138,12 +161,13 @@ def report_command(
     run_id: str,
     output_format: str = typer.Option("json", "--format", help="报告格式"),
 ) -> None:
-    """按运行 ID 读取阶段 1 JSON 报告。"""
+    """按运行 ID 读取完整性校验后的 JSON 报告。"""
 
     if output_format.lower() != "json":
         _fail(JiejianError(ErrorCode.INPUT_INVALID, "阶段 1 只支持 JSON 报告"))
     try:
         settings = _runtime_settings(context)
+        _require_published_completion(settings.var_dir, run_id)
         _emit_json(load_report(settings.var_dir, run_id))
     except JiejianError as exc:
         _fail(exc)
@@ -151,11 +175,12 @@ def report_command(
 
 @app.command("ci")
 def ci_command(context: typer.Context, project_path: Path) -> None:
-    """执行同步门禁，并用 0/1/2 表示 PASS/BLOCK/INCONCLUSIVE。"""
+    """提交持久门禁任务，并用 0/1/2 表示安全结论。"""
 
     try:
         settings = _runtime_settings(context)
-        result = RunService(settings.var_dir).run(project_path)
+        bundle = load_project_bundle(project_path)
+        result = _run_persisted_job(settings, bundle)
         _emit_json(result.model_dump(mode="json"))
         raise typer.Exit(
             code={
@@ -183,6 +208,167 @@ def _runtime_settings(context: typer.Context) -> Settings:
         trace_id=loaded.settings.trace_id,
     )
     return loaded.settings
+
+
+def _run_persisted_job(settings: Settings, bundle: ProjectBundle) -> RunResult:
+    var_dir = settings.var_dir.resolve()
+    database_path = default_database_path(var_dir)
+    upgrade_database(database_path)
+    engine = create_sqlite_engine(database_path)
+    try:
+        factory = create_session_factory(engine)
+        uow_factory = partial(StorageUnitOfWork, factory)
+        request = _persisted_request(bundle)
+        secret_names = required_secret_names(request)
+        known_secrets = _required_secrets(secret_names)
+        submission = ExecutionSubmissionService(
+            uow_factory,
+            ExecutionRequestStore(var_dir),
+        ).submit(
+            SubmitExecutionV1(
+                request=request,
+                idempotency_key=f"cli-{uuid4().hex}",
+                max_attempts=3,
+                available_at_us=time.time_ns() // 1_000,
+                now_us=time.time_ns() // 1_000,
+            ),
+            known_secrets=known_secrets,
+        )
+        dispatcher = WorkerDispatcher(
+            var_dir=var_dir,
+            uow_factory=uow_factory,
+            environ=os.environ,
+        )
+        process = dispatcher.start(
+            job_id=submission.job.job_id,
+            lease_owner=f"worker-{uuid4().hex}",
+            secret_names=secret_names,
+        )
+        staged = dispatcher.wait(
+            submission.job.job_id,
+            process,
+            known_secrets=known_secrets,
+            timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000 + 60,
+        )
+        if staged.result.result_type is RunnerResultType.SUCCESS:
+            return _published_run_result(
+                var_dir,
+                staged.paths.staging_dir,
+                staged.result.run_id,
+            )
+        if staged.result.result_type is RunnerResultType.SAFETY_STOPPED:
+            raise JiejianError(
+                staged.result.reason_codes[0],
+                "Runner 因安全边界主动停止",
+            )
+        if staged.result.result_type is RunnerResultType.CANCELLED:
+            raise JiejianError(ErrorCode.EXEC_CANCELLED, "运行已经安全取消")
+        error_code = (
+            staged.result.error.code
+            if staged.result.error is not None
+            else ErrorCode.RUNNER_RESULT_MISSING.value
+        )
+        raise JiejianError(error_code, "Runner 执行未形成安全结论")
+    finally:
+        engine.dispose()
+
+
+def _persisted_request(bundle: ProjectBundle) -> PersistedExecutionRequestV1:
+    project = bundle.project
+    snapshot = ExecutionProjectSnapshotV1(
+        schema_version="1",
+        project_id=project.id,
+        project_name=project.name,
+        target=project.target,
+        identities=project.identities,
+        resources=project.resources,
+        flow=bundle.flow,
+        contract=bundle.contract,
+        owner_observer_enabled=project.owner_observer_enabled,
+        mutation_seed=project.mutation_seed,
+    )
+    duration = min(
+        max(int(project.target.timeout_seconds * project.target.max_requests * 1_000_000), 1),
+        3_600_000_000,
+    )
+    return PersistedExecutionRequestV1(
+        schema_version="1",
+        budget=ExecutionBudgetV1(
+            schema_version="1",
+            max_requests=project.target.max_requests,
+            request_timeout_us=int(project.target.timeout_seconds * 1_000_000),
+            max_duration_us=duration,
+            max_response_bytes=project.target.max_response_bytes,
+            max_parallel_cases=1,
+        ),
+        project_snapshot=snapshot,
+    )
+
+
+def _required_secrets(names: tuple[str, ...]) -> tuple[str, ...]:
+    values: list[str] = []
+    for name in names:
+        value = os.environ.get(name)
+        if not value:
+            raise JiejianError(
+                ErrorCode.SECRET_MISSING,
+                "身份环境变量未设置",
+            )
+        values.append(value)
+    return tuple(values)
+
+
+def _published_run_result(
+    var_dir: Path,
+    staging_dir: Path,
+    run_id: str,
+) -> RunResult:
+    report_path = staging_dir / "artifacts" / "report" / "report.json"
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        return RunResult.model_validate(
+            {
+                "schema_version": "1",
+                "run_id": report["run_id"],
+                "project_id": report["project_id"],
+                "engine_version": report["engine_version"],
+                "verdict": report["verdict"],
+                "reason_codes": report["reason_codes"],
+                "evidence": report["evidence"],
+                "artifact_dir": str(
+                    var_dir / "projects" / report["project_id"] / "runs" / run_id
+                ),
+            }
+        )
+    except (OSError, json.JSONDecodeError, KeyError, ValueError):
+        raise JiejianError(
+            ErrorCode.RUNNER_PROTOCOL_INVALID,
+            "Runner 已发布报告不可读取",
+        ) from None
+
+
+def _require_published_completion(var_dir: Path, run_id: str) -> None:
+    manifests = list(
+        var_dir.resolve().glob(
+            f"projects/*/runs/{run_id}/publication-manifest.json"
+        )
+    )
+    if not manifests:
+        return
+    if len(manifests) != 1:
+        raise JiejianError(ErrorCode.REPORT_NOT_FOUND, "未找到唯一已发布运行")
+    database_path = default_database_path(var_dir.resolve())
+    if not database_path.is_file():
+        raise JiejianError(ErrorCode.REPORT_NOT_FOUND, "已发布运行尚未完成持久化")
+    engine = create_sqlite_engine(database_path)
+    try:
+        factory = create_session_factory(engine)
+        with StorageUnitOfWork(factory) as work:
+            run = work.runs.get(run_id)
+        if run is None or run.lifecycle is not RunLifecycle.COMPLETED:
+            raise JiejianError(ErrorCode.REPORT_NOT_FOUND, "已发布运行尚未完成持久化")
+    finally:
+        engine.dispose()
 
 
 def _emit_json(payload: object) -> None:
@@ -219,6 +405,8 @@ def _fail(error: JiejianError) -> NoReturn:
         ErrorCode.EXEC_BUDGET.value,
         ErrorCode.EXEC_RESPONSE_TOO_LARGE.value,
     }
+    if error.code == ErrorCode.EXEC_CANCELLED.value:
+        raise typer.Exit(code=130)
     raise typer.Exit(
         code=3 if error.code in input_codes else 5 if error.code in safety_codes else 4
     )

@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 import threading
+import time
 from copy import deepcopy
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -42,6 +43,7 @@ class SampleServer(ThreadingHTTPServer):
         tokens: dict[str, str],
         fail_cleanup: bool = False,
         echo_secret: str | None = None,
+        request_delay_seconds: float = 0.0,
     ) -> None:
         if address[0] != "127.0.0.1":
             raise ValueError("样例应用只允许绑定 127.0.0.1")
@@ -49,8 +51,10 @@ class SampleServer(ThreadingHTTPServer):
         self.tokens = dict(tokens)
         self.fail_cleanup = fail_cleanup
         self.echo_secret = echo_secret
+        self.request_delay_seconds = request_delay_seconds
         self.lock = threading.RLock()
         self.resources = deepcopy(_INITIAL_RESOURCES)
+        self.runner_process_ids: list[int] = []
         super().__init__(address, SampleRequestHandler)
 
     def reset(self) -> None:
@@ -62,6 +66,8 @@ class SampleRequestHandler(BaseHTTPRequestHandler):
     server: SampleServer
 
     def do_GET(self) -> None:  # noqa: N802 - 标准库回调名称
+        self._record_runner_process()
+        self._delay_target_request()
         path = urlsplit(self.path).path
         if path == "/health":
             self._send(HTTPStatus.OK, {"status": "ok", "variant": self.server.variant})
@@ -77,6 +83,8 @@ class SampleRequestHandler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
     def do_PATCH(self) -> None:  # noqa: N802 - 标准库回调名称
+        self._record_runner_process()
+        self._delay_target_request()
         resource_id = self._resource_id(urlsplit(self.path).path, "/resources/")
         if resource_id is None:
             self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
@@ -110,6 +118,7 @@ class SampleRequestHandler(BaseHTTPRequestHandler):
         self._send(status, payload)
 
     def do_POST(self) -> None:  # noqa: N802 - 标准库回调名称
+        self._record_runner_process()
         if urlsplit(self.path).path != "/reset":
             self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             return
@@ -137,6 +146,21 @@ class SampleRequestHandler(BaseHTTPRequestHandler):
             if hmac.compare_digest(candidate, token):
                 return identity_id
         return None
+
+    def _record_runner_process(self) -> None:
+        raw = self.headers.get("X-Jiejian-Runner-PID")
+        if raw is None:
+            return
+        try:
+            process_id = int(raw)
+        except ValueError:
+            return
+        with self.server.lock:
+            self.server.runner_process_ids.append(process_id)
+
+    def _delay_target_request(self) -> None:
+        if self.server.request_delay_seconds:
+            time.sleep(self.server.request_delay_seconds)
 
     def _read_resource(self, resource_id: str, *, trusted_observer: bool) -> None:
         actor = self._actor()
@@ -200,6 +224,7 @@ def create_sample_server(
     tokens: dict[str, str] | None = None,
     fail_cleanup: bool = False,
     echo_secret: str | None = None,
+    request_delay_seconds: float = 0.0,
 ) -> SampleServer:
     selected_tokens = tokens or {
         "owner": os.environ.get("JIEJIAN_SAMPLE_OWNER_TOKEN", "sample-owner-token"),
@@ -213,6 +238,7 @@ def create_sample_server(
         tokens=selected_tokens,
         fail_cleanup=fail_cleanup,
         echo_secret=echo_secret,
+        request_delay_seconds=request_delay_seconds,
     )
 
 
