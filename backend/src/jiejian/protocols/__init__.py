@@ -1,0 +1,41 @@
+"""Runner 协议的稳定公共导入面。"""
+
+from .runner_v1 import (
+    RUNNER_INPUT_MAX_BYTES,
+    RUNNER_RESULT_MAX_BYTES,
+    STAGED_ARTIFACT_MAX_BYTES,
+    STAGED_ARTIFACT_TOTAL_MAX_BYTES,
+    CleanupResultV1,
+    CleanupStatus,
+    ExecutionBudgetV1,
+    ExecutionProjectSnapshotV1,
+    RunnerErrorV1,
+    RunnerInputV1,
+    RunnerResultType,
+    RunnerResultV1,
+    StagedArtifactV1,
+    canonical_json_bytes,
+    canonical_json_sha256,
+    parse_runner_input,
+    parse_runner_result,
+)
+
+__all__ = [
+    "RUNNER_INPUT_MAX_BYTES",
+    "RUNNER_RESULT_MAX_BYTES",
+    "STAGED_ARTIFACT_MAX_BYTES",
+    "STAGED_ARTIFACT_TOTAL_MAX_BYTES",
+    "CleanupResultV1",
+    "CleanupStatus",
+    "ExecutionBudgetV1",
+    "ExecutionProjectSnapshotV1",
+    "RunnerErrorV1",
+    "RunnerInputV1",
+    "RunnerResultType",
+    "RunnerResultV1",
+    "StagedArtifactV1",
+    "canonical_json_bytes",
+    "canonical_json_sha256",
+    "parse_runner_input",
+    "parse_runner_result",
+]

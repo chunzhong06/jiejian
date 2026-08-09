@@ -51,7 +51,7 @@ try {
         throw "pip 项目依赖安装失败"
     }
     & $condaExecutable run --no-capture-output --name $environmentName `
-        python -B -c "import httpx, jiejian, pydantic, pytest, typer, yaml; print('jiejian_env ready')"
+        python -B -c "import alembic, httpx, jiejian, pydantic, pytest, sqlalchemy, typer, yaml; print('jiejian_env ready')"
     if ($LASTEXITCODE -ne 0) {
         throw "Conda 环境导入验证失败"
     }

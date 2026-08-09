@@ -9,9 +9,11 @@ description = "面向 AI 生成 Web 应用的交付前安全验证与持续回�
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.14,<2",
     "httpx>=0.27,<1",
     "pydantic>=2.10,<3",
     "pyyaml>=6.0,<7",
+    "SQLAlchemy>=2.0,<3",
     "typer>=0.15,<1",
 ]
 
