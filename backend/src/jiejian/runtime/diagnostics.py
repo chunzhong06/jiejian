@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import ipaddress
 import json
 import socket
@@ -176,12 +175,37 @@ def _sqlite_check() -> DoctorCheck:
 
 
 def _playwright_check() -> DoctorCheck:
-    available = importlib.util.find_spec("playwright") is not None
+    package_version: str | None = None
+    executable: str | None = None
+    reason: str | None = None
+    available = False
+    try:
+        package_version = version("playwright")
+        from playwright.sync_api import sync_playwright
+
+        playwright = sync_playwright().start()
+        try:
+            chromium = Path(playwright.chromium.executable_path)
+            executable = chromium.name
+            available = chromium.is_file()
+        finally:
+            playwright.stop()
+    except (PackageNotFoundError, OSError, RuntimeError) as exc:
+        reason = type(exc).__name__
     return DoctorCheck(
         name="playwright",
-        required=False,
+        required=True,
         ok=available,
-        message="Playwright 可用" if available else "Playwright 未安装（当前阶段可选）",
+        message=(
+            "Playwright 与 Chromium 可用"
+            if available
+            else "Playwright 或 Chromium 不可用"
+        ),
+        details={
+            "package_version": package_version,
+            "chromium_executable": executable,
+            "reason": reason,
+        },
     )
 
 

@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 from uuid import uuid4
 
 from ..domain.lifecycle import JobState, RunLifecycle
+from ..domain.recording import RecordingReasonCode, RecordingTerminalState
 from ..errors import ErrorCode, JiejianError
 from ..storage import JobRecord, RunRecord, StorageUnitOfWork
 from .events import append_job_event
@@ -17,6 +18,7 @@ from .models import (
     SubmitJobV1,
     validate_control_request,
 )
+from .targets import finish_job_target, load_job_target
 
 _TERMINAL_JOB_STATES = {
     JobState.SUCCEEDED,
@@ -113,9 +115,11 @@ class JobQueueService:
                     initial.state is JobState.CANCELLED
                     and initial.cancel_requested_at_us is not None
                 ):
+                    run, recording = load_job_target(work, initial)
                     return CancellationResultV1(
                         job=initial,
-                        run=self._require_run(work, initial.run_id),
+                        run=run,
+                        recording=recording,
                         first_requested_at_us=initial.cancel_requested_at_us,
                         completed=True,
                     )
@@ -130,9 +134,11 @@ class JobQueueService:
                 job.state is JobState.CANCELLED
                 and job.cancel_requested_at_us is not None
             ):
+                run, recording = load_job_target(work, job)
                 return CancellationResultV1(
                     job=job,
-                    run=self._require_run(work, job.run_id),
+                    run=run,
+                    recording=recording,
                     first_requested_at_us=job.cancel_requested_at_us,
                     completed=True,
                 )
@@ -150,11 +156,12 @@ class JobQueueService:
                 return self._cancel_waiting(work, job, request.now_us)
             if job.state is not JobState.RUNNING:
                 raise JiejianError(ErrorCode.JOB_CANCEL_CONFLICT, "任务取消请求冲突")
-            run = self._require_run(work, job.run_id)
+            run, recording = load_job_target(work, job)
             work.commit()
             return CancellationResultV1(
                 job=job,
                 run=run,
+                recording=recording,
                 first_requested_at_us=job.cancel_requested_at_us,
                 completed=False,
             )
@@ -169,13 +176,14 @@ class JobQueueService:
         cancelled = work.job_control.cancel_waiting(job.job_id, now_us)
         if cancelled is None:
             raise JiejianError(ErrorCode.JOB_CANCEL_CONFLICT, "任务取消请求冲突")
-        run = work.job_control.transition_run_terminal(
-            cancelled.run_id,
-            RunLifecycle.CANCELLED,
+        run, recording = finish_job_target(
+            work,
+            cancelled,
             now_us,
+            run_target=RunLifecycle.CANCELLED,
+            recording_target=RecordingTerminalState.CANCELLED,
+            recording_reason=RecordingReasonCode.CANCEL_REQUESTED,
         )
-        if run is None:
-            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "运行取消失败")
         append_job_event(
             work,
             job=cancelled,
@@ -189,6 +197,7 @@ class JobQueueService:
         return CancellationResultV1(
             job=cancelled,
             run=run,
+            recording=recording,
             first_requested_at_us=cancelled.cancel_requested_at_us,
             completed=True,
         )

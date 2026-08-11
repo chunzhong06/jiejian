@@ -30,9 +30,8 @@ from .models import (
     FatalFailureV1,
     RetryableFailureCode,
     RetryableFailureV1,
-    RenewLeaseV1,
-    checked_time_add,
 )
+from .process_control import AttemptProcessControl
 from .process_environment import minimal_process_environment
 from .publication import RunPublicationService
 from .published_artifacts import (
@@ -76,18 +75,24 @@ class WorkerSupervisor:
     ) -> None:
         self.var_dir = var_dir.resolve()
         self.lease_owner = lease_owner
-        self._uow_factory = uow_factory
         self._attempts = attempt_service
         self._request_store = request_store
         self._publication = publication_service
         self._environ = os.environ if environ is None else environ
         self._utc_now_us = utc_now_us or (lambda: time.time_ns() // 1_000)
-        self._monotonic = monotonic
-        self._sleep = sleep
         self._popen = popen
         self._lease_duration_us = lease_duration_us
-        self._poll_interval_seconds = poll_interval_seconds
-        self._termination_grace_seconds = termination_grace_seconds
+        self._process_control = AttemptProcessControl(
+            uow_factory=uow_factory,
+            attempt_service=attempt_service,
+            lease_owner=lease_owner,
+            utc_now_us=self._utc_now_us,
+            monotonic=monotonic,
+            sleep=sleep,
+            lease_duration_us=lease_duration_us,
+            poll_interval_seconds=poll_interval_seconds,
+            termination_grace_seconds=termination_grace_seconds,
+        )
 
     def run_job(self, job_id: str) -> StagedAttempt | None:
         now_us = self._utc_now_us()
@@ -149,7 +154,12 @@ class WorkerSupervisor:
                 "Runner 进程启动失败",
             ) from None
 
-        timed_out, forced_after_cancel = self._monitor(process, job, request, paths)
+        timed_out, forced_after_cancel = self._process_control.monitor(
+            process,
+            job,
+            max_duration_us=request.budget.max_duration_us,
+            cancel_path=paths.cancel_path,
+        )
         if timed_out or forced_after_cancel:
             reason = (
                 FatalFailureCode.CLEANUP_FAILED
@@ -188,7 +198,7 @@ class WorkerSupervisor:
         except JiejianError:
             self._record_fatal(job, FatalFailureCode.PROTOCOL_INVALID)
             raise
-        self._renew_current_fence(job)
+        self._process_control.renew(job)
         self._write_receipt(paths, result)
         staged = StagedAttempt(result=result, paths=paths)
         if result.result_type in {
@@ -198,50 +208,6 @@ class WorkerSupervisor:
             return self._publication.publish(staged, known_secrets=known_secrets)
         self._apply_non_success_result(job, result)
         return staged
-
-    def _monitor(
-        self,
-        process: subprocess.Popen[Any],
-        job: JobRecord,
-        request: PersistedExecutionRequestV1,
-        paths: AttemptPaths,
-    ) -> tuple[bool, bool]:
-        started = self._monotonic()
-        next_renew = started + self._lease_duration_us / 3_000_000
-        deadline = started + request.budget.max_duration_us / 1_000_000
-        cancellation_started: float | None = None
-        while process.poll() is None:
-            current_time = self._monotonic()
-            current_job = self._read_job(job.job_id)
-            if current_job.cancel_requested_at_us is not None:
-                if cancellation_started is None:
-                    paths.cancel_path.write_text("cancel\n", encoding="utf-8")
-                    cancellation_started = current_time
-                if current_time - cancellation_started >= self._termination_grace_seconds:
-                    self._terminate(process)
-                    return False, True
-            if current_time >= deadline:
-                self._terminate(process)
-                return True, False
-            if current_time >= next_renew:
-                self._renew_current_fence(job)
-                next_renew = current_time + self._lease_duration_us / 3_000_000
-            self._sleep(self._poll_interval_seconds)
-        return False, False
-
-    def _terminate(self, process: subprocess.Popen[Any]) -> None:
-        process.terminate()
-        try:
-            process.wait(timeout=self._termination_grace_seconds)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            try:
-                process.wait(timeout=self._termination_grace_seconds)
-            except subprocess.TimeoutExpired:
-                raise JiejianError(
-                    ErrorCode.RUNNER_TIMEOUT,
-                    "Runner 进程无法在有界时间内终止",
-                ) from None
 
     def _apply_non_success_result(
         self,
@@ -254,7 +220,7 @@ class WorkerSupervisor:
         }:
             return
         if result.result_type is RunnerResultType.CANCELLED:
-            current = self._read_job(job.job_id)
+            current = self._process_control.read_job(job.job_id)
             if current.cancel_requested_at_us is None:
                 self._record_fatal(job, FatalFailureCode.PROTOCOL_INVALID)
                 raise JiejianError(
@@ -322,7 +288,7 @@ class WorkerSupervisor:
             os.replace(temporary, paths.input_path)
         except OSError:
             self._record_retryable(
-                self._read_job(runner_input.job_id),
+                self._process_control.read_job(runner_input.job_id),
                 RetryableFailureCode.WORKER_INTERRUPTED,
             )
             raise JiejianError(
@@ -359,7 +325,7 @@ class WorkerSupervisor:
             os.replace(temporary, paths.receipt_path)
         except OSError:
             self._record_retryable(
-                self._read_job(result.job_id),
+                self._process_control.read_job(result.job_id),
                 RetryableFailureCode.WORKER_INTERRUPTED,
             )
             raise JiejianError(
@@ -368,20 +334,6 @@ class WorkerSupervisor:
             ) from None
         finally:
             temporary.unlink(missing_ok=True)
-
-    def _renew_current_fence(self, job: JobRecord) -> None:
-        now_us = self._utc_now_us()
-        self._attempts.renew_lease(
-            RenewLeaseV1(
-                job_id=job.job_id,
-                lease_owner=self.lease_owner,
-                fencing_token=job.fencing_token,
-                now_us=now_us,
-                lease_expires_at_us=checked_time_add(
-                    now_us, self._lease_duration_us
-                ),
-            )
-        )
 
     def _record_retryable(
         self,
@@ -412,10 +364,3 @@ class WorkerSupervisor:
                 reason_code=reason_code,
             )
         )
-
-    def _read_job(self, job_id: str) -> JobRecord:
-        with self._uow_factory() as work:
-            job = work.jobs.get(job_id)
-            if job is None:
-                raise JiejianError(ErrorCode.JOB_NOT_FOUND, "任务不存在")
-            return job

@@ -15,7 +15,7 @@ def test_root_help_lists_doctor() -> None:
     assert "doctor" in result.stdout
 
 
-def test_doctor_json_is_stable_and_optional_playwright_does_not_fail(
+def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
     isolated_environment: Path,
 ) -> None:
     runtime = isolated_environment / "runtime"
@@ -48,7 +48,8 @@ def test_doctor_json_is_stable_and_optional_playwright_does_not_fail(
     playwright = next(
         check for check in report["checks"] if check["name"] == "playwright"
     )
-    assert playwright["required"] is False
+    assert playwright["required"] is True
+    assert playwright["ok"] is True
 
 
 def test_doctor_returns_nonzero_when_a_required_check_fails(

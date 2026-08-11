@@ -6,8 +6,9 @@ from collections.abc import Callable, Sequence
 from secrets import randbelow
 
 from ..domain.lifecycle import JobState, RunLifecycle
+from ..domain.recording import RecordingReasonCode, RecordingTerminalState
 from ..errors import ErrorCode, JiejianError
-from ..storage import JobRecord, RunRecord, StorageUnitOfWork
+from ..storage import JobRecord, StorageUnitOfWork
 from .events import EventMetadata, append_job_event
 from .models import (
     ConfirmRecoveryV1,
@@ -19,6 +20,7 @@ from .models import (
     compute_retry_available_at,
     validate_control_request,
 )
+from .targets import finish_job_target, load_job_target
 
 _TERMINAL_JOB_STATES = {
     JobState.SUCCEEDED,
@@ -54,6 +56,7 @@ class JobRecoveryService:
                 RecoveryCandidateV1(
                     job_id=job.job_id,
                     run_id=job.run_id,
+                    recording_id=job.recording_id,
                     attempt=job.attempt,
                     max_attempts=job.max_attempts,
                     lease_owner=job.lease_owner,
@@ -95,11 +98,17 @@ class JobRecoveryService:
             )
             if job is None:
                 raise JiejianError(ErrorCode.JOB_LEASE_MISMATCH, "任务租约不匹配")
-            run = (
-                self._fail_run(work, job.run_id, request.now_us)
-                if exhausted
-                else self._require_run(work, job.run_id)
-            )
+            if exhausted:
+                run, recording = finish_job_target(
+                    work,
+                    job,
+                    request.now_us,
+                    run_target=RunLifecycle.FAILED,
+                    recording_target=RecordingTerminalState.FAILED,
+                    recording_reason=RecordingReasonCode.PROCESSING_FAILED,
+                )
+            else:
+                run, recording = load_job_target(work, job)
             append_job_event(
                 work,
                 job=job,
@@ -114,7 +123,11 @@ class JobRecoveryService:
                 ),
             )
             work.commit()
-            return JobMutationResultV1(job=job, run=run)
+            return JobMutationResultV1(
+                job=job,
+                run=run,
+                recording=recording,
+            )
 
     def _require_recovery_fence(
         self,
@@ -162,28 +175,7 @@ class JobRecoveryService:
             metadata["available_at_us"] = available_at_us
         return metadata
 
-    def _fail_run(
-        self,
-        work: StorageUnitOfWork,
-        run_id: str,
-        now_us: int,
-    ) -> RunRecord:
-        run = work.job_control.transition_run_terminal(
-            run_id,
-            RunLifecycle.FAILED,
-            now_us,
-        )
-        if run is None:
-            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "运行失败状态写入失败")
-        return run
-
     def _new_uow(self, known_secrets: Sequence[str]) -> StorageUnitOfWork:
         return self._uow_factory(
             known_secrets=tuple(secret for secret in known_secrets if secret)
         )
-
-    def _require_run(self, work: StorageUnitOfWork, run_id: str) -> RunRecord:
-        run = work.runs.get(run_id)
-        if run is None:
-            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务关联运行不存在")
-        return run

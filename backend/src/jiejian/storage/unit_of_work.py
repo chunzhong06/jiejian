@@ -12,9 +12,11 @@ from ..errors import ErrorCode, JiejianError
 from .job_control import JobControlRepository
 from .repositories import (
     EvidenceIndexRepository,
+    FlowDraftRevisionRepository,
     JobEventRepository,
     JobRepository,
     ProjectRepository,
+    RecordingRepository,
     RunRepository,
 )
 
@@ -24,6 +26,8 @@ class StorageUnitOfWork:
 
     projects: ProjectRepository
     runs: RunRepository
+    recordings: RecordingRepository
+    flow_drafts: FlowDraftRevisionRepository
     jobs: JobRepository
     job_events: JobEventRepository
     job_control: JobControlRepository
@@ -49,6 +53,11 @@ class StorageUnitOfWork:
         self._committed = False
         self.projects = ProjectRepository(session, self._known_secrets)
         self.runs = RunRepository(session, self._known_secrets)
+        self.recordings = RecordingRepository(session, self._known_secrets)
+        self.flow_drafts = FlowDraftRevisionRepository(
+            session,
+            self._known_secrets,
+        )
         self.jobs = JobRepository(session, self._known_secrets)
         self.job_events = JobEventRepository(session, self._known_secrets)
         self.job_control = JobControlRepository(session, self._known_secrets)

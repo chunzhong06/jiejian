@@ -15,6 +15,14 @@ from .lifecycle import (
     StateTransitionEvent,
     TestCase,
 )
+from .recording import (
+    Recording,
+    RecordingReasonCode,
+    RecordingState,
+    RecordingStateEvent,
+    RecordingTerminalState,
+    transition_recording_state,
+)
 from .state_machines import (
     revise_contract,
     set_case_verdict,
@@ -22,6 +30,7 @@ from .state_machines import (
     transition_state,
     update_contract_rules,
 )
+
 __all__ = [
     "CaseLifecycle",
     "CaseVerdict",
@@ -36,9 +45,15 @@ __all__ = [
     "RunVerdict",
     "StateTransitionEvent",
     "TestCase",
+    "Recording",
+    "RecordingReasonCode",
+    "RecordingState",
+    "RecordingStateEvent",
+    "RecordingTerminalState",
     "revise_contract",
     "set_case_verdict",
     "set_run_verdict",
     "transition_state",
+    "transition_recording_state",
     "update_contract_rules",
 ]

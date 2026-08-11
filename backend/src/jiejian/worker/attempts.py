@@ -6,8 +6,9 @@ from collections.abc import Callable, Sequence
 from secrets import randbelow
 
 from ..domain.lifecycle import JobState, RunLifecycle
+from ..domain.recording import RecordingReasonCode, RecordingTerminalState
 from ..errors import ErrorCode, JiejianError
-from ..storage import JobRecord, RunRecord, StorageUnitOfWork
+from ..storage import JobRecord, StorageUnitOfWork
 from .events import EventMetadata, append_job_event
 from .models import (
     CancellationResultV1,
@@ -23,6 +24,11 @@ from .models import (
     checked_time_add,
     compute_retry_available_at,
     validate_control_request,
+)
+from .targets import (
+    advance_job_target_after_claim,
+    finish_job_target,
+    load_job_target,
 )
 
 _TERMINAL_JOB_STATES = {
@@ -69,9 +75,11 @@ class JobAttemptService:
                     return None
                 self._raise_claim_error(work, request.job_id, request.now_us)
             assert job is not None
-            run = work.job_control.advance_run_after_claim(job.run_id, request.now_us)
-            if run is None:
-                raise JiejianError(ErrorCode.JOB_PERSISTENCE, "运行状态无法进入预检")
+            run, recording = advance_job_target_after_claim(
+                work,
+                job,
+                request.now_us,
+            )
             append_job_event(
                 work,
                 job=job,
@@ -87,7 +95,7 @@ class JobAttemptService:
                 },
             )
             work.commit()
-            return ClaimedJobV1(job=job, run=run)
+            return ClaimedJobV1(job=job, run=run, recording=recording)
 
     def renew_lease(
         self,
@@ -114,7 +122,7 @@ class JobAttemptService:
                     expired_code=ErrorCode.JOB_LEASE_EXPIRED,
                 )
             assert job is not None
-            run = self._require_run(work, job.run_id)
+            run, recording = load_job_target(work, job)
             append_job_event(
                 work,
                 job=job,
@@ -128,7 +136,7 @@ class JobAttemptService:
                 },
             )
             work.commit()
-            return JobMutationResultV1(job=job, run=run)
+            return JobMutationResultV1(job=job, run=run, recording=recording)
 
     def complete_cancellation(
         self,
@@ -157,13 +165,14 @@ class JobAttemptService:
                     expired_code=ErrorCode.JOB_RECOVERY_REQUIRED,
                 )
             assert job is not None
-            run = work.job_control.transition_run_terminal(
-                job.run_id,
-                RunLifecycle.CANCELLED,
+            run, recording = finish_job_target(
+                work,
+                job,
                 request.now_us,
+                run_target=RunLifecycle.CANCELLED,
+                recording_target=RecordingTerminalState.CANCELLED,
+                recording_reason=RecordingReasonCode.CANCEL_REQUESTED,
             )
-            if run is None:
-                raise JiejianError(ErrorCode.JOB_PERSISTENCE, "运行取消失败")
             append_job_event(
                 work,
                 job=job,
@@ -180,6 +189,7 @@ class JobAttemptService:
             return CancellationResultV1(
                 job=job,
                 run=run,
+                recording=recording,
                 first_requested_at_us=job.cancel_requested_at_us,
                 completed=True,
             )
@@ -259,11 +269,17 @@ class JobAttemptService:
                 expired_code=ErrorCode.JOB_RECOVERY_REQUIRED,
             )
         assert job is not None
-        run = (
-            self._fail_run(work, job.run_id, request.now_us)
-            if target is JobState.FAILED
-            else self._require_run(work, job.run_id)
-        )
+        if target is JobState.FAILED:
+            run, recording = finish_job_target(
+                work,
+                job,
+                request.now_us,
+                run_target=RunLifecycle.FAILED,
+                recording_target=RecordingTerminalState.FAILED,
+                recording_reason=RecordingReasonCode.PROCESSING_FAILED,
+            )
+        else:
+            run, recording = load_job_target(work, job)
         append_job_event(
             work,
             job=job,
@@ -283,7 +299,7 @@ class JobAttemptService:
             ),
         )
         work.commit()
-        return JobMutationResultV1(job=job, run=run)
+        return JobMutationResultV1(job=job, run=run, recording=recording)
 
     def _require_current_fence(
         self,
@@ -356,21 +372,6 @@ class JobAttemptService:
             raise JiejianError(expired_code, "任务租约已经过期")
         raise JiejianError(ErrorCode.JOB_NOT_CLAIMABLE, "任务更新条件不满足")
 
-    def _fail_run(
-        self,
-        work: StorageUnitOfWork,
-        run_id: str,
-        now_us: int,
-    ) -> RunRecord:
-        run = work.job_control.transition_run_terminal(
-            run_id,
-            RunLifecycle.FAILED,
-            now_us,
-        )
-        if run is None:
-            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "运行失败状态写入失败")
-        return run
-
     def _failure_metadata(
         self,
         job: JobRecord,
@@ -397,9 +398,3 @@ class JobAttemptService:
         if job is None:
             raise JiejianError(ErrorCode.JOB_NOT_FOUND, "任务不存在")
         return job
-
-    def _require_run(self, work: StorageUnitOfWork, run_id: str) -> RunRecord:
-        run = work.runs.get(run_id)
-        if run is None:
-            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务关联运行不存在")
-        return run

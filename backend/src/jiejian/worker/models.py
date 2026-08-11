@@ -11,11 +11,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from ..domain.identifiers import (
     JOB_ID_PATTERN,
     PROJECT_ID_PATTERN,
+    RECORDING_ID_PATTERN,
     RUN_ID_PATTERN,
     SHA256_PATTERN,
 )
 from ..errors import ErrorCode, JiejianError
-from ..storage import JobRecord, RunRecord
+from ..storage import JobRecord, RecordingRecord, RunRecord
 from ..storage.repositories import ensure_storage_payload_safe
 
 MAX_LEASE_DURATION_US = 300_000_000
@@ -189,12 +190,26 @@ class JobSubmissionResultV1(WorkerControlModel):
 
 class ClaimedJobV1(WorkerControlModel):
     job: JobRecord
-    run: RunRecord
+    run: RunRecord | None = None
+    recording: RecordingRecord | None = None
+
+    @model_validator(mode="after")
+    def validate_target(self) -> ClaimedJobV1:
+        if (self.run is None) == (self.recording is None):
+            raise ValueError("claimed job must expose exactly one target")
+        return self
 
 
 class JobMutationResultV1(WorkerControlModel):
     job: JobRecord
-    run: RunRecord
+    run: RunRecord | None = None
+    recording: RecordingRecord | None = None
+
+    @model_validator(mode="after")
+    def validate_target(self) -> JobMutationResultV1:
+        if (self.run is None) == (self.recording is None):
+            raise ValueError("job mutation must expose exactly one target")
+        return self
 
 
 class CancellationResultV1(JobMutationResultV1):
@@ -204,12 +219,19 @@ class CancellationResultV1(JobMutationResultV1):
 
 class RecoveryCandidateV1(WorkerControlModel):
     job_id: str = Field(pattern=JOB_ID_PATTERN)
-    run_id: str = Field(pattern=RUN_ID_PATTERN)
+    run_id: str | None = Field(default=None, pattern=RUN_ID_PATTERN)
+    recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
     attempt: int = Field(ge=1)
     max_attempts: int = Field(ge=1)
     lease_owner: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     fencing_token: int = Field(ge=1)
     lease_expires_at_us: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_target(self) -> RecoveryCandidateV1:
+        if (self.run_id is None) == (self.recording_id is None):
+            raise ValueError("recovery candidate must reference exactly one target")
+        return self
 
 
 def validate_control_request(

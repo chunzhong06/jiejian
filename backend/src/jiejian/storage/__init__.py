@@ -9,9 +9,11 @@ from .db import (
 )
 from .repositories import (
     EvidenceIndexRecord,
+    FlowDraftRevisionRecord,
     JobEventRecord,
     JobRecord,
     ProjectRecord,
+    RecordingRecord,
     RunRecord,
 )
 from .unit_of_work import StorageUnitOfWork
@@ -19,9 +21,11 @@ from .unit_of_work import StorageUnitOfWork
 __all__ = [
     "SQLITE_BUSY_TIMEOUT_MS",
     "EvidenceIndexRecord",
+    "FlowDraftRevisionRecord",
     "JobEventRecord",
     "JobRecord",
     "ProjectRecord",
+    "RecordingRecord",
     "RunRecord",
     "StorageUnitOfWork",
     "create_session_factory",
