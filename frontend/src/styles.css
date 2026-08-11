@@ -1,0 +1,10 @@
+html, body, #root { margin: 0; min-height: 100%; }
+.app-shell { min-height: 100vh; }
+.brand { color: #fff; font-size: 24px; font-weight: 700; padding: 22px 20px 18px; }
+.brand span { display: block; color: #91caff; font-size: 11px; font-weight: 400; margin-top: 4px; }
+.topbar { align-items: center; background: #fff; display: flex; gap: 16px; justify-content: space-between; padding: 0 28px; }
+.topbar h3 { margin: 0; }
+.content { background: #f5f7fb; padding: 28px; }
+.phase-steps { background: #fff; border-radius: 10px; margin-bottom: 22px; padding: 18px 24px; }
+.project-list { margin-top: 24px; }
+.report-view { background: #101828; border-radius: 8px; color: #d0d5dd; max-height: 520px; overflow: auto; padding: 18px; }
