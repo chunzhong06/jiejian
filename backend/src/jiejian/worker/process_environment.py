@@ -8,9 +8,12 @@ _BASE_KEYS = (
     "COMSPEC",
     "PATH",
     "PATHEXT",
+    "LOCALAPPDATA",
+    "PLAYWRIGHT_BROWSERS_PATH",
     "SYSTEMROOT",
     "TEMP",
     "TMP",
+    "USERPROFILE",
     "WINDIR",
 )
 

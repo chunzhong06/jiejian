@@ -156,8 +156,16 @@ class ResourceDefinition(DomainModel):
     owner_identity_id: str
 
 
+class FlowVariableSource(DomainModel):
+    name: str = Field(pattern=PROJECT_ID_PATTERN)
+    source_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    source_event_sequence: int = Field(ge=1)
+    json_path: str = Field(min_length=1, max_length=512)
+
+
 class FlowStep(DomainModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
+    name: str | None = Field(default=None, min_length=1, max_length=128)
     method: Literal["GET", "PATCH", "POST", "PUT", "DELETE"]
     path: str
     identity_id: str
@@ -166,6 +174,9 @@ class FlowStep(DomainModel):
     alternate_resource_id: str
     json_body: dict[str, Any] = Field(default_factory=dict)
     expected_statuses: tuple[int, ...] = (200,)
+    depends_on_step_ids: tuple[str, ...] = Field(default=(), max_length=128)
+    variable_sources: tuple[FlowVariableSource, ...] = Field(default=(), max_length=128)
+    sensitive_fields: tuple[str, ...] = Field(default=(), max_length=256)
 
     @field_validator("path")
     @classmethod
@@ -196,6 +207,17 @@ class FlowStep(DomainModel):
             raise ValueError("flow JSON must not contain inline credential fields")
         return value
 
+    @model_validator(mode="after")
+    def validate_flow_step_metadata(self) -> FlowStep:
+        if len(set(self.depends_on_step_ids)) != len(self.depends_on_step_ids):
+            raise ValueError("flow step dependencies must be unique")
+        variable_names = {source.name for source in self.variable_sources}
+        if len(variable_names) != len(self.variable_sources):
+            raise ValueError("flow step variable sources must be unique")
+        if len(set(self.sensitive_fields)) != len(self.sensitive_fields):
+            raise ValueError("flow step sensitive fields must be unique")
+        return self
+
 
 class Flow(DomainModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
@@ -218,6 +240,44 @@ class Flow(DomainModel):
         ):
             raise ValueError("support endpoint must be an absolute-path reference")
         return value
+
+    @model_validator(mode="after")
+    def validate_dependency_graph(self) -> Flow:
+        step_ids = tuple(step.id for step in self.steps)
+        if len(set(step_ids)) != len(step_ids):
+            raise ValueError("flow step IDs must be unique")
+        known = set(step_ids)
+        graph = {step.id: set(step.depends_on_step_ids) for step in self.steps}
+        if any(
+            dependency not in known or dependency == step_id
+            for step_id, dependencies in graph.items()
+            for dependency in dependencies
+        ):
+            raise ValueError("flow step dependency reference is invalid")
+        if any(
+            source.source_step_id not in known
+            or source.source_step_id not in graph[step.id]
+            for step in self.steps
+            for source in step.variable_sources
+        ):
+            raise ValueError("flow variable source must be a declared dependency")
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(step_id: str) -> None:
+            if step_id in visiting:
+                raise ValueError("flow dependencies must be acyclic")
+            if step_id in visited:
+                return
+            visiting.add(step_id)
+            for dependency in graph[step_id]:
+                visit(dependency)
+            visiting.remove(step_id)
+            visited.add(step_id)
+
+        for step_id in step_ids:
+            visit(step_id)
+        return self
 
 
 class ContractRule(DomainModel):

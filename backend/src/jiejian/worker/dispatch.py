@@ -145,6 +145,33 @@ class WorkerDispatcher:
             self._sleep(0.05)
         raise JiejianError(ErrorCode.RUNNER_TIMEOUT, "等待 Worker 结果超时")
 
+    def wait_recording(
+        self,
+        job_id: str,
+        process: subprocess.Popen[Any] | None,
+        *,
+        timeout_seconds: float,
+    ) -> JobRecord:
+        """等待 Recording Worker 将 Recording 推进到可审阅或失败终态。"""
+
+        deadline = self._monotonic() + timeout_seconds
+        while self._monotonic() < deadline:
+            job = self._read_job(job_id)
+            if job.state is JobState.SUCCEEDED:
+                return job
+            if job.state in {JobState.FAILED, JobState.CANCELLED}:
+                raise JiejianError(
+                    ErrorCode.RECORD_REPLAY_FAILED,
+                    "Recording Worker 未形成可审阅结果",
+                )
+            if process is not None and process.poll() is not None:
+                raise JiejianError(
+                    ErrorCode.RUNNER_RESULT_MISSING,
+                    "Recording Worker 在任务完成前退出",
+                )
+            self._sleep(0.05)
+        raise JiejianError(ErrorCode.RUNNER_TIMEOUT, "等待 Recording 结果超时")
+
     def _read_trusted_attempt(
         self,
         job: JobRecord,

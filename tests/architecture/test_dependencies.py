@@ -49,6 +49,7 @@ def test_domain_has_no_execution_or_infrastructure_dependencies() -> None:
         "sqlalchemy",
         "alembic",
         "httpx",
+        "playwright",
         "typer",
         "jiejian.storage",
         "jiejian.runtime",
@@ -114,12 +115,15 @@ def test_worker_is_a_control_plane_without_cli_or_target_io_dependencies() -> No
         "publication.py",
         "published_artifacts.py",
         "queue.py",
+        "recording.py",
+        "process_control.py",
         "reconciliation.py",
         "recovery.py",
         "request_store.py",
         "runtime.py",
         "submission.py",
         "supervisor.py",
+        "targets.py",
     }
     dependencies = {
         dependency
@@ -141,7 +145,7 @@ def test_worker_is_a_control_plane_without_cli_or_target_io_dependencies() -> No
     }
 
 
-def test_only_runner_process_package_can_reach_target_execution() -> None:
+def test_target_execution_is_confined_to_explicit_adapters() -> None:
     runner_root = PACKAGE_ROOT / "runner"
     assert {path.name for path in runner_root.glob("*.py")} == {
         "__init__.py",
@@ -165,7 +169,34 @@ def test_only_runner_process_package_can_reach_target_execution() -> None:
         for path in _python_files(PACKAGE_ROOT)
         if any(dependency == "httpx" for dependency in _imports(path))
     }
-    assert httpx_importers == {"verification/http.py"}
+    assert httpx_importers == {
+        "recording/transport.py",
+        "verification/http.py",
+    }
+
+
+def test_playwright_is_confined_to_recording_browser_boundary() -> None:
+    playwright_importers = {
+        path.relative_to(PACKAGE_ROOT).as_posix()
+        for path in _python_files(PACKAGE_ROOT)
+        if any(dependency.startswith("playwright") for dependency in _imports(path))
+    }
+    assert playwright_importers == {
+        "recording/browser.py",
+        "recording/events.py",
+        "recording/transport.py",
+        "recording/ui_capture.py",
+        "recording_runner/execution.py",
+        "runtime/diagnostics.py",
+    }
+    for protected in ("cli.py", "domain", "protocols", "storage", "worker"):
+        path = PACKAGE_ROOT / protected
+        files = (path,) if path.is_file() else _python_files(path)
+        assert not any(
+            dependency.startswith("playwright")
+            for file in files
+            for dependency in _imports(file)
+        )
 
 
 def test_verification_module_dependencies_are_acyclic() -> None:

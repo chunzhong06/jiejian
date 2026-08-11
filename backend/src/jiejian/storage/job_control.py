@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Select, and_, select, update
+from sqlalchemy import Select, and_, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..domain.lifecycle import JobState, RunLifecycle, RunVerdict
 from ..errors import ErrorCode, JiejianError
-from .models import JobRow, RunRow
+from .models import JobRow, RecordingRow, RunRow
 from .repositories import JobRecord, JobRepository, RunRecord, RunRepository
 
 _NONTERMINAL_RUNS = (
@@ -42,7 +42,11 @@ class JobControlRepository:
     ) -> JobRecord | None:
         eligible = (
             select(JobRow.job_id)
-            .join(RunRow, RunRow.run_id == JobRow.run_id)
+            .outerjoin(RunRow, RunRow.run_id == JobRow.run_id)
+            .outerjoin(
+                RecordingRow,
+                RecordingRow.recording_id == JobRow.recording_id,
+            )
             .where(
                 JobRow.state.in_(
                     (JobState.PENDING.value, JobState.RETRY_WAIT.value)
@@ -53,8 +57,17 @@ class JobControlRepository:
                 JobRow.lease_owner.is_(None),
                 JobRow.lease_expires_at_us.is_(None),
                 JobRow.updated_at_us <= now_us,
-                RunRow.lifecycle.in_(_NONTERMINAL_RUNS),
-                RunRow.verdict.is_(None),
+                or_(
+                    and_(
+                        JobRow.run_id.is_not(None),
+                        RunRow.lifecycle.in_(_NONTERMINAL_RUNS),
+                        RunRow.verdict.is_(None),
+                    ),
+                    and_(
+                        JobRow.recording_id.is_not(None),
+                        RecordingRow.state.in_(("CREATED", "STARTING")),
+                    ),
+                ),
             )
             .order_by(JobRow.available_at_us, JobRow.created_at_us, JobRow.job_id)
             .limit(1)
@@ -350,6 +363,42 @@ class JobControlRepository:
         if job is None or run is None:
             raise JiejianError(ErrorCode.STORAGE_STATE, "发布完成态读取失败")
         return job, run
+
+    def complete_recording_result(
+        self,
+        *,
+        job_id: str,
+        recording_id: str,
+        attempt: int,
+        lease_owner: str,
+        fencing_token: int,
+        completed_at_us: int,
+    ) -> JobRecord | None:
+        """在当前有效 fence 下把已持久化录制结果标记为成功。"""
+
+        changed_id = _scalar_value(
+            self._session,
+            update(JobRow)
+            .where(
+                JobRow.job_id == job_id,
+                JobRow.recording_id == recording_id,
+                JobRow.run_id.is_(None),
+                JobRow.state == JobState.RUNNING.value,
+                JobRow.attempt == attempt,
+                JobRow.lease_owner == lease_owner,
+                JobRow.fencing_token == fencing_token,
+                JobRow.lease_expires_at_us > completed_at_us,
+                JobRow.updated_at_us <= completed_at_us,
+            )
+            .values(
+                state=JobState.SUCCEEDED.value,
+                lease_owner=None,
+                lease_expires_at_us=None,
+                updated_at_us=completed_at_us,
+            )
+            .returning(JobRow.job_id),
+        )
+        return self._jobs.get(changed_id) if changed_id is not None else None
 
     def _finish_running_job(
         self,

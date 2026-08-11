@@ -51,7 +51,12 @@ try {
         throw "pip 项目依赖安装失败"
     }
     & $condaExecutable run --no-capture-output --name $environmentName `
-        python -B -c "import alembic, httpx, jiejian, pydantic, pytest, sqlalchemy, typer, yaml; print('jiejian_env ready')"
+        python -B -m playwright install chromium
+    if ($LASTEXITCODE -ne 0) {
+        throw "Playwright Chromium 安装失败"
+    }
+    & $condaExecutable run --no-capture-output --name $environmentName `
+        python -B -c "from pathlib import Path; import alembic, httpx, jiejian, playwright, pydantic, pytest, sqlalchemy, typer, yaml; from playwright.sync_api import sync_playwright; p = sync_playwright().start(); executable = Path(p.chromium.executable_path); p.stop(); assert executable.is_file(); print('jiejian_env ready')"
     if ($LASTEXITCODE -ne 0) {
         throw "Conda 环境导入验证失败"
     }

@@ -8,6 +8,11 @@ import time
 from functools import partial
 from pathlib import Path
 
+from ..domain.lifecycle import JobState
+from ..errors import JiejianError
+from ..protocols import RunnerResultType
+from ..recording.application import RecordingApplicationService
+from ..recording.request_store import RecordingRequestStore
 from ..storage import (
     StorageUnitOfWork,
     create_session_factory,
@@ -17,12 +22,10 @@ from ..storage import (
 )
 from .attempts import JobAttemptService
 from .publication import RunPublicationService
+from .recording import RecordingWorker
 from .reconciliation import RunReconciliationService
 from .request_store import ExecutionRequestStore, required_secret_names
 from .supervisor import WorkerSupervisor
-from ..domain.lifecycle import JobState
-from ..errors import JiejianError
-from ..protocols import RunnerResultType
 
 
 def main() -> int:
@@ -39,39 +42,64 @@ def main() -> int:
     try:
         factory = create_session_factory(engine)
         uow_factory = partial(StorageUnitOfWork, factory)
-        request_store = ExecutionRequestStore(var_dir)
         with uow_factory() as work:
             initial_job = work.jobs.get(arguments.job_id)
         if initial_job is None:
             return 1
-        request = request_store.load(arguments.job_id, expected_hash=initial_job.request_hash)
-        known_secrets = tuple(
-            os.environ[name]
-            for name in required_secret_names(request)
-            if os.environ.get(name)
-        )
-        publication = RunPublicationService(var_dir, uow_factory)
-        reconciliation = RunReconciliationService(
-            var_dir,
-            uow_factory,
-            publication,
-        )
-        reconciliation.reconcile(known_secrets=known_secrets)
-        supervisor = WorkerSupervisor(
-            var_dir=var_dir,
-            lease_owner=arguments.lease_owner,
-            uow_factory=uow_factory,
-            attempt_service=JobAttemptService(uow_factory),
-            request_store=request_store,
-            publication_service=publication,
-            environ=os.environ,
-        )
+        attempts = JobAttemptService(uow_factory)
+        reconciliation = None
+        known_secrets: tuple[str, ...] = ()
+        is_recording = initial_job.recording_id is not None
+        if is_recording:
+            recording_store = RecordingRequestStore(var_dir)
+            application = RecordingApplicationService(
+                uow_factory,
+                recording_store,
+                attempts=attempts,
+            )
+            run_attempt = RecordingWorker(
+                var_dir=var_dir,
+                lease_owner=arguments.lease_owner,
+                uow_factory=uow_factory,
+                attempts=attempts,
+                application=application,
+                request_store=recording_store,
+                environ=os.environ,
+            ).run_job
+        else:
+            request_store = ExecutionRequestStore(var_dir)
+            request = request_store.load(
+                arguments.job_id,
+                expected_hash=initial_job.request_hash,
+            )
+            known_secrets = tuple(
+                os.environ[name]
+                for name in required_secret_names(request)
+                if os.environ.get(name)
+            )
+            publication = RunPublicationService(var_dir, uow_factory)
+            reconciliation = RunReconciliationService(
+                var_dir,
+                uow_factory,
+                publication,
+            )
+            reconciliation.reconcile(known_secrets=known_secrets)
+            run_attempt = WorkerSupervisor(
+                var_dir=var_dir,
+                lease_owner=arguments.lease_owner,
+                uow_factory=uow_factory,
+                attempt_service=attempts,
+                request_store=request_store,
+                publication_service=publication,
+                environ=os.environ,
+            ).run_job
         while True:
             try:
-                staged = supervisor.run_job(arguments.job_id)
+                outcome = run_attempt(arguments.job_id)
             except JiejianError:
-                staged = None
-                reconciliation.reconcile(known_secrets=known_secrets)
+                outcome = None
+                if reconciliation is not None:
+                    reconciliation.reconcile(known_secrets=known_secrets)
             with uow_factory() as work:
                 job = work.jobs.get(arguments.job_id)
             if job is None:
@@ -82,7 +110,9 @@ def main() -> int:
                 delay_us = max(job.available_at_us - time.time_ns() // 1_000, 0)
                 time.sleep(delay_us / 1_000_000)
                 continue
-            if staged is not None and staged.result.result_type in {
+            if is_recording:
+                return 0 if job.state is JobState.CANCELLED else 1
+            if outcome is not None and outcome.result.result_type in {
                 RunnerResultType.SUCCESS,
                 RunnerResultType.SAFETY_STOPPED,
                 RunnerResultType.CANCELLED,

@@ -46,4 +46,14 @@ safe 预期 `PASS`/退出码 0，vulnerable 预期 `BLOCK`/退出码 1；缺少�
 
 阶段 2.1 的生产建库入口是 `jiejian.storage.upgrade_database()`，默认数据库路径为 `<var_dir>/jiejian.db`。持久请求和 attempt staging 位于 `<var_dir>/jobs/<job_id>/`；验证通过的完整 staging 原子发布到 `<var_dir>/projects/<project_id>/runs/<run_id>/`，随后才写数据库完成态。真实秘密只进入当前 Runner 的最小环境。
 
-`report <run_id>` 会校验已发布 manifest、文件哈希和数据库完成态。发布后提交失败的目录由 reconciliation 幂等补齐；旧 fencing token 和孤儿目录不能写完成态，只能进入受控 quarantine。当前仍没有 API、浏览器录制、GUI、LLM、插件或完整 HTML/SARIF/JUnit 报告。
+`report <run_id>` 会校验已发布 manifest、文件哈希和数据库完成态。发布后提交失败的目录由 reconciliation 幂等补齐；旧 fencing token 和孤儿目录不能写完成态，只能进入受控 quarantine。当前已提供最小浏览器录制闭环：`recording start/status/review/finalize/replay`。录制使用独立 Worker/Runner、脱敏事件和 FlowDraft 审阅；`replay` 默认连续执行三次，每次使用新的隔离会话。当前仍没有 API、GUI、LLM、插件或完整 HTML/SARIF/JUnit 报告。
+
+录制入口示例：
+
+```powershell
+jiejian recording start .\samples\fixed_apps\ownership\project.yaml --identity owner
+jiejian recording status <recording_id>
+jiejian recording review <recording_id> --command .\review.json
+jiejian recording finalize <recording_id>
+jiejian recording replay <recording_id> --project .\samples\fixed_apps\ownership\project.yaml --runs 3
+```
