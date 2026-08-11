@@ -18,6 +18,7 @@ from .domain.lifecycle import ProjectStatus, RunLifecycle, RunVerdict
 from .domain.recording import RecordingState
 from .domain.verification import RunResult
 from .errors import ErrorCode, JiejianError
+from .application.services import ProjectControlService, build_execution_request
 from .runtime.config import Settings, load_settings
 from .runtime.diagnostics import human_lines, run_doctor
 from .runtime.logging import configure_logging
@@ -75,6 +76,62 @@ class CliOptions:
     var_dir: Path | None
     log_level: str | None
     trace_id: str | None
+
+
+@app.command("serve")
+def serve_command(
+    context: typer.Context,
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8765, "--port", min=1, max=65535),
+    open_browser: bool = typer.Option(False, "--open/--no-open"),
+    frontend_dir: Path | None = typer.Option(None, "--frontend-dir", help="前端 dist 静态资源目录"),
+) -> None:
+    """启动本地回环 API、Worker 和前端静态资源。"""
+
+    import ipaddress
+    import threading
+    import webbrowser
+    import uvicorn
+
+    try:
+        address = ipaddress.ip_address(host)
+        if not address.is_loopback:
+            raise JiejianError(ErrorCode.API_BINDING_REJECTED, "API 只允许绑定本机回环地址")
+        settings = _runtime_settings(context)
+        from .application.serve_lock import ServeLock
+
+        serve_lock = ServeLock.acquire(settings.var_dir)
+        frontend_dir = (frontend_dir or Path(__file__).resolve().parents[3] / "frontend" / "dist").resolve()
+        from .api import create_app
+
+        try:
+            if not frontend_dir.is_dir() or not (frontend_dir / "index.html").is_file():
+                raise JiejianError(ErrorCode.SERVE_FAILED, "前端静态资源缺少可读的 index.html")
+            api = create_app(settings.var_dir, frontend_dir=frontend_dir)
+            config = uvicorn.Config(api, host=host, port=port, log_level=settings.log_level.lower())
+            server = uvicorn.Server(config)
+            if open_browser:
+                browser_host = f"[{host}]" if address.version == 6 else host
+
+                def open_when_ready() -> None:
+                    deadline = time.monotonic() + 10.0
+                    while time.monotonic() < deadline:
+                        if server.started:
+                            webbrowser.open(f"http://{browser_host}:{port}/")
+                            return
+                        time.sleep(0.05)
+
+                threading.Thread(
+                    target=open_when_ready,
+                    daemon=True,
+                ).start()
+            server.run()
+        finally:
+            serve_lock.release()
+    except JiejianError as exc:
+        _fail(exc)
+    except Exception:
+        _fail(JiejianError(ErrorCode.SERVE_FAILED, "本地服务启动失败"))
 
 
 @app.callback()
@@ -493,21 +550,7 @@ def _ensure_project_record(
     bundle: ProjectBundle,
     now_us: int,
 ) -> None:
-    with factory() as work:
-        existing = work.projects.get(bundle.project.id)
-        if existing is None:
-            work.projects.add(
-                ProjectRecord(
-                    project_id=bundle.project.id,
-                    name=bundle.project.name,
-                    status=ProjectStatus.READY,
-                    created_at_us=now_us,
-                    updated_at_us=now_us,
-                )
-            )
-            work.commit()
-        elif existing.status is not ProjectStatus.READY:
-            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "项目状态不允许创建录制")
+    ProjectControlService(factory).register(bundle.project_file, revalidate=True)
 
 
 def _run_persisted_job(
@@ -523,7 +566,8 @@ def _run_persisted_job(
     try:
         factory = create_session_factory(engine)
         uow_factory = partial(StorageUnitOfWork, factory)
-        request = _persisted_request(bundle, flow=flow)
+        ProjectControlService(uow_factory).register(bundle.project_file, revalidate=True)
+        request = build_execution_request(bundle, flow=flow)
         secret_names = required_secret_names(request)
         known_secrets = _required_secrets(secret_names)
         submission = ExecutionSubmissionService(
@@ -579,36 +623,7 @@ def _run_persisted_job(
 
 
 def _persisted_request(bundle: ProjectBundle, *, flow=None) -> PersistedExecutionRequestV1:
-    project = bundle.project
-    selected_flow = flow or bundle.flow
-    snapshot = ExecutionProjectSnapshotV1(
-        schema_version="1",
-        project_id=project.id,
-        project_name=project.name,
-        target=project.target,
-        identities=project.identities,
-        resources=project.resources,
-        flow=selected_flow,
-        contract=bundle.contract,
-        owner_observer_enabled=project.owner_observer_enabled,
-        mutation_seed=project.mutation_seed,
-    )
-    duration = min(
-        max(int(project.target.timeout_seconds * project.target.max_requests * 1_000_000), 1),
-        3_600_000_000,
-    )
-    return PersistedExecutionRequestV1(
-        schema_version="1",
-        budget=ExecutionBudgetV1(
-            schema_version="1",
-            max_requests=project.target.max_requests,
-            request_timeout_us=int(project.target.timeout_seconds * 1_000_000),
-            max_duration_us=duration,
-            max_response_bytes=project.target.max_response_bytes,
-            max_parallel_cases=1,
-        ),
-        project_snapshot=snapshot,
-    )
+    return build_execution_request(bundle, flow=flow)
 
 
 def _required_secrets(names: tuple[str, ...]) -> tuple[str, ...]:

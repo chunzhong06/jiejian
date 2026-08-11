@@ -10,12 +10,14 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.14,<2",
+    "fastapi>=0.115,<1",
     "httpx>=0.27,<1",
     "playwright>=1.61,<1.62",
     "pydantic>=2.10,<3",
     "pyyaml>=6.0,<7",
     "SQLAlchemy>=2.0,<3",
     "typer>=0.15,<1",
+    "uvicorn>=0.30,<1",
 ]
 
 [project.scripts]

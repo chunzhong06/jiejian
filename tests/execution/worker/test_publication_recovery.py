@@ -5,9 +5,11 @@ import json
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from jiejian.application.results import PublishedResultReader
 from jiejian.domain.lifecycle import (
     JobState,
     ProjectStatus,
@@ -24,6 +26,7 @@ from jiejian.protocols import (
     canonical_json_bytes,
 )
 from jiejian.storage import (
+    EvidenceIndexRecord,
     ProjectRecord,
     StorageUnitOfWork,
     create_session_factory,
@@ -41,6 +44,7 @@ from jiejian.worker import (
     RunReconciliationService,
     SubmitJobV1,
 )
+from jiejian.worker.request_store import ExecutionRequestStore
 from jiejian.worker.published_artifacts import (
     StagedAttempt,
     TrustedResultReceiptV1,
@@ -274,3 +278,102 @@ def test_reconciliation_completes_promoted_run_once_after_commit_failure(
         assert repeated_events == events
     finally:
         parts.engine.dispose()
+
+
+def test_result_reader_rejects_tampered_published_report(tmp_path: Path) -> None:
+    var_dir = tmp_path / "var"
+    parts = _claimed_job(var_dir, "a")
+    staged = _staged_attempt(var_dir, parts.job)
+    try:
+        RunPublicationService(
+            var_dir,
+            parts.uow_factory,
+            utc_now_us=lambda: NOW_US + 3,
+        ).publish(staged)
+        reader = PublishedResultReader(var_dir, parts.uow_factory)
+        assert reader.report(reader.read(parts.job.run_id)) == {}
+        report = (
+            var_dir
+            / "projects"
+            / "publication-project"
+            / "runs"
+            / parts.job.run_id
+            / "artifacts"
+            / "report"
+            / "report.json"
+        )
+        report.write_text('{"tampered":true}', encoding="utf-8")
+        with pytest.raises(JiejianError) as captured:
+            reader.read(parts.job.run_id)
+        assert captured.value.code == ErrorCode.ARTIFACT_MANIFEST.value
+    finally:
+        parts.engine.dispose()
+
+
+def test_result_reader_rejects_mismatched_evidence_index(tmp_path: Path) -> None:
+    var_dir = tmp_path / "var"
+    parts = _claimed_job(var_dir, "b")
+    staged = _staged_attempt(var_dir, parts.job)
+    try:
+        RunPublicationService(
+            var_dir,
+            parts.uow_factory,
+            utc_now_us=lambda: NOW_US + 3,
+        ).publish(staged)
+        with parts.uow_factory() as work:
+            work.evidence.add(
+                EvidenceIndexRecord(
+                    evidence_id="ev_" + "b" * 20,
+                    run_id=parts.job.run_id,
+                    case_id="forged-case",
+                    artifact_path="artifacts/report/report.json",
+                    sha256="b" * 64,
+                    byte_count=2,
+                    created_at_us=NOW_US + 3,
+                )
+            )
+            work.commit()
+        with pytest.raises(JiejianError) as captured:
+            PublishedResultReader(var_dir, parts.uow_factory).read(parts.job.run_id)
+        assert captured.value.code == ErrorCode.ARTIFACT_HASH_MISMATCH.value
+    finally:
+        parts.engine.dispose()
+
+
+def test_evidence_detail_rebuilds_baseline_from_flow_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    request = SimpleNamespace(
+        project_snapshot=SimpleNamespace(
+            flow=SimpleNamespace(
+                steps=(SimpleNamespace(
+                    id="step-1",
+                    identity_id="owner",
+                    method="GET",
+                    path="/resources/{resource_id}",
+                    resource_id="resource-1",
+                    json_body={"owner": "owner"},
+                ),),
+            ),
+        ),
+    )
+    reader = PublishedResultReader(tmp_path / "var", lambda: None)
+    monkeypatch.setattr(ExecutionRequestStore, "load", lambda self, job_id, expected_hash: request)
+    reader.evidence_document = lambda view, evidence_id: {
+        "evidence_id": evidence_id,
+        "case_id": "case-1",
+        "request": {"identity_id": "attacker", "method": "GET", "path": "/resources/other", "json_body": {"owner": "attacker"}},
+        "observations": [],
+    }
+    reader.document = lambda view, artifact_path: {
+        "cases": [{"case_id": "case-1", "step_id": "step-1", "identity_id": "attacker"}],
+    }
+    view = SimpleNamespace(job=SimpleNamespace(job_id="job-1", request_hash="hash"))
+    detail = reader.evidence_detail(view, "ev_test")
+    assert detail["difference"]["baseline_request"] == {
+        "identity_id": "owner",
+        "method": "GET",
+        "path": "/resources/resource-1",
+        "resource_id": "resource-1",
+        "json_body": {"owner": "owner"},
+    }
+    assert detail["difference"]["mutation_request"]["identity_id"] == "attacker"
+    assert detail["difference"]["mutation_request"]["path"] == "/resources/other"

@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 NOW_US = 1_810_000_000_000_000
 
 
-def test_stage3_migration_preserves_run_jobs_and_enforces_single_target(
+def test_stage4_migration_preserves_run_jobs_and_enforces_single_target(
     tmp_path: Path,
 ) -> None:
     database = tmp_path / "legacy.db"
@@ -87,7 +87,11 @@ def test_stage3_migration_preserves_run_jobs_and_enforces_single_target(
         assert connection.execute("SELECT count(*) FROM job_events").fetchone() == (1,)
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("0002_stage3_recording",)
+        ).fetchone() == ("0003_stage4_control_plane",)
+        assert connection.execute(
+            "SELECT source_path, source_hash, active_contract_path, active_contract_hash "
+            "FROM projects"
+        ).fetchone() == (None, None, None, None)
         assert {row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )} >= {"recordings", "flow_draft_revisions"}

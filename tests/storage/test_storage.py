@@ -172,7 +172,7 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
         with engine.connect() as connection:
             assert connection.execute(
                 text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == "0002_stage3_recording"
+            ).scalar_one() == "0003_stage4_control_plane"
     finally:
         engine.dispose()
 

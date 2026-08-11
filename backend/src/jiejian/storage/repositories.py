@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
@@ -85,6 +86,10 @@ class ProjectRecord(StorageRecord):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     name: str = Field(min_length=1, max_length=128)
     status: ProjectStatus
+    source_path: str | None = Field(default=None, min_length=1, max_length=1024)
+    source_hash: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    active_contract_path: str | None = Field(default=None, min_length=1, max_length=1024)
+    active_contract_hash: str | None = Field(default=None, pattern=SHA256_PATTERN)
     created_at_us: int = Field(ge=0)
     updated_at_us: int = Field(ge=0)
 
@@ -331,6 +336,10 @@ class ProjectRepository:
                 project_id=record.project_id,
                 name=record.name,
                 status=record.status.value,
+                source_path=record.source_path,
+                source_hash=record.source_hash,
+                active_contract_path=record.active_contract_path,
+                active_contract_hash=record.active_contract_hash,
                 created_at_us=record.created_at_us,
                 updated_at_us=record.updated_at_us,
             )
@@ -348,6 +357,50 @@ class ProjectRepository:
             project_id=row.project_id,
             name=row.name,
             status=ProjectStatus(row.status),
+            source_path=row.source_path,
+            source_hash=row.source_hash,
+            active_contract_path=row.active_contract_path,
+            active_contract_hash=row.active_contract_hash,
+            created_at_us=row.created_at_us,
+            updated_at_us=row.updated_at_us,
+        )
+
+    def list_all(self) -> tuple[ProjectRecord, ...]:
+        rows = _scalars(
+            self._session,
+            select(ProjectRow).order_by(ProjectRow.updated_at_us.desc(), ProjectRow.project_id),
+        )
+        return tuple(self._record(row) for row in rows)
+
+    def replace(self, record: ProjectRecord) -> None:
+        ensure_storage_payload_safe(
+            record.model_dump(mode="json"), self._known_secrets
+        )
+        row = _scalar(
+            self._session,
+            select(ProjectRow).where(ProjectRow.project_id == record.project_id),
+        )
+        if row is None:
+            raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "项目对象不存在")
+        row.name = record.name
+        row.status = record.status.value
+        row.source_path = record.source_path
+        row.source_hash = record.source_hash
+        row.active_contract_path = record.active_contract_path
+        row.active_contract_hash = record.active_contract_hash
+        row.updated_at_us = record.updated_at_us
+        _flush(self._session)
+
+    @staticmethod
+    def _record(row: ProjectRow) -> ProjectRecord:
+        return ProjectRecord(
+            project_id=row.project_id,
+            name=row.name,
+            status=ProjectStatus(row.status),
+            source_path=row.source_path,
+            source_hash=row.source_hash,
+            active_contract_path=row.active_contract_path,
+            active_contract_hash=row.active_contract_hash,
             created_at_us=row.created_at_us,
             updated_at_us=row.updated_at_us,
         )
@@ -398,6 +451,29 @@ class RunRepository:
             finished_at_us=row.finished_at_us,
         )
 
+    def list_for_project(self, project_id: str) -> tuple[RunRecord, ...]:
+        rows = _scalars(
+            self._session,
+            select(RunRow)
+            .where(RunRow.project_id == project_id)
+            .order_by(RunRow.created_at_us.desc(), RunRow.run_id),
+        )
+        return tuple(
+            RunRecord(
+                run_id=row.run_id,
+                project_id=row.project_id,
+                contract_id=row.contract_id,
+                contract_version=row.contract_version,
+                engine_version=row.engine_version,
+                lifecycle=RunLifecycle(row.lifecycle),
+                verdict=RunVerdict(row.verdict) if row.verdict is not None else None,
+                created_at_us=row.created_at_us,
+                updated_at_us=row.updated_at_us,
+                finished_at_us=row.finished_at_us,
+            )
+            for row in rows
+        )
+
 
 class RecordingRepository:
     def __init__(self, session: Session, known_secrets: Sequence[str]) -> None:
@@ -434,6 +510,15 @@ class RecordingRepository:
             select(RecordingRow).where(RecordingRow.recording_id == recording_id),
         )
         return self._record(row) if row is not None else None
+
+    def list_for_project(self, project_id: str) -> tuple[RecordingRecord, ...]:
+        rows = _scalars(
+            self._session,
+            select(RecordingRow)
+            .where(RecordingRow.project_id == project_id)
+            .order_by(RecordingRow.created_at_us.desc(), RecordingRow.recording_id),
+        )
+        return tuple(self._record(row) for row in rows)
 
     def _row(self, record: RecordingRecord) -> RecordingRow:
         return RecordingRow(
@@ -645,6 +730,49 @@ class JobRepository:
             ),
         )
         return self.get(job_id) if job_id is not None else None
+
+    def get_by_run(self, run_id: str) -> JobRecord | None:
+        job_id = _scalar(self._session, select(JobRow.job_id).where(JobRow.run_id == run_id))
+        return self.get(job_id) if job_id is not None else None
+
+    def get_by_recording(self, recording_id: str) -> JobRecord | None:
+        job_id = _scalar(self._session, select(JobRow.job_id).where(JobRow.recording_id == recording_id))
+        return self.get(job_id) if job_id is not None else None
+
+    def next_pending(self, now_us: int | None = None) -> JobRecord | None:
+        current = time.time_ns() // 1_000 if now_us is None else now_us
+        row = _scalar(
+            self._session,
+            select(JobRow)
+            .where(JobRow.state == JobState.PENDING.value, JobRow.available_at_us <= current)
+            .order_by(JobRow.created_at_us, JobRow.job_id)
+            .limit(1),
+        )
+        if row is None:
+            return None
+        return self._record(row)
+
+    @staticmethod
+    def _record(row: JobRow) -> JobRecord:
+        return JobRecord(
+            job_id=row.job_id,
+            project_id=row.project_id,
+            run_id=row.run_id,
+            recording_id=row.recording_id,
+            operation_type=row.operation_type,
+            state=JobState(row.state),
+            idempotency_key=row.idempotency_key,
+            request_hash=row.request_hash,
+            attempt=row.attempt,
+            max_attempts=row.max_attempts,
+            available_at_us=row.available_at_us,
+            lease_owner=row.lease_owner,
+            fencing_token=row.fencing_token,
+            lease_expires_at_us=row.lease_expires_at_us,
+            cancel_requested_at_us=row.cancel_requested_at_us,
+            created_at_us=row.created_at_us,
+            updated_at_us=row.updated_at_us,
+        )
 
 
 class JobEventRepository:

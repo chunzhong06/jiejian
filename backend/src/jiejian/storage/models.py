@@ -52,6 +52,10 @@ class ProjectRow(Base):
     project_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_path: Mapped[str | None] = mapped_column(String(1024))
+    source_hash: Mapped[str | None] = mapped_column(String(64))
+    active_contract_path: Mapped[str | None] = mapped_column(String(1024))
+    active_contract_hash: Mapped[str | None] = mapped_column(String(64))
     created_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
