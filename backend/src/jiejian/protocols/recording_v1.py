@@ -1,4 +1,15 @@
-"""阶段 3 Recording Runner V1 的严格进程协议。"""
+# =============================================================================
+# Recording Runner V1 进程协议
+#
+# 定位
+#   Worker 与隔离 Recording Runner 之间的稳定版本化 Wire DTO 边界
+#
+# 职责
+#   校验范围和预算｜约束事件与清理结果｜编码严格 JSON 请求和结果
+#
+# 调用链
+#   Recording job handler ↔ Recording V1 JSON files ↔ recording_runner.execution
+# =============================================================================
 
 from __future__ import annotations
 
@@ -20,8 +31,8 @@ from pydantic import (
 )
 
 from ..domain.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN
-from ..domain.recording import RecordingState, RecordingStateEvent
-from ..domain.verification import TargetScope
+from ..recording.models import RecordingState, RecordingStateEvent
+from ..verification.models import TargetScope
 from ..errors import ErrorCode, JiejianError
 from ..redaction import REDACTED
 

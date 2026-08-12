@@ -1,4 +1,15 @@
-"""不暴露 SQLAlchemy Session 的显式事务边界。"""
+# =============================================================================
+# Storage Unit of Work
+#
+# 定位
+#   应用服务与具体 Repository 之间的显式事务及资源所有权边界
+#
+# 职责
+#   组合聚合仓储｜统一 commit/rollback｜关闭 Session 并映射持久化错误
+#
+# 调用链
+#   Application / Execution services → StorageUnitOfWork → Repositories / Session
+# =============================================================================
 
 from __future__ import annotations
 
@@ -10,21 +21,29 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..errors import ErrorCode, JiejianError
 from .job_control import JobControlRepository
-from .repositories import (
-    EvidenceIndexRepository,
-    FlowDraftRevisionRepository,
-    JobEventRepository,
-    JobRepository,
-    ProjectRepository,
-    RecordingRepository,
-    RunRepository,
+from .repositories.contracts import (
+    ContractCandidateRepository,
+    ContractVersionRepository,
+    RequirementRepository,
 )
+from .repositories.llm import LLMProfileRepository
+from .repositories.evidence import EvidenceIndexRepository
+from .repositories.jobs import JobEventRepository, JobRepository
+from .repositories.projects import ProjectRepository
+from .repositories.recordings import (
+    FlowDraftRevisionRepository,
+    RecordingRepository,
+)
+from .repositories.runs import RunRepository
 
 
 class StorageUnitOfWork:
     """一个实例只承载一个显式事务；退出时不会隐式提交。"""
 
     projects: ProjectRepository
+    requirements: RequirementRepository
+    contract_candidates: ContractCandidateRepository
+    contract_versions: ContractVersionRepository
     runs: RunRepository
     recordings: RecordingRepository
     flow_drafts: FlowDraftRevisionRepository
@@ -32,6 +51,7 @@ class StorageUnitOfWork:
     job_events: JobEventRepository
     job_control: JobControlRepository
     evidence: EvidenceIndexRepository
+    llm_profiles: LLMProfileRepository
 
     def __init__(
         self,
@@ -52,6 +72,13 @@ class StorageUnitOfWork:
         self._session = session
         self._committed = False
         self.projects = ProjectRepository(session, self._known_secrets)
+        self.requirements = RequirementRepository(session, self._known_secrets)
+        self.contract_candidates = ContractCandidateRepository(
+            session, self._known_secrets
+        )
+        self.contract_versions = ContractVersionRepository(
+            session, self._known_secrets
+        )
         self.runs = RunRepository(session, self._known_secrets)
         self.recordings = RecordingRepository(session, self._known_secrets)
         self.flow_drafts = FlowDraftRevisionRepository(
@@ -62,6 +89,7 @@ class StorageUnitOfWork:
         self.job_events = JobEventRepository(session, self._known_secrets)
         self.job_control = JobControlRepository(session, self._known_secrets)
         self.evidence = EvidenceIndexRepository(session, self._known_secrets)
+        self.llm_profiles = LLMProfileRepository(session, self._known_secrets)
         return self
 
     def commit(self) -> None:

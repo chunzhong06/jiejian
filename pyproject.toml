@@ -31,6 +31,18 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["backend/src/jiejian"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"backend/alembic.ini" = "jiejian/resources/alembic.ini"
+"backend/migrations" = "jiejian/resources/migrations"
+"schemas" = "jiejian/resources/schemas"
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+markers = [
+    "browser: 启动或依赖 Playwright/浏览器边界",
+    "process: 拉起独立 Runner、Worker、Recording Runner 或 CLI 子进程",
+    "database: 创建、升级或通过事务访问数据库",
+    "e2e: 通过产品入口验证跨能力端到端行为",
+    "slow: 相对较慢的浏览器或多进程完整闭环测试",
+]

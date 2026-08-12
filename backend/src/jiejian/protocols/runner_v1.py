@@ -1,4 +1,15 @@
-"""阶段 2 Runner V1 边界的版本化、规范 JSON 协议。"""
+# =============================================================================
+# Runner V1 进程协议
+#
+# 定位
+#   Worker 与隔离 Verification Runner 之间的稳定版本化 Wire DTO 边界
+#
+# 职责
+#   校验输入快照和预算｜编码可信结果｜限制路径、大小、hash 与 schema_version
+#
+# 调用链
+#   Execution supervisor ↔ Runner V1 JSON files ↔ runner.execution
+# =============================================================================
 
 from __future__ import annotations
 
@@ -26,7 +37,7 @@ from ..domain.identifiers import (
     SHA256_PATTERN,
 )
 from ..domain.lifecycle import ContractStatus, JobState, RunLifecycle, RunVerdict
-from ..domain.verification import (
+from ..verification.models import (
     Flow,
     Identity,
     ResourceDefinition,

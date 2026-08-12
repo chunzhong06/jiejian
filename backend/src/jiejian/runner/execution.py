@@ -1,4 +1,15 @@
-"""严格 Runner 输入、共享验证核心和 staged 结果形成。"""
+# =============================================================================
+# Verification Runner 进程适配
+#
+# 定位
+#   Runner V1 协议与 Verification 核心之间的独立进程边界
+#
+# 职责
+#   严格加载输入｜构造 VerificationSnapshot 并执行｜写入可信结果或错误文件
+#
+# 调用链
+#   runner.__main__ → execute_runner_attempt → SnapshotRunExecutor → staging / RunnerResultV1
+# =============================================================================
 
 from __future__ import annotations
 
@@ -10,7 +21,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from ..domain.lifecycle import JobState, RunLifecycle
-from ..domain.verification import ReasonCode
+from ..verification.models import ReasonCode
 from ..errors import ErrorCode, JiejianError
 from ..protocols import (
     RUNNER_INPUT_MAX_BYTES,
@@ -50,7 +61,11 @@ def execute_runner_attempt(
     environ: Mapping[str, str] | None = None,
     finished_at_us: Callable[[], int] | None = None,
 ) -> int:
-    """执行一次 Runner；返回值只表达可信结果文件是否形成。"""
+    """执行一次 Runner 并在当前 attempt staging 中形成可信结果。
+
+    关键说明
+        返回的进程退出码不表示 PASS、BLOCK 或 INCONCLUSIVE。
+    """
 
     environment = os.environ if environ is None else environ
     clock = finished_at_us or (lambda: time.time_ns() // 1_000)

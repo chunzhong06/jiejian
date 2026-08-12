@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from jiejian.application.results import PublishedResultReader
+from jiejian.results.published import PublishedResultReader
 from jiejian.domain.lifecycle import (
     JobState,
     ProjectStatus,
@@ -34,18 +34,20 @@ from jiejian.storage import (
     default_database_path,
     upgrade_database,
 )
-from jiejian.worker import (
+from jiejian.execution.attempts import JobAttemptService
+from jiejian.execution.models import (
     ClaimJobV1,
-    JobAttemptService,
-    JobQueueService,
     RetryableFailureCode,
     RetryableFailureV1,
-    RunPublicationService,
-    RunReconciliationService,
     SubmitJobV1,
 )
-from jiejian.worker.request_store import ExecutionRequestStore
-from jiejian.worker.published_artifacts import (
+from jiejian.execution.publication import RunPublicationService
+from jiejian.execution.queue import JobQueueService
+
+pytestmark = pytest.mark.database
+from jiejian.execution.reconciliation import RunReconciliationService
+from jiejian.execution.request_store import ExecutionRequestStore
+from jiejian.execution.published_artifacts import (
     StagedAttempt,
     TrustedResultReceiptV1,
     attempt_paths_for,

@@ -13,8 +13,12 @@ from jiejian.storage import (
     create_sqlite_engine,
     default_database_path,
 )
-from jiejian.worker import WorkerDispatcher
-from jiejian.worker.process_environment import minimal_process_environment
+from jiejian.execution.dispatch import WorkerDispatcher
+from jiejian.execution.process_environment import minimal_process_environment
+
+import pytest
+
+pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 
 
 def test_submission_process_can_exit_before_worker_and_runner_finish(
@@ -30,10 +34,12 @@ def test_submission_process_can_exit_before_worker_and_runner_finish(
         """
 from functools import partial
 from pathlib import Path
-from jiejian.cli import _persisted_request
+from jiejian.cli.commands.runs import _persisted_request
 from jiejian.storage import StorageUnitOfWork, create_session_factory, create_sqlite_engine, default_database_path, upgrade_database
 from jiejian.verification.inputs import load_project_bundle
-from jiejian.worker import ExecutionRequestStore, ExecutionSubmissionService, SubmitExecutionV1, WorkerDispatcher, required_secret_names
+from jiejian.execution.request_store import ExecutionRequestStore, required_secret_names
+from jiejian.execution.submission import ExecutionSubmissionService, SubmitExecutionV1
+from jiejian.execution.dispatch import WorkerDispatcher
 
 project = Path(__import__('sys').argv[1])
 var_dir = Path(__import__('sys').argv[2])

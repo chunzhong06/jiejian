@@ -8,9 +8,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from jiejian.cli import app
+from jiejian.cli.app import app
 from jiejian.domain.lifecycle import ProjectStatus
-from jiejian.domain.recording import Recording, RecordingState, transition_recording_state
+from jiejian.recording.models import Recording, RecordingState, transition_recording_state
 from jiejian.protocols import (
     FlowDraftStepV1,
     FlowDraftV1,
@@ -27,6 +27,10 @@ from jiejian.storage import (
     upgrade_database,
 )
 from jiejian.verification.inputs import load_project_bundle
+
+import pytest
+
+pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 
 
 def test_finalize_and_replay_three_times_through_cli(

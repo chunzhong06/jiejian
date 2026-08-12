@@ -10,7 +10,9 @@ from sqlalchemy import text
 from jiejian.domain.lifecycle import JobState, RunLifecycle
 from jiejian.errors import ErrorCode, JiejianError
 from jiejian.storage import StorageUnitOfWork
-from jiejian.worker import (
+
+pytestmark = pytest.mark.database
+from jiejian.execution.models import (
     ClaimJobV1,
     ConfirmRecoveryV1,
     RecoveryOperator,

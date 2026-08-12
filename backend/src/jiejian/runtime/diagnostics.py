@@ -1,4 +1,15 @@
-"""只使用本机和临时资源的环境诊断。"""
+# =============================================================================
+# 本地环境诊断
+#
+# 定位
+#   doctor 命令使用的无目标网络副作用运行时检查边界
+#
+# 职责
+#   检查 Python 和依赖｜探测本地端口与 SQLite｜脱敏诊断输出
+#
+# 调用链
+#   CLI doctor → run_doctor → local runtime probes
+# =============================================================================
 
 from __future__ import annotations
 
@@ -207,6 +218,27 @@ def _playwright_check() -> DoctorCheck:
             "reason": reason,
         },
     )
+
+
+def browser_availability() -> str:
+    """Probe the local Playwright executable path without launching Chromium."""
+
+    try:
+        version("playwright")
+        from playwright.sync_api import sync_playwright
+
+        playwright = sync_playwright().start()
+        try:
+            executable = Path(playwright.chromium.executable_path)
+            return "available" if executable.is_file() else "unavailable"
+        finally:
+            playwright.stop()
+    except PackageNotFoundError:
+        return "unavailable"
+    except (OSError, RuntimeError):
+        return "unknown"
+    except Exception:
+        return "unknown"
 
 
 def _loopback_check() -> DoctorCheck:

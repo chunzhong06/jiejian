@@ -1,4 +1,15 @@
-"""安全验证 JSON 产物的原子提交、哈希和报告读取。"""
+# =============================================================================
+# Verification staging 工件
+#
+# 定位
+#   Verification Runner 内的结果序列化边界，产物仍需由 Execution 重验和发布
+#
+# 职责
+#   写入 Run/Evidence JSON｜计算内容哈希｜读取本地报告视图
+#
+# 调用链
+#   SnapshotRunExecutor → persist_run → attempt staging；CLI 兼容读取 → load_report
+# =============================================================================
 
 from __future__ import annotations
 
@@ -14,7 +25,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..domain.identifiers import RUN_ID_PATTERN
-from ..domain.verification import RunResult, SecurityContract, TargetScope
+from .models import RunResult, SecurityContract, TargetScope
 from ..errors import ErrorCode, JiejianError
 from ..redaction import redact
 

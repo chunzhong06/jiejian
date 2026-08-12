@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from jiejian.domain.lifecycle import CaseVerdict, RunVerdict
-from jiejian.domain.verification import (
+from jiejian.verification.models import (
     ContractRule,
     MutationCase,
     MutationKind,

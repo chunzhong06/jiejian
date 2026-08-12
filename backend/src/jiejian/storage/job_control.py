@@ -1,4 +1,15 @@
-"""阶段 2.2 Job 控制面的原子条件更新。"""
+# =============================================================================
+# Job 原子控制仓储
+#
+# 定位
+#   attempt、lease、fencing、cancel、recovery 状态竞争的数据库原子边界
+#
+# 职责
+#   执行条件状态更新｜验证 owner 与 fencing token｜保持 Job 和 Run 完成态一致
+#
+# 调用链
+#   Execution services → JobControlRepository → SQLAlchemy conditional SQL
+# =============================================================================
 
 from __future__ import annotations
 
@@ -11,8 +22,11 @@ from sqlalchemy.orm import Session
 
 from ..domain.lifecycle import JobState, RunLifecycle, RunVerdict
 from ..errors import ErrorCode, JiejianError
-from .models import JobRow, RecordingRow, RunRow
-from .repositories import JobRecord, JobRepository, RunRecord, RunRepository
+from .models.jobs import JobRow
+from .models.recordings import RecordingRow
+from .models.runs import RunRow
+from .repositories.jobs import JobRecord, JobRepository
+from .repositories.runs import RunRecord, RunRepository
 
 _NONTERMINAL_RUNS = (
     RunLifecycle.QUEUED.value,

@@ -1,4 +1,15 @@
-"""所有目标 HTTP 请求共用的范围授权边界。"""
+# =============================================================================
+# Verification 目标授权
+#
+# 定位
+#   Verification 与 Recording 共用的每次请求前 TargetScope 安全边界
+#
+# 职责
+#   校验 scheme/host/port｜阻止未授权私网和重定向｜返回已解析目标
+#
+# 调用链
+#   HttpExecutor / RecordingEventCollector → TargetGuard → DNS / URL policy
+# =============================================================================
 
 from __future__ import annotations
 
@@ -6,7 +17,7 @@ import ipaddress
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit
 
-from ..domain.verification import TargetScope, is_restricted_address
+from .models import TargetScope, is_restricted_address
 from ..errors import ErrorCode, JiejianError
 
 _METADATA_ADDRESSES = {

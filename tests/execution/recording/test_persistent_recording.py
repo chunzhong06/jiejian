@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from jiejian.domain.lifecycle import JobState, ProjectStatus
-from jiejian.domain.recording import RecordingState, RecordingStateEvent
-from jiejian.domain.verification import TargetScope
+from jiejian.recording.models import RecordingState, RecordingStateEvent
+from jiejian.verification.models import TargetScope
 from jiejian.errors import ErrorCode, JiejianError
 from jiejian.protocols import (
     RecordingBudgetV1,
@@ -37,8 +37,13 @@ from jiejian.storage import (
     create_sqlite_engine,
     upgrade_database,
 )
-from jiejian.worker.attempts import JobAttemptService
-from jiejian.worker.recording import RecordingWorker
+from jiejian.recording.job_handler import RecordingJobHandler
+from jiejian.execution.attempts import JobAttemptService
+from jiejian.execution.published_artifacts import attempt_paths_for
+from jiejian.execution.targets import JobTargetType, default_run_job_targets
+from jiejian.recording.job_target import RecordingJobTargetHandler
+
+pytestmark = pytest.mark.database
 
 NOW_US = 1_820_000_000_000_000
 PROJECT_ID = "stage33-project"
@@ -78,13 +83,14 @@ def test_recording_job_reaches_pending_review_with_atomic_draft(tmp_path: Path) 
             )
         )
         times = iter((NOW_US + 10, NOW_US + 30))
-        worker = RecordingWorker(
+        worker = RecordingJobHandler(
             var_dir=context.var_dir,
             lease_owner="recording-worker",
             uow_factory=context.uow_factory,
             attempts=context.attempts,
             application=context.application,
             request_store=context.request_store,
+            cancel_path_for=lambda root, job: attempt_paths_for(root, job).cancel_path,
             controlled_runner=lambda _request, _cancelled: _captured_result(
                 request.recording_id
             ),
@@ -133,13 +139,14 @@ def test_secret_bearing_runner_result_fails_without_persisting_payload(
             known_secrets=(sentinel,),
         )
         times = iter((NOW_US + 110, NOW_US + 120, NOW_US + 130))
-        worker = RecordingWorker(
+        worker = RecordingJobHandler(
             var_dir=context.var_dir,
             lease_owner="recording-worker",
             uow_factory=context.uow_factory,
             attempts=context.attempts,
             application=context.application,
             request_store=context.request_store,
+            cancel_path_for=lambda root, job: attempt_paths_for(root, job).cancel_path,
             controlled_runner=lambda _request, _cancelled: _captured_result(
                 request.recording_id,
                 response_body=f'{{"id":"{sentinel}"}}',
@@ -190,7 +197,13 @@ class _Context:
             )
             work.commit()
         self.request_store = RecordingRequestStore(self.var_dir)
-        self.attempts = JobAttemptService(self.uow_factory, jitter_source=lambda _: 0)
+        self.job_targets = default_run_job_targets()
+        self.job_targets.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
+        self.attempts = JobAttemptService(
+            self.uow_factory,
+            jitter_source=lambda _: 0,
+            targets=self.job_targets,
+        )
         self.application = RecordingApplicationService(
             self.uow_factory,
             self.request_store,

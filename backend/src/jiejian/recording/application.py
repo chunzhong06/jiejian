@@ -1,4 +1,15 @@
-"""Recording 提交、结果校验、FlowDraft 生成和原子完成态。"""
+# =============================================================================
+# Recording 应用服务
+#
+# 定位
+#   控制面、持久 Recording 与隔离 Recording Runner 之间的应用边界
+#
+# 职责
+#   幂等提交 Recording Job｜校验可信 Runner 结果｜生成 FlowDraft 并提交完成态
+#
+# 调用链
+#   CLI / API → RecordingApplicationService → RequestStore / JobAttemptPort / Storage
+# =============================================================================
 
 from __future__ import annotations
 
@@ -11,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..domain.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN
 from ..domain.lifecycle import JobState
-from ..domain.recording import Recording, RecordingState, transition_recording_state
+from .models import Recording, RecordingState, transition_recording_state
 from ..errors import ErrorCode, JiejianError
 from ..protocols import (
     FlowDraftV1,
@@ -27,9 +38,9 @@ from ..storage import (
     RecordingRecord,
     StorageUnitOfWork,
 )
-from ..worker.attempts import JobAttemptService
-from ..worker.events import append_job_event
-from ..worker.models import (
+from ..execution.events import append_job_event
+from ..execution.handlers import JobAttemptPort
+from ..execution.models import (
     CompleteCancellationV1,
     FatalFailureCode,
     FatalFailureV1,
@@ -82,12 +93,12 @@ class RecordingApplicationService:
         uow_factory: Callable[..., StorageUnitOfWork],
         request_store: RecordingRequestStore,
         *,
-        attempts: JobAttemptService | None = None,
+        attempts: JobAttemptPort | None = None,
         processor: FlowDraftProcessor | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._request_store = request_store
-        self._attempts = attempts or JobAttemptService(uow_factory)
+        self._attempts = attempts
         self._processor = processor or FlowDraftProcessor()
 
     def submit(
@@ -137,6 +148,9 @@ class RecordingApplicationService:
         alternate_identities: Mapping[str, str] | None = None,
         resource_bindings: Mapping[str, tuple[str, str]] | None = None,
     ) -> RecordingCompletionResultV1:
+        if self._attempts is None:
+            raise RuntimeError("consume_result requires an injected JobAttemptPort")
+        attempts = self._attempts
         canonical_recording_json_bytes(result, known_secrets=known_secrets)
         if result.result_type in {
             RecordingRunnerResultType.CAPTURED,
@@ -153,7 +167,7 @@ class RecordingApplicationService:
                 resource_bindings=resource_bindings,
             )
         if result.result_type is RecordingRunnerResultType.CANCELLED:
-            mutation = self._attempts.complete_cancellation(
+            mutation = attempts.complete_cancellation(
                 CompleteCancellationV1(
                     job_id=job_id,
                     lease_owner=lease_owner,
@@ -163,7 +177,7 @@ class RecordingApplicationService:
                 known_secrets=known_secrets,
             )
         elif result.error is not None and result.error.retryable:
-            mutation = self._attempts.record_retryable_failure(
+            mutation = attempts.record_retryable_failure(
                 RetryableFailureV1(
                     job_id=job_id,
                     lease_owner=lease_owner,
@@ -174,7 +188,7 @@ class RecordingApplicationService:
                 known_secrets=known_secrets,
             )
         else:
-            mutation = self._attempts.record_fatal_failure(
+            mutation = attempts.record_fatal_failure(
                 FatalFailureV1(
                     job_id=job_id,
                     lease_owner=lease_owner,

@@ -1,0 +1,31 @@
+schema_version: "1"
+project:
+  id: ownership-inconclusive
+  name: Ownership inconclusive sample
+target:
+  base_url: http://127.0.0.1:8767
+  allowed_origins: [http://127.0.0.1:8767]
+  allowed_hosts: [127.0.0.1]
+  allowed_ports: [8767]
+  allow_private_network: true
+  follow_redirects: false
+  timeout_seconds: 5
+  max_requests: 64
+  max_response_bytes: 262144
+identities:
+  - id: owner
+    role: user
+    secret_ref: env:JIEJIAN_SAMPLE_OWNER_TOKEN
+  - id: attacker
+    role: user
+    secret_ref: env:JIEJIAN_SAMPLE_ATTACKER_TOKEN
+resources:
+  - id: owner-resource
+    owner_identity_id: owner
+  - id: attacker-resource
+    owner_identity_id: attacker
+flow: flow.yaml
+contract: contract.yaml
+observers:
+  owner_api: false
+mutation_seed: 7

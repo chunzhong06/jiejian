@@ -1,4 +1,15 @@
-"""浏览器事件采集边界：目标授权、关联标识、预算和落盘前脱敏。"""
+# =============================================================================
+# Recording 事件采集
+#
+# 定位
+#   Playwright 回调与可持久 RecordingEventV1 之间的安全边界
+#
+# 职责
+#   关联 identity/page/frame/request｜执行 TargetScope 与预算｜落盘前统一脱敏
+#
+# 调用链
+#   BrowserRecordingAdapter → RecordingEventCollector → RecordingEventV1 / BoundedRouteTransport
+# =============================================================================
 
 from __future__ import annotations
 
@@ -19,8 +30,8 @@ from playwright.sync_api import (
     WebSocketRoute,
 )
 
-from ..domain.recording import RecordingReasonCode
-from ..domain.verification import TargetScope
+from .models import RecordingReasonCode
+from ..verification.models import TargetScope
 from ..errors import ErrorCode, JiejianError
 from ..protocols.recording_v1 import (
     RECORDING_EVENT_MAX_BYTES,

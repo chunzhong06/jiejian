@@ -1,4 +1,15 @@
-"""Playwright 录制适配器：身份隔离、生命周期与确定性清理。"""
+# =============================================================================
+# Recording 浏览器适配
+#
+# 定位
+#   Recording Runner 内创建隔离 BrowserContext 和受控 Page 的资源边界
+#
+# 职责
+#   每身份独立 context｜安装事件与网络控制｜按确定顺序关闭页面、context 和 browser
+#
+# 调用链
+#   recording_runner.execution → BrowserRecordingAdapter → RecordingEventCollector / Playwright
+# =============================================================================
 
 from __future__ import annotations
 
@@ -15,7 +26,7 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
-from ..domain.recording import (
+from .models import (
     Recording,
     RecordingReasonCode,
     RecordingState,

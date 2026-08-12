@@ -1,4 +1,15 @@
-"""脱敏录制事件生成的 Flow 草稿与不可变审阅命令 V1。"""
+# =============================================================================
+# FlowDraft V1 协议
+#
+# 定位
+#   脱敏 Recording Event 与可执行 Verification Flow 之间的审阅数据边界
+#
+# 职责
+#   表达草稿步骤和变量｜校验审阅命令｜提供规范 JSON 与稳定摘要
+#
+# 调用链
+#   Recording processing / review ↔ FlowDraft V1 → confirmed Verification Flow
+# =============================================================================
 
 from __future__ import annotations
 

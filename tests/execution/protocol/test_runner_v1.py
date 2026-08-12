@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from jiejian.domain.lifecycle import ContractStatus, JobState, RunLifecycle, RunVerdict
-from jiejian.domain.verification import (
+from jiejian.verification.models import (
     ContractRule,
     Flow,
     FlowStep,

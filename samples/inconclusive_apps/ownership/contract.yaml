@@ -1,0 +1,18 @@
+schema_version: "1"
+contract:
+  id: ownership-contract
+  version: 1
+  status: ACTIVE
+  rules:
+    - id: foreign-read
+      kind: foreign_read
+      required_observers: [http]
+      severity: high
+    - id: unauthorized-side-effect
+      kind: unauthorized_side_effect
+      required_observers: [http, owner_api]
+      severity: critical
+    - id: privileged-field
+      kind: privileged_field
+      required_observers: [http, owner_api]
+      severity: critical

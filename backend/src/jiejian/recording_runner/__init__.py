@@ -1,5 +1,1 @@
-"""隔离 Recording Runner 进程入口。"""
-
-from .execution import execute_recording_runner
-
-__all__ = ["execute_recording_runner"]
+# 隔离 Recording Runner 正式进程入口所在的包。
