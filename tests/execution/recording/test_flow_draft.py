@@ -20,7 +20,8 @@ from jiejian.protocols import (
     flow_draft_review_command_schema,
     parse_flow_draft,
 )
-from jiejian.recording import FlowDraftProcessor, FlowDraftReviewer
+from jiejian.recording.processing import FlowDraftProcessor
+from jiejian.recording.review import FlowDraftReviewer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 

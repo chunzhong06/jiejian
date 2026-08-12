@@ -1,4 +1,4 @@
-"""阶段 2.1 的具体持久化边界。"""
+# 阶段 2.1 的具体持久化边界。
 
 from .db import (
     SQLITE_BUSY_TIMEOUT_MS,
@@ -12,6 +12,7 @@ from .repositories import (
     FlowDraftRevisionRecord,
     JobEventRecord,
     JobRecord,
+    LLMProfileRepository,
     ProjectRecord,
     RecordingRecord,
     RunRecord,
@@ -27,6 +28,7 @@ __all__ = [
     "ProjectRecord",
     "RecordingRecord",
     "RunRecord",
+    "LLMProfileRepository",
     "StorageUnitOfWork",
     "create_session_factory",
     "create_sqlite_engine",

@@ -4,4 +4,4 @@ channels:
 dependencies:
   - python=3.13
   - pip
-# Python 包由 scripts/setup-conda.ps1 从 pyproject.toml 安装；Chromium 由同一脚本安装。
+# scripts/start.ps1 优先使用本环境，并从 pyproject.toml 安装 Python 包和 Chromium。

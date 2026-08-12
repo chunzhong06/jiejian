@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jiejian.domain.recording import RecordingState
-from jiejian.domain.verification import TargetScope
+from jiejian.recording.models import RecordingState
+from jiejian.verification.models import TargetScope
 from jiejian.errors import JiejianError
 from jiejian.protocols import (
     RecordingBudgetV1,

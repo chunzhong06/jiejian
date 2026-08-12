@@ -14,7 +14,9 @@ from jiejian.protocols import (
     canonical_json_bytes,
     parse_runner_result,
 )
-from jiejian.worker.process_environment import minimal_process_environment
+
+pytestmark = [pytest.mark.process, pytest.mark.slow]
+from jiejian.execution.process_environment import minimal_process_environment
 
 
 def _runner_input(request, *, job_suffix: str = "1") -> RunnerInputV1:

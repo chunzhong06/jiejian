@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from jiejian.worker import (
+from jiejian.execution.models import (
     ClaimJobV1,
     ConfirmRecoveryV1,
     RecoveryOperator,

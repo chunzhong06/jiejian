@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 import pytest
 
-from jiejian.domain.verification import TargetScope
+from jiejian.verification.models import TargetScope
 from jiejian.protocols import (
     RecordingBudgetV1,
     RecordingEventKind,
@@ -19,7 +19,9 @@ from jiejian.protocols import (
     RecordingSessionRefV1,
     canonical_recording_json_bytes,
 )
-from jiejian.recording import BrowserRecordingAdapter, RecordingBrowserSession
+from jiejian.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
+
+pytestmark = [pytest.mark.browser, pytest.mark.slow]
 
 
 class LocalBrowserServer(ThreadingHTTPServer):

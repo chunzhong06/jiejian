@@ -1,4 +1,15 @@
-"""Recording V1 stdin/stdout 边界与受控浏览器录制执行。"""
+# =============================================================================
+# Recording Runner 进程适配
+#
+# 定位
+#   Recording V1 协议与受控 Playwright 录制之间的独立进程边界
+#
+# 职责
+#   严格读取请求｜运行 BrowserRecordingAdapter｜写入脱敏事件和可信结果
+#
+# 调用链
+#   recording_runner.__main__ → execute_recording → BrowserRecordingAdapter → RecordingRunnerResultV1
+# =============================================================================
 
 from __future__ import annotations
 

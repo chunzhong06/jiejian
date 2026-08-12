@@ -10,6 +10,8 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import CheckConstraint, UniqueConstraint, inspect, insert, text
 from sqlalchemy.engine import Connection, Engine
+
+pytestmark = pytest.mark.database
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -30,6 +32,7 @@ from jiejian.storage import (
     default_database_path,
     upgrade_database,
 )
+from jiejian.storage.db import _migration_resource_root
 from jiejian.storage.models import Base, EvidenceIndexRow, JobRow, ProjectRow, RunRow
 
 PROJECT_ID = "stage21-project"
@@ -126,6 +129,13 @@ def _evidence(**changes: Any) -> EvidenceIndexRecord:
     return EvidenceIndexRecord(**(values | changes))
 
 
+def test_source_migration_resource_root_uses_backend_single_source() -> None:
+    with _migration_resource_root() as root:
+        assert root == Path(__file__).resolve().parents[2] / "backend"
+        assert (root / "alembic.ini").is_file()
+        assert (root / "migrations").is_dir()
+
+
 def _seed_project_and_run(connection: Connection) -> None:
     connection.execute(
         insert(ProjectRow).values(
@@ -161,18 +171,22 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
         inspector = inspect(engine)
         assert set(inspector.get_table_names()) == {
             "alembic_version",
+            "contract_candidates",
+            "contract_versions",
             "evidence_index",
             "flow_draft_revisions",
             "job_events",
             "jobs",
+            "llm_profiles",
             "projects",
             "recordings",
+            "requirements",
             "runs",
         }
         with engine.connect() as connection:
             assert connection.execute(
                 text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == "0003_stage4_control_plane"
+            ).scalar_one() == "0007_stage5_llm_profiles"
     finally:
         engine.dispose()
 
@@ -278,6 +292,26 @@ def test_migrated_schema_matches_sqlalchemy_metadata(
         ).scalar_one()
     assert "COLLATE \"NOCASE\"" in evidence_sql
 
+
+def test_project_governed_binding_database_trigger_rejects_partial_values(
+    migrated_storage: tuple[Path, Engine, sessionmaker[Session]],
+) -> None:
+    _, engine, factory = migrated_storage
+    with StorageUnitOfWork(factory) as work:
+        work.projects.add(_project())
+        work.commit()
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE projects SET governed_contract_id = :contract_id WHERE project_id = :project_id"),
+                {"contract_id": "ownership-contract", "project_id": PROJECT_ID},
+            )
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE projects SET governed_contract_version = 0 WHERE project_id = :project_id"),
+                {"project_id": PROJECT_ID},
+            )
 
 def test_every_new_connection_enables_required_sqlite_pragmas(
     migrated_storage: tuple[Path, Engine, sessionmaker[Session]],

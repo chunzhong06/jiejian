@@ -19,7 +19,7 @@ sys.path.insert(0, str(SOURCE_ROOT))
 from jiejian.sample_app import create_sample_server
 from jiejian.protocols import ExecutionBudgetV1, ExecutionProjectSnapshotV1
 from jiejian.verification.inputs import load_project_bundle
-from jiejian.worker import PersistedExecutionRequestV1
+from jiejian.execution.request_store import PersistedExecutionRequestV1
 
 
 @pytest.fixture

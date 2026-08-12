@@ -1,4 +1,15 @@
-"""Flow 草稿的不可变审阅操作和最终 Flow 编译边界。"""
+# =============================================================================
+# Recording FlowDraft 审阅
+#
+# 定位
+#   不可信 FlowDraft 与人工确认的可执行 Flow 之间的信任转换边界
+#
+# 职责
+#   应用版本化审阅命令｜保持草稿不可变历史｜校验绑定后编译 Flow
+#
+# 调用链
+#   RecordingWorkflow → FlowDraftReviewer → FlowDraft revision / verification.models.Flow
+# =============================================================================
 
 from __future__ import annotations
 
@@ -8,7 +19,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..domain.verification import Flow, FlowStep, FlowVariableSource
+from ..verification.models import Flow, FlowStep, FlowVariableSource
 from ..errors import ErrorCode, JiejianError
 from ..protocols.flow_draft_v1 import (
     ConfirmFlowDraftVariableV1,

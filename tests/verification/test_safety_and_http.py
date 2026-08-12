@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from jiejian.domain.verification import TargetScope
+from jiejian.verification.models import TargetScope
 from jiejian.errors import ErrorCode, JiejianError
 from jiejian.verification.http import HttpExecutor
 from jiejian.verification.safety import TargetGuard

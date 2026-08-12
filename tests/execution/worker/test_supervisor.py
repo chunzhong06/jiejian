@@ -20,16 +20,15 @@ from jiejian.storage import (
     default_database_path,
     upgrade_database,
 )
-from jiejian.worker import (
-    ExecutionRequestStore,
-    ExecutionSubmissionService,
-    JobAttemptService,
-    JobQueueService,
-    RequestCancellationV1,
-    RunPublicationService,
-    SubmitExecutionV1,
-    WorkerSupervisor,
-)
+from jiejian.execution.attempts import JobAttemptService
+from jiejian.execution.models import RequestCancellationV1
+from jiejian.execution.publication import RunPublicationService
+from jiejian.execution.queue import JobQueueService
+from jiejian.execution.request_store import ExecutionRequestStore
+from jiejian.execution.submission import ExecutionSubmissionService, SubmitExecutionV1
+from jiejian.execution.supervisor import WorkerSupervisor
+
+pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 
 NOW_US = 1_790_000_000_000_000
 

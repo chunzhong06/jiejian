@@ -1,4 +1,15 @@
-"""跨 CLI、服务与领域层复用的稳定错误结构。"""
+# =============================================================================
+# 稳定错误模型
+#
+# 定位
+#   领域、应用、CLI 与 API 共享的脱敏错误代码边界
+#
+# 职责
+#   定义稳定 ErrorCode｜保存安全详情｜在构造时统一脱敏
+#
+# 调用链
+#   Domain / Application / Infrastructure → JiejianError → CLI / API mapping
+# =============================================================================
 
 from __future__ import annotations
 
@@ -92,9 +103,50 @@ class ErrorCode(StrEnum):
     PROJECT_NOT_REVALIDATED = "PROJECT_NOT_REVALIDATED"
     CONTRACT_NOT_FOUND = "CONTRACT_NOT_FOUND"
     CONTRACT_NOT_ACTIVE = "CONTRACT_NOT_ACTIVE"
+    CONTRACT_REFERENCE_INVALID = "CONTRACT_REFERENCE_INVALID"
+    CONTRACT_ASSESSMENT_BLOCKED = "CONTRACT_ASSESSMENT_BLOCKED"
+    CONTRACT_ANALYSIS_INVALID = "CONTRACT_ANALYSIS_INVALID"
+    CONTRACT_HISTORY_NOT_FOUND = "CONTRACT_HISTORY_NOT_FOUND"
+    CONTRACT_CANDIDATE_CONFLICT = "CONTRACT_CANDIDATE_CONFLICT"
+    LLM_PROVIDER_UNAVAILABLE = "LLM_PROVIDER_UNAVAILABLE"
+    LLM_PROVIDER_FAILED = "LLM_PROVIDER_FAILED"
+    LLM_OUTPUT_INVALID = "LLM_OUTPUT_INVALID"
+    LLM_REQUIREMENT_INVALID = "LLM_REQUIREMENT_INVALID"
     ARTIFACT_NOT_PUBLISHED = "ARTIFACT_NOT_PUBLISHED"
     ARTIFACT_HASH_MISMATCH = "ARTIFACT_HASH_MISMATCH"
     SERVE_FAILED = "SERVE_FAILED"
+    LLM_AUTH_FAILED = "llm_auth_failed"
+    LLM_RATE_LIMITED = "llm_rate_limited"
+    LLM_TIMEOUT = "llm_timeout"
+    LLM_INVALID_RESPONSE = "llm_invalid_response"
+    LLM_BUDGET_EXCEEDED = "llm_budget_exceeded"
+    LLM_PROVIDER_UNAVAILABLE_WIRE = "llm_provider_unavailable"
+    LLM_PROFILE_NOT_FOUND = "LLM_PROFILE_NOT_FOUND"
+    LLM_PROFILE_INVALID = "LLM_PROFILE_INVALID"
+    LLM_SECRET_UNAVAILABLE = "LLM_SECRET_UNAVAILABLE"
+    LLM_PROFILE_STORAGE_FAILED = "LLM_PROFILE_STORAGE_FAILED"
+    LLM_TEST_IN_PROGRESS = "LLM_TEST_IN_PROGRESS"
+
+
+class LLMWireErrorCode(StrEnum):
+    """供应商传输边界对外冻结的小写 wire code。"""
+
+    AUTH_FAILED = "llm_auth_failed"
+    RATE_LIMITED = "llm_rate_limited"
+    TIMEOUT = "llm_timeout"
+    INVALID_RESPONSE = "llm_invalid_response"
+    BUDGET_EXCEEDED = "llm_budget_exceeded"
+    PROVIDER_UNAVAILABLE = "llm_provider_unavailable"
+
+
+LLM_WIRE_TO_INTERNAL: dict[LLMWireErrorCode, ErrorCode] = {
+    LLMWireErrorCode.AUTH_FAILED: ErrorCode.LLM_AUTH_FAILED,
+    LLMWireErrorCode.RATE_LIMITED: ErrorCode.LLM_RATE_LIMITED,
+    LLMWireErrorCode.TIMEOUT: ErrorCode.LLM_TIMEOUT,
+    LLMWireErrorCode.INVALID_RESPONSE: ErrorCode.LLM_INVALID_RESPONSE,
+    LLMWireErrorCode.BUDGET_EXCEEDED: ErrorCode.LLM_BUDGET_EXCEEDED,
+    LLMWireErrorCode.PROVIDER_UNAVAILABLE: ErrorCode.LLM_PROVIDER_UNAVAILABLE_WIRE,
+}
 
 
 class JiejianError(Exception):

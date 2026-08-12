@@ -1,4 +1,15 @@
-"""多面观察的显式判定、证据构建与门禁聚合。"""
+# =============================================================================
+# Verification 证据判定
+#
+# 定位
+#   把 HTTP 与 owner observer 的事实转换为 Evidence 和 Run Verdict 的纯算法
+#
+# 职责
+#   判定单个 case｜构造可哈希 Evidence｜聚合 PASS/BLOCK/INCONCLUSIVE
+#
+# 调用链
+#   SnapshotRunExecutor → evaluate_case / build_evidence → aggregate_verdict
+# =============================================================================
 
 from __future__ import annotations
 
@@ -7,7 +18,7 @@ import json
 from typing import Any
 
 from ..domain.lifecycle import CaseVerdict, RunVerdict
-from ..domain.verification import (
+from .models import (
     ContractRule,
     Evidence,
     MutationCase,
@@ -23,7 +34,11 @@ def evaluate_case(
     rule: ContractRule,
     observations: tuple[Observation, ...],
 ) -> tuple[CaseVerdict, tuple[str, ...]]:
-    """按契约规则解释观察结果，不把 HTTP 状态码直接当作结论。"""
+    """按契约规则解释观察结果，不把 HTTP 状态码直接当作结论。
+
+    关键说明
+        HTTP 拒绝只是一项观察；owner 侧已发生的副作用仍可形成漏洞结论。
+    """
 
     by_phase = {(item.observer, item.phase): item for item in observations}
     mutation_http = by_phase.get(("http", "mutation"))

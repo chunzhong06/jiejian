@@ -1,13 +1,11 @@
-"""领域生命周期、结论与最小实体模型。"""
+# 共享生命周期枚举与领域模型公共基线。
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Literal
-from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class ProjectStatus(StrEnum):
@@ -74,48 +72,3 @@ class DomainModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal["1"] = "1"
-
-
-class StateTransitionEvent(DomainModel):
-    entity_id: UUID
-    machine: str
-    source: str
-    target: str
-    operator: str = Field(min_length=1)
-    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-class EntityModel(DomainModel):
-    id: UUID = Field(default_factory=uuid4)
-    events: tuple[StateTransitionEvent, ...] = ()
-
-
-class Project(EntityModel):
-    name: str = Field(min_length=1)
-    status: ProjectStatus = ProjectStatus.DRAFT
-
-
-class Contract(EntityModel):
-    version: int = Field(default=1, ge=1)
-    rules: tuple[str, ...] = ()
-    status: ContractStatus = ContractStatus.DRAFT
-    supersedes_id: UUID | None = None
-
-
-class Run(EntityModel):
-    contract_version: int = Field(ge=1)
-    engine_version: str = Field(min_length=1)
-    lifecycle: RunLifecycle = RunLifecycle.QUEUED
-    verdict: RunVerdict | None = None
-
-
-class TestCase(EntityModel):
-    run_id: UUID
-    lifecycle: CaseLifecycle = CaseLifecycle.PLANNED
-    verdict: CaseVerdict | None = None
-
-
-class Job(EntityModel):
-    job_type: str = Field(min_length=1)
-    state: JobState = JobState.PENDING
-    attempts: int = Field(default=0, ge=0)

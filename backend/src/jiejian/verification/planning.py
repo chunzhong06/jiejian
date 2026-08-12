@@ -1,4 +1,15 @@
-"""根据 Flow 与安全契约生成确定性的关系变异计划。"""
+# =============================================================================
+# Verification 关系变异规划
+#
+# 定位
+#   在不产生目标副作用时把 Flow 和 Contract 派生为确定性 MutationPlan
+#
+# 职责
+#   选择适用规则｜交换身份、资源或敏感字段｜生成稳定 case 与计划哈希
+#
+# 调用链
+#   SnapshotRunExecutor → build_mutation_plan → MutationPlan / MutationCase
+# =============================================================================
 
 from __future__ import annotations
 
@@ -8,7 +19,7 @@ import random
 from importlib.metadata import version
 from typing import Any
 
-from ..domain.verification import (
+from .models import (
     Flow,
     Identity,
     MutationCase,

@@ -1,4 +1,4 @@
-"""仅用于本机黄金场景的标准库 HTTP 样例应用。"""
+# 仅用于本机黄金场景的标准库 HTTP 样例应用。
 
 from __future__ import annotations
 

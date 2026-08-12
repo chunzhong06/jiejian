@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 
 from jiejian.errors import ErrorCode, JiejianError
-from jiejian.worker import (
+from jiejian.execution.request_store import (
     ExecutionRequestStore,
     PersistedExecutionRequestV1,
     canonical_execution_request_bytes,
     parse_execution_request,
 )
-from jiejian.worker.process_environment import minimal_process_environment
+from jiejian.execution.process_environment import minimal_process_environment
 
 
 def test_request_store_is_canonical_hashed_atomic_and_idempotent(

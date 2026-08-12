@@ -1,4 +1,15 @@
-"""Recording Runner 请求的规范快照、哈希与原子文件边界。"""
+# =============================================================================
+# Recording 请求快照
+#
+# 定位
+#   Recording 提交事务与后续隔离 Runner 输入之间的不可变文件边界
+#
+# 职责
+#   规范编码请求｜原子写入和哈希重验｜拒绝 secret、重复键和非有限值
+#
+# 调用链
+#   RecordingApplicationService → RecordingRequestStore → RecordingJobHandler
+# =============================================================================
 
 from __future__ import annotations
 

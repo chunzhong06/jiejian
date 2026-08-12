@@ -10,12 +10,14 @@ from jiejian.domain.lifecycle import JobState, RunLifecycle
 from jiejian.errors import ErrorCode, JiejianError
 from jiejian.storage import StorageUnitOfWork, create_session_factory, create_sqlite_engine
 from jiejian.storage.repositories import JobEventRepository
-from jiejian.worker import (
+
+pytestmark = pytest.mark.database
+from jiejian.execution.attempts import JobAttemptService
+from jiejian.execution.models import (
     ClaimJobV1,
     CompleteCancellationV1,
     FatalFailureCode,
     FatalFailureV1,
-    JobAttemptService,
     RequestCancellationV1,
     RetryPolicyV1,
     RetryableFailureCode,

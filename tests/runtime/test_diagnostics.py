@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from jiejian.cli import app
+from jiejian.cli.app import app
 
 
 def test_root_help_lists_doctor() -> None:

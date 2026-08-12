@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 
@@ -8,12 +9,37 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from jiejian.cli import app
+from jiejian.cli.app import app
 from jiejian.domain.lifecycle import CaseVerdict, RunVerdict
 from jiejian.errors import ErrorCode, JiejianError
 from jiejian.verification.artifacts import load_report
-from jiejian.verification.pipeline import RunService
-from jiejian.worker import WorkerDispatcher
+from jiejian.verification.models import RunResult
+from jiejian.execution.dispatch import WorkerDispatcher
+
+pytestmark = [pytest.mark.e2e, pytest.mark.database, pytest.mark.process, pytest.mark.slow]
+
+
+def _run_via_cli(
+    runner: CliRunner,
+    var_dir: Path,
+    project_path: Path,
+    environment: dict[str, str],
+) -> RunResult:
+    result = runner.invoke(
+        app,
+        [
+            "--var-dir",
+            str(var_dir),
+            "run",
+            str(project_path),
+            "--contract",
+            str(project_path.parent / "contract.yaml"),
+        ],
+        env=environment,
+    )
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+    return RunResult.model_validate(json.loads(result.stdout))
 
 
 def test_safe_and_vulnerable_golden_paths(
@@ -23,18 +49,25 @@ def test_safe_and_vulnerable_golden_paths(
 ) -> None:
     safe_server = sample_server_factory("safe", echo_identity="attacker")
     safe_project = stage1_project_factory(safe_server.port)
-    safe_result = RunService(
-        tmp_path / "safe-var", environ=safe_server.environ
-    ).run(safe_project)
+    safe_result = _run_via_cli(
+        CliRunner(), tmp_path / "safe-var", safe_project, safe_server.environ
+    )
     assert safe_result.verdict is RunVerdict.PASS
     assert all(item.verdict is CaseVerdict.SAFE for item in safe_result.evidence)
+    assert safe_server.server.runner_process_ids
+    assert set(safe_server.server.runner_process_ids) != {os.getpid()}
 
     vulnerable_server = sample_server_factory("vulnerable")
     vulnerable_project = stage1_project_factory(vulnerable_server.port)
-    vulnerable_result = RunService(
-        tmp_path / "vulnerable-var", environ=vulnerable_server.environ
-    ).run(vulnerable_project)
+    vulnerable_result = _run_via_cli(
+        CliRunner(),
+        tmp_path / "vulnerable-var",
+        vulnerable_project,
+        vulnerable_server.environ,
+    )
     assert vulnerable_result.verdict is RunVerdict.BLOCK
+    assert vulnerable_server.server.runner_process_ids
+    assert set(vulnerable_server.server.runner_process_ids) != {os.getpid()}
     side_effect = next(
         item
         for item in vulnerable_result.evidence
@@ -61,20 +94,30 @@ def test_missing_observer_and_cleanup_failure_are_inconclusive(
         normal_server.port,
         owner_observer=False,
     )
-    missing = RunService(
-        tmp_path / "no-observer-var", environ=normal_server.environ
-    ).run(no_observer_project)
+    missing = _run_via_cli(
+        CliRunner(),
+        tmp_path / "no-observer-var",
+        no_observer_project,
+        normal_server.environ,
+    )
     assert missing.verdict is RunVerdict.INCONCLUSIVE
     assert "REQUIRED_OBSERVER_MISSING" in missing.reason_codes
+    assert normal_server.server.runner_process_ids
+    assert set(normal_server.server.runner_process_ids) != {os.getpid()}
 
     broken_server = sample_server_factory("safe", fail_cleanup=True)
     broken_project = stage1_project_factory(broken_server.port)
-    cleanup = RunService(
-        tmp_path / "cleanup-var", environ=broken_server.environ
-    ).run(broken_project)
+    cleanup = _run_via_cli(
+        CliRunner(),
+        tmp_path / "cleanup-var",
+        broken_project,
+        broken_server.environ,
+    )
     assert cleanup.verdict is RunVerdict.INCONCLUSIVE
     assert cleanup.reason_codes == ("CLEANUP_FAILED",)
     assert len(cleanup.evidence) == 1
+    assert broken_server.server.runner_process_ids
+    assert set(broken_server.server.runner_process_ids) != {os.getpid()}
 
 
 def test_seed_evidence_reports_and_secrets_are_stable(
@@ -85,9 +128,9 @@ def test_seed_evidence_reports_and_secrets_are_stable(
     running = sample_server_factory("safe", echo_identity="attacker")
     project = stage1_project_factory(running.port)
     var_dir = tmp_path / "artifacts"
-    service = RunService(var_dir, environ=running.environ)
-    first = service.run(project)
-    second = service.run(project)
+    runner = CliRunner()
+    first = _run_via_cli(runner, var_dir, project, running.environ)
+    second = _run_via_cli(runner, var_dir, project, running.environ)
     assert [item.fingerprint for item in first.evidence] == [
         item.fingerprint for item in second.evidence
     ]
@@ -102,7 +145,7 @@ def test_seed_evidence_reports_and_secrets_are_stable(
     assert running.tokens["attacker"] not in persisted
     assert "prefix::[REDACTED]::suffix" in persisted
     assert not list(var_dir.rglob("*.tmp-*"))
-    report_path = Path(first.artifact_dir) / "report" / "report.json"
+    report_path = Path(first.artifact_dir) / "artifacts" / "report" / "report.json"
     report_path.write_text("{}\n", encoding="utf-8")
     with pytest.raises(JiejianError) as captured:
         load_report(var_dir, first.run_id)
@@ -162,7 +205,7 @@ def test_all_stage1_cli_commands_and_ci_exit_codes(
     assert published_report.exit_code == 0
     assert json.loads(published_report.stdout)["run_id"] == run_payload["run_id"]
 
-    stable = RunService(safe_var, environ=environment).run(safe_project)
+    stable = _run_via_cli(runner, safe_var, safe_project, environment)
     report_result = runner.invoke(
         app,
         ["--var-dir", str(safe_var), "report", stable.run_id, "--format", "json"],
@@ -200,6 +243,51 @@ def test_all_stage1_cli_commands_and_ci_exit_codes(
     assert inconclusive_ci.exit_code == 2
     assert json.loads(inconclusive_ci.stdout)["verdict"] == "INCONCLUSIVE"
     assert inconclusive_ci.stderr == ""
+
+
+def test_cli_reads_and_rejects_tampered_legacy_report(tmp_path: Path) -> None:
+    run_id = "run_" + "a" * 32
+    run_dir = tmp_path / "projects" / "legacy-project" / "runs" / run_id
+    report_path = run_dir / "report" / "report.json"
+    report = {
+        "schema_version": "1",
+        "run_id": run_id,
+        "project_id": "legacy-project",
+        "engine_version": "0.1.0",
+        "verdict": "PASS",
+        "reason_codes": [],
+        "evidence": [],
+    }
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text(
+        json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    manifest = {
+        "schema_version": "1",
+        "run_id": run_id,
+        "project_id": "legacy-project",
+        "verdict": "PASS",
+        "artifact_hashes": {
+            "report/report.json": hashlib.sha256(report_path.read_bytes()).hexdigest()
+        },
+    }
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    assert load_report(tmp_path, run_id)["run_id"] == run_id
+    cli_result = CliRunner().invoke(
+        app, ["--var-dir", str(tmp_path), "report", run_id]
+    )
+    assert cli_result.exit_code == 0
+    assert json.loads(cli_result.stdout)["run_id"] == run_id
+
+    report_path.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(JiejianError) as captured:
+        load_report(tmp_path, run_id)
+    assert captured.value.code == ErrorCode.REPORT_NOT_FOUND.value
 
 
 def test_cli_uses_separate_input_system_and_safety_exit_codes(

@@ -1,4 +1,15 @@
-"""安全验证 YAML 输入边界、路径约束和跨文件引用校验。"""
+# =============================================================================
+# Verification 输入加载
+#
+# 定位
+#   磁盘 ProjectBundle、Flow 和 YAML Contract 进入领域模型的受限边界
+#
+# 职责
+#   严格 YAML 解析｜根目录内引用解析｜跨文件 ID 和语义校验
+#
+# 调用链
+#   Projects / CLI → load_project_bundle / load_flow / load_contract → verification.models
+# =============================================================================
 
 from __future__ import annotations
 
@@ -11,7 +22,7 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 from ..domain.lifecycle import ContractStatus
-from ..domain.verification import (
+from .models import (
     Flow,
     ProjectDefinition,
     RuleKind,

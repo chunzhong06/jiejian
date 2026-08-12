@@ -17,12 +17,10 @@ from jiejian.storage import (
     create_sqlite_engine,
     upgrade_database,
 )
-from jiejian.worker import (
-    JobAttemptService,
-    JobQueueService,
-    JobRecoveryService,
-    SubmitJobV1,
-)
+from jiejian.execution.attempts import JobAttemptService
+from jiejian.execution.models import SubmitJobV1
+from jiejian.execution.queue import JobQueueService
+from jiejian.execution.recovery import JobRecoveryService
 
 PROJECT_ID = "stage22-project"
 NOW_US = 1_790_000_000_000_000

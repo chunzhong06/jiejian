@@ -1,4 +1,15 @@
-"""只依赖不可变内容快照的安全验证执行核心。"""
+# =============================================================================
+# Verification 快照执行
+#
+# 定位
+#   隔离 Runner 内的安全验证核心，不拥有 Job 生命周期或最终发布事务
+#
+# 职责
+#   构造关系变异计划｜执行受控请求与清理｜聚合 Evidence 和 Verdict
+#
+# 调用链
+#   runner.execution → SnapshotRunExecutor → planning / http / evaluation / artifacts
+# =============================================================================
 
 from __future__ import annotations
 
@@ -9,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ..domain.lifecycle import CaseVerdict
-from ..domain.verification import (
+from .models import (
     Evidence,
     Flow,
     Identity,
@@ -99,6 +110,9 @@ class SnapshotRunExecutor:
         artifact_dir: Path,
         destination_dir: Path | None = None,
     ) -> RunResult:
+        """执行完整快照并把已脱敏结果写入调用方指定的 staging。"""
+
+        # --- 阶段：规划并预留全部清理请求 ---
         plan = build_mutation_plan(
             snapshot.identities,
             snapshot.resources,
@@ -126,6 +140,7 @@ class SnapshotRunExecutor:
         )
         evidence: list[Evidence] = []
         try:
+            # --- 阶段：执行变异并形成多面观察 ---
             for case in plan.cases:
                 item = self._run_case(executor, snapshot, case, run_id=run_id)
                 evidence.append(item)
@@ -134,6 +149,7 @@ class SnapshotRunExecutor:
         finally:
             executor.close()
 
+        # --- 阶段：聚合结论并写入 staging 工件 ---
         evidence_tuple = tuple(evidence)
         verdict = aggregate_verdict(evidence_tuple)
         reason_codes = tuple(

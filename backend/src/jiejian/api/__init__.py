@@ -1,4 +1,4 @@
-"""FastAPI 本地回环控制面。"""
+# FastAPI 本地回环控制面。
 
 from .app import create_app
 

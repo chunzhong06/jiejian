@@ -1,4 +1,15 @@
-"""Recording 公开工作流：状态查询、草稿审阅、最终 Flow 发布。"""
+# =============================================================================
+# Recording 审阅工作流
+#
+# 定位
+#   CLI/API 与 Recording、FlowDraft revision、最终 Flow 文件之间的应用服务
+#
+# 职责
+#   查询状态｜追加不可变审阅 revision｜原子发布已确认 Flow
+#
+# 调用链
+#   CLI / API → RecordingWorkflow → FlowDraftReviewer / Storage / final flow file
+# =============================================================================
 
 from __future__ import annotations
 
@@ -11,8 +22,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
-from ..domain.recording import RecordingState, transition_recording_state
-from ..domain.verification import Flow
+from .models import RecordingState, transition_recording_state
+from ..verification.models import Flow
 from ..errors import ErrorCode, JiejianError
 from ..protocols import (
     FlowDraftReviewCommandV1,

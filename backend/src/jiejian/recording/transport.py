@@ -1,4 +1,15 @@
-"""录制路由的有界单跳 HTTP 传输，不允许响应体无界缓冲。"""
+# =============================================================================
+# Recording 路由传输
+#
+# 定位
+#   Playwright route 与授权目标之间的受控单跳 HTTP 适配器
+#
+# 职责
+#   每跳重新授权｜禁用自动重定向｜限制响应字节并显式关闭连接
+#
+# 调用链
+#   RecordingEventCollector → BoundedRouteTransport → TargetGuard / httpx
+# =============================================================================
 
 from __future__ import annotations
 
@@ -8,7 +19,7 @@ from typing import Mapping
 import httpx
 from playwright.sync_api import BrowserContext, Request
 
-from ..domain.verification import TargetScope
+from ..verification.models import TargetScope
 from ..errors import ErrorCode, JiejianError
 from ..verification.safety import TargetGuard
 

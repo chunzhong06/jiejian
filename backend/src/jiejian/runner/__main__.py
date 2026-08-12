@@ -1,4 +1,4 @@
-"""`python -B -m jiejian.runner` 可执行入口。"""
+# `python -B -m jiejian.runner` 可执行入口。
 
 from __future__ import annotations
 
