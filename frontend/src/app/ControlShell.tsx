@@ -12,7 +12,7 @@
  * ============================================================================= */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Layout, Menu, Result, Steps, Tag, Typography } from 'antd'
+import { Button, Layout, Menu, Result, Steps, Tag, Typography } from 'antd'
 import { AppstoreOutlined, CheckCircleOutlined, FileSearchOutlined, PlayCircleOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { HashRouter, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/http'
@@ -20,12 +20,14 @@ import { projectsApi } from '../api/projects'
 import { runsApi } from '../api/runs'
 import { llmApi, LLMProfile } from '../api/llm'
 import { systemApi, SystemStatus } from '../api/system'
+import { onboardingApi } from '../api/onboarding'
 import { AccessPage } from '../features/access/AccessPage'
 import { ContractPage } from '../features/contracts/ContractPage'
 import { RecordingPage } from '../features/recording/RecordingPage'
 import { ReportPage } from '../features/results/ReportPage'
 import { RunPage } from '../features/runs/RunPage'
 import { VerifyPage } from '../features/verification/VerifyPage'
+import { ErrorRecovery } from '../components/ErrorRecovery'
 import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
 import '../styles.css'
 
@@ -89,6 +91,8 @@ function ControlShellContent() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [llmLoadFailed, setLlmLoadFailed] = useState(false)
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({ api: 'unknown', worker: 'unknown', browser: 'unknown' })
+  const [retryEpoch, setRetryEpoch] = useState(0)
+  const [demoData, setDemoData] = useState(false)
   const refresh = async () => {
     try {
       const current = await projectsApi.projects()
@@ -107,8 +111,27 @@ function ControlShellContent() {
   }
   const choose = (project: Item) => {
     setSelected(project)
+    setDemoData(false)
     remember(remembered.project, project)
     navigate('/contract')
+  }
+  const onboardingSubmitted = async (result: { project_id: string; run_id: string; job_id: string; demo_data?: boolean }) => {
+    setLoading(true)
+    setDemoData(Boolean(result.demo_data))
+    try {
+      const current = await projectsApi.projects()
+      setProjects(current)
+      const project = current.find((item) => item.project_id === result.project_id) ?? await projectsApi.project(result.project_id)
+      setSelected(project)
+      remember(remembered.project, project)
+      setRuns(await runsApi.runs(result.project_id))
+      navigate('/run')
+      setError(null)
+    } catch (e) {
+      setError(e as ApiError)
+    } finally {
+      setLoading(false)
+    }
   }
   const refreshRuns = async () => {
     if (selected?.project_id) {
@@ -118,6 +141,12 @@ function ControlShellContent() {
         setError(e as ApiError)
       }
     }
+  }
+  const retryCurrentPage = () => {
+    setError(null)
+    setRetryEpoch((epoch) => epoch + 1)
+    void refresh()
+    void refreshRuns()
   }
   useEffect(() => { void refresh() }, [])
   useEffect(() => {
@@ -133,6 +162,12 @@ function ControlShellContent() {
     return () => window.removeEventListener('focus', onFocus)
   }, [])
   useEffect(() => { void refreshRuns() }, [selected?.project_id])
+  useEffect(() => {
+    if (!selected?.project_id) return
+    void onboardingApi.demoStatus().then((status) => {
+      if (status.project_id === selected.project_id && status.demo_data) setDemoData(true)
+    }).catch(() => undefined)
+  }, [selected?.project_id])
   useEffect(() => {
     if (location.pathname !== `/${routePhase}`) {
       navigate('/access', { replace: true })
@@ -151,13 +186,13 @@ function ControlShellContent() {
     }
   }
   const content = () => {
-    if (routePhase === 'access') return <AccessPage projects={projects} selected={selected} runs={runs} onSelect={choose} onContinue={() => navigate('/contract')} onRegister={register} loading={loading} />
+    if (routePhase === 'access') return <AccessPage key={`access-${retryEpoch}`} projects={projects} selected={selected} runs={runs} onSelect={choose} onContinue={() => navigate('/contract')} onRegister={register} onOnboardingSubmitted={onboardingSubmitted} loading={loading} />
     if (!selected) return <Result status="info" title="请先在接入阶段选择项目" />
-    if (routePhase === 'contract') return <ContractPage project={selected} profiles={llmProfiles} onError={setError} />
-    if (routePhase === 'recording') return <RecordingPage project={selected} onError={setError} />
-    if (routePhase === 'run') return <RunPage project={selected} runs={runs} onRefresh={refreshRuns} onError={setError} />
-    if (routePhase === 'verify') return <VerifyPage run={activeRun} onError={setError} />
-    return <ReportPage run={activeRun} onError={setError} />
+    if (routePhase === 'contract') return <ContractPage key={`contract-${retryEpoch}`} project={selected} profiles={llmProfiles} onError={setError} onNext={() => navigate('/run')} />
+    if (routePhase === 'recording') return <RecordingPage key={`recording-${retryEpoch}`} project={selected} onError={setError} onNext={() => navigate('/contract')} />
+    if (routePhase === 'run') return <RunPage key={`run-${retryEpoch}`} project={selected} runs={runs} onRefresh={refreshRuns} onError={setError} onNext={() => navigate('/verify')} />
+    if (routePhase === 'verify') return <VerifyPage key={`verify-${retryEpoch}`} run={activeRun} onError={setError} onNext={() => navigate('/report')} />
+    return <ReportPage key={`report-${retryEpoch}`} run={activeRun} onError={setError} onNext={() => navigate('/access')} />
   }
   return (
     <Layout className="app-shell">
@@ -191,16 +226,8 @@ function ControlShellContent() {
             className="phase-steps"
             responsive={false}
           />
-          {error && (
-            <Alert
-              closable
-              showIcon
-              type="error"
-              message={`${error.code}: ${error.message}`}
-              description={error.traceId ? `trace_id: ${error.traceId}` : undefined}
-              onClose={() => setError(null)}
-            />
-          )}
+          {error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onBackAccess={() => { setError(null); navigate('/access') }} onClose={() => setError(null)} />}
+          {demoData && routePhase !== 'access' && <div className="demo-data-banner">演示数据，不代表真实项目</div>}
           {content()}
         </Layout.Content>
       </Layout>

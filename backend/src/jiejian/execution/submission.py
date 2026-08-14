@@ -26,7 +26,7 @@ from ..errors import ErrorCode, JiejianError
 from ..storage import ProjectRecord, StorageUnitOfWork
 from .models import JobSubmissionResultV1, SubmitJobV1
 from .queue import JobQueueService
-from .request_store import ExecutionRequestStore, PersistedExecutionRequestV1
+from .request_store import ExecutionRequestStore, PersistedExecutionRequestV1, PersistedExecutionRequestV2
 
 
 class SubmitExecutionV1(BaseModel):
@@ -39,6 +39,26 @@ class SubmitExecutionV1(BaseModel):
 
     schema_version: Literal["1"] = "1"
     request: PersistedExecutionRequestV1
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    max_attempts: int = Field(default=3, ge=1, le=1_000)
+    available_at_us: int = Field(ge=0)
+    now_us: int = Field(ge=0)
+    run_id: str | None = Field(default=None, pattern=RUN_ID_PATTERN)
+    job_id: str | None = Field(default=None, pattern=JOB_ID_PATTERN)
+
+
+class SubmitExecutionV2(BaseModel):
+    """只扩展内部提交命令；不创建新的 API/CLI 入口。"""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        hide_input_in_errors=True,
+    )
+
+    schema_version: Literal["2"] = "2"
+    request: PersistedExecutionRequestV2
     idempotency_key: str = Field(min_length=1, max_length=128)
     max_attempts: int = Field(default=3, ge=1, le=1_000)
     available_at_us: int = Field(ge=0)
@@ -63,7 +83,7 @@ class ExecutionSubmissionService:
 
     def submit(
         self,
-        command: SubmitExecutionV1,
+        command: SubmitExecutionV1 | SubmitExecutionV2,
         *,
         known_secrets: Sequence[str] = (),
     ) -> JobSubmissionResultV1:
@@ -77,14 +97,20 @@ class ExecutionSubmissionService:
         try:
             self._ensure_project(command, known_secrets)
             snapshot = command.request.project_snapshot
+            if isinstance(command, SubmitExecutionV2):
+                contract_id = snapshot.contract.contract_id
+                contract_version = snapshot.contract.version
+            else:
+                contract_id = snapshot.contract.id
+                contract_version = snapshot.contract.version
             result = self._queue.submit(
                 SubmitJobV1(
                     project_id=snapshot.project_id,
                     operation_type="ACTIVE_RUN",
                     idempotency_key=command.idempotency_key,
                     request_hash=request_hash,
-                    contract_id=snapshot.contract.id,
-                    contract_version=snapshot.contract.version,
+                    contract_id=contract_id,
+                    contract_version=contract_version,
                     engine_version=version("jiejian"),
                     max_attempts=command.max_attempts,
                     available_at_us=command.available_at_us,
@@ -110,7 +136,7 @@ class ExecutionSubmissionService:
 
     def _ensure_project(
         self,
-        command: SubmitExecutionV1,
+        command: SubmitExecutionV1 | SubmitExecutionV2,
         known_secrets: Sequence[str],
     ) -> None:
         snapshot = command.request.project_snapshot

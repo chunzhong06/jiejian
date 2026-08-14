@@ -1,0 +1,300 @@
+{
+  "$defs": {
+    "CausalityStatus": {
+      "enum": [
+        "CORRELATED",
+        "UNVERIFIED"
+      ],
+      "title": "CausalityStatus",
+      "type": "string"
+    },
+    "CorrelationV2": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "request_marker": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Request Marker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "resource_id",
+        "request_marker"
+      ],
+      "title": "CorrelationV2",
+      "type": "object"
+    },
+    "NormalizedStateV2": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "canonical_data": {
+          "additionalProperties": true,
+          "title": "Canonical Data",
+          "type": "object"
+        },
+        "canonical_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Canonical Sha256",
+          "type": "string"
+        },
+        "byte_count": {
+          "maximum": 262144,
+          "minimum": 2,
+          "title": "Byte Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "canonical_data",
+        "canonical_sha256",
+        "byte_count"
+      ],
+      "title": "NormalizedStateV2",
+      "type": "object"
+    },
+    "ObservationCompleteness": {
+      "enum": [
+        "COMPLETE",
+        "PARTIAL",
+        "MISSING",
+        "TIMED_OUT",
+        "UNSUPPORTED",
+        "ERROR"
+      ],
+      "title": "ObservationCompleteness",
+      "type": "string"
+    },
+    "ObservationPhase": {
+      "enum": [
+        "INITIAL",
+        "BASELINE",
+        "BEFORE",
+        "AFTER",
+        "EVENTUAL"
+      ],
+      "title": "ObservationPhase",
+      "type": "string"
+    },
+    "ObservationProvenanceV2": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "provenance_type": {
+          "$ref": "#/$defs/ProvenanceType"
+        },
+        "adapter_version": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Adapter Version",
+          "type": "string"
+        },
+        "target_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Target Id",
+          "type": "string"
+        },
+        "query_template_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Template Id"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provenance_type",
+        "adapter_version",
+        "target_id",
+        "source_sha256"
+      ],
+      "title": "ObservationProvenanceV2",
+      "type": "object"
+    },
+    "ObservationWindowV2": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/$defs/ObservationPhase"
+        },
+        "started_at_us": {
+          "minimum": 0,
+          "title": "Started At Us",
+          "type": "integer"
+        },
+        "finished_at_us": {
+          "minimum": 0,
+          "title": "Finished At Us",
+          "type": "integer"
+        },
+        "timeout_us": {
+          "maximum": 120000000,
+          "minimum": 1,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "phase",
+        "started_at_us",
+        "finished_at_us",
+        "timeout_us"
+      ],
+      "title": "ObservationWindowV2",
+      "type": "object"
+    },
+    "ObserverType": {
+      "enum": [
+        "OWNER_API",
+        "READ_ONLY_SQLITE",
+        "STRUCTURED_AUDIT_LOG",
+        "ASYNC_TASK_STATUS",
+        "AZURE_QUEUE_PEEK",
+        "AZURE_BLOB_OBJECT"
+      ],
+      "title": "ObserverType",
+      "type": "string"
+    },
+    "ProvenanceType": {
+      "enum": [
+        "OWNER_API",
+        "SQLITE_QUERY",
+        "AUDIT_LOG_WINDOW",
+        "ASYNC_TASK_API",
+        "AZURE_QUEUE_PEEK",
+        "AZURE_BLOB_OBJECT"
+      ],
+      "title": "ProvenanceType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "observer_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Observer Id",
+      "type": "string"
+    },
+    "observer_type": {
+      "$ref": "#/$defs/ObserverType"
+    },
+    "protocol_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "phase": {
+      "$ref": "#/$defs/ObservationPhase"
+    },
+    "target_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Target Id",
+      "type": "string"
+    },
+    "window": {
+      "$ref": "#/$defs/ObservationWindowV2"
+    },
+    "correlation": {
+      "$ref": "#/$defs/CorrelationV2"
+    },
+    "causality": {
+      "$ref": "#/$defs/CausalityStatus"
+    },
+    "completeness": {
+      "$ref": "#/$defs/ObservationCompleteness"
+    },
+    "state": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NormalizedStateV2"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ObservationProvenanceV2"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "reason_codes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Reason Codes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "observer_id",
+    "observer_type",
+    "phase",
+    "target_id",
+    "window",
+    "correlation",
+    "causality",
+    "completeness"
+  ],
+  "title": "ObservationEnvelopeV2",
+  "type": "object"
+}

@@ -8,7 +8,7 @@
 #   严格 YAML 解析｜根目录内引用解析｜跨文件 ID 和语义校验
 #
 # 调用链
-#   Projects / CLI → load_project_bundle / load_flow / load_contract → verification.models
+#   Projects / CLI → load_project_bundle → load_flow / load_contract → models
 # =============================================================================
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ _MAX_YAML_BYTES = 1_048_576
 
 
 class _UniqueKeySafeLoader(yaml.SafeLoader):
-    """安全 Loader，同时拒绝会掩盖配置的重复键。"""
+    """使用 PyYAML 安全类型，并通过自定义 mapping 构造器拒绝重复键。"""
 
 
 def _construct_unique_mapping(
@@ -43,6 +43,8 @@ def _construct_unique_mapping(
     node: yaml.MappingNode,
     deep: bool = False,
 ) -> dict[Any, Any]:
+    """逐项构造 YAML 对象并在同一 mapping 中发现重复键时立即拒绝。"""
+
     loader.flatten_mapping(node)
     result: dict[Any, Any] = {}
     for key_node, value_node in node.value:
@@ -75,6 +77,8 @@ _UniqueKeySafeLoader.add_constructor(
 
 @dataclass(frozen=True, slots=True)
 class ProjectBundle:
+    """把同一次校验得到的项目、Flow 和 Contract 绑定为不可变输入包。"""
+
     project_file: Path
     project: ProjectDefinition
     flow: Flow
@@ -86,6 +90,26 @@ def load_project_bundle(
     *,
     contract_path: Path | None = None,
 ) -> ProjectBundle:
+    """从 project.yaml 加载并交叉校验一次验证所需的完整输入。
+
+    核心数据
+        项目文件提供目标、身份、资源、Flow/Contract 相对路径和 mutation_seed；
+        返回的 ProjectBundle 保存解析后的 ProjectDefinition、Flow 与 SecurityContract。
+
+    数据流
+        先用 _load_yaml 读取项目文件，再用 _resolve_reference 限制 Flow 和默认 Contract
+        的位置，随后调用 load_flow、load_contract，最后由 _validate_bundle
+        核对跨文件引用。
+
+    关键说明
+        本函数只读取本地文件并构造内存模型，不解析 DNS、不发送目标请求，也不修改
+        文件或数据库。显式 contract_path 是调用方单独选择的契约，不受项目内相对路径
+        规则限制。
+
+    返回
+        已完成单文件结构校验和跨文件关系校验的 ProjectBundle。
+    """
+
     project_file = project_path.resolve()
     document = _load_yaml(project_file)
     unexpected = set(document).difference(
@@ -150,6 +174,8 @@ def load_project_bundle(
 
 
 def load_flow(path: Path) -> Flow:
+    """读取 Flow YAML 的 flow 表，并交给 Pydantic 构造成受约束的 Flow。"""
+
     document = _load_yaml(path)
     section = document.get("flow")
     if not isinstance(section, dict):
@@ -162,6 +188,8 @@ def load_flow(path: Path) -> Flow:
 
 
 def load_contract(path: Path) -> SecurityContract:
+    """读取 Contract YAML 的 contract 表，并构造成可供规划器匹配的 SecurityContract。"""
+
     document = _load_yaml(path)
     section = document.get("contract")
     if not isinstance(section, dict):
@@ -174,6 +202,16 @@ def load_contract(path: Path) -> SecurityContract:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """在大小、UTF-8、重复键、锚点、标签和 schema_version 边界内读取 YAML。
+
+    关键说明
+        这是所有 Verification YAML 的共同入口。任何限制失败都转换为稳定
+        JiejianError，后续模型不会接触未受控的 YAML 对象。
+
+    返回
+        顶层为对象且 schema_version 明确等于字符串 ``"1"`` 的字典。
+    """
+
     try:
         raw_bytes = path.read_bytes()
         if len(raw_bytes) > _MAX_YAML_BYTES:
@@ -204,6 +242,8 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _resolve_reference(root: Path, raw: Any, label: str) -> Path:
+    """把项目内相对引用解析为真实文件，并拒绝绝对路径和目录逃逸。"""
+
     if not isinstance(raw, str) or not raw:
         raise JiejianError(ErrorCode.INPUT_INVALID, f"项目文件缺少 {label} 引用")
     reference = Path(raw)
@@ -222,6 +262,8 @@ def _validate_model(
     data: Mapping[str, Any],
     label: str,
 ) -> ModelT:
+    """用指定 Pydantic 模型校验字典，并把内部校验细节转换为稳定输入错误。"""
+
     try:
         return model.model_validate(data)
     except ValidationError as exc:
@@ -244,6 +286,17 @@ def _validate_bundle(
     flow: Flow,
     contract: SecurityContract,
 ) -> None:
+    """核对 Project、Flow 和 Contract 之间无法由单个文件独立确认的关系。
+
+    数据流
+        检查身份、资源、步骤和规则是否唯一，确认 Flow 引用确实存在，
+        并要求 ACTIVE Contract 覆盖规划阶段需要的全部关系规则。
+
+    关键说明
+        如果省略这一步，单个 YAML 即使结构合法，也可能在规划阶段因不存在的
+        身份、资源或规则而失败，或缺少判断攻击结果的契约依据。
+    """
+
     identity_ids = {identity.id for identity in project.identities}
     resource_ids = {resource.id for resource in project.resources}
     step_ids = {step.id for step in flow.steps}

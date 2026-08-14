@@ -10,10 +10,13 @@ from jiejian.errors import ErrorCode, JiejianError
 from jiejian.execution.request_store import (
     ExecutionRequestStore,
     PersistedExecutionRequestV1,
+    PersistedExecutionRequestV2,
     canonical_execution_request_bytes,
     parse_execution_request,
+    required_secret_names,
 )
 from jiejian.execution.process_environment import minimal_process_environment
+from tests.execution.protocol.test_runner_v2 import _input
 
 
 def test_request_store_is_canonical_hashed_atomic_and_idempotent(
@@ -88,3 +91,20 @@ def test_request_parser_and_minimal_environment_do_not_copy_parent_values(
     assert environment["NEEDED_SECRET"] == "only-this-value"
     assert "UNRELATED_PARENT_SECRET" not in environment
     assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
+
+
+def test_v2_request_store_dispatches_canonical_and_uses_minimal_secret_refs(tmp_path: Path) -> None:
+    runner_input = _input()
+    request = PersistedExecutionRequestV2(
+        schema_version="2",
+        budget=runner_input.budget,
+        project_snapshot=runner_input.project_snapshot,
+    )
+    store = ExecutionRequestStore(tmp_path / "var")
+    job_id = "job_abcdef0123456789abcdef0123456789"
+    request_hash, created = store.write(job_id, request)
+    assert created is True
+    assert parse_execution_request(canonical_execution_request_bytes(request)) == request
+    assert store.load(job_id, expected_hash=request_hash) == request
+    assert required_secret_names(request) == ("JIEJIAN_TEST_TOKEN", "OWNER_READ_ONLY")
+    assert not list((tmp_path / "var").rglob("*.tmp-*"))

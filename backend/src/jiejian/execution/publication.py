@@ -22,7 +22,7 @@ from pathlib import Path
 
 from ..domain.lifecycle import JobState
 from ..errors import ErrorCode, JiejianError
-from ..protocols import RunnerResultType, RunnerResultV1, StagedArtifactV1
+from ..protocols import RunnerResultType, RunnerResultV1, RunnerResultV2, StagedArtifactV1
 from ..storage import JobRecord, StorageUnitOfWork
 from .events import append_job_event
 from .models import JobEventType
@@ -76,7 +76,7 @@ class RunPublicationService:
             known_secrets=known_secrets,
             require_receipt=True,
         )
-        if result.result_type not in _TERMINAL_PUBLISH_TYPES:
+        if result.result_type.value not in {"SUCCESS", "SAFETY_STOPPED"}:
             raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "该结果类型不得发布完成态")
         final_dir = final_run_dir(self.var_dir, job.project_id, job.run_id)
         if final_dir.exists():
@@ -140,6 +140,7 @@ class RunPublicationService:
                 final_dir,
                 result,
                 created_at_us=max(manifest.published_at_us, result.finished_at_us),
+                known_secrets=known_secrets,
             )
             if job.state is JobState.SUCCEEDED:
                 if (
@@ -211,7 +212,7 @@ class RunPublicationService:
         self,
         staging_dir: Path,
         job: JobRecord,
-        result: RunnerResultV1,
+        result: RunnerResultV1 | RunnerResultV2,
         files: tuple[StagedArtifactV1, ...],
         now_us: int,
     ) -> PublicationManifestV1:

@@ -24,6 +24,12 @@ from jiejian.protocols import (
     RunnerResultV1,
     StagedArtifactV1,
     canonical_json_bytes,
+    CleanupResultV2,
+    CleanupStatusV2,
+    RunnerResultTypeV2,
+    RunnerResultV2,
+    StagedArtifactV2,
+    canonical_runner_v2_json_bytes,
 )
 from jiejian.storage import (
     EvidenceIndexRecord,
@@ -52,6 +58,8 @@ from jiejian.execution.published_artifacts import (
     TrustedResultReceiptV1,
     attempt_paths_for,
 )
+from jiejian.execution.request_store import ExecutionRequestStore, PersistedExecutionRequestV2
+from tests.execution.protocol.test_runner_v2 import _evidence, _input, _snapshot
 
 NOW_US = 1_790_000_000_000_000
 
@@ -64,7 +72,12 @@ class PublicationParts:
     job: object
 
 
-def _claimed_job(var_dir: Path, suffix: str) -> PublicationParts:
+def _claimed_job(
+    var_dir: Path,
+    suffix: str,
+    *,
+    request_hash: str | None = None,
+) -> PublicationParts:
     upgrade_database(default_database_path(var_dir))
     engine = create_sqlite_engine(default_database_path(var_dir))
     factory = create_session_factory(engine)
@@ -85,7 +98,7 @@ def _claimed_job(var_dir: Path, suffix: str) -> PublicationParts:
             project_id="publication-project",
             operation_type="ACTIVE_RUN",
             idempotency_key=f"publication-{suffix}",
-            request_hash=suffix * 64,
+            request_hash=request_hash or suffix * 64,
             contract_id="ownership-contract",
             contract_version=1,
             engine_version="0.1.0",
@@ -308,6 +321,115 @@ def test_result_reader_rejects_tampered_published_report(tmp_path: Path) -> None
         with pytest.raises(JiejianError) as captured:
             reader.read(parts.job.run_id)
         assert captured.value.code == ErrorCode.ARTIFACT_MANIFEST.value
+    finally:
+        parts.engine.dispose()
+
+
+def test_v2_publication_indexes_matching_evidence_and_rejects_v1_views(tmp_path: Path) -> None:
+    var_dir = tmp_path / "var"
+    runner_input = _input()
+    request = PersistedExecutionRequestV2(
+        schema_version="2",
+        budget=runner_input.budget,
+        project_snapshot=runner_input.project_snapshot,
+    )
+    request_hash, _ = ExecutionRequestStore(var_dir).write(
+        runner_input.job_id,
+        request,
+    )
+    parts = _claimed_job(var_dir, "a", request_hash=request_hash)
+    evidence = _evidence()
+    evidence_raw = canonical_runner_v2_json_bytes(evidence)
+    evidence_artifact = StagedArtifactV2(
+        schema_version="2",
+        path=f"artifacts/evidence/{evidence.evidence_id}.json",
+        byte_count=len(evidence_raw),
+        sha256=hashlib.sha256(evidence_raw).hexdigest(),
+    )
+    result = RunnerResultV2(
+        schema_version="2",
+        run_id=parts.job.run_id,
+        job_id=parts.job.job_id,
+        attempt=parts.job.attempt,
+        lease_owner=parts.job.lease_owner,
+        fencing_token=parts.job.fencing_token,
+        finished_at_us=NOW_US + 2,
+        result_type=RunnerResultTypeV2.SUCCESS,
+        run_lifecycle=RunLifecycle.COMPLETED,
+        job_state=JobState.SUCCEEDED,
+        verdict=RunVerdict.PASS,
+        reason_codes=(),
+        cleanup=CleanupResultV2(status=CleanupStatusV2.SUCCEEDED),
+        error=None,
+        plan_fingerprint=_snapshot().plan.plan_fingerprint,
+        coverage_record_count=1,
+        coverage_gap_count=0,
+        evidence=(evidence,),
+        artifacts=(evidence_artifact,),
+    )
+    paths = attempt_paths_for(var_dir, parts.job)
+    paths.staging_dir.mkdir(parents=True)
+    evidence_path = paths.staging_dir / evidence_artifact.path
+    evidence_path.parent.mkdir(parents=True)
+    evidence_path.write_bytes(evidence_raw)
+    result_raw = canonical_runner_v2_json_bytes(result)
+    paths.result_path.write_bytes(result_raw)
+    paths.receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.receipt_path.write_text(json.dumps({
+        "schema_version": "1",
+        "run_id": result.run_id,
+        "job_id": result.job_id,
+        "attempt": result.attempt,
+        "lease_owner": result.lease_owner,
+        "fencing_token": result.fencing_token,
+        "result_sha256": hashlib.sha256(result_raw).hexdigest(),
+    }, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    try:
+        published = RunPublicationService(var_dir, parts.uow_factory, utc_now_us=lambda: NOW_US + 3).publish(
+            StagedAttempt(result=result, paths=paths)
+        )
+        reader = PublishedResultReader(var_dir, parts.uow_factory)
+        view = reader.read(parts.job.run_id)
+        assert published.result == result
+        assert len(view.evidence) == 1
+        assert view.evidence[0].case_id == evidence.case_snapshot.case_id
+        overview = reader.overview(parts.job.run_id, published=view)
+        assert overview["target_scope"] == _snapshot().target.model_dump(mode="json")
+        assert overview["budget"] == request.budget.model_dump(mode="json")
+        assert overview["execution_schema_version"] == "2"
+        assert overview["result_schema_version"] == "2"
+        assert overview["observer_health"]["required_observers"] == ["http", "owner_api"]
+        assert overview["observer_health"]["owner_api"]["observer_type"] == "OWNER_API"
+        assert overview["coverage_record_count"] == 1
+        assert overview["coverage_gap_count"] == 0
+        assert overview["case_progress"] == {
+            "schema_version": "1",
+            "status": "PUBLISHED",
+            "completed": 1,
+            "total": 1,
+        }
+        unpublished_overview = reader.overview(parts.job.run_id)
+        assert unpublished_overview["case_progress"]["status"] == "UNAVAILABLE"
+        assert unpublished_overview["case_progress"]["completed"] is None
+        with pytest.raises(JiejianError) as report_error:
+            reader.report(view)
+        assert report_error.value.code == ErrorCode.REPORT_NOT_FOUND.value
+        with pytest.raises(JiejianError) as finding_error:
+            reader.findings(view)
+        assert finding_error.value.code == ErrorCode.REPORT_NOT_FOUND.value
+        assert reader.evidence_detail(view, evidence.evidence_id)["evidence_id"] == evidence.evidence_id
+        published_evidence_path = (
+            var_dir
+            / "projects"
+            / parts.job.project_id
+            / "runs"
+            / parts.job.run_id
+            / evidence_artifact.path
+        )
+        published_evidence_path.write_bytes(evidence_raw + b"tamper")
+        with pytest.raises(JiejianError) as tamper:
+            reader.read(parts.job.run_id)
+        assert tamper.value.code == ErrorCode.ARTIFACT_MANIFEST.value
     finally:
         parts.engine.dispose()
 

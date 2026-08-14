@@ -36,6 +36,7 @@ const projectSnapshot = (project: Record<string, unknown>, versions = snapshot()
 })
 
 describe('ContractPage', () => {
+  const openAdvanced = () => fireEvent.click(screen.getByRole('button', { name: /高级：规则治理/ }))
   beforeEach(() => {
     cleanup()
     mockApi.contractGovernance.mockResolvedValue(snapshot())
@@ -52,6 +53,7 @@ describe('ContractPage', () => {
   it('恢复工作台、显示离线 LLM、阻断派生并展示稳定 issue code', async () => {
     render(<ContractPage project={{ project_id: 'p1' }} profiles={[]} onError={vi.fn()} />)
     expect(await screen.findByText('LLM 离线')).toBeInTheDocument()
+    openAdvanced()
     expect(screen.getByText('兼容：显式 Contract 文件')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '派生候选' })).toBeDisabled()
     fireEvent.click(screen.getAllByRole('checkbox')[0])
@@ -65,6 +67,7 @@ describe('ContractPage', () => {
   it('新增 Requirement 传递正文、标签和可见 actor', async () => {
     render(<ContractPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
     await screen.findByText('LLM 离线')
+    openAdvanced()
     fireEvent.change(screen.getByPlaceholderText('rule id=foreign-read kind=foreign_read observers=http severity=high'), { target: { value: 'rule id=added kind=foreign_read observers=http severity=high' } })
     fireEvent.change(screen.getByPlaceholderText('标签，用逗号分隔'), { target: { value: 'pii, auth' } })
     fireEvent.change(screen.getByPlaceholderText('actor'), { target: { value: 'reviewer-1' } })
@@ -75,7 +78,8 @@ describe('ContractPage', () => {
 
   it('激活 YAML 兼容入口并刷新工作台', async () => {
     render(<ContractPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
-    await screen.findByText('兼容：显式 Contract 文件')
+    await screen.findByText('LLM 离线')
+    openAdvanced()
     fireEvent.change(screen.getByPlaceholderText(/demo.*contract\.yaml/), { target: { value: 'D:\\demo\\contract.yaml' } })
     fireEvent.click(screen.getByRole('button', { name: '激活 YAML' }))
     await waitFor(() => expect(mockApi.activateContract).toHaveBeenCalledWith('p1', 'D:\\demo\\contract.yaml'))
@@ -85,6 +89,7 @@ describe('ContractPage', () => {
   it('按选定候选创建草稿、提交审阅并刷新', async () => {
     render(<ContractPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
     await screen.findByText('c1 v1 · DRAFT')
+    openAdvanced()
     fireEvent.change(screen.getAllByPlaceholderText('contract_id')[0], { target: { value: 'c1' } })
     fireEvent.click(screen.getAllByRole('checkbox')[2])
     fireEvent.click(screen.getAllByRole('button', { name: '创建 DRAFT' })[0])
@@ -98,6 +103,7 @@ describe('ContractPage', () => {
     mockApi.contractGovernance.mockResolvedValue({ ...snapshot(), versions: [{ ...snapshot().versions[0], status: 'REVIEW' }] })
     render(<ContractPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
     await screen.findByText('c1 v1 · REVIEW')
+    openAdvanced()
     fireEvent.click(screen.getByRole('button', { name: /^激\s*活$/ }))
     await waitFor(() => expect(mockApi.transitionGovernanceVersion).toHaveBeenCalledWith('p1', 'c1', 1, 'activate', 'local-user'))
     await waitFor(() => expect(mockApi.contractGovernance.mock.calls.length).toBeGreaterThan(1))
@@ -111,6 +117,7 @@ describe('ContractPage', () => {
     mockApi.contractGovernance.mockResolvedValue(projectSnapshot({ project_id: 'p1', governed_contract_id: 'c2', governed_contract_version: 3 }, versions))
     render(<ContractPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
     await screen.findByText('c2 v3 · ACTIVE')
+    openAdvanced()
     expect(screen.getByPlaceholderText('contract_id')).toHaveValue('c2')
     const checkboxes = screen.getAllByRole('checkbox')
     fireEvent.click(checkboxes[checkboxes.length - 1])
@@ -121,6 +128,7 @@ describe('ContractPage', () => {
   it('项目切换时清空旧项目的选择', async () => {
     const { rerender } = render(<ContractPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
     await screen.findByText('c1 v1 · DRAFT')
+    openAdvanced()
     fireEvent.click(screen.getAllByRole('checkbox')[0])
     mockApi.contractGovernance.mockResolvedValue(projectSnapshot({ project_id: 'p2', governed_contract_id: null, governed_contract_version: null }))
     rerender(<ContractPage project={{ project_id: 'p2' }} onError={vi.fn()} />)
@@ -139,6 +147,7 @@ describe('ContractPage', () => {
     }
     render(<ContractPage project={{ project_id: 'p1' }} profiles={[profile]} onError={vi.fn()} />)
     await screen.findByText('LLM 可用')
+    openAdvanced()
     fireEvent.click(screen.getAllByRole('checkbox')[0])
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'LLM profile' }))
     fireEvent.click(await screen.findByText('profile-1 · openai'))

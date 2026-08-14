@@ -44,10 +44,26 @@ def persist_run(
     finished_at: datetime,
     destination_dir: Path | None = None,
 ) -> None:
+    """把运行计划、Evidence、报告和 manifest 写成完整 staging 工件树。
+
+    核心数据
+        report 汇总 Verdict 和全部 Evidence；manifest 记录运行、Contract、配置、
+        seed、时间及每个 JSON 文件的 SHA-256，用于后续 Execution 重验。
+
+    数据流
+        RunResult + MutationPlan + 执行快照 → 临时目录内逐项写入
+        → 计算 artifact_hashes → manifest → 完整目录替换到 destination_dir。
+
+    关键说明
+        本函数只形成 Runner staging 或旧兼容目录，不写数据库，也不完成最终发布。
+        任一写入失败都会清理本次临时目录，不保留半成品作为可信结果。
+    """
+
     final_dir = Path(result.artifact_dir) if destination_dir is None else destination_dir
     temporary_dir = final_dir.with_name(f".{final_dir.name}.tmp-{uuid4().hex}")
     try:
         temporary_dir.mkdir(parents=True, exist_ok=False)
+        # case_counts 只汇总展示用 Verdict，不替代逐条 Evidence。
         case_counts: dict[str, int] = {}
         for item in result.evidence:
             case_counts[item.verdict.value] = case_counts.get(item.verdict.value, 0) + 1
@@ -91,6 +107,7 @@ def persist_run(
                 payload,
             )
         _atomic_write_json(temporary_dir / "report" / "report.json", report)
+        # manifest 最后生成，确保哈希覆盖此前已经形成的全部 JSON 工件。
         artifact_hashes = {
             str(path.relative_to(temporary_dir)).replace("\\", "/"): _hash_file(path)
             for path in sorted(temporary_dir.rglob("*.json"))
@@ -130,6 +147,20 @@ def persist_run(
 
 
 def load_report(var_dir: Path, run_id: str) -> dict[str, Any]:
+    """兼容读取旧布局或已发布布局中的本地 JSON 报告，并核对文件哈希。
+
+    数据流
+        run_id → 定位唯一报告与对应 manifest → 解析 JSON → 提取期望哈希
+        → 常量时间比较 → 脱敏报告。
+
+    关键说明
+        这是 CLI 旧兼容读取入口，只校验报告文件及 manifest；需要数据库完成态、
+        publication 和 Evidence 索引一致性时，应使用 PublishedResultReader。
+
+    返回
+        通过完整性校验并再次脱敏的报告字典。
+    """
+
     if not _RUN_ID.fullmatch(run_id):
         raise JiejianError(ErrorCode.REPORT_NOT_FOUND, "运行 ID 格式无效")
     project_root = var_dir.resolve() / "projects"
@@ -175,6 +206,8 @@ def load_report(var_dir: Path, run_id: str) -> dict[str, Any]:
 
 
 def _atomic_write_json(path: Path, payload: Any) -> None:
+    """先写同目录临时文件，再原子替换单个已脱敏 JSON 文件。"""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp-{uuid4().hex}")
     encoded = json.dumps(
@@ -191,6 +224,8 @@ def _atomic_write_json(path: Path, payload: Any) -> None:
 
 
 def _hash_json(payload: Any) -> str:
+    """对已脱敏、键排序的紧凑 JSON 计算稳定 SHA-256。"""
+
     encoded = json.dumps(
         redact(payload),
         ensure_ascii=False,
@@ -201,4 +236,6 @@ def _hash_json(payload: Any) -> str:
 
 
 def _hash_file(path: Path) -> str:
+    """读取文件原始字节并计算 SHA-256，供 manifest 与读取校验使用。"""
+
     return hashlib.sha256(path.read_bytes()).hexdigest()

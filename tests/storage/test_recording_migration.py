@@ -95,7 +95,7 @@ def test_stage4_migration_preserves_run_jobs_and_enforces_single_target(
         assert connection.execute("SELECT count(*) FROM job_events").fetchone() == (1,)
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("0007_stage5_llm_profiles",)
+        ).fetchone() == ("0008_permission_execution_profiles",)
         assert connection.execute(
             "SELECT source_path, source_hash, active_contract_path, active_contract_hash "
             "FROM projects"
@@ -201,7 +201,7 @@ def test_stage5_migration_upgrades_stage4_without_changing_project_data(
         ).fetchone() == ("stage4-project", "stage4", "READY")
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("0007_stage5_llm_profiles",)
+        ).fetchone() == ("0008_permission_execution_profiles",)
         assert {row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )} >= {"requirements", "contract_candidates", "contract_versions"}
@@ -301,7 +301,7 @@ def test_stage5_llm_metadata_migration_upgrades_0004(tmp_path: Path) -> None:
     try:
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("0007_stage5_llm_profiles",)
+        ).fetchone() == ("0008_permission_execution_profiles",)
         assert "llm_metadata_json" in {
             row[1] for row in connection.execute("PRAGMA table_info(contract_candidates)")
         }

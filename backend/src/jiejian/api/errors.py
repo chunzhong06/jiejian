@@ -30,6 +30,8 @@ def _status_for(code: str) -> int:
         ErrorCode.REPORT_NOT_FOUND.value,
         ErrorCode.ARTIFACT_NOT_PUBLISHED.value,
         ErrorCode.LLM_PROFILE_NOT_FOUND.value,
+        ErrorCode.ONBOARDING_SESSION_NOT_FOUND.value,
+        ErrorCode.PERMISSION_PROFILE_NOT_FOUND.value,
     }:
         return 404
     if code in {
@@ -39,6 +41,9 @@ def _status_for(code: str) -> int:
         ErrorCode.JOB_CANCEL_CONFLICT.value,
         ErrorCode.JOB_TERMINAL_CONFLICT.value,
         ErrorCode.LLM_TEST_IN_PROGRESS.value,
+        ErrorCode.ONBOARDING_SESSION_CONFLICT.value,
+        ErrorCode.PERMISSION_PROFILE_SOURCE_DRIFT.value,
+        ErrorCode.PERMISSION_PROFILE_PROJECT_CONFLICT.value,
     }:
         return 409
     if code in {
@@ -49,8 +54,13 @@ def _status_for(code: str) -> int:
         ErrorCode.LLM_PROVIDER_UNAVAILABLE_WIRE.value,
         ErrorCode.LLM_SECRET_UNAVAILABLE.value,
         ErrorCode.LLM_PROFILE_STORAGE_FAILED.value,
+        ErrorCode.ONBOARDING_SELECTOR_UNAVAILABLE.value,
+        ErrorCode.ONBOARDING_DEMO_FAILED.value,
+        ErrorCode.PERMISSION_PROFILE_STORAGE_FAILED.value,
     }:
         return 503
+    if code == ErrorCode.ONBOARDING_READ_BUDGET.value:
+        return 413
     if code == ErrorCode.LLM_AUTH_FAILED.value:
         return 401
     if code == ErrorCode.LLM_RATE_LIMITED.value:

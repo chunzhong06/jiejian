@@ -34,10 +34,15 @@ from ..domain.identifiers import (
 from ..errors import ErrorCode, JiejianError
 from ..protocols import (
     RUNNER_RESULT_MAX_BYTES,
+    RUNNER_V2_RESULT_MAX_BYTES,
     RunnerResultType,
     RunnerResultV1,
+    RunnerResultV2,
     StagedArtifactV1,
+    StagedArtifactV2,
     parse_runner_result,
+    parse_runner_result_v2,
+    parse_evidence_v2,
 )
 from ..storage import EvidenceIndexRecord, JobRecord
 
@@ -47,6 +52,8 @@ _TERMINAL_PUBLISH_TYPES = {
     RunnerResultType.SUCCESS,
     RunnerResultType.SAFETY_STOPPED,
 }
+RunnerResult = RunnerResultV1 | RunnerResultV2
+RunnerArtifact = StagedArtifactV1 | StagedArtifactV2
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +68,7 @@ class AttemptPaths:
 
 @dataclass(frozen=True, slots=True)
 class StagedAttempt:
-    result: RunnerResultV1
+    result: RunnerResult
     paths: AttemptPaths
 
 
@@ -120,7 +127,7 @@ class PublicationManifestV1(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class ValidatedPublication:
-    result: RunnerResultV1
+    result: RunnerResult
     manifest: PublicationManifestV1
     final_dir: Path
 
@@ -159,7 +166,7 @@ def validate_runner_staging(
     *,
     known_secrets: Sequence[str],
     require_receipt: bool,
-) -> tuple[RunnerResultV1, tuple[StagedArtifactV1, ...]]:
+) -> tuple[RunnerResult, tuple[StagedArtifactV1, ...]]:
     """在结果接收和发布两个安全边界复用完整目录校验。"""
 
     files = _inventory_regular_files(paths.staging_dir, known_secrets)
@@ -169,7 +176,7 @@ def validate_runner_staging(
         raise JiejianError(ErrorCode.RUNNER_RESULT_MISSING, "Runner 结果文件不存在")
     try:
         raw = paths.result_path.read_bytes()
-        result = parse_runner_result(raw, known_secrets=known_secrets)
+        result = _parse_runner_result_by_version(raw, known_secrets=known_secrets)
     except (OSError, JiejianError):
         raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID, "Runner 结果协议校验失败") from None
     if (
@@ -181,7 +188,7 @@ def validate_runner_staging(
     ):
         raise JiejianError(ErrorCode.ARTIFACT_FENCE, "Runner 结果关联信息不匹配")
     expected = {"result.json": result_record}
-    expected.update({item.path.casefold(): item for item in result.artifacts})
+    expected.update({item.path.casefold(): _artifact_record(item) for item in result.artifacts})
     comparable_expected = {
         key: (item.path, item.byte_count, item.sha256) for key, item in expected.items()
     }
@@ -227,7 +234,7 @@ def validate_published_run(
     if result_record is None or result_record.sha256 != manifest.result_sha256:
         raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "最终结果哈希不匹配")
     try:
-        result = parse_runner_result(
+        result = _parse_runner_result_by_version(
             (final_dir / result_record.path).read_bytes(),
             known_secrets=known_secrets,
         )
@@ -239,18 +246,36 @@ def validate_published_run(
         or result.attempt != manifest.attempt
         or result.lease_owner != manifest.lease_owner
         or result.fencing_token != manifest.fencing_token
-        or result.result_type not in _TERMINAL_PUBLISH_TYPES
+        or not _is_terminal_publish_result(result)
     ):
         raise JiejianError(ErrorCode.ARTIFACT_FENCE, "最终结果 fencing 关联无效")
     return ValidatedPublication(result=result, manifest=manifest, final_dir=final_dir)
 
 
+def _is_terminal_publish_result(result: RunnerResult) -> bool:
+    return (
+        isinstance(result, RunnerResultV1)
+        and result.result_type in _TERMINAL_PUBLISH_TYPES
+    ) or (
+        isinstance(result, RunnerResultV2)
+        and result.result_type.value in {"SUCCESS", "SAFETY_STOPPED"}
+    )
+
+
 def evidence_records_for_publication(
     final_dir: Path,
-    result: RunnerResultV1,
+    result: RunnerResult,
     *,
     created_at_us: int,
+    known_secrets: Sequence[str] = (),
 ) -> tuple[EvidenceIndexRecord, ...]:
+    if isinstance(result, RunnerResultV2):
+        return _v2_evidence_records_for_publication(
+            final_dir,
+            result,
+            created_at_us=created_at_us,
+            known_secrets=known_secrets,
+        )
     records: list[EvidenceIndexRecord] = []
     for artifact in result.artifacts:
         if not artifact.path.startswith("artifacts/evidence/") or not artifact.path.endswith(
@@ -298,6 +323,85 @@ def evidence_records_for_publication(
                 created_at_us=created_at_us,
             )
         )
+    return tuple(sorted(records, key=lambda item: item.evidence_id))
+
+
+def _artifact_record(artifact: RunnerArtifact) -> StagedArtifactV1:
+    """将两版结果的共同工件三元组绑定到既有 V1 manifest 形状。"""
+
+    return StagedArtifactV1(
+        schema_version="1",
+        path=artifact.path,
+        byte_count=artifact.byte_count,
+        sha256=artifact.sha256,
+    )
+
+
+def _parse_runner_result_by_version(raw: bytes, *, known_secrets: Sequence[str]) -> RunnerResult:
+    """只按顶层 schema_version 选择一个严格结果 parser。"""
+
+    if len(raw) > max(RUNNER_RESULT_MAX_BYTES, RUNNER_V2_RESULT_MAX_BYTES) or raw.startswith(b"\xef\xbb\xbf"):
+        raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "Runner 结果大小或编码无效")
+    try:
+        parsed = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object, parse_constant=_reject_nonfinite)
+        if not isinstance(parsed, dict):
+            raise ValueError("result root")
+        version = parsed.get("schema_version")
+        if version == "1":
+            if len(raw) > RUNNER_RESULT_MAX_BYTES:
+                raise ValueError("v1 result too large")
+            return parse_runner_result(raw, known_secrets=known_secrets)
+        if version == "2":
+            if len(raw) > RUNNER_V2_RESULT_MAX_BYTES:
+                raise ValueError("v2 result too large")
+            return parse_runner_result_v2(raw, known_secrets=known_secrets)
+        raise ValueError("unsupported result schema")
+    except JiejianError:
+        raise
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "Runner 结果协议校验失败") from None
+
+
+def _reject_nonfinite(_: str) -> None:
+    raise ValueError("non-finite number")
+
+
+def _v2_evidence_records_for_publication(
+    final_dir: Path,
+    result: RunnerResultV2,
+    *,
+    created_at_us: int,
+    known_secrets: Sequence[str],
+) -> tuple[EvidenceIndexRecord, ...]:
+    records: list[EvidenceIndexRecord] = []
+    expected_by_id = {item.evidence_id: item for item in result.evidence}
+    for artifact in result.artifacts:
+        if not artifact.path.startswith("artifacts/evidence/") or not artifact.path.endswith(".json"):
+            continue
+        path = final_dir / artifact.path
+        try:
+            raw = path.read_bytes()
+            evidence = parse_evidence_v2(raw, known_secrets=known_secrets)
+        except (OSError, JiejianError):
+            raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "V2 证据索引内容无效") from None
+        if Path(artifact.path).name != f"{evidence.evidence_id}.json":
+            raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "V2 证据文件名与内容不匹配")
+        if len(raw) != artifact.byte_count or hashlib.sha256(raw).hexdigest() != artifact.sha256:
+            raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "V2 证据工件哈希不匹配")
+        expected = expected_by_id.pop(evidence.evidence_id, None)
+        if expected is None or expected != evidence or evidence.run_id != result.run_id:
+            raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "V2 证据与结果不匹配")
+        records.append(EvidenceIndexRecord(
+            evidence_id=evidence.evidence_id,
+            run_id=result.run_id,
+            case_id=evidence.case_snapshot.case_id,
+            artifact_path=artifact.path,
+            sha256=evidence.evidence_hash,
+            byte_count=artifact.byte_count,
+            created_at_us=created_at_us,
+        ))
+    if expected_by_id:
+        raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "V2 结果中的证据缺少发布工件")
     return tuple(sorted(records, key=lambda item: item.evidence_id))
 
 

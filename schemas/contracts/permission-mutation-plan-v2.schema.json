@@ -1,0 +1,501 @@
+{
+  "$defs": {
+    "BatchAuthorizationMode": {
+      "enum": [
+        "ALL_ALLOW",
+        "ALL_DENY",
+        "MIXED_AUTHORIZATION"
+      ],
+      "title": "BatchAuthorizationMode",
+      "type": "string"
+    },
+    "CoverageDimension": {
+      "enum": [
+        "ROLE",
+        "TENANT",
+        "DEPARTMENT",
+        "RELATION",
+        "WORKFLOW",
+        "BULK"
+      ],
+      "title": "CoverageDimension",
+      "type": "string"
+    },
+    "CoverageGap": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "dimension": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoverageDimension"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expectation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionExpectation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "code": {
+          "$ref": "#/$defs/CoverageGapCode"
+        },
+        "detail": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "code",
+        "detail"
+      ],
+      "title": "CoverageGap",
+      "type": "object"
+    },
+    "CoverageGapCode": {
+      "enum": [
+        "MISSING_SUBJECT",
+        "MISSING_RESOURCE",
+        "MISSING_OBSERVER",
+        "RELATION_UNPROVABLE",
+        "BUDGET_EXCEEDED",
+        "RELATION_DEPTH_EXCEEDED"
+      ],
+      "title": "CoverageGapCode",
+      "type": "string"
+    },
+    "CoverageRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "dimension": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoverageDimension"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expectation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionExpectation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "$ref": "#/$defs/CoverageStatus"
+        },
+        "case_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Case Ids",
+          "type": "array"
+        },
+        "gap_codes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CoverageGapCode"
+          },
+          "maxItems": 8,
+          "title": "Gap Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "rule_id",
+        "status"
+      ],
+      "title": "CoverageRecord",
+      "type": "object"
+    },
+    "CoverageStatus": {
+      "enum": [
+        "COVERED",
+        "GAP"
+      ],
+      "title": "CoverageStatus",
+      "type": "string"
+    },
+    "EliminatedCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "candidate_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Candidate Fingerprint",
+          "type": "string"
+        },
+        "source_rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Source Rule Ids",
+          "type": "array"
+        },
+        "reason": {
+          "$ref": "#/$defs/EliminatedReason"
+        }
+      },
+      "required": [
+        "candidate_fingerprint",
+        "source_rule_ids",
+        "reason"
+      ],
+      "title": "EliminatedCandidate",
+      "type": "object"
+    },
+    "EliminatedReason": {
+      "enum": [
+        "DUPLICATE_SEMANTICS",
+        "BUDGET_EXCEEDED"
+      ],
+      "title": "EliminatedReason",
+      "type": "string"
+    },
+    "PermissionContext": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "workflow_states": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Workflow States",
+          "type": "array"
+        },
+        "tenant_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Tenant Ids",
+          "type": "array"
+        },
+        "department_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Department Ids",
+          "type": "array"
+        },
+        "resource_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Resource Ids",
+          "type": "array"
+        }
+      },
+      "title": "PermissionContext",
+      "type": "object"
+    },
+    "PermissionExpectation": {
+      "enum": [
+        "ALLOW",
+        "DENY"
+      ],
+      "title": "PermissionExpectation",
+      "type": "string"
+    },
+    "PermissionMutationCaseV2": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^case-[0-9a-f]{32}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "finding_pre_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Finding Pre Identity",
+          "type": "string"
+        },
+        "source_rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Source Rule Ids",
+          "type": "array"
+        },
+        "dimensions": {
+          "items": {
+            "$ref": "#/$defs/CoverageDimension"
+          },
+          "maxItems": 6,
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "retention_reason": {
+          "$ref": "#/$defs/RetentionReason"
+        },
+        "subject_id": {
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Resource Ids",
+          "type": "array"
+        },
+        "expectations": {
+          "items": {
+            "$ref": "#/$defs/PermissionExpectation"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Expectations",
+          "type": "array"
+        },
+        "relation_paths": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Relation Paths",
+          "type": "array"
+        },
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
+        },
+        "required_observers": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Required Observers",
+          "type": "array"
+        },
+        "batch_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BatchAuthorizationMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "atomic": {
+          "default": false,
+          "title": "Atomic",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "case_id",
+        "fingerprint",
+        "finding_pre_identity",
+        "source_rule_ids",
+        "dimensions",
+        "retention_reason",
+        "subject_id",
+        "action_id",
+        "resource_ids",
+        "expectations",
+        "relation_paths",
+        "context",
+        "required_observers"
+      ],
+      "title": "PermissionMutationCaseV2",
+      "type": "object"
+    },
+    "RetentionReason": {
+      "enum": [
+        "EXPLICIT_ALLOW_BASELINE",
+        "EXPLICIT_DENY_RISK",
+        "RECENT_NEIGHBOR",
+        "BATCH_AUTHORIZATION"
+      ],
+      "title": "RetentionReason",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "plan_id": {
+      "pattern": "^plan-[0-9a-f]{32}$",
+      "title": "Plan Id",
+      "type": "string"
+    },
+    "plan_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Plan Fingerprint",
+      "type": "string"
+    },
+    "contract_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Contract Fingerprint",
+      "type": "string"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    },
+    "engine_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "case_budget": {
+      "maximum": 8192,
+      "minimum": 0,
+      "title": "Case Budget",
+      "type": "integer"
+    },
+    "candidate_count": {
+      "maximum": 8192,
+      "minimum": 0,
+      "title": "Candidate Count",
+      "type": "integer"
+    },
+    "retained_count": {
+      "maximum": 8192,
+      "minimum": 0,
+      "title": "Retained Count",
+      "type": "integer"
+    },
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/PermissionMutationCaseV2"
+      },
+      "maxItems": 8192,
+      "title": "Cases",
+      "type": "array"
+    },
+    "coverage": {
+      "items": {
+        "$ref": "#/$defs/CoverageRecord"
+      },
+      "maxItems": 16384,
+      "title": "Coverage",
+      "type": "array"
+    },
+    "gaps": {
+      "items": {
+        "$ref": "#/$defs/CoverageGap"
+      },
+      "maxItems": 16384,
+      "title": "Gaps",
+      "type": "array"
+    },
+    "eliminated": {
+      "items": {
+        "$ref": "#/$defs/EliminatedCandidate"
+      },
+      "maxItems": 16384,
+      "title": "Eliminated",
+      "type": "array"
+    }
+  },
+  "required": [
+    "plan_id",
+    "plan_fingerprint",
+    "contract_fingerprint",
+    "seed",
+    "engine_version",
+    "case_budget",
+    "candidate_count",
+    "retained_count",
+    "cases",
+    "coverage",
+    "gaps",
+    "eliminated"
+  ],
+  "title": "PermissionMutationPlanV2",
+  "type": "object"
+}

@@ -28,7 +28,7 @@ from pydantic import ValidationError
 
 from ..domain.lifecycle import JobState
 from ..errors import ErrorCode, JiejianError
-from ..protocols import RunnerResultType, parse_runner_result
+from ..protocols import RunnerResultType
 from ..storage import JobRecord, StorageUnitOfWork
 from .process_environment import minimal_process_environment
 from .published_artifacts import (
@@ -37,6 +37,7 @@ from .published_artifacts import (
     attempt_paths_for,
     final_run_dir,
     validate_published_run,
+    _parse_runner_result_by_version,
 )
 
 
@@ -202,7 +203,7 @@ class WorkerDispatcher:
             raw = paths.result_path.read_bytes()
             if hashlib.sha256(raw).hexdigest() != receipt.result_sha256:
                 raise ValueError("result hash mismatch")
-            result = parse_runner_result(raw, known_secrets=known_secrets)
+            result = _parse_runner_result_by_version(raw, known_secrets=known_secrets)
         except (OSError, json.JSONDecodeError, ValidationError, ValueError, JiejianError):
             raise JiejianError(
                 ErrorCode.RUNNER_PROTOCOL_INVALID,
@@ -224,23 +225,20 @@ class WorkerDispatcher:
                 ErrorCode.RUNNER_PROTOCOL_INVALID,
                 "可信结果标记关联信息不匹配",
             )
-        if result.result_type in {
-            RunnerResultType.SUCCESS,
-            RunnerResultType.SAFETY_STOPPED,
-        }:
+        if result.result_type.value in {"SUCCESS", "SAFETY_STOPPED"}:
             return None
         if (
-            result.result_type is RunnerResultType.CANCELLED
+            result.result_type.value == "CANCELLED"
             and job.state is not JobState.CANCELLED
         ):
             return None
         if (
-            result.result_type is RunnerResultType.RETRYABLE_ERROR
+            result.result_type.value == "RETRYABLE_ERROR"
             and job.state not in {JobState.RETRY_WAIT, JobState.FAILED}
         ):
             return None
         if (
-            result.result_type is RunnerResultType.FATAL_ERROR
+            result.result_type.value == "FATAL_ERROR"
             and job.state is not JobState.FAILED
         ):
             return None

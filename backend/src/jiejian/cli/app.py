@@ -40,7 +40,7 @@ from .commands.recordings import (
     recording_status_command,
 )
 from .commands.results import ci_command, report_command
-from .commands.runs import run_command
+from .commands.runs import permission_run_command, run_command
 from .commands.system import doctor_command, serve_command
 
 
@@ -95,6 +95,7 @@ recording_app.command("finalize")(recording_finalize_command)
 recording_app.command("replay")(recording_replay_command)
 
 app.command("run")(run_command)
+app.command("permission-run")(permission_run_command)
 app.command("report")(report_command)
 app.command("ci")(ci_command)
 

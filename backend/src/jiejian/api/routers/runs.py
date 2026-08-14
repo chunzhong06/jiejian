@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 
 from fastapi import APIRouter
@@ -23,6 +22,7 @@ from ...results.published import PublishedResultReader
 from ...domain.lifecycle import RunLifecycle
 from ...errors import ErrorCode, JiejianError
 from ...execution.submission import SubmitExecutionV1
+from ...execution.request_store import required_secret_names
 from ..responses import data_response
 from ..schemas.common import ApiResponse
 from ..schemas.runs import RunCreateRequest
@@ -71,8 +71,8 @@ def build_runs_router(
                 available_at_us=now_us,
             ),
             known_secrets=tuple(
-                os.environ.get(item.secret_ref.removeprefix("env:"), "")
-                for item in request.project_snapshot.identities
+                context.environment_for_secret_names(required_secret_names(request)).get(name, "")
+                for name in required_secret_names(request)
             ),
         )
         return data_response(

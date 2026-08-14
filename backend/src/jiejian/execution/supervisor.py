@@ -28,9 +28,12 @@ from ..domain.lifecycle import JobState
 from ..errors import ErrorCode, JiejianError
 from ..protocols import (
     RunnerInputV1,
+    RunnerInputV2,
     RunnerResultType,
     RunnerResultV1,
+    RunnerResultV2,
     canonical_json_bytes,
+    canonical_runner_v2_json_bytes,
 )
 from ..storage import JobRecord, StorageUnitOfWork
 from .attempts import JobAttemptService
@@ -60,6 +63,8 @@ from .published_artifacts import (
 from .request_store import (
     ExecutionRequestStore,
     PersistedExecutionRequestV1,
+    PersistedExecutionRequestV2,
+    PersistedExecutionRequest,
     required_secret_names,
 )
 
@@ -218,10 +223,7 @@ class WorkerSupervisor:
         self._process_control.renew(job)
         self._write_receipt(paths, result)
         staged = StagedAttempt(result=result, paths=paths)
-        if result.result_type in {
-            RunnerResultType.SUCCESS,
-            RunnerResultType.SAFETY_STOPPED,
-        }:
+        if result.result_type.value in {"SUCCESS", "SAFETY_STOPPED"}:
             return self._publication.publish(staged, known_secrets=known_secrets)
         self._apply_non_success_result(job, result)
         return staged
@@ -229,14 +231,12 @@ class WorkerSupervisor:
     def _apply_non_success_result(
         self,
         job: JobRecord,
-        result: RunnerResultV1,
+        result: RunnerResultV1 | RunnerResultV2,
     ) -> None:
-        if result.result_type in {
-            RunnerResultType.SUCCESS,
-            RunnerResultType.SAFETY_STOPPED,
-        }:
+        result_type = result.result_type.value
+        if result_type in {"SUCCESS", "SAFETY_STOPPED"}:
             return
-        if result.result_type is RunnerResultType.CANCELLED:
+        if result_type == "CANCELLED":
             current = self._process_control.read_job(job.job_id)
             if current.cancel_requested_at_us is None:
                 self._record_fatal(job, FatalFailureCode.PROTOCOL_INVALID)
@@ -253,7 +253,7 @@ class WorkerSupervisor:
                 )
             )
             return
-        if result.result_type is RunnerResultType.RETRYABLE_ERROR:
+        if result_type == "RETRYABLE_ERROR":
             reason = (
                 RetryableFailureCode(result.error.code)
                 if result.error is not None
@@ -274,10 +274,9 @@ class WorkerSupervisor:
     def _runner_input(
         self,
         job: JobRecord,
-        request: PersistedExecutionRequestV1,
-    ) -> RunnerInputV1:
-        return RunnerInputV1(
-            schema_version="1",
+        request: PersistedExecutionRequest,
+    ) -> RunnerInputV1 | RunnerInputV2:
+        fields = dict(
             run_id=job.run_id,
             job_id=job.job_id,
             attempt=job.attempt,
@@ -287,14 +286,20 @@ class WorkerSupervisor:
             budget=request.budget,
             project_snapshot=request.project_snapshot,
         )
+        if isinstance(request, PersistedExecutionRequestV1):
+            return RunnerInputV1(schema_version="1", **fields)
+        return RunnerInputV2(schema_version="2", **fields)
 
     def _write_runner_input(
         self,
         paths: AttemptPaths,
-        runner_input: RunnerInputV1,
+        runner_input: RunnerInputV1 | RunnerInputV2,
         known_secrets: Sequence[str],
     ) -> None:
-        encoded = canonical_json_bytes(runner_input, known_secrets=known_secrets)
+        if isinstance(runner_input, RunnerInputV1):
+            encoded = canonical_json_bytes(runner_input, known_secrets=known_secrets)
+        else:
+            encoded = canonical_runner_v2_json_bytes(runner_input, known_secrets=known_secrets)
         paths.attempt_dir.mkdir(parents=True, exist_ok=False)
         temporary = paths.input_path.with_name(f".{paths.input_path.name}.tmp-{uuid4().hex}")
         try:

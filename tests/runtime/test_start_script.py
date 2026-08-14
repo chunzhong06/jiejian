@@ -72,7 +72,12 @@ def _make_shims(tmp_path: Path, *, conda: bool, uv: bool, existing_env: bool = F
         shim / "pnpm.cmd",
         '>>"%SHIM_LOG%" echo pnpm %*\n'
         'if "%1"=="--version" echo 11.21.0\n'
-        'if "%1"=="install" (if not exist node_modules mkdir node_modules& >node_modules\\shim.txt echo installed& exit /b 0)\n'
+        'if "%1"=="install" (if not exist node_modules\\.bin mkdir node_modules\\.bin& '
+        '>node_modules\\.modules.yaml echo {& '
+        '>>node_modules\\.modules.yaml echo   "storeDir": "%SHIM_STORE_DIR%"& '
+        '>>node_modules\\.modules.yaml echo }& '
+        '>node_modules\\.bin\\tsc.cmd echo @exit /b 0& '
+        '>node_modules\\.bin\\vite.cmd echo @exit /b 0& exit /b 0)\n'
         'if "%1"=="build" (if not exist dist mkdir dist& >dist\\index.html echo built& exit /b 0)\n'
         'exit /b 0',
     )
@@ -125,6 +130,12 @@ def _run_start(
     force_prepare: bool = False,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    effective_script_path = script_path
+    effective_cwd = cwd
+    if script_path == SCRIPT:
+        isolated_project = _make_isolated_project(shim.parent)
+        effective_script_path = isolated_project / "scripts" / "start.ps1"
+        effective_cwd = isolated_project
     env = os.environ.copy()
     _clean_conda_environment(env)
     shim_root = shim.parent
@@ -139,6 +150,7 @@ def _run_start(
             "SHIM_MIGRATION_HELPER": str(shim_root / "migration_helper.py"),
             "SHIM_REVISION_HELPER": str(shim_root / "revision_helper.py"),
             "SHIM_VAR_DIR": str(var_dir),
+            "SHIM_STORE_DIR": (effective_script_path.parent.parent.parent / ".pnpm-store" / "v11").as_posix(),
             "LOCALAPPDATA": str(shim_root / "localappdata"),
             "PYTHONDONTWRITEBYTECODE": "1",
         }
@@ -150,8 +162,8 @@ def _run_start(
         arguments.append("-ForcePrepare")
     arguments.extend(["-VarDir", str(command_var_dir if command_var_dir is not None else var_dir)])
     return subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script_path), *arguments],
-        cwd=cwd,
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(effective_script_path), *arguments],
+        cwd=effective_cwd,
         env=env,
         text=True,
         capture_output=True,
@@ -165,9 +177,9 @@ def _state_path(var_dir: Path) -> Path:
 
 def _make_isolated_project(tmp_path: Path) -> Path:
     project = tmp_path / "project"
-    (project / "scripts").mkdir(parents=True)
-    (project / "backend" / "migrations" / "versions").mkdir(parents=True)
-    (project / "frontend" / "src").mkdir(parents=True)
+    (project / "scripts").mkdir(parents=True, exist_ok=True)
+    (project / "backend" / "migrations" / "versions").mkdir(parents=True, exist_ok=True)
+    (project / "frontend" / "src").mkdir(parents=True, exist_ok=True)
     shutil.copy2(SCRIPT, project / "scripts" / "start.ps1")
     for name in ("environment.yml", "pyproject.toml", "uv.lock"):
         (project / name).write_text(f"fixture-{name}\n", encoding="utf-8")
@@ -176,6 +188,7 @@ def _make_isolated_project(tmp_path: Path) -> Path:
     (project / "backend" / "migrations" / "versions" / "001_fixture.py").write_text("fixture revision\n", encoding="utf-8")
     (project / "frontend" / "package.json").write_text('{"name":"fixture","scripts":{"build":"vite build"}}\n', encoding="utf-8")
     (project / "frontend" / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n", encoding="utf-8")
+    (project / "frontend" / "pnpm-workspace.yaml").write_text("allowBuilds:\n  esbuild: true\nstoreDir: ../../.pnpm-store\n", encoding="utf-8")
     (project / "frontend" / "index.html").write_text("<div id=app></div>\n", encoding="utf-8")
     (project / "frontend" / "src" / "main.ts").write_text("export const fixture = true;\n", encoding="utf-8")
     (project / "frontend" / "tsconfig.json").write_text("{}\n", encoding="utf-8")
@@ -199,7 +212,7 @@ def _command_counts(log: Path) -> dict[str, int]:
 def test_conda_creates_missing_environment_without_uv(tmp_path: Path) -> None:
     shim, log = _make_shims(tmp_path, conda=True, uv=False)
     relative_var_dir = Path("var") / f"pytest-o4-start-relative-{tmp_path.name}"
-    expected_var_dir = (ROOT / relative_var_dir).resolve()
+    expected_var_dir = (tmp_path / "project" / relative_var_dir).resolve()
     try:
         result = _run_start(expected_var_dir, shim, log, command_var_dir=relative_var_dir, cwd=tmp_path)
         assert result.returncode == 0, result.stdout + result.stderr
@@ -211,7 +224,7 @@ def test_conda_creates_missing_environment_without_uv(tmp_path: Path) -> None:
         assert "Python 环境路径: C:\\jiejian_env" in result.stdout
         assert f"运行目录: {expected_var_dir}" in result.stdout
         assert f"日志: {expected_var_dir / 'logs'}\\startup-" in result.stdout
-        assert str(ROOT) in result.stdout
+        assert str(tmp_path / "project") in result.stdout
     finally:
         if expected_var_dir.exists():
             shutil.rmtree(expected_var_dir)
@@ -328,6 +341,7 @@ def test_isolated_fixture_cold_hot_and_valid_revision(tmp_path: Path) -> None:
     [
         ("python_input", lambda project: (project / "pyproject.toml").write_text("changed\n", encoding="utf-8"), {"uv_sync": 1, "playwright_install": 1}),
         ("node_input", lambda project: (project / "frontend" / "package.json").write_text('{"name":"changed"}\n', encoding="utf-8"), {"pnpm_install": 1, "pnpm_build": 1}),
+        ("pnpm_workspace_input", lambda project: (project / "frontend" / "pnpm-workspace.yaml").write_text("allowBuilds:\n  esbuild: false\nstoreDir: ../../.pnpm-store\n", encoding="utf-8"), {"pnpm_install": 1, "pnpm_build": 1}),
         ("frontend_source", lambda project: (project / "frontend" / "src" / "main.ts").write_text("export const changed = true;\n", encoding="utf-8"), {"pnpm_build": 1}),
         ("migration_input", lambda project: (project / "backend" / "migrations" / "versions" / "001_fixture.py").write_text("changed revision\n", encoding="utf-8"), {"migration": 1}),
     ],
@@ -349,13 +363,15 @@ def test_isolated_fingerprint_invalidation_matrix(tmp_path: Path, name: str, mut
 
 
 @pytest.mark.process
-@pytest.mark.parametrize("missing", ["node_modules", "dist", "chromium", "database"])
+@pytest.mark.parametrize("missing", ["node_modules", "corrupt_node_modules", "dist", "chromium", "database"])
 def test_isolated_output_and_runtime_missingness_rebuilds_only_required_stage(tmp_path: Path, missing: str) -> None:
     project, shim, log, first = _run_isolated_fixture(tmp_path)
     assert first.returncode == 0, first.stdout + first.stderr
     before = _command_counts(log)
     if missing == "node_modules":
         shutil.rmtree(project / "frontend" / "node_modules")
+    elif missing == "corrupt_node_modules":
+        (project / "frontend" / "node_modules" / ".bin" / "tsc.cmd").unlink()
     elif missing == "dist":
         shutil.rmtree(project / "frontend" / "dist")
     elif missing == "chromium":
@@ -367,6 +383,7 @@ def test_isolated_output_and_runtime_missingness_rebuilds_only_required_stage(tm
     after = _command_counts(log)
     expected = {
         "node_modules": {"pnpm_install": 1, "pnpm_build": 1},
+        "corrupt_node_modules": {"pnpm_install": 1, "pnpm_build": 1},
         "dist": {"pnpm_build": 1},
         "chromium": {"playwright_install": 1},
         "database": {"migration": 1},
@@ -376,6 +393,22 @@ def test_isolated_output_and_runtime_missingness_rebuilds_only_required_stage(tm
     for command, amount in before.items():
         if command not in expected and command != "doctor":
             assert after[command] == amount
+
+
+@pytest.mark.process
+def test_old_pnpm_store_link_rebuilds_only_node_dependencies_and_frontend(tmp_path: Path) -> None:
+    project, shim, log, first = _run_isolated_fixture(tmp_path)
+    assert first.returncode == 0, first.stdout + first.stderr
+    before = _command_counts(log)
+    manifest = project / "frontend" / "node_modules" / ".modules.yaml"
+    manifest.write_text('{\n  "storeDir": "D:\\\\.pnpm-store\\\\v11"\n}\n', encoding="utf-8")
+    second = _run_start(tmp_path / "var", shim, log, cwd=project, script_path=project / "scripts" / "start.ps1")
+    assert second.returncode == 0, second.stdout + second.stderr
+    after = _command_counts(log)
+    assert after["pnpm_install"] == before["pnpm_install"] + 1
+    assert after["pnpm_build"] == before["pnpm_build"] + 1
+    for command in ("uv_sync", "playwright_install", "migration"):
+        assert after[command] == before[command]
 
 
 @pytest.mark.process
@@ -437,6 +470,7 @@ def test_failed_stage_does_not_write_failed_phase_and_prints_force_recovery(tmp_
 
 
 def _make_download_wrapper(tmp_path: Path, *, fail: bool = False) -> tuple[Path, Path, Path]:
+    project = _make_isolated_project(tmp_path)
     archive_root = tmp_path / "download-source"
     archive_root.mkdir()
     uv_cmd = archive_root / "uv.cmd"
@@ -484,7 +518,7 @@ def _make_download_wrapper(tmp_path: Path, *, fail: bool = False) -> tuple[Path,
         f"  if (${str(fail).lower()}) {{ throw 'offline' }}\n"
         f"  Add-Content -LiteralPath '{tmp_path / 'download-count.log'}' -Value $Uri\n"
         f"  if ($Uri.EndsWith('.sha256')) {{ Copy-Item -LiteralPath $sourceHash -Destination $OutFile }} else {{ Copy-Item -LiteralPath $sourceZip -Destination $OutFile }}\n"
-        f"}}\n$env:SHIM_PYTHON = '{r'D:\Miniconda\envs\jiejian_env\python.exe'}'\n$env:SHIM_MIGRATION_HELPER = '{migration_helper}'\n$env:SHIM_REVISION_HELPER = '{revision_helper}'\n$env:SHIM_VAR_DIR = '{tmp_path / 'var'}'\n. '{SCRIPT}' -PrepareOnly -VarDir '{tmp_path / 'var'}'\n"
+        f"}}\n$env:SHIM_PYTHON = '{r'D:\Miniconda\envs\jiejian_env\python.exe'}'\n$env:SHIM_MIGRATION_HELPER = '{migration_helper}'\n$env:SHIM_REVISION_HELPER = '{revision_helper}'\n$env:SHIM_VAR_DIR = '{tmp_path / 'var'}'\n$env:SHIM_STORE_DIR = '{(project.parent / '.pnpm-store' / 'v11').as_posix()}'\n. '{project / 'scripts' / 'start.ps1'}' -PrepareOnly -VarDir '{tmp_path / 'var'}'\n"
         f"if (Get-ChildItem -LiteralPath '{tmp_path / 'var' / 'logs'}' -Filter 'startup-*.log' | Get-Content | Select-String '失败阶段') {{ exit 21 }}\n",
         encoding="utf-8",
     )

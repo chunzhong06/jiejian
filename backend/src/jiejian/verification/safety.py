@@ -8,7 +8,7 @@
 #   校验 scheme/host/port｜阻止未授权私网和重定向｜返回已解析目标
 #
 # 调用链
-#   HttpExecutor / RecordingEventCollector → TargetGuard → DNS / URL policy
+#   HttpExecutor / Recording transport → TargetGuard → IPv4 / URL policy
 # =============================================================================
 
 from __future__ import annotations
@@ -33,6 +33,8 @@ _EXPLICIT_PRIVATE_NETWORKS = tuple(
 
 @dataclass(frozen=True, slots=True)
 class AuthorizedTarget:
+    """保存一次授权通过的完整 URL、目标主机、端口和固定地址。"""
+
     url: str
     host: str
     port: int
@@ -40,12 +42,16 @@ class AuthorizedTarget:
 
 
 class TargetGuard:
-    """在发出请求前重新解析并授权目标，不允许调用方绕过。"""
+    """在每次请求和重定向前重新核对目标是否仍在 TargetScope 内。"""
 
     def __init__(self, scope: TargetScope) -> None:
+        """绑定当前运行已经校验的目标授权范围。"""
+
         self.scope = scope
 
     def authorize_path(self, path: str) -> AuthorizedTarget:
+        """把站内绝对路径接到 base_url，并交给完整 URL 授权。"""
+
         parsed = urlsplit(path)
         if not path.startswith("/") or parsed.scheme or parsed.netloc:
             raise JiejianError(
@@ -55,6 +61,21 @@ class TargetGuard:
         return self.authorize_url(f"{self.scope.base_url}{path}")
 
     def authorize_url(self, url: str) -> AuthorizedTarget:
+        """校验完整 URL 的协议、origin、IPv4 地址和私网授权。
+
+        数据流
+            调用方 URL → 拆分 scheme/host/port → 与 TargetScope 逐项比对
+            → 私网与元数据地址检查 → AuthorizedTarget。
+
+        关键说明
+            当前只接受 IPv4 字面量，因此授权结果不会在请求时再次经过 DNS。
+            即使 allow_private_network 为真，云元数据、链路本地、组播和保留地址
+            仍然禁止访问。
+
+        返回
+            已确认落在授权范围内、可交给网络适配器使用的 AuthorizedTarget。
+        """
+
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"}:
             raise JiejianError(ErrorCode.SCOPE_URL, "只允许 HTTP 或 HTTPS 目标")
@@ -109,6 +130,8 @@ class TargetGuard:
         )
 
     def authorize_redirect(self, current_url: str, location: str) -> AuthorizedTarget:
+        """解析响应中的相对或绝对 Location，并把越界目标统一标记为重定向错误。"""
+
         try:
             return self.authorize_url(urljoin(current_url, location))
         except JiejianError as exc:

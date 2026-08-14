@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 from pathlib import Path
@@ -31,10 +30,12 @@ class LocalWorkerManager:
         var_dir: Path,
         uow_factory,
         job_queue: JobQueueService | None = None,
+        environment_provider=None,
     ) -> None:
         self.var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
         self._job_queue = job_queue or JobQueueService(uow_factory)
+        self._environment_provider = environment_provider or (lambda names: {})
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._process = None
@@ -100,10 +101,11 @@ class LocalWorkerManager:
                             )
                         )
                     self._job_id = job.job_id
+                    environment = self._environment_provider(secret_names)
                     self._process = WorkerDispatcher(
                         var_dir=self.var_dir,
                         uow_factory=self._uow_factory,
-                        environ=os.environ,
+                        environ=environment,
                     ).start(
                         job_id=job.job_id,
                         lease_owner=f"serve-worker-{uuid4().hex}",
