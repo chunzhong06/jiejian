@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ControlShell, { remembered } from './ControlShell'
 import { JobProgress } from '../features/runs/JobProgress'
 import { RecordingPage } from '../features/recording/RecordingPage'
+import { ReportPage } from '../features/results/ReportPage'
 import { VerifyPage } from '../features/verification/VerifyPage'
 
 const mockApi = vi.hoisted(() => ({
   projects: vi.fn().mockResolvedValue([]),
+  runs: vi.fn().mockResolvedValue([]),
   llmProfiles: vi.fn().mockResolvedValue([]),
   systemStatus: vi.fn().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }),
   cancel: vi.fn().mockResolvedValue({}),
@@ -20,7 +22,7 @@ const mockApi = vi.hoisted(() => ({
   evidenceDetail: vi.fn(),
 }))
 
-vi.mock('../api/http', () => ({ ApiError: class extends Error {} }))
+vi.mock('../api/http', () => ({ ApiError: class extends Error {}, request: vi.fn().mockResolvedValue({ status: 'stopped', demo_data: true, session_id: null, project_id: null, run_id: null, job_id: null, message: '内置演示尚未启动。' }) }))
 vi.mock('../api/projects', () => ({ projectsApi: mockApi }))
 vi.mock('../api/recordings', () => ({ recordingsApi: mockApi }))
 vi.mock('../api/results', () => ({ resultsApi: mockApi }))
@@ -29,11 +31,11 @@ vi.mock('../api/llm', () => ({ llmApi: { profiles: mockApi.llmProfiles } }))
 vi.mock('../api/system', () => ({ systemApi: { status: mockApi.systemStatus } }))
 
 describe('应用壳', () => {
-  beforeEach(() => { localStorage.clear(); window.location.hash = ''; mockApi.projects.mockReset().mockResolvedValue([]); mockApi.llmProfiles.mockReset().mockResolvedValue([]); mockApi.systemStatus.mockReset().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.cancel.mockClear(); mockApi.recordings.mockReset(); mockApi.recording.mockReset(); mockApi.reviewRecording.mockReset(); mockApi.finalizeRecording.mockReset(); mockApi.run.mockReset(); mockApi.findings.mockReset(); mockApi.evidence.mockReset(); mockApi.evidenceDetail.mockReset() })
+  beforeEach(() => { localStorage.clear(); window.location.hash = ''; mockApi.projects.mockReset().mockResolvedValue([]); mockApi.runs.mockReset().mockResolvedValue([]); mockApi.llmProfiles.mockReset().mockResolvedValue([]); mockApi.systemStatus.mockReset().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.cancel.mockClear(); mockApi.recordings.mockReset(); mockApi.recording.mockReset(); mockApi.reviewRecording.mockReset(); mockApi.finalizeRecording.mockReset(); mockApi.run.mockReset(); mockApi.findings.mockReset(); mockApi.evidence.mockReset(); mockApi.evidenceDetail.mockReset() })
 
   it('显示六个用户阶段', async () => {
     render(<ControlShell />)
-    expect(await screen.findByText('接入项目')).toBeInTheDocument()
+    expect(await screen.findByText('检查你的应用有没有权限越界')).toBeInTheDocument()
     for (const phase of ['录制', '建约', '测试', '验证', '报告']) {
       expect(screen.getAllByText(phase).length).toBeGreaterThan(0)
     }
@@ -60,11 +62,25 @@ describe('应用壳', () => {
     localStorage.setItem(remembered.project, JSON.stringify({ project_id: 'stale-project', name: '陈旧项目' }))
     mockApi.systemStatus.mockResolvedValue({ api: 'unknown', worker: 'unknown', browser: 'unknown' })
     render(<ControlShell />)
-    expect(await screen.findByText('接入项目')).toBeInTheDocument()
+    expect(await screen.findByText('检查你的应用有没有权限越界')).toBeInTheDocument()
     expect(screen.getAllByText(/API · 未知/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Worker · 未知/).length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: '继续建约' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '继续建约' })).not.toBeInTheDocument()
     expect(localStorage.getItem(remembered.project)).toBeNull()
+  })
+
+  it('错误恢复重试会重新挂载当前页面并再次读取当前运行', async () => {
+    window.location.hash = '#/verify'
+    localStorage.setItem(remembered.project, JSON.stringify({ project_id: 'project-retry' }))
+    mockApi.projects.mockResolvedValue([{ project_id: 'project-retry', name: '重试项目' }])
+    mockApi.runs.mockResolvedValue([{ run_id: 'run-retry', lifecycle: 'COMPLETED', result_integrity: 'VERIFIED' }])
+    mockApi.run.mockRejectedValueOnce({ code: 'TEMPORARY_READ_FAILURE', message: '暂时无法读取检查状态' }).mockResolvedValue({ run_id: 'run-retry', lifecycle: 'COMPLETED', result_integrity: 'VERIFIED', case_progress: { status: 'PUBLISHED', completed: 1, total: 1 } })
+    mockApi.findings.mockResolvedValue([])
+    mockApi.evidence.mockResolvedValue([])
+    render(<ControlShell />)
+    await screen.findByText('这一步没有完成')
+    fireEvent.click(screen.getByRole('button', { name: '刷新状态并重试' }))
+    await waitFor(() => expect(mockApi.run).toHaveBeenCalledTimes(2))
   })
 
   it('按真实 profile 状态优先显示正在测试，不因其他 profile 可用而伪造可用', async () => {
@@ -118,15 +134,14 @@ describe('应用壳', () => {
     mockApi.evidence.mockResolvedValue([])
     render(<VerifyPage run={{ run_id: 'run-overview' }} onError={vi.fn()} />)
     expect((await screen.findAllByText('http://127.0.0.1:18080')).length).toBeGreaterThan(0)
-    expect(screen.getByText('COMPLETED')).toBeInTheDocument()
+    expect(screen.getByText('已完成')).toBeInTheDocument()
     expect(screen.getByText('MISSING_OBSERVATION')).toBeInTheDocument()
     expect(screen.getByText('2/2')).toBeInTheDocument()
     const findingCount = screen.getByText('Finding 数量').closest('.ant-descriptions-item')
     expect(findingCount).not.toBeNull()
     expect(within(findingCount as HTMLElement).getByText('3')).toBeInTheDocument()
-    expect(screen.getByText('结果完整性：VERIFIED')).toBeInTheDocument()
-    expect(screen.getByText('Gate verdict')).toBeInTheDocument()
-    expect(screen.getByText('INCONCLUSIVE')).toBeInTheDocument()
+    expect(screen.getByText('已验证')).toBeInTheDocument()
+    expect(screen.getByText('证据不足，暂时不能下结论')).toBeInTheDocument()
     expect(screen.queryByText('SAFETY_STOPPED · 安全边界已停止运行')).not.toBeInTheDocument()
   })
 
@@ -147,16 +162,59 @@ describe('应用壳', () => {
     mockApi.findings.mockResolvedValue([])
     mockApi.evidence.mockResolvedValue([])
     render(<VerifyPage run={{ run_id: 'run-stopped' }} onError={vi.fn()} />)
-    expect(await screen.findByText('SAFETY_STOPPED')).toBeInTheDocument()
-    expect(screen.getByText('SAFETY_STOPPED · 安全边界已停止运行')).toBeInTheDocument()
-    expect(screen.getByText('REQUEST_BUDGET_EXCEEDED')).toBeInTheDocument()
+    expect(await screen.findByText('已安全停止')).toBeInTheDocument()
+    expect(screen.getByText('安全边界已停止运行')).toBeInTheDocument()
     const pendingVerdict = await screen.findByText('等待结论')
     const gateVerdict = pendingVerdict.closest('.ant-descriptions-item')
     expect(gateVerdict).not.toBeNull()
-    expect(within(gateVerdict as HTMLElement).getByText('Gate verdict')).toBeInTheDocument()
+    expect(within(gateVerdict as HTMLElement).getByText('安全结论')).toBeInTheDocument()
     expect(within(gateVerdict as HTMLElement).getByText('等待结论')).toBeInTheDocument()
     expect(screen.getAllByText('发布后可用').length).toBeGreaterThanOrEqual(2)
     expect(within(gateVerdict as HTMLElement).queryByText('INCONCLUSIVE')).not.toBeInTheDocument()
+  })
+
+  it('V2 Evidence 索引不伪造未知 verdict，查看详情后才展示真实 verdict', async () => {
+    mockApi.run.mockResolvedValue({
+      run_id: 'run-v2-evidence',
+      execution_schema_version: '2',
+      result_integrity: 'VERIFIED',
+      lifecycle: 'COMPLETED',
+      case_progress: { status: 'PUBLISHED', completed: 1, total: 1 },
+      observer_health: { required_observers: ['owner_api'] },
+      coverage_record_count: 1,
+      coverage_gap_count: 0,
+    })
+    mockApi.evidence.mockResolvedValue([{ case_id: 'case-1', evidence_id: 'ev_123', byte_count: 256 }])
+    mockApi.evidenceDetail.mockResolvedValue({ evidence_id: 'ev_123', verdict: 'SAFE' })
+    render(<VerifyPage run={{ run_id: 'run-v2-evidence' }} onError={vi.fn()} />)
+    expect(await screen.findByText('Evidence ev_123')).toBeInTheDocument()
+    expect(screen.queryByText(/INCONCLUSIVE/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /高级：复杂权限证据与运行细节/ }))
+    fireEvent.click(screen.getByRole('button', { name: '查看证据' }))
+    expect(await screen.findByText(/"verdict": "SAFE"/)).toBeInTheDocument()
+  })
+
+  it('V2 报告仅在可信发布后提示证据已发布，未发布和无效结果不伪造', async () => {
+    mockApi.run.mockResolvedValue({
+      run_id: 'run-v2-report',
+      execution_schema_version: '2',
+      result_integrity: 'UNAVAILABLE',
+      lifecycle: 'RUNNING',
+    })
+    const first = render(<ReportPage run={{ run_id: 'run-v2-report' }} onError={vi.fn()} />)
+    expect((await screen.findAllByText('等待已发布证据。')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('复杂权限证据已发布')).not.toBeInTheDocument()
+    first.unmount()
+
+    mockApi.run.mockResolvedValue({
+      run_id: 'run-v2-report',
+      execution_schema_version: '2',
+      result_integrity: 'INVALID',
+      lifecycle: 'COMPLETED',
+    })
+    render(<ReportPage run={{ run_id: 'run-v2-report' }} onError={vi.fn()} />)
+    expect((await screen.findAllByText('结果完整性无效，暂不提供报告。')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('复杂权限证据已发布')).not.toBeInTheDocument()
   })
 
   it('完成录制审阅到 revision 更新再最终化的闭环', async () => {
@@ -165,10 +223,11 @@ describe('应用壳', () => {
     mockApi.reviewRecording.mockResolvedValue({ recording: { recording_id: 'rec-1', project_id: 'project-1', state: 'PENDING_REVIEW' }, draft: { revision: 2, flow_id: 'flow-1', steps: [], variables: [] }, job: null })
     mockApi.finalizeRecording.mockResolvedValue({ recording: { recording_id: 'rec-1', project_id: 'project-1', state: 'COMPLETED' }, flow_path: 'var/projects/project-1/recordings/rec-1/flow.json' })
     render(<RecordingPage project={{ project_id: 'project-1' }} onError={vi.fn()} />)
-    expect(await screen.findByText('FlowDraft revision 1')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /高级：录制与步骤调整/ }))
+    expect(await screen.findByText('步骤草稿 revision 1')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '提交审阅' }))
     await waitFor(() => expect(mockApi.reviewRecording).toHaveBeenCalled())
-    expect(await screen.findByText('FlowDraft revision 2')).toBeInTheDocument()
+    expect(await screen.findByText('步骤草稿 revision 2')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '最终化' }))
     await waitFor(() => expect(mockApi.finalizeRecording).toHaveBeenCalledWith('rec-1'))
     expect(await screen.findByText('var/projects/project-1/recordings/rec-1/flow.json')).toBeInTheDocument()

@@ -1,3 +1,16 @@
+# =============================================================================
+# Verification 规划与判定测试
+#
+# 定位
+#   保护 MutationPlan 的可复现性，以及 MutationCase 进入观察判定后的核心安全结论
+#
+# 职责
+#   固定变异种类与指纹｜验证多面观察判定｜保护证据脱敏、哈希和总体 Verdict
+#
+# 调用链
+#   pytest → build_mutation_plan / evaluate_case / build_evidence / aggregate_verdict
+# =============================================================================
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,6 +42,13 @@ SAMPLE_PROJECT = (
 
 
 def test_mutation_plan_is_deterministic_for_fixed_seed() -> None:
+    """证明相同 Flow、Contract 和 seed 生成相同用例顺序、指纹及三种攻击变体。
+
+    关键说明
+        断言失败表示同一次输入可能产生不可重复的 MutationPlan，后续 Evidence
+        将无法稳定复查或比较。
+    """
+
     bundle = load_project_bundle(SAMPLE_PROJECT)
     first = build_mutation_plan(
         bundle.project.identities,

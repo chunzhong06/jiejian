@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import partial
 from pathlib import Path
 from collections.abc import Mapping
@@ -28,6 +29,7 @@ from ..execution.request_store import ExecutionRequestStore
 from ..execution.run_handler import VerificationRunJobHandler
 from ..execution.queue import JobQueueService
 from ..execution.submission import ExecutionSubmissionService
+from ..execution.permission_execution import PermissionExecutionService
 from ..execution.targets import JobTargetType, default_run_job_targets
 from ..projects.service import ProjectControlService
 from ..recording.application import RecordingApplicationService
@@ -39,6 +41,9 @@ from ..storage import StorageUnitOfWork
 from ..contracts.llm.adapters.httpx_transport import HttpxLLMTransport
 from ..contracts.llm.profiles import LLMProfileApplicationService
 from ..contracts.llm.secrets import LLMSecretStore
+from ..onboarding.service import FolderSelector, OnboardingService
+from ..onboarding.secrets import RuntimeSecretVault
+from ..onboarding.demo import DemoRuntimeManager
 
 
 class ApplicationContext:
@@ -52,6 +57,7 @@ class ApplicationContext:
         llm_secret_store: LLMSecretStore | None = None,
         environ: Mapping[str, str] | None = None,
         clock_us: Callable[[], int] | None = None,
+        folder_selector: FolderSelector | None = None,
     ) -> None:
         from ..storage import (
             create_session_factory,
@@ -61,6 +67,8 @@ class ApplicationContext:
         )
 
         self.var_dir = var_dir.resolve()
+        self._base_environment = dict(environ if environ is not None else os.environ)
+        self.secret_vault = RuntimeSecretVault()
         database_path = default_database_path(self.var_dir)
         upgrade_database(database_path)
         self.engine = create_sqlite_engine(database_path)
@@ -78,9 +86,31 @@ class ApplicationContext:
             self.execution_request_store,
             queue=self.job_queue,
         )
+        self.permission_execution = PermissionExecutionService(
+            factory,
+            self.execution_request_store,
+            self.execution_submission,
+            environment_provider=self.environment_for_secret_names,
+            clock_us=clock_us,
+        )
         self.results = PublishedResultReader(self.var_dir, self.uow_factory)
         self.projects = ProjectControlService(factory)
         self.execution_requests = ExecutionRequestService(factory, self.projects)
+        self.onboarding = OnboardingService(
+            folder_selector,
+            var_dir=self.var_dir,
+            vault=self.secret_vault,
+            projects=self.projects,
+            execution_requests=self.execution_requests,
+            execution_submission=self.execution_submission,
+            environment_provider=self.environment_for_secret_names,
+        )
+        self.demo = DemoRuntimeManager(
+            self.onboarding,
+            var_dir=self.var_dir,
+            base_environment=self._base_environment,
+            secret_vault=self.secret_vault,
+        )
         from ..contracts.governance_service import ContractGovernanceService
 
         self.contracts = ContractGovernanceService(
@@ -165,4 +195,11 @@ class ApplicationContext:
         return registry
 
     def close(self) -> None:
+        self.demo.close()
+        self.secret_vault.clear()
         self.engine.dispose()
+
+    def environment_for_secret_names(self, names) -> dict[str, str]:
+        environment = dict(self._base_environment)
+        environment.update(self.secret_vault.resolve(names))
+        return environment

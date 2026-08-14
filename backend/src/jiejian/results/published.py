@@ -24,13 +24,14 @@ from ..domain.lifecycle import RunLifecycle
 from ..errors import ErrorCode, JiejianError
 from ..redaction import redact
 from ..storage import EvidenceIndexRecord, JobRecord, RunRecord, StorageUnitOfWork
+from ..protocols import RunnerResultV2
 from ..execution.published_artifacts import (
     ValidatedPublication,
     evidence_records_for_publication,
     final_run_dir,
     validate_published_run,
 )
-from ..execution.request_store import ExecutionRequestStore
+from ..execution.request_store import ExecutionRequestStore, PersistedExecutionRequestV2
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,11 +99,15 @@ class PublishedResultReader:
         return redact(document)
 
     def report(self, view: PublishedRunView) -> dict[str, Any]:
+        if isinstance(view.publication.result, RunnerResultV2):
+            raise JiejianError(ErrorCode.REPORT_NOT_FOUND, "Runner V2 尚未提供 V1 report 语义")
         return self.document(view, "artifacts/report/report.json")
 
     def findings(self, view: PublishedRunView) -> list[dict[str, Any]]:
         """只从已验证 Evidence 派生可跟踪问题，SAFE 不构成 Finding。"""
 
+        if isinstance(view.publication.result, RunnerResultV2):
+            raise JiejianError(ErrorCode.REPORT_NOT_FOUND, "Runner V2 尚未提供阶段 7 Finding 语义")
         findings: list[dict[str, Any]] = []
         for record in view.evidence:
             item = self.evidence_document(view, record.evidence_id)
@@ -130,6 +135,124 @@ class PublishedResultReader:
             raise JiejianError(ErrorCode.ARTIFACT_NOT_PUBLISHED, "运行缺少持久任务关联")
         request = ExecutionRequestStore(self._var_dir).load(job.job_id, expected_hash=job.request_hash)
         snapshot = request.project_snapshot
+        if published is not None and isinstance(published.publication.result, RunnerResultV2):
+            required_observers = sorted(
+                {
+                    requirement
+                    for case in snapshot.plan.cases
+                    for requirement in case.required_observers
+                }
+            )
+            binding_map = {
+                binding.requirement_id: binding
+                for binding in snapshot.observer_bindings
+                if binding.kind.value == "OBSERVER_SPEC"
+            }
+            spec_map = {spec.observer_id: spec for spec in snapshot.observers}
+            observer_health: dict[str, Any] = {
+                "schema_version": "1",
+                "required_observers": required_observers,
+            }
+            if "http" in required_observers:
+                observer_health["http"] = {
+                    "configured": True,
+                    "required": True,
+                    "observer_type": "REQUEST_FACT",
+                }
+            for requirement in required_observers:
+                if requirement == "http":
+                    continue
+                binding = binding_map.get(requirement)
+                spec = spec_map.get(binding.observer_id) if binding is not None else None
+                observer_health[requirement] = {
+                    "configured": spec is not None,
+                    "required": bool(spec and spec.required),
+                    "observer_id": binding.observer_id if binding is not None else None,
+                    "observer_type": binding.observer_type.value if binding is not None else None,
+                    "phases": [phase.value for phase in binding.phases] if binding is not None else [],
+                }
+            required_observers = sorted(
+                {
+                    requirement
+                    for case in snapshot.plan.cases
+                    for requirement in case.required_observers
+                }
+            )
+            case_progress = {
+                "schema_version": "1",
+                "status": "PUBLISHED",
+                "completed": len(published.evidence),
+                "total": len(snapshot.plan.cases),
+            }
+            return {
+                "schema_version": "1",
+                "execution_schema_version": "2",
+                "result_schema_version": "2",
+                "target_scope": snapshot.target.model_dump(mode="json"),
+                "budget": request.budget.model_dump(mode="json"),
+                "observer_health": observer_health,
+                "case_progress": case_progress,
+                "finding_count": None,
+                "reason_codes": list(published.publication.result.reason_codes),
+                "coverage_record_count": published.publication.result.coverage_record_count,
+                "coverage_gap_count": published.publication.result.coverage_gap_count,
+                "safety_context": None,
+            }
+        if isinstance(request, PersistedExecutionRequestV2):
+            required_observers = sorted(
+                {
+                    requirement
+                    for case in snapshot.plan.cases
+                    for requirement in case.required_observers
+                }
+            )
+            binding_map = {
+                binding.requirement_id: binding
+                for binding in snapshot.observer_bindings
+                if binding.kind.value == "OBSERVER_SPEC"
+            }
+            spec_map = {spec.observer_id: spec for spec in snapshot.observers}
+            observer_health: dict[str, Any] = {
+                "schema_version": "1",
+                "required_observers": required_observers,
+            }
+            if "http" in required_observers:
+                observer_health["http"] = {
+                    "configured": True,
+                    "required": True,
+                    "observer_type": "REQUEST_FACT",
+                }
+            for requirement in required_observers:
+                if requirement == "http":
+                    continue
+                binding = binding_map.get(requirement)
+                spec = spec_map.get(binding.observer_id) if binding is not None else None
+                observer_health[requirement] = {
+                    "configured": spec is not None,
+                    "required": bool(spec and spec.required),
+                    "observer_id": binding.observer_id if binding is not None else None,
+                    "observer_type": binding.observer_type.value if binding is not None else None,
+                    "phases": [phase.value for phase in binding.phases] if binding is not None else [],
+                }
+            return {
+                "schema_version": "1",
+                "execution_schema_version": "2",
+                "result_schema_version": None,
+                "target_scope": snapshot.target.model_dump(mode="json"),
+                "budget": request.budget.model_dump(mode="json"),
+                "observer_health": observer_health,
+                "case_progress": {
+                    "schema_version": "1",
+                    "status": "UNAVAILABLE",
+                    "completed": None,
+                    "total": len(snapshot.plan.cases),
+                },
+                "finding_count": None,
+                "reason_codes": [],
+                "coverage_record_count": len(snapshot.plan.coverage),
+                "coverage_gap_count": len(snapshot.plan.gaps),
+                "safety_context": None,
+            }
         required_observers = sorted(
             {observer for rule in snapshot.contract.rules for observer in rule.required_observers}
         )
@@ -197,6 +320,8 @@ class PublishedResultReader:
     def evidence_detail(self, view: PublishedRunView, evidence_id: str) -> dict[str, Any]:
         """以已发布 plan 与不可变请求快照补充证据差分展示数据。"""
 
+        if isinstance(getattr(getattr(view, "publication", None), "result", None), RunnerResultV2):
+            return self.evidence_document(view, evidence_id)
         evidence = self.evidence_document(view, evidence_id)
         plan = self.document(view, "artifacts/mutation-plan.json")
         cases = plan.get("cases")

@@ -27,6 +27,7 @@ from .repositories.contracts import (
     RequirementRepository,
 )
 from .repositories.llm import LLMProfileRepository
+from .repositories.permission_profiles import PermissionExecutionProfileRepository
 from .repositories.evidence import EvidenceIndexRepository
 from .repositories.jobs import JobEventRepository, JobRepository
 from .repositories.projects import ProjectRepository
@@ -52,6 +53,7 @@ class StorageUnitOfWork:
     job_control: JobControlRepository
     evidence: EvidenceIndexRepository
     llm_profiles: LLMProfileRepository
+    permission_execution_profiles: PermissionExecutionProfileRepository
 
     def __init__(
         self,
@@ -90,6 +92,9 @@ class StorageUnitOfWork:
         self.job_control = JobControlRepository(session, self._known_secrets)
         self.evidence = EvidenceIndexRepository(session, self._known_secrets)
         self.llm_profiles = LLMProfileRepository(session, self._known_secrets)
+        self.permission_execution_profiles = PermissionExecutionProfileRepository(
+            session, self._known_secrets
+        )
         return self
 
     def commit(self) -> None:

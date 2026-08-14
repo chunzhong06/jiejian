@@ -12,14 +12,15 @@
  * ============================================================================= */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Descriptions, Divider, Form, Input, List, Select, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Checkbox, Collapse, Descriptions, Divider, Form, Input, List, Select, Space, Tag, Typography } from 'antd'
 import { contractsApi } from '../../api/contracts'
 import { ApiError } from '../../api/http'
 import { LLMProfile } from '../../api/llm'
+import { StageGuide } from '../../components/StageGuide'
 
 type Item = Record<string, any>
 
-export function ContractPage({ project, profiles = [], onError }: { project: Item; profiles?: LLMProfile[]; onError: (e: ApiError) => void }) {
+export function ContractPage({ project, profiles = [], onError, onNext }: { project: Item; profiles?: LLMProfile[]; onError: (e: ApiError) => void; onNext?: () => void }) {
   const [workspace, setWorkspace] = useState<Item | null>(null)
   const [requirements, setRequirements] = useState<Item[]>([])
   const [candidates, setCandidates] = useState<Item[]>([])
@@ -112,23 +113,26 @@ export function ContractPage({ project, profiles = [], onError }: { project: Ite
 
   const usableProfiles = profiles.filter((item) => item.enabled && item.secret_configured)
   const profileAvailable = usableProfiles.length > 0
+  const hasRule = Boolean(active || legacyContracts.some((item) => String(item.status).toUpperCase() === 'ACTIVE'))
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Card title="建约 · 治理工作台" extra={<Space><Tag color={llmAvailable || profileAvailable ? 'green' : 'default'}>LLM {llmAvailable || profileAvailable ? '可用' : '离线'}</Tag><Button onClick={() => void refresh()}>刷新</Button></Space>}>
+      <StageGuide stage="建约" what="确认哪些身份不应访问哪些资源" why="明确规则后，检查结果才有可解释的授权边界" missing={hasRule ? '已有可执行检查规则' : '缺少可执行检查规则'} next={hasRule ? '可以开始一次检查' : '先在高级规则治理中补齐并审阅规则'} onNext={hasRule ? onNext : undefined} nextLabel="去测试" />
+      <Card title="检查规则概览" extra={<Space><Tag color={hasRule ? 'green' : 'default'}>{hasRule ? '已有可执行检查规则' : '尚未确认规则'}</Tag><Tag>LLM {llmAvailable || profileAvailable ? '可用' : '离线'}</Tag><Button onClick={() => void refresh()}>刷新</Button></Space>}>
         <Descriptions size="small" column={2}>
-          <Descriptions.Item label="项目">{workspace?.project_id ?? project.project_id}</Descriptions.Item>
-          <Descriptions.Item label="治理绑定">{workspace?.governed_contract_id ? `${workspace.governed_contract_id} v${workspace.governed_contract_version}` : '未绑定'}</Descriptions.Item>
+          <Descriptions.Item label="当前项目">{workspace?.project_id ?? project.project_id}</Descriptions.Item>
+          <Descriptions.Item label="下一步">{hasRule ? '可以开始一次检查' : '展开高级规则治理补齐规则'}</Descriptions.Item>
         </Descriptions>
-        <Form layout="inline" onFinish={addRequirement} style={{ marginTop: 16 }}>
+      </Card>
+
+      <Collapse ghost items={[{ key: 'advanced-governance', label: '高级：规则治理', forceRender: true, children: <Space direction="vertical" style={{ width: '100%' }}><Card title="新增检查需求">
+        <Form layout="inline" onFinish={addRequirement}>
           <Form.Item name="text" rules={[{ required: true, message: '请输入受控需求模板' }]}><Input placeholder="rule id=foreign-read kind=foreign_read observers=http severity=high" style={{ width: 470 }} /></Form.Item>
           <Form.Item name="tags"><Input placeholder="标签，用逗号分隔" /></Form.Item>
           <Input value={actor} onChange={(event) => setActor(event.target.value)} placeholder="actor" style={{ width: 130 }} />
           <Button type="primary" htmlType="submit" loading={loading}>新增 Requirement</Button>
         </Form>
-      </Card>
-
-      <Card title="Requirement → Candidate" extra={<Button type="primary" disabled={loading || (!includeFlow && selectedRequirements.length === 0)} onClick={() => void derive()}>派生候选</Button>}>
+      </Card><Card title="Requirement → Candidate" extra={<Button type="primary" disabled={loading || (!includeFlow && selectedRequirements.length === 0)} onClick={() => void derive()}>派生候选</Button>}>
         <Space direction="vertical" style={{ width: '100%' }}>
           <Checkbox.Group value={selectedRequirements} onChange={(value) => setSelectedRequirements(value as string[])} options={requirements.map((item) => ({ label: `${item.requirement_id} · ${item.text}`, value: item.requirement_id }))} />
           <Checkbox checked={includeFlow} onChange={(event) => setIncludeFlow(event.target.checked)}>包含当前已校验 Flow（可独立派生）</Checkbox>
@@ -172,7 +176,7 @@ export function ContractPage({ project, profiles = [], onError }: { project: Ite
           <Button htmlType="submit">激活 YAML</Button>
         </Form>
         <List size="small" dataSource={legacyContracts} renderItem={(item) => <List.Item><List.Item.Meta title={`${item.id} v${item.version}`} description={String(item.path)} /><Tag color="blue">{String(item.status)}</Tag></List.Item>} />
-      </Card>
+      </Card></Space> }]} />
     </Space>
   )
 }

@@ -32,7 +32,9 @@ from .errors import (
 from .routers.contracts import build_contracts_router
 from .routers.jobs import build_jobs_router
 from .routers.llm import build_llm_router
+from .routers.onboarding import build_onboarding_router
 from .routers.projects import build_projects_router
+from .routers.permission_execution import build_permission_execution_router
 from .routers.recordings import build_recordings_router
 from .routers.results import build_results_router
 from .routers.runs import build_runs_router
@@ -48,6 +50,7 @@ def create_app(
     llm_secret_store=None,
     environ=None,
     clock_us=None,
+    folder_selector=None,
 ) -> FastAPI:
     context = ApplicationContext(
         var_dir,
@@ -55,11 +58,13 @@ def create_app(
         llm_secret_store=llm_secret_store,
         environ=environ,
         clock_us=clock_us,
+        folder_selector=folder_selector,
     )
     workers = LocalWorkerManager(
         context.var_dir,
         context.uow_factory,
         context.job_queue,
+        environment_provider=context.environment_for_secret_names,
     )
     results = context.results
     app = FastAPI(title="界鉴本地控制面", version="0.1.0")
@@ -84,11 +89,13 @@ def create_app(
 
     app.include_router(build_system_router(context, workers))
     app.include_router(build_projects_router(context))
+    app.include_router(build_permission_execution_router(context))
     app.include_router(build_contracts_router(context))
     app.include_router(build_recordings_router(context))
     app.include_router(build_runs_router(context, results))
     app.include_router(build_jobs_router(context))
     app.include_router(build_llm_router(context))
+    app.include_router(build_onboarding_router(context))
     app.include_router(build_results_router(context, results))
 
     @app.on_event("startup")

@@ -43,6 +43,8 @@ from ...execution.request_store import (
     required_secret_names,
 )
 from ...execution.submission import ExecutionSubmissionService, SubmitExecutionV1
+from ...application.context import ApplicationContext
+from ...protocols.runner_v2 import RunnerResultV2
 from ..bootstrap import runtime_settings
 from ..presentation import emit_json, fail
 
@@ -61,6 +63,75 @@ def run_command(
         emit_json(result.model_dump(mode="json"))
     except JiejianError as exc:
         fail(exc)
+
+
+def permission_run_command(
+    context: typer.Context,
+    profile_path: Path,
+    revalidate: bool = typer.Option(False, "--revalidate", help="显式更新 Profile 来源摘要"),
+) -> None:
+    """注册受控 V2 Profile，提交并等待真实 Runner V2 结果。"""
+
+    application = None
+    try:
+        settings = runtime_settings(context)
+        application = ApplicationContext(settings.var_dir, environ=os.environ)
+        record = application.permission_execution.register(
+            profile_path,
+            revalidate=revalidate,
+        )
+        submitted, request, secret_names = application.permission_execution.submit(
+            record.profile_id,
+            project_id=record.project_id,
+            idempotency_key=f"cli-{uuid4().hex}",
+            max_attempts=3,
+        )
+        environment = application.environment_for_secret_names(secret_names)
+        known_secrets = tuple(environment.get(name, "") for name in secret_names)
+        dispatcher = WorkerDispatcher(
+            var_dir=application.var_dir,
+            uow_factory=application.uow_factory,
+            environ=environment,
+        )
+        process = dispatcher.start(
+            job_id=submitted.job.job_id,
+            lease_owner=f"worker-{uuid4().hex}",
+            secret_names=secret_names,
+        )
+        staged = dispatcher.wait(
+            submitted.job.job_id,
+            process,
+            known_secrets=known_secrets,
+            timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000 + 60,
+        )
+        if not isinstance(staged.result, RunnerResultV2):
+            raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID, "V2 Profile 未形成 V2 结果")
+        result = staged.result
+        emit_json(
+            {
+                "schema_version": "2",
+                "run_id": result.run_id,
+                "job_id": result.job_id,
+                "lifecycle": result.run_lifecycle.value,
+                "verdict": result.verdict.value if result.verdict else None,
+                "coverage_record_count": result.coverage_record_count,
+                "coverage_gap_count": result.coverage_gap_count,
+                "evidence_count": len(result.evidence),
+                "reason_codes": list(result.reason_codes),
+                "artifact_dir": str(
+                    application.var_dir
+                    / "projects"
+                    / request.project_snapshot.project_id
+                    / "runs"
+                    / result.run_id
+                ),
+            }
+        )
+    except JiejianError as exc:
+        fail(exc)
+    finally:
+        if application is not None:
+            application.close()
 
 
 def _run_persisted_job(

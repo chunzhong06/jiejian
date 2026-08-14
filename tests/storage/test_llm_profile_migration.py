@@ -22,7 +22,7 @@ def test_0007_adds_only_non_secret_profile_table_and_has_no_downgrade(tmp_path: 
     connection = sqlite3.connect(database)
     try:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0007_stage5_llm_profiles",
+            "0008_permission_execution_profiles",
         )
         columns = {row[1] for row in connection.execute("PRAGMA table_info(llm_profiles)")}
         assert columns == {

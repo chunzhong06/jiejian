@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import os
 import time
+import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from uuid import uuid4
@@ -36,6 +37,7 @@ from ..protocols import (
     parse_runner_input,
 )
 from ..verification.execution import SnapshotRunExecutor, VerificationSnapshot
+from .execution_v2 import execute_runner_v2_attempt
 
 RUNNER_EXIT_OK = 0
 RUNNER_EXIT_PROTOCOL = 64
@@ -68,6 +70,13 @@ def execute_runner_attempt(
     """
 
     environment = os.environ if environ is None else environ
+    try:
+        if input_path.stat().st_size <= RUNNER_INPUT_MAX_BYTES:
+            header = json.loads(input_path.read_bytes().decode("utf-8"))
+            if isinstance(header, dict) and header.get("schema_version") == "2":
+                return execute_runner_v2_attempt(input_path, staging_dir, environ=environment, finished_at_us=finished_at_us)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        pass
     clock = finished_at_us or (lambda: time.time_ns() // 1_000)
     try:
         runner_input, known_secrets = _load_input(input_path, environment)

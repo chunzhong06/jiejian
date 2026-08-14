@@ -12,9 +12,10 @@
  * ============================================================================= */
 
 import { useEffect, useState } from 'react'
-import { Button, Space, Tag, Typography } from 'antd'
+import { Button, Collapse, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { runsApi } from '../../api/runs'
+import { lifecycleLabel } from '../sharedStatus'
 
 type Item = Record<string, any>
 const cursorKey = 'jiejian.cursor'
@@ -50,13 +51,10 @@ export function JobProgress({ job, onRefresh, onError }: { job?: Item; onRefresh
   return (
     <Space>
       <Tag color={job.state === 'RUNNING' ? 'processing' : undefined}>
-        任务 {job.state}
+        后台状态：{lifecycleLabel(job.state)}
       </Tag>
-      {event && (
-        <Typography.Text type="secondary">
-          事件 #{event.sequence}: {event.event_type}
-        </Typography.Text>
-      )}
+      {event && <Typography.Text type="secondary">后台正在处理</Typography.Text>}
+      {event && <Collapse ghost items={[{ key: 'job-event', label: '高级：后台事件细节', children: <Typography.Text type="secondary">事件 #{event.sequence}：{event.event_type}</Typography.Text> }]} />}
       {!['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(job.state) && (
         <Button
           danger

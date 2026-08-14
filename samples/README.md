@@ -1,75 +1,32 @@
-# 黄金样例
+# 本机样例
 
-`samples/` 只保存少量可读、可运行、可讲解的本机黄金场景；它们不是测试 fixture，也不是 benchmark。每个目录都是自包含 bundle，包含自己的 `project.yaml`、`flow.yaml` 和 `contract.yaml`。
+`fixed_apps/permissions_v2/`、`vulnerable_apps/permissions_v2/` 和 `inconclusive_apps/permissions_v2/` 是阶段 6.2 的 V2 权限关系规划样例。三套目录的 `contract.json` 与 `profile.json` 语义分别相同；`scenario.json` 和 `truth.json` 只描述变体与预期观察，不是 V1 `project.yaml`，也不接入 Runner V1。
 
-## 场景地图
-
-| Bundle | 目的与唯一价值 | 外部依赖/秘密 | 预期结果 | 竞赛演示 |
-| --- | --- | --- | --- | --- |
-| `fixed_apps/ownership/` | 安全版本：越权请求被拒绝且没有后端副作用。 | 仅本机 safe sample app（8765）；token 来自环境变量，不写入文件。 | `PASS`，CLI 退出码 0 | 适合，展示安全基线和 Evidence。 |
-| `vulnerable_apps/ownership/` | 缺陷版本：HTTP 可以返回拒绝，但越权副作用已发生。 | 仅本机 vulnerable sample app（8766）；token 来自环境变量，不写入文件。 | `BLOCK`，CLI 退出码 1 | 适合，展示“拒绝不等于安全”。 |
-| `inconclusive_apps/ownership/` | safe variant 的独立端口版本，显式关闭 `owner_api` 观察器。 | 仅本机 safe sample app（8767）；token 来自环境变量，不写入文件。 | `INCONCLUSIVE`，CLI 退出码 2 | 适合，展示观察不足，不代表安全或漏洞。 |
-
-三个 bundle 都只允许环回地址：fixed 使用 `8765`，vulnerable 使用 `8766`，inconclusive 使用 `8767`。默认 token 仅用于本机演示；正式使用时通过环境变量提供，不写入 YAML 或其他文件。
-
-## 最小运行方式
-
-以下命令使用 Windows PowerShell。先在一个 PowerShell 窗口启动对应 sample app，再在另一个窗口运行 CLI；结束后停止样例进程。
+样例进程仅绑定 `127.0.0.1`，通过以下模块入口启动：
 
 ```powershell
-$env:JIEJIAN_SAMPLE_OWNER_TOKEN = "demo-owner-token"
-$env:JIEJIAN_SAMPLE_ATTACKER_TOKEN = "demo-attacker-token"
-$sample = Start-Process python -ArgumentList "-B -m jiejian.sample_app --variant safe --port 8765" -PassThru
-try {
-    jiejian ci .\samples\fixed_apps\ownership\project.yaml
-} finally {
-    Stop-Process -Id $sample.Id -Force
-}
+$env:PYTHONDONTWRITEBYTECODE='1'
+& 'D:\Miniconda\envs\jiejian_env\python.exe' -B -m jiejian.permission_sample_app --variant fixed --port 8765
 ```
 
-将端口和 bundle 替换为 `8766`/`vulnerable_apps` 或 `8767`/`inconclusive_apps` 即可运行另外两个场景。安全版本预期 `PASS`/0，缺陷版本预期 `BLOCK`/1，观察器关闭版本预期 `INCONCLUSIVE`/2。
+`fixed` 严格执行权限和原子批量语义，`vulnerable` 保留可观测的越权/部分副作用缺陷，`inconclusive` 使 `owner_api` 返回稳定 503。Profile 可由后端 `PermissionExecutionService` 注册并由独立 Worker/Runner V2 执行；三者仍只绑定回环地址，不代表阶段 7 报告已实现。
 
-离线检查每个 bundle 的项目与独立 Contract：
+阶段 6.3 的配对测试为 fixed/vulnerable 使用测试临时目录中的 `resource_state` SQLite 数据源，通过 `resource-state` 固定观察模板比较 BEFORE/AFTER envelope。它验证 HTTP 403 后是否发生数据库副作用；数据库路径和 secret 只存在于测试进程环境，不写入这些资产。
+
+正式 Profile 入口需要先在当前 PowerShell 会话设置临时、不落盘的凭据值，再启动样例。所需环境变量为 `JIEJIAN_PERMISSION_MEMBER_A`、`JIEJIAN_PERMISSION_MEMBER_A2`、`JIEJIAN_PERMISSION_MEMBER_B`、`JIEJIAN_PERMISSION_DEPT_ADMIN_A`、`JIEJIAN_PERMISSION_DEPT_ADMIN_A2`、`JIEJIAN_PERMISSION_TENANT_ADMIN_A`、`JIEJIAN_PERMISSION_PEER_A` 和 `JIEJIAN_PERMISSION_OWNER_OBSERVER`。启动示例：
 
 ```powershell
-jiejian project validate .\samples\fixed_apps\ownership\project.yaml
-jiejian contract validate .\samples\fixed_apps\ownership\contract.yaml
-jiejian project validate .\samples\vulnerable_apps\ownership\project.yaml
-jiejian contract validate .\samples\vulnerable_apps\ownership\contract.yaml
-jiejian project validate .\samples\inconclusive_apps\ownership\project.yaml
-jiejian contract validate .\samples\inconclusive_apps\ownership\contract.yaml
+$env:JIEJIAN_PERMISSION_MEMBER_A = '<temporary opaque value>'
+$env:JIEJIAN_PERMISSION_MEMBER_A2 = '<temporary opaque value>'
+$env:JIEJIAN_PERMISSION_MEMBER_B = '<temporary opaque value>'
+$env:JIEJIAN_PERMISSION_DEPT_ADMIN_A = '<temporary opaque value>'
+$env:JIEJIAN_PERMISSION_DEPT_ADMIN_A2 = '<temporary opaque value>'
+$env:JIEJIAN_PERMISSION_TENANT_ADMIN_A = '<temporary opaque value>'
+$env:JIEJIAN_PERMISSION_PEER_A = '<temporary opaque value>'
+$env:JIEJIAN_PERMISSION_OWNER_OBSERVER = '<temporary opaque value>'
+& 'D:\Miniconda\envs\jiejian_env\python.exe' -B -m jiejian.permission_sample_app --variant fixed --port 8871
 ```
 
-## Recording 演示
+从同一父 PowerShell 会话启动样例和 CLI，或在两个终端分别设置相同的临时环境值，再执行项目 console entrypoint `jiejian permission-run samples/fixed_apps/permissions_v2/profile.json`。占位值不是可用凭据；真实值不要写入 Profile、命令行参数、文件或日志。
 
-Recording 复用 safe sample app，不复制另一套应用配置。它展示独立 Recording Runner、事件脱敏和 `PENDING_REVIEW`/FlowDraft 入口；命令不会声称完成全部人工浏览操作或自动生成可直接完成的 Flow。
-
-```powershell
-$env:JIEJIAN_SAMPLE_OWNER_TOKEN = "demo-owner-token"
-$env:JIEJIAN_SAMPLE_ATTACKER_TOKEN = "demo-attacker-token"
-$sample = Start-Process python -ArgumentList "-B -m jiejian.sample_app --variant safe --port 8765" -PassThru
-try {
-    jiejian recording start .\samples\fixed_apps\ownership\project.yaml --identity owner --duration-seconds 1 --headless
-} finally {
-    Stop-Process -Id $sample.Id -Force
-}
-```
-
-录制后的 `status`/`review`/`finalize` 仍按实际人工审阅结果推进；不把一次短时演示描述为完整 Flow。
-
-## Contract 与 Drift 演示
-
-Contract/Drift 复用 fixed bundle，不复制 app 或配置。常见顺序如下；动态 Candidate ID 从上一步 JSON 输出中取得：
-
-```powershell
-$project = ".\samples\fixed_apps\ownership\project.yaml"
-jiejian contract workspace $project
-jiejian contract derive $project --include-flow
-jiejian contract draft $project ownership-contract --candidate <从 derive JSON 取得>
-jiejian contract transition $project ownership-contract 1 submit --actor reviewer
-jiejian contract transition $project ownership-contract 1 activate --actor approver
-jiejian contract assessment $project ownership-contract 1
-jiejian contract drift $project ownership-contract 1
-```
-
-六类 Drift 由 Contract 测试固定覆盖；单次样例演示只展示工作台顺序，不制造全部六类漂移。
+阶段 6.4 的异步因果样例由 `tests/verification/test_async_causal_observation.py` 通过 loopback 运行：同一 Contract 下，`fixed` 的任务权威负观察为 `NOT_CREATED`，`vulnerable` 通过显式 case tag 关联真实后台任务和 SQLite 副作用，`inconclusive` 的任务状态 API 稳定 503，不能由 HTTP、审计或 SQLite 单独替代。测试侧将 `http`、`audit_log`、`async_task`、`final_side_effect` 四面事实分开保存；这些资产不是 V1 `project.yaml`，不接入 Runner V1。V2 Evidence 已随 Runner publication 产生并可读取；阶段 7 统一报告、Finding/Gate、MQ/对象存储正式 Profile 接入仍未实现。

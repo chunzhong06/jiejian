@@ -9,6 +9,7 @@ from .contracts import (
 from .evidence import EvidenceIndexRecord, EvidenceIndexRepository
 from .jobs import JobEventRecord, JobEventRepository, JobRecord, JobRepository
 from .llm import LLMProfileRepository
+from .permission_profiles import PermissionExecutionProfileRecord, PermissionExecutionProfileRepository
 from .projects import ProjectRecord, ProjectRepository
 from .recordings import (
     FlowDraftRevisionRecord,
@@ -40,4 +41,6 @@ __all__ = [
     "EvidenceIndexRecord",
     "EvidenceIndexRepository",
     "LLMProfileRepository",
+    "PermissionExecutionProfileRecord",
+    "PermissionExecutionProfileRepository",
 ]

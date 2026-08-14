@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "ObserverOutcomeStatus": {
+      "enum": [
+        "AVAILABLE",
+        "INCONCLUSIVE",
+        "EXECUTION_ERROR"
+      ],
+      "title": "ObserverOutcomeStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "observer_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Observer Id",
+      "type": "string"
+    },
+    "required": {
+      "title": "Required",
+      "type": "boolean"
+    },
+    "status": {
+      "$ref": "#/$defs/ObserverOutcomeStatus"
+    },
+    "reason_codes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Reason Codes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "observer_id",
+    "required",
+    "status"
+  ],
+  "title": "ObserverOutcomeV2",
+  "type": "object"
+}

@@ -218,6 +218,31 @@ function Get-StageFingerprint([string[]]$Paths, [hashtable]$Facts) {
     finally { $sha.Dispose() }
 }
 
+function Get-ExpectedPnpmStoreDir {
+    $versionMatch = [regex]::Match([string]$script:PnpmVersion, "(?m)^v?(?<major>\d+)(?:\.|$)")
+    if (-not $versionMatch.Success) { return $null }
+    $storeRoot = Join-Path (Split-Path -Parent $script:ProjectRoot) ".pnpm-store"
+    return [IO.Path]::GetFullPath((Join-Path $storeRoot ("v{0}" -f $versionMatch.Groups["major"].Value)))
+}
+
+function Test-PnpmStoreDir([string]$ModulesManifest, [string]$ExpectedStoreDir) {
+    if ([string]::IsNullOrWhiteSpace($ExpectedStoreDir) -or -not (Test-Path -LiteralPath $ModulesManifest -PathType Leaf)) {
+        return $false
+    }
+    try {
+        $content = Get-Content -LiteralPath $ModulesManifest -Raw -ErrorAction Stop
+        $manifestObject = $content | ConvertFrom-Json -ErrorAction Stop
+        $recordedValue = $manifestObject.storeDir
+        if ($null -eq $recordedValue -or $recordedValue -isnot [string] -or [string]::IsNullOrWhiteSpace($recordedValue)) {
+            return $false
+        }
+        $recorded = [IO.Path]::GetFullPath($recordedValue)
+        return [string]::Equals($recorded, $ExpectedStoreDir, [StringComparison]::OrdinalIgnoreCase)
+    } catch {
+        return $false
+    }
+}
+
 function Fail-Start([int]$Code, [string]$Stage, [string]$Diagnostic, [string]$Recovery) {
     $script:FailureStage = $Stage
     $script:FailureCode = $Code
@@ -650,17 +675,41 @@ function Prepare-Migration {
 function Prepare-Frontend {
     $pnpm = (Get-Command pnpm).Source
     $frontend = Join-Path $script:ProjectRoot "frontend"
-    $nodeFiles = @((Join-Path $frontend "package.json"), (Join-Path $frontend "pnpm-lock.yaml"))
+    $nodeFiles = @((Join-Path $frontend "package.json"), (Join-Path $frontend "pnpm-lock.yaml"), (Join-Path $frontend "pnpm-workspace.yaml"))
     $nodeFingerprint = Get-StageFingerprint $nodeFiles @{ node_version = $script:NodeVersion; pnpm_version = $script:PnpmVersion }
     $script:NodeDependenciesFingerprint = $nodeFingerprint
     $nodeModules = Join-Path $frontend "node_modules"
+    $expectedStoreDir = Get-ExpectedPnpmStoreDir
+    $requiredNodeEntries = @(
+        (Join-Path $nodeModules ".modules.yaml"),
+        (Join-Path $nodeModules ".bin\tsc.cmd"),
+        (Join-Path $nodeModules ".bin\vite.cmd")
+    )
+    $nodeDependenciesHealthy = (Test-Path -LiteralPath $nodeModules -PathType Container) -and
+        -not ($requiredNodeEntries | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }) -and
+        (Test-PnpmStoreDir (Join-Path $nodeModules ".modules.yaml") $expectedStoreDir)
     $nodeDependenciesRebuilt = $false
-    if (-not (Test-PhaseHit "node_dependencies" $nodeFingerprint) -or -not (Test-Path -LiteralPath $nodeModules -PathType Container)) {
+    if (-not (Test-PhaseHit "node_dependencies" $nodeFingerprint) -or -not $nodeDependenciesHealthy) {
+        if ((Test-Path -LiteralPath $nodeModules -PathType Container) -and -not $nodeDependenciesHealthy) {
+            $expectedNodeModules = [IO.Path]::GetFullPath((Join-Path $frontend "node_modules"))
+            if ([IO.Path]::GetFullPath($nodeModules) -ne $expectedNodeModules) {
+                Fail-Start 44 "frontend-install" "拒绝清理无法确认的前端依赖目录" (Get-RecoveryCommand)
+            }
+            Write-Startup "[node_dependencies] 检测到依赖入口残缺，重建 node_modules"
+            try {
+                Remove-Item -LiteralPath $nodeModules -Recurse -Force -ErrorAction Stop
+            } catch {
+                Fail-Start 44 "frontend-install" "无法清理损坏的 node_modules：$($_.Exception.Message)" (Get-RecoveryCommand)
+            }
+        }
         Push-Location -LiteralPath $frontend
         try { Invoke-External "frontend-install" @($pnpm) @("install", "--frozen-lockfile") 44 } finally { Pop-Location }
+        if ($requiredNodeEntries | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }) {
+            Fail-Start 44 "frontend-install" "依赖安装完成，但 TypeScript/Vite 入口仍不完整" (Get-RecoveryCommand)
+        }
         Set-PhaseState "node_dependencies" $nodeFingerprint @{ node_version = $script:NodeVersion; pnpm_version = $script:PnpmVersion }
         $nodeDependenciesRebuilt = $true
-    } else { Write-Startup "[node_dependencies] 跳过：指纹命中且 node_modules 存在" }
+    } else { Write-Startup "[node_dependencies] 跳过：指纹命中且关键依赖入口可用" }
     $buildFiles = @((Join-Path $frontend "src"), (Join-Path $frontend "index.html"), (Join-Path $frontend "package.json"), (Join-Path $frontend "pnpm-lock.yaml")) + @(Get-ChildItem -LiteralPath $frontend -File | Where-Object { $_.Name -like "tsconfig*.json" -or $_.Name -like "vite.config.*" } | Select-Object -ExpandProperty FullName)
     $buildFingerprint = Get-StageFingerprint $buildFiles @{ node_dependencies = $nodeFingerprint }
     $index = Join-Path $frontend "dist\index.html"

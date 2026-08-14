@@ -136,6 +136,19 @@ EXPECTED_API_ROUTE_OWNERS: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/runs/{run_id}/evidence"): "results.py",
     ("GET", "/api/v1/runs/{run_id}/findings"): "results.py",
     ("GET", "/api/v1/runs/{run_id}/evidence/{evidence_id}"): "results.py",
+    ("POST", "/api/v1/onboarding/select-folder"): "onboarding.py",
+    ("POST", "/api/v1/onboarding/inspect"): "onboarding.py",
+    ("POST", "/api/v1/onboarding/sessions"): "onboarding.py",
+    ("GET", "/api/v1/onboarding/sessions/{session_id}"): "onboarding.py",
+    ("PATCH", "/api/v1/onboarding/sessions/{session_id}"): "onboarding.py",
+    ("POST", "/api/v1/onboarding/sessions/{session_id}/credentials"): "onboarding.py",
+    ("POST", "/api/v1/onboarding/sessions/{session_id}/quick-check"): "onboarding.py",
+    ("POST", "/api/v1/onboarding/demo/start"): "onboarding.py",
+    ("GET", "/api/v1/onboarding/demo"): "onboarding.py",
+    ("POST", "/api/v1/onboarding/demo/stop"): "onboarding.py",
+    ("POST", "/api/v2/permission-execution-profiles"): "permission_execution.py",
+    ("GET", "/api/v2/projects/{project_id}/permission-execution-profiles"): "permission_execution.py",
+    ("POST", "/api/v2/projects/{project_id}/runs"): "permission_execution.py",
 }
 EXPECTED_API_SCHEMA_OWNERS: dict[str, str] = {
     "ApiModel": "common.py",
@@ -157,6 +170,13 @@ EXPECTED_API_SCHEMA_OWNERS: dict[str, str] = {
     "LLMProfileCreateRequest": "llm.py",
     "LLMProfileUpdateRequest": "llm.py",
     "LLMProfileResponse": "llm.py",
+    "OnboardingInspectRequest": "onboarding.py",
+    "OnboardingSessionCreateRequest": "onboarding.py",
+    "OnboardingSessionUpdateRequest": "onboarding.py",
+    "OnboardingCredentialsRequest": "onboarding.py",
+    "OnboardingQuickCheckRequest": "onboarding.py",
+    "PermissionExecutionProfileCreateRequest": "permission_execution.py",
+    "PermissionExecutionRunRequest": "permission_execution.py",
 }
 
 
@@ -603,6 +623,31 @@ def test_contract_pure_layers_do_not_depend_on_application_or_infrastructure() -
     }
 
 
+def test_onboarding_discovery_is_a_read_only_leaf_and_api_uses_application_boundary() -> None:
+    discovery_path = PACKAGE_ROOT / "onboarding" / "discovery.py"
+    forbidden = (
+        "fastapi",
+        "sqlalchemy",
+        "playwright",
+        "jiejian.api",
+        "jiejian.application",
+        "jiejian.execution",
+        "jiejian.storage",
+        "jiejian.verification",
+        "jiejian.worker",
+    )
+    assert not any(
+        dependency == prefix or dependency.startswith(prefix + ".")
+        for dependency in _imports(discovery_path)
+        for prefix in forbidden
+    )
+    router_source = (PACKAGE_ROOT / "api" / "routers" / "onboarding.py").read_text(
+        encoding="utf-8"
+    )
+    assert "context.onboarding" in router_source
+    assert "discover_folder" not in router_source
+
+
 def test_contract_analysis_algorithm_ownership_is_physical_and_explicit() -> None:
     owners = {
         "parse_requirement": PACKAGE_ROOT / "contracts" / "analysis" / "sources" / "requirement.py",
@@ -663,7 +708,11 @@ def test_protocols_do_not_depend_on_runtime_storage_cli_or_pipeline() -> None:
         dependency
         for dependency in dependencies
         if dependency.startswith(forbidden)
-        and dependency != "jiejian.verification.models"
+        and dependency not in {
+            "jiejian.verification.models",
+            "jiejian.verification.permissions",
+            "jiejian.verification.permission_coverage",
+        }
     }
 
 
@@ -702,6 +751,7 @@ def test_storage_orm_and_repository_aggregates_use_leaf_boundaries() -> None:
         "jobs.py",
         "evidence.py",
         "llm.py",
+        "permission_profiles.py",
     }
     assert {
         path.name for path in repositories_root.glob("*.py")
@@ -715,6 +765,7 @@ def test_storage_orm_and_repository_aggregates_use_leaf_boundaries() -> None:
         "jobs.py",
         "evidence.py",
         "llm.py",
+        "permission_profiles.py",
     }
     unit_of_work_imports = _imports(storage_root / "unit_of_work.py")
     assert "jiejian.storage.repositories" not in unit_of_work_imports
@@ -726,6 +777,7 @@ def test_storage_orm_and_repository_aggregates_use_leaf_boundaries() -> None:
         "jiejian.storage.repositories.recordings",
         "jiejian.storage.repositories.runs",
         "jiejian.storage.repositories.llm",
+        "jiejian.storage.repositories.permission_profiles",
     }.issubset(unit_of_work_imports)
     job_control_imports = _imports(storage_root / "job_control.py")
     assert "jiejian.storage.models" not in job_control_imports
@@ -780,6 +832,8 @@ def test_recording_and_execution_use_the_frozen_capability_boundaries() -> None:
         "run_handler.py",
         "requests.py",
         "submission.py",
+        "permission_profile.py",
+        "permission_execution.py",
         "supervisor.py",
         "targets.py",
     }
@@ -982,6 +1036,17 @@ def test_target_execution_is_confined_to_explicit_adapters() -> None:
         "__init__.py",
         "__main__.py",
         "execution.py",
+        "execution_v2.py",
+        "audit_log_observer.py",
+        "audit_observer_process.py",
+        "async_task_observer.py",
+        "async_task_observer_process.py",
+        "azure_blob_observer_process.py",
+        "azure_queue_observer_process.py",
+        "blob_observer.py",
+        "observer_process.py",
+        "queue_observer.py",
+        "sqlite_observer.py",
     }
     cli_dependencies = {
         dependency
@@ -1003,6 +1068,18 @@ def test_target_execution_is_confined_to_explicit_adapters() -> None:
         for dependency in cli_dependencies
         if dependency.startswith("jiejian.verification.http")
     }
+
+    for directory_name in ("api", "worker", "results", "application"):
+        dependencies = {
+            dependency
+            for path in _python_files(PACKAGE_ROOT / directory_name)
+            for dependency in _imports(path)
+        }
+        assert not {
+            dependency
+            for dependency in dependencies
+            if dependency.startswith(("jiejian.runner.sqlite_observer", "jiejian.runner.observer_process", "jiejian.runner.queue_observer", "jiejian.runner.azure_queue_observer_process", "jiejian.runner.blob_observer", "jiejian.runner.azure_blob_observer_process"))
+        }
     httpx_importers = {
         path.relative_to(PACKAGE_ROOT).as_posix()
         for path in _python_files(PACKAGE_ROOT)
@@ -1011,6 +1088,9 @@ def test_target_execution_is_confined_to_explicit_adapters() -> None:
     assert httpx_importers == {
         "recording/transport.py",
         "verification/http.py",
+        "runner/async_task_observer.py",
+        "runner/queue_observer.py",
+        "runner/blob_observer.py",
         "contracts/llm/adapters/httpx_transport.py",
         "cli/commands/system.py",
     }
@@ -1065,6 +1145,15 @@ def test_verification_module_dependencies_are_acyclic() -> None:
 
     for module in graph:
         visit(module)
+
+
+def test_verification_v2_evaluation_is_protocol_and_adapter_free() -> None:
+    path = PACKAGE_ROOT / "verification" / "evaluation_v2.py"
+    imports = _imports(path)
+    assert not any(
+        dependency.startswith(("jiejian.protocols", "jiejian.runner", "httpx", "sqlalchemy"))
+        for dependency in imports
+    )
 
 
 def test_old_flat_modules_are_removed_without_compatibility_wrappers() -> None:
@@ -1131,6 +1220,75 @@ def test_wheel_force_includes_preserve_single_source_resources() -> None:
     assert not (PACKAGE_ROOT / "domain" / "state_machines.py").exists()
 
 
+def test_minimum_comment_baseline_has_only_entry_and_detailed_sources() -> None:
+    agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    design = (
+        PROJECT_ROOT / "docs" / "01_开发规范" / "项目设计规范.md"
+    ).read_text(encoding="utf-8")
+    roadmap = (
+        PROJECT_ROOT / "docs" / "04_开发记录" / "开发路线图.md"
+    ).read_text(encoding="utf-8")
+    adr_index = (
+        PROJECT_ROOT / "docs" / "02_技术决策" / "README.md"
+    ).read_text(encoding="utf-8")
+    adr = (
+        PROJECT_ROOT
+        / "docs"
+        / "02_技术决策"
+        / "ADR-0021-最小文档真源.md"
+    ).read_text(encoding="utf-8")
+
+    assert "最低三层注释基线" in agents
+    assert "最低三层注释基线" in design
+    for marker in ("文件层", "类与函数层", "行内层"):
+        assert marker in design
+    assert "文件层" not in roadmap + adr_index + adr
+    legacy_explanation_phrase = "三层" + "解释体系"
+    assert legacy_explanation_phrase not in agents + design + roadmap + adr_index + adr
+
+
+def test_documentation_has_only_the_current_numbered_sources() -> None:
+    assert {path.name for path in (PROJECT_ROOT / "docs").iterdir()} == {
+        "01_开发规范",
+        "02_技术决策",
+        "03_协议定义",
+        "04_开发记录",
+    }
+
+
+def test_stage_6_to_9_design_is_versioned_and_ordered() -> None:
+    design = (
+        PROJECT_ROOT / "docs" / "01_开发规范" / "项目设计规范.md"
+    ).read_text(encoding="utf-8")
+    roadmap = (
+        PROJECT_ROOT / "docs" / "04_开发记录" / "开发路线图.md"
+    ).read_text(encoding="utf-8")
+    adr_index = (
+        PROJECT_ROOT / "docs" / "02_技术决策" / "README.md"
+    ).read_text(encoding="utf-8")
+    adr = (
+        PROJECT_ROOT
+        / "docs"
+        / "02_技术决策"
+        / "ADR-0023-阶段6至9能力演进与版本边界.md"
+    ).read_text(encoding="utf-8")
+
+    assert "ADR-0023" in design + roadmap + adr_index
+    assert "尚未实现" in design
+    stages = [roadmap.index(f"## 阶段 {number}：") for number in range(6, 10)]
+    assert stages == sorted(stages)
+    for marker in (
+        "V2 权限意图由六个正交部分组成",
+        "Observer V2",
+        "FindingOccurrence",
+        "RegressionBaseline",
+        "GatePolicy",
+        "report.json",
+    ):
+        assert marker in adr
+    assert "不在原字段上增加可选语义" in adr
+
+
 def test_new_production_code_does_not_use_aggregate_package_roots() -> None:
     """Freeze the migration rule while allowing only current, named call sites."""
 
@@ -1181,6 +1339,7 @@ EXPECTED_CLI_FUNCTION_OWNERS: dict[str, str] = {
     "_load_recording_bindings": "recordings.py",
     "_ensure_project_record": "recordings.py",
     "run_command": "runs.py",
+    "permission_run_command": "runs.py",
     "_run_persisted_job": "runs.py",
     "_persisted_request": "runs.py",
     "_required_secrets": "runs.py",
@@ -1351,7 +1510,7 @@ def test_api_app_only_assembles_routers_and_lifecycle() -> None:
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "include_router"
         for node in ast.walk(tree)
-    ) == 8
+    ) == 10
 
 
 def test_api_routes_are_defined_by_the_frozen_routers() -> None:

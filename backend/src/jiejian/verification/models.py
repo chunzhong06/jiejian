@@ -1,4 +1,15 @@
-# 同步安全验证纵切使用的公开领域模型。
+# =============================================================================
+# Verification 领域数据模型
+#
+# 定位
+#   承接已校验的项目输入，并为关系变异、执行、观察和证据提供统一数据结构
+#
+# 职责
+#   约束目标与 Flow｜表达 Contract 规则｜保存 MutationPlan、Observation 和 Evidence
+#
+# 调用链
+#   inputs / runner protocol → verification.models → planning / execution / evaluation
+# =============================================================================
 
 from __future__ import annotations
 
@@ -15,18 +26,21 @@ from ..domain.identifiers import LONG_SLUG_ID_PATTERN, PROJECT_ID_PATTERN
 from ..domain.lifecycle import CaseVerdict, ContractStatus, DomainModel, RunVerdict
 
 
+# 标识契约要检查的所有权安全关系。
 class RuleKind(StrEnum):
     FOREIGN_READ = "foreign_read"
     UNAUTHORIZED_SIDE_EFFECT = "unauthorized_side_effect"
     PRIVILEGED_FIELD = "privileged_field"
 
 
+# 标识规划器对正常 FlowStep 施加的攻击变化。
 class MutationKind(StrEnum):
     IDENTITY_SWAP = "identity_swap"
     RESOURCE_SWAP = "resource_swap"
     PRIVILEGED_FIELD = "privileged_field"
 
 
+# 统一记录单个测试无法通过或无法下结论的直接原因。
 class ReasonCode(StrEnum):
     FOREIGN_RESOURCE_OBSERVED = "FOREIGN_RESOURCE_OBSERVED"
     UNAUTHORIZED_SIDE_EFFECT = "UNAUTHORIZED_SIDE_EFFECT"
@@ -37,6 +51,7 @@ class ReasonCode(StrEnum):
     UNEXPECTED_HTTP_RESPONSE = "UNEXPECTED_HTTP_RESPONSE"
 
 
+# 保存一次验证明确获准访问的目标范围和请求预算。
 class TargetScope(DomainModel):
     base_url: str
     allowed_origins: tuple[str, ...]
@@ -51,6 +66,8 @@ class TargetScope(DomainModel):
     @field_validator("allowed_hosts")
     @classmethod
     def normalize_hosts(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        """去重并规范化显式 IPv4 主机，拒绝阶段 1 尚不能安全固定的域名。"""
+
         normalized = tuple(dict.fromkeys(value.strip().lower() for value in values))
         if not normalized or any(not value for value in normalized):
             raise ValueError("allowed_hosts must contain explicit hosts")
@@ -63,6 +80,8 @@ class TargetScope(DomainModel):
     @field_validator("allowed_ports")
     @classmethod
     def normalize_ports(cls, values: tuple[int, ...]) -> tuple[int, ...]:
+        """去重端口并拒绝空列表或超出 TCP/UDP 有效范围的值。"""
+
         normalized = tuple(dict.fromkeys(values))
         if not normalized or any(port < 1 or port > 65535 for port in normalized):
             raise ValueError("allowed_ports must contain valid explicit ports")
@@ -70,6 +89,8 @@ class TargetScope(DomainModel):
 
     @model_validator(mode="after")
     def validate_scope(self) -> TargetScope:
+        """确认 base_url 完全落在声明的 origin、主机和端口授权范围内。"""
+
         parsed = urlsplit(self.base_url)
         if parsed.scheme not in {"http", "https"}:
             raise ValueError("base_url must use HTTP or HTTPS")
@@ -145,17 +166,20 @@ def is_restricted_address(
     )
 
 
+# 描述一个测试身份；只保存外部秘密引用，不保存真实凭据。
 class Identity(DomainModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     role: str = Field(min_length=1, max_length=64)
     secret_ref: str = Field(pattern=r"^env:[A-Z][A-Z0-9_]{0,127}$")
 
 
+# 把资源 ID 与其合法所有者身份连接起来，供规划和观察阶段查询。
 class ResourceDefinition(DomainModel):
     id: str = Field(pattern=LONG_SLUG_ID_PATTERN)
     owner_identity_id: str
 
 
+# 描述一个 Flow 步骤从已声明依赖步骤中取得动态值的方式。
 class FlowVariableSource(DomainModel):
     name: str = Field(pattern=PROJECT_ID_PATTERN)
     source_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
@@ -163,6 +187,8 @@ class FlowVariableSource(DomainModel):
     json_path: str = Field(min_length=1, max_length=512)
 
 
+# 保存正常业务操作和派生攻击测试所需的替代身份、资源。
+# inputs.load_flow 构造合法基线，planning.build_mutation_plan 再生成 MutationCase。
 class FlowStep(DomainModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     name: str | None = Field(default=None, min_length=1, max_length=128)
@@ -181,6 +207,8 @@ class FlowStep(DomainModel):
     @field_validator("path")
     @classmethod
     def validate_relative_http_path(cls, value: str) -> str:
+        """只接受当前目标站点内的绝对路径引用，拒绝外部地址和目录跳转。"""
+
         parsed = urlsplit(value)
         if (
             not value.startswith("/")
@@ -196,6 +224,8 @@ class FlowStep(DomainModel):
     @field_validator("json_body")
     @classmethod
     def reject_inline_secrets(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """拒绝疑似凭据字段，防止真实秘密随 Flow YAML 进入快照或工件。"""
+
         if any(
             re.search(
                 r"authorization|cookie|credential|password|secret|token|api[_-]?key",
@@ -209,6 +239,8 @@ class FlowStep(DomainModel):
 
     @model_validator(mode="after")
     def validate_flow_step_metadata(self) -> FlowStep:
+        """确保步骤依赖、动态变量名和敏感字段声明各自不重复。"""
+
         if len(set(self.depends_on_step_ids)) != len(self.depends_on_step_ids):
             raise ValueError("flow step dependencies must be unique")
         variable_names = {source.name for source in self.variable_sources}
@@ -219,6 +251,7 @@ class FlowStep(DomainModel):
         return self
 
 
+# 按依赖关系保存可重放的正常业务步骤，并声明观察与清理端点。
 class Flow(DomainModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     steps: tuple[FlowStep, ...] = Field(min_length=1)
@@ -228,6 +261,8 @@ class Flow(DomainModel):
     @field_validator("owner_observer_path", "reset_path")
     @classmethod
     def validate_support_path(cls, value: str) -> str:
+        """限制观察和清理端点为当前目标内、不带查询参数的绝对路径引用。"""
+
         parsed = urlsplit(value)
         if (
             not value.startswith("/")
@@ -243,6 +278,8 @@ class Flow(DomainModel):
 
     @model_validator(mode="after")
     def validate_dependency_graph(self) -> Flow:
+        """验证步骤 ID、依赖引用和变量来源，并拒绝无法按顺序重放的依赖环。"""
+
         step_ids = tuple(step.id for step in self.steps)
         if len(set(step_ids)) != len(step_ids):
             raise ValueError("flow step IDs must be unique")
@@ -265,6 +302,8 @@ class Flow(DomainModel):
         visited: set[str] = set()
 
         def visit(step_id: str) -> None:
+            """深度遍历单个步骤，在再次进入当前路径时识别依赖环。"""
+
             if step_id in visiting:
                 raise ValueError("flow dependencies must be acyclic")
             if step_id in visited:
@@ -280,6 +319,7 @@ class Flow(DomainModel):
         return self
 
 
+# 声明一种攻击关系应由哪些观察面判定，以及问题严重程度。
 class ContractRule(DomainModel):
     id: str = Field(pattern=LONG_SLUG_ID_PATTERN)
     kind: RuleKind
@@ -287,6 +327,7 @@ class ContractRule(DomainModel):
     severity: Literal["low", "medium", "high", "critical"] = "high"
 
 
+# 汇总可执行关系规则；输入边界只允许 ACTIVE 契约进入运行。
 class SecurityContract(DomainModel):
     id: str = Field(pattern=LONG_SLUG_ID_PATTERN)
     version: int = Field(default=1, ge=1)
@@ -294,6 +335,7 @@ class SecurityContract(DomainModel):
     rules: tuple[ContractRule, ...] = Field(min_length=1)
 
 
+# 保存项目目标、身份、资源、输入文件位置和默认变异 seed。
 class ProjectDefinition(DomainModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     name: str = Field(min_length=1, max_length=128)
@@ -306,6 +348,8 @@ class ProjectDefinition(DomainModel):
     mutation_seed: int = 7
 
 
+# 保存由正常 FlowStep 派生的攻击请求；step_id/rule_id 保留来源与判定规则。
+# 执行器通过 step_id 回到原步骤执行基线，再发送本对象描述的攻击版本。
 class MutationCase(DomainModel):
     case_id: str
     fingerprint: str
@@ -320,12 +364,14 @@ class MutationCase(DomainModel):
     json_body: dict[str, Any] = Field(default_factory=dict)
 
 
+# 汇总固定 seed 和引擎版本下确定生成的全部 MutationCase。
 class MutationPlan(DomainModel):
     seed: int
     engine_version: str
     cases: tuple[MutationCase, ...]
 
 
+# 记录某个阶段从 HTTP 或资源所有者视角看到的事实。
 class Observation(DomainModel):
     observer: Literal["http", "owner_api"]
     phase: Literal["initial", "baseline", "before", "mutation", "after"]
@@ -333,6 +379,7 @@ class Observation(DomainModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+# 把攻击用例、观察事实、判定原因和内容哈希固化为单条证据。
 class Evidence(DomainModel):
     evidence_id: str
     run_id: str
@@ -347,6 +394,7 @@ class Evidence(DomainModel):
     evidence_hash: str
 
 
+# 汇总一次验证的总体结论、全部证据和工件目录。
 class RunResult(DomainModel):
     run_id: str
     project_id: str

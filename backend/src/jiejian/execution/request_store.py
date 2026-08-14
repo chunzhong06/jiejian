@@ -30,8 +30,12 @@ from ..domain.identifiers import JOB_ID_PATTERN
 from ..errors import ErrorCode, JiejianError
 from ..protocols import (
     RUNNER_INPUT_MAX_BYTES,
+    RUNNER_V2_INPUT_MAX_BYTES,
     ExecutionBudgetV1,
+    ExecutionBudgetV2,
     ExecutionProjectSnapshotV1,
+    ExecutionProjectSnapshotV2,
+    required_secret_refs_v2,
 )
 
 
@@ -61,6 +65,37 @@ class PersistedExecutionRequestV1(BaseModel):
         return self
 
 
+class PersistedExecutionRequestV2(BaseModel):
+    """V2 不可变执行快照；运行时 job/lease 字段仍由 Worker 注入。"""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        hide_input_in_errors=True,
+    )
+
+    schema_version: Literal["2"] = "2"
+    budget: ExecutionBudgetV2
+    project_snapshot: ExecutionProjectSnapshotV2
+
+    @model_validator(mode="after")
+    def validate_budget_snapshot(self) -> PersistedExecutionRequestV2:
+        target = self.project_snapshot.target
+        if self.budget.max_requests != target.max_requests:
+            raise ValueError("request budget max_requests does not match snapshot")
+        if self.budget.max_response_bytes != target.max_response_bytes:
+            raise ValueError("request response budget does not match snapshot")
+        if self.budget.request_timeout_us != int(target.timeout_seconds * 1_000_000):
+            raise ValueError("request timeout does not match snapshot")
+        if self.budget.max_cases < len(self.project_snapshot.plan.cases):
+            raise ValueError("max_cases cannot be smaller than the permission plan")
+        return self
+
+
+PersistedExecutionRequest = PersistedExecutionRequestV1 | PersistedExecutionRequestV2
+
+
 class ExecutionRequestStore:
     """以 job_id 定位请求文件，并用 request_hash 绑定数据库记录。"""
 
@@ -70,7 +105,7 @@ class ExecutionRequestStore:
     def write(
         self,
         job_id: str,
-        request: PersistedExecutionRequestV1,
+        request: PersistedExecutionRequest,
         *,
         known_secrets: Sequence[str] = (),
     ) -> tuple[str, bool]:
@@ -123,7 +158,7 @@ class ExecutionRequestStore:
         *,
         expected_hash: str,
         known_secrets: Sequence[str] = (),
-    ) -> PersistedExecutionRequestV1:
+    ) -> PersistedExecutionRequest:
         path = self.path_for(job_id)
         if not path.is_file():
             raise JiejianError(
@@ -201,12 +236,12 @@ class ExecutionRequestStore:
 
 
 def canonical_execution_request_bytes(
-    request: PersistedExecutionRequestV1,
+    request: PersistedExecutionRequest,
     *,
     known_secrets: Sequence[str] = (),
 ) -> bytes:
-    if not isinstance(request, PersistedExecutionRequestV1):
-        raise TypeError("execution request serializer requires its V1 model")
+    if not isinstance(request, (PersistedExecutionRequestV1, PersistedExecutionRequestV2)):
+        raise TypeError("execution request serializer requires a supported model")
     payload = request.model_dump(mode="json")
     _reject_known_secrets(payload, known_secrets)
     try:
@@ -222,7 +257,8 @@ def canonical_execution_request_bytes(
             ErrorCode.JOB_REQUEST_CONFLICT,
             "任务执行请求无法规范序列化",
         ) from None
-    if len(encoded) > RUNNER_INPUT_MAX_BYTES:
+    maximum = RUNNER_INPUT_MAX_BYTES if isinstance(request, PersistedExecutionRequestV1) else RUNNER_V2_INPUT_MAX_BYTES
+    if len(encoded) > maximum:
         raise JiejianError(
             ErrorCode.JOB_REQUEST_CONFLICT,
             "任务执行请求超过大小限制",
@@ -234,10 +270,10 @@ def parse_execution_request(
     raw: bytes,
     *,
     known_secrets: Sequence[str] = (),
-) -> PersistedExecutionRequestV1:
+) -> PersistedExecutionRequest:
     if not isinstance(raw, bytes):
         raise TypeError("execution request parser requires bytes")
-    if len(raw) > RUNNER_INPUT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
+    if len(raw) > max(RUNNER_INPUT_MAX_BYTES, RUNNER_V2_INPUT_MAX_BYTES) or raw.startswith(b"\xef\xbb\xbf"):
         raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求格式无效")
     try:
         parsed = json.loads(
@@ -246,7 +282,20 @@ def parse_execution_request(
             parse_constant=_reject_nonfinite,
         )
         _reject_known_secrets(parsed, known_secrets)
-        return PersistedExecutionRequestV1.model_validate_json(raw, strict=True)
+        if not isinstance(parsed, dict):
+            raise ValueError("request must be an object")
+        version = parsed.get("schema_version")
+        if version == "1":
+            model = PersistedExecutionRequestV1
+            maximum = RUNNER_INPUT_MAX_BYTES
+        elif version == "2":
+            model = PersistedExecutionRequestV2
+            maximum = RUNNER_V2_INPUT_MAX_BYTES
+        else:
+            raise ValueError("unsupported request schema version")
+        if len(raw) > maximum:
+            raise ValueError("request is too large")
+        return model.model_validate_json(raw, strict=True)
     except JiejianError:
         raise
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError, ValidationError):
@@ -256,13 +305,15 @@ def parse_execution_request(
         ) from None
 
 
-def required_secret_names(request: PersistedExecutionRequestV1) -> tuple[str, ...]:
-    return tuple(
-        dict.fromkeys(
-            identity.secret_ref.removeprefix("env:")
-            for identity in request.project_snapshot.identities
-        )
-    )
+def required_secret_names(request: PersistedExecutionRequest) -> tuple[str, ...]:
+    """返回本次 Runner 实际边界需要的 env 名称，不解析或读取秘密。"""
+
+    snapshot = request.project_snapshot
+    if isinstance(request, PersistedExecutionRequestV1):
+        references = [identity.secret_ref for identity in snapshot.identities]
+    else:
+        references = list(required_secret_refs_v2(snapshot))
+    return tuple(dict.fromkeys(reference.removeprefix("env:") for reference in references))
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

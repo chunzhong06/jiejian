@@ -5,6 +5,7 @@ from .contracts import ContractCandidateRow, ContractVersionRow, RequirementRow
 from .evidence import EvidenceIndexRow
 from .jobs import JobEventRow, JobRow
 from .llm import LLMProfileRow
+from .permission_profiles import PermissionExecutionProfileRow
 from .projects import ProjectRow
 from .recordings import FlowDraftRevisionRow, RecordingRow
 from .runs import RunRow
@@ -22,5 +23,6 @@ __all__ = [
     "JobRow",
     "JobEventRow",
     "LLMProfileRow",
+    "PermissionExecutionProfileRow",
     "EvidenceIndexRow",
 ]

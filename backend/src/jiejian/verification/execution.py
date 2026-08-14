@@ -34,9 +34,11 @@ from .models import (
 )
 from ..errors import ErrorCode, JiejianError
 from ..redaction import redact
+from ..protocols.observer_v2 import ObservationPhase
 from .artifacts import persist_run
 from .evaluation import aggregate_verdict, build_evidence, evaluate_case
 from .http import HttpExecutor
+from .owner_api_observer import OwnerApiObserverV2Adapter, project_owner_envelope_to_v1
 from .planning import build_mutation_plan
 from .safety import TargetGuard
 
@@ -59,7 +61,15 @@ _INFRASTRUCTURE_ERROR_CODES = {
 
 @dataclass(frozen=True, slots=True)
 class VerificationSnapshot:
-    """路径无关的完整验证输入；Runner 和 YAML 适配器共同构造。"""
+    """保存 Runner 已冻结的路径无关验证输入。
+
+    数据流
+        RunnerInputV1.project_snapshot → VerificationSnapshot
+        → SnapshotRunExecutor.run。
+
+    关键说明
+        快照携带 Flow 和 Contract 内容，不携带原始 YAML 路径或真实秘密。
+    """
 
     project_id: str
     project_name: str
@@ -72,6 +82,8 @@ class VerificationSnapshot:
     mutation_seed: int
 
     def to_json_snapshot(self) -> dict[str, object]:
+        """把当前快照转换为可写入验证工件的 JSON 数据。"""
+
         return {
             "schema_version": "1",
             "project_id": self.project_id,
@@ -87,7 +99,7 @@ class VerificationSnapshot:
 
 
 class SnapshotRunExecutor:
-    """执行一个完整快照并把产物写到调用方指定目录。"""
+    """连接规划、目标请求、观察、判定和 staging 工件写入。"""
 
     def __init__(
         self,
@@ -97,6 +109,8 @@ class SnapshotRunExecutor:
         utc_now: Callable[[], datetime] | None = None,
         executor_process_id: int | None = None,
     ) -> None:
+        """注入秘密环境、取消检查、时钟和执行进程 ID。"""
+
         self.environ = os.environ if environ is None else environ
         self.cancellation_requested = cancellation_requested or (lambda: False)
         self.utc_now = utc_now or (lambda: datetime.now(UTC))
@@ -110,7 +124,19 @@ class SnapshotRunExecutor:
         artifact_dir: Path,
         destination_dir: Path | None = None,
     ) -> RunResult:
-        """执行完整快照并把已脱敏结果写入调用方指定的 staging。"""
+        """执行完整验证快照，并把已脱敏结果写入调用方指定的 staging。
+
+        数据流
+            VerificationSnapshot → MutationPlan → 逐个 MutationCase
+            → Evidence 集合 → Run Verdict → staging 工件。
+
+        关键说明
+            每个用例预留前后两次清理请求，普通请求不得占用这部分预算。
+            本方法不管理 Job、数据库完成态或最终发布事务。
+
+        返回
+            包含总体 Verdict、原因码、全部 Evidence 和工件目录的 RunResult。
+        """
 
         # --- 阶段：规划并预留全部清理请求 ---
         plan = build_mutation_plan(
@@ -130,7 +156,9 @@ class SnapshotRunExecutor:
         started_at = self.utc_now()
         guard = TargetGuard(snapshot.target)
         guard.authorize_url(snapshot.target.base_url)
-        known_secrets = tuple(self._secret(identity) for identity in snapshot.identities)
+        known_secrets = tuple(
+            self._secret(identity) for identity in snapshot.identities
+        )
         executor = HttpExecutor(
             guard,
             cleanup_reserve=cleanup_reserve,
@@ -185,6 +213,25 @@ class SnapshotRunExecutor:
         *,
         run_id: str,
     ) -> Evidence:
+        """执行一个攻击用例的正常基线、攻击请求、前后观察和清理。
+
+        核心数据
+            case.step_id 找回原 FlowStep 作为合法基线；MutationCase 保存实际攻击请求。
+            observations 按 initial、baseline、before、mutation、after 阶段积累事实。
+
+        数据流
+            执行前清理 → 正常操作与状态确认 → 攻击前状态 → 攻击请求
+            → 攻击后状态 → evaluate_case → build_evidence → 最终清理。
+
+        关键说明
+            安全边界、基础设施和取消错误继续上抛，不能伪装成安全结论；观察缺失、
+            基线失败或清理失败形成 INCONCLUSIVE。finally 保证所有退出路径都尝试清理。
+
+        返回
+            已脱敏并带稳定内容哈希的单用例 Evidence。
+        """
+
+        # 这些索引只服务当前用例，用 case 中的稳定 ID 找回原始输入。
         identities = {identity.id: identity for identity in snapshot.identities}
         resource_owners = {
             resource.id: resource.owner_identity_id for resource in snapshot.resources
@@ -200,11 +247,15 @@ class SnapshotRunExecutor:
         infrastructure_failure = False
 
         try:
+            # --- 阶段：清理并建立合法基线 ---
             self._cleanup(executor, snapshot, case.case_id)
             if self.cancellation_requested():
                 raise JiejianError(ErrorCode.EXEC_CANCELLED, "运行已请求取消")
             phase = "baseline"
-            if "owner_api" in rule.required_observers and not snapshot.owner_observer_enabled:
+            if (
+                "owner_api" in rule.required_observers
+                and not snapshot.owner_observer_enabled
+            ):
                 reason_codes = (ReasonCode.REQUIRED_OBSERVER_MISSING.value,)
             else:
                 initial_state = None
@@ -219,6 +270,7 @@ class SnapshotRunExecutor:
                         phase="initial",
                     )
                     observations.append(initial_state)
+                # baseline 使用原 FlowStep，证明合法所有者的正常操作确实可用。
                 baseline = executor.request(
                     step.method,
                     step.path.format(resource_id=step.resource_id),
@@ -248,9 +300,16 @@ class SnapshotRunExecutor:
                             phase="baseline",
                         )
                         observations.append(baseline_state)
-                        if step.method != "GET" and initial_state.data == baseline_state.data:
-                            reason_codes = (ReasonCode.BASELINE_PRECONDITION_FAILED.value,)
+                        if (
+                            step.method != "GET"
+                            and initial_state.data == baseline_state.data
+                        ):
+                            reason_codes = (
+                                ReasonCode.BASELINE_PRECONDITION_FAILED.value,
+                            )
                         else:
+                            # 同一资源复用刚取得的 baseline；
+                            # 资源交换时才额外观察攻击目标。
                             before_state = (
                                 Observation(
                                     observer="owner_api",
@@ -271,6 +330,7 @@ class SnapshotRunExecutor:
                             )
                             observations.append(before_state)
                     if not reason_codes:
+                        # --- 阶段：执行攻击并取得后端真实状态 ---
                         phase = "mutation"
                         mutation = executor.request(
                             case.method,
@@ -303,20 +363,28 @@ class SnapshotRunExecutor:
                             case, rule, tuple(observations)
                         )
         except JiejianError as exc:
+            # 目标越界、预算、网络、超时、取消和秘密缺失属于运行故障，不参与判定。
             if exc.code in _SAFETY_ERROR_CODES | _INFRASTRUCTURE_ERROR_CODES:
                 infrastructure_failure = True
                 raise
             reason_codes = (
-                ReasonCode.REQUIRED_OBSERVER_MISSING.value
-                if exc.code == ReasonCode.REQUIRED_OBSERVER_MISSING.value
-                else ReasonCode.CLEANUP_FAILED.value
-                if phase == "cleanup"
-                else ReasonCode.BASELINE_PRECONDITION_FAILED.value
-                if phase == "baseline"
-                else exc.code,
+                (
+                    ReasonCode.REQUIRED_OBSERVER_MISSING.value
+                    if exc.code == ReasonCode.REQUIRED_OBSERVER_MISSING.value
+                    else (
+                        ReasonCode.CLEANUP_FAILED.value
+                        if phase == "cleanup"
+                        else (
+                            ReasonCode.BASELINE_PRECONDITION_FAILED.value
+                            if phase == "baseline"
+                            else exc.code
+                        )
+                    )
+                ),
             )
             verdict = CaseVerdict.INCONCLUSIVE
         finally:
+            # 即使基线、观察、攻击或判定失败，也必须尝试恢复测试目标。
             try:
                 self._cleanup(executor, snapshot, case.case_id)
             except JiejianError as exc:
@@ -351,13 +419,33 @@ class SnapshotRunExecutor:
         case_id: str,
         phase: str,
     ) -> Observation:
-        path = snapshot.flow.owner_observer_path.format(resource_id=resource_id)
+        """以资源所有者身份读取可信状态，并转换为 owner_api Observation。
+
+        关键说明
+            安全错误和取消保持原错误；普通请求或非 2xx 响应统一表示必要观察不可用，
+            防止缺少后端事实时得出 PASS。
+        """
+
+        adapter = OwnerApiObserverV2Adapter.for_path(
+            snapshot.flow.owner_observer_path,
+            timeout_us=int(snapshot.target.timeout_seconds * 1_000_000),
+            max_bytes=snapshot.target.max_response_bytes,
+            utc_now_us=lambda: int(self.utc_now().timestamp() * 1_000_000),
+        )
         try:
-            response = executor.request(
-                "GET",
-                path,
+            owner_token = self._secret(identities[owner_identity_id])
+            envelope = adapter.observe(
+                executor,
+                resource_id=resource_id,
+                owner_token=owner_token,
                 case_id=case_id,
-                bearer_token=self._secret(identities[owner_identity_id]),
+                phase={
+                    "initial": ObservationPhase.INITIAL,
+                    "baseline": ObservationPhase.BASELINE,
+                    "before": ObservationPhase.BEFORE,
+                    "after": ObservationPhase.AFTER,
+                }[phase],
+                known_secrets=(owner_token,),
             )
         except JiejianError as exc:
             if exc.code in _SAFETY_ERROR_CODES | {ErrorCode.EXEC_CANCELLED.value}:
@@ -367,18 +455,13 @@ class SnapshotRunExecutor:
                 "owner_api 观察不可用",
                 details={"cause": exc.code},
             ) from exc
-        if not 200 <= response.status_code < 300:
+        if envelope.completeness.value != "COMPLETE":
             raise JiejianError(
                 ReasonCode.REQUIRED_OBSERVER_MISSING.value,
                 "owner_api 观察失败",
-                details={"status_code": response.status_code},
+                details={"reason_codes": envelope.reason_codes},
             )
-        return Observation(
-            observer="owner_api",
-            phase=phase,
-            status_code=response.status_code,
-            data=redact(response.data),
-        )
+        return project_owner_envelope_to_v1(envelope)
 
     def _cleanup(
         self,
@@ -386,6 +469,8 @@ class SnapshotRunExecutor:
         snapshot: VerificationSnapshot,
         case_id: str,
     ) -> None:
+        """使用清理预留请求调用 Flow 声明的测试 reset 端点。"""
+
         response = executor.request(
             "POST",
             snapshot.flow.reset_path,
@@ -401,6 +486,8 @@ class SnapshotRunExecutor:
             )
 
     def _secret(self, identity: Identity) -> str:
+        """从当前进程环境解析身份的 env 引用，缺失时拒绝继续执行。"""
+
         variable = identity.secret_ref.removeprefix("env:")
         value = self.environ.get(variable)
         if not value:
