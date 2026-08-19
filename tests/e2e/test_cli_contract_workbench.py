@@ -2,39 +2,40 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import time
 
 import pytest
 from typer.testing import CliRunner
 
-from jiejian.application.context import ApplicationContext
-from jiejian.cli.app import app
-from jiejian.execution.request_store import ExecutionRequestStore
-from jiejian.execution.submission import ExecutionSubmissionService, SubmitExecutionV1
+from product.backend.cli.app import app
 
 pytestmark = [pytest.mark.e2e, pytest.mark.database]
 
 
 def _invoke(runner: CliRunner, var_dir: Path, *args: str):
     result = runner.invoke(app, ["--var-dir", str(var_dir), *args])
-    assert result.exit_code == 0, result.stdout + (f"\n{result.exception!r}" if result.exception else "")
+    assert result.exit_code == 0, result.stdout + result.stderr + (f"\n{result.exception!r}" if result.exception else "")
     return json.loads(result.stdout)
 
 
-def test_cli_contract_workbench_flow_only_lifecycle(tmp_path: Path) -> None:
+def test_cli_contract_workbench_profile_lifecycle(tmp_path: Path) -> None:
     runner = CliRunner()
-    project = Path("samples/fixed_apps/ownership/project.yaml").resolve()
+    profile = Path("samples/http/fixed/profile.json").resolve()
+    contract = Path("samples/http/fixed/contract.json").resolve()
     var_dir = tmp_path / "var"
-    workspace = _invoke(runner, var_dir, "contract", "workspace", str(project))
-    assert workspace["project"]["project_id"] == "ownership-safe"
+    contract_v2 = tmp_path / "contract-v2.json"
+    contract_payload = json.loads(contract.read_text(encoding="utf-8"))
+    contract_payload["version"] = 2
+    contract_v2.write_text(json.dumps(contract_payload), encoding="utf-8")
+    workspace = _invoke(runner, var_dir, "contract", "workspace", str(profile))
+    assert workspace["project"]["project_id"] == "permission-check-fixed"
     requirement = _invoke(
         runner,
         var_dir,
         "contract",
         "requirement-add",
-        str(project),
+        str(profile),
         "--text",
-        "rule id=cli-requirement kind=foreign_read observers=http severity=high",
+        "suggestion id=cli-requirement kind=FOREIGN_READ observations=resource_state severity=high",
         "--tag",
         "pii",
         "--actor",
@@ -45,45 +46,43 @@ def test_cli_contract_workbench_flow_only_lifecycle(tmp_path: Path) -> None:
         var_dir,
         "contract",
         "derive",
-        str(project),
+        str(profile),
         "--requirement",
         requirement["requirement_id"],
         "--actor",
         "cli-test",
     )
     assert requirement_derived["persisted_candidates"]
-    derived = _invoke(runner, var_dir, "contract", "derive", str(project), "--include-flow", "--actor", "cli-test")
-    candidates = derived["persisted_candidates"]
-    assert candidates
-    candidate_ids = [item["candidate_id"] for item in candidates]
     draft = _invoke(
         runner,
         var_dir,
         "contract",
         "draft",
-        str(project),
-        "cli-contract",
-        *sum((["--candidate", item] for item in candidate_ids), []),
+        str(profile),
+        "permission-check-contract",
+        "--snapshot",
+        str(contract),
         "--actor",
         "cli-test",
     )
     assert draft["status"] == "DRAFT"
-    review = _invoke(runner, var_dir, "contract", "transition", str(project), "cli-contract", "1", "submit", "--actor", "reviewer")
+    review = _invoke(runner, var_dir, "contract", "transition", str(profile), "permission-check-contract", "1", "submit", "--actor", "reviewer")
     assert review["status"] == "REVIEW"
-    active = _invoke(runner, var_dir, "contract", "transition", str(project), "cli-contract", "1", "activate", "--actor", "approver")
+    active = _invoke(runner, var_dir, "contract", "transition", str(profile), "permission-check-contract", "1", "activate", "--actor", "approver")
     assert active["status"] == "ACTIVE"
-    assessment = _invoke(runner, var_dir, "contract", "assessment", str(project), "cli-contract", "1")
+    assessment = _invoke(runner, var_dir, "contract", "assessment", str(profile), "permission-check-contract", "1")
     assert assessment["eligible"] is True
-    drift = _invoke(runner, var_dir, "contract", "drift", str(project), "cli-contract", "1")
-    assert drift["contract_id"] == "cli-contract"
+    drift = _invoke(runner, var_dir, "contract", "drift", str(profile), "permission-check-contract", "1")
+    assert drift["contract_id"] == "permission-check-contract"
     revised = _invoke(
         runner,
         var_dir,
         "contract",
         "revise",
-        str(project),
-        "cli-contract",
-        *sum((["--candidate", item] for item in candidate_ids), []),
+        str(profile),
+        "permission-check-contract",
+        "--snapshot",
+        str(contract_v2),
         "--actor",
         "cli-test",
     )
@@ -93,8 +92,8 @@ def test_cli_contract_workbench_flow_only_lifecycle(tmp_path: Path) -> None:
         var_dir,
         "contract",
         "diff",
-        str(project),
-        "cli-contract",
+        str(profile),
+        "permission-check-contract",
         "2",
         "--from-version",
         "1",
@@ -105,38 +104,10 @@ def test_cli_contract_workbench_flow_only_lifecycle(tmp_path: Path) -> None:
 
 def test_cli_contract_workbench_rejects_invalid_action(tmp_path: Path) -> None:
     runner = CliRunner()
-    project = Path("samples/fixed_apps/ownership/project.yaml").resolve()
+    profile = Path("samples/http/fixed/profile.json").resolve()
     result = runner.invoke(
         app,
-        ["--var-dir", str(tmp_path / "var"), "contract", "transition", str(project), "missing", "1", "bogus"],
+        ["--var-dir", str(tmp_path / "var"), "contract", "transition", str(profile), "missing", "1", "bogus"],
     )
     assert result.exit_code != 0
     assert "INPUT_INVALID" in result.stderr
-
-
-def test_cli_contract_workbench_history_reads_execution_request(tmp_path: Path) -> None:
-    runner = CliRunner()
-    project = Path("samples/fixed_apps/ownership/project.yaml").resolve()
-    var_dir = tmp_path / "var"
-    run_id = "run_" + "a" * 32
-    job_id = "job_" + "b" * 32
-    context = ApplicationContext(var_dir)
-    try:
-        record, _ = context.projects.register(project, revalidate=True)
-        request = context.execution_requests.execution_request(record.project_id)
-        now_us = time.time_ns() // 1_000
-        ExecutionSubmissionService(context.uow_factory, ExecutionRequestStore(var_dir)).submit(
-            SubmitExecutionV1(
-                request=request,
-                idempotency_key="cli-history",
-                available_at_us=now_us,
-                now_us=now_us,
-                run_id=run_id,
-                job_id=job_id,
-            )
-        )
-    finally:
-        context.close()
-    history = _invoke(runner, var_dir, "contract", "history", run_id)
-    assert history["source"] == "EXECUTION_REQUEST"
-    assert history["execution_job_id"] == job_id

@@ -7,39 +7,39 @@ from pathlib import Path
 import httpx
 import pytest
 
-import jiejian.runner.async_task_observer as async_module
-from jiejian.protocols import (
-    AsyncTaskApiLocatorV2,
-    AsyncTaskObserverInvocationV2,
-    AsyncTaskPollBudgetV2,
+import product.backend.infra.observers.async_task as async_module
+from product.protocols import (
+    AsyncTaskApiLocator,
+    AsyncTaskObserverInvocation,
+    AsyncTaskPollBudget,
     AsyncTaskStatus,
-    CorrelationV2,
+    Correlation,
     ObservationCompleteness,
     ObservationPhase,
-    ObserverBudgetV2,
+    ObserverBudget,
     ObserverOutcomeStatus,
-    ObserverSpecV2,
-    ObserverTargetV2,
+    ObserverSpec,
+    ObserverTarget,
     ObserverType,
 )
 
 
-def _spec(*, base_url: str = "https://127.0.0.1:8443", allow_loopback_http: bool = False, max_polls: int = 4, poll_interval_us: int = 0, timeout_us: int = 5_000_000, max_response_bytes: int = 8192, common_max_bytes: int | None = None) -> ObserverSpecV2:
-    locator = AsyncTaskApiLocatorV2(
+def _spec(*, base_url: str = "https://127.0.0.1:8443", allow_loopback_http: bool = False, max_polls: int = 4, poll_interval_us: int = 0, timeout_us: int = 5_000_000, max_response_bytes: int = 8192, common_max_bytes: int | None = None) -> ObserverSpec:
+    locator = AsyncTaskApiLocator(
         base_url=base_url,
         relative_path_template="/observer/tasks/by-case/{request_marker}",
         read_only_credential_ref="env:TASK_TOKEN",
         allow_private_network=True,
         allow_loopback_http=allow_loopback_http,
-        poll_budget=AsyncTaskPollBudgetV2(max_polls=max_polls, poll_interval_us=poll_interval_us, per_request_timeout_us=100_000, max_response_bytes=max_response_bytes),
+        poll_budget=AsyncTaskPollBudget(max_polls=max_polls, poll_interval_us=poll_interval_us, per_request_timeout_us=100_000, max_response_bytes=max_response_bytes),
     )
-    return ObserverSpecV2(
+    return ObserverSpec(
         observer_id="async_observer",
         observer_type=ObserverType.ASYNC_TASK_STATUS,
-        target=ObserverTargetV2(target_id="task-state", locator=locator, normalization_id="task-state", normalization_version="1.0"),
+        target=ObserverTarget(target_id="task-state", locator=locator, normalization_id="task-state", normalization_version="1.0"),
         phases=(ObservationPhase.EVENTUAL,),
         required=True,
-        budget=ObserverBudgetV2(timeout_us=timeout_us, max_rows=1, max_bytes=common_max_bytes or max_response_bytes),
+        budget=ObserverBudget(timeout_us=timeout_us, max_rows=1, max_bytes=common_max_bytes or max_response_bytes),
     )
 
 
@@ -47,11 +47,11 @@ def _response(state: str, *, task_id: str | None = "task-1", final_result: dict[
     return json.dumps({"schema_version": "1", "case_tag": case_tag, "resource_id": resource_id, "task_id": task_id, "state": state, "final_result": final_result}, separators=(",", ":")).encode()
 
 
-def _invocation(spec: ObserverSpecV2 | None = None) -> AsyncTaskObserverInvocationV2:
-    return AsyncTaskObserverInvocationV2(spec=spec or _spec(), correlation=CorrelationV2(case_id="case-1", resource_id="resource-a", request_marker="case-1"), phase=ObservationPhase.EVENTUAL)
+def _invocation(spec: ObserverSpec | None = None) -> AsyncTaskObserverInvocation:
+    return AsyncTaskObserverInvocation(spec=spec or _spec(), correlation=Correlation(case_id="case-1", resource_id="resource-a", request_marker="case-1"), phase=ObservationPhase.EVENTUAL)
 
 
-def _run_fake(monkeypatch: pytest.MonkeyPatch, responses: list[bytes], *, status_codes: list[int] | None = None, spec: ObserverSpecV2 | None = None):
+def _run_fake(monkeypatch: pytest.MonkeyPatch, responses: list[bytes], *, status_codes: list[int] | None = None, spec: ObserverSpec | None = None):
     invocation = _invocation(spec)
     monkeypatch.setenv("TASK_TOKEN", "opaque-task-secret")
     queue = list(responses)
@@ -196,11 +196,11 @@ def test_async_task_scope_rejects_unsafe_origins_and_requires_loopback_http() ->
     with pytest.raises(ValueError):
         _spec(base_url="https://example.test:443")
     with pytest.raises(ValueError):
-        AsyncTaskApiLocatorV2(base_url="https://127.0.0.1:8443", relative_path_template="/observer/../{request_marker}", read_only_credential_ref="env:TASK_TOKEN", allow_private_network=True, allow_loopback_http=False, poll_budget=AsyncTaskPollBudgetV2(max_polls=1, poll_interval_us=0, per_request_timeout_us=1, max_response_bytes=100))
+        AsyncTaskApiLocator(base_url="https://127.0.0.1:8443", relative_path_template="/observer/../{request_marker}", read_only_credential_ref="env:TASK_TOKEN", allow_private_network=True, allow_loopback_http=False, poll_budget=AsyncTaskPollBudget(max_polls=1, poll_interval_us=0, per_request_timeout_us=1, max_response_bytes=100))
     with pytest.raises(ValueError):
-        AsyncTaskApiLocatorV2(base_url="https://user:pass@127.0.0.1:8443", relative_path_template="/observer/tasks/{request_marker}", read_only_credential_ref="env:TASK_TOKEN", allow_private_network=True, allow_loopback_http=False, poll_budget=AsyncTaskPollBudgetV2(max_polls=1, poll_interval_us=0, per_request_timeout_us=1, max_response_bytes=100))
+        AsyncTaskApiLocator(base_url="https://user:pass@127.0.0.1:8443", relative_path_template="/observer/tasks/{request_marker}", read_only_credential_ref="env:TASK_TOKEN", allow_private_network=True, allow_loopback_http=False, poll_budget=AsyncTaskPollBudget(max_polls=1, poll_interval_us=0, per_request_timeout_us=1, max_response_bytes=100))
     with pytest.raises(ValueError):
-        AsyncTaskApiLocatorV2(base_url="https://169.254.169.254:443", relative_path_template="/observer/tasks/{request_marker}", read_only_credential_ref="env:TASK_TOKEN", allow_private_network=True, allow_loopback_http=False, poll_budget=AsyncTaskPollBudgetV2(max_polls=1, poll_interval_us=0, per_request_timeout_us=1, max_response_bytes=100))
+        AsyncTaskApiLocator(base_url="https://169.254.169.254:443", relative_path_template="/observer/tasks/{request_marker}", read_only_credential_ref="env:TASK_TOKEN", allow_private_network=True, allow_loopback_http=False, poll_budget=AsyncTaskPollBudget(max_polls=1, poll_interval_us=0, per_request_timeout_us=1, max_response_bytes=100))
     assert _spec(base_url="http://127.0.0.1:8080", allow_loopback_http=True).target.locator.base_url == "http://127.0.0.1:8080"
 
 
@@ -393,8 +393,8 @@ def test_async_task_parent_environment_and_process_failure_are_bounded(tmp_path:
 
 def test_async_task_poll_interval_is_bounded_and_marker_is_quoted(monkeypatch: pytest.MonkeyPatch) -> None:
     spec = _spec(max_polls=2, poll_interval_us=500_000)
-    correlation = CorrelationV2(case_id="case-1", resource_id="resource-a", request_marker="case-1:part")
-    invocation = AsyncTaskObserverInvocationV2(spec=spec, correlation=correlation, phase=ObservationPhase.EVENTUAL)
+    correlation = Correlation(case_id="case-1", resource_id="resource-a", request_marker="case-1:part")
+    invocation = AsyncTaskObserverInvocation(spec=spec, correlation=correlation, phase=ObservationPhase.EVENTUAL)
     assert "%3A" in async_module._request_url(invocation)
     monkeypatch.setenv("TASK_TOKEN", "opaque-task-secret")
     sleeps: list[float] = []
@@ -439,9 +439,9 @@ def test_async_task_corrupt_child_output_is_execution_error(tmp_path: Path, monk
 
 
 def test_async_task_generic_invocation_is_rejected_and_independent_wire_is_valid() -> None:
-    from jiejian.protocols import ObserverInvocationV2
+    from product.protocols import ObserverInvocation
     spec = _spec()
     correlation = _invocation(spec).correlation
     with pytest.raises(ValueError):
-        ObserverInvocationV2(spec=spec, correlation=correlation, phase=ObservationPhase.EVENTUAL)
-    assert AsyncTaskObserverInvocationV2(spec=spec, correlation=correlation, phase=ObservationPhase.EVENTUAL).phase is ObservationPhase.EVENTUAL
+        ObserverInvocation(spec=spec, correlation=correlation, phase=ObservationPhase.EVENTUAL)
+    assert AsyncTaskObserverInvocation(spec=spec, correlation=correlation, phase=ObservationPhase.EVENTUAL).phase is ObservationPhase.EVENTUAL

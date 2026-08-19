@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from jiejian.cli.app import app
+from product.backend.cli.app import app
 
 
 def test_root_help_lists_doctor() -> None:
@@ -104,3 +104,24 @@ def test_doctor_respects_error_log_level(isolated_environment: Path) -> None:
     assert result.exit_code == 0
     assert json.loads(result.stdout)["ok"] is True
     assert result.stderr == ""
+
+
+def test_doctor_human_uses_named_checks_and_conclusion(
+    isolated_environment: Path,
+) -> None:
+    config = isolated_environment / "doctor-human.toml"
+    config.write_text(
+        '[jiejian]\nvar_dir = "runtime"\nlog_level = "INFO"\n',
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app, ["--human", "--config", str(config), "doctor"]
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert result.stdout.startswith("运行环境检查\n")
+    assert "[通过] Python：" in result.stdout
+    assert "[通过] 数据库：" in result.stdout
+    assert "结论：必要检查全部通过" in result.stdout
+    assert "checks：" not in result.stdout

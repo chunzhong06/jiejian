@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from jiejian.redaction import REDACTED, redact
+from product.backend.core.redaction import REDACTED, redact
 
 
 def test_redaction_removes_secret_keys_and_inline_values() -> None:

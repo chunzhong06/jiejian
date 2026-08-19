@@ -1,0 +1,1172 @@
+{
+  "$defs": {
+    "BatchAuthorizationMode": {
+      "enum": [
+        "ALL_ALLOW",
+        "ALL_DENY",
+        "MIXED_AUTHORIZATION"
+      ],
+      "title": "BatchAuthorizationMode",
+      "type": "string"
+    },
+    "CaseVerdict": {
+      "enum": [
+        "SAFE",
+        "VULNERABLE",
+        "INCONCLUSIVE",
+        "SKIPPED",
+        "ERROR"
+      ],
+      "title": "CaseVerdict",
+      "type": "string"
+    },
+    "CausalityStatus": {
+      "enum": [
+        "CORRELATED",
+        "UNVERIFIED"
+      ],
+      "title": "CausalityStatus",
+      "type": "string"
+    },
+    "CleanupResult": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CleanupStatus"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "CleanupResult",
+      "type": "object"
+    },
+    "CleanupStatus": {
+      "enum": [
+        "NOT_REQUIRED",
+        "SUCCEEDED",
+        "FAILED"
+      ],
+      "title": "CleanupStatus",
+      "type": "string"
+    },
+    "Correlation": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "request_marker": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Request Marker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "resource_id",
+        "request_marker"
+      ],
+      "title": "Correlation",
+      "type": "object"
+    },
+    "CoverageDimension": {
+      "enum": [
+        "ROLE",
+        "TENANT",
+        "DEPARTMENT",
+        "RELATION",
+        "WORKFLOW",
+        "BULK"
+      ],
+      "title": "CoverageDimension",
+      "type": "string"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "evidence_id": {
+          "pattern": "^ev_[0-9a-f]{20}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "case_snapshot": {
+          "$ref": "#/$defs/PermissionMutationCase"
+        },
+        "finding_pre_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Finding Pre Identity",
+          "type": "string"
+        },
+        "execution_fact": {
+          "$ref": "#/$defs/ExecutionFact"
+        },
+        "requirement_bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObserverRequirementBinding"
+          },
+          "maxItems": 16,
+          "title": "Requirement Bindings",
+          "type": "array"
+        },
+        "observation_facts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObservationFact"
+          },
+          "maxItems": 19200,
+          "title": "Observation Facts",
+          "type": "array"
+        },
+        "observations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObservationEnvelope"
+          },
+          "maxItems": 19200,
+          "title": "Observations",
+          "type": "array"
+        },
+        "outcomes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObserverOutcome"
+          },
+          "maxItems": 64,
+          "title": "Outcomes",
+          "type": "array"
+        },
+        "verdict": {
+          "$ref": "#/$defs/CaseVerdict"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "evidence_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Evidence Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "run_id",
+        "case_snapshot",
+        "finding_pre_identity",
+        "execution_fact",
+        "verdict",
+        "evidence_hash"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "ExecutionFact": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "target_type": {
+          "$ref": "#/$defs/TargetType"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ExecutionOutcome"
+        },
+        "execution_marker": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Execution Marker",
+          "type": "string"
+        },
+        "input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "output_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Output Hash",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "case_id",
+        "action_id",
+        "target_type",
+        "outcome",
+        "execution_marker",
+        "input_hash",
+        "output_hash"
+      ],
+      "title": "ExecutionFact",
+      "type": "object"
+    },
+    "ExecutionOutcome": {
+      "enum": [
+        "ACCEPTED",
+        "DENIED",
+        "FAILED",
+        "UNKNOWN"
+      ],
+      "title": "ExecutionOutcome",
+      "type": "string"
+    },
+    "JobState": {
+      "enum": [
+        "PENDING",
+        "RUNNING",
+        "RETRY_WAIT",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "title": "JobState",
+      "type": "string"
+    },
+    "NormalizedState": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "canonical_data": {
+          "additionalProperties": true,
+          "title": "Canonical Data",
+          "type": "object"
+        },
+        "canonical_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Canonical Sha256",
+          "type": "string"
+        },
+        "byte_count": {
+          "maximum": 262144,
+          "minimum": 2,
+          "title": "Byte Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "canonical_data",
+        "canonical_sha256",
+        "byte_count"
+      ],
+      "title": "NormalizedState",
+      "type": "object"
+    },
+    "ObservationCompleteness": {
+      "enum": [
+        "COMPLETE",
+        "PARTIAL",
+        "MISSING",
+        "TIMED_OUT",
+        "UNSUPPORTED",
+        "ERROR"
+      ],
+      "title": "ObservationCompleteness",
+      "type": "string"
+    },
+    "ObservationEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        },
+        "observer_type": {
+          "$ref": "#/$defs/ObserverType"
+        },
+        "protocol_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/$defs/ObservationPhase"
+        },
+        "target_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Target Id",
+          "type": "string"
+        },
+        "window": {
+          "$ref": "#/$defs/ObservationWindow"
+        },
+        "correlation": {
+          "$ref": "#/$defs/Correlation"
+        },
+        "causality": {
+          "$ref": "#/$defs/CausalityStatus"
+        },
+        "completeness": {
+          "$ref": "#/$defs/ObservationCompleteness"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NormalizedState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObservationProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "observer_id",
+        "observer_type",
+        "phase",
+        "target_id",
+        "window",
+        "correlation",
+        "causality",
+        "completeness"
+      ],
+      "title": "ObservationEnvelope",
+      "type": "object"
+    },
+    "ObservationFact": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "requirement_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "effect": {
+          "$ref": "#/$defs/ObservedEffect"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "reliable": {
+          "title": "Reliable",
+          "type": "boolean"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "resource_id",
+        "effect",
+        "complete",
+        "reliable"
+      ],
+      "title": "ObservationFact",
+      "type": "object"
+    },
+    "ObservationPhase": {
+      "enum": [
+        "INITIAL",
+        "BASELINE",
+        "BEFORE",
+        "AFTER",
+        "EVENTUAL"
+      ],
+      "title": "ObservationPhase",
+      "type": "string"
+    },
+    "ObservationProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "provenance_type": {
+          "$ref": "#/$defs/ProvenanceType"
+        },
+        "adapter_version": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Adapter Version",
+          "type": "string"
+        },
+        "target_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Target Id",
+          "type": "string"
+        },
+        "query_template_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Template Id"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provenance_type",
+        "adapter_version",
+        "target_id",
+        "source_sha256"
+      ],
+      "title": "ObservationProvenance",
+      "type": "object"
+    },
+    "ObservationWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/$defs/ObservationPhase"
+        },
+        "started_at_us": {
+          "minimum": 0,
+          "title": "Started At Us",
+          "type": "integer"
+        },
+        "finished_at_us": {
+          "minimum": 0,
+          "title": "Finished At Us",
+          "type": "integer"
+        },
+        "timeout_us": {
+          "maximum": 120000000,
+          "minimum": 1,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "phase",
+        "started_at_us",
+        "finished_at_us",
+        "timeout_us"
+      ],
+      "title": "ObservationWindow",
+      "type": "object"
+    },
+    "ObservedEffect": {
+      "enum": [
+        "CONFIRMED",
+        "ABSENT",
+        "UNKNOWN"
+      ],
+      "title": "ObservedEffect",
+      "type": "string"
+    },
+    "ObserverOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/ObserverOutcomeStatus"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "observer_id",
+        "required",
+        "status"
+      ],
+      "title": "ObserverOutcome",
+      "type": "object"
+    },
+    "ObserverOutcomeStatus": {
+      "enum": [
+        "AVAILABLE",
+        "INCONCLUSIVE",
+        "EXECUTION_ERROR"
+      ],
+      "title": "ObserverOutcomeStatus",
+      "type": "string"
+    },
+    "ObserverRequirementBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "requirement_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ObserverRequirementKind"
+        },
+        "observer_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observer Id"
+        },
+        "observer_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObserverType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "credential_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Ref"
+        },
+        "phases": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObservationPhase"
+          },
+          "maxItems": 5,
+          "title": "Phases",
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "kind"
+      ],
+      "title": "ObserverRequirementBinding",
+      "type": "object"
+    },
+    "ObserverRequirementKind": {
+      "enum": [
+        "OBSERVER_SPEC"
+      ],
+      "title": "ObserverRequirementKind",
+      "type": "string"
+    },
+    "ObserverType": {
+      "enum": [
+        "OWNER_API",
+        "READ_ONLY_SQLITE",
+        "STRUCTURED_AUDIT_LOG",
+        "ASYNC_TASK_STATUS",
+        "AZURE_QUEUE_PEEK",
+        "AZURE_BLOB_OBJECT"
+      ],
+      "title": "ObserverType",
+      "type": "string"
+    },
+    "PermissionContext": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "workflow_states": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Workflow States",
+          "type": "array"
+        },
+        "tenant_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Tenant Ids",
+          "type": "array"
+        },
+        "department_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Department Ids",
+          "type": "array"
+        },
+        "resource_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Resource Ids",
+          "type": "array"
+        }
+      },
+      "title": "PermissionContext",
+      "type": "object"
+    },
+    "PermissionExpectation": {
+      "enum": [
+        "ALLOW",
+        "DENY"
+      ],
+      "title": "PermissionExpectation",
+      "type": "string"
+    },
+    "PermissionMutationCase": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^case-[0-9a-f]{32}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "finding_pre_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Finding Pre Identity",
+          "type": "string"
+        },
+        "source_rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Source Rule Ids",
+          "type": "array"
+        },
+        "dimensions": {
+          "items": {
+            "$ref": "#/$defs/CoverageDimension"
+          },
+          "maxItems": 6,
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "retention_reason": {
+          "$ref": "#/$defs/RetentionReason"
+        },
+        "subject_id": {
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Resource Ids",
+          "type": "array"
+        },
+        "expectations": {
+          "items": {
+            "$ref": "#/$defs/PermissionExpectation"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Expectations",
+          "type": "array"
+        },
+        "relation_paths": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Relation Paths",
+          "type": "array"
+        },
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
+        },
+        "required_observations": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Required Observations",
+          "type": "array"
+        },
+        "batch_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BatchAuthorizationMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "atomic": {
+          "default": false,
+          "title": "Atomic",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "case_id",
+        "fingerprint",
+        "finding_pre_identity",
+        "source_rule_ids",
+        "dimensions",
+        "retention_reason",
+        "subject_id",
+        "action_id",
+        "resource_ids",
+        "expectations",
+        "relation_paths",
+        "context",
+        "required_observations"
+      ],
+      "title": "PermissionMutationCase",
+      "type": "object"
+    },
+    "ProvenanceType": {
+      "enum": [
+        "OWNER_API",
+        "SQLITE_QUERY",
+        "AUDIT_LOG_WINDOW",
+        "ASYNC_TASK_API",
+        "AZURE_QUEUE_PEEK",
+        "AZURE_BLOB_OBJECT"
+      ],
+      "title": "ProvenanceType",
+      "type": "string"
+    },
+    "RetentionReason": {
+      "enum": [
+        "EXPLICIT_ALLOW_BASELINE",
+        "EXPLICIT_DENY_RISK",
+        "RECENT_NEIGHBOR",
+        "BATCH_AUTHORIZATION"
+      ],
+      "title": "RetentionReason",
+      "type": "string"
+    },
+    "RunLifecycle": {
+      "enum": [
+        "QUEUED",
+        "PREFLIGHT",
+        "PLANNING",
+        "EXECUTING",
+        "VERIFYING",
+        "REPORTING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "SAFETY_STOPPED"
+      ],
+      "title": "RunLifecycle",
+      "type": "string"
+    },
+    "RunVerdict": {
+      "enum": [
+        "PASS",
+        "BLOCK",
+        "INCONCLUSIVE"
+      ],
+      "title": "RunVerdict",
+      "type": "string"
+    },
+    "RunnerError": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "retryable"
+      ],
+      "title": "RunnerError",
+      "type": "object"
+    },
+    "RunnerResultType": {
+      "enum": [
+        "SUCCESS",
+        "SAFETY_STOPPED",
+        "CANCELLED",
+        "RETRYABLE_ERROR",
+        "FATAL_ERROR"
+      ],
+      "title": "RunnerResultType",
+      "type": "string"
+    },
+    "StagedArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "byte_count": {
+          "maximum": 1073741824,
+          "minimum": 0,
+          "title": "Byte Count",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_count",
+        "sha256"
+      ],
+      "title": "StagedArtifact",
+      "type": "object"
+    },
+    "TargetType": {
+      "enum": [
+        "WEB",
+        "CLI_APPLICATION",
+        "MCP_AGENT"
+      ],
+      "title": "TargetType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "lease_owner": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Lease Owner",
+      "type": "string"
+    },
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "finished_at_us": {
+      "minimum": 0,
+      "title": "Finished At Us",
+      "type": "integer"
+    },
+    "result_type": {
+      "$ref": "#/$defs/RunnerResultType"
+    },
+    "run_lifecycle": {
+      "$ref": "#/$defs/RunLifecycle"
+    },
+    "job_state": {
+      "$ref": "#/$defs/JobState"
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunVerdict"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reason_codes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 128,
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "cleanup": {
+      "$ref": "#/$defs/CleanupResult"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunnerError"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "plan_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Plan Fingerprint",
+      "type": "string"
+    },
+    "coverage_record_count": {
+      "maximum": 16384,
+      "minimum": 0,
+      "title": "Coverage Record Count",
+      "type": "integer"
+    },
+    "coverage_gap_count": {
+      "maximum": 16384,
+      "minimum": 0,
+      "title": "Coverage Gap Count",
+      "type": "integer"
+    },
+    "evidence": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "maxItems": 8192,
+      "title": "Evidence",
+      "type": "array"
+    },
+    "artifacts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StagedArtifact"
+      },
+      "maxItems": 4096,
+      "title": "Artifacts",
+      "type": "array"
+    }
+  },
+  "required": [
+    "run_id",
+    "job_id",
+    "attempt",
+    "lease_owner",
+    "fencing_token",
+    "finished_at_us",
+    "result_type",
+    "run_lifecycle",
+    "job_state",
+    "verdict",
+    "cleanup",
+    "error",
+    "plan_fingerprint",
+    "coverage_record_count",
+    "coverage_gap_count"
+  ],
+  "title": "RunnerResult",
+  "type": "object"
+}

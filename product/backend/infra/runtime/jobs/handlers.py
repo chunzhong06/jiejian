@@ -1,0 +1,125 @@
+# =============================================================================
+# Execution JobHandler 端口
+#
+# 定位
+#   Worker 调度壳与 Verification/Recording 实现之间的依赖反转边界
+#
+# 职责
+#   定义 JobHandler｜定义最小 attempt 操作｜按 Job target 惰性注册 Handler
+#
+# 边界
+#   Registry 只做显式类型分派，不提供隐式 fallback 或跨 target 结果转换。
+#
+# 调用链
+#   ApplicationCore → JobHandlerRegistry → VerificationRunJobHandler / RecordingJobHandler
+# =============================================================================
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Any, Protocol, TypeVar
+
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import JobRecord
+from product.backend.infra.runtime.jobs.models import CancellationResult, ClaimJob, ClaimedJob, CompleteCancellation, FatalFailure, JobMutationResult, RetryableFailure, RenewLease
+from product.backend.infra.runtime.jobs.targets import JobTargetType
+
+ResultT_co = TypeVar("ResultT_co", covariant=True)
+
+
+class JobHandler(Protocol[ResultT_co]):
+    """一个作业处理器的稳定执行端口。"""
+
+    def run_job(self, job_id: str) -> ResultT_co | None:
+        ...
+
+
+class JobAttemptPort(Protocol):
+    """Recording 与 Worker Attempt 服务之间的最小端口。"""
+
+    def claim(
+        self,
+        request: ClaimJob,
+        *,
+        known_secrets: Sequence[str] = (),
+    ) -> ClaimedJob | None:
+        ...
+
+    def renew_lease(
+        self,
+        request: RenewLease,
+        *,
+        known_secrets: Sequence[str] = (),
+    ) -> JobMutationResult:
+        ...
+
+    def complete_cancellation(
+        self,
+        request: CompleteCancellation,
+        *,
+        known_secrets: Sequence[str] = (),
+    ) -> CancellationResult:
+        ...
+
+    def record_retryable_failure(
+        self,
+        request: RetryableFailure,
+        *,
+        known_secrets: Sequence[str] = (),
+    ) -> JobMutationResult:
+        ...
+
+    def record_fatal_failure(
+        self,
+        request: FatalFailure,
+        *,
+        known_secrets: Sequence[str] = (),
+    ) -> JobMutationResult:
+        ...
+
+
+class JobHandlerRegistry:
+    """按 Job 目标类型惰性创建单任务 Handler。"""
+
+    def __init__(self) -> None:
+        self._factories: dict[JobTargetType, Callable[[], JobHandler[Any]]] = {}
+        self._auxiliary_factories: dict[str, Callable[[], JobHandler[Any]]] = {}
+
+    def register(
+        self,
+        target_type: JobTargetType,
+        factory: Callable[[], JobHandler[Any]],
+    ) -> None:
+        if not isinstance(target_type, JobTargetType):
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务目标类型非法")
+        if target_type in self._factories:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务处理器重复注册")
+        self._factories[target_type] = factory
+
+    def register_auxiliary(
+        self,
+        name: str,
+        factory: Callable[[], JobHandler[Any]],
+    ) -> None:
+        """注册不占用持久 Job target 的 Worker 辅助 Handler。"""
+
+        if not isinstance(name, str) or not name or not name.isascii() or not name.replace("_", "").isalnum() or name != name.upper():
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "辅助任务处理器名称非法")
+        if name in self._auxiliary_factories:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "辅助任务处理器重复注册")
+        self._auxiliary_factories[name] = factory
+
+    def resolve_auxiliary(self, name: str) -> JobHandler[Any]:
+        try:
+            factory = self._auxiliary_factories[name]
+        except KeyError:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "辅助任务处理器未注册") from None
+        return factory()
+
+    def resolve(self, job: JobRecord) -> JobHandler[Any]:
+        target_type = JobTargetType.from_job(job)
+        try:
+            factory = self._factories[target_type]
+        except KeyError:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务处理器未注册") from None
+        return factory()

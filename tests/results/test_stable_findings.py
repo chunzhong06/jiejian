@@ -3,15 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from jiejian.domain.lifecycle import CaseVerdict, JobState, ProjectStatus, RunLifecycle, RunVerdict
-from jiejian.protocols import (
-    CleanupResultV2,
-    CleanupStatusV2,
-    RunnerResultTypeV2,
-    RunnerResultV2,
+from product.backend.core.lifecycle import CaseVerdict, JobState, ProjectStatus, RunLifecycle, RunVerdict
+from product.protocols import (
+    CleanupResult,
+    CleanupStatus,
+    RunnerResultType,
+    RunnerResult,
 )
-from jiejian.results.stable_findings import FindingApplicationService, finding_inputs
-from jiejian.storage import (
+from product.backend.workflows.results.findings import FindingProjection, finding_inputs
+from product.backend.infra.storage import (
     ProjectRecord,
     RunRecord,
     StorageUnitOfWork,
@@ -19,7 +19,7 @@ from jiejian.storage import (
     create_sqlite_engine,
     upgrade_database,
 )
-from tests.execution.protocol.test_runner_v2 import _evidence, _input, _rehash_evidence
+from tests.execution.protocol.test_runner import _evidence, _input, _rehash_evidence
 
 
 PROJECT_ID = "runner-project"
@@ -27,7 +27,7 @@ RUN_ONE = "run_11111111111111111111111111111111"
 RUN_TWO = "run_22222222222222222222222222222222"
 
 
-def _view(run_id: str, result: RunnerResultV2):
+def _view(run_id: str, result: RunnerResult):
     return SimpleNamespace(
         run=SimpleNamespace(
             project_id=PROJECT_ID,
@@ -42,7 +42,7 @@ def _view(run_id: str, result: RunnerResultV2):
 
 def _result(run_id: str, evidence):
     snapshot = _input().project_snapshot
-    return RunnerResultV2(
+    return RunnerResult(
         schema_version="2",
         run_id=run_id,
         job_id="job_" + run_id[4:],
@@ -50,12 +50,12 @@ def _result(run_id: str, evidence):
         lease_owner="finding-test",
         fencing_token=1,
         finished_at_us=100 if run_id == RUN_ONE else 200,
-        result_type=RunnerResultTypeV2.SUCCESS,
+        result_type=RunnerResultType.SUCCESS,
         run_lifecycle=RunLifecycle.COMPLETED,
         job_state=JobState.SUCCEEDED,
         verdict=RunVerdict.BLOCK if evidence.verdict.value == "VULNERABLE" else RunVerdict.PASS,
         reason_codes=(),
-        cleanup=CleanupResultV2(schema_version="2", status=CleanupStatusV2.SUCCEEDED),
+        cleanup=CleanupResult(schema_version="2", status=CleanupStatus.SUCCEEDED),
         error=None,
         plan_fingerprint=snapshot.plan.plan_fingerprint,
         coverage_record_count=len(snapshot.plan.coverage),
@@ -65,67 +65,15 @@ def _result(run_id: str, evidence):
     )
 
 
-def test_v1_v2_finding_input_dispatch_uses_published_result_version() -> None:
-    v2_evidence = _evidence()
-    v2_result = _result("run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", v2_evidence)
-    v2_view = _view(v2_result.run_id, v2_result)
-    v2_reader = SimpleNamespace(request_snapshot=lambda _view: _input().project_snapshot)
-    v2_inputs = finding_inputs(v2_reader, v2_view)
-    assert len(v2_inputs) == 1
-    assert v2_inputs[0].evidence_id == v2_evidence.evidence_id
-    assert v2_inputs[0].verdict.value == "SAFE"
-
-    v1_reader = SimpleNamespace()
-    v1_view = SimpleNamespace(
-        publication=SimpleNamespace(result=SimpleNamespace()),
-    )
-    # The V1 branch is selected by the concrete published result type; the
-    # V1 artifact reader remains the only source of its Evidence body.
-    from tests.execution.protocol.test_runner_v1 import _runner_result
-    from jiejian.protocols import RunnerResultV1
-
-    v1_result = _runner_result()
-    assert isinstance(v1_result, RunnerResultV1)
-    v1_view.publication.result = v1_result
-    v1_view.evidence = ()
-    assert finding_inputs(v1_reader, v1_view) == ()
-
-
-def test_v1_published_evidence_projects_to_a_stable_finding_input(
-    stage1_project_factory,
-    stage23_request_factory,
-) -> None:
-    from jiejian.verification.planning import build_mutation_plan
-    from tests.execution.protocol.test_runner_v1 import _runner_result
-
-    project_path = stage1_project_factory(8765)
-    request = stage23_request_factory(project_path)
-    snapshot = request.project_snapshot
-    plan = build_mutation_plan(
-        snapshot.identities,
-        snapshot.resources,
-        snapshot.flow,
-        snapshot.contract,
-        seed=snapshot.mutation_seed,
-    )
-    case = plan.cases[0]
-    result = _runner_result()
-    evidence_id = "ev_" + "a" * 20
-    view = SimpleNamespace(
-        run=SimpleNamespace(project_id=snapshot.project_id, run_id=result.run_id),
-        publication=SimpleNamespace(result=result),
-        evidence=(SimpleNamespace(evidence_id=evidence_id, case_id=case.case_id),),
-    )
-    reader = SimpleNamespace(
-        request_snapshot=lambda _view: snapshot,
-        document=lambda _view, _path: {"cases": [case.model_dump(mode="json")]},
-        evidence_document=lambda _view, _evidence_id: {"verdict": "VULNERABLE"},
-    )
-
+def test_published_current_result_projects_to_a_stable_finding_input() -> None:
+    evidence = _evidence()
+    result = _result("run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", evidence)
+    view = _view(result.run_id, result)
+    reader = SimpleNamespace(request_snapshot=lambda _view: _input().project_snapshot)
     inputs = finding_inputs(reader, view)
     assert len(inputs) == 1
-    assert inputs[0].evidence_id == evidence_id
-    assert inputs[0].identity.finding_id().startswith("finding_")
+    assert inputs[0].evidence_id == evidence.evidence_id
+    assert inputs[0].verdict.value == "SAFE"
 
 
 def test_two_published_runs_materialize_appeared_and_disappeared_occurrences(tmp_path: Path) -> None:
@@ -176,7 +124,7 @@ def test_two_published_runs_materialize_appeared_and_disappeared_occurrences(tmp
             read=lambda run_id: views[run_id],
             request_snapshot=lambda _view: _input().project_snapshot,
         )
-        service = FindingApplicationService(lambda: StorageUnitOfWork(factory), reader)
+        service = FindingProjection(lambda: StorageUnitOfWork(factory), reader)
 
         first = service.findings_for_run(RUN_ONE)
         second = service.findings_for_run(RUN_TWO)

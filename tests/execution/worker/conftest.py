@@ -9,18 +9,18 @@ import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from jiejian.domain.lifecycle import ProjectStatus
-from jiejian.storage import (
+from product.backend.core.lifecycle import ProjectStatus
+from product.backend.infra.storage import (
     ProjectRecord,
     StorageUnitOfWork,
     create_session_factory,
     create_sqlite_engine,
     upgrade_database,
 )
-from jiejian.execution.attempts import JobAttemptService
-from jiejian.execution.models import SubmitJobV1
-from jiejian.execution.queue import JobQueueService
-from jiejian.execution.recovery import JobRecoveryService
+from product.backend.infra.runtime.jobs.attempts import JobAttempts
+from product.backend.infra.runtime.jobs.models import SubmitJob
+from product.backend.infra.runtime.jobs.queue import JobQueue
+from product.backend.infra.runtime.jobs.recovery import JobRecovery
 
 PROJECT_ID = "stage22-project"
 NOW_US = 1_790_000_000_000_000
@@ -31,11 +31,11 @@ class WorkerServices:
     database_path: Path
     engine: Engine
     session_factory: sessionmaker[Session]
-    queue: JobQueueService
-    attempts: JobAttemptService
-    recovery: JobRecoveryService
+    queue: JobQueue
+    attempts: JobAttempts
+    recovery: JobRecovery
 
-    def submit_request(self, **changes: Any) -> SubmitJobV1:
+    def submit_request(self, **changes: Any) -> SubmitJob:
         values = {
             "project_id": PROJECT_ID,
             "operation_type": "ACTIVE_RUN",
@@ -48,7 +48,7 @@ class WorkerServices:
             "available_at_us": NOW_US,
             "now_us": NOW_US,
         }
-        return SubmitJobV1(**(values | changes))
+        return SubmitJob(**(values | changes))
 
 
 @pytest.fixture
@@ -73,12 +73,12 @@ def worker_services(tmp_path: Path) -> Iterator[WorkerServices]:
         database_path=database_path,
         engine=engine,
         session_factory=factory,
-        queue=JobQueueService(uow_factory),
-        attempts=JobAttemptService(
+        queue=JobQueue(uow_factory),
+        attempts=JobAttempts(
             uow_factory,
             jitter_source=lambda _: 0,
         ),
-        recovery=JobRecoveryService(
+        recovery=JobRecovery(
             uow_factory,
             jitter_source=lambda _: 0,
         ),

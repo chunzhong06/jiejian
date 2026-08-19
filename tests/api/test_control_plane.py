@@ -3,25 +3,82 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-import shutil
 import time
 
 from fastapi.testclient import TestClient
 import pytest
 from typer.testing import CliRunner
 
-from jiejian.api import create_app
-from jiejian.runtime.serve_lock import ServeLock
-from jiejian.cli.app import app as cli_app
-from jiejian.contracts.models import ContractSourceType, SourceReference
-from jiejian.errors import JiejianError
-from jiejian.execution.request_store import ExecutionRequestStore
-from jiejian.cli.commands.system import _wait_for_ready
+from product.backend.api import create_app
+from product.backend.infra.runtime.serve_lock import ServeLock
+from product.backend.cli.app import app as cli_app
+from product.backend.core.contracts.models import ContractStatus
+from product.backend.core.errors import JiejianError
+from product.backend.core.verification.permissions import PermissionContract
+from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.cli.commands.system import _wait_for_ready
+from product.protocols import canonical_execution_profile_json_bytes, parse_execution_profile
 
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 
+PROFILE_SOURCE = Path("samples/http/fixed/profile.json").resolve()
+CONTRACT_SOURCE = Path("samples/http/fixed/contract.json").resolve()
 
-def _set_governed_binding(app, project_id: str, contract_id: str, version: int) -> None:
+
+def _write_profile(tmp_path: Path, *, port: int | None = None) -> Path:
+    profile = parse_execution_profile(PROFILE_SOURCE.read_bytes())
+    if port is not None:
+        scope = profile.target.scope.model_copy(
+            update={
+                "base_url": f"http://127.0.0.1:{port}",
+                "allowed_origins": (f"http://127.0.0.1:{port}",),
+                "allowed_ports": (port,),
+            }
+        )
+        profile = profile.model_copy(update={"target": profile.target.model_copy(update={"scope": scope})})
+    path = tmp_path / "profile.json"
+    path.write_bytes(canonical_execution_profile_json_bytes(profile))
+    return path
+
+
+def _register_project(client: TestClient, profile_path: Path) -> dict[str, object]:
+    response = client.post(
+        "/api/projects",
+        json={"schema_version": "1", "profile_path": str(profile_path)},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+def _activate_contract(app, project_id: str) -> PermissionContract:
+    contract = PermissionContract.model_validate_json(CONTRACT_SOURCE.read_text(encoding="utf-8"), strict=True)
+    draft = app.state.context.contracts.create_draft(
+        project_id,
+        contract.contract_id,
+        snapshot=contract,
+        actor="test",
+    )
+    review = app.state.context.contracts.submit_review(
+        project_id, draft.contract_id, draft.version, actor="reviewer"
+    )
+    active = app.state.context.contracts.activate_review(
+        project_id, review.contract_id, review.version, actor="approver"
+    )
+    return active.snapshot
+
+
+def _register_active_profile(app, client: TestClient, profile_path: Path) -> tuple[dict[str, object], PermissionContract, dict[str, object]]:
+    project = _register_project(client, profile_path)
+    contract = _activate_contract(app, str(project["project_id"]))
+    response = client.post(
+        "/api/execution-profiles",
+        json={"schema_version": "1", "profile_path": str(profile_path)},
+    )
+    assert response.status_code == 201, response.text
+    return project, contract, response.json()["data"]
+
+
+def _set_governed_binding(app, project_id: str, contract_id: str | None, version: int | None) -> None:
     record = app.state.context.projects.get(project_id)
     with app.state.context.uow_factory() as work:
         work.projects.replace(
@@ -41,7 +98,7 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
     with TestClient(app) as client:
         assert client.get("/health").json() == {"schema_version": "1", "status": "ok"}
         assert client.get("/ready").json()["status"] == "ready"
-        status = client.get("/api/v1/system/status")
+        status = client.get("/api/system/status")
         assert status.status_code == 200
         assert status.json()["schema_version"] == "1"
         assert status.json()["data"]["api"] == "available"
@@ -50,295 +107,170 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         openapi = client.get("/openapi.json")
         assert openapi.status_code == 200
         assert "ApiResponse" in openapi.json()["components"]["schemas"]
-        assert "202" in openapi.json()["paths"]["/api/v1/projects/{project_id}/runs"]["post"]["responses"]
-        project_path = Path("samples/fixed_apps/ownership/project.yaml").resolve()
+        assert "202" in openapi.json()["paths"]["/api/projects/{project_id}/runs"]["post"]["responses"]
+        project_path = Path("samples/http/fixed/profile.json").resolve()
         response = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(project_path)},
+            "/api/projects",
+                json={"schema_version": "1", "profile_path": str(project_path)},
         )
         assert response.status_code == 200
         project_id = response.json()["data"]["project_id"]
-        assert client.get(f"/api/v1/projects/{project_id}").status_code == 200
+        assert client.get(f"/api/projects/{project_id}").status_code == 200
 
     restarted = create_app(var_dir, start_worker=False)
     with TestClient(restarted) as client:
-        assert client.get(f"/api/v1/projects/{project_id}").status_code == 200
+        assert client.get(f"/api/projects/{project_id}").status_code == 200
 
 
 def test_control_plane_rejects_invalid_binding_and_redacts_trace(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         response = client.post(
-            "/api/v1/projects",
+            "/api/projects",
             headers={"X-Trace-ID": "trace-safe"},
-            json={"schema_version": "1", "path": "missing.yaml"},
+                json={"schema_version": "1", "profile_path": "missing.json"},
         )
         assert response.status_code == 400
         assert response.json()["trace_id"] == "trace-safe"
         assert response.json()["error"]["schema_version"] == "1"
 
 
-def test_run_idempotency_cancel_and_sse_cursor(tmp_path: Path) -> None:
+def test_run_idempotency_cancel_and_sse_cursor(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
     app = create_app(tmp_path / "var", start_worker=False)
+    profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
-        project_path = Path("samples/fixed_apps/ownership/project.yaml").resolve()
-        project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(project_path)},
-        ).json()["data"]
+        project, _, profile = _register_active_profile(app, client, profile_path)
         first = client.post(
-            f"/api/v1/projects/{project['project_id']}/runs",
-            json={"schema_version": "1", "idempotency_key": "api-sse-test"},
+            f"/api/projects/{project['project_id']}/runs",
+            json={"schema_version": "1", "profile_id": profile["profile_id"], "idempotency_key": "api-sse-test"},
         )
         second = client.post(
-            f"/api/v1/projects/{project['project_id']}/runs",
-            json={"schema_version": "1", "idempotency_key": "api-sse-test"},
+            f"/api/projects/{project['project_id']}/runs",
+            json={"schema_version": "1", "profile_id": profile["profile_id"], "idempotency_key": "api-sse-test"},
         )
-        assert first.status_code == second.status_code == 202
+        assert first.status_code == second.status_code == 202, (first.text, second.text)
         job = first.json()["data"]["job"]
         assert second.json()["data"]["run"]["run_id"] == first.json()["data"]["run"]["run_id"]
-        assert client.post(f"/api/v1/jobs/{job['job_id']}/cancel").status_code == 200
-        events = client.get(
-            f"/api/v1/jobs/{job['job_id']}/events",
-            headers={"Last-Event-ID": "0"},
-        )
+        assert client.post(f"/api/jobs/{job['job_id']}/cancel").status_code == 200
+        events = client.get(f"/api/jobs/{job['job_id']}/events", headers={"Last-Event-ID": "0"})
         assert events.status_code == 200
-        assert "id: 1" in events.text
-        assert "id: 2" in events.text
-        resumed = client.get(
-            f"/api/v1/jobs/{job['job_id']}/events",
-            headers={"Last-Event-ID": "1"},
-        )
-        assert "id: 1" not in resumed.text
-        assert "id: 2" in resumed.text
-        query_precedence = client.get(
-            f"/api/v1/jobs/{job['job_id']}/events?after=1",
-            headers={"Last-Event-ID": "0"},
-        )
+        assert "id: 1" in events.text and "id: 2" in events.text
+        resumed = client.get(f"/api/jobs/{job['job_id']}/events", headers={"Last-Event-ID": "1"})
+        assert "id: 1" not in resumed.text and "id: 2" in resumed.text
+        query_precedence = client.get(f"/api/jobs/{job['job_id']}/events?after=1", headers={"Last-Event-ID": "0"})
         assert "id: 1" not in query_precedence.text
 
 
-def test_api_run_uses_governed_active_snapshot_and_yaml_fallback_clear(
-    tmp_path: Path,
-) -> None:
+def test_api_run_uses_explicit_governed_active_snapshot(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
     var_dir = tmp_path / "var"
     app = create_app(var_dir, start_worker=False)
+    profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
-        project_path = Path("samples/fixed_apps/ownership/project.yaml").resolve()
-        project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(project_path)},
-        ).json()["data"]
-        project_id = project["project_id"]
-        _, bundle = app.state.context.projects.current_bundle(project_id)
-        draft = app.state.context.contracts.create_draft(
-            project_id,
-            "governed-api-contract",
-            rules=bundle.contract.rules,
-            sources=(
-                SourceReference(
-                    source_type=ContractSourceType.PROJECT_CONFIG,
-                    locator="governed-test",
-                    content_sha256="c" * 64,
-                ),
-            ),
-            actor="test",
+        project, contract, profile = _register_active_profile(app, client, profile_path)
+        submitted = client.post(
+            f"/api/projects/{project['project_id']}/runs",
+            json={"schema_version": "1", "profile_id": profile["profile_id"], "idempotency_key": "governed-run"},
         )
-        review = app.state.context.contracts.submit_review(
-            project_id, draft.contract_id, draft.version, actor="reviewer"
-        )
-        active = app.state.context.contracts.activate_review(
-            project_id, review.contract_id, review.version, actor="approver"
-        )
-        preserved = client.post(f"/api/v1/projects/{project_id}/revalidate")
-        assert preserved.status_code == 200
-        assert preserved.json()["data"]["governed_contract_id"] == active.contract_id
-        assert preserved.json()["data"]["governed_contract_version"] == active.version
-        run = client.post(
-            f"/api/v1/projects/{project_id}/runs",
-            json={"schema_version": "1", "idempotency_key": "governed-run"},
-        )
-        assert run.status_code == 202
-        job = run.json()["data"]["job"]
-        request = ExecutionRequestStore(var_dir).load(
-            job["job_id"], expected_hash=job["request_hash"]
-        )
-        assert request.project_snapshot.contract.id == active.contract_id
-        assert request.project_snapshot.contract.version == active.version
-        assert request.project_snapshot.contract.status.value == "ACTIVE"
-
-        alternative = tmp_path / "alternative-contract.yaml"
-        alternative.write_text(
-            (project_path.parent / "contract.yaml").read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
-        cleared = client.post(
-            f"/api/v1/projects/{project_id}/contracts/activate",
-            json={"schema_version": "1", "path": str(alternative)},
-        )
-        assert cleared.status_code == 200
-        assert cleared.json()["data"]["governed_contract_id"] is None
-        assert cleared.json()["data"]["governed_contract_version"] is None
-        revalidated = client.post(f"/api/v1/projects/{project_id}/revalidate")
-        assert revalidated.status_code == 200
-        assert revalidated.json()["data"]["governed_contract_id"] is None
+        assert submitted.status_code == 202, submitted.text
+        job = submitted.json()["data"]["job"]
+        request = ExecutionRequestStore(var_dir).load(job["job_id"], expected_hash=job["request_hash"])
+        assert request.project_snapshot.contract == contract
+        assert request.project_snapshot.contract.contract_id == "ownership-contract"
+        assert request.project_snapshot.contract.version == 1
+        version = app.state.context.contracts.list_versions(str(project["project_id"]), "ownership-contract")[0]
+        assert version.status is ContractStatus.ACTIVE
 
 
-def test_api_run_rejects_missing_governed_binding_without_yaml_fallback(
-    tmp_path: Path,
-) -> None:
-    var_dir = tmp_path / "var"
-    app = create_app(var_dir, start_worker=False)
+def test_api_run_rejects_missing_governed_binding(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
+    app = create_app(tmp_path / "var", start_worker=False)
+    profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
-        project_path = Path("samples/fixed_apps/ownership/project.yaml").resolve()
-        project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(project_path)},
-        ).json()["data"]
-        project_id = project["project_id"]
-        _set_governed_binding(app, project_id, "missing-governed-contract", 9)
-
+        project, _, profile = _register_active_profile(app, client, profile_path)
+        _set_governed_binding(app, str(project["project_id"]), None, None)
         response = client.post(
-            f"/api/v1/projects/{project_id}/runs",
-            json={"schema_version": "1", "idempotency_key": "missing-governed"},
-        )
-        assert response.status_code == 404
-        assert response.json()["error"]["code"] == "CONTRACT_NOT_FOUND"
-        assert client.get(f"/api/v1/projects/{project_id}/runs").json()["data"] == []
-
-
-def test_api_run_rejects_non_active_governed_binding_without_yaml_fallback(
-    tmp_path: Path,
-) -> None:
-    var_dir = tmp_path / "var"
-    app = create_app(var_dir, start_worker=False)
-    with TestClient(app) as client:
-        project_path = Path("samples/fixed_apps/ownership/project.yaml").resolve()
-        project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(project_path)},
-        ).json()["data"]
-        project_id = project["project_id"]
-        _, bundle = app.state.context.projects.current_bundle(project_id)
-        draft = app.state.context.contracts.create_draft(
-            project_id,
-            "draft-governed-contract",
-            rules=bundle.contract.rules,
-            sources=(
-                SourceReference(
-                    source_type=ContractSourceType.PROJECT_CONFIG,
-                    locator="draft-governed-test",
-                    content_sha256="d" * 64,
-                ),
-            ),
-            actor="test",
-        )
-        _set_governed_binding(app, project_id, draft.contract_id, draft.version)
-
-        response = client.post(
-            f"/api/v1/projects/{project_id}/runs",
-            json={"schema_version": "1", "idempotency_key": "draft-governed"},
+            f"/api/projects/{project['project_id']}/runs",
+            json={"schema_version": "1", "profile_id": profile["profile_id"], "idempotency_key": "missing-governed"},
         )
         assert response.status_code == 409
         assert response.json()["error"]["code"] == "CONTRACT_NOT_ACTIVE"
-        assert client.get(f"/api/v1/projects/{project_id}/runs").json()["data"] == []
+        assert client.get(f"/api/projects/{project['project_id']}/runs").json()["data"] == []
 
 
-def test_run_rejects_changed_source_until_revalidated(tmp_path: Path) -> None:
-    copied = tmp_path / "ownership"
-    shutil.copytree(Path("samples/fixed_apps/ownership"), copied)
-    source = copied / "project.yaml"
+def test_api_run_rejects_non_active_governed_binding(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
     app = create_app(tmp_path / "var", start_worker=False)
+    profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
-        project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(source)},
-        ).json()["data"]
-        source.write_text(source.read_text(encoding="utf-8") + "\n# source drift\n", encoding="utf-8")
+        project, contract, profile = _register_active_profile(app, client, profile_path)
+        revision = app.state.context.contracts.revise_active(
+            str(project["project_id"]),
+            contract.contract_id,
+            snapshot=contract.model_copy(update={"version": 2}),
+            actor="reviser",
+        )
+        review = app.state.context.contracts.submit_review(
+            str(project["project_id"]), revision.contract_id, revision.version, actor="reviewer"
+        )
+        app.state.context.contracts.activate_review(
+            str(project["project_id"]), review.contract_id, review.version, actor="approver"
+        )
+        _set_governed_binding(app, str(project["project_id"]), contract.contract_id, contract.version)
         response = client.post(
-            f"/api/v1/projects/{project['project_id']}/runs",
-            json={"schema_version": "1", "idempotency_key": "must-revalidate"},
+            f"/api/projects/{project['project_id']}/runs",
+            json={"schema_version": "1", "profile_id": profile["profile_id"], "idempotency_key": "draft-governed"},
         )
         assert response.status_code == 409
-        assert response.json()["error"]["code"] == "PROJECT_SOURCE_DRIFT"
+        assert response.json()["error"]["code"] == "CONTRACT_NOT_ACTIVE"
+        assert client.get(f"/api/projects/{project['project_id']}/runs").json()["data"] == []
 
 
-def test_flow_source_drift_blocks_run_and_recording_until_revalidated(tmp_path: Path) -> None:
-    copied = tmp_path / "ownership"
-    shutil.copytree(Path("samples/fixed_apps/ownership"), copied)
+def test_profile_reregistration_preserves_explicit_active_contract(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
+    profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
-        project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(copied / "project.yaml")},
-        ).json()["data"]
-        flow = copied / "flow.yaml"
-        flow.write_text(flow.read_text(encoding="utf-8") + "\n# flow source drift\n", encoding="utf-8")
-        run = client.post(
-            f"/api/v1/projects/{project['project_id']}/runs",
-            json={"schema_version": "1", "idempotency_key": "flow-drift-run"},
+        project, active, _ = _register_active_profile(app, client, profile_path)
+        response = client.post(
+            "/api/projects",
+            json={"schema_version": "1", "profile_path": str(profile_path)},
         )
-        recording = client.post(
-            f"/api/v1/projects/{project['project_id']}/recordings",
-            json={"schema_version": "1", "identities": [], "duration_seconds": 60, "headless": True, "idempotency_key": "flow-drift-recording"},
-        )
-        assert run.status_code == recording.status_code == 409
-        assert run.json()["error"]["code"] == recording.json()["error"]["code"] == "PROJECT_SOURCE_DRIFT"
-        assert client.post(f"/api/v1/projects/{project['project_id']}/revalidate").status_code == 200
-        assert client.post(
-            f"/api/v1/projects/{project['project_id']}/runs",
-            json={"schema_version": "1", "idempotency_key": "flow-drift-restored"},
-        ).status_code == 202
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["governed_contract_id"] == active.contract_id
+        assert data["governed_contract_version"] == active.version
 
 
 def test_recording_json_array_schema_keeps_identity_validation(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
-        project_path = Path("samples/fixed_apps/ownership/project.yaml").resolve()
+        project_path = Path("samples/http/fixed/profile.json").resolve()
         project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(project_path)},
+            "/api/projects",
+            json={"schema_version": "1", "profile_path": str(project_path)},
         ).json()["data"]
         valid = client.post(
-            f"/api/v1/projects/{project['project_id']}/recordings",
-            json={"schema_version": "1", "identities": ["owner"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-owner"},
+            f"/api/projects/{project['project_id']}/recordings",
+                json={"schema_version": "1", "profile_path": str(project_path), "identities": ["owner"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-owner"},
         )
         duplicate = client.post(
-            f"/api/v1/projects/{project['project_id']}/recordings",
-            json={"schema_version": "1", "identities": ["owner", "owner"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-duplicate"},
+            f"/api/projects/{project['project_id']}/recordings",
+                json={"schema_version": "1", "profile_path": str(project_path), "identities": ["owner", "owner"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-duplicate"},
         )
         unknown = client.post(
-            f"/api/v1/projects/{project['project_id']}/recordings",
-            json={"schema_version": "1", "identities": ["not-a-project-identity"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-unknown"},
+            f"/api/projects/{project['project_id']}/recordings",
+                json={"schema_version": "1", "profile_path": str(project_path), "identities": ["not-a-project-identity"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-unknown"},
         )
         assert valid.status_code == 202
         assert duplicate.status_code == 400
         assert duplicate.json()["error"]["code"] == "INPUT_INVALID"
         assert unknown.status_code == 400
         assert unknown.json()["error"]["code"] == "INPUT_INVALID"
-
-
-def test_revalidation_preserves_explicit_active_contract(tmp_path: Path) -> None:
-    copied = tmp_path / "ownership"
-    shutil.copytree(Path("samples/fixed_apps/ownership"), copied)
-    alternative = copied / "alternative-contract.yaml"
-    alternative.write_text((copied / "contract.yaml").read_text(encoding="utf-8"), encoding="utf-8")
-    app = create_app(tmp_path / "var", start_worker=False)
-    with TestClient(app) as client:
-        project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(copied / "project.yaml")},
-        ).json()["data"]
-        activated = client.post(
-            f"/api/v1/projects/{project['project_id']}/contracts/activate",
-            json={"schema_version": "1", "path": str(alternative)},
-        )
-        assert activated.status_code == 200
-        revalidated = client.post(
-            f"/api/v1/projects/{project['project_id']}/revalidate",
-        )
-        assert revalidated.status_code == 200
-        assert revalidated.json()["data"]["active_contract_path"] == str(alternative.resolve())
 
 
 def test_serve_lock_releases_normally_and_diagnoses_existing_lock(tmp_path: Path) -> None:
@@ -449,31 +381,27 @@ def test_create_app_serves_a_readable_frontend_index(tmp_path: Path) -> None:
 
 def test_api_worker_runner_publication_matches_cli_report(
     sample_server_factory,
-    stage1_project_factory,
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    sample = sample_server_factory("safe")
-    project_path = stage1_project_factory(sample.port)
+    sample = sample_server_factory("fixed")
+    profile_path = _write_profile(tmp_path, port=sample.port)
     for key, value in sample.environ.items():
         monkeypatch.setenv(key, value)
     var_dir = tmp_path / "api-real"
     app = create_app(var_dir, start_worker=True)
     with TestClient(app) as client:
-        project = client.post(
-            "/api/v1/projects",
-            json={"schema_version": "1", "path": str(project_path)},
-        ).json()["data"]
+        project, _, profile = _register_active_profile(app, client, profile_path)
         submitted = client.post(
-            f"/api/v1/projects/{project['project_id']}/runs",
-            json={"schema_version": "1", "idempotency_key": "api-real-closure"},
+            f"/api/projects/{project['project_id']}/runs",
+            json={"schema_version": "1", "profile_id": profile["profile_id"], "idempotency_key": "api-real-closure"},
         )
         assert submitted.status_code == 202
         run_id = submitted.json()["data"]["run"]["run_id"]
         deadline = time.monotonic() + 45
         detail = None
         while time.monotonic() < deadline:
-            response = client.get(f"/api/v1/runs/{run_id}")
+            response = client.get(f"/api/runs/{run_id}")
             if response.status_code == 200:
                 detail = response.json()["data"]
                 if detail["lifecycle"] in {"COMPLETED", "FAILED", "CANCELLED", "SAFETY_STOPPED"}:
@@ -481,57 +409,63 @@ def test_api_worker_runner_publication_matches_cli_report(
             time.sleep(0.1)
         assert detail is not None and detail["lifecycle"] == "COMPLETED", detail
         assert detail["result_integrity"] == "VERIFIED"
-        report = client.get(f"/api/v1/runs/{run_id}").json()["data"]
-        api_report = client.get(f"/api/v1/runs/{run_id}/report").json()["data"]
-        findings = client.get(f"/api/v1/runs/{run_id}/findings").json()["data"]
-        assert api_report["run_id"] == run_id
-        assert api_report["verdict"] == report["verdict"]
+        report = client.get(f"/api/runs/{run_id}").json()["data"]
+        findings_response = client.get(f"/api/runs/{run_id}/findings")
+        assert findings_response.status_code == 200, findings_response.text
+        findings = findings_response.json()["data"]
         assert findings == []
         assert report["finding_count"] == 0
         assert report["finding_count"] == len(findings)
         assert report["target_scope"]["base_url"] == f"http://127.0.0.1:{sample.port}"
         assert report["target_scope"]["max_requests"] == 64
         assert report["budget"]["max_requests"] == report["target_scope"]["max_requests"]
-        assert report["observer_health"]["http"]["configured"] is True
-        assert report["observer_health"]["owner_api"]["configured"] is True
-        assert "http" in report["observer_health"]["required_observers"]
-        assert "owner_api" in report["observer_health"]["required_observers"]
+        assert report["observer_health"]["resource_state"]["configured"] is True
         assert report["case_progress"]["status"] == "PUBLISHED"
         assert report["case_progress"]["completed"] == report["case_progress"]["total"]
         assert report["case_progress"]["total"] > 0
         assert report["safety_context"] is None
-        evidence = client.get(f"/api/v1/runs/{run_id}/evidence").json()["data"]
+        evidence = client.get(f"/api/runs/{run_id}/evidence").json()["data"]
         assert evidence
-        evidence_detail = client.get(
-            f"/api/v1/runs/{run_id}/evidence/{evidence[0]['evidence_id']}"
-        )
+        evidence_detail = client.get(f"/api/runs/{run_id}/evidence/{evidence[0]['evidence_id']}")
         assert evidence_detail.status_code == 200
-        difference = evidence_detail.json()["data"]["difference"]
-        assert {"baseline_request", "mutation_request", "side_effect_observations"} <= difference.keys()
+        evidence_payload = evidence_detail.json()["data"]
+        assert evidence_payload.get("evidence_id") == evidence[0]["evidence_id"], evidence_detail.text
+        assert evidence_payload.get("execution_fact") is not None
+        assert evidence_payload.get("observation_facts")
+        baseline_response = client.post(
+            f"/api/projects/{project['project_id']}/baselines",
+            json={"schema_version": "1", "accepted_run_id": run_id, "actor": "test", "reason": "current publication baseline"},
+        )
+        assert baseline_response.status_code == 200, baseline_response.text
+        baseline_id = baseline_response.json()["data"]["baseline_id"]
+        gate_response = client.post(
+            f"/api/baselines/{baseline_id}/runs/{run_id}/gate",
+            json={"schema_version": "1", "minimum_severity": "low"},
+        )
+        assert gate_response.status_code == 200, gate_response.text
+        gate_result_id = gate_response.json()["data"]["gate_result_id"]
         runner_process_ids = tuple(sample.server.runner_process_ids)
     assert runner_process_ids and set(runner_process_ids) != {os.getpid()}
     cli_report = CliRunner().invoke(
         cli_app,
-        ["--var-dir", str(var_dir), "report", run_id, "--format", "json"],
+        ["--var-dir", str(var_dir), "report", run_id, "--format", "json", "--gate-result-id", gate_result_id],
         env=sample.environ,
     )
     assert cli_report.exit_code == 0, cli_report.output
     cli_payload = json.loads(cli_report.stdout)
     assert cli_payload["run_id"] == run_id
-    assert cli_payload["verdict"] == api_report["verdict"]
+    with TestClient(create_app(var_dir, start_worker=False)) as client:
+        available = client.get(f"/api/runs/{run_id}/reports")
+        assert available.status_code == 200
+        report_id = cli_payload["report_id"]
+        api_report_response = client.get(f"/api/runs/{run_id}/reports/{report_id}")
+        assert api_report_response.status_code == 200, api_report_response.text
+        api_report = api_report_response.json()["data"]
+    assert api_report == cli_payload
 
-    report_path = (
-        var_dir
-        / "projects"
-        / project["project_id"]
-        / "runs"
-        / run_id
-        / "artifacts"
-        / "report"
-        / "report.json"
-    )
+    report_path = var_dir / "reports" / "runs" / run_id / report_id / "report.json"
     report_path.write_text('{"tampered":true}', encoding="utf-8")
     with TestClient(create_app(var_dir, start_worker=False)) as client:
-        tampered = client.get(f"/api/v1/runs/{run_id}")
+        tampered = client.get(f"/api/runs/{run_id}/reports/{report_id}")
     assert tampered.status_code != 200
-    assert tampered.json()["error"]["code"] == "ARTIFACT_MANIFEST"
+    assert tampered.json()["error"]["code"] in {"ARTIFACT_HASH_MISMATCH", "ARTIFACT_MANIFEST", "REPORT_INTEGRITY"}

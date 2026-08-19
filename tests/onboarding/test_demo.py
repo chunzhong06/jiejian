@@ -1,24 +1,35 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import sys
 import threading
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
-from jiejian.api import create_app
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.onboarding.demo import DemoRuntimeManager
-from jiejian.onboarding.models import OnboardingDemoStatus
+from product.backend.api import create_app
+from product.backend.core.errors import ErrorCode, JiejianError
+import product.backend.workflows.onboarding.demo as demo_module
+from product.backend.workflows.onboarding.demo import DemoRuntimeSupervisor
+from product.backend.workflows.onboarding.demo_target import create_demo_target_server
+from product.backend.workflows.onboarding.models import OnboardingDemoStatus, OnboardingSession
+from product.backend.workflows.onboarding.session import OnboardingSessionStore
+from product.backend.workflows.onboarding.workflow import OnboardingWorkflow
 
 
 class FakeVault:
     def __init__(self) -> None:
         self.cleared: list[str] = []
+        self.values: dict[str, dict[str, str]] = {}
+
+    def put(self, session_id: str, values: dict[str, str]) -> None:
+        self.values[session_id] = dict(values)
 
     def clear_session(self, session_id: str) -> None:
         self.cleared.append(session_id)
@@ -33,7 +44,9 @@ class FakeOnboarding:
             comparison_secret_ref="env:JIEJIAN_ONB_DEMO_COMPARISON",
         )
         self.credentials: tuple[str, str] | None = None
+        self.demo_credentials: tuple[str, str, str] | None = None
         self.updated = None
+        self.demo_calls: list[str] = []
 
     def create_session(self, source: Path, project_name: str):
         assert source.name == "source"
@@ -45,6 +58,14 @@ class FakeOnboarding:
         self.credentials = (primary, comparison)
         self.session.revision = 1
 
+    def put_demo_credentials(self, session_id: str, owner: str, attacker: str, peer: str):
+        assert session_id == self.session.session_id
+        assert owner != attacker
+        assert owner != peer
+        assert attacker != peer
+        self.demo_credentials = (owner, attacker, peer)
+        self.session.revision = 1
+
     def get_session(self, session_id: str):
         assert session_id == self.session.session_id
         return self.session
@@ -54,12 +75,13 @@ class FakeOnboarding:
         self.updated = update
         return self.session
 
-    def quick_check(self, session_id: str):
+    def demo_check(self, session_id: str, variant: str):
+        self.demo_calls.append(variant)
         return SimpleNamespace(
             session=self.session,
-            project_id="onboarding_demo",
-            run_id="run_0123456789abcdef0123456789abcdef",
-            job_id="job_0123456789abcdef0123456789abcdef",
+            project_id=f"onboarding_demo_{variant}",
+            run_id=f"run_{'0' * 15}{len(self.demo_calls):x}",
+            job_id=f"job_{'0' * 15}{len(self.demo_calls):x}",
         )
 
 
@@ -87,11 +109,14 @@ class FakeProcess:
         self.killed = True
 
 
-def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path) -> None:
+def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path, monkeypatch) -> None:
     onboarding = FakeOnboarding()
     vault = FakeVault()
     calls: list[tuple[list[str], dict]] = []
     processes: list[FakeProcess] = []
+    secret_values = ("owner-demo-sentinel", "attacker-demo-sentinel", "peer-demo-sentinel")
+    generated = iter(secret_values)
+    monkeypatch.setattr(demo_module.secrets, "token_urlsafe", lambda _size: next(generated))
 
     def popen(command, **kwargs):
         calls.append((command, kwargs))
@@ -99,7 +124,7 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
         processes.append(process)
         return process
 
-    manager = DemoRuntimeManager(
+    manager = DemoRuntimeSupervisor(
         onboarding,
         var_dir=tmp_path / "var",
         base_environment={"PATH": "path", "JIEJIAN_OTHER_SECRET": "not-for-demo"},
@@ -107,7 +132,7 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
         popen=popen,
     )
     results: list[OnboardingDemoStatus] = []
-    threads = [threading.Thread(target=lambda: results.append(manager.start())) for _ in range(2)]
+    threads = [threading.Thread(target=lambda: results.append(manager.start("fixed"))) for _ in range(2)]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -119,20 +144,49 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
         sys.executable,
         "-B",
         "-m",
-        "jiejian.sample_app",
+        "product.backend.workflows.onboarding.demo_target",
         "--variant",
-        "vulnerable",
+        "fixed",
         "--port",
         "0",
     ]
     assert kwargs["shell"] is False
     assert kwargs["stdin"] is not None
-    assert set(kwargs["env"]) == {"PATH", "PYTHONDONTWRITEBYTECODE", "PYTHONUTF8", "PYTHONPATH", "JIEJIAN_SAMPLE_OWNER_TOKEN", "JIEJIAN_SAMPLE_ATTACKER_TOKEN"}
+    assert set(kwargs["env"]) == {"PATH", "PYTHONDONTWRITEBYTECODE", "PYTHONUTF8", "JIEJIAN_DEMO_OWNER_TOKEN", "JIEJIAN_DEMO_ATTACKER_TOKEN", "JIEJIAN_DEMO_PEER_TOKEN"}
+    assert kwargs["env"]["JIEJIAN_DEMO_ATTACKER_TOKEN"] != kwargs["env"]["JIEJIAN_DEMO_PEER_TOKEN"]
+    assert onboarding.demo_credentials == secret_values
     assert "JIEJIAN_OTHER_SECRET" not in kwargs["env"]
     assert results[0].run_id == results[1].run_id
     assert manager.stop().status == "stopped"
-    assert vault.cleared == []
+    assert vault.cleared == [onboarding.session.session_id]
     assert processes[0].stdout.closed
+
+
+def test_put_demo_credentials_rejects_duplicate_peer_without_writing_vault(tmp_path: Path) -> None:
+    vault = FakeVault()
+    var_dir = tmp_path / "var"
+    workflow = OnboardingWorkflow(
+        var_dir=var_dir,
+        vault=vault,
+        projects=object(),
+        contracts=object(),
+        execution=object(),
+    )
+    session = OnboardingSession(
+        session_id="onb_0123456789abcdef0123456789abcdef",
+        source_path=str(tmp_path),
+        project_name="界鉴内置演示",
+        primary_secret_ref="env:JIEJIAN_ONB_DEMO_PRIMARY",
+        comparison_secret_ref="env:JIEJIAN_ONB_DEMO_COMPARISON",
+        project_id="onboarding_0123456789abcdef0123456789abcdef",
+    )
+    OnboardingSessionStore(var_dir).create(session)
+
+    with pytest.raises(JiejianError) as raised:
+        workflow.put_demo_credentials(session.session_id, "owner", "attacker", "attacker")
+
+    assert raised.value.code == ErrorCode.ONBOARDING_CREDENTIALS_INVALID
+    assert vault.values == {}
 
 
 def test_demo_unexpected_exit_becomes_failed_and_closes_stdout(tmp_path: Path) -> None:
@@ -145,14 +199,14 @@ def test_demo_unexpected_exit_becomes_failed_and_closes_stdout(tmp_path: Path) -
         process = FakeProcess("http://127.0.0.1:43123\n")
         return process
 
-    manager = DemoRuntimeManager(
+    manager = DemoRuntimeSupervisor(
         onboarding,
         var_dir=tmp_path / "var",
         base_environment={"PATH": "path"},
         secret_vault=vault,
         popen=popen,
     )
-    assert manager.start().status == "running"
+    assert manager.start("fixed").status == "running"
     assert process is not None
     process.exit_code = 17
 
@@ -180,7 +234,7 @@ def test_demo_api_status_does_not_report_exited_process_as_running(tmp_path: Pat
     )
 
     with TestClient(app) as client:
-        response = client.get("/api/v1/onboarding/demo")
+        response = client.get("/api/onboarding/demo")
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "failed"
@@ -196,7 +250,7 @@ def test_demo_fake_ready_timeout_is_stable_and_cleans_secret(tmp_path: Path) -> 
     def popen(command, **kwargs):
         return FakeProcess("")
 
-    manager = DemoRuntimeManager(
+    manager = DemoRuntimeSupervisor(
         onboarding,
         var_dir=tmp_path / "var",
         base_environment=dict(os.environ),
@@ -204,7 +258,7 @@ def test_demo_fake_ready_timeout_is_stable_and_cleans_secret(tmp_path: Path) -> 
         popen=popen,
     )
     with pytest.raises(JiejianError) as raised:
-        manager.start()
+        manager.start("fixed")
     assert raised.value.code == ErrorCode.ONBOARDING_DEMO_FAILED
     assert onboarding.session.session_id in vault.cleared
     assert manager.status().status == "failed"
@@ -212,13 +266,13 @@ def test_demo_fake_ready_timeout_is_stable_and_cleans_secret(tmp_path: Path) -> 
 
 def test_demo_real_sample_ready_and_stop_without_http(tmp_path: Path) -> None:
     onboarding = FakeOnboarding()
-    manager = DemoRuntimeManager(
+    manager = DemoRuntimeSupervisor(
         onboarding,
         var_dir=tmp_path / "var",
         base_environment=dict(os.environ),
         secret_vault=FakeVault(),
     )
-    started = manager.start()
+    started = manager.start("fixed")
     assert started.status == "running"
     assert started.message == "演示数据，不代表真实项目；检查已排队。"
     stopped = manager.stop()
@@ -229,14 +283,100 @@ def test_demo_real_sample_ready_and_stop_without_http(tmp_path: Path) -> None:
 def test_demo_api_start_worker_false_only_queues_and_hides_process_details(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
-        response = client.post("/api/v1/onboarding/demo/start")
+        response = client.post("/api/onboarding/demo/start", json={"schema_version": "1", "variant": "fixed"})
         assert response.status_code == 200, response.text
         payload = response.json()["data"]
         assert payload["status"] == "running"
         assert payload["demo_data"] is True
+        assert payload["variant"] == "fixed"
         assert payload["message"] == "演示数据，不代表真实项目；检查已排队。"
         assert "pid" not in response.text.lower()
         assert "token" not in response.text.lower()
-        assert "jiejian.sample_app" not in response.text
-        assert client.get("/api/v1/onboarding/demo").json()["data"]["run_id"] == payload["run_id"]
-        assert client.post("/api/v1/onboarding/demo/stop").json()["data"]["status"] == "stopped"
+        assert "product.backend.workflows.onboarding.demo_target" not in response.text
+        assert client.get("/api/onboarding/demo").json()["data"]["run_id"] == payload["run_id"]
+        repeated = client.post("/api/onboarding/demo/start", json={"schema_version": "1", "variant": "fixed"}).json()["data"]
+        assert (repeated["project_id"], repeated["run_id"], repeated["job_id"]) == (payload["project_id"], payload["run_id"], payload["job_id"])
+        switched = client.post("/api/onboarding/demo/start", json={"schema_version": "1", "variant": "vulnerable"}).json()["data"]
+        assert switched["variant"] == "vulnerable"
+        assert switched["run_id"] != payload["run_id"]
+        assert client.post("/api/onboarding/demo/stop").json()["data"]["status"] == "stopped"
+        assert client.post("/api/onboarding/demo/stop").json()["data"]["status"] == "stopped"
+
+
+def test_demo_start_requires_versioned_variant_body(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "var", start_worker=False)
+    with TestClient(app) as client:
+        assert client.post("/api/onboarding/demo/start").status_code == 422
+        assert client.post("/api/onboarding/demo/start", json={"schema_version": "1", "variant": "unknown"}).status_code == 422
+
+
+def test_demo_switches_variant_without_reusing_previous_process_or_run(tmp_path: Path) -> None:
+    onboarding = FakeOnboarding()
+    processes: list[FakeProcess] = []
+
+    def popen(command, **kwargs):
+        process = FakeProcess(f"http://127.0.0.1:{43123 + len(processes)}\n")
+        processes.append(process)
+        return process
+
+    manager = DemoRuntimeSupervisor(
+        onboarding,
+        var_dir=tmp_path / "var",
+        base_environment={"PATH": "path"},
+        secret_vault=FakeVault(),
+        popen=popen,
+    )
+    fixed = manager.start("fixed")
+    vulnerable = manager.start("vulnerable")
+
+    assert len(processes) == 2
+    assert processes[0].terminated is True
+    assert fixed.variant == "fixed"
+    assert vulnerable.variant == "vulnerable"
+    assert fixed.run_id != vulnerable.run_id
+    assert onboarding.demo_calls == ["fixed", "vulnerable"]
+
+
+@pytest.mark.parametrize("variant", ("fixed", "vulnerable", "inconclusive"))
+def test_demo_target_three_variants_have_distinct_observable_semantics(variant: str) -> None:
+    tokens = {"owner": "owner-direct", "attacker": "attacker-direct", "peer": "peer-direct"}
+    server = create_demo_target_server(variant=variant, port=0, tokens=tokens)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+
+    def call(path: str, *, token: str, method: str = "GET", body: dict | None = None, headers: dict[str, str] | None = None):
+        request_headers = {"Authorization": f"Bearer {token}", **(headers or {})}
+        request = Request(
+            base + path,
+            data=None if body is None else json.dumps(body).encode("utf-8"),
+            headers=request_headers,
+            method=method,
+        )
+        try:
+            with urlopen(request, timeout=3) as response:
+                return response.status, json.loads(response.read() or b"{}")
+        except HTTPError as error:
+            return error.code, json.loads(error.read() or b"{}")
+
+    try:
+        before_status, before = call("/owner/resources/owner-resource", token=tokens["owner"])
+        patch_status, _ = call(
+            "/resources/owner-resource",
+            token=tokens["attacker"],
+            method="PATCH",
+            body={"value": f"changed-{variant}"},
+            headers={"Content-Type": "application/json"},
+        )
+        after_status, after = call("/owner/resources/owner-resource", token=tokens["owner"])
+        assert patch_status == 403
+        if variant == "inconclusive":
+            assert before_status == after_status == 503
+        else:
+            assert before_status == after_status == 200
+            assert (after["value"] == before["value"]) is (variant == "fixed")
+        assert call("/reset", token=tokens["owner"], method="POST", headers={"X-Jiejian-Test-Mode": "1"})[0] == 204
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)

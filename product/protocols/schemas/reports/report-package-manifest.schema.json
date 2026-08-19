@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jiejian/reports/report-package-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "report_id", "run_id", "gate_result_id", "report_sha256", "files"],
+  "properties": {
+    "schema_version": {"const": "2"},
+    "report_id": {"type": "string", "pattern": "^report_[0-9a-f]{32}$"},
+    "run_id": {"type": "string", "pattern": "^run_[0-9a-f]{32}$"},
+    "gate_result_id": {"type": "string", "pattern": "^gate_[0-9a-f]{32}$"},
+    "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "files": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {"type": "object", "additionalProperties": false, "required": ["schema_version", "path", "byte_count", "sha256"], "properties": {
+        "schema_version": {"const": "2"}, "path": {"enum": ["report.json", "report.html", "report.sarif.json", "report.junit.xml"]},
+        "byte_count": {"type": "integer", "minimum": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }}
+    }
+  }
+}

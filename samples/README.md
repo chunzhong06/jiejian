@@ -1,32 +1,49 @@
-# 本机样例
+# 官方 Samples
 
-`fixed_apps/permissions_v2/`、`vulnerable_apps/permissions_v2/` 和 `inconclusive_apps/permissions_v2/` 是阶段 6.2 的 V2 权限关系规划样例。三套目录的 `contract.json` 与 `profile.json` 语义分别相同；`scenario.json` 和 `truth.json` 只描述变体与预期观察，不是 V1 `project.yaml`，也不接入 Runner V1。
+Samples 是界鉴随仓库提供的可重复 HTTP Target、权限契约和执行配置，供开发者验证真实副作用、观察证据和检查结果。当前只提供 Web Target。
 
-样例进程仅绑定 `127.0.0.1`，通过以下模块入口启动：
+## 三态权限检查 Golden
+
+界鉴提供三套同一安全意图的权限检查 Golden：
+
+- `fixed`：接口拒绝攻击者修改，真实资源没有变化，预期为 PASS。
+- `vulnerable`：接口表面拒绝，但真实资源发生变化，预期为 BLOCK。
+- `inconclusive`：必需的资源状态观察不可用，预期为 INCONCLUSIVE。
+
+Ownership 只是这个示例中的一种关系场景，不是独立的产品或 Sample 家族。更复杂的 tenant、department、role、hierarchy、workflow、batch、异步和多观察器能力由 Core、Coverage 与 Observer 定向测试保护。
+
+每个 Bundle 位于 `samples/http/{fixed|vulnerable|inconclusive}/`，包含：
+
+- `contract.json`：完整 PermissionContract，描述 attacker 对 owner-resource 执行 modify 时的 DENY 意图。
+- `profile.json`：当前正式 Web 执行配置。
+- `scenario.json`：Target、观察器和验证条件的说明。
+- `truth.json`：测试在产品真实执行和发布结果完成后才读取的外部预期；产品不会读取它来决定 Verdict。
+
+Target 真源为 `samples/http/target/server.py`。三个 Bundle 使用固定回环端口 `8865`、`8866`、`8867`；产品控制面默认使用 `8765`，两者不会抢占端口。Target 只绑定 `127.0.0.1`，reset 只接受回环请求和 `X-Jiejian-Test-Mode: 1`。
+
+## 运行 Target
+
+从仓库根目录启动一个变体时，使用本机会话中的临时不透明凭据：
 
 ```powershell
-$env:PYTHONDONTWRITEBYTECODE='1'
-& 'D:\Miniconda\envs\jiejian_env\python.exe' -B -m jiejian.permission_sample_app --variant fixed --port 8765
+$env:JIEJIAN_AUTHORIZATION_OWNER_TOKEN = '<temporary opaque value>'
+$env:JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN = '<temporary opaque value>'
+$env:JIEJIAN_AUTHORIZATION_PEER_TOKEN = '<temporary opaque value>'
+$env:JIEJIAN_AUTHORIZATION_OWNER_OBSERVER = '<temporary opaque value>'
+$env:PYTHONDONTWRITEBYTECODE = '1'
+python -B -m samples.http.target.server --variant vulnerable --port 8866
 ```
 
-`fixed` 严格执行权限和原子批量语义，`vulnerable` 保留可观测的越权/部分副作用缺陷，`inconclusive` 使 `owner_api` 返回稳定 503。Profile 可由后端 `PermissionExecutionService` 注册并由独立 Worker/Runner V2 执行；三者仍只绑定回环地址，不代表阶段 7 报告已实现。
+Target 启动后，可在已完成项目登记、契约治理和 Profile 准备的开发环境中，按启动输出提供的本机 CLI 调用方式运行对应 Profile。不要把上面的命令当作绕过 Contract Governance 的 Quick Start；`jiejian run` 不会自动激活契约。
 
-阶段 6.3 的配对测试为 fixed/vulnerable 使用测试临时目录中的 `resource_state` SQLite 数据源，通过 `resource-state` 固定观察模板比较 BEFORE/AFTER envelope。它验证 HTTP 403 后是否发生数据库副作用；数据库路径和 secret 只存在于测试进程环境，不写入这些资产。
+## 预期结果与安全限制
 
-正式 Profile 入口需要先在当前 PowerShell 会话设置临时、不落盘的凭据值，再启动样例。所需环境变量为 `JIEJIAN_PERMISSION_MEMBER_A`、`JIEJIAN_PERMISSION_MEMBER_A2`、`JIEJIAN_PERMISSION_MEMBER_B`、`JIEJIAN_PERMISSION_DEPT_ADMIN_A`、`JIEJIAN_PERMISSION_DEPT_ADMIN_A2`、`JIEJIAN_PERMISSION_TENANT_ADMIN_A`、`JIEJIAN_PERMISSION_PEER_A` 和 `JIEJIAN_PERMISSION_OWNER_OBSERVER`。启动示例：
+一次完整的当前执行链应形成：
 
-```powershell
-$env:JIEJIAN_PERMISSION_MEMBER_A = '<temporary opaque value>'
-$env:JIEJIAN_PERMISSION_MEMBER_A2 = '<temporary opaque value>'
-$env:JIEJIAN_PERMISSION_MEMBER_B = '<temporary opaque value>'
-$env:JIEJIAN_PERMISSION_DEPT_ADMIN_A = '<temporary opaque value>'
-$env:JIEJIAN_PERMISSION_DEPT_ADMIN_A2 = '<temporary opaque value>'
-$env:JIEJIAN_PERMISSION_TENANT_ADMIN_A = '<temporary opaque value>'
-$env:JIEJIAN_PERMISSION_PEER_A = '<temporary opaque value>'
-$env:JIEJIAN_PERMISSION_OWNER_OBSERVER = '<temporary opaque value>'
-& 'D:\Miniconda\envs\jiejian_env\python.exe' -B -m jiejian.permission_sample_app --variant fixed --port 8871
-```
+- `fixed`：HTTP 403、状态不变，最终 PASS。
+- `vulnerable`：HTTP 403、状态改变，最终 BLOCK。
+- `inconclusive`：表面请求完成但必需观察不可用，最终 INCONCLUSIVE。
 
-从同一父 PowerShell 会话启动样例和 CLI，或在两个终端分别设置相同的临时环境值，再执行项目 console entrypoint `jiejian permission-run samples/fixed_apps/permissions_v2/profile.json`。占位值不是可用凭据；真实值不要写入 Profile、命令行参数、文件或日志。
+INCONCLUSIVE 表示证据不足，暂时不能下结论，不表示安全或未发现问题。Truth 只用于测试最后比较，产品不会读取它来决定 Verdict。
 
-阶段 6.4 的异步因果样例由 `tests/verification/test_async_causal_observation.py` 通过 loopback 运行：同一 Contract 下，`fixed` 的任务权威负观察为 `NOT_CREATED`，`vulnerable` 通过显式 case tag 关联真实后台任务和 SQLite 副作用，`inconclusive` 的任务状态 API 稳定 503，不能由 HTTP、审计或 SQLite 单独替代。测试侧将 `http`、`audit_log`、`async_task`、`final_side_effect` 四面事实分开保存；这些资产不是 V1 `project.yaml`，不接入 Runner V1。V2 Evidence 已随 Runner publication 产生并可读取；阶段 7 统一报告、Finding/Gate、MQ/对象存储正式 Profile 接入仍未实现。
+官方 Target 不联网、不扫描公网、不依赖产品源码或测试代码。请使用临时凭据，避免把凭据放入 Profile、提交文件或日志；完成验证后停止 Target 并清理临时运行数据。

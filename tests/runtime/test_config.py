@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import jiejian.runtime.config as config_module
-from jiejian.runtime.config import Settings, load_settings
+import product.backend.infra.runtime.settings as config_module
+from product.backend.infra.runtime.settings import Settings, load_settings
 
 
 def test_built_in_defaults_are_generated_from_settings(

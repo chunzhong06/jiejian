@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jiejian/artifacts/artifact-scan-result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "artifact_id", "source_type", "ruleset_version", "status", "verdict", "manifest_sha256", "scanned_file_count", "scanned_byte_count", "findings", "evidence"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "project_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "artifact_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "run_id": {"type": ["string", "null"], "pattern": "^run_[0-9a-f]{32}$"},
+    "source_type": {"const": "ARTIFACT"},
+    "ruleset_version": {"const": "artifact-local-2026.08.18"},
+    "status": {"enum": ["COMPLETE", "INCONCLUSIVE"]},
+    "verdict": {"enum": ["SAFE", "VULNERABLE", "INCONCLUSIVE"]},
+    "error_code": {"type": ["string", "null"]},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "scanned_file_count": {"type": "integer", "minimum": 0, "maximum": 4096},
+    "scanned_byte_count": {"type": "integer", "minimum": 0, "maximum": 1073741824},
+    "findings": {"type": "array", "maxItems": 4096},
+    "evidence": {"type": "array", "maxItems": 4096}
+  }
+}

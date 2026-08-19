@@ -1,76 +1,122 @@
-# 界鉴
+# 界鉴 JIEJIAN
 
-界鉴用于验证 Vibe Coding Web 应用是否真正满足安全意图。核心链路是：
+> 界鉴是一款面向 AI 快速开发 Web 应用的权限安全检查工具，用来确认不同身份是否真的只能访问和操作自己有权限的数据与业务功能。
 
-```text
-安全意图 -> 可执行契约 -> 关系变异 -> 多面观察 -> 确认证据 -> 回归门禁
-```
+应用可能返回“禁止访问”，但真实数据或后台状态仍可能发生变化。界鉴结合接口结果和真实副作用判断权限是否真正生效，而不是只看一个 HTTP 状态码。
 
-阶段 0～6 已完成 Runner 协议、持久化 Job、隔离执行、录制审阅、Contract 治理、回环 API、React GUI、结果发布恢复、测试/样例/Schema、Windows 启动资产，以及复杂权限关系、确定性覆盖、Observer V2、多面观察和 V2 Evidence/Result 闭环。所有主动目标与观察流量仍只由独立 Runner 隔离域发出。
+## Windows 快速启动提示
 
-第一次使用先看本文，再看[项目设计规范](docs/01_开发规范/项目设计规范.md)、[开发路线图](docs/04_开发记录/开发路线图.md)和 [ADR 索引](docs/02_技术决策/README.md)。
-
-## 首次使用
-
-Windows 唯一入口是根部薄转发壳：
+在 Windows 上，准备好 Node.js（20.19+ 或 22.12+）和 pnpm 后，进入项目根目录运行：
 
 ```bat
 .\start.cmd
 ```
 
-它调用 `scripts/start.ps1`。准备过程会检查并准备 Python 依赖、Chromium、doctor、数据库迁移和前端构建，日志写入 `var/logs/`；Node.js 与 pnpm 是系统前置，不由 Python 环境安装。
+首次准备需要网络。启动完成后，界鉴会在本机回环地址启动服务并打开浏览器。
 
-准备状态按内容 SHA-256 指纹记录在 `var/startup/prepare-state.json`，命中时跳过缓存阶段，`-ForcePrepare` 强制重做。服务仅在本机 `/ready` 返回 `schema_version="1"`、`status="ready"` 后尝试打开浏览器。
+## 界面预览
 
-只准备不启动服务：
+界面围绕工作台、应用接入、权限规则、开始检查和检查结果组织。
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1 -PrepareOnly
+<!-- 后续仅在真实运行 GUI 并有可靠数据后，在此放置工作台或检查结果截图。当前不添加图片链接。 -->
+
+## 界鉴能做什么
+
+- 定义权限规则，明确不同身份可以做什么。
+- 执行 Web 应用权限安全检查。
+- 查看接口结果、真实副作用和其他证据。
+- 查看历史变化与回归情况。
+- 导出检查报告，供交付和自动化使用。
+
+## 快速开始
+
+1. 获取项目并打开项目根目录。
+2. 确认 Windows、Node.js 和 pnpm 已安装。Node.js 需要满足 20.19+ 或 22.12+。
+3. 运行 `.\start.cmd`。
+4. 等待界鉴准备 Python 环境、浏览器、数据库和前端资源。
+5. 浏览器会自动打开本机界面。
+
+启动脚本会自动准备 Python 运行环境、浏览器、数据库和前端资源；准备完成后，控制台会给出适用于本机的 CLI 调用方式。
+
+## 第一次使用
+
+默认从工作台开始，按下面的路径完成第一次检查：
+
+1. **应用接入**：选择要检查的 Web 应用，并确认检查范围和授权信息。
+2. **权限规则**：说明不同身份允许执行的操作，以及哪些操作必须被阻止。
+3. **开始检查**：选择已登记的检查配置，执行真实权限安全检查并收集证据。
+4. **检查结果**：查看结论、问题、证据和报告。
+
+流程录制、模型服务和运行环境属于高级能力，不是第一次检查的必经步骤。
+
+如果暂时没有准备自己的应用，可以在“应用接入”直接试用三个内置演示，无需配置 Token、Profile 或 Contract：
+
+- **安全示例**：接口拒绝未授权修改，真实资源没有变化，结果为 `PASS`。
+- **权限漏洞示例**：接口表面拒绝，但真实资源仍被修改，结果为 `BLOCK`。
+- **证据不足示例**：关键资源状态无法可靠观察，结果为 `INCONCLUSIVE`。
+
+三个演示都通过真实检查、证据发布和确定性判断得到结果，不使用预先写好的结论代替执行。
+
+## 结果怎么看
+
+界鉴不会把“接口返回禁止访问”直接当作安全结论。例如：
+
+```text
+服务返回：403 禁止访问
+真实观察：数据或后台状态已经发生变化
+界鉴判断：发现可能的权限越界
 ```
 
-`-PrepareOnly` 不会修改当前 PowerShell 父 shell。准备成功后，手工 CLI 使用脚本输出的 Conda 或 uv 命令；普通 GUI 启动仍推荐 `.\start.cmd`。
+结果含义如下：
 
-## 当前入口
+| 结果 | 含义 |
+| --- | --- |
+| `PASS` | 当前规则覆盖范围内未发现越权 |
+| `BLOCK` | 发现可能的权限越界，需要处理 |
+| `INCONCLUSIVE` | 证据不足，暂时不能下结论 |
+| `INVALID` | 结果无效，不能形成安全结论 |
 
-唯一安装的产品命令入口是 `jiejian`：
+在检查结果中，可以继续查看真实证据和完整报告。`INCONCLUSIVE` 不表示安全，也不表示未发现问题。
+
+## 命令行与自动化
+
+命令行是面向高级用户、自动化和 CI 的入口。准备完成后，按启动输出给出的本机 CLI 调用方式执行；下面的 `jiejian` 代表产品 CLI：
 
 ```powershell
-jiejian doctor --json
-jiejian project validate .\samples\fixed_apps\ownership\project.yaml
-jiejian contract workspace .\samples\fixed_apps\ownership\project.yaml
-jiejian contract derive .\samples\fixed_apps\ownership\project.yaml --include-flow
-jiejian run .\samples\fixed_apps\ownership\project.yaml --contract .\samples\fixed_apps\ownership\contract.yaml
+jiejian run <execution_profile.json>
 jiejian report <run_id> --format json
-jiejian ci .\samples\fixed_apps\ownership\project.yaml
-jiejian serve --open
+jiejian ci <execution_profile.json>
 ```
 
-录制入口示例：
+全局 `--human` 用于人类可读输出，`--json` 用于机器输出；`ci` 适合接入持续集成。CLI 不替代工作台，完整命令说明以实际帮助信息和后续 CLI 文档为准。
 
-```powershell
-jiejian recording start .\samples\fixed_apps\ownership\project.yaml --identity owner
-jiejian recording status <recording_id>
-jiejian recording review <recording_id> --command .\review.json
-jiejian recording finalize <recording_id>
-jiejian recording replay <recording_id> --project .\samples\fixed_apps\ownership\project.yaml --runs 3
-```
+## 高级能力
 
-## 黄金样例
+需要更细控制时，可以使用流程录制、模型服务、运行环境、原始证据查看和自动化/CI。它们服务于已经明确检查范围的用户，不改变第一次使用的主路径。
 
-本机样例应用：
+## 官方示例
 
-```powershell
-python -B -m jiejian.sample_app --variant safe --port 8765
-python -B -m jiejian.sample_app --variant vulnerable --port 8766
-```
+仓库内只保留一组权限检查 Samples，并用 `fixed`、`vulnerable`、`inconclusive` 表达同一安全意图的三种结果。开发者需要复现 Target、临时凭据和 Golden 检查时，从 [samples/README.md](samples/README.md) 开始。
 
-safe 预期 `PASS`/退出码 0，vulnerable 预期 `BLOCK`/退出码 1；缺少必要观察时为 `INCONCLUSIVE`/退出码 2。三套自包含 bundle 位于 `samples/fixed_apps/ownership/`、`samples/vulnerable_apps/ownership/` 和 `samples/inconclusive_apps/ownership/`。不要临时修改样例或写入真实秘密。
+## 遇到问题
 
-## 排错
+- **启动失败**：先查看 `var/logs/` 中的启动日志，再按启动输出给出的恢复命令重试。
+- **浏览器未打开**：手工打开 [http://127.0.0.1:8765/](http://127.0.0.1:8765/)。
+- **运行环境不可用**：核对 Node.js 和 pnpm 是否满足前置要求，并按启动输出恢复。
+- **检查无法开始**：确认已经完成应用接入，目标使用授权的回环地址，权限规则已准备好，运行环境状态正常。
 
-- 首次准备失败：查看 `var/logs/` 阶段日志，按输出的恢复命令重试；需要强制重做时使用 `-ForcePrepare -PrepareOnly`。
-- 服务未打开浏览器：确认 `frontend/dist/index.html` 存在，并确认 `/ready` 返回 `schema_version="1"` 和 `status="ready"`。
-- CLI 未找到：使用准备脚本输出的 `conda run ... jiejian` 或 uv 命令；`-PrepareOnly` 不会改变父 PowerShell。
-- 结果读取失败：不要手工修改 `var/`；`report` 会校验 publication manifest、文件哈希和数据库完成态。
+`-PrepareOnly` 和 `-ForcePrepare` 仅用于高级恢复，不是正常启动流程。
 
-协议、Schema、迁移和安全边界分别以 `docs/03_协议定义/`、`schemas/`、`backend/migrations/` 和[项目设计规范](docs/01_开发规范/项目设计规范.md)为准。
+## 适用范围
+
+当前界鉴只检查 Web 应用，并要求目标处于用户明确授权的范围内。它不把本地命令行应用或 MCP/Agent 目标作为当前支持范围。
+
+## 更多文档
+
+- [技术文档总入口](docs/README.md)：按任务路由到当前 Architecture、ADR、Protocol、Schema 和 Migration。
+- [系统总体架构](docs/02_架构设计/系统总体架构.md)：模块化单体、ApplicationCore 和执行边界。
+- [Runner 执行协议](docs/04_协议与数据/Runner执行协议.md)：Worker、Runner、Evidence 和发布边界。
+- [ADR 索引](docs/03_架构决策/README.md)：当前决策与历史决策的状态和取代关系。
+- [开发路线图](docs/05_路线与研究/开发路线图.md)：按需查看下一步目标和验收边界。
+
+深入技术内容以这些现有文档为准；后续文档入口调整时，再同步更新本页链接。

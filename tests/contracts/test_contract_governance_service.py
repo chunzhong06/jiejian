@@ -7,13 +7,13 @@ import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from jiejian.contracts.governance_service import ContractGovernanceService
-from jiejian.contracts.models import ContractSourceType, SourceReference
-from jiejian.domain.lifecycle import ContractStatus
-from jiejian.domain.lifecycle import ProjectStatus
-from jiejian.verification.models import ContractRule, RuleKind
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.storage import (
+from product.backend.workflows.contracts.governance import ContractGovernance
+from product.backend.core.contracts.models import CandidateRiskKind, CandidateSuggestion, ContractSourceType, SourceReference
+from product.backend.core.lifecycle import ContractStatus
+from product.backend.core.lifecycle import ProjectStatus
+from product.backend.core.verification.permissions import ActionDefinition, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionRule, RelationEndpoint, RelationFact, RelationType, ResourceDefinition, SubjectDefinition
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import (
     ProjectRecord,
     StorageUnitOfWork,
     create_session_factory,
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.database
 @pytest.fixture
 def governance(
     tmp_path: Path,
-) -> Iterator[tuple[ContractGovernanceService, sessionmaker[Session], Engine]]:
+) -> Iterator[tuple[ContractGovernance, sessionmaker[Session], Engine]]:
     path = tmp_path / "governance.db"
     upgrade_database(path)
     engine = create_sqlite_engine(path)
@@ -47,10 +47,10 @@ def governance(
             )
         work.commit()
     ticks = iter(range(NOW_US + 1, NOW_US + 100))
-    yield ContractGovernanceService(
+    yield ContractGovernance(
         lambda: StorageUnitOfWork(factory),
         clock_us=lambda: next(ticks),
-        available_observers=("http", "owner_api"),
+        available_observations=("resource_state",),
     ), factory, engine
     engine.dispose()
 
@@ -63,16 +63,26 @@ def _source(locator: str = "requirements.md#ownership") -> SourceReference:
     )
 
 
-def _rule(rule_id: str = "foreign-read") -> ContractRule:
-    return ContractRule(
-        id=rule_id,
-        kind=RuleKind.FOREIGN_READ,
-        required_observers=("http",),
+def _contract(contract_id: str, version: int = 1, rule_id: str = "foreign-read") -> PermissionContract:
+    return PermissionContract(
+        contract_id=contract_id,
+        version=version,
+        role_ids=("member",),
+        workflow_states=("DRAFT",),
+        subjects=(SubjectDefinition(subject_id="member", roles=("member",), tenant_id="tenant"),),
+        actions=(ActionDefinition(action_id="view"),),
+        resources=(ResourceDefinition(resource_id="document", resource_type="document", owner_subject_id="member", tenant_id="tenant", workflow_state="DRAFT"),),
+        relations=(RelationFact(relation_id="owns-document", relation=RelationType.OWNS, source=RelationEndpoint(endpoint_type="subject", endpoint_id="member"), target=RelationEndpoint(endpoint_type="resource", endpoint_id="document")),),
+        rules=(PermissionRule(rule_id=rule_id, subject_id="member", action_id="view", resource_id="document", relation_path=("owns-document",), context=PermissionContext(resource_ids=("document",)), expectation=PermissionExpectation.DENY, required_observations=("resource_state",), coverage_dimensions=(CoverageDimension.RELATION,)),),
     )
 
 
+def _suggestion() -> CandidateSuggestion:
+    return CandidateSuggestion(id="foreign-read", kind=CandidateRiskKind.FOREIGN_READ, required_observations=("resource_state",))
+
+
 def test_full_review_activation_revision_and_supersession_flow(
-    governance: tuple[ContractGovernanceService, sessionmaker[Session], Engine],
+    governance: tuple[ContractGovernance, sessionmaker[Session], Engine],
 ) -> None:
     service, factory, _ = governance
     requirement = service.create_requirement(
@@ -85,16 +95,25 @@ def test_full_review_activation_revision_and_supersession_flow(
     candidate = service.create_candidate(
         "project-a",
         source=_source("analysis/routes.py#resource"),
-        rule=_rule(),
+        suggestion=_suggestion(),
         requirement_ids=(requirement.requirement_id,),
         actor="analyzer",
     )
     draft = service.create_draft(
         "project-a",
         "ownership-contract",
+        snapshot=_contract("ownership-contract"),
+        requirement_ids=(requirement.requirement_id,),
         candidate_ids=(candidate.candidate_id,),
         actor="analyst",
     )
+    expected_sources = tuple(
+        sorted(
+            {requirement.source, candidate.source},
+            key=lambda item: (item.source_type.value, item.locator, item.content_sha256),
+        )
+    )
+    assert draft.provenance.sources == expected_sources
     review = service.submit_review(
         "project-a", "ownership-contract", draft.version, actor="reviewer"
     )
@@ -104,7 +123,7 @@ def test_full_review_activation_revision_and_supersession_flow(
     draft_v2 = service.revise_active(
         "project-a",
         "ownership-contract",
-        rules=(_rule("foreign-read-v2"),),
+        snapshot=_contract("ownership-contract", version=2, rule_id="foreign-read-v2"),
         sources=(_source("manual/revision-v2"),),
         requirement_ids=(requirement.requirement_id,),
         actor="analyst",
@@ -131,16 +150,16 @@ def test_full_review_activation_revision_and_supersession_flow(
 
 
 def test_activation_of_another_contract_switches_project_binding(
-    governance: tuple[ContractGovernanceService, sessionmaker[Session], Engine],
+    governance: tuple[ContractGovernance, sessionmaker[Session], Engine],
 ) -> None:
     service, factory, _ = governance
     first = service.create_draft(
-        "project-a", "first-contract", rules=(_rule(),), sources=(_source("manual/first"),), actor="analyst"
+        "project-a", "first-contract", snapshot=_contract("first-contract"), sources=(_source("manual/first"),), actor="analyst"
     )
     first_review = service.submit_review("project-a", "first-contract", first.version, actor="reviewer")
     service.activate_review("project-a", "first-contract", first_review.version, actor="approver")
     second = service.create_draft(
-        "project-a", "second-contract", rules=(_rule("second-rule"),), sources=(_source("manual/second"),), actor="analyst"
+        "project-a", "second-contract", snapshot=_contract("second-contract", rule_id="second-rule"), sources=(_source("manual/second"),), actor="analyst"
     )
     second_review = service.submit_review("project-a", "second-contract", second.version, actor="reviewer")
     service.activate_review("project-a", "second-contract", second_review.version, actor="approver")
@@ -151,7 +170,7 @@ def test_activation_of_another_contract_switches_project_binding(
 
 
 def test_rejection_illegal_activation_and_cross_project_references(
-    governance: tuple[ContractGovernanceService, sessionmaker[Session], Engine],
+    governance: tuple[ContractGovernance, sessionmaker[Session], Engine],
 ) -> None:
     service, _, _ = governance
     requirement = service.create_requirement(
@@ -161,7 +180,7 @@ def test_rejection_illegal_activation_and_cross_project_references(
         service.create_candidate(
             "project-b",
             source=_source(),
-            rule=_rule(),
+            suggestion=_suggestion(),
             requirement_ids=(requirement.requirement_id,),
             actor="analyst",
         )
@@ -170,7 +189,7 @@ def test_rejection_illegal_activation_and_cross_project_references(
     draft = service.create_draft(
         "project-a",
         "rejected-contract",
-        rules=(_rule(),),
+        snapshot=_contract("rejected-contract"),
         sources=(_source("manual/rejected-contract"),),
         actor="analyst",
     )
@@ -192,16 +211,29 @@ def test_rejection_illegal_activation_and_cross_project_references(
         )
 
 
-def test_duplicate_manual_rule_ids_are_rejected(
-    governance: tuple[ContractGovernanceService, sessionmaker[Session], Engine],
+def test_draft_requires_first_contract_version(
+    governance: tuple[ContractGovernance, sessionmaker[Session], Engine],
 ) -> None:
     service, _, _ = governance
     with pytest.raises(JiejianError) as captured:
         service.create_draft(
             "project-a",
-            "duplicate-contract",
-            rules=(_rule(), _rule()),
-            sources=(_source("manual/duplicate"),),
+            "versioned-contract",
+            snapshot=_contract("versioned-contract", version=2),
+            sources=(_source("manual/versioned"),),
             actor="analyst",
         )
-    assert captured.value.code == ErrorCode.CONTRACT_ASSESSMENT_BLOCKED.value
+    assert captured.value.code == ErrorCode.CONTRACT_REFERENCE_INVALID.value
+
+
+def test_manual_contract_without_provenance_sources_does_not_fabricate_source(
+    governance: tuple[ContractGovernance, sessionmaker[Session], Engine],
+) -> None:
+    service, _, _ = governance
+    draft = service.create_draft(
+        "project-a",
+        "source-free-contract",
+        snapshot=_contract("source-free-contract"),
+        actor="analyst",
+    )
+    assert draft.provenance.sources == ()

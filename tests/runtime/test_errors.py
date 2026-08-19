@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.redaction import REDACTED
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.redaction import REDACTED
 
 
 def test_jiejian_error_keeps_stable_external_structure() -> None:

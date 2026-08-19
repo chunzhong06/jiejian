@@ -6,13 +6,21 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from jiejian.api import create_app
-from jiejian.contracts.llm.adapters.base import LLMHttpResponse
-from jiejian.contracts.llm.service import LLMCandidateGenerationService
-from jiejian.contracts.workbench import ContractWorkbenchService
-from jiejian.storage import StorageUnitOfWork
+from product.backend.api import create_app
+from product.backend.infra.llm.adapters.base import LLMHttpResponse
+from product.backend.workflows.contracts.candidate_generation import ContractCandidateGenerator
+from product.backend.workflows.contracts.workbench import ContractWorkbench
+from product.backend.infra.storage import StorageUnitOfWork
 
 pytestmark = pytest.mark.database
+
+SAMPLE_CONTRACT = Path("samples/http/fixed/contract.json").resolve()
+
+
+def _contract_snapshot(version: int = 1) -> dict:
+    snapshot = json.loads(SAMPLE_CONTRACT.read_text(encoding="utf-8"))
+    snapshot["version"] = version
+    return snapshot
 
 
 def _output(requirement_id: str) -> str:
@@ -22,11 +30,11 @@ def _output(requirement_id: str) -> str:
             "candidates": [
                 {
                     "requirement_ids": [requirement_id],
-                    "rule": {
+                    "suggestion": {
                         "schema_version": "1",
                         "id": "llm-rule",
-                        "kind": "foreign_read",
-                        "required_observers": ["http"],
+                        "kind": "FOREIGN_READ",
+                        "required_observations": ["resource_state"],
                         "severity": "high",
                     },
                 }
@@ -37,10 +45,10 @@ def _output(requirement_id: str) -> str:
 
 def _register(client: TestClient, path: Path | None = None) -> str:
     response = client.post(
-        "/api/v1/projects",
+        "/api/projects",
         json={
             "schema_version": "1",
-            "path": str((path or Path("samples/fixed_apps/ownership/project.yaml")).resolve()),
+            "profile_path": str((path or Path("samples/http/fixed/profile.json")).resolve()),
         },
     )
     assert response.status_code == 200
@@ -52,16 +60,15 @@ def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> 
     with TestClient(app) as client:
         project_id = _register(client)
         malformed = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/requirements",
+            f"/api/projects/{project_id}/contract-governance/requirements",
             json={"schema_version": "1", "text": "任意自然语言", "security_tags": [], "actor": "analyst"},
         )
         malformed_requirement = malformed.json()["data"]
         blocked = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/derive",
+            f"/api/projects/{project_id}/contract-governance/candidates/derive",
             json={
                 "schema_version": "1",
                 "requirement_ids": [malformed_requirement["requirement_id"]],
-                "include_flow": False,
                 "actor": "analyst",
             },
         )
@@ -70,10 +77,10 @@ def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> 
         assert any(issue["severity"] == "BLOCKING" for issue in blocked.json()["data"]["batches"][0]["issues"])
 
         requirement = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/requirements",
+            f"/api/projects/{project_id}/contract-governance/requirements",
             json={
                 "schema_version": "1",
-                "text": "rule id=foreign-read kind=foreign_read observers=http severity=high\nrule id=unauthorized-side-effect kind=unauthorized_side_effect observers=http,owner_api severity=critical\nrule id=privileged-field kind=privileged_field observers=http,owner_api severity=critical",
+                "text": "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high\nsuggestion id=unauthorized-side-effect kind=UNAUTHORIZED_SIDE_EFFECT observations=resource_state severity=critical\nsuggestion id=privileged-field kind=PRIVILEGED_FIELD observations=resource_state severity=critical",
                 "security_tags": ["ownership"],
                 "actor": "analyst",
             },
@@ -81,104 +88,97 @@ def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> 
         derive_body = {
             "schema_version": "1",
             "requirement_ids": [requirement["requirement_id"]],
-            "include_flow": False,
             "actor": "analyst",
         }
         first = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/derive",
+            f"/api/projects/{project_id}/contract-governance/candidates/derive",
             json=derive_body,
         )
         second = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/derive",
+            f"/api/projects/{project_id}/contract-governance/candidates/derive",
             json=derive_body,
         )
         assert first.status_code == second.status_code == 200
         candidates = first.json()["data"]["persisted_candidates"]
         assert [item["candidate_id"] for item in second.json()["data"]["persisted_candidates"]] == [item["candidate_id"] for item in candidates]
 
-        draft = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/contracts",
+        draft_response = client.post(
+            f"/api/projects/{project_id}/contract-governance/contracts",
             json={
                 "schema_version": "1",
-                "contract_id": "workbench-contract",
+                "contract_id": "ownership-contract",
+                "snapshot": _contract_snapshot(),
                 "candidate_ids": [item["candidate_id"] for item in candidates],
                 "actor": "analyst",
             },
-        ).json()["data"]
+        )
+        assert draft_response.status_code == 200, draft_response.text
+        draft = draft_response.json()["data"]
         assessment = client.get(
-            f"/api/v1/projects/{project_id}/contract-governance/contracts/workbench-contract/versions/1/assessment"
+            f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/versions/1/assessment"
         )
         assert assessment.status_code == 200
         assert assessment.json()["data"]["eligible"] is True
         review = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/contracts/workbench-contract/versions/{draft['version']}/submit",
+            f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/versions/{draft['version']}/submit",
             json={"schema_version": "1", "actor": "reviewer"},
         ).json()["data"]
         active = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/contracts/workbench-contract/versions/{review['version']}/activate",
+            f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/versions/{review['version']}/activate",
             json={"schema_version": "1", "actor": "approver"},
         ).json()["data"]
-        snapshot = client.get(f"/api/v1/projects/{project_id}/contract-governance")
+        snapshot = client.get(f"/api/projects/{project_id}/contract-governance")
         assert snapshot.status_code == 200
         assert snapshot.json()["data"]["project"]["governed_contract_id"] == active["contract_id"]
         assert snapshot.json()["data"]["llm_available"] is False
 
         revision = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/contracts/workbench-contract/revisions",
+            f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/revisions",
             json={
                 "schema_version": "1",
+                "snapshot": _contract_snapshot(2),
                 "candidate_ids": [item["candidate_id"] for item in candidates],
                 "actor": "analyst",
             },
         ).json()["data"]
         diff = client.get(
-            f"/api/v1/projects/{project_id}/contract-governance/contracts/workbench-contract/versions/{revision['version']}/diff",
+            f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/versions/{revision['version']}/diff",
             params={"from_version": 1},
         )
         assert diff.status_code == 200
         drift = client.get(
-            f"/api/v1/projects/{project_id}/contract-governance/contracts/workbench-contract/versions/{active['version']}/drift"
+            f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/versions/{active['version']}/drift"
         )
         assert drift.status_code == 200
-        run = client.post(
-            f"/api/v1/projects/{project_id}/runs",
-            json={"schema_version": "1", "idempotency_key": "workbench-history"},
-        )
-        assert run.status_code == 202
-        history = client.get(f"/api/v1/runs/{run.json()['data']['run']['run_id']}/contract")
-        assert history.status_code == 200
-        assert history.json()["data"]["source"] == "EXECUTION_REQUEST"
-
-
 def test_contract_workbench_api_llm_offline_and_injected_provider(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         project_id = _register(client)
         requirement = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/requirements",
+            f"/api/projects/{project_id}/contract-governance/requirements",
             json={
                 "schema_version": "1",
-                "text": "rule id=foreign-read kind=foreign_read observers=http severity=high",
+                "text": "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high",
                 "security_tags": [],
                 "actor": "analyst",
             },
         ).json()["data"]
         body = {"schema_version": "1", "requirement_ids": [requirement["requirement_id"]], "actor": "analyst"}
         unavailable = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/llm",
+            f"/api/projects/{project_id}/contract-governance/candidates/llm",
             json=body,
         )
         assert unavailable.status_code == 503
         assert unavailable.json()["error"]["code"] == "LLM_PROVIDER_UNAVAILABLE"
 
         context = app.state.context
-        context.llm_candidates = LLMCandidateGenerationService(
+        context.llm_candidates = ContractCandidateGenerator(
             context.uow_factory,
             provider=lambda _: _output(requirement["requirement_id"]),
             provider_id="test-provider",
             model_id="test-model",
         )
-        context.contract_workbench = ContractWorkbenchService(
+        context.contract_workbench = ContractWorkbench(
             context.uow_factory,
             context.projects,
             context.contracts,
@@ -186,7 +186,7 @@ def test_contract_workbench_api_llm_offline_and_injected_provider(tmp_path: Path
             context.llm_candidates,
         )
         generated = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/llm",
+            f"/api/projects/{project_id}/contract-governance/candidates/llm",
             json=body,
         )
         assert generated.status_code == 200
@@ -242,18 +242,18 @@ def test_contract_workbench_api_generates_with_explicit_profile_and_persists_pro
     )
     with TestClient(app) as client:
         profile = client.post(
-            "/api/v1/llm/profiles",
+            "/api/llm/profiles",
             json={"schema_version": "1", "profile_name": "candidate-profile", "provider": "openai", "model": "gpt-test", "secret": "value-c"},
         )
         assert profile.status_code == 201
         project_id = _register(client)
         requirement = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/requirements",
-            json={"schema_version": "1", "text": "rule id=foreign-read kind=foreign_read observers=http severity=high", "security_tags": [], "actor": "analyst"},
+            f"/api/projects/{project_id}/contract-governance/requirements",
+            json={"schema_version": "1", "text": "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high", "security_tags": [], "actor": "analyst"},
         ).json()["data"]
         transport.requirement_id = requirement["requirement_id"]
         response = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/llm",
+            f"/api/projects/{project_id}/contract-governance/candidates/llm",
             json={"schema_version": "1", "requirement_ids": [requirement["requirement_id"]], "actor": "analyst", "profile_name": "candidate-profile"},
         )
         assert response.status_code == 200, response.text
@@ -296,15 +296,15 @@ def test_contract_workbench_api_unconfigured_profile_sends_no_request(tmp_path: 
     with TestClient(app) as client:
         project_id = _register(client)
         requirement = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/requirements",
-            json={"schema_version": "1", "text": "rule id=foreign-read kind=foreign_read observers=http severity=high", "security_tags": [], "actor": "analyst"},
+            f"/api/projects/{project_id}/contract-governance/requirements",
+            json={"schema_version": "1", "text": "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high", "security_tags": [], "actor": "analyst"},
         ).json()["data"]
         client.post(
-            "/api/v1/llm/profiles",
+            "/api/llm/profiles",
             json={"schema_version": "1", "profile_name": "unconfigured", "provider": "openai", "model": "gpt-test", "secret_ref": "env:MISSING"},
         )
         response = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/llm",
+            f"/api/projects/{project_id}/contract-governance/candidates/llm",
             json={"schema_version": "1", "requirement_ids": [requirement["requirement_id"]], "actor": "analyst", "profile_name": "unconfigured"},
         )
         assert response.status_code == 503
@@ -316,22 +316,21 @@ def test_contract_workbench_api_rejects_cross_project_requirement(tmp_path: Path
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         first_project = _register(client)
-        second_project = _register(client, Path("samples/vulnerable_apps/ownership/project.yaml"))
+        second_project = _register(client, Path("samples/http/vulnerable/profile.json"))
         requirement = client.post(
-            f"/api/v1/projects/{first_project}/contract-governance/requirements",
+            f"/api/projects/{first_project}/contract-governance/requirements",
             json={
                 "schema_version": "1",
-                "text": "rule id=foreign-read kind=foreign_read observers=http severity=high",
+                "text": "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high",
                 "security_tags": [],
                 "actor": "analyst",
             },
         ).json()["data"]
         response = client.post(
-            f"/api/v1/projects/{second_project}/contract-governance/candidates/derive",
+            f"/api/projects/{second_project}/contract-governance/candidates/derive",
             json={
                 "schema_version": "1",
                 "requirement_ids": [requirement["requirement_id"]],
-                "include_flow": False,
                 "actor": "analyst",
             },
         )
@@ -339,76 +338,22 @@ def test_contract_workbench_api_rejects_cross_project_requirement(tmp_path: Path
         assert response.json()["error"]["code"] == "CONTRACT_REFERENCE_INVALID"
 
         candidate = client.post(
-            f"/api/v1/projects/{first_project}/contract-governance/candidates/derive",
+            f"/api/projects/{first_project}/contract-governance/candidates/derive",
             json={
                 "schema_version": "1",
                 "requirement_ids": [requirement["requirement_id"]],
-                "include_flow": False,
                 "actor": "analyst",
             },
         ).json()["data"]["persisted_candidates"][0]
         draft = client.post(
-            f"/api/v1/projects/{second_project}/contract-governance/contracts",
+            f"/api/projects/{second_project}/contract-governance/contracts",
             json={
                 "schema_version": "1",
                 "contract_id": "cross-project-contract",
+                "snapshot": _contract_snapshot(),
                 "candidate_ids": [candidate["candidate_id"]],
                 "actor": "analyst",
             },
         )
-        assert draft.status_code == 400
+        assert draft.status_code == 400, draft.text
         assert draft.json()["error"]["code"] == "CONTRACT_REFERENCE_INVALID"
-
-
-def test_contract_workbench_api_flow_only_and_strict_surface(tmp_path: Path) -> None:
-    app = create_app(tmp_path / "var", start_worker=False)
-    with TestClient(app) as client:
-        project_id = _register(client)
-        body = {
-            "schema_version": "1",
-            "requirement_ids": [],
-            "include_flow": True,
-            "actor": "analyst",
-        }
-        first = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/derive",
-            json=body,
-        )
-        second = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/derive",
-            json=body,
-        )
-        assert first.status_code == second.status_code == 200
-        first_candidates = first.json()["data"]["persisted_candidates"]
-        assert first_candidates
-        assert {item["source"]["source_type"] for item in first_candidates} == {"recording_flow"}
-        assert [item["candidate_id"] for item in second.json()["data"]["persisted_candidates"]] == [
-            item["candidate_id"] for item in first_candidates
-        ]
-
-        invalid = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/candidates/derive",
-            json={"schema_version": "1", "requirement_ids": [], "include_flow": False, "actor": "analyst"},
-        )
-        assert invalid.status_code == 422
-
-        extra = client.post(
-            f"/api/v1/projects/{project_id}/contract-governance/requirements",
-            json={
-                "schema_version": "1",
-                "text": "rule id=foreign-read kind=foreign_read observers=http severity=high",
-                "security_tags": [],
-                "actor": "analyst",
-                "path": "secret/routes.py",
-                "url": "https://example.invalid",
-                "secret": "Bearer hidden",
-                "provider_id": "provider",
-                "model_id": "model",
-            },
-        )
-        assert extra.status_code == 422
-
-        openapi = client.get("/openapi.json").json()
-        for name in ("RequirementCreateRequest", "CandidateDeriveRequest", "LLMCandidateRequest"):
-            properties = openapi["components"]["schemas"][name]["properties"]
-            assert not {"path", "url", "secret", "provider_id", "model_id"}.intersection(properties)

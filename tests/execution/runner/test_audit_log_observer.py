@@ -9,20 +9,20 @@ from pathlib import Path
 
 import pytest
 
-from jiejian.protocols import (
-    AuditLogScanBudgetV2,
-    AuditLogStartCursorV2,
-    CorrelationV2,
+from product.protocols import (
+    AuditLogScanBudget,
+    AuditLogStartCursor,
+    Correlation,
     ObservationCompleteness,
     ObservationPhase,
-    ObserverBudgetV2,
+    ObserverBudget,
     ObserverOutcomeStatus,
-    ObserverSpecV2,
-    ObserverTargetV2,
+    ObserverSpec,
+    ObserverTarget,
     ObserverType,
-    StructuredAuditLogLocatorV2,
+    StructuredAuditLogLocator,
 )
-from jiejian.runner.audit_log_observer import (
+from product.backend.infra.observers.audit_log import (
     AUDIT_FILE_CHANGED,
     AUDIT_LINE_BYTES_LIMIT,
     AUDIT_RECORD_LIMIT,
@@ -35,7 +35,7 @@ from jiejian.runner.audit_log_observer import (
     AUDIT_TAG_NOT_FOUND,
     run_audit_log_observer,
 )
-import jiejian.runner.audit_log_observer as audit_module
+import product.backend.infra.observers.audit_log as audit_module
 
 
 PYTHON = sys.executable
@@ -53,24 +53,24 @@ FIELDS = (
 )
 
 
-def _spec(*, phases: tuple[ObservationPhase, ...] = (ObservationPhase.AFTER,), max_files: int = 4, max_lines: int = 100, max_line_bytes: int = 4096, max_rows: int = 100, timeout_us: int = 5_000_000) -> ObserverSpecV2:
-    return ObserverSpecV2(
+def _spec(*, phases: tuple[ObservationPhase, ...] = (ObservationPhase.AFTER,), max_files: int = 4, max_lines: int = 100, max_line_bytes: int = 4096, max_rows: int = 100, timeout_us: int = 5_000_000) -> ObserverSpec:
+    return ObserverSpec(
         observer_id="audit_observer",
         observer_type=ObserverType.STRUCTURED_AUDIT_LOG,
-        target=ObserverTargetV2(
+        target=ObserverTarget(
             target_id="audit-window",
-            locator=StructuredAuditLogLocatorV2(
+            locator=StructuredAuditLogLocator(
                 authorized_root_ref="env:AUDIT_ROOT",
                 relative_file_pattern="audit.jsonl",
                 allowed_fields=FIELDS,
-                scan_budget=AuditLogScanBudgetV2(max_files=max_files, max_lines=max_lines, max_line_bytes=max_line_bytes),
+                scan_budget=AuditLogScanBudget(max_files=max_files, max_lines=max_lines, max_line_bytes=max_line_bytes),
             ),
             normalization_id="audit-window",
             normalization_version="1.0",
         ),
         phases=phases,
         required=True,
-        budget=ObserverBudgetV2(timeout_us=timeout_us, max_rows=max_rows, max_bytes=32_768),
+        budget=ObserverBudget(timeout_us=timeout_us, max_rows=max_rows, max_bytes=32_768),
     )
 
 
@@ -95,10 +95,10 @@ def _write(path: Path, records: list[dict[str, object]], *, trailing_newline: bo
     return len(data)
 
 
-def _observe(root: Path, *, spec: ObserverSpecV2 | None = None, phase: ObservationPhase = ObservationPhase.AFTER, cursors: tuple[AuditLogStartCursorV2, ...] = ()):
+def _observe(root: Path, *, spec: ObserverSpec | None = None, phase: ObservationPhase = ObservationPhase.AFTER, cursors: tuple[AuditLogStartCursor, ...] = ()):
     return run_audit_log_observer(
         spec or _spec(),
-        CorrelationV2(case_id="case-1", resource_id="resource-a", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="resource-a", request_marker="case-1"),
         phase,
         attempt_dir=root / "attempt",
         parent_environ={"AUDIT_ROOT": str(root), "UNRELATED_ROOT": "D:/private/audit"},
@@ -154,7 +154,7 @@ def test_audit_observer_offset_and_eventual_are_explicit_and_bounded(tmp_path: P
     offset = _write(path, [first])
     _write(path, [first, _record("case-1", "task-case-1", "success", "TASK_STATE", 2, terminal="SUCCESS"), _record("case-1", "task-case-1", "effect", "SIDE_EFFECT", 3, effect="APPLIED")])
     anchor = path.read_bytes()[:offset]
-    cursor = AuditLogStartCursorV2(file_name="audit.jsonl", offset=offset, anchor_start=0, anchor_length=len(anchor), anchor_sha256=hashlib.sha256(anchor).hexdigest())
+    cursor = AuditLogStartCursor(file_name="audit.jsonl", offset=offset, anchor_start=0, anchor_length=len(anchor), anchor_sha256=hashlib.sha256(anchor).hexdigest())
     result = _observe(tmp_path, spec=_spec(phases=(ObservationPhase.EVENTUAL,)), phase=ObservationPhase.EVENTUAL, cursors=(cursor,))
     assert result.outcome.status is ObserverOutcomeStatus.AVAILABLE
     assert result.envelope is not None
@@ -165,7 +165,7 @@ def test_audit_observer_offset_and_eventual_are_explicit_and_bounded(tmp_path: P
     assert next_offsets[0]["file_name"] == "audit.jsonl"
 
     with pytest.raises(ValueError):
-        AuditLogStartCursorV2(file_name="audit.jsonl", offset=10_000)
+        AuditLogStartCursor(file_name="audit.jsonl", offset=10_000)
 
 
 def test_audit_observer_cursor_survives_rotation_without_rereading_old_records(tmp_path: Path) -> None:
@@ -173,7 +173,7 @@ def test_audit_observer_cursor_survives_rotation_without_rereading_old_records(t
     first = _record("case-1", "task-case-1", "request", "REQUEST", 1)
     offset = _write(path, [first])
     anchor = path.read_bytes()[:offset]
-    cursor = AuditLogStartCursorV2(file_name="audit.jsonl", offset=offset, anchor_start=0, anchor_length=len(anchor), anchor_sha256=hashlib.sha256(anchor).hexdigest())
+    cursor = AuditLogStartCursor(file_name="audit.jsonl", offset=offset, anchor_start=0, anchor_length=len(anchor), anchor_sha256=hashlib.sha256(anchor).hexdigest())
     path.rename(tmp_path / "audit.1.jsonl")
     _write(path, [_record("case-1", "task-case-1", "task", "TASK_STATE", 2, value="QUEUED")])
     result = _observe(tmp_path, cursors=(cursor,))
@@ -193,7 +193,7 @@ def test_audit_observer_cursor_window_accepts_task_and_effect_without_request(tm
     with path.open("ab") as handle:
         handle.write(b"".join(json.dumps(item, sort_keys=True, separators=(",", ":")).encode() + b"\n" for item in tail))
     anchor = path.read_bytes()[:offset]
-    cursor = AuditLogStartCursorV2(file_name="audit.jsonl", offset=offset, anchor_start=0, anchor_length=len(anchor), anchor_sha256=hashlib.sha256(anchor).hexdigest())
+    cursor = AuditLogStartCursor(file_name="audit.jsonl", offset=offset, anchor_start=0, anchor_length=len(anchor), anchor_sha256=hashlib.sha256(anchor).hexdigest())
     result = _observe(tmp_path, cursors=(cursor,))
     assert result.outcome.status is ObserverOutcomeStatus.AVAILABLE
     assert result.envelope is not None
@@ -279,9 +279,9 @@ def test_audit_observer_line_byte_limit_is_inconclusive(tmp_path: Path) -> None:
 def test_audit_observer_child_deadline_is_timed_out_not_execution_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _write(tmp_path / "audit.jsonl", [_record("case-1", "task-case-1", "event", "TASK_STATE", 1)])
     spec = _spec(timeout_us=1)
-    invocation = audit_module.AuditLogObserverInvocationV2(
+    invocation = audit_module.AuditLogObserverInvocation(
         spec=spec,
-        correlation=CorrelationV2(case_id="case-1", resource_id="resource-a", request_marker="case-1"),
+        correlation=Correlation(case_id="case-1", resource_id="resource-a", request_marker="case-1"),
         phase=ObservationPhase.AFTER,
     )
     monkeypatch.setenv("AUDIT_ROOT", str(tmp_path))
@@ -349,9 +349,9 @@ def test_audit_observer_rejects_symlink_or_reparse_boundary(tmp_path: Path, monk
 def test_audit_observer_rejects_read_time_replacement(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _write(tmp_path / "audit.jsonl", [_record("case-1", "task-case-1", "event", "TASK_STATE", 1)])
     spec = _spec()
-    invocation = audit_module.AuditLogObserverInvocationV2(
+    invocation = audit_module.AuditLogObserverInvocation(
         spec=spec,
-        correlation=CorrelationV2(case_id="case-1", resource_id="resource-a", request_marker="case-1"),
+        correlation=Correlation(case_id="case-1", resource_id="resource-a", request_marker="case-1"),
         phase=ObservationPhase.AFTER,
     )
     monkeypatch.setenv("AUDIT_ROOT", str(tmp_path))
@@ -377,9 +377,9 @@ def test_audit_observer_rejects_read_time_replacement(tmp_path: Path, monkeypatc
 
 def test_audit_observer_rejects_invalid_locator_and_subdirectory(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
-        StructuredAuditLogLocatorV2(authorized_root_ref="env:AUDIT_ROOT", relative_file_pattern="**/*.jsonl", allowed_fields=FIELDS)
+        StructuredAuditLogLocator(authorized_root_ref="env:AUDIT_ROOT", relative_file_pattern="**/*.jsonl", allowed_fields=FIELDS)
     with pytest.raises(ValueError):
-        StructuredAuditLogLocatorV2(authorized_root_ref="env:AUDIT_ROOT", relative_file_pattern="../audit.jsonl", allowed_fields=FIELDS)
+        StructuredAuditLogLocator(authorized_root_ref="env:AUDIT_ROOT", relative_file_pattern="../audit.jsonl", allowed_fields=FIELDS)
     nested = tmp_path / "nested"
     nested.mkdir()
     _write(nested / "audit.jsonl", [_record("case-1", "task-case-1", "nested", "REQUEST", 1)])

@@ -1,0 +1,691 @@
+{
+  "$defs": {
+    "ActionDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "side_effect": {
+          "default": false,
+          "title": "Side Effect",
+          "type": "boolean"
+        },
+        "is_batch": {
+          "default": false,
+          "title": "Is Batch",
+          "type": "boolean"
+        },
+        "workflow_transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowTransition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "action_id"
+      ],
+      "title": "ActionDefinition",
+      "type": "object"
+    },
+    "BatchPermissionRule": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "rule_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "resource_expectations": {
+          "items": {
+            "$ref": "#/$defs/BatchResourceExpectation"
+          },
+          "maxItems": 256,
+          "minItems": 2,
+          "title": "Resource Expectations",
+          "type": "array"
+        },
+        "required_observations": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Required Observations",
+          "type": "array"
+        },
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
+        },
+        "atomic": {
+          "default": true,
+          "title": "Atomic",
+          "type": "boolean"
+        },
+        "coverage_dimensions": {
+          "items": {
+            "$ref": "#/$defs/CoverageDimension"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Coverage Dimensions",
+          "type": "array"
+        },
+        "severity": {
+          "default": "high",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "subject_id",
+        "action_id",
+        "resource_expectations",
+        "required_observations",
+        "coverage_dimensions"
+      ],
+      "title": "BatchPermissionRule",
+      "type": "object"
+    },
+    "BatchResourceExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "expectation": {
+          "$ref": "#/$defs/PermissionExpectation"
+        },
+        "relation_path": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Relation Path",
+          "type": "array"
+        }
+      },
+      "required": [
+        "resource_id",
+        "expectation"
+      ],
+      "title": "BatchResourceExpectation",
+      "type": "object"
+    },
+    "CoverageDimension": {
+      "enum": [
+        "ROLE",
+        "TENANT",
+        "DEPARTMENT",
+        "RELATION",
+        "WORKFLOW",
+        "BULK"
+      ],
+      "title": "CoverageDimension",
+      "type": "string"
+    },
+    "PermissionContext": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "workflow_states": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Workflow States",
+          "type": "array"
+        },
+        "tenant_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Tenant Ids",
+          "type": "array"
+        },
+        "department_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Department Ids",
+          "type": "array"
+        },
+        "resource_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Resource Ids",
+          "type": "array"
+        }
+      },
+      "title": "PermissionContext",
+      "type": "object"
+    },
+    "PermissionExpectation": {
+      "enum": [
+        "ALLOW",
+        "DENY"
+      ],
+      "title": "PermissionExpectation",
+      "type": "string"
+    },
+    "PermissionRule": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "rule_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "relation_path": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Relation Path",
+          "type": "array"
+        },
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
+        },
+        "expectation": {
+          "$ref": "#/$defs/PermissionExpectation"
+        },
+        "required_observations": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Required Observations",
+          "type": "array"
+        },
+        "coverage_dimensions": {
+          "items": {
+            "$ref": "#/$defs/CoverageDimension"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Coverage Dimensions",
+          "type": "array"
+        },
+        "severity": {
+          "default": "high",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "subject_id",
+        "action_id",
+        "resource_id",
+        "relation_path",
+        "expectation",
+        "required_observations",
+        "coverage_dimensions"
+      ],
+      "title": "PermissionRule",
+      "type": "object"
+    },
+    "RelationEndpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "endpoint_type": {
+          "enum": [
+            "subject",
+            "resource"
+          ],
+          "title": "Endpoint Type",
+          "type": "string"
+        },
+        "endpoint_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Endpoint Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "endpoint_type",
+        "endpoint_id"
+      ],
+      "title": "RelationEndpoint",
+      "type": "object"
+    },
+    "RelationFact": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "relation_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Relation Id",
+          "type": "string"
+        },
+        "relation": {
+          "$ref": "#/$defs/RelationType"
+        },
+        "source": {
+          "$ref": "#/$defs/RelationEndpoint"
+        },
+        "target": {
+          "$ref": "#/$defs/RelationEndpoint"
+        }
+      },
+      "required": [
+        "relation_id",
+        "relation",
+        "source",
+        "target"
+      ],
+      "title": "RelationFact",
+      "type": "object"
+    },
+    "RelationType": {
+      "enum": [
+        "OWNS",
+        "MEMBER_OF",
+        "SAME_TENANT",
+        "SAME_DEPARTMENT",
+        "MANAGES",
+        "PARENT_OF",
+        "INHERITS"
+      ],
+      "title": "RelationType",
+      "type": "string"
+    },
+    "ResourceDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "resource_type": {
+          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+          "title": "Resource Type",
+          "type": "string"
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant Id"
+        },
+        "department_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Department Id"
+        },
+        "owner_subject_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Subject Id"
+        },
+        "parent_resource_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Resource Id"
+        },
+        "workflow_state": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Workflow State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_id",
+        "resource_type",
+        "workflow_state"
+      ],
+      "title": "ResourceDefinition",
+      "type": "object"
+    },
+    "SubjectDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Roles",
+          "type": "array"
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant Id"
+        },
+        "department_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Department Id"
+        },
+        "admin_level": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Admin Level",
+          "type": "integer"
+        },
+        "parent_subject_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Subject Id"
+        }
+      },
+      "required": [
+        "subject_id",
+        "roles"
+      ],
+      "title": "SubjectDefinition",
+      "type": "object"
+    },
+    "WorkflowTransition": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "allowed_from_states": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Allowed From States",
+          "type": "array"
+        },
+        "target_state": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Target State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "allowed_from_states",
+        "target_state"
+      ],
+      "title": "WorkflowTransition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "contract_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Contract Id",
+      "type": "string"
+    },
+    "version": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "role_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "title": "Role Ids",
+      "type": "array"
+    },
+    "workflow_states": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "title": "Workflow States",
+      "type": "array"
+    },
+    "subjects": {
+      "items": {
+        "$ref": "#/$defs/SubjectDefinition"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Subjects",
+      "type": "array"
+    },
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/ActionDefinition"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Actions",
+      "type": "array"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/ResourceDefinition"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Resources",
+      "type": "array"
+    },
+    "relations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RelationFact"
+      },
+      "maxItems": 8192,
+      "title": "Relations",
+      "type": "array"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/PermissionRule"
+      },
+      "maxItems": 8192,
+      "minItems": 1,
+      "title": "Rules",
+      "type": "array"
+    },
+    "batch_rules": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BatchPermissionRule"
+      },
+      "maxItems": 2048,
+      "title": "Batch Rules",
+      "type": "array"
+    }
+  },
+  "required": [
+    "contract_id",
+    "version",
+    "role_ids",
+    "workflow_states",
+    "subjects",
+    "actions",
+    "resources",
+    "rules"
+  ],
+  "title": "PermissionContract",
+  "type": "object"
+}

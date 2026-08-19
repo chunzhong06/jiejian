@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jiejian/artifacts/artifact-check-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "artifact_id", "artifact_root", "manifest_path", "ruleset_version", "budget"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "project_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "artifact_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "run_id": {"type": ["string", "null"], "pattern": "^run_[0-9a-f]{32}$"},
+    "artifact_root": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "manifest_path": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "ruleset_version": {"const": "artifact-local-2026.08.18"},
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "max_parallel_files", "max_files", "max_file_bytes", "max_total_bytes", "max_results", "max_duration_us", "max_compressed_layers"],
+      "properties": {
+        "schema_version": {"const": "1"},
+        "max_parallel_files": {"const": 1},
+        "max_files": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "max_file_bytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
+        "max_total_bytes": {"type": "integer", "minimum": 1, "maximum": 1073741824},
+        "max_results": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "max_duration_us": {"type": "integer", "minimum": 1000, "maximum": 300000000},
+        "max_compressed_layers": {"const": 0}
+      }
+    }
+  }
+}

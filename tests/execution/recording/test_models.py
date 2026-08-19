@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from jiejian.recording.models import (
+from product.backend.core.recording import (
     Recording,
     RecordingReasonCode,
     RecordingState,
     RecordingTerminalState,
     transition_recording_state,
 )
-from jiejian.errors import JiejianError
+from product.backend.core.errors import JiejianError
 
 
 def _recording() -> Recording:

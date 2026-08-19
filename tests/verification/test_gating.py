@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from jiejian.domain.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
-from jiejian.verification.gating import (
+from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
+from product.backend.core.verification.gating import (
     BaselineFindingRef,
     GateFacts,
     GateFinding,

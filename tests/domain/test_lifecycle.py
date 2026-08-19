@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from jiejian.domain.lifecycle import (
+from product.backend.core.lifecycle import (
     CaseLifecycle,
     CaseVerdict,
     ContractStatus,

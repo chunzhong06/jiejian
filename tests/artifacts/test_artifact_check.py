@@ -6,18 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from jiejian.artifacts.handler import ArtifactCheckJobHandler
-from jiejian.artifacts.models import (
-    ArtifactCheckRequestV1,
+from product.backend.infra.artifacts.scan_job import ArtifactCheckJobHandler
+from product.protocols.artifacts import (
+    ArtifactCheckRequest,
     ArtifactScanStatus,
     ArtifactVerdict,
-    ScanBudgetV1,
+    ScanBudget,
 )
-from jiejian.artifacts.scanner import scan_artifact
-from jiejian.execution.handlers import JobHandlerRegistry
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.execution.published_artifacts import PublicationManifestV1
-from jiejian.protocols import StagedArtifactV1
+from product.backend.infra.artifacts.scanner import scan_artifact
+from product.backend.infra.runtime.jobs.handlers import JobHandlerRegistry
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.artifacts.run_packages import PublicationManifest
+from product.protocols import StagedArtifact
 
 
 PROJECT_ID = "artifact-project"
@@ -25,19 +25,19 @@ RUN_ID = "run_" + "1" * 32
 JOB_ID = "job_" + "2" * 32
 
 
-def _artifact_tree(tmp_path: Path, files: dict[str, bytes]) -> ArtifactCheckRequestV1:
+def _artifact_tree(tmp_path: Path, files: dict[str, bytes]) -> ArtifactCheckRequest:
     var_dir = tmp_path / "var"
     final_dir = var_dir / "projects" / PROJECT_ID / "runs" / RUN_ID
     root = final_dir / "artifacts"
     root.mkdir(parents=True)
     (final_dir / "result.json").write_bytes(b"{}")
-    manifest_files = [StagedArtifactV1(schema_version="1", path="result.json", byte_count=2, sha256=hashlib.sha256(b"{}").hexdigest())]
+    manifest_files = [StagedArtifact(schema_version="2", path="result.json", byte_count=2, sha256=hashlib.sha256(b"{}").hexdigest())]
     for relative, raw in files.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw)
-        manifest_files.append(StagedArtifactV1(schema_version="1", path=f"artifacts/{relative}", byte_count=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
-    manifest = PublicationManifestV1(
+        manifest_files.append(StagedArtifact(schema_version="2", path=f"artifacts/{relative}", byte_count=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
+    manifest = PublicationManifest(
         project_id=PROJECT_ID,
         run_id=RUN_ID,
         job_id=JOB_ID,
@@ -51,7 +51,7 @@ def _artifact_tree(tmp_path: Path, files: dict[str, bytes]) -> ArtifactCheckRequ
     )
     manifest_path = final_dir / "publication-manifest.json"
     manifest_path.write_bytes(json.dumps(manifest.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode())
-    return ArtifactCheckRequestV1(
+    return ArtifactCheckRequest(
         project_id=PROJECT_ID,
         artifact_id="build-1",
         run_id=RUN_ID,
@@ -97,7 +97,7 @@ def test_fixed_artifact_is_safe(tmp_path: Path) -> None:
     assert request.budget.max_parallel_files == 1
 
     schema = json.loads(
-        (Path(__file__).resolve().parents[2] / "schemas" / "artifacts" / "artifact-check-request-v1.schema.json").read_text(
+    (Path(__file__).resolve().parents[2] / "product" / "protocols" / "schemas" / "artifacts" / "artifact-check-request.schema.json").read_text(
             encoding="utf-8"
         )
     )
@@ -114,7 +114,7 @@ def test_artifact_handler_is_auxiliary_and_does_not_add_a_persistent_target() ->
 
 def test_budget_or_manifest_boundary_is_inconclusive(tmp_path: Path) -> None:
     request = _artifact_tree(tmp_path, {"one.js": b"1", "two.js": b"2"})
-    limited = request.model_copy(update={"budget": ScanBudgetV1(max_files=1)})
+    limited = request.model_copy(update={"budget": ScanBudget(max_files=1)})
     result = scan_artifact(limited)
     assert result.status is ArtifactScanStatus.INCONCLUSIVE
     assert result.verdict is ArtifactVerdict.INCONCLUSIVE

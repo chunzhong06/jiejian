@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jiejian.contracts.llm.config import LLMProfileConfig, LLMProviderType
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.storage import (
+from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import (
     StorageUnitOfWork,
     create_session_factory,
     create_sqlite_engine,
