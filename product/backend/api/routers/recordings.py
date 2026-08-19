@@ -5,19 +5,16 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter
 
 from product.backend.workflows.context import ApplicationCore
-from product.backend.core.recording import RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command
 from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
-from product.protocols import parse_execution_profile
 
 
 def build_recordings_router(context: ApplicationCore) -> APIRouter:
@@ -29,25 +26,9 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         status_code=202,
     )
     async def create_recording(project_id: str, body: RecordingCreateRequest):
-        try:
-            profile = parse_execution_profile(
-                Path(body.profile_path).resolve().read_bytes()
-            )
-        except (OSError, ValueError, JiejianError):
-            raise JiejianError(ErrorCode.EXECUTION_PROFILE_INVALID, "录制必须使用有效的当前 ExecutionProfile") from None
-        if profile.project_id != project_id:
-            raise JiejianError(ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT, "录制 Profile 与项目不匹配")
-        selected = (
-            tuple(body.identities)
-            if body.identities
-            else tuple(item.id for item in profile.identities)
-        )
-        known = {item.id for item in profile.identities}
-        if (
-            not selected
-            or len(set(selected)) != len(selected)
-            or any(item not in known for item in selected)
-        ):
+        profile = context.execution.current(body.profile_id, project_id=project_id)
+        selected = next((item for item in profile.identities if item.id == body.identity_id), None)
+        if selected is None:
             raise JiejianError(ErrorCode.INPUT_INVALID, "录制身份选择无效")
         now_us = time.time_ns() // 1_000
         request = RecordingRunnerRequest(
@@ -56,21 +37,20 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             project_id=project_id,
             created_at_us=now_us,
             target_scope=profile.target.scope,
-            sessions=tuple(
+            sessions=(
                 RecordingSessionRef(
                     schema_version="1",
-                    identity_id=item,
+                    identity_id=selected.id,
                     session_ref=f"session_{uuid4().hex}",
                     expires_at_us=now_us + body.duration_seconds * 1_000_000,
-                )
-                for item in selected
+                ),
             ),
             budget=RecordingBudget(
                 schema_version="1",
                 max_duration_us=body.duration_seconds * 1_000_000,
-                max_contexts=len(selected),
+                max_contexts=1,
             ),
-            headless=body.headless,
+            headless=False,
             trace_enabled=False,
         )
         result = context.recording_submission.submit(
@@ -87,8 +67,22 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             {
                 "job": result.job.model_dump(mode="json"),
                 "recording": result.recording.model_dump(mode="json"),
+                "identity_options": _identity_options(profile),
             },
             status_code=202,
+        )
+
+    @router.get(
+        "/api/projects/{project_id}/recordings/setup", response_model=ApiResponse
+    )
+    async def recording_setup(project_id: str, profile_id: str):
+        profile = context.execution.current(profile_id, project_id=project_id)
+        return data_response(
+            {
+                "profile_id": profile.profile_id,
+                "project_id": profile.project_id,
+                "identity_options": _identity_options(profile),
+            }
         )
 
     @router.get("/api/recordings/{recording_id}", response_model=ApiResponse)
@@ -100,6 +94,18 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             job = work.jobs.get_by_recording(recording_id)
         view["job"] = job.model_dump(mode="json") if job else None
         return data_response(view)
+
+    @router.post("/api/recordings/{recording_id}/capture/start", response_model=ApiResponse)
+    @router.post("/api/recordings/{recording_id}/start", response_model=ApiResponse)
+    async def start_recording(recording_id: str):
+        view = context.recording_lifecycle.start_capture(recording_id)
+        return data_response(view.model_dump(mode="json"))
+
+    @router.post("/api/recordings/{recording_id}/capture/stop", response_model=ApiResponse)
+    @router.post("/api/recordings/{recording_id}/stop", response_model=ApiResponse)
+    async def stop_recording(recording_id: str):
+        view = context.recording_lifecycle.stop_capture(recording_id)
+        return data_response(view.model_dump(mode="json"))
 
     @router.get(
         "/api/projects/{project_id}/recordings", response_model=ApiResponse
@@ -136,11 +142,15 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
     @router.post(
         "/api/recordings/{recording_id}/finalize", response_model=ApiResponse
     )
-    async def finalize_recording(recording_id: str):
+    async def finalize_recording(
+        recording_id: str,
+        body: FinalizeRequest | None = None,
+    ):
         view = context.recording_lifecycle.finalize(
             recording_id,
             var_dir=context.var_dir,
             now_us=time.time_ns() // 1_000,
+            bindings=body.bindings if body is not None else None,
         )
         return data_response(view.model_dump(mode="json"))
 
@@ -156,14 +166,25 @@ from product.backend.api.envelope import ApiModel
 
 
 class RecordingCreateRequest(ApiModel):
-    profile_path: str = Field(min_length=1, max_length=2048)
-    # JSON arrays decode to list; tuple conversion belongs at the application boundary.
-    identities: list[str] | None = None
+    profile_id: str = Field(min_length=1, max_length=64)
+    identity_id: str = Field(min_length=1, max_length=64)
     duration_seconds: int = Field(default=60, ge=1, le=3_600)
-    headless: bool = True
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
 class ReviewRequest(ApiModel):
     command: dict[str, Any]
     bindings: dict[str, dict[str, str]] | None = None
+
+
+class FinalizeRequest(ApiModel):
+    bindings: dict[str, dict[str, str]] | None = None
+
+
+def _identity_options(profile) -> list[dict[str, str]]:
+    """仅投影身份 ID 与可读角色，避免把 secret_ref 带到产品响应。"""
+
+    return [
+        {"identity_id": identity.id, "role": identity.role}
+        for identity in profile.identities
+    ]

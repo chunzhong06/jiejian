@@ -26,6 +26,61 @@ function Write-Banner {
     }
 }
 
+function Select-StartupMode {
+    # 返回稳定内部模式名，避免展示文案成为脚本路由契约。
+
+    $items = @(
+        [pscustomobject]@{ mode = "Gui"; label = "图形界面" },
+        [pscustomobject]@{ mode = "Cli"; label = "命令行" },
+        [pscustomobject]@{ mode = "Prepare"; label = "仅完成环境准备" }
+    )
+    $selected = 0
+    Write-Host ""
+    Write-Host "界鉴已经准备完成" -ForegroundColor Cyan
+    Write-Host ""
+    $menuTop = [Console]::CursorTop
+    foreach ($item in $items) { Write-Host ("  {0,-24}" -f $item.label) }
+    while ($true) {
+        [Console]::SetCursorPosition(0, $menuTop)
+        for ($index = 0; $index -lt $items.Count; $index += 1) {
+            $marker = if ($index -eq $selected) { ">" } else { " " }
+            $color = if ($index -eq $selected) { "Cyan" } else { "Gray" }
+            Write-Host ("{0} {1,-24}" -f $marker, $items[$index].label) -ForegroundColor $color
+        }
+        $key = [Console]::ReadKey($true).Key
+        switch ($key) {
+            "UpArrow" { $selected = ($selected - 1 + $items.Count) % $items.Count }
+            "DownArrow" { $selected = ($selected + 1) % $items.Count }
+            "Enter" { return $items[$selected].mode }
+        }
+    }
+}
+
+function Write-CliWelcome {
+    # 子 shell 只继承本轮环境，欢迎信息不暗示用户配置已被修改。
+
+    Write-Host ""
+    Write-Host "界鉴命令行已经准备完成" -ForegroundColor Cyan
+    Write-Host ("VarDir  {0}" -f $script:VarDir) -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "常用命令" -ForegroundColor Gray
+    Write-Host "  jiejian doctor" -ForegroundColor DarkGray
+    Write-Host "  jiejian project --help" -ForegroundColor DarkGray
+    Write-Host "  jiejian recording --help" -ForegroundColor DarkGray
+    Write-Host "  jiejian run --help" -ForegroundColor DarkGray
+    Write-Host "  exit" -ForegroundColor DarkGray
+    Write-Host ""
+}
+
+function Wait-StartupFailureInput {
+    # start.cmd 双击入口需要保留错误；自动化和直接脚本调用仍立即返回退出码。
+    if (-not $script:WaitOnFailure -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
+        return
+    }
+    Write-Host "按 Enter 关闭窗口" -ForegroundColor DarkGray
+    while ([Console]::ReadKey($true).Key -ne "Enter") { }
+}
+
 function Start-DisplayStage([int]$Index, [string]$Name) {
     $script:DisplayStageName = $Name
     $script:DisplayStageIndex = $Index

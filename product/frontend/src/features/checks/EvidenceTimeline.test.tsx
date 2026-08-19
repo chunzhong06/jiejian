@@ -29,7 +29,7 @@ describe('EvidenceTimeline', () => {
     expect(screen.getByText('确定性结论')).toBeInTheDocument()
     expect(screen.queryByText('请求事实')).not.toBeInTheDocument()
     expect(screen.queryByText('多面观察')).not.toBeInTheDocument()
-    expect(screen.getByText('修改')).toBeInTheDocument()
+    expect(screen.getAllByText('修改')).toHaveLength(2)
     expect(screen.getByText(outcomeText)).toBeInTheDocument()
     expect(screen.getByText(effectText)).toBeInTheDocument()
     expect(screen.getByText(completeness)).toBeInTheDocument()

@@ -35,9 +35,11 @@ from product.backend.infra.runtime.process_environment import minimal_process_en
 from product.protocols import RECORDING_RESULT_MAX_BYTES, RecordingRunnerRequest, RecordingRunnerResult, canonical_recording_json_bytes, parse_recording_result
 from product.backend.workflows.recording.submission import RecordingSubmission, RecordingCompletionResult
 from product.backend.infra.recording.request_store import RecordingRequestStore
+from product.backend.infra.recording.control import control_paths_for_attempt
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 
 _CANCEL_PATH_ENV = "JIEJIAN_RECORDING_CANCEL_FILE"
+_ATTEMPT_DIR_ENV = "JIEJIAN_RECORDING_ATTEMPT_DIR"
 logger = logging.getLogger("jiejian.runtime.recording_job")
 
 
@@ -166,6 +168,8 @@ class RecordingJobHandler:
     ) -> RecordingRunnerResult:
         environment = minimal_process_environment(self._environ)
         environment[_CANCEL_PATH_ENV] = str(cancel_path)
+        control = control_paths_for_attempt(cancel_path.parent)
+        environment[_ATTEMPT_DIR_ENV] = str(control.attempt_dir)
         with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
             try:
                 process = self._popen(
@@ -252,7 +256,6 @@ class RecordingJobHandler:
         )
 
 
-# Recording JobTarget 实现。
 # =============================================================================
 # Recording Job target
 #

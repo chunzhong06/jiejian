@@ -21,6 +21,7 @@ from product.protocols import (
     RecordingRunnerResultType,
     RecordingRunnerResult,
     RecordingSessionRef,
+    ConfirmFlowDraftVariable,
     canonical_recording_json_bytes,
     parse_recording_result,
 )
@@ -29,7 +30,12 @@ from product.backend.workflows.recording.submission import (
     SubmitRecording,
 )
 from product.backend.infra.recording.request_store import RecordingRequestStore
+from product.backend.infra.recording.control import (
+    control_paths_for_attempt,
+    write_control_marker,
+)
 from product.backend.infra.runtime.recording_process import execute_recording_runner
+from product.backend.infra.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
 from product.backend.infra.storage import (
     ProjectRecord,
     StorageUnitOfWork,
@@ -39,9 +45,14 @@ from product.backend.infra.storage import (
 )
 from product.backend.infra.runtime.jobs.recording import RecordingJobHandler
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
+from product.backend.infra.runtime.jobs.models import ClaimJob
+from product.backend.infra.runtime.jobs.models import RequestCancellation
+from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
 from product.backend.infra.runtime.jobs.targets import JobTargetType, default_run_job_targets
 from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
+from product.backend.workflows.recording.lifecycle import RecordingLifecycle
+from tests.execution.recording.test_browser_boundary import browser_server, recording_request
 
 pytestmark = pytest.mark.database
 
@@ -115,6 +126,260 @@ def test_recording_job_reaches_pending_review_with_atomic_draft(tmp_path: Path) 
         assert len(persisted.browser_events) == 5
         assert len(drafts) == 1 and drafts[0].draft == completed.draft
         assert [event.sequence for event in events] == [1, 2, 3]
+        variable = completed.draft.variables[0]
+        source = variable.candidate_sources[0]
+        lifecycle = RecordingLifecycle(context.uow_factory, var_dir=context.var_dir)
+        reviewed = lifecycle.review(
+            request.recording_id,
+            ConfirmFlowDraftVariable(
+                schema_version="1",
+                operation="CONFIRM_VARIABLE_SOURCE",
+                variable_name=variable.name,
+                source_event_sequence=source.source_event_sequence,
+                source_json_path=source.json_path,
+            ),
+        )
+        bindings = {
+            step.id: {
+                "alternate_identity_id": "attacker",
+                "resource_id": "owner-resource",
+                "alternate_resource_id": "attacker-resource",
+            }
+            for step in reviewed.draft.steps
+            if step.method is not None
+        }
+        finalized = lifecycle.finalize(
+            request.recording_id,
+            var_dir=context.var_dir,
+            now_us=NOW_US + 40,
+            bindings=bindings,
+        )
+        assert finalized.recording.state is RecordingState.COMPLETED
+        assert finalized.flow.steps
+        with context.uow_factory() as work:
+            final_drafts = work.flow_drafts.list_for_recording(request.recording_id)
+        assert [item.revision for item in final_drafts] == [1, 2, 3]
+        assert all(step.bindings_confirmed for step in final_drafts[-1].draft.steps)
+    finally:
+        context.engine.dispose()
+
+
+def test_recording_lifecycle_controls_current_attempt_and_capture_phases(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    try:
+        request = _request("rec_" + "9" * 32).model_copy(
+            update={"created_at_us": NOW_US}
+        )
+        submission = context.application.submit(
+            SubmitRecording(
+                request=request,
+                flow_id=PROJECT_ID,
+                idempotency_key="recording-control-phases",
+                available_at_us=NOW_US,
+                now_us=NOW_US,
+                job_id="job_" + "9" * 32,
+            )
+        )
+        lifecycle = RecordingLifecycle(context.uow_factory, var_dir=context.var_dir)
+
+        def assert_precondition(action) -> None:
+            with pytest.raises(JiejianError) as raised:
+                action()
+            assert raised.value.code == ErrorCode.RECORD_STATE_PRECONDITION.value
+
+        assert lifecycle.status(request.recording_id).capture_phase == "PREPARING_BROWSER"
+        assert_precondition(lambda: lifecycle.start_capture(request.recording_id))
+
+        claimed = context.attempts.claim(
+            ClaimJob(
+                lease_owner="recording-worker",
+                now_us=NOW_US + 10,
+                lease_duration_us=60_000_000,
+                job_id=submission.job.job_id,
+            )
+        )
+        assert claimed is not None
+        paths = attempt_paths_for(context.var_dir, claimed.job)
+        paths.attempt_dir.mkdir(parents=True)
+        current = control_paths_for_attempt(paths.attempt_dir)
+        stale_dir = paths.attempt_dir.parent / "1-999"
+        stale_dir.mkdir(parents=True)
+        write_control_marker(
+            control_paths_for_attempt(stale_dir).ready_path,
+            attempt_dir=stale_dir,
+        )
+
+        assert lifecycle.status(request.recording_id).capture_phase == "PREPARING_BROWSER"
+        assert_precondition(lambda: lifecycle.start_capture(request.recording_id))
+
+        write_control_marker(current.ready_path, attempt_dir=current.attempt_dir)
+        assert lifecycle.status(request.recording_id).capture_phase == "AWAITING_CAPTURE"
+        assert_precondition(lambda: lifecycle.stop_capture(request.recording_id))
+        started = lifecycle.start_capture(request.recording_id)
+        assert started.capture_phase == "CAPTURE_STARTING"
+        assert_precondition(lambda: lifecycle.start_capture(request.recording_id))
+
+        write_control_marker(current.started_path, attempt_dir=current.attempt_dir)
+        assert lifecycle.status(request.recording_id).capture_phase == "CAPTURING"
+        stopping = lifecycle.stop_capture(request.recording_id)
+        assert stopping.capture_phase == "STOPPING"
+        assert_precondition(lambda: lifecycle.stop_capture(request.recording_id))
+    finally:
+        context.engine.dispose()
+
+
+def test_controlled_captured_result_is_consumed_into_pending_review_draft(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    sentinel = "persistent-controlled-recording-secret"
+    try:
+        with browser_server(sentinel) as server:
+            request = recording_request(server.server_port)
+            request = request.model_copy(
+                update={
+                    "recording_id": "rec_" + "a" * 32,
+                    "project_id": PROJECT_ID,
+                    "created_at_us": NOW_US,
+                    "sessions": (
+                        request.sessions[0].model_copy(
+                            update={"expires_at_us": NOW_US + 60_000_000}
+                        ),
+                    ),
+                }
+            )
+            signals = {"start": False, "stop": False}
+
+            def interact(session: RecordingBrowserSession) -> None:
+                page = session.new_page("owner")
+                page.goto(server.url("/ui"))
+                signals["start"] = True
+                assert session.wait_for_capture_start(page, "owner")
+                page.fill("input[name='password']", sentinel)
+                page.click("button[data-testid='submit']")
+                page.wait_for_timeout(250)
+                signals["stop"] = True
+                assert session.stop_requested()
+
+            result = BrowserRecordingAdapter().run(
+                request,
+                interact,
+                known_secrets=(sentinel,),
+                capture_controlled=True,
+                start_requested=lambda: signals["start"],
+                stop_requested=lambda: signals["stop"],
+                now_us=lambda: NOW_US + 100,
+            )
+
+        assert result.result_type is RecordingRunnerResultType.CAPTURED
+        submission = context.application.submit(
+            SubmitRecording(
+                request=request,
+                flow_id=PROJECT_ID,
+                idempotency_key="controlled-captured-consumption",
+                available_at_us=NOW_US,
+                now_us=NOW_US,
+                job_id="job_" + "a" * 32,
+            ),
+            known_secrets=(sentinel,),
+        )
+        times = iter((NOW_US + 10, NOW_US + 1_000))
+        worker = RecordingJobHandler(
+            var_dir=context.var_dir,
+            lease_owner="recording-worker",
+            uow_factory=context.uow_factory,
+            attempts=context.attempts,
+            application=context.application,
+            request_store=context.request_store,
+            cancel_path_for=lambda root, job: attempt_paths_for(root, job).cancel_path,
+            controlled_runner=lambda _request, _cancelled: result,
+            known_secrets=(sentinel,),
+            utc_now_us=lambda: next(times),
+        )
+
+        completed = worker.run_job(submission.job.job_id)
+
+        assert completed is not None
+        assert completed.recording.state is RecordingState.PENDING_REVIEW
+        assert completed.draft is not None
+        assert any(
+            event.kind is RecordingEventKind.REQUEST
+            and "/echo" in (event.url or "")
+            for event in result.events
+        )
+        assert all("/ui" not in (event.url or "") for event in result.events)
+        with context.uow_factory() as work:
+            persisted = work.recordings.get(request.recording_id)
+            drafts = work.flow_drafts.list_for_recording(request.recording_id)
+        assert persisted is not None and persisted.state is RecordingState.PENDING_REVIEW
+        assert len(drafts) == 1
+        final_view = RecordingLifecycle(
+            context.uow_factory, var_dir=context.var_dir
+        ).status(request.recording_id)
+        assert final_view.capture_phase == "FINISHED"
+    finally:
+        context.engine.dispose()
+
+
+def test_cancelled_result_is_consumed_without_flow_draft(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    try:
+        request = _request("rec_" + "b" * 32).model_copy(
+            update={"created_at_us": NOW_US}
+        )
+        cancelled = BrowserRecordingAdapter().run(
+            request,
+            lambda _session: pytest.fail("cancelled recording must not interact"),
+            cancellation_requested=lambda: True,
+            now_us=lambda: NOW_US + 100,
+        )
+        assert cancelled.result_type is RecordingRunnerResultType.CANCELLED
+        submission = context.application.submit(
+            SubmitRecording(
+                request=request,
+                flow_id=PROJECT_ID,
+                idempotency_key="cancelled-consumption",
+                available_at_us=NOW_US,
+                now_us=NOW_US,
+                job_id="job_" + "b" * 32,
+            )
+        )
+        queue = JobQueue(context.uow_factory, targets=context.job_targets)
+        times = iter((NOW_US + 10, NOW_US + 1_000))
+        worker = RecordingJobHandler(
+            var_dir=context.var_dir,
+            lease_owner="recording-worker",
+            uow_factory=context.uow_factory,
+            attempts=context.attempts,
+            application=context.application,
+            request_store=context.request_store,
+            cancel_path_for=lambda root, job: attempt_paths_for(root, job).cancel_path,
+            controlled_runner=lambda _request, _cancelled: (
+                queue.request_cancellation(
+                    RequestCancellation(
+                        job_id=submission.job.job_id,
+                        now_us=NOW_US + 500,
+                    )
+                ),
+                cancelled,
+            )[1],
+            utc_now_us=lambda: next(times),
+        )
+
+        completed = worker.run_job(submission.job.job_id)
+
+        assert completed is not None
+        assert completed.job.state is JobState.CANCELLED
+        assert completed.recording.state is RecordingState.CANCELLED
+        assert completed.draft is None
+        with context.uow_factory() as work:
+            assert work.flow_drafts.list_for_recording(request.recording_id) == ()
+        final_view = RecordingLifecycle(
+            context.uow_factory, var_dir=context.var_dir
+        ).status(request.recording_id)
+        assert final_view.capture_phase == "FINISHED"
     finally:
         context.engine.dispose()
 

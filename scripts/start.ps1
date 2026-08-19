@@ -18,14 +18,20 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [string]$VarDir = "",
+    [ValidateSet("Interactive", "Gui", "Cli", "Prepare")]
+    [string]$Mode = "Interactive",
     [switch]$PrepareOnly,
     [switch]$ForcePrepare,
     [Parameter(DontShow = $true)][switch]$DisplaySpinnerProcess,
     [Parameter(DontShow = $true)][string]$DisplaySpinnerStage = "startup",
-    [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii
+    [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii,
+    [Parameter(DontShow = $true)][switch]$WaitOnFailure
 )
 
 $ErrorActionPreference = "Stop"
+$script:ModeExplicit = $PSBoundParameters.ContainsKey("Mode")
+$script:FinalMode = if ($PrepareOnly) { "Prepare" } else { $Mode }
+$script:WaitOnFailure = $false
 $script:ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 if ([string]::IsNullOrWhiteSpace($VarDir)) {
     $VarDir = Join-Path $script:ProjectRoot "var"
@@ -78,7 +84,8 @@ $script:Utf8Encoding = New-Object -TypeName System.Text.UTF8Encoding -ArgumentLi
 $OutputEncoding = [Console]::OutputEncoding
 
 try {
-    $script:DisplayInteractive = -not [Console]::IsOutputRedirected
+    $script:DisplayInteractive = -not [Console]::IsInputRedirected -and
+        -not [Console]::IsOutputRedirected
     $script:DisplayUnicode = $script:DisplayInteractive -and
         [Console]::OutputEncoding.CodePage -eq 65001 -and
         $Host.UI.RawUI.WindowSize.Width -ge 72
@@ -99,7 +106,17 @@ if ($DisplaySpinnerProcess) {
     exit 0
 }
 
+$script:WaitOnFailure = [bool]($WaitOnFailure -and
+    $script:FinalMode -eq "Interactive" -and
+    $script:DisplayInteractive)
+
 try {
+    if ($PrepareOnly -and $script:ModeExplicit -and $Mode -ne "Prepare") {
+        Fail-Start 40 "arguments" "-PrepareOnly 只能与 -Mode Prepare 组合" "使用 -Mode Prepare 或移除 -PrepareOnly"
+    }
+    if ($script:FinalMode -eq "Interactive" -and -not $script:DisplayInteractive) {
+        Fail-Start 40 "mode" "Interactive 模式需要可交互的输入和输出；请显式使用 -Mode Gui、-Mode Cli 或 -Mode Prepare" "使用 -Mode Gui、-Mode Cli 或 -Mode Prepare"
+    }
     # --- 启动环节：检查运行环境 ---
     Set-Location -LiteralPath $script:ProjectRoot
     Write-Banner
@@ -114,7 +131,7 @@ try {
     Write-DisplayResult "PowerShell" "完成" $true $PSVersionTable.PSVersion.ToString()
     New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null
     Load-PrepareState
-    Write-Startup "项目根: $script:ProjectRoot`n运行目录: $script:VarDir`n模式: $(if($PrepareOnly){'PrepareOnly'}else{'serve'})`n日志: $script:LogPath`nNode=$script:NodeVersion pnpm=$script:PnpmVersion"
+    Write-Startup "项目根: $script:ProjectRoot`n运行目录: $script:VarDir`n模式: $script:FinalMode`n日志: $script:LogPath`nNode=$script:NodeVersion pnpm=$script:PnpmVersion"
     Complete-DisplayStage "完成"
     # --- 启动环节：准备 Python ---
     Start-DisplayStage 2 "准备 Python"
@@ -163,10 +180,20 @@ try {
     Write-DisplayResult "前端资源" "完成" $true
     Complete-DisplayStage "完成"
     Start-DisplayStage 6 "启动界鉴"
-    if ($PrepareOnly) {
+    if ($script:FinalMode -eq "Interactive") {
+        $script:FinalMode = Select-StartupMode
+    }
+    if ($script:FinalMode -eq "Prepare") {
         Write-Stage "prepare" "确认准备完成"
         Write-Startup "准备完成: $script:VarDir"
         Write-DisplayResult "启动条件" "完成" $true ("运行目录：{0}" -f $script:VarDir)
+        Complete-DisplayStage
+        exit 0
+    }
+    if ($script:FinalMode -eq "Cli") {
+        Write-Stage "cli" "进入命令行会话"
+        Invoke-CliShell
+        Write-DisplayResult "命令行" "已退出" $true
         Complete-DisplayStage
         exit 0
     }

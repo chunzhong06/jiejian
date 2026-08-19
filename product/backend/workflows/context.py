@@ -128,7 +128,7 @@ class ApplicationCore:
             factory,
             RecordingRequestStore(self.var_dir),
         )
-        self.recording_lifecycle = RecordingLifecycle(factory)
+        self.recording_lifecycle = RecordingLifecycle(factory, var_dir=self.var_dir)
         self.onboarding = OnboardingWorkflow(
             folder_selector or SystemFolderSelector(environment=self._base_environment),
             var_dir=self.var_dir,

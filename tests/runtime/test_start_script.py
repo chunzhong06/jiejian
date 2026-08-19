@@ -130,6 +130,9 @@ def _run_start(
     cwd: Path = ROOT,
     script_path: Path = SCRIPT,
     force_prepare: bool = False,
+    mode: str | None = None,
+    prepare_only: bool = True,
+    input_text: str | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     effective_script_path = script_path
@@ -159,7 +162,11 @@ def _run_start(
     )
     if extra_env:
         env.update(extra_env)
-    arguments = ["-PrepareOnly"]
+    arguments = []
+    if prepare_only:
+        arguments.append("-PrepareOnly")
+    if mode is not None:
+        arguments.extend(["-Mode", mode])
     if force_prepare:
         arguments.append("-ForcePrepare")
     arguments.extend(["-VarDir", str(command_var_dir if command_var_dir is not None else var_dir)])
@@ -168,6 +175,7 @@ def _run_start(
         cwd=effective_cwd,
         env=env,
         text=True,
+        input=input_text,
         capture_output=True,
         check=False,
     )
@@ -760,13 +768,116 @@ def test_root_start_cmd_forwards_arguments_and_exit_code(tmp_path: Path) -> None
     )
     assert result.returncode == 37
     forwarded = forwarded_path.read_text(encoding="utf-8-sig").strip()
-    assert forwarded == '-ForcePrepare|-PrepareOnly|-VarDir|"D:\\tmp\\界鉴-test"'
+    assert forwarded == '-WaitOnFailure|-ForcePrepare|-PrepareOnly|-VarDir|"D:\\tmp\\界鉴-test"'
     command_text = CMD_SCRIPT.read_text(encoding="utf-8")
     assert "chcp 65001" in command_text
     assert "setlocal" in command_text
+    assert "-WaitOnFailure" in command_text
     assert "where pwsh.exe" in command_text
     assert "-NoLogo -NoProfile -ExecutionPolicy Bypass -File" in command_text
     assert "%*" in command_text
     assert "conda" not in command_text.lower()
     assert "uv" not in command_text.lower()
     assert "jiejian" not in command_text.lower()
+
+
+@pytest.mark.process
+def test_default_interactive_requires_explicit_mode_when_io_is_redirected(
+    tmp_path: Path,
+) -> None:
+    shim, log = _make_shims(tmp_path, conda=False, uv=True)
+    result = _run_start(
+        tmp_path / "var",
+        shim,
+        log,
+        prepare_only=False,
+    )
+
+    assert result.returncode == 40
+    assert "请显式使用 -Mode Gui、-Mode Cli 或 -Mode Prepare" in result.stdout
+    assert "Select-StartupMode" not in result.stdout
+
+
+@pytest.mark.process
+def test_prepare_only_compatibility_and_explicit_mode_conflict_are_strict(
+    tmp_path: Path,
+) -> None:
+    shim, log = _make_shims(tmp_path, conda=False, uv=True)
+    result = _run_start(
+        tmp_path / "var",
+        shim,
+        log,
+        mode="Gui",
+        prepare_only=True,
+    )
+
+    assert result.returncode == 40
+    assert "-PrepareOnly 只能与 -Mode Prepare 组合" in result.stdout
+
+
+@pytest.mark.process
+def test_explicit_prepare_and_gui_routes_keep_prepare_semantics_and_serve_open(
+    tmp_path: Path,
+) -> None:
+    shim, log = _make_shims(tmp_path, conda=False, uv=True)
+    var_dir = tmp_path / "var"
+    prepared = _run_start(var_dir, shim, log, mode="Prepare", prepare_only=False)
+    assert prepared.returncode == 0, prepared.stdout + prepared.stderr
+    assert " serve --open " not in log.read_text(encoding="utf-8")
+
+    gui = _run_start(var_dir, shim, log, mode="Gui", prepare_only=False)
+    assert gui.returncode == 0, gui.stdout + gui.stderr
+    log_text = log.read_text(encoding="utf-8")
+    assert " serve --open " in log_text
+    assert "--frontend-dir" in log_text
+
+
+@pytest.mark.process
+def test_cli_mode_enters_temporary_shell_with_exact_runner_and_var_dir(
+    tmp_path: Path,
+) -> None:
+    shim, log = _make_shims(tmp_path, conda=False, uv=True)
+    var_dir = tmp_path / "var"
+    result = _run_start(
+        var_dir,
+        shim,
+        log,
+        mode="Cli",
+        prepare_only=False,
+        input_text="jiejian doctor\nexit\n",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "界鉴命令行已经准备完成" in result.stdout
+    assert str(var_dir) in result.stdout
+    log_text = log.read_text(encoding="utf-8")
+    assert " run --locked --no-sync python -B -m product.backend.cli " in log_text
+    assert " doctor " in log_text
+    assert str(var_dir) in log_text
+    assert not list(tmp_path.rglob("*PowerShell_profile.ps1"))
+
+
+@pytest.mark.process
+def test_direct_prepare_failure_does_not_wait_even_when_hidden_flag_is_present(
+    tmp_path: Path,
+) -> None:
+    shim, log = _make_shims(tmp_path, conda=False, uv=True)
+    result = _run_start(
+        tmp_path / "var",
+        shim,
+        log,
+        mode="Prepare",
+        prepare_only=False,
+        extra_env={"UV_MODE": "mismatch"},
+    )
+
+    assert result.returncode == 22
+    assert "按 Enter 关闭窗口" not in result.stdout
+
+
+def test_interactive_failure_wait_eligibility_survives_menu_selection() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assignment = "$script:WaitOnFailure = [bool]($WaitOnFailure -and"
+
+    assert text.count(assignment) == 1
+    assert text.index(assignment) < text.index("$script:FinalMode = Select-StartupMode")

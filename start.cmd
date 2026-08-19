@@ -13,6 +13,6 @@ if not errorlevel 1 (
 ) else (
     set "POWERSHELL_EXE=powershell.exe"
 )
-"%POWERSHELL_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%" %*
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%" -WaitOnFailure %*
 set "START_EXIT=%ERRORLEVEL%"
 endlocal & exit /b %START_EXIT%

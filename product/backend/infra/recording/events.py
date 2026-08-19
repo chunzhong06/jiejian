@@ -64,15 +64,29 @@ class RecordingEventCollector:
         self.safety_error: JiejianError | None = None
         self.safety_reason = RecordingReasonCode.TARGET_SCOPE_VIOLATION
         self._frozen = False
+        self._capture_enabled = False
         self._payload_bytes = 0
         self._page_ids: dict[Page, str] = {}
         self._page_identity: dict[Page, str] = {}
         self._frame_ids: dict[Frame, str] = {}
         self._request_ids: dict[Request, str] = {}
+        self._discarded_requests: set[Request] = set()
         self._websocket_count = 0
         self._action_count = 0
         self._pending_actions: dict[tuple[str, str, str], str] = {}
         self._guards: dict[str, WebTargetGuard] = {}
+
+    def begin_capture(self) -> None:
+        """开启持久事件采集，并丢弃准备阶段建立的关联索引。"""
+
+        self._capture_enabled = True
+        # 登录准备期间的 page/request 关联不能带入草稿；开始后由下一次事件重新建立。
+        self._discarded_requests.update(self._request_ids)
+        self._page_ids.clear()
+        self._page_identity.clear()
+        self._frame_ids.clear()
+        self._request_ids.clear()
+        self._pending_actions.clear()
 
     def freeze(self) -> None:
         """在清理前固定事件集合，避免关闭回调改变已判定结果。"""
@@ -388,6 +402,10 @@ class RecordingEventCollector:
         )
 
     def _request_finished(self, identity_id: str, request: Request) -> None:
+        if request in self._discarded_requests:
+            # requestfinished 可能在开始采集后才到达；不能让准备期响应伪装成录制事件。
+            self._discarded_requests.discard(request)
+            return
         response = request.response()
         if response is None:
             return
@@ -605,6 +623,8 @@ class RecordingEventCollector:
 
     def _append(self, *, force_safety: bool = False, **values: Any) -> None:
         if self._frozen:
+            return
+        if not self._capture_enabled and not force_safety:
             return
         if not force_safety:
             if self.now_us() - self.started_at_us > self.budget.max_duration_us:

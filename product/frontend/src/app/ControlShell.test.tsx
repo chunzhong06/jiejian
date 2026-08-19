@@ -66,7 +66,7 @@ describe('应用壳', () => {
   })
 
   it('串起执行配置、矩阵、已发布结果、证据、报告和历史入口', async () => {
-    const contract = { subjects: [{ subject_id: 'member', roles: ['reader'] }], resources: [{ resource_id: 'document', resource_type: '文档' }], relations: [{ relation_id: 'owns-document', relation: '拥有', source: { endpoint_id: 'member' }, target: { endpoint_id: 'document' } }], rules: [{ rule_id: 'read-document', subject_id: 'member', action_id: 'read', resource_id: 'document', expectation: 'DENY', severity: 'high' }], batch_rules: [] }
+    const contract = { subjects: [{ subject_id: 'member', roles: ['reader'] }], resources: [{ resource_id: 'document', resource_type: '文档' }], relations: [{ relation_id: 'owns-document', relation: '拥有', source: { endpoint_type: 'subject', endpoint_id: 'member' }, target: { endpoint_type: 'resource', endpoint_id: 'document' } }], rules: [{ rule_id: 'read-document', subject_id: 'member', action_id: 'read', resource_id: 'document', expectation: 'DENY', severity: 'high' }], batch_rules: [] }
     const run = { run_id: 'run-current', created_at_us: 3, execution_schema_version: '2', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', case_progress: { completed: 1, total: 1 }, observer_health: { schema_version: '1', required_observations: ['resource_state'], resource_state: { configured: true, required: true } } }
     mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
     mockApi.runs.mockResolvedValue([run, { run_id: 'run-history', created_at_us: 1, lifecycle: 'COMPLETED', result_integrity: 'VERIFIED' }])
@@ -87,7 +87,7 @@ describe('应用壳', () => {
     await screen.findByText('当前执行配置')
     expect(await screen.findByText('权限矩阵')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: '关系图' }))
-    expect(await screen.findByText('权限关系图')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '权限关系图' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '开始检查' }))
     expect(await screen.findByText('选择执行配置')).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '开始检查' }))
