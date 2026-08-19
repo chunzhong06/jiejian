@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from jiejian.api.routers.gating import build_gating_router
-from jiejian.cli.app import app as cli_app
+from product.backend.api.routers.gating import build_gating_router
+from product.backend.cli.app import app as cli_app
 
 
 BASELINE_ID = "baseline_" + "a" * 32
@@ -32,27 +33,30 @@ class _FakeGating:
         return {"schema_version": "1", "gate_result_id": gate_result_id, "decision": "PASS"}
 
 
-def test_v2_api_uses_explicit_baseline_and_gate_paths() -> None:
+def test_api_uses_explicit_baseline_and_gate_paths() -> None:
     app = FastAPI()
     app.include_router(build_gating_router(SimpleNamespace(gating=_FakeGating())))
     with TestClient(app) as client:
         accepted = client.post(
-            "/api/v2/projects/project-api/baselines",
-            json={"schema_version": "2", "accepted_run_id": RUN_ID, "actor": "operator", "reason": "fixed run"},
+            "/api/projects/project-api/baselines",
+            json={"schema_version": "1", "accepted_run_id": RUN_ID, "actor": "operator", "reason": "fixed run"},
         )
         evaluated = client.post(
-            f"/api/v2/baselines/{BASELINE_ID}/runs/{RUN_ID}/gate",
-            json={"schema_version": "2", "minimum_severity": "low"},
+            f"/api/baselines/{BASELINE_ID}/runs/{RUN_ID}/gate",
+            json={"schema_version": "1", "minimum_severity": "low"},
         )
-        read = client.get(f"/api/v2/gates/{GATE_ID}")
+        read = client.get(f"/api/gates/{GATE_ID}")
     assert accepted.status_code == evaluated.status_code == read.status_code == 200
     assert evaluated.json()["data"]["decision"] == read.json()["data"]["decision"] == "PASS"
 
 
-def test_new_cli_gate_mode_returns_gate_decision_exit_code(monkeypatch, tmp_path) -> None:
+def test_new_cli_gate_mode_returns_gate_decision_exit_code(monkeypatch) -> None:
     fake_context = SimpleNamespace(gating=_FakeGating(), close=lambda: None)
-    monkeypatch.setattr("jiejian.cli.commands.gating.runtime_settings", lambda _context: SimpleNamespace(var_dir=tmp_path))
-    monkeypatch.setattr("jiejian.cli.commands.gating.ApplicationContext", lambda _var_dir: fake_context)
+    @contextmanager
+    def fake_scope(_context):
+        yield fake_context
+
+    monkeypatch.setattr("product.backend.cli.commands.gating.application_scope", fake_scope)
     result = CliRunner().invoke(cli_app, ["gate", "evaluate", BASELINE_ID, RUN_ID])
     assert result.exit_code == 0
     assert '"decision":"PASS"' in result.stdout

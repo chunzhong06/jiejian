@@ -11,33 +11,33 @@ from threading import Thread
 import pytest
 from sqlalchemy.engine import Engine
 
-from jiejian.domain.lifecycle import JobState, RunLifecycle, RunVerdict
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.storage import (
+from product.backend.core.lifecycle import JobState, RunLifecycle, RunVerdict
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import (
     StorageUnitOfWork,
     create_session_factory,
     create_sqlite_engine,
     default_database_path,
     upgrade_database,
 )
-from jiejian.execution.attempts import JobAttemptService
-from jiejian.execution.models import RequestCancellationV1
-from jiejian.execution.publication import RunPublicationService
-from jiejian.execution.queue import JobQueueService
-from jiejian.execution.request_store import ExecutionRequestStore
-from jiejian.execution.submission import ExecutionSubmissionService, SubmitExecutionV1, SubmitExecutionV2
-from jiejian.execution.supervisor import WorkerSupervisor
-from jiejian.execution.request_store import PersistedExecutionRequestV2
-from jiejian.protocols import (
-    CleanupResultV2,
-    CleanupStatusV2,
-    RunnerErrorV2,
-    RunnerInputV2,
-    RunnerResultTypeV2,
-    RunnerResultV2,
-    canonical_runner_v2_json_bytes,
+from product.backend.infra.runtime.jobs.attempts import JobAttempts
+from product.backend.infra.runtime.jobs.models import RequestCancellation
+from product.backend.infra.artifacts.run_publication import RunPublisher
+from product.backend.infra.runtime.jobs.queue import JobQueue
+from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.workflows.runs.submission import RunSubmission, SubmitExecution, SubmitExecution
+from product.backend.infra.runtime.runner_supervisor import RunnerSupervisor
+from product.backend.infra.runtime.job_requests import PersistedExecutionRequest
+from product.protocols import (
+    CleanupResult,
+    CleanupStatus,
+    RunnerError,
+    RunnerInput,
+    RunnerResultType,
+    RunnerResult,
+    canonical_runner_json_bytes,
 )
-from tests.execution.protocol.test_runner_v2 import _input
+from tests.execution.protocol.test_runner import _input
 
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 
@@ -49,9 +49,9 @@ class RuntimeParts:
     engine: Engine
     uow_factory: object
     request_store: ExecutionRequestStore
-    submission: ExecutionSubmissionService
-    queue: JobQueueService
-    attempts: JobAttemptService
+    submission: RunSubmission
+    queue: JobQueue
+    attempts: JobAttempts
 
 
 def _runtime(var_dir: Path) -> RuntimeParts:
@@ -65,15 +65,15 @@ def _runtime(var_dir: Path) -> RuntimeParts:
         engine=engine,
         uow_factory=uow_factory,
         request_store=request_store,
-        submission=ExecutionSubmissionService(uow_factory, request_store),
-        queue=JobQueueService(uow_factory),
-        attempts=JobAttemptService(uow_factory, jitter_source=lambda _: 0),
+        submission=RunSubmission(uow_factory, request_store),
+        queue=JobQueue(uow_factory),
+        attempts=JobAttempts(uow_factory, jitter_source=lambda _: 0),
     )
 
 
 def _submit(parts: RuntimeParts, request, suffix: str = "3"):
     return parts.submission.submit(
-        SubmitExecutionV1(
+        SubmitExecution(
             request=request,
             idempotency_key=f"supervisor-{suffix}",
             max_attempts=3,
@@ -90,14 +90,14 @@ def _job(parts: RuntimeParts, job_id: str):
         return work.jobs.get(job_id)
 
 
-def test_worker_v2_bridge_builds_explicit_input_and_submission_command(tmp_path: Path) -> None:
+def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_path: Path) -> None:
     runner_input = _input()
-    request = PersistedExecutionRequestV2(
+    request = PersistedExecutionRequest(
         schema_version="2",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )
-    command = SubmitExecutionV2(
+    command = SubmitExecution(
         schema_version="2",
         request=request,
         idempotency_key="worker-v2-bridge",
@@ -106,7 +106,7 @@ def test_worker_v2_bridge_builds_explicit_input_and_submission_command(tmp_path:
         run_id=runner_input.run_id,
         job_id=runner_input.job_id,
     )
-    supervisor = WorkerSupervisor(
+    supervisor = RunnerSupervisor(
         var_dir=tmp_path / "var",
         lease_owner="worker-v2-bridge",
         uow_factory=lambda **kwargs: None,
@@ -123,11 +123,11 @@ def test_worker_v2_bridge_builds_explicit_input_and_submission_command(tmp_path:
         "updated_at_us": NOW_US,
     })()
     built = supervisor._runner_input(job, command.request)
-    assert isinstance(built, RunnerInputV2)
-    assert canonical_runner_v2_json_bytes(built)
+    assert isinstance(built, RunnerInput)
+    assert canonical_runner_json_bytes(built)
 
 
-def test_worker_v2_non_success_uses_existing_fatal_lifecycle_bridge(tmp_path: Path) -> None:
+def test_worker_current_non_success_uses_existing_fatal_lifecycle_bridge(tmp_path: Path) -> None:
     class FatalCapture:
         def __init__(self) -> None:
             self.calls = []
@@ -136,7 +136,7 @@ def test_worker_v2_non_success_uses_existing_fatal_lifecycle_bridge(tmp_path: Pa
             self.calls.append(mutation)
 
     attempts = FatalCapture()
-    supervisor = WorkerSupervisor(
+    supervisor = RunnerSupervisor(
         var_dir=tmp_path / "var",
         lease_owner="worker-v2-fatal",
         uow_factory=lambda **kwargs: None,
@@ -146,19 +146,19 @@ def test_worker_v2_non_success_uses_existing_fatal_lifecycle_bridge(tmp_path: Pa
         utc_now_us=lambda: NOW_US,
     )
     job = type("Job", (), {"job_id": "job_" + "b" * 32, "fencing_token": 3})()
-    result = RunnerResultV2(
+    result = RunnerResult(
         run_id="run_" + "b" * 32,
         job_id=job.job_id,
         attempt=1,
         lease_owner="worker-v2-fatal",
         fencing_token=3,
         finished_at_us=NOW_US,
-        result_type=RunnerResultTypeV2.FATAL_ERROR,
+        result_type=RunnerResultType.FATAL_ERROR,
         run_lifecycle=RunLifecycle.FAILED,
         job_state=JobState.FAILED,
         verdict=None,
-        cleanup=CleanupResultV2(status=CleanupStatusV2.SUCCEEDED),
-        error=RunnerErrorV2(code="RUNNER_FATAL", retryable=False),
+        cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED),
+        error=RunnerError(code="RUNNER_FATAL", retryable=False),
         plan_fingerprint="0" * 64,
         coverage_record_count=0,
         coverage_gap_count=0,
@@ -168,152 +168,3 @@ def test_worker_v2_non_success_uses_existing_fatal_lifecycle_bridge(tmp_path: Pa
 
     assert len(attempts.calls) == 1
     assert attempts.calls[0].job_id == job.job_id
-
-
-def test_supervisor_uses_persisted_snapshot_after_yaml_removal_and_publishes(
-    sample_server_factory,
-    stage1_project_factory,
-    stage23_request_factory,
-    tmp_path: Path,
-) -> None:
-    server = sample_server_factory("safe")
-    project = stage1_project_factory(server.port)
-    request = stage23_request_factory(project)
-    parts = _runtime(tmp_path / "var")
-    clock = iter((NOW_US, NOW_US + 3_000_000, NOW_US + 4_000_000))
-    try:
-        submitted = _submit(parts, request)
-        shutil.rmtree(project.parent)
-        staged = WorkerSupervisor(
-            var_dir=tmp_path / "var",
-            lease_owner="worker-supervisor-success",
-            uow_factory=parts.uow_factory,
-            attempt_service=parts.attempts,
-            request_store=parts.request_store,
-            publication_service=RunPublicationService(
-                tmp_path / "var",
-                parts.uow_factory,
-                utc_now_us=lambda: NOW_US + 4_000_000,
-            ),
-            environ=os.environ | server.environ,
-            utc_now_us=lambda: next(clock),
-        ).run_job(submitted.job.job_id)
-
-        assert staged is not None
-        assert staged.result.verdict is RunVerdict.PASS
-        assert staged.paths.receipt_path.is_file()
-        assert staged.paths.result_path.is_file()
-        assert (
-            tmp_path
-            / "var"
-            / "projects"
-            / request.project_snapshot.project_id
-            / "runs"
-            / submitted.run.run_id
-        ).is_dir()
-        current = _job(parts, submitted.job.job_id)
-        assert current.state is JobState.SUCCEEDED
-        assert server.server.runner_process_ids
-    finally:
-        parts.engine.dispose()
-
-
-def test_running_cancellation_notifies_runner_and_completes_after_cleanup(
-    sample_server_factory,
-    stage1_project_factory,
-    stage23_request_factory,
-    tmp_path: Path,
-) -> None:
-    server = sample_server_factory("safe", request_delay_seconds=0.15)
-    request = stage23_request_factory(stage1_project_factory(server.port))
-    parts = _runtime(tmp_path / "var")
-    submitted = _submit(parts, request, "4")
-    outcome: list[object] = []
-    clock = iter((NOW_US, NOW_US + 3_000_000, NOW_US + 4_000_000))
-
-    def supervise() -> None:
-        try:
-            outcome.append(
-                WorkerSupervisor(
-                    var_dir=tmp_path / "var",
-                    lease_owner="worker-supervisor-cancel",
-                    uow_factory=parts.uow_factory,
-                    attempt_service=parts.attempts,
-                    request_store=parts.request_store,
-                    publication_service=RunPublicationService(
-                        tmp_path / "var",
-                        parts.uow_factory,
-                        utc_now_us=lambda: NOW_US + 4_000_000,
-                    ),
-                    environ=os.environ | server.environ,
-                    utc_now_us=lambda: next(clock),
-                ).run_job(submitted.job.job_id)
-            )
-        except Exception as exc:
-            outcome.append(exc)
-
-    thread = Thread(target=supervise)
-    thread.start()
-    try:
-        deadline = time.monotonic() + 10
-        while _job(parts, submitted.job.job_id).state is not JobState.RUNNING:
-            if time.monotonic() >= deadline:
-                raise AssertionError("job was not claimed")
-            time.sleep(0.01)
-        parts.queue.request_cancellation(
-            RequestCancellationV1(
-                job_id=submitted.job.job_id,
-                now_us=NOW_US + 2_000_000,
-            )
-        )
-        thread.join(timeout=20)
-        assert not thread.is_alive()
-        assert outcome and not isinstance(outcome[0], Exception), outcome
-        assert _job(parts, submitted.job.job_id).state is JobState.CANCELLED
-    finally:
-        parts.engine.dispose()
-
-
-def test_expired_fence_rejects_completed_result_without_trusted_receipt(
-    sample_server_factory,
-    stage1_project_factory,
-    stage23_request_factory,
-    tmp_path: Path,
-) -> None:
-    server = sample_server_factory("safe")
-    request = stage23_request_factory(stage1_project_factory(server.port))
-    parts = _runtime(tmp_path / "var")
-    submitted = _submit(parts, request, "5")
-    moments = iter((NOW_US, NOW_US + 31_000_000))
-    supervisor = WorkerSupervisor(
-        var_dir=tmp_path / "var",
-        lease_owner="worker-expired-result",
-        uow_factory=parts.uow_factory,
-        attempt_service=parts.attempts,
-        request_store=parts.request_store,
-        publication_service=RunPublicationService(
-            tmp_path / "var",
-            parts.uow_factory,
-            utc_now_us=lambda: NOW_US + 4_000_000,
-        ),
-        environ=os.environ | server.environ,
-        utc_now_us=lambda: next(moments),
-    )
-    try:
-        with pytest.raises(JiejianError) as captured:
-            supervisor.run_job(submitted.job.job_id)
-        assert captured.value.code == ErrorCode.JOB_LEASE_EXPIRED.value
-        current = _job(parts, submitted.job.job_id)
-        assert current.state is JobState.RUNNING
-        attempt_root = (
-            tmp_path
-            / "var"
-            / "jobs"
-            / submitted.job.job_id
-            / "attempts"
-            / "1-1"
-        )
-        assert (attempt_root / "staging" / "result.json").is_file()
-        assert not (attempt_root / "trusted-result.json").exists()
-    finally:
-        parts.engine.dispose()

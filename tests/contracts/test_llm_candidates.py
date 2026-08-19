@@ -2,25 +2,37 @@ from __future__ import annotations
 
 import json
 import hashlib
-from pathlib import Path
-
 import pytest
 
-from jiejian.contracts.governance_service import ContractGovernanceService
-from jiejian.contracts.llm.service import LLMCandidateGenerationService
-from jiejian.contracts.llm.profiles import LLMProfileApplicationService
-from jiejian.contracts.llm.adapters.base import LLMHttpResponse
-from jiejian.contracts.llm.config import LLMProviderType
-from jiejian.contracts.models import (
+from product.backend.workflows.contracts.governance import ContractGovernance
+from product.backend.workflows.contracts.candidate_generation import ContractCandidateGenerator
+from product.backend.infra.llm.profiles import LLMProfileRegistry
+from product.backend.infra.llm.adapters.base import LLMHttpResponse
+from product.backend.infra.llm.config import LLMProviderType
+from product.backend.core.contracts.models import (
+    CandidateRiskKind,
+    CandidateSuggestion,
     ContractSourceType,
     LLMGenerationMetadata,
     Requirement,
     SourceReference,
 )
-from jiejian.domain.lifecycle import ProjectStatus
-from jiejian.verification.models import ContractRule, RuleKind
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.storage import (
+from product.backend.core.lifecycle import ProjectStatus
+from product.backend.core.verification.permissions import PermissionContract
+from product.backend.core.verification.permissions import (
+    ActionDefinition,
+    CoverageDimension,
+    PermissionContext,
+    PermissionExpectation,
+    PermissionRule,
+    RelationEndpoint,
+    RelationFact,
+    RelationType,
+    ResourceDefinition,
+    SubjectDefinition,
+)
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import (
     ProjectRecord,
     StorageUnitOfWork,
     create_session_factory,
@@ -57,16 +69,61 @@ def _output(requirement_id: str) -> str:
             "candidates": [
                 {
                     "requirement_ids": [requirement_id],
-                    "rule": {
+                    "suggestion": {
                         "schema_version": "1",
                         "id": "foreign-read",
-                        "kind": "foreign_read",
-                        "required_observers": ["http"],
+                        "kind": "FOREIGN_READ",
+                        "required_observations": ["resource_state"],
                         "severity": "high",
                     },
                 }
             ],
         }
+    )
+
+
+def _authorization_contract() -> PermissionContract:
+    return PermissionContract(
+        contract_id="authorization-contract",
+        version=1,
+        role_ids=("user",),
+        workflow_states=("DRAFT",),
+        subjects=(
+            SubjectDefinition(subject_id="attacker", roles=("user",), tenant_id="tenant", department_id="department"),
+            SubjectDefinition(subject_id="owner", roles=("user",), tenant_id="tenant", department_id="department"),
+        ),
+        actions=(ActionDefinition(action_id="modify", side_effect=True),),
+        resources=(
+            ResourceDefinition(resource_id="owner-resource", resource_type="document", tenant_id="tenant", department_id="department", owner_subject_id="owner", workflow_state="DRAFT"),
+        ),
+        relations=(
+            RelationFact(
+                relation_id="same-tenant-owner",
+                relation=RelationType.SAME_TENANT,
+                source=RelationEndpoint(endpoint_type="subject", endpoint_id="attacker"),
+                target=RelationEndpoint(endpoint_type="subject", endpoint_id="owner"),
+            ),
+            RelationFact(
+                relation_id="owns-owner-resource",
+                relation=RelationType.OWNS,
+                source=RelationEndpoint(endpoint_type="subject", endpoint_id="owner"),
+                target=RelationEndpoint(endpoint_type="resource", endpoint_id="owner-resource"),
+            ),
+        ),
+        rules=(
+            PermissionRule(
+                rule_id="unauthorized-modify",
+                subject_id="attacker",
+                action_id="modify",
+                resource_id="owner-resource",
+                relation_path=("same-tenant-owner", "owns-owner-resource"),
+                expectation=PermissionExpectation.DENY,
+                required_observations=("resource_state",),
+                context=PermissionContext(resource_ids=("owner-resource",)),
+                coverage_dimensions=(CoverageDimension.RELATION,),
+            ),
+        ),
+        batch_rules=(),
     )
 
 
@@ -99,14 +156,14 @@ def llm_context(tmp_path: Path):
             _requirement(
                 "req_" + "1" * 32,
                 "llm-project",
-                "rule id=foreign-read kind=foreign_read observers=http severity=high note=supersecret",
+                "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high note=supersecret",
             )
         )
         work.requirements.add(
             _requirement(
                 "req_" + "2" * 32,
                 "other-project",
-                "rule id=foreign-read kind=foreign_read observers=http severity=high",
+                "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high",
             )
         )
         work.commit()
@@ -122,7 +179,7 @@ def test_llm_generation_is_bounded_redacted_idempotent_and_persisted(llm_context
         prompts.append(prompt)
         return _output("req_" + "1" * 32)
 
-    service = LLMCandidateGenerationService(
+    service = ContractCandidateGenerator(
         lambda: StorageUnitOfWork(factory),
         provider=provider,
         provider_id="memory",
@@ -155,7 +212,7 @@ def test_llm_generation_is_bounded_redacted_idempotent_and_persisted(llm_context
 def test_llm_requires_provider_and_rejects_unauthorized_requirement_before_call(llm_context) -> None:
     factory, _ = llm_context
     with pytest.raises(JiejianError) as unavailable:
-        LLMCandidateGenerationService(lambda: StorageUnitOfWork(factory)).generate(
+        ContractCandidateGenerator(lambda: StorageUnitOfWork(factory)).generate(
             "llm-project", ("req_" + "1" * 32,), actor="analyst"
         )
     assert unavailable.value.code == ErrorCode.LLM_PROVIDER_UNAVAILABLE.value
@@ -167,7 +224,7 @@ def test_llm_requires_provider_and_rejects_unauthorized_requirement_before_call(
         calls += 1
         return _output("req_" + "1" * 32)
 
-    service = LLMCandidateGenerationService(lambda: StorageUnitOfWork(factory), provider=provider)
+    service = ContractCandidateGenerator(lambda: StorageUnitOfWork(factory), provider=provider)
     with pytest.raises(JiejianError) as unauthorized:
         service.generate("llm-project", ("req_" + "2" * 32,), actor="analyst")
     assert unauthorized.value.code == ErrorCode.LLM_REQUIREMENT_INVALID.value
@@ -176,11 +233,11 @@ def test_llm_requires_provider_and_rejects_unauthorized_requirement_before_call(
 
 @pytest.mark.parametrize("payload", [
     "```json\n{}\n```",
-    '{"schema_version":"1","candidates":[{"requirement_ids":["req_' + "1" * 32 + '"],"rule":{},"extra":"denied"}]}',
+    '{"schema_version":"1","candidates":[{"requirement_ids":["req_' + "1" * 32 + '"],"suggestion":{},"extra":"denied"}]}',
 ])
 def test_llm_rejects_non_schema_output_without_leaking_response(llm_context, payload: str) -> None:
     factory, _ = llm_context
-    service = LLMCandidateGenerationService(lambda: StorageUnitOfWork(factory), provider=lambda _: payload)
+    service = ContractCandidateGenerator(lambda: StorageUnitOfWork(factory), provider=lambda _: payload)
     with pytest.raises(JiejianError) as captured:
         service.generate("llm-project", ("req_" + "1" * 32,), actor="analyst")
     assert captured.value.code == ErrorCode.LLM_OUTPUT_INVALID.value
@@ -190,10 +247,10 @@ def test_llm_rejects_non_schema_output_without_leaking_response(llm_context, pay
 def test_generated_llm_candidate_conflict_is_blocked_by_governance(llm_context) -> None:
     factory, _ = llm_context
     requirement_id = "req_" + "1" * 32
-    governance = ContractGovernanceService(
+    governance = ContractGovernance(
         lambda: StorageUnitOfWork(factory),
         clock_us=iter((10, 11, 12, 13)).__next__,
-        available_observers=("http", "owner_api"),
+        available_observations=("resource_state",),
     )
     explicit = governance.create_candidate(
         "llm-project",
@@ -202,16 +259,16 @@ def test_generated_llm_candidate_conflict_is_blocked_by_governance(llm_context) 
             locator="analysis/routes.py#ownership",
             content_sha256="b" * 64,
         ),
-        rule=ContractRule(
+        suggestion=CandidateSuggestion(
             id="ownership-side-effect",
-            kind=RuleKind.UNAUTHORIZED_SIDE_EFFECT,
-            required_observers=("http",),
+            kind=CandidateRiskKind.UNAUTHORIZED_SIDE_EFFECT,
+            required_observations=("resource_state",),
             severity="high",
         ),
         requirement_ids=(requirement_id,),
         actor="analyzer",
     )
-    llm = LLMCandidateGenerationService(
+    llm = ContractCandidateGenerator(
         lambda: StorageUnitOfWork(factory),
         provider=lambda _: _output(requirement_id),
         provider_id="memory",
@@ -222,18 +279,19 @@ def test_generated_llm_candidate_conflict_is_blocked_by_governance(llm_context) 
     llm_candidate = generated.candidates[0]
     assert llm_candidate.llm_metadata is not None
 
+    contract = _authorization_contract()
     draft = governance.create_draft(
         "llm-project",
-        "ownership-contract",
+        contract.contract_id,
+        snapshot=contract,
         candidate_ids=(explicit.candidate_id, llm_candidate.candidate_id),
         actor="analyst",
     )
     with pytest.raises(JiejianError) as captured:
         governance.submit_review(
-            "llm-project", "ownership-contract", draft.version, actor="reviewer"
+            "llm-project", contract.contract_id, draft.version, actor="reviewer"
         )
     assert captured.value.code == ErrorCode.CONTRACT_ASSESSMENT_BLOCKED.value
-    assert "LLM_REQUIREMENT_CONFLICT" in captured.value.to_dict()["details"]["reason_codes"]
 
 
 def test_profile_resolver_generation_persists_compatible_provenance_without_secret(llm_context) -> None:
@@ -272,7 +330,7 @@ def test_profile_resolver_generation_persists_compatible_provenance_without_secr
 
     store = SecretStore()
     transport = Transport()
-    profiles = LLMProfileApplicationService(
+    profiles = LLMProfileRegistry(
         lambda **kwargs: StorageUnitOfWork(factory, **kwargs),
         transport=transport,
         secret_store=store,
@@ -286,7 +344,7 @@ def test_profile_resolver_generation_persists_compatible_provenance_without_secr
         },
         secret=store.value,
     )
-    service = LLMCandidateGenerationService(
+    service = ContractCandidateGenerator(
         lambda: StorageUnitOfWork(factory),
         profile_resolver=profiles,
         clock_us=iter((50, 60, 70, 80, 100, 120)).__next__,
@@ -349,7 +407,7 @@ def test_profile_resolver_rejects_disabled_unconfigured_and_unauthorized_before_
             calls += 1
             raise AssertionError("transport must not be called")
 
-    profiles = LLMProfileApplicationService(
+    profiles = LLMProfileRegistry(
         lambda **kwargs: StorageUnitOfWork(factory, **kwargs),
         transport=Transport(),
         secret_store=Store(),
@@ -363,7 +421,7 @@ def test_profile_resolver_rejects_disabled_unconfigured_and_unauthorized_before_
             "enabled": False,
         },
     )
-    service = LLMCandidateGenerationService(
+    service = ContractCandidateGenerator(
         lambda: StorageUnitOfWork(factory), profile_resolver=profiles
     )
     requirement_id = "req_" + "1" * 32

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from jiejian.verification.findings import FindingIdentity
+from product.backend.core.verification.findings import FindingIdentity
 
 
 def _identity(**changes):

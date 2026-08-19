@@ -10,23 +10,23 @@ from typing import Any
 import httpx
 import pytest
 
-import jiejian.runner.blob_observer as blob_module
-from jiejian.protocols import (
-    AzureBlobObjectLocatorV2,
-    BlobObjectScanBudgetV2,
-    CorrelationV2,
+import product.backend.infra.observers.azure_blob as blob_module
+from product.protocols import (
+    AzureBlobObjectLocator,
+    BlobObjectScanBudget,
+    Correlation,
     ObservationCompleteness,
     ObservationPhase,
-    ObserverBudgetV2,
+    ObserverBudget,
     ObserverOutcomeStatus,
-    ObserverSpecV2,
-    ObserverTargetV2,
+    ObserverSpec,
+    ObserverTarget,
     ObserverType,
 )
 
 
 SAS = "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=rl&sr=c&sig=opaque-signature"
-CORRELATION = CorrelationV2(case_id="case-1", resource_id="resource-a", request_marker="case-1")
+CORRELATION = Correlation(case_id="case-1", resource_id="resource-a", request_marker="case-1")
 
 
 def _spec(
@@ -39,8 +39,8 @@ def _spec(
     max_attempts: int = 1,
     timeout_us: int = 5_000_000,
     prefix_template: str = "cases/{request_marker}/",
-) -> ObserverSpecV2:
-    locator = AzureBlobObjectLocatorV2(
+) -> ObserverSpec:
+    locator = AzureBlobObjectLocator(
         allow_loopback_http=True,
         service_url="http://127.0.0.1:10000/devstoreaccount1",
         container_name="container-test",
@@ -48,7 +48,7 @@ def _spec(
         read_only_sas_ref="env:BLOB_SAS",
         exclusive_test_container=True,
         allowed_metadata_fields=("case_tag", "resource_id", "effect", "revision"),
-        scan_budget=BlobObjectScanBudgetV2(
+        scan_budget=BlobObjectScanBudget(
             page_size=page_size,
             max_pages=max_pages,
             max_objects=max_objects,
@@ -59,13 +59,13 @@ def _spec(
             retry_interval_us=0,
         ),
     )
-    return ObserverSpecV2(
+    return ObserverSpec(
         observer_id="blob-observer",
         observer_type=ObserverType.AZURE_BLOB_OBJECT,
-        target=ObserverTargetV2(target_id="blob-target", locator=locator, normalization_id="blob", normalization_version="1.0"),
+        target=ObserverTarget(target_id="blob-target", locator=locator, normalization_id="blob", normalization_version="1.0"),
         phases=(ObservationPhase.BEFORE,),
         required=True,
-        budget=ObserverBudgetV2(timeout_us=timeout_us, max_rows=max_objects, max_bytes=max_total_bytes),
+        budget=ObserverBudget(timeout_us=timeout_us, max_rows=max_objects, max_bytes=max_total_bytes),
     )
 
 
@@ -109,7 +109,7 @@ class _Stream:
         return None
 
 
-def _run_fake(monkeypatch: pytest.MonkeyPatch, responses: list[_Response | Exception], *, spec: ObserverSpecV2 | None = None):
+def _run_fake(monkeypatch: pytest.MonkeyPatch, responses: list[_Response | Exception], *, spec: ObserverSpec | None = None):
     monkeypatch.setenv("BLOB_SAS", SAS)
     queue = list(responses)
     calls: list[tuple[str, str, dict[str, str]]] = []
@@ -126,7 +126,7 @@ def _run_fake(monkeypatch: pytest.MonkeyPatch, responses: list[_Response | Excep
             return None
 
     monkeypatch.setattr(blob_module.httpx, "Client", lambda **kwargs: Client())
-    invocation = blob_module.ObserverInvocationV2(spec=spec or _spec(), correlation=CORRELATION, phase=ObservationPhase.BEFORE)
+    invocation = blob_module.ObserverInvocation(spec=spec or _spec(), correlation=CORRELATION, phase=ObservationPhase.BEFORE)
     envelope = blob_module._run_child(invocation, utc_now_us=lambda: 100)
     return envelope, blob_module.evaluate_observer_outcome(envelope, required=True), calls
 
@@ -263,7 +263,7 @@ def test_blob_xml_and_path_boundaries(monkeypatch: pytest.MonkeyPatch, payload: 
 def test_blob_secret_stays_out_of_envelope_and_parent_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     secret = "sv=secret&sp=rl&sr=c&sig=opaque"
     monkeypatch.setenv("BLOB_SAS", secret)
-    invocation = blob_module.ObserverInvocationV2(spec=_spec(), correlation=CORRELATION, phase=ObservationPhase.BEFORE)
+    invocation = blob_module.ObserverInvocation(spec=_spec(), correlation=CORRELATION, phase=ObservationPhase.BEFORE)
     envelope = blob_module._run_child(invocation, utc_now_us=lambda: 100)
     assert secret not in envelope.model_dump_json()
     captured: dict[str, Any] = {}
@@ -330,7 +330,7 @@ def test_blob_parent_timeout_and_corrupt_output_are_bounded(tmp_path: Path, monk
 
 
 def test_blob_process_entry_delegates_to_core(monkeypatch: pytest.MonkeyPatch) -> None:
-    import jiejian.runner.azure_blob_observer_process as process_module
+    import product.backend.infra.observers.azure_blob as process_module
 
     monkeypatch.setattr(process_module, "child_main", lambda input_path, output_path: 9)
     monkeypatch.setattr(sys, "argv", ["azure_blob_observer_process", "--input", "input.json", "--output", "output.json"])

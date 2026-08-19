@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 pytestmark = pytest.mark.database
 
-from jiejian.contracts.models import (
+from product.backend.core.contracts.models import (
     ContractAuditAction,
     ContractAuditEntry,
+    CandidateRiskKind,
+    CandidateSuggestion,
     ContractCandidate,
     ContractProvenance,
     ContractSourceType,
@@ -19,11 +21,23 @@ from jiejian.contracts.models import (
     Requirement,
     SourceReference,
 )
-from jiejian.domain.lifecycle import ContractStatus, ProjectStatus
-from jiejian.contracts.governance import transition_contract_version
-from jiejian.verification.models import ContractRule, RuleKind, SecurityContract
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.storage import (
+from product.backend.core.lifecycle import ContractStatus, ProjectStatus
+from product.backend.core.contracts.lifecycle import transition_contract_version
+from product.backend.core.verification.permissions import (
+    ActionDefinition,
+    CoverageDimension,
+    PermissionContract,
+    PermissionContext,
+    PermissionExpectation,
+    PermissionRule,
+    RelationEndpoint,
+    RelationFact,
+    RelationType,
+    ResourceDefinition,
+    SubjectDefinition,
+)
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import (
     ProjectRecord,
     StorageUnitOfWork,
     create_session_factory,
@@ -54,11 +68,31 @@ def _source() -> SourceReference:
     )
 
 
-def _rule() -> ContractRule:
-    return ContractRule(
-        id="foreign-read",
-        kind=RuleKind.FOREIGN_READ,
-        required_observers=("http",),
+def _rule() -> PermissionRule:
+    return PermissionRule(
+        rule_id="foreign-read",
+        subject_id="member",
+        action_id="view",
+        resource_id="document",
+        relation_path=("owns-document",),
+        context=PermissionContext(resource_ids=("document",)),
+        expectation=PermissionExpectation.DENY,
+        required_observations=("resource_state",),
+        coverage_dimensions=(CoverageDimension.RELATION,),
+    )
+
+
+def _contract(version: int = 1) -> PermissionContract:
+    return PermissionContract(
+        contract_id="ownership-contract",
+        version=version,
+        role_ids=("member",),
+        workflow_states=("DRAFT",),
+        subjects=(SubjectDefinition(subject_id="member", roles=("member",), tenant_id="tenant"),),
+        actions=(ActionDefinition(action_id="view"),),
+        resources=(ResourceDefinition(resource_id="document", resource_type="document", owner_subject_id="member", tenant_id="tenant", workflow_state="DRAFT"),),
+        relations=(RelationFact(relation_id="owns-document", relation=RelationType.OWNS, source=RelationEndpoint(endpoint_type="subject", endpoint_id="member"), target=RelationEndpoint(endpoint_type="resource", endpoint_id="document")),),
+        rules=(_rule(),),
     )
 
 
@@ -89,7 +123,11 @@ def test_contract_records_round_trip_and_active_is_not_rewritten(
         candidate_id="cand_" + "2" * 32,
         project_id=PROJECT_ID,
         source=_source(),
-        rule=_rule(),
+        suggestion=CandidateSuggestion(
+            id="foreign-read",
+            kind=CandidateRiskKind.FOREIGN_READ,
+            required_observations=("resource_state",),
+        ),
         requirement_ids=(requirement.requirement_id,),
         created_by="analyst",
         created_at_us=NOW_US + 2,
@@ -99,12 +137,7 @@ def test_contract_records_round_trip_and_active_is_not_rewritten(
         contract_id="ownership-contract",
         version=1,
         status=ContractStatus.DRAFT,
-        snapshot=SecurityContract(
-            id="ownership-contract",
-            version=1,
-            status=ContractStatus.DRAFT,
-            rules=(_rule(),),
-        ),
+        snapshot=_contract(),
         provenance=ContractProvenance(
             requirement_ids=(requirement.requirement_id,),
             candidate_ids=(candidate.candidate_id,),
@@ -134,7 +167,17 @@ def test_contract_records_round_trip_and_active_is_not_rewritten(
 
     rewritten = active.model_copy(
         update={
-            "snapshot": active.snapshot.model_copy(update={"rules": (ContractRule(id="changed", kind=RuleKind.FOREIGN_READ, required_observers=("http",)),)}),
+            "snapshot": active.snapshot.model_copy(update={"rules": (PermissionRule(
+                rule_id="changed",
+                subject_id="member",
+                action_id="view",
+                resource_id="document",
+                relation_path=("owns-document",),
+                context=PermissionContext(resource_ids=("document",)),
+                expectation=PermissionExpectation.DENY,
+                required_observations=("resource_state",),
+                coverage_dimensions=(CoverageDimension.RELATION,),
+            ),)}),
         }
     )
     with pytest.raises(JiejianError) as captured:

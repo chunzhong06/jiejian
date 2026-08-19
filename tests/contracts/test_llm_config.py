@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from jiejian.contracts.llm.config import (
+from product.backend.infra.llm.config import (
     LLMProfileConfig,
     LLMProviderType,
     normalize_llm_base_url,

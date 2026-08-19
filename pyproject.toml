@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-jiejian = "jiejian.cli:main"
+jiejian = "product.backend.cli:main"
 
 [dependency-groups]
 dev = [
@@ -29,13 +29,11 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["backend/src/jiejian"]
+only-include = ["product/backend", "product/protocols"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"backend/alembic.ini" = "jiejian/resources/alembic.ini"
-"backend/migrations" = "jiejian/resources/migrations"
-"schemas" = "jiejian/resources/schemas"
-"backend/src/jiejian/artifacts/ruleset_v1.json" = "jiejian/artifacts/ruleset_v1.json"
+"product/config/default.toml" = "product/config/default.toml"
+"product/frontend/dist" = "product/frontend/dist"
 
 [tool.pytest.ini_options]
 addopts = "-ra"

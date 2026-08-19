@@ -7,41 +7,41 @@ from pathlib import Path
 
 import pytest
 
-from jiejian.domain.lifecycle import JobState, ProjectStatus
-from jiejian.recording.models import RecordingState, RecordingStateEvent
-from jiejian.verification.models import TargetScope
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.protocols import (
-    RecordingBudgetV1,
+from product.backend.core.lifecycle import JobState, ProjectStatus
+from product.backend.core.recording import RecordingState, RecordingStateEvent
+from product.protocols.runner import WebTargetScope
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.protocols import (
+    RecordingBudget,
     RecordingCleanupStatus,
     RecordingEventKind,
-    RecordingEventV1,
-    RecordingHeaderV1,
-    RecordingRunnerRequestV1,
+    RecordingEvent,
+    RecordingHeader,
+    RecordingRunnerRequest,
     RecordingRunnerResultType,
-    RecordingRunnerResultV1,
-    RecordingSessionRefV1,
+    RecordingRunnerResult,
+    RecordingSessionRef,
     canonical_recording_json_bytes,
     parse_recording_result,
 )
-from jiejian.recording.application import (
-    RecordingApplicationService,
-    SubmitRecordingV1,
+from product.backend.workflows.recording.submission import (
+    RecordingSubmission,
+    SubmitRecording,
 )
-from jiejian.recording.request_store import RecordingRequestStore
-from jiejian.recording_runner.execution import execute_recording_runner
-from jiejian.storage import (
+from product.backend.infra.recording.request_store import RecordingRequestStore
+from product.backend.infra.runtime.recording_process import execute_recording_runner
+from product.backend.infra.storage import (
     ProjectRecord,
     StorageUnitOfWork,
     create_session_factory,
     create_sqlite_engine,
     upgrade_database,
 )
-from jiejian.recording.job_handler import RecordingJobHandler
-from jiejian.execution.attempts import JobAttemptService
-from jiejian.execution.published_artifacts import attempt_paths_for
-from jiejian.execution.targets import JobTargetType, default_run_job_targets
-from jiejian.recording.job_target import RecordingJobTargetHandler
+from product.backend.infra.runtime.jobs.recording import RecordingJobHandler
+from product.backend.infra.runtime.jobs.attempts import JobAttempts
+from product.backend.infra.artifacts.run_packages import attempt_paths_for
+from product.backend.infra.runtime.jobs.targets import JobTargetType, default_run_job_targets
+from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
 
 pytestmark = pytest.mark.database
 
@@ -72,7 +72,7 @@ def test_recording_job_reaches_pending_review_with_atomic_draft(tmp_path: Path) 
     try:
         request = _request("rec_" + "1" * 32)
         submission = context.application.submit(
-            SubmitRecordingV1(
+            SubmitRecording(
                 request=request,
                 flow_id="recorded-flow",
                 idempotency_key="recording-success",
@@ -127,7 +127,7 @@ def test_secret_bearing_runner_result_fails_without_persisting_payload(
     try:
         request = _request("rec_" + "3" * 32)
         submission = context.application.submit(
-            SubmitRecordingV1(
+            SubmitRecording(
                 request=request,
                 flow_id="secret-rejection-flow",
                 idempotency_key="recording-secret-failure",
@@ -199,12 +199,12 @@ class _Context:
         self.request_store = RecordingRequestStore(self.var_dir)
         self.job_targets = default_run_job_targets()
         self.job_targets.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
-        self.attempts = JobAttemptService(
+        self.attempts = JobAttempts(
             self.uow_factory,
             jitter_source=lambda _: 0,
             targets=self.job_targets,
         )
-        self.application = RecordingApplicationService(
+        self.application = RecordingSubmission(
             self.uow_factory,
             self.request_store,
             attempts=self.attempts,
@@ -216,21 +216,21 @@ def _context(tmp_path: Path) -> _Context:
 
 
 class _ControlledAdapter:
-    def __init__(self, result: RecordingRunnerResultV1) -> None:
+    def __init__(self, result: RecordingRunnerResult) -> None:
         self._result = result
 
-    def run(self, *_args: object, **_kwargs: object) -> RecordingRunnerResultV1:
+    def run(self, *_args: object, **_kwargs: object) -> RecordingRunnerResult:
         return self._result
 
 
-def _request(recording_id: str) -> RecordingRunnerRequestV1:
-    return RecordingRunnerRequestV1(
+def _request(recording_id: str) -> RecordingRunnerRequest:
+    return RecordingRunnerRequest(
         schema_version="1",
         recording_id=recording_id,
         project_id=PROJECT_ID,
         created_at_us=NOW_US if recording_id.endswith("1" * 32) else NOW_US + 100,
-        target_scope=TargetScope(
-            schema_version="1",
+        target_scope=WebTargetScope(
+            schema_version="2",
             base_url="http://127.0.0.1:18080",
             allowed_origins=("http://127.0.0.1:18080",),
             allowed_hosts=("127.0.0.1",),
@@ -238,14 +238,14 @@ def _request(recording_id: str) -> RecordingRunnerRequestV1:
             allow_private_network=True,
         ),
         sessions=(
-            RecordingSessionRefV1(
+            RecordingSessionRef(
                 schema_version="1",
                 identity_id="owner",
                 session_ref="session_" + "5" * 32,
                 expires_at_us=NOW_US + 1_000_000,
             ),
         ),
-        budget=RecordingBudgetV1(
+        budget=RecordingBudget(
             schema_version="1",
             max_duration_us=1_000_000,
         ),
@@ -258,7 +258,7 @@ def _captured_result(
     recording_id: str,
     *,
     response_body: str = '{"id":"resource-42"}',
-) -> RecordingRunnerResultV1:
+) -> RecordingRunnerResult:
     lifecycle = (
         RecordingStateEvent(
             sequence=1,
@@ -291,7 +291,7 @@ def _captured_result(
         ),
     )
     events = (
-        RecordingEventV1(
+        RecordingEvent(
             schema_version="1",
             sequence=1,
             occurred_at_us=NOW_US + 12,
@@ -302,7 +302,7 @@ def _captured_result(
             action_id="action_000001",
             element_locator="#resource-form",
         ),
-        RecordingEventV1(
+        RecordingEvent(
             schema_version="1",
             sequence=2,
             occurred_at_us=NOW_US + 12,
@@ -317,7 +317,7 @@ def _captured_result(
             resource_type="fetch",
             body='{"name":"demo"}',
         ),
-        RecordingEventV1(
+        RecordingEvent(
             schema_version="1",
             sequence=3,
             occurred_at_us=NOW_US + 13,
@@ -329,7 +329,7 @@ def _captured_result(
             url="http://127.0.0.1:18080/resources",
             status_code=201,
             headers=(
-                RecordingHeaderV1(
+                RecordingHeader(
                     schema_version="1",
                     name="location",
                     value="/resources/resource-42",
@@ -337,7 +337,7 @@ def _captured_result(
             ),
             body=response_body,
         ),
-        RecordingEventV1(
+        RecordingEvent(
             schema_version="1",
             sequence=4,
             occurred_at_us=NOW_US + 14,
@@ -350,7 +350,7 @@ def _captured_result(
             method="GET",
             resource_type="fetch",
         ),
-        RecordingEventV1(
+        RecordingEvent(
             schema_version="1",
             sequence=5,
             occurred_at_us=NOW_US + 15,
@@ -364,7 +364,7 @@ def _captured_result(
             body="{}",
         ),
     )
-    return RecordingRunnerResultV1(
+    return RecordingRunnerResult(
         schema_version="1",
         recording_id=recording_id,
         project_id=PROJECT_ID,

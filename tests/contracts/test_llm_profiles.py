@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 import threading
 
-from jiejian.contracts.llm.adapters.base import LLMHttpResponse, LLMTransportError
-from jiejian.contracts.llm.profiles import LLMProfileApplicationService
-from jiejian.contracts.llm.config import LLMProviderType
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.storage import StorageUnitOfWork, create_session_factory, create_sqlite_engine, upgrade_database
+from product.backend.infra.llm.adapters.base import LLMHttpResponse, LLMTransportError
+from product.backend.infra.llm.profiles import LLMProfileRegistry
+from product.backend.infra.llm.config import LLMProviderType
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import StorageUnitOfWork, create_session_factory, create_sqlite_engine, upgrade_database
 
 
 class FakeSecretStore:
@@ -95,7 +95,7 @@ def _service(
     engine = create_sqlite_engine(database)
     factory = create_session_factory(engine)
     clock = iter([now, now, now + 10, now + 10, now + 20, now + 20])
-    service = LLMProfileApplicationService(
+    service = LLMProfileRegistry(
         lambda **kwargs: StorageUnitOfWork(factory, **kwargs),
         transport=transport or FakeTransport(),
         secret_store=store or FakeSecretStore(),
@@ -223,7 +223,7 @@ def test_database_failure_compensates_new_credential_without_leaking_secret() ->
         def commit(self):
             raise RuntimeError("database failed")
 
-    service = LLMProfileApplicationService(
+    service = LLMProfileRegistry(
         lambda **kwargs: BrokenWork(),
         transport=FakeTransport(),
         secret_store=store,

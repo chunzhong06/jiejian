@@ -9,35 +9,35 @@ from pathlib import Path
 import httpx
 import pytest
 
-import jiejian.runner.queue_observer as queue_module
-from jiejian.protocols import (
-    AzureQueuePeekLocatorV2,
-    CorrelationV2,
+import product.backend.infra.observers.azure_queue as queue_module
+from product.protocols import (
+    AzureQueuePeekLocator,
+    Correlation,
     ObservationCompleteness,
     ObservationPhase,
-    ObserverBudgetV2,
+    ObserverBudget,
     ObserverOutcomeStatus,
-    ObserverSpecV2,
-    ObserverTargetV2,
+    ObserverSpec,
+    ObserverTarget,
     ObserverType,
-    QueuePeekBudgetV2,
+    QueuePeekBudget,
 )
-from jiejian.protocols.observer_v2 import OBSERVER_JSON_MAX_BYTES
+from product.protocols.observer import OBSERVER_JSON_MAX_BYTES
 
 
 SAS = "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=r&sr=q&sig=opaque-signature"
-CORRELATION = CorrelationV2(case_id="case-1", resource_id="resource-a", request_marker="case-1")
+CORRELATION = Correlation(case_id="case-1", resource_id="resource-a", request_marker="case-1")
 
 
-def _spec(*, max_messages: int = 8, max_message_bytes: int = 4096, max_total_bytes: int = 8192, max_attempts: int = 1, timeout_us: int = 5_000_000) -> ObserverSpecV2:
-    locator = AzureQueuePeekLocatorV2(
+def _spec(*, max_messages: int = 8, max_message_bytes: int = 4096, max_total_bytes: int = 8192, max_attempts: int = 1, timeout_us: int = 5_000_000) -> ObserverSpec:
+    locator = AzureQueuePeekLocator(
         allow_loopback_http=True,
         service_url="http://127.0.0.1:10000/devstoreaccount1",
         queue_name="queue-test",
         read_only_sas_ref="env:QUEUE_SAS",
         exclusive_test_queue=True,
         allowed_fields=("event_id", "case_tag", "resource_id", "sequence", "event_type", "result"),
-        peek_budget=QueuePeekBudgetV2(
+        peek_budget=QueuePeekBudget(
             max_messages=max_messages,
             max_message_bytes=max_message_bytes,
             max_total_bytes=max_total_bytes,
@@ -46,13 +46,13 @@ def _spec(*, max_messages: int = 8, max_message_bytes: int = 4096, max_total_byt
             retry_interval_us=0,
         ),
     )
-    return ObserverSpecV2(
+    return ObserverSpec(
         observer_id="queue-observer",
         observer_type=ObserverType.AZURE_QUEUE_PEEK,
-        target=ObserverTargetV2(target_id="queue-target", locator=locator, normalization_id="queue", normalization_version="1.0"),
+        target=ObserverTarget(target_id="queue-target", locator=locator, normalization_id="queue", normalization_version="1.0"),
         phases=(ObservationPhase.EVENTUAL,),
         required=True,
-        budget=ObserverBudgetV2(timeout_us=timeout_us, max_rows=max_messages, max_bytes=max_total_bytes),
+        budget=ObserverBudget(timeout_us=timeout_us, max_rows=max_messages, max_bytes=max_total_bytes),
     )
 
 
@@ -96,7 +96,7 @@ class _Stream:
         return None
 
 
-def _run_fake(monkeypatch: pytest.MonkeyPatch, payloads: list[bytes], *, statuses: list[int] | None = None, spec: ObserverSpecV2 | None = None):
+def _run_fake(monkeypatch: pytest.MonkeyPatch, payloads: list[bytes], *, statuses: list[int] | None = None, spec: ObserverSpec | None = None):
     monkeypatch.setenv("QUEUE_SAS", SAS)
     responses = list(payloads)
     codes = list(statuses or [200] * len(responses))
@@ -111,7 +111,7 @@ def _run_fake(monkeypatch: pytest.MonkeyPatch, payloads: list[bytes], *, statuse
             pass
 
     monkeypatch.setattr(queue_module.httpx, "Client", lambda **kwargs: Client())
-    invocation = queue_module.ObserverInvocationV2(spec=spec or _spec(), correlation=CORRELATION, phase=ObservationPhase.EVENTUAL)
+    invocation = queue_module.ObserverInvocation(spec=spec or _spec(), correlation=CORRELATION, phase=ObservationPhase.EVENTUAL)
     envelope = queue_module._run_child(invocation, utc_now_us=lambda: 100)
     return envelope, queue_module.evaluate_observer_outcome(envelope, required=True), calls
 
@@ -195,7 +195,7 @@ def test_queue_sas_boundary_is_strict(value: str) -> None:
 
 
 def test_queue_process_entry_delegates_to_core(monkeypatch: pytest.MonkeyPatch) -> None:
-    import jiejian.runner.azure_queue_observer_process as process_module
+    import product.backend.infra.observers.azure_queue as process_module
 
     monkeypatch.setattr(process_module, "child_main", lambda input_path, output_path: 7)
     monkeypatch.setattr(sys, "argv", ["azure_queue_observer_process", "--input", "input.json", "--output", "output.json"])
@@ -205,7 +205,7 @@ def test_queue_process_entry_delegates_to_core(monkeypatch: pytest.MonkeyPatch) 
 def test_queue_sas_and_response_never_enter_state_or_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     secret = "sv=secret-value"
     monkeypatch.setenv("QUEUE_SAS", secret)
-    invocation = queue_module.ObserverInvocationV2(spec=_spec(), correlation=CORRELATION, phase=ObservationPhase.EVENTUAL)
+    invocation = queue_module.ObserverInvocation(spec=_spec(), correlation=CORRELATION, phase=ObservationPhase.EVENTUAL)
     envelope = queue_module._run_child(invocation, utc_now_us=lambda: 100)
     outcome = queue_module.evaluate_observer_outcome(envelope, required=True)
     assert outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
@@ -303,11 +303,11 @@ def _assert_parent_rejects_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
 def test_queue_output_binding_rejects_wrong_target(monkeypatch: pytest.MonkeyPatch) -> None:
     envelope, _, _ = _run_fake(monkeypatch, [_xml([_record("a", 1)])])
-    invocation = queue_module.ObserverInvocationV2(spec=_spec(), correlation=CORRELATION, phase=ObservationPhase.EVENTUAL)
+    invocation = queue_module.ObserverInvocation(spec=_spec(), correlation=CORRELATION, phase=ObservationPhase.EVENTUAL)
     with pytest.raises(ValueError):
         queue_module._validate_output_binding(invocation, envelope.model_copy(update={"target_id": "wrong-target"}))
 
 
 def test_queue_protocol_scope_is_not_widened() -> None:
     with pytest.raises(ValueError):
-        AzureQueuePeekLocatorV2(allow_loopback_http=False, service_url="http://127.0.0.1:10000/devstoreaccount1", queue_name="queue-test", read_only_sas_ref="env:QUEUE_SAS", exclusive_test_queue=True, allowed_fields=("event_id", "case_tag", "resource_id", "sequence"), peek_budget=QueuePeekBudgetV2(max_messages=1, max_message_bytes=100, max_total_bytes=100, max_attempts=1, per_request_timeout_us=1, retry_interval_us=0))
+        AzureQueuePeekLocator(allow_loopback_http=False, service_url="http://127.0.0.1:10000/devstoreaccount1", queue_name="queue-test", read_only_sas_ref="env:QUEUE_SAS", exclusive_test_queue=True, allowed_fields=("event_id", "case_tag", "resource_id", "sequence"), peek_budget=QueuePeekBudget(max_messages=1, max_message_bytes=100, max_total_bytes=100, max_attempts=1, per_request_timeout_us=1, retry_interval_us=0))

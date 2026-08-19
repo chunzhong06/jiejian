@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.onboarding import discovery
-from jiejian.onboarding.discovery import discover_folder
-from jiejian.onboarding.models import DiscoveryLimits
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.workflows.onboarding import discovery
+from product.backend.workflows.onboarding.discovery import discover_folder
+from product.backend.workflows.onboarding.models import DiscoveryLimits
 
 
 def test_discovery_returns_stack_candidates_hints_and_stable_missing_items(
@@ -76,6 +76,27 @@ def test_discovery_never_reads_scripts_or_source_and_reports_env_only(
     assert result.start_candidates[0].command == "npm run start"
 
 
+def test_discovery_prunes_large_dependency_and_cache_directories(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"name":"fixture","scripts":{"dev":"vite"}}', encoding="utf-8"
+    )
+    node_modules = tmp_path / "Node_Modules"
+    node_modules.mkdir()
+    for index in range(300):
+        (node_modules / f"unrelated-{index:03d}.txt").write_text("x", encoding="utf-8")
+    cache_dir = tmp_path / ".CACHE"
+    cache_dir.mkdir()
+    for index in range(3):
+        (cache_dir / f"cache-{index}").write_text("x", encoding="utf-8")
+
+    result = discover_folder(tmp_path.resolve())
+
+    assert "Node.js" in result.detected_types
+    assert any(item.command == "npm run dev" for item in result.start_candidates)
+
+
 def test_discovery_requires_absolute_existing_directory(tmp_path: Path) -> None:
     with pytest.raises(JiejianError) as relative:
         discover_folder("relative-folder")
@@ -138,11 +159,13 @@ def test_discovery_enforces_file_and_total_read_budgets(tmp_path: Path) -> None:
     with pytest.raises(JiejianError) as file_error:
         discover_folder(tmp_path, limits=DiscoveryLimits(max_file_bytes=1))
     assert file_error.value.code == ErrorCode.ONBOARDING_READ_BUDGET.value
+    assert file_error.value.to_dict()["message"] == "应用目录内容过多，自动识别已达到安全扫描上限。请确认选择的是项目根目录，或改为手工填写必要信息。"
 
     (tmp_path / "package.json").write_text("{}", encoding="utf-8")
     with pytest.raises(JiejianError) as total_error:
         discover_folder(tmp_path, limits=DiscoveryLimits(max_total_bytes=1))
     assert total_error.value.code == ErrorCode.ONBOARDING_READ_BUDGET.value
+    assert total_error.value.to_dict()["message"] == "应用目录内容过多，自动识别已达到安全扫描上限。请确认选择的是项目根目录，或改为手工填写必要信息。"
 
 
 def test_discovery_rejects_too_many_empty_directories_before_reading_configs(
@@ -158,6 +181,7 @@ def test_discovery_rejects_too_many_empty_directories_before_reading_configs(
     with pytest.raises(JiejianError) as error:
         discover_folder(tmp_path)
     assert error.value.code == ErrorCode.ONBOARDING_READ_BUDGET.value
+    assert error.value.to_dict()["message"] == "应用目录内容过多，自动识别已达到安全扫描上限。请确认选择的是项目根目录，或改为手工填写必要信息。"
 
 
 def test_discovery_counts_mixed_entries_once_at_boundary(tmp_path: Path) -> None:
@@ -171,3 +195,4 @@ def test_discovery_counts_mixed_entries_once_at_boundary(tmp_path: Path) -> None
     with pytest.raises(JiejianError) as error:
         discover_folder(tmp_path, limits=DiscoveryLimits(max_entries=255))
     assert error.value.code == ErrorCode.ONBOARDING_READ_BUDGET.value
+    assert error.value.to_dict()["message"] == "应用目录内容过多，自动识别已达到安全扫描上限。请确认选择的是项目根目录，或改为手工填写必要信息。"

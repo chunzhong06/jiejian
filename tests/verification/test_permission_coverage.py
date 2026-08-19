@@ -9,49 +9,45 @@ from pathlib import Path
 
 import pytest
 
-from jiejian.permission_sample_app import create_permission_sample_server
-from jiejian.protocols import (
-    CorrelationV2,
+from tests.verification.permission_test_target import create_complex_permission_test_server
+from product.protocols import (
+    Correlation,
     ObservationCompleteness,
     ObservationPhase,
-    ObserverBudgetV2,
+    ObserverBudget,
     ObserverOutcomeStatus,
-    ObserverSpecV2,
-    ObserverTargetV2,
+    ObserverSpec,
+    ObserverTarget,
     ObserverType,
-    SqliteQueryLocatorV2,
+    SqliteQueryLocator,
 )
-from jiejian.runner.sqlite_observer import run_sqlite_observer
-from jiejian.verification.permission_coverage import (
+from product.backend.infra.observers.sqlite import run_sqlite_observer
+from product.backend.core.verification.permission_coverage import (
     BatchAuthorizationMode,
     CoverageGapCode,
     CoverageStatus,
     build_permission_coverage_plan,
 )
-from jiejian.verification.permissions import (
+from product.backend.core.verification.permissions import (
     ActionDefinition,
-    BatchPermissionRuleV2,
+    BatchPermissionRule,
     BatchResourceExpectation,
     CoverageDimension,
-    PermissionContractV2,
+    PermissionContract,
     PermissionContext,
     PermissionExpectation,
-    PermissionRuleV2,
+    PermissionRule,
     RelationEndpoint,
     RelationFact,
     RelationType,
-    ResourceDefinitionV2,
+    ResourceDefinition,
     SubjectDefinition,
-    canonical_sha256,
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _complex_contract() -> PermissionContractV2:
-    return PermissionContractV2(
-        contract_id="permissions-v2-sample",
+def _complex_contract() -> PermissionContract:
+    return PermissionContract(
+        contract_id="complex-permission-test-contract",
         version=1,
         role_ids=("department-admin", "member", "tenant-admin"),
         workflow_states=("APPROVED", "DRAFT", "PENDING"),
@@ -64,17 +60,17 @@ def _complex_contract() -> PermissionContractV2:
             SubjectDefinition(subject_id="member-b", roles=("member",), tenant_id="tenant-b", department_id="dept-b"),
         ),
         actions=(
-            ActionDefinition(action_id="modify", flow_step_ids=("modify-step",), side_effect=True),
-            ActionDefinition(action_id="approve", flow_step_ids=("approve-step",), side_effect=True, workflow_transition={"allowed_from_states": ("PENDING",), "target_state": "APPROVED"}),
-            ActionDefinition(action_id="batch-modify", flow_step_ids=("batch-step",), is_batch=True, side_effect=True),
+            ActionDefinition(action_id="modify", side_effect=True),
+            ActionDefinition(action_id="approve", side_effect=True, workflow_transition={"allowed_from_states": ("PENDING",), "target_state": "APPROVED"}),
+            ActionDefinition(action_id="batch-modify", is_batch=True, side_effect=True),
         ),
         resources=(
-            ResourceDefinitionV2(resource_id="document-a", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", workflow_state="DRAFT"),
-            ResourceDefinitionV2(resource_id="document-a-child", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", parent_resource_id="document-a", workflow_state="DRAFT"),
-            ResourceDefinitionV2(resource_id="document-a-pending", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", workflow_state="PENDING"),
-            ResourceDefinitionV2(resource_id="document-a-approved", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", workflow_state="APPROVED"),
-            ResourceDefinitionV2(resource_id="document-b", resource_type="document", tenant_id="tenant-b", department_id="dept-b", owner_subject_id="member-b", workflow_state="DRAFT"),
-            ResourceDefinitionV2(resource_id="document-a2", resource_type="document", tenant_id="tenant-a", department_id="dept-a2", owner_subject_id="member-a2", workflow_state="DRAFT"),
+            ResourceDefinition(resource_id="document-a", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", workflow_state="DRAFT"),
+            ResourceDefinition(resource_id="document-a-child", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", parent_resource_id="document-a", workflow_state="DRAFT"),
+            ResourceDefinition(resource_id="document-a-pending", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", workflow_state="PENDING"),
+            ResourceDefinition(resource_id="document-a-approved", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", workflow_state="APPROVED"),
+            ResourceDefinition(resource_id="document-b", resource_type="document", tenant_id="tenant-b", department_id="dept-b", owner_subject_id="member-b", workflow_state="DRAFT"),
+            ResourceDefinition(resource_id="document-a2", resource_type="document", tenant_id="tenant-a", department_id="dept-a2", owner_subject_id="member-a2", workflow_state="DRAFT"),
         ),
         relations=(
             RelationFact(relation_id="manages-dept-admin-a", relation=RelationType.MANAGES, source=RelationEndpoint(endpoint_type="subject", endpoint_id="tenant-admin-a"), target=RelationEndpoint(endpoint_type="subject", endpoint_id="dept-admin-a")),
@@ -87,15 +83,15 @@ def _complex_contract() -> PermissionContractV2:
             RelationFact(relation_id="owns-document-a2", relation=RelationType.OWNS, source=RelationEndpoint(endpoint_type="subject", endpoint_id="member-a2"), target=RelationEndpoint(endpoint_type="resource", endpoint_id="document-a2")),
         ),
         rules=(
-            PermissionRuleV2(rule_id="modify-document-a", subject_id="member-a", action_id="modify", resource_id="document-a", relation_path=("owns-document-a",), context=PermissionContext(workflow_states=("DRAFT",), resource_ids=("document-a",)), expectation=PermissionExpectation.ALLOW, required_observers=("http", "owner_api"), coverage_dimensions=(CoverageDimension.ROLE, CoverageDimension.TENANT, CoverageDimension.DEPARTMENT, CoverageDimension.RELATION)),
-            PermissionRuleV2(rule_id="approve-document-a", subject_id="tenant-admin-a", action_id="approve", resource_id="document-a", relation_path=("inherits-tenant-admin-a", "manages-member-a", "owns-document-a"), context=PermissionContext(workflow_states=("DRAFT",), resource_ids=("document-a",)), expectation=PermissionExpectation.DENY, required_observers=("http", "owner_api"), coverage_dimensions=(CoverageDimension.WORKFLOW,)),
-            PermissionRuleV2(rule_id="approve-document-a-pending", subject_id="tenant-admin-a", action_id="approve", resource_id="document-a-pending", relation_path=("inherits-tenant-admin-a", "manages-member-a", "owns-document-a-pending"), context=PermissionContext(workflow_states=("PENDING",), resource_ids=("document-a-pending",)), expectation=PermissionExpectation.ALLOW, required_observers=("http", "owner_api"), coverage_dimensions=(CoverageDimension.WORKFLOW,)),
-            PermissionRuleV2(rule_id="approve-document-a-approved", subject_id="tenant-admin-a", action_id="approve", resource_id="document-a-approved", relation_path=("inherits-tenant-admin-a", "manages-member-a", "owns-document-a-approved"), context=PermissionContext(workflow_states=("APPROVED",), resource_ids=("document-a-approved",)), expectation=PermissionExpectation.DENY, required_observers=("http", "owner_api"), coverage_dimensions=(CoverageDimension.WORKFLOW,)),
+            PermissionRule(rule_id="modify-document-a", subject_id="member-a", action_id="modify", resource_id="document-a", relation_path=("owns-document-a",), context=PermissionContext(workflow_states=("DRAFT",), resource_ids=("document-a",)), expectation=PermissionExpectation.ALLOW, required_observations=("resource_state",), coverage_dimensions=(CoverageDimension.ROLE, CoverageDimension.TENANT, CoverageDimension.DEPARTMENT, CoverageDimension.RELATION)),
+            PermissionRule(rule_id="approve-document-a", subject_id="tenant-admin-a", action_id="approve", resource_id="document-a", relation_path=("inherits-tenant-admin-a", "manages-member-a", "owns-document-a"), context=PermissionContext(workflow_states=("DRAFT",), resource_ids=("document-a",)), expectation=PermissionExpectation.DENY, required_observations=("resource_state",), coverage_dimensions=(CoverageDimension.WORKFLOW,)),
+            PermissionRule(rule_id="approve-document-a-pending", subject_id="tenant-admin-a", action_id="approve", resource_id="document-a-pending", relation_path=("inherits-tenant-admin-a", "manages-member-a", "owns-document-a-pending"), context=PermissionContext(workflow_states=("PENDING",), resource_ids=("document-a-pending",)), expectation=PermissionExpectation.ALLOW, required_observations=("resource_state",), coverage_dimensions=(CoverageDimension.WORKFLOW,)),
+            PermissionRule(rule_id="approve-document-a-approved", subject_id="tenant-admin-a", action_id="approve", resource_id="document-a-approved", relation_path=("inherits-tenant-admin-a", "manages-member-a", "owns-document-a-approved"), context=PermissionContext(workflow_states=("APPROVED",), resource_ids=("document-a-approved",)), expectation=PermissionExpectation.DENY, required_observations=("resource_state",), coverage_dimensions=(CoverageDimension.WORKFLOW,)),
         ),
         batch_rules=(
-            BatchPermissionRuleV2(rule_id="batch-all-allow", subject_id="member-a", action_id="batch-modify", resource_expectations=(BatchResourceExpectation(resource_id="document-a", expectation=PermissionExpectation.ALLOW, relation_path=("owns-document-a",)), BatchResourceExpectation(resource_id="document-a-child", expectation=PermissionExpectation.ALLOW, relation_path=("owns-document-a-child",))), required_observers=("http", "owner_api"), context=PermissionContext(resource_ids=("document-a", "document-a-child")), atomic=True, coverage_dimensions=(CoverageDimension.BULK,)),
-            BatchPermissionRuleV2(rule_id="batch-all-deny", subject_id="member-a", action_id="batch-modify", resource_expectations=(BatchResourceExpectation(resource_id="document-a2", expectation=PermissionExpectation.DENY), BatchResourceExpectation(resource_id="document-b", expectation=PermissionExpectation.DENY)), required_observers=("http", "owner_api"), context=PermissionContext(resource_ids=("document-a2", "document-b")), atomic=True, coverage_dimensions=(CoverageDimension.BULK,)),
-            BatchPermissionRuleV2(rule_id="batch-mixed", subject_id="member-a", action_id="batch-modify", resource_expectations=(BatchResourceExpectation(resource_id="document-a", expectation=PermissionExpectation.ALLOW, relation_path=("owns-document-a",)), BatchResourceExpectation(resource_id="document-b", expectation=PermissionExpectation.DENY)), required_observers=("http", "owner_api"), context=PermissionContext(resource_ids=("document-a", "document-b")), atomic=True, coverage_dimensions=(CoverageDimension.BULK,)),
+            BatchPermissionRule(rule_id="batch-all-allow", subject_id="member-a", action_id="batch-modify", resource_expectations=(BatchResourceExpectation(resource_id="document-a", expectation=PermissionExpectation.ALLOW, relation_path=("owns-document-a",)), BatchResourceExpectation(resource_id="document-a-child", expectation=PermissionExpectation.ALLOW, relation_path=("owns-document-a-child",))), required_observations=("resource_state",), context=PermissionContext(resource_ids=("document-a", "document-a-child")), atomic=True, coverage_dimensions=(CoverageDimension.BULK,)),
+            BatchPermissionRule(rule_id="batch-all-deny", subject_id="member-a", action_id="batch-modify", resource_expectations=(BatchResourceExpectation(resource_id="document-a2", expectation=PermissionExpectation.DENY), BatchResourceExpectation(resource_id="document-b", expectation=PermissionExpectation.DENY)), required_observations=("resource_state",), context=PermissionContext(resource_ids=("document-a2", "document-b")), atomic=True, coverage_dimensions=(CoverageDimension.BULK,)),
+            BatchPermissionRule(rule_id="batch-mixed", subject_id="member-a", action_id="batch-modify", resource_expectations=(BatchResourceExpectation(resource_id="document-a", expectation=PermissionExpectation.ALLOW, relation_path=("owns-document-a",)), BatchResourceExpectation(resource_id="document-b", expectation=PermissionExpectation.DENY)), required_observations=("resource_state",), context=PermissionContext(resource_ids=("document-a", "document-b")), atomic=True, coverage_dimensions=(CoverageDimension.BULK,)),
         ),
     )
 
@@ -122,7 +118,7 @@ def permission_server(request: pytest.FixtureRequest, tmp_path: Path):
 
     def start(variant: str, *, observer_token: str | None = None):
         tokens = {subject_id: f"token-{subject_id}" for subject_id in ("member-a", "dept-admin-a", "dept-admin-a2", "tenant-admin-a", "member-b")}
-        server = create_permission_sample_server(
+        server = create_complex_permission_test_server(
             variant=variant,
             port=0,
             tokens=tokens,
@@ -156,13 +152,24 @@ def test_complex_coverage_is_stable_and_preserves_batch_semantics() -> None:
     assert all(case.finding_pre_identity for case in first.cases)
     approve_cases = [case for case in first.cases if case.action_id == "approve"]
     assert any(case.expectations == (PermissionExpectation.ALLOW,) and case.context.workflow_states == ("PENDING",) for case in approve_cases)
+    assert any(
+        case.relation_paths[0] == ("inherits-tenant-admin-a", "manages-member-a", "owns-document-a")
+        for case in approve_cases
+    )
+    child = next(resource for resource in contract.resources if resource.resource_id == "document-a-child")
+    assert child.parent_resource_id == "document-a"
+    assert any(
+        expectation.resource_id == "document-a-child" and expectation.relation_path == ("owns-document-a-child",)
+        for rule in contract.batch_rules
+        for expectation in rule.resource_expectations
+    )
     baseline = next(record for record in first.coverage if record.rule_id == "modify-document-a" and record.expectation is PermissionExpectation.ALLOW)
     assert baseline.status is CoverageStatus.COVERED
     assert any(record.status is CoverageStatus.COVERED for record in first.coverage)
 
 
 def test_coverage_reports_missing_observer_and_budget_gap() -> None:
-    plan = build_permission_coverage_plan(_complex_contract(), engine_version="coverage-v2", seed=7, case_budget=1, available_observers=("http",))
+    plan = build_permission_coverage_plan(_complex_contract(), engine_version="coverage-v2", seed=7, case_budget=1, available_observations=())
     codes = {gap.code for gap in plan.gaps}
     assert CoverageGapCode.MISSING_OBSERVER in codes
     assert plan.candidate_count >= plan.retained_count
@@ -170,7 +177,7 @@ def test_coverage_reports_missing_observer_and_budget_gap() -> None:
 
 
 def test_coverage_gaps_explain_each_baseline_and_dimension() -> None:
-    plan = build_permission_coverage_plan(_complex_contract(), engine_version="coverage-v2", seed=7, case_budget=32, available_subject_ids=("member-a",), available_observers=("http",))
+    plan = build_permission_coverage_plan(_complex_contract(), engine_version="coverage-v2", seed=7, case_budget=32, available_subject_ids=("member-a",), available_observations=("resource_state",))
     targets = {(gap.rule_id, gap.dimension, gap.expectation) for gap in plan.gaps}
     for record in plan.coverage:
         if record.status is CoverageStatus.GAP:
@@ -184,39 +191,6 @@ def test_seed_changes_same_priority_budget_selection_and_finding_identity_has_su
     assert first.plan_fingerprint != second.plan_fingerprint
     assert first.cases != second.cases
     assert all(case.finding_pre_identity for case in first.cases)
-
-
-def test_checked_in_permission_sample_assets_share_one_contract() -> None:
-    hashes = []
-    sample_contracts = []
-    for variant in ("fixed", "vulnerable", "inconclusive"):
-        asset_dir = PROJECT_ROOT / "samples" / f"{variant}_apps" / "permissions_v2"
-        contract = PermissionContractV2.model_validate_json((asset_dir / "contract.json").read_text(encoding="utf-8"))
-        sample_contracts.append(contract)
-        scenario = json.loads((asset_dir / "scenario.json").read_text(encoding="utf-8"))
-        truth = json.loads((asset_dir / "truth.json").read_text(encoding="utf-8"))
-        assert scenario["schema_version"] == "2"
-        assert scenario["variant"] == variant
-        assert scenario["base_path"] == "/resources"
-        assert scenario["observer_path"] == "/owner/resources"
-        assert scenario["reset_path"] == "/reset"
-        assert scenario["roles"] == ["department-admin", "guest", "member", "tenant-admin"]
-        assert scenario["tenants"] == ["tenant-a", "tenant-b"]
-        assert scenario["departments"] == ["dept-a", "dept-a2", "dept-b"]
-        assert scenario["actions"] == ["view", "modify", "approve", "batch"]
-        assert scenario["observer"] == {"observer_id": "sqlite_observer", "query_template_id": "resource-state", "table_or_view": "resource_state", "phases": ["BEFORE", "AFTER"]}
-        assert scenario["pairing"]["request"] == {"method": "PATCH", "resource_id": "document-b", "expected_http_status": 403}
-        assert truth["schema_version"] == "2"
-        assert truth["variant"] == variant
-        assert "secret" not in json.dumps([scenario, truth], ensure_ascii=False).lower()
-        hashes.append(canonical_sha256(contract))
-    assert len(set(hashes)) == 1
-    modes = {
-        case.batch_mode
-        for case in build_permission_coverage_plan(sample_contracts[0], engine_version="coverage-v2", seed=7, case_budget=32).cases
-        if case.batch_mode is not None
-    }
-    assert modes == {BatchAuthorizationMode.ALL_ALLOW, BatchAuthorizationMode.ALL_DENY, BatchAuthorizationMode.MIXED_AUTHORIZATION}
 
 
 @pytest.mark.parametrize("variant", ["fixed", "vulnerable", "inconclusive"])
@@ -280,23 +254,23 @@ def test_fixed_batch_all_allow_persists_to_sqlite_observer(permission_server, tm
     server, tokens = permission_server("fixed")
     base = f"http://127.0.0.1:{server.server_port}"
     assert _request(base, "POST", "/resources/batch", tokens["member-a"], {"resource_ids": ["document-a", "document-a-child"], "value": "batch-persisted"})[0] == 200
-    spec = ObserverSpecV2(
+    spec = ObserverSpec(
         observer_id="sqlite_observer",
         observer_type=ObserverType.READ_ONLY_SQLITE,
-        target=ObserverTargetV2(
+        target=ObserverTarget(
             target_id="sqlite_state",
-            locator=SqliteQueryLocatorV2(query_template_id="resource-state", table_or_view="resource_state", database_secret_ref="env:BATCH_DB_SECRET"),
+            locator=SqliteQueryLocator(query_template_id="resource-state", table_or_view="resource_state", database_secret_ref="env:BATCH_DB_SECRET"),
             normalization_id="resource-state",
             normalization_version="1.0",
         ),
         phases=(ObservationPhase.AFTER,),
         required=True,
-        budget=ObserverBudgetV2(timeout_us=5_000_000, max_rows=10, max_bytes=4096),
+        budget=ObserverBudget(timeout_us=5_000_000, max_rows=10, max_bytes=4096),
     )
     for resource_id in ("document-a", "document-a-child"):
         result = run_sqlite_observer(
             spec,
-            CorrelationV2(case_id="batch-persist", resource_id=resource_id, request_marker="batch-persist"),
+            Correlation(case_id="batch-persist", resource_id=resource_id, request_marker="batch-persist"),
             ObservationPhase.AFTER,
             attempt_dir=tmp_path / resource_id,
             parent_environ={"BATCH_DB_SECRET": str(server.database_path)},
@@ -324,12 +298,12 @@ def test_inconclusive_observer_cannot_be_replaced_by_http_response(permission_se
 
 def test_fixed_and_vulnerable_pair_http_403_with_sqlite_before_after_evidence(permission_server, tmp_path: Path) -> None:
     def observe(server, phase: ObservationPhase, name: str):
-        spec = ObserverSpecV2(
+        spec = ObserverSpec(
             observer_id="sqlite_observer",
             observer_type=ObserverType.READ_ONLY_SQLITE,
-            target=ObserverTargetV2(
+            target=ObserverTarget(
                 target_id="sqlite_state",
-                locator=SqliteQueryLocatorV2(
+                locator=SqliteQueryLocator(
                     query_template_id="resource-state",
                     table_or_view="resource_state",
                     database_secret_ref="env:PAIRING_DB_SECRET",
@@ -339,11 +313,11 @@ def test_fixed_and_vulnerable_pair_http_403_with_sqlite_before_after_evidence(pe
             ),
             phases=(ObservationPhase.BEFORE, ObservationPhase.AFTER),
             required=True,
-            budget=ObserverBudgetV2(timeout_us=5_000_000, max_rows=10, max_bytes=4096),
+            budget=ObserverBudget(timeout_us=5_000_000, max_rows=10, max_bytes=4096),
         )
         result = run_sqlite_observer(
             spec,
-            CorrelationV2(case_id="pairing-case", resource_id="document-b", request_marker="pairing-case"),
+            Correlation(case_id="pairing-case", resource_id="document-b", request_marker="pairing-case"),
             phase,
             attempt_dir=tmp_path / f"{server.variant}-{name}",
             parent_environ={"PAIRING_DB_SECRET": str(server.database_path), "UNRELATED_SECRET": "not-forwarded"},

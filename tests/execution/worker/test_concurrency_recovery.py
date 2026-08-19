@@ -7,34 +7,34 @@ from typing import Any
 import pytest
 from sqlalchemy import text
 
-from jiejian.domain.lifecycle import JobState, RunLifecycle
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.storage import StorageUnitOfWork
+from product.backend.core.lifecycle import JobState, RunLifecycle
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import StorageUnitOfWork
 
 pytestmark = pytest.mark.database
-from jiejian.execution.models import (
-    ClaimJobV1,
-    ConfirmRecoveryV1,
+from product.backend.infra.runtime.jobs.models import (
+    ClaimJob,
+    ConfirmRecovery,
     RecoveryOperator,
     RecoveryProofType,
     RecoveryReasonCode,
-    RecoveryScanV1,
-    RequestCancellationV1,
+    RecoveryScan,
+    RequestCancellation,
     RetryableFailureCode,
-    RetryableFailureV1,
+    RetryableFailure,
 )
 
 NOW_US = 1_790_000_000_000_000
 
 
-def _claim_request(job_id: str, **changes: Any) -> ClaimJobV1:
+def _claim_request(job_id: str, **changes: Any) -> ClaimJob:
     values = {
         "job_id": job_id,
         "lease_owner": "worker-1",
         "now_us": NOW_US + 10,
         "lease_duration_us": 1_000,
     }
-    return ClaimJobV1(**(values | changes))
+    return ClaimJob(**(values | changes))
 
 
 def test_concurrent_identical_submits_create_one_run_and_job(
@@ -68,7 +68,7 @@ def test_concurrent_claims_allow_exactly_one_worker(
         barrier.wait()
         try:
             result = worker_services.attempts.claim(
-                ClaimJobV1(
+                ClaimJob(
                     job_id=submitted.job.job_id,
                     lease_owner=owner,
                     now_us=NOW_US + 10,
@@ -104,7 +104,7 @@ def test_concurrent_waiting_cancellation_is_idempotent(
     def cancel_once() -> tuple[bool, int]:
         barrier.wait()
         result = worker_services.queue.request_cancellation(
-            RequestCancellationV1(
+            RequestCancellation(
                 job_id=submitted.job.job_id,
                 now_us=NOW_US + 5,
             )
@@ -148,7 +148,7 @@ def test_expired_lease_is_only_listed_and_cannot_be_claimed_again(
     )
     assert claimed is not None
     candidates = worker_services.recovery.list_recovery_candidates(
-        RecoveryScanV1(now_us=NOW_US + 20)
+        RecoveryScan(now_us=NOW_US + 20)
     )
     assert [(item.job_id, item.fencing_token) for item in candidates] == [
         (claimed.job.job_id, claimed.job.fencing_token)
@@ -194,7 +194,7 @@ def test_both_recovery_proofs_release_expired_job_and_invalidate_old_token(
     )
     assert claimed is not None
     recovered = worker_services.recovery.confirm_recovery(
-        ConfirmRecoveryV1(
+        ConfirmRecovery(
             job_id=claimed.job.job_id,
             lease_owner="worker-1",
             fencing_token=claimed.job.fencing_token,
@@ -210,7 +210,7 @@ def test_both_recovery_proofs_release_expired_job_and_invalidate_old_token(
 
     with pytest.raises(JiejianError) as stale:
         worker_services.recovery.confirm_recovery(
-            ConfirmRecoveryV1(
+            ConfirmRecovery(
                 job_id=claimed.job.job_id,
                 lease_owner="worker-1",
                 fencing_token=claimed.job.fencing_token,
@@ -245,7 +245,7 @@ def test_recovery_at_attempt_limit_fails_job_and_run_without_verdict(
     )
     assert claimed is not None
     recovered = worker_services.recovery.confirm_recovery(
-        ConfirmRecoveryV1(
+        ConfirmRecovery(
             job_id=claimed.job.job_id,
             lease_owner="worker-1",
             fencing_token=claimed.job.fencing_token,
@@ -272,7 +272,7 @@ def test_retry_wait_cancel_keeps_first_request_time_and_never_reclaims(
     claimed = worker_services.attempts.claim(_claim_request(submitted.job.job_id))
     assert claimed is not None
     waiting = worker_services.attempts.record_retryable_failure(
-        RetryableFailureV1(
+        RetryableFailure(
             job_id=claimed.job.job_id,
             lease_owner="worker-1",
             fencing_token=claimed.job.fencing_token,
@@ -281,7 +281,7 @@ def test_retry_wait_cancel_keeps_first_request_time_and_never_reclaims(
         )
     )
     cancelled = worker_services.queue.request_cancellation(
-        RequestCancellationV1(
+        RequestCancellation(
             job_id=waiting.job.job_id,
             now_us=NOW_US + 21,
         )
@@ -307,7 +307,7 @@ def test_recovery_event_metadata_is_stable_and_owner_is_not_copied(
     )
     assert claimed is not None
     worker_services.recovery.confirm_recovery(
-        ConfirmRecoveryV1(
+        ConfirmRecovery(
             job_id=claimed.job.job_id,
             lease_owner="worker-1",
             fencing_token=claimed.job.fencing_token,
@@ -334,7 +334,7 @@ def test_known_secret_as_owner_is_rejected_without_owner_echo(
     sentinel = "stage22-owner-secret"
     with pytest.raises(JiejianError) as captured:
         worker_services.attempts.claim(
-            ClaimJobV1(
+            ClaimJob(
                 job_id=submitted.job.job_id,
                 lease_owner=sentinel,
                 now_us=NOW_US + 10,

@@ -8,24 +8,24 @@ from pathlib import Path
 
 import pytest
 
-from jiejian.protocols import (
-    CorrelationV2,
+from product.protocols import (
+    Correlation,
     CausalityStatus,
     ObservationCompleteness,
     ObservationPhase,
-    ObservationProvenanceV2,
-    ObservationWindowV2,
-    ObserverBudgetV2,
+    ObservationProvenance,
+    ObservationWindow,
+    ObserverBudget,
     ObserverOutcomeStatus,
-    ObserverInvocationV2,
-    ObserverSpecV2,
-    ObserverTargetV2,
+    ObserverInvocation,
+    ObserverSpec,
+    ObserverTarget,
     ObserverType,
     ProvenanceType,
-    SqliteQueryLocatorV2,
+    SqliteQueryLocator,
 )
-from jiejian.protocols.observer_v2 import OBSERVER_JSON_MAX_BYTES
-from jiejian.runner.sqlite_observer import (
+from product.protocols.observer import OBSERVER_JSON_MAX_BYTES
+from product.backend.infra.observers.sqlite import (
     SQLITE_BYTE_LIMIT,
     SQLITE_QUERY_UNSUPPORTED,
     SQLITE_ROW_LIMIT,
@@ -33,19 +33,19 @@ from jiejian.runner.sqlite_observer import (
     SQLITE_UNAVAILABLE,
     run_sqlite_observer,
 )
-import jiejian.runner.sqlite_observer as sqlite_observer
+import product.backend.infra.observers.sqlite as sqlite_observer
 
 
 PYTHON = sys.executable
 
 
-def _spec(*, timeout_us: int = 5_000_000, max_rows: int = 10, max_bytes: int = 4096, template: str = "resource-state", table: str = "resource_state") -> ObserverSpecV2:
-    return ObserverSpecV2(
+def _spec(*, timeout_us: int = 5_000_000, max_rows: int = 10, max_bytes: int = 4096, template: str = "resource-state", table: str = "resource_state") -> ObserverSpec:
+    return ObserverSpec(
         observer_id="sqlite_observer",
         observer_type=ObserverType.READ_ONLY_SQLITE,
-        target=ObserverTargetV2(
+        target=ObserverTarget(
             target_id="sqlite_state",
-            locator=SqliteQueryLocatorV2(
+            locator=SqliteQueryLocator(
                 query_template_id=template,
                 table_or_view=table,
                 database_secret_ref="env:DB_SECRET",
@@ -55,7 +55,7 @@ def _spec(*, timeout_us: int = 5_000_000, max_rows: int = 10, max_bytes: int = 4
         ),
         phases=(ObservationPhase.AFTER,),
         required=True,
-        budget=ObserverBudgetV2(timeout_us=timeout_us, max_rows=max_rows, max_bytes=max_bytes),
+        budget=ObserverBudget(timeout_us=timeout_us, max_rows=max_rows, max_bytes=max_bytes),
     )
 
 
@@ -67,10 +67,10 @@ def _database(path: Path, rows: list[tuple[str, str, str]]) -> None:
     connection.close()
 
 
-def _observe(tmp_path: Path, db_path: Path, spec: ObserverSpecV2 | None = None):
+def _observe(tmp_path: Path, db_path: Path, spec: ObserverSpec | None = None):
     return run_sqlite_observer(
         spec or _spec(),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "attempt",
         parent_environ={"DB_SECRET": str(db_path), "OTHER_SECRET": "must-not-propagate"},
@@ -116,7 +116,7 @@ def test_sqlite_observer_rejects_unregistered_query_boundary(tmp_path: Path) -> 
     ("spec", "reason"),
     [(_spec(max_rows=1), SQLITE_ROW_LIMIT), (_spec(max_bytes=64), SQLITE_BYTE_LIMIT)],
 )
-def test_sqlite_observer_budget_is_inconclusive(tmp_path: Path, spec: ObserverSpecV2, reason: str) -> None:
+def test_sqlite_observer_budget_is_inconclusive(tmp_path: Path, spec: ObserverSpec, reason: str) -> None:
     db = tmp_path / "state.db"
     _database(db, [("document", "DRAFT", "a"), ("document", "APPROVED", "b")])
     result = _observe(tmp_path / reason.lower(), db, spec)
@@ -136,7 +136,7 @@ def test_sqlite_observer_budget_is_inconclusive(tmp_path: Path, spec: ObserverSp
 def test_sqlite_observer_secret_missing_and_child_failure_are_not_safety_results(tmp_path: Path) -> None:
     missing = run_sqlite_observer(
         _spec(),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "missing",
         parent_environ={},
@@ -156,7 +156,7 @@ def test_sqlite_observer_secret_missing_and_child_failure_are_not_safety_results
 
     crashed = run_sqlite_observer(
         _spec(),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "crash",
         parent_environ={"DB_SECRET": "C:\\private\\source.db"},
@@ -184,7 +184,7 @@ def test_supervisor_passes_only_the_referenced_secret_and_no_query_text(monkeypa
     monkeypatch.setattr(sqlite_observer.subprocess, "Popen", fake_popen)
     result = run_sqlite_observer(
         _spec(),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "supervisor",
         parent_environ={"DB_SECRET": "opaque-db-source", "OTHER_SECRET": "must-not-propagate"},
@@ -223,7 +223,7 @@ def test_supervisor_rejects_oversized_output_before_reading(monkeypatch: pytest.
     monkeypatch.setattr(sqlite_observer.subprocess, "Popen", fake_popen)
     result = run_sqlite_observer(
         _spec(),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "oversized-output",
         parent_environ={"DB_SECRET": "opaque-db-source"},
@@ -246,19 +246,19 @@ def test_child_rejects_oversized_invocation_before_reading(tmp_path: Path) -> No
 @pytest.mark.parametrize("field", ["observer_id", "correlation", "phase", "provenance"])
 def test_supervisor_rejects_output_bound_to_another_invocation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, field: str) -> None:
     spec = _spec()
-    correlation = CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1")
+    correlation = Correlation(case_id="case-1", resource_id="document", request_marker="case-1")
     state = sqlite_observer.build_normalized_state({"row_count": 1, "rows": [], "truncated": False})
-    envelope = sqlite_observer.ObservationEnvelopeV2(
+    envelope = sqlite_observer.ObservationEnvelope(
         observer_id=spec.observer_id,
         observer_type=ObserverType.READ_ONLY_SQLITE,
         phase=ObservationPhase.AFTER,
         target_id=spec.target.target_id,
-        window=ObservationWindowV2(phase=ObservationPhase.AFTER, started_at_us=100, finished_at_us=200, timeout_us=spec.budget.timeout_us),
+        window=ObservationWindow(phase=ObservationPhase.AFTER, started_at_us=100, finished_at_us=200, timeout_us=spec.budget.timeout_us),
         correlation=correlation,
         causality=CausalityStatus.CORRELATED,
         completeness=ObservationCompleteness.COMPLETE,
         state=state,
-        provenance=ObservationProvenanceV2(
+        provenance=ObservationProvenance(
             provenance_type=ProvenanceType.SQLITE_QUERY,
             adapter_version="sqlite-observer-1",
             target_id=spec.target.target_id,
@@ -268,7 +268,7 @@ def test_supervisor_rejects_output_bound_to_another_invocation(monkeypatch: pyte
     )
     updates = {
         "observer_id": "other_observer",
-        "correlation": CorrelationV2(case_id="other-case", resource_id="document", request_marker="other-case"),
+        "correlation": Correlation(case_id="other-case", resource_id="document", request_marker="other-case"),
         "phase": ObservationPhase.BEFORE,
         "provenance": envelope.provenance.model_copy(update={"query_template_id": "other-query"}),
     }
@@ -328,7 +328,7 @@ def test_parent_wait_timeout_deducts_launch_time(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(sqlite_observer.subprocess, "Popen", lambda *args, **kwargs: Process())
     result = run_sqlite_observer(
         _spec(timeout_us=10),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "budget",
         parent_environ={"DB_SECRET": "opaque-db-source"},
@@ -356,7 +356,7 @@ def test_sqlite_observer_corrupt_output_is_execution_error(monkeypatch: pytest.M
     monkeypatch.setattr(sqlite_observer.subprocess, "Popen", fake_popen)
     result = run_sqlite_observer(
         _spec(),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "corrupt",
         parent_environ={"DB_SECRET": "opaque-db-source"},
@@ -382,7 +382,7 @@ def test_supervisor_timeout_window_starts_before_child_launch(monkeypatch: pytes
     monkeypatch.setattr(sqlite_observer.subprocess, "Popen", lambda *args, **kwargs: TimedOutProcess())
     result = run_sqlite_observer(
         _spec(timeout_us=10),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "timeout-window",
         parent_environ={"DB_SECRET": "opaque-db-source"},
@@ -411,7 +411,7 @@ def test_timeout_reap_is_bounded_when_kill_does_not_exit(monkeypatch: pytest.Mon
     monkeypatch.setattr(sqlite_observer.time, "monotonic_ns", iter((1_000, 1_001)).__next__)
     result = run_sqlite_observer(
         _spec(timeout_us=10),
-        CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "stuck-reap",
         parent_environ={"DB_SECRET": "opaque-db-source"},
@@ -435,9 +435,9 @@ def test_sqlite_observer_timeout_is_inconclusive(tmp_path: Path) -> None:
 def test_sqlite_query_returned_after_deadline_is_timed_out(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     db = tmp_path / "deadline.db"
     _database(db, [("document", "DRAFT", "safe")])
-    invocation = ObserverInvocationV2(
+    invocation = ObserverInvocation(
         spec=_spec(timeout_us=1),
-        correlation=CorrelationV2(case_id="case-1", resource_id="document", request_marker="case-1"),
+        correlation=Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         phase=ObservationPhase.AFTER,
     )
     ticks = iter((1_000, 2_000, 2_000))

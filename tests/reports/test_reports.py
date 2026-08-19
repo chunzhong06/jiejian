@@ -12,17 +12,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from jiejian.api.routers.results import build_results_router
-from jiejian.cli.app import app as cli_app
-from jiejian.domain.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.protocols import CleanupResultV1, CleanupStatus, RunnerResultType, RunnerResultV1
-from jiejian.artifacts.models import stable_artifact_ids
-from jiejian.reports.models import canonical_sha256
-from jiejian.reports.artifacts import ArtifactResultReader
-from jiejian.reports.publication import ReportPublication
-from jiejian.reports.service import ReportApplicationService
-from jiejian.storage import (
+from product.backend.api.routers.results import build_results_router
+from product.backend.cli.app import app as cli_app
+from product.backend.core.lifecycle import CaseVerdict, JobState, ProjectStatus, RunLifecycle, RunVerdict
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.protocols import CleanupResult, CleanupStatus, RunnerResultType, RunnerResult
+from product.protocols.artifacts import stable_artifact_ids
+from product.protocols.report import canonical_sha256
+from product.backend.infra.artifacts.report_reader import ArtifactResultReader
+from product.backend.infra.artifacts.report_store import ReportStore
+from product.backend.workflows.results.reporting import ReportBuilder
+from product.backend.infra.storage import (
     GateResultRecord,
     ProjectRecord,
     RegressionBaselineRecord,
@@ -32,11 +32,12 @@ from jiejian.storage import (
     create_sqlite_engine,
     upgrade_database,
 )
-from jiejian.verification.findings import FindingIdentity
+from product.backend.core.verification.findings import FindingIdentity
+from tests.execution.protocol.test_runner import _evidence
 
 
 PROJECT_ID = "report-project"
-RUN_ID = "run_" + "1" * 32
+RUN_ID = "run_" + "a" * 32
 GATE_ID = "gate_" + "2" * 32
 BASELINE_ID = "baseline_" + "3" * 32
 EVIDENCE_ID = "ev_" + "4" * 20
@@ -45,9 +46,9 @@ OCCURRENCE_ID = "occ_" + "6" * 32
 ARTIFACT_ID = "build-1"
 
 
-def _runtime_result() -> RunnerResultV1:
-    return RunnerResultV1(
-        schema_version="1",
+def _runtime_result() -> RunnerResult:
+    return RunnerResult(
+        schema_version="2",
         run_id=RUN_ID,
         job_id="job_" + "7" * 32,
         attempt=1,
@@ -59,7 +60,11 @@ def _runtime_result() -> RunnerResultV1:
         job_state=JobState.SUCCEEDED,
         verdict=RunVerdict.BLOCK,
         reason_codes=(),
-        cleanup=CleanupResultV1(schema_version="1", status=CleanupStatus.SUCCEEDED, reason_codes=()),
+        plan_fingerprint="a" * 64,
+        coverage_record_count=0,
+        coverage_gap_count=0,
+        evidence=(_evidence(verdict=CaseVerdict.VULNERABLE),),
+        cleanup=CleanupResult(schema_version="2", status=CleanupStatus.SUCCEEDED, reason_codes=()),
         error=None,
         artifacts=(),
     )
@@ -82,7 +87,7 @@ def _stored_gate(tmp_path: Path):
             coverage_digest=canonical_sha256(()),
             request_snapshot_sha256="a" * 64,
             engine_version="engine-v1",
-            protocol_versions_json='["runner-result-v1"]',
+            protocol_versions_json='["runner-result-2"]',
             actor="operator",
             reason="report test",
             accepted_at_us=10,
@@ -202,7 +207,7 @@ def _service(tmp_path: Path):
             assert baseline_id == BASELINE_ID
             return {"schema_version": "1", "baseline_id": BASELINE_ID, "project_id": PROJECT_ID}
 
-    return ReportApplicationService(var_dir, Results(), Findings(), Gating()), engine, var_dir
+    return ReportBuilder(var_dir, Results(), Findings(), Gating()), engine, var_dir
 
 
 def test_report_json_is_deterministic_and_four_formats_share_ids_gate_and_evidence(tmp_path: Path) -> None:
@@ -278,15 +283,15 @@ def test_inconclusive_and_missing_artifact_facts_are_visible_in_projections(tmp_
 
 def test_reparse_attribute_is_rejected_for_report_and_artifact_roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_metadata = SimpleNamespace(st_mode=stat.S_IFDIR, st_file_attributes=0x400)
-    monkeypatch.setattr("jiejian.reports.publication.os.lstat", lambda _path: fake_metadata)
+    monkeypatch.setattr("product.backend.infra.artifacts.report_store.os.lstat", lambda _path: fake_metadata)
     with pytest.raises(JiejianError):
-        ReportPublication(tmp_path)._regular_directory(tmp_path)
-    monkeypatch.setattr("jiejian.reports.artifacts.os.lstat", lambda _path: fake_metadata)
+        ReportStore(tmp_path)._regular_directory(tmp_path)
+    monkeypatch.setattr("product.backend.infra.artifacts.report_reader.os.lstat", lambda _path: fake_metadata)
     with pytest.raises(JiejianError):
         ArtifactResultReader(tmp_path)._regular_directory(tmp_path)
 
 
-def test_v2_api_and_cli_read_the_same_explicit_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_current_api_and_cli_read_the_same_explicit_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service, engine, var_dir = _service(tmp_path)
     try:
         generated = service.generate(RUN_ID, GATE_ID)
@@ -294,22 +299,25 @@ def test_v2_api_and_cli_read_the_same_explicit_report(tmp_path: Path, monkeypatc
         api = FastAPI()
         api.include_router(build_results_router(fake_context, SimpleNamespace()))
         with TestClient(api) as client:
-            assert client.post(f"/api/v2/runs/{RUN_ID}/reports", json={"gate_result_id": GATE_ID}).status_code == 405
-            response = client.get(f"/api/v2/runs/{RUN_ID}/reports/{generated['report_id']}")
+            assert client.post(f"/api/runs/{RUN_ID}/reports", json={"gate_result_id": GATE_ID}).status_code == 405
+            response = client.get(f"/api/runs/{RUN_ID}/reports/{generated['report_id']}")
         assert response.status_code == 200
         assert response.json()["data"]["gate_result_id"] == GATE_ID
         with TestClient(api) as client:
-            download = client.get(f"/api/v2/runs/{RUN_ID}/reports/{generated['report_id']}/formats/sarif")
+            download = client.get(f"/api/runs/{RUN_ID}/reports/{generated['report_id']}/formats/sarif")
         assert download.status_code == 200
         assert download.headers["content-type"].startswith("application/sarif+json")
         assert download.headers["content-disposition"] == 'attachment; filename="report.sarif.json"'
 
-        monkeypatch.setattr("jiejian.cli.commands.results.runtime_settings", lambda _context: SimpleNamespace(var_dir=var_dir))
-        monkeypatch.setattr("jiejian.application.context.ApplicationContext", lambda _var_dir: fake_context)
-        cli = CliRunner().invoke(cli_app, ["--var-dir", str(var_dir), "report", RUN_ID, "--v2", "--report-id", generated["report_id"]])
+        from contextlib import contextmanager
+        @contextmanager
+        def scope(*_args, **_kwargs):
+            yield fake_context
+        monkeypatch.setattr("product.backend.cli.commands.results.application_scope", scope)
+        cli = CliRunner().invoke(cli_app, ["--var-dir", str(var_dir), "report", RUN_ID, "--report-id", generated["report_id"]])
         assert cli.exit_code == 0, cli.output
         assert json.loads(cli.stdout)["gate_result_id"] == GATE_ID
-        cli_projection = CliRunner().invoke(cli_app, ["--var-dir", str(var_dir), "report", RUN_ID, "--v2", "--report-id", generated["report_id"], "--format", "html"])
+        cli_projection = CliRunner().invoke(cli_app, ["--var-dir", str(var_dir), "report", RUN_ID, "--report-id", generated["report_id"], "--format", "html"])
         assert cli_projection.exit_code == 0, cli_projection.output
         assert cli_projection.stdout_bytes == service.read_format(RUN_ID, generated["report_id"], "html")
     finally:

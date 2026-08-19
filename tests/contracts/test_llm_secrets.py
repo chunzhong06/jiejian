@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-import jiejian.contracts.llm.secrets as secrets_module
-from jiejian.contracts.llm.secrets import WindowsCredentialManagerSecretStore
+import product.backend.infra.llm.secrets as secrets_module
+from product.backend.infra.llm.secrets import WindowsCredentialManagerSecretStore
 
 
 @pytest.mark.parametrize(

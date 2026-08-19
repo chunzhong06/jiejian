@@ -6,10 +6,10 @@ import json
 from fastapi.testclient import TestClient
 import pytest
 
-from jiejian.api import create_app
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.onboarding.models import FolderSelectionResult
-from jiejian.verification.inputs import load_project_bundle
+from product.backend.api import create_app
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.workflows.onboarding.models import FolderSelectionResult
+from product.protocols.execution_profile import parse_execution_profile
 
 
 class FakeFolderSelector:
@@ -39,7 +39,7 @@ def test_onboarding_select_folder_uses_injected_selector(tmp_path: Path) -> None
         ),
     )
     with TestClient(app) as client:
-        response = client.post("/api/v1/onboarding/select-folder")
+        response = client.post("/api/onboarding/select-folder")
 
     assert response.status_code == 200
     assert response.json()["data"] == {
@@ -58,7 +58,7 @@ def test_onboarding_cancelled_selector_is_not_an_error(tmp_path: Path) -> None:
         ),
     )
     with TestClient(app) as client:
-        response = client.post("/api/v1/onboarding/select-folder")
+        response = client.post("/api/onboarding/select-folder")
 
     assert response.status_code == 200
     assert response.json()["data"] == {
@@ -74,7 +74,7 @@ def test_onboarding_inspect_returns_versioned_safe_result(tmp_path: Path) -> Non
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         response = client.post(
-            "/api/v1/onboarding/inspect",
+            "/api/onboarding/inspect",
             json={"schema_version": "1", "path": str(tmp_path.resolve())},
         )
 
@@ -92,7 +92,7 @@ def test_onboarding_inspect_maps_invalid_path_without_leaking_path(
     secret_path = str(tmp_path / "missing-secret-folder")
     with TestClient(app) as client:
         response = client.post(
-            "/api/v1/onboarding/inspect",
+            "/api/onboarding/inspect",
             json={"schema_version": "1", "path": secret_path},
         )
 
@@ -108,7 +108,7 @@ def test_onboarding_selector_unavailable_maps_to_503(tmp_path: Path) -> None:
         folder_selector=FailingFolderSelector(),
     )
     with TestClient(app) as client:
-        response = client.post("/api/v1/onboarding/select-folder")
+        response = client.post("/api/onboarding/select-folder")
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "ONBOARDING_SELECTOR_UNAVAILABLE"
@@ -122,12 +122,13 @@ def test_onboarding_read_budget_maps_to_413(tmp_path: Path) -> None:
     )
     with TestClient(app) as client:
         response = client.post(
-            "/api/v1/onboarding/inspect",
+            "/api/onboarding/inspect",
             json={"schema_version": "1", "path": str(tmp_path.resolve())},
         )
 
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "ONBOARDING_READ_BUDGET"
+    assert response.json()["error"]["message"] == "应用目录内容过多，自动识别已达到安全扫描上限。请确认选择的是项目根目录，或改为手工填写必要信息。"
 
 
 def test_onboarding_routes_are_present_in_openapi(tmp_path: Path) -> None:
@@ -135,19 +136,19 @@ def test_onboarding_routes_are_present_in_openapi(tmp_path: Path) -> None:
     with TestClient(app) as client:
         document = client.get("/openapi.json").json()
 
-    assert document["paths"]["/api/v1/onboarding/select-folder"]["post"]
-    inspect = document["paths"]["/api/v1/onboarding/inspect"]["post"]
+    assert document["paths"]["/api/onboarding/select-folder"]["post"]
+    inspect = document["paths"]["/api/onboarding/inspect"]["post"]
     assert "OnboardingInspectRequest" in str(inspect)
 
 
-def test_onboarding_quick_check_creates_safe_bundle_and_is_idempotent(tmp_path: Path) -> None:
+def test_onboarding_quick_check_creates_current_profile_and_is_idempotent(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     (source / "package.json").write_text("{}", encoding="utf-8")
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         created = client.post(
-            "/api/v1/onboarding/sessions",
+            "/api/onboarding/sessions",
             json={"schema_version": "1", "path": str(source.resolve()), "project_name": "新手项目"},
         )
         assert created.status_code == 201
@@ -155,7 +156,7 @@ def test_onboarding_quick_check_creates_safe_bundle_and_is_idempotent(tmp_path: 
         session_id = session["session_id"]
         assert session["primary_configured"] is False
         updated = client.patch(
-            f"/api/v1/onboarding/sessions/{session_id}",
+            f"/api/onboarding/sessions/{session_id}",
             json={
                 "schema_version": "1", "revision": session["revision"],
                 "target_address": "http://127.0.0.1:8765",
@@ -167,13 +168,13 @@ def test_onboarding_quick_check_creates_safe_bundle_and_is_idempotent(tmp_path: 
         )
         assert updated.status_code == 200
         credentials = client.post(
-            f"/api/v1/onboarding/sessions/{session_id}/credentials",
+            f"/api/onboarding/sessions/{session_id}/credentials",
             json={"schema_version": "1", "primary": "primary-secret", "comparison": "comparison-secret"},
         )
         assert credentials.status_code == 200
         assert "primary-secret" not in credentials.text
         assert "comparison-secret" not in credentials.text
-        refreshed = client.get(f"/api/v1/onboarding/sessions/{session_id}")
+        refreshed = client.get(f"/api/onboarding/sessions/{session_id}")
         assert refreshed.status_code == 200
         assert refreshed.json()["data"]["status"] == "READY"
         context = app.state.context
@@ -189,41 +190,45 @@ def test_onboarding_quick_check_creates_safe_bundle_and_is_idempotent(tmp_path: 
 
         context.execution_submission.submit = fail_once
         failed_attempt = client.post(
-            f"/api/v1/onboarding/sessions/{session_id}/quick-check",
+            f"/api/onboarding/sessions/{session_id}/quick-check",
             json={"schema_version": "1"},
         )
         assert failed_attempt.status_code == 400
         context.execution_submission.submit = original_submit
         quick = client.post(
-            f"/api/v1/onboarding/sessions/{session_id}/quick-check",
+            f"/api/onboarding/sessions/{session_id}/quick-check",
             json={"schema_version": "1"},
         )
         assert quick.status_code == 202, quick.text
         result = quick.json()["data"]
         repeated = client.post(
-            f"/api/v1/onboarding/sessions/{session_id}/quick-check",
+            f"/api/onboarding/sessions/{session_id}/quick-check",
             json={"schema_version": "1"},
         )
         assert repeated.status_code == 202
         assert repeated.json()["data"]["run_id"] == result["run_id"]
         assert repeated.json()["data"]["created"] is False
 
-    bundle_root = tmp_path / "var" / "onboarding" / session_id / "bundle"
-    bundle = load_project_bundle(bundle_root / "project.yaml")
-    assert bundle.project.target.base_url == "http://127.0.0.1:8765"
-    assert bundle.project.target.follow_redirects is False
-    assert bundle.project.owner_observer_enabled is False
-    assert tuple(rule.kind.value for rule in bundle.contract.rules) == ("foreign_read",)
-    for path in bundle_root.iterdir():
-        assert "primary-secret" not in path.read_text(encoding="utf-8")
-        assert "comparison-secret" not in path.read_text(encoding="utf-8")
+    profile_path = tmp_path / "var" / "onboarding" / session_id / "profile.json"
+    profile = parse_execution_profile(profile_path.read_bytes())
+    assert profile.target.scope.base_url == "http://127.0.0.1:8765"
+    assert profile.target.scope.follow_redirects is False
+    assert profile.target.scope.max_requests == 10
+    assert profile.contract_id.endswith("-contract")
+    assert profile.observer_bindings[0].requirement_id == "resource_state"
+    assert {item.subject_id for item in profile.subject_bindings} == {"primary", "comparison"}
+    active_contract = app.state.context.projects.current_contract(profile.project_id).snapshot
+    assert any(item.relation.value == "OWNS" for item in active_contract.relations)
+    assert tuple(item.expectation.value for item in active_contract.rules) == ("ALLOW",)
+    assert "primary-secret" not in profile_path.read_text(encoding="utf-8")
+    assert "comparison-secret" not in profile_path.read_text(encoding="utf-8")
     persisted = json.loads((tmp_path / "var" / "onboarding" / "sessions" / f"{session_id}.json").read_text(encoding="utf-8"))
     assert "primary-secret" not in json.dumps(persisted)
     assert "comparison-secret" not in json.dumps(persisted)
 
     restarted = create_app(tmp_path / "var", start_worker=False)
     with TestClient(restarted) as client:
-        after_restart = client.get(f"/api/v1/onboarding/sessions/{session_id}")
+        after_restart = client.get(f"/api/onboarding/sessions/{session_id}")
     assert after_restart.status_code == 200
     assert after_restart.json()["data"]["primary_configured"] is False
     assert after_restart.json()["data"]["comparison_configured"] is False
@@ -237,12 +242,12 @@ def test_onboarding_quick_check_rejects_changed_session_after_submission_failure
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         created = client.post(
-            "/api/v1/onboarding/sessions",
+            "/api/onboarding/sessions",
             json={"schema_version": "1", "path": str(source.resolve()), "project_name": "项目"},
         ).json()["data"]
         session_id = created["session_id"]
         updated_response = client.patch(
-            f"/api/v1/onboarding/sessions/{session_id}",
+            f"/api/onboarding/sessions/{session_id}",
             json={
                 "schema_version": "1", "revision": created["revision"],
                 "target_address": "http://127.0.0.1:8765",
@@ -254,7 +259,7 @@ def test_onboarding_quick_check_rejects_changed_session_after_submission_failure
         )
         assert updated_response.status_code == 200
         client.post(
-            f"/api/v1/onboarding/sessions/{session_id}/credentials",
+            f"/api/onboarding/sessions/{session_id}/credentials",
             json={"schema_version": "1", "primary": "primary-secret", "comparison": "comparison-secret"},
         )
         calls: list[str] = []
@@ -266,17 +271,17 @@ def test_onboarding_quick_check_rejects_changed_session_after_submission_failure
 
         context.execution_submission.submit = fail_submission
         first = client.post(
-            f"/api/v1/onboarding/sessions/{session_id}/quick-check",
+            f"/api/onboarding/sessions/{session_id}/quick-check",
             json={"schema_version": "1"},
         )
         assert first.status_code == 400
-        bundle_root = tmp_path / "var" / "onboarding" / session_id / "bundle"
-        old_bundle = load_project_bundle(bundle_root / "project.yaml")
-        assert old_bundle.project.target.base_url == "http://127.0.0.1:8765"
-        current = client.get(f"/api/v1/onboarding/sessions/{session_id}").json()["data"]
+        profile_path = tmp_path / "var" / "onboarding" / session_id / "profile.json"
+        old_profile = parse_execution_profile(profile_path.read_bytes())
+        assert old_profile.target.scope.base_url == "http://127.0.0.1:8765"
+        current = client.get(f"/api/onboarding/sessions/{session_id}").json()["data"]
 
         changed = client.patch(
-            f"/api/v1/onboarding/sessions/{session_id}",
+            f"/api/onboarding/sessions/{session_id}",
             json={
                 "schema_version": "1", "revision": current["revision"],
                 "target_address": "http://127.0.0.1:8766",
@@ -284,14 +289,14 @@ def test_onboarding_quick_check_rejects_changed_session_after_submission_failure
         )
         assert changed.status_code == 200
         retry = client.post(
-            f"/api/v1/onboarding/sessions/{session_id}/quick-check",
+            f"/api/onboarding/sessions/{session_id}/quick-check",
             json={"schema_version": "1"},
         )
 
     assert retry.status_code == 409
     assert retry.json()["error"]["code"] == "ONBOARDING_SESSION_CONFLICT"
     assert len(calls) == 1
-    assert load_project_bundle(bundle_root / "project.yaml").project.target.base_url == "http://127.0.0.1:8765"
+    assert parse_execution_profile(profile_path.read_bytes()).target.scope.base_url == "http://127.0.0.1:8765"
 
 
 @pytest.mark.parametrize(
@@ -310,11 +315,11 @@ def test_onboarding_rejects_unsafe_encoded_or_control_paths(tmp_path: Path, path
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         created = client.post(
-            "/api/v1/onboarding/sessions",
+            "/api/onboarding/sessions",
             json={"schema_version": "1", "path": str(source.resolve()), "project_name": "项目"},
         ).json()["data"]
         response = client.patch(
-            f"/api/v1/onboarding/sessions/{created['session_id']}",
+            f"/api/onboarding/sessions/{created['session_id']}",
             json={
                 "schema_version": "1", "revision": created["revision"],
                 "read_only_path_template": path,
@@ -343,18 +348,18 @@ def test_onboarding_quick_check_rejects_non_ipv4_loopback_targets(
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         created = client.post(
-            "/api/v1/onboarding/sessions",
+            "/api/onboarding/sessions",
             json={"schema_version": "1", "path": str(source.resolve()), "project_name": "项目"},
         ).json()["data"]
         response = client.patch(
-            f"/api/v1/onboarding/sessions/{created['session_id']}",
+            f"/api/onboarding/sessions/{created['session_id']}",
             json={"schema_version": "1", "revision": created["revision"], "target_address": target},
         )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "ONBOARDING_TARGET_INVALID"
 
 
-def test_onboarding_quick_check_reports_missing_answers_without_creating_bundle(
+def test_onboarding_quick_check_reports_missing_answers_without_creating_profile(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "source"
@@ -362,13 +367,13 @@ def test_onboarding_quick_check_reports_missing_answers_without_creating_bundle(
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         created = client.post(
-            "/api/v1/onboarding/sessions",
+            "/api/onboarding/sessions",
             json={"schema_version": "1", "path": str(source.resolve()), "project_name": "项目"},
         ).json()["data"]
         response = client.post(
-            f"/api/v1/onboarding/sessions/{created['session_id']}/quick-check",
+            f"/api/onboarding/sessions/{created['session_id']}/quick-check",
             json={"schema_version": "1"},
         )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "ONBOARDING_SESSION_INCOMPLETE"
-    assert not (tmp_path / "var" / "onboarding" / created["session_id"] / "bundle").exists()
+    assert not (tmp_path / "var" / "onboarding" / created["session_id"] / "profile.json").exists()

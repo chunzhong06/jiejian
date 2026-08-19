@@ -1,0 +1,23 @@
+/* =============================================================================
+ * Results API Client
+ *
+ * 定位
+ *   验证、报告页面与已发布结果 HTTP 路由之间的只读适配器
+ *
+ * 职责
+ *   读取报告｜读取 Evidence 和 Finding｜保持后端发布视图为真源
+ *
+ * 调用链
+ *   CheckResultsPage / EvidenceTimeline / ReportPanel → resultsApi → api/http
+ * ============================================================================= */
+
+import { request } from './http'
+
+export const resultsApi = {
+  reports: (runId: string) => request<Record<string, unknown>[]>(`/api/runs/${runId}/reports`),
+  report: (runId: string, reportId: string) => request<Record<string, any>>(`/api/runs/${runId}/reports/${encodeURIComponent(reportId)}`),
+  findings: (runId: string) => request<Record<string, unknown>[]>(`/api/runs/${runId}/findings`),
+  evidence: (runId: string) => request<Record<string, unknown>[]>(`/api/runs/${runId}/evidence`),
+  evidenceDetail: (runId: string, evidenceId: string) => request<Record<string, unknown>>(`/api/runs/${runId}/evidence/${evidenceId}`),
+  reportFormat: (runId: string, reportId: string, format: 'json' | 'html' | 'sarif' | 'junit') => `/api/runs/${runId}/reports/${encodeURIComponent(reportId)}/formats/${format}`,
+}

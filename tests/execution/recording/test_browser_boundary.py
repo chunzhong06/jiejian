@@ -10,16 +10,16 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 import pytest
 
-from jiejian.verification.models import TargetScope
-from jiejian.protocols import (
-    RecordingBudgetV1,
+from product.protocols.runner import WebTargetScope
+from product.protocols import (
+    RecordingBudget,
     RecordingEventKind,
-    RecordingRunnerRequestV1,
+    RecordingRunnerRequest,
     RecordingRunnerResultType,
-    RecordingSessionRefV1,
+    RecordingSessionRef,
     canonical_recording_json_bytes,
 )
-from jiejian.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
+from product.backend.infra.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
 
 pytestmark = [pytest.mark.browser, pytest.mark.slow]
 
@@ -156,14 +156,14 @@ def browser_server(secret: str) -> Iterator[LocalBrowserServer]:
         thread.join(timeout=5)
 
 
-def recording_request(port: int) -> RecordingRunnerRequestV1:
+def recording_request(port: int) -> RecordingRunnerRequest:
     created_at_us = time.time_ns() // 1_000
-    return RecordingRunnerRequestV1(
+    return RecordingRunnerRequest(
         schema_version="1",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         created_at_us=created_at_us,
-        target_scope=TargetScope(
+        target_scope=WebTargetScope(
             schema_version="1",
             base_url=f"http://127.0.0.1:{port}",
             allowed_origins=(f"http://127.0.0.1:{port}",),
@@ -175,20 +175,20 @@ def recording_request(port: int) -> RecordingRunnerRequestV1:
             max_response_bytes=65_536,
         ),
         sessions=(
-            RecordingSessionRefV1(
+            RecordingSessionRef(
                 schema_version="1",
                 identity_id="owner",
                 session_ref="session_0123456789abcdef0123456789abcdef",
                 expires_at_us=created_at_us + 60_000_000,
             ),
-            RecordingSessionRefV1(
+            RecordingSessionRef(
                 schema_version="1",
                 identity_id="attacker",
                 session_ref="session_fedcba9876543210fedcba9876543210",
                 expires_at_us=created_at_us + 60_000_000,
             ),
         ),
-        budget=RecordingBudgetV1(
+        budget=RecordingBudget(
             schema_version="1",
             max_duration_us=30_000_000,
             max_events=256,

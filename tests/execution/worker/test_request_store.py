@@ -6,26 +6,23 @@ from pathlib import Path
 
 import pytest
 
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.execution.request_store import (
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.runtime.job_requests import (
     ExecutionRequestStore,
-    PersistedExecutionRequestV1,
-    PersistedExecutionRequestV2,
+    PersistedExecutionRequest,
     canonical_execution_request_bytes,
     parse_execution_request,
     required_secret_names,
 )
-from jiejian.execution.process_environment import minimal_process_environment
-from tests.execution.protocol.test_runner_v2 import _input
+from product.backend.infra.runtime.process_environment import minimal_process_environment
+from tests.execution.protocol.test_runner import _input
 
 
 def test_request_store_is_canonical_hashed_atomic_and_idempotent(
-    stage1_project_factory,
     stage23_request_factory,
     tmp_path: Path,
 ) -> None:
-    project = stage1_project_factory(8765)
-    request = stage23_request_factory(project)
+    request = stage23_request_factory()
     store = ExecutionRequestStore(tmp_path / "var")
     job_id = "job_0123456789abcdef0123456789abcdef"
     request_hash, created = store.write(job_id, request)
@@ -42,17 +39,15 @@ def test_request_store_is_canonical_hashed_atomic_and_idempotent(
 
 
 def test_request_store_rejects_drift_duplicate_keys_and_known_secrets(
-    stage1_project_factory,
     stage23_request_factory,
     tmp_path: Path,
 ) -> None:
-    project = stage1_project_factory(8765)
-    request = stage23_request_factory(project)
+    request = stage23_request_factory()
     store = ExecutionRequestStore(tmp_path / "var")
     job_id = "job_fedcba9876543210fedcba9876543210"
     request_hash, _ = store.write(job_id, request)
     path = store.path_for(job_id)
-    path.write_bytes(path.read_bytes().replace(b'"schema_version":"1"', b'"schema_version":"1","schema_version":"1"', 1))
+    path.write_bytes(path.read_bytes().replace(b'"schema_version":"2"', b'"schema_version":"2","schema_version":"2"', 1))
     drift_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     with pytest.raises(JiejianError) as duplicate:
         store.load(job_id, expected_hash=drift_hash)
@@ -61,7 +56,7 @@ def test_request_store_rejects_drift_duplicate_keys_and_known_secrets(
     sentinel = "stage23-real-secret-sentinel"
     exposed_payload = request.model_dump(mode="python")
     exposed_payload["project_snapshot"]["project_name"] = f"ordinary-{sentinel}"
-    exposed_request = PersistedExecutionRequestV1.model_validate(
+    exposed_request = PersistedExecutionRequest.model_validate(
         exposed_payload, strict=True
     )
     with pytest.raises(JiejianError) as exposed:
@@ -73,10 +68,9 @@ def test_request_store_rejects_drift_duplicate_keys_and_known_secrets(
 
 
 def test_request_parser_and_minimal_environment_do_not_copy_parent_values(
-    stage1_project_factory,
     stage23_request_factory,
 ) -> None:
-    request = stage23_request_factory(stage1_project_factory(8765))
+    request = stage23_request_factory()
     raw = canonical_execution_request_bytes(request)
     assert parse_execution_request(raw) == request
     environment = minimal_process_environment(
@@ -95,7 +89,7 @@ def test_request_parser_and_minimal_environment_do_not_copy_parent_values(
 
 def test_v2_request_store_dispatches_canonical_and_uses_minimal_secret_refs(tmp_path: Path) -> None:
     runner_input = _input()
-    request = PersistedExecutionRequestV2(
+    request = PersistedExecutionRequest(
         schema_version="2",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,

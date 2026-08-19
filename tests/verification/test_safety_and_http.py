@@ -3,10 +3,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from jiejian.verification.models import TargetScope
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.verification.http import HttpExecutor
-from jiejian.verification.safety import TargetGuard
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.execution.http import HttpExecutionAdapter, WebTargetGuard
+from product.protocols.runner import WebTargetDefinition, WebTargetScope
 
 
 def make_scope(
@@ -15,11 +14,11 @@ def make_scope(
     allow_private: bool = True,
     max_requests: int = 8,
     max_response_bytes: int = 1024,
-) -> TargetScope:
+) -> WebTargetScope:
     parsed_host_port = base_url.removeprefix("http://").split(":")
     host = parsed_host_port[0]
     port = int(parsed_host_port[1])
-    return TargetScope(
+    return WebTargetScope(
         base_url=base_url,
         allowed_origins=(base_url,),
         allowed_hosts=(host,),
@@ -48,7 +47,7 @@ def test_target_scope_rejects_invalid_base_boundaries(overrides: dict[str, str])
     }
     values.update(overrides)
     with pytest.raises(ValidationError):
-        TargetScope(**values)
+        WebTargetScope(**values)
 
 
 def test_target_scope_requires_explicit_private_network_authorization() -> None:
@@ -60,7 +59,7 @@ def test_target_scope_requires_explicit_private_network_authorization() -> None:
 def test_target_scope_rejects_dns_and_ipv6_hosts(host: str) -> None:
     rendered = f"[{host}]" if ":" in host else host
     with pytest.raises(ValidationError):
-        TargetScope(
+        WebTargetScope(
             base_url=f"http://{rendered}:8080",
             allowed_origins=(f"http://{rendered}:8080",),
             allowed_hosts=(host,),
@@ -72,12 +71,12 @@ def test_target_scope_rejects_dns_and_ipv6_hosts(host: str) -> None:
 def test_guard_always_rejects_metadata_address() -> None:
     scope = make_scope("http://169.254.169.254:80", allow_private=True)
     with pytest.raises(JiejianError) as captured:
-        TargetGuard(scope).authorize_path("/latest/meta-data")
+        WebTargetGuard(WebTargetDefinition(scope=scope, reset_path="/reset")).authorize_path("/latest/meta-data")
     assert captured.value.code == ErrorCode.SCOPE_PRIVATE_NETWORK.value
 
 
 def test_guard_rejects_userinfo_port_and_cross_origin_redirect() -> None:
-    guard = TargetGuard(make_scope("http://127.0.0.1:8080"))
+    guard = WebTargetGuard(WebTargetDefinition(scope=make_scope("http://127.0.0.1:8080"), reset_path="/reset"))
     with pytest.raises(JiejianError) as captured:
         guard.authorize_url("http://user@127.0.0.1:8080/resource")
     assert captured.value.code == ErrorCode.SCOPE_URL.value
@@ -91,13 +90,14 @@ def test_guard_rejects_userinfo_port_and_cross_origin_redirect() -> None:
 
 def test_executor_enforces_request_and_response_budgets(sample_server_factory) -> None:
     running = sample_server_factory()
-    executor = HttpExecutor(
-        TargetGuard(
-            make_scope(
+    executor = HttpExecutionAdapter(
+        WebTargetDefinition(
+            scope=make_scope(
                 f"http://127.0.0.1:{running.port}",
                 max_requests=1,
                 max_response_bytes=10,
-            )
+            ),
+            reset_path="/reset",
         )
     )
     try:

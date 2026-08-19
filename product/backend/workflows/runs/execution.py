@@ -1,0 +1,308 @@
+# =============================================================================
+# Execution Profile 工作流
+#
+# 定位
+# 项目治理配置、冻结执行请求与 Job 提交之间的唯一应用服务。
+#
+# 职责
+# 校验 Profile 漂移｜解析 ACTIVE Contract｜编译覆盖计划｜冻结并提交执行请求
+#
+# 边界
+# 不在入口进程执行目标；秘密只用于提交前完整性检查，并通过受控环境交给 Worker。
+#
+# 调用链
+# CLI / API / Onboarding → ExecutionWorkflow → RunSubmission / WorkerDispatcher
+# =============================================================================
+
+from __future__ import annotations
+
+import hashlib
+import time
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from typing import Any
+
+from product.backend import __version__
+from product.backend.core.contracts.execution_binding import resolve_execution_contract
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.verification.permission_coverage import build_permission_coverage_plan
+from product.backend.infra.runtime.job_requests import ExecutionRequestStore, PersistedExecutionRequest, required_secret_names
+from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
+from product.backend.infra.runtime.jobs.models import JobSubmissionResult
+from product.backend.infra.storage import ExecutionProfileRecord, StorageUnitOfWork
+from product.backend.workflows.runs.submission import RunSubmission, SubmitExecution
+from product.protocols import ActionExecutionBinding, ExecutionBudget, ExecutionProfile, ObserverRequirementKind, RunnerResult, WebTargetDefinition
+from product.protocols.execution_profile import EXECUTION_PROFILE_MAX_BYTES, parse_execution_profile
+
+
+class ExecutionWorkflow:
+    """只从项目绑定的 ACTIVE ContractVersion 构造当前执行请求。"""
+
+    def __init__(
+        self,
+        uow_factory: Callable[..., StorageUnitOfWork],
+        request_store: ExecutionRequestStore,
+        submission: RunSubmission,
+        *,
+        environment_provider: Callable[[tuple[str, ...]], Mapping[str, str]],
+        var_dir: Path | None = None,
+        clock_us: Callable[[], int] | None = None,
+    ) -> None:
+        self._uow_factory = uow_factory
+        self._request_store = request_store
+        self._submission = submission
+        self._environment_provider = environment_provider
+        self._var_dir = var_dir.resolve() if var_dir is not None else None
+        self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
+
+    def register(self, source_path: Path, *, accept_source_changes: bool = False) -> ExecutionProfileRecord:
+        """校验并登记 Profile；任何源漂移都必须由调用者显式接受。"""
+
+        # --- 阶段：读取并规范化声明源 ---
+        profile, raw, source_hash = self._read_source(source_path)
+        now_us = self._clock_us()
+        # --- 阶段：在同一事务内核对治理绑定并保存元数据 ---
+        with self._uow_factory() as work:
+            project = work.projects.get(profile.project_id)
+            if project is None or project.name != profile.project_name:
+                raise JiejianError(ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT, "Profile 必须绑定已登记项目")
+            if project.target_type is not profile.target_type:
+                raise JiejianError(ErrorCode.PROJECT_TARGET_INVALID, "项目与 Profile 的 target_type 不一致")
+            governed = work.contract_versions.get(profile.project_id, profile.contract_id, profile.contract_version)
+            contract = resolve_execution_contract(project, governed)
+            plan = self._compile_plan(profile, contract)
+            metadata = self._metadata(profile, source_path, source_hash, contract, plan)
+            existing = work.execution_profiles.get(profile.profile_id)
+            if existing is not None and existing.project_id != profile.project_id:
+                raise JiejianError(ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT, "Profile 已绑定其他项目")
+            if existing is not None and not accept_source_changes and not _metadata_matches(existing, metadata):
+                raise JiejianError(ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, "Profile 发生漂移，请显式重新校验")
+            record = ExecutionProfileRecord(
+                **metadata,
+                created_at_us=existing.created_at_us if existing else now_us,
+                updated_at_us=max(now_us, existing.updated_at_us) if existing else now_us,
+            )
+            if existing is None:
+                work.execution_profiles.add(record)
+            else:
+                work.execution_profiles.replace(record)
+            work.commit()
+        return record
+
+    def list(self, project_id: str) -> tuple[ExecutionProfileRecord, ...]:
+        with self._uow_factory() as work:
+            if work.projects.get(project_id) is None:
+                raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
+            return work.execution_profiles.list_for_project(project_id)
+
+    def current(self, profile_id: str, *, project_id: str | None = None) -> ExecutionProfile:
+        record, profile, _, _, metadata = self._validated(profile_id, project_id=project_id)
+        if not _metadata_matches(record, metadata):
+            raise JiejianError(ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, "Profile 发生漂移，请显式重新校验")
+        return profile
+
+    def current_contract(self, profile_id: str, *, project_id: str | None = None):
+        record, _profile, contract, _plan, metadata = self._validated(
+            profile_id, project_id=project_id
+        )
+        if not _metadata_matches(record, metadata):
+            raise JiejianError(
+                ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT,
+                "Profile 发生漂移，请显式重新校验",
+            )
+        return contract
+
+    def build_request(
+        self,
+        profile_id: str,
+        *,
+        project_id: str | None = None,
+        target_override: WebTargetDefinition | None = None,
+        action_bindings_override: tuple[ActionExecutionBinding, ...] | None = None,
+    ) -> PersistedExecutionRequest:
+        """从已登记 Profile 和 ACTIVE Contract 构造带预算的不可变执行快照。"""
+
+        record, profile, contract, plan, metadata = self._validated(profile_id, project_id=project_id)
+        if not _metadata_matches(record, metadata):
+            raise JiejianError(ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, "Profile 发生漂移，请显式重新校验")
+        snapshot = profile.build_snapshot(
+            contract,
+            plan,
+            target_override=target_override,
+            action_bindings_override=action_bindings_override,
+        )
+        scope = profile.target.scope
+        budget = ExecutionBudget(
+            max_requests=scope.max_requests,
+            request_timeout_us=int(scope.timeout_seconds * 1_000_000),
+            max_duration_us=profile.max_duration_us,
+            max_response_bytes=scope.max_response_bytes,
+            max_cases=profile.case_budget,
+            max_parallel_cases=1,
+        )
+        return PersistedExecutionRequest(budget=budget, project_snapshot=snapshot)
+
+    def submit(
+        self,
+        profile_id: str,
+        *,
+        project_id: str | None = None,
+        target_override: WebTargetDefinition | None = None,
+        action_bindings_override: tuple[ActionExecutionBinding, ...] | None = None,
+        idempotency_key: str,
+        max_attempts: int = 3,
+        now_us: int | None = None,
+        available_at_us: int | None = None,
+        run_id: str | None = None,
+        job_id: str | None = None,
+    ) -> tuple[JobSubmissionResult, PersistedExecutionRequest, tuple[str, ...]]:
+        """验证必需秘密存在后提交冻结请求；返回秘密名称而非秘密正文。"""
+
+        request = self.build_request(
+            profile_id,
+            project_id=project_id,
+            target_override=target_override,
+            action_bindings_override=action_bindings_override,
+        )
+        names = required_secret_names(request)
+        environment = self._environment_provider(names)
+        fatal_names = _fatal_secret_names(request)
+        # 安全不变量：致命秘密必须在创建 Job 前可用，避免排入注定失败且可能泄漏上下文的任务。
+        if any(not environment.get(name) for name in fatal_names):
+            raise JiejianError(ErrorCode.SECRET_MISSING, "执行所需环境变量未设置")
+        timestamp = self._clock_us() if now_us is None else now_us
+        available = timestamp if available_at_us is None else available_at_us
+        result = self._submission.submit(
+            SubmitExecution(
+                request=request,
+                idempotency_key=idempotency_key,
+                max_attempts=max_attempts,
+                now_us=timestamp,
+                available_at_us=available,
+                run_id=run_id,
+                job_id=job_id,
+            ),
+            known_secrets=tuple(value for name in names if (value := environment.get(name))),
+        )
+        return result, request, names
+
+    def run_profile(
+        self,
+        source_path: Path,
+        *,
+        accept_source_changes: bool = False,
+        target_override: WebTargetDefinition | None = None,
+        action_bindings_override: tuple[ActionExecutionBinding, ...] | None = None,
+        idempotency_key: str,
+        max_attempts: int = 3,
+    ) -> RunnerResult:
+        """为 CLI 同步模式监督一个独立 Worker；目标请求仍不在调用进程执行。"""
+
+        if self._var_dir is None:
+            raise JiejianError(ErrorCode.RUNNER_START_FAILED, "同步执行服务尚未完成装配")
+        # --- 阶段：冻结并提交请求 ---
+        record = self.register(source_path, accept_source_changes=accept_source_changes)
+        submission, request, secret_names = self.submit(
+            record.profile_id,
+            project_id=record.project_id,
+            target_override=target_override,
+            action_bindings_override=action_bindings_override,
+            idempotency_key=idempotency_key,
+            max_attempts=max_attempts,
+        )
+        environment = self._environment_provider(secret_names)
+        known_secrets = tuple(value for name in secret_names if (value := environment.get(name)))
+        # --- 阶段：监督独立 Worker 并读取可信 staged 结果 ---
+        dispatcher = WorkerDispatcher(var_dir=self._var_dir, uow_factory=self._uow_factory, environ=environment)
+        process = dispatcher.start(
+            job_id=submission.job.job_id,
+            lease_owner=f"worker-{self._clock_us()}",
+            secret_names=secret_names,
+        )
+        staged = dispatcher.wait(
+            submission.job.job_id,
+            process,
+            known_secrets=known_secrets,
+            timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000 + 60,
+        )
+        return staged.result
+
+    def _record(self, profile_id: str) -> ExecutionProfileRecord:
+        with self._uow_factory() as work:
+            record = work.execution_profiles.get(profile_id)
+        if record is None:
+            raise JiejianError(ErrorCode.EXECUTION_PROFILE_NOT_FOUND, "ExecutionProfile 不存在")
+        return record
+
+    def _validated(self, profile_id: str, *, project_id: str | None):
+        record = self._record(profile_id)
+        if project_id is not None and record.project_id != project_id:
+            raise JiejianError(ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT, "Profile 与项目不匹配")
+        profile, _, source_hash = self._read_source(Path(record.source_path))
+        with self._uow_factory() as work:
+            project = work.projects.get(record.project_id)
+            governed = work.contract_versions.get(record.project_id, record.contract_id, record.contract_version)
+            contract = resolve_execution_contract(project, governed) if project is not None else None
+        if contract is None:
+            raise JiejianError(ErrorCode.CONTRACT_NOT_ACTIVE, "Profile 绑定的契约版本不存在")
+        plan = self._compile_plan(profile, contract)
+        metadata = self._metadata(profile, Path(record.source_path), source_hash, contract, plan)
+        return record, profile, contract, plan, metadata
+
+    @staticmethod
+    def _read_source(source_path: Path) -> tuple[ExecutionProfile, bytes, str]:
+        path = source_path.resolve()
+        try:
+            if not path.is_file() or path.stat().st_size > EXECUTION_PROFILE_MAX_BYTES:
+                raise OSError
+            raw = path.read_bytes()
+            profile = parse_execution_profile(raw)
+        except JiejianError:
+            raise
+        except (OSError, ValueError):
+            raise JiejianError(ErrorCode.EXECUTION_PROFILE_INVALID, "ExecutionProfile 文件不可读取") from None
+        return profile, raw, hashlib.sha256(raw).hexdigest()
+
+    @staticmethod
+    def _metadata(profile, source_path, source_hash, contract, plan) -> dict[str, Any]:
+        return {
+            "profile_id": profile.profile_id,
+            "project_id": profile.project_id,
+            "source_path": str(source_path.resolve()),
+            "source_hash": source_hash,
+            "contract_id": contract.contract_id,
+            "contract_version": contract.version,
+            "contract_fingerprint": plan.contract_fingerprint,
+            "plan_fingerprint": plan.plan_fingerprint,
+            "engine_version": __version__,
+        }
+
+    @staticmethod
+    def _compile_plan(profile: ExecutionProfile, contract):
+        available_observations = tuple(item.requirement_id for item in profile.observer_bindings)
+        return build_permission_coverage_plan(
+            contract,
+            engine_version=__version__,
+            seed=profile.seed,
+            case_budget=profile.case_budget,
+            available_subject_ids=tuple(item.subject_id for item in profile.subject_bindings),
+            available_resource_ids=tuple(item.resource_id for item in contract.resources),
+            available_observations=available_observations,
+            max_relation_depth=profile.max_relation_depth,
+        )
+
+
+def _metadata_matches(record: ExecutionProfileRecord, metadata: Mapping[str, Any]) -> bool:
+    return all(getattr(record, key) == value for key, value in metadata.items())
+
+
+def _fatal_secret_names(request: PersistedExecutionRequest) -> tuple[str, ...]:
+    snapshot = request.project_snapshot
+    identity_ids = {item.identity_id for item in snapshot.subject_bindings}
+    references = [identity.secret_ref for identity in snapshot.identities if identity.id in identity_ids]
+    references.extend(
+        binding.credential_ref
+        for binding in snapshot.observer_bindings
+        if binding.kind is ObserverRequirementKind.OBSERVER_SPEC and binding.credential_ref is not None
+    )
+    return tuple(dict.fromkeys(reference.removeprefix("env:") for reference in references))

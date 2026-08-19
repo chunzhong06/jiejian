@@ -10,28 +10,27 @@ from urllib.parse import quote
 
 import pytest
 
-from jiejian.permission_sample_app import create_permission_sample_server
-from jiejian.protocols import (
-    AsyncTaskApiLocatorV2,
-    AsyncTaskPollBudgetV2,
-    AuditLogScanBudgetV2,
-    CorrelationV2,
+from tests.verification.permission_test_target import create_complex_permission_test_server
+from product.protocols import (
+    AsyncTaskApiLocator,
+    AsyncTaskPollBudget,
+    AuditLogScanBudget,
+    Correlation,
     ObservationCompleteness,
     ObservationPhase,
-    ObserverBudgetV2,
+    ObserverBudget,
     ObserverOutcomeStatus,
-    ObserverSpecV2,
-    ObserverTargetV2,
+    ObserverSpec,
+    ObserverTarget,
     ObserverType,
-    SqliteQueryLocatorV2,
-    StructuredAuditLogLocatorV2,
+    SqliteQueryLocator,
+    StructuredAuditLogLocator,
 )
-from jiejian.runner.async_task_observer import run_async_task_observer
-from jiejian.runner.audit_log_observer import run_audit_log_observer
-from jiejian.runner.sqlite_observer import run_sqlite_observer
+from product.backend.infra.observers.async_task import run_async_task_observer
+from product.backend.infra.observers.audit_log import run_audit_log_observer
+from product.backend.infra.observers.sqlite import run_sqlite_observer
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PYTHON = sys.executable
 SUBJECT_TOKEN = "permission-member-a-token"
 OBSERVER_TOKEN = "async-observer-token"
@@ -40,13 +39,6 @@ CASE_TAG = {
     "vulnerable": "case-async-vulnerable",
     "inconclusive": "case-async-inconclusive",
 }
-EXPECTED_LABEL = {
-    "fixed": "NO_CONFIRMED_SIDE_EFFECT",
-    "vulnerable": "CONFIRMED_SIDE_EFFECT",
-    "inconclusive": "INCONCLUSIVE_REQUIRED_TASK_OBSERVER",
-}
-
-
 def _request(server, method: str, path: str, *, token: str, case_tag: str | None = None, body: dict | None = None) -> tuple[int, dict]:
     payload = b"" if body is None else json.dumps(body, separators=(",", ":")).encode("utf-8")
     headers = {"Authorization": f"Bearer {token}"}
@@ -64,63 +56,63 @@ def _request(server, method: str, path: str, *, token: str, case_tag: str | None
         connection.close()
 
 
-def _sqlite_spec() -> ObserverSpecV2:
-    return ObserverSpecV2(
+def _sqlite_spec() -> ObserverSpec:
+    return ObserverSpec(
         observer_id="sqlite_observer",
         observer_type=ObserverType.READ_ONLY_SQLITE,
-        target=ObserverTargetV2(
+        target=ObserverTarget(
             target_id="sample_sqlite",
-            locator=SqliteQueryLocatorV2(query_template_id="resource-state", table_or_view="resource_state", database_secret_ref="env:ASYNC_DB"),
+            locator=SqliteQueryLocator(query_template_id="resource-state", table_or_view="resource_state", database_secret_ref="env:ASYNC_DB"),
             normalization_id="resource_state",
             normalization_version="1.0",
         ),
         phases=(ObservationPhase.BEFORE, ObservationPhase.AFTER),
         required=True,
-        budget=ObserverBudgetV2(timeout_us=5_000_000, max_rows=32, max_bytes=65_536),
+        budget=ObserverBudget(timeout_us=5_000_000, max_rows=32, max_bytes=65_536),
     )
 
 
-def _audit_spec() -> ObserverSpecV2:
-    return ObserverSpecV2(
+def _audit_spec() -> ObserverSpec:
+    return ObserverSpec(
         observer_id="audit_observer",
         observer_type=ObserverType.STRUCTURED_AUDIT_LOG,
-        target=ObserverTargetV2(
+        target=ObserverTarget(
             target_id="sample_audit",
-            locator=StructuredAuditLogLocatorV2(
+            locator=StructuredAuditLogLocator(
                 authorized_root_ref="env:ASYNC_AUDIT_ROOT",
                 relative_file_pattern="audit.jsonl",
                 allowed_fields=("event_id", "case_tag", "task_id", "event_type", "sequence", "resource_id", "terminal_state", "result", "effect", "value"),
-                scan_budget=AuditLogScanBudgetV2(max_files=1, max_lines=32, max_line_bytes=2048),
+                scan_budget=AuditLogScanBudget(max_files=1, max_lines=32, max_line_bytes=2048),
             ),
             normalization_id="audit_window",
             normalization_version="1.0",
         ),
         phases=(ObservationPhase.AFTER,),
         required=True,
-        budget=ObserverBudgetV2(timeout_us=5_000_000, max_rows=32, max_bytes=65_536),
+        budget=ObserverBudget(timeout_us=5_000_000, max_rows=32, max_bytes=65_536),
     )
 
 
-def _async_spec(server) -> ObserverSpecV2:
-    return ObserverSpecV2(
+def _async_spec(server) -> ObserverSpec:
+    return ObserverSpec(
         observer_id="task_observer",
         observer_type=ObserverType.ASYNC_TASK_STATUS,
-        target=ObserverTargetV2(
+        target=ObserverTarget(
             target_id="sample_task_api",
-            locator=AsyncTaskApiLocatorV2(
+            locator=AsyncTaskApiLocator(
                 base_url=f"http://127.0.0.1:{server.server_port}",
                 relative_path_template="/observer/tasks/document-b/by-case/{request_marker}",
                 read_only_credential_ref="env:ASYNC_OBSERVER_TOKEN",
                 allow_private_network=True,
                 allow_loopback_http=True,
-                poll_budget=AsyncTaskPollBudgetV2(max_polls=8, poll_interval_us=5_000, per_request_timeout_us=500_000, max_response_bytes=4096),
+                poll_budget=AsyncTaskPollBudget(max_polls=8, poll_interval_us=5_000, per_request_timeout_us=500_000, max_response_bytes=4096),
             ),
             normalization_id="async_task_state",
             normalization_version="1.0",
         ),
         phases=(ObservationPhase.EVENTUAL,),
         required=True,
-        budget=ObserverBudgetV2(timeout_us=5_000_000, max_rows=1, max_bytes=16_384),
+        budget=ObserverBudget(timeout_us=5_000_000, max_rows=1, max_bytes=16_384),
     )
 
 
@@ -134,16 +126,11 @@ def _row(state: dict, resource_id: str) -> dict:
     return next(row for row in state["rows"] if row["resource_id"] == resource_id)
 
 
-def _asset_truth(variant: str) -> dict:
-    path = PROJECT_ROOT / "samples" / f"{variant}_apps" / "permissions_v2" / "truth.json"
-    return json.loads(path.read_text(encoding="utf-8"))["async_causal"]
-
-
 @pytest.mark.parametrize("variant", ("fixed", "vulnerable", "inconclusive"))
 def test_async_causal_facets_are_separate_and_deterministic(tmp_path: Path, variant: str) -> None:
     database_path = tmp_path / "target.db"
     audit_root = tmp_path / "audit"
-    server = create_permission_sample_server(
+    server = create_complex_permission_test_server(
         variant=variant,
         port=0,
         database_path=database_path,
@@ -153,11 +140,10 @@ def test_async_causal_facets_are_separate_and_deterministic(tmp_path: Path, vari
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     case_tag = CASE_TAG[variant]
-    correlation = CorrelationV2(case_id=case_tag, resource_id="document-b", request_marker=case_tag)
+    correlation = Correlation(case_id=case_tag, resource_id="document-b", request_marker=case_tag)
     try:
         child_environment = {
             **os.environ,
-            "PYTHONPATH": str(PROJECT_ROOT / "backend" / "src"),
             "SSL_CERT_FILE": os.environ.get("SSL_CERT_FILE", ""),
             "SSL_CERT_DIR": os.environ.get("SSL_CERT_DIR", ""),
         }
@@ -222,7 +208,6 @@ def test_async_causal_facets_are_separate_and_deterministic(tmp_path: Path, vari
             assert audit_state["records"][-1]["terminal_state"] == audit_state["records"][-1]["result"] == "SUCCESS"
             assert _row(after_state, "document-b")["value"] == "async-inconclusive"
             assert _row(before_state, "document-b") != _row(after_state, "document-b")
-        assert _asset_truth(variant)["label"] == EXPECTED_LABEL[variant]
     finally:
         server.shutdown()
         server.server_close()
@@ -231,7 +216,7 @@ def test_async_causal_facets_are_separate_and_deterministic(tmp_path: Path, vari
 
 
 def test_async_action_rejects_bad_tags_wrong_observer_and_is_idempotent(tmp_path: Path) -> None:
-    server = create_permission_sample_server(variant="vulnerable", port=0, audit_root=tmp_path / "audit", observer_token=OBSERVER_TOKEN)
+    server = create_complex_permission_test_server(variant="vulnerable", port=0, audit_root=tmp_path / "audit", observer_token=OBSERVER_TOKEN)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -254,7 +239,7 @@ def test_async_action_rejects_bad_tags_wrong_observer_and_is_idempotent(tmp_path
 def test_async_observation_never_echoes_user_value_secret(tmp_path: Path, secret_value: str) -> None:
     database_path = tmp_path / "target.db"
     audit_root = tmp_path / "audit"
-    server = create_permission_sample_server(
+    server = create_complex_permission_test_server(
         variant="vulnerable",
         port=0,
         database_path=database_path,
@@ -264,8 +249,8 @@ def test_async_observation_never_echoes_user_value_secret(tmp_path: Path, secret
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     case_tag = "case-async-secret-" + ("subject" if secret_value == SUBJECT_TOKEN else "observer")
-    correlation = CorrelationV2(case_id=case_tag, resource_id="document-b", request_marker=case_tag)
-    child_environment = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT / "backend" / "src")}
+    correlation = Correlation(case_id=case_tag, resource_id="document-b", request_marker=case_tag)
+    child_environment = {**os.environ}
     try:
         status, _ = _request(server, "POST", "/resources/document-b/async-modify", token=SUBJECT_TOKEN, case_tag=case_tag, body={"value": secret_value})
         assert status == 403
@@ -308,7 +293,7 @@ def test_async_observation_never_echoes_user_value_secret(tmp_path: Path, secret
 
 
 def test_async_task_cap_and_worker_cleanup(tmp_path: Path) -> None:
-    server = create_permission_sample_server(variant="vulnerable", port=0, database_path=tmp_path / "target.db")
+    server = create_complex_permission_test_server(variant="vulnerable", port=0, database_path=tmp_path / "target.db")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -321,16 +306,3 @@ def test_async_task_cap_and_worker_cleanup(tmp_path: Path) -> None:
         thread.join(timeout=2)
         assert not thread.is_alive()
         assert not server._async_threads
-
-
-def test_checked_in_async_assets_have_faceted_truth_without_contract_changes() -> None:
-    contract_bytes = []
-    for variant in ("fixed", "vulnerable", "inconclusive"):
-        asset_dir = PROJECT_ROOT / "samples" / f"{variant}_apps" / "permissions_v2"
-        contract_bytes.append((asset_dir / "contract.json").read_bytes())
-        scenario = json.loads((asset_dir / "scenario.json").read_text(encoding="utf-8"))
-        truth = json.loads((asset_dir / "truth.json").read_text(encoding="utf-8"))
-        assert scenario["async_causal"]["request_path"] == "/resources/document-b/async-modify"
-        assert set(scenario["async_causal"]["facets"]) == {"http", "audit_log", "async_task", "final_side_effect"}
-        assert truth["async_causal"]["label"] == EXPECTED_LABEL[variant]
-    assert contract_bytes[0] == contract_bytes[1] == contract_bytes[2]

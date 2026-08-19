@@ -3,14 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import jiejian.runtime.worker_manager as worker_manager_module
-from jiejian.execution.process_environment import minimal_process_environment
-from jiejian.runtime.worker_manager import LocalWorkerManager
+import product.backend.infra.runtime.worker_supervisor as worker_supervisor_module
+from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.worker_supervisor import LocalWorkerSupervisor
 
 
-def test_worker_manager_receives_only_requested_secret_names(tmp_path: Path) -> None:
+def test_worker_supervisor_receives_only_requested_secret_names(tmp_path: Path) -> None:
     requested: list[tuple[str, ...]] = []
-    manager = LocalWorkerManager(
+    manager = LocalWorkerSupervisor(
         tmp_path / "var",
         lambda **kwargs: None,
         environment_provider=lambda names: requested.append(tuple(names)) or {"ONE": "1"},
@@ -20,20 +20,13 @@ def test_worker_manager_receives_only_requested_secret_names(tmp_path: Path) -> 
     assert requested == [("ONE",)]
 
 
-def test_worker_loop_resolves_request_secrets_and_keeps_dispatch_filter(
-    tmp_path: Path, monkeypatch
+def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_filter(
+    tmp_path: Path, monkeypatch, stage23_request_factory, caplog
 ) -> None:
     requested: list[tuple[str, ...]] = []
     dispatched: dict[str, object] = {}
     job = SimpleNamespace(job_id="job-1", run_id="run-1", request_hash="hash-1")
-    request = SimpleNamespace(
-        project_snapshot=SimpleNamespace(
-            identities=(
-                SimpleNamespace(secret_ref="env:PRIMARY"),
-                SimpleNamespace(secret_ref="env:COMPARISON"),
-            )
-        )
-    )
+    request = stage23_request_factory()
 
     class FakeRequestStore:
         def __init__(self, var_dir: Path) -> None:
@@ -65,29 +58,38 @@ def test_worker_loop_resolves_request_secrets_and_keeps_dispatch_filter(
         def wait(self, timeout: float) -> None:
             assert timeout == 0.1
 
-    monkeypatch.setattr(worker_manager_module, "ExecutionRequestStore", FakeRequestStore)
-    monkeypatch.setattr(worker_manager_module, "WorkerDispatcher", FakeDispatcher)
-    manager = LocalWorkerManager(
+    monkeypatch.setattr(worker_supervisor_module, "ExecutionRequestStore", FakeRequestStore)
+    monkeypatch.setattr(worker_supervisor_module, "WorkerDispatcher", FakeDispatcher)
+    manager = LocalWorkerSupervisor(
         tmp_path / "var",
         lambda **kwargs: None,
         environment_provider=lambda names: requested.append(tuple(names))
-        or {"PRIMARY": "one", "COMPARISON": "two", "EXTRA": "must-not-inject"},
+        or {
+            "JIEJIAN_TEST_TOKEN": "identity-secret-value",
+            "OWNER_READ_ONLY": "observer-secret-value",
+            "EXTRA": "must-not-inject",
+        },
     )
     manager._next_job = lambda: job
     manager._stop = StopAfterOneStep()
 
     manager._loop()
 
-    assert requested == [("PRIMARY", "COMPARISON")]
+    assert requested == [("JIEJIAN_TEST_TOKEN", "OWNER_READ_ONLY")]
     assert dispatched["environ"] == {
-        "PRIMARY": "one",
-        "COMPARISON": "two",
+        "JIEJIAN_TEST_TOKEN": "identity-secret-value",
+        "OWNER_READ_ONLY": "observer-secret-value",
         "EXTRA": "must-not-inject",
     }
-    assert dispatched["secret_names"] == ("PRIMARY", "COMPARISON")
+    assert dispatched["secret_names"] == ("JIEJIAN_TEST_TOKEN", "OWNER_READ_ONLY")
     filtered = minimal_process_environment(
         dispatched["environ"], secret_names=dispatched["secret_names"]
     )
-    assert filtered["PRIMARY"] == "one"
-    assert filtered["COMPARISON"] == "two"
+    assert filtered["JIEJIAN_TEST_TOKEN"] == "identity-secret-value"
+    assert filtered["OWNER_READ_ONLY"] == "observer-secret-value"
     assert "EXTRA" not in filtered
+    request_json = request.model_dump_json()
+    assert "identity-secret-value" not in request_json
+    assert "observer-secret-value" not in request_json
+    assert "identity-secret-value" not in caplog.text
+    assert "observer-secret-value" not in caplog.text

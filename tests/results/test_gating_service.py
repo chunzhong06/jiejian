@@ -5,12 +5,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from jiejian.domain.lifecycle import CaseVerdict, JobState, ProjectStatus, RunLifecycle, RunVerdict
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.protocols import CleanupResultV2, CleanupStatusV2, ObserverOutcomeStatus, RunnerResultTypeV2, RunnerResultV2
-from jiejian.results.gating import GatingApplicationService
-from jiejian.storage import ProjectRecord, RunRecord, StorageUnitOfWork, create_session_factory, create_sqlite_engine, upgrade_database
-from tests.execution.protocol.test_runner_v2 import _evidence, _input, _rehash_evidence
+from product.backend.core.lifecycle import CaseVerdict, JobState, ProjectStatus, RunLifecycle, RunVerdict
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.protocols import CleanupResult, CleanupStatus, ObserverOutcomeStatus, RunnerResultType, RunnerResult
+from product.backend.workflows.results.gating import RegressionGate
+from product.backend.infra.storage import ProjectRecord, RunRecord, StorageUnitOfWork, create_session_factory, create_sqlite_engine, upgrade_database
+from tests.execution.protocol.test_runner import _evidence, _input, _rehash_evidence
 
 
 PROJECT_ID = "project-gating"
@@ -25,7 +25,7 @@ OCCURRENCE_FIXED = "occ_" + "4" * 32
 OCCURRENCE_VULNERABLE = "occ_" + "5" * 32
 
 
-def _result(run_id: str, verdict: CaseVerdict, *, observer_status: ObserverOutcomeStatus | None = None) -> RunnerResultV2:
+def _result(run_id: str, verdict: CaseVerdict, *, observer_status: ObserverOutcomeStatus | None = None) -> RunnerResult:
     evidence = _evidence(verdict=verdict)
     if observer_status is not None:
         outcome = evidence.outcomes[0].model_copy(update={"status": observer_status, "reason_codes": (observer_status.value,)})
@@ -33,7 +33,7 @@ def _result(run_id: str, verdict: CaseVerdict, *, observer_status: ObserverOutco
     evidence = type(evidence)(**_rehash_evidence({**evidence.model_dump(mode="python"), "run_id": run_id}))
     snapshot = _input().project_snapshot
     run_verdict = RunVerdict.BLOCK if verdict is CaseVerdict.VULNERABLE else RunVerdict.INCONCLUSIVE if verdict is CaseVerdict.INCONCLUSIVE else RunVerdict.PASS
-    return RunnerResultV2(
+    return RunnerResult(
         schema_version="2",
         run_id=run_id,
         job_id="job_" + run_id[4:],
@@ -41,12 +41,12 @@ def _result(run_id: str, verdict: CaseVerdict, *, observer_status: ObserverOutco
         lease_owner="gate-test",
         fencing_token=1,
         finished_at_us=100 if run_id == FIXED_RUN else 200,
-        result_type=RunnerResultTypeV2.SUCCESS,
+        result_type=RunnerResultType.SUCCESS,
         run_lifecycle=RunLifecycle.COMPLETED,
         job_state=JobState.SUCCEEDED,
         verdict=run_verdict,
         reason_codes=(),
-        cleanup=CleanupResultV2(schema_version="2", status=CleanupStatusV2.SUCCEEDED),
+        cleanup=CleanupResult(schema_version="2", status=CleanupStatus.SUCCEEDED),
         error=None,
         plan_fingerprint=snapshot.plan.plan_fingerprint,
         coverage_record_count=len(snapshot.plan.coverage),
@@ -110,7 +110,7 @@ def test_vulnerable_fixed_vulnerable_reappears_and_gate_result_is_immutable(tmp_
         }
         reader = SimpleNamespace(read=lambda run_id: results[run_id], request_snapshot=lambda _view: snapshot)
         finding_service = SimpleNamespace(findings_for_run=lambda run_id: findings[run_id])
-        service = GatingApplicationService(lambda: StorageUnitOfWork(factory), reader, finding_service, clock_us=lambda: 999)
+        service = RegressionGate(lambda: StorageUnitOfWork(factory), reader, finding_service, clock_us=lambda: 999)
         assert findings[INITIAL_VULNERABLE_RUN][0]["occurrence"]["verdict"] == "VULNERABLE"
         baseline = service.accept_baseline(FIXED_RUN, actor="operator", reason="fixed run")
         assert service.accept_baseline(FIXED_RUN, actor="operator", reason="fixed run") == baseline

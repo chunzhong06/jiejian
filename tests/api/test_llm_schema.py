@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
-from jiejian.api.schemas.llm import (
+from product.backend.api.routers.llm import (
     LLMProfileCreateRequest,
     LLMProfileResponse,
     LLMProfileUpdateRequest,
 )
-from jiejian.contracts.llm.config import LLMProviderType
+from product.backend.infra.llm.config import LLMProviderType
 
 
 def test_llm_write_only_secret_is_not_serialized_or_represented() -> None:

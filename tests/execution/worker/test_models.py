@@ -3,33 +3,33 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from jiejian.execution.models import (
-    ClaimJobV1,
-    ConfirmRecoveryV1,
+from product.backend.infra.runtime.jobs.models import (
+    ClaimJob,
+    ConfirmRecovery,
     RecoveryOperator,
     RecoveryProofType,
     RecoveryReasonCode,
-    RetryPolicyV1,
-    SubmitJobV1,
+    RetryPolicy,
+    SubmitJob,
 )
 
 
 def test_worker_dtos_are_strict_frozen_and_versioned() -> None:
-    request = ClaimJobV1(
+    request = ClaimJob(
         lease_owner="worker-1",
         now_us=100,
         lease_duration_us=10,
     )
     assert request.schema_version == "1"
     with pytest.raises(ValidationError):
-        ClaimJobV1(
+        ClaimJob(
             lease_owner="worker-1",
             now_us=100,
             lease_duration_us=10,
             unknown=True,
         )
     with pytest.raises(ValidationError):
-        ClaimJobV1(
+        ClaimJob(
             lease_owner="worker-1",
             now_us="100",
             lease_duration_us=10,
@@ -51,9 +51,9 @@ def test_submit_ids_are_optional_but_strict_when_supplied() -> None:
         "available_at_us": 100,
         "now_us": 100,
     }
-    assert SubmitJobV1(**values).run_id is None
+    assert SubmitJob(**values).run_id is None
     with pytest.raises(ValidationError):
-        SubmitJobV1(**values, run_id="run_NOT_HEX")
+        SubmitJob(**values, run_id="run_NOT_HEX")
 
 
 @pytest.mark.parametrize(
@@ -73,7 +73,7 @@ def test_recovery_proof_pairs_are_explicit(
     proof_type: RecoveryProofType,
     reason_code: RecoveryReasonCode,
 ) -> None:
-    request = ConfirmRecoveryV1(
+    request = ConfirmRecovery(
         job_id="job_" + "1" * 32,
         lease_owner="worker-1",
         fencing_token=1,
@@ -87,7 +87,7 @@ def test_recovery_proof_pairs_are_explicit(
 
 def test_recovery_proof_rejects_mismatched_reason() -> None:
     with pytest.raises(ValidationError):
-        ConfirmRecoveryV1(
+        ConfirmRecovery(
             job_id="job_" + "1" * 32,
             lease_owner="worker-1",
             fencing_token=1,
@@ -100,6 +100,6 @@ def test_recovery_proof_rejects_mismatched_reason() -> None:
 
 def test_retry_policy_rejects_inverted_or_unbounded_values() -> None:
     with pytest.raises(ValidationError):
-        RetryPolicyV1(base_delay_us=11, max_delay_us=10, max_jitter_us=0)
+        RetryPolicy(base_delay_us=11, max_delay_us=10, max_jitter_us=0)
     with pytest.raises(ValidationError):
-        RetryPolicyV1(base_delay_us=1, max_delay_us=10, max_jitter_us=11)
+        RetryPolicy(base_delay_us=1, max_delay_us=10, max_jitter_us=11)

@@ -6,36 +6,36 @@ from typing import Any
 import pytest
 from sqlalchemy import text
 
-from jiejian.domain.lifecycle import JobState, RunLifecycle
-from jiejian.errors import ErrorCode, JiejianError
-from jiejian.storage import StorageUnitOfWork, create_session_factory, create_sqlite_engine
-from jiejian.storage.repositories import JobEventRepository
+from product.backend.core.lifecycle import JobState, RunLifecycle
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import StorageUnitOfWork, create_session_factory, create_sqlite_engine
+from product.backend.infra.storage import JobEventRepository
 
 pytestmark = pytest.mark.database
-from jiejian.execution.attempts import JobAttemptService
-from jiejian.execution.models import (
-    ClaimJobV1,
-    CompleteCancellationV1,
+from product.backend.infra.runtime.jobs.attempts import JobAttempts
+from product.backend.infra.runtime.jobs.models import (
+    ClaimJob,
+    CompleteCancellation,
     FatalFailureCode,
-    FatalFailureV1,
-    RequestCancellationV1,
-    RetryPolicyV1,
+    FatalFailure,
+    RequestCancellation,
+    RetryPolicy,
     RetryableFailureCode,
-    RetryableFailureV1,
-    RenewLeaseV1,
+    RetryableFailure,
+    RenewLease,
 )
 
 NOW_US = 1_790_000_000_000_000
 
 
-def _claim_request(job_id: str, **changes: Any) -> ClaimJobV1:
+def _claim_request(job_id: str, **changes: Any) -> ClaimJob:
     values = {
         "job_id": job_id,
         "lease_owner": "worker-1",
         "now_us": NOW_US + 10,
         "lease_duration_us": 1_000,
     }
-    return ClaimJobV1(**(values | changes))
+    return ClaimJob(**(values | changes))
 
 
 def test_submit_is_idempotent_and_appends_only_one_initial_event(
@@ -72,10 +72,10 @@ def test_pending_cancel_is_atomic_and_first_time_is_immutable(
 ) -> None:
     submitted = worker_services.queue.submit(worker_services.submit_request())
     first = worker_services.queue.request_cancellation(
-        RequestCancellationV1(job_id=submitted.job.job_id, now_us=NOW_US + 5)
+        RequestCancellation(job_id=submitted.job.job_id, now_us=NOW_US + 5)
     )
     repeated = worker_services.queue.request_cancellation(
-        RequestCancellationV1(job_id=submitted.job.job_id, now_us=NOW_US + 9)
+        RequestCancellation(job_id=submitted.job.job_id, now_us=NOW_US + 9)
     )
 
     assert first.completed is repeated.completed is True
@@ -100,7 +100,7 @@ def test_running_cancel_waits_for_matching_fenced_cleanup(
     claimed = worker_services.attempts.claim(_claim_request(submitted.job.job_id))
     assert claimed is not None
     requested = worker_services.queue.request_cancellation(
-        RequestCancellationV1(job_id=submitted.job.job_id, now_us=NOW_US + 20)
+        RequestCancellation(job_id=submitted.job.job_id, now_us=NOW_US + 20)
     )
 
     assert requested.completed is False
@@ -108,7 +108,7 @@ def test_running_cancel_waits_for_matching_fenced_cleanup(
     assert requested.run.lifecycle is RunLifecycle.PREFLIGHT
     with pytest.raises(JiejianError) as stale:
         worker_services.attempts.complete_cancellation(
-            CompleteCancellationV1(
+            CompleteCancellation(
                 job_id=submitted.job.job_id,
                 lease_owner="worker-2",
                 fencing_token=claimed.job.fencing_token,
@@ -118,7 +118,7 @@ def test_running_cancel_waits_for_matching_fenced_cleanup(
     assert stale.value.code == ErrorCode.JOB_LEASE_MISMATCH.value
 
     completed = worker_services.attempts.complete_cancellation(
-        CompleteCancellationV1(
+        CompleteCancellation(
             job_id=submitted.job.job_id,
             lease_owner="worker-1",
             fencing_token=claimed.job.fencing_token,
@@ -138,7 +138,7 @@ def test_renewal_preserves_attempt_and_token_and_rejects_stale_fence(
     claimed = worker_services.attempts.claim(_claim_request(submitted.job.job_id))
     assert claimed is not None
     renewed = worker_services.attempts.renew_lease(
-        RenewLeaseV1(
+        RenewLease(
             job_id=claimed.job.job_id,
             lease_owner="worker-1",
             fencing_token=claimed.job.fencing_token,
@@ -152,7 +152,7 @@ def test_renewal_preserves_attempt_and_token_and_rejects_stale_fence(
 
     with pytest.raises(JiejianError) as stale:
         worker_services.attempts.renew_lease(
-            RenewLeaseV1(
+            RenewLease(
                 job_id=claimed.job.job_id,
                 lease_owner="worker-1",
                 fencing_token=claimed.job.fencing_token + 1,
@@ -174,7 +174,7 @@ def test_expired_lease_cannot_renew_or_write_attempt_result(
     expired_at = NOW_US + 21
     with pytest.raises(JiejianError) as renewal:
         worker_services.attempts.renew_lease(
-            RenewLeaseV1(
+            RenewLease(
                 job_id=claimed.job.job_id,
                 lease_owner="worker-1",
                 fencing_token=claimed.job.fencing_token,
@@ -185,7 +185,7 @@ def test_expired_lease_cannot_renew_or_write_attempt_result(
     assert renewal.value.code == ErrorCode.JOB_LEASE_EXPIRED.value
     with pytest.raises(JiejianError) as failure:
         worker_services.attempts.record_fatal_failure(
-            FatalFailureV1(
+            FatalFailure(
                 job_id=claimed.job.job_id,
                 lease_owner="worker-1",
                 fencing_token=claimed.job.fencing_token,
@@ -204,9 +204,9 @@ def test_expired_lease_cannot_renew_or_write_attempt_result(
 def test_retry_uses_bounded_deterministic_backoff_and_next_claim_new_token(
     worker_services: Any,
 ) -> None:
-    attempts = JobAttemptService(
+    attempts = JobAttempts(
         partial(StorageUnitOfWork, worker_services.session_factory),
-        retry_policy=RetryPolicyV1(
+        retry_policy=RetryPolicy(
             base_delay_us=100,
             max_delay_us=250,
             max_jitter_us=50,
@@ -215,7 +215,7 @@ def test_retry_uses_bounded_deterministic_backoff_and_next_claim_new_token(
     )
     submitted = worker_services.queue.submit(worker_services.submit_request())
     first = attempts.claim(
-        ClaimJobV1(
+        ClaimJob(
             job_id=submitted.job.job_id,
             lease_owner="worker-1",
             now_us=NOW_US + 10,
@@ -224,7 +224,7 @@ def test_retry_uses_bounded_deterministic_backoff_and_next_claim_new_token(
     )
     assert first is not None
     retried = attempts.record_retryable_failure(
-        RetryableFailureV1(
+        RetryableFailure(
             job_id=first.job.job_id,
             lease_owner="worker-1",
             fencing_token=first.job.fencing_token,
@@ -238,7 +238,7 @@ def test_retry_uses_bounded_deterministic_backoff_and_next_claim_new_token(
     assert retried.run.verdict is None
 
     second = attempts.claim(
-        ClaimJobV1(
+        ClaimJob(
             job_id=first.job.job_id,
             lease_owner="worker-2",
             now_us=NOW_US + 145,
@@ -253,9 +253,9 @@ def test_retry_uses_bounded_deterministic_backoff_and_next_claim_new_token(
 def test_retry_delay_is_capped_and_attempt_exhaustion_fails_run(
     worker_services: Any,
 ) -> None:
-    attempts = JobAttemptService(
+    attempts = JobAttempts(
         partial(StorageUnitOfWork, worker_services.session_factory),
-        retry_policy=RetryPolicyV1(
+        retry_policy=RetryPolicy(
             base_delay_us=100,
             max_delay_us=100,
             max_jitter_us=0,
@@ -266,7 +266,7 @@ def test_retry_delay_is_capped_and_attempt_exhaustion_fails_run(
         worker_services.submit_request(max_attempts=2)
     )
     first = attempts.claim(
-        ClaimJobV1(
+        ClaimJob(
             job_id=submitted.job.job_id,
             lease_owner="worker-1",
             now_us=NOW_US + 10,
@@ -275,7 +275,7 @@ def test_retry_delay_is_capped_and_attempt_exhaustion_fails_run(
     )
     assert first is not None
     waiting = attempts.record_retryable_failure(
-        RetryableFailureV1(
+        RetryableFailure(
             job_id=first.job.job_id,
             lease_owner="worker-1",
             fencing_token=first.job.fencing_token,
@@ -285,7 +285,7 @@ def test_retry_delay_is_capped_and_attempt_exhaustion_fails_run(
     )
     assert waiting.job.available_at_us == NOW_US + 120
     second = attempts.claim(
-        ClaimJobV1(
+        ClaimJob(
             job_id=first.job.job_id,
             lease_owner="worker-2",
             now_us=NOW_US + 120,
@@ -294,7 +294,7 @@ def test_retry_delay_is_capped_and_attempt_exhaustion_fails_run(
     )
     assert second is not None
     failed = attempts.record_retryable_failure(
-        RetryableFailureV1(
+        RetryableFailure(
             job_id=second.job.job_id,
             lease_owner="worker-2",
             fencing_token=second.job.fencing_token,
@@ -314,7 +314,7 @@ def test_fatal_failure_never_becomes_inconclusive(
     claimed = worker_services.attempts.claim(_claim_request(submitted.job.job_id))
     assert claimed is not None
     failed = worker_services.attempts.record_fatal_failure(
-        FatalFailureV1(
+        FatalFailure(
             job_id=claimed.job.job_id,
             lease_owner="worker-1",
             fencing_token=claimed.job.fencing_token,

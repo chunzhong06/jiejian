@@ -5,28 +5,28 @@ from pathlib import Path
 
 import pytest
 
-from jiejian.errors import JiejianError
-from jiejian.protocols import (
-    ConfirmFlowDraftVariableV1,
-    DeleteFlowDraftStepV1,
-    FlowDraftV1,
+from product.backend.core.errors import JiejianError
+from product.protocols import (
+    ConfirmFlowDraftVariable,
+    DeleteFlowDraftStep,
+    FlowDraft,
     FlowDraftVariableStatus,
-    MergeFlowDraftStepsV1,
+    MergeFlowDraftSteps,
     RecordingEventKind,
-    RecordingEventV1,
-    RecordingHeaderV1,
-    RenameFlowDraftStepV1,
+    RecordingEvent,
+    RecordingHeader,
+    RenameFlowDraftStep,
     canonical_flow_draft_json_bytes,
     flow_draft_review_command_schema,
     parse_flow_draft,
 )
-from jiejian.recording.processing import FlowDraftProcessor
-from jiejian.recording.review import FlowDraftReviewer
+from product.backend.workflows.recording.processing import FlowDraftProcessor
+from product.backend.workflows.recording.review import FlowDraftReviewer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def recorded_events() -> tuple[RecordingEventV1, ...]:
+def recorded_events() -> tuple[RecordingEvent, ...]:
     common = {
         "schema_version": "1",
         "identity_id": "owner",
@@ -34,7 +34,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
         "frame_id": "frame_000001",
     }
     return (
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=1,
             occurred_at_us=1,
@@ -44,7 +44,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             field_name="password",
             input_type="password",
         ),
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=2,
             occurred_at_us=2,
@@ -54,7 +54,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             field_name="password",
             input_type="password",
         ),
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=3,
             occurred_at_us=3,
@@ -62,7 +62,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             action_id="action_000003",
             element_locator="form#resource-form",
         ),
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=4,
             occurred_at_us=4,
@@ -73,12 +73,12 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             method="POST",
             resource_type="fetch",
             headers=(
-                RecordingHeaderV1(
+                RecordingHeader(
                     schema_version="1",
                     name="authorization",
                     value="[REDACTED]",
                 ),
-                RecordingHeaderV1(
+                RecordingHeader(
                     schema_version="1",
                     name="content-type",
                     value="application/json",
@@ -86,7 +86,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             ),
             body='{"password":"[REDACTED]","value":"draft"}',
         ),
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=5,
             occurred_at_us=5,
@@ -95,7 +95,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             url="http://127.0.0.1:8080/resources",
             status_code=201,
             headers=(
-                RecordingHeaderV1(
+                RecordingHeader(
                     schema_version="1",
                     name="location",
                     value="/resources/resource-42",
@@ -103,7 +103,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             ),
             body='{"id":"resource-42","token":"[REDACTED]"}',
         ),
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=6,
             occurred_at_us=6,
@@ -111,7 +111,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             action_id="action_000004",
             element_locator='a[data-testid="resource-link"]',
         ),
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=7,
             occurred_at_us=7,
@@ -122,7 +122,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             method="GET",
             resource_type="fetch",
         ),
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=8,
             occurred_at_us=8,
@@ -132,7 +132,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
             status_code=200,
             body='{"id":"resource-42"}',
         ),
-        RecordingEventV1(
+        RecordingEvent(
             **common,
             sequence=9,
             occurred_at_us=9,
@@ -143,7 +143,7 @@ def recorded_events() -> tuple[RecordingEventV1, ...]:
     )
 
 
-def build_draft() -> FlowDraftV1:
+def build_draft() -> FlowDraft:
     return FlowDraftProcessor().build(
         recording_id="rec_0123456789abcdef0123456789abcdef",
         flow_id="recorded-flow",
@@ -175,12 +175,12 @@ def test_events_build_deterministic_redacted_draft_with_dynamic_dag() -> None:
     assert b"resource-42" not in encoded
     assert parse_flow_draft(encoded) == first
 
-    schema_root = PROJECT_ROOT / "schemas" / "recording"
-    assert json.loads((schema_root / "flow-draft-v1.schema.json").read_text()) == (
-        FlowDraftV1.model_json_schema()
+    schema_root = PROJECT_ROOT / "product" / "protocols" / "schemas" / "recording"
+    assert json.loads((schema_root / "flow-draft.schema.json").read_text()) == (
+        FlowDraft.model_json_schema()
     )
     assert json.loads(
-        (schema_root / "flow-draft-review-command-v1.schema.json").read_text()
+        (schema_root / "flow-draft-review-command.schema.json").read_text()
     ) == flow_draft_review_command_schema()
 
 
@@ -190,7 +190,7 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
     with pytest.raises(JiejianError) as nonadjacent:
         reviewer.apply(
             draft,
-            MergeFlowDraftStepsV1(
+            MergeFlowDraftSteps(
                 schema_version="1",
                 operation="MERGE_ADJACENT_STEPS",
                 left_step_id="step-000001",
@@ -201,7 +201,7 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
     with pytest.raises(JiejianError) as reference:
         reviewer.apply(
             draft,
-            DeleteFlowDraftStepV1(
+            DeleteFlowDraftStep(
                 schema_version="1",
                 operation="DELETE_STEP",
                 step_id="step-000002",
@@ -211,7 +211,7 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
 
     renamed = reviewer.apply(
         draft,
-        RenameFlowDraftStepV1(
+        RenameFlowDraftStep(
             schema_version="1",
             operation="RENAME_STEP",
             step_id="step-000001",
@@ -220,7 +220,7 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
     )
     merged = reviewer.apply(
         renamed,
-        MergeFlowDraftStepsV1(
+        MergeFlowDraftSteps(
             schema_version="1",
             operation="MERGE_ADJACENT_STEPS",
             left_step_id="step-000001",
@@ -229,7 +229,7 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
     )
     deleted = reviewer.apply(
         merged,
-        DeleteFlowDraftStepV1(
+        DeleteFlowDraftStep(
             schema_version="1",
             operation="DELETE_STEP",
             step_id="step-000004",
@@ -237,7 +237,7 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
     )
     confirmed = reviewer.apply(
         deleted,
-        ConfirmFlowDraftVariableV1(
+        ConfirmFlowDraftVariable(
             schema_version="1",
             operation="CONFIRM_VARIABLE_SOURCE",
             variable_name="resource_id",
@@ -277,11 +277,11 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
     )
     cycle_data = draft.model_dump(mode="python")
     cycle_data["steps"] = cycle_steps
-    cycle_draft = FlowDraftV1.model_validate(cycle_data)
+    cycle_draft = FlowDraft.model_validate(cycle_data)
     with pytest.raises(JiejianError) as cycle:
         reviewer.apply(
             cycle_draft,
-            ConfirmFlowDraftVariableV1(
+            ConfirmFlowDraftVariable(
                 schema_version="1",
                 operation="CONFIRM_VARIABLE_SOURCE",
                 variable_name="resource_id",

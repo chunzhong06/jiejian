@@ -5,14 +5,14 @@ import json
 import httpx
 import pytest
 
-from jiejian.contracts.llm.adapters.base import (
+from product.backend.infra.llm.adapters.base import (
     LLMHttpResponse,
     LLMTransportError,
 )
-from jiejian.contracts.llm.adapters.gemini import GeminiAdapter
-from jiejian.contracts.llm.adapters.httpx_transport import HttpxLLMTransport
-from jiejian.contracts.llm.adapters.openai_compatible import OpenAICompatibleAdapter
-from jiejian.contracts.llm.config import LLMProfileConfig, LLMProviderType
+from product.backend.infra.llm.adapters.gemini import GeminiAdapter
+from product.backend.infra.llm.adapters.httpx_transport import HttpxLLMTransport
+from product.backend.infra.llm.adapters.openai_compatible import OpenAICompatibleAdapter
+from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType
 
 
 def _profile(provider: LLMProviderType, **updates: object) -> LLMProfileConfig:
