@@ -28,6 +28,13 @@ Roadmap 只说明后续方向，不是普通任务的默认必读文档；ADR �
 - [技术文档规范](01_技术规范/技术文档规范.md)：真源层级、文档职责、CURRENT/历史分离和维护规则。
 - [工程设计规范](01_技术规范/工程设计规范.md)：模块边界、依赖方向、公共格式、测试和安全工程约束。
 
+## 代码导航
+
+- [后端代码导航](../product/backend/README.md)：`core`、`workflows`、`infra`、`api`、`cli` 和 migration 从哪里读起。
+- [前端代码导航](../product/frontend/README.md)：页面、用户任务流、`src` 职责和本地命令。
+- [协议代码导航](../product/protocols/README.md)：协议文件、Schema、版本与 canonical/hash 约束。
+- [测试导航](../tests/README.md)：测试目录、fixture、必要测试和全量测试。
+
 ## 当前 Architecture
 
 - [系统总体架构](02_架构设计/系统总体架构.md)：模块化单体、ApplicationCore、入口与执行边界。

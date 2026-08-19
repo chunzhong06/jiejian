@@ -10,8 +10,6 @@ from typing import Any, Callable
 import pytest
 
 from product.backend.workflows.onboarding.demo_target import create_demo_target_server
-from product.protocols import ExecutionBudget, ExecutionProjectSnapshot
-from product.backend.infra.runtime.job_requests import PersistedExecutionRequest
 
 
 @pytest.fixture
@@ -69,18 +67,3 @@ def sample_server_factory(request: pytest.FixtureRequest) -> Callable[..., Any]:
 
     request.addfinalizer(stop_all)
     return start
-
-
-@pytest.fixture
-def stage23_request_factory() -> Callable[[], PersistedExecutionRequest]:
-    def create() -> PersistedExecutionRequest:
-        from tests.execution.protocol.test_runner import _input
-
-        runner_input = _input()
-        return PersistedExecutionRequest(
-            schema_version="2",
-            budget=runner_input.budget,
-            project_snapshot=runner_input.project_snapshot,
-        )
-
-    return create

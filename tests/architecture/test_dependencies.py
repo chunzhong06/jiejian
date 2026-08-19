@@ -5,7 +5,12 @@ import re
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from product.backend import __version__
+
+
+pytestmark = pytest.mark.essential
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "product" / "backend"
@@ -29,7 +34,7 @@ def _imports(path: Path) -> set[str]:
 
 def test_backend_top_level_is_the_frozen_product_shape() -> None:
     names = {path.name for path in BACKEND.iterdir()}
-    assert names == {"__init__.py", "api", "cli", "core", "workflows", "infra", "migrations", "alembic.ini"}
+    assert names == {"__init__.py", "README.md", "api", "cli", "core", "workflows", "infra", "migrations", "alembic.ini"}
     assert not (BACKEND / "jiejian").exists()
     assert not any((BACKEND / name).exists() for name in ("application", "domain", "execution", "runner", "worker", "recording_runner", "results", "storage"))
 

@@ -39,6 +39,7 @@ only-include = ["product/backend", "product/protocols"]
 addopts = "-ra"
 testpaths = ["tests"]
 markers = [
+    "essential: 跨模块变更必须通过的必要回归门禁",
     "browser: 启动或依赖 Playwright/浏览器边界",
     "process: 拉起独立 Runner、Worker、Recording Runner 或 CLI 子进程",
     "database: 创建、升级或通过事务访问数据库",
