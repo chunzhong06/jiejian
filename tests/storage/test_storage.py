@@ -174,6 +174,10 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
             "contract_candidates",
             "contract_versions",
             "evidence_index",
+            "findings",
+            "finding_occurrences",
+            "regression_baselines",
+            "gate_results",
             "flow_draft_revisions",
             "job_events",
             "jobs",
@@ -187,7 +191,7 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
         with engine.connect() as connection:
             assert connection.execute(
                 text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == "0008_permission_execution_profiles"
+            ).scalar_one() == "0010_stage7_gate"
     finally:
         engine.dispose()
 

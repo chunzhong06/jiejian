@@ -1,0 +1,22 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlalchemy import inspect
+
+from jiejian.storage import create_sqlite_engine, upgrade_database
+
+
+def test_stage_7_2_migration_adds_immutable_baseline_and_gate_tables(tmp_path: Path) -> None:
+    database = tmp_path / "stage72.db"
+    upgrade_database(database)
+    engine = create_sqlite_engine(database)
+    try:
+        inspector = inspect(engine)
+        assert {"regression_baselines", "gate_results"} <= set(inspector.get_table_names())
+        assert "baseline_id" in {item["name"] for item in inspector.get_columns("regression_baselines")}
+        assert "input_hash" in {item["name"] for item in inspector.get_columns("gate_results")}
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == "0010_stage7_gate"
+    finally:
+        engine.dispose()

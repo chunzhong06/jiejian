@@ -40,6 +40,7 @@ from .commands.recordings import (
     recording_status_command,
 )
 from .commands.results import ci_command, report_command
+from .commands.gating import baseline_accept_command, gate_evaluate_command, gate_result_command
 from .commands.runs import permission_run_command, run_command
 from .commands.system import doctor_command, serve_command
 
@@ -53,9 +54,13 @@ app = typer.Typer(
 project_app = typer.Typer(help="项目输入校验", no_args_is_help=True)
 contract_app = typer.Typer(help="契约输入校验", no_args_is_help=True)
 recording_app = typer.Typer(help="浏览器录制与 Flow 审阅", no_args_is_help=True)
+baseline_app = typer.Typer(help="回归基线", no_args_is_help=True)
+gate_app = typer.Typer(help="确定性门禁", no_args_is_help=True)
 app.add_typer(project_app, name="project")
 app.add_typer(contract_app, name="contract")
 app.add_typer(recording_app, name="recording")
+app.add_typer(baseline_app, name="baseline")
+app.add_typer(gate_app, name="gate")
 
 
 def root(
@@ -98,6 +103,9 @@ app.command("run")(run_command)
 app.command("permission-run")(permission_run_command)
 app.command("report")(report_command)
 app.command("ci")(ci_command)
+baseline_app.command("accept")(baseline_accept_command)
+gate_app.command("evaluate")(gate_evaluate_command)
+gate_app.command("result")(gate_result_command)
 
 
 def main() -> None:

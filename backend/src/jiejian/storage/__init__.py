@@ -18,12 +18,24 @@ from .repositories import (
     ProjectRecord,
     RecordingRecord,
     RunRecord,
+    FindingRecord,
+    FindingOccurrenceRecord,
+    FindingRepository,
+    GateResultRecord,
+    GatingRepository,
+    RegressionBaselineRecord,
 )
 from .unit_of_work import StorageUnitOfWork
 
 __all__ = [
     "SQLITE_BUSY_TIMEOUT_MS",
     "EvidenceIndexRecord",
+    "FindingRecord",
+    "FindingOccurrenceRecord",
+    "FindingRepository",
+    "RegressionBaselineRecord",
+    "GateResultRecord",
+    "GatingRepository",
     "FlowDraftRevisionRecord",
     "JobEventRecord",
     "JobRecord",

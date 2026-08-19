@@ -98,6 +98,15 @@ class PublishedResultReader:
             raise JiejianError(ErrorCode.ARTIFACT_HASH_MISMATCH, "发布工件 JSON 结构无效")
         return redact(document)
 
+    def request_snapshot(self, view: PublishedRunView):
+        """读取与已发布 Job hash 绑定的不可变执行快照，供结果投影使用。"""
+
+        request = ExecutionRequestStore(self._var_dir).load(
+            view.job.job_id,
+            expected_hash=view.job.request_hash,
+        )
+        return request.project_snapshot
+
     def report(self, view: PublishedRunView) -> dict[str, Any]:
         if isinstance(view.publication.result, RunnerResultV2):
             raise JiejianError(ErrorCode.REPORT_NOT_FOUND, "Runner V2 尚未提供 V1 report 语义")

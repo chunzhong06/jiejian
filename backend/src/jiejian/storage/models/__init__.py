@@ -3,6 +3,8 @@
 from .base import Base, NAMING_CONVENTION
 from .contracts import ContractCandidateRow, ContractVersionRow, RequirementRow
 from .evidence import EvidenceIndexRow
+from .findings import FindingOccurrenceRow, FindingRow
+from .gating import GateResultRow, RegressionBaselineRow
 from .jobs import JobEventRow, JobRow
 from .llm import LLMProfileRow
 from .permission_profiles import PermissionExecutionProfileRow
@@ -25,4 +27,8 @@ __all__ = [
     "LLMProfileRow",
     "PermissionExecutionProfileRow",
     "EvidenceIndexRow",
+    "FindingRow",
+    "FindingOccurrenceRow",
+    "RegressionBaselineRow",
+    "GateResultRow",
 ]
