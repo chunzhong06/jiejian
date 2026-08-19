@@ -35,6 +35,7 @@ packages = ["backend/src/jiejian"]
 "backend/alembic.ini" = "jiejian/resources/alembic.ini"
 "backend/migrations" = "jiejian/resources/migrations"
 "schemas" = "jiejian/resources/schemas"
+"backend/src/jiejian/artifacts/ruleset_v1.json" = "jiejian/artifacts/ruleset_v1.json"
 
 [tool.pytest.ini_options]
 addopts = "-ra"

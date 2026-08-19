@@ -15,6 +15,8 @@ import { request } from './http'
 
 export const resultsApi = {
   report: (runId: string) => request<Record<string, unknown>>(`/api/v1/runs/${runId}/report`),
+  reports: (runId: string) => request<Record<string, unknown>[]>(`/api/v2/runs/${runId}/reports`),
+  reportV2: (runId: string, reportId: string) => request<Record<string, any>>(`/api/v2/runs/${runId}/reports/${encodeURIComponent(reportId)}`),
   findings: (runId: string) => request<Record<string, unknown>[]>(`/api/v1/runs/${runId}/findings`),
   evidence: (runId: string) => request<Record<string, unknown>[]>(`/api/v1/runs/${runId}/evidence`),
   evidenceDetail: (runId: string, evidenceId: string) => request<Record<string, unknown>>(`/api/v1/runs/${runId}/evidence/${evidenceId}`),

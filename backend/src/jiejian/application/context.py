@@ -31,12 +31,14 @@ from ..execution.queue import JobQueueService
 from ..execution.submission import ExecutionSubmissionService
 from ..execution.permission_execution import PermissionExecutionService
 from ..execution.targets import JobTargetType, default_run_job_targets
+from ..artifacts.handler import ArtifactCheckJobHandler
 from ..projects.service import ProjectControlService
 from ..recording.application import RecordingApplicationService
 from ..recording.job_handler import RecordingJobHandler
 from ..recording.job_target import RecordingJobTargetHandler
 from ..recording.request_store import RecordingRequestStore
 from ..results.published import PublishedResultReader
+from ..reports.service import ReportApplicationService
 from ..storage import StorageUnitOfWork
 from ..contracts.llm.adapters.httpx_transport import HttpxLLMTransport
 from ..contracts.llm.profiles import LLMProfileApplicationService
@@ -104,6 +106,12 @@ class ApplicationContext:
             self.results,
             self.findings,
             clock_us=clock_us,
+        )
+        self.reports = ReportApplicationService(
+            self.var_dir,
+            self.results,
+            self.findings,
+            self.gating,
         )
         self.projects = ProjectControlService(factory)
         self.execution_requests = ExecutionRequestService(factory, self.projects)
@@ -203,7 +211,13 @@ class ApplicationContext:
 
         registry.register(JobTargetType.RUN, build_run_handler)
         registry.register(JobTargetType.RECORDING, build_recording_handler)
+        registry.register_auxiliary("ARTIFACT_CHECK", self.build_artifact_check_handler)
         return registry
+
+    def build_artifact_check_handler(self) -> ArtifactCheckJobHandler:
+        """构造只由 Worker 使用的隔离产物检查 Handler。"""
+
+        return ArtifactCheckJobHandler(self.var_dir)
 
     def close(self) -> None:
         self.demo.close()

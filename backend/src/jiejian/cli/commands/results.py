@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from click import get_binary_stream
 
 from ...domain.lifecycle import RunLifecycle, RunVerdict
 from ...errors import ErrorCode, JiejianError
@@ -29,17 +30,45 @@ def report_command(
     context: typer.Context,
     run_id: str,
     output_format: str = typer.Option("json", "--format", help="报告格式"),
+    v2: bool = typer.Option(False, "--v2", help="读取或生成统一报告 V2"),
+    gate_result_id: str | None = typer.Option(None, "--gate-result-id", help="显式 GateResult ID；提供时生成 V2 报告"),
+    report_id: str | None = typer.Option(None, "--report-id", help="读取已发布 V2 报告 ID"),
 ) -> None:
-    """按运行 ID 读取完整性校验后的 JSON 报告。"""
+    """按运行 ID 读取历史 V1 报告或显式 V2 统一报告。"""
 
-    if output_format.lower() != "json":
+    if not v2 and output_format.lower() != "json":
         fail(JiejianError(ErrorCode.INPUT_INVALID, "阶段 1 只支持 JSON 报告"))
+    application = None
     try:
         settings = runtime_settings(context)
+        if v2:
+            from ...application.context import ApplicationContext
+
+            application = ApplicationContext(settings.var_dir)
+            if gate_result_id is not None:
+                if report_id is not None:
+                    fail(JiejianError(ErrorCode.INPUT_INVALID, "V2 报告不能同时指定 GateResult 和 report_id"))
+                payload = application.reports.generate(run_id, gate_result_id)
+                if output_format.lower() == "json":
+                    emit_json(payload)
+                else:
+                    get_binary_stream("stdout").write(application.reports.read_format(run_id, payload["report_id"], output_format.lower()))
+                return
+            if report_id is None:
+                fail(JiejianError(ErrorCode.INPUT_INVALID, "V2 报告必须指定 --gate-result-id 或 --report-id"))
+            raw = application.reports.read_format(run_id, report_id, output_format.lower())
+            if output_format.lower() == "json":
+                emit_json(application.reports.read(run_id, report_id))
+            else:
+                get_binary_stream("stdout").write(raw)
+            return
         _require_published_completion(settings.var_dir, run_id)
         emit_json(load_report(settings.var_dir, run_id))
     except JiejianError as exc:
         fail(exc)
+    finally:
+        if application is not None:
+            application.close()
 
 
 def ci_command(context: typer.Context, project_path: Path) -> None:

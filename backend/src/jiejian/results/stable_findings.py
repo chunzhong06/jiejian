@@ -122,6 +122,18 @@ class FindingApplicationService:
             if records[item.finding_id] is not None
         ]
 
+    def stored_findings_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        """只读取已持久化 Finding/Occurrence，不因报告读取产生新的事实。"""
+
+        with self._uow_factory() as work:
+            occurrences = work.findings.list_occurrences_for_run(run_id)
+            records = {item.finding_id: work.findings.get(item.finding_id) for item in occurrences}
+        return [
+            _view_record(records[item.finding_id], item)
+            for item in occurrences
+            if records[item.finding_id] is not None
+        ]
+
 
 def finding_inputs(reader: PublishedResultReader, view: PublishedRunView) -> tuple[FindingInput, ...]:
     """按 publication 结果类型分派；V1/V2 正文均先经过 PublishedResultReader。"""

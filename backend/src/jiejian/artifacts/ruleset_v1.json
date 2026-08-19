@@ -1,0 +1,9 @@
+{
+  "schema_version": "1",
+  "ruleset_version": "artifact-local-2026.08.18",
+  "dependency_minimums": {
+    "lodash": "4.17.21",
+    "axios": "1.6.8",
+    "requests": "2.32.0"
+  }
+}
