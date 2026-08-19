@@ -133,6 +133,7 @@ def _reset_target(server, *, variant: str, observer_token: str) -> None:
 @pytest.mark.database
 @pytest.mark.process
 @pytest.mark.slow
+@pytest.mark.essential
 @pytest.mark.parametrize("variant", ("fixed", "vulnerable", "inconclusive"))
 def test_authorization_profile_worker_runner_publication_loop(variant: str, tmp_path: Path) -> None:
     secret_values = _temporary_environment()
