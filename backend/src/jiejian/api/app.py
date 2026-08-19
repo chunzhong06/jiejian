@@ -37,6 +37,7 @@ from .routers.projects import build_projects_router
 from .routers.permission_execution import build_permission_execution_router
 from .routers.recordings import build_recordings_router
 from .routers.results import build_results_router
+from .routers.gating import build_gating_router
 from .routers.runs import build_runs_router
 from .routers.system import build_system_router
 
@@ -97,6 +98,7 @@ def create_app(
     app.include_router(build_llm_router(context))
     app.include_router(build_onboarding_router(context))
     app.include_router(build_results_router(context, results))
+    app.include_router(build_gating_router(context))
 
     @app.on_event("startup")
     async def startup() -> None:

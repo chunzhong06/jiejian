@@ -94,6 +94,17 @@ class ApplicationContext:
             clock_us=clock_us,
         )
         self.results = PublishedResultReader(self.var_dir, self.uow_factory)
+        from ..results.stable_findings import FindingApplicationService
+
+        self.findings = FindingApplicationService(self.uow_factory, self.results)
+        from ..results.gating import GatingApplicationService
+
+        self.gating = GatingApplicationService(
+            self.uow_factory,
+            self.results,
+            self.findings,
+            clock_us=clock_us,
+        )
         self.projects = ProjectControlService(factory)
         self.execution_requests = ExecutionRequestService(factory, self.projects)
         self.onboarding = OnboardingService(

@@ -29,6 +29,8 @@ from .repositories.contracts import (
 from .repositories.llm import LLMProfileRepository
 from .repositories.permission_profiles import PermissionExecutionProfileRepository
 from .repositories.evidence import EvidenceIndexRepository
+from .repositories.findings import FindingRepository
+from .repositories.gating import GatingRepository
 from .repositories.jobs import JobEventRepository, JobRepository
 from .repositories.projects import ProjectRepository
 from .repositories.recordings import (
@@ -54,6 +56,8 @@ class StorageUnitOfWork:
     evidence: EvidenceIndexRepository
     llm_profiles: LLMProfileRepository
     permission_execution_profiles: PermissionExecutionProfileRepository
+    findings: FindingRepository
+    gating: GatingRepository
 
     def __init__(
         self,
@@ -95,6 +99,8 @@ class StorageUnitOfWork:
         self.permission_execution_profiles = PermissionExecutionProfileRepository(
             session, self._known_secrets
         )
+        self.findings = FindingRepository(session, self._known_secrets)
+        self.gating = GatingRepository(session, self._known_secrets)
         return self
 
     def commit(self) -> None:

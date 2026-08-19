@@ -7,6 +7,8 @@ from .contracts import (
     RequirementRepository,
 )
 from .evidence import EvidenceIndexRecord, EvidenceIndexRepository
+from .findings import FindingOccurrenceRecord, FindingRecord, FindingRepository
+from .gating import GateResultRecord, GatingRepository, RegressionBaselineRecord
 from .jobs import JobEventRecord, JobEventRepository, JobRecord, JobRepository
 from .llm import LLMProfileRepository
 from .permission_profiles import PermissionExecutionProfileRecord, PermissionExecutionProfileRepository
@@ -40,6 +42,12 @@ __all__ = [
     "JobEventRepository",
     "EvidenceIndexRecord",
     "EvidenceIndexRepository",
+    "FindingRecord",
+    "FindingOccurrenceRecord",
+    "FindingRepository",
+    "RegressionBaselineRecord",
+    "GateResultRecord",
+    "GatingRepository",
     "LLMProfileRepository",
     "PermissionExecutionProfileRecord",
     "PermissionExecutionProfileRepository",

@@ -41,6 +41,10 @@ def build_results_router(
         view = results.read(run_id)
         return data_response(results.findings(view))
 
+    @router.get("/api/v2/runs/{run_id}/findings", response_model=ApiResponse)
+    async def list_stable_findings(run_id: str):
+        return data_response(context.findings.findings_for_run(run_id))
+
     @router.get(
         "/api/v1/runs/{run_id}/evidence/{evidence_id}",
         response_model=ApiResponse,

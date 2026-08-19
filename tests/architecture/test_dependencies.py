@@ -135,6 +135,12 @@ EXPECTED_API_ROUTE_OWNERS: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/runs/{run_id}/report"): "results.py",
     ("GET", "/api/v1/runs/{run_id}/evidence"): "results.py",
     ("GET", "/api/v1/runs/{run_id}/findings"): "results.py",
+    ("GET", "/api/v2/runs/{run_id}/findings"): "results.py",
+    ("POST", "/api/v2/projects/{project_id}/baselines"): "gating.py",
+    ("GET", "/api/v2/baselines/{baseline_id}"): "gating.py",
+    ("POST", "/api/v2/baselines/{baseline_id}/runs/{run_id}/gate"): "gating.py",
+    ("GET", "/api/v2/baselines/{baseline_id}/runs/{run_id}/gate"): "gating.py",
+    ("GET", "/api/v2/gates/{gate_result_id}"): "gating.py",
     ("GET", "/api/v1/runs/{run_id}/evidence/{evidence_id}"): "results.py",
     ("POST", "/api/v1/onboarding/select-folder"): "onboarding.py",
     ("POST", "/api/v1/onboarding/inspect"): "onboarding.py",
@@ -177,6 +183,8 @@ EXPECTED_API_SCHEMA_OWNERS: dict[str, str] = {
     "OnboardingQuickCheckRequest": "onboarding.py",
     "PermissionExecutionProfileCreateRequest": "permission_execution.py",
     "PermissionExecutionRunRequest": "permission_execution.py",
+    "BaselineAcceptRequest": "gating.py",
+    "GateEvaluateRequest": "gating.py",
 }
 
 
@@ -619,7 +627,7 @@ def test_contract_pure_layers_do_not_depend_on_application_or_infrastructure() -
         dependency
         for dependency in dependencies
         if dependency.startswith(forbidden)
-        and dependency != "jiejian.verification.models"
+            and dependency != "jiejian.verification.models"
     }
 
 
@@ -752,6 +760,8 @@ def test_storage_orm_and_repository_aggregates_use_leaf_boundaries() -> None:
         "evidence.py",
         "llm.py",
         "permission_profiles.py",
+        "findings.py",
+        "gating.py",
     }
     assert {
         path.name for path in repositories_root.glob("*.py")
@@ -766,6 +776,8 @@ def test_storage_orm_and_repository_aggregates_use_leaf_boundaries() -> None:
         "evidence.py",
         "llm.py",
         "permission_profiles.py",
+        "findings.py",
+        "gating.py",
     }
     unit_of_work_imports = _imports(storage_root / "unit_of_work.py")
     assert "jiejian.storage.repositories" not in unit_of_work_imports
@@ -778,6 +790,8 @@ def test_storage_orm_and_repository_aggregates_use_leaf_boundaries() -> None:
         "jiejian.storage.repositories.runs",
         "jiejian.storage.repositories.llm",
         "jiejian.storage.repositories.permission_profiles",
+        "jiejian.storage.repositories.findings",
+        "jiejian.storage.repositories.gating",
     }.issubset(unit_of_work_imports)
     job_control_imports = _imports(storage_root / "job_control.py")
     assert "jiejian.storage.models" not in job_control_imports
@@ -1195,6 +1209,7 @@ def test_cli_is_the_only_installed_product_command_entry() -> None:
         "cli/commands/recordings.py",
         "cli/commands/runs.py",
         "cli/commands/results.py",
+        "cli/commands/gating.py",
     }
     assert not any(
         (PACKAGE_ROOT / name).exists()
@@ -1347,6 +1362,9 @@ EXPECTED_CLI_FUNCTION_OWNERS: dict[str, str] = {
     "report_command": "results.py",
     "ci_command": "results.py",
     "_require_published_completion": "results.py",
+    "baseline_accept_command": "gating.py",
+    "gate_evaluate_command": "gating.py",
+    "gate_result_command": "gating.py",
 }
 
 
@@ -1380,7 +1398,7 @@ def test_cli_app_is_only_composition_root_and_main() -> None:
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "Typer"
         for node in ast.walk(app_tree)
-    ) == 4
+    ) == 6
 
 
 def test_cli_package_root_exposes_only_main() -> None:
@@ -1510,7 +1528,7 @@ def test_api_app_only_assembles_routers_and_lifecycle() -> None:
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "include_router"
         for node in ast.walk(tree)
-    ) == 10
+    ) == 11
 
 
 def test_api_routes_are_defined_by_the_frozen_routers() -> None:
