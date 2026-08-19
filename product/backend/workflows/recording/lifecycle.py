@@ -21,14 +21,18 @@ import json
 import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
+from product.backend.core.lifecycle import JobState
 from product.backend.core.recording import RecordingState, transition_recording_state
 from product.protocols.recording_flow import Flow
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import FlowDraftReviewCommand, FlowDraft, canonical_flow_draft_json_bytes
+from product.backend.infra.artifacts.run_packages import attempt_paths_for
+from product.backend.infra.recording.control import control_paths_for_attempt, valid_control_marker, write_control_marker
 from product.backend.infra.storage import FlowDraftRevisionRecord, RecordingRecord, StorageUnitOfWork
 from product.backend.workflows.recording.review import FlowDraftReviewer
 
@@ -39,6 +43,14 @@ class RecordingStatusView(BaseModel):
     schema_version: str = "1"
     recording: RecordingRecord
     draft: FlowDraft | None = None
+    capture_phase: Literal[
+        "PREPARING_BROWSER",
+        "AWAITING_CAPTURE",
+        "CAPTURE_STARTING",
+        "CAPTURING",
+        "STOPPING",
+        "FINISHED",
+    ]
 
 
 class RecordingFinalizationView(BaseModel):
@@ -57,21 +69,102 @@ class RecordingLifecycle:
         self,
         uow_factory: Callable[..., StorageUnitOfWork],
         *,
+        var_dir: Path | None = None,
         reviewer: FlowDraftReviewer | None = None,
     ) -> None:
         self._uow_factory = uow_factory
+        self._var_dir = var_dir.resolve() if var_dir is not None else None
         self._reviewer = reviewer or FlowDraftReviewer()
 
     def status(self, recording_id: str) -> RecordingStatusView:
         with self._uow_factory() as work:
             recording = work.recordings.get(recording_id)
             draft_record = work.flow_drafts.latest(recording_id)
+            job = work.jobs.get_by_recording(recording_id)
             if recording is None:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND, "录制对象不存在")
             return RecordingStatusView(
                 recording=recording,
                 draft=draft_record.draft if draft_record is not None else None,
+                capture_phase=self._capture_phase(recording, job),
             )
+
+    def start_capture(self, recording_id: str) -> RecordingStatusView:
+        """为当前 fenced attempt 原子写入开始标记，不直接启动浏览器。"""
+
+        return self._write_capture_marker(recording_id, "start")
+
+    def stop_capture(self, recording_id: str) -> RecordingStatusView:
+        """为当前 fenced attempt 原子写入停止标记，保留已采集事件。"""
+
+        return self._write_capture_marker(recording_id, "stop")
+
+    def _write_capture_marker(
+        self,
+        recording_id: str,
+        action: Literal["start", "stop"],
+    ) -> RecordingStatusView:
+        if self._var_dir is None:
+            raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制控制面尚未完成装配")
+        with self._uow_factory() as work:
+            recording = work.recordings.get(recording_id)
+            job = work.jobs.get_by_recording(recording_id)
+            if recording is None:
+                raise JiejianError(ErrorCode.RECORD_NOT_FOUND, "录制对象不存在")
+            if job is None or job.recording_id != recording_id:
+                raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制任务尚未建立")
+            if job.state is not JobState.RUNNING or job.attempt < 1:
+                raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制当前不在可控 attempt")
+            paths = attempt_paths_for(self._var_dir, job)
+            control = control_paths_for_attempt(paths.attempt_dir)
+            if action == "start":
+                if recording.state is not RecordingState.STARTING:
+                    raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制当前不在等待开始阶段")
+                if not valid_control_marker(control.ready_path):
+                    raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "浏览器尚未准备完成")
+                if control.start_path.exists() or control.started_path.exists() or control.stop_path.exists():
+                    raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制开始动作已处理")
+                write_control_marker(control.start_path, attempt_dir=control.attempt_dir)
+            else:
+                if recording.state is not RecordingState.STARTING and recording.state is not RecordingState.RECORDING:
+                    raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制当前不在采集阶段")
+                if not valid_control_marker(control.started_path):
+                    raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制尚未开始采集")
+                if control.stop_path.exists():
+                    raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制停止动作已处理")
+                write_control_marker(control.stop_path, attempt_dir=control.attempt_dir)
+        return self.status(recording_id)
+
+    def _capture_phase(self, recording: RecordingRecord, job) -> str:
+        if recording.state in {
+            RecordingState.PROCESSING,
+            RecordingState.PENDING_REVIEW,
+            RecordingState.COMPLETED,
+            RecordingState.FAILED,
+            RecordingState.CANCELLED,
+            RecordingState.SAFETY_STOPPED,
+        }:
+            return "FINISHED"
+        if (
+            self._var_dir is None
+            or job is None
+            or job.state is not JobState.RUNNING
+            or job.attempt < 1
+        ):
+            return "PREPARING_BROWSER"
+        try:
+            control = control_paths_for_attempt(attempt_paths_for(self._var_dir, job).attempt_dir)
+        except JiejianError:
+            return "PREPARING_BROWSER"
+        if valid_control_marker(control.stop_path):
+            return "STOPPING"
+        if valid_control_marker(control.started_path):
+            return "CAPTURING"
+        if valid_control_marker(control.start_path):
+            return "CAPTURE_STARTING"
+        if valid_control_marker(control.ready_path):
+            return "AWAITING_CAPTURE"
+        return "PREPARING_BROWSER"
 
     def review(
         self,
@@ -108,8 +201,13 @@ class RecordingLifecycle:
                     created_at_us=draft_record.created_at_us,
                 )
             )
+            job = work.jobs.get_by_recording(recording_id)
             work.commit()
-            return RecordingStatusView(recording=recording, draft=draft)
+            return RecordingStatusView(
+                recording=recording,
+                draft=draft,
+                capture_phase=self._capture_phase(recording, job),
+            )
 
     def finalize(
         self,
@@ -117,8 +215,9 @@ class RecordingLifecycle:
         *,
         var_dir: Path,
         now_us: int,
+        bindings: Mapping[str, Mapping[str, str]] | None = None,
     ) -> RecordingFinalizationView:
-        """编译最新 revision，并在状态提交前原子发布 canonical Flow 文件。"""
+        """确认可选映射、编译最新 revision，并在状态提交前原子发布 Flow。"""
 
         # --- 阶段：读取并编译明确记录的最新草稿 revision ---
         with self._uow_factory() as work:
@@ -136,7 +235,28 @@ class RecordingLifecycle:
                     ErrorCode.RECORD_REVIEW_STATE,
                     "录制当前状态不允许最终化",
                 )
-            flow = self._reviewer.compile(draft_record.draft)
+            if bindings:
+                confirmed = _confirm_bindings(draft_record.draft, bindings)
+                if confirmed != draft_record.draft:
+                    confirmed_data = confirmed.model_dump(mode="python")
+                    confirmed_data["revision"] = draft_record.revision + 1
+                    draft = FlowDraft.model_validate(confirmed_data)
+                    encoded_draft = canonical_flow_draft_json_bytes(draft)
+                    work.flow_drafts.add(
+                        FlowDraftRevisionRecord(
+                            recording_id=draft.recording_id,
+                            revision=draft.revision,
+                            flow_id=draft.flow_id,
+                            draft=draft,
+                            draft_sha256=hashlib.sha256(encoded_draft).hexdigest(),
+                            created_at_us=now_us,
+                        )
+                    )
+                else:
+                    draft = draft_record.draft
+            else:
+                draft = draft_record.draft
+            flow = self._reviewer.compile(draft)
             path = self.flow_path(var_dir, recording)
             encoded = _canonical_flow_bytes(flow)
             # --- 阶段：先原子发布文件，再提交数据库完成态 ---

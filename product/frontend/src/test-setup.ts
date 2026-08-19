@@ -1,4 +1,8 @@
 import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/react'
+import { afterEach } from 'vitest'
+
+afterEach(cleanup)
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -13,3 +17,14 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: () => false,
   }),
 })
+
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(globalThis, 'ResizeObserver', { writable: true, value: TestResizeObserver })
+
+const nativeGetComputedStyle = window.getComputedStyle.bind(window)
+window.getComputedStyle = (element: Element) => nativeGetComputedStyle(element)

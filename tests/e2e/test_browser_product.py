@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -107,7 +108,17 @@ def test_browser_product_demo_vulnerable_reaches_published_block() -> None:
                     page.wait_for_url("**/#/checks/start")
                     page.get_by_role("button", name="查看检查结果").click()
                     page.get_by_text("检查结果", exact=True).wait_for()
+                    page.get_by_role(
+                        "heading",
+                        name=re.compile(r"^发现 [1-9]\d* 个权限问题$"),
+                    ).wait_for()
                     page.locator(".result-summary").get_by_text("发现权限问题", exact=True).wait_for()
+                    page.get_by_text("页面或接口显示已拒绝", exact=True).first.wait_for()
+                    page.get_by_text("真实资源已经发生变化", exact=True).first.wait_for()
+                    page.get_by_text(
+                        "表面拒绝没有阻止真实副作用",
+                        exact=False,
+                    ).first.wait_for()
                     page.get_by_text("执行事实", exact=True).wait_for()
                     page.get_by_text("执行已拒绝", exact=True).wait_for()
                     page.get_by_text("真实观察", exact=True).wait_for()
@@ -117,6 +128,21 @@ def test_browser_product_demo_vulnerable_reaches_published_block() -> None:
                         "发现可能的权限越界，需要处理",
                         exact=True,
                     ).wait_for()
+
+                    page.get_by_role("menuitem", name="权限规则").click()
+                    page.get_by_text("权限矩阵", exact=True).wait_for()
+                    role_filter = page.get_by_role("combobox", name="筛选角色")
+                    role_filter.click()
+                    role_filter.press("Enter")
+                    page.get_by_role("button", name="peer modify owner-resource 未声明").wait_for()
+                    page.get_by_role("tab", name="关系图").click()
+                    graph = page.get_by_role("region", name="权限关系图")
+                    graph.wait_for()
+                    assert graph.get_by_role("button").count() >= 3
+                    identity_focus = page.get_by_role("combobox", name="聚焦身份")
+                    identity_focus.click()
+                    identity_focus.press("Enter")
+                    page.get_by_text("正在聚焦：attacker", exact=True).wait_for()
                 finally:
                     browser.close()
     finally:

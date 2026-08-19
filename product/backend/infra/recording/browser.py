@@ -84,9 +84,25 @@ class RecordingBrowserSession:
         self,
         contexts: Mapping[str, BrowserContext],
         collector: RecordingEventCollector,
+        *,
+        capture_controlled: bool = False,
+        start_requested: Callable[[], bool] = lambda: True,
+        stop_requested: Callable[[], bool] = lambda: False,
+        cancellation_requested: Callable[[], bool] = lambda: False,
+        on_capture_started: Callable[[], None] = lambda: None,
+        monotonic: Callable[[], float] = time.monotonic,
+        capture_deadline: float | None = None,
     ) -> None:
         self._contexts = dict(contexts)
         self._collector = collector
+        self._capture_controlled = capture_controlled
+        self._start_requested = start_requested
+        self._stop_requested = stop_requested
+        self._cancellation_requested = cancellation_requested
+        self._on_capture_started = on_capture_started
+        self._monotonic = monotonic
+        self._capture_deadline = capture_deadline
+        self._capture_started = not capture_controlled
 
     @property
     def identity_ids(self) -> tuple[str, ...]:
@@ -104,6 +120,33 @@ class RecordingBrowserSession:
         self._collector.register_page(identity_id, page)
         return RecordingPage(page)
 
+    @property
+    def capture_started(self) -> bool:
+        return self._capture_started
+
+    def wait_for_capture_start(self, page: RecordingPage, identity_id: str) -> bool:
+        """等待明确开始；准备阶段继续运行安全边界但不追加普通事件。"""
+
+        if self._capture_started:
+            return True
+        while not self._start_requested():
+            if self._cancellation_requested():
+                return False
+            if self._capture_deadline is not None and self._monotonic() >= self._capture_deadline:
+                self._collector.check_runtime_budget(identity_id)
+                raise JiejianError(
+                    ErrorCode.RECORD_EVENT_BUDGET,
+                    "等待开始采集超过运行时间预算",
+                )
+            page.wait_for_timeout(100)
+        self._collector.begin_capture()
+        self._capture_started = True
+        self._on_capture_started()
+        return True
+
+    def stop_requested(self) -> bool:
+        return self._stop_requested()
+
 
 Interaction = Callable[[RecordingBrowserSession], None]
 
@@ -119,6 +162,12 @@ class BrowserRecordingAdapter:
         known_secrets: Sequence[str] = (),
         cancellation_requested: Callable[[], bool] = lambda: False,
         now_us: Callable[[], int] | None = None,
+        capture_controlled: bool = False,
+        ready_callback: Callable[[], None] = lambda: None,
+        start_requested: Callable[[], bool] = lambda: True,
+        started_callback: Callable[[], None] = lambda: None,
+        stop_requested: Callable[[], bool] = lambda: False,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> RecordingRunnerResult:
         """运行一次有预算的录制；返回前冻结事件，并在所有出口关闭浏览器资源。"""
 
@@ -176,14 +225,40 @@ class BrowserRecordingAdapter:
                     context.set_default_navigation_timeout(timeout_ms)
                     collector.attach_context(session.identity_id, context)
                     contexts[session.identity_id] = context
-                recording = transition_recording_state(
-                    recording,
-                    RecordingState.RECORDING,
-                    operator="RECORDING_RUNNER",
-                    occurred_at_us=clock(),
-                )
+                ready_callback()
+                capture_deadline = monotonic() + request.budget.max_duration_us / 1_000_000
+
+                def mark_capture_started() -> None:
+                    nonlocal recording
+                    recording = transition_recording_state(
+                        recording,
+                        RecordingState.RECORDING,
+                        operator="RECORDING_RUNNER",
+                        occurred_at_us=clock(),
+                    )
+                    started_callback()
+
+                if not capture_controlled:
+                    collector.begin_capture()
+                    mark_capture_started()
                 collector.check_runtime_budget(request.sessions[0].identity_id)
-                interaction(RecordingBrowserSession(contexts, collector))
+                session = RecordingBrowserSession(
+                    contexts,
+                    collector,
+                    capture_controlled=capture_controlled,
+                    start_requested=start_requested,
+                    stop_requested=stop_requested,
+                    cancellation_requested=cancellation_requested,
+                    on_capture_started=mark_capture_started,
+                    monotonic=monotonic,
+                    capture_deadline=capture_deadline,
+                )
+                interaction(session)
+                if capture_controlled and not session.capture_started and not cancellation_requested():
+                    raise JiejianError(
+                        ErrorCode.RECORD_INTERACTION_FAILED,
+                        "录制未收到开始采集动作",
+                    )
                 collector.check_runtime_budget(request.sessions[0].identity_id)
                 if collector.safety_error is not None:
                     result_type = RecordingRunnerResultType.SAFETY_STOPPED

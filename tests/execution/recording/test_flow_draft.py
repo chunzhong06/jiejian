@@ -290,3 +290,72 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
             ),
         )
     assert cycle.value.code == "RECORD_DRAFT_CYCLE"
+
+
+def test_processor_preserves_dynamic_project_id_across_create_get_and_approval() -> None:
+    created_project = {"project_id": "project-created-by-api"}
+    project_id = str(created_project["project_id"])
+    events = list(recorded_events())
+    for index in (3, 4, 6, 7):
+        event = events[index]
+        events[index] = event.model_copy(
+            update={
+                "url": event.url.replace(
+                    "/resources", f"/projects/{project_id}/resources"
+                )
+            }
+        )
+    events[4] = events[4].model_copy(
+        update={
+            "headers": (
+                RecordingHeader(
+                    schema_version="1",
+                    name="location",
+                    value=f"/projects/{project_id}/resources/resource-42",
+                ),
+            )
+        }
+    )
+    draft = FlowDraftProcessor().build(
+        recording_id="rec_0123456789abcdef0123456789abcdef",
+        flow_id=project_id,
+        events=events,
+        alternate_identities={"owner": "attacker"},
+        resource_bindings={
+            "request_000001": ("owner-resource", "attacker-resource"),
+            "request_000002": ("owner-resource", "attacker-resource"),
+        },
+    )
+    reviewer = FlowDraftReviewer()
+    merged = reviewer.apply(
+        draft,
+        MergeFlowDraftSteps(
+            schema_version="1",
+            operation="MERGE_ADJACENT_STEPS",
+            left_step_id="step-000001",
+            right_step_id="step-000002",
+        ),
+    )
+    reviewed = reviewer.apply(
+        merged,
+        DeleteFlowDraftStep(
+            schema_version="1",
+            operation="DELETE_STEP",
+            step_id="step-000004",
+        ),
+    )
+    reviewed = reviewer.apply(
+        reviewed,
+        ConfirmFlowDraftVariable(
+            schema_version="1",
+            operation="CONFIRM_VARIABLE_SOURCE",
+            variable_name="resource_id",
+            source_event_sequence=5,
+            source_json_path="$.id",
+        ),
+    )
+    flow = reviewer.compile(reviewed)
+
+    assert flow.id == project_id
+    assert flow.steps[0].path == f"/projects/{project_id}/resources"
+    assert flow.steps[1].path == f"/projects/{project_id}/resources/{{resource_id}}"

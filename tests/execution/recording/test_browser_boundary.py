@@ -91,6 +91,10 @@ class LocalBrowserHandler(BaseHTTPRequestHandler):
             ).encode()
             self._send(body, "text/html; charset=utf-8")
             return
+        if parsed.path == "/slow":
+            time.sleep(0.25)
+            self._send(b"slow preparation response", "text/plain")
+            return
         if parsed.path in {"/frame", "/popup"}:
             self._send(b"<!doctype html><p>ok</p>", "text/html; charset=utf-8")
             return
@@ -164,7 +168,7 @@ def recording_request(port: int) -> RecordingRunnerRequest:
         project_id="ownership-recording",
         created_at_us=created_at_us,
         target_scope=WebTargetScope(
-            schema_version="1",
+            schema_version="2",
             base_url=f"http://127.0.0.1:{port}",
             allowed_origins=(f"http://127.0.0.1:{port}",),
             allowed_hosts=("127.0.0.1",),
@@ -274,6 +278,61 @@ def test_browser_contexts_isolate_identity_state_and_redact_before_result(
     assert b"[REDACTED]" in encoded
     assert capsys.readouterr() == ("", "")
     assert tuple(tmp_path.iterdir()) == ()
+
+
+def test_controlled_capture_omits_preparation_and_late_response_events() -> None:
+    sentinel = "controlled-recording-secret-sentinel"
+    signals = {"start": False, "stop": False}
+    with browser_server(sentinel) as server:
+        request = recording_request(server.server_port)
+        request = request.model_copy(
+            update={
+                "sessions": (request.sessions[0],),
+                "budget": request.budget.model_copy(
+                    update={"max_duration_us": 10_000_000}
+                ),
+            }
+        )
+
+        def interact(session: RecordingBrowserSession) -> None:
+            page = session.new_page("owner")
+            page.goto(server.url("/ui"))
+            page.evaluate("void fetch('/slow')")
+            deadline = time.monotonic() + 2
+            while "/slow" not in server.paths:
+                if time.monotonic() >= deadline:
+                    pytest.fail("slow preparation request did not reach the server")
+                page.wait_for_timeout(20)
+            signals["start"] = True
+            assert session.wait_for_capture_start(page, "owner")
+            page.fill("input[name='password']", sentinel)
+            page.click("button[data-testid='submit']")
+            page.wait_for_timeout(350)
+            signals["stop"] = True
+            assert session.stop_requested()
+
+        result = BrowserRecordingAdapter().run(
+            request,
+            interact,
+            known_secrets=(sentinel,),
+            capture_controlled=True,
+            start_requested=lambda: signals["start"],
+            stop_requested=lambda: signals["stop"],
+        )
+
+    assert result.result_type is RecordingRunnerResultType.CAPTURED
+    assert result.recording_state.value == "PROCESSING"
+    urls = tuple(event.url or "" for event in result.events)
+    assert not any("/ui" in url or "/slow" in url for url in urls), [
+        (event.kind.value, event.url) for event in result.events
+    ]
+    assert any(event.kind is RecordingEventKind.UI_INPUT_CHANGE for event in result.events)
+    assert any(
+        event.kind is RecordingEventKind.REQUEST and "/echo" in (event.url or "")
+        for event in result.events
+    )
+    encoded = canonical_recording_json_bytes(result, known_secrets=(sentinel,))
+    assert sentinel.encode() not in encoded
 
 
 @pytest.mark.parametrize("boundary", ["redirect", "iframe", "popup", "fetch", "websocket"])

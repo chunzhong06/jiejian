@@ -25,6 +25,9 @@ function Fail-Start([int]$Code, [string]$Stage, [string]$Diagnostic, [string]$Re
     Write-Host ""
     Write-Host ("{0} 启动未完成" -f $cross) -ForegroundColor Red
     Write-Host ""
+    Write-Host "  失败阶段" -ForegroundColor Red
+    Write-Host ("{0} {1}" -f $branch, $Stage) -ForegroundColor Red
+    Write-Host ""
     Write-Host "  原因" -ForegroundColor Red
     Write-Host ("{0} {1}" -f $branch, $Diagnostic) -ForegroundColor Red
     Write-Host ""
@@ -36,6 +39,8 @@ function Fail-Start([int]$Code, [string]$Stage, [string]$Diagnostic, [string]$Re
     Write-Host ""
     Write-Host "  错误代码" -ForegroundColor Red
     Write-Host ("{0} {1}（退出码 {2}）" -f $branch, $displayCode, $Code) -ForegroundColor Red
+    Write-Host ""
+    Wait-StartupFailureInput
     exit $Code
 }
 

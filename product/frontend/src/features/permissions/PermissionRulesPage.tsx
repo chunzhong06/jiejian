@@ -1,120 +1,23 @@
-/* 权限规则页面：展示已登记配置中的只读 Contract，并保留高级规则治理入口。 */
+/* =============================================================================
+ * 权限规则工作台
+ *
+ * 编排只读 Contract 探索和高级治理入口；矩阵与关系图不改写契约或安全结论。
+ * ============================================================================= */
 
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import { Alert, Button, Card, Checkbox, Collapse, Descriptions, Divider, Form, Input, List, Select, Space, Tabs, Typography } from 'antd'
+import { Alert, Button, Card, Checkbox, Collapse, Descriptions, Divider, Form, Input, List, Select, Space, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { contractsApi } from '../../api/contracts'
 import { executionProfilesApi } from '../../api/executionProfiles'
 import { LLMProfile } from '../../api/llm'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
-import { expectationLabel, severityLabel } from '../../app/presentation'
+import { expectationLabel } from '../../app/presentation'
+import { PermissionExplorer } from './PermissionExplorer'
 
 type Item = Record<string, any>
-type MatrixRule = Item & { batch_rule_id?: string; atomic?: boolean }
 const MAX_PERMISSION_CONTRACT_BYTES = 1024 * 1024
 
 function label(value: unknown) { return String(value ?? '未知') }
-function contextSummary(value: unknown) {
-  if (!value || typeof value !== 'object' || Object.keys(value as Item).length === 0) return '无附加条件'
-  return Object.entries(value as Item).filter(([, item]) => item !== undefined && item !== null).map(([key, item]) => `${key}：${Array.isArray(item) ? item.join('、') : String(item)}`).join('；') || '无附加条件'
-}
-function endpointKey(value: Item | undefined) { return `${String(value?.endpoint_type ?? '').toLowerCase()}:${String(value?.endpoint_id ?? '')}` }
-
-function expandedRules(contract: Item): MatrixRule[] {
-  const ordinary = (Array.isArray(contract.rules) ? contract.rules : []).map((rule: Item) => ({ ...rule }))
-  const batch = (Array.isArray(contract.batch_rules) ? contract.batch_rules : []).flatMap((rule: Item) =>
-    (Array.isArray(rule.resource_expectations) ? rule.resource_expectations : []).map((expectation: Item) => ({
-      ...rule,
-      resource_id: expectation.resource_id,
-      expectation: expectation.expectation,
-      relation_path: expectation.relation_path ?? [],
-      batch_rule_id: rule.rule_id,
-      atomic: Boolean(rule.atomic),
-      resource_expectation: expectation,
-    })),
-  )
-  return [...ordinary, ...batch]
-}
-
-function ruleColumns(contract: Item) {
-  const rules = expandedRules(contract)
-  const seen = new Set<string>()
-  return rules
-    .map((rule) => ({ action_id: String(rule.action_id), resource_id: String(rule.resource_id), key: `${rule.action_id}:${rule.resource_id}` }))
-    .filter((column) => !seen.has(column.key) && seen.add(column.key))
-    .sort((left, right) => left.key.localeCompare(right.key))
-}
-
-function graphNodes(contract: Item) {
-  const subjects = (Array.isArray(contract.subjects) ? contract.subjects : []).map((item: Item) => ({ id: String(item.subject_id), type: 'subject', roles: item.roles ?? [] }))
-  const resources = (Array.isArray(contract.resources) ? contract.resources : []).map((item: Item) => ({ id: String(item.resource_id), type: 'resource', roles: [item.resource_type] }))
-  return [...subjects, ...resources].sort((left, right) => `${left.type}:${left.id}`.localeCompare(`${right.type}:${right.id}`))
-}
-
-function PermissionMatrix({ contract }: { contract: Item }) {
-  const [selected, setSelected] = useState<MatrixRule[] | null>(null)
-  const columns = ruleColumns(contract)
-  const rules = expandedRules(contract)
-  const subjects = [...(Array.isArray(contract.subjects) ? contract.subjects : [])].sort((left: Item, right: Item) => String(left.subject_id).localeCompare(String(right.subject_id)))
-  const rows = subjects.map((subject: Item) => {
-    const row: Item = { key: String(subject.subject_id), subject }
-    for (const column of columns) {
-      row[column.key] = rules.filter((rule) => String(rule.subject_id) === String(subject.subject_id) && `${rule.action_id}:${rule.resource_id}` === column.key)
-    }
-    return row
-  })
-  return <Space direction="vertical" className="full-width">
-    {columns.length === 0 && <Alert type="info" showIcon message="当前权限配置没有可展示的动作与资源组合。" />}
-    <div className="permission-matrix-scroll"><table className="permission-matrix-table"><thead><tr><th>身份</th>{columns.map((column) => <th key={column.key}><div>{column.action_id}</div><small>{column.resource_id}</small></th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.key}><th scope="row"><div>{label(row.subject.subject_id)}</div><small>角色：{(row.subject.roles ?? []).join('、') || '未提供'}</small></th>{columns.map((column) => { const cell = row[column.key] as MatrixRule[]; const state = cell.length === 1 ? String(cell[0].expectation).toLowerCase() : 'multiple'; return <td key={column.key} className={`permission-matrix-${state}`}>{cell.length === 0 ? <Typography.Text type="secondary">未声明</Typography.Text> : <Button type="link" className="permission-cell" onClick={() => setSelected(cell)} aria-label={`${column.action_id} ${column.resource_id} 的 ${cell.length} 条规则`}>{cell.length === 1 ? expectationLabel(cell[0].expectation) : `${cell.length} 条规则`}</Button>}</td> })}</tr>)}</tbody></table></div>
-    {selected && <Card size="small" title="规则详情" extra={<Button type="link" onClick={() => setSelected(null)}>关闭</Button>}>
-      <List size="small" dataSource={selected} renderItem={(rule) => <List.Item><Descriptions size="small" column={2} className="full-width">
-        <Descriptions.Item label="期望">{expectationLabel(rule.expectation)}</Descriptions.Item><Descriptions.Item label="严重度">{severityLabel(rule.severity)}</Descriptions.Item>
-        <Descriptions.Item label="关系路径">{(rule.relation_path ?? []).join(' → ') || '未提供'}</Descriptions.Item><Descriptions.Item label="适用条件">{contextSummary(rule.context)}</Descriptions.Item><Descriptions.Item label="必需观察">{(rule.required_observations ?? []).join('、') || '未提供'}</Descriptions.Item>
-        <Descriptions.Item label="覆盖维度">{(rule.coverage_dimensions ?? []).join('、') || '未提供'}</Descriptions.Item>
-        {rule.batch_rule_id && <Descriptions.Item label="批量规则">{label(rule.batch_rule_id)} · 原子：{rule.atomic ? '是' : '否'}</Descriptions.Item>}
-        <Descriptions.Item span={2}><Collapse ghost items={[{ key: 'rule-tech', label: '高级：规则标识', children: <Typography.Text code>{label(rule.rule_id)}</Typography.Text> }]} /></Descriptions.Item>
-      </Descriptions></List.Item>} />
-    </Card>}
-  </Space>
-}
-
-function PermissionGraph({ contract }: { contract: Item }) {
-  const nodes = graphNodes(contract)
-  const [focus, setFocus] = useState<string>()
-  const allRelations = Array.isArray(contract.relations) ? contract.relations as Item[] : []
-  const allRules = expandedRules(contract)
-  const relatedKeys = new Set<string>()
-  if (focus) {
-    relatedKeys.add(focus)
-    for (const relation of allRelations) { const source = endpointKey(relation.source); const target = endpointKey(relation.target); if (source === focus || target === focus) { relatedKeys.add(source); relatedKeys.add(target) } }
-    for (const rule of allRules) { const subject = `subject:${String(rule.subject_id)}`; const resource = `resource:${String(rule.resource_id)}`; if (subject === focus || resource === focus) { relatedKeys.add(subject); relatedKeys.add(resource) } }
-  }
-  const visible = (focus ? nodes.filter((node) => relatedKeys.has(`${node.type}:${node.id}`)) : nodes).slice(0, 24)
-  const subjects = visible.filter((node) => node.type === 'subject')
-  const resources = visible.filter((node) => node.type === 'resource')
-  const positions = new Map<string, { x: number; y: number }>()
-  subjects.forEach((node, index) => positions.set(`subject:${node.id}`, { x: 110, y: 55 + index * Math.min(70, 440 / Math.max(1, subjects.length - 1)) }))
-  resources.forEach((node, index) => positions.set(`resource:${node.id}`, { x: 410, y: 55 + index * Math.min(70, 440 / Math.max(1, resources.length - 1)) }))
-  const relations = allRelations.filter((relation) => positions.has(endpointKey(relation.source)) && positions.has(endpointKey(relation.target)))
-  const rules = allRules.filter((rule) => positions.has(`subject:${String(rule.subject_id)}`) && positions.has(`resource:${String(rule.resource_id)}`))
-  return <Space direction="vertical" className="full-width">
-    <Space wrap><Select allowClear aria-label="聚焦身份或资源" placeholder="聚焦身份或资源" value={focus} onChange={setFocus} options={nodes.map((node) => ({ value: `${node.type}:${node.id}`, label: `${node.type === 'subject' ? '身份' : '资源'} · ${node.id}` }))} /><Typography.Text type="secondary">当前显示 {visible.length}/{nodes.length} 个节点；实线为关系，虚线为权限规则。</Typography.Text></Space>
-    <div className="permission-graph-layout">
-      <svg className="permission-graph" role="img" aria-labelledby="permission-graph-title permission-graph-description" viewBox="0 0 560 560">
-        <title id="permission-graph-title">权限关系图</title><desc id="permission-graph-description">展示已声明的身份、资源、关系和权限规则。</desc>
-        <defs><marker id="permission-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
-        {relations.map((relation: Item) => { const from = positions.get(endpointKey(relation.source)); const to = positions.get(endpointKey(relation.target)); return <line key={relation.relation_id} x1={from?.x} y1={from?.y} x2={to?.x} y2={to?.y} className="permission-edge" markerEnd="url(#permission-arrow)" /> })}
-        {rules.map((rule, index) => { const from = positions.get(`subject:${String(rule.subject_id)}`); const to = positions.get(`resource:${String(rule.resource_id)}`); return <line key={`${rule.rule_id}-${rule.resource_id}-${index}`} x1={from?.x} y1={from?.y} x2={to?.x} y2={to?.y} className={`permission-rule-edge permission-rule-${String(rule.expectation).toLowerCase()}`} /> })}
-        {visible.map((node) => { const key = `${node.type}:${node.id}`; const position = positions.get(key)!; return <g key={key} tabIndex={0} className={`permission-node permission-node-${node.type}`}><circle cx={position.x} cy={position.y} r="15" /><text x={position.x + 22} y={position.y + 5}>{node.id}</text></g> })}
-      </svg>
-      <div className="permission-graph-lists"><Card size="small" title="完整关系列表"><List size="small" dataSource={allRelations} locale={{ emptyText: '未声明关系' }} renderItem={(relation: Item) => <List.Item><Typography.Text>{label(relation.source?.endpoint_id)} — {label(relation.relation)} → {label(relation.target?.endpoint_id)}</Typography.Text></List.Item>} /></Card><Card size="small" title="完整权限列表"><List size="small" dataSource={allRules} locale={{ emptyText: '未声明权限规则' }} renderItem={(rule: Item) => <List.Item><Typography.Text>{label(rule.subject_id)} — {label(rule.action_id)} / {expectationLabel(rule.expectation)} → {label(rule.resource_id)}</Typography.Text></List.Item>} /></Card></div>
-    </div>
-  </Space>
-}
-
-function ContractView({ contract }: { contract: Item }) {
-  return <Tabs items={[{ key: 'matrix', label: '权限矩阵', children: <PermissionMatrix contract={contract} /> }, { key: 'graph', label: '关系图', children: <PermissionGraph contract={contract} /> }]} />
-}
 
 export function PermissionRulesPage({ project, profiles = [], onError, onNext }: { project: Item; profiles?: LLMProfile[]; onError: (e: ApiError) => void; onNext?: () => void }) {
   const [permissionProfiles, setPermissionProfiles] = useState<Item[]>([])
@@ -210,7 +113,7 @@ export function PermissionRulesPage({ project, profiles = [], onError, onNext }:
       {permissionProfiles.length === 0 && <Alert type="info" showIcon message="当前项目没有已登记的 ExecutionProfile。" description="下面的当前治理规则摘要只展示已激活契约的规则字段；由于缺少 Profile，不生成矩阵或关系图实体。" />}
       {permissionProfiles.length === 1 && <Typography.Paragraph type="secondary">已自动选择唯一的已登记执行配置。</Typography.Paragraph>}
       {permissionProfiles.length > 1 && !selectedProfileId && <Typography.Paragraph type="secondary">请选择要查看的已登记权限配置。</Typography.Paragraph>}
-      {permissionContract && <ContractView contract={permissionContract} />}
+      {permissionContract && <PermissionExplorer contract={permissionContract} />}
       {!permissionContract && governedContracts.length > 0 && <List header={<Typography.Text strong>当前治理规则摘要</Typography.Text>} dataSource={governedContracts.flatMap((item) => Array.isArray(item.rules) ? item.rules.map((rule: Item) => ({ ...rule, contract_id: item.id, contract_version: item.version })) : [])} renderItem={(rule: Item) => <List.Item><Space wrap><Typography.Text code>{label(rule.rule_id ?? rule.id)}</Typography.Text><Typography.Text>{expectationLabel(rule.expectation ?? rule.effect)}</Typography.Text><Collapse ghost items={[{ key: 'governed-rule-tech', label: '规则版本', children: <Typography.Text type="secondary">{label(rule.contract_id)} v{label(rule.contract_version)}</Typography.Text> }]} /></Space></List.Item>} />}
       {!permissionContract && governedContracts.length > 0 && permissionProfiles.length === 0 && <Typography.Paragraph type="secondary">当前治理摘要只返回规则字段，不包含身份、动作、资源和关系实体，因此关系视图不可用。</Typography.Paragraph>}
     </Card>

@@ -16,6 +16,7 @@ from product.backend.core.contracts.models import ContractStatus
 from product.backend.core.errors import JiejianError
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.cli.commands.system import _wait_for_ready
 from product.protocols import canonical_execution_profile_json_bytes, parse_execution_profile
 
@@ -138,6 +139,8 @@ def test_control_plane_rejects_invalid_binding_and_redacts_trace(tmp_path: Path)
 def test_run_idempotency_cancel_and_sse_cursor(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
     monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_PEER_TOKEN", "peer-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_OBSERVER", "owner-test")
     app = create_app(tmp_path / "var", start_worker=False)
     profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
@@ -166,6 +169,8 @@ def test_run_idempotency_cancel_and_sse_cursor(tmp_path: Path, monkeypatch) -> N
 def test_api_run_uses_explicit_governed_active_snapshot(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
     monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_PEER_TOKEN", "peer-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_OBSERVER", "owner-test")
     var_dir = tmp_path / "var"
     app = create_app(var_dir, start_worker=False)
     profile_path = _write_profile(tmp_path)
@@ -179,15 +184,17 @@ def test_api_run_uses_explicit_governed_active_snapshot(tmp_path: Path, monkeypa
         job = submitted.json()["data"]["job"]
         request = ExecutionRequestStore(var_dir).load(job["job_id"], expected_hash=job["request_hash"])
         assert request.project_snapshot.contract == contract
-        assert request.project_snapshot.contract.contract_id == "ownership-contract"
-        assert request.project_snapshot.contract.version == 1
-        version = app.state.context.contracts.list_versions(str(project["project_id"]), "ownership-contract")[0]
+        assert request.project_snapshot.contract.contract_id == contract.contract_id
+        assert request.project_snapshot.contract.version == contract.version
+        version = app.state.context.contracts.list_versions(str(project["project_id"]), contract.contract_id)[0]
         assert version.status is ContractStatus.ACTIVE
 
 
 def test_api_run_rejects_missing_governed_binding(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
     monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_PEER_TOKEN", "peer-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_OBSERVER", "owner-test")
     app = create_app(tmp_path / "var", start_worker=False)
     profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
@@ -205,6 +212,8 @@ def test_api_run_rejects_missing_governed_binding(tmp_path: Path, monkeypatch) -
 def test_api_run_rejects_non_active_governed_binding(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
     monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_PEER_TOKEN", "peer-test")
+    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_OBSERVER", "owner-test")
     app = create_app(tmp_path / "var", start_worker=False)
     profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
@@ -246,31 +255,69 @@ def test_profile_reregistration_preserves_explicit_active_contract(tmp_path: Pat
         assert data["governed_contract_version"] == active.version
 
 
-def test_recording_json_array_schema_keeps_identity_validation(tmp_path: Path) -> None:
+def test_recording_api_uses_registered_profile_and_single_identity(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
+    profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
-        project_path = Path("samples/http/fixed/profile.json").resolve()
-        project = client.post(
-            "/api/projects",
-            json={"schema_version": "1", "profile_path": str(project_path)},
-        ).json()["data"]
+        project, _, profile = _register_active_profile(app, client, profile_path)
+        setup = client.get(
+            f"/api/projects/{project['project_id']}/recordings/setup",
+            params={"profile_id": profile["profile_id"]},
+        )
+        assert setup.status_code == 200, setup.text
+        assert setup.json()["data"]["identity_options"]
+        assert "secret_ref" not in json.dumps(setup.json()["data"])
+        schema = client.get("/openapi.json").json()["components"]["schemas"][
+            "RecordingCreateRequest"
+        ]["properties"]
+        assert set(schema) == {
+            "schema_version",
+            "profile_id",
+            "identity_id",
+            "duration_seconds",
+            "idempotency_key",
+        }
         valid = client.post(
             f"/api/projects/{project['project_id']}/recordings",
-                json={"schema_version": "1", "profile_path": str(project_path), "identities": ["owner"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-owner"},
+            json={
+                "schema_version": "1",
+                "profile_id": profile["profile_id"],
+                "identity_id": "owner",
+                "duration_seconds": 60,
+                "idempotency_key": "single-owner",
+            },
         )
-        duplicate = client.post(
+        assert valid.status_code == 202, valid.text
+        data = valid.json()["data"]
+        assert data["identity_options"] == [
+            {"identity_id": "owner", "role": "user"},
+            {"identity_id": "attacker", "role": "user"},
+            {"identity_id": "peer", "role": "guest"},
+        ]
+        request = RecordingRequestStore(tmp_path / "var").load(
+            data["job"]["job_id"], expected_hash=data["job"]["request_hash"]
+        )
+        assert request.headless is False
+        assert tuple(item.identity_id for item in request.sessions) == ("owner",)
+        detail = client.get(f"/api/recordings/{data['recording']['recording_id']}")
+        assert detail.status_code == 200
+        assert detail.json()["data"]["capture_phase"] == "PREPARING_BROWSER"
+        assert client.post(f"/api/jobs/{data['job']['job_id']}/cancel").status_code == 200
+        cancelled = client.get(f"/api/recordings/{data['recording']['recording_id']}")
+        assert cancelled.json()["data"]["recording"]["state"] == "CANCELLED"
+        assert cancelled.json()["data"]["capture_phase"] == "FINISHED"
+        assert cancelled.json()["data"]["draft"] is None
+        rejected = client.post(
             f"/api/projects/{project['project_id']}/recordings",
-                json={"schema_version": "1", "profile_path": str(project_path), "identities": ["owner", "owner"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-duplicate"},
+            json={
+                "schema_version": "1",
+                "profile_path": str(profile_path),
+                "identities": ["owner"],
+                "headless": True,
+                "idempotency_key": "legacy-fields",
+            },
         )
-        unknown = client.post(
-            f"/api/projects/{project['project_id']}/recordings",
-                json={"schema_version": "1", "profile_path": str(project_path), "identities": ["not-a-project-identity"], "duration_seconds": 60, "headless": True, "idempotency_key": "array-unknown"},
-        )
-        assert valid.status_code == 202
-        assert duplicate.status_code == 400
-        assert duplicate.json()["error"]["code"] == "INPUT_INVALID"
-        assert unknown.status_code == 400
-        assert unknown.json()["error"]["code"] == "INPUT_INVALID"
+        assert rejected.status_code == 422, rejected.text
 
 
 def test_serve_lock_releases_normally_and_diagnoses_existing_lock(tmp_path: Path) -> None:

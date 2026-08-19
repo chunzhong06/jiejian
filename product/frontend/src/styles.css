@@ -67,26 +67,13 @@ body { color: #172033; background: #f5f7fb; }
 .error-recovery .ant-alert-description { width: 100%; }
 .sr-only { height: 1px; margin: -1px; overflow: hidden; position: absolute; width: 1px; clip: rect(0, 0, 0, 0); }
 .full-width { width: 100%; }
-.permission-matrix-scroll { max-width: 100%; overflow-x: auto; }
-.permission-matrix-table { border-collapse: collapse; min-width: 680px; width: 100%; }
-.permission-matrix-table th, .permission-matrix-table td { border-bottom: 1px solid #e5e7eb; padding: 10px 12px; text-align: left; transition: background-color .16s ease; vertical-align: top; }
-.permission-matrix-table th { background: #f8fafc; font-weight: 600; }
-.permission-matrix-table small { color: #667085; font-weight: 400; }
-.permission-cell { min-width: 76px; }
-.permission-matrix-allow { background: #f0fdf4; }
-.permission-matrix-deny { background: #fff1f2; }
-.permission-matrix-multiple { background: #fffbeb; }
-.permission-graph-layout { align-items: flex-start; display: grid; gap: 16px; grid-template-columns: minmax(360px, 1fr) minmax(260px, .8fr); min-width: 0; }
-.permission-graph { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 100%; min-width: 0; }
-.permission-edge { stroke: #64748b; stroke-width: 2; }
-.permission-rule-edge { fill: none; opacity: .72; stroke-dasharray: 5 4; stroke-width: 2; }
-.permission-rule-allow { stroke: #16a34a; }
-.permission-rule-deny { stroke: #dc2626; }
-.permission-graph marker path { fill: #64748b; }
-.permission-node circle { fill: #e0e7ff; stroke: #4f46e5; stroke-width: 2; }
-.permission-node-resource circle { fill: #ecfeff; stroke: #0891b2; }
-.permission-node:focus { outline: 2px solid #1677ff; outline-offset: 3px; }
-.permission-node text { fill: #1e293b; font-size: 12px; }
+.permission-matrix .ant-table-cell { vertical-align: middle; }
+.permission-matrix .ant-table-cell-fix-left { background: #f8fafc; }
+.permission-cell { min-width: 96px; }
+.permission-flow { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; height: 580px; overflow: hidden; width: 100%; }
+.permission-flow .react-flow__node { background: #fff; border-width: 2px; border-radius: 10px; padding: 10px; }
+.permission-flow .react-flow__edge-text { font-size: 11px; }
+.permission-flow .react-flow__edge-textbg { fill: #fff; fill-opacity: .92; }
 .permission-graph-lists { display: grid; gap: 12px; min-width: 0; }
 .check-progress { display: flex; flex-direction: column; gap: 8px; }
 .check-progress-value { max-width: 620px; }
@@ -102,19 +89,16 @@ body { color: #172033; background: #f5f7fb; }
 .history-timeline li { margin-bottom: 18px; position: relative; }
 .history-marker { background: #fff; border: 3px solid #4f46e5; border-radius: 50%; height: 11px; left: -27px; position: absolute; top: 4px; width: 11px; }
 .history-event { display: flex; flex-direction: column; gap: 7px; }
-.finding-list-item { cursor: pointer; }
-.finding-list-item:focus { outline: 2px solid #1677ff; outline-offset: -2px; }
+.finding-list-item { align-items: stretch !important; }
 
 @media (max-width: 768px) {
   .page-task-header-main { flex-direction: column; gap: 8px; }
   .onboarding-form-grid { grid-template-columns: 1fr; }
   .onboarding-manual-path { width: 100%; }
   .onboarding-manual-path .ant-input { min-width: 0; }
-  .permission-graph-layout { grid-template-columns: 1fr; }
-  .permission-graph { min-height: 360px; }
+  .permission-flow { height: 440px; }
   .page-task-header { padding: 18px; }
   .ant-descriptions-view { overflow-x: auto; }
-  .permission-matrix-table { min-width: 600px; }
   .evidence-timeline { padding-left: 24px; }
   .evidence-timeline-dot { left: -24px; }
 }

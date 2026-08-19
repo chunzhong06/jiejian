@@ -26,14 +26,16 @@ from typing import BinaryIO, TextIO
 
 from playwright.sync_api import Error as PlaywrightError
 
-from product.backend.core.errors import JiejianError
+from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RECORDING_REQUEST_MAX_BYTES, RecordingRunnerRequest, canonical_recording_json_bytes, parse_recording_request
 from product.backend.infra.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
+from product.backend.infra.recording.control import control_paths_for_attempt, valid_control_marker, write_control_marker
 
 RECORDING_RUNNER_EXIT_OK = 0
 RECORDING_RUNNER_EXIT_PROTOCOL = 64
 RECORDING_RUNNER_EXIT_INTERNAL = 70
 _CANCEL_PATH_ENV = "JIEJIAN_RECORDING_CANCEL_FILE"
+_ATTEMPT_DIR_ENV = "JIEJIAN_RECORDING_ATTEMPT_DIR"
 logger = logging.getLogger("jiejian.runtime.recording_process")
 
 
@@ -65,21 +67,48 @@ def execute_recording_runner(
         if environment.get(_CANCEL_PATH_ENV)
         else None
     )
+    control = None
+    if adapter is None:
+        try:
+            control = control_paths_for_attempt(Path(environment[_ATTEMPT_DIR_ENV]))
+        except (KeyError, JiejianError):
+            stderr.write("RECORD_CONTROL_INVALID\n")
+            return RECORDING_RUNNER_EXIT_PROTOCOL
     cancellation_requested = (
         cancel_path.exists if cancel_path is not None else lambda: False
     )
     # --- 阶段：受控录制并输出唯一 canonical 结果 ---
     try:
-        result = (adapter or BrowserRecordingAdapter()).run(
+        interaction = lambda session: _capture_until_closed(
+            session,
             request,
-            lambda session: _capture_until_closed(
-                session,
-                request,
-                cancellation_requested,
-                monotonic,
-            ),
-            cancellation_requested=cancellation_requested,
+            cancellation_requested,
+            monotonic,
         )
+        if control is None:
+            result = adapter.run(
+                request,
+                interaction,
+                cancellation_requested=cancellation_requested,
+            )
+        else:
+            result = adapter.run(
+                request,
+                interaction,
+                cancellation_requested=cancellation_requested,
+                capture_controlled=True,
+                ready_callback=lambda: write_control_marker(
+                    control.ready_path,
+                    attempt_dir=control.attempt_dir,
+                ),
+                start_requested=lambda: valid_control_marker(control.start_path),
+                started_callback=lambda: write_control_marker(
+                    control.started_path,
+                    attempt_dir=control.attempt_dir,
+                ),
+                stop_requested=lambda: valid_control_marker(control.stop_path),
+                monotonic=monotonic,
+            )
         stdout.write(canonical_recording_json_bytes(result))
         stdout.flush()
         return RECORDING_RUNNER_EXIT_OK
@@ -107,8 +136,15 @@ def _capture_until_closed(
 ) -> None:
     page = session.new_page(session.identity_ids[0])
     page.goto(request.target_scope.base_url)
+    if not session.wait_for_capture_start(page, session.identity_ids[0]):
+        return
     deadline = monotonic() + request.budget.max_duration_us / 1_000_000
-    while not page.is_closed and not cancellation_requested() and monotonic() < deadline:
+    while not page.is_closed and not cancellation_requested() and not session.stop_requested():
+        if monotonic() >= deadline:
+            raise JiejianError(
+                ErrorCode.RECORD_EVENT_BUDGET,
+                "浏览器录制超过运行时间预算",
+            )
         try:
             page.wait_for_timeout(100)
         except PlaywrightError:

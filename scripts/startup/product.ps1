@@ -106,6 +106,46 @@ function Invoke-Package([object[]]$Arguments, [string]$Stage, [int]$Code = 50) {
     Invoke-External $Stage $script:PackageRunner $Arguments $Code
 }
 
+function Invoke-CliShell {
+    # 子 shell 只继承本轮已确认的项目、PackageRunner 和 VarDir，不写用户配置。
+
+    Write-CliWelcome
+    $shellName = if ($PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
+    $shell = Join-Path $PSHOME $shellName
+    if (-not (Test-Path -LiteralPath $shell -PathType Leaf)) {
+        Fail-Start 50 "cli" "无法定位 PowerShell 子 shell" "确认 PowerShell 安装后重新执行本脚本"
+    }
+    $quote = {
+        param([object]$Value)
+        $escaped = ([string]$Value) -replace "'", "''"
+        return "'$escaped'"
+    }
+    $runnerLiteral = (@($script:PackageRunner) | ForEach-Object { & $quote $_ }) -join ", "
+    $projectLiteral = & $quote $script:ProjectRoot
+    $varLiteral = & $quote $script:VarDir
+    $childScript = @"
+`$projectRoot = $projectLiteral
+`$varDir = $varLiteral
+`$runner = @($runnerLiteral)
+function jiejian {
+    param([Parameter(ValueFromRemainingArguments=`$true)][object[]]`$CommandArgs)
+    `$prefix = if (`$runner.Count -gt 1) { @(`$runner[1..(`$runner.Count - 1)]) } else { @() }
+    & `$runner[0] @(`$prefix + @("--var-dir", `$varDir) + @(`$CommandArgs))
+}
+Set-Location -LiteralPath `$projectRoot
+"@
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript))
+    try {
+        & $shell -NoLogo -NoProfile -NoExit -EncodedCommand $encoded
+        $code = $LASTEXITCODE
+    } catch {
+        Fail-Start 50 "cli" ("命令行子 shell 启动失败: " + $_.Exception.Message) (Get-RecoveryCommand)
+    }
+    if ($code -ne 0) {
+        Fail-Start 50 "cli" ("命令行子 shell 返回 $code") (Get-RecoveryCommand)
+    }
+}
+
 function Write-Stage([string]$Stage, [string]$Message) {
     Write-Startup (">>> [{0}] {1}" -f $Stage, $Message)
 }
