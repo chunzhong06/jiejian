@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi.responses import Response
 
 from ...application.context import ApplicationContext
 from ...results.published import PublishedResultReader
@@ -44,6 +45,38 @@ def build_results_router(
     @router.get("/api/v2/runs/{run_id}/findings", response_model=ApiResponse)
     async def list_stable_findings(run_id: str):
         return data_response(context.findings.findings_for_run(run_id))
+
+    @router.get("/api/v2/runs/{run_id}/reports", response_model=ApiResponse)
+    async def list_reports(run_id: str):
+        return data_response(context.reports.list(run_id))
+
+    @router.get("/api/v2/runs/{run_id}/reports/{report_id}", response_model=ApiResponse)
+    async def get_v2_report(run_id: str, report_id: str):
+        return data_response(context.reports.read(run_id, report_id))
+
+    @router.get("/api/v2/runs/{run_id}/reports/{report_id}/formats/{output_format}")
+    async def download_v2_report(run_id: str, report_id: str, output_format: str):
+        media_type = {
+            "json": "application/json",
+            "html": "text/html; charset=utf-8",
+            "sarif": "application/sarif+json",
+            "junit": "application/xml",
+        }.get(output_format)
+        if media_type is None:
+            from ...errors import ErrorCode, JiejianError
+
+            raise JiejianError(ErrorCode.INPUT_INVALID, "报告格式无效")
+        filename = {
+            "json": "report.json",
+            "html": "report.html",
+            "sarif": "report.sarif.json",
+            "junit": "report.junit.xml",
+        }[output_format]
+        return Response(
+            content=context.reports.read_format(run_id, report_id, output_format),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @router.get(
         "/api/v1/runs/{run_id}/evidence/{evidence_id}",

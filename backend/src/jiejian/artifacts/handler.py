@@ -1,0 +1,136 @@
+# =============================================================================
+# Artifact Check JobHandler
+#
+# Worker 只负责读取固定请求、启动隔离扫描子进程和原子保存脱敏结果；
+# API 进程没有产物递归扫描能力，扫描失败不会覆盖既有可信结果。
+# =============================================================================
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+from ..errors import ErrorCode, JiejianError
+from ..execution.handlers import JobHandler
+from ..execution.process_environment import minimal_process_environment
+from .models import ArtifactCheckRequestV1, ArtifactResultFileV1, ArtifactResultManifestV1, ArtifactScanResultV1
+
+_JOB_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+
+
+class ArtifactCheckJobHandler(JobHandler[ArtifactScanResultV1]):
+    """在现有 Worker 组合根内启动一次独立、无网络的产物检查。"""
+
+    def __init__(
+        self,
+        var_dir: Path,
+        *,
+        python_executable: str = sys.executable,
+        popen: Any = subprocess.Popen,
+        monotonic: Any = time.monotonic,
+        sleep: Any = time.sleep,
+    ) -> None:
+        self.var_dir = var_dir.resolve()
+        self._python = python_executable
+        self._popen = popen
+        self._monotonic = monotonic
+        self._sleep = sleep
+
+    def run_job(self, job_id: str) -> ArtifactScanResultV1:
+        if not re.fullmatch(_JOB_ID, job_id):
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查任务标识无效")
+        job_dir = (self.var_dir / "artifact-checks" / "jobs" / job_id).resolve()
+        request_path = job_dir / "request.json"
+        request = self._load_request(job_dir, request_path)
+        output_path = job_dir / f".artifact-result.tmp-{uuid4().hex}.json"
+        environment = minimal_process_environment(os.environ)
+        try:
+            process = self._popen(
+                [self._python, "-B", "-m", "jiejian.artifacts.worker", "--request", str(request_path), "--output", str(output_path)],
+                cwd=str(self.var_dir),
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+            )
+        except OSError:
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查进程启动失败") from None
+        deadline = self._monotonic() + request.budget.max_duration_us / 1_000_000 + 2
+        while process.poll() is None and self._monotonic() < deadline:
+            self._sleep(0.01)
+        if process.poll() is None:
+            try:
+                process.kill()
+            except OSError:
+                pass
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查超过时间预算")
+        try:
+            if process.returncode != 0:
+                raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查进程失败")
+            result = ArtifactScanResultV1.model_validate_json(output_path.read_bytes(), strict=True)
+            if (
+                result.project_id != request.project_id
+                or result.artifact_id != request.artifact_id
+                or result.ruleset_version != request.ruleset_version
+                or result.run_id != request.run_id
+            ):
+                raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查结果关联不匹配")
+            self._publish(job_dir, result)
+            return result
+        except (OSError, ValueError):
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查结果无效") from None
+        finally:
+            output_path.unlink(missing_ok=True)
+
+    def _load_request(self, job_dir: Path, request_path: Path) -> ArtifactCheckRequestV1:
+        if not job_dir.is_relative_to(self.var_dir / "artifact-checks" / "jobs"):
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查任务路径越界")
+        try:
+            request = ArtifactCheckRequestV1.model_validate_json(request_path.read_bytes(), strict=True)
+        except (OSError, ValueError):
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查请求无效") from None
+        root = Path(request.artifact_root).resolve()
+        manifest = Path(request.manifest_path).resolve()
+        allowed_roots = (self.var_dir / "projects", self.var_dir / "jobs")
+        if not any(root.is_relative_to(allowed) and manifest.is_relative_to(allowed) for allowed in allowed_roots):
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查根目录未授权")
+        if not manifest.is_relative_to(root.parent) or manifest.parent != root.parent:
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查清单路径无效")
+        return request
+
+    def _publish(self, job_dir: Path, result: ArtifactScanResultV1) -> None:
+        result_bytes = json.dumps(result.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        manifest = ArtifactResultManifestV1(
+            artifact_id=result.artifact_id,
+            project_id=result.project_id,
+            result_sha256=hashlib.sha256(result_bytes).hexdigest(),
+            input_manifest_sha256=result.manifest_sha256,
+            files=(ArtifactResultFileV1(path="artifact-result.json", byte_count=len(result_bytes), sha256=hashlib.sha256(result_bytes).hexdigest()),),
+        )
+        final_dir = job_dir / "published"
+        if final_dir.exists():
+            existing = final_dir / "artifact-result.json"
+            if existing.is_file() and existing.read_bytes() == result_bytes:
+                return
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "既有产物检查结果不可覆盖")
+        temporary = job_dir / f".published.tmp-{uuid4().hex}"
+        try:
+            temporary.mkdir(parents=True, exist_ok=False)
+            (temporary / "artifact-result.json").write_bytes(result_bytes)
+            (temporary / "artifact-check-manifest.json").write_bytes(json.dumps(manifest.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+            os.replace(temporary, final_dir)
+        except OSError:
+            raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查结果发布失败") from None
+        finally:
+            if temporary.exists():
+                import shutil
+                shutil.rmtree(temporary, ignore_errors=True)

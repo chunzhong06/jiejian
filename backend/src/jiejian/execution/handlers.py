@@ -89,6 +89,7 @@ class JobHandlerRegistry:
 
     def __init__(self) -> None:
         self._factories: dict[JobTargetType, Callable[[], JobHandler[Any]]] = {}
+        self._auxiliary_factories: dict[str, Callable[[], JobHandler[Any]]] = {}
 
     def register(
         self,
@@ -100,6 +101,26 @@ class JobHandlerRegistry:
         if target_type in self._factories:
             raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务处理器重复注册")
         self._factories[target_type] = factory
+
+    def register_auxiliary(
+        self,
+        name: str,
+        factory: Callable[[], JobHandler[Any]],
+    ) -> None:
+        """注册不占用持久 Job target 的 Worker 辅助 Handler。"""
+
+        if not isinstance(name, str) or not name or not name.isascii() or not name.replace("_", "").isalnum() or name != name.upper():
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "辅助任务处理器名称非法")
+        if name in self._auxiliary_factories:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "辅助任务处理器重复注册")
+        self._auxiliary_factories[name] = factory
+
+    def resolve_auxiliary(self, name: str) -> JobHandler[Any]:
+        try:
+            factory = self._auxiliary_factories[name]
+        except KeyError:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "辅助任务处理器未注册") from None
+        return factory()
 
     def resolve(self, job: JobRecord) -> JobHandler[Any]:
         target_type = JobTargetType.from_job(job)

@@ -45,6 +45,7 @@ def fail(error: JiejianError) -> NoReturn:
         ErrorCode.INPUT_PATH.value,
         ErrorCode.SECRET_MISSING.value,
         ErrorCode.REPORT_NOT_FOUND.value,
+        ErrorCode.REPORT_INPUT_INVALID.value,
         ErrorCode.RECORD_NOT_FOUND.value,
         ErrorCode.RECORD_REVIEW_STATE.value,
         ErrorCode.RECORD_DRAFT_UNCONFIRMED.value,
