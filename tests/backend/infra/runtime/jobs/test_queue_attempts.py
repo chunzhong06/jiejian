@@ -18,6 +18,7 @@ from product.backend.infra.runtime.jobs.models import (
     CompleteCancellation,
     FatalFailureCode,
     FatalFailure,
+    WaitingFatalFailure,
     RequestCancellation,
     RetryPolicy,
     RetryableFailureCode,
@@ -53,6 +54,115 @@ def test_submit_is_idempotent_and_appends_only_one_initial_event(
         assert [(event.sequence, event.event_type) for event in events] == [
             (1, "JOB_SUBMITTED")
         ]
+
+
+def test_waiting_worker_fatal_atomically_finishes_job_and_run_without_fence(
+    worker_services: Any,
+) -> None:
+    submitted = worker_services.queue.submit(worker_services.submit_request())
+
+    failed = worker_services.attempts.record_waiting_fatal_failure(
+        WaitingFatalFailure(
+            job_id=submitted.job.job_id,
+            now_us=NOW_US + 10,
+        )
+    )
+    repeated = worker_services.attempts.record_waiting_fatal_failure(
+        WaitingFatalFailure(
+            job_id=submitted.job.job_id,
+            now_us=NOW_US + 11,
+        )
+    )
+
+    assert failed is not None
+    assert failed.job.state is JobState.FAILED
+    assert failed.job.attempt == 0
+    assert failed.job.fencing_token == 0
+    assert failed.job.lease_owner is None
+    assert failed.job.lease_expires_at_us is None
+    assert failed.run is not None
+    assert failed.run.lifecycle is RunLifecycle.FAILED
+    assert failed.run.verdict is None
+    assert repeated is None
+    with StorageUnitOfWork(worker_services.session_factory) as work:
+        events = work.job_events.list_for_job(submitted.job.job_id)
+    assert [event.event_type for event in events] == ["JOB_SUBMITTED", "JOB_FAILED"]
+    assert events[-1].metadata == {
+        "attempt": 0,
+        "reason_code": "WORKER_FATAL",
+    }
+    assert "fencing_token" not in events[-1].metadata
+
+
+def test_waiting_worker_fatal_cannot_override_a_concurrent_claim(
+    worker_services: Any,
+) -> None:
+    submitted = worker_services.queue.submit(worker_services.submit_request())
+    claimed = worker_services.attempts.claim(
+        _claim_request(submitted.job.job_id)
+    )
+    assert claimed is not None
+
+    failed = worker_services.attempts.record_waiting_fatal_failure(
+        WaitingFatalFailure(
+            job_id=submitted.job.job_id,
+            now_us=NOW_US + 20,
+        )
+    )
+
+    assert failed is None
+    with StorageUnitOfWork(worker_services.session_factory) as work:
+        persisted = work.jobs.get(submitted.job.job_id)
+        events = work.job_events.list_for_job(submitted.job.job_id)
+    assert persisted is not None
+    assert persisted.state is JobState.RUNNING
+    assert persisted.lease_owner == "worker-1"
+    assert persisted.fencing_token == claimed.job.fencing_token
+    assert [event.event_type for event in events] == [
+        "JOB_SUBMITTED",
+        "JOB_CLAIMED",
+    ]
+
+
+def test_waiting_worker_fatal_finishes_retry_wait_without_new_fence(
+    worker_services: Any,
+) -> None:
+    submitted = worker_services.queue.submit(worker_services.submit_request())
+    claimed = worker_services.attempts.claim(
+        _claim_request(submitted.job.job_id)
+    )
+    assert claimed is not None
+    retried = worker_services.attempts.record_retryable_failure(
+        RetryableFailure(
+            job_id=claimed.job.job_id,
+            lease_owner="worker-1",
+            fencing_token=claimed.job.fencing_token,
+            now_us=NOW_US + 20,
+            reason_code=RetryableFailureCode.WORKER_INTERRUPTED,
+        )
+    )
+    assert retried.job.state is JobState.RETRY_WAIT
+
+    failed = worker_services.attempts.record_waiting_fatal_failure(
+        WaitingFatalFailure(
+            job_id=retried.job.job_id,
+            now_us=NOW_US + 30,
+        )
+    )
+
+    assert failed is not None
+    assert failed.job.state is JobState.FAILED
+    assert failed.job.attempt == 1
+    assert failed.job.fencing_token == claimed.job.fencing_token
+    assert failed.job.lease_owner is None
+    assert failed.run is not None and failed.run.lifecycle is RunLifecycle.FAILED
+    with StorageUnitOfWork(worker_services.session_factory) as work:
+        events = work.job_events.list_for_job(submitted.job.job_id)
+    assert events[-1].source_state is JobState.RETRY_WAIT
+    assert events[-1].metadata == {
+        "attempt": 1,
+        "reason_code": "WORKER_FATAL",
+    }
 
 
 def test_submit_same_scope_with_different_hash_is_stable_conflict(

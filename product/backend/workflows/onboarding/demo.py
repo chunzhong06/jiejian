@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
@@ -27,14 +28,56 @@ from threading import Lock, Thread
 from typing import Any
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.lifecycle import JobState, RunLifecycle
 from product.backend.infra.runtime.process_environment import minimal_process_environment
 from product.backend.workflows.onboarding.models import DemoVariant, OnboardingConfirmations, OnboardingDemoStatus, OnboardingSessionUpdate
 
 _READY_RE = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})$")
-_DEMO_LOG_RELATIVE = "var/log/onboarding-demo.log"
+_DEMO_LOG_RELATIVE = "var/logs/onboarding-demo.log"
 _DEMO_OWNER_ENV = "JIEJIAN_DEMO_OWNER_TOKEN"
 _DEMO_ATTACKER_ENV = "JIEJIAN_DEMO_ATTACKER_TOKEN"
 _DEMO_PEER_ENV = "JIEJIAN_DEMO_PEER_TOKEN"
+
+_ACTIVE_JOB_STATES = {JobState.PENDING, JobState.RUNNING, JobState.RETRY_WAIT}
+_ACTIVE_RUN_STATES = {
+    RunLifecycle.QUEUED,
+    RunLifecycle.PREFLIGHT,
+    RunLifecycle.PLANNING,
+    RunLifecycle.EXECUTING,
+    RunLifecycle.VERIFYING,
+    RunLifecycle.REPORTING,
+}
+
+
+class DemoExecutionStatusReader:
+    """只读核对 Demo 缓存关联的 Job、Run 与可信 publication。"""
+
+    def __init__(self, uow_factory, published_results) -> None:
+        self._uow_factory = uow_factory
+        self._published_results = published_results
+
+    def can_reuse(self, status: OnboardingDemoStatus) -> bool:
+        if status.run_id is None or status.job_id is None:
+            return False
+        try:
+            with self._uow_factory() as work:
+                run = work.runs.get(status.run_id)
+                job = work.jobs.get(status.job_id)
+            if (
+                run is None
+                or job is None
+                or job.run_id != run.run_id
+                or job.recording_id is not None
+            ):
+                return False
+            if job.state in _ACTIVE_JOB_STATES:
+                return run.lifecycle in _ACTIVE_RUN_STATES and run.verdict is None
+            if job.state is not JobState.SUCCEEDED:
+                return False
+            published = self._published_results.read(run.run_id)
+            return published.job.job_id == job.job_id
+        except JiejianError:
+            return False
 
 
 class DemoRuntimeSupervisor:
@@ -47,16 +90,19 @@ class DemoRuntimeSupervisor:
         var_dir: Path,
         base_environment: Mapping[str, str],
         secret_vault,
+        status_reader: DemoExecutionStatusReader,
         popen: Callable[..., Any] = subprocess.Popen,
     ) -> None:
         self._onboarding = onboarding
         self._var_dir = var_dir.resolve()
         self._base_environment = dict(base_environment)
         self._secret_vault = secret_vault
+        self._status_reader = status_reader
         self._popen = popen
         self._lock = Lock()
         self._process: Any | None = None
         self._stderr: Any | None = None
+        self._source_root: Path | None = None
         self._status = OnboardingDemoStatus(
             status="stopped",
             message="内置演示尚未启动。",
@@ -71,15 +117,17 @@ class DemoRuntimeSupervisor:
                 return self._status.model_copy(update={"status": "running"})
             self._process = None
             self._close_process_streams_locked(process)
+            self._close_stderr_locked()
             if self._status.status in {"starting", "running"}:
                 self._status = self._status.model_copy(
                     update={
                         "status": "failed",
-                        "message": "内置演示进程意外退出，请查看 var/log/onboarding-demo.log 后重试。",
+                        "message": "内置演示进程意外退出，请查看 var/logs/onboarding-demo.log 后重试。",
                     }
                 )
             if self._status.session_id:
                 self._secret_vault.clear_session(self._status.session_id)
+            self._cleanup_source_locked()
             return self._status
 
     def start(self, variant: DemoVariant) -> OnboardingDemoStatus:
@@ -87,7 +135,10 @@ class DemoRuntimeSupervisor:
 
         with self._lock:
             if self._process is not None and self._process.poll() is None:
-                if self._status.variant == variant:
+                if (
+                    self._status.variant == variant
+                    and self._status_reader.can_reuse(self._status)
+                ):
                     return self._status.model_copy(update={"status": "running"})
                 self._stop_current_locked()
             elif self._status.session_id:
@@ -138,7 +189,11 @@ class DemoRuntimeSupervisor:
         """在持锁状态下创建短期会话、启动 Target 并提交专用检查。"""
 
         source = self._prepare_source()
-        session = self._onboarding.create_session(source, "界鉴内置演示")
+        try:
+            session = self._onboarding.create_session(source, "界鉴内置演示")
+        except Exception:
+            self._cleanup_source_locked()
+            raise
         try:
             owner_token = secrets.token_urlsafe(32)
             attacker_token = secrets.token_urlsafe(32)
@@ -187,13 +242,19 @@ class DemoRuntimeSupervisor:
         """在 var 受控子树创建最小项目身份，不复制或读取产品源码。"""
 
         var_root = self._var_dir.resolve()
-        demo_entry = var_root / "onboarding" / "demo"
+        demo_entry = (
+            var_root
+            / "temp"
+            / "onboarding-demo"
+            / f"demo_{secrets.token_hex(16)}"
+        )
         root = demo_entry.resolve()
         source_entry = demo_entry / "source"
         source = source_entry.resolve()
         if not root.is_relative_to(var_root) or not source.is_relative_to(root):
             raise JiejianError(ErrorCode.ONBOARDING_PATH_UNSAFE, "内置演示目录不安全")
         root.mkdir(parents=True, exist_ok=True)
+        self._source_root = root
         source.mkdir(parents=True, exist_ok=True)
         package = source / "package.json"
         # 安全边界：演示工作目录只能落在受控 var 子树，符号链接不得逃逸到源码或用户目录。
@@ -214,13 +275,14 @@ class DemoRuntimeSupervisor:
     ) -> None:
         """以最小环境和独立日志流启动由当前对象拥有的演示进程。"""
 
-        log_path = self._var_dir / "log" / "onboarding-demo.log"
+        log_path = self._var_dir / "logs" / "onboarding-demo.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         environment = minimal_process_environment(self._base_environment)
         environment[_DEMO_OWNER_ENV] = owner_token
         environment[_DEMO_ATTACKER_ENV] = attacker_token
         environment[_DEMO_PEER_ENV] = peer_token
-        self._stderr = log_path.open("ab")
+        # 每个 Demo 会话重建小日志，避免演示输出长期无界累积。
+        self._stderr = log_path.open("wb")
         try:
             self._process = self._popen(
                 [sys.executable, "-B", "-m", "product.backend.workflows.onboarding.demo_target", "--variant", variant, "--port", "0"],
@@ -290,6 +352,7 @@ class DemoRuntimeSupervisor:
                 pass
             self._close_process_streams_locked(process)
         self._close_stderr_locked()
+        self._cleanup_source_locked()
 
     def _stop_current_locked(self) -> None:
         self._stop_process_locked()
@@ -316,3 +379,15 @@ class DemoRuntimeSupervisor:
                 stream.close()
             except Exception:
                 pass
+
+    def _cleanup_source_locked(self) -> None:
+        """只删除本监督器创建的临时 source，不触碰已提交的 Run/Job/Evidence。"""
+
+        root, self._source_root = self._source_root, None
+        if root is None:
+            return
+        temp_root = (self._var_dir / "temp" / "onboarding-demo").resolve()
+        resolved = root.resolve()
+        if resolved.parent != temp_root or not resolved.is_relative_to(self._var_dir):
+            return
+        shutil.rmtree(resolved, ignore_errors=True)

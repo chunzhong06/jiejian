@@ -79,6 +79,20 @@ export const gateDecisionLabels: Record<string, string> = {
   PASS: '门禁通过', BLOCK: '门禁阻断', INCONCLUSIVE: '门禁证据不足', ERROR: '门禁错误',
 }
 
+const productStatusLabels = {
+  project: { DRAFT: '草稿', READY: '已就绪', REGISTERED: '已登记', ARCHIVED: '已归档' },
+  contract: { DRAFT: '草稿', REVIEW: '待审阅', ACTIVE: '已激活', REJECTED: '已拒绝', RETIRED: '已停用' },
+} as const
+
+const productTermLabels = {
+  identity: { attacker: '攻击者', owner: '所有者', peer: '同级用户', guest: '访客', admin: '管理员', member: '成员', user: '普通用户' },
+  role: { attacker: '攻击者', owner: '所有者', peer: '同级用户', guest: '访客', admin: '管理员', member: '成员', user: '普通用户' },
+  action: { create: '创建', read: '读取', view: '查看', list: '列出', modify: '修改', update: '修改', write: '写入', delete: '删除', approve: '审批' },
+  resource: { 'attacker-resource': '攻击者资源', 'owner-resource': '所有者资源', document: '文档' },
+  resourceType: { document: '文档' },
+  relation: { OWNS: '拥有', owns: '拥有', SAME_TENANT: '同一租户', same_tenant: '同一租户', BELONGS_TO: '属于', belongs_to: '属于', MEMBER_OF: '隶属', member_of: '隶属' },
+} as const
+
 export function severityLabel(value: unknown) {
   return severityLabels[String(value ?? '').toLowerCase()] ?? '未知'
 }
@@ -93,6 +107,19 @@ export function occurrenceStatusLabel(value: unknown) {
 
 export function gateDecisionLabel(value: unknown) {
   return gateDecisionLabels[String(value ?? '')] ?? '未知'
+}
+
+export function productStatusLabel(kind: keyof typeof productStatusLabels, value: unknown) {
+  const raw = String(value ?? '')
+  return (productStatusLabels[kind] as Record<string, string>)[raw] ?? (raw || '未知')
+}
+
+// 业务含义优先使用中文；协议标识仍保留在括号中，便于对照契约和排错。
+export function productTermLabel(kind: keyof typeof productTermLabels, value: unknown, preserveRaw = true) {
+  const raw = String(value ?? '')
+  if (!raw) return '未提供'
+  const translated = (productTermLabels[kind] as Record<string, string>)[raw]
+  return translated ? preserveRaw ? `${translated}（${raw}）` : translated : raw
 }
 
 export function formatTimestamp(value: unknown) {

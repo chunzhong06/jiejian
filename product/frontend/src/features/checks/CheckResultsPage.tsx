@@ -7,18 +7,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, Collapse, Descriptions, List, Segmented, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import { resultsApi } from '../../api/results'
-import { runsApi } from '../../api/runs'
+import { resultsApi, type EvidenceDto, type FindingDto, type ObservationFactDto } from '../../api/results'
+import { runsApi, type RunDto } from '../../api/runs'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
-import { integrityLabel, lifecycleLabel, occurrenceStatusLabel, severityLabel, verdictLabel } from '../../app/presentation'
+import { integrityLabel, lifecycleLabel, occurrenceStatusLabel, productTermLabel, severityLabel, verdictLabel } from '../../app/presentation'
 import { EvidenceTimeline } from './EvidenceTimeline'
 import { ReportPanel } from './ReportPanel'
+import './checks.css'
 
-type Item = Record<string, any>
 const issueVerdicts = new Set(['BLOCK', 'VULNERABLE'])
 
 function requirementLabel(value: unknown) { return ({ resource_state: '资源状态' } as Record<string, string>)[String(value)] ?? `观察要求：${String(value ?? '未提供')}` }
-function actionLabel(value: unknown) { return ({ read: '读取', view: '查看', create: '创建', update: '修改', modify: '修改', delete: '删除' } as Record<string, string>)[String(value)] ?? String(value ?? '未提供') }
 function expectationText(value: unknown) {
   const items = Array.isArray(value) ? value.map(String) : []
   if (items.includes('DENY')) return '不应允许这次操作，资源也不应发生变化'
@@ -30,21 +29,21 @@ function surfaceText(value: unknown) {
 }
 function actualText(value: unknown) {
   const facts = Array.isArray(value) ? value : []
-  const effects = new Set(facts.map((item: Item) => String(item.effect)))
+  const effects = new Set((facts as ObservationFactDto[]).map((item) => String(item.effect)))
   if (effects.has('CONFIRMED')) return '真实资源已经发生变化'
   if (effects.size > 0 && [...effects].every((item) => item === 'ABSENT')) return '真实资源没有发生变化'
   return '真实资源状态尚不能可靠确认'
 }
-function explanation(detail: Item | undefined, verdict: unknown) {
+function explanation(detail: EvidenceDto | undefined, verdict: unknown) {
   const outcome = String(detail?.execution_fact?.outcome ?? '')
   const facts = Array.isArray(detail?.observation_facts) ? detail.observation_facts : []
-  const changed = facts.some((item: Item) => String(item.effect) === 'CONFIRMED')
+  const changed = facts.some((item) => String(item.effect) === 'CONFIRMED')
   if (issueVerdicts.has(String(verdict)) && outcome === 'DENIED' && changed) return '界面虽然显示拒绝，但外部观察确认资源已被改变；表面拒绝没有阻止真实副作用，因此构成权限问题。'
   if (issueVerdicts.has(String(verdict)) && changed) return '这次操作产生了权限规则不允许的真实资源变化，因此构成权限问题。'
   if (String(verdict) === 'INCONCLUSIVE') return '必需观察不完整或不可靠，当前证据不足以确认资源是否按权限规则变化。'
   return '表面执行结果与真实资源观察共同支持当前结论。'
 }
-function conclusion(run: Item | undefined) {
+function conclusion(run: RunDto | undefined) {
   if (!run) return '等待检查结果'
   if (!['COMPLETED', 'SAFETY_STOPPED'].includes(String(run.lifecycle))) return '等待检查结果'
   if (String(run.result_integrity) !== 'VERIFIED') return '结果不可用'
@@ -60,22 +59,22 @@ function observerSummary(value: unknown) {
   if (required.length === 0) return '未声明必需观察'
   return required.map((id) => {
     const item = health[id]
-    const configured = Boolean(item && typeof item === 'object' && (item as Item).configured === true)
+    const configured = Boolean(item && typeof item === 'object' && (item as { configured?: boolean }).configured === true)
     return `${requirementLabel(id)} · ${configured ? '已配置' : '缺失'}`
   }).join('；')
 }
 function readableErrors(value: unknown) {
   if (!Array.isArray(value)) return []
-  return value.map((item) => typeof item === 'object' && item ? String((item as Item).message ?? (item as Item).code ?? '执行失败') : String(item))
+  return value.map((item) => typeof item === 'object' && item ? String((item as { message?: string; code?: string }).message ?? (item as { code?: string }).code ?? '执行失败') : String(item))
 }
 
-export function CheckResultsPage({ run, onError, onNext, initialView = 'results' }: { run?: Item; onError: (error: ApiError) => void; onNext?: () => void; initialView?: 'results' | 'report' }) {
-  const [current, setCurrent] = useState<Item | undefined>(run)
-  const [findings, setFindings] = useState<Item[]>([])
-  const [evidence, setEvidence] = useState<Item[]>([])
-  const [details, setDetails] = useState<Record<string, Item>>({})
+export function CheckResultsPage({ run, onError, onNext, initialView = 'results' }: { run?: RunDto; onError: (error: ApiError) => void; onNext?: () => void; initialView?: 'results' | 'report' }) {
+  const [current, setCurrent] = useState<RunDto | undefined>(run)
+  const [findings, setFindings] = useState<FindingDto[]>([])
+  const [evidence, setEvidence] = useState<EvidenceDto[]>([])
+  const [details, setDetails] = useState<Record<string, EvidenceDto>>({})
   const [view, setView] = useState<'results' | 'report'>(initialView)
-  const [selectedFinding, setSelectedFinding] = useState<Item | undefined>()
+  const [selectedFinding, setSelectedFinding] = useState<FindingDto | undefined>()
   useEffect(() => {
     setCurrent(run); setFindings([]); setEvidence([]); setDetails({}); setSelectedFinding(undefined); setView(initialView)
     if (!run?.run_id) return
@@ -89,7 +88,7 @@ export function CheckResultsPage({ run, onError, onNext, initialView = 'results'
         if (!active) return
         setFindings(stable); setEvidence(publishedEvidence); setSelectedFinding(stable[0])
         const evidenceIds = [...new Set(stable.flatMap((item) => {
-          const occurrence = (item as Item).occurrence as Item | undefined
+          const occurrence = item.occurrence
           return Array.isArray(occurrence?.evidence_refs) ? occurrence.evidence_refs.map(String) : []
         }).filter(Boolean))]
         const loaded = await Promise.allSettled(evidenceIds.map(async (evidenceId) => [evidenceId, await resultsApi.evidenceDetail(String(run.run_id), evidenceId)] as const))
@@ -104,7 +103,7 @@ export function CheckResultsPage({ run, onError, onNext, initialView = 'results'
   const issueFindings = findings.filter((item) => issueVerdicts.has(String(item.occurrence?.verdict)))
   const inconclusiveCount = findings.filter((item) => String(item.occurrence?.verdict) === 'INCONCLUSIVE').length
   const severities = issueFindings.map((item) => severityLabel(item.occurrence?.severity)).join('、') || '无'
-  const observer = current?.observer_health as Item | undefined
+  const observer = current?.observer_health
   const executionErrors = readableErrors(current?.execution_errors)
   const reasonCodes = Array.isArray(current?.reason_codes) ? current.reason_codes.map(String) : []
   const preferredEvidence = useMemo(() => Array.isArray(selectedFinding?.occurrence?.evidence_refs) ? selectedFinding.occurrence.evidence_refs.map(String) : [], [selectedFinding])
@@ -137,9 +136,9 @@ export function CheckResultsPage({ run, onError, onNext, initialView = 'results'
         const snapshot = detail?.case_snapshot ?? {}
         return <List.Item className="finding-list-item"><Card size="small" className="full-width" title={<Space wrap><Typography.Text strong>{identity.permission_intent ?? identity.problem_category ?? '权限检查项'}</Typography.Text><Tag color={issueVerdicts.has(String(occurrence.verdict)) ? 'red' : String(occurrence.verdict) === 'INCONCLUSIVE' ? 'gold' : 'green'}>{verdictLabel(occurrence.verdict)}</Tag><Tag>{severityLabel(occurrence.severity)}</Tag></Space>} extra={<Button type="link" onClick={() => setSelectedFinding(item)}>查看对应证据</Button>}>
           <Descriptions size="small" column={{ xs: 1, md: 2 }}>
-            <Descriptions.Item label="谁">{String(snapshot.subject_id ?? identity.subject_class ?? '未提供')}</Descriptions.Item>
-            <Descriptions.Item label="做什么">{actionLabel(snapshot.action_id ?? identity.action)}</Descriptions.Item>
-            <Descriptions.Item label="对什么资源">{Array.isArray(snapshot.resource_ids) ? snapshot.resource_ids.join('、') : String(identity.resource_class ?? '未提供')}</Descriptions.Item>
+            <Descriptions.Item label="谁">{productTermLabel('identity', snapshot.subject_id ?? identity.subject_class)}</Descriptions.Item>
+            <Descriptions.Item label="做什么">{productTermLabel('action', snapshot.action_id ?? identity.action)}</Descriptions.Item>
+            <Descriptions.Item label="对什么资源">{Array.isArray(snapshot.resource_ids) ? snapshot.resource_ids.map((value: unknown) => productTermLabel('resource', value)).join('、') : productTermLabel('resource', identity.resource_class)}</Descriptions.Item>
             <Descriptions.Item label="规则预期">{expectationText(snapshot.expectations)}</Descriptions.Item>
             <Descriptions.Item label="表面结果">{surfaceText(detail?.execution_fact?.outcome)}</Descriptions.Item>
             <Descriptions.Item label="真实结果">{actualText(detail?.observation_facts)}</Descriptions.Item>

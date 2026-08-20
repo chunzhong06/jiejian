@@ -19,15 +19,34 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 import time
 from pathlib import Path
-
-from product.backend.workflows.context import WorkerContext
-from product.backend.core.lifecycle import JobState
-from product.backend.core.errors import JiejianError
-from product.backend.infra.runtime.logging import configure_logging
+from typing import TextIO
 
 logger = logging.getLogger("jiejian.runtime.worker_process")
+
+
+class _RedactingTextStream:
+    """在结构化日志初始化前也替换已注入秘密，底层仍使用直接文件句柄。"""
+
+    def __init__(self, stream: TextIO, secrets: tuple[str, ...]) -> None:
+        self._stream = stream
+        self._secrets = tuple(
+            sorted({secret for secret in secrets if secret}, key=len, reverse=True)
+        )
+
+    def write(self, value: str) -> int:
+        for secret in self._secrets:
+            value = value.replace(secret, "[REDACTED]")
+        return self._stream.write(value)
+
+    def flush(self) -> None:
+        self._stream.flush()
+
+    @property
+    def encoding(self) -> str | None:
+        return self._stream.encoding
 
 
 def main() -> int:
@@ -35,12 +54,32 @@ def main() -> int:
     parser.add_argument("--var-dir", type=Path, required=True)
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--lease-owner", required=True)
+    parser.add_argument("--secret-name", action="append", default=[])
     arguments = parser.parse_args()
+    known_secrets = tuple(
+        value
+        for name in arguments.secret_name
+        if (value := os.environ.get(name))
+    )
+    # import、组合根与 handler 初始化的异常都先经过精确秘密替换，再落入每 Job 诊断日志。
+    sys.stdout = _RedactingTextStream(sys.stdout, known_secrets)
+    sys.stderr = _RedactingTextStream(sys.stderr, known_secrets)
     var_dir = arguments.var_dir.resolve()
     var_dir.mkdir(parents=True, exist_ok=True)
-    configure_logging(var_dir=var_dir)
-    context = WorkerContext(var_dir, environ=os.environ)
+    from product.backend.infra.runtime.logging import configure_logging
+
+    configure_logging(
+        var_dir=var_dir,
+        console=True,
+        known_secrets=known_secrets,
+    )
+    context = None
     try:
+        from product.backend.workflows.context import WorkerContext
+        from product.backend.core.lifecycle import JobState
+        from product.backend.core.errors import JiejianError
+
+        context = WorkerContext(var_dir, environ=os.environ)
         with context.uow_factory() as work:
             initial_job = work.jobs.get(arguments.job_id)
         if initial_job is None:
@@ -75,7 +114,8 @@ def main() -> int:
         )
         return 1
     finally:
-        context.close()
+        if context is not None:
+            context.close()
 
 
 if __name__ == "__main__":

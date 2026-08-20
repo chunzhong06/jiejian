@@ -1,0 +1,41 @@
+/* 权限矩阵、只读关系图与高级治理。 */
+.permission-matrix .ant-table-cell { vertical-align: middle; }
+.permission-matrix .ant-table-cell-fix-left { background: #f8fafc; }
+.permission-cell { min-width: 96px; }
+.permission-raw-id { overflow-wrap: anywhere; }
+.permission-flow { background: #0b1220; border: 1px solid #1e293b; border-radius: 10px; height: clamp(440px, 58vh, 560px); overflow: hidden; position: relative; width: 100%; }
+.permission-flow .react-flow { height: 100%; width: 100%; }
+.permission-flow .react-flow__background pattern circle { fill: #475569; }
+.permission-entity-node { background: rgba(15, 23, 42, .96); border: 2px solid #2563eb; border-radius: 12px; box-shadow: 0 10px 24px rgba(2, 6, 23, .3); box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; min-height: 112px; padding: 12px 16px; width: 220px; }
+.permission-entity-resource { border-color: #06b6d4; }
+.permission-entity-node .ant-typography { color: #f8fafc; }
+.permission-entity-node .ant-typography-secondary { color: #94a3b8; }
+.permission-entity-node .ant-tag { background: rgba(30, 41, 59, .9); border-color: #475569; color: #cbd5e1; margin-inline-end: 0; }
+.permission-flow .react-flow__node { width: auto; }
+.permission-flow .permission-handle { border: 2px solid #0f172a; height: 9px; width: 9px; }
+.permission-flow .permission-handle-relation { background: #a78bfa; }
+.permission-flow .permission-handle-ownership { background: #22d3ee; }
+.permission-flow .permission-handle-rule { background: #f8fafc; }
+.permission-flow .react-flow__edge-text { font-size: 11px; }
+.permission-flow .react-flow__edge-textbg { fill: #0f172a; fill-opacity: .82; }
+.permission-flow .react-flow__controls { border: 1px solid #334155; box-shadow: 0 8px 20px rgba(2, 6, 23, .35); }
+.permission-flow .react-flow__controls button { background: #111827; border-color: #334155; color: #e2e8f0; }
+.permission-flow .react-flow__controls button:hover { background: #1e293b; }
+.permission-flow .react-flow__controls button svg { fill: currentColor; }
+.permission-flow-note { background: rgba(15, 23, 42, .9); border: 1px solid #334155; border-radius: 8px; color: #cbd5e1; font-size: 12px; padding: 8px 10px; }
+.permission-graph-lists { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
+.permission-graph-lists .ant-list-item { align-items: flex-start; flex-direction: column; gap: 4px; }
+.governance-version-list { min-width: 0; width: 100%; }
+.governance-version-item { align-items: center !important; gap: 16px; min-width: 0; }
+.governance-version-item .ant-list-item-meta { flex: 1 1 320px; min-width: 0; }
+.governance-version-item .ant-list-item-meta-title,
+.governance-version-item .ant-list-item-meta-description { overflow-wrap: anywhere; }
+.governance-version-item .ant-list-item-action { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: 8px; margin-inline-start: 0; }
+.governance-version-item .ant-list-item-action > li { padding: 0; }
+
+@media (max-width: 768px) {
+  .permission-flow { height: 440px; }
+  .permission-graph-lists { grid-template-columns: 1fr; }
+  .governance-version-item { align-items: stretch !important; flex-direction: column; }
+  .governance-version-item .ant-list-item-action { justify-content: flex-start; }
+}

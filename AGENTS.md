@@ -89,7 +89,7 @@
 - 语法检查优先使用 `ast.parse`，不使用 `py_compile` 或 `compileall`。
 - 不得在源码目录生成或修改 `__pycache__` 与 `.pyc` 文件。
 - 需要导入检查时，使用项目解释器的 `-B` 参数，并确认检查前后没有新增缓存文件。
-- 普通 pytest 验证默认使用 `-p no:cacheprovider`，并将唯一命名的 `--basetemp` 放在工作区 `var/` 下；验证结束后精确清理本次临时目录。
+- 普通 pytest 验证默认使用 `-p no:cacheprovider`，并将唯一命名的 `--basetemp` 放在工作区 `var/test/` 下；`var/test` 不存在时先创建父目录，验证结束后精确清理本次临时目录。
 - 只有需要 `--lf`、`--ff` 或 `--stepwise` 排错时才临时启用 `.pytest_cache`；子阶段结束后只清理已确认的仓库内缓存，不递归清理上级目录或仓库外路径。
 
 ### 2. 提交前检查

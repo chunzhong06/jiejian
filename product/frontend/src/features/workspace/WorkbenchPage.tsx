@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card, Col, List, Row, Space, Statistic, Tag, Typography } from 'antd'
-import { contractsApi } from '../../api/contracts'
+import { contractsApi, type ContractSummaryDto, type GovernanceWorkspaceDto } from '../../api/contracts'
 import { ApiError } from '../../api/http'
 import { LLMProfile } from '../../api/llm'
 import { SystemStatus } from '../../api/system'
+import type { ProjectDto } from '../../api/projects'
+import type { RunDto } from '../../api/runs'
 import { formatTimestamp, integrityLabel, lifecycleLabel, verdictLabel } from '../../app/presentation'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
-
-type Item = Record<string, any>
 
 function statusLabel(value: unknown) {
   const raw = String(value ?? 'unknown')
@@ -24,14 +24,14 @@ function statusColor(value: unknown) {
   return raw === 'available' || raw === 'running' || raw === 'configured' ? 'green' : raw === 'unavailable' || raw === 'stopped' ? 'red' : 'default'
 }
 
-function ruleCount(contracts: Item[], governance: Item | null) {
-  const project = (governance?.project ?? {}) as Item
-  const versions = Array.isArray(governance?.versions) ? governance.versions as Item[] : []
+function ruleCount(contracts: ContractSummaryDto[], governance: GovernanceWorkspaceDto | null) {
+  const project = governance?.project ?? {}
+  const versions = governance?.versions ?? []
   const active = versions.find((version) => version.status === 'ACTIVE'
     && String(version.contract_id) === String(project.governed_contract_id)
     && Number(version.version) === Number(project.governed_contract_version))
   if (active) return Array.isArray(active.snapshot?.rules) ? active.snapshot.rules.length : 0
-  return contracts.reduce((total, item) => total + (Array.isArray(item.rules) ? item.rules.length : 0), 0)
+  return contracts.reduce((total, item) => total + item.rules.length, 0)
 }
 
 export function WorkbenchPage({
@@ -43,16 +43,16 @@ export function WorkbenchPage({
   onNavigate,
   onError,
 }: {
-  selected: Item | null
-  runs: Item[]
+  selected: ProjectDto | null
+  runs: RunDto[]
   systemStatus: SystemStatus
   profiles: LLMProfile[]
   llmLoadFailed: boolean
   onNavigate: (path: string) => void
   onError: (error: ApiError) => void
 }) {
-  const [contracts, setContracts] = useState<Item[] | null>(null)
-  const [governance, setGovernance] = useState<Item | null>(null)
+  const [contracts, setContracts] = useState<ContractSummaryDto[] | null>(null)
+  const [governance, setGovernance] = useState<GovernanceWorkspaceDto | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export function WorkbenchPage({
       .then(([nextContracts, nextGovernance]) => {
         if (!Array.isArray(nextContracts)) throw new ApiError('INVALID_RESPONSE', '权限规则返回格式不可用')
         setContracts(nextContracts)
-        setGovernance(nextGovernance as Item)
+        setGovernance(nextGovernance)
       })
       .catch((error) => onError(error as ApiError))
       .finally(() => setLoading(false))

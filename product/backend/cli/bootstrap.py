@@ -22,6 +22,7 @@ class CliOptions:
     trace_id: str | None
     presentation: str = "auto"
     machine_only: bool = False
+    verbose: bool = False
 
 
 def runtime_settings(context: typer.Context) -> Settings:
@@ -38,6 +39,7 @@ def runtime_settings(context: typer.Context) -> Settings:
         loaded.settings.log_level,
         trace_id=loaded.settings.trace_id,
         var_dir=loaded.settings.var_dir,
+        console=False,
     )
     return loaded.settings
 

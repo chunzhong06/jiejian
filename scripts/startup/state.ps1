@@ -13,7 +13,6 @@ function Load-PrepareState {
         $script:PrepareState = $loaded
     } catch {
         Write-Startup "准备状态损坏或版本未知，安全执行冷准备"
-        Write-DisplaySubtask "准备状态损坏或版本未知，安全执行冷准备"
         $script:PrepareState = [pscustomobject]@{
             schema_version = "1"
             phases = [pscustomobject]@{}
@@ -112,26 +111,51 @@ function Get-StageFingerprint([string[]]$Paths, [hashtable]$Facts) {
     finally { $sha.Dispose() }
 }
 
-function Get-ExpectedPnpmStoreDir {
-    $versionMatch = [regex]::Match([string]$script:PnpmVersion, "(?m)^v?(?<major>\d+)(?:\.|$)")
-    if (-not $versionMatch.Success) { return $null }
-    $storeRoot = Join-Path (Split-Path -Parent $script:ProjectRoot) ".pnpm-store"
-    return [IO.Path]::GetFullPath((Join-Path $storeRoot ("v{0}" -f $versionMatch.Groups["major"].Value)))
+function Get-PnpmStoreRoot {
+    if ([string]::IsNullOrWhiteSpace([string]$script:PnpmVersion)) { return $null }
+    return [IO.Path]::GetFullPath((Join-Path $script:VarDir "cache\pnpm-store"))
 }
 
-function Test-PnpmStoreDir([string]$ModulesManifest, [string]$ExpectedStoreDir) {
-    if ([string]::IsNullOrWhiteSpace($ExpectedStoreDir) -or -not (Test-Path -LiteralPath $ModulesManifest -PathType Leaf)) {
+function Get-ExpectedPnpmStoreDir {
+    if ([string]::IsNullOrWhiteSpace([string]$script:PnpmVersion)) { return $null }
+    $major = ([version]$script:PnpmVersion).Major
+    return [IO.Path]::GetFullPath((Join-Path (Get-PnpmStoreRoot) ("v{0}" -f $major)))
+}
+
+function Get-ExpectedPnpmVirtualStoreDir {
+    if ([string]::IsNullOrWhiteSpace([string]$script:PnpmVersion)) { return $null }
+    return [IO.Path]::GetFullPath((Join-Path $script:ProjectRoot "product\frontend\node_modules\.pnpm"))
+}
+
+function Test-PnpmLayout([string]$ModulesManifest, [string]$ExpectedStoreDir, [string]$ExpectedVirtualStoreDir) {
+    if ([string]::IsNullOrWhiteSpace($ExpectedStoreDir) -or
+        [string]::IsNullOrWhiteSpace($ExpectedVirtualStoreDir) -or
+        -not (Test-Path -LiteralPath $ModulesManifest -PathType Leaf)) {
         return $false
     }
     try {
         $content = Get-Content -LiteralPath $ModulesManifest -Raw -ErrorAction Stop
-        $manifestObject = $content | ConvertFrom-Json -ErrorAction Stop
-        $recordedValue = $manifestObject.storeDir
-        if ($null -eq $recordedValue -or $recordedValue -isnot [string] -or [string]::IsNullOrWhiteSpace($recordedValue)) {
+        $recordedStore = $null
+        $recordedVirtualStore = $null
+        try {
+            $manifestObject = $content | ConvertFrom-Json -ErrorAction Stop
+            $recordedStore = $manifestObject.storeDir
+            $recordedVirtualStore = $manifestObject.virtualStoreDir
+        } catch {
+            # pnpm 的真实 .modules.yaml 不是 JSON；只读取路径字段，不引入额外 YAML 解析依赖。
+            $storeMatch = [regex]::Match($content, "(?m)^\s*storeDir\s*:\s*(?<value>.+?)\s*$")
+            $virtualStoreMatch = [regex]::Match($content, "(?m)^\s*virtualStoreDir\s*:\s*(?<value>.+?)\s*$")
+            if ($storeMatch.Success) { $recordedStore = $storeMatch.Groups["value"].Value }
+            if ($virtualStoreMatch.Success) { $recordedVirtualStore = $virtualStoreMatch.Groups["value"].Value }
+        }
+        if ($recordedStore -isnot [string] -or [string]::IsNullOrWhiteSpace($recordedStore) -or
+            $recordedVirtualStore -isnot [string] -or [string]::IsNullOrWhiteSpace($recordedVirtualStore)) {
             return $false
         }
-        $recorded = [IO.Path]::GetFullPath($recordedValue)
-        return [string]::Equals($recorded, $ExpectedStoreDir, [StringComparison]::OrdinalIgnoreCase)
+        $recordedStore = [IO.Path]::GetFullPath($recordedStore.Trim().Trim([char[]]@([char]34, [char]39)))
+        $recordedVirtualStore = [IO.Path]::GetFullPath($recordedVirtualStore.Trim().Trim([char[]]@([char]34, [char]39)))
+        return [string]::Equals($recordedStore, $ExpectedStoreDir, [StringComparison]::OrdinalIgnoreCase) -and
+            [string]::Equals($recordedVirtualStore, $ExpectedVirtualStoreDir, [StringComparison]::OrdinalIgnoreCase)
     } catch {
         return $false
     }

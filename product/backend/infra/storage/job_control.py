@@ -249,6 +249,35 @@ class JobControlRepository:
             require_expired=False,
         )
 
+    def record_waiting_failure(
+        self,
+        *,
+        job_id: str,
+        now_us: int,
+    ) -> JobRecord | None:
+        """仅把仍处于无租约等待态的指定 Job 原子结束为失败。"""
+
+        changed_id = _scalar_value(
+            self._session,
+            update(JobRow)
+            .where(
+                JobRow.job_id == job_id,
+                JobRow.state.in_(
+                    (JobState.PENDING.value, JobState.RETRY_WAIT.value)
+                ),
+                JobRow.lease_owner.is_(None),
+                JobRow.lease_expires_at_us.is_(None),
+                JobRow.cancel_requested_at_us.is_(None),
+                JobRow.updated_at_us <= now_us,
+            )
+            .values(
+                state=JobState.FAILED.value,
+                updated_at_us=now_us,
+            )
+            .returning(JobRow.job_id),
+        )
+        return self._jobs.get(changed_id) if changed_id is not None else None
+
     def list_expired_running(self, now_us: int, limit: int) -> tuple[JobRecord, ...]:
         rows = _scalars(
             self._session,

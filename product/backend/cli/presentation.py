@@ -16,12 +16,16 @@ from product.backend.core.errors import ErrorCode, JiejianError
 
 _configured_presentation = "auto"
 _configured_machine_only = False
+_configured_verbose = False
 
 
-def configure_presentation(mode: str, *, machine_only: bool = False) -> None:
-    global _configured_presentation, _configured_machine_only
+def configure_presentation(
+    mode: str, *, machine_only: bool = False, verbose: bool = False
+) -> None:
+    global _configured_presentation, _configured_machine_only, _configured_verbose
     _configured_presentation = mode
     _configured_machine_only = machine_only
+    _configured_verbose = verbose
 
 
 def _root_context() -> click.Context | None:
@@ -74,6 +78,11 @@ def presentation_mode(context: click.Context | None = None) -> str:
     return "human" if click.get_text_stream("stdout").isatty() else "json"
 
 
+def verbose_enabled() -> bool:
+    options = _options()
+    return _configured_verbose or bool(getattr(options, "verbose", False))
+
+
 _FIELD_LABELS = {
     "valid": "项目校验",
     "project_id": "项目",
@@ -99,7 +108,7 @@ _FIELD_LABELS = {
 
 _DOCTOR_LABELS = {
     "python": "Python",
-    "dependencies": "依赖",
+    "dependencies": "Python 依赖",
     "config": "配置",
     "var_dir": "运行目录",
     "sqlite": "数据库",
@@ -129,10 +138,12 @@ def _outcome(value: object) -> str:
 
 
 def _technical_value(value: object) -> str:
-    if isinstance(value, (dict, list, tuple)):
-        return json.dumps(
-            value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        )
+    if isinstance(value, dict):
+        items = [f"{key}={_technical_value(item)}" for key, item in value.items()]
+        return "；".join(items[:12]) + ("；…" if len(items) > 12 else "")
+    if isinstance(value, (list, tuple)):
+        items = [_technical_value(item) for item in value]
+        return "、".join(items[:12]) + ("、…" if len(items) > 12 else "")
     return _human_value(value)
 
 
@@ -198,11 +209,12 @@ def _emit_section(title: str, rows: list[tuple[str, object, str]], *, err: bool 
     typer.echo(title, err=err)
     for index, (label, value, marker_value) in enumerate(rows):
         branch = ("└─" if index == len(rows) - 1 else "├─") if unicode else ("`--" if index == len(rows) - 1 else "|--")
+        content = f"{label}：{value}" if label else str(value)
         if marker_value:
             marker, color = _marker(marker_value, unicode=unicode)
-            typer.secho(f"{branch} {label}：{value}  {marker}", fg=color, err=err)
+            typer.secho(f"{branch} {content}  {marker}", fg=color, err=err)
         else:
-            typer.echo(f"{branch} {label}：{value}", err=err)
+            typer.echo(f"{branch} {content}", err=err)
 
 
 def _result_sections(payload: dict[str, object]) -> list[tuple[str, list[tuple[str, object, str]]]]:
@@ -256,7 +268,7 @@ def _result_sections(payload: dict[str, object]) -> list[tuple[str, list[tuple[s
     for key, value in payload.items():
         if key not in shown:
             technical_rows.append((str(key), _technical_value(value), ""))
-    if technical_rows:
+    if technical_rows and verbose_enabled():
         sections.append(("高级：技术详情", technical_rows))
     return sections
 
@@ -280,15 +292,162 @@ def emit_doctor(report: object) -> None:
         return
     typer.echo("界鉴运行环境")
     typer.echo("")
+    conclusion = "所有必要检查均已通过" if report.ok else "存在必要检查失败"
+    marker, color = _marker("PASS" if report.ok else "FAILED", unicode=_supports_unicode())
+    typer.secho(f"{conclusion}  {marker}", fg=color)
+    typer.echo("")
     rows = []
     for check in report.checks:
-        status = "通过" if check.ok else "失败" if check.required else "可选"
         label = _DOCTOR_LABELS.get(check.name, check.name)
-        rows.append((label, f"{status} · {check.message}", "PASS" if check.ok else "FAILED" if check.required else ""))
+        rows.append(
+            (
+                label,
+                _doctor_value(check),
+                "PASS" if check.ok else "FAILED" if check.required else "",
+            )
+        )
     _emit_section("检查项", rows)
-    conclusion = "必要检查全部通过" if report.ok else "存在必要检查失败"
+    for check in report.checks:
+        if check.ok or not check.required:
+            continue
+        label = _DOCTOR_LABELS.get(check.name, check.name)
+        typer.echo("")
+        typer.secho(f"× {label}不可用", fg="red")
+        typer.echo("")
+        _emit_section("原因", [("", check.message, "")])
+        typer.echo("")
+        _emit_section("如何解决", [("", _doctor_recovery(check.name), "")])
+
+
+def emit_guide_result(result: object) -> None:
+    """用与图形结果页一致的层级展示已发布检查事实，不改写 Verdict。"""
+
+    verdict = str(result.verdict)
+    evidence = tuple(result.evidence)
+    issues = sum(str(item.verdict) == "VULNERABLE" for item in evidence)
+    marker, color = _marker(verdict, unicode=_supports_unicode())
+    typer.echo("界鉴检查完成")
     typer.echo("")
-    _emit_section("结论", [("运行环境", conclusion, "PASS" if report.ok else "FAILED")])
+    conclusion = {
+        "PASS": "当前证据范围内未发现确认问题",
+        "BLOCK": f"发现 {issues or 1} 个权限问题",
+        "INCONCLUSIVE": "证据不足，暂时不能下结论",
+    }.get(verdict, "检查没有形成可展示的结论")
+    typer.secho(f"{conclusion}  {marker}", fg=color)
+    selected = next(
+        (
+            item
+            for item in evidence
+            if str(item.verdict)
+            == ("VULNERABLE" if verdict == "BLOCK" else "INCONCLUSIVE")
+        ),
+        evidence[0] if evidence else None,
+    )
+    if selected is not None:
+        case = selected.case_snapshot
+        typer.echo("")
+        typer.echo(_case_summary(case))
+        typer.echo("")
+        _emit_section(
+            "系统表面结果",
+            [("", _execution_summary(selected.execution_fact.outcome), "")],
+        )
+        typer.echo("")
+        _emit_section(
+            "真实结果",
+            [("", _observation_summary(selected.observation_facts), "")],
+        )
+        typer.echo("")
+        _emit_section("因此", [("", _verdict_reason(verdict, selected), "")])
+    typer.echo("")
+    _emit_section(
+        "下一步",
+        [("", "在图形界面的“检查结果”中查看完整证据。", "")],
+    )
+    if verbose_enabled():
+        typer.echo("")
+        _emit_section(
+            "高级：技术详情",
+            [
+                ("运行标识", result.run_id, ""),
+                ("证据数量", len(evidence), ""),
+                ("原因代码", _technical_value(result.reason_codes), ""),
+            ],
+        )
+
+
+def _case_summary(case: object) -> str:
+    subject = {
+        "attacker": "普通成员",
+        "peer": "访客",
+        "owner": "资源所有者",
+    }.get(str(case.subject_id), "测试身份")
+    action = {"modify": "修改", "view": "查看"}.get(
+        str(case.action_id), "操作"
+    )
+    resource = (
+        "不属于自己的资源"
+        if "owner-resource" in tuple(str(item) for item in case.resource_ids)
+        else "目标资源"
+    )
+    return f"{subject}{action}了{resource}"
+
+
+def _execution_summary(outcome: object) -> str:
+    return {
+        "ACCEPTED": "请求被接受",
+        "DENIED": "请求被拒绝",
+        "FAILED": "请求执行失败",
+        "UNKNOWN": "没有取得可靠的请求结果",
+    }.get(str(outcome), "请求结果未知")
+
+
+def _observation_summary(facts: object) -> str:
+    effects = {str(item.effect) for item in facts}
+    if "CONFIRMED" in effects:
+        return "资源内容已经发生变化"
+    if effects and effects == {"ABSENT"}:
+        return "资源保持不变"
+    return "没有取得完整、可靠的资源状态"
+
+
+def _verdict_reason(verdict: str, evidence: object) -> str:
+    if verdict == "BLOCK":
+        if str(evidence.execution_fact.outcome) == "DENIED" and any(
+            str(item.effect) == "CONFIRMED" for item in evidence.observation_facts
+        ):
+            return "权限限制没有真正阻止这次操作"
+        return "不应允许的操作影响了真实资源"
+    if verdict == "PASS":
+        return "权限规则、请求结果和真实资源状态一致"
+    return "关键观察不完整，不能把未知结果当作安全通过"
+
+
+def _doctor_value(check: object) -> str:
+    details = check.details
+    if check.name in {"python", "node", "pnpm"} and details.get("version"):
+        return str(details["version"])
+    if not check.ok:
+        return "不可用"
+    return {
+        "dependencies": "已准备",
+        "config": "正常",
+        "var_dir": "可写",
+        "sqlite": "SQLite 可用",
+        "playwright": "Chromium 可用",
+        "loopback": "可用",
+        "redaction": "正常",
+    }.get(check.name, check.message)
+
+
+def _doctor_recovery(name: str) -> str:
+    if name in {"node", "pnpm", "dependencies", "playwright"}:
+        return "重新运行 .\\start.cmd，让界鉴修复运行环境。"
+    if name == "config":
+        return "检查配置文件路径和内容后重试。"
+    if name == "var_dir":
+        return "确认运行目录存在且当前用户可以写入。"
+    return "查看运行日志，修复对应环境问题后重试。"
 
 
 def emit_json(payload: object) -> None:

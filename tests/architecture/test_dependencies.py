@@ -176,8 +176,9 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
     assert (frontend / "src" / "app").is_dir()
     assert (frontend / "src" / "api").is_dir()
     workspace_text = (frontend / "pnpm-workspace.yaml").read_text(encoding="utf-8")
-    assert "storeDir: ../../../.pnpm-store" in workspace_text
-    assert (frontend / "../../../.pnpm-store").resolve() == (ROOT.parent / ".pnpm-store").resolve()
+    assert "storeDir: ../../var/cache/pnpm-store" in workspace_text
+    assert "virtualStoreDir" not in workspace_text
+    assert (frontend / "../../var/cache/pnpm-store").resolve() == (ROOT / "var/cache/pnpm-store").resolve()
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
     assert wheel["only-include"] == ["product/backend", "product/protocols"]
@@ -196,6 +197,28 @@ def test_frontend_uses_task_pages_without_legacy_wrappers() -> None:
     assert all(name not in control_shell for name in ("ContractPage", "RunPage", "VerifyPage", "ReportPage"))
     assert "import { HistoryPage }" not in control_shell
     assert (frontend / "features" / "permissions" / "PermissionRulesPage.tsx").is_file()
+    for path in (
+        frontend / "app" / "browserState.ts",
+        frontend / "features" / "access" / "onboarding" / "OnboardingWizard.tsx",
+        frontend / "features" / "access" / "onboarding" / "OnboardingWelcome.tsx",
+        frontend / "features" / "access" / "onboarding" / "OnboardingSteps.tsx",
+        frontend / "features" / "permissions" / "explorer" / "PermissionExplorer.tsx",
+        frontend / "features" / "permissions" / "explorer" / "PermissionMatrix.tsx",
+        frontend / "features" / "permissions" / "explorer" / "PermissionGraph.tsx",
+        frontend / "features" / "permissions" / "explorer" / "projection.ts",
+        frontend / "features" / "permissions" / "governance" / "PermissionGovernancePanel.tsx",
+        frontend / "features" / "recording" / "RecordingSetupCard.tsx",
+        frontend / "features" / "recording" / "RecordingCaptureCard.tsx",
+        frontend / "features" / "recording" / "FlowDraftReview.tsx",
+        frontend / "features" / "access" / "access.css",
+        frontend / "features" / "permissions" / "permissions.css",
+        frontend / "features" / "checks" / "checks.css",
+    ):
+        assert path.is_file(), path
+    assert not (frontend / "features" / "sharedStatus.ts").exists()
+    for path in (*sorted((frontend / "app").rglob("*.ts*")), *sorted((frontend / "features").rglob("*.ts*"))):
+        if ".test." not in path.name:
+            assert "type Item = Record<string, any>" not in path.read_text(encoding="utf-8"), path
     for name in ("StartCheckPage.tsx", "CheckProgress.tsx", "CheckResultsPage.tsx", "EvidenceTimeline.tsx", "ReportPanel.tsx", "CheckHistoryPage.tsx"):
         assert (frontend / "features" / "checks" / name).is_file()
     for legacy in (

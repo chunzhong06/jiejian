@@ -6,25 +6,27 @@
 
 普通用户主路径是：工作台 → 应用接入 → 权限规则 → 开始检查 → 检查结果。历史变化用于查看回归；流程录制、模型服务和运行环境放在高级能力中。
 
+展示层以中文任务表达为默认。按钮、状态、说明和已知业务枚举使用中文；品牌、命令、JSON 等文件格式、协议字段、路径和需要对照的原始标识保留原文。已知机器值需要同时可辨识时使用“中文含义（原值）”，不得修改 API 数据完成翻译。
+
 页面主要位于 `src/features/`：
 
 - `workspace/`：工作台和下一步提示。
-- `access/`：应用接入、目录选择和 onboarding。
-- `permissions/`：权限规则、可筛选矩阵和关系图。
+- `access/`：应用接入；`onboarding/` 内分别组织欢迎页、步骤表单和向导编排。
+- `permissions/`：权限规则；`explorer/` 放矩阵、关系图与纯 projection，`governance/` 放规则版本治理。
 - `checks/`：检查提交、进度、结果、证据、报告和历史变化。
-- `recording/`：浏览器录制、FlowDraft 审阅和确认保存。
+- `recording/`：分别组织录制准备、采集控制、FlowDraft 审阅和页面编排。
 - `settings/`、`system/`：模型服务和运行环境。
 
 ## src 目录职责
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/app/` | 控制壳、路由级状态和统一展示投影。 |
-| `src/api/` | loopback API 客户端、DTO 和稳定错误处理。 |
+| `src/app/` | 控制壳、路由级状态、允许持久化的 browserState 和统一展示投影。 |
+| `src/api/` | loopback API 客户端、命名 DTO 和稳定错误处理。 |
 | `src/features/` | 按用户任务组织页面与局部组件。 |
 | `src/components/` | 多个 feature 复用的通用展示组件。 |
 | `src/main.tsx` | React 入口。 |
-| `src/styles.css` | 当前产品的全局样式。 |
+| `src/styles.css` | 只保留应用壳与跨页面全局样式；Feature 样式跟随所属目录。 |
 | `src/test-setup.ts` | Vitest/Testing Library 公共测试环境。 |
 
 ## 开发与验证
@@ -37,6 +39,10 @@ pnpm test
 pnpm build
 ```
 
+pnpm 的内容寻址 store 位于项目根 `var/cache/pnpm-store`；不要从前端目录传入相对 `--store-dir`。已安装依赖继续使用 `product/frontend/node_modules` 与其默认 `.pnpm` 虚拟依赖目录，保证 TypeScript 和 Vite 按标准祖先链解析类型；删除该目录后由启动器自动识别并重建。
+
 组件测试与源码放在一起，文件名使用 `*.test.tsx` 或 `*.test.ts`。涉及真实路由、下拉交互、浏览器或完整产品闭环时，再补后端 `tests/e2e/` 测试。
+
+权限矩阵负责完整权限集合；关系图全局模式只表达身份、资源和业务关系，角色显示为身份属性。聚焦具体身份后，projection 才过滤到相关节点并加入该身份自己的权限边。布局使用确定性的身份 lane，不引入大型自动布局依赖；节点中文含义与原始 ID 分层展示。
 
 前端只展示已经发布的 Contract、Evidence、Finding、Verification 和 Gate 事实。它不能自行决定漏洞结论，不能把 HTTP 状态当作真实资源状态，也不能直接访问目标或持久化秘密。深入理解数据流时，从[技术文档入口](../../docs/README.md)进入对应 Architecture。

@@ -30,8 +30,9 @@ PowerShell 示例：
 
 ```powershell
 $env:PYTHONDONTWRITEBYTECODE = '1'
-python -B -m pytest -p no:cacheprovider --basetemp var/pytest-essential-local -m essential
-python -B -m pytest -p no:cacheprovider --basetemp var/pytest-full-local
+New-Item -ItemType Directory -Path var/test -Force | Out-Null
+python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-essential-local -m essential
+python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-full-local
 ```
 
 前端组件测试与源码共置，不受 pytest marker 管理。仓库级全量验证还要运行：
@@ -44,11 +45,11 @@ pnpm --dir product/frontend build
 只收集不执行时加 `--collect-only -q`。E2E 和 architecture 可分别运行：
 
 ```powershell
-python -B -m pytest -p no:cacheprovider --basetemp var/pytest-e2e-local tests/e2e
-python -B -m pytest -p no:cacheprovider --basetemp var/pytest-architecture-local tests/architecture
+python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-e2e-local tests/e2e
+python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-architecture-local tests/architecture
 ```
 
-每次使用唯一 `--basetemp`，完成后只清理这次创建的目录。需要 `--lf`、`--ff` 或 `--stepwise` 时才临时启用 pytest cache。
+每次使用 `var/test/` 下唯一的 `--basetemp`，完成后只清理这次创建的目录；`var/test` 整体都不属于产品事实。需要 `--lf`、`--ff` 或 `--stepwise` 时才临时启用 pytest cache。
 
 ## fixture 规则
 

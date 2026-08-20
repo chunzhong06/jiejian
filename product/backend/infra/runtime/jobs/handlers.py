@@ -21,7 +21,7 @@ from typing import Any, Protocol, TypeVar
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord
-from product.backend.infra.runtime.jobs.models import CancellationResult, ClaimJob, ClaimedJob, CompleteCancellation, FatalFailure, JobMutationResult, RetryableFailure, RenewLease
+from product.backend.infra.runtime.jobs.models import CancellationResult, ClaimJob, ClaimedJob, CompleteCancellation, FatalFailure, JobMutationResult, RetryableFailure, RenewLease, WaitingFatalFailure
 from product.backend.infra.runtime.jobs.targets import JobTargetType
 
 ResultT_co = TypeVar("ResultT_co", covariant=True)
@@ -75,6 +75,14 @@ class JobAttemptPort(Protocol):
         *,
         known_secrets: Sequence[str] = (),
     ) -> JobMutationResult:
+        ...
+
+    def record_waiting_fatal_failure(
+        self,
+        request: WaitingFatalFailure,
+        *,
+        known_secrets: Sequence[str] = (),
+    ) -> JobMutationResult | None:
         ...
 
 

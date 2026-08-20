@@ -135,7 +135,6 @@ class Recording(RecordingModel):
             RecordingState.PROCESSING,
             RecordingState.PENDING_REVIEW,
             RecordingState.COMPLETED,
-            RecordingState.FAILED,
             RecordingState.SAFETY_STOPPED,
         }
         if self.state in started_states and self.started_at_us is None:
@@ -152,7 +151,7 @@ class Recording(RecordingModel):
 
 _TRANSITIONS: dict[RecordingState, frozenset[RecordingState]] = {
     RecordingState.CREATED: frozenset(
-        {RecordingState.STARTING, RecordingState.CANCELLED}
+        {RecordingState.STARTING, RecordingState.FAILED, RecordingState.CANCELLED}
     ),
     RecordingState.STARTING: frozenset(
         {RecordingState.RECORDING, RecordingState.CLEANING}

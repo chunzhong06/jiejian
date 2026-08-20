@@ -3,13 +3,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Card, Collapse, Select, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import { resultsApi } from '../../api/results'
+import { resultsApi, type FindingDto } from '../../api/results'
+import type { RunDto } from '../../api/runs'
 import { formatTimestamp, occurrenceStatusLabel, severityLabel } from '../../app/presentation'
+import './checks.css'
 
-type Item = Record<string, any>
+type HistoryFindingEvent = FindingDto & { run_id: string; run_created_at_us?: string | number }
 
-export function CheckHistoryPage({ runs, onError }: { runs: Item[]; onError: (error: ApiError) => void }) {
-  const [events, setEvents] = useState<Item[]>([])
+export function CheckHistoryPage({ runs, onError }: { runs: RunDto[]; onError: (error: ApiError) => void }) {
+  const [events, setEvents] = useState<HistoryFindingEvent[]>([])
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [status, setStatus] = useState<string>()
@@ -20,11 +22,11 @@ export function CheckHistoryPage({ runs, onError }: { runs: Item[]; onError: (er
     let active = true
     setLoading(true); setLoaded(false); setEvents([])
     void (async () => {
-      const collected: Item[] = []
+      const collected: HistoryFindingEvent[] = []
       for (const run of readableRuns) {
         const result = await resultsApi.findings(String(run.run_id))
         if (!active) return
-        for (const item of result) collected.push({ ...item, run_id: run.run_id, run_created_at_us: run.created_at_us ?? run.created_at })
+        for (const item of result) collected.push({ ...item, run_id: String(run.run_id), run_created_at_us: run.created_at_us ?? run.created_at })
       }
       if (active) { setEvents(collected); setLoaded(true); setLoading(false) }
     })().catch((error) => { if (active) { setLoaded(false); setLoading(false); onError(error as ApiError) } })
@@ -32,7 +34,7 @@ export function CheckHistoryPage({ runs, onError }: { runs: Item[]; onError: (er
   }, [readableRuns.map((run) => run.run_id).join('|')])
   const identities = [...new Set(events.map((item) => String(item.finding?.finding_id ?? item.finding?.identity?.finding_id ?? '')))].filter(Boolean)
   const filtered = events.filter((item) => (!status || String(item.occurrence?.status) === status) && (!findingId || String(item.finding?.finding_id) === findingId))
-  const grouped: Array<[string, Item[]]> = [...filtered.reduce<Map<string, Item[]>>((map, item) => { const key = String(item.finding?.finding_id ?? 'unknown'); const current = map.get(key) ?? []; current.push(item); map.set(key, current); return map }, new Map<string, Item[]>()).entries()]
+  const grouped: Array<[string, HistoryFindingEvent[]]> = [...filtered.reduce<Map<string, HistoryFindingEvent[]>>((map, item) => { const key = String(item.finding?.finding_id ?? 'unknown'); const current = map.get(key) ?? []; current.push(item); map.set(key, current); return map }, new Map<string, HistoryFindingEvent[]>()).entries()]
   return <Card title="历史变化">
     {readableRuns.length < 2 && <Typography.Paragraph type="secondary">还没有两次已完成且结果完整的检查可供比较。</Typography.Paragraph>}
     {readableRuns.length >= 2 && loading && <Typography.Paragraph type="secondary">正在按检查时间读取真实问题变化。</Typography.Paragraph>}

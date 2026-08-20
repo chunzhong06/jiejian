@@ -5,21 +5,36 @@
  */
 
 import { request } from './http'
+import type { PermissionContractDto } from './contracts'
 
-type Item = Record<string, any>
+export type ExecutionProfileDto = {
+  schema_version?: '1'
+  profile_id: string
+  project_id: string
+  name?: string
+  profile_path?: string
+  created_at_us?: number
+  updated_at_us?: number
+}
+
+export type SubmittedRunDto = {
+  schema_version: '1'
+  run: import('./runs').RunDto
+  job: { job_id: string; state: string }
+}
 
 export const executionProfilesApi = {
   register: (path: string) =>
-    request<Item>('/api/execution-profiles', {
+    request<ExecutionProfileDto>('/api/execution-profiles', {
       method: 'POST',
       body: JSON.stringify({ schema_version: '1', profile_path: path }),
     }),
   profiles: (projectId: string) =>
-    request<Item[]>(`/api/projects/${encodeURIComponent(projectId)}/execution-profiles`),
+    request<ExecutionProfileDto[]>(`/api/projects/${encodeURIComponent(projectId)}/execution-profiles`),
   contract: (projectId: string, profileId: string) =>
-    request<Item>(`/api/projects/${encodeURIComponent(projectId)}/execution-profiles/${encodeURIComponent(profileId)}/contract`),
+    request<PermissionContractDto>(`/api/projects/${encodeURIComponent(projectId)}/execution-profiles/${encodeURIComponent(profileId)}/contract`),
   submit: (projectId: string, profileId: string) =>
-    request<Item>(`/api/projects/${encodeURIComponent(projectId)}/runs`, {
+    request<SubmittedRunDto>(`/api/projects/${encodeURIComponent(projectId)}/runs`, {
       method: 'POST',
       body: JSON.stringify({
         schema_version: '1',

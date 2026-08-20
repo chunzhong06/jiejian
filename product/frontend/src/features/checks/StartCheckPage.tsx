@@ -3,19 +3,17 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Collapse, List, Select, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import { executionProfilesApi } from '../../api/executionProfiles'
-import { runsApi } from '../../api/runs'
+import { executionProfilesApi, type ExecutionProfileDto } from '../../api/executionProfiles'
+import { runsApi, type RunDto } from '../../api/runs'
+import type { ProjectDto } from '../../api/projects'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { lifecycleLabel, verdictLabel } from '../../app/presentation'
 import { CheckProgress } from './CheckProgress'
+import './checks.css'
 
-type Item = Record<string, any>
-const resourceKey = 'jiejian.resource'
-function remember(key: string, value: unknown) { localStorage.setItem(key, JSON.stringify(value)) }
-
-export function StartCheckPage({ project, runs, onRefresh, onError, onNext }: { project: Item; runs: Item[]; onRefresh: () => void; onError: (error: ApiError) => void; onNext?: () => void }) {
-  const [currentRun, setCurrentRun] = useState<Item | undefined>(runs[0])
-  const [profiles, setProfiles] = useState<Item[]>([])
+export function StartCheckPage({ project, runs, onRefresh, onError, onNext }: { project: ProjectDto; runs: RunDto[]; onRefresh: () => void; onError: (error: ApiError) => void; onNext?: () => void }) {
+  const [currentRun, setCurrentRun] = useState<RunDto | undefined>(runs[0])
+  const [profiles, setProfiles] = useState<ExecutionProfileDto[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState<string>()
   const [loading, setLoading] = useState(false)
   const latest = currentRun ?? runs[0]
@@ -40,7 +38,7 @@ export function StartCheckPage({ project, runs, onRefresh, onError, onNext }: { 
   const submit = async () => {
     if (!selectedProfileId) return
     setLoading(true)
-    try { const result = await executionProfilesApi.submit(String(project.project_id), selectedProfileId); if (result.run) { remember(resourceKey, result.run); setCurrentRun(result.run) }; await onRefresh() } catch (error) { onError(error as ApiError) } finally { setLoading(false) }
+    try { const result = await executionProfilesApi.submit(project.project_id, selectedProfileId); setCurrentRun(result.run); await onRefresh() } catch (error) { onError(error as ApiError) } finally { setLoading(false) }
   }
   const titleStatus = latest ? lifecycleLabel(latest.lifecycle) : '尚未开始'
   return <Space direction="vertical" size="large" className="full-width">

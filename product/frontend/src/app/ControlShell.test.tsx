@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import ControlShell, { remembered } from './ControlShell'
+import ControlShell from './ControlShell'
 
 const mockApi = vi.hoisted(() => ({
   projects: vi.fn().mockResolvedValue([]), runs: vi.fn().mockResolvedValue([]), run: vi.fn(),
@@ -59,10 +59,10 @@ describe('应用壳', () => {
   })
 
   it('陈旧项目不会绕过项目选择边界', async () => {
-    localStorage.setItem(remembered.project, JSON.stringify({ project_id: 'stale-project' }))
+    localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'stale-project' }))
     render(<ControlShell />)
     expect(await screen.findByText('还没有选择要检查的应用。')).toBeInTheDocument()
-    expect(localStorage.getItem(remembered.project)).toBeNull()
+    expect(localStorage.getItem('jiejian.project')).toBeNull()
   })
 
   it('串起执行配置、矩阵、已发布结果、证据、报告和历史入口', async () => {
@@ -81,7 +81,7 @@ describe('应用壳', () => {
     mockApi.evidenceDetail.mockResolvedValue({ case_snapshot: { case_id: 'case-1', subject_id: 'member', action_id: 'read', resource_ids: ['document'], required_observations: ['resource_state'] }, execution_fact: { target_type: 'WEB', action_id: 'read', outcome: 'DENIED', reason_codes: [] }, observation_facts: [{ requirement_id: 'resource_state', resource_id: 'document', effect: 'CONFIRMED', complete: true, reliable: true, reason_codes: [] }], observations: [], outcomes: [], verdict: 'BLOCK', reason_codes: [] })
     mockApi.reports.mockResolvedValue([{ report_id: 'report-1', gate_decision: 'PASS' }])
     mockApi.report.mockResolvedValue({ runtime: { verdict: 'BLOCK', findings: [{}] }, gate: { decision: 'PASS' }, limitations: [] })
-    localStorage.setItem(remembered.project, JSON.stringify({ project_id: 'p1' }))
+    localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
     window.location.hash = '#/apps/rules'
     render(<ControlShell />)
     await screen.findByText('当前执行配置')

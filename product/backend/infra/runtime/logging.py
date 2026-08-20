@@ -19,17 +19,25 @@ from __future__ import annotations
 import json
 import logging as stdlib_logging
 import sys
+from logging.handlers import RotatingFileHandler
 from datetime import UTC, datetime
 from pathlib import Path
+from collections.abc import Sequence
 from typing import TextIO
 
-from product.backend.core.redaction import redact
+from product.backend.core.redaction import redact_known_secrets
 
 
 class JsonFormatter(stdlib_logging.Formatter):
-    def __init__(self, *, default_trace_id: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        default_trace_id: str | None = None,
+        known_secrets: Sequence[str] = (),
+    ) -> None:
         super().__init__()
         self.default_trace_id = default_trace_id
+        self.known_secrets = tuple(secret for secret in known_secrets if secret)
 
     def format(self, record: stdlib_logging.LogRecord) -> str:
         payload = {
@@ -38,13 +46,18 @@ class JsonFormatter(stdlib_logging.Formatter):
             "component": getattr(record, "component", record.name),
             "trace_id": getattr(record, "trace_id", self.default_trace_id),
             "run_id": getattr(record, "run_id", None),
+            "job_id": getattr(record, "job_id", None),
             "case_id": getattr(record, "case_id", None),
             "event_code": getattr(record, "event_code", None),
             "message": record.getMessage(),
         }
         if record.exc_info:
             payload["error"] = self.formatException(record.exc_info)
-        return json.dumps(redact(payload), ensure_ascii=False, separators=(",", ":"))
+        return json.dumps(
+            redact_known_secrets(payload, self.known_secrets),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
 
 
 def configure_logging(
@@ -53,21 +66,34 @@ def configure_logging(
     stream: TextIO | None = None,
     trace_id: str | None = None,
     var_dir: Path | None = None,
+    console: bool | None = None,
+    known_secrets: Sequence[str] = (),
 ) -> stdlib_logging.Logger:
-    """初始化界鉴命名日志器；日志只写 stderr 和可选的 var 日志文件。"""
+    """初始化界鉴命名日志器；控制台与 VarDir 文件 sink 可独立选择。"""
 
     logger = stdlib_logging.getLogger("jiejian")
     for handler in tuple(logger.handlers):
         logger.removeHandler(handler)
         handler.close()
-    formatter = JsonFormatter(default_trace_id=trace_id)
-    stderr_handler = stdlib_logging.StreamHandler(stream or sys.stderr)
-    stderr_handler.setFormatter(formatter)
-    logger.addHandler(stderr_handler)
+    formatter = JsonFormatter(
+        default_trace_id=trace_id,
+        known_secrets=known_secrets,
+    )
+    if console is None:
+        console = stream is not None
+    if console:
+        stderr_handler = stdlib_logging.StreamHandler(stream or sys.stderr)
+        stderr_handler.setFormatter(formatter)
+        logger.addHandler(stderr_handler)
     if var_dir is not None:
         log_path = Path(var_dir).resolve() / "logs" / "jiejian.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = stdlib_logging.FileHandler(log_path, encoding="utf-8")
+        file_handler = RotatingFileHandler(
+            log_path,
+            maxBytes=5 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     logger.setLevel(level.upper())

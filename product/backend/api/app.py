@@ -51,7 +51,9 @@ def create_app(
         context.var_dir,
         context.uow_factory,
         context.job_queue,
+        attempt_service=context.job_attempts,
         environment_provider=context.environment_for_secret_names,
+        clock_us=clock_us,
     )
     results = context.results
     app = FastAPI(title="界鉴本地控制面", version="0.1.0")

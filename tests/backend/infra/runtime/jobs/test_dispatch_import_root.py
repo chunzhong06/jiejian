@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher, _worker_import_root
+from product.backend.infra.runtime.jobs.dispatch import WORKER_LOG_MAX_BYTES, WorkerDispatcher, _worker_import_root
 
 
 def test_worker_dispatch_uses_import_root_for_child_cwd(tmp_path: Path) -> None:
@@ -35,3 +35,44 @@ def test_worker_dispatch_uses_import_root_for_child_cwd(tmp_path: Path) -> None:
     assert captured["cwd"] == str(_worker_import_root())
     assert captured["cwd"] != str(var_dir.resolve())
     assert command[command.index("--var-dir") + 1] == str(var_dir.resolve())
+
+
+def test_worker_dispatch_captures_bootstrap_stderr_and_rotates_by_job_id(
+    tmp_path: Path,
+) -> None:
+    job_id = "job_" + "2" * 32
+    commands: list[list[str]] = []
+
+    def fake_popen(command: list[str], **kwargs: object) -> object:
+        commands.append(command)
+        stderr = kwargs["stderr"]
+        assert stderr is kwargs["stdout"]
+        stderr.write(b"bootstrap traceback\r\n")
+        return object()
+
+    var_dir = tmp_path / "var"
+    dispatcher = WorkerDispatcher(
+        var_dir=var_dir,
+        uow_factory=lambda: None,
+        environ={"NEEDED_SECRET": "sentinel"},
+        popen=fake_popen,
+    )
+
+    dispatcher.start(
+        job_id=job_id,
+        lease_owner="worker-test",
+        secret_names=("NEEDED_SECRET",),
+    )
+    log_path = var_dir / "logs" / "workers" / f"{job_id}.log"
+    assert log_path.read_bytes() == b"bootstrap traceback\r\n"
+    assert commands[0][-2:] == ["--secret-name", "NEEDED_SECRET"]
+
+    log_path.write_bytes(b"x" * WORKER_LOG_MAX_BYTES)
+    dispatcher.start(
+        job_id=job_id,
+        lease_owner="worker-test",
+        secret_names=("NEEDED_SECRET",),
+    )
+
+    assert log_path.read_bytes() == b"bootstrap traceback\r\n"
+    assert log_path.with_name(f"{job_id}.log.1").stat().st_size == WORKER_LOG_MAX_BYTES

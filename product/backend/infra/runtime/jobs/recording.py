@@ -339,13 +339,11 @@ class RecordingJobTargetHandler(JobTargetHandler):
             else RecordingReasonCode.PROCESSING_FAILED
         )
         domain = recording.to_domain()
-        if (
-            domain.state is RecordingState.CREATED
-            and recording_target is RecordingTerminalState.CANCELLED
-        ):
+        # Worker 尚未 claim 时没有真实启动事实，直接落终态，不能伪造 STARTING/CLEANING。
+        if domain.state is RecordingState.CREATED:
             domain = transition_recording_state(
                 domain,
-                RecordingState.CANCELLED,
+                RecordingState(recording_target.value),
                 operator="WORKER",
                 occurred_at_us=now_us,
                 reason_code=recording_reason,

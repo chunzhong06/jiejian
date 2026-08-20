@@ -1,0 +1,21 @@
+/* 检查过程、结果证据和历史变化。 */
+.check-progress { display: flex; flex-direction: column; gap: 8px; }
+.check-progress-value { max-width: 620px; }
+.evidence-timeline { margin: 22px 0 8px; padding-left: 28px; position: relative; }
+.evidence-timeline::before { background: linear-gradient(#818cf8, #cbd5e1); bottom: 34px; content: ''; left: 7px; position: absolute; top: 10px; width: 2px; }
+.evidence-timeline-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 14px; padding: 14px 16px; position: relative; }
+.evidence-timeline-item h5 { margin: 0 0 10px; }
+.evidence-timeline-dot { background: #fff; border: 3px solid #6366f1; border-radius: 50%; height: 12px; left: -28px; position: absolute; top: 18px; width: 12px; z-index: 1; }
+.evidence-timeline-content { min-width: 0; }
+.observation-item { background: #fff; border-radius: 8px; margin-bottom: 8px; padding-inline: 12px !important; }
+.history-timeline { list-style: none; margin: 8px 0 0; padding: 0 0 0 28px; position: relative; }
+.history-timeline::before { background: #cbd5e1; bottom: 24px; content: ''; left: 7px; position: absolute; top: 8px; width: 2px; }
+.history-timeline li { margin-bottom: 18px; position: relative; }
+.history-marker { background: #fff; border: 3px solid #4f46e5; border-radius: 50%; height: 11px; left: -27px; position: absolute; top: 4px; width: 11px; }
+.history-event { display: flex; flex-direction: column; gap: 7px; }
+.finding-list-item { align-items: stretch !important; }
+
+@media (max-width: 768px) {
+  .evidence-timeline { padding-left: 24px; }
+  .evidence-timeline-dot { left: -24px; }
+}
