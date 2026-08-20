@@ -45,7 +45,7 @@ from product.backend.infra.storage import (
 )
 from product.backend.infra.runtime.jobs.recording import RecordingJobHandler
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
-from product.backend.infra.runtime.jobs.models import ClaimJob
+from product.backend.infra.runtime.jobs.models import ClaimJob, WaitingFatalFailure
 from product.backend.infra.runtime.jobs.models import RequestCancellation
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
@@ -438,6 +438,47 @@ def test_secret_bearing_runner_result_fails_without_persisting_payload(
         finally:
             connection.close()
         assert sentinel not in dump
+    finally:
+        context.engine.dispose()
+
+
+def test_waiting_worker_fatal_finishes_recording_without_creating_attempt(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    try:
+        request = _request("rec_" + "5" * 32)
+        submission = context.application.submit(
+            SubmitRecording(
+                request=request,
+                flow_id="waiting-worker-fatal",
+                idempotency_key="waiting-worker-fatal",
+                available_at_us=NOW_US + 100,
+                now_us=NOW_US + 100,
+                job_id="job_" + "5" * 32,
+            )
+        )
+
+        failed = context.attempts.record_waiting_fatal_failure(
+            WaitingFatalFailure(
+                job_id=submission.job.job_id,
+                now_us=NOW_US + 110,
+            )
+        )
+
+        assert failed is not None
+        assert failed.job.state is JobState.FAILED
+        assert failed.job.attempt == 0
+        assert failed.recording is not None
+        assert failed.recording.state is RecordingState.FAILED
+        assert failed.recording.started_at_us is None
+        with context.uow_factory() as work:
+            events = work.job_events.list_for_job(submission.job.job_id)
+        assert events[-1].event_type == "JOB_FAILED"
+        assert events[-1].metadata == {
+            "attempt": 0,
+            "reason_code": "WORKER_FATAL",
+        }
     finally:
         context.engine.dispose()
 

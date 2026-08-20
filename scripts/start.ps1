@@ -24,14 +24,12 @@ param(
     [switch]$ForcePrepare,
     [Parameter(DontShow = $true)][switch]$DisplaySpinnerProcess,
     [Parameter(DontShow = $true)][string]$DisplaySpinnerStage = "startup",
-    [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii,
-    [Parameter(DontShow = $true)][switch]$WaitOnFailure
+    [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii
 )
 
 $ErrorActionPreference = "Stop"
 $script:ModeExplicit = $PSBoundParameters.ContainsKey("Mode")
 $script:FinalMode = if ($PrepareOnly) { "Prepare" } else { $Mode }
-$script:WaitOnFailure = $false
 $script:ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 if ([string]::IsNullOrWhiteSpace($VarDir)) {
     $VarDir = Join-Path $script:ProjectRoot "var"
@@ -39,26 +37,44 @@ if ([string]::IsNullOrWhiteSpace($VarDir)) {
     $VarDir = Join-Path $script:ProjectRoot $VarDir
 }
 $script:VarDir = [IO.Path]::GetFullPath($VarDir)
-$script:LogDir = Join-Path $script:VarDir "logs"
-$script:StartupDir = Join-Path $script:VarDir "startup"
+$script:LogDir = Join-Path $script:VarDir "logs\startup"
+$script:StartupDir = Join-Path $script:VarDir "cache\startup"
 $script:StatePath = Join-Path $script:StartupDir "prepare-state.json"
-$script:LogPath = Join-Path $script:LogDir ("startup-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+$script:LogPath = Join-Path $script:LogDir ("{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff"))
+$script:StartupLogInitialized = $false
 $script:FailureStage = "startup"
 $script:FailureCode = 0
 $script:CondaExecutable = $null
 $script:UvExecutable = $null
 $script:PythonRunner = $null
 $script:PackageRunner = $null
+$script:PythonExecutable = $null
 $script:PythonEnvironmentType = $null
 $script:PythonEnvironmentPath = $null
 $script:UvVersion = $null
 $script:DownloadTemp = $null
 $script:NodeVersion = $null
 $script:PnpmVersion = $null
+$script:NodeExecutable = $null
+$script:PnpmExecutable = $null
+$script:PnpmRunner = $null
+$script:CorepackExecutable = $null
+$script:NodeArchitecture = $null
+$script:NodeRequirement = $null
+$script:PnpmRequirement = $null
+$script:ToolchainFingerprint = $null
+$script:NodeRuntimeDetail = $null
+$script:PnpmRuntimeDetail = $null
 $script:CondaVersion = $null
 $script:PythonVersion = $null
 $script:PythonFingerprint = $null
 $script:NodeDependenciesFingerprint = $null
+$script:PythonDependenciesDetail = $null
+$script:ChromiumDetail = $null
+$script:MigrationDetail = $null
+$script:FrontendDependenciesDetail = $null
+$script:FrontendBuildDetail = $null
+$script:CliEntryMode = "Shell"
 $script:PrepareState = [pscustomobject]@{
     schema_version = "1"
     phases = [pscustomobject]@{}
@@ -69,6 +85,12 @@ $script:SavedUvCacheDir = $env:UV_CACHE_DIR
 $script:SavedUvPythonInstallDir = $env:UV_PYTHON_INSTALL_DIR
 $script:SavedPythonUtf8 = $env:PYTHONUTF8
 $script:SavedPythonIoEncoding = $env:PYTHONIOENCODING
+$script:SavedPath = $env:PATH
+$script:SavedCorepackHome = $env:COREPACK_HOME
+$script:SavedCorepackDownloadPrompt = $env:COREPACK_ENABLE_DOWNLOAD_PROMPT
+$script:SavedJiejianCorepackExecutable = $env:JIEJIAN_COREPACK_EXECUTABLE
+$script:SavedPnpmHome = $env:PNPM_HOME
+$script:SavedNpmConfigCache = $env:npm_config_cache
 $script:OriginalLocation = (Get-Location).Path
 $script:DisplayStageName = $null
 $script:DisplayStageTimer = $null
@@ -76,6 +98,7 @@ $script:DisplayStageSkipped = $false
 $script:DisplayStageIndex = 0
 $script:DisplayInteractive = $false
 $script:DisplayUnicode = $false
+$script:DisplayTrueColor = $false
 $script:WaitIndicatorProcess = $null
 
 $script:Utf8Encoding = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
@@ -89,9 +112,21 @@ try {
     $script:DisplayUnicode = $script:DisplayInteractive -and
         [Console]::OutputEncoding.CodePage -eq 65001 -and
         $Host.UI.RawUI.WindowSize.Width -ge 72
+    $supportsVirtualTerminal = $false
+    try { $supportsVirtualTerminal = [bool]$Host.UI.SupportsVirtualTerminal } catch { $supportsVirtualTerminal = $false }
+    $hasTerminalHint = -not [string]::IsNullOrWhiteSpace([string]$env:WT_SESSION) -or
+        -not [string]::IsNullOrWhiteSpace([string]$env:COLORTERM) -or
+        -not [string]::IsNullOrWhiteSpace([string]$env:ANSICON) -or
+        [string]$env:ConEmuANSI -eq "ON" -or
+        [string]$env:TERM_PROGRAM -match "^(vscode|WezTerm|Hyper)$" -or
+        [string]$env:TERM -match "(xterm|ansi|cygwin|msys|vt100)"
+    $script:DisplayTrueColor = $script:DisplayUnicode -and (
+        $supportsVirtualTerminal -or $hasTerminalHint
+    )
 } catch {
     $script:DisplayInteractive = $false
     $script:DisplayUnicode = $false
+    $script:DisplayTrueColor = $false
 }
 
 
@@ -105,10 +140,6 @@ if ($DisplaySpinnerProcess) {
     try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) } catch { }
     exit 0
 }
-
-$script:WaitOnFailure = [bool]($WaitOnFailure -and
-    $script:FinalMode -eq "Interactive" -and
-    $script:DisplayInteractive)
 
 try {
     if ($PrepareOnly -and $script:ModeExplicit -and $Mode -ne "Prepare") {
@@ -125,12 +156,12 @@ try {
     $env:PYTHONIOENCODING = "utf-8"
     Start-DisplayStage 1 "检查运行环境"
     Write-Stage "preflight" "检查 Node.js 与 pnpm"
-    Test-NodeAndPnpm
-    Write-DisplayResult "Node.js" "完成" $false $script:NodeVersion
-    Write-DisplayResult "pnpm" "完成" $false $script:PnpmVersion
-    Write-DisplayResult "PowerShell" "完成" $true $PSVersionTable.PSVersion.ToString()
     New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null
     Load-PrepareState
+    Test-NodeAndPnpm
+    Write-DisplayResult "Node.js" "完成" $false $script:NodeRuntimeDetail
+    Write-DisplayResult "pnpm" "完成" $false $script:PnpmRuntimeDetail
+    Write-DisplayResult "PowerShell" "完成" $true $PSVersionTable.PSVersion.ToString()
     Write-Startup "项目根: $script:ProjectRoot`n运行目录: $script:VarDir`n模式: $script:FinalMode`n日志: $script:LogPath`nNode=$script:NodeVersion pnpm=$script:PnpmVersion"
     Complete-DisplayStage "完成"
     # --- 启动环节：准备 Python ---
@@ -155,13 +186,13 @@ try {
     }
     Write-PythonEnvironment
     Write-DisplayResult "Python" "完成" $false $script:PythonVersion
-    Write-DisplayResult "Python 依赖" "完成" $false
+    Write-DisplayResult "Python 依赖" "完成" $false $script:PythonDependenciesDetail
     Write-DisplayResult "运行环境" "完成" $true ("{0} · {1}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath)
     Complete-DisplayStage
     Start-DisplayStage 3 "准备浏览器"
     Write-Stage "playwright" "安装或校验 Chromium"
     Prepare-Playwright $pythonFingerprint
-    Write-DisplayResult "Chromium" "完成" $true
+    Write-DisplayResult "Chromium" "完成" $true $script:ChromiumDetail
     Complete-DisplayStage
     # --- 启动环节：准备数据 ---
     Start-DisplayStage 4 "准备数据"
@@ -170,14 +201,13 @@ try {
     Write-DisplayResult "环境诊断" "完成" $false
     Write-Stage "migration" "升级 VarDir 数据库"
     Prepare-Migration
-    $databaseRevision = Get-DatabaseRevision (Join-Path $script:VarDir "jiejian.db")
-    Write-DisplayResult "本地数据" "完成" $true ("修订 {0}" -f $databaseRevision)
+    Write-DisplayResult "本地数据" "完成" $true $script:MigrationDetail
     Complete-DisplayStage
     Start-DisplayStage 5 "准备界面"
     Write-Stage "frontend" "按指纹安装并构建前端"
     Prepare-Frontend
-    Write-DisplayResult "前端依赖" "完成" $false ("pnpm {0}" -f $script:PnpmVersion)
-    Write-DisplayResult "前端资源" "完成" $true
+    Write-DisplayResult "前端依赖" "完成" $false $script:FrontendDependenciesDetail
+    Write-DisplayResult "前端构建" "完成" $true $script:FrontendBuildDetail
     Complete-DisplayStage "完成"
     Start-DisplayStage 6 "启动界鉴"
     if ($script:FinalMode -eq "Interactive") {
@@ -191,9 +221,15 @@ try {
         exit 0
     }
     if ($script:FinalMode -eq "Cli") {
-        Write-Stage "cli" "进入命令行会话"
-        Invoke-CliShell
-        Write-DisplayResult "命令行" "已退出" $true
+        if ($script:CliEntryMode -eq "Guide") {
+            Write-Stage "guide" "进入命令行引导"
+            Invoke-CliShell $true
+            Write-DisplayResult "命令行引导" "已退出" $true
+        } else {
+            Write-Stage "cli" "进入命令行会话"
+            Invoke-CliShell
+            Write-DisplayResult "命令行" "已退出" $true
+        }
         Complete-DisplayStage
         exit 0
     }
@@ -224,5 +260,11 @@ try {
     if ($null -eq $script:SavedUvPythonInstallDir) { Remove-Item Env:UV_PYTHON_INSTALL_DIR -ErrorAction SilentlyContinue } else { $env:UV_PYTHON_INSTALL_DIR = $script:SavedUvPythonInstallDir }
     if ($null -eq $script:SavedPythonUtf8) { Remove-Item Env:PYTHONUTF8 -ErrorAction SilentlyContinue } else { $env:PYTHONUTF8 = $script:SavedPythonUtf8 }
     if ($null -eq $script:SavedPythonIoEncoding) { Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue } else { $env:PYTHONIOENCODING = $script:SavedPythonIoEncoding }
+    if ($null -eq $script:SavedPath) { Remove-Item Env:PATH -ErrorAction SilentlyContinue } else { $env:PATH = $script:SavedPath }
+    if ($null -eq $script:SavedCorepackHome) { Remove-Item Env:COREPACK_HOME -ErrorAction SilentlyContinue } else { $env:COREPACK_HOME = $script:SavedCorepackHome }
+    if ($null -eq $script:SavedCorepackDownloadPrompt) { Remove-Item Env:COREPACK_ENABLE_DOWNLOAD_PROMPT -ErrorAction SilentlyContinue } else { $env:COREPACK_ENABLE_DOWNLOAD_PROMPT = $script:SavedCorepackDownloadPrompt }
+    if ($null -eq $script:SavedJiejianCorepackExecutable) { Remove-Item Env:JIEJIAN_COREPACK_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_COREPACK_EXECUTABLE = $script:SavedJiejianCorepackExecutable }
+    if ($null -eq $script:SavedPnpmHome) { Remove-Item Env:PNPM_HOME -ErrorAction SilentlyContinue } else { $env:PNPM_HOME = $script:SavedPnpmHome }
+    if ($null -eq $script:SavedNpmConfigCache) { Remove-Item Env:npm_config_cache -ErrorAction SilentlyContinue } else { $env:npm_config_cache = $script:SavedNpmConfigCache }
     Set-Location -LiteralPath $script:OriginalLocation
 }

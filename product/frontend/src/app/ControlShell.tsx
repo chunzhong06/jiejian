@@ -5,8 +5,8 @@ import { Button, Layout, Menu, Result, Tag, Typography } from 'antd'
 import { AppstoreOutlined, CloudServerOutlined, FileSearchOutlined, HistoryOutlined, PlayCircleOutlined, SettingOutlined } from '@ant-design/icons'
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/http'
-import { projectsApi } from '../api/projects'
-import { runsApi } from '../api/runs'
+import { projectsApi, type ProjectDto } from '../api/projects'
+import { runsApi, type RunDto } from '../api/runs'
 import { llmApi, LLMProfile } from '../api/llm'
 import { systemApi, SystemStatus } from '../api/system'
 import { onboardingApi } from '../api/onboarding'
@@ -22,10 +22,8 @@ import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
 import { RuntimePage } from '../features/system/RuntimePage'
 import { WorkbenchPage } from '../features/workspace/WorkbenchPage'
 import { navigationGroups, normalizeRoute, AppRoute } from './presentation'
+import { browserState } from './browserState'
 import '../styles.css'
-
-type Item = Record<string, any>
-export const remembered = { project: 'jiejian.project', resource: 'jiejian.resource', cursor: 'jiejian.cursor' }
 
 function statusTag(value: string, labels: Record<string, string>) {
   const color = value === 'available' || value === 'running' ? 'green' : value === 'unavailable' || value === 'stopped' ? 'red' : value === 'configured' ? 'blue' : value === 'testing' ? 'gold' : 'default'
@@ -41,11 +39,6 @@ export function llmStatus(profiles: LLMProfile[], failed: boolean) {
   return 'offline'
 }
 
-function remember(key: string, value: unknown) { localStorage.setItem(key, JSON.stringify(value)) }
-function recalled<T>(key: string): T | null {
-  try { return JSON.parse(localStorage.getItem(key) ?? 'null') as T } catch { return null }
-}
-
 function MissingApplication({ onNavigate }: { onNavigate: () => void }) {
   return <Result status="info" title="先选择要检查的应用" subTitle="选择应用后才能查看这里的内容。" extra={<Button type="primary" onClick={onNavigate}>去应用接入</Button>} />
 }
@@ -57,9 +50,9 @@ function ControlShellContent() {
   const navigate = useNavigate()
   const route = normalizeRoute(location.pathname)
   const reportView = route === '/checks/results' && location.search === '?view=report'
-  const [projects, setProjects] = useState<Item[]>([])
-  const [selected, setSelected] = useState<Item | null>(null)
-  const [runs, setRuns] = useState<Item[]>([])
+  const [projects, setProjects] = useState<ProjectDto[]>([])
+  const [selected, setSelected] = useState<ProjectDto | null>(null)
+  const [runs, setRuns] = useState<RunDto[]>([])
   const [error, setError] = useState<ApiError | null>(null)
   const [loading, setLoading] = useState(false)
   const [llmProfiles, setLlmProfiles] = useState<LLMProfile[]>([])
@@ -73,21 +66,21 @@ function ControlShellContent() {
     try {
     const current = await projectsApi.projects()
       setProjects(current)
-      const recalledProject = recalled<Item>(remembered.project)
+      const recalledProject = browserState.readProject()
       const authoritative = current.find((item) => item.project_id === recalledProject?.project_id)
       if (authoritative) setSelected(authoritative)
-      else { setSelected(null); localStorage.removeItem(remembered.project) }
+      else { setSelected(null); browserState.clearProject() }
       setError(null)
     } catch (e) { setError(e as ApiError) }
   }
-  const choose = (project: Item) => { setSelected(project); setDemoData(false); remember(remembered.project, project); navigate('/apps/rules') }
+  const choose = (project: ProjectDto) => { setSelected(project); setDemoData(false); browserState.writeProject(project); navigate('/apps/rules') }
   const onboardingSubmitted = async (result: { project_id: string; run_id: string; job_id: string; demo_data?: boolean }) => {
     setLoading(true); setDemoData(Boolean(result.demo_data))
     try {
       const current = await projectsApi.projects()
       setProjects(current)
       const project = current.find((item) => item.project_id === result.project_id) ?? await projectsApi.project(result.project_id)
-      setSelected(project); remember(remembered.project, project); setRuns(await runsApi.runs(result.project_id)); navigate('/checks/start'); setError(null)
+      setSelected(project); browserState.writeProject(project); setRuns(await runsApi.runs(result.project_id)); navigate('/checks/start'); setError(null)
     } catch (e) { setError(e as ApiError) } finally { setLoading(false) }
   }
   const refreshRuns = async () => {

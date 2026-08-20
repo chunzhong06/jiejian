@@ -23,7 +23,7 @@ from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.events import EventMetadata, append_job_event
-from product.backend.infra.runtime.jobs.models import CancellationResult, ClaimJob, ClaimedJob, CompleteCancellation, FatalFailure, JobEventType, JobMutationResult, RetryPolicy, RetryableFailure, RenewLease, checked_time_add, compute_retry_available_at, validate_control_request
+from product.backend.infra.runtime.jobs.models import CancellationResult, ClaimJob, ClaimedJob, CompleteCancellation, FatalFailure, JobEventType, JobMutationResult, RetryPolicy, RetryableFailure, RenewLease, WaitingFatalFailure, checked_time_add, compute_retry_available_at, validate_control_request
 from product.backend.infra.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry, default_run_job_targets
 
 _TERMINAL_JOB_STATES = {
@@ -247,6 +247,50 @@ class JobAttempts:
                 target=JobState.FAILED,
                 available_at_us=None,
             )
+
+    def record_waiting_fatal_failure(
+        self,
+        request: WaitingFatalFailure,
+        *,
+        known_secrets: Sequence[str] = (),
+    ) -> JobMutationResult | None:
+        """原子结束尚未 claim 的等待态 Job；竞争失配时返回 ``None``。"""
+
+        validate_control_request(request, known_secrets)
+        with self._new_uow(known_secrets) as work:
+            current = work.jobs.get(request.job_id)
+            job = work.job_control.record_waiting_failure(
+                job_id=request.job_id,
+                now_us=request.now_us,
+            )
+            if job is None:
+                return None
+            # 条件 SQL 已经冻结 waiting + unleased；这里的预读只用于保留真实事件源状态。
+            if current is None or current.state not in {
+                JobState.PENDING,
+                JobState.RETRY_WAIT,
+            }:
+                raise JiejianError(ErrorCode.STORAGE_STATE, "等待态失败源状态无效")
+            run, recording = self._targets.finish(
+                work,
+                job,
+                request.now_us,
+                JobTargetOutcome.FAILED,
+            )
+            append_job_event(
+                work,
+                job=job,
+                event_type=JobEventType.JOB_FAILED,
+                source_state=current.state,
+                target_state=JobState.FAILED,
+                occurred_at_us=request.now_us,
+                metadata={
+                    "attempt": job.attempt,
+                    "reason_code": request.reason_code.value,
+                },
+            )
+            work.commit()
+            return JobMutationResult(job=job, run=run, recording=recording)
 
     def _persist_failure(
         self,

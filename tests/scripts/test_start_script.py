@@ -67,19 +67,37 @@ def _make_shims(tmp_path: Path, *, conda: bool, uv: bool, existing_env: bool = F
 
     _write_cmd(
         shim / "node.cmd",
-        '>>"%SHIM_LOG%" echo node %*\nif "%1"=="--version" echo v22.12.0\nexit /b 0',
+        '>>"%SHIM_LOG%" echo node %*\nif "%1"=="--version" echo v24.13.0\nexit /b 0',
     )
     _write_cmd(
         shim / "pnpm.cmd",
         '>>"%SHIM_LOG%" echo pnpm %*\n'
-        'if "%1"=="--version" echo 11.21.0\n'
-        'if "%1"=="install" (if not exist node_modules\\.bin mkdir node_modules\\.bin& '
+        'if "%1"=="--version" goto version\n'
+        'if "%1"=="install" goto install\n'
+        'if "%1"=="build" goto build\n'
+        'exit /b 0\n'
+        ':install\n'
+        'if not exist node_modules\\.bin mkdir node_modules\\.bin\n'
+        'if not exist "%SHIM_STORE_DIR%" mkdir "%SHIM_STORE_DIR%"\n'
+        'if not exist "%SHIM_VIRTUAL_STORE_DIR%" mkdir "%SHIM_VIRTUAL_STORE_DIR%"\n'
         '>node_modules\\.modules.yaml echo {& '
-        '>>node_modules\\.modules.yaml echo   "storeDir": "%SHIM_STORE_DIR%"& '
+        '>>node_modules\\.modules.yaml echo   "storeDir": "%SHIM_STORE_DIR%",& '
+        '>>node_modules\\.modules.yaml echo   "virtualStoreDir": "%SHIM_VIRTUAL_STORE_DIR%"& '
         '>>node_modules\\.modules.yaml echo }& '
         '>node_modules\\.bin\\tsc.cmd echo @exit /b 0& '
-        '>node_modules\\.bin\\vite.cmd echo @exit /b 0& exit /b 0)\n'
-        'if "%1"=="build" (if not exist dist mkdir dist& >dist\\index.html echo built& exit /b 0)\n'
+        '>node_modules\\.bin\\vite.cmd echo @exit /b 0\n'
+        'exit /b 0\n'
+        ':build\n'
+        'if not exist dist mkdir dist\n'
+        '>dist\\index.html echo built\n'
+        'exit /b 0\n'
+        ':version\n'
+        'if not "%COREPACK_ENABLE_DOWNLOAD_PROMPT%"=="0" exit /b 29\n'
+        'if exist package.json goto pinned_version\n'
+        'echo 11.22.0\n'
+        'exit /b 0\n'
+        ':pinned_version\n'
+        'echo 11.21.0\n'
         'exit /b 0',
     )
     if conda:
@@ -92,6 +110,7 @@ def _make_shims(tmp_path: Path, *, conda: bool, uv: bool, existing_env: bool = F
             'if "%1"=="run" goto run\nexit /b 0\n'
             ':run\n'
             'echo %* | findstr /c:"tomllib" >nul\nif not errorlevel 1 (echo ["pytest"]& exit /b 0)\n'
+            'echo %* | findstr /c:"sys.executable" >nul\nif not errorlevel 1 (echo D:\\Miniconda\\envs\\jiejian_env\\python.exe& exit /b 0)\n'
             'echo %* | findstr /c:"playwright install" >nul\nif not errorlevel 1 (>>"%SHIM_STATE%\\chromium-ready" echo 1& exit /b 0)\n'
             'echo %* | findstr /c:"playwright.sync_api" >nul\nif not errorlevel 1 if exist "%SHIM_STATE%\\chromium-ready" exit /b 0\nif not errorlevel 1 if not exist "%SHIM_STATE%\\chromium-ready" exit /b 1\n'
             'echo %* | findstr /c:"upgrade_database" >nul\nif not errorlevel 1 "%SHIM_PYTHON%" "%SHIM_MIGRATION_HELPER%" "%SHIM_VAR_DIR%"\n'
@@ -108,6 +127,7 @@ def _make_shims(tmp_path: Path, *, conda: bool, uv: bool, existing_env: bool = F
             shim / "uv.cmd",
             '>>"%SHIM_LOG%" echo uv %*\n'
             'if "%1"=="--version" echo uv 0.11.12\n'
+            'echo %* | findstr /c:"sys.executable" >nul\nif not errorlevel 1 (echo D:\\Miniconda\\envs\\jiejian_env\\python.exe& exit /b 0)\n'
             'if "%1"=="lock" if "%UV_MODE%"=="mismatch" exit /b 7\n'
             'if "%1"=="sync" if not exist "%UV_PROJECT_ENVIRONMENT%" mkdir "%UV_PROJECT_ENVIRONMENT%"\n'
             'if "%1"=="run" goto run\nexit /b 0\n'
@@ -152,10 +172,12 @@ def _run_start(
             "SHIM_ENV_PATH": "C:/jiejian_env",
             "SHIM_CONDA_MODE": "existing" if (shim_root / "state" / "env-exists").exists() else "missing",
             "SHIM_PYTHON": r"D:\Miniconda\envs\jiejian_env\python.exe",
+            "PYTHONPATH": str(ROOT),
             "SHIM_MIGRATION_HELPER": str(shim_root / "migration_helper.py"),
             "SHIM_REVISION_HELPER": str(shim_root / "revision_helper.py"),
             "SHIM_VAR_DIR": str(var_dir),
-            "SHIM_STORE_DIR": (effective_script_path.parent.parent.parent / ".pnpm-store" / "v11").as_posix(),
+            "SHIM_STORE_DIR": (var_dir / "cache" / "pnpm-store" / "v11").as_posix(),
+            "SHIM_VIRTUAL_STORE_DIR": (effective_cwd / "product" / "frontend" / "node_modules" / ".pnpm").as_posix(),
             "LOCALAPPDATA": str(shim_root / "localappdata"),
             "PYTHONDONTWRITEBYTECODE": "1",
         }
@@ -182,7 +204,7 @@ def _run_start(
 
 
 def _state_path(var_dir: Path) -> Path:
-    return var_dir / "startup" / "prepare-state.json"
+    return var_dir / "cache" / "startup" / "prepare-state.json"
 
 
 def _make_isolated_project(tmp_path: Path) -> Path:
@@ -197,9 +219,15 @@ def _make_isolated_project(tmp_path: Path) -> Path:
     (project / "product" / "backend" / "alembic.ini").write_text("[alembic]\nscript_location = migrations\n", encoding="utf-8")
     (project / "product" / "backend" / "migrations" / "env.py").write_text("fixture migration env\n", encoding="utf-8")
     (project / "product" / "backend" / "migrations" / "versions" / "0001_initial.py").write_text("fixture revision\n", encoding="utf-8")
-    (project / "product" / "frontend" / "package.json").write_text('{"name":"fixture","scripts":{"build":"vite build"}}\n', encoding="utf-8")
+    (project / "product" / "frontend" / "package.json").write_text(
+        '{"name":"fixture","engines":{"node":">=24.13.0 <25"},"packageManager":"pnpm@11.21.0","scripts":{"build":"vite build"}}\n',
+        encoding="utf-8",
+    )
     (project / "product" / "frontend" / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n", encoding="utf-8")
-    (project / "product" / "frontend" / "pnpm-workspace.yaml").write_text("allowBuilds:\n  esbuild: true\nstoreDir: ../../../.pnpm-store\n", encoding="utf-8")
+    (project / "product" / "frontend" / "pnpm-workspace.yaml").write_text(
+        "allowBuilds:\n  esbuild: true\nstoreDir: ../../var/cache/pnpm-store\n",
+        encoding="utf-8",
+    )
     (project / "product" / "frontend" / "index.html").write_text("<div id=app></div>\n", encoding="utf-8")
     (project / "product" / "frontend" / "src" / "main.ts").write_text("export const fixture = true;\n", encoding="utf-8")
     (project / "product" / "frontend" / "tsconfig.json").write_text("{}\n", encoding="utf-8")
@@ -293,7 +321,7 @@ def test_conda_creates_missing_environment_without_uv(tmp_path: Path) -> None:
         assert "conda env update" not in commands
         assert "python -B -m pip --isolated install --requirement" in commands
         assert "--editable" not in commands
-        assert (expected_var_dir / "cache" / "python-dependencies.txt").read_text(
+        assert (expected_var_dir / "cache" / "python" / "requirements.txt").read_text(
             encoding="utf-8"
         ).splitlines() == ["pytest"]
         assert "uv " not in commands
@@ -349,8 +377,9 @@ def test_existing_uv_runs_locked_commands(tmp_path: Path) -> None:
     assert "--no-install-project" in commands
     assert "uv run --locked --no-sync" in commands
     assert "conda " not in commands
-    assert f"uv · {tmp_path / 'var' / 'envs' / 'uv'}" in result.stdout
-    assert "uv 版本：uv 0.11.12" in result.stdout
+    assert f"uv · {tmp_path / 'var' / 'runtime' / 'python' / 'env'}" in result.stdout
+    startup_log = next((tmp_path / "var" / "logs" / "startup").glob("*.log")).read_text(encoding="utf-8")
+    assert "uv=uv 0.11.12" in startup_log
 
 
 @pytest.mark.process
@@ -371,8 +400,10 @@ def test_prepare_state_is_versioned_atomic_and_hot_path_skips_cacheable_commands
     after = log.read_text(encoding="utf-8")
     for command in ("uv sync", "playwright install", "pnpm install", "pnpm build"):
         assert after.count(command) == before.count(command)
-    assert "已复用 Python 依赖缓存" in second.stdout
-    assert "已复用前端资源" in second.stdout
+    startup_logs = [path.read_text(encoding="utf-8") for path in (var_dir / "logs" / "startup").glob("*.log")]
+    assert any("[python_dependencies] 跳过" in content for content in startup_logs)
+    assert any("[node_dependencies] 跳过" in content for content in startup_logs)
+    assert any("[frontend_build] 跳过" in content for content in startup_logs)
 
 
 def _run_isolated_fixture(tmp_path: Path, *, extra_env: dict[str, str] | None = None):
@@ -423,6 +454,42 @@ def test_isolated_fixture_cold_hot_and_valid_revision(tmp_path: Path) -> None:
     )
     assert second.returncode == 0, second.stdout + second.stderr
     assert _command_counts(log) == {**cold, "doctor": 2}
+    assert second.stdout.count("本地数据") == 1
+    assert "修订 0001_initial · 已是最新" in second.stdout
+    assert second.stdout.count("前端依赖") == 1
+    assert second.stdout.count("前端构建") == 1
+    assert "Write-DisplaySubtask" not in second.stdout
+
+
+@pytest.mark.process
+def test_toolchain_state_records_confirmed_runner_and_python_resolution(tmp_path: Path) -> None:
+    project, shim, log, result = _run_isolated_fixture(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    state = json.loads(_state_path(tmp_path / "var").read_text(encoding="utf-8"))
+    facts = state["phases"]["toolchain"]["facts"]
+    assert facts["node_version"] == "v24.13.0"
+    assert facts["pnpm_version"] == "11.21.0"
+    assert Path(facts["node_path"]).name == "node.cmd"
+    assert Path(facts["pnpm_path"]).name == "pnpm.cmd"
+    assert state["phases"]["toolchain"]["fingerprint"]
+    startup_log = next((tmp_path / "var" / "logs" / "startup").glob("*.log")).read_text(encoding="utf-8")
+    assert "Python 实际可执行文件: D:\\Miniconda\\envs\\jiejian_env\\python.exe" in startup_log
+
+
+@pytest.mark.process
+def test_invalid_package_manager_source_fails_before_frontend_or_download(tmp_path: Path) -> None:
+    project, shim, log, first = _run_isolated_fixture(tmp_path)
+    assert first.returncode == 0, first.stdout + first.stderr
+    package_path = project / "product" / "frontend" / "package.json"
+    package = json.loads(package_path.read_text(encoding="utf-8"))
+    package["packageManager"] = "pnpm"
+    package_path.write_text(json.dumps(package), encoding="utf-8")
+
+    result = _run_start(tmp_path / "var", shim, log, cwd=project, script_path=project / "scripts" / "start.ps1")
+
+    assert result.returncode == 31
+    assert "packageManager" in result.stdout
+    assert not list((tmp_path / "var" / "temp" / "downloads").glob("node-*"))
 
 
 @pytest.mark.process
@@ -460,6 +527,39 @@ def test_wait_indicator_is_tty_gated_and_stopped_for_external_calls() -> None:
     assert "Invoke-WaitIndicatorProcess" in text
     assert "Stop-Process -Id $script:WaitIndicatorProcess.Id" in text
     assert "if ($waitIndicatorStarted) { Stop-WaitIndicator }" in text
+    assert "Start-Sleep -Milliseconds 130" in text
+
+
+def test_startup_var_dir_paths_follow_final_lifecycle_layout() -> None:
+    start = SCRIPT.read_text(encoding="utf-8-sig")
+    runtime = (ROOT / "scripts" / "startup" / "runtime.ps1").read_text(encoding="utf-8-sig")
+
+    assert 'Join-Path $script:VarDir "logs\\startup"' in start
+    assert 'Join-Path $script:VarDir "cache\\startup"' in start
+    assert '"cache\\python\\requirements.txt"' in runtime
+    assert '"runtime\\python\\env"' in runtime
+    assert '"runtime\\python\\installations"' in runtime
+    assert '"runtime\\uv\\0.11.12\\{0}"' in runtime
+    assert '"temp\\downloads\\node-{0}"' in runtime
+    assert '"temp\\downloads\\uv-{0}"' in runtime
+    assert "LOCALAPPDATA" not in runtime
+
+
+@pytest.mark.process
+def test_startup_logs_are_nested_and_keep_only_twenty_runs(tmp_path: Path) -> None:
+    shim, log = _make_shims(tmp_path, conda=False, uv=True)
+    var_dir = tmp_path / "var"
+    startup_logs = var_dir / "logs" / "startup"
+    startup_logs.mkdir(parents=True)
+    for index in range(22):
+        path = startup_logs / f"old-{index:02d}.log"
+        path.write_text(str(index), encoding="utf-8")
+        os.utime(path, (index + 1, index + 1))
+
+    result = _run_start(var_dir, shim, log)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(list(startup_logs.glob("*.log"))) == 20
 
 
 def test_service_uses_current_repository_cli_and_frontend() -> None:
@@ -479,8 +579,8 @@ def test_service_uses_current_repository_cli_and_frontend() -> None:
     ("name", "mutate", "rerun"),
     [
         ("python_input", lambda project: (project / "pyproject.toml").write_text("changed\n", encoding="utf-8"), {"uv_sync": 1}),
-        ("node_input", lambda project: (project / "product" / "frontend" / "package.json").write_text('{"name":"changed"}\n', encoding="utf-8"), {"pnpm_install": 1, "pnpm_build": 1}),
-        ("pnpm_workspace_input", lambda project: (project / "product" / "frontend" / "pnpm-workspace.yaml").write_text("allowBuilds:\n  esbuild: false\nstoreDir: ../../../.pnpm-store\n", encoding="utf-8"), {"pnpm_install": 1, "pnpm_build": 1}),
+        ("node_input", lambda project: (project / "product" / "frontend" / "package.json").write_text('{"name":"fixture-changed","engines":{"node":">=24.13.0 <25"},"packageManager":"pnpm@11.21.0","scripts":{"build":"vite build"}}\n', encoding="utf-8"), {"pnpm_install": 1, "pnpm_build": 1}),
+        ("pnpm_workspace_input", lambda project: (project / "product" / "frontend" / "pnpm-workspace.yaml").write_text("allowBuilds:\n  esbuild: false\nstoreDir: ../../var/cache/pnpm-store\n", encoding="utf-8"), {"pnpm_install": 1, "pnpm_build": 1}),
         ("frontend_source", lambda project: (project / "product" / "frontend" / "src" / "main.ts").write_text("export const changed = true;\n", encoding="utf-8"), {"pnpm_build": 1}),
         ("migration_input", lambda project: (project / "product" / "backend" / "migrations" / "versions" / "0001_initial.py").write_text("changed revision\n", encoding="utf-8"), {"migration": 1}),
     ],
@@ -502,7 +602,7 @@ def test_isolated_fingerprint_invalidation_matrix(tmp_path: Path, name: str, mut
 
 
 @pytest.mark.process
-@pytest.mark.parametrize("missing", ["node_modules", "corrupt_node_modules", "dist", "chromium", "database"])
+@pytest.mark.parametrize("missing", ["node_modules", "corrupt_node_modules", "pnpm_storage", "dist", "chromium", "database"])
 def test_isolated_output_and_runtime_missingness_rebuilds_only_required_stage(tmp_path: Path, missing: str) -> None:
     project, shim, log, first = _run_isolated_fixture(tmp_path)
     assert first.returncode == 0, first.stdout + first.stderr
@@ -511,6 +611,9 @@ def test_isolated_output_and_runtime_missingness_rebuilds_only_required_stage(tm
         shutil.rmtree(project / "product" / "frontend" / "node_modules")
     elif missing == "corrupt_node_modules":
         (project / "product" / "frontend" / "node_modules" / ".bin" / "tsc.cmd").unlink()
+    elif missing == "pnpm_storage":
+        shutil.rmtree(tmp_path / "var" / "cache" / "pnpm-store")
+        shutil.rmtree(project / "product" / "frontend" / "node_modules" / ".pnpm")
     elif missing == "dist":
         shutil.rmtree(project / "product" / "frontend" / "dist")
     elif missing == "chromium":
@@ -519,10 +622,12 @@ def test_isolated_output_and_runtime_missingness_rebuilds_only_required_stage(tm
         (tmp_path / "var" / "jiejian.db").unlink()
     second = _run_start(tmp_path / "var", shim, log, cwd=project, script_path=project / "scripts" / "start.ps1")
     assert second.returncode == 0, f"{missing}: {second.stdout}{second.stderr}"
+    assert not (project / "product" / "frontend" / "var").exists()
     after = _command_counts(log)
     expected = {
         "node_modules": {"pnpm_install": 1, "pnpm_build": 1},
         "corrupt_node_modules": {"pnpm_install": 1, "pnpm_build": 1},
+        "pnpm_storage": {"pnpm_install": 1, "pnpm_build": 1},
         "dist": {"pnpm_build": 1},
         "chromium": {"playwright_install": 1},
         "database": {"migration": 1},
@@ -540,7 +645,7 @@ def test_old_pnpm_store_link_rebuilds_only_node_dependencies_and_frontend(tmp_pa
     assert first.returncode == 0, first.stdout + first.stderr
     before = _command_counts(log)
     manifest = project / "product" / "frontend" / "node_modules" / ".modules.yaml"
-    manifest.write_text('{\n  "storeDir": "D:\\\\.pnpm-store\\\\v11"\n}\n', encoding="utf-8")
+    manifest.write_text('{\n  "storeDir": "D:\\\\stale-pnpm-store\\\\v11"\n}\n', encoding="utf-8")
     second = _run_start(tmp_path / "var", shim, log, cwd=project, script_path=project / "scripts" / "start.ps1")
     assert second.returncode == 0, second.stdout + second.stderr
     after = _command_counts(log)
@@ -593,7 +698,8 @@ def test_corrupt_or_unknown_prepare_state_cold_starts_safely(tmp_path: Path) -> 
     state.write_text('{"schema_version":"999","phases":{}}', encoding="utf-8")
     result = _run_start(var_dir, shim, log)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "损坏或版本未知" in result.stdout
+    startup_log = next((var_dir / "logs" / "startup").glob("*.log")).read_text(encoding="utf-8")
+    assert "损坏或版本未知" in startup_log
     assert __import__("json").loads(state.read_text(encoding="utf-8"))["schema_version"] == "1"
 
 
@@ -638,6 +744,7 @@ def _make_download_wrapper(tmp_path: Path, *, fail: bool = False) -> tuple[Path,
         'if "%1"=="sync" if not exist "%UV_PROJECT_ENVIRONMENT%" mkdir "%UV_PROJECT_ENVIRONMENT%"\n'
         'if "%1"=="run" goto run\nexit /b 0\n'
         ':run\n'
+        'echo %* | findstr /c:"sys.executable" >nul\nif not errorlevel 1 (echo D:\\Miniconda\\envs\\jiejian_env\\python.exe& exit /b 0)\n'
         'echo %* | findstr /c:"playwright install" >nul\nif not errorlevel 1 (>>"%SHIM_STATE%\\chromium-ready" echo 1& exit /b 0)\n'
         'echo %* | findstr /c:"playwright.sync_api" >nul\nif not errorlevel 1 if exist "%SHIM_STATE%\\chromium-ready" exit /b 0\nif not errorlevel 1 if not exist "%SHIM_STATE%\\chromium-ready" exit /b 1\n'
         'echo %* | findstr /c:"upgrade_database" >nul\nif not errorlevel 1 "%SHIM_PYTHON%" "%SHIM_MIGRATION_HELPER%" "%SHIM_VAR_DIR%"\n'
@@ -657,8 +764,8 @@ def _make_download_wrapper(tmp_path: Path, *, fail: bool = False) -> tuple[Path,
         f"  if (${str(fail).lower()}) {{ throw 'offline' }}\n"
         f"  Add-Content -LiteralPath '{tmp_path / 'download-count.log'}' -Value $Uri\n"
         f"  if ($Uri.EndsWith('.sha256')) {{ Copy-Item -LiteralPath $sourceHash -Destination $OutFile }} else {{ Copy-Item -LiteralPath $sourceZip -Destination $OutFile }}\n"
-        f"}}\n$env:SHIM_PYTHON = '{r'D:\Miniconda\envs\jiejian_env\python.exe'}'\n$env:SHIM_MIGRATION_HELPER = '{migration_helper}'\n$env:SHIM_REVISION_HELPER = '{revision_helper}'\n$env:SHIM_VAR_DIR = '{tmp_path / 'var'}'\n$env:SHIM_STORE_DIR = '{(project.parent / '.pnpm-store' / 'v11').as_posix()}'\n. '{project / 'scripts' / 'start.ps1'}' -PrepareOnly -VarDir '{tmp_path / 'var'}'\n"
-        f"if (Get-ChildItem -LiteralPath '{tmp_path / 'var' / 'logs'}' -Filter 'startup-*.log' | Get-Content | Select-String '失败阶段') {{ exit 21 }}\n",
+        f"}}\n$env:SHIM_PYTHON = '{r'D:\Miniconda\envs\jiejian_env\python.exe'}'\n$env:SHIM_MIGRATION_HELPER = '{migration_helper}'\n$env:SHIM_REVISION_HELPER = '{revision_helper}'\n$env:SHIM_VAR_DIR = '{tmp_path / 'var'}'\n$env:SHIM_STORE_DIR = '{(tmp_path / 'var' / 'cache' / 'pnpm-store' / 'v11').as_posix()}'\n$env:SHIM_VIRTUAL_STORE_DIR = '{(project / 'product' / 'frontend' / 'node_modules' / '.pnpm').as_posix()}'\n. '{project / 'scripts' / 'start.ps1'}' -PrepareOnly -VarDir '{tmp_path / 'var'}'\n"
+        f"if (Get-ChildItem -LiteralPath '{tmp_path / 'var' / 'logs' / 'startup'}' -Filter '*.log' | Get-Content | Select-String '失败阶段') {{ exit 21 }}\n",
         encoding="utf-8",
     )
     return wrapper, archive, checksum
@@ -686,8 +793,8 @@ def test_missing_uv_downloads_after_hash_check_and_reuses_install(tmp_path: Path
     second = subprocess.run([POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(wrapper)], cwd=ROOT, env=env, text=True, capture_output=True)
     assert first.returncode == 0, first.stdout + first.stderr
     assert second.returncode == 0, second.stdout + second.stderr
-    assert (tmp_path / "localappdata" / "jiejian" / "bin" / "uv.cmd").is_file()
-    assert len(list(tmp_path.glob("var/uv-download-*"))) == 0
+    assert (tmp_path / "var" / "runtime" / "uv" / "0.11.12" / "x64" / "uv.cmd").is_file()
+    assert len(list((tmp_path / "var" / "temp" / "downloads").glob("uv-*"))) == 0
     assert len((tmp_path / "download-count.log").read_text(encoding="utf-8").splitlines()) == 2
 
 
@@ -713,7 +820,7 @@ def test_download_failure_returns_21_and_cleans_download_directory(tmp_path: Pat
     result = subprocess.run([POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(wrapper)], cwd=ROOT, env=env, text=True, capture_output=True)
     assert result.returncode == 21
     assert "日志" in result.stdout
-    assert not list((tmp_path / "var").glob("uv-download-*"))
+    assert not list((tmp_path / "var" / "temp" / "downloads").glob("uv-*"))
 
 
 @pytest.mark.essential
@@ -721,6 +828,145 @@ def test_start_script_is_the_only_startup_script() -> None:
     assert [path.name for path in ROOT.glob("start*.cmd")] == ["start.cmd"]
     assert [path.name for path in (ROOT / "scripts").iterdir() if path.suffix.lower() in {".ps1", ".cmd"}] == ["start.ps1"]
     assert not (ROOT / "scripts" / "setup-conda.ps1").exists()
+
+
+@pytest.mark.essential
+def test_frontend_declares_the_supported_node_line_and_exact_pnpm() -> None:
+    package = json.loads(
+        (ROOT / "product" / "frontend" / "package.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert package["engines"]["node"] == ">=24.13.0 <25"
+    assert package["packageManager"] == "pnpm@11.21.0"
+
+
+@pytest.mark.essential
+def test_node_runtime_uses_package_source_and_private_download_contract() -> None:
+    runtime = (ROOT / "scripts" / "startup" / "runtime.ps1").read_text(encoding="utf-8-sig")
+    product = (ROOT / "scripts" / "startup" / "product.ps1").read_text(encoding="utf-8-sig")
+    start = SCRIPT.read_text(encoding="utf-8-sig")
+    assert "Read-FrontendToolRequirements" in runtime
+    assert "Get-Command pnpm" in runtime
+    assert runtime.index('Push-Location -LiteralPath $frontend') < runtime.index("Get-Command pnpm")
+    assert '$env:COREPACK_ENABLE_DOWNLOAD_PROMPT = "0"' in runtime
+    assert "$script:SavedCorepackDownloadPrompt" in start
+    assert "Remove-Item Env:COREPACK_ENABLE_DOWNLOAD_PROMPT" in start
+    assert "$script:SavedJiejianCorepackExecutable" in start
+    assert "Remove-Item Env:JIEJIAN_COREPACK_EXECUTABLE" in start
+    assert 'Join-Path $env:PNPM_HOME "pnpm.cmd"' in runtime
+    assert 'call `"%JIEJIAN_COREPACK_EXECUTABLE%`" pnpm %*' in runtime
+    presentation = (ROOT / "scripts" / "startup" / "presentation.ps1").read_text(encoding="utf-8-sig")
+    for label in (
+        "正在查找 Node.js",
+        "正在检查 pnpm",
+        "正在查找 Python 环境",
+        "正在验证 Python 环境",
+        "正在准备 Python 依赖",
+        "正在检查 Chromium",
+        "正在准备 Chromium",
+        "正在检查本地数据",
+        "正在升级本地数据",
+        "正在准备前端依赖",
+        "正在构建界面",
+        "正在启动界面",
+    ):
+        assert label in presentation
+    for stage in ("node-search", "pnpm-check", "python-search", "python-verify", "chromium-check"):
+        assert f'Start-WaitIndicator "{stage}"' in runtime
+    assert "Get-Command pnpm).Source" not in product
+    assert "https://nodejs.org/dist/v24.19.0/node-v24.19.0-win-x64.zip" in runtime
+    assert "https://nodejs.org/dist/v24.19.0/node-v24.19.0-win-arm64.zip" in runtime
+    assert "57f71ab3652e797d84acddc79c81cc9ff1c6ddb2a1974cdb83f00fee9bff4c73" in runtime
+    assert "8502f4a50b458d4cc38ed8f2001556c2cd239d464920f74017926ccb1e1c157f" in runtime
+    assert "corepack enable" not in runtime.lower()
+
+
+@pytest.mark.process
+def test_corepack_fallback_exposes_pnpm_executable_to_downstream_processes(tmp_path: Path) -> None:
+    shim, log = _make_shims(tmp_path, conda=True, uv=False, existing_env=True)
+    (shim / "pnpm.cmd").unlink()
+    _write_cmd(
+        shim / "corepack.cmd",
+        '>>"%SHIM_LOG%" echo corepack %*\n'
+        'if not "%1"=="pnpm" exit /b 1\n'
+        'if "%2"=="--version" (echo 11.21.0& exit /b 0)\n'
+        'if "%2"=="install" goto install\n'
+        'if "%2"=="build" goto build\n'
+        'exit /b 1\n'
+        ':install\n'
+        'if not exist node_modules\\.bin mkdir node_modules\\.bin\n'
+        'if not exist "%SHIM_STORE_DIR%" mkdir "%SHIM_STORE_DIR%"\n'
+        'if not exist "%SHIM_VIRTUAL_STORE_DIR%" mkdir "%SHIM_VIRTUAL_STORE_DIR%"\n'
+        '>node_modules\\.modules.yaml echo {& '
+        '>>node_modules\\.modules.yaml echo   "storeDir": "%SHIM_STORE_DIR%",& '
+        '>>node_modules\\.modules.yaml echo   "virtualStoreDir": "%SHIM_VIRTUAL_STORE_DIR%"& '
+        '>>node_modules\\.modules.yaml echo }& '
+        '>node_modules\\.bin\\tsc.cmd echo @exit /b 0& '
+        '>node_modules\\.bin\\vite.cmd echo @exit /b 0\n'
+        'exit /b 0\n'
+        ':build\n'
+        'if not exist dist mkdir dist\n'
+        '>dist\\index.html echo built\n'
+        'exit /b 0',
+    )
+    var_dir = tmp_path / "var"
+
+    first = _run_start(var_dir, shim, log)
+    assert first.returncode == 0, first.stdout + first.stderr
+    private_shim = var_dir / "runtime" / "pnpm" / "pnpm.cmd"
+    assert private_shim.read_bytes() == (
+        b'@echo off\r\ncall "%JIEJIAN_COREPACK_EXECUTABLE%" pnpm %*\r\n'
+    )
+    state = json.loads(_state_path(var_dir).read_text(encoding="utf-8"))
+    facts = state["phases"]["toolchain"]["facts"]
+    assert Path(facts["pnpm_path"]) == private_shim
+    assert facts["pnpm_runner"] == str(private_shim)
+
+    second = _run_start(var_dir, shim, log)
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert private_shim.is_file()
+    assert not list((var_dir / "temp" / "downloads").glob("node-*"))
+
+
+@pytest.mark.essential
+def test_banner_menu_and_tree_contracts_are_frozen_in_the_startup_modules() -> None:
+    presentation = (ROOT / "scripts" / "startup" / "presentation.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+    start = SCRIPT.read_text(encoding="utf-8-sig")
+    product = (ROOT / "scripts" / "startup" / "product.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    assert presentation.count("38;2;") == 1
+    for rgb in (
+        "@(0, 102, 153)",
+        "@(0, 126, 174)",
+        "@(0, 151, 194)",
+        "@(32, 174, 211)",
+        "@(82, 197, 226)",
+        "@(145, 222, 239)",
+    ):
+        assert rgb in presentation
+    assert "Write-Host $lines[$index] -ForegroundColor Cyan" in presentation
+    assert "↑ ↓ 选择    Enter 确认" in presentation
+    assert "输入编号后按 Enter 确认" in presentation
+    assert 'Join-Path $script:ProjectRoot "scripts\\start.ps1"' in presentation
+    assert "$PSCommandPath.Replace" not in presentation
+    assert "SupportsVirtualTerminal" in start
+    assert presentation.count("Read-StartupMenu \"") == 2
+    assert "引导模式（推荐）" in presentation
+    assert "普通命令行" in presentation
+    assert "Write-DisplaySubtask" not in presentation + start + product
+    assert 'Write-DisplayResult "本地数据" "完成" $true $script:MigrationDetail' in start
+    first_option_draw = presentation.index("for ($index = 0; $index -lt $Items.Count; $index += 1)")
+    footer = presentation.index('Write-Host "↑ ↓ 选择    Enter 确认"')
+    assert presentation.index("Write-Host $Title") < first_option_draw < footer
+    assert presentation.index('(\"{0}[s{0}[{1}A{0}[1G\"', footer) > footer
+    assert presentation.index('(\"{0}[u\"', footer) > footer
+    assert '" " * ($width - (Get-DisplayCellWidth $line))' not in presentation
 
 
 @pytest.mark.essential
@@ -766,16 +1012,19 @@ def test_root_start_cmd_forwards_arguments_and_exit_code(tmp_path: Path) -> None
         cwd=launch_root,
         env=env,
         text=True,
+        input="\n",
         capture_output=True,
         check=False,
     )
     assert result.returncode == 37
     forwarded = forwarded_path.read_text(encoding="utf-8-sig").strip()
-    assert forwarded == '-WaitOnFailure|-ForcePrepare|-PrepareOnly|-VarDir|"D:\\tmp\\界鉴-test"'
+    assert forwarded == '-ForcePrepare|-PrepareOnly|-VarDir|"D:\\tmp\\界鉴-test"'
     command_text = CMD_SCRIPT.read_text(encoding="utf-8")
     assert "chcp 65001" in command_text
     assert "setlocal" in command_text
-    assert "-WaitOnFailure" in command_text
+    assert 'if not "%START_EXIT%"=="0"' in command_text
+    assert "pause >nul" in command_text
+    assert "Startup failed. Press any key to close this window." in result.stdout
     assert "where pwsh.exe" in command_text
     assert "-NoLogo -NoProfile -ExecutionPolicy Bypass -File" in command_text
     assert "%*" in command_text
@@ -857,14 +1106,15 @@ def test_cli_mode_enters_temporary_shell_with_exact_runner_and_var_dir(
     assert "界鉴命令行已经准备完成" in result.stdout
     assert str(var_dir) in result.stdout
     log_text = log.read_text(encoding="utf-8")
-    assert " run --locked --no-sync python -B -m product.backend.cli " in log_text
-    assert " doctor " in log_text
-    assert str(var_dir) in log_text
+    product_text = (ROOT / "scripts" / "startup" / "product.ps1").read_text(encoding="utf-8-sig")
+    assert "& $pythonLiteral -B -m product.backend.cli --var-dir `$varDir" in product_text
+    assert "PackageRunner" not in product_text[product_text.index("function Invoke-CliShell"):]
+    assert log_text.count(" run --locked --no-sync python -B -m product.backend.cli ") == 1
     assert not list(tmp_path.rglob("*PowerShell_profile.ps1"))
 
 
 @pytest.mark.process
-def test_direct_prepare_failure_does_not_wait_even_when_hidden_flag_is_present(
+def test_direct_prepare_failure_returns_without_waiting(
     tmp_path: Path,
 ) -> None:
     shim, log = _make_shims(tmp_path, conda=False, uv=True)
@@ -882,9 +1132,13 @@ def test_direct_prepare_failure_does_not_wait_even_when_hidden_flag_is_present(
 
 
 @pytest.mark.essential
-def test_interactive_failure_wait_eligibility_survives_menu_selection() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    assignment = "$script:WaitOnFailure = [bool]($WaitOnFailure -and"
+def test_failure_pause_is_owned_by_root_start_cmd() -> None:
+    command_text = CMD_SCRIPT.read_text(encoding="utf-8")
+    powershell_text = "\n".join(
+        path.read_text(encoding="utf-8-sig") for path in POWERSHELL_SCRIPTS
+    )
 
-    assert text.count(assignment) == 1
-    assert text.index(assignment) < text.index("$script:FinalMode = Select-StartupMode")
+    assert 'if not "%START_EXIT%"=="0"' in command_text
+    assert "pause >nul" in command_text
+    assert "WaitOnFailure" not in command_text + powershell_text
+    assert "Wait-StartupFailureInput" not in powershell_text

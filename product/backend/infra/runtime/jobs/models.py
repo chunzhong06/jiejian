@@ -134,6 +134,15 @@ class RequestCancellation(WorkerControlModel):
     now_us: int = Field(ge=0)
 
 
+# 未进入 claim/fence 边界的 Worker 启动失败，只携带等待态原子收口所需字段。
+class WaitingFatalFailure(WorkerControlModel):
+    job_id: str = Field(pattern=JOB_ID_PATTERN)
+    now_us: int = Field(ge=0)
+    reason_code: Literal[FatalFailureCode.WORKER_FATAL] = (
+        FatalFailureCode.WORKER_FATAL
+    )
+
+
 class FencedJobMutation(WorkerControlModel):
     job_id: str = Field(pattern=JOB_ID_PATTERN)
     lease_owner: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")

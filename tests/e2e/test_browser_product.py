@@ -142,7 +142,7 @@ def test_browser_product_demo_vulnerable_reaches_published_block() -> None:
                     identity_focus = page.get_by_role("combobox", name="聚焦身份")
                     identity_focus.click()
                     identity_focus.press("Enter")
-                    page.get_by_text("正在聚焦：attacker", exact=True).wait_for()
+                    page.get_by_text("正在聚焦：攻击者", exact=True).wait_for()
                 finally:
                     browser.close()
     finally:

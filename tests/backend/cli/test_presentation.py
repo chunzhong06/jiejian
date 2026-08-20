@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import typer
 from typer.testing import CliRunner
 
 from product.backend.cli.app import app
-from product.backend.cli.presentation import configure_presentation, emit_human, fail
+from product.backend.cli.presentation import configure_presentation, emit_guide_result, emit_human, fail
 from product.backend.core.errors import ErrorCode, JiejianError
 
 
@@ -57,7 +58,9 @@ def test_human_error_is_separate_from_machine_error() -> None:
     assert "错误代码" in human.stderr
     assert "INPUT_FILE" in human.stderr
     assert human.stdout == ""
-    assert json.loads(machine.stderr)["error"]["code"] == "INPUT_FILE"
+    machine_error = json.loads(machine.stderr)["error"]
+    assert machine_error["code"] == "INPUT_FILE"
+    assert machine_error["message"] == "执行配置（ExecutionProfile）文件不可读取"
 
 
 def test_ci_forces_machine_mode_even_when_human_is_requested() -> None:
@@ -68,23 +71,66 @@ def test_ci_forces_machine_mode_even_when_human_is_requested() -> None:
     assert json.loads(result.stderr)["error"]["code"] == "EXECUTION_PROFILE_INVALID"
 
 
-def test_human_result_puts_unknown_fields_under_technical_details(capsys) -> None:
-    emit_human(
-        {
-            "schema_version": "1",
-            "run_id": "run_demo",
-            "verdict": "PASS",
-            "lifecycle": "COMPLETED",
-            "internal_marker": "kept",
-        }
-    )
+def test_human_result_hides_technical_details_until_verbose(capsys) -> None:
+    payload = {
+        "schema_version": "1",
+        "run_id": "run_demo",
+        "verdict": "PASS",
+        "lifecycle": "COMPLETED",
+        "internal_marker": {"kept": ["one", "two"]},
+    }
+    configure_presentation("human")
+    emit_human(payload)
+    ordinary = capsys.readouterr().out
+    configure_presentation("human", verbose=True)
+    emit_human(payload)
+    verbose = capsys.readouterr().out
+    configure_presentation("auto")
 
+    assert ordinary.startswith("界鉴检查\n")
+    assert "高级：技术详情" not in ordinary
+    assert "run_demo" not in ordinary
+    assert "高级：技术详情" in verbose
+    assert "运行标识：run_demo" in verbose
+    assert "internal_marker：kept=one、two" in verbose
+    assert "{" not in verbose and "}" not in verbose
+
+
+def test_verbose_and_json_are_rejected_as_ambiguous() -> None:
+    result = CliRunner().invoke(app, ["--json", "--verbose", "doctor"])
+
+    assert result.exit_code != 0
+    assert "--verbose 只能用于普通人类可读输出" in result.stderr
+
+
+def test_guide_result_uses_surface_and_real_effect_language(capsys) -> None:
+    evidence = SimpleNamespace(
+        verdict="VULNERABLE",
+        case_snapshot=SimpleNamespace(
+            subject_id="attacker",
+            action_id="modify",
+            resource_ids=("owner-resource",),
+        ),
+        execution_fact=SimpleNamespace(outcome="DENIED"),
+        observation_facts=(SimpleNamespace(effect="CONFIRMED"),),
+    )
+    result = SimpleNamespace(
+        verdict="BLOCK",
+        evidence=(evidence,),
+        run_id="run_demo",
+        reason_codes=(),
+    )
+    configure_presentation("human")
+    emit_guide_result(result)
     output = capsys.readouterr().out
-    assert output.startswith("界鉴检查\n")
-    assert "运行标识：run_demo" in output
-    assert "高级：技术详情" in output
-    assert "internal_marker：kept" in output
-    assert "lifecycle：" not in output
+    configure_presentation("auto")
+
+    assert "发现 1 个权限问题" in output
+    assert "普通成员修改了不属于自己的资源" in output
+    assert "系统表面结果\n└─ 请求被拒绝" in output
+    assert "真实结果\n└─ 资源内容已经发生变化" in output
+    assert "权限限制没有真正阻止这次操作" in output
+    assert "run_demo" not in output
 
 
 def test_human_error_recovery_is_category_specific(capsys) -> None:

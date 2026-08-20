@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -29,12 +30,16 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from product.backend.core.identifiers import JOB_ID_PATTERN
 from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RunnerResultType
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.process_environment import minimal_process_environment
 from product.backend.infra.artifacts.run_packages import StagedAttempt, TrustedResultReceipt, attempt_paths_for, final_run_dir, validate_published_run, _parse_runner_result
+
+WORKER_LOG_MAX_BYTES = 1_048_576
+WORKER_LOG_BACKUPS = 2
 
 
 def _worker_import_root() -> Path:
@@ -91,12 +96,22 @@ class WorkerDispatcher:
             "--lease-owner",
             lease_owner,
         ]
+        for name in secret_names:
+            command.extend(("--secret-name", name))
+        log_path = self._prepare_worker_log(job_id)
+        try:
+            worker_log = log_path.open("ab", buffering=0)
+        except OSError:
+            raise JiejianError(
+                ErrorCode.RUNNER_START_FAILED,
+                "Worker 诊断日志无法打开",
+            ) from None
         kwargs: dict[str, Any] = {
             "cwd": str(_worker_import_root()),
             "env": environment,
             "stdin": subprocess.DEVNULL,
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
+            "stdout": worker_log,
+            "stderr": worker_log,
             "close_fds": True,
         }
         if os.name == "nt":
@@ -112,6 +127,34 @@ class WorkerDispatcher:
                 ErrorCode.RUNNER_START_FAILED,
                 "独立 Worker 进程启动失败",
             ) from None
+        finally:
+            worker_log.close()
+
+    def _prepare_worker_log(self, job_id: str) -> Path:
+        """返回按 Job 可定位的有界日志，并在新 launch 前执行固定备份轮换。"""
+
+        if re.fullmatch(JOB_ID_PATTERN, job_id) is None:
+            raise JiejianError(ErrorCode.RUNNER_START_FAILED, "Worker 任务 ID 无效")
+        root = (self.var_dir / "logs" / "workers").resolve()
+        path = (root / f"{job_id}.log").resolve()
+        if not path.is_relative_to(root):
+            raise JiejianError(ErrorCode.RUNNER_START_FAILED, "Worker 日志路径越界")
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            if path.is_file() and path.stat().st_size >= WORKER_LOG_MAX_BYTES:
+                oldest = path.with_name(f"{path.name}.{WORKER_LOG_BACKUPS}")
+                oldest.unlink(missing_ok=True)
+                for index in range(WORKER_LOG_BACKUPS - 1, 0, -1):
+                    source = path.with_name(f"{path.name}.{index}")
+                    if source.is_file():
+                        os.replace(source, path.with_name(f"{path.name}.{index + 1}"))
+                os.replace(path, path.with_name(f"{path.name}.1"))
+        except OSError:
+            raise JiejianError(
+                ErrorCode.RUNNER_START_FAILED,
+                "Worker 诊断日志准备失败",
+            ) from None
+        return path
 
     def wait(
         self,

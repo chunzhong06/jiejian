@@ -27,7 +27,7 @@ from product.backend.infra.runtime.jobs.handlers import JobHandlerRegistry
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.infra.runtime.job_requests import ExecutionRequestStore, required_secret_names
 from product.backend.infra.runtime.jobs.verification import VerificationRunJobHandler
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.workflows.runs.submission import RunSubmission
@@ -49,7 +49,10 @@ from product.backend.infra.llm.profiles import LLMProfileRegistry
 from product.backend.infra.llm.secrets import LLMSecretStore
 from product.backend.workflows.onboarding.workflow import FolderSelector, OnboardingWorkflow, SystemFolderSelector
 from product.backend.workflows.onboarding.secrets import RuntimeSecretVault
-from product.backend.workflows.onboarding.demo import DemoRuntimeSupervisor
+from product.backend.workflows.onboarding.demo import DemoExecutionStatusReader, DemoRuntimeSupervisor
+from product.backend.workflows.onboarding.models import DemoVariant, OnboardingDemoStatus
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.protocols import RunnerResult
 
 
 class ApplicationCore:
@@ -81,6 +84,7 @@ class ApplicationCore:
             JobTargetType.RECORDING,
             RecordingJobTargetHandler(),
         )
+        self.job_attempts = JobAttempts(factory, targets=self.job_targets)
         self.job_queue = JobQueue(factory, targets=self.job_targets)
         self.execution_request_store = ExecutionRequestStore(self.var_dir)
         if _minimal:
@@ -143,6 +147,7 @@ class ApplicationCore:
             var_dir=self.var_dir,
             base_environment=self._base_environment,
             secret_vault=self.secret_vault,
+            status_reader=DemoExecutionStatusReader(factory, self.results),
         )
         from product.backend.workflows.contracts.analysis import ContractAnalysis
 
@@ -175,10 +180,7 @@ class ApplicationCore:
         )
 
     def build_job_handler_registry(self, lease_owner: str, environ) -> JobHandlerRegistry:
-        attempts = JobAttempts(
-            self.uow_factory,
-            targets=self.job_targets,
-        )
+        attempts = self.job_attempts
         registry = JobHandlerRegistry()
 
         def build_run_handler() -> VerificationRunJobHandler:
@@ -246,6 +248,81 @@ class ApplicationCore:
             timeout_seconds=timeout_seconds,
         )
         return submission
+
+    def guide_snapshot(self) -> dict[str, object]:
+        """从现有项目、权限规则和运行记录生成无独立持久状态的引导视图。"""
+
+        projects = self.projects.list()
+        items: list[dict[str, object]] = []
+        recent_runs = []
+        for project in projects:
+            profiles = self.execution.list(project.project_id)
+            with self.uow_factory() as work:
+                runs = work.runs.list_for_project(project.project_id)
+            recent_runs.extend((project, run) for run in runs)
+            items.append(
+                {
+                    "project": project,
+                    "profiles": profiles,
+                    "permission_rules_ready": (
+                        project.governed_contract_id is not None
+                        and project.governed_contract_version is not None
+                    ),
+                }
+            )
+        recent_runs.sort(key=lambda item: item[1].created_at_us, reverse=True)
+        return {
+            "schema_version": "1",
+            "projects": tuple(items),
+            "recent_runs": tuple(recent_runs),
+        }
+
+    def run_demo(
+        self, variant: DemoVariant
+    ) -> tuple[OnboardingDemoStatus, RunnerResult]:
+        """运行内置演示并等待可信发布结果；目标请求仍只由独立 Worker/Runner 发出。"""
+
+        status = self.demo.start(variant)
+        if status.job_id is None:
+            raise JiejianError(
+                ErrorCode.ONBOARDING_DEMO_FAILED, "内置演示没有形成可执行任务"
+            )
+        try:
+            with self.uow_factory() as work:
+                job = work.jobs.get(status.job_id)
+            if job is None:
+                raise JiejianError(
+                    ErrorCode.ONBOARDING_DEMO_FAILED,
+                    "内置演示任务无法读取",
+                )
+            request = self.execution_request_store.load(
+                status.job_id, expected_hash=job.request_hash
+            )
+            secret_names = required_secret_names(request)
+            environment = self.environment_for_secret_names(secret_names)
+            known_secrets = tuple(
+                value for name in secret_names if (value := environment.get(name))
+            )
+            dispatcher = WorkerDispatcher(
+                var_dir=self.var_dir,
+                uow_factory=self.uow_factory,
+                environ=environment,
+            )
+            process = dispatcher.start(
+                job_id=status.job_id,
+                lease_owner=f"guide-worker-{os.getpid()}-{id(status)}",
+                secret_names=secret_names,
+            )
+            staged = dispatcher.wait(
+                status.job_id,
+                process,
+                known_secrets=known_secrets,
+                timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000
+                + 60,
+            )
+            return status, staged.result
+        finally:
+            self.demo.stop()
 
     def close(self) -> None:
         if hasattr(self, "demo"):

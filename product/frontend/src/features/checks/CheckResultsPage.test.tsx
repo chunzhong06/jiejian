@@ -21,7 +21,7 @@ describe('CheckResultsPage', () => {
     expect(await screen.findByText('页面或接口显示已拒绝')).toBeInTheDocument()
     expect(screen.getByText('真实资源已经发生变化')).toBeInTheDocument()
     expect(screen.getByText(/表面拒绝没有阻止真实副作用/)).toBeInTheDocument()
-    expect(screen.getAllByText('member').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('成员（member）').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('owner-document').length).toBeGreaterThanOrEqual(1)
   })
 

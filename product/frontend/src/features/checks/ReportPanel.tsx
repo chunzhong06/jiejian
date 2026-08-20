@@ -3,17 +3,15 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Collapse, Descriptions, Select, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import { resultsApi } from '../../api/results'
-import { runsApi } from '../../api/runs'
+import { resultsApi, type ReportDto } from '../../api/results'
+import { runsApi, type RunDto } from '../../api/runs'
 import { gateDecisionLabel, verdictLabel } from '../../app/presentation'
 
-type Item = Record<string, any>
-
-export function ReportPanel({ run, onError }: { run?: Item; onError: (error: ApiError) => void }) {
-  const [authoritative, setAuthoritative] = useState<Item | undefined>(run)
-  const [reports, setReports] = useState<Item[]>([])
+export function ReportPanel({ run, onError }: { run?: RunDto; onError: (error: ApiError) => void }) {
+  const [authoritative, setAuthoritative] = useState<RunDto | undefined>(run)
+  const [reports, setReports] = useState<ReportDto[]>([])
   const [selectedId, setSelectedId] = useState<string>()
-  const [report, setReport] = useState<Item | null>(null)
+  const [report, setReport] = useState<ReportDto | null>(null)
   useEffect(() => {
     setAuthoritative(run); setReports([]); setReport(null); setSelectedId(undefined)
     if (!run?.run_id) return
@@ -47,7 +45,7 @@ export function ReportPanel({ run, onError }: { run?: Item; onError: (error: Api
     {report && <Space direction="vertical" className="full-width">
       <Space wrap><Tag color={runtimeVerdict === 'BLOCK' ? 'red' : runtimeVerdict === 'PASS' ? 'green' : 'gold'}>安全检查结论：{verdictLabel(runtimeVerdict)}</Tag>{gateDecision && <Tag>交付门禁：{gateDecisionLabel(gateDecision)}</Tag>}</Space>
       {gateDecision && <Typography.Paragraph type="secondary">安全检查结论与交付门禁是相互独立的判断。</Typography.Paragraph>}
-      <Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="问题数量">{findings.length}</Descriptions.Item><Descriptions.Item label="产物检查">{artifacts.length > 0 ? artifacts.map((item: Item, index: number) => `产物 ${index + 1}：${item.status === 'COMPLETE' ? '检查完整' : '无法确认'}`).join('；') : '没有产物检查结果'}</Descriptions.Item><Descriptions.Item label="必需观察">{observers.length > 0 ? observers.filter((item: Item) => item.required).map((item: Item) => `${item.observer_id === 'http' ? '接口响应' : item.observer_id === 'owner_api' ? '资源状态' : '外部状态'}：${item.status === 'AVAILABLE' ? '可用' : '无法确认'}`).join('；') || '未声明' : '未提供'}</Descriptions.Item>{errors.length > 0 && <Descriptions.Item label="执行错误">存在 {errors.length} 项执行错误</Descriptions.Item>}{limitations.length > 0 && <Descriptions.Item label="限制">存在 {limitations.length} 项无法确认的内容</Descriptions.Item>}</Descriptions>
+      <Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="问题数量">{findings.length}</Descriptions.Item><Descriptions.Item label="产物检查">{artifacts.length > 0 ? artifacts.map((item, index) => `产物 ${index + 1}：${item.status === 'COMPLETE' ? '检查完整' : '无法确认'}`).join('；') : '没有产物检查结果'}</Descriptions.Item><Descriptions.Item label="必需观察">{observers.length > 0 ? observers.filter((item) => item.required).map((item) => `${item.observer_id === 'http' ? '接口响应' : item.observer_id === 'owner_api' ? '资源状态' : '外部状态'}：${item.status === 'AVAILABLE' ? '可用' : '无法确认'}`).join('；') || '未声明' : '未提供'}</Descriptions.Item>{errors.length > 0 && <Descriptions.Item label="执行错误">存在 {errors.length} 项执行错误</Descriptions.Item>}{limitations.length > 0 && <Descriptions.Item label="限制">存在 {limitations.length} 项无法确认的内容</Descriptions.Item>}</Descriptions>
       {selectedId && <Space wrap>{(['json', 'html', 'sarif', 'junit'] as const).map((format) => <Button key={format} href={resultsApi.reportFormat(String(run.run_id), selectedId, format)} target="_blank">导出{format.toUpperCase()}</Button>)}</Space>}
       <Collapse ghost items={[{ key: 'report-technical', label: '高级：报告技术详情', children: <pre className="report-view">{JSON.stringify(report, null, 2)}</pre> }]} />
     </Space>}

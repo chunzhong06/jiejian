@@ -13,7 +13,7 @@ from product.backend.cli.presentation import emit_json, fail
 
 
 def project_validate_command(path: Path) -> None:
-    """离线校验当前 ExecutionProfile 及其治理引用。"""
+    """离线校验当前执行配置（ExecutionProfile）及其治理引用。"""
 
     try:
         profile = parse_execution_profile(path.read_bytes())
@@ -31,4 +31,4 @@ def project_validate_command(path: Path) -> None:
     except JiejianError as exc:
         fail(exc)
     except (OSError, ValueError):
-        fail(JiejianError(ErrorCode.INPUT_FILE, "ExecutionProfile 文件不可读取"))
+        fail(JiejianError(ErrorCode.INPUT_FILE, "执行配置（ExecutionProfile）文件不可读取"))

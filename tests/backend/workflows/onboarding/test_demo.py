@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+import time
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from pathlib import Path
@@ -15,6 +16,10 @@ from fastapi.testclient import TestClient
 
 from product.backend.api import create_app
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.lifecycle import JobState, RunLifecycle
+from product.backend.infra.runtime.jobs.models import RequestCancellation, WaitingFatalFailure
+from product.backend.infra.runtime.worker_supervisor import LocalWorkerSupervisor
+from product.backend.infra.artifacts.run_packages import PUBLICATION_MANIFEST_NAME
 import product.backend.workflows.onboarding.demo as demo_module
 from product.backend.workflows.onboarding.demo import DemoRuntimeSupervisor
 from product.backend.workflows.onboarding.demo_target import create_demo_target_server
@@ -33,6 +38,14 @@ class FakeVault:
 
     def clear_session(self, session_id: str) -> None:
         self.cleared.append(session_id)
+
+
+class FakeStatusReader:
+    def __init__(self, reusable: bool = True) -> None:
+        self.reusable = reusable
+
+    def can_reuse(self, _status: OnboardingDemoStatus) -> bool:
+        return self.reusable
 
 
 class FakeOnboarding:
@@ -129,6 +142,7 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
         var_dir=tmp_path / "var",
         base_environment={"PATH": "path", "JIEJIAN_OTHER_SECRET": "not-for-demo"},
         secret_vault=vault,
+        status_reader=FakeStatusReader(),
         popen=popen,
     )
     results: list[OnboardingDemoStatus] = []
@@ -157,7 +171,12 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
     assert onboarding.demo_credentials == secret_values
     assert "JIEJIAN_OTHER_SECRET" not in kwargs["env"]
     assert results[0].run_id == results[1].run_id
+    demo_roots = list((tmp_path / "var" / "temp" / "onboarding-demo").iterdir())
+    assert len(demo_roots) == 1
+    assert (demo_roots[0] / "source" / "package.json").is_file()
     assert manager.stop().status == "stopped"
+    assert not demo_roots[0].exists()
+    assert (tmp_path / "var" / "logs" / "onboarding-demo.log").is_file()
     assert vault.cleared == [onboarding.session.session_id]
     assert processes[0].stdout.closed
 
@@ -204,6 +223,7 @@ def test_demo_unexpected_exit_becomes_failed_and_closes_stdout(tmp_path: Path) -
         var_dir=tmp_path / "var",
         base_environment={"PATH": "path"},
         secret_vault=vault,
+        status_reader=FakeStatusReader(),
         popen=popen,
     )
     assert manager.start("fixed").status == "running"
@@ -213,7 +233,7 @@ def test_demo_unexpected_exit_becomes_failed_and_closes_stdout(tmp_path: Path) -
     status = manager.status()
 
     assert status.status == "failed"
-    assert "var/log/onboarding-demo.log" in status.message
+    assert "var/logs/onboarding-demo.log" in status.message
     assert process.stdout.closed
     assert manager._process is None
 
@@ -238,7 +258,7 @@ def test_demo_api_status_does_not_report_exited_process_as_running(tmp_path: Pat
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "failed"
-    assert "var/log/onboarding-demo.log" in response.json()["data"]["message"]
+    assert "var/logs/onboarding-demo.log" in response.json()["data"]["message"]
     assert process.stdout.closed
     assert process.stderr.closed
 
@@ -255,6 +275,7 @@ def test_demo_fake_ready_timeout_is_stable_and_cleans_secret(tmp_path: Path) -> 
         var_dir=tmp_path / "var",
         base_environment=dict(os.environ),
         secret_vault=vault,
+        status_reader=FakeStatusReader(),
         popen=popen,
     )
     with pytest.raises(JiejianError) as raised:
@@ -271,6 +292,7 @@ def test_demo_real_sample_ready_and_stop_without_http(tmp_path: Path) -> None:
         var_dir=tmp_path / "var",
         base_environment=dict(os.environ),
         secret_vault=FakeVault(),
+        status_reader=FakeStatusReader(),
     )
     started = manager.start("fixed")
     assert started.status == "running"
@@ -303,6 +325,135 @@ def test_demo_api_start_worker_false_only_queues_and_hides_process_details(tmp_p
         assert client.post("/api/onboarding/demo/stop").json()["data"]["status"] == "stopped"
 
 
+@pytest.mark.parametrize("terminal", ("failed", "cancelled"))
+def test_demo_failed_or_cancelled_job_restarts_same_variant_with_new_audit_facts(
+    tmp_path: Path,
+    terminal: str,
+) -> None:
+    app = create_app(tmp_path / "var", start_worker=False)
+    context = app.state.context
+    with TestClient(app) as client:
+        first = client.post(
+            "/api/onboarding/demo/start",
+            json={"schema_version": "1", "variant": "fixed"},
+        ).json()["data"]
+        if terminal == "failed":
+            changed = context.job_attempts.record_waiting_fatal_failure(
+                WaitingFatalFailure(
+                    job_id=first["job_id"],
+                    now_us=1_900_000_000_000_000,
+                )
+            )
+            assert changed is not None
+        else:
+            context.job_queue.request_cancellation(
+                RequestCancellation(
+                    job_id=first["job_id"],
+                    now_us=1_900_000_000_000_000,
+                )
+            )
+
+        second = client.post(
+            "/api/onboarding/demo/start",
+            json={"schema_version": "1", "variant": "fixed"},
+        ).json()["data"]
+
+        assert second["run_id"] != first["run_id"]
+        assert second["job_id"] != first["job_id"]
+        with context.uow_factory() as work:
+            old_job = work.jobs.get(first["job_id"])
+            old_run = work.runs.get(first["run_id"])
+        assert old_job is not None
+        assert old_job.state is (
+            JobState.FAILED if terminal == "failed" else JobState.CANCELLED
+        )
+        assert old_run is not None
+        assert old_run.lifecycle is (
+            RunLifecycle.FAILED
+            if terminal == "failed"
+            else RunLifecycle.CANCELLED
+        )
+
+
+def test_demo_preclaim_worker_process_failure_is_logged_and_not_relaunched(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sentinels = iter(
+        (
+            "demo-owner-secret-sentinel",
+            "demo-attacker-secret-sentinel",
+            "demo-peer-secret-sentinel",
+        )
+    )
+    monkeypatch.setattr(
+        demo_module.secrets,
+        "token_urlsafe",
+        lambda _size: next(sentinels),
+    )
+    var_dir = tmp_path / "var"
+    app = create_app(var_dir, start_worker=False)
+    manager = None
+    with TestClient(app) as client:
+        started = client.post(
+            "/api/onboarding/demo/start",
+            json={"schema_version": "1", "variant": "fixed"},
+        ).json()["data"]
+        broken = var_dir / "projects" / "broken" / "runs" / "broken"
+        broken.mkdir(parents=True)
+        (broken / PUBLICATION_MANIFEST_NAME).write_text("{}", encoding="utf-8")
+        (var_dir / "quarantine").write_text("block quarantine", encoding="utf-8")
+        context = app.state.context
+        manager = LocalWorkerSupervisor(
+            context.var_dir,
+            context.uow_factory,
+            context.job_queue,
+            attempt_service=context.job_attempts,
+            environment_provider=context.environment_for_secret_names,
+        )
+        manager.start()
+        try:
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                with context.uow_factory() as work:
+                    job = work.jobs.get(started["job_id"])
+                    run = work.runs.get(started["run_id"])
+                if job is not None and job.state is JobState.FAILED:
+                    break
+                time.sleep(0.05)
+            else:
+                pytest.fail("pre-claim Worker failure did not reach FAILED")
+
+            assert job is not None and job.attempt == 0
+            assert run is not None and run.lifecycle is RunLifecycle.FAILED
+            projected = client.get(f"/api/runs/{started['run_id']}")
+            assert projected.status_code == 200
+            assert projected.json()["data"]["lifecycle"] == "FAILED"
+            assert projected.json()["data"]["job"]["state"] == "FAILED"
+            time.sleep(0.2)
+            with context.uow_factory() as work:
+                events = work.job_events.list_for_job(started["job_id"])
+            assert [event.event_type for event in events] == [
+                "JOB_SUBMITTED",
+                "JOB_FAILED",
+            ]
+            worker_log = (
+                var_dir / "logs" / "workers" / f"{started['job_id']}.log"
+            ).read_text(encoding="utf-8")
+            main_log = (var_dir / "logs" / "jiejian.log").read_text(encoding="utf-8")
+            assert worker_log.count("WORKER_PROCESS_ERROR") == 1
+            assert started["job_id"] in worker_log
+            for sentinel in (
+                "demo-owner-secret-sentinel",
+                "demo-attacker-secret-sentinel",
+                "demo-peer-secret-sentinel",
+            ):
+                assert sentinel not in worker_log
+                assert sentinel not in main_log
+        finally:
+            manager.stop()
+
+
 def test_demo_start_requires_versioned_variant_body(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
@@ -324,6 +475,7 @@ def test_demo_switches_variant_without_reusing_previous_process_or_run(tmp_path:
         var_dir=tmp_path / "var",
         base_environment={"PATH": "path"},
         secret_vault=FakeVault(),
+        status_reader=FakeStatusReader(),
         popen=popen,
     )
     fixed = manager.start("fixed")
@@ -335,6 +487,36 @@ def test_demo_switches_variant_without_reusing_previous_process_or_run(tmp_path:
     assert vulnerable.variant == "vulnerable"
     assert fixed.run_id != vulnerable.run_id
     assert onboarding.demo_calls == ["fixed", "vulnerable"]
+
+
+def test_demo_same_variant_restarts_when_persisted_status_is_not_reusable(
+    tmp_path: Path,
+) -> None:
+    onboarding = FakeOnboarding()
+    status_reader = FakeStatusReader()
+    processes: list[FakeProcess] = []
+
+    def popen(command, **kwargs):
+        process = FakeProcess(f"http://127.0.0.1:{43123 + len(processes)}\n")
+        processes.append(process)
+        return process
+
+    manager = DemoRuntimeSupervisor(
+        onboarding,
+        var_dir=tmp_path / "var",
+        base_environment={"PATH": "path"},
+        secret_vault=FakeVault(),
+        status_reader=status_reader,
+        popen=popen,
+    )
+    first = manager.start("fixed")
+    status_reader.reusable = False
+    second = manager.start("fixed")
+
+    assert len(processes) == 2
+    assert processes[0].terminated is True
+    assert first.run_id != second.run_id
+    assert onboarding.demo_calls == ["fixed", "fixed"]
 
 
 @pytest.mark.parametrize("variant", ("fixed", "vulnerable", "inconclusive"))

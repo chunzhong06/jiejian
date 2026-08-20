@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import time
 
 from fastapi.testclient import TestClient
@@ -334,6 +336,57 @@ def test_serve_lock_releases_normally_and_diagnoses_existing_lock(tmp_path: Path
     finally:
         lock.release()
     assert ServeLock.acquire(tmp_path / "var").release() is None
+
+
+def test_serve_lock_reclaims_stale_owner(tmp_path: Path) -> None:
+    lock_path = tmp_path / "var" / ".serve.lock"
+    lock_path.parent.mkdir(parents=True)
+    lock_path.write_text(
+        json.dumps({"schema_version": "1", "pid": 2_147_483_647}),
+        encoding="utf-8",
+    )
+
+    lock = ServeLock.acquire(tmp_path / "var")
+    try:
+        assert lock.acquired is True
+    finally:
+        lock.release()
+    assert not lock_path.exists()
+
+
+@pytest.mark.process
+def test_serve_lock_is_released_by_process_exit(tmp_path: Path) -> None:
+    var_dir = tmp_path / "var"
+    child = subprocess.Popen(
+        [
+            sys.executable,
+            "-B",
+            "-c",
+            (
+                "import sys,time; from pathlib import Path; "
+                "from product.backend.infra.runtime.serve_lock import ServeLock; "
+                "lock=ServeLock.acquire(Path(sys.argv[1])); print('READY', flush=True); time.sleep(60)"
+            ),
+            str(var_dir),
+        ],
+        cwd=Path(__file__).parents[3],
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert child.stdout is not None
+        assert child.stdout.readline().strip() == "READY"
+        with pytest.raises(JiejianError):
+            ServeLock.acquire(var_dir)
+    finally:
+        child.kill()
+        child.wait(timeout=10)
+
+    lock = ServeLock.acquire(var_dir)
+    lock.release()
+    assert not (var_dir / ".serve.lock").exists()
 
 
 def test_serve_requires_frontend_index_and_releases_lock(tmp_path: Path) -> None:

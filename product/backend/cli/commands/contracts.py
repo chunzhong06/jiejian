@@ -107,7 +107,7 @@ def contract_draft_command(
     context: typer.Context,
     profile_path: Path,
     contract_id: str,
-    snapshot_path: Path = typer.Option(..., "--snapshot", help="完整 PermissionContract JSON"),
+    snapshot_path: Path = typer.Option(..., "--snapshot", help="完整权限契约（PermissionContract）JSON"),
     actor: str = typer.Option("local-user", "--actor"),
 ) -> None:
     """用明确候选创建 Contract DRAFT。"""
@@ -128,7 +128,7 @@ def contract_revise_command(
     context: typer.Context,
     profile_path: Path,
     contract_id: str,
-    snapshot_path: Path = typer.Option(..., "--snapshot", help="下一版本完整 PermissionContract JSON"),
+    snapshot_path: Path = typer.Option(..., "--snapshot", help="下一版本完整权限契约（PermissionContract）JSON"),
     actor: str = typer.Option("local-user", "--actor"),
 ) -> None:
     """用明确候选修订 ACTIVE Contract。"""
@@ -150,7 +150,7 @@ def contract_transition_command(
     profile_path: Path,
     contract_id: str,
     version: int,
-    action: str = typer.Argument(..., help="submit、reject 或 activate"),
+    action: str = typer.Argument(..., help="动作值：submit（提交）、reject（拒绝）或 activate（激活）"),
     actor: str = typer.Option("local-user", "--actor"),
 ) -> None:
     """执行 Contract Version 的 submit、reject 或 activate 状态动作。"""

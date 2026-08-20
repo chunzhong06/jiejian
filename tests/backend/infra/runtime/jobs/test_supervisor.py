@@ -11,6 +11,7 @@ from threading import Thread
 import pytest
 from sqlalchemy.engine import Engine
 
+import product.backend.infra.runtime.worker_supervisor as worker_supervisor_module
 from product.backend.core.lifecycle import JobState, RunLifecycle, RunVerdict
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import (
@@ -21,12 +22,13 @@ from product.backend.infra.storage import (
     upgrade_database,
 )
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
-from product.backend.infra.runtime.jobs.models import RequestCancellation
+from product.backend.infra.runtime.jobs.models import ClaimJob, RequestCancellation, WaitingFatalFailure
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore
 from product.backend.workflows.runs.submission import RunSubmission, SubmitExecution, SubmitExecution
 from product.backend.infra.runtime.runner_supervisor import RunnerSupervisor
+from product.backend.infra.runtime.worker_supervisor import LocalWorkerSupervisor
 from product.backend.infra.runtime.job_requests import PersistedExecutionRequest
 from product.protocols import (
     CleanupResult,
@@ -88,6 +90,172 @@ def _submit(parts: RuntimeParts, request, suffix: str = "3"):
 def _job(parts: RuntimeParts, job_id: str):
     with parts.uow_factory() as work:
         return work.jobs.get(job_id)
+
+
+class _ExitedWorker:
+    def __init__(self, returncode: int = 1) -> None:
+        self.returncode = returncode
+
+    def poll(self) -> int:
+        return self.returncode
+
+
+def test_local_supervisor_nonzero_preclaim_exit_launches_once_and_fails_run(
+    tmp_path: Path,
+    monkeypatch,
+    stage23_request_factory,
+) -> None:
+    parts = _runtime(tmp_path / "var")
+    launches: list[str] = []
+
+    class FakeDispatcher:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def start(self, *, job_id: str, **_kwargs):
+            launches.append(job_id)
+            return _ExitedWorker()
+
+    monkeypatch.setattr(worker_supervisor_module, "WorkerDispatcher", FakeDispatcher)
+    try:
+        submitted = _submit(parts, stage23_request_factory(), "4")
+        manager = LocalWorkerSupervisor(
+            tmp_path / "var",
+            parts.uow_factory,
+            parts.queue,
+            attempt_service=parts.attempts,
+            clock_us=lambda: NOW_US + 10,
+        )
+
+        manager._start_job(submitted.job)
+        manager._reap_finished_worker()
+
+        with parts.uow_factory() as work:
+            job = work.jobs.get(submitted.job.job_id)
+            run = work.runs.get(submitted.run.run_id)
+            events = work.job_events.list_for_job(submitted.job.job_id)
+        assert launches == [submitted.job.job_id]
+        assert job is not None and job.state is JobState.FAILED
+        assert job.attempt == 0 and job.fencing_token == 0
+        assert run is not None and run.lifecycle is RunLifecycle.FAILED
+        assert run.verdict is None
+        assert [event.event_type for event in events] == [
+            "JOB_SUBMITTED",
+            "JOB_FAILED",
+        ]
+        assert manager._next_job() is None
+    finally:
+        parts.engine.dispose()
+
+
+@pytest.mark.parametrize("failure_point", ("request_load", "process_start"))
+def test_local_supervisor_bootstrap_failures_finish_waiting_job(
+    tmp_path: Path,
+    monkeypatch,
+    stage23_request_factory,
+    failure_point: str,
+) -> None:
+    parts = _runtime(tmp_path / "var")
+
+    class FailingRequestStore:
+        def __init__(self, _var_dir: Path) -> None:
+            pass
+
+        def load(self, *_args, **_kwargs):
+            raise JiejianError(ErrorCode.JOB_REQUEST_MISSING, "request missing")
+
+    class FailingDispatcher:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def start(self, **_kwargs):
+            raise OSError("worker start failed")
+
+    try:
+        submitted = _submit(parts, stage23_request_factory(), "5")
+        if failure_point == "request_load":
+            monkeypatch.setattr(
+                worker_supervisor_module,
+                "ExecutionRequestStore",
+                FailingRequestStore,
+            )
+        else:
+            monkeypatch.setattr(
+                worker_supervisor_module,
+                "WorkerDispatcher",
+                FailingDispatcher,
+            )
+        manager = LocalWorkerSupervisor(
+            tmp_path / "var",
+            parts.uow_factory,
+            parts.queue,
+            attempt_service=parts.attempts,
+            clock_us=lambda: NOW_US + 10,
+        )
+
+        manager._start_job(submitted.job)
+
+        with parts.uow_factory() as work:
+            job = work.jobs.get(submitted.job.job_id)
+            run = work.runs.get(submitted.run.run_id)
+            events = work.job_events.list_for_job(submitted.job.job_id)
+        assert job is not None and job.state is JobState.FAILED
+        assert run is not None and run.lifecycle is RunLifecycle.FAILED
+        assert events[-1].event_type == "JOB_FAILED"
+        assert events[-1].metadata["reason_code"] == "WORKER_FATAL"
+    finally:
+        parts.engine.dispose()
+
+
+@pytest.mark.parametrize("database_state", ("failed", "running"))
+def test_local_supervisor_exit_accepts_existing_terminal_or_fenced_state(
+    tmp_path: Path,
+    stage23_request_factory,
+    database_state: str,
+) -> None:
+    parts = _runtime(tmp_path / "var")
+    try:
+        submitted = _submit(parts, stage23_request_factory(), "6")
+        if database_state == "failed":
+            parts.attempts.record_waiting_fatal_failure(
+                WaitingFatalFailure(
+                    job_id=submitted.job.job_id,
+                    now_us=NOW_US + 10,
+                )
+            )
+            expected = JobState.FAILED
+        else:
+            claimed = parts.attempts.claim(
+                ClaimJob(
+                    job_id=submitted.job.job_id,
+                    lease_owner="concurrent-worker",
+                    now_us=NOW_US + 10,
+                    lease_duration_us=10_000,
+                )
+            )
+            assert claimed is not None
+            expected = JobState.RUNNING
+        with parts.uow_factory() as work:
+            before_events = work.job_events.list_for_job(submitted.job.job_id)
+        manager = LocalWorkerSupervisor(
+            tmp_path / "var",
+            parts.uow_factory,
+            parts.queue,
+            attempt_service=parts.attempts,
+            clock_us=lambda: NOW_US + 20,
+        )
+        manager._process = _ExitedWorker()
+        manager._job_id = submitted.job.job_id
+
+        manager._reap_finished_worker()
+
+        with parts.uow_factory() as work:
+            job = work.jobs.get(submitted.job.job_id)
+            after_events = work.job_events.list_for_job(submitted.job.job_id)
+        assert job is not None and job.state is expected
+        assert after_events == before_events
+    finally:
+        parts.engine.dispose()
 
 
 def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_path: Path) -> None:

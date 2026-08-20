@@ -15,7 +15,7 @@ const mockApi = vi.hoisted(() => ({
   demoStop: vi.fn(),
 }))
 
-vi.mock('../../api/onboarding', () => ({ onboardingApi: mockApi }))
+vi.mock('../../../api/onboarding', () => ({ onboardingApi: mockApi }))
 
 const session = (overrides = {}) => ({
   schema_version: '1',

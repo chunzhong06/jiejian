@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import os
+import shutil
 import socket
+import subprocess
 import sqlite3
 import sys
 import tempfile
@@ -62,6 +65,85 @@ def _python_check() -> DoctorCheck:
         ok=ok,
         message="Python 版本满足要求" if ok else "需要 Python 3.12 或更高版本",
         details={"version": ".".join(str(part) for part in current)},
+    )
+
+
+def _toolchain_requirements(project_root: Path) -> tuple[str, str] | None:
+    package_path = project_root / "product" / "frontend" / "package.json"
+    try:
+        package = json.loads(package_path.read_text(encoding="utf-8"))
+        node_range = str(package["engines"]["node"])
+        package_manager = str(package["packageManager"])
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
+    if package_manager.startswith("pnpm@") and node_range:
+        return node_range, package_manager.removeprefix("pnpm@")
+    return None
+
+
+def _local_tool_check(
+    *, name: str, executable_name: str, expected: str | tuple[str, str] | None,
+    project_root: Path,
+) -> DoctorCheck:
+    requirements = _toolchain_requirements(project_root)
+    if requirements is None:
+        return DoctorCheck(
+            name=name,
+            required=True,
+            ok=False,
+            message="前端 package.json 版本真源不可读取",
+        )
+    expected_value = requirements[1] if name == "pnpm" else requirements[0]
+    executable = shutil.which(executable_name)
+    if not executable:
+        return DoctorCheck(
+            name=name,
+            required=True,
+            ok=False,
+            message=f"未找到 {name} 可执行文件",
+            details={"expected": expected_value},
+        )
+    path = Path(executable).resolve()
+    frontend_root = project_root / "product" / "frontend"
+    try:
+        # Corepack 根据当前目录的 packageManager 选择 pnpm；从仓库根探测会误用其他版本。
+        completed = subprocess.run(
+            [str(path), "--version"],
+            cwd=frontend_root,
+            capture_output=True,
+            check=False,
+            timeout=3,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=os.environ.copy(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        completed = None
+    output = ""
+    if completed is not None and completed.returncode == 0:
+        output = next(
+            (line.strip() for line in reversed(completed.stdout.splitlines()) if line.strip()),
+            "",
+        )
+    if name == "node":
+        import re
+
+        match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", output)
+        range_match = re.fullmatch(r">=\s*(\d+)\.(\d+)\.(\d+)\s*<\s*(\d+)", expected_value)
+        ok = bool(match and range_match)
+        if ok:
+            actual = tuple(int(match.group(index)) for index in range(1, 4))
+            minimum = tuple(int(range_match.group(index)) for index in range(1, 4))
+            ok = actual >= minimum and actual[0] < int(range_match.group(4))
+    else:
+        ok = output == expected_value
+    return DoctorCheck(
+        name=name,
+        required=True,
+        ok=ok,
+        message=(f"{name} 版本符合 package.json" if ok else f"{name} 版本不符合 package.json"),
+        details={"version": output or None, "path": str(path), "expected": expected_value},
     )
 
 
@@ -291,13 +373,17 @@ def run_doctor(
     *,
     config_path: Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
+    project_root: Path | None = None,
 ) -> DoctorReport:
     """执行启动诊断；不访问公网，也不在源码树写数据库。"""
 
     config_check, settings = _config_check(config_path, cli_overrides or {})
+    frontend_root = (project_root or Path(__file__).resolve().parents[4]).resolve()
     checks: tuple[DoctorCheck, ...] = (
         _python_check(),
         _dependency_check(),
+        _local_tool_check(name="node", executable_name="node", expected=None, project_root=frontend_root),
+        _local_tool_check(name="pnpm", executable_name="pnpm", expected=None, project_root=frontend_root),
         config_check,
         _var_check(settings),
         _sqlite_check(),
@@ -311,6 +397,8 @@ def run_doctor(
     logger = configure_logging(
         settings.log_level if settings is not None else "INFO",
         trace_id=settings.trace_id if settings is not None else None,
+        var_dir=settings.var_dir if settings is not None else None,
+        console=False,
     )
     logger.info(
         "启动环境诊断完成",

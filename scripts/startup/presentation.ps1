@@ -4,20 +4,46 @@ function Write-Startup([string]$Message) {
     if (-not (Test-Path -LiteralPath $script:LogDir -PathType Container)) {
         New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null
     }
+    if (-not $script:StartupLogInitialized) {
+        # 新日志写入前只保留最近十九份历史，连同本轮日志最多二十份。
+        @(Get-ChildItem -LiteralPath $script:LogDir -Filter "*.log" -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTimeUtc, Name -Descending |
+            Select-Object -Skip 19) | ForEach-Object {
+                Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+            }
+        $script:StartupLogInitialized = $true
+    }
     [IO.File]::AppendAllText($script:LogPath, $Message + [Environment]::NewLine, $script:Utf8Encoding)
 }
 
 function Write-Banner {
     Write-Host ""
     if ($script:DisplayUnicode) {
-        @(
+        $lines = @(
             "   ██╗██╗███████╗     ██╗██╗ █████╗ ███╗   ██╗",
             "   ██║██║██╔════╝     ██║██║██╔══██╗████╗  ██║",
             "   ██║██║█████╗       ██║██║███████║██╔██╗ ██║",
             "██ ██║██║██╔══╝    ██ ██║██║██╔══██║██║╚██╗██║",
             "╚███╔╝██║███████╗  ╚███╔╝██║██║  ██║██║ ╚████║",
             " ╚══╝ ╚═╝╚══════╝   ╚══╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝"
-        ) | ForEach-Object { Write-Host $_ -ForegroundColor Cyan }
+        )
+        $colors = @(
+            @(0, 102, 153),
+            @(0, 126, 174),
+            @(0, 151, 194),
+            @(32, 174, 211),
+            @(82, 197, 226),
+            @(145, 222, 239)
+        )
+        for ($index = 0; $index -lt $lines.Count; $index += 1) {
+            if ($script:DisplayTrueColor) {
+                $escape = [char]27
+                $rgb = $colors[$index]
+                Write-Host ("{0}[38;2;{1};{2};{3}m{4}{0}[0m" -f $escape, $rgb[0], $rgb[1], $rgb[2], $lines[$index])
+            } else {
+                Write-Host $lines[$index] -ForegroundColor Cyan
+            }
+        }
         Write-Host ""
         Write-Host "         界鉴 · 安全意图一致性验证" -ForegroundColor Gray
     } else {
@@ -26,33 +52,96 @@ function Write-Banner {
     }
 }
 
-function Select-StartupMode {
-    # 返回稳定内部模式名，避免展示文案成为脚本路由契约。
-
-    $items = @(
-        [pscustomobject]@{ mode = "Gui"; label = "图形界面" },
-        [pscustomobject]@{ mode = "Cli"; label = "命令行" },
-        [pscustomobject]@{ mode = "Prepare"; label = "仅完成环境准备" }
-    )
+function Read-StartupMenu([string]$Title, [object[]]$Items) {
+    # 标题、选项和操作提示分区绘制；方向键只覆盖选项行。
     $selected = 0
     Write-Host ""
-    Write-Host "界鉴已经准备完成" -ForegroundColor Cyan
+    Write-Host $Title -ForegroundColor Cyan
     Write-Host ""
-    $menuTop = [Console]::CursorTop
-    foreach ($item in $items) { Write-Host ("  {0,-24}" -f $item.label) }
-    while ($true) {
-        [Console]::SetCursorPosition(0, $menuTop)
-        for ($index = 0; $index -lt $items.Count; $index += 1) {
+    try {
+        $menuTop = [Console]::CursorTop
+        for ($index = 0; $index -lt $Items.Count; $index += 1) {
             $marker = if ($index -eq $selected) { ">" } else { " " }
             $color = if ($index -eq $selected) { "Cyan" } else { "Gray" }
-            Write-Host ("{0} {1,-24}" -f $marker, $items[$index].label) -ForegroundColor $color
+            $line = ("{0} {1}" -f $marker, $Items[$index].label)
+            Write-Host $line -ForegroundColor $color
         }
-        $key = [Console]::ReadKey($true).Key
-        switch ($key) {
-            "UpArrow" { $selected = ($selected - 1 + $items.Count) % $items.Count }
-            "DownArrow" { $selected = ($selected + 1) % $items.Count }
-            "Enter" { return $items[$selected].mode }
+        Write-Host ""
+        if ($script:DisplayUnicode) {
+            Write-Host "↑ ↓ 选择    Enter 确认" -ForegroundColor DarkGray
+        } else {
+            Write-Host "方向键选择    Enter 确认" -ForegroundColor DarkGray
         }
+        $afterFooter = [Console]::CursorTop
+        while ($true) {
+            $key = [Console]::ReadKey($true).Key
+            switch ($key) {
+                "UpArrow" { $selected = ($selected - 1 + $Items.Count) % $Items.Count }
+                "DownArrow" { $selected = ($selected + 1) % $Items.Count }
+                "Enter" {
+                    if (-not $script:DisplayTrueColor) {
+                        [Console]::SetCursorPosition(0, $afterFooter)
+                    }
+                    return $Items[$selected].value
+                }
+            }
+            if ($script:DisplayTrueColor) {
+                # Windows Terminal 通过同一 VT 输出流保存和恢复光标，避免 RawUI 坐标与 ConPTY 状态脱节后追加菜单。
+                $escape = [char]27
+                [Console]::Write(("{0}[s{0}[{1}A{0}[1G" -f $escape, ($Items.Count + 2)))
+                for ($index = 0; $index -lt $Items.Count; $index += 1) {
+                    $marker = if ($index -eq $selected) { ">" } else { " " }
+                    $colorCode = if ($index -eq $selected) { 96 } else { 37 }
+                    $line = ("{0} {1}" -f $marker, $Items[$index].label)
+                    [Console]::Write(("{0}[2K{0}[{1}m{2}{0}[0m" -f $escape, $colorCode, $line))
+                    if ($index -lt ($Items.Count - 1)) { [Console]::Write("`r`n") }
+                }
+                [Console]::Write(("{0}[u" -f $escape))
+            } else {
+                [Console]::SetCursorPosition(0, $menuTop)
+                for ($index = 0; $index -lt $Items.Count; $index += 1) {
+                    $marker = if ($index -eq $selected) { ">" } else { " " }
+                    $color = if ($index -eq $selected) { "Cyan" } else { "Gray" }
+                    Write-Host ("{0} {1}" -f $marker, $Items[$index].label) -ForegroundColor $color
+                }
+                [Console]::SetCursorPosition(0, $afterFooter)
+            }
+        }
+    } catch {
+        # RawUI 不可靠时只输出一次编号列表；无效输入只重问编号。
+        Write-Host "当前终端改用编号选择，输入编号后按 Enter 确认。" -ForegroundColor DarkGray
+        for ($index = 0; $index -lt $Items.Count; $index += 1) {
+            Write-Host ("{0}. {1}" -f ($index + 1), $Items[$index].label) -ForegroundColor Gray
+        }
+        while ($true) {
+            $answer = Read-Host ("请输入 1-{0}" -f $Items.Count)
+            $number = 0
+            if ([int]::TryParse($answer, [ref]$number) -and $number -ge 1 -and $number -le $Items.Count) {
+                return $Items[$number - 1].value
+            }
+        }
+    }
+}
+
+function Select-StartupMode {
+    # 展示文案与内部路由值分离；返回可回到第一层，不增加新的公共 Mode。
+    $startupItems = @(
+        [pscustomobject]@{ value = "Gui"; label = "图形界面" },
+        [pscustomobject]@{ value = "Cli"; label = "命令行" },
+        [pscustomobject]@{ value = "Prepare"; label = "仅完成环境准备" }
+    )
+    $cliItems = @(
+        [pscustomobject]@{ value = "Guide"; label = "引导模式（推荐）" },
+        [pscustomobject]@{ value = "Shell"; label = "普通命令行" },
+        [pscustomobject]@{ value = "Back"; label = "返回" }
+    )
+    while ($true) {
+        $mode = Read-StartupMenu "界鉴已经准备完成" $startupItems
+        if ($mode -ne "Cli") { return $mode }
+        $cliMode = Read-StartupMenu "请选择命令行方式" $cliItems
+        if ($cliMode -eq "Back") { continue }
+        $script:CliEntryMode = $cliMode
+        return "Cli"
     }
 }
 
@@ -63,22 +152,15 @@ function Write-CliWelcome {
     Write-Host "界鉴命令行已经准备完成" -ForegroundColor Cyan
     Write-Host ("VarDir  {0}" -f $script:VarDir) -ForegroundColor Gray
     Write-Host ""
+    Write-Host "第一次使用？" -ForegroundColor Gray
+    Write-Host "  jiejian guide" -ForegroundColor DarkGray
+    Write-Host ""
     Write-Host "常用命令" -ForegroundColor Gray
     Write-Host "  jiejian doctor" -ForegroundColor DarkGray
-    Write-Host "  jiejian project --help" -ForegroundColor DarkGray
-    Write-Host "  jiejian recording --help" -ForegroundColor DarkGray
     Write-Host "  jiejian run --help" -ForegroundColor DarkGray
-    Write-Host "  exit" -ForegroundColor DarkGray
+    Write-Host "  jiejian report --help" -ForegroundColor DarkGray
+    Write-Host "  jiejian --help" -ForegroundColor DarkGray
     Write-Host ""
-}
-
-function Wait-StartupFailureInput {
-    # start.cmd 双击入口需要保留错误；自动化和直接脚本调用仍立即返回退出码。
-    if (-not $script:WaitOnFailure -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
-        return
-    }
-    Write-Host "按 Enter 关闭窗口" -ForegroundColor DarkGray
-    while ([Console]::ReadKey($true).Key -ne "Enter") { }
 }
 
 function Start-DisplayStage([int]$Index, [string]$Name) {
@@ -101,17 +183,6 @@ function Complete-DisplayStage([string]$Status = "") {
     $script:DisplayStageName = $null
     $script:DisplayStageTimer = $null
     $script:DisplayStageSkipped = $false
-}
-
-function Write-DisplaySubtask([string]$Message, [bool]$Weak = $false) {
-    if ($null -eq $script:DisplayStageTimer) { return }
-    $branch = if ($script:DisplayUnicode) {
-        if ($Weak) { "         └─" } else { "      ├─" }
-    } else {
-        if ($Weak) { "         `--" } else { "      |--" }
-    }
-    $color = if ($Weak) { "DarkGray" } else { "Gray" }
-    Write-Host ("{0} {1}" -f $branch, $Message) -ForegroundColor $color
 }
 
 function Get-DisplayCellWidth([string]$Text) {
@@ -165,10 +236,17 @@ function Write-DisplayResult(
 
 function Get-WaitIndicatorLabel([string]$Stage) {
     switch ($Stage) {
-        { $_ -in @("conda", "uv", "lock", "python-dependencies", "python") } { return "正在准备 Python" }
-        "playwright" { return "正在准备浏览器" }
-        { $_ -in @("doctor", "migration") } { return "正在准备数据" }
-        { $_ -in @("frontend-install", "frontend-build", "frontend") } { return "正在准备界面" }
+        { $_ -in @("node", "node-search") } { return "正在查找 Node.js" }
+        { $_ -in @("pnpm", "pnpm-check") } { return "正在检查 pnpm" }
+        { $_ -in @("conda", "uv", "python-search") } { return "正在查找 Python 环境" }
+        { $_ -in @("python", "python-version", "python-verify") } { return "正在验证 Python 环境" }
+        { $_ -in @("lock", "uv-sync", "python-dependencies") } { return "正在准备 Python 依赖" }
+        "chromium-check" { return "正在检查 Chromium" }
+        { $_ -in @("playwright", "chromium-prepare") } { return "正在准备 Chromium" }
+        { $_ -in @("doctor", "database-check") } { return "正在检查本地数据" }
+        { $_ -in @("migration", "database-upgrade") } { return "正在升级本地数据" }
+        { $_ -in @("frontend-install", "frontend-dependencies") } { return "正在准备前端依赖" }
+        { $_ -in @("frontend-build", "frontend") } { return "正在构建界面" }
         "serve" { return "正在启动界面" }
         default { return "正在处理" }
     }
@@ -180,7 +258,8 @@ function Start-WaitIndicator([string]$Stage) {
     try {
         Stop-WaitIndicator
         $shell = (Get-Process -Id $PID -ErrorAction Stop).Path
-        $quotedScript = '"' + $PSCommandPath.Replace('"', '""') + '"'
+        $spinnerScript = Join-Path $script:ProjectRoot "scripts\start.ps1"
+        $quotedScript = '"' + $spinnerScript.Replace('"', '""') + '"'
         $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File $quotedScript -DisplaySpinnerProcess -DisplaySpinnerStage $Stage"
         if (-not $script:DisplayUnicode) { $arguments += " -DisplaySpinnerAscii" }
         $script:WaitIndicatorProcess = Start-Process -FilePath $shell -ArgumentList $arguments -NoNewWindow -PassThru -ErrorAction Stop
@@ -214,6 +293,8 @@ function Invoke-WaitIndicatorProcess([string]$Stage, [bool]$Ascii) {
     $frames = if ($Ascii) { @("|", "/", "-", "\") } else { @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏") }
     $label = Get-WaitIndicatorLabel $Stage
     $index = 0
+    # 快速探针在首帧出现前结束，避免终端闪烁。
+    Start-Sleep -Milliseconds 130
     while ($true) {
         [Console]::Write(("`r{0} {1}" -f $frames[$index % $frames.Count], $label))
         $index += 1

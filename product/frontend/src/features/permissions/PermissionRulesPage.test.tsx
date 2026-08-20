@@ -28,7 +28,7 @@ describe('PermissionRulesPage', () => {
     contractsApi.contractGovernance.mockResolvedValue({ project: { project_id: 'p1' }, requirements: [], candidates: [], versions: [], llm_available: false })
     contractsApi.contracts.mockResolvedValue([])
     render(<PermissionRulesPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
-    expect(await screen.findByText(/alice/)).toBeInTheDocument()
+    expect((await screen.findAllByText('alice')).length).toBeGreaterThanOrEqual(1)
     const cell = await screen.findByRole('button', { name: /alice read doc-1 允许/ })
     expect(cell).toHaveTextContent('允许')
     expect(screen.getByRole('button', { name: /alice read doc-2 未声明/ })).toHaveTextContent('未声明')
@@ -44,7 +44,10 @@ describe('PermissionRulesPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '关系图' }))
     const graph = await screen.findByRole('region', { name: '权限关系图' })
     expect(within(graph).getAllByRole('button').length).toBeGreaterThanOrEqual(3)
-    expect(screen.getByText(/alice — OWNS → doc-1/)).toBeInTheDocument()
+    expect(graph.querySelector('.react-flow__minimap')).not.toBeInTheDocument()
+    expect(graph.querySelector('.react-flow__attribution')).not.toBeInTheDocument()
+    expect(screen.getAllByText('拥有').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('doc-1').length).toBeGreaterThanOrEqual(1)
     fireEvent.click(await screen.findByLabelText('身份 alice'))
     expect(await screen.findByText('正在聚焦：alice')).toBeInTheDocument()
     expect(screen.getByText('当前身份的权限')).toBeInTheDocument()
@@ -59,6 +62,37 @@ describe('PermissionRulesPage', () => {
     expect(screen.getByText('当前治理摘要只返回规则字段，不包含身份、动作、资源和关系实体，因此关系视图不可用。')).toBeInTheDocument()
   })
 
+  it('内置示例使用中文业务含义并保留协议原值，规则版本列表占满可用宽度', async () => {
+    const demoContract = {
+      ...contract,
+      subjects: [{ subject_id: 'attacker', roles: ['user'] }, { subject_id: 'owner', roles: ['user'] }],
+      actions: [{ action_id: 'modify' }],
+      resources: [
+        { resource_id: 'attacker-resource', resource_type: 'document' },
+        { resource_id: 'owner-resource', resource_type: 'document' },
+      ],
+      relations: [{ relation_id: 'attacker-owns', relation: 'OWNS', source: { endpoint_type: 'subject', endpoint_id: 'attacker' }, target: { endpoint_type: 'resource', endpoint_id: 'attacker-resource' } }],
+      rules: [{ rule_id: 'unauthorized-modify', subject_id: 'attacker', action_id: 'modify', resource_id: 'owner-resource', expectation: 'DENY', severity: 'critical' }],
+    }
+    permissionApi.profiles.mockResolvedValue([{ profile_id: 'profile-1', contract_id: 'access', contract_version: 1 }])
+    permissionApi.contract.mockResolvedValue(demoContract)
+    contractsApi.contractGovernance.mockResolvedValue({ project: { project_id: 'p1' }, requirements: [], candidates: [], versions: [{ contract_id: 'access', version: 1, status: 'ACTIVE', snapshot: demoContract }], llm_available: false })
+    contractsApi.contracts.mockResolvedValue([])
+
+    render(<PermissionRulesPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
+
+    expect((await screen.findAllByText('攻击者')).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('attacker').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('修改').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('modify').length).toBeGreaterThanOrEqual(1)
+    fireEvent.click(screen.getByRole('tab', { name: '关系图' }))
+    expect((await screen.findAllByText('拥有')).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('文档').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('attacker-resource').length).toBeGreaterThanOrEqual(1)
+    expect(document.querySelector('.governance-version-list')).toBeInTheDocument()
+    expect(document.querySelector('.governance-version-item')).toHaveTextContent('已激活')
+  })
+
   it('选择 PermissionContract 后创建草稿只提交完整快照，不自动提交或激活', async () => {
     permissionApi.profiles.mockResolvedValue([])
     contractsApi.contractGovernance.mockResolvedValue({ project: { project_id: 'p1' }, requirements: [], candidates: [], versions: [], llm_available: false })
@@ -69,9 +103,9 @@ describe('PermissionRulesPage', () => {
     render(<PermissionRulesPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: /高级：规则治理与当前配置/ }))
-    fireEvent.change(await screen.findByLabelText('PermissionContract JSON 文件'), { target: { files: [file] } })
+    fireEvent.change(await screen.findByLabelText('权限契约 JSON 文件'), { target: { files: [file] } })
     expect(await screen.findByText('已选择：contract.json')).toBeInTheDocument()
-    expect((await screen.findByText('contract_id')).parentElement).toHaveTextContent('access')
+    expect((await screen.findByText('契约标识（contract_id）')).parentElement).toHaveTextContent('access')
     fireEvent.click(screen.getByRole('button', { name: '创建草稿' }))
 
     await waitFor(() => expect(contractsApi.createGovernanceContract).toHaveBeenCalledWith('p1', contract, [], 'local-user'))

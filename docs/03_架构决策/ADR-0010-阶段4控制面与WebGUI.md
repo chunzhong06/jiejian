@@ -16,7 +16,7 @@
 1. API 由 FastAPI 提供，只允许绑定 `127.0.0.1` 或 `::1`；健康检查、OpenAPI、资源管理、任务提交、状态查询、SSE 和已发布结果读取均返回 `schema_version=1`，错误包含稳定错误码和脱敏 `trace_id`。
 2. `application/` 保存 CLI、API 和 serve 共用的项目来源校验、Contract 选择和执行请求构造；Verification、Recording 和 Worker 的既有语义不复制到路由。
 3. `projects` 向前增加可空来源路径/哈希及 ACTIVE Contract 路径/哈希。来源哈希覆盖 project 文件及其解析出的 Flow 路径和内容；Contract 仍以独立哈希绑定。旧记录可以查询；缺少来源身份的记录必须重新注册后才能创建任务。任一来源或 Contract 内容变化必须显式重新校验。
-4. API 创建长任务只写持久请求和 Job，立即返回资源 ID。serve 管理独立 Worker 子进程；API 不执行目标 I/O。SSE 使用 `JobEvent.sequence` 作为事件 ID，支持 `after` 查询参数与 `Last-Event-ID`（显式 `after` 优先），断开不发送取消请求；serve 对同一 `var` 使用单实例锁并诊断陈旧锁。
+4. API 创建长任务只写持久请求和 Job，立即返回资源 ID。serve 管理独立 Worker 子进程；API 不执行目标 I/O。SSE 使用 `JobEvent.sequence` 作为事件 ID，支持 `after` 查询参数与 `Last-Event-ID`（显式 `after` 优先），断开不发送取消请求；serve 对同一 `var` 使用由进程句柄持有的非阻塞系统文件锁。正常退出时主动释放，异常退出或强制终止时由内核释放；`.serve.lock` 中的 PID 只供诊断，遗留或半写入文件不得自行决定锁仍然有效。
 5. Finding 由已发布且通过 manifest、路径、文件哈希、Evidence 语义哈希和数据库索引一致性校验的 Evidence/JSON report 确定性派生，不建立第二套判定。证据差分只使用已发布 mutation plan 与持久执行请求快照。
 6. `product/frontend/` 使用 React、TypeScript、Vite、Ant Design 和 pnpm；GUI 只通过 API 恢复项目、Recording、Run、事件和报告状态。
 7. Run 详情从持久 ExecutionRequest 快照提供目标范围、预算和观察器配置；终态必须先通过统一发布完整性读取服务，完整性失败直接返回稳定错误，不以数据库 verdict 降级。Finding 只由非 SAFE Evidence 派生；项目运行列表可将损坏终态标记为 `result_integrity=INVALID` 并隐藏 verdict。

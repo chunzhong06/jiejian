@@ -16,7 +16,7 @@ from product.backend.core.errors import JiejianError
 
 def baseline_accept_command(
     context: typer.Context,
-    run_id: str = typer.Argument(..., help="已发布且已完成的 Run ID"),
+    run_id: str = typer.Argument(..., help="已发布且已完成的检查 ID"),
     actor: str = typer.Option(..., "--actor"),
     reason: str = typer.Option(..., "--reason"),
 ) -> None:

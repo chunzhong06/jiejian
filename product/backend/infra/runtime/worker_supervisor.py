@@ -22,8 +22,11 @@ import logging
 from pathlib import Path
 from uuid import uuid4
 
+from product.backend.core.lifecycle import JobState
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
+from product.backend.infra.runtime.jobs.attempts import JobAttempts
+from product.backend.infra.runtime.jobs.models import WaitingFatalFailure
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore, required_secret_names
 
@@ -38,12 +41,16 @@ class LocalWorkerSupervisor:
         var_dir: Path,
         uow_factory,
         job_queue: JobQueue | None = None,
+        attempt_service: JobAttempts | None = None,
         environment_provider=None,
+        clock_us=None,
     ) -> None:
         self.var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
         self._job_queue = job_queue or JobQueue(uow_factory)
+        self._attempts = attempt_service or JobAttempts(uow_factory)
         self._environment_provider = environment_provider or (lambda names: {})
+        self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._process = None
@@ -104,38 +111,15 @@ class LocalWorkerSupervisor:
         self._thread = None
 
     def _loop(self) -> None:
-        """串行选择 Job 并启动独立 Worker 进程，异常仅终止当前调度迭代。"""
+        """串行监督 Worker；已承担的等待态 Job 在 bootstrap 失败后必须收口。"""
 
         while not self._stop.is_set():
             try:
-                if self._process is None or self._process.poll() is not None:
-                    if self._process is not None and self._process.returncode:
-                        logger.error(
-                            "worker exited with non-zero status",
-                            extra={"component": "worker_supervisor", "event_code": "WORKER_EXIT_NONZERO", "job_id": self._job_id},
-                        )
-                    self._process = None
-                    self._job_id = None
+                self._reap_finished_worker()
+                if self._process is None:
                     job = self._next_job()
                     if job is not None:
-                        secret_names = ()
-                        if job.run_id is not None:
-                            request = ExecutionRequestStore(self.var_dir).load(
-                                job.job_id,
-                                expected_hash=job.request_hash,
-                            )
-                            secret_names = required_secret_names(request)
-                        self._job_id = job.job_id
-                        environment = self._environment_provider(secret_names)
-                        self._process = WorkerDispatcher(
-                            var_dir=self.var_dir,
-                            uow_factory=self._uow_factory,
-                            environ=environment,
-                        ).start(
-                            job_id=job.job_id,
-                            lease_owner=f"serve-worker-{uuid4().hex}",
-                            secret_names=secret_names,
-                        )
+                        self._start_job(job)
             except Exception:
                 logger.exception(
                     "worker supervisor loop failed",
@@ -144,6 +128,92 @@ class LocalWorkerSupervisor:
                 self._stop.wait(0.25)
                 continue
             self._stop.wait(0.1)
+
+    def _reap_finished_worker(self) -> None:
+        process = self._process
+        if process is None or process.poll() is None:
+            return
+        # 清理引用前保存责任 Job；否则非零退出会丢失需要结束的 waiting 身份。
+        finished_job_id = self._job_id
+        return_code = process.returncode
+        self._process = None
+        self._job_id = None
+        if return_code and finished_job_id is not None:
+            logger.error(
+                "worker exited with non-zero status",
+                extra={
+                    "component": "worker_supervisor",
+                    "event_code": "WORKER_EXIT_NONZERO",
+                    "job_id": finished_job_id,
+                },
+            )
+            self._finish_waiting_failure(finished_job_id)
+
+    def _start_job(self, job) -> None:
+        """建立启动责任并完成 request、secret 与进程准备；失败时结束仍匹配的 waiting Job。"""
+
+        self._job_id = job.job_id
+        try:
+            secret_names = ()
+            if job.run_id is not None:
+                request = ExecutionRequestStore(self.var_dir).load(
+                    job.job_id,
+                    expected_hash=job.request_hash,
+                )
+                secret_names = required_secret_names(request)
+            environment = self._environment_provider(secret_names)
+            self._process = WorkerDispatcher(
+                var_dir=self.var_dir,
+                uow_factory=self._uow_factory,
+                environ=environment,
+            ).start(
+                job_id=job.job_id,
+                lease_owner=f"serve-worker-{uuid4().hex}",
+                secret_names=secret_names,
+            )
+        except Exception:
+            failed_job_id = self._job_id
+            self._process = None
+            self._job_id = None
+            logger.exception(
+                "worker bootstrap failed",
+                extra={
+                    "component": "worker_supervisor",
+                    "event_code": "WORKER_BOOTSTRAP_ERROR",
+                    "job_id": failed_job_id,
+                },
+            )
+            if failed_job_id is not None:
+                self._finish_waiting_failure(failed_job_id)
+
+    def _finish_waiting_failure(self, job_id: str) -> None:
+        """接受数据库真实状态，只结束仍为 waiting 且无租约的 Job。"""
+
+        current = self._read_job(job_id)
+        if current is None or current.state in {
+            JobState.SUCCEEDED,
+            JobState.FAILED,
+            JobState.CANCELLED,
+            JobState.RUNNING,
+        }:
+            return
+        if current.state not in {JobState.PENDING, JobState.RETRY_WAIT}:
+            return
+        if current.lease_owner is not None or current.lease_expires_at_us is not None:
+            return
+        changed = self._attempts.record_waiting_fatal_failure(
+            WaitingFatalFailure(
+                job_id=job_id,
+                now_us=self._clock_us(),
+            )
+        )
+        if changed is None:
+            # claim/cancel 竞争可能已经获胜；重新读取后只接受新的真实状态，不做无条件覆盖。
+            self._read_job(job_id)
+
+    def _read_job(self, job_id: str):
+        with self._uow_factory() as work:
+            return work.jobs.get(job_id)
 
     def _next_job(self):
         with self._uow_factory() as work:

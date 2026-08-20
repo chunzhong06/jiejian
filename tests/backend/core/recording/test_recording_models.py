@@ -94,6 +94,22 @@ def test_recording_safety_stop_and_cleanup_failure_use_explicit_cleanup_state() 
     )
 
 
+def test_recording_can_fail_before_start_without_inventing_start_time() -> None:
+    failed = _transition(
+        _recording(),
+        RecordingState.FAILED,
+        2,
+        reason_code=RecordingReasonCode.PROCESSING_FAILED,
+    )
+
+    assert failed.state is RecordingState.FAILED
+    assert failed.started_at_us is None
+    assert failed.finished_at_us == 2
+    assert failed.reason_codes == ("PROCESSING_FAILED",)
+    assert failed.events[0].source is RecordingState.CREATED
+    assert failed.events[0].target is RecordingState.FAILED
+
+
 def test_recording_rejects_illegal_assignment_transition_and_time_regression() -> None:
     recording = _recording()
     with pytest.raises(JiejianError) as illegal:

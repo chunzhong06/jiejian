@@ -1,11 +1,12 @@
-/* 首次使用向导：组织目录识别、普通信息补充和快速任务提交，不执行候选命令。 */
+/* 首次使用向导编排：组织目录识别、普通信息补充和快速任务提交，不执行候选命令。 */
 
-import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Collapse, Descriptions, Form, Input, List, Progress, Space, Steps, Tag, Typography } from 'antd'
-import { ApiError } from '../../api/http'
-import { DemoVariant, DiscoveryResult, OnboardingSession, onboardingApi, QuickCheckResult } from '../../api/onboarding'
+import { useEffect, useState } from 'react'
+import { ApiError } from '../../../api/http'
+import { DemoVariant, DiscoveryResult, OnboardingSession, onboardingApi, QuickCheckResult } from '../../../api/onboarding'
+import { browserState } from '../../../app/browserState'
+import { OnboardingSteps, type OnboardingFields } from './OnboardingSteps'
+import { OnboardingWelcome } from './OnboardingWelcome'
 
-const SESSION_KEY = 'product.backend.workflows.onboarding.session'
 const FOLDER_SELECTOR_CLIENT_TIMEOUT_MS = 125_000
 
 type Submitted = Pick<QuickCheckResult, 'project_id' | 'run_id' | 'job_id'> & { demo_data?: boolean }
@@ -87,7 +88,7 @@ export function OnboardingWizard({ onSubmitted }: { onSubmitted?: (result: Submi
   }
 
   useEffect(() => {
-    const sessionId = localStorage.getItem(SESSION_KEY)
+    const sessionId = browserState.readOnboardingSession()
     if (sessionId) {
       setLoading(true)
       void onboardingApi.getSession(sessionId).then((next) => {
@@ -95,7 +96,7 @@ export function OnboardingWizard({ onSubmitted }: { onSubmitted?: (result: Submi
         setPath(next.source_path)
         void inspectRestoredPath(next.source_path)
       }).catch(() => {
-        localStorage.removeItem(SESSION_KEY)
+        browserState.clearOnboardingSession()
         setError('之前的新手会话已失效，请重新选择应用文件夹。')
       }).finally(() => setLoading(false))
     }
@@ -126,7 +127,7 @@ export function OnboardingWizard({ onSubmitted }: { onSubmitted?: (result: Submi
       const result = await onboardingApi.inspect(selectedPath)
       setDiscovery(result)
       const created = await onboardingApi.createSession(selectedPath, projectNameFromPath(selectedPath))
-      localStorage.setItem(SESSION_KEY, created.session_id)
+      browserState.writeOnboardingSession(created.session_id)
       applySession(created)
       setPath(selectedPath)
       setStep(0)
@@ -296,73 +297,22 @@ export function OnboardingWizard({ onSubmitted }: { onSubmitted?: (result: Submi
 
   const missing = session?.missing_items ?? []
   const submitted = session?.status === 'SUBMITTED'
-  const candidateItems = discovery?.start_candidates ?? []
-  const hintItems = useMemo(() => [
-    ...(discovery?.config_hints ?? []),
-    ...(discovery?.interface_hints ?? []),
-    ...(discovery?.auth_hints ?? []),
-  ], [discovery])
+  if (!session) return <OnboardingWelcome loading={loading} manualPath={manualPath} chooserMessage={chooserMessage} error={error} demo={demo} onManualPathChange={setManualPath} onChooseFolder={() => void chooseFolder()} onSubmitManualPath={() => void submitManualPath()} onStartDemo={(variant) => void startDemo(variant)} onStopDemo={() => void stopDemo()} onContinueDemo={() => { if (demo?.project_id && demo.run_id && demo.job_id) onSubmitted?.({ project_id: demo.project_id, run_id: demo.run_id, job_id: demo.job_id, demo_data: true }) }} />
 
-  const demoCards: Array<{ variant: DemoVariant; title: string; description: string; outcome: string }> = [
-    { variant: 'fixed', title: '安全示例', description: '看看权限正确生效时，界鉴如何形成安全结论。', outcome: '预期：未发现权限越界' },
-    { variant: 'vulnerable', title: '权限漏洞示例', description: '接口看起来拒绝了请求，但真实数据仍被修改。', outcome: '预期：发现权限越界' },
-    { variant: 'inconclusive', title: '证据不足示例', description: '关键观察不可用时，界鉴为什么不能误判为安全。', outcome: '预期：证据不足，暂时无法下结论' },
-  ]
-
-  if (!session) {
-    return <Card className="onboarding-wizard onboarding-welcome" bordered={false}>
-      <Typography.Title level={2}>检查你的应用有没有权限越界</Typography.Title>
-      <Typography.Paragraph>先选择应用文件夹，界鉴只读取少量常见配置，不会运行项目或安装依赖。</Typography.Paragraph>
-      <Space wrap>
-        <Button type="primary" size="large" loading={loading} onClick={() => void chooseFolder()}>选择应用文件夹</Button>
-      </Space>
-      <Typography.Title level={4}>试用内置演示</Typography.Title>
-      <div className="onboarding-demo-grid">
-        {demoCards.map((card) => (
-          <Card key={card.variant} size="small" className="onboarding-demo-card" title={card.title}>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Typography.Paragraph>{card.description}</Typography.Paragraph>
-              <Typography.Text type="secondary">{card.outcome}</Typography.Text>
-              <Button type="primary" block loading={loading} disabled={loading} onClick={() => void startDemo(card.variant)}>开始体验</Button>
-            </Space>
-          </Card>
-        ))}
-      </div>
-      <Typography.Paragraph type="secondary" className="onboarding-demo-note">演示数据，不代表真实项目。</Typography.Paragraph>
-      <Collapse ghost items={[{ key: 'manual', label: '无法打开目录选择器？', children: <Space.Compact className="onboarding-manual-path"><Input aria-label="应用文件夹绝对路径" value={manualPath} onChange={(event) => setManualPath(event.target.value)} placeholder="输入应用文件夹绝对路径" /><Button type="primary" loading={loading} onClick={() => void submitManualPath()}>识别文件夹</Button></Space.Compact> }]} />
-      {chooserMessage && <Alert className="onboarding-inline-alert" type="info" showIcon message={chooserMessage} />}
-      {error && <Alert className="onboarding-inline-alert" type="error" showIcon message={error} />}
-      {demo && demo.status !== 'stopped' && <Alert className="onboarding-inline-alert" type={demo.status === 'failed' ? 'error' : demo.status === 'running' ? 'success' : 'info'} showIcon message={demo.message} action={demo.status === 'running' ? <Space><Button size="small" onClick={() => { if (demo.project_id && demo.run_id && demo.job_id) onSubmitted?.({ project_id: demo.project_id, run_id: demo.run_id, job_id: demo.job_id, demo_data: true }) }}>继续查看演示</Button><Button size="small" onClick={() => void stopDemo()} loading={loading}>停止演示</Button></Space> : undefined} />}
-    </Card>
+  const fields: OnboardingFields = { targetAddress, primaryName, comparisonName, primaryResource, comparisonResource, primaryPassword, comparisonPassword, readPath, recoveryPath }
+  const changeField = <K extends keyof OnboardingFields>(key: K, value: OnboardingFields[K]) => {
+    const setters: { [P in keyof OnboardingFields]: (next: OnboardingFields[P]) => void } = {
+      targetAddress: setTargetAddress,
+      primaryName: setPrimaryName,
+      comparisonName: setComparisonName,
+      primaryResource: setPrimaryResource,
+      comparisonResource: setComparisonResource,
+      primaryPassword: setPrimaryPassword,
+      comparisonPassword: setComparisonPassword,
+      readPath: setReadPath,
+      recoveryPath: setRecoveryPath,
+    }
+    setters[key](value)
   }
-
-  return <Card className="onboarding-wizard" bordered={false}>
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <div className="onboarding-heading"><Typography.Title level={3}>准备一次快速检查</Typography.Title><Typography.Text type="secondary">只读取少量配置；启动命令由你决定，界鉴不会替你执行。</Typography.Text></div>
-      {submitted && <Alert type="success" showIcon message="检查已提交" description="这次新手检查已进入后台，当前会话不能再修改。请到开始检查查看真实状态。" />}
-      {error && <Alert type="error" showIcon message={error} closable onClose={() => setError('')} />}
-      {chooserMessage && <Alert type="info" showIcon message={chooserMessage} closable onClose={() => setChooserMessage('')} action={chooserMessage.includes('暂时无法重新识别') ? <Button size="small" onClick={() => void inspectRestoredPath(session.source_path)} loading={loading}>重新识别</Button> : undefined} />}
-      <Descriptions size="small" column={{ xs: 1, sm: 2 }} items={[{ key: 'path', label: '应用文件夹', children: path || session.source_path }, { key: 'project', label: '项目名称', children: <Input aria-label="项目名称" value={projectName} disabled={submitted || loading} onChange={(event) => setProjectName(event.target.value)} /> }]} />
-      {discovery && <Card size="small" title="识别结果" className="onboarding-discovery">
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Typography.Text>项目类型：{discovery.detected_types.length ? discovery.detected_types.join('、') : '暂未识别'}</Typography.Text>
-          {candidateItems.length > 0 && <List size="small" header="可能的启动方式（只可复制，不会执行）" dataSource={candidateItems} renderItem={(candidate) => <List.Item actions={[<Button key="select" disabled={submitted || loading} type={selectedCandidateSource === candidate.source ? 'primary' : 'link'} onClick={() => setSelectedCandidateSource(candidate.source)}>{selectedCandidateSource === candidate.source ? '已记录来源' : '记录来源'}</Button>, <Button key="copy" disabled={submitted || loading} type="link" onClick={() => void copyCandidate(candidate.command)}>复制</Button>]}><Space direction="vertical" size={0}><Typography.Text>{candidate.label}</Typography.Text><Typography.Text code>{candidate.command}</Typography.Text><Typography.Text type="secondary">{candidate.safety_note}</Typography.Text></Space></List.Item>} />}
-          {hintItems.length > 0 && <List size="small" header="配置、API 和认证线索" dataSource={hintItems} renderItem={(hint) => <List.Item><Typography.Text>{hint.detail}（来源：{hint.source}）</Typography.Text></List.Item>} />}
-          {discovery.warnings.map((warning) => <Alert key={`${warning.code}-${warning.message}`} type="warning" showIcon message={warning.message} />)}
-        </Space>
-      </Card>}
-      <Steps current={step} responsive items={[{ title: '启动应用' }, { title: '允许访问的地址' }, { title: '两个测试账号' }, { title: '检查与恢复' }]} />
-      {step === 0 && <Card title="应用怎样启动" size="small"><Typography.Paragraph>用途：告诉界鉴应用已经由你启动。示例：复制候选命令，在本机自行启动后勾选确认。</Typography.Paragraph><Checkbox disabled={submitted || loading} checked={confirmations.app_started} onChange={(event) => setConfirmations({ ...confirmations, app_started: event.target.checked })}>应用已经在本机运行</Checkbox><Typography.Paragraph type="secondary">安全影响：候选命令只供复制，界鉴不会运行脚本或安装依赖。</Typography.Paragraph></Card>}
-      {step === 1 && <Card title="允许访问哪些地址" size="small"><Typography.Paragraph>快速检查只访问明确授权的本机回环地址，不扫描公网。</Typography.Paragraph><Form layout="vertical"><Form.Item label="目标地址" required extra="示例：http://127.0.0.1:8765"><Input aria-label="目标地址" disabled={submitted || loading} value={targetAddress} onChange={(event) => setTargetAddress(event.target.value)} placeholder="http://127.0.0.1:8765" /></Form.Item><Checkbox disabled={submitted || loading} checked={confirmations.target_authorized} onChange={(event) => setConfirmations({ ...confirmations, target_authorized: event.target.checked })}>我已授权界鉴只访问这个回环地址</Checkbox></Form></Card>}
-      {step === 2 && <Card title="测试账号有哪些" size="small"><Typography.Paragraph>用途：用两个身份互换资源，检查权限边界。密码只在本次提交时使用，成功后立即清空；刷新后若已配置，可以留空。</Typography.Paragraph><div className="onboarding-form-grid"><Form.Item label="主账号显示名" required><Input aria-label="主账号显示名" disabled={submitted || loading} value={primaryName} onChange={(event) => setPrimaryName(event.target.value)} /></Form.Item><Form.Item label="对照账号显示名" required><Input aria-label="对照账号显示名" disabled={submitted || loading} value={comparisonName} onChange={(event) => setComparisonName(event.target.value)} /></Form.Item><Form.Item label="主账号拥有的资源标识" required><Input aria-label="主账号拥有的资源标识" disabled={submitted || loading} value={primaryResource} onChange={(event) => setPrimaryResource(event.target.value)} placeholder="owner-resource" /></Form.Item><Form.Item label="对照账号拥有的资源标识" required><Input aria-label="对照账号拥有的资源标识" disabled={submitted || loading} value={comparisonResource} onChange={(event) => setComparisonResource(event.target.value)} placeholder="attacker-resource" /></Form.Item><Form.Item label="主账号密码"><Input.Password aria-label="主账号密码" disabled={submitted || loading} autoComplete="new-password" value={primaryPassword} onChange={(event) => setPrimaryPassword(event.target.value)} /></Form.Item><Form.Item label="对照账号密码"><Input.Password aria-label="对照账号密码" disabled={submitted || loading} autoComplete="new-password" value={comparisonPassword} onChange={(event) => setComparisonPassword(event.target.value)} /></Form.Item></div></Card>}
-      {step === 3 && <Card title="检查后怎样恢复数据" size="small"><Typography.Paragraph>界鉴会在每个用例后调用恢复接口，避免演示或测试数据互相影响。</Typography.Paragraph><div className="onboarding-form-grid"><Form.Item label="只读路径" required extra="示例：/resources/{resource_id}"><Input aria-label="只读路径" disabled={submitted || loading} value={readPath} onChange={(event) => setReadPath(event.target.value)} /></Form.Item><Form.Item label="恢复路径" required extra="示例：/reset"><Input aria-label="恢复路径" disabled={submitted || loading} value={recoveryPath} onChange={(event) => setRecoveryPath(event.target.value)} /></Form.Item></div><Checkbox disabled={submitted || loading} checked={confirmations.recovery_confirmed} onChange={(event) => setConfirmations({ ...confirmations, recovery_confirmed: event.target.checked })}>我已确认恢复方式</Checkbox><br /><Checkbox disabled={submitted || loading} checked={confirmations.dangerous_inference_confirmed} onChange={(event) => setConfirmations({ ...confirmations, dangerous_inference_confirmed: event.target.checked })}>系统将按我确认的归属和路径生成检查</Checkbox></Card>}
-      {missing.length > 0 && <Alert type="warning" showIcon message="还缺什么" description={missing.join('、')} />}
-      <Space wrap>
-        {step > 0 && <Button onClick={() => setStep((current) => current - 1)} disabled={submitted || loading}>上一步</Button>}
-        {step < 3 && <Button type="primary" onClick={() => void goNext()} loading={loading} disabled={submitted}>保存并继续</Button>}
-        {step === 3 && <Button type="primary" onClick={() => void quickCheck()} loading={loading} disabled={submitted}>开始快速检查</Button>}
-      </Space>
-      <Progress percent={Math.round(((step + 1) / 4) * 100)} showInfo={false} />
-    </Space>
-  </Card>
+  return <OnboardingSteps session={session} discovery={discovery} path={path} projectName={projectName} step={step} loading={loading} error={error} chooserMessage={chooserMessage} selectedCandidateSource={selectedCandidateSource} fields={fields} confirmations={confirmations} missing={missing} submitted={submitted} onProjectNameChange={setProjectName} onFieldChange={changeField} onConfirmationsChange={setConfirmations} onSelectedCandidateSourceChange={setSelectedCandidateSource} onCopyCandidate={(command) => void copyCandidate(command)} onRetryDiscovery={() => void inspectRestoredPath(session.source_path)} onCloseError={() => setError('')} onCloseMessage={() => setChooserMessage('')} onBack={() => setStep((current) => current - 1)} onNext={() => void goNext()} onQuickCheck={() => void quickCheck()} />
 }

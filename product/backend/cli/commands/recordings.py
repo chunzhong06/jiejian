@@ -119,7 +119,7 @@ def recording_status_command(context: typer.Context, recording_id: str) -> None:
 def recording_review_command(
     context: typer.Context,
     recording_id: str,
-    command_path: Path = typer.Option(..., "--command", help="Flow 审阅命令 JSON"),
+    command_path: Path = typer.Option(..., "--command", help="流程审阅命令 JSON"),
     bindings_path: Path | None = typer.Option(
         None,
         "--bindings",
@@ -167,7 +167,7 @@ def recording_finalize_command(
 def recording_replay_command(
     context: typer.Context,
     recording_id: str,
-    profile_path: Path = typer.Option(..., "--profile", help="当前 ExecutionProfile JSON"),
+    profile_path: Path = typer.Option(..., "--profile", help="当前执行配置（ExecutionProfile）JSON"),
     runs: int = typer.Option(3, "--runs", min=1, max=3, help="连续回放次数"),
 ) -> None:
     """通过独立 Verification Runner 连续回放已完成 Flow。"""

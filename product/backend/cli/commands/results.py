@@ -18,7 +18,7 @@ def report_command(
     context: typer.Context,
     run_id: str,
     output_format: str = typer.Option("json", "--format", help="报告格式"),
-    gate_result_id: str | None = typer.Option(None, "--gate-result-id", help="显式 GateResult ID；提供时生成统一报告"),
+    gate_result_id: str | None = typer.Option(None, "--gate-result-id", help="显式门禁结果 ID；提供时生成统一报告"),
     report_id: str | None = typer.Option(None, "--report-id", help="读取已发布统一报告 ID"),
 ) -> None:
     """按运行 ID 读取当前已发布结果或当前报告。"""
