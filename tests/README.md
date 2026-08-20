@@ -1,6 +1,6 @@
 # 测试导航
 
-> 测试目录按生产代码责任组织；测试类型通过 pytest marker 表达，不再建立第二套产品架构。系统边界仍以 [docs/README.md](../docs/README.md) 路由的 Architecture 为准。
+> 测试目录按生产代码责任组织；少量 pytest marker 表示稳定测试属性，L1～L5 表示一次具体改动的验证策略。系统边界仍以 [docs/README.md](../docs/README.md) 路由的 Architecture 为准。
 
 ## 目录结构
 
@@ -19,23 +19,74 @@
 
 跨边界测试按“被验证行为的主要所有者”放置。例如报告的 API/CLI 投影仍由 `backend/workflows/results/` 负责；HTTP scope 与预算由 `backend/infra/execution/` 负责。真正的 E2E 必须从产品入口验证完整事实链，不能只因为测试较慢就放进 `e2e/`。
 
-## 必要测试与全量测试
+## 模块 × 验证程度
 
-目录回答“由谁负责”，marker 定义执行层级。
+正式测试模型是：
 
-- 必要测试：`essential`，覆盖架构边界、核心权限语义、公共协议、数据库迁移、Job 恢复、启动入口、控制面和一个授权黄金闭环。它是跨模块改动合入前的最低门禁，不替代改动相关的定向测试；前端改动还要运行直接相关的共置组件测试。
-- 全量测试：默认 `tests/` 下全部测试，并包含前端 Vitest 集合；它覆盖所有 integration、process、browser、slow 和 E2E 保护。发布前、跨模块合并或高风险共享边界变化时运行。
+`测试范围 = 模块范围 × 验证程度`
 
-PowerShell 示例：
+“模块”回答修改影响了哪里，继续由目录和生产责任决定；“验证程度”回答证明这次修改需要把证据扩展多远。不要把测试移动到程度目录，也不要创建 `l1`、`l2`、`l3`、`full` 或 `dynamic` 测试树。
+
+| 程度 | 证明什么 | 典型范围 |
+| --- | --- | --- |
+| L1 最小验证 | 这一次边界明确的局部修改没有写错 | 相关语法/类型检查、`git diff --check`、直接保护行为的少量测试 |
+| L2 模块验证 | 一个生产模块内的完整能力仍然成立 | 先跑新增/失败项，再跑该模块目录；只按真实依赖补少量协议或边界测试 |
+| L3 集成验证 | 被修改连接起来的多个模块形成完整能力链 | 涉及模块的直接测试、边界协议和一个或少量代表性闭环 |
+| L4 全量回归 | 共享高风险边界或阶段最终稳定树没有发生仓库级退化 | pytest 全量、前端 Vitest 全量、前端生产构建及 architecture 检查 |
+| L5 真实动态验收 | 自动化局部测试无法证明的真实产品边界成立 | Windows Terminal、PowerShell、`start.cmd`、浏览器/GUI、真实子进程、Target、Observer、数据库或竞态 |
+
+L5 是独立维度，不是“比 L4 更大”的测试集合，可以与任一自动化等级组合。例如 Banner 修改使用 `scripts + L1 + L5`；完整权限关系图使用 `frontend/permissions + L2 + L5`；跨 Protocol、Workflow、Runner 的状态化能力使用相关模块 `+ L3 + L5`；共享 Verification 语义变化才可能需要 `L3 + L4 + L5`。
+
+### `essential` 的定位
+
+`essential` 覆盖架构边界、核心权限语义、公共协议、数据库迁移、Job 恢复、启动入口、控制面和一个授权黄金闭环，是稳定的跨模块重要回归集合，不等于 L1 最小验证，也不能替代改动相关的定向测试。
+
+- L1、L2 默认不运行 `essential`。
+- L3 只有确实触及核心跨模块边界，或阶段中间需要一次重要门禁时才考虑它。
+- L4 全量已经包含 `essential`，同一代码状态不得先跑 `essential` 再立即跑全量。
+- 前端组件测试与源码共置，不受 pytest marker 管理。
+
+目录表示模块责任，`essential`、`browser`、`process`、`database`、`e2e`、`slow` 等少量 marker 表示稳定测试属性；L1～L5 是本次改动的执行策略，不建立同名 pytest marker。
+
+### 验证合同与逐级升级
+
+每个非平凡验证批次开始前明确：测试模块、L1～L4 程度、是否需要 L5、当前等级为何足够，以及出现什么证据才升级。通常按以下顺序选择证据：
+
+```text
+局部修改 → L1
+形成完整模块 → L2
+实际跨多个模块 → L3
+触及共享高风险边界或阶段最终稳定树 → L4
+需要证明真实运行边界 → 在对应等级追加 L5
+```
+
+不要按代码行数、任务名称或“更保险”的主观感觉直接选择 L4。一个大型阶段可以在各子阶段使用 L1～L3 和必要 L5，只在全部生产代码稳定后执行一次 L4。
+
+测试失败后先区分产品逻辑、测试/fixture 与环境工具问题。修复后第一步只重跑失败项；通过后按修复真实影响补直接邻域。只有修复触及更大的共享边界，才重新运行完整 L2/L3 或评估 L4。错误 Python、缺失依赖、框架限制、jsdom 能力缺口、浏览器 locator、路径错误和陈旧 fixture 不算产品逻辑失败，不能为适配验证工具修改正确的生产行为。
+
+同一 HEAD 和 working-tree 状态禁止重复 L4。L4 后只修改 README、注释或无行为影响文案时，不机械重跑产品全量；L4 发现失败时也先运行修复项和直接邻域，只有共享核心发生变化或原证据失效才考虑第二次 L4。
+
+## 常用命令
+
+命令只是执行手段，先根据验证合同选择实际模块和程度。Python 检查同时设置 `PYTHONDONTWRITEBYTECODE` 并使用 `python -B`：
+
+L3 确实需要阶段中间 `essential` 门禁时：
 
 ```powershell
 $env:PYTHONDONTWRITEBYTECODE = '1'
 New-Item -ItemType Directory -Path var/test -Force | Out-Null
 python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-essential-local -m essential
+```
+
+L4 直接运行全量，不先运行上面的 `essential`：
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE = '1'
+New-Item -ItemType Directory -Path var/test -Force | Out-Null
 python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-full-local
 ```
 
-前端组件测试与源码共置，不受 pytest marker 管理。仓库级全量验证还要运行：
+L1～L3 优先把命令末尾替换为直接测试文件或对应模块目录，例如 `tests/backend/cli`、`tests/backend/workflows/recording`、`tests/protocols/test_example.py`。L4 仓库级全量还要运行：
 
 ```powershell
 pnpm --dir product/frontend test
