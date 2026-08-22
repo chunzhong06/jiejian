@@ -1,7 +1,7 @@
 /* 当前检查的真实过程状态、事件续读与取消边界。 */
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { Button, Collapse, Progress, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Collapse, Progress, Space, Spin, Tag, Typography } from 'antd'
 import { runsApi, type JobEventDto, type RunDto } from '../../api/runs'
 import { ApiError } from '../../api/http'
 import { integrityLabel, lifecycleLabel, verdictLabel } from '../../app/presentation'
@@ -46,7 +46,14 @@ export function CheckProgress({ run, onRefresh, onError }: { run?: RunDto; onRef
     {percent !== undefined
       ? <div className="check-progress-value"><Typography.Text>已完成 {completed}/{total} 个用例</Typography.Text><Progress percent={percent} size="small" aria-label={`检查进度 ${completed}/${total}`} /></div>
       : !terminal && <Space><Spin size="small" /><Typography.Text type="secondary">正在执行，暂时没有可确认的用例总量</Typography.Text></Space>}
-    {errors.length > 0 && <Typography.Text type="danger">执行错误：{errors.map((item) => typeof item === 'object' ? String(item.message ?? item.code ?? '执行失败') : String(item)).join('、')}</Typography.Text>}
+    {errors.map((item, index) => typeof item === 'object'
+      ? <Alert key={`${item.code ?? 'error'}-${index}`} type="error" showIcon message={`${item.stage ?? '后台执行'}失败`} description={<Space direction="vertical">
+          <Typography.Text>{item.message ?? '任务未能完整结束。'}</Typography.Text>
+          {item.log_path && <Typography.Text>日志：<Typography.Text copyable>{item.log_path}</Typography.Text></Typography.Text>}
+          {item.recovery && <Typography.Text>下一步：{item.recovery}</Typography.Text>}
+          {item.copy_text && <Typography.Paragraph copyable={{ text: item.copy_text }} code>复制这段信息后可直接询问 AI</Typography.Paragraph>}
+        </Space>} />
+      : <Alert key={`error-${index}`} type="error" showIcon message="检查执行失败" description={String(item)} />)}
     <Collapse ghost items={[{ key: 'progress-details', label: '高级：运行详情', children: <Space direction="vertical"><Typography.Text>事件序列：{String(event?.sequence ?? run.job?.event_sequence ?? run.event_sequence ?? '未提供')}</Typography.Text><Typography.Text>事件类型：{String(event?.event_type ?? '未提供')}</Typography.Text><Typography.Text>任务类型：{String(run.job?.job_type ?? '未提供')}</Typography.Text><Typography.Text>任务标识：{jobId ?? '未提供'}</Typography.Text></Space> }]} />
   </Cardless>
 }

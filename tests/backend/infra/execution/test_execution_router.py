@@ -6,11 +6,17 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.verification.facts import ExecutionOutcome, TargetType
 from product.backend.infra.execution.http import HttpExecutionAdapter, HttpResponse
 from product.backend.infra.execution.router import ExecutionRouter
-from product.protocols import ActionExecutionBinding, ResourceInjection, WebTargetDefinition, WebTargetScope
+from product.protocols import HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind, HttpRequestTemplate, WebTargetDefinition, WebTargetScope
 
 
-def _binding() -> ActionExecutionBinding:
-    return ActionExecutionBinding(action_id="view", target_type=TargetType.WEB, method="GET", relative_path_template="/resources/{resource_id}", accepted_statuses=(200,), denied_statuses=(401, 403, 404), resource_injection=ResourceInjection.PATH_RESOURCE_ID)
+def _binding() -> tuple[HttpRequestTemplate, HttpOutcomeClassifier]:
+    return (
+        HttpRequestTemplate(method="GET", path="/resources/fixed-resource"),
+        HttpOutcomeClassifier(
+            accepted=(HttpPredicate(kind=HttpPredicateKind.STATUS_IN, statuses=(200,)),),
+            denied=(HttpPredicate(kind=HttpPredicateKind.STATUS_IN, statuses=(401, 403, 404)),),
+        ),
+    )
 
 
 def _adapter(monkeypatch, status: int | None = 200) -> HttpExecutionAdapter:
@@ -29,7 +35,8 @@ def _adapter(monkeypatch, status: int | None = 200) -> HttpExecutionAdapter:
 def test_http_adapter_reduces_status_to_target_neutral_fact(monkeypatch, status: int, expected: ExecutionOutcome) -> None:
     adapter = _adapter(monkeypatch, status)
     try:
-        fact = adapter.execute(_binding(), case_id="case-" + "a" * 32, action_id="view")
+        template, classifier = _binding()
+        fact = adapter.execute(template, case_id="case-" + "a" * 32, action_id="view", classifier=classifier)
         assert fact.outcome is expected
         assert "status_code" not in fact.model_dump()
     finally:
@@ -39,7 +46,8 @@ def test_http_adapter_reduces_status_to_target_neutral_fact(monkeypatch, status:
 def test_http_transport_failure_is_failed_with_empty_output_hash(monkeypatch) -> None:
     adapter = _adapter(monkeypatch, None)
     try:
-        fact = adapter.execute(_binding(), case_id="case-" + "a" * 32, action_id="view")
+        template, classifier = _binding()
+        fact = adapter.execute(template, case_id="case-" + "a" * 32, action_id="view", classifier=classifier)
         assert fact.outcome is ExecutionOutcome.FAILED
         assert fact.output_hash == __import__("hashlib").sha256(b"").hexdigest()
     finally:
@@ -51,7 +59,8 @@ def test_router_fails_closed_for_unregistered_target_type(monkeypatch) -> None:
     router = ExecutionRouter((adapter,))
     try:
         with pytest.raises(JiejianError):
-            router.execute(TargetType.CLI_APPLICATION, _binding(), case_id="case-" + "a" * 32, action_id="view")
+            template, classifier = _binding()
+            router.execute(TargetType.CLI_APPLICATION, template, case_id="case-" + "a" * 32, action_id="view", classifier=classifier)
     finally:
         adapter.close()
 

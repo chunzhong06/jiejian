@@ -13,7 +13,7 @@ def stage23_request_factory() -> Callable[[], PersistedExecutionRequest]:
     def create() -> PersistedExecutionRequest:
         current_input = runner_input()
         return PersistedExecutionRequest(
-            schema_version="2",
+            schema_version="3",
             budget=current_input.budget,
             project_snapshot=current_input.project_snapshot,
         )

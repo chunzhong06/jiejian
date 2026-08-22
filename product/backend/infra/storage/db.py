@@ -24,7 +24,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, Table, UniqueConstraint, create_engine, event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -183,6 +183,14 @@ def _check_database_compatibility(path: Path) -> None:
                         ErrorCode.STORAGE_MIGRATION,
                         _INCOMPATIBLE_DATABASE_MESSAGE,
                     )
+                if table_name != "alembic_version" and not _has_expected_unique_cardinality(
+                    connection,
+                    Base.metadata.tables[table_name],
+                ):
+                    raise JiejianError(
+                        ErrorCode.STORAGE_MIGRATION,
+                        _INCOMPATIBLE_DATABASE_MESSAGE,
+                    )
         finally:
             connection.close()
     except JiejianError:
@@ -197,3 +205,36 @@ def _quote_sqlite_identifier(identifier: str) -> str:
     if "\x00" in identifier:
         raise ValueError("SQLite identifiers cannot contain NUL")
     return '"' + identifier.replace('"', '""') + '"'
+
+
+def _has_expected_unique_cardinality(
+    connection: sqlite3.Connection,
+    table: Table,
+) -> bool:
+    """核对会改变业务关系基数的唯一列组合与部分唯一语义。"""
+
+    expected = {
+        (tuple(column.name for column in constraint.columns), False)
+        for constraint in table.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    expected.update(
+        (
+            tuple(column.name for column in index.columns),
+            index.dialect_options["sqlite"].get("where") is not None,
+        )
+        for index in table.indexes
+        if index.unique
+    )
+    quoted_table_name = _quote_sqlite_identifier(table.name)
+    actual: set[tuple[tuple[str, ...], bool]] = set()
+    for index_row in connection.execute(f"PRAGMA index_list({quoted_table_name})"):
+        if not index_row[2] or index_row[3] == "pk":
+            continue
+        quoted_index_name = _quote_sqlite_identifier(index_row[1])
+        columns = tuple(
+            row[2]
+            for row in connection.execute(f"PRAGMA index_info({quoted_index_name})")
+        )
+        actual.add((columns, bool(index_row[4])))
+    return actual == expected

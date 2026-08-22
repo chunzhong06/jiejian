@@ -1,4 +1,4 @@
-# Recording API Router
+# 录制 API 路由
 # 将创建、审阅和完成请求交给 Recording 应用服务，路由不直接操作浏览器或状态机。
 
 from __future__ import annotations
@@ -27,7 +27,14 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
     )
     async def create_recording(project_id: str, body: RecordingCreateRequest):
         profile = context.execution.current(body.profile_id, project_id=project_id)
-        selected = next((item for item in profile.identities if item.id == body.identity_id), None)
+        selected = next(
+            (
+                item
+                for item in profile.identities
+                if item.identity_id == body.identity_id
+            ),
+            None,
+        )
         if selected is None:
             raise JiejianError(ErrorCode.INPUT_INVALID, "录制身份选择无效")
         now_us = time.time_ns() // 1_000
@@ -40,7 +47,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             sessions=(
                 RecordingSessionRef(
                     schema_version="1",
-                    identity_id=selected.id,
+                    identity_id=selected.identity_id,
                     session_ref=f"session_{uuid4().hex}",
                     expires_at_us=now_us + body.duration_seconds * 1_000_000,
                 ),
@@ -185,6 +192,6 @@ def _identity_options(profile) -> list[dict[str, str]]:
     """仅投影身份 ID 与可读角色，避免把 secret_ref 带到产品响应。"""
 
     return [
-        {"identity_id": identity.id, "role": identity.role}
+        {"identity_id": identity.identity_id, "role": identity.role}
         for identity in profile.identities
     ]

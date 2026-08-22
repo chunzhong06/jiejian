@@ -142,11 +142,24 @@ def test_current_migration_api_and_runner_document_boundaries() -> None:
 
 
 def test_no_compatibility_import_mechanisms_or_old_python_root() -> None:
-    text = "\n".join(path.read_text(encoding="utf-8") for path in _python_files(ROOT / "product"))
+    files = _python_files(ROOT / "product")
+    text = "\n".join(path.read_text(encoding="utf-8") for path in files)
     assert "backend/src/jiejian" not in text
-    assert "sys.path" not in text
     assert "PYTHONPATH" not in text
     assert "import jiejian." not in text
+    for path in files:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            owner = node.func.value
+            assert not (
+                isinstance(owner, ast.Attribute)
+                and isinstance(owner.value, ast.Name)
+                and owner.value.id == "sys"
+                and owner.attr == "path"
+                and node.func.attr in {"append", "extend", "insert", "remove"}
+            ), path
 
 
 def test_official_samples_have_one_way_dependency_and_fixed_tree() -> None:

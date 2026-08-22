@@ -14,7 +14,14 @@
 import { request } from './http'
 
 export type PermissionSubjectDto = { subject_id: string; roles?: string[] }
-export type PermissionActionDto = { action_id: string }
+export type PermissionActionDto = { action_id: string; effect_ids?: string[] }
+export type SecurityEffectDto = {
+  effect_id: string
+  kind: string
+  resource_type: string
+  expected_state?: string | null
+  protected_fields?: string[]
+}
 export type PermissionResourceDto = { resource_id: string; resource_type?: string }
 export type PermissionEndpointDto = { endpoint_type: string; endpoint_id: string }
 export type PermissionRelationDto = {
@@ -51,6 +58,7 @@ export type PermissionContractDto = {
   status?: string
   subjects?: PermissionSubjectDto[]
   role_ids?: string[]
+  effects?: SecurityEffectDto[]
   actions?: PermissionActionDto[]
   resources?: PermissionResourceDto[]
   relations?: PermissionRelationDto[]

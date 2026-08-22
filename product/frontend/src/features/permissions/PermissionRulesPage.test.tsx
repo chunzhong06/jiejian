@@ -1,15 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PermissionRulesPage } from './PermissionRulesPage'
 
-const permissionApi = vi.hoisted(() => ({ profiles: vi.fn(), contract: vi.fn() }))
+const permissionApi = vi.hoisted(() => ({ profiles: vi.fn(), contract: vi.fn(), summary: vi.fn() }))
 const contractsApi = vi.hoisted(() => ({ contracts: vi.fn(), contractGovernance: vi.fn(), createGovernanceContract: vi.fn(), transitionGovernanceVersion: vi.fn() }))
 vi.mock('../../api/executionProfiles', () => ({ executionProfilesApi: permissionApi }))
 vi.mock('../../api/contracts', () => ({ contractsApi }))
 
 const contract = {
   contract_id: 'access', version: 1, status: 'ACTIVE', role_ids: ['admin', 'member'], workflow_states: ['OPEN'],
-  subjects: [{ subject_id: 'alice', roles: ['admin'] }, { subject_id: 'bob', roles: ['member'] }], actions: [{ action_id: 'read' }, { action_id: 'write' }],
+  subjects: [{ subject_id: 'alice', roles: ['admin'] }, { subject_id: 'bob', roles: ['member'] }],
+  effects: [{ effect_id: 'document-change', kind: 'STATE_MUTATION', resource_type: 'document' }],
+  actions: [{ action_id: 'read', effect_ids: ['document-change'] }, { action_id: 'write', effect_ids: ['document-change'] }],
   resources: [{ resource_id: 'doc-1', resource_type: 'document', workflow_state: 'OPEN' }, { resource_id: 'doc-2', resource_type: 'document', workflow_state: 'OPEN' }],
   relations: [{ relation_id: 'owns', relation: 'OWNS', source: { endpoint_type: 'subject', endpoint_id: 'alice' }, target: { endpoint_type: 'resource', endpoint_id: 'doc-1' } }],
   rules: [
@@ -22,12 +24,24 @@ const contract = {
 }
 
 describe('PermissionRulesPage', () => {
+  beforeEach(() => {
+    permissionApi.summary.mockResolvedValue({
+      schema_version: '1',
+      workflows: [{ action_id: 'read', workflow_id: 'read-flow', target_step: { step_id: 'target', method: 'GET', path: '/documents/{id}' }, setup_step_count: 1, cleanup_step_count: 1, baseline_modes: ['EXACT_RESTORE'] }],
+      effect_bindings: [{ effect_id: 'document-change', required_channels: ['resource_state'], corroborating_channels: [], closure_policy: 'IMMEDIATE' }],
+    })
+  })
+
   it('展示真实矩阵、规则详情和关系文本等价视图', async () => {
     permissionApi.profiles.mockResolvedValue([{ profile_id: 'profile-1', contract_id: 'access', contract_version: 1 }])
     permissionApi.contract.mockResolvedValue(contract)
     contractsApi.contractGovernance.mockResolvedValue({ project: { project_id: 'p1' }, requirements: [], candidates: [], versions: [], llm_available: false })
     contractsApi.contracts.mockResolvedValue([])
     render(<PermissionRulesPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
+    expect(await screen.findByText('业务流程与真实影响')).toBeInTheDocument()
+    expect(screen.getByText('恢复同一资源')).toBeInTheDocument()
+    expect(screen.getByText('状态变更')).toBeInTheDocument()
+    expect(screen.getByText('即时闭合')).toBeInTheDocument()
     expect((await screen.findAllByText('alice')).length).toBeGreaterThanOrEqual(1)
     const cell = await screen.findByRole('button', { name: /alice read doc-1 允许/ })
     expect(cell).toHaveTextContent('允许')
@@ -43,9 +57,8 @@ describe('PermissionRulesPage', () => {
     expect(await screen.findByText('allow-read')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: '关系图' }))
     const graph = await screen.findByRole('region', { name: '权限关系图' })
-    expect(within(graph).getAllByRole('button').length).toBeGreaterThanOrEqual(3)
-    expect(graph.querySelector('.react-flow__minimap')).not.toBeInTheDocument()
-    expect(graph.querySelector('.react-flow__attribution')).not.toBeInTheDocument()
+    expect(within(graph).getAllByRole('button')).toHaveLength(2)
+    expect(graph.querySelector('.react-flow')).not.toBeInTheDocument()
     expect(screen.getAllByText('拥有').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('doc-1').length).toBeGreaterThanOrEqual(1)
     fireEvent.click(await screen.findByLabelText('身份 alice'))

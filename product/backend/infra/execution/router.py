@@ -11,7 +11,7 @@ from typing import Protocol
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.verification.facts import ExecutionFact, TargetType
-from product.protocols.runner import ActionExecutionBinding
+from product.protocols.http import HttpRequestTemplate
 
 
 class ExecutionAdapter(Protocol):
@@ -19,11 +19,10 @@ class ExecutionAdapter(Protocol):
 
     def execute(
         self,
-        binding: ActionExecutionBinding,
+        binding: HttpRequestTemplate,
         *,
         case_id: str,
         action_id: str,
-        bearer_token: str | None = None,
     ) -> ExecutionFact: ...
 
     def cleanup(self, path: str, *, case_id: str) -> None: ...
@@ -46,11 +45,14 @@ class ExecutionRouter:
     def execute(
         self,
         target_type: TargetType,
-        binding: ActionExecutionBinding,
+        binding: HttpRequestTemplate,
         *,
         case_id: str,
         action_id: str,
-        bearer_token: str | None = None,
+        classifier=None,
+        slot_values=None,
+        identity_runtime=None,
+        terminal_completed=None,
     ) -> ExecutionFact:
         adapter = self._adapters.get(target_type)
         if adapter is None:
@@ -59,7 +61,10 @@ class ExecutionRouter:
             binding,
             case_id=case_id,
             action_id=action_id,
-            bearer_token=bearer_token,
+            classifier=classifier,
+            slot_values=slot_values,
+            identity_runtime=identity_runtime,
+            terminal_completed=terminal_completed,
         )
 
     def cleanup(self, target_type: TargetType, path: str, *, case_id: str) -> None:

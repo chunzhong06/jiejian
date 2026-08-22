@@ -641,6 +641,30 @@ def test_evidence_path_uniqueness_is_windows_case_insensitive(
     assert captured.value.code == ErrorCode.STORAGE_CONSTRAINT.value
 
 
+def test_one_case_can_publish_distinct_evidence_for_multiple_twins(
+    migrated_storage: tuple[Path, Engine, sessionmaker[Session]],
+) -> None:
+    _, _, factory = migrated_storage
+    second_hash = "b" * 64
+    with StorageUnitOfWork(factory) as work:
+        work.projects.add(_project())
+        work.runs.add(_run())
+        work.evidence.add(_evidence())
+        work.evidence.add(
+            _evidence(
+                evidence_id="ev_" + second_hash[:20],
+                artifact_path="evidence/second-twin.json",
+                sha256=second_hash,
+            )
+        )
+        work.commit()
+
+    with StorageUnitOfWork(factory) as work:
+        evidence = work.evidence.list_for_run(RUN_ID)
+    assert len(evidence) == 2
+    assert {item.case_id for item in evidence} == {"foreign-read-case"}
+
+
 def test_known_secret_and_evidence_body_never_enter_database(
     migrated_storage: tuple[Path, Engine, sessionmaker[Session]],
 ) -> None:

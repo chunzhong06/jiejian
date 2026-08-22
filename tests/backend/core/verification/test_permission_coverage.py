@@ -41,6 +41,8 @@ from product.backend.core.verification.permissions import (
     RelationFact,
     RelationType,
     ResourceDefinition,
+    SecurityEffectDefinition,
+    SecurityEffectKind,
     SubjectDefinition,
 )
 
@@ -59,10 +61,17 @@ def _complex_contract() -> PermissionContract:
             SubjectDefinition(subject_id="dept-admin-a2", roles=("department-admin",), tenant_id="tenant-a", department_id="dept-a2", admin_level=1),
             SubjectDefinition(subject_id="member-b", roles=("member",), tenant_id="tenant-b", department_id="dept-b"),
         ),
+        effects=(
+            SecurityEffectDefinition(
+                effect_id="document-mutated",
+                kind=SecurityEffectKind.STATE_MUTATION,
+                resource_type="document",
+            ),
+        ),
         actions=(
-            ActionDefinition(action_id="modify", side_effect=True),
-            ActionDefinition(action_id="approve", side_effect=True, workflow_transition={"allowed_from_states": ("PENDING",), "target_state": "APPROVED"}),
-            ActionDefinition(action_id="batch-modify", is_batch=True, side_effect=True),
+            ActionDefinition(action_id="modify", effect_ids=("document-mutated",)),
+            ActionDefinition(action_id="approve", effect_ids=("document-mutated",), workflow_transition={"allowed_from_states": ("PENDING",), "target_state": "APPROVED"}),
+            ActionDefinition(action_id="batch-modify", effect_ids=("document-mutated",), is_batch=True),
         ),
         resources=(
             ResourceDefinition(resource_id="document-a", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member-a", workflow_state="DRAFT"),
@@ -186,11 +195,15 @@ def test_coverage_gaps_explain_each_baseline_and_dimension() -> None:
 
 
 def test_seed_changes_same_priority_budget_selection_and_finding_identity_has_subject_class() -> None:
-    first = build_permission_coverage_plan(_complex_contract(), engine_version="coverage-v2", seed=1, case_budget=1)
-    second = build_permission_coverage_plan(_complex_contract(), engine_version="coverage-v2", seed=2, case_budget=1)
-    assert first.plan_fingerprint != second.plan_fingerprint
-    assert first.cases != second.cases
-    assert all(case.finding_pre_identity for case in first.cases)
+    plans = tuple(
+        build_permission_coverage_plan(
+            _complex_contract(), engine_version="coverage-v2", seed=seed, case_budget=1
+        )
+        for seed in range(1, 9)
+    )
+    assert len({plan.plan_fingerprint for plan in plans}) == len(plans)
+    assert len({plan.cases[0].case_id for plan in plans}) > 1
+    assert all(case.finding_pre_identity for plan in plans for case in plan.cases)
 
 
 @pytest.mark.parametrize("variant", ["fixed", "vulnerable", "inconclusive"])

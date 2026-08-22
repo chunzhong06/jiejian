@@ -17,8 +17,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
+import secrets
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -30,9 +32,13 @@ from pydantic import ValidationError
 
 from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle, RunVerdict
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import AuditLogStartCursor, CausalityStatus, CleanupResult, CleanupStatus, Correlation, Evidence, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObserverOutcomeStatus, ObserverOutcome, ObserverSpec, ObserverType, ProvenanceType, RunnerError, RunnerInput, RunnerResultType, RunnerResult, StagedArtifact, ExecutionFact, ExecutionOutcome, ObservationFact, ObservedEffect, build_evidence, build_normalized_state, canonical_runner_json_bytes, canonical_runner_sha256, evaluate_observer_outcome, parse_runner_input, required_secret_refs
+from product.protocols import AuditLogStartCursor, BearerIdentityBinding, CausalityStatus, CleanupResult, CleanupStatus, Correlation, DisclosureProof, Evidence, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObserverOutcomeStatus, ObserverOutcome, ObserverSpec, ObserverType, ProvenanceType, RunnerError, RunnerInput, RunnerResultType, RunnerResult, StagedArtifact, ExecutionFact, ExecutionOutcome, ObservationFact, ObservedEffect, TemporalClosure, TwinExecutionRole, aggregate_security_effect, build_evidence, build_normalized_state, canonical_runner_json_bytes, canonical_runner_sha256, evaluate_observer_outcome, parse_runner_input, required_secret_refs
 from product.backend.core.verification.permission_evaluation import CaseDecisionInput, evaluate_permission_case
-from product.backend.infra.execution.http import HttpExecutionAdapter
+from product.backend.core.verification.permissions import PermissionExpectation
+from product.backend.infra.execution.http import HttpExecutionAdapter, HttpResponse
+from product.backend.infra.execution.http import extract_response_value
+from product.backend.infra.execution.http_identity import HttpIdentityRuntime
+from product.protocols.http import BaselineIntegrity, CASE_SUBJECT_IDENTITY, HttpOutcome, ValueSlotSource, build_baseline_fingerprint
 from product.backend.infra.execution.router import ExecutionRouter
 from product.backend.infra.observers.owner_api import OwnerApiObserverAdapter
 from product.backend.infra.observers.async_task import run_async_task_observer
@@ -48,9 +54,10 @@ RUNNER_EXIT_INTERNAL = 70
 RUNNER_EXIT_WRITE = 74
 
 _PHASE_ORDER = {
-    ObservationPhase.BEFORE: 0,
-    ObservationPhase.AFTER: 1,
-    ObservationPhase.EVENTUAL: 2,
+    ObservationPhase.BASELINE: 0,
+    ObservationPhase.BEFORE: 1,
+    ObservationPhase.AFTER: 2,
+    ObservationPhase.EVENTUAL: 3,
 }
 _PERMISSION_OBSERVER_INCOMPLETE = "REQUIRED_OBSERVER_INCOMPLETE"
 _PERMISSION_REQUEST_FAILED = "REQUEST_FAILED"
@@ -63,6 +70,24 @@ def _now_us() -> int:
 
 def _json_bytes(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def _project_fields(value: Any, fields: tuple[str, ...], *, require_present: bool) -> tuple[dict[str, Any], bool]:
+    """只投影 manifest 允许的字段；缺失字段不得被当作“不披露”。"""
+
+    projected: dict[str, Any] = {}
+    complete = isinstance(value, Mapping)
+    for path in fields:
+        current = value
+        for part in path.split("."):
+            if not isinstance(current, Mapping) or part not in current:
+                if require_present:
+                    complete = False
+                current = None
+                break
+            current = current[part]
+        projected[path] = current
+    return projected, complete
 
 
 def _sha256(value: Any) -> str:
@@ -84,6 +109,69 @@ def _failure_outcome(spec: ObserverSpec, code: str = _PERMISSION_OBSERVER_INCOMP
         status=ObserverOutcomeStatus.INCONCLUSIVE,
         reason_codes=(code,),
     )
+
+
+def _apply_terminal_completion(
+    execution: ExecutionFact,
+    response: HttpResponse,
+    classifier: Any,
+    *,
+    completion_bindings: Mapping[str, Any],
+    envelopes: tuple[ObservationEnvelope, ...],
+    case_id: str,
+) -> ExecutionFact:
+    """只用已绑定的异步 SUCCESS 终态解释 202，不重新发送目标请求。"""
+
+    completion_id = classifier.completion_binding
+    if response.status_code != 202 or completion_id is None:
+        return execution
+    binding = completion_bindings.get(completion_id)
+    completed = any(
+        envelope.observer_id == getattr(binding, "observer_id", None)
+        and envelope.observer_type is ObserverType.ASYNC_TASK_STATUS
+        and envelope.phase is ObservationPhase.EVENTUAL
+        and envelope.correlation.case_id == case_id
+        and envelope.completeness is ObservationCompleteness.COMPLETE
+        and envelope.causality is CausalityStatus.CORRELATED
+        and envelope.state is not None
+        and envelope.state.canonical_data.get("task_state") == "SUCCESS"
+        for envelope in envelopes
+    )
+    resolved = classifier.classify(response, terminal_completed=completed)
+    outcome = {
+        HttpOutcome.ACCEPTED: ExecutionOutcome.ACCEPTED,
+        HttpOutcome.DENIED: ExecutionOutcome.DENIED,
+        HttpOutcome.UNKNOWN: ExecutionOutcome.UNKNOWN,
+    }[resolved]
+    return execution.model_copy(
+        update={
+            "outcome": outcome,
+            "reason_codes": () if outcome is not ExecutionOutcome.UNKNOWN else ("UNINTERPRETED_RESPONSE",),
+        }
+    )
+
+
+def _bind_twin_baseline(
+    baselines: dict[str, tuple[str, ...]],
+    twin: Any,
+    twin_role: TwinExecutionRole | None,
+    integrities: tuple[BaselineIntegrity, ...],
+) -> bool:
+    """冻结 ALLOW 实际基线，并要求 DENY 在相同归一化基线上执行。"""
+
+    if twin is None or twin_role is None:
+        return True
+    observed = tuple(
+        item.observed_fingerprint
+        for item in integrities
+        if item.observed_fingerprint is not None
+    )
+    if len(observed) != len(integrities):
+        return False
+    if twin_role is TwinExecutionRole.ALLOW_CONTROL:
+        baselines[twin.twin_id] = observed
+        return True
+    return baselines.get(twin.twin_id) == observed
 
 
 def _aggregate_outcome(current: ObserverOutcome | None, incoming: ObserverOutcome) -> ObserverOutcome:
@@ -135,11 +223,14 @@ class RunnerExecutor:
             for item in self.snapshot.subject_bindings
         }
         self.actions = {item.action_id: item for item in self.snapshot.contract.actions}
+        self.effects = {item.effect_id: item for item in self.snapshot.contract.effects}
+        self.effect_bindings = {item.effect_id: item for item in self.snapshot.effect_bindings}
+        self.disclosure_key = secrets.token_bytes(32)
         used_identity_ids = {item.identity_id for item in self.snapshot.subject_bindings}
         identity_secrets = tuple(
-            _secret_value(self.environ, identity.secret_ref, required=True) or ""
-            for identity in self.snapshot.identities
-            if identity.id in used_identity_ids
+            value
+            for reference in required_secret_refs(self.snapshot)
+            if (value := _secret_value(self.environ, reference, required=True))
         )
         self.http = HttpExecutionAdapter(
             self.snapshot.target,
@@ -149,10 +240,12 @@ class RunnerExecutor:
             executor_process_id=os.getpid(),
         )
         self.router = ExecutionRouter((self.http,))
+        self.baseline_integrities: dict[str, tuple[BaselineIntegrity, ...]] = {}
+        self.twin_baselines: dict[str, tuple[str, ...]] = {}
 
     def _identity_by_id(self, identity_id: str) -> Any:
         for identity in self.snapshot.identities:
-            if identity.id == identity_id:
+            if identity.identity_id == identity_id:
                 return identity
         raise JiejianError("_BINDING_INVALID", "复杂权限执行身份绑定无效")
 
@@ -162,6 +255,11 @@ class RunnerExecutor:
         if spec.observer_type is ObserverType.OWNER_API:
             token = _secret_value(self.environ, binding.credential_ref or "", required=True)
             adapter = OwnerApiObserverAdapter(spec=spec, utc_now_us=self.clock)
+            owner_runtime = HttpIdentityRuntime(
+                BearerIdentityBinding(secret_ref=binding.credential_ref or ""),
+                resolve_secret=lambda reference: _secret_value(self.environ, reference, required=True),
+                business_origin=self.snapshot.target.scope.base_url,
+            )
             try:
                 envelope = adapter.observe(
                     self.http,
@@ -170,6 +268,7 @@ class RunnerExecutor:
                     case_id=correlation.case_id,
                     phase=phase,
                     known_secrets=(token or "",),
+                    identity_runtime=owner_runtime,
                 )
                 return envelope, evaluate_observer_outcome(envelope, required=spec.required), cursors
             except JiejianError as exc:
@@ -186,6 +285,8 @@ class RunnerExecutor:
                 }:
                     raise
                 return None, _failure_outcome(spec), cursors
+            finally:
+                owner_runtime.close()
         kwargs = {
             "attempt_dir": self.staging.parent,
             "parent_environ": self.environ,
@@ -270,7 +371,7 @@ class RunnerExecutor:
                     for item in selected
                 )
                 if not complete:
-                    facts.append(ObservationFact(requirement_id=requirement, resource_id=resource_id, effect=ObservedEffect.UNKNOWN, complete=False, reliable=False, reason_codes=(_PERMISSION_OBSERVER_INCOMPLETE,)))
+                    facts.append(ObservationFact(requirement_id=requirement, resource_id=resource_id, effect=ObservedEffect.UNKNOWN, complete=False, reliable=False, correlated=False, temporal_closure=TemporalClosure.UNKNOWN, reason_codes=(_PERMISSION_OBSERVER_INCOMPLETE,)))
                     continue
                 states = [item.state for item in sorted(selected, key=lambda item: _PHASE_ORDER[item.phase])]
                 effect = ObservedEffect.ABSENT
@@ -286,7 +387,7 @@ class RunnerExecutor:
                     if isinstance(data, Mapping) and data.get("task_state") == "SUCCESS" and isinstance(data.get("final_result"), Mapping) and data["final_result"].get("effect") == "APPLIED":
                         effect = ObservedEffect.CONFIRMED
                     elif not (isinstance(data, Mapping) and data.get("task_state") == "NOT_CREATED"):
-                        facts.append(ObservationFact(requirement_id=requirement, resource_id=resource_id, effect=ObservedEffect.UNKNOWN, complete=False, reliable=False, reason_codes=("OBSERVATION_UNINTERPRETED",)))
+                        facts.append(ObservationFact(requirement_id=requirement, resource_id=resource_id, effect=ObservedEffect.UNKNOWN, complete=False, reliable=False, correlated=True, temporal_closure=TemporalClosure.UNKNOWN, reason_codes=("OBSERVATION_UNINTERPRETED",)))
                         continue
                 elif observer_type is ObserverType.AZURE_QUEUE_PEEK:
                     data = states[-1].canonical_data
@@ -294,76 +395,484 @@ class RunnerExecutor:
                         if isinstance(data, Mapping) and data.get("matched_count", 0) > 0 and data.get("messages"):
                             effect = ObservedEffect.CONFIRMED
                         else:
-                            facts.append(ObservationFact(requirement_id=requirement, resource_id=resource_id, effect=ObservedEffect.UNKNOWN, complete=False, reliable=False, reason_codes=("OBSERVATION_WINDOW_INCOMPLETE",)))
+                            facts.append(ObservationFact(requirement_id=requirement, resource_id=resource_id, effect=ObservedEffect.UNKNOWN, complete=False, reliable=False, correlated=True, temporal_closure=TemporalClosure.OPEN, reason_codes=("OBSERVATION_WINDOW_INCOMPLETE",)))
                             continue
-                facts.append(ObservationFact(requirement_id=requirement, resource_id=resource_id, effect=effect, complete=True, reliable=True))
+                phases = {item.phase for item in selected}
+                closed = ObservationPhase.AFTER in phases and (
+                    ObservationPhase.EVENTUAL not in binding.phases or ObservationPhase.EVENTUAL in phases
+                )
+                facts.append(ObservationFact(
+                    requirement_id=requirement,
+                    resource_id=resource_id,
+                    effect=effect,
+                    complete=True,
+                    reliable=True,
+                    correlated=True,
+                    temporal_closure=TemporalClosure.CLOSED if closed else TemporalClosure.OPEN,
+                    reason_codes=() if closed else ("TEMPORAL_WINDOW_OPEN",),
+                ))
         return tuple(facts)
 
-    def run_case(self, case: Any) -> Evidence:
-        """执行单个冻结 case，并保证目标恢复后返回完整 Evidence。"""
+    def _disclosure_proof(
+        self,
+        effect: Any,
+        binding: Any,
+        *,
+        resource_id: str,
+        response: Any,
+        envelopes: list[ObservationEnvelope],
+        case_id: str,
+    ) -> DisclosureProof | None:
+        if effect.kind.value != "DATA_DISCLOSURE":
+            return None
+        baseline = next(
+            (
+                item for item in envelopes
+                if item.phase is ObservationPhase.BASELINE
+                and item.correlation.resource_id == resource_id
+                and item.state is not None
+                and item.observer_id in {
+                    self.bindings[requirement].observer_id
+                    for requirement in binding.required_channels
+                }
+            ),
+            None,
+        )
+        owner_value = baseline.state.canonical_data if baseline is not None and baseline.state is not None else None
+        response_value = response.data if response is not None else None
+        owner_projection, owner_complete = _project_fields(owner_value, effect.protected_fields, require_present=True)
+        response_projection, response_complete = _project_fields(response_value, effect.protected_fields, require_present=False)
+        owner_digest = hmac.new(self.disclosure_key, _json_bytes(owner_projection), hashlib.sha256).hexdigest()
+        response_digest = hmac.new(self.disclosure_key, _json_bytes(response_projection), hashlib.sha256).hexdigest()
+        complete = owner_complete and response_complete
+        return DisclosureProof(
+            projection_version=binding.projection_version,
+            projection_complete=complete,
+            owner_digest=owner_digest,
+            response_digest=response_digest,
+            matched=complete and hmac.compare_digest(owner_digest, response_digest),
+            correlation_digest=hashlib.sha256(f"{case_id}:{resource_id}".encode("utf-8")).hexdigest(),
+        )
 
-        # --- 阶段：准备冻结绑定与请求 ---
-        action_binding = next(item for item in self.snapshot.action_bindings if item.action_id == case.action_id)
+    def _security_effect_facts(
+        self,
+        case: Any,
+        action: Any,
+        observations: tuple[ObservationFact, ...],
+        *,
+        baseline_integrity: bool,
+        response: Any,
+        envelopes: list[ObservationEnvelope],
+    ) -> tuple[Any, ...]:
+        facts: list[Any] = []
+        for effect_id in action.effect_ids:
+            effect = self.effects[effect_id]
+            binding = self.effect_bindings[effect_id]
+            for resource_id in case.resource_ids:
+                proof = self._disclosure_proof(
+                    effect,
+                    binding,
+                    resource_id=resource_id,
+                    response=response,
+                    envelopes=envelopes,
+                    case_id=case.case_id,
+                )
+                facts.append(aggregate_security_effect(
+                    effect,
+                    resource_id=resource_id,
+                    required_requirement_ids=binding.required_channels,
+                    corroborating_requirement_ids=binding.corroborating_channels,
+                    observations=observations,
+                    baseline_integrity=baseline_integrity,
+                    disclosure_proof=proof,
+                ))
+        return tuple(facts)
+
+    def _baseline_inconclusive(
+        self,
+        case: Any,
+        action: Any,
+        *,
+        twin: Any,
+        twin_role: TwinExecutionRole | None,
+        envelopes: list[ObservationEnvelope],
+        outcomes: dict[str, ObserverOutcome],
+        reason_code: str,
+    ) -> Evidence:
+        """基线不可比时在 TARGET 前停止，并发布可解释的 INCONCLUSIVE 证据。"""
+
+        observations = self._observation_facts(case, envelopes)
+        effect_facts = self._security_effect_facts(
+            case,
+            action,
+            observations,
+            baseline_integrity=False,
+            response=None,
+            envelopes=envelopes,
+        )
+        execution = ExecutionFact(
+            case_id=case.case_id,
+            action_id=case.action_id,
+            target_type=self.snapshot.target_type,
+            outcome=ExecutionOutcome.UNKNOWN,
+            execution_marker=case.case_id,
+            input_hash=hashlib.sha256(b"").hexdigest(),
+            output_hash=hashlib.sha256(b"").hexdigest(),
+            reason_codes=(reason_code,),
+        )
+        for requirement in case.required_observations:
+            binding = self.bindings[requirement]
+            # TARGET 前停止意味着完整观察窗口不可能闭合；即使 BASELINE 单点可用，
+            # 也必须把整体 Observer outcome 收敛为 INCONCLUSIVE。
+            outcomes[binding.observer_id] = _failure_outcome(
+                self.observer_specs[binding.observer_id], reason_code
+            )
+        return build_evidence(
+            schema_version="3",
+            run_id=self.document.run_id,
+            case_snapshot=case,
+            twin_snapshot=twin,
+            twin_role=twin_role,
+            allow_control_valid=False,
+            baseline_integrity=False,
+            finding_pre_identity=case.finding_pre_identity,
+            execution_fact=execution,
+            requirement_bindings=tuple(self.bindings[item] for item in case.required_observations),
+            observation_facts=observations,
+            security_effect_facts=effect_facts,
+            observations=tuple(envelopes),
+            outcomes=tuple(outcomes.values()),
+            verdict=CaseVerdict.INCONCLUSIVE,
+            reason_codes=(reason_code,),
+        )
+
+    def run_case(self, case: Any, *, twin: Any = None, twin_role: TwinExecutionRole | None = None, allow_control_valid: bool = False) -> Evidence:
+        """按冻结顺序执行一个工作流，并把动态值限制在当前 case 内存。"""
+
+        workflow = next(item for item in self.snapshot.workflow_bindings if item.action_id == case.action_id)
         action = self.actions[case.action_id]
-        subject_identity = self.subject_identities[case.subject_id]
-        subject_token = _secret_value(self.environ, subject_identity.secret_ref, required=True)
         envelopes: list[ObservationEnvelope] = []
         outcomes: dict[str, ObserverOutcome] = {}
         cursors: dict[tuple[str, str], tuple[AuditLogStartCursor, ...]] = {}
-        request_path = action_binding.relative_path_template
-        request_body = dict(action_binding.json_body)
-        if action_binding.resource_injection.value == "PATH_RESOURCE_ID":
-            request_path = request_path.replace("{resource_id}", case.resource_ids[0])
-        else:
-            request_body["resource_ids"] = list(case.resource_ids)
-        execution_binding = action_binding.model_copy(update={"relative_path_template": request_path, "json_body": request_body})
-        execution: ExecutionFact
+        outputs: dict[str, dict[str, Any]] = {}
+        required_identity_ids = {
+            self.subject_identities[case.subject_id].identity_id
+            if step.identity_id == CASE_SUBJECT_IDENTITY
+            else step.identity_id
+            for step in workflow.steps
+        }
+        runtimes = {
+            identity.identity_id: HttpIdentityRuntime(
+                identity.binding,
+                resolve_secret=lambda reference: _secret_value(self.environ, reference, required=True),
+                business_origin=self.snapshot.target.scope.base_url,
+            )
+            for identity in self.snapshot.identities
+            if identity.identity_id in required_identity_ids
+        }
+        identity_definitions = {identity.identity_id: identity for identity in self.snapshot.identities}
+        execution: ExecutionFact | None = None
+        target_started = False
+
+        def runtime_for(step: Any) -> HttpIdentityRuntime:
+            identity_id = self.subject_identities[case.subject_id].identity_id if step.identity_id == CASE_SUBJECT_IDENTITY else step.identity_id
+            return runtimes[identity_id]
+
+        def ordered_steps() -> tuple[Any, ...]:
+            pending = {step.id: step for step in workflow.steps}
+            ordered: list[Any] = []
+            while pending:
+                ready = [step for step in pending.values() if set(step.depends_on_step_ids).issubset({item.id for item in ordered})]
+                if not ready:
+                    raise JiejianError(ErrorCode.SETUP_STEP_FAILED, "工作流步骤依赖无法满足")
+                for step in sorted(ready, key=lambda item: item.id):
+                    ordered.append(step)
+                    pending.pop(step.id)
+            return tuple(ordered)
+
+        def values_for(step: Any) -> dict[str, Any]:
+            values: dict[str, Any] = {}
+            for slot in step.input_slots:
+                if slot.source.value == "CASE_SUBJECT_ID":
+                    value: Any = case.subject_id
+                elif slot.source.value == "CASE_RESOURCE_ID":
+                    value = case.resource_ids[0]
+                elif slot.source.value == "FIXED_LITERAL":
+                    value = slot.literal
+                elif slot.source.value == "SECRET_REF":
+                    value = _secret_value(self.environ, slot.secret_ref or "", required=True)
+                else:
+                    if slot.producer_step_id not in outputs:
+                        raise JiejianError(ErrorCode.VALUE_EXTRACTION_FAILED, "动态值生产步骤尚未完成")
+                    value = outputs[slot.producer_step_id].get(slot.slot_id)
+                    if value is None:
+                        raise JiejianError(ErrorCode.VALUE_EXTRACTION_FAILED, "动态值提取为空")
+                if isinstance(value, str) and len(value) > slot.max_length:
+                    raise JiejianError(ErrorCode.VALUE_EXTRACTION_FAILED, "动态值超过长度预算")
+                values[slot.slot_id] = value
+            return values
+
         try:
-            # --- 阶段：恢复目标、执行前观察与受控请求 ---
             if self.cancellation_requested():
                 raise JiejianError(ErrorCode.EXEC_CANCELLED, "复杂权限执行已取消")
-            # 安全边界：每个 case 前后都执行恢复，避免跨 case 状态污染；finally 保证失败路径同样清理。
-            self.router.cleanup(self.snapshot.target_type, self.snapshot.target.reset_path, case_id=case.case_id)
+            reset_path = self.snapshot.target.reset_path
+            if workflow.reset_strategy.kind.value == "RESET_ENDPOINT":
+                reset_path = workflow.reset_strategy.path
+            else:
+                raise JiejianError(ErrorCode.BASELINE_INVALID, "当前工作流 reset strategy 无可执行恢复器")
+            self.http.cleanup(reset_path, case_id=case.case_id)
+            for identity_id, runtime in runtimes.items():
+                try:
+                    identity = identity_definitions[identity_id]
+                    bootstrap_outputs: dict[str, dict[str, Any]] = {}
+
+                    def send_bootstrap(request_or_path: Any, *, method: str = "POST", data: Any = None, auth: bool = False, auth_scope: Any = None, bootstrap: bool = False) -> Any:
+                        if isinstance(request_or_path, str):
+                            return self.http.request(
+                                method,
+                                request_or_path,
+                                case_id=case.case_id,
+                                data=data,
+                                identity_runtime=runtime,
+                                bootstrap_request=True,
+                                auth_scope=auth_scope if auth else None,
+                            )
+                        template = request_or_path.request_template
+                        slot_values: dict[str, Any] = {}
+                        for slot in template.input_slots:
+                            if slot.source is ValueSlotSource.FIXED_LITERAL:
+                                value = slot.literal
+                            elif slot.source is ValueSlotSource.SECRET_REF:
+                                value = _secret_value(self.environ, slot.secret_ref or "", required=True)
+                            else:
+                                value = bootstrap_outputs.get(slot.producer_step_id or "", {}).get(slot.slot_id)
+                            if value is None:
+                                raise JiejianError(ErrorCode.VALUE_EXTRACTION_FAILED, "身份 Bootstrap 动态值不可用")
+                            slot_values[slot.slot_id] = value
+                        response = self.http.request(
+                            template.method,
+                            template.path,
+                            case_id=case.case_id,
+                            query=template.query,
+                            headers=template.headers,
+                            body=template.body,
+                            slot_values=slot_values,
+                            identity_runtime=runtime,
+                            bootstrap_request=True,
+                        )
+                        extracted = {
+                            extractor.extractor_id: extract_response_value(response, extractor)
+                            for extractor in template.response_extractors
+                        }
+                        bootstrap_outputs[request_or_path.template_id] = extracted
+                        csrf_slot_id = getattr(identity.binding, "csrf_slot_id", None)
+                        if csrf_slot_id is not None and csrf_slot_id in extracted:
+                            extractor = next(item for item in template.response_extractors if item.extractor_id == csrf_slot_id)
+                            runtime.set_csrf(
+                                csrf_slot_id,
+                                str(extracted[csrf_slot_id]),
+                                origin=self.snapshot.target.scope.base_url,
+                                max_length=extractor.max_length,
+                            )
+                        return response
+
+                    runtime.bootstrap(send_bootstrap, requests=identity.bootstrap_requests)
+                except JiejianError as exc:
+                    raise JiejianError(ErrorCode.IDENTITY_PREPARATION_FAILED, "身份准备失败") from exc
+            ordered = ordered_steps()
+            for step in ordered:
+                if step.purpose.value != "SETUP":
+                    continue
+                try:
+                    fact, response = self.http.execute_detailed(step.request_template, case_id=case.case_id, action_id=case.action_id, classifier=step.classifier, slot_values=values_for(step), identity_runtime=runtime_for(step))
+                    if fact.outcome is not ExecutionOutcome.ACCEPTED:
+                        raise JiejianError(ErrorCode.SETUP_STEP_FAILED, "SETUP 步骤未被接受")
+                    outputs[step.id] = {extractor.extractor_id: extract_response_value(response, extractor) for extractor in step.output_extractors}
+                except JiejianError as exc:
+                    if exc.code in {ErrorCode.VALUE_EXTRACTION_FAILED.value, ErrorCode.SECRET_MISSING.value}:
+                        raise
+                    raise JiejianError(ErrorCode.SETUP_STEP_FAILED, "SETUP 步骤失败") from exc
+            baseline_failed = self._observe_phase(case, ObservationPhase.BASELINE, envelopes, outcomes, cursors)
+            if workflow.baseline_projections and baseline_failed:
+                self.baseline_integrities[case.case_id] = (
+                    BaselineIntegrity(
+                        mode=workflow.baseline_projections[0].integrity_mode,
+                        expected_fingerprint=workflow.baseline_projections[0].expected_fingerprint,
+                        observed_fingerprint=None,
+                        valid=False,
+                        reason_codes=("BASELINE_OBSERVATION_INCOMPLETE",),
+                    ),
+                )
+                return self._baseline_inconclusive(
+                    case,
+                    action,
+                    twin=twin,
+                    twin_role=twin_role,
+                    envelopes=envelopes,
+                    outcomes=outcomes,
+                    reason_code="BASELINE_OBSERVATION_INCOMPLETE",
+                )
+            integrities: list[BaselineIntegrity] = []
+            baseline_envelopes = [item for item in envelopes if item.phase is ObservationPhase.BASELINE]
+            relationship_payload = case.model_dump(
+                mode="json",
+                include={"subject_id", "relation_paths", "context"},
+            )
+            if twin is not None:
+                for field_name in twin.mutation.changed_fields:
+                    relationship_payload.pop(field_name, None)
+            relationship_fingerprint = hashlib.sha256(
+                _json_bytes(relationship_payload)
+            ).hexdigest()
+            for projection in workflow.baseline_projections:
+                for resource_id in case.resource_ids:
+                    envelope = next((item for item in baseline_envelopes if item.correlation.resource_id == resource_id and item.state is not None), None)
+                    if envelope is None or envelope.state is None:
+                        raise JiejianError(ErrorCode.BASELINE_INVALID, "BASELINE 缺少权威资源状态")
+                    fingerprint = build_baseline_fingerprint(
+                        logical_resource_handle=projection.logical_resource_handle,
+                        normalized_resource_state=envelope.state.canonical_sha256,
+                        workflow_state=workflow.workflow_fingerprint or "",
+                        relationship_projection=relationship_fingerprint,
+                        effect_projection=hashlib.sha256(_json_bytes(action.model_dump(mode="json"))).hexdigest(),
+                        normalization_version=projection.normalization_version,
+                        projection_version=projection.projection_version,
+                    )
+                    valid = projection.expected_fingerprint is None or projection.expected_fingerprint == fingerprint.fingerprint
+                    integrities.append(BaselineIntegrity(
+                        mode=projection.integrity_mode,
+                        expected_fingerprint=projection.expected_fingerprint,
+                        observed_fingerprint=fingerprint.fingerprint,
+                        valid=valid,
+                        reason_codes=() if valid else ("BASELINE_FINGERPRINT_MISMATCH",),
+                    ))
+            frozen_integrities = tuple(integrities)
+            twin_baseline_valid = _bind_twin_baseline(
+                self.twin_baselines,
+                twin,
+                twin_role,
+                frozen_integrities,
+            )
+            if not twin_baseline_valid:
+                frozen_integrities = tuple(
+                    item.model_copy(
+                        update={
+                            "valid": False,
+                            "reason_codes": tuple(
+                                sorted(set((*item.reason_codes, "TWIN_BASELINE_MISMATCH")))
+                            ),
+                        }
+                    )
+                    for item in frozen_integrities
+                )
+            self.baseline_integrities[case.case_id] = frozen_integrities
+            baseline_valid = (
+                bool(workflow.baseline_projections)
+                and twin_baseline_valid
+                and all(item.valid for item in frozen_integrities)
+            )
+            if not baseline_valid:
+                return self._baseline_inconclusive(
+                    case,
+                    action,
+                    twin=twin,
+                    twin_role=twin_role,
+                    envelopes=envelopes,
+                    outcomes=outcomes,
+                    reason_code=(
+                        "TWIN_BASELINE_MISMATCH"
+                        if not twin_baseline_valid
+                        else "BASELINE_INTEGRITY_INVALID"
+                    ),
+                )
             before_failed = self._observe_phase(case, ObservationPhase.BEFORE, envelopes, outcomes, cursors)
             if before_failed:
-                execution = ExecutionFact(case_id=case.case_id, action_id=case.action_id, target_type=self.snapshot.target_type, outcome=ExecutionOutcome.UNKNOWN, execution_marker=case.case_id, input_hash=_sha256(request_body), output_hash=hashlib.sha256(b"").hexdigest(), reason_codes=(_PERMISSION_OBSERVER_INCOMPLETE,))
-            else:
-                execution = self.router.execute(self.snapshot.target_type, execution_binding, case_id=case.case_id, action_id=case.action_id, bearer_token=subject_token)
-            if not before_failed:
-                for phase in (ObservationPhase.AFTER, ObservationPhase.EVENTUAL):
-                    self._observe_phase(case, phase, envelopes, outcomes, cursors)
+                raise JiejianError(ErrorCode.OBSERVER_INCOMPLETE, "BEFORE 观察不完整")
+            target = next(step for step in ordered if step.id == workflow.target_step_id)
+            target_started = True
+            execution, response = self.http.execute_detailed(target.request_template, case_id=case.case_id, action_id=case.action_id, classifier=target.classifier, slot_values=values_for(target), identity_runtime=runtime_for(target))
+            if execution.outcome is ExecutionOutcome.FAILED:
+                raise JiejianError(ErrorCode.TARGET_EXECUTION_FAILED, "TARGET 请求失败")
+            outputs[target.id] = {extractor.extractor_id: extract_response_value(response, extractor) for extractor in target.output_extractors}
+            for phase in (ObservationPhase.AFTER, ObservationPhase.EVENTUAL):
+                self._observe_phase(case, phase, envelopes, outcomes, cursors)
+            execution = _apply_terminal_completion(
+                execution,
+                response,
+                target.classifier,
+                completion_bindings=self.bindings,
+                envelopes=tuple(envelopes),
+                case_id=case.case_id,
+            )
             # --- 阶段：投影事实并确定性判定 ---
             facts = list(self._observation_facts(case, envelopes))
+            effect_facts = self._security_effect_facts(
+                case,
+                action,
+                tuple(facts),
+                baseline_integrity=baseline_valid,
+                response=response,
+                envelopes=envelopes,
+            )
             decision = CaseDecisionInput(
                 case=case,
                 action=action,
                 execution=execution,
-                observations=tuple(facts),
+                effects=effect_facts,
+                twin_role=twin_role,
+                allow_control_valid=True if twin_role is TwinExecutionRole.ALLOW_CONTROL else allow_control_valid,
+                baseline_integrity=baseline_valid,
             )
             verdict, reason_codes = evaluate_permission_case(decision)
-            if any(item.status is not ObserverOutcomeStatus.AVAILABLE for item in outcomes.values()):
+            confirmed_effect = any(item.state is ObservedEffect.CONFIRMED for item in effect_facts)
+            if any(item.status is not ObserverOutcomeStatus.AVAILABLE for item in outcomes.values()) and not (
+                verdict is CaseVerdict.VULNERABLE and confirmed_effect
+            ):
                 verdict = CaseVerdict.INCONCLUSIVE
                 reason_codes = tuple(sorted(set((*reason_codes, _PERMISSION_OBSERVER_INCOMPLETE))))
             for requirement in case.required_observations:
                 binding = self.bindings[requirement]
                 if binding.observer_id not in outcomes:
                     outcomes[binding.observer_id] = _failure_outcome(self.observer_specs[binding.observer_id])
-            return build_evidence(
-                schema_version="2",
+            is_allow_control = twin_role is TwinExecutionRole.ALLOW_CONTROL or (
+                twin_role is None
+                and all(item is PermissionExpectation.ALLOW for item in case.expectations)
+            )
+            evidence = build_evidence(
+                schema_version="3",
                 run_id=self.document.run_id,
                 case_snapshot=case,
+                twin_snapshot=twin,
+                twin_role=twin_role,
+                allow_control_valid=(verdict is CaseVerdict.SAFE) if is_allow_control else allow_control_valid,
+                baseline_integrity=baseline_valid,
                 finding_pre_identity=case.finding_pre_identity,
                 execution_fact=execution,
                 requirement_bindings=tuple(self.bindings[item] for item in case.required_observations),
                 observation_facts=tuple(facts),
+                security_effect_facts=effect_facts,
                 observations=tuple(envelopes),
                 outcomes=tuple(outcomes.values()),
                 verdict=verdict,
                 reason_codes=tuple(reason_codes),
             )
+            # 清理只能发生在安全事实聚合与确定性判定之后，避免改变本次证据窗口。
+            for step in reversed(ordered):
+                if step.purpose.value != "CLEANUP":
+                    continue
+                try:
+                    self.http.execute_detailed(step.request_template, case_id=case.case_id, action_id=case.action_id, classifier=step.classifier, slot_values=values_for(step), identity_runtime=runtime_for(step))
+                except JiejianError as exc:
+                    raise JiejianError(ErrorCode.CLEANUP_FAILED, "CLEANUP 步骤失败") from exc
+            return evidence
         finally:
-            # 失败语义：任何异常都不能跳过 case 后恢复，cleanup 失败由上层 attempt 归一处理。
-            self.router.cleanup(self.snapshot.target_type, self.snapshot.target.reset_path, case_id=case.case_id)
+            try:
+                self.http.cleanup(self.snapshot.target.reset_path, case_id=case.case_id)
+            except JiejianError:
+                if target_started:
+                    raise JiejianError(ErrorCode.CLEANUP_FAILED, "目标恢复失败") from None
+            for runtime in runtimes.values():
+                runtime.close()
 
 
 def _result_error(
@@ -438,8 +947,25 @@ def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str
         )
         evidence: list[Evidence] = []
         try:
+            paired_case_ids: set[str] = set()
+            for twin in document.project_snapshot.differential_plan.twins:
+                allow_evidence = executor.run_case(
+                    twin.allow_case,
+                    twin=twin,
+                    twin_role=TwinExecutionRole.ALLOW_CONTROL,
+                    allow_control_valid=True,
+                )
+                evidence.append(allow_evidence)
+                evidence.append(executor.run_case(
+                    twin.deny_case,
+                    twin=twin,
+                    twin_role=TwinExecutionRole.DENY_VARIANT,
+                    allow_control_valid=allow_evidence.verdict is CaseVerdict.SAFE,
+                ))
+                paired_case_ids.update((twin.allow_case.case_id, twin.deny_case.case_id))
             for case in document.project_snapshot.plan.cases:
-                evidence.append(executor.run_case(case))
+                if case.case_id not in paired_case_ids:
+                    evidence.append(executor.run_case(case))
         except JiejianError as exc:
             if exc.code == ErrorCode.EXEC_CANCELLED.value:
                 _atomic_write(staging / "result.json", canonical_runner_json_bytes(_result_error(document, exc.code, finished_at_us=finish_value, cancelled=True), known_secrets=known_secrets))

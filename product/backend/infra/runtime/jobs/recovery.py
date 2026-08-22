@@ -87,11 +87,18 @@ class JobRecovery:
         with self._new_uow(known_secrets) as work:
             current = self._require_recovery_fence(work, request)
             # 恢复动作沿用正常重试预算，不能借崩溃恢复绕过最大尝试次数。
+            cancelled = current.cancel_requested_at_us is not None
             exhausted = current.attempt >= current.max_attempts
-            target = JobState.FAILED if exhausted else JobState.RETRY_WAIT
+            target = (
+                JobState.CANCELLED
+                if cancelled
+                else JobState.FAILED
+                if exhausted
+                else JobState.RETRY_WAIT
+            )
             available_at_us = (
                 None
-                if exhausted
+                if exhausted or cancelled
                 else compute_retry_available_at(
                     policy=self._retry_policy,
                     jitter_source=self._jitter_source,
@@ -109,7 +116,14 @@ class JobRecovery:
             )
             if job is None:
                 raise JiejianError(ErrorCode.JOB_LEASE_MISMATCH, "任务租约不匹配")
-            if exhausted:
+            if cancelled:
+                run, recording = self._targets.finish(
+                    work,
+                    job,
+                    request.now_us,
+                    JobTargetOutcome.CANCELLED,
+                )
+            elif exhausted:
                 run, recording = self._targets.finish(
                     work,
                     job,

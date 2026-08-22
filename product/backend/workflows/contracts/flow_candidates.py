@@ -16,7 +16,7 @@ def build_flow_candidates(project_id: str, flow: Flow) -> CandidateBatch:
     flow_hash = canonical_sha256(flow)
     candidates: list[ContractCandidate] = []
     for step in flow.steps:
-        if step.method == "GET":
+        if step.request_template.method == "GET":
             candidates.append(
                 _candidate(
                     project_id,

@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
-    "@xyflow/react": "12.11.3",
     "antd": "^5.27.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

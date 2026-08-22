@@ -203,9 +203,18 @@ def test_authorization_profile_worker_runner_publication_loop(variant: str, tmp_
         expected = RunVerdict(truth["formal_profile"]["run_verdict"])
         assert published.result.verdict is expected
         assert view.publication.result.verdict is expected
-        assert len(view.evidence) == len(request.project_snapshot.plan.cases)
+        paired_case_ids = {
+            case.case_id
+            for twin in request.project_snapshot.differential_plan.twins
+            for case in (twin.allow_case, twin.deny_case)
+        }
+        expected_evidence_count = (
+            2 * len(request.project_snapshot.differential_plan.twins)
+            + sum(case.case_id not in paired_case_ids for case in request.project_snapshot.plan.cases)
+        )
+        assert len(view.evidence) == expected_evidence_count
         assert view.publication.result.coverage_gap_count == truth["formal_profile"]["coverage_gaps"]
-        assert context.results.overview(submitted.run.run_id, published=view)["execution_schema_version"] == "2"
+        assert context.results.overview(submitted.run.run_id, published=view)["execution_schema_version"] == "3"
         _reset_target(
             server,
             variant=variant,

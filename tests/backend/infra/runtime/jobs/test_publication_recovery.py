@@ -336,7 +336,7 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="2",
+        schema_version="3",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )
@@ -403,7 +403,7 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
         overview = reader.overview(parts.job.run_id, published=view)
         assert overview["target_scope"] == execution_snapshot().target.scope.model_dump(mode="json")
         assert overview["budget"] == request.budget.model_dump(mode="json")
-        assert overview["execution_schema_version"] == "2"
+        assert overview["execution_schema_version"] == "3"
         assert overview["result_schema_version"] == "2"
         assert overview["observer_health"]["required_observations"] == ["resource_state"]
         assert overview["observer_health"]["resource_state"]["observer_type"] == "OWNER_API"

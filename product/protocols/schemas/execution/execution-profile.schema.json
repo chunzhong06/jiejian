@@ -1,81 +1,5 @@
 {
   "$defs": {
-    "ActionExecutionBinding": {
-      "additionalProperties": false,
-      "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "action_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Action Id",
-          "type": "string"
-        },
-        "target_type": {
-          "$ref": "#/$defs/TargetType",
-          "default": "WEB"
-        },
-        "method": {
-          "enum": [
-            "GET",
-            "PATCH",
-            "POST",
-            "PUT",
-            "DELETE"
-          ],
-          "title": "Method",
-          "type": "string"
-        },
-        "relative_path_template": {
-          "maxLength": 2048,
-          "minLength": 1,
-          "title": "Relative Path Template",
-          "type": "string"
-        },
-        "json_body": {
-          "additionalProperties": true,
-          "title": "Json Body",
-          "type": "object"
-        },
-        "accepted_statuses": {
-          "items": {
-            "type": "integer"
-          },
-          "maxItems": 32,
-          "minItems": 1,
-          "title": "Accepted Statuses",
-          "type": "array"
-        },
-        "denied_statuses": {
-          "default": [
-            401,
-            403,
-            404
-          ],
-          "items": {
-            "type": "integer"
-          },
-          "maxItems": 32,
-          "title": "Denied Statuses",
-          "type": "array"
-        },
-        "resource_injection": {
-          "$ref": "#/$defs/ResourceInjection"
-        }
-      },
-      "required": [
-        "action_id",
-        "method",
-        "relative_path_template",
-        "accepted_statuses",
-        "resource_injection"
-      ],
-      "title": "ActionExecutionBinding",
-      "type": "object"
-    },
     "AsyncTaskApiLocator": {
       "additionalProperties": false,
       "properties": {
@@ -208,6 +132,91 @@
         "max_line_bytes"
       ],
       "title": "AuditLogScanBudget",
+      "type": "object"
+    },
+    "AuthTargetScope": {
+      "additionalProperties": false,
+      "description": "身份端点的独立授权范围；不能借用业务目标的 origin 或预算。",
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "base_url": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Base Url",
+          "type": "string"
+        },
+        "allowed_origins": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Allowed Origins",
+          "type": "array"
+        },
+        "allowed_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "allowed_ports": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Allowed Ports",
+          "type": "array"
+        },
+        "allow_private_network": {
+          "default": false,
+          "title": "Allow Private Network",
+          "type": "boolean"
+        },
+        "follow_redirects": {
+          "const": false,
+          "default": false,
+          "title": "Follow Redirects",
+          "type": "boolean"
+        },
+        "max_requests": {
+          "default": 8,
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 4194304,
+          "minimum": 1,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "base_url",
+        "allowed_origins",
+        "allowed_hosts",
+        "allowed_ports"
+      ],
+      "title": "AuthTargetScope",
       "type": "object"
     },
     "AzureBlobObjectLocator": {
@@ -347,6 +356,102 @@
       "title": "AzureQueuePeekLocator",
       "type": "object"
     },
+    "BaselineIntegrityMode": {
+      "enum": [
+        "EXACT_RESTORE",
+        "NORMALIZED_EQUIVALENCE"
+      ],
+      "title": "BaselineIntegrityMode",
+      "type": "string"
+    },
+    "BaselineProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "projection_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Projection Id",
+          "type": "string"
+        },
+        "logical_resource_handle": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Logical Resource Handle",
+          "type": "string"
+        },
+        "normalization_version": {
+          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
+          "title": "Normalization Version",
+          "type": "string"
+        },
+        "projection_version": {
+          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
+          "title": "Projection Version",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "expected_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Fingerprint"
+        },
+        "integrity_mode": {
+          "$ref": "#/$defs/BaselineIntegrityMode",
+          "default": "EXACT_RESTORE"
+        }
+      },
+      "required": [
+        "projection_id",
+        "logical_resource_handle",
+        "normalization_version",
+        "projection_version"
+      ],
+      "title": "BaselineProjection",
+      "type": "object"
+    },
+    "BearerIdentityBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "BEARER",
+          "default": "BEARER",
+          "title": "Kind",
+          "type": "string"
+        },
+        "secret_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Secret Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "secret_ref"
+      ],
+      "title": "BearerIdentityBinding",
+      "type": "object"
+    },
     "BlobObjectScanBudget": {
       "additionalProperties": false,
       "properties": {
@@ -418,9 +523,8 @@
       "title": "BlobObjectScanBudget",
       "type": "object"
     },
-    "ExecutionIdentity": {
+    "CookieSessionIdentityBinding": {
       "additionalProperties": false,
-      "description": "执行配置中的身份，只保存非秘密环境引用。",
       "properties": {
         "schema_version": {
           "const": "2",
@@ -428,9 +532,130 @@
           "title": "Schema Version",
           "type": "string"
         },
-        "id": {
+        "kind": {
+          "const": "COOKIE_SESSION",
+          "default": "COOKIE_SESSION",
+          "title": "Kind",
+          "type": "string"
+        },
+        "bootstrap_template_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Bootstrap Template Ids",
+          "type": "array"
+        },
+        "csrf_slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Csrf Slot Id"
+        }
+      },
+      "title": "CookieSessionIdentityBinding",
+      "type": "object"
+    },
+    "EffectBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "effect_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Id",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "required_channels": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Required Channels",
+          "type": "array"
+        },
+        "corroborating_channels": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Corroborating Channels",
+          "type": "array"
+        },
+        "closure_policy": {
+          "$ref": "#/$defs/EffectClosurePolicy"
+        },
+        "projection_version": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Projection Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "effect_id",
+        "required_channels",
+        "closure_policy",
+        "projection_version"
+      ],
+      "title": "EffectBinding",
+      "type": "object"
+    },
+    "EffectClosurePolicy": {
+      "enum": [
+        "IMMEDIATE",
+        "TERMINAL_STATE",
+        "BOUNDED_QUIESCENCE",
+        "EXCLUSIVE_CHANNEL_WINDOW"
+      ],
+      "title": "EffectClosurePolicy",
+      "type": "string"
+    },
+    "EmptyBody": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "EMPTY",
+          "default": "EMPTY",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EmptyBody",
+      "type": "object"
+    },
+    "ExecutionIdentity": {
+      "additionalProperties": false,
+      "description": "执行配置中的身份，只保存非秘密环境引用。",
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "identity_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Identity Id",
           "type": "string"
         },
         "role": {
@@ -439,18 +664,945 @@
           "title": "Role",
           "type": "string"
         },
-        "secret_ref": {
-          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
-          "title": "Secret Ref",
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "binding": {
+          "discriminator": {
+            "mapping": {
+              "BEARER": "#/$defs/BearerIdentityBinding",
+              "COOKIE_SESSION": "#/$defs/CookieSessionIdentityBinding",
+              "LOGIN_WORKFLOW": "#/$defs/LoginWorkflowIdentityBinding",
+              "OAUTH2_CLIENT_CREDENTIALS": "#/$defs/OAuth2ClientCredentialsIdentityBinding",
+              "OAUTH2_REFRESH_TOKEN": "#/$defs/OAuth2RefreshTokenIdentityBinding",
+              "STATIC_HEADERS": "#/$defs/StaticHeadersIdentityBinding"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BearerIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/StaticHeadersIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/CookieSessionIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/LoginWorkflowIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/OAuth2ClientCredentialsIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/OAuth2RefreshTokenIdentityBinding"
+            }
+          ],
+          "title": "Binding"
+        },
+        "bootstrap_requests": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/IdentityBootstrapRequest"
+          },
+          "maxItems": 32,
+          "title": "Bootstrap Requests",
+          "type": "array"
+        }
+      },
+      "required": [
+        "identity_id",
+        "role",
+        "binding"
+      ],
+      "title": "ExecutionIdentity",
+      "type": "object"
+    },
+    "FormUrlEncodedBody": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
           "type": "string"
+        },
+        "kind": {
+          "const": "FORM_URLENCODED",
+          "default": "FORM_URLENCODED",
+          "title": "Kind",
+          "type": "string"
+        },
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Fields",
+          "type": "array"
+        }
+      },
+      "title": "FormUrlEncodedBody",
+      "type": "object"
+    },
+    "HttpOutcomeClassifier": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "accepted": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpPredicate"
+          },
+          "maxItems": 128,
+          "title": "Accepted",
+          "type": "array"
+        },
+        "denied": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpPredicate"
+          },
+          "maxItems": 128,
+          "title": "Denied",
+          "type": "array"
+        },
+        "completion_binding": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Binding"
+        }
+      },
+      "title": "HttpOutcomeClassifier",
+      "type": "object"
+    },
+    "HttpParameter": {
+      "additionalProperties": false,
+      "description": "受控 Query/Header/Form 字段；字段值只能是 literal 或已声明 Slot。",
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "HttpParameter",
+      "type": "object"
+    },
+    "HttpPredicate": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/HttpPredicateKind"
+        },
+        "statuses": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 32,
+          "title": "Statuses",
+          "type": "array"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "expected": {
+          "default": null,
+          "title": "Expected"
+        },
+        "values": {
+          "default": [],
+          "items": {},
+          "maxItems": 32,
+          "title": "Values",
+          "type": "array"
+        },
+        "redirect_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Redirect Path"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "attribute": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribute"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "HttpPredicate",
+      "type": "object"
+    },
+    "HttpPredicateKind": {
+      "enum": [
+        "STATUS_IN",
+        "JSON_PATH_EXISTS",
+        "JSON_PATH_EQUALS",
+        "JSON_PATH_IN",
+        "HEADER_EXISTS",
+        "HEADER_EQUALS",
+        "REDIRECT_PATH_MATCHES",
+        "HTML_SELECTOR_EXISTS",
+        "HTML_ATTRIBUTE_EQUALS",
+        "BODY_CONTAINS_LITERAL"
+      ],
+      "title": "HttpPredicateKind",
+      "type": "string"
+    },
+    "HttpRequestTemplate": {
+      "additionalProperties": false,
+      "description": "单请求受控模板；不接受 URL、脚本、任意文件或保留认证头。",
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "PATCH",
+            "POST",
+            "PUT",
+            "DELETE",
+            "HEAD"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Path",
+          "type": "string"
+        },
+        "query": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Query",
+          "type": "array"
+        },
+        "headers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Headers",
+          "type": "array"
+        },
+        "body": {
+          "discriminator": {
+            "mapping": {
+              "EMPTY": "#/$defs/EmptyBody",
+              "FORM_URLENCODED": "#/$defs/FormUrlEncodedBody",
+              "JSON": "#/$defs/JsonBody",
+              "MULTIPART": "#/$defs/MultipartBody"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EmptyBody"
+            },
+            {
+              "$ref": "#/$defs/JsonBody"
+            },
+            {
+              "$ref": "#/$defs/FormUrlEncodedBody"
+            },
+            {
+              "$ref": "#/$defs/MultipartBody"
+            }
+          ],
+          "title": "Body"
+        },
+        "input_slots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ValueSlot"
+          },
+          "maxItems": 128,
+          "title": "Input Slots",
+          "type": "array"
+        },
+        "response_extractors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResponseExtractor"
+          },
+          "maxItems": 128,
+          "title": "Response Extractors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "method",
+        "path"
+      ],
+      "title": "HttpRequestTemplate",
+      "type": "object"
+    },
+    "HttpWorkflowBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "workflow_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Workflow Id",
+          "type": "string"
+        },
+        "source_flow_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Source Flow Id",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/HttpWorkflowStep"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "target_step_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Target Step Id",
+          "type": "string"
+        },
+        "logical_resource_slots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LogicalResourceSlot"
+          },
+          "maxItems": 128,
+          "title": "Logical Resource Slots",
+          "type": "array"
+        },
+        "baseline_projections": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BaselineProjection"
+          },
+          "maxItems": 128,
+          "title": "Baseline Projections",
+          "type": "array"
+        },
+        "reset_strategy": {
+          "discriminator": {
+            "mapping": {
+              "RESET_ENDPOINT": "#/$defs/ResetEndpointStrategy",
+              "SNAPSHOT_PROVIDER": "#/$defs/SnapshotProviderResetStrategy",
+              "UNIQUE_RESOURCE_WORKFLOW": "#/$defs/UniqueResourceWorkflowResetStrategy"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ResetEndpointStrategy"
+            },
+            {
+              "$ref": "#/$defs/UniqueResourceWorkflowResetStrategy"
+            },
+            {
+              "$ref": "#/$defs/SnapshotProviderResetStrategy"
+            }
+          ],
+          "title": "Reset Strategy"
+        },
+        "workflow_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workflow Fingerprint"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "source_flow_id",
+        "action_id",
+        "steps",
+        "target_step_id"
+      ],
+      "title": "HttpWorkflowBinding",
+      "type": "object"
+    },
+    "HttpWorkflowStep": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "purpose": {
+          "$ref": "#/$defs/WorkflowStepPurpose"
+        },
+        "identity_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "request_template": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "classifier": {
+          "$ref": "#/$defs/HttpOutcomeClassifier"
+        },
+        "input_slots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ValueSlot"
+          },
+          "maxItems": 128,
+          "title": "Input Slots",
+          "type": "array"
+        },
+        "output_extractors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResponseExtractor"
+          },
+          "maxItems": 128,
+          "title": "Output Extractors",
+          "type": "array"
+        },
+        "depends_on_step_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Depends On Step Ids",
+          "type": "array"
+        },
+        "failure_policy": {
+          "$ref": "#/$defs/WorkflowFailurePolicy",
+          "default": "INCONCLUSIVE"
         }
       },
       "required": [
         "id",
-        "role",
-        "secret_ref"
+        "purpose",
+        "identity_id",
+        "request_template"
       ],
-      "title": "ExecutionIdentity",
+      "title": "HttpWorkflowStep",
+      "type": "object"
+    },
+    "IdentityBootstrapRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "template_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Template Id",
+          "type": "string"
+        },
+        "request_template": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        }
+      },
+      "required": [
+        "template_id",
+        "request_template"
+      ],
+      "title": "IdentityBootstrapRequest",
+      "type": "object"
+    },
+    "JsonBody": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "JSON",
+          "default": "JSON",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "JsonBody",
+      "type": "object"
+    },
+    "LogicalResourceSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "slot_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "logical_resource_handle": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Logical Resource Handle",
+          "type": "string"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "secret": {
+          "const": false,
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "slot_id",
+        "logical_resource_handle"
+      ],
+      "title": "LogicalResourceSlot",
+      "type": "object"
+    },
+    "LoginWorkflowIdentityBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "LOGIN_WORKFLOW",
+          "default": "LOGIN_WORKFLOW",
+          "title": "Kind",
+          "type": "string"
+        },
+        "workflow_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Workflow Id",
+          "type": "string"
+        },
+        "csrf_slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Csrf Slot Id"
+        }
+      },
+      "required": [
+        "workflow_id"
+      ],
+      "title": "LoginWorkflowIdentityBinding",
+      "type": "object"
+    },
+    "MultipartBody": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "MULTIPART",
+          "default": "MULTIPART",
+          "title": "Kind",
+          "type": "string"
+        },
+        "parts": {
+          "items": {
+            "$ref": "#/$defs/MultipartPart"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Parts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "parts"
+      ],
+      "title": "MultipartBody",
+      "type": "object"
+    },
+    "MultipartPart": {
+      "additionalProperties": false,
+      "description": "Multipart 只允许 literal、Slot 或已登记 fixture/artifact 标识。",
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        },
+        "fixture_artifact_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixture Artifact Id"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Type"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MultipartPart",
+      "type": "object"
+    },
+    "OAuth2ClientCredentialsIdentityBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OAUTH2_CLIENT_CREDENTIALS",
+          "default": "OAUTH2_CLIENT_CREDENTIALS",
+          "title": "Kind",
+          "type": "string"
+        },
+        "token_path": {
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Token Path",
+          "type": "string"
+        },
+        "client_id_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Client Id Ref",
+          "type": "string"
+        },
+        "client_secret_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Client Secret Ref",
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "auth_scope": {
+          "$ref": "#/$defs/AuthTargetScope"
+        }
+      },
+      "required": [
+        "token_path",
+        "client_id_ref",
+        "client_secret_ref",
+        "auth_scope"
+      ],
+      "title": "OAuth2ClientCredentialsIdentityBinding",
+      "type": "object"
+    },
+    "OAuth2RefreshTokenIdentityBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OAUTH2_REFRESH_TOKEN",
+          "default": "OAUTH2_REFRESH_TOKEN",
+          "title": "Kind",
+          "type": "string"
+        },
+        "token_path": {
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Token Path",
+          "type": "string"
+        },
+        "client_id_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Client Id Ref",
+          "type": "string"
+        },
+        "refresh_token_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Refresh Token Ref",
+          "type": "string"
+        },
+        "auth_scope": {
+          "$ref": "#/$defs/AuthTargetScope"
+        }
+      },
+      "required": [
+        "token_path",
+        "client_id_ref",
+        "refresh_token_ref",
+        "auth_scope"
+      ],
+      "title": "OAuth2RefreshTokenIdentityBinding",
       "type": "object"
     },
     "ObservationPhase": {
@@ -797,13 +1949,173 @@
       "title": "QueuePeekBudget",
       "type": "object"
     },
-    "ResourceInjection": {
-      "enum": [
-        "PATH_RESOURCE_ID",
-        "JSON_RESOURCE_IDS"
+    "ResetEndpointStrategy": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "RESET_ENDPOINT",
+          "default": "RESET_ENDPOINT",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
       ],
-      "title": "ResourceInjection",
+      "title": "ResetEndpointStrategy",
+      "type": "object"
+    },
+    "ResponseExtractor": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "extractor_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Extractor Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ResponseExtractorKind"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "cookie_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cookie Name"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "attribute": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z_:][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribute"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "extractor_id",
+        "kind"
+      ],
+      "title": "ResponseExtractor",
+      "type": "object"
+    },
+    "ResponseExtractorKind": {
+      "enum": [
+        "JSON_PATH",
+        "HEADER",
+        "COOKIE",
+        "LOCATION",
+        "HTML_SELECTOR",
+        "HTML_ATTRIBUTE"
+      ],
+      "title": "ResponseExtractorKind",
       "type": "string"
+    },
+    "SnapshotProviderResetStrategy": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "SNAPSHOT_PROVIDER",
+          "default": "SNAPSHOT_PROVIDER",
+          "title": "Kind",
+          "type": "string"
+        },
+        "provider_ref": {
+          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+          "title": "Provider Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_ref"
+      ],
+      "title": "SnapshotProviderResetStrategy",
+      "type": "object"
     },
     "SqliteQueryLocator": {
       "additionalProperties": false,
@@ -842,6 +2154,66 @@
         "database_secret_ref"
       ],
       "title": "SqliteQueryLocator",
+      "type": "object"
+    },
+    "StaticHeaderCredential": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "secret_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Secret Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "secret_ref"
+      ],
+      "title": "StaticHeaderCredential",
+      "type": "object"
+    },
+    "StaticHeadersIdentityBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "STATIC_HEADERS",
+          "default": "STATIC_HEADERS",
+          "title": "Kind",
+          "type": "string"
+        },
+        "headers": {
+          "items": {
+            "$ref": "#/$defs/StaticHeaderCredential"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Headers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "headers"
+      ],
+      "title": "StaticHeadersIdentityBinding",
       "type": "object"
     },
     "StructuredAuditLogLocator": {
@@ -925,6 +2297,198 @@
         "MCP_AGENT"
       ],
       "title": "TargetType",
+      "type": "string"
+    },
+    "UniqueResourceWorkflowResetStrategy": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "const": "UNIQUE_RESOURCE_WORKFLOW",
+          "default": "UNIQUE_RESOURCE_WORKFLOW",
+          "title": "Kind",
+          "type": "string"
+        },
+        "workflow_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Workflow Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id"
+      ],
+      "title": "UniqueResourceWorkflowResetStrategy",
+      "type": "object"
+    },
+    "ValueSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "slot_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ValueSlotSource"
+        },
+        "consumer": {
+          "$ref": "#/$defs/ValueSlotConsumer"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "literal": {
+          "default": null,
+          "title": "Literal"
+        },
+        "secret_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secret Ref"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Path"
+        },
+        "producer_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Producer Step Id"
+        },
+        "consumer_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Step Id"
+        },
+        "producer_step": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Producer Step"
+        },
+        "consumer_step": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Step"
+        }
+      },
+      "required": [
+        "slot_id",
+        "source",
+        "consumer"
+      ],
+      "title": "ValueSlot",
+      "type": "object"
+    },
+    "ValueSlotConsumer": {
+      "enum": [
+        "PATH",
+        "QUERY",
+        "HEADER",
+        "JSON_BODY",
+        "FORM_FIELD",
+        "MULTIPART_FIELD"
+      ],
+      "title": "ValueSlotConsumer",
+      "type": "string"
+    },
+    "ValueSlotSource": {
+      "enum": [
+        "CASE_SUBJECT_ID",
+        "CASE_RESOURCE_ID",
+        "FIXED_LITERAL",
+        "SECRET_REF",
+        "PRIOR_STEP_JSON_PATH",
+        "PRIOR_STEP_HEADER",
+        "PRIOR_STEP_COOKIE",
+        "PRIOR_STEP_LOCATION"
+      ],
+      "title": "ValueSlotSource",
+      "type": "string"
+    },
+    "ValueType": {
+      "enum": [
+        "STRING",
+        "INTEGER",
+        "BOOLEAN",
+        "JSON"
+      ],
+      "title": "ValueType",
       "type": "string"
     },
     "WebTargetDefinition": {
@@ -1028,14 +2592,31 @@
       ],
       "title": "WebTargetScope",
       "type": "object"
+    },
+    "WorkflowFailurePolicy": {
+      "enum": [
+        "INCONCLUSIVE",
+        "STOP"
+      ],
+      "title": "WorkflowFailurePolicy",
+      "type": "string"
+    },
+    "WorkflowStepPurpose": {
+      "enum": [
+        "SETUP",
+        "TARGET",
+        "CLEANUP"
+      ],
+      "title": "WorkflowStepPurpose",
+      "type": "string"
     }
   },
   "additionalProperties": false,
   "description": "完整、无秘密的  权限执行配置；不含运行时 Job 或结果字段。",
   "properties": {
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },
@@ -1099,13 +2680,22 @@
       "title": "Subject Bindings",
       "type": "array"
     },
-    "action_bindings": {
+    "workflow_bindings": {
       "items": {
-        "$ref": "#/$defs/ActionExecutionBinding"
+        "$ref": "#/$defs/HttpWorkflowBinding"
       },
       "maxItems": 4096,
       "minItems": 1,
-      "title": "Action Bindings",
+      "title": "Workflow Bindings",
+      "type": "array"
+    },
+    "effect_bindings": {
+      "items": {
+        "$ref": "#/$defs/EffectBinding"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Effect Bindings",
       "type": "array"
     },
     "observer_bindings": {
@@ -1151,7 +2741,8 @@
     "contract_id",
     "contract_version",
     "subject_bindings",
-    "action_bindings",
+    "workflow_bindings",
+    "effect_bindings",
     "observer_bindings",
     "seed",
     "case_budget",

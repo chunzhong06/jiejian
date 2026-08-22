@@ -73,12 +73,62 @@
       "title": "CoverageDimension",
       "type": "string"
     },
+    "DisclosureProof": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "projection_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Projection Version",
+          "type": "string"
+        },
+        "projection_complete": {
+          "title": "Projection Complete",
+          "type": "boolean"
+        },
+        "owner_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Owner Digest",
+          "type": "string"
+        },
+        "response_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Response Digest",
+          "type": "string"
+        },
+        "matched": {
+          "title": "Matched",
+          "type": "boolean"
+        },
+        "correlation_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Correlation Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "projection_version",
+        "projection_complete",
+        "owner_digest",
+        "response_digest",
+        "matched",
+        "correlation_digest"
+      ],
+      "title": "DisclosureProof",
+      "type": "object"
+    },
     "ExecutionFact": {
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -283,8 +333,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -309,6 +359,13 @@
           "title": "Reliable",
           "type": "boolean"
         },
+        "correlated": {
+          "title": "Correlated",
+          "type": "boolean"
+        },
+        "temporal_closure": {
+          "$ref": "#/$defs/TemporalClosure"
+        },
         "reason_codes": {
           "default": [],
           "items": {
@@ -324,7 +381,9 @@
         "resource_id",
         "effect",
         "complete",
-        "reliable"
+        "reliable",
+        "correlated",
+        "temporal_closure"
       ],
       "title": "ObservationFact",
       "type": "object"
@@ -579,8 +638,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -636,8 +695,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -761,6 +820,99 @@
       "title": "PermissionMutationCase",
       "type": "object"
     },
+    "PermissionMutationDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "dimension": {
+          "$ref": "#/$defs/CoverageDimension"
+        },
+        "changed_fields": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Changed Fields",
+          "type": "array"
+        },
+        "allow_value_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Allow Value Fingerprint",
+          "type": "string"
+        },
+        "deny_value_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Deny Value Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dimension",
+        "changed_fields",
+        "allow_value_fingerprint",
+        "deny_value_fingerprint"
+      ],
+      "title": "PermissionMutationDescriptor",
+      "type": "object"
+    },
+    "PermissionTwin": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "twin_id": {
+          "pattern": "^twin-[0-9a-f]{32}$",
+          "title": "Twin Id",
+          "type": "string"
+        },
+        "source_rule_id": {
+          "title": "Source Rule Id",
+          "type": "string"
+        },
+        "allow_case": {
+          "$ref": "#/$defs/PermissionMutationCase"
+        },
+        "deny_case": {
+          "$ref": "#/$defs/PermissionMutationCase"
+        },
+        "varied_dimension": {
+          "$ref": "#/$defs/CoverageDimension"
+        },
+        "mutation": {
+          "$ref": "#/$defs/PermissionMutationDescriptor"
+        },
+        "invariant": {
+          "$ref": "#/$defs/TwinInvariantSpecification"
+        },
+        "twin_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Twin Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "twin_id",
+        "source_rule_id",
+        "allow_case",
+        "deny_case",
+        "varied_dimension",
+        "mutation",
+        "invariant",
+        "twin_fingerprint"
+      ],
+      "title": "PermissionTwin",
+      "type": "object"
+    },
     "ProvenanceType": {
       "enum": [
         "OWNER_API",
@@ -783,6 +935,107 @@
       "title": "RetentionReason",
       "type": "string"
     },
+    "SecurityEffectFact": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SecurityEffectKind"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/ObservedEffect"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "reliable": {
+          "title": "Reliable",
+          "type": "boolean"
+        },
+        "correlated": {
+          "title": "Correlated",
+          "type": "boolean"
+        },
+        "temporal_closure": {
+          "$ref": "#/$defs/TemporalClosure"
+        },
+        "baseline_integrity": {
+          "title": "Baseline Integrity",
+          "type": "boolean"
+        },
+        "source_requirement_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Source Requirement Ids",
+          "type": "array"
+        },
+        "disclosure_proof": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DisclosureProof"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "effect_id",
+        "kind",
+        "resource_id",
+        "state",
+        "complete",
+        "reliable",
+        "correlated",
+        "temporal_closure",
+        "baseline_integrity",
+        "source_requirement_ids"
+      ],
+      "title": "SecurityEffectFact",
+      "type": "object"
+    },
+    "SecurityEffectKind": {
+      "enum": [
+        "STATE_MUTATION",
+        "DATA_DISCLOSURE",
+        "OBJECT_CREATION",
+        "EXTERNAL_DISPATCH",
+        "RESTRICTED_FUNCTION_INVOCATION",
+        "CREDENTIAL_ACCESS"
+      ],
+      "title": "SecurityEffectKind",
+      "type": "string"
+    },
     "TargetType": {
       "enum": [
         "WEB",
@@ -791,13 +1044,91 @@
       ],
       "title": "TargetType",
       "type": "string"
+    },
+    "TemporalClosure": {
+      "enum": [
+        "CLOSED",
+        "OPEN",
+        "UNKNOWN"
+      ],
+      "title": "TemporalClosure",
+      "type": "string"
+    },
+    "TwinExecutionRole": {
+      "enum": [
+        "ALLOW_CONTROL",
+        "DENY_VARIANT"
+      ],
+      "title": "TwinExecutionRole",
+      "type": "string"
+    },
+    "TwinInvariantSpecification": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Resource Ids",
+          "type": "array"
+        },
+        "workflow_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Workflow Fingerprint",
+          "type": "string"
+        },
+        "effect_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Effect Fingerprint",
+          "type": "string"
+        },
+        "observer_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Observer Fingerprint",
+          "type": "string"
+        },
+        "baseline_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Baseline Fingerprint",
+          "type": "string"
+        },
+        "normalization_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Normalization Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "resource_ids",
+        "workflow_fingerprint",
+        "effect_fingerprint",
+        "observer_fingerprint",
+        "baseline_fingerprint",
+        "normalization_version"
+      ],
+      "title": "TwinInvariantSpecification",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },
@@ -813,6 +1144,36 @@
     },
     "case_snapshot": {
       "$ref": "#/$defs/PermissionMutationCase"
+    },
+    "twin_snapshot": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PermissionTwin"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "twin_role": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TwinExecutionRole"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "allow_control_valid": {
+      "title": "Allow Control Valid",
+      "type": "boolean"
+    },
+    "baseline_integrity": {
+      "title": "Baseline Integrity",
+      "type": "boolean"
     },
     "finding_pre_identity": {
       "pattern": "^[0-9a-f]{64}$",
@@ -838,6 +1199,15 @@
       },
       "maxItems": 19200,
       "title": "Observation Facts",
+      "type": "array"
+    },
+    "security_effect_facts": {
+      "items": {
+        "$ref": "#/$defs/SecurityEffectFact"
+      },
+      "maxItems": 19200,
+      "minItems": 1,
+      "title": "Security Effect Facts",
       "type": "array"
     },
     "observations": {
@@ -880,8 +1250,11 @@
     "evidence_id",
     "run_id",
     "case_snapshot",
+    "allow_control_valid",
+    "baseline_integrity",
     "finding_pre_identity",
     "execution_fact",
+    "security_effect_facts",
     "verdict",
     "evidence_hash"
   ],

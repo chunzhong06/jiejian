@@ -219,7 +219,10 @@ def test_onboarding_quick_check_creates_current_profile_and_is_idempotent(tmp_pa
     assert {item.subject_id for item in profile.subject_bindings} == {"primary", "comparison"}
     active_contract = app.state.context.projects.current_contract(profile.project_id).snapshot
     assert any(item.relation.value == "OWNS" for item in active_contract.relations)
-    assert tuple(item.expectation.value for item in active_contract.rules) == ("ALLOW",)
+    assert tuple(item.expectation.value for item in active_contract.rules) == (
+        "ALLOW",
+        "DENY",
+    )
     assert "primary-secret" not in profile_path.read_text(encoding="utf-8")
     assert "comparison-secret" not in profile_path.read_text(encoding="utf-8")
     persisted = json.loads((tmp_path / "var" / "onboarding" / "sessions" / f"{session_id}.json").read_text(encoding="utf-8"))

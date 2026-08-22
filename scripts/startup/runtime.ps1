@@ -13,6 +13,29 @@
 # 调用链
 # start.cmd → scripts/start.ps1 → 本脚本 → 固定运行时与依赖检查
 # =============================================================================
+# 机器阶段码保留给日志与错误代码，界面使用稳定中文名称。
+function Get-StageDisplayName([string]$Stage) {
+    $names = @{
+        "arguments" = "启动参数"
+        "mode" = "启动方式"
+        "conda" = "Python 环境"
+        "uv" = "Python 环境"
+        "python" = "Python 环境"
+        "python-dependencies" = "Python 依赖"
+        "node" = "Node.js 环境"
+        "pnpm" = "pnpm 环境"
+        "playwright" = "浏览器环境"
+        "doctor" = "运行环境诊断"
+        "migration" = "本地数据准备"
+        "frontend-install" = "前端依赖"
+        "frontend-build" = "前端构建"
+        "serve" = "本地服务"
+        "cli" = "命令行界面"
+    }
+    if ($names.ContainsKey($Stage)) { return $names[$Stage] }
+    return $Stage
+}
+
 # 统一终止启动：记录可恢复诊断，并用稳定退出码结束当前脚本。
 function Fail-Start([int]$Code, [string]$Stage, [string]$Diagnostic, [string]$Recovery) {
     $script:FailureStage = $Stage
@@ -22,11 +45,12 @@ function Fail-Start([int]$Code, [string]$Stage, [string]$Diagnostic, [string]$Re
     $cross = if ($script:DisplayUnicode) { "×" } else { "FAILED" }
     $branch = if ($script:DisplayUnicode) { "  └─" } else { "  `--" }
     $displayCode = "STARTUP_" + (($Stage -replace '[^a-zA-Z0-9]+', '_').Trim('_').ToUpperInvariant())
+    $displayStage = Get-StageDisplayName $Stage
     Write-Host ""
     Write-Host ("{0} 启动未完成" -f $cross) -ForegroundColor Red
     Write-Host ""
     Write-Host "  失败阶段" -ForegroundColor Red
-    Write-Host ("{0} {1}" -f $branch, $Stage) -ForegroundColor Red
+    Write-Host ("{0} {1}" -f $branch, $displayStage) -ForegroundColor Red
     Write-Host ""
     Write-Host "  原因" -ForegroundColor Red
     Write-Host ("{0} {1}" -f $branch, $Diagnostic) -ForegroundColor Red
@@ -81,6 +105,19 @@ function Invoke-External(
                 ForEach-Object {
                     $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
                     [IO.File]::AppendAllText($script:LogPath, $line + [Environment]::NewLine, $script:Utf8Encoding)
+                    if (-not $script:ServeReadyObserved -and $line.StartsWith("__JIEJIAN_SERVE_READY__:")) {
+                        $script:ServeReadyObserved = $true
+                        Stop-WaitIndicator
+                        Write-Host ""
+                        if ($line.EndsWith("browser-opened")) {
+                            Write-Host "界鉴网页已打开。" -ForegroundColor Cyan
+                        } else {
+                            Write-Host "界鉴服务已启动，但未能自动打开网页。" -ForegroundColor Yellow
+                            Write-Host "请在浏览器访问 http://127.0.0.1:8765/" -ForegroundColor Gray
+                        }
+                        Write-Host "请使用网页右上角“退出界鉴”，或在此终端按 Ctrl+C 安全退出。" -ForegroundColor Gray
+                        Write-Host "此终端会保持运行，用于管理服务、Worker 和浏览器资源。" -ForegroundColor DarkGray
+                    }
                 } |
                 Out-Null
         }
@@ -598,6 +635,25 @@ function Resolve-PythonExecutable {
         Fail-Start 40 "python-dependencies" "Python 实际可执行文件不存在" (Get-RecoveryCommand)
     }
     $script:PythonExecutable = $resolved
+    $env:JIEJIAN_PYTHON_EXECUTABLE = $script:PythonExecutable
+    $env:JIEJIAN_PYTHON_ENVIRONMENT_PATH = $script:PythonEnvironmentPath
+    $env:JIEJIAN_PYTHON_ENVIRONMENT_TYPE = $script:PythonEnvironmentType
+    $identityProbe = "import json; from product.backend.infra.runtime.environment_identity import require_python_environment; print(json.dumps(require_python_environment(), ensure_ascii=False))"
+    $identityArguments = @()
+    if ($script:PythonRunner.Count -gt 1) {
+        $identityArguments = @($script:PythonRunner[1..($script:PythonRunner.Count - 1)])
+    }
+    $identityArguments += @("-c", $identityProbe)
+    try {
+        $identityText = (& $script:PythonRunner[0] @identityArguments 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($identityText)) {
+            Fail-Start 40 "python" "Python 环境来源检查失败：$identityText" (Get-RecoveryCommand)
+        }
+        $script:PythonEnvironmentReport = $identityText | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        if ($script:FailureCode -gt 0) { throw }
+        Fail-Start 40 "python" ("Python 环境来源检查失败：" + $_.Exception.Message) (Get-RecoveryCommand)
+    }
     Write-Startup "Python 实际可执行文件: $script:PythonExecutable"
 }
 
@@ -742,7 +798,7 @@ function Prepare-PythonDependencies {
 
 # 浏览器探针只验证产品需要的 Chromium，不启动目标检查。
 function Test-Chromium {
-    $probe = "from pathlib import Path; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); path=Path(p.chromium.executable_path); p.stop(); raise SystemExit(0 if path.is_file() else 1)"
+    $probe = "from pathlib import Path; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); path=Path(p.chromium.executable_path).resolve(); p.stop(); print(path); raise SystemExit(0 if path.is_file() else 1)"
     Start-WaitIndicator "chromium-check"
     try {
         $arguments = @()
@@ -750,8 +806,10 @@ function Test-Chromium {
             $arguments = @($script:PythonRunner[1..($script:PythonRunner.Count - 1)])
         }
         $arguments += @("-c", $probe)
-        & $script:PythonRunner[0] @arguments 2>$null | Out-Null
-        return $LASTEXITCODE -eq 0
+        $result = (& $script:PythonRunner[0] @arguments 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($result)) { return $false }
+        $script:ChromiumExecutable = ($result -split "`r?`n" | Select-Object -Last 1).Trim()
+        return Test-Path -LiteralPath $script:ChromiumExecutable -PathType Leaf
     } catch { return $false }
     finally { Stop-WaitIndicator }
 }

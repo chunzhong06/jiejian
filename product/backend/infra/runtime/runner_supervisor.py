@@ -272,7 +272,7 @@ class RunnerSupervisor:
             budget=request.budget,
             project_snapshot=request.project_snapshot,
         )
-        return RunnerInput(schema_version="2", **fields)
+        return RunnerInput(schema_version="3", **fields)
 
     def _write_runner_input(
         self,

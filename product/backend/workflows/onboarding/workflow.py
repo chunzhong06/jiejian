@@ -466,7 +466,7 @@ class OnboardingWorkflow:
         target, _port = self._parse_loopback(session.target_address or "")
         return json.dumps(
             {
-                "schema_version": "2",
+                "schema_version": "3",
                 "contract_id": f"{session.project_id}-contract",
                 "version": 1,
                 "role_ids": ["owner", "user"],
@@ -475,7 +475,8 @@ class OnboardingWorkflow:
                     {"subject_id": "primary", "roles": ["owner"], "tenant_id": "tenant", "department_id": "department"},
                     {"subject_id": "comparison", "roles": ["user"], "tenant_id": "tenant", "department_id": "department"},
                 ],
-                "actions": [{"action_id": "view", "side_effect": False}],
+                "effects": [{"effect_id": "resource-disclosed", "kind": "DATA_DISCLOSURE", "resource_type": "document", "protected_fields": ["value"]}],
+                "actions": [{"action_id": "view", "effect_ids": ["resource-disclosed"]}],
                 "resources": [
                     {"resource_id": session.primary_resource_id, "resource_type": "document", "owner_subject_id": "primary", "tenant_id": "tenant", "department_id": "department", "workflow_state": "DRAFT"},
                     {"resource_id": session.comparison_resource_id, "resource_type": "document", "owner_subject_id": "comparison", "tenant_id": "tenant", "department_id": "department", "workflow_state": "DRAFT"},
@@ -484,7 +485,10 @@ class OnboardingWorkflow:
                     {"relation_id": "same-tenant-owner", "relation": "SAME_TENANT", "source": {"endpoint_type": "subject", "endpoint_id": "comparison"}, "target": {"endpoint_type": "subject", "endpoint_id": "primary"}},
                     {"relation_id": "owns-primary", "relation": "OWNS", "source": {"endpoint_type": "subject", "endpoint_id": "primary"}, "target": {"endpoint_type": "resource", "endpoint_id": session.primary_resource_id}},
                 ],
-                "rules": [{"rule_id": "owner-read", "subject_id": "primary", "action_id": "view", "resource_id": session.primary_resource_id, "relation_path": ["owns-primary"], "context": {"resource_ids": [session.primary_resource_id]}, "expectation": "ALLOW", "required_observations": ["resource_state"], "coverage_dimensions": ["ROLE"], "severity": "high"}],
+                "rules": [
+                    {"rule_id": "owner-read", "subject_id": "primary", "action_id": "view", "resource_id": session.primary_resource_id, "relation_path": ["owns-primary"], "context": {"resource_ids": [session.primary_resource_id]}, "expectation": "ALLOW", "required_observations": ["resource_state"], "coverage_dimensions": ["ROLE"], "severity": "high"},
+                    {"rule_id": "unauthorized-read", "subject_id": "comparison", "action_id": "view", "resource_id": session.primary_resource_id, "relation_path": ["same-tenant-owner", "owns-primary"], "context": {"resource_ids": [session.primary_resource_id]}, "expectation": "DENY", "required_observations": ["resource_state"], "coverage_dimensions": ["RELATION"], "severity": "high"},
+                ],
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -494,7 +498,7 @@ class OnboardingWorkflow:
     def _demo_contract_document(self, session: OnboardingSession) -> bytes:
         return json.dumps(
             {
-                "schema_version": "2",
+                "schema_version": "3",
                 "contract_id": f"{session.project_id}-demo-contract",
                 "version": 1,
                 "role_ids": ["user", "guest"],
@@ -504,7 +508,8 @@ class OnboardingWorkflow:
                     {"subject_id": "owner", "roles": ["user"], "tenant_id": "tenant", "department_id": "department"},
                     {"subject_id": "peer", "roles": ["guest"], "tenant_id": "tenant", "department_id": "department"},
                 ],
-                "actions": [{"action_id": "modify", "side_effect": True, "is_batch": False, "workflow_transition": None}],
+                "effects": [{"effect_id": "resource-mutated", "kind": "STATE_MUTATION", "resource_type": "document"}],
+                "actions": [{"action_id": "modify", "effect_ids": ["resource-mutated"], "is_batch": False, "workflow_transition": None}],
                 "resources": [
                     {"resource_id": session.comparison_resource_id, "resource_type": "document", "owner_subject_id": "attacker", "tenant_id": "tenant", "department_id": "department", "workflow_state": "DRAFT", "parent_resource_id": None},
                     {"resource_id": session.primary_resource_id, "resource_type": "document", "owner_subject_id": "owner", "tenant_id": "tenant", "department_id": "department", "workflow_state": "DRAFT", "parent_resource_id": None},
@@ -514,7 +519,10 @@ class OnboardingWorkflow:
                     {"relation_id": "owns-owner-resource", "relation": "OWNS", "source": {"endpoint_type": "subject", "endpoint_id": "owner"}, "target": {"endpoint_type": "resource", "endpoint_id": session.primary_resource_id}},
                     {"relation_id": "owns-attacker-resource", "relation": "OWNS", "source": {"endpoint_type": "subject", "endpoint_id": "attacker"}, "target": {"endpoint_type": "resource", "endpoint_id": session.comparison_resource_id}},
                 ],
-                "rules": [{"rule_id": "unauthorized-modify", "subject_id": "attacker", "action_id": "modify", "resource_id": session.primary_resource_id, "relation_path": ["same-tenant-owner", "owns-owner-resource"], "context": {"resource_ids": [session.primary_resource_id], "tenant_ids": [], "department_ids": [], "workflow_states": []}, "expectation": "DENY", "required_observations": ["resource_state"], "coverage_dimensions": ["RELATION"], "severity": "critical"}],
+                "rules": [
+                    {"rule_id": "owner-modify", "subject_id": "owner", "action_id": "modify", "resource_id": session.primary_resource_id, "relation_path": ["owns-owner-resource"], "context": {"resource_ids": [session.primary_resource_id], "tenant_ids": [], "department_ids": [], "workflow_states": []}, "expectation": "ALLOW", "required_observations": ["resource_state"], "coverage_dimensions": ["RELATION"], "severity": "high"},
+                    {"rule_id": "unauthorized-modify", "subject_id": "attacker", "action_id": "modify", "resource_id": session.primary_resource_id, "relation_path": ["same-tenant-owner", "owns-owner-resource"], "context": {"resource_ids": [session.primary_resource_id], "tenant_ids": [], "department_ids": [], "workflow_states": []}, "expectation": "DENY", "required_observations": ["resource_state"], "coverage_dimensions": ["RELATION"], "severity": "critical"},
+                ],
                 "batch_rules": [],
             },
             ensure_ascii=False,
@@ -525,7 +533,7 @@ class OnboardingWorkflow:
     def _profile_document(self, session: OnboardingSession) -> dict:
         target, port = self._parse_loopback(session.target_address or "")
         return {
-            "schema_version": "2",
+            "schema_version": "3",
             "profile_id": session.project_id,
             "project_id": session.project_id,
             "project_name": session.project_name,
@@ -534,16 +542,17 @@ class OnboardingWorkflow:
             "contract_version": 1,
             "target": {"scope": {"base_url": target, "allowed_origins": [target], "allowed_hosts": ["127.0.0.1"], "allowed_ports": [port], "allow_private_network": True, "follow_redirects": False, "timeout_seconds": 5, "max_requests": 10, "max_response_bytes": 262144}, "reset_path": session.recovery_path},
             "identities": [
-                {"id": "primary", "role": session.primary_display_name, "secret_ref": session.primary_secret_ref},
-                {"id": "comparison", "role": session.comparison_display_name, "secret_ref": session.comparison_secret_ref},
+                {"identity_id": "primary", "role": session.primary_display_name, "binding": {"kind": "BEARER", "secret_ref": session.primary_secret_ref}},
+                {"identity_id": "comparison", "role": session.comparison_display_name, "binding": {"kind": "BEARER", "secret_ref": session.comparison_secret_ref}},
             ],
-            "observers": [{"observer_id": "owner-observer", "observer_type": "OWNER_API", "target": {"target_id": "owner-target", "locator": {"locator_type": "OWNER_API", "relative_path_template": "/owner/resources/{resource_id}"}, "normalization_id": "owner-state", "normalization_version": "1"}, "phases": ["BEFORE", "AFTER"], "required": True, "protocol_version": "2", "budget": {"timeout_us": 5000000, "max_rows": 1, "max_bytes": 262144}}],
+            "observers": [{"observer_id": "owner-observer", "observer_type": "OWNER_API", "target": {"target_id": "owner-target", "locator": {"locator_type": "OWNER_API", "relative_path_template": "/owner/resources/{resource_id}"}, "normalization_id": "owner-state", "normalization_version": "1"}, "phases": ["BASELINE", "BEFORE", "AFTER"], "required": True, "protocol_version": "2", "budget": {"timeout_us": 5000000, "max_rows": 1, "max_bytes": 262144}}],
             "subject_bindings": [
                 {"subject_id": "primary", "identity_id": "primary"},
                 {"subject_id": "comparison", "identity_id": "comparison"},
             ],
-            "action_bindings": [{"action_id": "view", "target_type": "WEB", "method": "GET", "relative_path_template": session.read_only_path_template, "json_body": {}, "accepted_statuses": [200], "denied_statuses": [401, 403, 404], "resource_injection": "PATH_RESOURCE_ID"}],
-            "observer_bindings": [{"requirement_id": "resource_state", "kind": "OBSERVER_SPEC", "observer_id": "owner-observer", "observer_type": "OWNER_API", "credential_ref": session.primary_secret_ref, "phases": ["BEFORE", "AFTER"]}],
+            "workflow_bindings": [{"schema_version": "3", "workflow_id": "view-workflow", "source_flow_id": "onboarding-flow", "action_id": "view", "steps": [{"id": "target-view", "purpose": "TARGET", "identity_id": "CASE_SUBJECT", "request_template": {"method": "GET", "path": session.read_only_path_template, "input_slots": [{"slot_id": "resource_id", "source": "CASE_RESOURCE_ID", "consumer": "PATH", "consumer_step_id": "target-view"}]}, "classifier": {"accepted": [{"kind": "STATUS_IN", "statuses": [200]}], "denied": [{"kind": "STATUS_IN", "statuses": [401, 403, 404]}]}}], "target_step_id": "target-view", "baseline_projections": [{"projection_id": "resource-state", "logical_resource_handle": "case-resource", "normalization_version": "1", "projection_version": "1", "integrity_mode": "EXACT_RESTORE"}], "reset_strategy": {"kind": "RESET_ENDPOINT", "path": session.recovery_path}}],
+            "effect_bindings": [{"effect_id": "resource-disclosed", "required_channels": ["resource_state"], "corroborating_channels": [], "closure_policy": "IMMEDIATE", "projection_version": "v1"}],
+            "observer_bindings": [{"requirement_id": "resource_state", "kind": "OBSERVER_SPEC", "observer_id": "owner-observer", "observer_type": "OWNER_API", "credential_ref": session.primary_secret_ref, "phases": ["BASELINE", "BEFORE", "AFTER"]}],
             "seed": 7,
             "case_budget": 8,
             "max_relation_depth": 8,
@@ -554,7 +563,7 @@ class OnboardingWorkflow:
         target, port = self._parse_loopback(session.target_address or "")
         contract_id = f"{session.project_id}-demo-contract"
         return {
-            "schema_version": "2",
+            "schema_version": "3",
             "profile_id": f"{session.project_id}-demo",
             "project_id": session.project_id,
             "project_name": session.project_name,
@@ -563,14 +572,15 @@ class OnboardingWorkflow:
             "contract_version": 1,
             "target": {"scope": {"base_url": target, "allowed_origins": [target], "allowed_hosts": ["127.0.0.1"], "allowed_ports": [port], "allow_private_network": True, "follow_redirects": False, "timeout_seconds": 5, "max_requests": 64, "max_response_bytes": 262144}, "reset_path": session.recovery_path},
             "identities": [
-                {"id": "owner", "role": "user", "secret_ref": session.primary_secret_ref},
-                {"id": "attacker", "role": "user", "secret_ref": session.comparison_secret_ref},
-                {"id": "peer", "role": "guest", "secret_ref": "env:JIEJIAN_DEMO_PEER_TOKEN"},
+                {"identity_id": "owner", "role": "user", "binding": {"kind": "BEARER", "secret_ref": session.primary_secret_ref}},
+                {"identity_id": "attacker", "role": "user", "binding": {"kind": "BEARER", "secret_ref": session.comparison_secret_ref}},
+                {"identity_id": "peer", "role": "guest", "binding": {"kind": "BEARER", "secret_ref": "env:JIEJIAN_DEMO_PEER_TOKEN"}},
             ],
-            "observers": [{"observer_id": "owner-observer", "observer_type": "OWNER_API", "target": {"target_id": "owner-target", "locator": {"locator_type": "OWNER_API", "relative_path_template": "/owner/resources/{resource_id}"}, "normalization_id": "owner-state", "normalization_version": "1"}, "phases": ["AFTER", "BEFORE"], "required": True, "protocol_version": "2", "budget": {"timeout_us": 5000000, "max_rows": 1, "max_bytes": 262144}}],
-            "subject_bindings": [{"subject_id": "attacker", "identity_id": "attacker"}, {"subject_id": "peer", "identity_id": "peer"}],
-            "action_bindings": [{"action_id": "modify", "target_type": "WEB", "method": "PATCH", "relative_path_template": "/resources/{resource_id}", "json_body": {"value": "bounded"}, "accepted_statuses": [200], "denied_statuses": [401, 403, 404], "resource_injection": "PATH_RESOURCE_ID"}],
-            "observer_bindings": [{"requirement_id": "resource_state", "kind": "OBSERVER_SPEC", "observer_id": "owner-observer", "observer_type": "OWNER_API", "credential_ref": session.primary_secret_ref, "phases": ["BEFORE", "AFTER"]}],
+            "observers": [{"observer_id": "owner-observer", "observer_type": "OWNER_API", "target": {"target_id": "owner-target", "locator": {"locator_type": "OWNER_API", "relative_path_template": "/owner/resources/{resource_id}"}, "normalization_id": "owner-state", "normalization_version": "1"}, "phases": ["BASELINE", "BEFORE", "AFTER"], "required": True, "protocol_version": "2", "budget": {"timeout_us": 5000000, "max_rows": 1, "max_bytes": 262144}}],
+            "subject_bindings": [{"subject_id": "owner", "identity_id": "owner"}, {"subject_id": "attacker", "identity_id": "attacker"}, {"subject_id": "peer", "identity_id": "peer"}],
+            "workflow_bindings": [{"schema_version": "3", "workflow_id": "modify-workflow", "source_flow_id": "demo-flow", "action_id": "modify", "steps": [{"id": "target-modify", "purpose": "TARGET", "identity_id": "CASE_SUBJECT", "request_template": {"method": "PATCH", "path": "/resources/{resource_id}", "body": {"kind": "JSON", "value": {"value": "bounded"}}, "input_slots": [{"slot_id": "resource_id", "source": "CASE_RESOURCE_ID", "consumer": "PATH", "consumer_step_id": "target-modify"}]}, "classifier": {"accepted": [{"kind": "STATUS_IN", "statuses": [200]}], "denied": [{"kind": "STATUS_IN", "statuses": [401, 403, 404]}]}}], "target_step_id": "target-modify", "baseline_projections": [{"projection_id": "resource-state", "logical_resource_handle": "case-resource", "normalization_version": "1", "projection_version": "1", "integrity_mode": "EXACT_RESTORE"}], "reset_strategy": {"kind": "RESET_ENDPOINT", "path": session.recovery_path}}],
+            "effect_bindings": [{"effect_id": "resource-mutated", "required_channels": ["resource_state"], "corroborating_channels": [], "closure_policy": "IMMEDIATE", "projection_version": "v1"}],
+            "observer_bindings": [{"requirement_id": "resource_state", "kind": "OBSERVER_SPEC", "observer_id": "owner-observer", "observer_type": "OWNER_API", "credential_ref": session.primary_secret_ref, "phases": ["BASELINE", "BEFORE", "AFTER"]}],
             "seed": 7,
             "case_budget": 8,
             "max_relation_depth": 8,

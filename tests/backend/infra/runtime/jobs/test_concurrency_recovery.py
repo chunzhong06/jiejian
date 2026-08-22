@@ -265,6 +265,40 @@ def test_recovery_at_attempt_limit_fails_job_and_run_without_verdict(
     assert exhausted.value.code == ErrorCode.JOB_TERMINAL_CONFLICT.value
 
 
+def test_expired_running_cancellation_recovers_to_cancelled_without_retry(
+    worker_services: Any,
+) -> None:
+    submitted = worker_services.queue.submit(worker_services.submit_request())
+    claimed = worker_services.attempts.claim(
+        _claim_request(submitted.job.job_id, lease_duration_us=10)
+    )
+    assert claimed is not None
+    requested = worker_services.queue.request_cancellation(
+        RequestCancellation(job_id=claimed.job.job_id, now_us=NOW_US + 11)
+    )
+    assert requested.job.state is JobState.RUNNING
+
+    recovered = worker_services.recovery.confirm_recovery(
+        ConfirmRecovery(
+            job_id=claimed.job.job_id,
+            lease_owner="worker-1",
+            fencing_token=claimed.job.fencing_token,
+            now_us=NOW_US + 20,
+            proof_type=RecoveryProofType.EXECUTION_EXITED,
+            operator=RecoveryOperator.WORKER_SUPERVISOR,
+            reason_code=RecoveryReasonCode.PROCESS_EXIT_CONFIRMED,
+        )
+    )
+
+    assert recovered.job.state is JobState.CANCELLED
+    assert recovered.run.lifecycle is RunLifecycle.CANCELLED
+    with pytest.raises(JiejianError) as terminal:
+        worker_services.attempts.claim(
+            _claim_request(recovered.job.job_id, now_us=NOW_US + 30)
+        )
+    assert terminal.value.code == ErrorCode.JOB_TERMINAL_CONFLICT.value
+
+
 def test_retry_wait_cancel_keeps_first_request_time_and_never_reclaims(
     worker_services: Any,
 ) -> None:

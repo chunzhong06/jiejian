@@ -249,8 +249,7 @@ def upgrade() -> None:
         sa.CheckConstraint('substr(sha256, 1, length(evidence_id) - 3) = substr(evidence_id, 4)', name=op.f('ck_evidence_index_content_address_match')),
         sa.ForeignKeyConstraint(['run_id'], ['runs.run_id'], name=op.f('fk_evidence_index_run_id_runs'), ondelete='RESTRICT'),
         sa.PrimaryKeyConstraint('evidence_id', name=op.f('pk_evidence_index')),
-        sa.UniqueConstraint('run_id', 'artifact_path', name='uq_evidence_run_artifact_path'),
-        sa.UniqueConstraint('run_id', 'case_id', name='uq_evidence_run_case')
+        sa.UniqueConstraint('run_id', 'artifact_path', name='uq_evidence_run_artifact_path')
         )
         op.create_index('ix_evidence_run_created', 'evidence_index', ['run_id', 'created_at_us'], unique=False)
         op.create_table('finding_occurrences',

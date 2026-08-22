@@ -90,7 +90,7 @@ def test_request_parser_and_minimal_environment_do_not_copy_parent_values(
 def test_v2_request_store_dispatches_canonical_and_uses_minimal_secret_refs(tmp_path: Path) -> None:
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="2",
+        schema_version="3",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )

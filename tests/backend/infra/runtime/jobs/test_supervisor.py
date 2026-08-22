@@ -29,6 +29,7 @@ from product.backend.infra.runtime.job_requests import ExecutionRequestStore
 from product.backend.workflows.runs.submission import RunSubmission, SubmitExecution, SubmitExecution
 from product.backend.infra.runtime.runner_supervisor import RunnerSupervisor
 from product.backend.infra.runtime.worker_supervisor import LocalWorkerSupervisor
+from product.backend.infra.runtime.worker_lifetime import WorkerLifetimeLock
 from product.backend.infra.runtime.job_requests import PersistedExecutionRequest
 from product.protocols import (
     CleanupResult,
@@ -208,7 +209,7 @@ def test_local_supervisor_bootstrap_failures_finish_waiting_job(
 
 
 @pytest.mark.parametrize("database_state", ("failed", "running"))
-def test_local_supervisor_exit_accepts_existing_terminal_or_fenced_state(
+def test_local_supervisor_exit_accepts_terminal_or_closes_owned_running_state(
     tmp_path: Path,
     stage23_request_factory,
     database_state: str,
@@ -234,7 +235,7 @@ def test_local_supervisor_exit_accepts_existing_terminal_or_fenced_state(
                 )
             )
             assert claimed is not None
-            expected = JobState.RUNNING
+            expected = JobState.FAILED
         with parts.uow_factory() as work:
             before_events = work.job_events.list_for_job(submitted.job.job_id)
         manager = LocalWorkerSupervisor(
@@ -246,6 +247,7 @@ def test_local_supervisor_exit_accepts_existing_terminal_or_fenced_state(
         )
         manager._process = _ExitedWorker()
         manager._job_id = submitted.job.job_id
+        manager._lease_owner = "concurrent-worker" if database_state == "running" else None
 
         manager._reap_finished_worker()
 
@@ -253,7 +255,55 @@ def test_local_supervisor_exit_accepts_existing_terminal_or_fenced_state(
             job = work.jobs.get(submitted.job.job_id)
             after_events = work.job_events.list_for_job(submitted.job.job_id)
         assert job is not None and job.state is expected
-        assert after_events == before_events
+        if database_state == "failed":
+            assert after_events == before_events
+        else:
+            assert len(after_events) == len(before_events) + 1
+            assert after_events[-1].event_type == "JOB_FAILED"
+            assert after_events[-1].metadata["reason_code"] == "WORKER_FATAL"
+    finally:
+        parts.engine.dispose()
+
+
+def test_local_supervisor_recovers_expired_job_only_after_worker_lock_is_free(
+    tmp_path: Path,
+    stage23_request_factory,
+) -> None:
+    parts = _runtime(tmp_path / "var")
+    try:
+        submitted = _submit(parts, stage23_request_factory(), "7")
+        claimed = parts.attempts.claim(
+            ClaimJob(
+                job_id=submitted.job.job_id,
+                lease_owner="expired-worker",
+                now_us=NOW_US,
+                lease_duration_us=10,
+            )
+        )
+        assert claimed is not None
+        manager = LocalWorkerSupervisor(
+            tmp_path / "var",
+            parts.uow_factory,
+            parts.queue,
+            attempt_service=parts.attempts,
+            clock_us=lambda: NOW_US + 20,
+        )
+
+        lifetime = WorkerLifetimeLock.acquire(
+            tmp_path / "var",
+            submitted.job.job_id,
+            "expired-worker",
+        )
+        manager._recover_expired_workers()
+        still_running = _job(parts, submitted.job.job_id)
+        assert still_running is not None and still_running.state is JobState.RUNNING
+        lifetime.release()
+        manager._next_recovery_scan_us = 0
+        manager._recover_expired_workers()
+
+        recovered = _job(parts, submitted.job.job_id)
+        assert recovered is not None and recovered.state is JobState.RETRY_WAIT
+        assert manager.recovered_jobs == 1
     finally:
         parts.engine.dispose()
 
@@ -261,7 +311,7 @@ def test_local_supervisor_exit_accepts_existing_terminal_or_fenced_state(
 def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_path: Path) -> None:
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="2",
+        schema_version="3",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )
@@ -292,6 +342,7 @@ def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_
     })()
     built = supervisor._runner_input(job, command.request)
     assert isinstance(built, RunnerInput)
+    assert built.schema_version == "3"
     assert canonical_runner_json_bytes(built)
 
 

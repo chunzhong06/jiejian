@@ -26,7 +26,8 @@ from product.protocols.recording_flow import Flow, FlowStep, FlowVariableSource
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.flow_draft import ConfirmFlowDraftVariable, DeleteFlowDraftStep, FlowDraftReviewCommand, FlowDraftStep, FlowDraft, FlowDraftVariableSource, FlowDraftVariableStatus, FlowDraftVariable, MergeFlowDraftSteps, RenameFlowDraftStep
 from product.protocols.execution_profile import ExecutionProfile
-from product.protocols.runner import ActionExecutionBinding, WebTargetDefinition
+from product.protocols.http import CASE_SUBJECT_IDENTITY, EmptyBody, HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind, HttpRequestTemplate, HttpWorkflowBinding, HttpWorkflowStep, JsonBody, ResponseExtractor, ResponseExtractorKind, ValueSlot, ValueSlotConsumer, ValueSlotSource, WorkflowStepPurpose
+from product.protocols.runner import WebTargetDefinition
 
 _SENSITIVE_FIELD = re.compile(
     r"(?:authorization|cookie|credential|password|passwd|secret|token|api[_-]?key)",
@@ -91,46 +92,87 @@ class FlowDraftReviewer:
                     ErrorCode.RECORD_DRAFT_UNCONFIRMED,
                     "Flow 草稿的变量来源尚未确认",
                 )
+            step_map = {step.id: step for step in draft.steps}
             for consumer in variable.consumer_step_ids:
+                consumer_step = step_map[consumer]
+                placeholder = "{" + variable.name + "}"
                 sources_by_consumer.setdefault(consumer, []).append(
                     FlowVariableSource(
-                        schema_version="1",
+                        schema_version="3",
                         name=variable.name,
                         source_step_id=source.source_step_id,
                         source_event_sequence=source.source_event_sequence,
                         json_path=source.json_path,
+                        consumer=(ValueSlotConsumer.PATH if placeholder in (consumer_step.path or "") else ValueSlotConsumer.JSON_BODY),
                     )
                 )
+        extractors_by_producer: dict[str, list[ResponseExtractor]] = {}
+        for sources in sources_by_consumer.values():
+            for source in sources:
+                kind = ResponseExtractorKind.LOCATION if source.json_path.startswith("$location") else ResponseExtractorKind.JSON_PATH
+                extractor = ResponseExtractor(
+                    extractor_id=source.name,
+                    kind=kind,
+                    json_path=None if kind is ResponseExtractorKind.LOCATION else source.json_path,
+                    max_length=source.max_length,
+                    secret=source.secret,
+                )
+                existing = {item.extractor_id for item in extractors_by_producer.setdefault(source.source_step_id, [])}
+                if extractor.extractor_id not in existing:
+                    extractors_by_producer[source.source_step_id].append(extractor)
+
+        def slot_json(value: Any, slot_ids: set[str]) -> Any:
+            if isinstance(value, Mapping):
+                return {key: slot_json(item, slot_ids) for key, item in value.items()}
+            if isinstance(value, list):
+                return [slot_json(item, slot_ids) for item in value]
+            if isinstance(value, str) and value.startswith("{") and value.endswith("}") and value[1:-1] in slot_ids:
+                return {"$slot": value[1:-1]}
+            return value
         # --- 阶段：投影已确认步骤并验证最终 Flow ---
         try:
-            steps = tuple(
-                FlowStep(
-                    schema_version="1",
-                    id=step.id,
-                    name=step.name,
+            steps: list[FlowStep] = []
+            for step in draft.steps:
+                sources = tuple(sorted(sources_by_consumer.get(step.id, ()), key=lambda item: item.name))
+                slots = tuple(
+                    ValueSlot(
+                        slot_id=source.name,
+                        source=ValueSlotSource.PRIOR_STEP_LOCATION if source.json_path.startswith("$location") else ValueSlotSource.PRIOR_STEP_JSON_PATH,
+                        consumer=source.consumer,
+                        value_type=source.value_type,
+                        max_length=source.max_length,
+                        secret=source.secret,
+                        source_path=source.json_path,
+                        producer_step_id=source.source_step_id,
+                        consumer_step_id=step.id,
+                    )
+                    for source in sources
+                )
+                request_template = HttpRequestTemplate(
                     method=step.method,
                     path=step.path,
+                    body=JsonBody(value=slot_json(self._drop_sensitive_json(step.json_body), {item.slot_id for item in slots})) if step.json_body else EmptyBody(),
+                    input_slots=slots,
+                    response_extractors=tuple(sorted(extractors_by_producer.get(step.id, ()), key=lambda item: item.extractor_id)),
+                )
+                steps.append(FlowStep(
+                    schema_version="3",
+                    id=step.id,
+                    name=step.name,
                     identity_id=step.identity_id,
                     resource_id=step.resource_id,
                     alternate_identity_id=step.alternate_identity_id,
                     alternate_resource_id=step.alternate_resource_id,
-                    json_body=self._drop_sensitive_json(step.json_body),
-                    expected_statuses=step.expected_statuses,
+                    request_template=request_template,
+                    classifier=HttpOutcomeClassifier(accepted=(HttpPredicate(kind=HttpPredicateKind.STATUS_IN, statuses=step.expected_statuses),)),
                     depends_on_step_ids=step.depends_on_step_ids,
-                    variable_sources=tuple(
-                        sorted(
-                            sources_by_consumer.get(step.id, ()),
-                            key=lambda item: item.name,
-                        )
-                    ),
+                    variable_sources=sources,
                     sensitive_fields=step.sensitive_fields,
-                )
-                for step in draft.steps
-            )
+                ))
             return Flow(
-                schema_version="1",
+                schema_version="3",
                 id=draft.flow_id,
-                steps=steps,
+                steps=tuple(steps),
                 owner_observer_path=draft.owner_observer_path,
                 reset_path=draft.reset_path,
             )
@@ -414,11 +456,11 @@ class FlowDraftReviewer:
 def compile_flow_bindings(
     flow: Flow,
     profile: ExecutionProfile,
-) -> tuple[WebTargetDefinition, tuple[ActionExecutionBinding, ...]]:
+) -> tuple[WebTargetDefinition, tuple[HttpWorkflowBinding, ...]]:
     """把已确认 Flow 投影为当前 Profile 可接受的 Web 执行绑定。"""
 
-    profile_bindings = {binding.action_id: binding for binding in profile.action_bindings}
-    if len(profile_bindings) != len(profile.action_bindings):
+    profile_bindings = {binding.action_id: binding for binding in profile.workflow_bindings}
+    if len(profile_bindings) != len(profile.workflow_bindings):
         raise JiejianError(
             ErrorCode.RECORD_DRAFT_INVALID,
             "Profile 的 action bindings 不得包含重复 action",
@@ -437,19 +479,39 @@ def compile_flow_bindings(
             ErrorCode.RECORD_DRAFT_INVALID,
             "每个 action 必须恰好映射一个已确认 Flow step",
         )
-    compiled = tuple(
-        ActionExecutionBinding.model_validate(
-            {
-                **profile_bindings[action_id].model_dump(mode="python"),
-                "method": step.method,
-                "relative_path_template": step.path,
-                "json_body": step.json_body,
-                "accepted_statuses": step.expected_statuses,
-            },
-            strict=True,
+    compiled: list[HttpWorkflowBinding] = []
+    for action_id, items in sorted(actions_by_step.items()):
+        target_id, _target_step = items[0]
+        ancestors: set[str] = set()
+        graph = {item.id: set(item.depends_on_step_ids) for item in flow.steps}
+        pending = list(graph[target_id])
+        while pending:
+            current = pending.pop()
+            if current in ancestors:
+                continue
+            ancestors.add(current)
+            pending.extend(graph[current])
+        steps = tuple(
+            HttpWorkflowStep(
+                id=step.id,
+                purpose=(WorkflowStepPurpose.TARGET if step.id == target_id else WorkflowStepPurpose.SETUP if step.id in ancestors else WorkflowStepPurpose.CLEANUP),
+                identity_id=CASE_SUBJECT_IDENTITY if step.id == target_id else step.identity_id,
+                request_template=step.request_template,
+                classifier=step.classifier,
+                depends_on_step_ids=step.depends_on_step_ids,
+            )
+            for step in flow.steps
         )
-        for action_id, items in sorted(actions_by_step.items())
-        for _, step in items
-    )
+        base = profile_bindings[action_id]
+        compiled.append(
+            HttpWorkflowBinding.model_validate({
+                **base.model_dump(mode="python"),
+                "source_flow_id": flow.id,
+                "steps": steps,
+                "target_step_id": target_id,
+                "reset_strategy": {"kind": "RESET_ENDPOINT", "path": flow.reset_path},
+                "workflow_fingerprint": None,
+            }, strict=True)
+        )
     target = WebTargetDefinition(scope=profile.target.scope, reset_path=flow.reset_path)
-    return target, compiled
+    return target, tuple(compiled)

@@ -12,10 +12,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from product.protocols.observer import CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverBudget, ObserverSpec, ObserverTarget, ObserverType, OwnerApiLocator, ProvenanceType, build_normalized_state, canonical_sha256
 from product.backend.core.redaction import redact_known_secrets
+
+if TYPE_CHECKING:
+    from product.backend.infra.execution.http_identity import HttpIdentityRuntime
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +66,7 @@ class OwnerApiObserverAdapter:
         case_id: str,
         phase: ObservationPhase,
         known_secrets: tuple[str, ...] = (),
+        identity_runtime: HttpIdentityRuntime | None = None,
     ) -> ObservationEnvelope:
         """执行一次有界 GET；异常仍交给 Runner 的统一错误映射。"""
 
@@ -73,7 +77,8 @@ class OwnerApiObserverAdapter:
             "GET",
             locator.relative_path_template.format(resource_id=resource_id),
             case_id=case_id,
-            bearer_token=owner_token,
+            identity_runtime=identity_runtime,
+            redaction_values=(owner_token,),
         )
         finished_at_us = self.utc_now_us()
         safe_data = redact_known_secrets(response.data, known_secrets)

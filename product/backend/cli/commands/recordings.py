@@ -189,14 +189,14 @@ def recording_replay_command(
                     "录制尚未完成，不能回放",
             )
             flow = workflow.load_final_flow(workflow.flow_path(application.var_dir, recording))
-            target_override, action_bindings_override = compile_flow_bindings(flow, profile)
+            target_override, workflow_bindings_override = compile_flow_bindings(flow, profile)
             with human_wait("正在回放并检查流程"):
                 results = [
                     application.execution.run_profile(
                         profile_path,
                         accept_source_changes=index == 0,
                         target_override=target_override,
-                        action_bindings_override=action_bindings_override,
+                        workflow_bindings_override=workflow_bindings_override,
                         idempotency_key=f"recording-replay:{recording_id}:{index}:{uuid4().hex}",
                     ).model_dump(mode="json")
                     for index in range(runs)

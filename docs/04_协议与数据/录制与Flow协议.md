@@ -12,7 +12,7 @@ Recording Runner、GUI/CLI 录制入口、FlowDraft 审阅、ExecutionProfile �
 - Recording request/result 表达一次录制或回放的身份、目标范围、预算、状态、错误和清理结果。
 - `RecordingEvent` 保存稳定序号、关联标识、事件类型、身份和有界脱敏摘要。
 - `FlowDraft` 保存步骤、变量、revision 和审阅状态；review command 产生新的 revision。
-- 审阅通过后，FlowDraft 编译为 Web target 与 ActionExecutionBinding，再进入普通 Contract/Profile/ExecutionWorkflow。
+- 审阅通过后，FlowDraft 编译为冻结 `HttpWorkflowBinding`，再进入普通 Contract/Profile/ExecutionWorkflow；不建立旧单请求 binding 的并行编译链。
 
 ## 生命周期与数据流
 
@@ -22,8 +22,8 @@ Recording request → 独立 identity 有头 BrowserContext
   → 明确开始 → RecordingEvent（限长、脱敏）
   → 明确停止
   → FlowDraft revision
-  → 审阅/确认变量来源
-  → Web target/binding 编译
+  → 审阅/确认变量来源、步骤目的与唯一 TARGET
+  → HttpWorkflowBinding 编译
   → 普通执行快照和回放
 ```
 
@@ -40,7 +40,7 @@ TargetScope、身份、协议、主机、端口、私网、重定向、响应大
 
 ## 版本规则与 Schema 真源
 
-Recording、FlowDraft、RecordingEvent 和 Recording Runner 相关 Schema 当前主要为 1；review command 当前 Schema 若没有 `schema_version`，不补写不存在的字段。模型、required 和 strict parsing 以：
+Flow/FlowDraft 为表达 SETUP/TARGET/CLEANUP、ValueSlot 与动态提取升级到单一当前格式；RecordingEvent 和 Recording Runner 只在实际 wire 结构不兼容时升级。模型、required 和 strict parsing 以：
 
 - `product/protocols/recording.py`
 - `product/protocols/flow_draft.py`

@@ -8,9 +8,9 @@
 
 ## 协议边界
 
-- `PersistedExecutionRequest` 是执行真源，保存项目、Contract/plan 快照、bindings、身份、目标范围、预算、Observer 引用和指纹。
+- `PersistedExecutionRequest` 是执行真源，保存项目、Contract/plan/孪生快照、workflow/effect bindings、身份、目标范围、预算、Observer 引用和指纹。
 - `RunnerInput` 绑定 run、job、attempt、lease owner、fencing token、创建时间、预算和项目快照。
-- `Evidence` 绑定不可变 case snapshot、ExecutionFact、ObservationFact、verdict 和 evidence hash。
+- `Evidence` 绑定不可变 case/twin snapshot、ExecutionFact、ObservationFact、SecurityEffectFact、基线/闭合状态、verdict 和 evidence hash。
 - `RunnerResult` 返回结果类型、生命周期状态、Job 状态、Verdict、清理结果、错误和覆盖计数。
 - Worker/Runner 通过稳定 ID、attempt 和 fencing token 关联；Runner 不自行声明最终发布完成。
 
@@ -20,7 +20,8 @@
 ApplicationCore → PersistedExecutionRequest
   → Job/lease/fencing → Worker
   → RunnerInput → 隔离 Runner
-  → ExecutionFact + ObservationFact → Evidence
+  → bootstrap / SETUP / BASELINE / BEFORE / TARGET / AFTER / EVENTUAL
+  → ExecutionFact + ObservationFact + SecurityEffectFact → Evidence
   → RunnerResult/staging → Worker 校验 → publication
 ```
 
@@ -34,7 +35,7 @@ ApplicationCore → PersistedExecutionRequest
 
 ## 版本规则与 Schema 真源
 
-Runner、RunnerInput、Evidence、RunnerResult 当前 Schema 主要为 2；`schema_version` 是机器格式版本，不表示产品代际。协议正文不复制完整字段表，严格模型、required、枚举和 canonical 规则以：
+状态化工作流与效果事实使 RunnerInput、Evidence 和 RunnerResult 升级为单一当前格式；`schema_version` 是机器格式版本，不表示产品代际。协议正文不复制完整字段表，严格模型、required、枚举和 canonical 规则以：
 
 - `product/protocols/runner.py`
 - `product/protocols/execution_request.py`

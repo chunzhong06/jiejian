@@ -1,4 +1,4 @@
-# Storage 的 SQLAlchemy typed declarative 映射。
+# Evidence 索引的 SQLAlchemy 映射；同一用例可产生多份证据，唯一性由内容地址和工件路径约束。
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from product.backend.infra.storage.base import Base
 class EvidenceIndexRow(Base):
     __tablename__ = "evidence_index"
     __table_args__ = (
-        UniqueConstraint("run_id", "case_id", name="uq_evidence_run_case"),
         UniqueConstraint(
             "run_id",
             "artifact_path",

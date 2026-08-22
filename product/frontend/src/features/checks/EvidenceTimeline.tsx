@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Alert, Card, Collapse, Descriptions, List, Select, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import { resultsApi, type EvidenceCaseSnapshotDto, type EvidenceDto, type ExecutionFactDto, type ObservationFactDto } from '../../api/results'
+import { resultsApi, type EvidenceCaseSnapshotDto, type EvidenceDto, type ExecutionFactDto, type ObservationFactDto, type SecurityEffectFactDto } from '../../api/results'
 import { expectationLabel, productTermLabel, verdictLabel } from '../../app/presentation'
 
 type TechnicalObservationDto = {
@@ -27,6 +27,10 @@ function requirementLabel(value: unknown) { return ({ resource_state: '资源状
 function targetLabel(value: unknown) { return ({ WEB: 'Web 应用', PROCESS: '本地进程', MCP: 'MCP/Agent 服务', MCP_AGENT: 'MCP/Agent 服务' } as Record<string, string>)[String(value)] ?? `目标：${text(value)}` }
 function outcomeLabel(value: unknown) { return ({ ACCEPTED: '执行已允许', DENIED: '执行已拒绝', FAILED: '执行失败', UNKNOWN: '执行结果无法确定' } as Record<string, string>)[String(value)] ?? `执行状态：${text(value)}` }
 function effectLabel(value: unknown) { return ({ CONFIRMED: '资源状态发生变化', ABSENT: '资源状态未变化', UNKNOWN: '无法可靠获取资源状态' } as Record<string, string>)[String(value)] ?? `观察结果：${text(value)}` }
+function securityEffectLabel(value: unknown) { return ({ STATE_MUTATION: '状态变更', DATA_DISCLOSURE: '受保护数据披露', OBJECT_CREATION: '对象创建', EXTERNAL_DISPATCH: '外部发送', RESTRICTED_FUNCTION_INVOCATION: '受限功能调用', CREDENTIAL_ACCESS: '凭据访问' } as Record<string, string>)[String(value)] ?? text(value) }
+function effectStateLabel(value: unknown) { return ({ CONFIRMED: '已确认发生', ABSENT: '已确认未发生', UNKNOWN: '尚无法确定' } as Record<string, string>)[String(value)] ?? text(value) }
+function closureLabel(value: unknown) { return ({ CLOSED: '证据窗口已闭合', OPEN: '仍可能出现后续影响', UNKNOWN: '闭合状态未知' } as Record<string, string>)[String(value)] ?? text(value) }
+function twinRoleLabel(value: unknown) { return ({ ALLOW_CONTROL: '允许场景对照', DENY_VARIANT: '禁止场景检查' } as Record<string, string>)[String(value)] ?? '独立检查' }
 function booleanLabel(value: unknown, positive: string, negative: string) { return value === true ? positive : negative }
 function observerLabel(value: unknown) { return ({ HTTP: '接口响应', OWNER_API: '资源状态接口', READ_ONLY_SQLITE: '只读数据状态', STRUCTURED_AUDIT_LOG: '审计记录', ASYNC_TASK_STATUS: '异步任务状态', AZURE_QUEUE_PEEK: '队列状态', AZURE_BLOB_OBJECT: '文件状态' } as Record<string, string>)[String(value)] ?? '外部状态观察' }
 function phaseLabel(value: unknown) { return ({ BEFORE: '请求前', AFTER: '请求后', EVENTUAL: '最终状态' } as Record<string, string>)[String(value)] ?? text(value) }
@@ -54,12 +58,15 @@ export function EvidenceTimeline({ runId, evidence, preferredIds = [], onError }
   }, [runId, selectedId])
   const executionFact = detail?.execution_fact
   const observationFacts = Array.isArray(detail?.observation_facts) ? detail.observation_facts : []
+  const securityEffectFacts = Array.isArray(detail?.security_effect_facts) ? detail.security_effect_facts : []
   return <Card title="证据时间线">
     {evidence.length === 0 && <Alert type="info" showIcon message="没有可展示的已发布证据。" />}
     {evidence.length > 0 && <Select aria-label="选择证据" className="full-width" value={selectedId} onChange={setSelectedId} options={evidence.map((item, index) => ({ value: String(item.evidence_id), label: `证据 ${index + 1}` }))} />}
     {detail && <div className="evidence-timeline">
       <TimelineStep title="检查对象"><CaseFacts value={detail.case_snapshot} /></TimelineStep>
+      <TimelineStep title="对照与基线"><DifferentialFacts value={detail} /></TimelineStep>
       <TimelineStep title="执行事实"><ExecutionFacts value={executionFact} /></TimelineStep>
+      <TimelineStep title="真实影响"><SecurityEffectFacts values={securityEffectFacts} /></TimelineStep>
       <TimelineStep title="真实观察"><ObservationFacts values={observationFacts} /></TimelineStep>
       <TimelineStep title="确定性结论"><Tag>{verdictLabel(detail.verdict)}</Tag></TimelineStep>
       <Collapse ghost items={[{ key: 'technical', label: '高级：技术详情', children: <TechnicalDetails detail={detail} /> }]} />
@@ -88,6 +95,27 @@ function ExecutionFacts({ value = {} }: { value?: ExecutionFactDto }) {
     <Descriptions.Item label="执行结果"><Tag>{outcomeLabel(value.outcome)}</Tag></Descriptions.Item>
     {Array.isArray(value.reason_codes) && value.reason_codes.length > 0 && <Descriptions.Item label="原因">{list(value.reason_codes)}</Descriptions.Item>}
   </Descriptions>
+}
+
+function DifferentialFacts({ value }: { value: EvidenceDto }) {
+  return <Descriptions size="small" column={{ xs: 1, sm: 2 }}>
+    <Descriptions.Item label="当前场景"><Tag color={value.twin_role === 'ALLOW_CONTROL' ? 'green' : value.twin_role === 'DENY_VARIANT' ? 'red' : undefined}>{twinRoleLabel(value.twin_role)}</Tag></Descriptions.Item>
+    <Descriptions.Item label="允许场景对照">{booleanLabel(value.allow_control_valid, '有效', '无效或未完成')}</Descriptions.Item>
+    <Descriptions.Item label="基线可比性">{booleanLabel(value.baseline_integrity, '基线一致', '基线无法确认')}</Descriptions.Item>
+  </Descriptions>
+}
+
+function SecurityEffectFacts({ values }: { values: SecurityEffectFactDto[] }) {
+  if (values.length === 0) return <Typography.Text type="secondary">未提供聚合后的真实影响</Typography.Text>
+  return <List size="small" dataSource={values} renderItem={(item) => <List.Item className="observation-item"><Descriptions size="small" column={{ xs: 1, sm: 2 }} className="full-width">
+    <Descriptions.Item label="影响类型">{securityEffectLabel(item.kind)}</Descriptions.Item>
+    <Descriptions.Item label="资源">{productTermLabel('resource', item.resource_id)}</Descriptions.Item>
+    <Descriptions.Item label="影响状态"><Tag color={item.state === 'CONFIRMED' ? 'red' : item.state === 'ABSENT' ? 'green' : 'gold'}>{effectStateLabel(item.state)}</Tag></Descriptions.Item>
+    <Descriptions.Item label="证据闭合">{closureLabel(item.temporal_closure)}</Descriptions.Item>
+    <Descriptions.Item label="证据质量">{item.complete && item.reliable && item.correlated ? '完整、可靠且已关联' : '仍有证据缺口'}</Descriptions.Item>
+    <Descriptions.Item label="基线">{booleanLabel(item.baseline_integrity, '一致', '无法确认')}</Descriptions.Item>
+    {Array.isArray(item.reason_codes) && item.reason_codes.length > 0 && <Descriptions.Item label="原因代码">{list(item.reason_codes)}</Descriptions.Item>}
+  </Descriptions></List.Item>} />
 }
 
 function ObservationFacts({ values }: { values: ObservationFactDto[] }) {

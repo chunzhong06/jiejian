@@ -17,12 +17,13 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN
+from product.protocols.http import HttpOutcomeClassifier, HttpRequestTemplate, ValueSlotConsumer, ValueType
 
 
 class RecordingFlowModel(BaseModel):
@@ -33,7 +34,7 @@ class RecordingFlowModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["3"] = "3"
 
 
 class FlowVariableSource(RecordingFlowModel):
@@ -41,52 +42,25 @@ class FlowVariableSource(RecordingFlowModel):
     source_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
     source_event_sequence: int = Field(ge=1)
     json_path: str = Field(min_length=1, max_length=512)
+    consumer: ValueSlotConsumer = ValueSlotConsumer.JSON_BODY
+    value_type: ValueType = ValueType.STRING
+    max_length: int = Field(default=256, ge=1, le=4096)
+    secret: bool = False
 
 
 class FlowStep(RecordingFlowModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     name: str | None = Field(default=None, min_length=1, max_length=128)
-    method: Literal["GET", "PATCH", "POST", "PUT", "DELETE"]
-    path: str
     identity_id: str
     resource_id: str
     alternate_identity_id: str
     alternate_resource_id: str
-    json_body: dict[str, Any] = Field(default_factory=dict)
-    expected_statuses: tuple[int, ...] = (200,)
+    request_template: HttpRequestTemplate
+    classifier: HttpOutcomeClassifier
     action_ids: tuple[str, ...] = Field(default=(), max_length=16)
     depends_on_step_ids: tuple[str, ...] = Field(default=(), max_length=128)
     variable_sources: tuple[FlowVariableSource, ...] = Field(default=(), max_length=128)
     sensitive_fields: tuple[str, ...] = Field(default=(), max_length=256)
-
-    @field_validator("path")
-    @classmethod
-    def validate_relative_http_path(cls, value: str) -> str:
-        parsed = urlsplit(value)
-        if (
-            not value.startswith("/")
-            or value.startswith("//")
-            or parsed.scheme
-            or parsed.netloc
-            or parsed.fragment
-            or any(segment in {".", ".."} for segment in parsed.path.split("/"))
-        ):
-            raise ValueError("flow step path must be an absolute-path reference")
-        return value
-
-    @field_validator("json_body")
-    @classmethod
-    def reject_inline_secrets(cls, value: dict[str, Any]) -> dict[str, Any]:
-        if any(
-            re.search(
-                r"authorization|cookie|credential|password|secret|token|api[_-]?key",
-                str(key),
-                re.IGNORECASE,
-            )
-            for key in value
-        ):
-            raise ValueError("flow JSON must not contain inline credential fields")
-        return value
 
     @model_validator(mode="after")
     def validate_metadata(self) -> FlowStep:
@@ -141,6 +115,21 @@ class Flow(RecordingFlowModel):
             for source in step.variable_sources
         ):
             raise ValueError("flow variable source must be a declared dependency")
+        step_map = {step.id: step for step in self.steps}
+        for step in self.steps:
+            slot_map = {slot.slot_id: slot for slot in step.request_template.input_slots}
+            for source in step.variable_sources:
+                slot = slot_map.get(source.name)
+                producer = step_map[source.source_step_id]
+                extractor_ids = {item.extractor_id for item in producer.request_template.response_extractors}
+                if (
+                    slot is None
+                    or slot.producer_step_id != source.source_step_id
+                    or slot.consumer_step_id != step.id
+                    or slot.source_path != source.json_path
+                    or source.name not in extractor_ids
+                ):
+                    raise ValueError("flow variable source must match the compiled slot and producer extractor")
         visiting: set[str] = set()
         visited: set[str] = set()
 

@@ -14,7 +14,8 @@ from product.backend.core.contracts.analysis.sources.requirement import parse_re
 from product.backend.core.contracts.models import CandidateRiskKind, CandidateSuggestion, ContractAuditAction, ContractAuditEntry, ContractProvenance, ContractSourceType, ContractVersion, Requirement, SourceReference
 from product.backend.core.lifecycle import ContractStatus
 from product.protocols.recording_flow import Flow, FlowStep
-from product.backend.core.verification.permissions import ActionDefinition, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionRule, RelationEndpoint, RelationFact, RelationType, ResourceDefinition, SubjectDefinition
+from product.protocols.http import HttpOutcomeClassifier, HttpRequestTemplate, ValueSlot, ValueSlotConsumer, ValueSlotSource
+from product.backend.core.verification.permissions import ActionDefinition, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionRule, RelationEndpoint, RelationFact, RelationType, ResourceDefinition, SecurityEffectDefinition, SecurityEffectKind, SubjectDefinition
 
 SHA256 = "a" * 64
 
@@ -36,7 +37,7 @@ def _permission_rule(rule_id: str = "foreign-read") -> PermissionRule:
 
 
 def _permission_contract(version: int = 1, rule_id: str = "foreign-read") -> PermissionContract:
-    return PermissionContract(contract_id="analysis-contract", version=version, role_ids=("member",), workflow_states=("DRAFT",), subjects=(SubjectDefinition(subject_id="member", roles=("member",), tenant_id="tenant"),), actions=(ActionDefinition(action_id="view"),), resources=(ResourceDefinition(resource_id="document", resource_type="document", owner_subject_id="member", tenant_id="tenant", workflow_state="DRAFT"),), relations=(RelationFact(relation_id="owns-document", relation=RelationType.OWNS, source=RelationEndpoint(endpoint_type="subject", endpoint_id="member"), target=RelationEndpoint(endpoint_type="resource", endpoint_id="document")),), rules=(_permission_rule(rule_id),))
+    return PermissionContract(contract_id="analysis-contract", version=version, role_ids=("member",), workflow_states=("DRAFT",), subjects=(SubjectDefinition(subject_id="member", roles=("member",), tenant_id="tenant"),), effects=(SecurityEffectDefinition(effect_id="document-read", kind=SecurityEffectKind.DATA_DISCLOSURE, resource_type="document", protected_fields=("content",)),), actions=(ActionDefinition(action_id="view", effect_ids=("document-read",)),), resources=(ResourceDefinition(resource_id="document", resource_type="document", owner_subject_id="member", tenant_id="tenant", workflow_state="DRAFT"),), relations=(RelationFact(relation_id="owns-document", relation=RelationType.OWNS, source=RelationEndpoint(endpoint_type="subject", endpoint_id="member"), target=RelationEndpoint(endpoint_type="resource", endpoint_id="document")),), rules=(_permission_rule(rule_id),))
 
 
 def _version(version: int = 1, *, rule_id: str = "foreign-read") -> ContractVersion:
@@ -57,7 +58,8 @@ def test_requirement_template_is_deterministic_and_candidate_is_non_authoritativ
 
 
 def test_flow_and_openapi_adapters_produce_suggestions() -> None:
-    flow = Flow(id="analysis-flow", steps=(FlowStep(id="read-resource", method="GET", path="/resources/{resource_id}", identity_id="owner", resource_id="resource", alternate_identity_id="attacker", alternate_resource_id="foreign-resource"), FlowStep(id="update-resource", method="PATCH", path="/resources/{resource_id}", identity_id="owner", resource_id="resource", alternate_identity_id="attacker", alternate_resource_id="foreign-resource", sensitive_fields=("email",))))
+    resource_slot = ValueSlot(slot_id="resource_id", source=ValueSlotSource.CASE_RESOURCE_ID, consumer=ValueSlotConsumer.PATH)
+    flow = Flow(id="analysis-flow", steps=(FlowStep(id="read-resource", request_template=HttpRequestTemplate(method="GET", path="/resources/{resource_id}", input_slots=(resource_slot,)), classifier=HttpOutcomeClassifier(), identity_id="owner", resource_id="resource", alternate_identity_id="attacker", alternate_resource_id="foreign-resource"), FlowStep(id="update-resource", request_template=HttpRequestTemplate(method="PATCH", path="/resources/{resource_id}", input_slots=(resource_slot,)), classifier=HttpOutcomeClassifier(), identity_id="owner", resource_id="resource", alternate_identity_id="attacker", alternate_resource_id="foreign-resource", sensitive_fields=("email",))))
     flow_batch = build_flow_candidates("analysis-project", flow)
     assert {item.suggestion.kind for item in flow_batch.candidates} == {CandidateRiskKind.FOREIGN_READ, CandidateRiskKind.PRIVILEGED_FIELD, CandidateRiskKind.UNAUTHORIZED_SIDE_EFFECT}
     assert all(item.source.locator.startswith("flow:analysis-flow/step:") for item in flow_batch.candidates)

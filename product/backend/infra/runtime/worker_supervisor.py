@@ -26,9 +26,21 @@ from product.backend.core.lifecycle import JobState
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
-from product.backend.infra.runtime.jobs.models import WaitingFatalFailure
+from product.backend.infra.runtime.jobs.recovery import JobRecovery
+from product.backend.infra.runtime.jobs.models import (
+    ConfirmRecovery,
+    FatalFailure,
+    FatalFailureCode,
+    RecoveryOperator,
+    RecoveryProofType,
+    RecoveryReasonCode,
+    RecoveryScan,
+    WaitingFatalFailure,
+)
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore, required_secret_names
+from product.backend.infra.runtime.worker_lifetime import WorkerLifetimeLock
+from product.backend.infra.runtime.process_control import force_terminate_process_tree
 
 logger = logging.getLogger("jiejian.runtime.worker_supervisor")
 
@@ -42,6 +54,7 @@ class LocalWorkerSupervisor:
         uow_factory,
         job_queue: JobQueue | None = None,
         attempt_service: JobAttempts | None = None,
+        recovery_service: JobRecovery | None = None,
         environment_provider=None,
         clock_us=None,
     ) -> None:
@@ -49,12 +62,16 @@ class LocalWorkerSupervisor:
         self._uow_factory = uow_factory
         self._job_queue = job_queue or JobQueue(uow_factory)
         self._attempts = attempt_service or JobAttempts(uow_factory)
+        self._recovery = recovery_service or JobRecovery(uow_factory)
         self._environment_provider = environment_provider or (lambda names: {})
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._process = None
         self._job_id: str | None = None
+        self._lease_owner: str | None = None
+        self._next_recovery_scan_us = 0
+        self._recovered_jobs = 0
 
     def start(self) -> None:
         """幂等启动后台调度；已有存活线程时不创建第二个 Worker。"""
@@ -68,11 +85,19 @@ class LocalWorkerSupervisor:
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
+    @property
+    def recovered_jobs(self) -> int:
+        return self._recovered_jobs
+
     def stop(self, timeout: float = 5.0) -> None:
         """请求停止并等待线程退出；超时后报告失败而不伪装为已关闭。"""
 
         self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
         process = self._process
+        stopping_job_id = self._job_id
+        stopping_lease_owner = self._lease_owner
         if process is not None and process.poll() is None:
             try:
                 from product.backend.infra.runtime.jobs.models import RequestCancellation
@@ -105,9 +130,18 @@ class LocalWorkerSupervisor:
                         "worker kill requested",
                         extra={"component": "worker_supervisor", "event_code": "WORKER_KILL"},
                     )
-                    process.kill()
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
+                    try:
+                        force_terminate_process_tree(process, 2.0)
+                    except Exception:
+                        logger.exception(
+                            "Worker 强制结束后仍未退出",
+                            extra={"component": "worker_supervisor", "event_code": "WORKER_KILL_WAIT_FAILED", "job_id": stopping_job_id},
+                        )
+        if process is not None and process.poll() is not None and stopping_job_id is not None:
+            self._finish_worker_exit(stopping_job_id, process.returncode, stopping_lease_owner)
+            self._process = None
+            self._job_id = None
+            self._lease_owner = None
         self._thread = None
 
     def _loop(self) -> None:
@@ -115,8 +149,9 @@ class LocalWorkerSupervisor:
 
         while not self._stop.is_set():
             try:
+                self._recover_expired_workers()
                 self._reap_finished_worker()
-                if self._process is None:
+                if self._process is None and not self._stop.is_set():
                     job = self._next_job()
                     if job is not None:
                         self._start_job(job)
@@ -135,24 +170,19 @@ class LocalWorkerSupervisor:
             return
         # 清理引用前保存责任 Job；否则非零退出会丢失需要结束的 waiting 身份。
         finished_job_id = self._job_id
+        finished_lease_owner = self._lease_owner
         return_code = process.returncode
         self._process = None
         self._job_id = None
-        if return_code and finished_job_id is not None:
-            logger.error(
-                "worker exited with non-zero status",
-                extra={
-                    "component": "worker_supervisor",
-                    "event_code": "WORKER_EXIT_NONZERO",
-                    "job_id": finished_job_id,
-                },
-            )
-            self._finish_waiting_failure(finished_job_id)
+        self._lease_owner = None
+        if finished_job_id is not None:
+            self._finish_worker_exit(finished_job_id, return_code, finished_lease_owner)
 
     def _start_job(self, job) -> None:
         """建立启动责任并完成 request、secret 与进程准备；失败时结束仍匹配的 waiting Job。"""
 
         self._job_id = job.job_id
+        self._lease_owner = f"serve-worker-{uuid4().hex}"
         try:
             secret_names = ()
             if job.run_id is not None:
@@ -168,13 +198,23 @@ class LocalWorkerSupervisor:
                 environ=environment,
             ).start(
                 job_id=job.job_id,
-                lease_owner=f"serve-worker-{uuid4().hex}",
+                lease_owner=self._lease_owner,
                 secret_names=secret_names,
+            )
+            logger.info(
+                "Worker 已启动",
+                extra={
+                    "component": "worker_supervisor",
+                    "event_code": "WORKER_STARTED",
+                    "job_id": job.job_id,
+                    "log_path": str(self.var_dir / "logs" / "workers" / f"{job.job_id}.log"),
+                },
             )
         except Exception:
             failed_job_id = self._job_id
             self._process = None
             self._job_id = None
+            self._lease_owner = None
             logger.exception(
                 "worker bootstrap failed",
                 extra={
@@ -185,6 +225,125 @@ class LocalWorkerSupervisor:
             )
             if failed_job_id is not None:
                 self._finish_waiting_failure(failed_job_id)
+
+    def _finish_worker_exit(
+        self,
+        job_id: str,
+        return_code: int | None,
+        expected_lease_owner: str | None,
+    ) -> None:
+        """按数据库当前 fence 结束异常退出，禁止 RUNNING 永久悬挂。"""
+
+        current = self._read_job(job_id)
+        if current is None or current.state in {
+            JobState.SUCCEEDED,
+            JobState.FAILED,
+            JobState.CANCELLED,
+        }:
+            return
+        logger.log(
+            logging.ERROR if return_code else logging.WARNING,
+            "Worker 在任务终态前退出",
+            extra={
+                "component": "worker_supervisor",
+                "event_code": "WORKER_EXITED",
+                "job_id": job_id,
+                "return_code": return_code,
+                "log_path": str(
+                    self.var_dir / "logs" / "workers" / f"{job_id}.log"
+                ),
+            },
+        )
+        if current.state in {JobState.PENDING, JobState.RETRY_WAIT}:
+            self._finish_waiting_failure(job_id)
+            return
+        now_us = self._clock_us()
+        if current.lease_owner is None or current.fencing_token < 1:
+            return
+        if expected_lease_owner is None or current.lease_owner != expected_lease_owner:
+            return
+        try:
+            if current.lease_expires_at_us is not None and current.lease_expires_at_us > now_us:
+                if current.cancel_requested_at_us is not None:
+                    from product.backend.infra.runtime.jobs.models import CompleteCancellation
+
+                    self._attempts.complete_cancellation(
+                        CompleteCancellation(
+                            job_id=job_id,
+                            lease_owner=current.lease_owner,
+                            fencing_token=current.fencing_token,
+                            now_us=now_us,
+                        )
+                    )
+                else:
+                    self._attempts.record_fatal_failure(
+                        FatalFailure(
+                            job_id=job_id,
+                            lease_owner=current.lease_owner,
+                            fencing_token=current.fencing_token,
+                            now_us=now_us,
+                            reason_code=FatalFailureCode.WORKER_FATAL,
+                        )
+                    )
+                return
+            self._confirm_exited_recovery(current, now_us)
+        except Exception:
+            logger.exception(
+                "Worker 退出状态收口失败",
+                extra={
+                    "component": "worker_supervisor",
+                    "event_code": "WORKER_EXIT_FINALIZE_FAILED",
+                    "job_id": job_id,
+                    "return_code": return_code,
+                },
+            )
+
+    def _recover_expired_workers(self) -> None:
+        """周期扫描过期任务；仅在 Worker 系统锁可获取时确认旧进程已退出。"""
+
+        now_us = self._clock_us()
+        if now_us < self._next_recovery_scan_us:
+            return
+        self._next_recovery_scan_us = now_us + 1_000_000
+        for candidate in self._recovery.list_recovery_candidates(
+            RecoveryScan(now_us=now_us, limit=100)
+        ):
+            if not WorkerLifetimeLock.execution_has_exited(self.var_dir, candidate.job_id):
+                continue
+            try:
+                self._confirm_exited_recovery(candidate, now_us)
+            except Exception:
+                logger.exception(
+                    "过期 Worker 自动恢复失败",
+                    extra={
+                        "component": "worker_supervisor",
+                        "event_code": "WORKER_RECOVERY_FAILED",
+                        "job_id": candidate.job_id,
+                    },
+                )
+
+    def _confirm_exited_recovery(self, current, now_us: int) -> None:
+        result = self._recovery.confirm_recovery(
+            ConfirmRecovery(
+                job_id=current.job_id,
+                lease_owner=current.lease_owner,
+                fencing_token=current.fencing_token,
+                now_us=now_us,
+                proof_type=RecoveryProofType.EXECUTION_EXITED,
+                operator=RecoveryOperator.WORKER_SUPERVISOR,
+                reason_code=RecoveryReasonCode.PROCESS_EXIT_CONFIRMED,
+            )
+        )
+        self._recovered_jobs += 1
+        logger.warning(
+            "已自动恢复异常中断的 Worker 任务",
+            extra={
+                "component": "worker_supervisor",
+                "event_code": "WORKER_RECOVERED",
+                "job_id": current.job_id,
+                "target_state": result.job.state.value,
+            },
+        )
 
     def _finish_waiting_failure(self, job_id: str) -> None:
         """接受数据库真实状态，只结束仍为 waiting 且无租约的 Job。"""
