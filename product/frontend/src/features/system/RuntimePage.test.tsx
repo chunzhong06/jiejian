@@ -21,21 +21,21 @@ const status: SystemStatus = {
   worker: 'running',
   browser: 'available',
   environment: {
-    runtime_mode: 'release',
+    runtime_mode: 'development',
     runtime_fingerprint: 'fingerprint',
-    python: { ok: true, version: '3.13.15', environment_type: 'uv-private', executable: 'D:/runtime/python.exe', prefix: 'D:/runtime', user_site_on_sys_path: false },
+    python: { ok: true, version: '3.13.15', environment_type: 'conda', executable: 'D:/runtime/python.exe', prefix: 'D:/runtime', user_site_on_sys_path: false },
     uv: { version: '0.11.12', executable: 'D:/runtime/uv.exe' },
-    node: { required: false },
-    pnpm: { required: false },
+    node: { required: false, version: '24.19.0', executable: 'D:/runtime/node.exe' },
+    pnpm: { required: false, version: '11.21.0', executable: 'D:/runtime/pnpm.cjs' },
     playwright: { package_version: '1.61.0', chromium_executable: 'D:/runtime/chromium.exe' },
-    frontend: { mode: 'prebuilt', dist: 'D:/jiejian/product/frontend/dist' },
+    frontend: { mode: 'source-build', dist: 'D:/jiejian/var/runtime/frontend', build_state: 'reused' },
   },
 }
 
 describe('RuntimePage', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('展示正式运行身份并通过同一 API 预览缓存维护', async () => {
+  it('展示源码运行身份并通过同一 API 预览缓存维护', async () => {
     vi.spyOn(systemApi, 'cacheStatus').mockResolvedValue(cacheStatus)
     vi.spyOn(systemApi, 'cacheOperation').mockResolvedValue({
       schema_version: '1',
@@ -50,8 +50,8 @@ describe('RuntimePage', () => {
 
     render(<RuntimePage status={status} profiles={[]} failed={false} />)
 
-    expect(screen.getAllByText('正式运行不需要')).toHaveLength(2)
-    expect(screen.getByText(/预构建资源/)).toBeInTheDocument()
+    expect(screen.getAllByText(/仅构建时需要/)).toHaveLength(2)
+    expect(screen.getByText(/源码构建/)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('1.0 KiB')).toBeInTheDocument())
     expect(screen.getByText('Vite 缓存')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '按预算清理' }))

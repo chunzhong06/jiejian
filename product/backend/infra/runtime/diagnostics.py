@@ -118,6 +118,44 @@ def _local_tool_check(
         "JIEJIAN_NODE_EXECUTABLE" if name == "node" else "JIEJIAN_PNPM_EXECUTABLE"
     )
     executable = os.environ.get(environment_key)
+    reported_version = os.environ.get(
+        "JIEJIAN_NODE_VERSION" if name == "node" else "JIEJIAN_PNPM_VERSION"
+    )
+    if executable and reported_version and not required:
+        path = Path(executable).resolve()
+        if name == "node":
+            import re
+
+            match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", reported_version)
+            range_match = re.fullmatch(
+                r">=\s*(\d+)\.(\d+)\.(\d+)\s*<\s*(\d+)", expected_value
+            )
+            ok = bool(match and range_match)
+            if ok:
+                actual = tuple(int(match.group(index)) for index in range(1, 4))
+                minimum = tuple(
+                    int(range_match.group(index)) for index in range(1, 4)
+                )
+                ok = actual >= minimum and actual[0] < int(range_match.group(4))
+        else:
+            ok = reported_version == expected_value
+        ok = ok and path.is_file()
+        return DoctorCheck(
+            name=name,
+            required=False,
+            ok=ok,
+            message=(
+                f"{name} 构建工具版本已记录"
+                if ok
+                else f"{name} 构建工具记录无效"
+            ),
+            details={
+                "version": reported_version,
+                "path": str(path),
+                "expected": expected_value,
+                "usage": "build-only",
+            },
+        )
     if not executable and required:
         executable = shutil.which(executable_name)
     if not executable:
@@ -128,7 +166,7 @@ def _local_tool_check(
             message=(
                 f"未找到 {name} 可执行文件"
                 if required
-                else f"发布运行不需要 {name}"
+                else f"运行阶段不需要 {name}"
             ),
             details={"expected": expected_value},
         )
@@ -197,25 +235,20 @@ def _uv_check(project_root: Path) -> DoctorCheck:
 
 
 def _frontend_check(runtime_mode: str) -> DoctorCheck:
-    if runtime_mode == "release":
-        root = os.environ.get("JIEJIAN_FRONTEND_DIST")
-        index = Path(root).resolve() / "index.html" if root else None
-        ok = bool(index and index.is_file())
-        return DoctorCheck(
-            name="frontend",
-            required=True,
-            ok=ok,
-            message="预构建图形界面可用" if ok else "正式发布缺少预构建图形界面",
-            details={"dist": str(index.parent) if index else None, "mode": "prebuilt"},
-        )
-    detail = os.environ.get("JIEJIAN_FRONTEND_DEPENDENCIES")
-    ok = bool(detail)
+    root = os.environ.get("JIEJIAN_FRONTEND_DIST")
+    index = Path(root).resolve() / "index.html" if root else None
+    ok = bool(index and index.is_file())
     return DoctorCheck(
         name="frontend",
         required=True,
         ok=ok,
-        message="开发前端依赖已确认" if ok else "开发前端依赖尚未同步",
-        details={"state": detail, "mode": "development"},
+        message="源码构建图形界面可用" if ok else "缺少源码构建图形界面",
+        details={
+            "dist": str(index.parent) if index else None,
+            "mode": "source-build",
+            "state": os.environ.get("JIEJIAN_FRONTEND_BUILD_STATE"),
+            "dependencies": os.environ.get("JIEJIAN_FRONTEND_DEPENDENCIES"),
+        },
     )
 
 
@@ -403,7 +436,7 @@ def runtime_environment_details() -> dict[str, Any]:
 
     python = python_environment_report()
     runtime_mode = str(python.get("runtime_mode") or "unknown")
-    node_required = runtime_mode == "development"
+    node_required = False
     chromium = _playwright_check()
     chromium_details = dict(chromium.details)
     chromium_details["status"] = (
@@ -435,9 +468,10 @@ def runtime_environment_details() -> dict[str, Any]:
         },
         "playwright": chromium_details,
         "frontend": {
-            "mode": "development" if node_required else "prebuilt",
+            "mode": "source-build",
             "dependencies": os.environ.get("JIEJIAN_FRONTEND_DEPENDENCIES"),
             "dist": os.environ.get("JIEJIAN_FRONTEND_DIST"),
+            "build_state": os.environ.get("JIEJIAN_FRONTEND_BUILD_STATE"),
         },
     }
 
@@ -496,7 +530,7 @@ def run_doctor(
     config_check, settings = _config_check(config_path, cli_overrides or {})
     frontend_root = (project_root or Path(__file__).resolve().parents[4]).resolve()
     runtime_mode = os.environ.get("JIEJIAN_RUNTIME_MODE", "").strip().lower()
-    node_required = runtime_mode == "development"
+    node_required = False
     checks: tuple[DoctorCheck, ...] = (
         _python_check(),
         _dependency_check(),

@@ -12,7 +12,7 @@
 .\start.cmd
 ```
 
-启动器会优先复用符合 `product/frontend/package.json` 要求的系统 Node.js 24 与 pnpm 11.21.0；未找到时，会在项目 `var/` 中准备受控运行时，不修改系统 PATH 或全局安装。首次准备需要网络。准备完成并选择“图形界面”后，界鉴会在本机回环地址启动服务并打开浏览器。
+启动器会准备或复用项目专用 Conda 环境 `jiejian_env`，由仓库受控 uv 按 `uv.lock` 精确同步并 editable 指向当前源码。前端只在 `var/runtime/frontend` 缺失或构建指纹变化时准备受控 Node/pnpm 并重新构建；后续启动直接复用。全部运行产物都在本地 `var/` 中生成，不进入 Git，也不修改系统 PATH 或全局安装。首次准备需要网络。
 
 ## 界面预览
 
@@ -32,10 +32,10 @@
 
 1. 获取项目并打开项目根目录。
 2. 运行 `.\start.cmd`。
-3. 等待界鉴准备 Node.js、pnpm、Python 环境、浏览器、数据库和前端资源。
+3. 等待界鉴准备源码运行环境、浏览器、数据库和前端资源；Node/pnpm 只会在前端需要重建时出现。
 4. 选择图形界面、命令行或仅完成环境准备。
 
-启动脚本会自动准备 Node.js、pnpm、Python 运行环境、浏览器、数据库和前端资源；准备完成后，控制台会给出适用于本机的 CLI 调用方式。
+启动脚本会自动准备 Conda + uv.lock + editable 当前源码、浏览器、数据库和前端资源；准备完成后，控制台会给出适用于本机的 CLI 调用方式。Wheel 仅可通过 `./scripts/dev.ps1 package` 独立生成，不参与普通启动。
 
 ## 第一次使用
 
@@ -104,7 +104,7 @@ jiejian ci <execution_profile.json>
 - **运行环境不可用**：按启动输出恢复；只需重建环境时可删除 `var/runtime/`、`var/cache/` 和 `var/temp/`。整个 `var/` 还包含数据库、Job、项目、报告和工件检查等产品事实，只有明确要清空全部本地数据时才整体删除。需要同时重建已安装的前端依赖时，再删除 `product/frontend/node_modules`，启动器会按标准位置重新安装。
 - **检查无法开始**：确认已经完成应用接入，目标使用授权的回环地址，权限规则已准备好，运行环境状态正常。
 
-`-PrepareOnly` 和 `-ForcePrepare` 仅用于高级恢复，不是正常启动流程。
+`-Mode Prepare` 和 `-ForcePrepare` 仅用于高级恢复，不是正常启动流程。
 
 ## 适用范围
 

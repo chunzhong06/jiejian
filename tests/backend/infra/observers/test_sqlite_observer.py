@@ -140,12 +140,14 @@ def test_sqlite_observer_budget_is_inconclusive(tmp_path: Path, spec: ObserverSp
 
 
 def test_sqlite_observer_secret_missing_and_child_failure_are_not_safety_results(tmp_path: Path) -> None:
+    missing_environment = dict(os.environ)
+    missing_environment.pop("DB_SECRET", None)
     missing = run_sqlite_observer(
         _spec(),
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "missing",
-        parent_environ={},
+        parent_environ=missing_environment,
         python_executable=PYTHON,
     )
     assert missing.envelope is not None

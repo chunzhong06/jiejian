@@ -2,7 +2,7 @@
 
 - 状态：已接受
 - 日期：2026-08-22
-- 适用范围：开发与发布环境、运行目录、进程所有权、结果派生、报告、Target Runtime、当前协议与数据库
+- 适用范围：源码运行与可选打包、运行目录、进程所有权、结果派生、报告、Target Runtime、当前协议与数据库
 
 ## 背景
 
@@ -16,13 +16,13 @@
 
 开发继续使用全局但项目专用的 Conda 环境 `jiejian_env`。`environment.yml` 只固定 CPython 基线和必要 Conda 工具；`pyproject.toml` 声明项目直接依赖；`uv.lock` 固定全部传递依赖和来源。开发同步由仓库受控 uv 对解析出的 Conda Prefix 执行 frozen 精确同步，并以 editable 方式安装当前源码。普通启动不求解 Conda、不修改锁文件；只有显式 update 命令可以更新锁文件。
 
-### 2. 正式运行不依赖开发工具链
+### 2. 正式入口从源码仓库一键运行
 
-正式发布携带 Wheel 与预构建前端 `dist`，使用 uv 管理的私有 Python 环境和非 editable 安装。正式 `start.cmd` 不调用 Conda、Node、pnpm、TypeScript 或 Vite，也不创建 `node_modules`。仓库开发通过独立 `scripts/dev.ps1` 完成 bootstrap、sync、update、start、test 和 shell。
+`start.cmd` 是源码仓库中的正式产品入口，准备项目专用 Conda `jiejian_env`，由受控 uv 按 `uv.lock` frozen 同步并 editable 安装当前仓库。普通启动不改写锁文件，也不安装或运行 Wheel。`scripts/dev.ps1` 提供 bootstrap、sync、update、prepare、start、test、shell 和独立可选的 package；Wheel 只可能由 package 产生，不参与普通启动。
 
-### 3. Node 与 pnpm 只属于开发和发布构建
+### 3. Node 与 pnpm 只属于前端构建
 
-`product/frontend/node_modules` 是开发安装视图，`product/frontend/node_modules/.pnpm` 是 pnpm 虚拟依赖目录，`var/cache/pnpm-store` 才是内容寻址缓存；Vite 缓存固定进入 `var/cache/vite`。正式构建记录精确 Node、pnpm、锁文件和资源摘要，把唯一 Wheel 写入 `var/runtime/release-artifacts`；正式运行只读取随 Wheel 发布的 `dist`。
+`product/frontend/node_modules` 是依赖安装视图，`product/frontend/node_modules/.pnpm` 是 pnpm 虚拟依赖目录，`var/cache/pnpm-store` 才是内容寻址缓存；Vite 缓存固定进入 `var/cache/vite`。源码、锁文件、配置和固定工具链共同形成构建指纹；仅当 `var/runtime/frontend` 缺失或指纹变化时才准备受控 Node/pnpm 并构建。命中时普通启动直接复用，不解析、下载或启动 Node/pnpm。可选 package 可以独立生成 Wheel，但不改变这条启动链。
 
 ### 4. 运行目录由唯一路径对象分区
 
@@ -34,7 +34,7 @@
 
 ### 6. 同一解释器和内核进程树是恢复前提
 
-主进程、Worker、Runner、Recording、Observer 和 Demo 使用启动阶段确认的同一绝对 Python。开发依赖当前 editable 安装，发布依赖当前 Wheel；任何子进程都不依赖调用者 cwd、用户 `PYTHONPATH` 或旧 Wheel。Windows 使用 Job Object 并在关闭所有者句柄时终止后代，POSIX 使用独立 session/process group。只有 Worker 内核锁可重新获取、进程树确认无存活后代且旧 fencing 已失效，才允许恢复 attempt。
+主进程、Worker、Runner、Recording、Observer 和 Demo 使用启动阶段确认的同一绝对 Python，并依赖当前仓库的 editable 安装；任何子进程都不依赖调用者 cwd、用户 `PYTHONPATH` 或旧 Wheel。Windows 使用 Job Object 并在关闭所有者句柄时终止后代，POSIX 使用独立 session/process group。只有 Worker 内核锁可重新获取、进程树确认无存活后代且旧 fencing 已失效，才允许恢复 attempt。
 
 ### 7. publication、结果派生和 Gate 分层
 
@@ -54,11 +54,11 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ## 影响
 
-新增开发入口、发布构建边界、RuntimePaths、缓存维护服务、进程树控制器、ResultFinalizer、派生持久状态、Target Runtime Port/Registry、独立应用与 Worker 容器。RunLifecycle、Report、Artifact 状态和 Web wire 类型收敛到当前唯一格式。现有 PermissionContract、Coverage、差分孪生、Baseline Integrity、Temporal Closure、SecurityEffectFact 与 PASS/BLOCK/INCONCLUSIVE 规则保持不变。
+新增源码准备入口、可选打包边界、RuntimePaths、缓存维护服务、进程树控制器、ResultFinalizer、派生持久状态、Target Runtime Port/Registry、独立应用与 Worker 容器。RunLifecycle、Report、Artifact 状态和 Web wire 类型收敛到当前唯一格式。现有 PermissionContract、Coverage、差分孪生、Baseline Integrity、Temporal Closure、SecurityEffectFact 与 PASS/BLOCK/INCONCLUSIVE 规则保持不变。
 
 ## 迁移与兼容
 
-阶段 10.6 使用空 `var/data`，不读取或迁移旧运行目录和旧数据库。仓库自身调用方、Sample、fixture、Schema、前端客户端和文档一次迁移。正式发布通过 Wheel 和预构建前端验收；旧源码启动模式与旧兼容入口直接删除。
+阶段 10.6 使用空 `var/data`，不读取或迁移旧运行目录和旧数据库。仓库自身调用方、Sample、fixture、Schema、前端客户端和文档一次迁移。Windows 验收从全新本地运行态双击仓库根 `start.cmd`，证明 editable 当前源码、受控依赖和 `var/runtime/frontend` 可以完整再生；旧兼容入口直接删除。
 
 ## 相关真源
 

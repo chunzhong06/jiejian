@@ -5,7 +5,7 @@
 #   启动器、控制面与全部 Python 子进程之间的解释器和包来源信任边界
 #
 # 职责
-#   核对解释器与 Prefix｜区分 editable 开发安装和 Wheel 发布安装｜生成稳定指纹
+#   核对解释器与 Prefix｜确认 editable 当前源码｜生成稳定指纹
 #
 # 边界
 #   只诊断和拒绝来源漂移，不安装依赖、不切换环境，也不信任调用者 cwd。
@@ -28,7 +28,7 @@ from urllib.parse import unquote, urlparse
 from product.backend.core.errors import ErrorCode, JiejianError
 
 SUPPORTED_PYTHON = (3, 13)
-_RUNTIME_MODES = {"development", "release"}
+_RUNTIME_MODES = {"development"}
 _IDENTITY_KEYS = (
     "JIEJIAN_PYTHON_EXECUTABLE",
     "JIEJIAN_PYTHON_ENVIRONMENT_PATH",
@@ -123,17 +123,6 @@ def python_environment_report(
             issues.append("editable 安装指向了其他源码目录")
         if project_root and product_path and not _is_within(product_path, project_root):
             issues.append("开发模式导入的 product 不属于当前仓库")
-    elif runtime_mode == "release":
-        if environment_type != "uv-private":
-            issues.append("发布模式必须使用 uv 私有环境")
-        if editable:
-            issues.append("发布模式禁止 editable 安装")
-        if distribution_root and not _is_within(distribution_root, prefix):
-            issues.append("发布 Wheel 不属于当前 Python Prefix")
-        if product_path and not _is_within(product_path, prefix):
-            issues.append("发布模式导入的 product 不属于私有环境")
-        if project_root and product_path and _is_within(product_path, project_root):
-            issues.append("发布模式错误导入了仓库源码")
 
     fingerprint_payload = {
         "python": str(executable),

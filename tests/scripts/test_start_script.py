@@ -12,9 +12,8 @@ START = ROOT / "scripts" / "start.ps1"
 DEV = ROOT / "scripts" / "dev.ps1"
 START_CMD = ROOT / "start.cmd"
 STARTUP = ROOT / "scripts" / "startup"
-RELEASE = STARTUP / "release.ps1"
+SOURCE = STARTUP / "source.ps1"
 RUNTIME = STARTUP / "runtime.ps1"
-PRODUCT = STARTUP / "product.ps1"
 PRESENTATION = STARTUP / "presentation.ps1"
 POWERSHELL = (
     shutil.which("powershell")
@@ -26,40 +25,42 @@ def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
-def test_product_start_uses_release_assets_without_node_or_frontend_build() -> None:
+def test_product_start_prepares_current_repository_without_wheel() -> None:
     source = _text(START)
 
-    assert '"release.ps1"' in source
-    assert "Read-ReleaseToolchain" in source
-    assert "Prepare-ReleasePython" in source
-    assert "Prepare-ReleaseChromium" in source
-    assert "Confirm-ReleaseFrontend" in source
-    assert "Write-ReleaseRuntimeState" in source
-    assert "Test-NodeAndPnpm" not in source
-    assert "Prepare-PythonDependencies" not in source
-    assert "Prepare-Frontend" not in source
-    assert "-PrepareOnly" not in source
-    assert 'Node.js / pnpm" "跳过"' in source
+    assert '"source.ps1"' in source
+    assert "Prepare-SourceRuntime" in source
+    assert "Confirm-SourceFrontend" in source
+    assert "Release" not in source
+    assert "Wheel" in source  # 文件信息卡明确 Wheel 不参与普通启动。
+    assert "Get-ReleaseWheel" not in source
+    assert "Prepare-ReleasePython" not in source
 
 
-def test_prepare_lock_precedes_state_and_runtime_mutation() -> None:
-    start = _text(START)
+def test_development_prepare_lock_precedes_state_and_runtime_mutation() -> None:
     dev = _text(DEV)
 
-    assert start.index("Enter-ReleasePrepareLock") < start.index("Load-PrepareState")
-    assert start.index("Enter-ReleasePrepareLock") < start.index("Resolve-ReleaseUv")
     assert dev.index("Enter-PrepareLock\n    Read-State") > 0
     assert dev.index("Enter-PrepareLock\n    Read-State") < dev.index(
         'if ($Command -eq "update")'
     )
 
 
-def test_development_entry_owns_lock_updates_and_fixed_release_build_tools() -> None:
+def test_development_entry_owns_lock_updates_and_fixed_build_tools() -> None:
     source = _text(DEV)
     project = _text(ROOT / "pyproject.toml")
     manifest = json.loads((ROOT / "product" / "config" / "toolchain.json").read_text(encoding="utf-8"))
 
-    for command in ("bootstrap", "sync", "update", "start", "test", "shell", "package"):
+    for command in (
+        "bootstrap",
+        "sync",
+        "update",
+        "prepare",
+        "start",
+        "test",
+        "shell",
+        "package",
+    ):
         assert f'"{command}"' in source
     assert source.count('"lock"') >= 2
     assert 'Invoke-External "uv-update"' in source
@@ -80,38 +81,40 @@ def test_development_entry_owns_lock_updates_and_fixed_release_build_tools() -> 
 
 
 def test_uv_partial_download_keeps_zip_extension_for_expand_archive() -> None:
-    for path in (DEV, RELEASE):
-        source = _text(path)
-        assert 'cache\\downloads\\.tmp-{0}-{1}' in source
-        assert "Expand-Archive -LiteralPath $partial" in source
-        assert 'cache\\downloads\\{0}.partial' not in source
+    source = _text(DEV)
+    assert 'cache\\downloads\\.tmp-{0}-{1}' in source
+    assert "Expand-Archive -LiteralPath $partial" in source
+    assert 'cache\\downloads\\{0}.partial' not in source
 
 
-def test_release_identity_runs_from_outside_repository_and_installs_wheel() -> None:
-    source = _text(RELEASE)
+def test_source_receipt_requires_editable_current_repository_and_var_frontend() -> None:
+    source = _text(SOURCE)
+    dev = _text(DEV)
 
-    assert "Push-Location -LiteralPath $script:ReleaseLaunchRoot" in source
-    assert '"--no-install-project"' in source
-    assert '"--no-dev"' in source
-    assert '"pip",' in source and '"install",' in source and '"--no-deps"' in source
-    assert 'JIEJIAN_RUNTIME_MODE = "release"' in source
-    assert 'runtime\\release-artifacts' in source
-    assert 'Join-Path $script:ProjectRoot "dist"' not in source
-    assert "package_origins.product" in source
-    assert '"frontend\\dist"' in source
-    assert "JIEJIAN_NODE_EXECUTABLE" in source
-    assert "Remove-Item Env:JIEJIAN_NODE_EXECUTABLE" in source
+    assert '"prepare"' in source
+    assert "project_distribution.editable" in source
+    assert "project_distribution.source_root" in source
+    assert 'runtime\\frontend' in source
+    assert 'runtime\\source\\receipt.json' in source
+    assert 'JIEJIAN_RUNTIME_MODE = "development"' in source
+    assert "Get-ReleaseWheel" not in source + dev
+    assert "pip install" not in source
+    assert "source_frontend" in dev
+    assert "recordHit" in dev
+    assert source.index("Invoke-SourcePreparation") < source.index("Import-SourceReceipt")
 
 
 def test_startup_uses_new_database_and_frontend_paths() -> None:
-    product = _text(PRODUCT)
     start = _text(START)
+    dev = _text(DEV)
 
-    assert 'Join-Path $script:VarDir "data\\jiejian.db"' in product
-    assert 'Join-Path $script:VarDir "jiejian.db"' not in product
+    assert "default_database_path" in dev
+    assert 'Join-Path $script:VarDir "jiejian.db"' not in dev
     assert '"--frontend-dir", $script:FrontendDist' in start
     assert '"--frontend-dir", (Join-Path $script:ProjectRoot' not in start
-    assert 'runtime\\release-artifacts' in _text(DEV)
+    assert 'runtime\\frontend' in dev
+    assert 'runtime\\release-artifacts' in dev
+    assert 'JIEJIAN_FRONTEND_OUT_DIR' in _text(ROOT / "product" / "frontend" / "vite.config.ts")
 
 
 def test_external_command_wrapper_preserves_single_argument_arrays() -> None:

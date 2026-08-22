@@ -251,7 +251,7 @@ def test_demo_unexpected_exit_becomes_failed_and_closes_stdout(tmp_path: Path) -
     status = manager.status()
 
     assert status.status == "failed"
-    assert "var/logs/onboarding-demo.log" in status.message
+    assert "var/logs/app/onboarding-demo.log" in status.message
     assert process.stdout.closed
     assert manager._process is None
 
@@ -276,7 +276,7 @@ def test_demo_api_status_does_not_report_exited_process_as_running(tmp_path: Pat
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "failed"
-    assert "var/logs/onboarding-demo.log" in response.json()["data"]["message"]
+    assert "var/logs/app/onboarding-demo.log" in response.json()["data"]["message"]
     assert process.stdout.closed
     assert process.stderr.closed
 
@@ -420,7 +420,9 @@ def test_demo_preclaim_worker_process_failure_is_logged_and_not_relaunched(
         broken = var_dir / "data" / "projects" / "broken" / "runs" / "broken"
         broken.mkdir(parents=True)
         (broken / PUBLICATION_MANIFEST_NAME).write_text("{}", encoding="utf-8")
-        (var_dir / "quarantine").write_text("block quarantine", encoding="utf-8")
+        (var_dir / "data" / "quarantine").write_text(
+            "block quarantine", encoding="utf-8"
+        )
         context = app.state.context
         manager = LocalWorkerSupervisor(
             context.var_dir,

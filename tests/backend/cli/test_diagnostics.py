@@ -21,7 +21,7 @@ def trusted_doctor_environment(
     chromium.touch()
     frontend.mkdir()
     (frontend / "index.html").write_text("<div id='root'></div>", encoding="utf-8")
-    monkeypatch.setenv("JIEJIAN_RUNTIME_MODE", "release")
+    monkeypatch.setenv("JIEJIAN_RUNTIME_MODE", "development")
     monkeypatch.setenv("JIEJIAN_UV_VERSION", "0.11.12")
     monkeypatch.setenv("JIEJIAN_UV_EXECUTABLE", str(uv))
     monkeypatch.setenv("JIEJIAN_FRONTEND_DIST", str(frontend))
@@ -31,12 +31,12 @@ def trusted_doctor_environment(
         lambda: {
             "schema_version": "1",
             "ok": True,
-            "runtime_mode": "release",
+            "runtime_mode": "development",
             "runtime_fingerprint": "test-fingerprint",
             "executable": "D:/runtime/python.exe",
             "version": "3.13.15",
             "prefix": "D:/runtime",
-            "environment_type": "uv-private",
+            "environment_type": "conda",
             "user_site_on_sys_path": False,
             "package_origins": {},
             "issues": [],
@@ -122,7 +122,7 @@ def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
         check = next(item for item in report["checks"] if item["name"] == name)
         assert check["ok"] is True
         assert check["required"] is False
-        assert "运行不需要" in check["message"]
+        assert "运行阶段不需要" in check["message"]
 
 
 def test_doctor_returns_nonzero_when_a_required_check_fails(

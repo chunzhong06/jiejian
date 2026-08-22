@@ -82,19 +82,19 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
         <Col xs={24} sm={12} lg={6}><Statistic title="模型" value={model} /></Col>
       </Row>
       <Descriptions style={{ marginTop: 20 }} bordered size="small" column={1}>
-        <Descriptions.Item label="运行模式">{environment?.runtime_mode ?? '未提供'} · {environment?.runtime_fingerprint ?? '无指纹'}</Descriptions.Item>
+        <Descriptions.Item label="运行模式">{environment?.runtime_mode === 'development' ? '源码运行' : environment?.runtime_mode ?? '未提供'} · {environment?.runtime_fingerprint ?? '无指纹'}</Descriptions.Item>
         <Descriptions.Item label="Python">{python?.version ?? '未提供'} · {python?.environment_type ?? '来源未知'}</Descriptions.Item>
         <Descriptions.Item label="Python 可执行文件"><Typography.Text copyable>{python?.executable ?? '未提供'}</Typography.Text></Descriptions.Item>
         <Descriptions.Item label="Python 环境目录"><Typography.Text copyable>{python?.prefix ?? '未提供'}</Typography.Text></Descriptions.Item>
         <Descriptions.Item label="用户级包">{python?.user_site_on_sys_path ? '正在使用' : '未使用'}</Descriptions.Item>
         <Descriptions.Item label="uv">{environment?.uv?.version ?? '未提供'} · <Typography.Text copyable>{environment?.uv?.executable ?? '未提供'}</Typography.Text></Descriptions.Item>
-        <Descriptions.Item label="Node.js">{environment?.node?.required === false ? '正式运行不需要' : `${environment?.node?.version ?? '未提供'} · ${environment?.node?.executable ?? '未提供'}`}</Descriptions.Item>
-        <Descriptions.Item label="pnpm">{environment?.pnpm?.required === false ? '正式运行不需要' : `${environment?.pnpm?.version ?? '未提供'} · ${environment?.pnpm?.executable ?? '未提供'}`}</Descriptions.Item>
+        <Descriptions.Item label="Node.js">{`${environment?.node?.version ?? '未提供'} · ${environment?.node?.executable ?? '未提供'}${environment?.node?.required === false ? ' · 仅构建时需要' : ''}`}</Descriptions.Item>
+        <Descriptions.Item label="pnpm">{`${environment?.pnpm?.version ?? '未提供'} · ${environment?.pnpm?.executable ?? '未提供'}${environment?.pnpm?.required === false ? ' · 仅构建时需要' : ''}`}</Descriptions.Item>
         <Descriptions.Item label="Playwright">{environment?.playwright?.package_version ?? '未提供'} · <Typography.Text copyable>{environment?.playwright?.chromium_executable ?? '未提供'}</Typography.Text></Descriptions.Item>
         <Descriptions.Item label="前端资源">
-          {environment?.frontend?.mode === 'prebuilt'
-            ? <>预构建资源 · <Typography.Text copyable>{environment.frontend.dist ?? '路径未提供'}</Typography.Text></>
-            : environment?.frontend?.dependencies ?? '开发依赖未确认'}
+          {environment?.frontend?.mode === 'source-build'
+            ? <>源码构建 · {environment.frontend.build_state === 'reused' ? '已复用' : '已更新'} · <Typography.Text copyable>{environment.frontend.dist ?? '路径未提供'}</Typography.Text></>
+            : environment?.frontend?.dependencies ?? '前端资源未确认'}
         </Descriptions.Item>
         <Descriptions.Item label="本次自动恢复任务">{status.recovered_jobs ?? 0}</Descriptions.Item>
       </Descriptions>

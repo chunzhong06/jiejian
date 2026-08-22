@@ -26,6 +26,7 @@ def test_python_environment_accepts_matching_editable_development_environment(
     monkeypatch.setenv("JIEJIAN_RUNTIME_MODE", "development")
     monkeypatch.setenv("JIEJIAN_PROJECT_ROOT", str(project_root))
     monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    monkeypatch.delenv("JIEJIAN_RUNTIME_FINGERPRINT", raising=False)
     monkeypatch.setattr(
         "product.backend.infra.runtime.environment_identity._project_distribution",
         lambda: {

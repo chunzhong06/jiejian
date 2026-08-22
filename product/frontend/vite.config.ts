@@ -2,6 +2,10 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  build: {
+    emptyOutDir: true,
+    outDir: process.env.JIEJIAN_FRONTEND_OUT_DIR || 'dist',
+  },
   plugins: [react()],
   cacheDir: '../../var/cache/vite',
   server: { port: 5173, strictPort: true },

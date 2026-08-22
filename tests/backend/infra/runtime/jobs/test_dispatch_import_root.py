@@ -96,8 +96,8 @@ def test_worker_dispatch_captures_bootstrap_stderr_and_rotates_by_job_id(
 
 @pytest.mark.process
 def test_real_recording_module_imports_away_from_repository_root(tmp_path: Path) -> None:
-    if os.environ.get("JIEJIAN_RUNTIME_MODE") not in {"development", "release"}:
-        pytest.skip("需要通过界鉴开发或正式启动环境执行真实导入证明")
+    if os.environ.get("JIEJIAN_RUNTIME_MODE") != "development":
+        pytest.skip("需要通过界鉴源码启动环境执行真实导入证明")
     outside = tmp_path / "outside-repository"
     outside.mkdir()
 

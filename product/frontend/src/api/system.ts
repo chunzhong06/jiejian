@@ -15,7 +15,7 @@ export type SystemStatus = {
     node?: { version?: string; executable?: string; required?: boolean }
     pnpm?: { version?: string; executable?: string; required?: boolean }
     playwright?: { package_version?: string; chromium_executable?: string }
-    frontend?: { mode?: 'development' | 'prebuilt'; dependencies?: string; dist?: string }
+    frontend?: { mode?: 'development' | 'prebuilt' | 'source-build'; dependencies?: string; dist?: string; build_state?: string }
   }
 }
 

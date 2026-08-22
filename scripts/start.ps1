@@ -3,16 +3,16 @@
 # Windows 一键启动编排
 #
 # 定位
-#   start.cmd 与预构建 Wheel、uv 私有 Python、Chromium 及本地控制面之间的正式启动边界
+#   start.cmd 与当前仓库 editable 源码、受控依赖及本地控制面之间的一键启动边界
 #
 # 职责
-#   校验固定发布资源｜准备版本化私有运行时｜诊断迁移并启动本地控制面
+#   准备 Conda/uv/editable 源码｜按指纹构建前端｜诊断并启动本地控制面
 #
 # 边界
-#   不调用 Conda、Node、pnpm 或前端构建；失败必须保留稳定退出码并完成子进程清理。
+#   Wheel 不参与普通启动；全部运行产物只进入 var，失败保留稳定退出码并清理子进程。
 #
 # 调用链
-#   start.cmd / user shell → scripts/start.ps1 → 已安装 package CLI / Playwright
+#   start.cmd / user shell → scripts/start.ps1 → scripts/dev.ps1 prepare → editable package CLI
 # =============================================================================
 
 [CmdletBinding(PositionalBinding = $false)]
@@ -41,7 +41,6 @@ $script:StartupDir = Join-Path $script:VarDir "cache\startup"
 $script:StatePath = Join-Path $script:StartupDir "prepare-state.json"
 $script:LogPath = Join-Path $script:LogDir ("{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff"))
 $script:ToolchainPath = Join-Path $script:ProjectRoot "product\config\toolchain.json"
-$script:ReleaseLaunchRoot = Join-Path $script:VarDir "runtime\launch\release"
 $script:StartupLogInitialized = $false
 $script:FailureStage = "startup"
 $script:FailureCode = 0
@@ -150,8 +149,8 @@ try {
 
 
 
-# 上下文变量初始化后再加载职责模块，正式启动只调用发布环境准备能力。
-foreach ($module in @("presentation.ps1", "state.ps1", "runtime.ps1", "release.ps1", "product.ps1")) {
+# 上下文变量初始化后再加载职责模块；源码准备由 dev.ps1 独占准备锁并返回可信回执。
+foreach ($module in @("presentation.ps1", "runtime.ps1", "source.ps1", "product.ps1")) {
     . (Join-Path $PSScriptRoot "startup\$module")
 }
 
@@ -172,55 +171,44 @@ try {
     Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
     $env:PYTHONUTF8 = "1"
     $env:PYTHONIOENCODING = "utf-8"
-    Enter-ReleasePrepareLock
-
-    # 正式启动的准备锁先于工具、状态、数据库和缓存读写，避免并发修改同一运行时。
     Start-DisplayStage 1 "检查运行环境"
-    Write-Stage "preflight" "检查正式发布资源与固定工具链"
-    Load-PrepareState
-    $toolchain = Read-ReleaseToolchain
-    $null = Get-ReleaseWheel
-    Resolve-ReleaseUv $toolchain
+    Write-Stage "source-prepare" "准备当前仓库的受控源码运行环境"
+    Prepare-SourceRuntime
+    $frontendStatus = if ($script:FrontendBuildDetail -eq "reused") { "指纹命中，已复用" } else { "指纹变化，已构建" }
     Write-DisplayResult "固定工具链" "完成" $false ("uv {0}" -f $script:UvVersion)
-    Write-DisplayResult "前端资源" "完成" $false "Wheel 内预构建资源"
-    Write-DisplayResult "Node.js / pnpm" "跳过" $false "正式运行不需要"
+    Write-DisplayResult "源码环境" "完成" $false "Conda jiejian_env · editable 当前仓库"
+    Write-DisplayResult "前端资源" "完成" $false $frontendStatus
     Write-DisplayResult "PowerShell" "完成" $true $PSVersionTable.PSVersion.ToString()
-    Write-Startup "项目根: $script:ProjectRoot`n运行目录: $script:VarDir`n模式: release/$script:FinalMode`n日志: $script:LogPath`nuv=$script:UvVersion`nNode/pnpm=正式运行不需要"
+    Write-Startup "项目根: $script:ProjectRoot`n运行目录: $script:VarDir`n模式: source/$script:FinalMode`n日志: $script:LogPath`nuv=$script:UvVersion`n前端=$script:FrontendBuildDetail"
     Complete-DisplayStage "完成"
 
     Start-DisplayStage 2 "准备 Python"
-    Write-Stage "python" "准备 uv 私有 Python 与安装 Wheel"
-    Prepare-ReleasePython $toolchain
+    Write-Stage "python" "确认 Conda、uv.lock 与 editable 当前源码"
     Write-PythonEnvironment
     Write-DisplayResult "Python" "完成" $false $script:PythonVersion
     Write-DisplayResult "Python 依赖" "完成" $false $script:PythonDependenciesDetail
     Write-DisplayResult "运行环境" "完成" $true ("{0} · {1}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath)
     Complete-DisplayStage
     Start-DisplayStage 3 "准备浏览器"
-    Write-Stage "playwright" "准备或校验正式 Chromium"
-    Prepare-ReleaseChromium
+    Write-Stage "playwright" "确认受控 Playwright Chromium"
     Write-DisplayResult "Chromium" "完成" $true $script:ChromiumDetail
     Complete-DisplayStage
     Write-RuntimeSummary
 
     Start-DisplayStage 4 "准备数据"
     Write-Stage "doctor" "运行环境诊断"
-    Set-Location -LiteralPath $script:ReleaseLaunchRoot
+    Set-Location -LiteralPath $script:ProjectRoot
     Invoke-Package @("--var-dir", $script:VarDir, "doctor", "--json") "doctor" 42
     Write-DisplayResult "环境诊断" "完成" $false
-    Write-Stage "migration" "升级本地数据库"
-    Prepare-Migration
-    Write-DisplayResult "本地数据" "完成" $true $script:MigrationDetail
+    Write-DisplayResult "本地数据" "完成" $true "已迁移并校验"
     Complete-DisplayStage
 
     Start-DisplayStage 5 "准备界面"
-    Write-Stage "frontend" "确认预构建前端与运行时引用"
-    Confirm-ReleaseFrontend
-    Write-ReleaseRuntimeState
+    Write-Stage "frontend" "确认 var/runtime/frontend 源码构建"
+    Confirm-SourceFrontend
     Write-DisplayResult "前端资源" "完成" $false $script:FrontendDist
-    Write-DisplayResult "运行时状态" "完成" $true "保留当前与上一版本引用"
+    Write-DisplayResult "构建状态" "完成" $true $frontendStatus
     Complete-DisplayStage "完成"
-    Exit-ReleasePrepareLock
 
     Start-DisplayStage 6 "启动界鉴"
     if ($script:FinalMode -eq "Interactive") {
@@ -246,7 +234,7 @@ try {
         Complete-DisplayStage
         exit 0
     }
-    # --- 启动环节：把控制权交给正式 serve 入口 ---
+    # --- 启动环节：把控制权交给当前仓库的统一 serve 入口 ---
     Write-Stage "serve" "启动本地控制面"
     Invoke-Package @(
         "--var-dir", $script:VarDir,
@@ -263,7 +251,6 @@ try {
     Fail-Start (Get-StageFailureCode $script:FailureStage) $script:FailureStage ("启动编排失败: " + $_.Exception.Message) (Get-RecoveryCommand)
 } finally {
     # --- 阶段：恢复调用者环境并精确清理本轮临时资源 ---
-    Exit-ReleasePrepareLock
     Stop-WaitIndicator
     if ($script:DownloadTemp -and (Test-Path -LiteralPath $script:DownloadTemp)) {
         Remove-Item -LiteralPath $script:DownloadTemp -Recurse -Force -ErrorAction SilentlyContinue

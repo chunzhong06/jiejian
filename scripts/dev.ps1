@@ -6,7 +6,7 @@
 #   全局项目专用 Conda 环境、冻结 uv 依赖与仓库源码之间的唯一开发编排入口
 #
 # 职责
-#   创建或更新 Python 基线｜冻结同步 editable 项目｜开发启动/测试/交互/发布构建
+#   创建或更新 Python 基线｜冻结同步 editable 项目｜源码启动准备｜开发测试/交互/可选打包
 #
 # 边界
 #   只有 update 可以改写 uv.lock；不修改用户 PATH、PowerShell Profile 或仓库外环境。
@@ -15,9 +15,10 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("bootstrap", "sync", "update", "start", "test", "shell", "package")]
+    [ValidateSet("bootstrap", "sync", "update", "prepare", "start", "test", "shell", "package")]
     [string]$Command = "start",
     [string]$VarDir = "",
+    [switch]$ForcePrepare,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$CommandArguments = @()
 )
@@ -45,6 +46,7 @@ $script:Node = $null
 $script:NodeVersion = $null
 $script:PnpmRunner = @()
 $script:PnpmVersion = $null
+$script:FrontendBuildState = $null
 $script:State = [pscustomobject]@{ schema_version = "1" }
 $script:OriginalPath = $env:PATH
 
@@ -472,32 +474,99 @@ function Get-FrontendDigest {
         (Join-Path $frontend "pnpm-workspace.yaml"),
         (Join-Path $frontend "index.html"),
         (Join-Path $frontend "tsconfig.json"),
-        (Join-Path $frontend "vite.config.ts")
+        (Join-Path $frontend "vite.config.ts"),
+        $script:ToolchainPath
     ) + @(Get-ChildItem -LiteralPath (Join-Path $frontend "src") -Recurse -File | Select-Object -ExpandProperty FullName)
     return Get-CombinedDigest $files
 }
 
-function Prepare-Frontend($Toolchain, [bool]$Exact) {
-    Resolve-DevelopmentNode $Toolchain $Exact
+function Set-FrontendToolEnvironment($Record) {
+    if ($null -eq $Record) { return }
+    $script:Node = [string]$Record.node_executable
+    $script:NodeVersion = [string]$Record.node_version
+    $script:PnpmVersion = [string]$Record.pnpm_version
+    if (-not [string]::IsNullOrWhiteSpace([string]$Record.pnpm_executable)) {
+        $script:PnpmRunner = @([string]$Record.node_executable, [string]$Record.pnpm_executable)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($script:Node)) {
+        $env:JIEJIAN_NODE_EXECUTABLE = $script:Node
+        $env:JIEJIAN_NODE_VERSION = $script:NodeVersion
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$Record.pnpm_executable)) {
+        $env:JIEJIAN_PNPM_EXECUTABLE = [string]$Record.pnpm_executable
+        $env:JIEJIAN_PNPM_VERSION = $script:PnpmVersion
+    }
+}
+
+function Prepare-SourceFrontend($Toolchain) {
     $frontend = Join-Path $script:ProjectRoot "product\frontend"
     $fingerprint = Get-FrontendDigest
-    $index = Join-Path $frontend "dist\index.html"
-    $modules = Join-Path $frontend "node_modules\.modules.yaml"
-    $stateDigest = [string](Get-StateValue "frontend_digest")
-    if ($stateDigest -ne $fingerprint -or -not (Test-Path -LiteralPath $modules -PathType Leaf) -or -not (Test-Path -LiteralPath $index -PathType Leaf)) {
-        Push-Location -LiteralPath $frontend
-        try {
-            Invoke-External "frontend-install" @($script:PnpmRunner + @("install", "--frozen-lockfile", "--store-dir", (Join-Path $script:VarDir "cache\pnpm-store")))
-            Invoke-External "frontend-build" @($script:PnpmRunner + @("build"))
-        } finally { Pop-Location }
-        if (-not (Test-Path -LiteralPath $index -PathType Leaf)) {
-            Fail-Development "frontend-build" "前端构建没有生成 dist/index.html" "检查 TypeScript/Vite 输出"
-        }
-        Set-StateValue "frontend_digest" $fingerprint
-        Save-State
+    $dist = Join-Path $script:VarDir "runtime\frontend"
+    $index = Join-Path $dist "index.html"
+    $record = Get-StateValue "source_frontend"
+    $recordHit = -not $ForcePrepare -and $null -ne $record -and
+        [string]$record.digest -eq $fingerprint -and
+        [string]$record.dist -eq [IO.Path]::GetFullPath($dist) -and
+        (Test-Path -LiteralPath $index -PathType Leaf)
+    if ($recordHit) {
+        Set-FrontendToolEnvironment $record
+        $script:FrontendBuildState = "reused"
+        $env:JIEJIAN_FRONTEND_DEPENDENCIES = "构建指纹命中，运行阶段无需 Node/pnpm"
+        $env:JIEJIAN_FRONTEND_DIST = [IO.Path]::GetFullPath($dist)
+        $env:JIEJIAN_FRONTEND_BUILD_STATE = $script:FrontendBuildState
+        Write-Host "前端构建指纹未变化，复用 var/runtime/frontend。" -ForegroundColor DarkGray
+        return
     }
-    $env:JIEJIAN_FRONTEND_DEPENDENCIES = "pnpm $($script:PnpmVersion) · 已同步"
-    $env:JIEJIAN_FRONTEND_DIST = Join-Path $frontend "dist"
+
+    # Node/pnpm 只属于构建阶段；已有可验证构建命中时不会解析、下载或启动它们。
+    Resolve-DevelopmentNode $Toolchain $true
+    $modules = Join-Path $frontend "node_modules\.modules.yaml"
+    Push-Location -LiteralPath $frontend
+    $savedOutDir = $env:JIEJIAN_FRONTEND_OUT_DIR
+    try {
+        Invoke-External "frontend-install" @($script:PnpmRunner + @("install", "--frozen-lockfile", "--store-dir", (Join-Path $script:VarDir "cache\pnpm-store")))
+        if (-not (Test-Path -LiteralPath $modules -PathType Leaf)) {
+            Fail-Development "frontend-install" "pnpm 未生成完整依赖安装视图" "删除 product/frontend/node_modules 后重试"
+        }
+        $env:JIEJIAN_FRONTEND_OUT_DIR = [IO.Path]::GetFullPath($dist)
+        Invoke-External "frontend-build" @($script:PnpmRunner + @("build"))
+    } finally {
+        if ($null -eq $savedOutDir) { Remove-Item Env:JIEJIAN_FRONTEND_OUT_DIR -ErrorAction SilentlyContinue }
+        else { $env:JIEJIAN_FRONTEND_OUT_DIR = $savedOutDir }
+        Pop-Location
+    }
+    if (-not (Test-Path -LiteralPath $index -PathType Leaf)) {
+        Fail-Development "frontend-build" "前端构建没有生成 var/runtime/frontend/index.html" "检查 TypeScript/Vite 输出"
+    }
+    $record = [pscustomobject]@{
+        digest = $fingerprint
+        dist = [IO.Path]::GetFullPath($dist)
+        node_executable = $script:Node
+        node_version = $script:NodeVersion
+        pnpm_executable = $script:PnpmRunner[1]
+        pnpm_version = $script:PnpmVersion
+    }
+    Set-StateValue "source_frontend" $record
+    Save-State
+    $script:FrontendBuildState = "rebuilt"
+    $env:JIEJIAN_FRONTEND_DEPENDENCIES = "pnpm $($script:PnpmVersion) · 已同步并构建"
+    $env:JIEJIAN_FRONTEND_DIST = [IO.Path]::GetFullPath($dist)
+    $env:JIEJIAN_FRONTEND_BUILD_STATE = $script:FrontendBuildState
+}
+
+function Prepare-PackageFrontend($Toolchain) {
+    Resolve-DevelopmentNode $Toolchain $true
+    $frontend = Join-Path $script:ProjectRoot "product\frontend"
+    $index = Join-Path $frontend "dist\index.html"
+    Push-Location -LiteralPath $frontend
+    try {
+        Invoke-External "frontend-install" @($script:PnpmRunner + @("install", "--frozen-lockfile", "--store-dir", (Join-Path $script:VarDir "cache\pnpm-store")))
+        Remove-Item Env:JIEJIAN_FRONTEND_OUT_DIR -ErrorAction SilentlyContinue
+        Invoke-External "frontend-build" @($script:PnpmRunner + @("build"))
+    } finally { Pop-Location }
+    if (-not (Test-Path -LiteralPath $index -PathType Leaf)) {
+        Fail-Development "frontend-build" "可选打包未生成 product/frontend/dist/index.html" "检查 TypeScript/Vite 输出"
+    }
 }
 
 function Prepare-Database {
@@ -510,10 +579,57 @@ function Prepare-Database {
     )
 }
 
-function Invoke-DevelopmentStart($Toolchain) {
-    Prepare-Frontend $Toolchain $false
+function Write-SourceReceipt {
+    $identity = Read-DevelopmentIdentity
+    if ($null -eq $identity -or -not $identity.ok) {
+        Fail-Development "python-identity" "无法为源码启动形成可信环境回执" "执行 .\scripts\dev.ps1 sync"
+    }
+    $pythonVersion = (& $script:Python -S -B -c "import platform; print(platform.python_version())" 2>$null | Out-String).Trim()
+    $receiptPath = Join-Path $script:VarDir "runtime\source\receipt.json"
+    $receipt = [ordered]@{
+        schema_version = "1"
+        project_root = $script:ProjectRoot
+        var_dir = $script:VarDir
+        runtime_mode = "development"
+        python = [ordered]@{
+            executable = $script:Python
+            version = $pythonVersion
+            environment_path = $script:CondaPrefix
+            environment_type = "conda"
+            runtime_fingerprint = [string]$identity.runtime_fingerprint
+            report = $identity
+        }
+        uv = [ordered]@{ executable = $script:Uv; version = $script:UvVersion }
+        node = [ordered]@{ executable = $env:JIEJIAN_NODE_EXECUTABLE; version = $env:JIEJIAN_NODE_VERSION }
+        pnpm = [ordered]@{ executable = $env:JIEJIAN_PNPM_EXECUTABLE; version = $env:JIEJIAN_PNPM_VERSION }
+        playwright = [ordered]@{ executable = $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE; browsers_path = $env:PLAYWRIGHT_BROWSERS_PATH }
+        frontend = [ordered]@{
+            dist = $env:JIEJIAN_FRONTEND_DIST
+            dependencies = $env:JIEJIAN_FRONTEND_DEPENDENCIES
+            build_state = $script:FrontendBuildState
+        }
+    }
+    New-Item -ItemType Directory -Path (Split-Path -Parent $receiptPath) -Force | Out-Null
+    $temporary = "$receiptPath.$([guid]::NewGuid().ToString('N')).tmp"
+    try {
+        [IO.File]::WriteAllText($temporary, ($receipt | ConvertTo-Json -Depth 12 -Compress), $script:Utf8NoBom)
+        if (Test-Path -LiteralPath $receiptPath -PathType Leaf) { Remove-Item -LiteralPath $receiptPath -Force }
+        [IO.File]::Move($temporary, $receiptPath)
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host ("源码运行环境回执：{0}" -f $receiptPath) -ForegroundColor Green
+}
+
+function Prepare-SourceRuntime($Toolchain) {
+    Prepare-SourceFrontend $Toolchain
     Prepare-Chromium
     Prepare-Database
+    Write-SourceReceipt
+}
+
+function Invoke-DevelopmentStart($Toolchain) {
+    Prepare-SourceRuntime $Toolchain
     Exit-PrepareLock
     Write-Host "界鉴开发环境已准备完成，正在打开图形界面。" -ForegroundColor Cyan
     Invoke-External "serve" @(
@@ -576,7 +692,7 @@ function Invoke-Update {
 }
 
 function Invoke-Package($Toolchain) {
-    Prepare-Frontend $Toolchain $true
+    Prepare-PackageFrontend $Toolchain
     Prepare-Chromium
     $dist = Join-Path $script:VarDir "runtime\release-artifacts"
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
@@ -605,6 +721,7 @@ try {
     switch ($Command) {
         "bootstrap" { Write-Host "jiejian_env 已按 environment.yml 与 uv.lock 完整准备。" -ForegroundColor Green }
         "sync" { Write-Host "jiejian_env 已按 uv.lock 精确同步。" -ForegroundColor Green }
+        "prepare" { Prepare-SourceRuntime $toolchain }
         "start" { Invoke-DevelopmentStart $toolchain }
         "test" { Invoke-DevelopmentTest }
         "shell" { Invoke-DevelopmentShell }
