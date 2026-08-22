@@ -604,6 +604,14 @@ def test_api_worker_runner_publication_matches_cli_report(
     profile_path = _write_profile(tmp_path, port=sample.port)
     for key, value in sample.environ.items():
         monkeypatch.setenv(key, value)
+    project_root = Path(__file__).resolve().parents[3]
+    monkeypatch.setenv("JIEJIAN_PYTHON_EXECUTABLE", sys.executable)
+    monkeypatch.setenv("JIEJIAN_PYTHON_ENVIRONMENT_PATH", sys.prefix)
+    monkeypatch.setenv("JIEJIAN_PYTHON_ENVIRONMENT_TYPE", "conda")
+    monkeypatch.setenv("JIEJIAN_RUNTIME_MODE", "development")
+    monkeypatch.setenv("JIEJIAN_PROJECT_ROOT", str(project_root))
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
+    monkeypatch.delenv("JIEJIAN_RUNTIME_FINGERPRINT", raising=False)
     var_dir = tmp_path / "api-real"
     app = create_app(var_dir, start_worker=True)
     with TestClient(app) as client:
@@ -620,7 +628,11 @@ def test_api_worker_runner_publication_matches_cli_report(
             response = client.get(f"/api/runs/{run_id}")
             if response.status_code == 200:
                 detail = response.json()["data"]
-                if detail["lifecycle"] in {"COMPLETED", "FAILED", "CANCELLED", "SAFETY_STOPPED"}:
+                finalization = detail.get("finalization", {})
+                if (
+                    detail["lifecycle"] in {"FAILED", "CANCELLED"}
+                    or finalization.get("base_report_state") == "COMPLETE"
+                ):
                     break
             time.sleep(0.1)
         assert detail is not None and detail["lifecycle"] == "COMPLETED", detail
@@ -640,6 +652,10 @@ def test_api_worker_runner_publication_matches_cli_report(
         assert report["case_progress"]["completed"] == report["case_progress"]["total"]
         assert report["case_progress"]["total"] > 0
         assert report["safety_context"] is None
+        assert report["finalization"]["findings_state"] == "COMPLETE"
+        assert report["finalization"]["base_report_state"] == "COMPLETE"
+        base_report_id = report["finalization"]["base_report_id"]
+        assert base_report_id
         evidence = client.get(f"/api/runs/{run_id}/evidence").json()["data"]
         assert evidence
         evidence_detail = client.get(f"/api/runs/{run_id}/evidence/{evidence[0]['evidence_id']}")
@@ -648,9 +664,32 @@ def test_api_worker_runner_publication_matches_cli_report(
         assert evidence_payload.get("evidence_id") == evidence[0]["evidence_id"], evidence_detail.text
         assert evidence_payload.get("execution_fact") is not None
         assert evidence_payload.get("observation_facts")
+        available = client.get(f"/api/runs/{run_id}/reports")
+        assert available.status_code == 200, available.text
+        listed_reports = available.json()["data"]
+        assert len(listed_reports) == 1
+        assert listed_reports[0]["schema_version"] == "3"
+        assert listed_reports[0]["report_id"] == base_report_id
+        assert listed_reports[0]["run_id"] == run_id
+        assert listed_reports[0]["report_type"] == "BASE"
+        api_report_response = client.get(f"/api/runs/{run_id}/reports/{base_report_id}")
+        assert api_report_response.status_code == 200, api_report_response.text
+        api_report = api_report_response.json()["data"]
+        assert api_report["report_type"] == "BASE"
+        assert api_report["artifact_summary"]["status"] == "NOT_REQUESTED"
+        for output_format in ("json", "html", "sarif", "junit"):
+            projection = client.get(
+                f"/api/runs/{run_id}/reports/{base_report_id}/formats/{output_format}"
+            )
+            assert projection.status_code == 200, projection.text
         baseline_response = client.post(
             f"/api/projects/{project['project_id']}/baselines",
-            json={"schema_version": "1", "accepted_run_id": run_id, "actor": "test", "reason": "current publication baseline"},
+            json={
+                "schema_version": "1",
+                "accepted_run_id": run_id,
+                "actor": "test",
+                "reason": "current publication baseline",
+            },
         )
         assert baseline_response.status_code == 200, baseline_response.text
         baseline_id = baseline_response.json()["data"]["baseline_id"]
@@ -660,28 +699,54 @@ def test_api_worker_runner_publication_matches_cli_report(
         )
         assert gate_response.status_code == 200, gate_response.text
         gate_result_id = gate_response.json()["data"]["gate_result_id"]
+        gate_report_response = client.post(
+            f"/api/runs/{run_id}/reports/gate",
+            json={"gate_result_id": gate_result_id},
+        )
+        assert gate_report_response.status_code == 200, gate_report_response.text
+        gate_report = gate_report_response.json()["data"]
+        assert gate_report["report_type"] == "GATE"
+        assert gate_report["base_report_id"] == base_report_id
+        assert gate_report["base_report_sha256"] == api_report["canonical_sha256"]
+        for copied_field in (
+            "run",
+            "runtime",
+            "artifact_summary",
+            "versions",
+            "limitations",
+        ):
+            assert gate_report[copied_field] == api_report[copied_field]
+        assert len(client.get(f"/api/runs/{run_id}/reports").json()["data"]) == 2
         runner_process_ids = tuple(sample.server.runner_process_ids)
     assert runner_process_ids and set(runner_process_ids) != {os.getpid()}
     cli_report = CliRunner().invoke(
         cli_app,
-        ["--var-dir", str(var_dir), "report", run_id, "--format", "json", "--gate-result-id", gate_result_id],
+        ["--var-dir", str(var_dir), "report", run_id, "--format", "json"],
         env=sample.environ,
     )
     assert cli_report.exit_code == 0, cli_report.output
     cli_payload = json.loads(cli_report.stdout)
     assert cli_payload["run_id"] == run_id
+    assert cli_payload["report_id"] == base_report_id
+    assert cli_payload == api_report
+    cli_repair = CliRunner().invoke(
+        cli_app,
+        ["--var-dir", str(var_dir), "result-repair", run_id],
+        env=sample.environ,
+    )
+    assert cli_repair.exit_code == 0, cli_repair.output
+    assert json.loads(cli_repair.stdout)["base_report_state"] == "COMPLETE"
+    assert tuple(sample.server.runner_process_ids) == runner_process_ids
     with TestClient(create_app(var_dir, start_worker=False)) as client:
         available = client.get(f"/api/runs/{run_id}/reports")
         assert available.status_code == 200
-        report_id = cli_payload["report_id"]
-        api_report_response = client.get(f"/api/runs/{run_id}/reports/{report_id}")
+        api_report_response = client.get(f"/api/runs/{run_id}/reports/{base_report_id}")
         assert api_report_response.status_code == 200, api_report_response.text
-        api_report = api_report_response.json()["data"]
-    assert api_report == cli_payload
+        assert api_report_response.json()["data"] == cli_payload
 
-    report_path = var_dir / "data" / "reports" / "runs" / run_id / report_id / "report.json"
+    report_path = var_dir / "data" / "reports" / "runs" / run_id / base_report_id / "report.json"
     report_path.write_text('{"tampered":true}', encoding="utf-8")
     with TestClient(create_app(var_dir, start_worker=False)) as client:
-        tampered = client.get(f"/api/runs/{run_id}/reports/{report_id}")
+        tampered = client.get(f"/api/runs/{run_id}/reports/{base_report_id}")
     assert tampered.status_code != 200
     assert tampered.json()["error"]["code"] in {"ARTIFACT_HASH_MISMATCH", "ARTIFACT_MANIFEST", "REPORT_INTEGRITY"}

@@ -151,3 +151,74 @@ def test_runner_resolves_202_only_after_bound_async_success() -> None:
     assert without_terminal.outcome is ExecutionOutcome.UNKNOWN
     assert completed.outcome is ExecutionOutcome.ACCEPTED
     assert completed.reason_codes == ()
+
+
+def test_runner_cleanup_failure_is_a_single_fatal_reason() -> None:
+    result = execution._result_error(
+        runner_input(),
+        ErrorCode.CLEANUP_FAILED.value,
+        finished_at_us=20,
+        cleanup_failed=True,
+    )
+    assert result.result_type.value == "FATAL_ERROR"
+    assert result.error is not None and result.error.code == ErrorCode.CLEANUP_FAILED.value
+    assert result.reason_codes == (ErrorCode.CLEANUP_FAILED.value,)
+    assert result.cleanup.status.value == "FAILED"
+    assert result.cleanup.finished_at_us == 20
+
+    completed_cleanup = execution._result_error(
+        runner_input(),
+        "RUNNER_FATAL",
+        finished_at_us=21,
+        cleanup_succeeded=True,
+    )
+    assert completed_cleanup.cleanup.status.value == "SUCCEEDED"
+    assert completed_cleanup.cleanup.finished_at_us == 21
+
+
+def test_runner_safety_stop_with_cleanup_failure_is_fatal() -> None:
+    result = execution._result_error(
+        runner_input(),
+        ErrorCode.SCOPE_URL.value,
+        finished_at_us=20,
+        safety_stopped=True,
+        cleanup_failed=True,
+    )
+    assert result.result_type.value == "FATAL_ERROR"
+    assert result.run_lifecycle.value == "FAILED"
+    assert result.job_state.value == "FAILED"
+    assert result.error is not None and result.error.code == ErrorCode.CLEANUP_FAILED.value
+    assert result.reason_codes == (ErrorCode.CLEANUP_FAILED.value,)
+    assert result.cleanup.status.value == "FAILED"
+    assert result.cleanup.reason_codes == (ErrorCode.CLEANUP_FAILED.value,)
+
+
+def test_runner_runtime_close_failure_is_cleanup_failure(monkeypatch, tmp_path: Path) -> None:
+    class _FailingRuntime:
+        instances = 0
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.instance_id = self.__class__.instances
+            self.__class__.instances += 1
+
+        def bootstrap(self, _sender, *, requests=()) -> None:
+            return None
+
+        def set_csrf(self, *_args, **_kwargs) -> None:
+            return None
+
+        def close(self) -> None:
+            if self.instance_id == 0:
+                raise RuntimeError("runtime close failure")
+
+    monkeypatch.setattr(execution, "HttpIdentityRuntime", _FailingRuntime)
+    runner = execution.RunnerExecutor(
+        runner_input(),
+        environ={"JIEJIAN_TEST_TOKEN": "subject-secret", "OWNER_READ_ONLY": "owner-secret"},
+        staging=tmp_path / "staging",
+        clock=lambda: 20,
+    )
+    import pytest
+    with pytest.raises(JiejianError) as captured:
+        runner.run_case(runner_input().project_snapshot.plan.cases[0])
+    assert captured.value.code == ErrorCode.CLEANUP_FAILED.value

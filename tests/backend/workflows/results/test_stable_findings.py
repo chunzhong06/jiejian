@@ -10,7 +10,10 @@ from product.protocols import (
     RunnerResultType,
     RunnerResult,
 )
-from product.backend.workflows.results.findings import FindingProjection, finding_inputs
+from product.backend.workflows.results.findings import FindingMaterializer, FindingQueries, finding_inputs
+from product.backend.workflows.results.published import PublishedRunView
+from product.backend.infra.artifacts.run_packages import PublicationManifest, StagedArtifact, ValidatedPublication
+from product.backend.infra.artifacts.run_publication import publication_manifest_sha256
 from product.backend.infra.storage import (
     ProjectRecord,
     RunRecord,
@@ -28,14 +31,29 @@ RUN_TWO = "run_22222222222222222222222222222222"
 
 
 def _view(run_id: str, result: RunnerResult):
-    return SimpleNamespace(
+    timestamp = 100 if run_id == RUN_ONE else 200
+    manifest = PublicationManifest(
+        project_id=PROJECT_ID,
+        run_id=run_id,
+        job_id=result.job_id,
+        attempt=1,
+        lease_owner="finding-test",
+        fencing_token=1,
+        lease_expires_at_us=1000,
+        published_at_us=timestamp,
+        result_sha256="a" * 64,
+        files=(StagedArtifact(path="result.json", byte_count=1, sha256="a" * 64),),
+    )
+    return PublishedRunView(
         run=SimpleNamespace(
             project_id=PROJECT_ID,
             run_id=run_id,
-            finished_at_us=100 if run_id == RUN_ONE else 200,
-            updated_at_us=100 if run_id == RUN_ONE else 200,
+            finished_at_us=timestamp,
+            updated_at_us=timestamp,
+            lifecycle=RunLifecycle.COMPLETED,
         ),
-        publication=SimpleNamespace(result=result),
+        job=SimpleNamespace(job_id=result.job_id),
+        publication=ValidatedPublication(result=result, manifest=manifest, final_dir=Path(".")),
         evidence=(),
     )
 
@@ -43,7 +61,7 @@ def _view(run_id: str, result: RunnerResult):
 def _result(run_id: str, evidence):
     snapshot = runner_input().project_snapshot
     return RunnerResult(
-        schema_version="2",
+        schema_version="3",
         run_id=run_id,
         job_id="job_" + run_id[4:],
         attempt=1,
@@ -55,7 +73,7 @@ def _result(run_id: str, evidence):
         job_state=JobState.SUCCEEDED,
         verdict=RunVerdict.BLOCK if evidence.verdict.value == "VULNERABLE" else RunVerdict.PASS,
         reason_codes=(),
-        cleanup=CleanupResult(schema_version="2", status=CleanupStatus.SUCCEEDED),
+        cleanup=CleanupResult(schema_version="2", status=CleanupStatus.SUCCEEDED, finished_at_us=100 if run_id == RUN_ONE else 200),
         error=None,
         plan_fingerprint=snapshot.plan.plan_fingerprint,
         coverage_record_count=len(snapshot.plan.coverage),
@@ -124,16 +142,23 @@ def test_two_published_runs_materialize_appeared_and_disappeared_occurrences(tmp
             read=lambda run_id: views[run_id],
             request_snapshot=lambda _view: runner_input().project_snapshot,
         )
-        service = FindingProjection(lambda: StorageUnitOfWork(factory), reader)
+        materializer = FindingMaterializer(lambda: StorageUnitOfWork(factory), reader)
+        for view in views.values():
+            with StorageUnitOfWork(factory) as work:
+                materializer_sha = publication_manifest_sha256(view.publication.manifest)
+                work.finalizations.ensure_initial(view.run.run_id, materializer_sha, view.run.finished_at_us)
+                work.commit()
+            materializer.materialize(view)
+        queries = FindingQueries(lambda: StorageUnitOfWork(factory))
 
-        first = service.findings_for_run(RUN_ONE)
-        second = service.findings_for_run(RUN_TWO)
+        first = queries.findings_for_run(RUN_ONE)
+        second = queries.findings_for_run(RUN_TWO)
         assert first[0]["occurrence"]["status"] == "APPEARED"
         assert first[0]["occurrence"]["evidence_refs"] == [first_evidence.evidence_id]
         assert second[0]["finding"]["finding_id"] == first[0]["finding"]["finding_id"]
         assert second[0]["occurrence"]["status"] == "DISAPPEARED"
         assert second[0]["occurrence"]["evidence_refs"] == [second_evidence.evidence_id]
-        repeated = service.findings_for_run(RUN_ONE)
+        repeated = queries.findings_for_run(RUN_ONE)
         assert repeated[0]["finding"]["finding_id"] == first[0]["finding"]["finding_id"]
         assert repeated[0]["occurrence"] == first[0]["occurrence"]
     finally:

@@ -9,6 +9,7 @@ from product.backend.core.lifecycle import CaseVerdict, JobState, ProjectStatus,
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import CleanupResult, CleanupStatus, ObserverOutcomeStatus, RunnerResultType, RunnerResult
 from product.backend.workflows.results.gating import RegressionGate
+from product.backend.workflows.results.findings import FindingQueries
 from product.backend.infra.storage import ProjectRecord, RunRecord, StorageUnitOfWork, create_session_factory, create_sqlite_engine, upgrade_database
 from tests.fixtures.runner import evidence as make_evidence, rehash_evidence, runner_input
 
@@ -34,7 +35,7 @@ def _result(run_id: str, verdict: CaseVerdict, *, observer_status: ObserverOutco
     snapshot = runner_input().project_snapshot
     run_verdict = RunVerdict.BLOCK if verdict is CaseVerdict.VULNERABLE else RunVerdict.INCONCLUSIVE if verdict is CaseVerdict.INCONCLUSIVE else RunVerdict.PASS
     return RunnerResult(
-        schema_version="2",
+        schema_version="3",
         run_id=run_id,
         job_id="job_" + run_id[4:],
         attempt=1,
@@ -46,7 +47,7 @@ def _result(run_id: str, verdict: CaseVerdict, *, observer_status: ObserverOutco
         job_state=JobState.SUCCEEDED,
         verdict=run_verdict,
         reason_codes=(),
-        cleanup=CleanupResult(schema_version="2", status=CleanupStatus.SUCCEEDED),
+        cleanup=CleanupResult(schema_version="2", status=CleanupStatus.SUCCEEDED, finished_at_us=100 if run_id == FIXED_RUN else 200),
         error=None,
         plan_fingerprint=snapshot.plan.plan_fingerprint,
         coverage_record_count=len(snapshot.plan.coverage),
@@ -133,5 +134,59 @@ def test_vulnerable_fixed_vulnerable_reappears_and_gate_result_is_immutable(tmp_
         assert mismatch.value.code == ErrorCode.GATE_INPUT_INVALID.value
         with StorageUnitOfWork(factory) as work:
             assert work.gating.latest_gate_result(baseline["baseline_id"], OTHER_PROJECT_RUN) is None
+    finally:
+        engine.dispose()
+
+
+def test_gate_rejects_pending_finalization_without_materializing_findings(tmp_path: Path) -> None:
+    database = tmp_path / "gating-pending.db"
+    upgrade_database(database)
+    engine = create_sqlite_engine(database)
+    factory = create_session_factory(engine)
+    try:
+        with StorageUnitOfWork(factory) as work:
+            work.projects.add(
+                ProjectRecord(
+                    project_id=PROJECT_ID,
+                    name="Gating pending",
+                    status=ProjectStatus.READY,
+                    created_at_us=1,
+                    updated_at_us=1,
+                )
+            )
+            work.runs.add(
+                RunRecord(
+                    run_id=FIXED_RUN,
+                    project_id=PROJECT_ID,
+                    contract_id="contract",
+                    contract_version=1,
+                    engine_version="runner-v3",
+                    lifecycle=RunLifecycle.COMPLETED,
+                    verdict=RunVerdict.PASS,
+                    created_at_us=1,
+                    updated_at_us=100,
+                    finished_at_us=100,
+                )
+            )
+            work.finalizations.ensure_initial(FIXED_RUN, "a" * 64, 101)
+            work.commit()
+        view = SimpleNamespace(
+            run=SimpleNamespace(
+                project_id=PROJECT_ID,
+                run_id=FIXED_RUN,
+                lifecycle=RunLifecycle.COMPLETED,
+            )
+        )
+        service = RegressionGate(
+            lambda: StorageUnitOfWork(factory),
+            SimpleNamespace(read=lambda _run_id: view),
+            FindingQueries(lambda: StorageUnitOfWork(factory)),
+        )
+        with pytest.raises(JiejianError) as captured:
+            service.accept_baseline(FIXED_RUN, actor="operator", reason="pending")
+        assert captured.value.code == ErrorCode.RESULT_FINALIZATION_NOT_READY.value
+        with StorageUnitOfWork(factory) as work:
+            assert work.findings.list_for_project(PROJECT_ID) == ()
+            assert work.gating.get_baseline_for_run(PROJECT_ID, FIXED_RUN) is None
     finally:
         engine.dispose()

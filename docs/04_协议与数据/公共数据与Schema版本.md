@@ -10,13 +10,13 @@
 
 | 数据族 | Python 真源 | Schema 目录 | 当前主要版本 |
 | --- | --- | --- | --- |
-| Runner/Input/Request/Evidence/Result | `runner.py`、`execution_request.py` | `schemas/runner/` | 2 |
+| Runner/Input/Request/Evidence/Result | `runner.py`、`execution_request.py` | `schemas/runner/` | 3 |
 | Observer | `observer.py` | `schemas/observer/` | 2 |
 | ExecutionProfile | `execution_profile.py` | `schemas/execution/` | 2 |
 | Contract/Plan | core 权限模型与协议模型 | `schemas/contracts/` | 2 |
 | Recording/FlowDraft/Event | `recording.py`、`flow_draft.py`、`recording_flow.py` | `schemas/recording/` | 1 |
 | Artifact | `artifacts.py` | `schemas/artifacts/` | 1 |
-| Report/Package Manifest | `report.py` | `schemas/reports/` | 2 |
+| Report/Package Manifest | `report.py` | `schemas/reports/` | 3 |
 
 `flow-draft-review-command.schema.json` 当前没有 `schema_version` 字段；不得为了表格完整而补写字段。
 

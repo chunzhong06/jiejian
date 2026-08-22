@@ -24,11 +24,7 @@ class ContractStatus(StrEnum):
 
 class RunLifecycle(StrEnum):
     QUEUED = "QUEUED"
-    PREFLIGHT = "PREFLIGHT"
-    PLANNING = "PLANNING"
-    EXECUTING = "EXECUTING"
-    VERIFYING = "VERIFYING"
-    REPORTING = "REPORTING"
+    RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"

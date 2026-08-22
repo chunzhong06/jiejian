@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle
+from product.backend.core.lifecycle import JobState, RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.storage import EvidenceIndexRecord, JobRecord, RunRecord, StorageUnitOfWork
@@ -110,29 +110,6 @@ class PublishedResultReader:
         )
         return request.project_snapshot
 
-    def report(self, view: PublishedRunView) -> dict[str, Any]:
-        return self.document(view, "artifacts/report/report.json")
-
-    def findings(self, view: PublishedRunView) -> list[dict[str, Any]]:
-        """只从已验证 Evidence 派生可跟踪问题，SAFE 不构成 Finding。"""
-
-        findings: list[dict[str, Any]] = []
-        for record in view.evidence:
-            item = self.evidence_document(view, record.evidence_id)
-            verdict = item.get("verdict")
-            if verdict == "SAFE":
-                continue
-            findings.append(
-                {
-                    "schema_version": "2",
-                    "finding_id": item.get("evidence_id"),
-                    "verdict": verdict,
-                    "severity": "high" if verdict == "VULNERABLE" else "unknown",
-                    "evidence_refs": [item.get("evidence_id")],
-                }
-            )
-        return findings
-
     def overview(self, run_id: str, *, published: PublishedRunView | None = None) -> dict[str, Any]:
         """从当前执行快照和可信发布结果生成 GUI 只读运行概览。"""
 
@@ -159,19 +136,6 @@ class PublishedResultReader:
                 "phases": [phase.value for phase in binding.phases] if binding is not None else [],
             }
         reason_codes = list(published.publication.result.reason_codes) if published is not None else []
-        finding_count = None
-        if published is not None:
-            from product.backend.workflows.results.findings import finding_inputs
-
-            # 孪生执行可为同一稳定问题产生多份 Evidence；概览按 Finding 身份计数，
-            # 不能把证据基数直接暴露成问题数量。
-            finding_count = len(
-                {
-                    item.identity.finding_id()
-                    for item in finding_inputs(self, published)
-                    if item.verdict is not CaseVerdict.SAFE
-                }
-            )
         completed_case_count = (
             len({item.case_id for item in published.evidence})
             if published is not None
@@ -181,7 +145,7 @@ class PublishedResultReader:
         return {
             "schema_version": "1",
             "execution_schema_version": "3",
-            "result_schema_version": "2" if published is not None else None,
+            "result_schema_version": published.publication.result.schema_version if published is not None else None,
             "target_scope": snapshot.target.scope.model_dump(mode="json"),
             "budget": request.budget.model_dump(mode="json"),
             "observer_health": observer_health,
@@ -197,7 +161,9 @@ class PublishedResultReader:
                 "completed": completed_case_count,
                 "total": len(snapshot.plan.cases),
             },
-            "finding_count": finding_count,
+            # Finding 只能由最终化事务写入，并由上层 FindingQueries 补充数量；
+            # publication reader 不在 GET 路径临时投影或写入 Finding。
+            "finding_count": None,
             "reason_codes": reason_codes,
             "execution_errors": execution_errors,
             "coverage_record_count": len(snapshot.plan.coverage),

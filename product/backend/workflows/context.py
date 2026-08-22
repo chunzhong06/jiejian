@@ -95,6 +95,40 @@ class ApplicationCore:
         self.job_attempts = JobAttempts(factory, targets=self.job_targets)
         self.job_queue = JobQueue(factory, targets=self.job_targets)
         self.execution_request_store = ExecutionRequestStore(self.var_dir)
+        from product.backend.workflows.results.findings import FindingMaterializer, FindingQueries
+        from product.backend.workflows.results.finalizer import ResultFinalizer
+
+        self.results = PublishedResultReader(self.var_dir, self.uow_factory)
+        self.finding_materializer = FindingMaterializer(
+            self.uow_factory,
+            self.results,
+            utc_now_us=clock_us,
+        )
+        self.findings = FindingQueries(self.uow_factory)
+        self.result_finalizer = ResultFinalizer(
+            self.var_dir,
+            self.uow_factory,
+            self.results,
+            self.finding_materializer,
+            utc_now_us=clock_us,
+        )
+        from product.backend.workflows.results.gating import RegressionGate
+
+        self.gating = RegressionGate(
+            self.uow_factory,
+            self.results,
+            self.findings,
+            clock_us=clock_us,
+        )
+        self.reports = ReportBuilder(
+            self.var_dir,
+            self.results,
+            self.findings,
+            self.gating,
+            self.uow_factory,
+        )
+        self.result_finalizer.attach_report_builder(self.reports)
+        # Worker 的最小组合仍需完整结果链，publication 后才能自动生成 Base Report。
         if _minimal:
             return
         self.secret_vault = RuntimeSecretVault()
@@ -110,24 +144,6 @@ class ApplicationCore:
             environment_provider=self.environment_for_secret_names,
             var_dir=self.var_dir,
             clock_us=clock_us,
-        )
-        self.results = PublishedResultReader(self.var_dir, self.uow_factory)
-        from product.backend.workflows.results.findings import FindingProjection
-
-        self.findings = FindingProjection(self.uow_factory, self.results)
-        from product.backend.workflows.results.gating import RegressionGate
-
-        self.gating = RegressionGate(
-            self.uow_factory,
-            self.results,
-            self.findings,
-            clock_us=clock_us,
-        )
-        self.reports = ReportBuilder(
-            self.var_dir,
-            self.results,
-            self.findings,
-            self.gating,
         )
         self.projects = ProjectCatalog(factory)
         from product.backend.workflows.contracts.governance import ContractGovernance
@@ -209,6 +225,7 @@ class ApplicationCore:
                     self.uow_factory,
                     publication,
                 ),
+                result_finalizer=self.result_finalizer,
                 environ=environ,
             )
 

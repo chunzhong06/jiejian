@@ -60,7 +60,6 @@ _PHASE_ORDER = {
 }
 _PERMISSION_OBSERVER_INCOMPLETE = "REQUIRED_OBSERVER_INCOMPLETE"
 _PERMISSION_REQUEST_FAILED = "REQUEST_FAILED"
-_PERMISSION_CLEANUP_FAILED = "PERMISSION_CLEANUP_FAILED"
 
 
 def _now_us() -> int:
@@ -241,6 +240,7 @@ class RunnerExecutor:
         self.router = ExecutionRouter((self.http,))
         self.baseline_integrities: dict[str, tuple[BaselineIntegrity, ...]] = {}
         self.twin_baselines: dict[str, tuple[str, ...]] = {}
+        self.cleanup_finished_at_us: int | None = None
 
     def _identity_by_id(self, identity_id: str) -> Any:
         for identity in self.snapshot.identities:
@@ -570,7 +570,6 @@ class RunnerExecutor:
         }
         identity_definitions = {identity.identity_id: identity for identity in self.snapshot.identities}
         execution: ExecutionFact | None = None
-        target_started = False
 
         def runtime_for(step: Any) -> HttpIdentityRuntime:
             identity_id = self.subject_identities[case.subject_id].identity_id if step.identity_id == CASE_SUBJECT_IDENTITY else step.identity_id
@@ -787,7 +786,6 @@ class RunnerExecutor:
             if before_failed:
                 raise JiejianError(ErrorCode.OBSERVER_INCOMPLETE, "BEFORE 观察不完整")
             target = next(step for step in ordered if step.id == workflow.target_step_id)
-            target_started = True
             execution, response = self.http.execute_detailed(target.request_template, case_id=case.case_id, action_id=case.action_id, classifier=target.classifier, slot_values=values_for(target), identity_runtime=runtime_for(target))
             if execution.outcome is ExecutionOutcome.FAILED:
                 raise JiejianError(ErrorCode.TARGET_EXECUTION_FAILED, "TARGET 请求失败")
@@ -864,13 +862,19 @@ class RunnerExecutor:
                     raise JiejianError(ErrorCode.CLEANUP_FAILED, "CLEANUP 步骤失败") from exc
             return evidence
         finally:
+            cleanup_error: Exception | None = None
             try:
                 self.http.cleanup(self.snapshot.target.reset_path, case_id=case.case_id)
-            except JiejianError:
-                if target_started:
-                    raise JiejianError(ErrorCode.CLEANUP_FAILED, "目标恢复失败") from None
+            except Exception as exc:
+                cleanup_error = exc
             for runtime in runtimes.values():
-                runtime.close()
+                try:
+                    runtime.close()
+                except Exception as exc:
+                    cleanup_error = cleanup_error or exc
+            self.cleanup_finished_at_us = self.clock()
+            if cleanup_error is not None:
+                raise JiejianError(ErrorCode.CLEANUP_FAILED, "资源清理失败") from cleanup_error
 
 
 def _result_error(
@@ -881,15 +885,20 @@ def _result_error(
     cancelled: bool = False,
     safety_stopped: bool = False,
     cleanup_failed: bool = False,
+    cleanup_succeeded: bool = False,
 ) -> RunnerResult:
-    """按一次尝试的固定完成时间构造失败、取消或安全停止结果。"""
+    """在所有资源清理完成后构造失败、取消或安全停止结果。"""
 
+    if cleanup_failed:
+        error = ErrorCode.CLEANUP_FAILED.value
+        cancelled = False
+        safety_stopped = False
     if cancelled:
         return RunnerResult(
             run_id=document.run_id, job_id=document.job_id, attempt=document.attempt, lease_owner=document.lease_owner,
             fencing_token=document.fencing_token, finished_at_us=finished_at_us, result_type=RunnerResultType.CANCELLED,
             run_lifecycle=RunLifecycle.CANCELLED, job_state=JobState.CANCELLED, verdict=None, reason_codes=(),
-            cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED), error=None,
+            cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED, finished_at_us=finished_at_us), error=None,
             plan_fingerprint=document.project_snapshot.plan.plan_fingerprint, coverage_record_count=len(document.project_snapshot.plan.coverage),
             coverage_gap_count=len(document.project_snapshot.plan.gaps), evidence=(), artifacts=(),
         )
@@ -898,7 +907,7 @@ def _result_error(
             run_id=document.run_id, job_id=document.job_id, attempt=document.attempt, lease_owner=document.lease_owner,
             fencing_token=document.fencing_token, finished_at_us=finished_at_us, result_type=RunnerResultType.SAFETY_STOPPED,
             run_lifecycle=RunLifecycle.SAFETY_STOPPED, job_state=JobState.SUCCEEDED, verdict=None,
-            reason_codes=(error,), cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED), error=None,
+            reason_codes=(error,), cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED, finished_at_us=finished_at_us), error=None,
             plan_fingerprint=document.project_snapshot.plan.plan_fingerprint,
             coverage_record_count=len(document.project_snapshot.plan.coverage), coverage_gap_count=len(document.project_snapshot.plan.gaps),
             evidence=(), artifacts=(),
@@ -908,8 +917,9 @@ def _result_error(
         fencing_token=document.fencing_token, finished_at_us=finished_at_us, result_type=RunnerResultType.FATAL_ERROR,
         run_lifecycle=RunLifecycle.FAILED, job_state=JobState.FAILED, verdict=None, reason_codes=(error,),
         cleanup=CleanupResult(
-            status=CleanupStatus.FAILED if cleanup_failed else CleanupStatus.NOT_REQUIRED,
-            reason_codes=(error,) if cleanup_failed else (),
+            status=CleanupStatus.FAILED if cleanup_failed else CleanupStatus.SUCCEEDED if cleanup_succeeded else CleanupStatus.NOT_REQUIRED,
+            finished_at_us=finished_at_us if cleanup_failed or cleanup_succeeded else None,
+            reason_codes=(ErrorCode.CLEANUP_FAILED.value,) if cleanup_failed else (),
         ), error=RunnerError(code=error, retryable=False),
         plan_fingerprint=document.project_snapshot.plan.plan_fingerprint, coverage_record_count=len(document.project_snapshot.plan.coverage),
         coverage_gap_count=len(document.project_snapshot.plan.gaps), evidence=(), artifacts=(),
@@ -929,7 +939,7 @@ def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str
     except (OSError, JiejianError, ValidationError, ValueError):
         return RUNNER_EXIT_PROTOCOL
     staging = staging_dir.resolve()
-    finish_value = (finished_at_us or _now_us)()
+    finish_clock = finished_at_us or _now_us
     try:
         try:
             staging.mkdir(parents=True, exist_ok=False)
@@ -944,6 +954,17 @@ def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str
             cancellation_requested=cancel_path.is_file,
         )
         evidence: list[Evidence] = []
+
+        def close_executor() -> bool:
+            try:
+                executor.http.close()
+            except Exception:
+                return False
+            return True
+
+        def completion_time() -> int:
+            return finish_clock()
+
         try:
             paired_case_ids: set[str] = set()
             for twin in document.project_snapshot.differential_plan.twins:
@@ -965,8 +986,17 @@ def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str
                 if case.case_id not in paired_case_ids:
                     evidence.append(executor.run_case(case))
         except JiejianError as exc:
+            cleanup_ok = close_executor()
             if exc.code == ErrorCode.EXEC_CANCELLED.value:
-                _atomic_write(staging / "result.json", canonical_runner_json_bytes(_result_error(document, exc.code, finished_at_us=finish_value, cancelled=True), known_secrets=known_secrets))
+                result = _result_error(
+                    document,
+                    ErrorCode.CLEANUP_FAILED.value if not cleanup_ok else exc.code,
+                    finished_at_us=completion_time(),
+                    cancelled=cleanup_ok,
+                    cleanup_failed=not cleanup_ok,
+                    cleanup_succeeded=cleanup_ok,
+                )
+                _atomic_write(staging / "result.json", canonical_runner_json_bytes(result, known_secrets=known_secrets))
                 return RUNNER_EXIT_OK
             safety_codes = {
                 ErrorCode.SCOPE_URL.value,
@@ -977,22 +1007,37 @@ def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str
                 ErrorCode.EXEC_BUDGET.value,
                 ErrorCode.EXEC_RESPONSE_TOO_LARGE.value,
             }
-            cleanup_failed = exc.code == _PERMISSION_CLEANUP_FAILED
+            cleanup_failed = not cleanup_ok or exc.code == ErrorCode.CLEANUP_FAILED.value
             result = _result_error(
                 document,
-                exc.code if exc.code.isupper() else "_RUNNER_FATAL",
-                finished_at_us=finish_value,
-                safety_stopped=exc.code in safety_codes,
+                ErrorCode.CLEANUP_FAILED.value if cleanup_failed else exc.code if exc.code.isupper() else "RUNNER_FATAL",
+                finished_at_us=completion_time(),
+                safety_stopped=not cleanup_failed and exc.code in safety_codes,
                 cleanup_failed=cleanup_failed,
+                cleanup_succeeded=cleanup_ok and not cleanup_failed,
             )
             _atomic_write(staging / "result.json", canonical_runner_json_bytes(result, known_secrets=known_secrets))
             return RUNNER_EXIT_OK
         except Exception:
-            result = _result_error(document, "_RUNNER_FATAL", finished_at_us=finish_value)
+            cleanup_ok = close_executor()
+            result = _result_error(
+                document,
+                ErrorCode.CLEANUP_FAILED.value if not cleanup_ok else "RUNNER_FATAL",
+                finished_at_us=completion_time(),
+                cleanup_failed=not cleanup_ok,
+                cleanup_succeeded=cleanup_ok,
+            )
             _atomic_write(staging / "result.json", canonical_runner_json_bytes(result, known_secrets=known_secrets))
             return RUNNER_EXIT_OK
-        finally:
-            executor.http.close()
+        if not close_executor():
+            result = _result_error(
+                document,
+                ErrorCode.CLEANUP_FAILED.value,
+                finished_at_us=completion_time(),
+                cleanup_failed=True,
+            )
+            _atomic_write(staging / "result.json", canonical_runner_json_bytes(result, known_secrets=known_secrets))
+            return RUNNER_EXIT_OK
         evidence_dir = staging / "artifacts" / "evidence"
         try:
             evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -1012,11 +1057,13 @@ def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str
             verdict = RunVerdict.INCONCLUSIVE
         else:
             verdict = RunVerdict.PASS
+        finish_value = completion_time()
+        cleanup_finished = executor.cleanup_finished_at_us or finish_value
         result = RunnerResult(
             run_id=document.run_id, job_id=document.job_id, attempt=document.attempt, lease_owner=document.lease_owner,
             fencing_token=document.fencing_token, finished_at_us=finish_value, result_type=RunnerResultType.SUCCESS,
             run_lifecycle=RunLifecycle.COMPLETED, job_state=JobState.SUCCEEDED, verdict=verdict, reason_codes=(),
-            cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED), error=None,
+            cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED, finished_at_us=cleanup_finished), error=None,
             plan_fingerprint=document.project_snapshot.plan.plan_fingerprint, coverage_record_count=len(document.project_snapshot.plan.coverage),
             coverage_gap_count=len(document.project_snapshot.plan.gaps), evidence=tuple(evidence), artifacts=tuple(artifacts),
         )

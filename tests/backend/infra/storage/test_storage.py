@@ -187,6 +187,7 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
             "recordings",
             "requirements",
             "runs",
+            "run_finalizations",
         }
         with engine.connect() as connection:
             assert connection.execute(
@@ -523,7 +524,7 @@ def test_job_database_checks_reject_invalid_protocol_fields(
         (RunLifecycle.COMPLETED, None),
         (RunLifecycle.FAILED, RunVerdict.INCONCLUSIVE),
         (RunLifecycle.CANCELLED, RunVerdict.PASS),
-        (RunLifecycle.EXECUTING, RunVerdict.BLOCK),
+        (RunLifecycle.RUNNING, RunVerdict.BLOCK),
     ],
 )
 def test_run_lifecycle_and_verdict_invalid_combinations_are_rejected(

@@ -40,6 +40,19 @@
         "status": {
           "$ref": "#/$defs/CleanupStatus"
         },
+        "finished_at_us": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At Us"
+        },
         "reason_codes": {
           "default": [],
           "items": {
@@ -1125,11 +1138,7 @@
     "RunLifecycle": {
       "enum": [
         "QUEUED",
-        "PREFLIGHT",
-        "PLANNING",
-        "EXECUTING",
-        "VERIFYING",
-        "REPORTING",
+        "RUNNING",
         "COMPLETED",
         "FAILED",
         "CANCELLED",
@@ -1411,8 +1420,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },

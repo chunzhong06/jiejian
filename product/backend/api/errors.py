@@ -22,6 +22,7 @@ def _status_for(code: str) -> int:
         ErrorCode.LLM_PROFILE_NOT_FOUND.value,
         ErrorCode.ONBOARDING_SESSION_NOT_FOUND.value,
         ErrorCode.EXECUTION_PROFILE_NOT_FOUND.value,
+        ErrorCode.RESULT_FINALIZATION_NOT_FOUND.value,
     }:
         return 404
     if code in {
@@ -34,6 +35,10 @@ def _status_for(code: str) -> int:
         ErrorCode.ONBOARDING_SESSION_CONFLICT.value,
         ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT.value,
         ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT.value,
+        ErrorCode.RESULT_FINALIZATION_NOT_READY.value,
+        ErrorCode.RESULT_FINALIZATION_FAILED.value,
+        ErrorCode.RESULT_FINALIZATION_CONFLICT.value,
+        ErrorCode.RESULT_FINALIZATION_BLOCKED.value,
     }:
         return 409
     if code in {

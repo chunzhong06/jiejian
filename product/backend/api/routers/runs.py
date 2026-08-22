@@ -10,6 +10,7 @@ from product.backend.workflows.context import ApplicationCore
 from product.backend.workflows.results.published import PublishedResultReader
 from product.backend.core.lifecycle import RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage import FindingFinalizationState
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
 from product.backend.api.envelope import ApiModel
@@ -88,6 +89,30 @@ def build_runs_router(
             "result_integrity": "VERIFIED" if published else "UNAVAILABLE",
             **results.overview(run_id, published=published),
         }
+        try:
+            finalization = context.result_finalizer.status(run_id)
+        except JiejianError as exc:
+            if exc.code != ErrorCode.RESULT_FINALIZATION_NOT_FOUND.value:
+                raise
+            finalization_summary = {
+                "findings_state": None,
+                "base_report_state": None,
+                "base_report_id": None,
+                "last_error_code": None,
+            }
+        else:
+            finalization_summary = {
+                "findings_state": finalization.findings_state.value,
+                "base_report_state": finalization.base_report_state.value,
+                "base_report_id": finalization.base_report_id,
+                "last_error_code": (
+                    finalization.base_report_error_code
+                    or finalization.findings_error_code
+                ),
+            }
+            if finalization.findings_state is FindingFinalizationState.COMPLETE:
+                view["finding_count"] = len(context.findings.findings_for_run(run_id))
+        view["finalization"] = finalization_summary
         return data_response(view)
 
     return router

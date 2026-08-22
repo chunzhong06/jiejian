@@ -682,14 +682,21 @@ def build_evidence(**fields: Any) -> Evidence:
 
 class CleanupResult(ProtocolModel):
     status: CleanupStatus
+    finished_at_us: int | None = Field(default=None, ge=0)
     reason_codes: tuple[str, ...] = Field(default=(), max_length=64)
 
     @model_validator(mode="after")
     def validate_cleanup(self) -> CleanupResult:
         reasons = _validate_reason_codes(self.reason_codes, "cleanup reason_codes")
-        if self.status is CleanupStatus.FAILED and not reasons:
-            raise ValueError("failed cleanup requires a reason")
-        if self.status is not CleanupStatus.FAILED and reasons:
+        if self.status is CleanupStatus.NOT_REQUIRED:
+            if self.finished_at_us is not None or reasons:
+                raise ValueError("not-required cleanup cannot contain completion facts")
+        elif self.finished_at_us is None:
+            raise ValueError("performed cleanup requires a completion time")
+        if self.status is CleanupStatus.FAILED:
+            if reasons != ("CLEANUP_FAILED",):
+                raise ValueError("failed cleanup must use CLEANUP_FAILED")
+        elif reasons:
             raise ValueError("successful cleanup cannot contain a reason")
         object.__setattr__(self, "reason_codes", reasons)
         return self
@@ -726,6 +733,7 @@ class StagedArtifact(ProtocolModel):
 
 # 一次 attempt 的生命周期结果、聚合 Verdict、Evidence 与 staging 工件清单。
 class RunnerResult(ProtocolModel):
+    schema_version: Literal["3"] = "3"
     run_id: str = Field(pattern=RUN_ID_PATTERN)
     job_id: str = Field(pattern=JOB_ID_PATTERN)
     attempt: int = Field(ge=1)
@@ -773,13 +781,19 @@ class RunnerResult(ProtocolModel):
         elif self.result_type is RunnerResultType.CANCELLED:
             valid = self.run_lifecycle is RunLifecycle.CANCELLED and self.job_state is JobState.CANCELLED and self.verdict is None and self.error is None and self.cleanup.status is CleanupStatus.SUCCEEDED
         elif self.result_type is RunnerResultType.RETRYABLE_ERROR:
-            valid = self.run_lifecycle in {RunLifecycle.PREFLIGHT, RunLifecycle.PLANNING, RunLifecycle.EXECUTING, RunLifecycle.VERIFYING, RunLifecycle.REPORTING} and self.job_state is JobState.RETRY_WAIT and self.verdict is None and self.error is not None and self.error.retryable and self.cleanup.status in allowed_cleanup
+            valid = self.run_lifecycle is RunLifecycle.RUNNING and self.job_state is JobState.RETRY_WAIT and self.verdict is None and self.error is not None and self.error.retryable and self.cleanup.status in allowed_cleanup
         else:
             valid = self.run_lifecycle is RunLifecycle.FAILED and self.job_state is JobState.FAILED and self.verdict is None and self.error is not None and not self.error.retryable and self.cleanup.status in {CleanupStatus.NOT_REQUIRED, CleanupStatus.SUCCEEDED, CleanupStatus.FAILED}
+        if self.cleanup.status is CleanupStatus.FAILED:
+            valid = valid and self.result_type is RunnerResultType.FATAL_ERROR and self.error is not None and self.error.code == "CLEANUP_FAILED" and "CLEANUP_FAILED" in reasons
         if not valid:
             raise ValueError("runner  result violates the lifecycle and verdict matrix")
         if any(item.run_id != self.run_id for item in self.evidence):
             raise ValueError("evidence run_id must match the runner result")
+        if any(item.window.finished_at_us > self.finished_at_us for item in (observation for evidence in self.evidence for observation in evidence.observations)):
+            raise ValueError("runner finish time precedes an evidence observation window")
+        if self.cleanup.finished_at_us is not None and self.cleanup.finished_at_us > self.finished_at_us:
+            raise ValueError("runner finish time precedes cleanup completion")
         execution_keys = {
             (
                 item.case_snapshot.case_id,
@@ -877,7 +891,15 @@ def _reject_nonfinite(value: str) -> None:
     raise ValueError(" JSON contains a non-finite number")
 
 
-def _parse_(raw: bytes, model: type[ProtocolT], maximum: int, label: str, known_secrets: Sequence[str]) -> ProtocolT:
+def _parse_(
+    raw: bytes,
+    model: type[ProtocolT],
+    maximum: int,
+    label: str,
+    known_secrets: Sequence[str],
+    *,
+    expected_schema_version: str | None = None,
+) -> ProtocolT:
     if not isinstance(raw, bytes):
         raise TypeError(" parser requires bytes")
     if len(raw) > maximum or raw.startswith(b"\xef\xbb\xbf"):
@@ -886,6 +908,8 @@ def _parse_(raw: bytes, model: type[ProtocolT], maximum: int, label: str, known_
         parsed = json.loads(raw.decode("utf-8"), object_pairs_hook=_reject_pairs, parse_constant=_reject_nonfinite)
         if not isinstance(parsed, dict):
             raise ValueError(" root must be an object")
+        if expected_schema_version is not None and parsed.get("schema_version") != expected_schema_version:
+            raise ValueError(" schema_version is missing or unsupported")
         _reject_secret_material(parsed)
         if any(secret and secret in raw.decode("utf-8") for secret in known_secrets):
             raise JiejianError("PROTOCOL_SECRET_EXPOSED", f"{label} contains known secret material")
@@ -901,7 +925,14 @@ def parse_runner_input(raw: bytes, *, known_secrets: Sequence[str] = ()) -> Runn
 
 
 def parse_runner_result(raw: bytes, *, known_secrets: Sequence[str] = ()) -> RunnerResult:
-    return _parse_(raw, RunnerResult, RUNNER_RESULT_MAX_BYTES, "Runner  result", known_secrets)
+    return _parse_(
+        raw,
+        RunnerResult,
+        RUNNER_RESULT_MAX_BYTES,
+        "Runner  result",
+        known_secrets,
+        expected_schema_version="3",
+    )
 
 
 def parse_evidence(raw: bytes, *, known_secrets: Sequence[str] = ()) -> Evidence:

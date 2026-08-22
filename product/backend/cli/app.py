@@ -15,7 +15,7 @@ from product.backend.cli.presentation import configure_presentation
 from product.backend.cli.commands.contracts import contract_assessment_command, contract_derive_command, contract_diff_command, contract_draft_command, contract_history_command, contract_requirement_add_command, contract_revise_command, contract_transition_command, contract_validate_command, contract_workspace_command, contract_drift_command
 from product.backend.cli.commands.projects import project_validate_command
 from product.backend.cli.commands.recordings import recording_finalize_command, recording_replay_command, recording_review_command, recording_start_command, recording_status_command
-from product.backend.cli.commands.results import ci_command, report_command
+from product.backend.cli.commands.results import ci_command, report_command, result_repair_command
 from product.backend.cli.commands.gating import baseline_accept_command, gate_evaluate_command, gate_result_command
 from product.backend.cli.commands.runs import run_command
 from product.backend.cli.commands.system import cache_clean_command, cache_prune_command, cache_status_command, doctor_command, runtime_repair_command, serve_command
@@ -129,6 +129,7 @@ recording_app.command("replay")(recording_replay_command)
 
 app.command("run", help="开始权限检查", rich_help_panel="常用操作")(run_command)
 app.command("report", help="查看检查报告", rich_help_panel="常用操作")(report_command)
+app.command("result-repair", help="显式恢复结果最终化", rich_help_panel="常用操作")(result_repair_command)
 app.command("ci", help="在 CI 中执行检查", rich_help_panel="自动化")(ci_command)
 baseline_app.command("accept")(baseline_accept_command)
 gate_app.command("evaluate")(gate_evaluate_command)

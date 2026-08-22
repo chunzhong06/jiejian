@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import time
 from collections.abc import Callable, Sequence
@@ -111,6 +112,7 @@ class RunPublisher:
         validated = validate_published_run(final_dir, known_secrets=known_secrets)
         manifest = validated.manifest
         result = validated.result
+        publication_sha256 = publication_manifest_sha256(manifest)
         with self._uow_factory(known_secrets=known_secrets) as work:
             job = work.jobs.get(manifest.job_id)
             run = work.runs.get(manifest.run_id)
@@ -137,6 +139,12 @@ class RunPublisher:
                     or tuple(existing_evidence) != expected_evidence
                 ):
                     raise JiejianError(ErrorCode.ARTIFACT_RECONCILE, "发布完成态不一致")
+                work.finalizations.ensure_initial(
+                    run.run_id,
+                    publication_sha256,
+                    max(manifest.published_at_us, result.finished_at_us),
+                )
+                work.commit()
                 return validated
             completed_at_us = max(
                 self._utc_now_us(),
@@ -159,6 +167,11 @@ class RunPublisher:
                 raise JiejianError(ErrorCode.ARTIFACT_FENCE, "发布完成态条件不匹配")
             for record in expected_evidence:
                 work.evidence.add(record)
+            work.finalizations.ensure_initial(
+                run.run_id,
+                publication_sha256,
+                max(manifest.published_at_us, result.finished_at_us),
+            )
             append_job_event(
                 work,
                 job=job,
@@ -238,3 +251,16 @@ class RunPublisher:
         )
         write_publication_manifest(manifest_path, manifest)
         return manifest
+
+
+def publication_manifest_sha256(manifest: PublicationManifest) -> str:
+    """对完整规范化 publication manifest 计算稳定摘要，不使用路径或 Run ID 替代。"""
+
+    payload = json.dumps(
+        manifest.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()

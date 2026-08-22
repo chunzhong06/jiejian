@@ -27,11 +27,7 @@ pytestmark = pytest.mark.essential
             RunLifecycle,
             {
                 "QUEUED",
-                "PREFLIGHT",
-                "PLANNING",
-                "EXECUTING",
-                "VERIFYING",
-                "REPORTING",
+                "RUNNING",
                 "COMPLETED",
                 "FAILED",
                 "CANCELLED",

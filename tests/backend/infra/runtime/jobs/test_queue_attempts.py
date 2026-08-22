@@ -215,7 +215,7 @@ def test_running_cancel_waits_for_matching_fenced_cleanup(
 
     assert requested.completed is False
     assert requested.job.state is JobState.RUNNING
-    assert requested.run.lifecycle is RunLifecycle.PREFLIGHT
+    assert requested.run.lifecycle is RunLifecycle.RUNNING
     with pytest.raises(JiejianError) as stale:
         worker_services.attempts.complete_cancellation(
             CompleteCancellation(
@@ -344,7 +344,7 @@ def test_retry_uses_bounded_deterministic_backoff_and_next_claim_new_token(
     )
     assert retried.job.state is JobState.RETRY_WAIT
     assert retried.job.available_at_us == NOW_US + 145
-    assert retried.run.lifecycle is RunLifecycle.PREFLIGHT
+    assert retried.run.lifecycle is RunLifecycle.RUNNING
     assert retried.run.verdict is None
 
     second = attempts.claim(
@@ -512,7 +512,7 @@ def test_committed_state_and_events_survive_engine_restart(
             events = work.job_events.list_for_job(submitted.job.job_id)
             assert job is not None and job.state is JobState.RUNNING
             assert job.fencing_token == claimed.job.fencing_token
-            assert run is not None and run.lifecycle is RunLifecycle.PREFLIGHT
+            assert run is not None and run.lifecycle is RunLifecycle.RUNNING
             assert [event.sequence for event in events] == [1, 2]
     finally:
         restarted.dispose()

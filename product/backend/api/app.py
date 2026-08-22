@@ -101,6 +101,7 @@ def create_app(
             RunPublisher(context.var_dir, context.uow_factory),
         ).reconcile()
         app.state.startup_reconciliation = reconciliation
+        app.state.startup_finalization = context.result_finalizer.reconcile()
         if start_worker:
             workers.start()
 

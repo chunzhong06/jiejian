@@ -387,7 +387,7 @@ def test_worker_current_non_success_uses_existing_fatal_lifecycle_bridge(tmp_pat
         run_lifecycle=RunLifecycle.FAILED,
         job_state=JobState.FAILED,
         verdict=None,
-        cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED),
+        cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED, finished_at_us=NOW_US),
         error=RunnerError(code="RUNNER_FATAL", retryable=False),
         plan_fingerprint="0" * 64,
         coverage_record_count=0,

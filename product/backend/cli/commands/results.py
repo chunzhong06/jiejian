@@ -21,7 +21,7 @@ def report_command(
     gate_result_id: str | None = typer.Option(None, "--gate-result-id", help="显式门禁结果 ID；提供时生成统一报告"),
     report_id: str | None = typer.Option(None, "--report-id", help="读取已发布统一报告 ID"),
 ) -> None:
-    """按运行 ID 读取当前已发布结果或当前报告。"""
+    """按运行 ID 读取基础报告或明确生成/读取 Gate 报告。"""
 
     try:
         with application_scope(context) as application:
@@ -29,21 +29,28 @@ def report_command(
             if gate_result_id is not None:
                 if report_id is not None:
                     fail(JiejianError(ErrorCode.INPUT_INVALID, "不能同时指定 GateResult 和 report_id"))
-                payload = application.reports.generate(run_id, gate_result_id)
+                payload = application.reports.generate_gate(run_id, gate_result_id).model_dump(mode="json")
                 selected_id = str(payload["report_id"])
             elif selected_id is None:
-                reports = application.reports.list(run_id)
-                if len(reports) == 0:
-                    fail(JiejianError(ErrorCode.REPORT_NOT_FOUND, "当前 Run 没有统一报告"))
-                if len(reports) > 1:
-                    fail(JiejianError(ErrorCode.INPUT_INVALID, "当前 Run 有多份报告，请指定 --report-id"))
-                selected_id = str(reports[0]["report_id"])
+                selected_id = str(application.result_finalizer.status(run_id).base_report_id or "")
+                if not selected_id:
+                    fail(JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_READY, "基础报告尚未完成；请执行 jiejian result-repair " + run_id))
             if output_format.lower() == "json":
                 emit_json(application.reports.read(run_id, selected_id))
             else:
                 get_binary_stream("stdout").write(
                     application.reports.read_format(run_id, selected_id, output_format.lower())
                 )
+    except JiejianError as exc:
+        fail(exc)
+
+
+def result_repair_command(context: typer.Context, run_id: str) -> None:
+    """显式恢复 Finding 或基础报告最终化状态。"""
+
+    try:
+        with application_scope(context) as application:
+            emit_json(application.result_finalizer.repair(run_id).model_dump(mode="json"))
     except JiejianError as exc:
         fail(exc)
 

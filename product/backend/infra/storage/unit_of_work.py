@@ -29,6 +29,7 @@ from product.backend.infra.storage.llm import LLMProfileRepository
 from product.backend.infra.storage.execution_profiles import ExecutionProfileRepository
 from product.backend.infra.storage.evidence import EvidenceIndexRepository
 from product.backend.infra.storage.findings import FindingRepository
+from product.backend.infra.storage.finalizations import RunFinalizationRepository
 from product.backend.infra.storage.gating import GatingRepository
 from product.backend.infra.storage.jobs import JobEventRepository, JobRepository
 from product.backend.infra.storage.projects import ProjectRepository
@@ -53,6 +54,7 @@ class StorageUnitOfWork:
     llm_profiles: LLMProfileRepository
     execution_profiles: ExecutionProfileRepository
     findings: FindingRepository
+    finalizations: RunFinalizationRepository
     gating: GatingRepository
 
     def __init__(
@@ -98,6 +100,7 @@ class StorageUnitOfWork:
             session, self._known_secrets
         )
         self.findings = FindingRepository(session, self._known_secrets)
+        self.finalizations = RunFinalizationRepository(session, self._known_secrets)
         self.gating = GatingRepository(session, self._known_secrets)
         return self
 

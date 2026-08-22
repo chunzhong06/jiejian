@@ -264,7 +264,7 @@ class HttpExecutionAdapter:
     def cleanup(self, path: str, *, case_id: str) -> None:
         response = self.request("POST", path, case_id=case_id, cleanup_request=True, test_mode=True)
         if not 200 <= response.status_code < 300:
-            raise JiejianError("EXECUTION_CLEANUP_FAILED", "目标清理失败")
+            raise JiejianError(ErrorCode.CLEANUP_FAILED, "目标清理失败")
 
     def request(
         self,

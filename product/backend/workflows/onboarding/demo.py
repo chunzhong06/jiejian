@@ -42,11 +42,7 @@ _DEMO_PEER_ENV = "JIEJIAN_DEMO_PEER_TOKEN"
 _ACTIVE_JOB_STATES = {JobState.PENDING, JobState.RUNNING, JobState.RETRY_WAIT}
 _ACTIVE_RUN_STATES = {
     RunLifecycle.QUEUED,
-    RunLifecycle.PREFLIGHT,
-    RunLifecycle.PLANNING,
-    RunLifecycle.EXECUTING,
-    RunLifecycle.VERIFYING,
-    RunLifecycle.REPORTING,
+    RunLifecycle.RUNNING,
 }
 
 

@@ -33,11 +33,7 @@ from product.backend.infra.storage.runs import RunRecord, RunRepository
 
 _NONTERMINAL_RUNS = (
     RunLifecycle.QUEUED.value,
-    RunLifecycle.PREFLIGHT.value,
-    RunLifecycle.PLANNING.value,
-    RunLifecycle.EXECUTING.value,
-    RunLifecycle.VERIFYING.value,
-    RunLifecycle.REPORTING.value,
+    RunLifecycle.RUNNING.value,
 )
 
 
@@ -119,16 +115,10 @@ class JobControlRepository:
                 RunRow.verdict.is_(None),
                 RunRow.updated_at_us <= now_us,
             )
-            .values(lifecycle=RunLifecycle.PREFLIGHT.value, updated_at_us=now_us),
+            .values(lifecycle=RunLifecycle.RUNNING.value, updated_at_us=now_us),
         )
         run = self._runs.get(run_id)
-        if run is None or run.lifecycle not in {
-            RunLifecycle.PREFLIGHT,
-            RunLifecycle.PLANNING,
-            RunLifecycle.EXECUTING,
-            RunLifecycle.VERIFYING,
-            RunLifecycle.REPORTING,
-        }:
+        if run is None or run.lifecycle is not RunLifecycle.RUNNING:
             return None
         return run
 

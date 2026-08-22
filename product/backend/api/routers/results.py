@@ -5,11 +5,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.workflows.context import ApplicationCore
 from product.backend.workflows.results.published import PublishedResultReader
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
+
+
+class GateReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    gate_result_id: str = Field(pattern=r"^gate_[0-9a-f]{32}$")
 
 
 def build_results_router(
@@ -27,9 +34,21 @@ def build_results_router(
     async def list_findings(run_id: str):
         return data_response(context.findings.findings_for_run(run_id))
 
+    @router.get("/api/runs/{run_id}/result-status", response_model=ApiResponse)
+    async def get_result_status(run_id: str):
+        return data_response(context.result_finalizer.status(run_id).model_dump(mode="json"))
+
+    @router.post("/api/runs/{run_id}/result-repair", response_model=ApiResponse)
+    async def repair_result(run_id: str):
+        return data_response(context.result_finalizer.repair(run_id).model_dump(mode="json"))
+
     @router.get("/api/runs/{run_id}/reports", response_model=ApiResponse)
     async def list_reports(run_id: str):
         return data_response(context.reports.list(run_id))
+
+    @router.post("/api/runs/{run_id}/reports/gate", response_model=ApiResponse)
+    async def create_gate_report(run_id: str, request: GateReportRequest):
+        return data_response(context.reports.generate_gate(run_id, request.gate_result_id).model_dump(mode="json"))
 
     @router.get("/api/runs/{run_id}/reports/{report_id}", response_model=ApiResponse)
     async def get_permission_report(run_id: str, report_id: str):

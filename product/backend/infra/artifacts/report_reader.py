@@ -26,7 +26,7 @@ _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 class PublishedArtifactResult:
     job_id: str
     request: ArtifactCheckRequest
-    result: ArtifactScanResult
+    result: ArtifactScanResult | None
 
 
 class ArtifactResultReader:
@@ -60,7 +60,8 @@ class ArtifactResultReader:
                 raise JiejianError(ErrorCode.REPORT_INTEGRITY, "产物检查项目关联不一致")
             published = entry / "published"
             if not os.path.lexists(published):
-                raise JiejianError(ErrorCode.REPORT_INTEGRITY, "产物检查结果尚未发布")
+                results.append(PublishedArtifactResult(entry.name, request, None))
+                continue
             results.append(PublishedArtifactResult(entry.name, request, self._read_published(published, request, run_id, project_id)))
         return tuple(results)
 

@@ -32,7 +32,7 @@ from product.protocols import ObserverOutcomeStatus, RunnerResult
 from product.backend.infra.storage.gating import GateResultRecord, RegressionBaselineRecord
 from product.backend.core.verification.gating import BaselineFindingRef, GateFacts, GateFinding, GatePolicy, GateResult, RegressionBaseline, baseline_id_for, canonical_sha256, evaluate_gate, gate_input_hash
 from product.backend.workflows.results.published import PublishedResultReader, PublishedRunView
-from product.backend.workflows.results.findings import FindingProjection
+from product.backend.workflows.results.findings import FindingQueries
 
 
 class RegressionGate:
@@ -42,7 +42,7 @@ class RegressionGate:
         self,
         uow_factory,
         published_reader: PublishedResultReader,
-        findings: FindingProjection,
+        findings: FindingQueries,
         *,
         clock_us=None,
     ) -> None:
@@ -102,8 +102,8 @@ class RegressionGate:
         else:
             if view.run.project_id != baseline.project_id:
                 raise JiejianError(ErrorCode.GATE_INPUT_INVALID, "基线与当前 Run 不属于同一项目")
+            findings = self._findings.findings_for_run(run_id)
             try:
-                findings = self._findings.findings_for_run(run_id)
                 baseline_view = self._reader.read(baseline.accepted_run_id)
                 facts = _published_facts(self._reader, view, findings, baseline_view=baseline_view)
             except (JiejianError, KeyError, TypeError, ValueError) as exc:
@@ -223,7 +223,7 @@ def _published_facts(
         behavior_comparison_issues=behavior_comparison_issues,
         request_snapshot_sha256=request_hash,
         engine_version=view.run.engine_version,
-        protocol_versions=("evidence-3", "observer-2", "runner-result-2"),
+        protocol_versions=("evidence-3", "observer-2", "runner-result-3"),
     )
 
 
