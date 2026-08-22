@@ -23,6 +23,11 @@ from typing import Any
 
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.verification.behavior_differential import (
+    compare_behavior_snapshots,
+    normalize_evidence_behavior,
+)
+from product.backend.core.verification.permissions import canonical_sha256 as canonical_model_sha256
 from product.protocols import ObserverOutcomeStatus, RunnerResult
 from product.backend.infra.storage.gating import GateResultRecord, RegressionBaselineRecord
 from product.backend.core.verification.gating import BaselineFindingRef, GateFacts, GateFinding, GatePolicy, GateResult, RegressionBaseline, baseline_id_for, canonical_sha256, evaluate_gate, gate_input_hash
@@ -99,7 +104,8 @@ class RegressionGate:
                 raise JiejianError(ErrorCode.GATE_INPUT_INVALID, "基线与当前 Run 不属于同一项目")
             try:
                 findings = self._findings.findings_for_run(run_id)
-                facts = _published_facts(self._reader, view, findings)
+                baseline_view = self._reader.read(baseline.accepted_run_id)
+                facts = _published_facts(self._reader, view, findings, baseline_view=baseline_view)
             except (JiejianError, KeyError, TypeError, ValueError) as exc:
                 facts = _error_facts(self._uow_factory, baseline, run_id, getattr(exc, "code", "PUBLICATION_READ_ERROR"))
 
@@ -158,7 +164,13 @@ def _build_baseline(view: PublishedRunView, facts: GateFacts, findings: list[dic
     )
 
 
-def _published_facts(reader: PublishedResultReader, view: PublishedRunView, findings: list[dict[str, Any]]) -> GateFacts:
+def _published_facts(
+    reader: PublishedResultReader,
+    view: PublishedRunView,
+    findings: list[dict[str, Any]],
+    *,
+    baseline_view: PublishedRunView | None = None,
+) -> GateFacts:
     result = view.publication.result
     snapshot = reader.request_snapshot(view)
     request_hash = canonical_sha256(snapshot)
@@ -175,11 +187,11 @@ def _published_facts(reader: PublishedResultReader, view: PublishedRunView, find
     if not isinstance(result, RunnerResult):
         raise TypeError("unsupported published result")
     case_map = {case.case_id: case for case in snapshot.plan.cases}
-    coverage_ids = tuple(sorted(
+    coverage_ids = tuple(sorted({
         f"case:{evidence.case_snapshot.case_id}:{case_map[evidence.case_snapshot.case_id].fingerprint}"
         for evidence in result.evidence
         if evidence.case_snapshot.case_id in case_map
-    ))
+    }))
     required_issues: list[str] = []
     inconclusive: list[str] = []
     observer_errors: list[str] = []
@@ -194,6 +206,7 @@ def _published_facts(reader: PublishedResultReader, view: PublishedRunView, find
     if result.verdict is not None and result.verdict.value == "INCONCLUSIVE":
         inconclusive.append(view.run.run_id)
     errors = tuple(sorted(set(observer_errors + ([] if result.error is None else [str(result.error.code)]))))
+    behavior_change_ids, behavior_comparison_issues = _behavior_differences(reader, baseline_view, view)
     return GateFacts(
         run_id=view.run.run_id,
         project_id=view.run.project_id,
@@ -206,10 +219,67 @@ def _published_facts(reader: PublishedResultReader, view: PublishedRunView, find
         required_observer_issues=tuple(sorted(set(required_issues))),
         inconclusive_reasons=tuple(sorted(set(inconclusive))),
         execution_errors=errors,
+        behavior_change_ids=behavior_change_ids,
+        behavior_comparison_issues=behavior_comparison_issues,
         request_snapshot_sha256=request_hash,
         engine_version=view.run.engine_version,
-        protocol_versions=("runner-result-2", "observer-2"),
+        protocol_versions=("evidence-3", "observer-2", "runner-result-2"),
     )
+
+
+def _behavior_differences(
+    reader: PublishedResultReader,
+    baseline_view: PublishedRunView | None,
+    current_view: PublishedRunView,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """按冻结用例身份比较安全行为；缺失或不兼容输入单独阻断。"""
+
+    if baseline_view is None:
+        return (), ()
+    baseline_snapshot = reader.request_snapshot(baseline_view)
+    current_snapshot = reader.request_snapshot(current_view)
+    baseline_result = baseline_view.publication.result
+    current_result = current_view.publication.result
+    if not isinstance(baseline_result, RunnerResult) or not isinstance(current_result, RunnerResult):
+        return (), ("unsupported-result",)
+
+    baseline_evidence = {_evidence_key(item): item for item in baseline_result.evidence}
+    current_evidence = {_evidence_key(item): item for item in current_result.evidence}
+    changes: list[str] = []
+    issues: list[str] = []
+    for key in sorted(set(baseline_evidence) | set(current_evidence)):
+        old = baseline_evidence.get(key)
+        new = current_evidence.get(key)
+        subject = ":".join(key)
+        if old is None or new is None:
+            issues.append(f"missing:{subject}")
+            continue
+        try:
+            old_workflow = next(item for item in baseline_snapshot.workflow_bindings if item.action_id == old.case_snapshot.action_id)
+            new_workflow = next(item for item in current_snapshot.workflow_bindings if item.action_id == new.case_snapshot.action_id)
+            before = normalize_evidence_behavior(
+                old,
+                contract_fingerprint=baseline_snapshot.contract_fingerprint,
+                workflow_fingerprint=old_workflow.workflow_fingerprint,
+                baseline_fingerprint=canonical_model_sha256(old_workflow.baseline_projections),
+            )
+            after = normalize_evidence_behavior(
+                new,
+                contract_fingerprint=current_snapshot.contract_fingerprint,
+                workflow_fingerprint=new_workflow.workflow_fingerprint,
+                baseline_fingerprint=canonical_model_sha256(new_workflow.baseline_projections),
+            )
+            if compare_behavior_snapshots(before, after).changed:
+                changes.append(subject)
+        except (StopIteration, ValueError):
+            issues.append(f"incompatible:{subject}")
+    return tuple(changes), tuple(issues)
+
+
+def _evidence_key(evidence) -> tuple[str, str, str]:
+    twin_id = evidence.twin_snapshot.twin_id if evidence.twin_snapshot is not None else evidence.case_snapshot.case_id
+    twin_role = evidence.twin_role.value if evidence.twin_role is not None else "INDEPENDENT"
+    return evidence.case_snapshot.case_id, twin_id, twin_role
 
 
 def _error_facts(uow_factory, baseline: RegressionBaseline, run_id: str, code: str) -> GateFacts:

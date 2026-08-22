@@ -8,7 +8,7 @@ import pytest
 from product.backend.core.errors import JiejianError
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.workflows.context import ApplicationCore
-from product.protocols import ExecutionIdentity, ExecutionProfile, TargetType
+from product.protocols import ExecutionIdentity, ExecutionProfile, ExecutionProjectSnapshot, TargetType
 from product.protocols.execution_profile import canonical_execution_profile_json_bytes, parse_execution_profile
 from tests.fixtures.runner import execution_snapshot
 
@@ -18,10 +18,11 @@ def _profile(profile_id: str = "profile-runner") -> ExecutionProfile:
     return ExecutionProfile(
         profile_id=profile_id, project_id=snapshot.project_id, project_name=snapshot.project_name,
         target_type=TargetType.WEB, target=snapshot.target,
-        identities=tuple(ExecutionIdentity(schema_version="2", id=item.id, role=item.role, secret_ref=item.secret_ref) for item in snapshot.identities),
+        identities=snapshot.identities,
         contract_id=snapshot.contract.contract_id, contract_version=snapshot.contract.version,
         observers=snapshot.observers, subject_bindings=snapshot.subject_bindings,
-        action_bindings=snapshot.action_bindings, observer_bindings=snapshot.observer_bindings,
+        workflow_bindings=snapshot.workflow_bindings, effect_bindings=snapshot.effect_bindings,
+        observer_bindings=snapshot.observer_bindings,
         seed=4, case_budget=1, max_relation_depth=8, max_duration_us=20_000_000,
     )
 
@@ -38,6 +39,18 @@ def test_profile_roundtrip_has_explicit_contract_reference_only() -> None:
     assert payload["target_type"] == "WEB"
     assert payload["contract_id"] == profile.contract_id
     assert "contract" not in payload and "flow" not in payload
+
+
+@pytest.mark.parametrize("completion_binding", ["missing_requirement", "resource_state"])
+def test_snapshot_rejects_missing_or_non_async_completion_binding(
+    completion_binding: str,
+) -> None:
+    payload = execution_snapshot().model_dump(mode="python")
+    payload["workflow_bindings"][0]["steps"][0]["classifier"]["completion_binding"] = completion_binding
+    payload["workflow_bindings"][0]["workflow_fingerprint"] = None
+
+    with pytest.raises(ValueError, match="EVENTUAL async task observer"):
+        ExecutionProjectSnapshot.model_validate(payload)
 
 
 def test_profile_registration_requires_active_governed_version_and_rejects_drift(tmp_path: Path) -> None:

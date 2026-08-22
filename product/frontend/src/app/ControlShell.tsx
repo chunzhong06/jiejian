@@ -1,8 +1,8 @@
 /* 产品工作台壳：集中处理任务导航、项目恢复、状态展示和错误恢复。 */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Layout, Menu, Result, Tag, Typography } from 'antd'
-import { AppstoreOutlined, CloudServerOutlined, FileSearchOutlined, HistoryOutlined, PlayCircleOutlined, SettingOutlined } from '@ant-design/icons'
+import { Button, Layout, Menu, Modal, Result, Tag, Typography } from 'antd'
+import { AppstoreOutlined, CloudServerOutlined, FileSearchOutlined, HistoryOutlined, PlayCircleOutlined, PoweroffOutlined, SettingOutlined } from '@ant-design/icons'
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/http'
 import { projectsApi, type ProjectDto } from '../api/projects'
@@ -61,6 +61,8 @@ function ControlShellContent() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({ api: 'unknown', worker: 'unknown', browser: 'unknown' })
   const [retryEpoch, setRetryEpoch] = useState(0)
   const [demoData, setDemoData] = useState(false)
+  const [shutdownConfirmOpen, setShutdownConfirmOpen] = useState(false)
+  const [shutdownRequested, setShutdownRequested] = useState(false)
 
   const refresh = async () => {
     try {
@@ -88,6 +90,7 @@ function ControlShellContent() {
     try { setRuns(await runsApi.runs(selected.project_id)) } catch (e) { setError(e as ApiError) }
   }
   const retryCurrentPage = () => { setError(null); setRetryEpoch((epoch) => epoch + 1); void refresh(); void refreshRuns() }
+  const requestShutdown = () => setShutdownConfirmOpen(true)
   useEffect(() => { void refresh() }, [])
   useEffect(() => { void llmApi.profiles().then((profiles) => { setLlmProfiles(profiles); setLlmLoadFailed(false) }).catch(() => setLlmLoadFailed(true)) }, [])
   const refreshSystemStatus = () => { void systemApi.status().then(setSystemStatus).catch(() => setSystemStatus({ api: 'unknown', worker: 'unknown', browser: 'unknown' })) }
@@ -124,11 +127,30 @@ function ControlShellContent() {
   const execution = statusTag(systemStatus.worker, { running: '运行中', stopped: '已停止', unknown: '未知' })
   const browser = statusTag(systemStatus.browser, { available: '可用', unavailable: '不可用', unknown: '未知' })
   const model = statusTag(llmStatus(llmProfiles, llmLoadFailed), { testing: '检查中', available: '可用', unavailable: '不可用', configured: '已配置', offline: '未配置', unknown: '未知' })
+  if (shutdownRequested) return <Result status="success" title="界鉴正在安全退出" subTitle="服务、Worker 和受控浏览器清理完成后，可以关闭此页面；下次启动会自动检查异常中断记录。" />
   return <Layout className="app-shell">
     <Layout.Sider breakpoint="lg" collapsedWidth="0"><div className="brand">界鉴<span>安全意图一致性验证</span></div><Menu theme="dark" mode="inline" defaultOpenKeys={['apps', 'checks', 'advanced']} selectedKeys={[route]} items={menuItems} onClick={({ key }) => { if (String(key).startsWith('/')) navigate(String(key)) }} /></Layout.Sider>
-    <Layout><Layout.Header className="topbar"><Typography.Text className="topbar-context">{selected ? String(selected.name ?? '当前应用') : '尚未选择应用'}</Typography.Text><Button className="topbar-settings" type="link" onClick={() => setSettingsOpen(true)}>模型服务</Button><div className="status-cluster"><Tag color={service.color}>服务 · {service.label}</Tag><Tag color={execution.color}>执行 · {execution.label}</Tag><Tag color={browser.color}>浏览器 · {browser.label}</Tag><Tag color={model.color}>模型 · {model.label}</Tag></div></Layout.Header>
+    <Layout><Layout.Header className="topbar"><Typography.Text className="topbar-context">{selected ? String(selected.name ?? '当前应用') : '尚未选择应用'}</Typography.Text><Button className="topbar-settings" type="link" onClick={() => setSettingsOpen(true)}>模型服务</Button><Button type="text" aria-label="退出界鉴" icon={<PoweroffOutlined />} onClick={requestShutdown}>退出界鉴</Button><div className="status-cluster"><Tag color={service.color}>服务 · {service.label}</Tag><Tag color={execution.color}>执行 · {execution.label}</Tag><Tag color={browser.color}>浏览器 · {browser.label}</Tag><Tag color={model.color}>模型 · {model.label}</Tag></div></Layout.Header>
       <Layout.Content className="content">{error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onBackAccess={() => { setError(null); navigate('/apps/access') }} onClose={() => setError(null)} />}{demoData && route !== '/apps/access' && <div className="demo-data-banner">演示数据，不代表真实项目</div>}{content()}</Layout.Content>
     </Layout>
+    <Modal
+      open={shutdownConfirmOpen}
+      title="退出界鉴？"
+      okText="安全退出"
+      cancelText="继续使用"
+      onCancel={() => setShutdownConfirmOpen(false)}
+      onOk={async () => {
+        try {
+          await systemApi.shutdown()
+          setShutdownConfirmOpen(false)
+          setShutdownRequested(true)
+        } catch (shutdownError) {
+          setError(shutdownError as ApiError)
+        }
+      }}
+    >
+      界鉴会先停止服务、Worker 和受控浏览器，并保留可恢复的任务记录。
+    </Modal>
     <LLMSettingsDrawer open={settingsOpen} profiles={llmProfiles} onClose={() => setSettingsOpen(false)} onChanged={setLlmProfiles} onError={setError} />
   </Layout>
 }

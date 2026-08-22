@@ -43,19 +43,24 @@ def test_real_onboarding_demo_worker_runner_publication_and_secret_boundary(
         project_id = payload["project_id"]
         job_id = payload["job_id"]
         profile = json.loads((var_dir / "onboarding" / payload["session_id"] / "profile.json").read_text(encoding="utf-8"))
-        assert profile["action_bindings"][0]["action_id"] == "modify"
-        assert profile["action_bindings"][0]["method"] == "PATCH"
-        assert {item["id"] for item in profile["identities"]} == {"owner", "attacker", "peer"}
-        assert next(item for item in profile["identities"] if item["id"] == "peer")["secret_ref"] == "env:JIEJIAN_DEMO_PEER_TOKEN"
-        assert {item["subject_id"] for item in profile["subject_bindings"]} == {"attacker", "peer"}
+        assert profile["workflow_bindings"][0]["action_id"] == "modify"
+        assert profile["workflow_bindings"][0]["steps"][0]["request_template"]["method"] == "PATCH"
+        assert {item["identity_id"] for item in profile["identities"]} == {"owner", "attacker", "peer"}
+        assert next(item for item in profile["identities"] if item["identity_id"] == "peer")["binding"]["secret_ref"] == "env:JIEJIAN_DEMO_PEER_TOKEN"
+        assert {item["subject_id"] for item in profile["subject_bindings"]} == {"owner", "attacker", "peer"}
         assert profile["observer_bindings"][0]["observer_type"] == "OWNER_API"
         active_contract = app.state.context.projects.current_contract(project_id).snapshot
         assert set(active_contract.role_ids) == {"user", "guest"}
         assert {item.subject_id for item in active_contract.subjects} == {"owner", "attacker", "peer"}
-        assert len(active_contract.rules) == 1
-        rule = active_contract.rules[0]
-        assert (rule.subject_id, rule.action_id, rule.expectation.value) == ("attacker", "modify", "DENY")
-        assert rule.required_observations == ("resource_state",)
+        rules = {
+            (rule.subject_id, rule.action_id, rule.expectation.value): rule
+            for rule in active_contract.rules
+        }
+        assert set(rules) == {
+            ("owner", "modify", "ALLOW"),
+            ("attacker", "modify", "DENY"),
+        }
+        assert all(rule.required_observations == ("resource_state",) for rule in rules.values())
 
         detail = None
         deadline = time.monotonic() + 60
@@ -82,14 +87,24 @@ def test_real_onboarding_demo_worker_runner_publication_and_secret_boundary(
         assert detail["finding_count"] == len(findings.json()["data"])
         evidence_index = evidence.json()["data"]
         assert evidence_index
-        evidence_detail = client.get(f"/api/runs/{run_id}/evidence/{evidence_index[0]['evidence_id']}")
-        assert evidence_detail.status_code == 200, evidence_detail.text
-        evidence_payload = evidence_detail.json()["data"]
+        evidence_payloads = []
+        for indexed in evidence_index:
+            evidence_detail = client.get(f"/api/runs/{run_id}/evidence/{indexed['evidence_id']}")
+            assert evidence_detail.status_code == 200, evidence_detail.text
+            evidence_payloads.append(evidence_detail.json()["data"])
+        evidence_payload = next(
+            item
+            for item in evidence_payloads
+            if item["case_snapshot"]["subject_id"] == "attacker"
+            and item["twin_role"] == "DENY_VARIANT"
+        )
         expected_outcome = "UNKNOWN" if variant == "inconclusive" else "DENIED"
         assert evidence_payload["execution_fact"]["outcome"] == expected_outcome
         effects = {item["effect"] for item in evidence_payload["observation_facts"]}
         expected_effect = {"fixed": "ABSENT", "vulnerable": "CONFIRMED", "inconclusive": "UNKNOWN"}[variant]
         assert expected_effect in effects
+        security_effects = {item["state"] for item in evidence_payload["security_effect_facts"]}
+        assert expected_effect in security_effects
 
         repeated = client.post("/api/onboarding/demo/start", json={"schema_version": "1", "variant": variant}).json()["data"]
         assert (repeated["project_id"], repeated["run_id"], repeated["job_id"]) == (

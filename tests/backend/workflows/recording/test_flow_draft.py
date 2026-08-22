@@ -257,7 +257,7 @@ def test_review_commands_are_immutable_and_compile_confirmed_flow() -> None:
     assert confirmed.variables[0].status is FlowDraftVariableStatus.CONFIRMED
     flow = reviewer.compile(confirmed)
     assert len(flow.steps) == 2
-    assert flow.steps[1].path == "/resources/{resource_id}"
+    assert flow.steps[1].request_template.path == "/resources/{resource_id}"
     assert flow.steps[1].depends_on_step_ids == ("step-000001",)
     assert flow.steps[1].variable_sources[0].json_path == "$.id"
 
@@ -357,5 +357,5 @@ def test_processor_preserves_dynamic_project_id_across_create_get_and_approval()
     flow = reviewer.compile(reviewed)
 
     assert flow.id == project_id
-    assert flow.steps[0].path == f"/projects/{project_id}/resources"
-    assert flow.steps[1].path == f"/projects/{project_id}/resources/{{resource_id}}"
+    assert flow.steps[0].request_template.path == f"/projects/{project_id}/resources"
+    assert flow.steps[1].request_template.path == f"/projects/{project_id}/resources/{{resource_id}}"

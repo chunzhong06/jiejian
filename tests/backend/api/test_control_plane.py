@@ -18,6 +18,7 @@ from product.backend.core.contracts.models import ContractStatus
 from product.backend.core.errors import JiejianError
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.infra.runtime.jobs.models import WaitingFatalFailure
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.cli.commands.system import _wait_for_ready
 from product.protocols import canonical_execution_profile_json_bytes, parse_execution_profile
@@ -108,6 +109,8 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         assert status.json()["data"]["api"] == "available"
         assert status.json()["data"]["worker"] == "stopped"
         assert status.json()["data"]["browser"] in {"available", "unavailable", "unknown"}
+        assert status.json()["data"]["environment"]["python"]["executable"]
+        assert status.json()["data"]["recovered_jobs"] == 0
         openapi = client.get("/openapi.json")
         assert openapi.status_code == 200
         assert "ApiResponse" in openapi.json()["components"]["schemas"]
@@ -126,6 +129,62 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         assert client.get(f"/api/projects/{project_id}").status_code == 200
 
 
+def test_control_plane_shutdown_requires_explicit_local_control_header(tmp_path: Path) -> None:
+    calls: list[str] = []
+    app = create_app(
+        tmp_path / "var",
+        start_worker=False,
+        shutdown_callback=lambda: calls.append("shutdown"),
+    )
+    with TestClient(app) as client:
+        rejected = client.post("/api/system/shutdown")
+        accepted = client.post(
+            "/api/system/shutdown",
+            headers={"X-Jiejian-Control": "shutdown"},
+        )
+
+    assert rejected.status_code == 400
+    assert accepted.status_code == 202
+    assert accepted.json()["data"]["status"] == "stopping"
+    assert calls == ["shutdown"]
+
+
+def test_failed_worker_run_returns_copyable_user_diagnostic(
+    sample_server_factory,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    sample = sample_server_factory("fixed")
+    profile_path = _write_profile(tmp_path, port=sample.port)
+    for key, value in sample.environ.items():
+        monkeypatch.setenv(key, value)
+    app = create_app(tmp_path / "failed-run", start_worker=False)
+
+    with TestClient(app) as client:
+        project, _, profile = _register_active_profile(app, client, profile_path)
+        submitted = client.post(
+            f"/api/projects/{project['project_id']}/runs",
+            json={
+                "schema_version": "1",
+                "profile_id": profile["profile_id"],
+                "idempotency_key": "failed-worker-diagnostic",
+            },
+        ).json()["data"]
+        job_id = submitted["job"]["job_id"]
+        app.state.context.job_attempts.record_waiting_fatal_failure(
+            WaitingFatalFailure(job_id=job_id, now_us=time.time_ns() // 1_000)
+        )
+        detail = client.get(f"/api/runs/{submitted['run']['run_id']}")
+
+    assert detail.status_code == 200
+    error = detail.json()["data"]["execution_errors"][0]
+    assert error["stage"] == "后台执行"
+    assert error["code"] == "WORKER_FATAL"
+    assert error["job_id"] == job_id
+    assert job_id in error["copy_text"]
+    assert error["log_path"].endswith(f"{job_id}.log")
+
+
 def test_control_plane_rejects_invalid_binding_and_redacts_trace(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
@@ -137,6 +196,30 @@ def test_control_plane_rejects_invalid_binding_and_redacts_trace(tmp_path: Path)
         assert response.status_code == 400
         assert response.json()["trace_id"] == "trace-safe"
         assert response.json()["error"]["schema_version"] == "1"
+
+
+def test_execution_profile_summary_exposes_only_user_confirmable_workflow_and_effect_facts(
+    tmp_path: Path,
+) -> None:
+    app = create_app(tmp_path / "var", start_worker=False)
+    profile_path = _write_profile(tmp_path)
+    with TestClient(app) as client:
+        project, _, profile = _register_active_profile(app, client, profile_path)
+        response = client.get(
+            f"/api/projects/{project['project_id']}/execution-profiles/{profile['profile_id']}/summary"
+        )
+
+    assert response.status_code == 200, response.text
+    summary = response.json()["data"]
+    assert summary["schema_version"] == "1"
+    assert summary["workflows"]
+    assert all(item["target_step"]["method"] for item in summary["workflows"])
+    assert summary["effect_bindings"]
+    assert all(item["required_channels"] for item in summary["effect_bindings"])
+    serialized = json.dumps(summary).lower()
+    assert "secret_ref" not in serialized
+    assert "authorization" not in serialized
+    assert "cookie" not in serialized
 
 
 def test_run_idempotency_cancel_and_sse_cursor(tmp_path: Path, monkeypatch) -> None:
@@ -351,7 +434,7 @@ def test_serve_lock_reclaims_stale_owner(tmp_path: Path) -> None:
         assert lock.acquired is True
     finally:
         lock.release()
-    assert not lock_path.exists()
+    assert lock_path.is_file()
 
 
 @pytest.mark.process
@@ -386,7 +469,7 @@ def test_serve_lock_is_released_by_process_exit(tmp_path: Path) -> None:
 
     lock = ServeLock.acquire(var_dir)
     lock.release()
-    assert not (var_dir / ".serve.lock").exists()
+    assert (var_dir / ".serve.lock").is_file()
 
 
 def test_serve_requires_frontend_index_and_releases_lock(tmp_path: Path) -> None:
@@ -397,7 +480,7 @@ def test_serve_requires_frontend_index_and_releases_lock(tmp_path: Path) -> None
     )
     assert result.exit_code != 0
     assert "SERVE_FAILED" in result.output
-    assert not (tmp_path / "var" / ".serve.lock").exists()
+    assert (tmp_path / "var" / ".serve.lock").is_file()
 
 
 def test_serve_rejects_non_loopback_before_frontend_and_releases_lock(tmp_path: Path) -> None:

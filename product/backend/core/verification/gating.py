@@ -146,6 +146,8 @@ class GateFacts(DomainModel):
     required_observer_issues: tuple[str, ...] = Field(max_length=8192)
     inconclusive_reasons: tuple[str, ...] = Field(max_length=8192)
     execution_errors: tuple[str, ...] = Field(max_length=8192)
+    behavior_change_ids: tuple[str, ...] = Field(default=(), max_length=8192)
+    behavior_comparison_issues: tuple[str, ...] = Field(default=(), max_length=8192)
     request_snapshot_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     engine_version: str | None = Field(default=None, min_length=1, max_length=64)
     protocol_versions: tuple[str, ...] = Field(default=(), max_length=8)
@@ -155,7 +157,15 @@ class GateFacts(DomainModel):
     def validate_fact_tokens(cls, value: str | None, info) -> str | None:
         return None if value is None else _clean_token(value, info.field_name)
 
-    @field_validator("coverage_ids", "required_observer_issues", "inconclusive_reasons", "execution_errors", "protocol_versions")
+    @field_validator(
+        "coverage_ids",
+        "required_observer_issues",
+        "inconclusive_reasons",
+        "execution_errors",
+        "behavior_change_ids",
+        "behavior_comparison_issues",
+        "protocol_versions",
+    )
     @classmethod
     def validate_fact_lists(cls, values: tuple[str, ...], info) -> tuple[str, ...]:
         if len(set(values)) != len(values):
@@ -223,6 +233,10 @@ def evaluate_gate(baseline: RegressionBaseline, facts: GateFacts, policy: GatePo
         reasons.append(_reason("REQUIRED_OBSERVER_INCOMPLETE", issue))
     for issue in facts.inconclusive_reasons:
         reasons.append(_reason("INCONCLUSIVE", issue))
+    for behavior_id in facts.behavior_change_ids:
+        reasons.append(_reason("SECURITY_BEHAVIOR_CHANGED", behavior_id))
+    for issue in facts.behavior_comparison_issues:
+        reasons.append(_reason("SECURITY_BEHAVIOR_NOT_COMPARABLE", issue))
 
     baseline_ids = {item.finding_id for item in baseline.finding_refs}
     threshold = _SEVERITY_ORDER[policy.minimum_severity]

@@ -30,11 +30,12 @@ export function StartCheckPage({ project, runs, onRefresh, onError, onNext }: { 
     return () => { active = false }
   }, [project.project_id])
   useEffect(() => {
-    if (!runs[0]?.run_id) return
+    const summary = runs[0]
+    if (!summary?.run_id) return
     let active = true
-    void runsApi.run(String(runs[0].run_id)).then((run) => { if (active) setCurrentRun(run) }).catch((error) => { if (active) onError(error as ApiError) })
+    void runsApi.run(String(summary.run_id)).then((run) => { if (active) setCurrentRun(run) }).catch((error) => { if (active) onError(error as ApiError) })
     return () => { active = false }
-  }, [runs[0]?.run_id])
+  }, [runs[0]?.run_id, runs[0]?.lifecycle, runs[0]?.updated_at_us, runs[0]?.job?.state])
   const submit = async () => {
     if (!selectedProfileId) return
     setLoading(true)

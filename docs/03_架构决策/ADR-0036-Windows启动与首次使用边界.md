@@ -16,6 +16,8 @@
 
 `VarDir` 按生命周期分成六类：根部 `jiejian.db/jobs/projects/reports/artifact-checks` 保持既有产品事实路径；`logs` 保存有界诊断；`runtime` 和 `cache` 可重建；`temp` 正常结束后应为空；`test` 只供仓库测试。自动下载的 uv 固定进入 `runtime/uv/0.11.12/<arch>/`，uv Python 环境和解释器分别进入 `runtime/python/env/` 与 `runtime/python/installations/`；启动状态进入 `cache/startup/`，pip requirements 投影进入 `cache/python/`，Node/uv 下载只在 `temp/downloads/` 创建并精确清理。不得再向 `%LOCALAPPDATA%\jiejian`、`VarDir` 根部或 `product/` 写入这些运行时。
 
+启动器选择 Conda 或 uv 后立即以实际 `sys.executable` 和 `sys.prefix` 固定 Python 身份，清除调用者的 `PYTHONHOME/PYTHONPATH`，启用 `PYTHONNOUSERSITE`，并检查 `sys.path` 与关键依赖 origin 是否落入 Windows 用户级 site-packages。身份随最小环境传给 Worker，Worker 在组合根初始化前再次核对，避免主进程和 Worker 使用不同解释器。Playwright 浏览器固定到 `VarDir/runtime/playwright`；删除整个 `VarDir` 后，Python、Node、pnpm store、浏览器和准备状态均可按真源重建。
+
 日志统一位于 `logs/`：主日志 `jiejian.log` 单文件上限 5 MiB 并保留 3 个备份，启动日志进入 `logs/startup/` 且最多保留 20 次，Worker 保持既有单 Job 有界轮换，Demo 使用 `logs/onboarding-demo.log` 并在新会话开始时重建。Demo 的最小项目 source 只在 `temp/onboarding-demo/<session>/source/` 存活，停止、切换、异常退出或关闭时清理，不删除已提交的 Run、Job 或 Evidence。
 
 准备完成后，第一层交互入口用方向键和 Enter 提供“图形界面 / 命令行 / 仅完成环境准备”。进入“命令行”后再选择“引导模式（推荐） / 普通命令行 / 返回”；返回只回到第一层。两个菜单都把“↑ ↓ 选择    Enter 确认”固定放在选项下方，方向键只重画选项行，Enter 后光标进入 footer 下一行。RawUI 不可靠时只显示一次编号列表和对应的输入说明。图形界面继续执行 `serve --open`；普通命令行进入使用同一已准备 Python 解释器、项目模块、`VarDir` 和已确认 Node/pnpm PATH 的 PowerShell 子会话；仅准备直接成功退出。准备状态只保存非秘密事实和 fingerprint；配置与秘密不被启动器覆盖。
@@ -24,6 +26,8 @@
 
 既有等待动画只覆盖真实外部等待：查找 Node.js、检查 pnpm、查找或验证 Python、准备 Python 依赖、检查或准备 Chromium、检查或升级本地数据、准备前端依赖、构建界面和启动界面。动画子进程延迟 130 ms 显示首帧，每个 Start 必须在 finally 中 Stop；重定向、CI 和非交互输出完全禁用动画，动画自身失败不得改变准备逻辑或错误码。
 
+`serve` 的 ready 探针成功后必须立即停止“正在启动界面”动画，并在终端提示网页已打开、GUI 退出入口和 `Ctrl+C`。GUI 退出请求携带专用本地控制头并进入 Uvicorn/FastAPI shutdown；该链停止 Worker、Runner、受控浏览器和 ApplicationCore。直接关闭窗口时，系统释放 Serve 锁，Worker 根据随机 owner token 失配请求取消；下次启动用系统锁证明恢复过期任务，遗留 PID 文件不能阻塞启动或决定锁是否有效。
+
 自动化和重定向输入场景必须显式选择 GUI、CLI 或 prepare 模式，不能依赖菜单。显式 CLI 模式直接进入普通命令行，不读取键盘。CLI 子会话直接调用启动时解析出的 Python 绝对路径，不为每条命令重复执行 Conda 或 uv wrapper；运行环境只影响该子进程，不永久写入 `PATH`、PowerShell profile 或系统环境变量。为兼容已有自动化，旧 `PrepareOnly` 入口继续映射到 prepare，冲突参数严格失败。
 
 CLI 引导只调用 ApplicationCore 和现有 onboarding、Project、Contract、Execution、Recording 与 Result 能力，不保存第二套进度。首页固定使用“开始第一次权限检查 / 检查运行环境 / 录制业务流程 / 查看最近检查结果 / 打开图形界面 / 进入普通命令行 / 退出”。首次检查优先提供内置“存在权限问题 / 权限限制正常 / 证据不足”三种演示，演示仍经过普通 Contract、Profile、Job、Worker、Runner 和已发布结果链；真实应用需要复杂权限矩阵或流程编辑时，引导用户进入现有 `serve --open`，不要求普通用户手写 JSON 或内部标识。
@@ -31,6 +35,8 @@ CLI 引导只调用 ApplicationCore 和现有 onboarding、Project、Contract、
 CLI 的人类结果、机器结果和运行日志分开：Human 只在终端展示任务结果与恢复建议；`--json` 的 stdout 只有一个稳定 JSON 对象；CI 保持机器模式和既有退出码；脱敏结构化日志写入 `VarDir/logs/jiejian.log`。普通 CLI 命令不把 INFO 日志写到 stderr，Worker、Runner 和 serve 仍保留所需日志。Human 默认隐藏内部标识和复杂技术字段，只有 `--verbose` 展示有界技术详情，`--verbose` 不得与 `--json` 或 CI 混用。
 
 失败输出固定包含失败阶段、稳定错误码、主要错误、日志位置和恢复建议。`scripts/start.ps1` 直接调用及显式非交互模式保持原始退出码且不等待；根 `start.cmd` 在 PowerShell 返回任意非零退出码后统一等待用户关闭窗口，并在等待结束后返回原始退出码。等待由最外层入口负责，因此参数绑定、模块加载或 PowerShell 内部展示失效也不会让双击窗口直接消失；自动化需要立即获得退出码时直接调用 `scripts/start.ps1`。
+
+运行环境页面展示当前 Python、Node、pnpm、Playwright、前端依赖和本次自动恢复数量。任务失败面向普通用户展示阶段、原因、Job、日志位置与下一步，并生成可直接复制给 AI 的脱敏文本；堆栈只进入有界日志。
 
 PowerShell 启动脚本统一保存为带 BOM 的 UTF-8，使 Windows PowerShell 5.1 在系统“Beta：使用 Unicode UTF-8”关闭时仍能确定性解析中文。`start.cmd` 保持无 BOM 且仅含 ASCII；代码页 65001 只负责后续控制台输入输出，不能让 `cmd.exe` 可靠解析 UTF-8 中文批处理字节，也不能替代 PowerShell 脚本文件的编码标记。
 

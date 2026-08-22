@@ -74,6 +74,9 @@ $script:ChromiumDetail = $null
 $script:MigrationDetail = $null
 $script:FrontendDependenciesDetail = $null
 $script:FrontendBuildDetail = $null
+$script:ChromiumExecutable = $null
+$script:PythonEnvironmentReport = $null
+$script:ServeReadyObserved = $false
 $script:CliEntryMode = "Shell"
 $script:PrepareState = [pscustomobject]@{
     schema_version = "1"
@@ -85,12 +88,25 @@ $script:SavedUvCacheDir = $env:UV_CACHE_DIR
 $script:SavedUvPythonInstallDir = $env:UV_PYTHON_INSTALL_DIR
 $script:SavedPythonUtf8 = $env:PYTHONUTF8
 $script:SavedPythonIoEncoding = $env:PYTHONIOENCODING
+$script:SavedPythonNoUserSite = $env:PYTHONNOUSERSITE
+$script:SavedPythonPath = $env:PYTHONPATH
+$script:SavedPythonHome = $env:PYTHONHOME
+$script:SavedJiejianPythonExecutable = $env:JIEJIAN_PYTHON_EXECUTABLE
+$script:SavedJiejianPythonEnvironmentPath = $env:JIEJIAN_PYTHON_ENVIRONMENT_PATH
+$script:SavedJiejianPythonEnvironmentType = $env:JIEJIAN_PYTHON_ENVIRONMENT_TYPE
+$script:SavedJiejianNodeExecutable = $env:JIEJIAN_NODE_EXECUTABLE
+$script:SavedJiejianNodeVersion = $env:JIEJIAN_NODE_VERSION
+$script:SavedJiejianPnpmExecutable = $env:JIEJIAN_PNPM_EXECUTABLE
+$script:SavedJiejianPnpmVersion = $env:JIEJIAN_PNPM_VERSION
+$script:SavedJiejianPlaywrightExecutable = $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE
+$script:SavedJiejianFrontendDependencies = $env:JIEJIAN_FRONTEND_DEPENDENCIES
 $script:SavedPath = $env:PATH
 $script:SavedCorepackHome = $env:COREPACK_HOME
 $script:SavedCorepackDownloadPrompt = $env:COREPACK_ENABLE_DOWNLOAD_PROMPT
 $script:SavedJiejianCorepackExecutable = $env:JIEJIAN_COREPACK_EXECUTABLE
 $script:SavedPnpmHome = $env:PNPM_HOME
 $script:SavedNpmConfigCache = $env:npm_config_cache
+$script:SavedPlaywrightBrowsersPath = $env:PLAYWRIGHT_BROWSERS_PATH
 $script:OriginalLocation = (Get-Location).Path
 $script:DisplayStageName = $null
 $script:DisplayStageTimer = $null
@@ -152,13 +168,21 @@ try {
     Set-Location -LiteralPath $script:ProjectRoot
     Write-Banner
     $env:PYTHONDONTWRITEBYTECODE = "1"
+    $env:PYTHONNOUSERSITE = "1"
+    Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+    Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
     $env:PYTHONUTF8 = "1"
     $env:PYTHONIOENCODING = "utf-8"
+    $env:PLAYWRIGHT_BROWSERS_PATH = [IO.Path]::GetFullPath((Join-Path $script:VarDir "runtime\playwright"))
     Start-DisplayStage 1 "检查运行环境"
     Write-Stage "preflight" "检查 Node.js 与 pnpm"
     New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null
     Load-PrepareState
     Test-NodeAndPnpm
+    $env:JIEJIAN_NODE_EXECUTABLE = $script:NodeExecutable
+    $env:JIEJIAN_NODE_VERSION = $script:NodeVersion
+    $env:JIEJIAN_PNPM_EXECUTABLE = $script:PnpmExecutable
+    $env:JIEJIAN_PNPM_VERSION = $script:PnpmVersion
     Write-DisplayResult "Node.js" "完成" $false $script:NodeRuntimeDetail
     Write-DisplayResult "pnpm" "完成" $false $script:PnpmRuntimeDetail
     Write-DisplayResult "PowerShell" "完成" $true $PSVersionTable.PSVersion.ToString()
@@ -192,8 +216,10 @@ try {
     Start-DisplayStage 3 "准备浏览器"
     Write-Stage "playwright" "安装或校验 Chromium"
     Prepare-Playwright $pythonFingerprint
+    $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE = $script:ChromiumExecutable
     Write-DisplayResult "Chromium" "完成" $true $script:ChromiumDetail
     Complete-DisplayStage
+    Write-RuntimeSummary
     # --- 启动环节：准备数据 ---
     Start-DisplayStage 4 "准备数据"
     Write-Stage "doctor" "运行环境诊断"
@@ -206,6 +232,7 @@ try {
     Start-DisplayStage 5 "准备界面"
     Write-Stage "frontend" "按指纹安装并构建前端"
     Prepare-Frontend
+    $env:JIEJIAN_FRONTEND_DEPENDENCIES = $script:FrontendDependenciesDetail
     Write-DisplayResult "前端依赖" "完成" $false $script:FrontendDependenciesDetail
     Write-DisplayResult "前端构建" "完成" $true $script:FrontendBuildDetail
     Complete-DisplayStage "完成"
@@ -260,11 +287,24 @@ try {
     if ($null -eq $script:SavedUvPythonInstallDir) { Remove-Item Env:UV_PYTHON_INSTALL_DIR -ErrorAction SilentlyContinue } else { $env:UV_PYTHON_INSTALL_DIR = $script:SavedUvPythonInstallDir }
     if ($null -eq $script:SavedPythonUtf8) { Remove-Item Env:PYTHONUTF8 -ErrorAction SilentlyContinue } else { $env:PYTHONUTF8 = $script:SavedPythonUtf8 }
     if ($null -eq $script:SavedPythonIoEncoding) { Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue } else { $env:PYTHONIOENCODING = $script:SavedPythonIoEncoding }
+    if ($null -eq $script:SavedPythonNoUserSite) { Remove-Item Env:PYTHONNOUSERSITE -ErrorAction SilentlyContinue } else { $env:PYTHONNOUSERSITE = $script:SavedPythonNoUserSite }
+    if ($null -eq $script:SavedPythonPath) { Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue } else { $env:PYTHONPATH = $script:SavedPythonPath }
+    if ($null -eq $script:SavedPythonHome) { Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue } else { $env:PYTHONHOME = $script:SavedPythonHome }
+    if ($null -eq $script:SavedJiejianPythonExecutable) { Remove-Item Env:JIEJIAN_PYTHON_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PYTHON_EXECUTABLE = $script:SavedJiejianPythonExecutable }
+    if ($null -eq $script:SavedJiejianPythonEnvironmentPath) { Remove-Item Env:JIEJIAN_PYTHON_ENVIRONMENT_PATH -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PYTHON_ENVIRONMENT_PATH = $script:SavedJiejianPythonEnvironmentPath }
+    if ($null -eq $script:SavedJiejianPythonEnvironmentType) { Remove-Item Env:JIEJIAN_PYTHON_ENVIRONMENT_TYPE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PYTHON_ENVIRONMENT_TYPE = $script:SavedJiejianPythonEnvironmentType }
+    if ($null -eq $script:SavedJiejianNodeExecutable) { Remove-Item Env:JIEJIAN_NODE_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_NODE_EXECUTABLE = $script:SavedJiejianNodeExecutable }
+    if ($null -eq $script:SavedJiejianNodeVersion) { Remove-Item Env:JIEJIAN_NODE_VERSION -ErrorAction SilentlyContinue } else { $env:JIEJIAN_NODE_VERSION = $script:SavedJiejianNodeVersion }
+    if ($null -eq $script:SavedJiejianPnpmExecutable) { Remove-Item Env:JIEJIAN_PNPM_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PNPM_EXECUTABLE = $script:SavedJiejianPnpmExecutable }
+    if ($null -eq $script:SavedJiejianPnpmVersion) { Remove-Item Env:JIEJIAN_PNPM_VERSION -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PNPM_VERSION = $script:SavedJiejianPnpmVersion }
+    if ($null -eq $script:SavedJiejianPlaywrightExecutable) { Remove-Item Env:JIEJIAN_PLAYWRIGHT_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE = $script:SavedJiejianPlaywrightExecutable }
+    if ($null -eq $script:SavedJiejianFrontendDependencies) { Remove-Item Env:JIEJIAN_FRONTEND_DEPENDENCIES -ErrorAction SilentlyContinue } else { $env:JIEJIAN_FRONTEND_DEPENDENCIES = $script:SavedJiejianFrontendDependencies }
     if ($null -eq $script:SavedPath) { Remove-Item Env:PATH -ErrorAction SilentlyContinue } else { $env:PATH = $script:SavedPath }
     if ($null -eq $script:SavedCorepackHome) { Remove-Item Env:COREPACK_HOME -ErrorAction SilentlyContinue } else { $env:COREPACK_HOME = $script:SavedCorepackHome }
     if ($null -eq $script:SavedCorepackDownloadPrompt) { Remove-Item Env:COREPACK_ENABLE_DOWNLOAD_PROMPT -ErrorAction SilentlyContinue } else { $env:COREPACK_ENABLE_DOWNLOAD_PROMPT = $script:SavedCorepackDownloadPrompt }
     if ($null -eq $script:SavedJiejianCorepackExecutable) { Remove-Item Env:JIEJIAN_COREPACK_EXECUTABLE -ErrorAction SilentlyContinue } else { $env:JIEJIAN_COREPACK_EXECUTABLE = $script:SavedJiejianCorepackExecutable }
     if ($null -eq $script:SavedPnpmHome) { Remove-Item Env:PNPM_HOME -ErrorAction SilentlyContinue } else { $env:PNPM_HOME = $script:SavedPnpmHome }
     if ($null -eq $script:SavedNpmConfigCache) { Remove-Item Env:npm_config_cache -ErrorAction SilentlyContinue } else { $env:npm_config_cache = $script:SavedNpmConfigCache }
+    if ($null -eq $script:SavedPlaywrightBrowsersPath) { Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH -ErrorAction SilentlyContinue } else { $env:PLAYWRIGHT_BROWSERS_PATH = $script:SavedPlaywrightBrowsersPath }
     Set-Location -LiteralPath $script:OriginalLocation
 }

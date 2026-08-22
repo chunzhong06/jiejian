@@ -31,7 +31,15 @@ from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
 from product.backend.infra.runtime.jobs.models import JobSubmissionResult
 from product.backend.infra.storage import ExecutionProfileRecord, StorageUnitOfWork
 from product.backend.workflows.runs.submission import RunSubmission, SubmitExecution
-from product.protocols import ActionExecutionBinding, ExecutionBudget, ExecutionProfile, ObserverRequirementKind, RunnerResult, WebTargetDefinition
+from product.protocols import (
+    ExecutionBudget,
+    ExecutionProfile,
+    HttpWorkflowBinding,
+    ObserverRequirementKind,
+    RunnerResult,
+    WebTargetDefinition,
+    required_secret_refs,
+)
 from product.protocols.execution_profile import EXECUTION_PROFILE_MAX_BYTES, parse_execution_profile
 
 
@@ -118,7 +126,7 @@ class ExecutionWorkflow:
         *,
         project_id: str | None = None,
         target_override: WebTargetDefinition | None = None,
-        action_bindings_override: tuple[ActionExecutionBinding, ...] | None = None,
+        workflow_bindings_override: tuple[HttpWorkflowBinding, ...] | None = None,
     ) -> PersistedExecutionRequest:
         """从已登记 Profile 和 ACTIVE Contract 构造带预算的不可变执行快照。"""
 
@@ -129,7 +137,15 @@ class ExecutionWorkflow:
             contract,
             plan,
             target_override=target_override,
-            action_bindings_override=action_bindings_override,
+            workflow_bindings_override=workflow_bindings_override,
+        )
+        paired_case_ids = {
+            case.case_id
+            for twin in snapshot.differential_plan.twins
+            for case in (twin.allow_case, twin.deny_case)
+        }
+        execution_case_count = 2 * len(snapshot.differential_plan.twins) + sum(
+            case.case_id not in paired_case_ids for case in snapshot.plan.cases
         )
         scope = profile.target.scope
         budget = ExecutionBudget(
@@ -137,7 +153,7 @@ class ExecutionWorkflow:
             request_timeout_us=int(scope.timeout_seconds * 1_000_000),
             max_duration_us=profile.max_duration_us,
             max_response_bytes=scope.max_response_bytes,
-            max_cases=profile.case_budget,
+            max_cases=max(profile.case_budget, execution_case_count),
             max_parallel_cases=1,
         )
         return PersistedExecutionRequest(budget=budget, project_snapshot=snapshot)
@@ -148,7 +164,7 @@ class ExecutionWorkflow:
         *,
         project_id: str | None = None,
         target_override: WebTargetDefinition | None = None,
-        action_bindings_override: tuple[ActionExecutionBinding, ...] | None = None,
+        workflow_bindings_override: tuple[HttpWorkflowBinding, ...] | None = None,
         idempotency_key: str,
         max_attempts: int = 3,
         now_us: int | None = None,
@@ -162,7 +178,7 @@ class ExecutionWorkflow:
             profile_id,
             project_id=project_id,
             target_override=target_override,
-            action_bindings_override=action_bindings_override,
+            workflow_bindings_override=workflow_bindings_override,
         )
         names = required_secret_names(request)
         environment = self._environment_provider(names)
@@ -192,7 +208,7 @@ class ExecutionWorkflow:
         *,
         accept_source_changes: bool = False,
         target_override: WebTargetDefinition | None = None,
-        action_bindings_override: tuple[ActionExecutionBinding, ...] | None = None,
+        workflow_bindings_override: tuple[HttpWorkflowBinding, ...] | None = None,
         idempotency_key: str,
         max_attempts: int = 3,
     ) -> RunnerResult:
@@ -206,7 +222,7 @@ class ExecutionWorkflow:
             record.profile_id,
             project_id=record.project_id,
             target_override=target_override,
-            action_bindings_override=action_bindings_override,
+            workflow_bindings_override=workflow_bindings_override,
             idempotency_key=idempotency_key,
             max_attempts=max_attempts,
         )
@@ -298,11 +314,5 @@ def _metadata_matches(record: ExecutionProfileRecord, metadata: Mapping[str, Any
 
 def _fatal_secret_names(request: PersistedExecutionRequest) -> tuple[str, ...]:
     snapshot = request.project_snapshot
-    identity_ids = {item.identity_id for item in snapshot.subject_bindings}
-    references = [identity.secret_ref for identity in snapshot.identities if identity.id in identity_ids]
-    references.extend(
-        binding.credential_ref
-        for binding in snapshot.observer_bindings
-        if binding.kind is ObserverRequirementKind.OBSERVER_SPEC and binding.credential_ref is not None
-    )
+    references = list(required_secret_refs(snapshot))
     return tuple(dict.fromkeys(reference.removeprefix("env:") for reference in references))

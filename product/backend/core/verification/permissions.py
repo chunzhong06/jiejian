@@ -40,7 +40,7 @@ _SECRET_OR_URL = re.compile(
 class PermissionModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["3"] = "3"
 
 
 class RelationType(StrEnum):
@@ -56,6 +56,44 @@ class RelationType(StrEnum):
 class PermissionExpectation(StrEnum):
     ALLOW = "ALLOW"
     DENY = "DENY"
+
+
+class SecurityEffectKind(StrEnum):
+    STATE_MUTATION = "STATE_MUTATION"
+    DATA_DISCLOSURE = "DATA_DISCLOSURE"
+    OBJECT_CREATION = "OBJECT_CREATION"
+    EXTERNAL_DISPATCH = "EXTERNAL_DISPATCH"
+    RESTRICTED_FUNCTION_INVOCATION = "RESTRICTED_FUNCTION_INVOCATION"
+    CREDENTIAL_ACCESS = "CREDENTIAL_ACCESS"
+
+
+# Contract 中的安全效果只表达业务意图，不携带 Observer 或传输实现细节。
+class SecurityEffectDefinition(PermissionModel):
+    effect_id: str = Field(pattern=_ID_PATTERN)
+    kind: SecurityEffectKind
+    resource_type: str = Field(pattern=_TEXT_PATTERN)
+    expected_state: str | None = Field(default=None, pattern=_STATE_PATTERN)
+    protected_fields: tuple[str, ...] = Field(default=(), max_length=64)
+
+    @field_validator("effect_id", "resource_type", "expected_state")
+    @classmethod
+    def reject_forbidden_effect_text(cls, value: str | None, info: Any) -> str | None:
+        return None if value is None else _safe_text(value, info.field_name)
+
+    @field_validator("protected_fields")
+    @classmethod
+    def normalize_protected_fields(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if any(re.fullmatch(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$", value) is None for value in values):
+            raise ValueError("protected_fields must contain bounded projection paths")
+        return _ordered_unique(values, "protected_fields")
+
+    @model_validator(mode="after")
+    def validate_effect(self) -> SecurityEffectDefinition:
+        if self.kind is SecurityEffectKind.DATA_DISCLOSURE and not self.protected_fields:
+            raise ValueError("DATA_DISCLOSURE requires protected_fields")
+        if self.kind is not SecurityEffectKind.DATA_DISCLOSURE and self.protected_fields:
+            raise ValueError("protected_fields are only valid for DATA_DISCLOSURE")
+        return self
 
 
 class CoverageDimension(StrEnum):
@@ -122,7 +160,7 @@ class SubjectDefinition(PermissionModel):
 
 class ActionDefinition(PermissionModel):
     action_id: str = Field(pattern=_ID_PATTERN)
-    side_effect: bool = False
+    effect_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
     is_batch: bool = False
     workflow_transition: WorkflowTransition | None = None
 
@@ -131,11 +169,12 @@ class ActionDefinition(PermissionModel):
     def reject_forbidden_action_text(cls, value: str) -> str:
         return _safe_text(value, "action_id")
 
-    @model_validator(mode="after")
-    def validate_transition(self) -> ActionDefinition:
-        if self.workflow_transition is not None and not self.side_effect:
-            raise ValueError("workflow_transition requires a side-effect action")
-        return self
+    @field_validator("effect_ids")
+    @classmethod
+    def normalize_effect_ids(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if any(re.fullmatch(_ID_PATTERN, value) is None for value in values):
+            raise ValueError("effect_ids must contain bounded IDs")
+        return _ordered_unique(values, "effect_ids")
 
 
 class ResourceDefinition(PermissionModel):
@@ -310,6 +349,7 @@ class PermissionContract(PermissionModel):
     role_ids: tuple[str, ...] = Field(min_length=1, max_length=128)
     workflow_states: tuple[str, ...] = Field(min_length=1, max_length=128)
     subjects: tuple[SubjectDefinition, ...] = Field(min_length=1, max_length=4096)
+    effects: tuple[SecurityEffectDefinition, ...] = Field(min_length=1, max_length=4096)
     actions: tuple[ActionDefinition, ...] = Field(min_length=1, max_length=4096)
     resources: tuple[ResourceDefinition, ...] = Field(min_length=1, max_length=4096)
     relations: tuple[RelationFact, ...] = Field(default=(), max_length=8192)
@@ -334,6 +374,7 @@ class PermissionContract(PermissionModel):
         """校验图、规则、批量语义和跨引用，拒绝悬空或冲突关系。"""
 
         subjects = {item.subject_id: item for item in self.subjects}
+        effects = {item.effect_id: item for item in self.effects}
         actions = {item.action_id: item for item in self.actions}
         resources = {item.resource_id: item for item in self.resources}
         relations = {item.relation_id: item for item in self.relations}
@@ -341,6 +382,7 @@ class PermissionContract(PermissionModel):
         batch_rules = {item.rule_id: item for item in self.batch_rules}
         all_ids = (
             tuple(subjects)
+            + tuple(effects)
             + tuple(actions)
             + tuple(resources)
             + tuple(relations)
@@ -352,8 +394,12 @@ class PermissionContract(PermissionModel):
             raise ValueError("all permission definition IDs must be globally unique")
         if len(subjects) != len(self.subjects):
             raise ValueError("subject IDs must be unique")
+        if len(effects) != len(self.effects):
+            raise ValueError("effect IDs must be unique")
         if len(actions) != len(self.actions):
             raise ValueError("action IDs must be unique")
+        if any(effect_id not in effects for action in self.actions for effect_id in action.effect_ids):
+            raise ValueError("action effect reference is invalid")
         if len(resources) != len(self.resources):
             raise ValueError("resource IDs must be unique")
         if len(relations) != len(self.relations):
@@ -407,6 +453,8 @@ class PermissionContract(PermissionModel):
         for action in self.actions:
             if action.workflow_transition is not None:
                 transition = action.workflow_transition
+                if not any(effects[effect_id].kind is SecurityEffectKind.STATE_MUTATION for effect_id in action.effect_ids):
+                    raise ValueError("workflow transition requires a STATE_MUTATION effect")
                 if any(state not in self.workflow_states for state in transition.allowed_from_states):
                     raise ValueError("workflow transition references an undeclared source state")
                 if transition.target_state not in self.workflow_states:

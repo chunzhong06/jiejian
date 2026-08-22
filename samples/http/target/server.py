@@ -138,7 +138,7 @@ class AuthorizationRequestHandler(BaseHTTPRequestHandler):
 
     def _observe_resource(self, resource_id: str) -> None:
         # 观察凭据与被测身份凭据分离，避免目标响应自证其授权结果。
-        token = self._bearer_token()
+        token = self._authorization_token()
         if token is None or not hmac.compare_digest(token, self.server.observer_token):
             self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return
@@ -153,7 +153,7 @@ class AuthorizationRequestHandler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.OK, copy.deepcopy(resource))
 
     def _subject_id(self) -> str | None:
-        token = self._bearer_token()
+        token = self._authorization_token()
         if token is None:
             self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return None
@@ -163,7 +163,7 @@ class AuthorizationRequestHandler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
         return None
 
-    def _bearer_token(self) -> str | None:
+    def _authorization_token(self) -> str | None:
         value = self.headers.get("Authorization", "")
         return value.removeprefix("Bearer ") if value.startswith("Bearer ") else None
 

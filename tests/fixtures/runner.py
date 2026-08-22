@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from product.backend.core.lifecycle import CaseVerdict
-from product.backend.core.verification.facts import ExecutionOutcome, ObservedEffect, TargetType
+from product.backend.core.verification.facts import ExecutionOutcome, ObservedEffect, TargetType, TemporalClosure, aggregate_security_effect
 from product.backend.core.verification.permission_coverage import build_permission_coverage_plan
 from product.backend.core.verification.permissions import (
     ActionDefinition,
@@ -14,17 +14,24 @@ from product.backend.core.verification.permissions import (
     RelationFact,
     RelationType,
     ResourceDefinition,
+    SecurityEffectDefinition,
+    SecurityEffectKind,
     SubjectDefinition,
     canonical_sha256,
 )
 from product.protocols import (
-    ActionExecutionBinding,
+    BearerIdentityBinding,
+    BaselineIntegrityMode,
+    BaselineProjection,
     CausalityStatus,
     Correlation,
     Evidence,
+    EffectBinding,
+    EffectClosurePolicy,
     ExecutionBudget,
     ExecutionFact,
     ExecutionIdentity,
+    ExecutionProfile,
     ExecutionProjectSnapshot,
     ObservationCompleteness,
     ObservationEnvelope,
@@ -42,7 +49,16 @@ from product.protocols import (
     ObserverType,
     OwnerApiLocator,
     ProvenanceType,
-    ResourceInjection,
+    HttpOutcomeClassifier,
+    HttpPredicate,
+    HttpPredicateKind,
+    HttpRequestTemplate,
+    HttpWorkflowBinding,
+    HttpWorkflowStep,
+    ValueSlot,
+    ValueSlotConsumer,
+    ValueSlotSource,
+    WorkflowStepPurpose,
     RunnerInput,
     SubjectExecutionBinding,
     WebTargetDefinition,
@@ -59,7 +75,8 @@ def contract_and_plan() -> tuple[PermissionContract, object]:
         role_ids=("member",),
         workflow_states=("DRAFT",),
         subjects=(SubjectDefinition(subject_id="member", roles=("member",), tenant_id="tenant-a", department_id="dept-a"),),
-        actions=(ActionDefinition(action_id="modify", side_effect=True),),
+        effects=(SecurityEffectDefinition(effect_id="document-mutated", kind=SecurityEffectKind.STATE_MUTATION, resource_type="document"),),
+        actions=(ActionDefinition(action_id="modify", effect_ids=("document-mutated",)),),
         resources=(ResourceDefinition(resource_id="document", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="member", workflow_state="DRAFT"),),
         relations=(RelationFact(relation_id="owns-document", relation=RelationType.OWNS, source=RelationEndpoint(endpoint_type="subject", endpoint_id="member"), target=RelationEndpoint(endpoint_type="resource", endpoint_id="document")),),
         rules=(PermissionRule(rule_id="modify-document", subject_id="member", action_id="modify", resource_id="document", relation_path=("owns-document",), context=PermissionContext(workflow_states=("DRAFT",), resource_ids=("document",)), expectation=PermissionExpectation.ALLOW, required_observations=("resource_state",), coverage_dimensions=(CoverageDimension.ROLE,)),),
@@ -90,10 +107,10 @@ def execution_snapshot() -> ExecutionProjectSnapshot:
         reset_path="/reset",
     )
     identity = ExecutionIdentity(
-        schema_version="2",
-        id="identity-member",
+        schema_version="3",
+        identity_id="identity-member",
         role="member",
-        secret_ref="env:JIEJIAN_TEST_TOKEN",
+        binding=BearerIdentityBinding(secret_ref="env:JIEJIAN_TEST_TOKEN"),
     )
     owner = ObserverSpec(
         observer_id="owner_observer",
@@ -104,25 +121,59 @@ def execution_snapshot() -> ExecutionProjectSnapshot:
             normalization_id="owner-state",
             normalization_version="1",
         ),
-        phases=(ObservationPhase.BEFORE, ObservationPhase.AFTER),
+        phases=(ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
         required=True,
         budget=ObserverBudget(timeout_us=5_000_000, max_rows=1, max_bytes=262_144),
     )
-    return ExecutionProjectSnapshot(
+    workflow = HttpWorkflowBinding(
+        workflow_id="modify-workflow",
+        source_flow_id="runner-flow",
+        action_id="modify",
+        steps=(HttpWorkflowStep(
+            id="target-1",
+            purpose=WorkflowStepPurpose.TARGET,
+            identity_id="identity-member",
+            request_template=HttpRequestTemplate(
+                method="PATCH",
+                path="/resources/{resource_id}",
+                body={"kind": "JSON", "value": {"value": "bounded"}},
+                input_slots=(ValueSlot(slot_id="resource_id", source=ValueSlotSource.CASE_RESOURCE_ID, consumer=ValueSlotConsumer.PATH, consumer_step_id="target-1"),),
+            ),
+            classifier=HttpOutcomeClassifier(
+                accepted=(HttpPredicate(kind=HttpPredicateKind.STATUS_IN, statuses=(200,)),),
+                denied=(HttpPredicate(kind=HttpPredicateKind.STATUS_IN, statuses=(401, 403, 404)),),
+            ),
+        ),),
+        target_step_id="target-1",
+        baseline_projections=(BaselineProjection(
+            projection_id="document-state",
+            logical_resource_handle="case-resource",
+            normalization_version="1",
+            projection_version="1",
+            integrity_mode=BaselineIntegrityMode.EXACT_RESTORE,
+        ),),
+    )
+    observer_binding = ObserverRequirementBinding(requirement_id="resource_state", kind=ObserverRequirementKind.OBSERVER_SPEC, observer_id="owner_observer", observer_type=ObserverType.OWNER_API, credential_ref="env:OWNER_READ_ONLY", phases=(ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER))
+    profile = ExecutionProfile(
         project_id="runner-project",
+        profile_id="runner-profile",
         project_name="Runner test",
         target_type=TargetType.WEB,
         target=target,
         identities=(identity,),
-        contract=contract,
-        plan=plan,
+        contract_id=contract.contract_id,
+        contract_version=contract.version,
         observers=(owner,),
         subject_bindings=(SubjectExecutionBinding(subject_id="member", identity_id="identity-member"),),
-        action_bindings=(ActionExecutionBinding(action_id="modify", target_type=TargetType.WEB, method="PATCH", relative_path_template="/resources/{resource_id}", json_body={"value": "bounded"}, accepted_statuses=(200,), denied_statuses=(401, 403, 404), resource_injection=ResourceInjection.PATH_RESOURCE_ID),),
-        observer_bindings=(ObserverRequirementBinding(requirement_id="resource_state", kind=ObserverRequirementKind.OBSERVER_SPEC, observer_id="owner_observer", observer_type=ObserverType.OWNER_API, credential_ref="env:OWNER_READ_ONLY", phases=(ObservationPhase.BEFORE, ObservationPhase.AFTER)),),
-        contract_fingerprint=canonical_sha256(contract),
-        plan_fingerprint=plan.plan_fingerprint,
+        workflow_bindings=(workflow,),
+        effect_bindings=(EffectBinding(effect_id="document-mutated", required_channels=("resource_state",), closure_policy=EffectClosurePolicy.IMMEDIATE, projection_version="v1"),),
+        observer_bindings=(observer_binding,),
+        seed=4,
+        case_budget=1,
+        max_relation_depth=8,
+        max_duration_us=20_000_000,
     )
+    return profile.build_snapshot(contract, plan)
 
 
 def runner_input() -> RunnerInput:
@@ -164,9 +215,10 @@ def evidence(
                 "batch_mode": None,
             }
         )
+    phases = (ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER)
     states = tuple(
-        build_normalized_state({"value": "old" if phase is ObservationPhase.BEFORE else "new"})
-        for phase in (ObservationPhase.BEFORE, ObservationPhase.AFTER)
+        build_normalized_state({"value": "new" if phase is ObservationPhase.AFTER else "old"})
+        for phase in phases
     )
     envelopes = tuple(
         ObservationEnvelope(
@@ -205,11 +257,7 @@ def evidence(
             reason_codes=() if available else ("REQUIRED_OBSERVATION_INCOMPLETE",),
         )
         for resource_id in resources
-        for phase, state in zip(
-            (ObservationPhase.BEFORE, ObservationPhase.AFTER),
-            states,
-            strict=True,
-        )
+        for phase, state in zip(phases, states, strict=True)
     )
     outcomes = (
         ObserverOutcome(
@@ -230,6 +278,8 @@ def evidence(
             effect=ObservedEffect.CONFIRMED if available else ObservedEffect.UNKNOWN,
             complete=available,
             reliable=available,
+            correlated=available,
+            temporal_closure=TemporalClosure.CLOSED if available else TemporalClosure.UNKNOWN,
             reason_codes=() if available else ("REQUIRED_OBSERVATION_INCOMPLETE",),
         )
         for resource_id in resources
@@ -243,14 +293,30 @@ def evidence(
         input_hash="a" * 64,
         output_hash="b" * 64,
     )
+    effect_facts = tuple(
+        aggregate_security_effect(
+            snapshot.contract.effects[0],
+            resource_id=resource_id,
+            required_requirement_ids=("resource_state",),
+            corroborating_requirement_ids=(),
+            observations=observation_facts,
+            baseline_integrity=available,
+        )
+        for resource_id in resources
+    )
     return build_evidence(
-        schema_version="2",
+        schema_version="3",
         run_id="run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         case_snapshot=case,
+        twin_snapshot=None,
+        twin_role=None,
+        allow_control_valid=available,
+        baseline_integrity=available,
         finding_pre_identity=case.finding_pre_identity,
         execution_fact=execution,
         requirement_bindings=tuple(snapshot.observer_bindings),
         observation_facts=observation_facts,
+        security_effect_facts=effect_facts,
         observations=envelopes,
         outcomes=outcomes,
         verdict=verdict,

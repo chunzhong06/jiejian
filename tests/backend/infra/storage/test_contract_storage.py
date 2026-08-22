@@ -34,6 +34,8 @@ from product.backend.core.verification.permissions import (
     RelationFact,
     RelationType,
     ResourceDefinition,
+    SecurityEffectDefinition,
+    SecurityEffectKind,
     SubjectDefinition,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
@@ -89,7 +91,8 @@ def _contract(version: int = 1) -> PermissionContract:
         role_ids=("member",),
         workflow_states=("DRAFT",),
         subjects=(SubjectDefinition(subject_id="member", roles=("member",), tenant_id="tenant"),),
-        actions=(ActionDefinition(action_id="view"),),
+        effects=(SecurityEffectDefinition(effect_id="document-read", kind=SecurityEffectKind.DATA_DISCLOSURE, resource_type="document", protected_fields=("content",)),),
+        actions=(ActionDefinition(action_id="view", effect_ids=("document-read",)),),
         resources=(ResourceDefinition(resource_id="document", resource_type="document", owner_subject_id="member", tenant_id="tenant", workflow_state="DRAFT"),),
         relations=(RelationFact(relation_id="owns-document", relation=RelationType.OWNS, source=RelationEndpoint(endpoint_type="subject", endpoint_id="member"), target=RelationEndpoint(endpoint_type="resource", endpoint_id="document")),),
         rules=(_rule(),),

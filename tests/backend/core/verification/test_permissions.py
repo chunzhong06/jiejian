@@ -16,6 +16,8 @@ from product.backend.core.verification.permissions import (
     RelationFact,
     RelationType,
     ResourceDefinition,
+    SecurityEffectDefinition,
+    SecurityEffectKind,
     SubjectDefinition,
     canonical_json_bytes,
     canonical_sha256,
@@ -39,7 +41,8 @@ def _contract(*, expectation: PermissionExpectation = PermissionExpectation.ALLO
             SubjectDefinition(subject_id="admin", roles=("admin",), tenant_id="tenant-a", department_id="dept-a", admin_level=2),
             SubjectDefinition(subject_id="owner", roles=("user",), tenant_id="tenant-a", department_id="dept-a", admin_level=0),
         ),
-        actions=(ActionDefinition(action_id="read", ),),
+        effects=(SecurityEffectDefinition(effect_id="document-mutated", kind=SecurityEffectKind.STATE_MUTATION, resource_type="document"),),
+        actions=(ActionDefinition(action_id="read", effect_ids=("document-mutated",)),),
         resources=(
             ResourceDefinition(
                 resource_id="document",
@@ -97,7 +100,7 @@ def test_v2_contract_has_strict_six_dimensions_and_stable_plan() -> None:
     )
     reordered = PermissionContract(**reordered_data)
     assert canonical_sha256(contract) == canonical_sha256(reordered)
-    assert plan.model_dump(mode="python")["schema_version"] == "2"
+    assert plan.model_dump(mode="python")["schema_version"] == "3"
 
 
 @pytest.mark.parametrize(
@@ -257,7 +260,7 @@ def test_permission_coverage_is_deterministic_and_records_neighborhoods() -> Non
         ResourceDefinition(resource_id="pending-document", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="owner", workflow_state="archived"),
     )
     data["actions"] = (
-        ActionDefinition(action_id="read", side_effect=True, workflow_transition={"allowed_from_states": ("active",), "target_state": "archived"}),
+        ActionDefinition(action_id="read", effect_ids=("document-mutated",), workflow_transition={"allowed_from_states": ("active",), "target_state": "archived"}),
     )
     data["rules"] = ({**data["rules"][0], "coverage_dimensions": (CoverageDimension.ROLE, CoverageDimension.TENANT, CoverageDimension.DEPARTMENT, CoverageDimension.WORKFLOW)},)
     contract = PermissionContract(**data)
@@ -288,7 +291,7 @@ def test_batch_rule_requires_batch_action_and_preserves_per_resource_expectation
     data = _contract().model_dump(mode="python")
     data["subjects"] = (*data["subjects"], SubjectDefinition(subject_id="child", roles=("user",), tenant_id="tenant-a", department_id="dept-a"))
     data["resources"] = (*data["resources"], ResourceDefinition(resource_id="child-document", resource_type="document", tenant_id="tenant-a", department_id="dept-a", owner_subject_id="child", workflow_state="active"))
-    data["actions"] = (*data["actions"], ActionDefinition(action_id="batch-read", is_batch=True))
+    data["actions"] = (*data["actions"], ActionDefinition(action_id="batch-read", effect_ids=("document-mutated",), is_batch=True))
     data["batch_rules"] = (BatchPermissionRule(
         rule_id="batch-read-rule", subject_id="admin", action_id="batch-read",
         resource_expectations=(

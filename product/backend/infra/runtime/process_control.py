@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import subprocess
+import os
 import time
 import logging
 from collections.abc import Callable
@@ -32,6 +33,26 @@ DEFAULT_LEASE_DURATION_US = 30_000_000
 DEFAULT_POLL_INTERVAL_SECONDS = 0.05
 DEFAULT_TERMINATION_GRACE_SECONDS = 2.0
 logger = logging.getLogger("jiejian.runtime.process_control")
+
+
+def force_terminate_process_tree(process: subprocess.Popen[Any], timeout: float) -> None:
+    """强制结束已持有句柄的进程树，避免 Runner 的受控浏览器成为孤儿进程。"""
+
+    if os.name == "nt" and isinstance(getattr(process, "pid", None), int):
+        try:
+            subprocess.run(
+                ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=timeout,
+            )
+        except (OSError, subprocess.SubprocessError):
+            process.kill()
+    else:
+        process.kill()
+    process.wait(timeout=timeout)
 
 
 class AttemptProcessControl:
@@ -137,9 +158,8 @@ class AttemptProcessControl:
                 "process kill requested",
                 extra={"component": "process_control", "event_code": "PROCESS_KILL"},
             )
-            process.kill()
             try:
-                process.wait(timeout=self._termination_grace_seconds)
+                force_terminate_process_tree(process, self._termination_grace_seconds)
             except subprocess.TimeoutExpired:
                 raise JiejianError(
                     ErrorCode.RUNNER_TIMEOUT,

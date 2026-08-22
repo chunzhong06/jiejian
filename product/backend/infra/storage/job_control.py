@@ -305,7 +305,7 @@ class JobControlRepository:
         target_state: JobState,
         available_at_us: int | None,
     ) -> JobRecord | None:
-        if target_state not in {JobState.RETRY_WAIT, JobState.FAILED}:
+        if target_state not in {JobState.RETRY_WAIT, JobState.FAILED, JobState.CANCELLED}:
             raise JiejianError(ErrorCode.STORAGE_STATE, "任务恢复目标状态无效")
         return self._finish_running_job(
             job_id=job_id,
@@ -314,7 +314,7 @@ class JobControlRepository:
             now_us=now_us,
             target_state=target_state,
             available_at_us=available_at_us,
-            require_cancel=False,
+            require_cancel=target_state is JobState.CANCELLED,
             require_expired=True,
         )
 

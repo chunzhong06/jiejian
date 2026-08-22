@@ -4,8 +4,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -14,10 +14,14 @@
           "title": "Action Id",
           "type": "string"
         },
-        "side_effect": {
-          "default": false,
-          "title": "Side Effect",
-          "type": "boolean"
+        "effect_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Effect Ids",
+          "type": "array"
         },
         "is_batch": {
           "default": false,
@@ -37,7 +41,8 @@
         }
       },
       "required": [
-        "action_id"
+        "action_id",
+        "effect_ids"
       ],
       "title": "ActionDefinition",
       "type": "object"
@@ -46,8 +51,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -128,8 +133,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -174,8 +179,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -231,8 +236,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -318,8 +323,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -348,8 +353,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -394,8 +399,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -475,12 +480,77 @@
       "title": "ResourceDefinition",
       "type": "object"
     },
+    "SecurityEffectDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3",
+          "default": "3",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SecurityEffectKind"
+        },
+        "resource_type": {
+          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+          "title": "Resource Type",
+          "type": "string"
+        },
+        "expected_state": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected State"
+        },
+        "protected_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "effect_id",
+        "kind",
+        "resource_type"
+      ],
+      "title": "SecurityEffectDefinition",
+      "type": "object"
+    },
+    "SecurityEffectKind": {
+      "enum": [
+        "STATE_MUTATION",
+        "DATA_DISCLOSURE",
+        "OBJECT_CREATION",
+        "EXTERNAL_DISPATCH",
+        "RESTRICTED_FUNCTION_INVOCATION",
+        "CREDENTIAL_ACCESS"
+      ],
+      "title": "SecurityEffectKind",
+      "type": "string"
+    },
     "SubjectDefinition": {
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -556,8 +626,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -587,8 +657,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },
@@ -628,6 +698,15 @@
       "maxItems": 4096,
       "minItems": 1,
       "title": "Subjects",
+      "type": "array"
+    },
+    "effects": {
+      "items": {
+        "$ref": "#/$defs/SecurityEffectDefinition"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Effects",
       "type": "array"
     },
     "actions": {
@@ -682,6 +761,7 @@
     "role_ids",
     "workflow_states",
     "subjects",
+    "effects",
     "actions",
     "resources",
     "rules"

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import time
+import os
+import logging
 from pathlib import Path
 
 import typer
@@ -12,6 +14,8 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.diagnostics import run_doctor
 from product.backend.cli.bootstrap import default_frontend_dir, runtime_settings
 from product.backend.cli.presentation import emit_doctor, fail, set_command_mode
+
+logger = logging.getLogger("jiejian.cli.system")
 
 
 def _wait_for_ready(
@@ -23,7 +27,7 @@ def _wait_for_ready(
     open_browser=None,
     timeout_seconds: float = 10.0,
 ) -> bool:
-    """Wait for the lifespan-backed ready response before opening a browser."""
+    """等待 lifespan 就绪响应后再打开浏览器，避免把端口监听误判为可用。"""
 
     if client_factory is None:
         import httpx
@@ -86,25 +90,43 @@ def serve_command(
         from product.backend.infra.runtime.serve_lock import ServeLock
 
         serve_lock = ServeLock.acquire(settings.var_dir)
+        previous_lock_path = os.environ.get("JIEJIAN_SERVE_LOCK_PATH")
+        previous_owner_token = os.environ.get("JIEJIAN_SERVE_OWNER_TOKEN")
+        os.environ["JIEJIAN_SERVE_LOCK_PATH"] = str(serve_lock.path)
+        os.environ["JIEJIAN_SERVE_OWNER_TOKEN"] = serve_lock.owner_token
         frontend_dir = (frontend_dir or default_frontend_dir()).resolve()
         from product.backend.api import create_app
 
         try:
             if not frontend_dir.is_dir() or not (frontend_dir / "index.html").is_file():
                 raise JiejianError(ErrorCode.SERVE_FAILED, "前端静态资源缺少可读的 index.html")
-            api = create_app(settings.var_dir, frontend_dir=frontend_dir)
+            server_holder: dict[str, object] = {}
+
+            def request_shutdown() -> None:
+                server_instance = server_holder.get("server")
+                if server_instance is not None:
+                    setattr(server_instance, "should_exit", True)
+
+            api = create_app(
+                settings.var_dir,
+                frontend_dir=frontend_dir,
+                shutdown_callback=request_shutdown,
+            )
             config = uvicorn.Config(
                 api, host=host, port=port, log_level=settings.log_level.lower()
             )
             server = uvicorn.Server(config)
+            server_holder["server"] = server
             if open_browser:
                 def open_when_ready() -> None:
-                    _wait_for_ready(
+                    opened = _wait_for_ready(
                         server,
                         host,
                         port,
                         open_browser=webbrowser.open,
                     )
+                    marker = "browser-opened" if opened else "browser-open-failed"
+                    print(f"__JIEJIAN_SERVE_READY__:{marker}", flush=True)
 
                 threading.Thread(
                     target=open_when_ready,
@@ -112,11 +134,23 @@ def serve_command(
                 ).start()
             server.run()
         finally:
+            if previous_lock_path is None:
+                os.environ.pop("JIEJIAN_SERVE_LOCK_PATH", None)
+            else:
+                os.environ["JIEJIAN_SERVE_LOCK_PATH"] = previous_lock_path
+            if previous_owner_token is None:
+                os.environ.pop("JIEJIAN_SERVE_OWNER_TOKEN", None)
+            else:
+                os.environ["JIEJIAN_SERVE_OWNER_TOKEN"] = previous_owner_token
             serve_lock.release()
     except JiejianError as exc:
         fail(exc)
     except Exception:
-        fail(JiejianError(ErrorCode.SERVE_FAILED, "本地服务启动失败"))
+        logger.exception(
+            "本地服务启动失败",
+            extra={"component": "serve", "event_code": "SERVE_UNEXPECTED_ERROR"},
+        )
+        fail(JiejianError(ErrorCode.SERVE_FAILED, "本地服务启动失败；详细原因已写入日志"))
 
 
 def doctor_command(

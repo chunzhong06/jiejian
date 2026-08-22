@@ -27,7 +27,7 @@ export type RunDto = {
   updated_at_us?: number
   job?: { job_id: string; state: string; event_sequence?: number; job_type?: string }
   case_progress?: { completed?: number; total?: number }
-  execution_errors?: Array<{ message?: string; code?: string } | string>
+  execution_errors?: Array<{ stage?: string; message?: string; code?: string; job_id?: string; log_path?: string; recovery?: string; copy_text?: string } | string>
   event_sequence?: number
   coverage_record_count?: number
   coverage_gap_count?: number

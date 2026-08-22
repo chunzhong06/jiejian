@@ -24,6 +24,11 @@ _BASE_KEYS = (
     "PATHEXT",
     "LOCALAPPDATA",
     "PLAYWRIGHT_BROWSERS_PATH",
+    "JIEJIAN_PYTHON_EXECUTABLE",
+    "JIEJIAN_PYTHON_ENVIRONMENT_PATH",
+    "JIEJIAN_PYTHON_ENVIRONMENT_TYPE",
+    "JIEJIAN_SERVE_LOCK_PATH",
+    "JIEJIAN_SERVE_OWNER_TOKEN",
     "SYSTEMROOT",
     "TEMP",
     "TMP",
@@ -47,5 +52,6 @@ def minimal_process_environment(
         if selected is not None and selected[1]:
             result[name] = selected[1]
     result["PYTHONDONTWRITEBYTECODE"] = "1"
+    result["PYTHONNOUSERSITE"] = "1"
     result["PYTHONUTF8"] = "1"
     return result

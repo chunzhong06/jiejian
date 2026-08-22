@@ -34,6 +34,7 @@ def _make_shims(tmp_path: Path, *, conda: bool, uv: bool, existing_env: bool = F
     state = tmp_path / "state"
     shim.mkdir()
     state.mkdir()
+    (state / "chromium.exe").write_bytes(b"fixture")
     log = tmp_path / "commands.log"
     migration_helper = tmp_path / "migration_helper.py"
     revision_helper = tmp_path / "revision_helper.py"
@@ -111,8 +112,9 @@ def _make_shims(tmp_path: Path, *, conda: bool, uv: bool, existing_env: bool = F
             ':run\n'
             'echo %* | findstr /c:"tomllib" >nul\nif not errorlevel 1 (echo ["pytest"]& exit /b 0)\n'
             'echo %* | findstr /c:"sys.executable" >nul\nif not errorlevel 1 (echo D:\\Miniconda\\envs\\jiejian_env\\python.exe& exit /b 0)\n'
+            'echo %* | findstr /c:"require_python_environment" >nul\nif not errorlevel 1 (echo {"ok":true,"user_site_on_sys_path":false,"package_origins":{}}& exit /b 0)\n'
             'echo %* | findstr /c:"playwright install" >nul\nif not errorlevel 1 (>>"%SHIM_STATE%\\chromium-ready" echo 1& exit /b 0)\n'
-            'echo %* | findstr /c:"playwright.sync_api" >nul\nif not errorlevel 1 if exist "%SHIM_STATE%\\chromium-ready" exit /b 0\nif not errorlevel 1 if not exist "%SHIM_STATE%\\chromium-ready" exit /b 1\n'
+            'echo %* | findstr /c:"playwright.sync_api" >nul\nif not errorlevel 1 if exist "%SHIM_STATE%\\chromium-ready" (echo %SHIM_CHROMIUM%& exit /b 0)\nif not errorlevel 1 if not exist "%SHIM_STATE%\\chromium-ready" exit /b 1\n'
             'echo %* | findstr /c:"upgrade_database" >nul\nif not errorlevel 1 "%SHIM_PYTHON%" "%SHIM_MIGRATION_HELPER%" "%SHIM_VAR_DIR%"\n'
             'echo %* | findstr /c:"select version_num" >nul\nif not errorlevel 1 "%SHIM_PYTHON%" "%SHIM_REVISION_HELPER%" "%SHIM_VAR_DIR%\\jiejian.db"\n'
             'exit /b 0\n'
@@ -132,8 +134,9 @@ def _make_shims(tmp_path: Path, *, conda: bool, uv: bool, existing_env: bool = F
             'if "%1"=="sync" if not exist "%UV_PROJECT_ENVIRONMENT%" mkdir "%UV_PROJECT_ENVIRONMENT%"\n'
             'if "%1"=="run" goto run\nexit /b 0\n'
             ':run\n'
+            'echo %* | findstr /c:"require_python_environment" >nul\nif not errorlevel 1 (echo {"ok":true,"user_site_on_sys_path":false,"package_origins":{}}& exit /b 0)\n'
             'echo %* | findstr /c:"playwright install" >nul\nif not errorlevel 1 (>>"%SHIM_STATE%\\chromium-ready" echo 1& exit /b 0)\n'
-            'echo %* | findstr /c:"playwright.sync_api" >nul\nif not errorlevel 1 if exist "%SHIM_STATE%\\chromium-ready" exit /b 0\nif not errorlevel 1 if not exist "%SHIM_STATE%\\chromium-ready" exit /b 1\n'
+            'echo %* | findstr /c:"playwright.sync_api" >nul\nif not errorlevel 1 if exist "%SHIM_STATE%\\chromium-ready" (echo %SHIM_CHROMIUM%& exit /b 0)\nif not errorlevel 1 if not exist "%SHIM_STATE%\\chromium-ready" exit /b 1\n'
             'echo %* | findstr /c:"upgrade_database" >nul\nif not errorlevel 1 "%SHIM_PYTHON%" "%SHIM_MIGRATION_HELPER%" "%SHIM_VAR_DIR%"\n'
             'echo %* | findstr /c:"select version_num" >nul\nif not errorlevel 1 "%SHIM_PYTHON%" "%SHIM_REVISION_HELPER%" "%SHIM_VAR_DIR%\\jiejian.db"\n'
             'exit /b 0',
@@ -172,6 +175,7 @@ def _run_start(
             "SHIM_ENV_PATH": "C:/jiejian_env",
             "SHIM_CONDA_MODE": "existing" if (shim_root / "state" / "env-exists").exists() else "missing",
             "SHIM_PYTHON": r"D:\Miniconda\envs\jiejian_env\python.exe",
+            "SHIM_CHROMIUM": str(shim_root / "state" / "chromium.exe"),
             "PYTHONPATH": str(ROOT),
             "SHIM_MIGRATION_HELPER": str(shim_root / "migration_helper.py"),
             "SHIM_REVISION_HELPER": str(shim_root / "revision_helper.py"),
@@ -542,7 +546,27 @@ def test_startup_var_dir_paths_follow_final_lifecycle_layout() -> None:
     assert '"runtime\\uv\\0.11.12\\{0}"' in runtime
     assert '"temp\\downloads\\node-{0}"' in runtime
     assert '"temp\\downloads\\uv-{0}"' in runtime
+    assert '"runtime\\playwright"' in start
     assert "LOCALAPPDATA" not in runtime
+
+
+def test_startup_isolates_python_and_reports_actual_runtime() -> None:
+    start = SCRIPT.read_text(encoding="utf-8-sig")
+    runtime = (ROOT / "scripts" / "startup" / "runtime.ps1").read_text(encoding="utf-8-sig")
+    product = (ROOT / "scripts" / "startup" / "product.ps1").read_text(encoding="utf-8-sig")
+
+    assert '$env:PYTHONNOUSERSITE = "1"' in start
+    assert "Remove-Item Env:PYTHONPATH" in start
+    assert "Remove-Item Env:PYTHONHOME" in start
+    assert "JIEJIAN_PYTHON_EXECUTABLE" in start + runtime
+    assert "require_python_environment" in runtime
+    assert "当前界鉴运行环境" in product
+    for label in ("Python", "Node.js", "pnpm", "Chromium"):
+        assert label in product
+    assert "__JIEJIAN_SERVE_READY__:" in runtime
+    assert "界鉴网页已打开" in runtime
+    assert "退出界鉴" in runtime
+    assert "Ctrl+C" in runtime
 
 
 @pytest.mark.process
@@ -745,8 +769,9 @@ def _make_download_wrapper(tmp_path: Path, *, fail: bool = False) -> tuple[Path,
         'if "%1"=="run" goto run\nexit /b 0\n'
         ':run\n'
         'echo %* | findstr /c:"sys.executable" >nul\nif not errorlevel 1 (echo D:\\Miniconda\\envs\\jiejian_env\\python.exe& exit /b 0)\n'
+        'echo %* | findstr /c:"require_python_environment" >nul\nif not errorlevel 1 (echo {"ok":true,"user_site_on_sys_path":false,"package_origins":{}}& exit /b 0)\n'
         'echo %* | findstr /c:"playwright install" >nul\nif not errorlevel 1 (>>"%SHIM_STATE%\\chromium-ready" echo 1& exit /b 0)\n'
-        'echo %* | findstr /c:"playwright.sync_api" >nul\nif not errorlevel 1 if exist "%SHIM_STATE%\\chromium-ready" exit /b 0\nif not errorlevel 1 if not exist "%SHIM_STATE%\\chromium-ready" exit /b 1\n'
+        'echo %* | findstr /c:"playwright.sync_api" >nul\nif not errorlevel 1 if exist "%SHIM_STATE%\\chromium-ready" (echo %SHIM_CHROMIUM%& exit /b 0)\nif not errorlevel 1 if not exist "%SHIM_STATE%\\chromium-ready" exit /b 1\n'
         'echo %* | findstr /c:"upgrade_database" >nul\nif not errorlevel 1 "%SHIM_PYTHON%" "%SHIM_MIGRATION_HELPER%" "%SHIM_VAR_DIR%"\n'
         'echo %* | findstr /c:"select version_num" >nul\nif not errorlevel 1 "%SHIM_PYTHON%" "%SHIM_REVISION_HELPER%" "%SHIM_VAR_DIR%\\jiejian.db"\n'
         'exit /b 0',
@@ -764,7 +789,7 @@ def _make_download_wrapper(tmp_path: Path, *, fail: bool = False) -> tuple[Path,
         f"  if (${str(fail).lower()}) {{ throw 'offline' }}\n"
         f"  Add-Content -LiteralPath '{tmp_path / 'download-count.log'}' -Value $Uri\n"
         f"  if ($Uri.EndsWith('.sha256')) {{ Copy-Item -LiteralPath $sourceHash -Destination $OutFile }} else {{ Copy-Item -LiteralPath $sourceZip -Destination $OutFile }}\n"
-        f"}}\n$env:SHIM_PYTHON = '{r'D:\Miniconda\envs\jiejian_env\python.exe'}'\n$env:SHIM_MIGRATION_HELPER = '{migration_helper}'\n$env:SHIM_REVISION_HELPER = '{revision_helper}'\n$env:SHIM_VAR_DIR = '{tmp_path / 'var'}'\n$env:SHIM_STORE_DIR = '{(tmp_path / 'var' / 'cache' / 'pnpm-store' / 'v11').as_posix()}'\n$env:SHIM_VIRTUAL_STORE_DIR = '{(project / 'product' / 'frontend' / 'node_modules' / '.pnpm').as_posix()}'\n. '{project / 'scripts' / 'start.ps1'}' -PrepareOnly -VarDir '{tmp_path / 'var'}'\n"
+        f"}}\n$env:SHIM_PYTHON = '{r'D:\Miniconda\envs\jiejian_env\python.exe'}'\n$env:SHIM_CHROMIUM = '{tmp_path / 'state' / 'chromium.exe'}'\n$env:SHIM_MIGRATION_HELPER = '{migration_helper}'\n$env:SHIM_REVISION_HELPER = '{revision_helper}'\n$env:SHIM_VAR_DIR = '{tmp_path / 'var'}'\n$env:SHIM_STORE_DIR = '{(tmp_path / 'var' / 'cache' / 'pnpm-store' / 'v11').as_posix()}'\n$env:SHIM_VIRTUAL_STORE_DIR = '{(project / 'product' / 'frontend' / 'node_modules' / '.pnpm').as_posix()}'\n. '{project / 'scripts' / 'start.ps1'}' -PrepareOnly -VarDir '{tmp_path / 'var'}'\n"
         f"if (Get-ChildItem -LiteralPath '{tmp_path / 'var' / 'logs' / 'startup'}' -Filter '*.log' | Get-Content | Select-String '失败阶段') {{ exit 21 }}\n",
         encoding="utf-8",
     )

@@ -1,0 +1,302 @@
+{
+  "$defs": {
+    "HttpBindingCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "candidate_id": {
+          "pattern": "^httpbind-[0-9a-f]{32}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/HttpBindingCandidateSource"
+        },
+        "source_priority": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Source Priority",
+          "type": "integer"
+        },
+        "source_locator": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Source Locator",
+          "type": "string"
+        },
+        "operation_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "PATCH",
+            "POST",
+            "PUT",
+            "DELETE",
+            "HEAD"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "path_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Path Fields",
+          "type": "array"
+        },
+        "query_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Query Fields",
+          "type": "array"
+        },
+        "header_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Header Fields",
+          "type": "array"
+        },
+        "request_schema_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Schema Fingerprint"
+        },
+        "response_schemas": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpResponseSchemaCandidate"
+          },
+          "maxItems": 256,
+          "title": "Response Schemas",
+          "type": "array"
+        },
+        "security_scheme_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Security Scheme Ids",
+          "type": "array"
+        },
+        "producer_consumer_links": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpProducerConsumerLink"
+          },
+          "maxItems": 256,
+          "title": "Producer Consumer Links",
+          "type": "array"
+        },
+        "requires_confirmation": {
+          "const": true,
+          "default": true,
+          "title": "Requires Confirmation",
+          "type": "boolean"
+        },
+        "candidate_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Candidate Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "source",
+        "source_priority",
+        "source_locator",
+        "operation_id",
+        "method",
+        "path",
+        "candidate_fingerprint"
+      ],
+      "title": "HttpBindingCandidate",
+      "type": "object"
+    },
+    "HttpBindingCandidateSource": {
+      "enum": [
+        "RECORDING",
+        "OPENAPI_LINK",
+        "SCHEMA_DEPENDENCY",
+        "NAME_HEURISTIC"
+      ],
+      "title": "HttpBindingCandidateSource",
+      "type": "string"
+    },
+    "HttpProducerConsumerKind": {
+      "enum": [
+        "OPENAPI_LINK",
+        "LOCATION_HEADER",
+        "SCHEMA_DEPENDENCY",
+        "NAME_HEURISTIC"
+      ],
+      "title": "HttpProducerConsumerKind",
+      "type": "string"
+    },
+    "HttpProducerConsumerLink": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/HttpProducerConsumerKind"
+        },
+        "producer_operation_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Producer Operation Id",
+          "type": "string"
+        },
+        "consumer_operation_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Operation Id"
+        },
+        "consumer_field": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Field"
+        },
+        "source_expression": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Source Expression",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "producer_operation_id",
+        "source_expression"
+      ],
+      "title": "HttpProducerConsumerLink",
+      "type": "object"
+    },
+    "HttpResponseSchemaCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "status_code": {
+          "maxLength": 16,
+          "minLength": 3,
+          "title": "Status Code",
+          "type": "string"
+        },
+        "media_type": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "schema_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Fingerprint",
+          "type": "string"
+        },
+        "property_paths": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 1024,
+          "title": "Property Paths",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status_code",
+        "media_type",
+        "schema_fingerprint"
+      ],
+      "title": "HttpResponseSchemaCandidate",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "candidates": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/HttpBindingCandidate"
+      },
+      "maxItems": 4096,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "input_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Input Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "input_fingerprint"
+  ],
+  "title": "HttpBindingCandidateBatch",
+  "type": "object"
+}

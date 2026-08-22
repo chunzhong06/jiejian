@@ -13,13 +13,16 @@ describe('CheckResultsPage', () => {
     runsApi.run.mockResolvedValue(run)
     resultsApi.findings.mockResolvedValue([{ finding: { finding_id: 'finding-block', identity: { permission_intent: '成员不能修改他人文档', subject_class: '成员', action: 'modify', resource_class: 'document' } }, occurrence: { occurrence_id: 'occ-block', status: 'APPEARED', verdict: 'VULNERABLE', severity: 'critical', evidence_refs: ['ev-block'] } }])
     resultsApi.evidence.mockResolvedValue([{ evidence_id: 'ev-block' }])
-    resultsApi.evidenceDetail.mockResolvedValue({ evidence_id: 'ev-block', case_snapshot: { subject_id: 'member', action_id: 'modify', resource_ids: ['owner-document'], expectations: ['DENY'], required_observations: ['resource_state'] }, execution_fact: { outcome: 'DENIED' }, observation_facts: [{ requirement_id: 'resource_state', resource_id: 'owner-document', effect: 'CONFIRMED', complete: true, reliable: true }], verdict: 'VULNERABLE' })
+    resultsApi.evidenceDetail.mockResolvedValue({ evidence_id: 'ev-block', case_snapshot: { subject_id: 'member', action_id: 'modify', resource_ids: ['owner-document'], expectations: ['DENY'], required_observations: ['resource_state'] }, twin_snapshot: { twin_id: 'twin-block' }, twin_role: 'DENY_VARIANT', allow_control_valid: true, baseline_integrity: true, execution_fact: { outcome: 'DENIED' }, observation_facts: [{ requirement_id: 'resource_state', resource_id: 'owner-document', effect: 'CONFIRMED', complete: true, reliable: true }], security_effect_facts: [{ effect_id: 'document-change', kind: 'STATE_MUTATION', resource_id: 'owner-document', state: 'CONFIRMED', complete: true, reliable: true, correlated: true, temporal_closure: 'CLOSED', baseline_integrity: true }], verdict: 'VULNERABLE' })
 
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
 
     expect(await screen.findByRole('heading', { name: '发现 1 个权限问题' })).toBeInTheDocument()
     expect(await screen.findByText('页面或接口显示已拒绝')).toBeInTheDocument()
     expect(screen.getByText('真实资源已经发生变化')).toBeInTheDocument()
+    expect(screen.getByText('允许场景对照')).toBeInTheDocument()
+    expect(screen.getByText('基线一致')).toBeInTheDocument()
+    expect(screen.getByText('证据窗口已闭合')).toBeInTheDocument()
     expect(screen.getByText(/表面拒绝没有阻止真实副作用/)).toBeInTheDocument()
     expect(screen.getAllByText('成员（member）').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('owner-document').length).toBeGreaterThanOrEqual(1)

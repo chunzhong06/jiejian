@@ -120,6 +120,7 @@ def test_vulnerable_fixed_vulnerable_reappears_and_gate_result_is_immutable(tmp_
         second = service.evaluate(baseline["baseline_id"], VULNERABLE_RUN)
         assert first["decision"] == "BLOCK"
         assert "FINDING_REAPPEARED" in {item["code"] for item in first["reasons"]}
+        assert "SECURITY_BEHAVIOR_CHANGED" in {item["code"] for item in first["reasons"]}
         assert second == first
         execution_error = service.evaluate(baseline["baseline_id"], EXECUTION_ERROR_RUN)
         assert execution_error["decision"] == "ERROR"

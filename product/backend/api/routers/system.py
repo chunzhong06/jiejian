@@ -3,19 +3,22 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from fastapi.responses import JSONResponse
 
 from product.backend.workflows.context import ApplicationCore
 from product.backend.infra.runtime.worker_supervisor import LocalWorkerSupervisor
-from product.backend.infra.runtime.diagnostics import browser_availability
+from product.backend.infra.runtime.diagnostics import runtime_environment_details
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import default_database_path
 from product.backend.api.envelope import ApiResponse, data_response
 
 
 def build_system_router(
-    context: ApplicationCore, workers: LocalWorkerSupervisor
+    context: ApplicationCore,
+    workers: LocalWorkerSupervisor,
+    *,
+    shutdown_callback=None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -36,12 +39,35 @@ def build_system_router(
 
     @router.get("/api/system/status", response_model=ApiResponse)
     def status() -> JSONResponse:
+        environment = runtime_environment_details()
         return data_response(
             {
                 "api": "available",
                 "worker": "running" if workers.is_running() else "stopped",
-                "browser": browser_availability(),
+                "browser": environment["playwright"]["status"],
+                "environment": environment,
+                "recovered_jobs": workers.recovered_jobs,
             }
+        )
+
+    @router.post("/api/system/shutdown", response_model=ApiResponse, status_code=202)
+    def shutdown(
+        x_jiejian_control: str | None = Header(default=None, alias="X-Jiejian-Control"),
+    ) -> JSONResponse:
+        """只接受带专用控制头的同源退出请求，避免简单跨站请求关闭服务。"""
+
+        if x_jiejian_control != "shutdown":
+            raise JiejianError(ErrorCode.INPUT_INVALID, "退出请求缺少本地控制确认")
+        if shutdown_callback is None:
+            raise JiejianError(ErrorCode.SERVE_FAILED, "当前服务未配置网页退出能力")
+        shutdown_callback()
+        return data_response(
+            {
+                "schema_version": "1",
+                "status": "stopping",
+                "message": "界鉴正在安全退出，完成后可关闭浏览器页面。",
+            },
+            status_code=202,
         )
 
     return router

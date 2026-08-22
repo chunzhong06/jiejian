@@ -8,7 +8,7 @@ from product.backend.core.contracts.analysis.sources.requirement import parse_re
 from product.backend.core.contracts.models import ContractAuditAction, ContractAuditEntry, ContractProvenance, ContractSourceType, ContractVersion, Requirement, SourceReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ContractStatus
-from product.backend.core.verification.permissions import ActionDefinition, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionRule, RelationEndpoint, RelationFact, RelationType, ResourceDefinition, SubjectDefinition
+from product.backend.core.verification.permissions import ActionDefinition, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionRule, RelationEndpoint, RelationFact, RelationType, ResourceDefinition, SecurityEffectDefinition, SecurityEffectKind, SubjectDefinition
 
 
 def _source(locator: str) -> SourceReference:
@@ -22,7 +22,8 @@ def _contract() -> ContractVersion:
         role_ids=("member",),
         workflow_states=("DRAFT",),
         subjects=(SubjectDefinition(subject_id="member", roles=("member",), tenant_id="tenant"),),
-        actions=(ActionDefinition(action_id="view"),),
+        effects=(SecurityEffectDefinition(effect_id="document-read", kind=SecurityEffectKind.DATA_DISCLOSURE, resource_type="document", protected_fields=("content",)),),
+        actions=(ActionDefinition(action_id="view", effect_ids=("document-read",)),),
         resources=(ResourceDefinition(resource_id="document", resource_type="document", owner_subject_id="member", tenant_id="tenant", workflow_state="DRAFT"),),
         relations=(RelationFact(relation_id="owns-document", relation=RelationType.OWNS, source=RelationEndpoint(endpoint_type="subject", endpoint_id="member"), target=RelationEndpoint(endpoint_type="resource", endpoint_id="document")),),
         rules=(PermissionRule(rule_id="foreign-read", subject_id="member", action_id="view", resource_id="document", relation_path=("owns-document",), context=PermissionContext(resource_ids=("document",)), expectation=PermissionExpectation.DENY, required_observations=("resource_state",), coverage_dimensions=(CoverageDimension.RELATION,)),),

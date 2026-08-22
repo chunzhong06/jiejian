@@ -62,6 +62,19 @@ export type EvidenceCaseSnapshotDto = {
 }
 export type ExecutionFactDto = { target_type?: string; action_id?: string; outcome?: string; reason_codes?: string[] }
 export type ObservationFactDto = { requirement_id?: string; resource_id?: string; effect?: string; complete?: boolean; reliable?: boolean; reason_codes?: string[] }
+export type SecurityEffectFactDto = {
+  effect_id?: string
+  kind?: string
+  resource_id?: string
+  state?: string
+  complete?: boolean
+  reliable?: boolean
+  correlated?: boolean
+  temporal_closure?: string
+  baseline_integrity?: boolean
+  source_requirement_ids?: string[]
+  reason_codes?: string[]
+}
 export type EvidenceDto = {
   evidence_id: string
   evidence_type?: string
@@ -71,6 +84,11 @@ export type EvidenceDto = {
   case_snapshot?: EvidenceCaseSnapshotDto
   execution_fact?: ExecutionFactDto
   observation_facts?: ObservationFactDto[]
+  security_effect_facts?: SecurityEffectFactDto[]
+  twin_snapshot?: { twin_id?: string } | null
+  twin_role?: string | null
+  allow_control_valid?: boolean
+  baseline_integrity?: boolean
   verdict?: string
   observations?: Array<Record<string, unknown>>
   outcomes?: Array<Record<string, unknown>>

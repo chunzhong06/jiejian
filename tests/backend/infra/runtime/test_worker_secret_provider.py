@@ -53,7 +53,7 @@ def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_f
 
         def is_set(self) -> bool:
             self.calls += 1
-            return self.calls > 1
+            return self.calls > 2
 
         def wait(self, timeout: float) -> None:
             assert timeout == 0.1
@@ -69,6 +69,9 @@ def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_f
             "OWNER_READ_ONLY": "observer-secret-value",
             "EXTRA": "must-not-inject",
         },
+        recovery_service=SimpleNamespace(
+            list_recovery_candidates=lambda _request: ()
+        ),
     )
     manager._next_job = lambda: job
     manager._stop = StopAfterOneStep()

@@ -29,6 +29,8 @@ from product.backend.core.verification.permissions import (
     RelationFact,
     RelationType,
     ResourceDefinition,
+    SecurityEffectDefinition,
+    SecurityEffectKind,
     SubjectDefinition,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
@@ -92,7 +94,8 @@ def _authorization_contract() -> PermissionContract:
             SubjectDefinition(subject_id="attacker", roles=("user",), tenant_id="tenant", department_id="department"),
             SubjectDefinition(subject_id="owner", roles=("user",), tenant_id="tenant", department_id="department"),
         ),
-        actions=(ActionDefinition(action_id="modify", side_effect=True),),
+        effects=(SecurityEffectDefinition(effect_id="document-mutated", kind=SecurityEffectKind.STATE_MUTATION, resource_type="document"),),
+        actions=(ActionDefinition(action_id="modify", effect_ids=("document-mutated",)),),
         resources=(
             ResourceDefinition(resource_id="owner-resource", resource_type="document", tenant_id="tenant", department_id="department", owner_subject_id="owner", workflow_state="DRAFT"),
         ),

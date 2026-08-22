@@ -493,7 +493,7 @@ def test_owner_api_adapter_emits_current_complete_envelope() -> None:
     class Executor:
         def request(self, *args, **kwargs):
             assert args[:2] == ("GET", "/owner/resources/document")
-            assert kwargs["bearer_token"] == "owner-token"
+            assert kwargs["redaction_values"] == ("owner-token",)
             return Response()
 
     ticks = iter((100, 200))

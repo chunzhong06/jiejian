@@ -102,6 +102,30 @@ def test_current_head_with_extra_table_is_rejected_without_modification(
     assert database.read_bytes() == before
 
 
+def test_current_head_with_legacy_unique_cardinality_is_rejected_without_modification(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "current-head-with-legacy-cardinality.db"
+    upgrade_database(database)
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute(
+            "CREATE UNIQUE INDEX legacy_uq_evidence_run_case "
+            "ON evidence_index (run_id, case_id)"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    before = database.read_bytes()
+
+    with pytest.raises(JiejianError) as error:
+        upgrade_database(database)
+
+    assert error.value.code == ErrorCode.STORAGE_MIGRATION.value
+    assert "数据库格式与当前版本不兼容，请备份后重新初始化 var 目录" in str(error.value)
+    assert database.read_bytes() == before
+
+
 def test_current_metadata_has_a_single_execution_profile_table() -> None:
     assert "execution_profiles" in Base.metadata.tables
     assert "permission_execution_profiles" not in Base.metadata.tables

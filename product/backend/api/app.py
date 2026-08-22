@@ -38,6 +38,7 @@ def create_app(
     environ=None,
     clock_us=None,
     folder_selector=None,
+    shutdown_callback=None,
 ) -> FastAPI:
     context = ApplicationCore(
         var_dir,
@@ -76,7 +77,7 @@ def create_app(
     )
     app.add_exception_handler(ValidationError, validation_error_handler)
 
-    app.include_router(build_system_router(context, workers))
+    app.include_router(build_system_router(context, workers, shutdown_callback=shutdown_callback))
     app.include_router(build_projects_router(context))
     app.include_router(build_execution_profiles_router(context))
     app.include_router(build_contracts_router(context))
@@ -90,6 +91,15 @@ def create_app(
 
     @app.on_event("startup")
     async def startup() -> None:
+        from product.backend.infra.artifacts.run_publication import RunPublisher
+        from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
+
+        reconciliation = RunReconciler(
+            context.var_dir,
+            context.uow_factory,
+            RunPublisher(context.var_dir, context.uow_factory),
+        ).reconcile()
+        app.state.startup_reconciliation = reconciliation
         if start_worker:
             workers.start()
 

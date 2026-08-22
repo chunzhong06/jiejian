@@ -8,7 +8,8 @@ Observer 为 Runner 和 Verification 提供真实副作用、异步状态和审�
 
 ## 协议边界
 
-- `ObserverSpec` 声明 observer 身份、类型、目标、phase、required 和 budget。
+- `ObserverSpec` 声明 observer 身份、类型、目标、BASELINE/BEFORE/AFTER/EVENTUAL phase、required 和 budget。
+- `EffectBinding` 把 manifest effect 绑定到权威/佐证通道、版本化投影和时间闭合策略。
 - `ObserverInvocation` 描述一次 phase 调用及其 correlation。
 - `ObservationEnvelope` 携带 target、window、correlation、causality 和 completeness。
 - `ObserverOutcome` 表达状态、观察事实、可靠性、原因和限制。
@@ -21,11 +22,11 @@ Execution case → ObserverSpec
   → phase invocation/correlation
   → source read within budget
   → ObservationEnvelope/Outcome
-  → ObservationFact/Evidence
+  → ObservationFact/SecurityEffectFact/Evidence
   → Verification
 ```
 
-phase、case、task、sequence 和资源事实必须可关联。观察窗口、关联标识和完整性共同决定观察是否可用于结论。
+phase、case、task、sequence 和逻辑资源事实必须可关联。观察窗口、关联标识、基线完整性与时间闭合共同决定观察是否可用于结论。任一权威完整通道可确认效果；ABSENT 必须由全部必需通道和 CLOSED closure 共同证明。
 
 ## 失败与安全语义
 

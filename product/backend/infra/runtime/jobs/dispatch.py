@@ -84,6 +84,10 @@ class WorkerDispatcher:
             self._environ,
             secret_names=secret_names,
         )
+        # 即使调用者绕过 start.cmd，Worker 也必须绑定到当前主进程的同一解释器身份。
+        environment.setdefault("JIEJIAN_PYTHON_EXECUTABLE", str(Path(sys.executable).resolve()))
+        environment.setdefault("JIEJIAN_PYTHON_ENVIRONMENT_PATH", str(Path(sys.prefix).resolve()))
+        environment.setdefault("JIEJIAN_PYTHON_ENVIRONMENT_TYPE", "当前 Python 环境")
         command = [
             sys.executable,
             "-B",

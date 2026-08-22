@@ -20,6 +20,7 @@ import argparse
 import logging
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import TextIO
@@ -74,12 +75,38 @@ def main() -> int:
         known_secrets=known_secrets,
     )
     context = None
+    lifetime_lock = None
+    watchdog_stop = threading.Event()
+    watchdog_thread: threading.Thread | None = None
     try:
+        from product.backend.infra.runtime.environment_identity import require_python_environment
+        from product.backend.infra.runtime.worker_lifetime import WorkerLifetimeLock
         from product.backend.workflows.context import WorkerContext
         from product.backend.core.lifecycle import JobState
         from product.backend.core.errors import JiejianError
 
+        identity = require_python_environment()
+        logger.info(
+            "Worker 运行环境已确认",
+            extra={
+                "component": "worker_process",
+                "event_code": "WORKER_ENVIRONMENT_CONFIRMED",
+                "job_id": arguments.job_id,
+                "python_executable": identity["executable"],
+                "python_prefix": identity["prefix"],
+            },
+        )
+        lifetime_lock = WorkerLifetimeLock.acquire(
+            var_dir,
+            arguments.job_id,
+            arguments.lease_owner,
+        )
         context = WorkerContext(var_dir, environ=os.environ)
+        watchdog_thread = _start_service_watchdog(
+            context,
+            arguments.job_id,
+            watchdog_stop,
+        )
         with context.uow_factory() as work:
             initial_job = work.jobs.get(arguments.job_id)
         if initial_job is None:
@@ -93,7 +120,8 @@ def main() -> int:
                 handler.run_job(arguments.job_id)
             except JiejianError as exc:
                 logger.error(
-                    "job handler failed",
+                    "任务处理失败：%s",
+                    exc,
                     extra={"component": "worker_process", "event_code": "JOB_HANDLER_ERROR", "job_id": arguments.job_id, "error_code": exc.code},
                 )
             with context.uow_factory() as work:
@@ -114,8 +142,60 @@ def main() -> int:
         )
         return 1
     finally:
+        watchdog_stop.set()
+        if watchdog_thread is not None:
+            watchdog_thread.join(timeout=1.0)
         if context is not None:
             context.close()
+        if lifetime_lock is not None:
+            lifetime_lock.release()
+
+
+def _start_service_watchdog(context, job_id: str, stop: threading.Event) -> threading.Thread | None:
+    """控制面失联时请求取消，确保受控浏览器与 Runner 沿现有清理路径退出。"""
+
+    lock_value = os.environ.get("JIEJIAN_SERVE_LOCK_PATH")
+    owner_token = os.environ.get("JIEJIAN_SERVE_OWNER_TOKEN")
+    if not lock_value or not owner_token:
+        return None
+    lock_path = Path(lock_value).resolve()
+
+    def watch() -> None:
+        from product.backend.infra.runtime.jobs.models import RequestCancellation
+        from product.backend.infra.runtime.service_lifetime import serve_owner_is_alive
+
+        while not stop.wait(0.25):
+            if serve_owner_is_alive(lock_path, owner_token):
+                continue
+            try:
+                context.job_queue.request_cancellation(
+                    RequestCancellation(
+                        job_id=job_id,
+                        now_us=time.time_ns() // 1_000,
+                    )
+                )
+                logger.warning(
+                    "控制面失联，Worker 已请求取消任务",
+                    extra={
+                        "component": "worker_process",
+                        "event_code": "SERVE_OWNER_LOST",
+                        "job_id": job_id,
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    "控制面失联后的取消请求失败",
+                    extra={
+                        "component": "worker_process",
+                        "event_code": "SERVE_OWNER_CANCEL_FAILED",
+                        "job_id": job_id,
+                    },
+                )
+            return
+
+    thread = threading.Thread(target=watch, name="jiejian-serve-watchdog", daemon=True)
+    thread.start()
+    return thread
 
 
 if __name__ == "__main__":

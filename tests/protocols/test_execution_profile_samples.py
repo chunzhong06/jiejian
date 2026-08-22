@@ -10,7 +10,7 @@ from product.backend.core.errors import JiejianError
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.workflows.recording.review import compile_flow_bindings
 from product.backend.workflows.runs.execution import ExecutionWorkflow
-from product.protocols import ExecutionBudget, RunnerInput
+from product.protocols import ExecutionBudget, HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind, HttpRequestTemplate, RunnerInput, ValueSlot, ValueSlotConsumer, ValueSlotSource
 from product.protocols.execution_profile import canonical_execution_profile_json_bytes, parse_execution_profile
 from product.protocols.recording_flow import Flow, FlowStep
 
@@ -66,18 +66,22 @@ def test_recording_flow_compiles_to_authorization_profile_bindings() -> None:
     plan = ExecutionWorkflow._compile_plan(profile, contract)
     step = FlowStep(
         id="modify-step",
-        method="PATCH",
-        path="/resources/{resource_id}",
+        request_template=HttpRequestTemplate(
+            method="PATCH",
+            path="/resources/{resource_id}",
+            body={"kind": "JSON", "value": {"value": "recorded-value"}},
+            input_slots=(ValueSlot(slot_id="resource_id", source=ValueSlotSource.CASE_RESOURCE_ID, consumer=ValueSlotConsumer.PATH),),
+        ),
+        classifier=HttpOutcomeClassifier(accepted=(HttpPredicate(kind=HttpPredicateKind.STATUS_IN, statuses=(200,)),)),
         identity_id="owner",
         resource_id="owner-resource",
         alternate_identity_id="attacker",
         alternate_resource_id="owner-resource",
-        json_body={"value": "recorded-value"},
         action_ids=("modify",),
     )
     valid_flow = Flow(id="recorded-flow", reset_path="/reset", steps=(step,))
-    target_override, action_bindings_override = compile_flow_bindings(valid_flow, profile)
-    snapshot = profile.build_snapshot(contract, plan, target_override=target_override, action_bindings_override=action_bindings_override)
+    target_override, workflow_bindings_override = compile_flow_bindings(valid_flow, profile)
+    snapshot = profile.build_snapshot(contract, plan, target_override=target_override, workflow_bindings_override=workflow_bindings_override)
     assert snapshot.target.reset_path == "/reset"
     invalid_flow = Flow(id="invalid-flow", reset_path="/reset", steps=(step.model_copy(update={"action_ids": ()}),))
     with pytest.raises((JiejianError, ValidationError, ValueError)):

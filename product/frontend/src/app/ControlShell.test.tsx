@@ -4,23 +4,23 @@ import ControlShell from './ControlShell'
 
 const mockApi = vi.hoisted(() => ({
   projects: vi.fn().mockResolvedValue([]), runs: vi.fn().mockResolvedValue([]), run: vi.fn(),
-  llmProfiles: vi.fn().mockResolvedValue([]), systemStatus: vi.fn().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }),
-  profiles: vi.fn().mockResolvedValue([]), contract: vi.fn(), submit: vi.fn(), cancel: vi.fn().mockResolvedValue({}), findings: vi.fn().mockResolvedValue([]), evidence: vi.fn().mockResolvedValue([]), evidenceDetail: vi.fn().mockResolvedValue({}), reports: vi.fn().mockResolvedValue([]), report: vi.fn().mockResolvedValue({}), contracts: vi.fn().mockResolvedValue([]), contractGovernance: vi.fn().mockResolvedValue({ project: {}, requirements: [], candidates: [], versions: [], llm_available: false }),
+  llmProfiles: vi.fn().mockResolvedValue([]), systemStatus: vi.fn().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }), shutdown: vi.fn().mockResolvedValue({ status: 'stopping' }),
+  profiles: vi.fn().mockResolvedValue([]), contract: vi.fn(), summary: vi.fn().mockResolvedValue({ schema_version: '1', workflows: [], effect_bindings: [] }), submit: vi.fn(), cancel: vi.fn().mockResolvedValue({}), findings: vi.fn().mockResolvedValue([]), evidence: vi.fn().mockResolvedValue([]), evidenceDetail: vi.fn().mockResolvedValue({}), reports: vi.fn().mockResolvedValue([]), report: vi.fn().mockResolvedValue({}), contracts: vi.fn().mockResolvedValue([]), contractGovernance: vi.fn().mockResolvedValue({ project: {}, requirements: [], candidates: [], versions: [], llm_available: false }),
 }))
 
 vi.mock('../api/projects', () => ({ projectsApi: { projects: mockApi.projects } }))
 vi.mock('../api/runs', () => ({ runsApi: { runs: mockApi.runs, run: mockApi.run, cancel: mockApi.cancel, createRun: vi.fn() } }))
 vi.mock('../api/llm', () => ({ llmApi: { profiles: mockApi.llmProfiles } }))
-vi.mock('../api/system', () => ({ systemApi: { status: mockApi.systemStatus } }))
+vi.mock('../api/system', () => ({ systemApi: { status: mockApi.systemStatus, shutdown: mockApi.shutdown } }))
 vi.mock('../api/onboarding', () => ({ onboardingApi: { demoStatus: vi.fn().mockResolvedValue({}), } }))
-vi.mock('../api/executionProfiles', () => ({ executionProfilesApi: { profiles: mockApi.profiles, contract: mockApi.contract, submit: mockApi.submit, register: vi.fn() } }))
+vi.mock('../api/executionProfiles', () => ({ executionProfilesApi: { profiles: mockApi.profiles, contract: mockApi.contract, summary: mockApi.summary, submit: mockApi.submit, register: vi.fn() } }))
 vi.mock('../api/contracts', () => ({ contractsApi: { contracts: mockApi.contracts, contractGovernance: mockApi.contractGovernance } }))
 vi.mock('../api/results', () => ({ resultsApi: { findings: mockApi.findings, evidence: mockApi.evidence, evidenceDetail: mockApi.evidenceDetail, reports: mockApi.reports, report: mockApi.report, reportFormat: (runId: string, reportId: string, format: string) => `/api/runs/${runId}/reports/${reportId}/formats/${format}` } }))
 vi.mock('../api/http', () => ({ ApiError: class extends Error {}, request: vi.fn() }))
 
 describe('应用壳', () => {
   afterEach(() => cleanup())
-  beforeEach(() => { localStorage.clear(); window.location.hash = ''; vi.clearAllMocks(); mockApi.projects.mockResolvedValue([]); mockApi.runs.mockResolvedValue([]); mockApi.llmProfiles.mockResolvedValue([]); mockApi.systemStatus.mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.profiles.mockResolvedValue([]) })
+  beforeEach(() => { localStorage.clear(); window.location.hash = ''; vi.clearAllMocks(); mockApi.projects.mockResolvedValue([]); mockApi.runs.mockResolvedValue([]); mockApi.llmProfiles.mockResolvedValue([]); mockApi.systemStatus.mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.profiles.mockResolvedValue([]); mockApi.summary.mockResolvedValue({ schema_version: '1', workflows: [], effect_bindings: [] }) })
 
   it('显示工作台、任务导航和真实运行状态', async () => {
     render(<ControlShell />)
@@ -29,6 +29,15 @@ describe('应用壳', () => {
     expect(screen.getByText('服务 · 可用')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '模型服务' })).toBeInTheDocument()
     expect(document.querySelector('.phase-steps')).not.toBeInTheDocument()
+  })
+
+  it('通过明确确认入口请求安全退出', async () => {
+    render(<ControlShell />)
+    fireEvent.click(await screen.findByRole('button', { name: '退出界鉴' }))
+    expect(await screen.findByText('退出界鉴？')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '安全退出' }))
+    await waitFor(() => expect(mockApi.shutdown).toHaveBeenCalledOnce())
+    expect(await screen.findByText('界鉴正在安全退出')).toBeInTheDocument()
   })
 
   it('旧报告路径重定向到检查结果并保留无应用提示', async () => {
@@ -56,6 +65,25 @@ describe('应用壳', () => {
     render(<ControlShell />)
     expect((await screen.findAllByText('运行环境')).length).toBeGreaterThan(0)
     expect(screen.getByText('状态来自当前运行环境')).toBeInTheDocument()
+  })
+
+  it('运行环境展示实际解释器与工具链来源', async () => {
+    mockApi.systemStatus.mockResolvedValue({
+      api: 'available', worker: 'running', browser: 'available', recovered_jobs: 2,
+      environment: {
+        python: { ok: true, version: '3.13.15', executable: 'D:\\env\\python.exe', prefix: 'D:\\env', environment_type: 'Conda', user_site_on_sys_path: false, issues: [] },
+        node: { version: '24.13.0', executable: 'D:\\runtime\\node.exe' },
+        pnpm: { version: '11.21.0', executable: 'D:\\runtime\\pnpm.cmd' },
+        playwright: { package_version: '1.58.0', chromium_executable: 'D:\\runtime\\chromium.exe' },
+        frontend_dependencies: '已验证并复用',
+      },
+    })
+    window.location.hash = '#/advanced/system'
+    render(<ControlShell />)
+    expect(await screen.findByText(/3\.13\.15/)).toBeInTheDocument()
+    expect(screen.getByText('未使用')).toBeInTheDocument()
+    expect(screen.getByText('已验证并复用')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
   })
 
   it('陈旧项目不会绕过项目选择边界', async () => {

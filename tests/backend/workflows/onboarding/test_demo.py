@@ -166,7 +166,7 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
     ]
     assert kwargs["shell"] is False
     assert kwargs["stdin"] is not None
-    assert set(kwargs["env"]) == {"PATH", "PYTHONDONTWRITEBYTECODE", "PYTHONUTF8", "JIEJIAN_DEMO_OWNER_TOKEN", "JIEJIAN_DEMO_ATTACKER_TOKEN", "JIEJIAN_DEMO_PEER_TOKEN"}
+    assert set(kwargs["env"]) == {"PATH", "PYTHONDONTWRITEBYTECODE", "PYTHONNOUSERSITE", "PYTHONUTF8", "JIEJIAN_DEMO_OWNER_TOKEN", "JIEJIAN_DEMO_ATTACKER_TOKEN", "JIEJIAN_DEMO_PEER_TOKEN"}
     assert kwargs["env"]["JIEJIAN_DEMO_ATTACKER_TOKEN"] != kwargs["env"]["JIEJIAN_DEMO_PEER_TOKEN"]
     assert onboarding.demo_credentials == secret_values
     assert "JIEJIAN_OTHER_SECRET" not in kwargs["env"]

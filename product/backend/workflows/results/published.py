@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from product.backend.core.lifecycle import RunLifecycle
+from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.storage import EvidenceIndexRecord, JobRecord, RunRecord, StorageUnitOfWork
@@ -138,6 +138,7 @@ class PublishedResultReader:
         with self._uow_factory() as work:
             run = work.runs.get(run_id)
             job = work.jobs.get_by_run(run_id)
+            events = work.job_events.list_for_job(job.job_id) if job is not None else ()
         if run is None or job is None:
             raise JiejianError(ErrorCode.ARTIFACT_NOT_PUBLISHED, "运行缺少持久任务关联")
         request = ExecutionRequestStore(self._var_dir).load(job.job_id, expected_hash=job.request_hash)
@@ -157,26 +158,80 @@ class PublishedResultReader:
                 "phases": [phase.value for phase in binding.phases] if binding is not None else [],
             }
         reason_codes = list(published.publication.result.reason_codes) if published is not None else []
-        finding_count = len(self.findings(published)) if published is not None else None
+        finding_count = None
+        if published is not None:
+            from product.backend.workflows.results.findings import finding_inputs
+
+            # 孪生执行可为同一稳定问题产生多份 Evidence；概览按 Finding 身份计数，
+            # 不能把证据基数直接暴露成问题数量。
+            finding_count = len(
+                {
+                    item.identity.finding_id()
+                    for item in finding_inputs(self, published)
+                    if item.verdict is not CaseVerdict.SAFE
+                }
+            )
+        completed_case_count = (
+            len({item.case_id for item in published.evidence})
+            if published is not None
+            else None
+        )
+        execution_errors = self._execution_errors(job, events)
         return {
             "schema_version": "1",
-            "execution_schema_version": "2",
+            "execution_schema_version": "3",
             "result_schema_version": "2" if published is not None else None,
             "target_scope": snapshot.target.scope.model_dump(mode="json"),
             "budget": request.budget.model_dump(mode="json"),
             "observer_health": observer_health,
             "case_progress": {
                 "schema_version": "1",
-                "status": "PUBLISHED" if published is not None else "UNAVAILABLE",
-                "completed": len(published.evidence) if published is not None else None,
+                "status": (
+                    "PUBLISHED"
+                    if published is not None
+                    else "FAILED"
+                    if job.state is JobState.FAILED
+                    else "UNAVAILABLE"
+                ),
+                "completed": completed_case_count,
                 "total": len(snapshot.plan.cases),
             },
             "finding_count": finding_count,
             "reason_codes": reason_codes,
+            "execution_errors": execution_errors,
             "coverage_record_count": len(snapshot.plan.coverage),
             "coverage_gap_count": len(snapshot.plan.gaps),
             "safety_context": None,
         }
+
+    def _execution_errors(self, job: JobRecord, events: tuple[Any, ...]) -> list[dict[str, Any]]:
+        """把失败事件投影为普通用户可复制的诊断，不暴露秘密或内部堆栈。"""
+
+        if job.state is not JobState.FAILED:
+            return []
+        latest = next((event for event in reversed(events) if event.target_state is JobState.FAILED), None)
+        reason_code = str((latest.metadata if latest else {}).get("reason_code") or "WORKER_FATAL")
+        stage, cause, recovery = {
+            "WORKER_FATAL": ("后台执行", "Worker 在任务完成前异常退出。", "重新启动界鉴即可自动恢复其他中断任务；本任务可重新发起检查。"),
+            "RUNNER_FATAL": ("隔离执行", "隔离运行进程未能形成可信结果。", "检查任务日志与运行环境后重新发起检查。"),
+            "CLEANUP_FAILED": ("资源清理", "受控浏览器或临时资源未能完整清理。", "重新启动界鉴触发自动恢复；若仍失败，请提供日志。"),
+            "PROTOCOL_INVALID": ("结果校验", "执行结果格式或关联信息未通过完整性校验。", "不要手工修改运行文件；请提供日志以定位环境或程序问题。"),
+        }.get(reason_code, ("后台执行", "任务未能完整结束。", "查看任务日志后重新发起检查。"))
+        log_path = str(self._var_dir / "logs" / "workers" / f"{job.job_id}.log")
+        copy_text = (
+            f"界鉴任务失败\n阶段：{stage}\n原因：{cause}\n任务：{job.job_id}\n"
+            f"错误代码：{reason_code}\n日志：{log_path}\n建议：{recovery}"
+        )
+        return [{
+            "schema_version": "1",
+            "stage": stage,
+            "message": cause,
+            "code": reason_code,
+            "job_id": job.job_id,
+            "log_path": log_path,
+            "recovery": recovery,
+            "copy_text": copy_text,
+        }]
     def evidence_document(self, view: PublishedRunView, evidence_id: str) -> dict[str, Any]:
         record = next((item for item in view.evidence if item.evidence_id == evidence_id), None)
         if record is None:

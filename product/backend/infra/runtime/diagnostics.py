@@ -35,6 +35,7 @@ from product.backend.core.errors import JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.runtime.settings import Settings, load_settings
 from product.backend.infra.runtime.logging import configure_logging
+from product.backend.infra.runtime.environment_identity import python_environment_report
 
 
 class DoctorCheck(BaseModel):
@@ -58,13 +59,20 @@ class DoctorReport(BaseModel):
 
 def _python_check() -> DoctorCheck:
     current = sys.version_info[:3]
-    ok = current >= (3, 12)
+    environment = python_environment_report()
+    ok = current >= (3, 12) and bool(environment["ok"])
+    if current < (3, 12):
+        message = "需要 Python 3.12 或更高版本"
+    elif not environment["ok"]:
+        message = "Python 环境来源异常：" + "；".join(environment["issues"])
+    else:
+        message = "Python 版本与环境来源符合要求"
     return DoctorCheck(
         name="python",
         required=True,
         ok=ok,
-        message="Python 版本满足要求" if ok else "需要 Python 3.12 或更高版本",
-        details={"version": ".".join(str(part) for part in current)},
+        message=message,
+        details=environment,
     )
 
 
@@ -282,7 +290,7 @@ def _playwright_check() -> DoctorCheck:
         playwright = sync_playwright().start()
         try:
             chromium = Path(playwright.chromium.executable_path)
-            executable = chromium.name
+            executable = str(chromium.resolve())
             available = chromium.is_file()
         finally:
             playwright.stop()
@@ -324,6 +332,35 @@ def browser_availability() -> str:
         return "unknown"
     except Exception:
         return "unknown"
+
+
+def runtime_environment_details() -> dict[str, Any]:
+    """生成 GUI 可展示的当前进程环境身份，不执行浏览器或目标请求。"""
+
+    python = python_environment_report()
+    chromium = _playwright_check()
+    chromium_details = dict(chromium.details)
+    chromium_details["status"] = (
+        "available"
+        if chromium.ok
+        else "unavailable"
+        if chromium_details.get("reason") in {None, "PackageNotFoundError"}
+        else "unknown"
+    )
+    return {
+        "schema_version": "1",
+        "python": python,
+        "node": {
+            "version": os.environ.get("JIEJIAN_NODE_VERSION"),
+            "executable": os.environ.get("JIEJIAN_NODE_EXECUTABLE") or shutil.which("node"),
+        },
+        "pnpm": {
+            "version": os.environ.get("JIEJIAN_PNPM_VERSION"),
+            "executable": os.environ.get("JIEJIAN_PNPM_EXECUTABLE") or shutil.which("pnpm"),
+        },
+        "playwright": chromium_details,
+        "frontend_dependencies": os.environ.get("JIEJIAN_FRONTEND_DEPENDENCIES", "未由启动器确认"),
+    }
 
 
 def _loopback_check() -> DoctorCheck:

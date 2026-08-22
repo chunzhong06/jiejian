@@ -110,7 +110,22 @@ function Prepare-Frontend {
 
 function Write-PythonEnvironment {
     Write-Startup ("Python 环境: {0}`nPython 环境路径: {1}`nPython 可执行文件: {2}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath, $script:PythonExecutable)
+    if ($null -ne $script:PythonEnvironmentReport) {
+        $siteStatus = if ($script:PythonEnvironmentReport.user_site_on_sys_path) { "检测到用户级来源" } else { "未使用用户级来源" }
+        Write-Startup ("Python site-packages: {0}`n依赖来源: {1}" -f $siteStatus, ($script:PythonEnvironmentReport.package_origins | ConvertTo-Json -Compress))
+    }
     Write-Startup "后续 CLI 用法: <已解析 Python> -B -m product.backend.cli <命令>"
+}
+
+function Write-RuntimeSummary {
+    Write-Host ""
+    Write-Host "当前界鉴运行环境" -ForegroundColor Cyan
+    Write-Host ("  Python    {0}  {1}" -f $script:PythonVersion, $script:PythonExecutable) -ForegroundColor Gray
+    Write-Host ("  环境来源  {0}  {1}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath) -ForegroundColor Gray
+    Write-Host ("  用户级包  {0}" -f ($(if ($script:PythonEnvironmentReport.user_site_on_sys_path) { "检测到" } else { "未使用" }))) -ForegroundColor Gray
+    Write-Host ("  Node.js   {0}  {1}" -f $script:NodeVersion, $script:NodeExecutable) -ForegroundColor Gray
+    Write-Host ("  pnpm      {0}  {1}" -f $script:PnpmVersion, $script:PnpmExecutable) -ForegroundColor Gray
+    Write-Host ("  Chromium  {0}" -f $script:ChromiumExecutable) -ForegroundColor Gray
 }
 
 function Invoke-Python([object[]]$Arguments, [string]$Stage, [int]$Code = 40) {

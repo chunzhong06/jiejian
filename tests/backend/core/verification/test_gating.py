@@ -94,6 +94,18 @@ def test_required_observer_and_coverage_degradation_block() -> None:
     assert {item.code for item in result.reasons} >= {"BASELINE_COVERAGE_MISSING", "REQUIRED_OBSERVER_INCOMPLETE"}
 
 
+def test_normalized_security_behavior_change_blocks() -> None:
+    result = evaluate_gate(
+        _baseline(),
+        _facts(behavior_change_ids=("case-a:twin-a:DENY_MUTATION",)),
+        GatePolicy(),
+    )
+    assert result.decision.value == "BLOCK"
+    assert {(item.code, item.subject) for item in result.reasons} >= {
+        ("SECURITY_BEHAVIOR_CHANGED", "case-a:twin-a:DENY_MUTATION"),
+    }
+
+
 def test_publication_error_is_independent_gate_error() -> None:
     result = evaluate_gate(
         _baseline(),

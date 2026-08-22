@@ -23,6 +23,24 @@ export type SubmittedRunDto = {
   job: { job_id: string; state: string }
 }
 
+export type ExecutionProfileSummaryDto = {
+  schema_version: '1'
+  workflows: Array<{
+    action_id: string
+    workflow_id: string
+    target_step: { step_id: string; method: string; path: string }
+    setup_step_count: number
+    cleanup_step_count: number
+    baseline_modes: string[]
+  }>
+  effect_bindings: Array<{
+    effect_id: string
+    required_channels: string[]
+    corroborating_channels: string[]
+    closure_policy: string
+  }>
+}
+
 export const executionProfilesApi = {
   register: (path: string) =>
     request<ExecutionProfileDto>('/api/execution-profiles', {
@@ -33,6 +51,8 @@ export const executionProfilesApi = {
     request<ExecutionProfileDto[]>(`/api/projects/${encodeURIComponent(projectId)}/execution-profiles`),
   contract: (projectId: string, profileId: string) =>
     request<PermissionContractDto>(`/api/projects/${encodeURIComponent(projectId)}/execution-profiles/${encodeURIComponent(profileId)}/contract`),
+  summary: (projectId: string, profileId: string) =>
+    request<ExecutionProfileSummaryDto>(`/api/projects/${encodeURIComponent(projectId)}/execution-profiles/${encodeURIComponent(profileId)}/summary`),
   submit: (projectId: string, profileId: string) =>
     request<SubmittedRunDto>(`/api/projects/${encodeURIComponent(projectId)}/runs`, {
       method: 'POST',
