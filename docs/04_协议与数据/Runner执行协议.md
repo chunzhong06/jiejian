@@ -19,19 +19,20 @@
 ```text
 ApplicationCore → PersistedExecutionRequest
   → Job/lease/fencing → Worker
-  → RunnerInput → 隔离 Runner
-  → bootstrap / SETUP / BASELINE / BEFORE / TARGET / AFTER / EVENTUAL
+  → RunnerInput → 受控 Runner → Case Orchestrator
+  → TargetRuntimeRegistry → Web Target Runtime
+  → bootstrap / SETUP / BASELINE / BEFORE / TARGET / AFTER / EVENTUAL / Cleanup
   → ExecutionFact + ObservationFact + SecurityEffectFact → Evidence
   → RunnerResult/staging → Worker 校验 → publication
 ```
 
-目标流量只在隔离 Runner 内产生。Runner 退出、取消、超时或清理失败必须返回可区分的结果，不得将基础设施失败伪装成安全 PASS。
+目标流量只在受控 Runner 内产生。通用 Orchestrator 的输入输出不含 HTTP 类型；当前 Web Runtime 负责全部 HTTP 细节。Runner 退出、取消、超时或清理失败必须返回可区分的结果，不得将基础设施失败伪装成安全 PASS。`finished_at_us` 只能在全部观察、Evidence 准备和 Cleanup 完成后取得。
 
 ## 失败与安全语义
 
 未知 TargetType、请求结构、ID 关联、fencing token、预算、路径、大小、秘密、hash 或退出状态均严格失败。Worker 只接受当前 attempt 的结果；过期租约、重复完成和孤儿 staging 不得覆盖已发布事实。
 
-秘密只通过最小环境和受控引用注入，秘密值不进入协议、Evidence、日志、异常或报告。HTTP scope、重定向、私网、请求/响应预算和清理由 Web adapter 与 Runner 边界执行。
+秘密只通过最小环境和受控引用注入，秘密值不进入协议、Evidence、日志、异常或报告。主进程及其 Worker、Runner、Recording、Observer、Demo 使用同一已确认 Python，并进入可证明回收的内核进程树。HTTP scope、重定向、私网、请求/响应预算和清理由 Web Runtime 与 Runner 边界执行。
 
 ## 版本规则与 Schema 真源
 
