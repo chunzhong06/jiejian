@@ -19,7 +19,6 @@ from __future__ import annotations
 import os
 import logging
 import subprocess
-import sys
 import tempfile
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -31,8 +30,10 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.jobs.handlers import JobAttemptPort
 from product.backend.infra.runtime.jobs.models import ClaimJob, FatalFailureCode, FatalFailure, RetryableFailureCode, RetryableFailure
 from product.backend.infra.runtime.process_control import DEFAULT_LEASE_DURATION_US, DEFAULT_POLL_INTERVAL_SECONDS, DEFAULT_TERMINATION_GRACE_SECONDS, AttemptProcessControl
-from product.backend.infra.runtime.process_environment import minimal_process_environment
-from product.protocols import RECORDING_RESULT_MAX_BYTES, RecordingRunnerRequest, RecordingRunnerResult, canonical_recording_json_bytes, parse_recording_result
+from product.backend.infra.runtime.process_environment import spawn_python_module
+from product.backend.infra.runtime.process_tree import release_process_tree
+from product.backend.infra.runtime.paths import RuntimePaths
+from product.protocols import RECORDING_RESULT_MAX_BYTES, RecordingRunnerRequest, RecordingRunnerResult, canonical_recording_json_bytes, parse_recording_result, required_recording_secret_names
 from product.backend.workflows.recording.submission import RecordingSubmission, RecordingCompletionResult
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.recording.control import control_paths_for_attempt
@@ -61,7 +62,6 @@ class RecordingJobHandler:
             RecordingRunnerResult,
         ]
         | None = None,
-        known_secrets: Sequence[str] = (),
         environ: Mapping[str, str] | None = None,
         utc_now_us: Callable[[], int] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
@@ -78,7 +78,6 @@ class RecordingJobHandler:
         self._request_store = request_store
         self._cancel_path_for = cancel_path_for
         self._controlled_runner = controlled_runner
-        self._known_secrets = tuple(secret for secret in known_secrets if secret)
         self._environ = os.environ if environ is None else environ
         self._utc_now_us = utc_now_us or (lambda: time.time_ns() // 1_000)
         self._popen = popen
@@ -117,11 +116,25 @@ class RecordingJobHandler:
             request = self._request_store.load(
                 job.job_id,
                 expected_hash=job.request_hash,
-                known_secrets=self._known_secrets,
             )
         except JiejianError:
             self._record_fatal(job, FatalFailureCode.PROTOCOL_INVALID)
             raise
+        secret_names = required_recording_secret_names(request)
+        missing = tuple(name for name in secret_names if not self._environ.get(name))
+        if missing:
+            self._record_fatal(job, FatalFailureCode.PROTOCOL_INVALID)
+            raise JiejianError(
+                ErrorCode.RUNTIME_ENVIRONMENT_INVALID,
+                "录制身份所需秘密未注入当前 Worker",
+                details={"missing_secret_names": missing},
+            )
+        known_secrets = tuple(self._environ[name] for name in secret_names)
+        request = self._request_store.load(
+            job.job_id,
+            expected_hash=job.request_hash,
+            known_secrets=known_secrets,
+        )
         if request.recording_id != job.recording_id:
             self._record_fatal(job, FatalFailureCode.PROTOCOL_INVALID)
             raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制请求关联不匹配")
@@ -130,7 +143,13 @@ class RecordingJobHandler:
         result = (
             self._controlled_runner(request, cancel_path.exists)
             if self._controlled_runner is not None
-            else self._run_process(job, request, cancel_path)
+            else self._run_process(
+                job,
+                request,
+                cancel_path,
+                secret_names=secret_names,
+                known_secrets=known_secrets,
+            )
         )
         if (
             result.recording_id != job.recording_id
@@ -148,7 +167,7 @@ class RecordingJobHandler:
                 fencing_token=job.fencing_token,
                 result=result,
                 now_us=self._utc_now_us(),
-                known_secrets=self._known_secrets,
+                known_secrets=known_secrets,
             )
         except JiejianError:
             current = self._process_control.read_job(job.job_id)
@@ -165,27 +184,36 @@ class RecordingJobHandler:
         job: JobRecord,
         request: RecordingRunnerRequest,
         cancel_path: Path,
+        *,
+        secret_names: Sequence[str],
+        known_secrets: Sequence[str],
     ) -> RecordingRunnerResult:
-        environment = minimal_process_environment(self._environ)
-        environment[_CANCEL_PATH_ENV] = str(cancel_path)
         control = control_paths_for_attempt(cancel_path.parent)
-        environment[_ATTEMPT_DIR_ENV] = str(control.attempt_dir)
+        source_environment = dict(self._environ)
+        source_environment.setdefault("JIEJIAN_VAR_DIR", str(self.var_dir))
+        runtime_paths = RuntimePaths(self.var_dir).ensure_layout()
         with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
             try:
-                process = self._popen(
-                    [sys.executable, "-B", "-m", "product.backend.infra.runtime.recording_process"],
-                    cwd=str(self.var_dir),
-                    env=environment,
+                process = spawn_python_module(
+                    source_environment,
+                    "product.backend.infra.runtime.recording_process",
+                    secret_names=secret_names,
+                    extra_environment={
+                        _CANCEL_PATH_ENV: str(cancel_path),
+                        _ATTEMPT_DIR_ENV: str(control.attempt_dir),
+                    },
+                    cwd=runtime_paths.temp,
                     stdin=subprocess.PIPE,
                     stdout=stdout_file,
                     stderr=stderr_file,
                     close_fds=True,
+                    popen=self._popen,
                 )
                 assert process.stdin is not None
                 process.stdin.write(
                     canonical_recording_json_bytes(
                         request,
-                        known_secrets=self._known_secrets,
+                        known_secrets=known_secrets,
                     )
                 )
                 process.stdin.close()
@@ -217,16 +245,19 @@ class RecordingJobHandler:
             stdout_file.seek(0)
             raw = stdout_file.read(RECORDING_RESULT_MAX_BYTES + 1)
             if process.returncode != 0 or size > RECORDING_RESULT_MAX_BYTES:
+                release_process_tree(process)
                 self._record_fatal(job, FatalFailureCode.PROTOCOL_INVALID)
                 raise JiejianError(ErrorCode.RUNNER_PROTOCOL_INVALID, "录制 Runner 结果无效")
             try:
                 result = parse_recording_result(
                     raw,
-                    known_secrets=self._known_secrets,
+                    known_secrets=known_secrets,
                 )
             except JiejianError:
+                release_process_tree(process)
                 self._record_fatal(job, FatalFailureCode.PROTOCOL_INVALID)
                 raise
+            release_process_tree(process)
             return result
 
     def _record_retryable(

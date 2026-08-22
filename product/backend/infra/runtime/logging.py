@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import TextIO
 
 from product.backend.core.redaction import redact_known_secrets
+from product.backend.infra.runtime.paths import RuntimePaths
 
 
 class JsonFormatter(stdlib_logging.Formatter):
@@ -86,12 +87,12 @@ def configure_logging(
         stderr_handler.setFormatter(formatter)
         logger.addHandler(stderr_handler)
     if var_dir is not None:
-        log_path = Path(var_dir).resolve() / "logs" / "jiejian.log"
+        log_path = RuntimePaths(Path(var_dir)).app_logs / "jiejian.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         file_handler = RotatingFileHandler(
             log_path,
-            maxBytes=5 * 1024 * 1024,
-            backupCount=3,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
             encoding="utf-8",
         )
         file_handler.setFormatter(formatter)

@@ -11,7 +11,7 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 import httpx
 
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.process_environment import spawn_python_module
 from product.protocols.observer import AsyncTaskApiLocator, AsyncTaskObserverInvocation, AsyncTaskStatus, CausalityStatus, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, OBSERVER_JSON_MAX_BYTES, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType, ProvenanceType, build_normalized_state, canonical_json_bytes, canonical_sha256, evaluate_observer_outcome, parse_observer_json
 from product.protocols.runner import WebTargetDefinition, WebTargetScope
 from product.backend.infra.execution.http import WebTargetGuard
@@ -394,27 +394,28 @@ def run_async_task_observer(
     deadline_ns = time.monotonic_ns() + spec.budget.timeout_us * 1_000
     try:
         source_name = _secret_name(spec)
-        environment = minimal_process_environment(parent_environ if parent_environ is not None else os.environ, secret_names=(source_name,))
-        environment["JIEJIAN_ATTEMPT_DIR"] = str(attempt_root)
+        environment = dict(parent_environ if parent_environ is not None else os.environ)
+        environment.setdefault("JIEJIAN_VAR_DIR", str(attempt_root))
         _write_atomic(input_path, invocation.model_dump_json().encode("utf-8"))
-        command = [python_executable or sys.executable, "-B", "-m", "product.backend.infra.observers.async_task", "--input", str(input_path), "--output", str(output_path)]
+        command = ["product.backend.infra.observers.async_task", "--input", str(input_path), "--output", str(output_path)]
         try:
-            process = subprocess.Popen(command, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process = spawn_python_module(
+                environment,
+                command[0],
+                *command[1:],
+                secret_names=(source_name,),
+                extra_environment={"JIEJIAN_ATTEMPT_DIR": str(attempt_root)},
+                cwd=attempt_root,
+                python_executable=python_executable,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except OSError:
             return AsyncTaskObserverResult(None, _execution_error(spec))
         try:
             while True:
                 if (attempt_root / "cancel.requested").is_file():
-                    terminator = getattr(process, "terminate", process.kill)
-                    terminator()
-                    try:
-                        process.wait(timeout=_PROCESS_REAP_TIMEOUT_SECONDS)
-                    except subprocess.TimeoutExpired:
-                        try:
-                            process.kill()
-                            process.wait(timeout=_PROCESS_REAP_TIMEOUT_SECONDS)
-                        except subprocess.TimeoutExpired:
-                            pass
+                    terminate_process_tree(process, _PROCESS_REAP_TIMEOUT_SECONDS)
                     envelope = _failure_envelope(invocation, ObservationCompleteness.PARTIAL, ASYNC_TASK_CANCELLED, started_at_us, _now_us())
                     return AsyncTaskObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
                 remaining = (deadline_ns - time.monotonic_ns()) / 1_000_000_000
@@ -426,11 +427,7 @@ def run_async_task_observer(
                 except subprocess.TimeoutExpired:
                     continue
         except subprocess.TimeoutExpired:
-            process.kill()
-            try:
-                process.wait(timeout=_PROCESS_REAP_TIMEOUT_SECONDS)
-            except subprocess.TimeoutExpired:
-                pass
+            terminate_process_tree(process, _PROCESS_REAP_TIMEOUT_SECONDS)
             envelope = _failure_envelope(invocation, ObservationCompleteness.TIMED_OUT, ASYNC_TASK_OBSERVATION_TIMEOUT, started_at_us, _now_us())
             return AsyncTaskObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
         if process.returncode != 0 or not output_path.is_file():
@@ -444,6 +441,8 @@ def run_async_task_observer(
             return AsyncTaskObserverResult(None, _execution_error(spec))
         return AsyncTaskObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
     finally:
+        if "process" in locals():
+            release_process_tree(process)
         for path in (input_path, output_path, *temporary_paths):
             path.unlink(missing_ok=True)
 

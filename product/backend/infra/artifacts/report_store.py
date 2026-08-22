@@ -17,6 +17,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.protocols.report import ReportPackageFile, ReportPackageManifest, Report
 from product.backend.core.reporting import render_format
 
@@ -29,7 +30,7 @@ _NAMES = {"json": "report.json", "html": "report.html", "sarif": "report.sarif.j
 class ReportStore:
     def __init__(self, var_dir: Path) -> None:
         self._var_dir = var_dir.resolve()
-        self._root = self._var_dir / "reports" / "runs"
+        self._root = RuntimePaths(self._var_dir).reports / "runs"
 
     def publish(self, report: Report) -> ReportPackageManifest:
         """将 canonical 报告及其格式投影原子发布；同一身份禁止内容漂移。"""

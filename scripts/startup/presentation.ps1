@@ -303,5 +303,5 @@ function Invoke-WaitIndicatorProcess([string]$Stage, [bool]$Ascii) {
 }
 
 function Get-RecoveryCommand {
-    return "powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1 -ForcePrepare -PrepareOnly -VarDir `"$script:VarDir`""
+    return ".\start.cmd -Mode Prepare -ForcePrepare -VarDir `"$script:VarDir`""
 }

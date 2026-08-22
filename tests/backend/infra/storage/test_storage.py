@@ -711,7 +711,7 @@ def test_known_secret_and_evidence_body_never_enter_database(
 
 
 def test_default_database_path_and_uow_public_boundary(tmp_path: Path) -> None:
-    assert default_database_path(tmp_path) == tmp_path / "jiejian.db"
+    assert default_database_path(tmp_path) == tmp_path / "data" / "jiejian.db"
     engine = create_sqlite_engine(tmp_path / "boundary.db")
     try:
         work = StorageUnitOfWork(create_session_factory(engine))

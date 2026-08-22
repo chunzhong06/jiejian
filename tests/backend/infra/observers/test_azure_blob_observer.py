@@ -271,6 +271,9 @@ def test_blob_secret_stays_out_of_envelope_and_parent_environment(tmp_path: Path
     class Process:
         returncode = 7
 
+        def poll(self) -> int:
+            return self.returncode
+
         def wait(self, timeout: float | None = None) -> int:
             return 0
 
@@ -288,7 +291,7 @@ def test_blob_secret_stays_out_of_envelope_and_parent_environment(tmp_path: Path
     assert captured["environment"]["BLOB_SAS"] == secret
     assert "UNRELATED_SECRET" not in captured["environment"]
     assert secret not in " ".join(captured["command"])
-    assert not list((tmp_path / "env").glob("*"))
+    assert not list((tmp_path / "env").rglob("*observer*"))
 
 
 def test_blob_parent_timeout_and_corrupt_output_are_bounded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -297,7 +300,15 @@ def test_blob_parent_timeout_and_corrupt_output_are_bounded(tmp_path: Path, monk
         killed = False
 
         def wait(self, timeout: float | None = None) -> int:
+            if self.killed:
+                return -9
             raise subprocess.TimeoutExpired("blob", timeout)
+
+        def poll(self) -> int | None:
+            return -9 if self.killed else None
+
+        def terminate(self) -> None:
+            return None
 
         def kill(self) -> None:
             self.killed = True
@@ -308,13 +319,16 @@ def test_blob_parent_timeout_and_corrupt_output_are_bounded(tmp_path: Path, monk
     assert result.envelope is not None and result.envelope.completeness is ObservationCompleteness.TIMED_OUT
     assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
     assert process.killed
-    assert not list((tmp_path / "timeout").glob("*"))
+    assert not list((tmp_path / "timeout").rglob("*observer*"))
 
     def corrupt_popen(command: list[str], **kwargs: Any) -> Process:
         output = Path(command[command.index("--output") + 1])
 
         class DoneProcess:
             returncode = 0
+
+            def poll(self) -> int:
+                return self.returncode
 
             def wait(self, timeout: float | None = None) -> int:
                 output.write_bytes(b"{}")
@@ -326,7 +340,7 @@ def test_blob_parent_timeout_and_corrupt_output_are_bounded(tmp_path: Path, monk
     result = blob_module.run_azure_blob_observer(_spec(), CORRELATION, ObservationPhase.BEFORE, attempt_dir=tmp_path / "corrupt", parent_environ={"BLOB_SAS": SAS}, python_executable="python")
     assert result.envelope is None
     assert result.outcome.status is ObserverOutcomeStatus.EXECUTION_ERROR
-    assert not list((tmp_path / "corrupt").glob("*"))
+    assert not list((tmp_path / "corrupt").rglob("*observer*"))
 
 
 def test_blob_process_entry_delegates_to_core(monkeypatch: pytest.MonkeyPatch) -> None:

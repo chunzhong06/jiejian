@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import subprocess
-import os
 import time
 import logging
 from collections.abc import Callable
@@ -28,6 +27,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.handlers import JobAttemptPort
 from product.backend.infra.runtime.jobs.models import RenewLease, checked_time_add
+from product.backend.infra.runtime.process_tree import terminate_process_tree
 
 DEFAULT_LEASE_DURATION_US = 30_000_000
 DEFAULT_POLL_INTERVAL_SECONDS = 0.05
@@ -36,23 +36,9 @@ logger = logging.getLogger("jiejian.runtime.process_control")
 
 
 def force_terminate_process_tree(process: subprocess.Popen[Any], timeout: float) -> None:
-    """强制结束已持有句柄的进程树，避免 Runner 的受控浏览器成为孤儿进程。"""
+    """通过共享进程树控制器结束进程及后代，避免浏览器成为孤儿。"""
 
-    if os.name == "nt" and isinstance(getattr(process, "pid", None), int):
-        try:
-            subprocess.run(
-                ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-                timeout=timeout,
-            )
-        except (OSError, subprocess.SubprocessError):
-            process.kill()
-    else:
-        process.kill()
-    process.wait(timeout=timeout)
+    terminate_process_tree(process, timeout)
 
 
 class AttemptProcessControl:
@@ -80,6 +66,12 @@ class AttemptProcessControl:
         self._lease_duration_us = lease_duration_us
         self._poll_interval_seconds = poll_interval_seconds
         self._termination_grace_seconds = termination_grace_seconds
+
+    @property
+    def termination_grace_seconds(self) -> float:
+        """暴露同一监督边界的树回收预算，避免调用方另造超时常量。"""
+
+        return self._termination_grace_seconds
 
     def monitor(
         self,
@@ -144,24 +136,20 @@ class AttemptProcessControl:
             return job
 
     def _terminate(self, process: subprocess.Popen[Any]) -> None:
-        """先请求温和退出，预算耗尽后强制杀死并等待句柄回收。"""
+        """沿受控 Job/session 结束整棵树；根进程退出不能代替后代退出证明。"""
 
         logger.warning(
             "process terminate requested",
             extra={"component": "process_control", "event_code": "PROCESS_TERMINATE"},
         )
-        process.terminate()
         try:
-            process.wait(timeout=self._termination_grace_seconds)
-        except subprocess.TimeoutExpired:
-            logger.error(
-                "process kill requested",
-                extra={"component": "process_control", "event_code": "PROCESS_KILL"},
+            force_terminate_process_tree(process, self._termination_grace_seconds)
+        except Exception:
+            logger.exception(
+                "process tree termination failed",
+                extra={"component": "process_control", "event_code": "PROCESS_TREE_TERMINATION_FAILED"},
             )
-            try:
-                force_terminate_process_tree(process, self._termination_grace_seconds)
-            except subprocess.TimeoutExpired:
-                raise JiejianError(
-                    ErrorCode.RUNNER_TIMEOUT,
-                    "Runner 进程无法在有界时间内终止",
-                ) from None
+            raise JiejianError(
+                ErrorCode.PROCESS_TREE_FAILED,
+                "Runner 进程树无法在有界时间内终止",
+            ) from None

@@ -213,7 +213,12 @@ def test_async_task_parent_timeout_cancel_and_cleanup(tmp_path: Path, monkeypatc
             self.waits: list[float | None] = []
         def wait(self, timeout: float | None = None) -> int:
             self.waits.append(timeout)
+            if self.killed:
+                return -9
             raise subprocess.TimeoutExpired("async", timeout)
+
+        def poll(self) -> int | None:
+            return -9 if self.killed else None
         def terminate(self) -> None:
             self.terminated = True
         def kill(self) -> None:
@@ -228,9 +233,13 @@ def test_async_task_parent_timeout_cancel_and_cleanup(tmp_path: Path, monkeypatc
     assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
     assert result.envelope is not None and result.envelope.completeness is ObservationCompleteness.TIMED_OUT
     assert process.killed
-    assert len(process.waits) == 2
+    assert len(process.waits) == 3
     assert process.waits[0] <= async_module._SUPERVISION_SLICE_SECONDS
-    assert process.waits[1] == async_module._PROCESS_REAP_TIMEOUT_SECONDS
+    assert all(
+        timeout is not None
+        and 0 <= timeout <= async_module._PROCESS_REAP_TIMEOUT_SECONDS
+        for timeout in process.waits[1:]
+    )
     assert not list((tmp_path / "attempt").glob("async-task-observer-*.json"))
     assert not list((tmp_path / "attempt").glob(".*async-task-observer-*.tmp"))
 
@@ -247,9 +256,14 @@ def test_async_task_parent_cancel_terminates_and_returns_inconclusive(tmp_path: 
         def wait(self, timeout: float | None = None) -> int:
             self.waits += 1
             self.wait_timeouts.append(timeout)
+            if self.terminated:
+                return -15
             if self.waits == 2:
                 (tmp_path / "attempt" / "cancel.requested").write_text("", encoding="ascii")
             raise subprocess.TimeoutExpired("async", timeout)
+
+        def poll(self) -> int | None:
+            return -15 if self.terminated else None
 
         def terminate(self) -> None:
             self.terminated = True
@@ -267,7 +281,11 @@ def test_async_task_parent_cancel_terminates_and_returns_inconclusive(tmp_path: 
     assert (tmp_path / "attempt" / "cancel.requested").is_file()
     assert process.waits >= 2
     assert process.wait_timeouts[0] <= async_module._SUPERVISION_SLICE_SECONDS
-    assert all(timeout == async_module._PROCESS_REAP_TIMEOUT_SECONDS for timeout in process.wait_timeouts[2:]), process.wait_timeouts
+    assert all(
+        timeout is not None
+        and 0 <= timeout <= async_module._PROCESS_REAP_TIMEOUT_SECONDS
+        for timeout in process.wait_timeouts[2:]
+    ), process.wait_timeouts
 
 
 def test_async_task_request_error_is_inconclusive(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -371,6 +389,9 @@ def test_async_task_parent_environment_and_process_failure_are_bounded(tmp_path:
     class FailedProcess:
         returncode = 7
 
+        def poll(self) -> int:
+            return self.returncode
+
         def wait(self, timeout: float | None = None) -> int:
             return self.returncode
 
@@ -422,6 +443,9 @@ def test_async_task_poll_interval_is_bounded_and_marker_is_quoted(monkeypatch: p
 def test_async_task_corrupt_child_output_is_execution_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     class Process:
         returncode = 0
+
+        def poll(self) -> int:
+            return self.returncode
 
         def wait(self, timeout: float | None = None) -> int:
             return 0

@@ -3,10 +3,60 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from product.backend.cli.app import app
 from product.backend.infra.runtime import diagnostics
+
+
+@pytest.fixture
+def trusted_doctor_environment(
+    isolated_environment: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    uv = isolated_environment / "uv.exe"
+    frontend = isolated_environment / "frontend-dist"
+    chromium = isolated_environment / "chromium.exe"
+    uv.touch()
+    chromium.touch()
+    frontend.mkdir()
+    (frontend / "index.html").write_text("<div id='root'></div>", encoding="utf-8")
+    monkeypatch.setenv("JIEJIAN_RUNTIME_MODE", "release")
+    monkeypatch.setenv("JIEJIAN_UV_VERSION", "0.11.12")
+    monkeypatch.setenv("JIEJIAN_UV_EXECUTABLE", str(uv))
+    monkeypatch.setenv("JIEJIAN_FRONTEND_DIST", str(frontend))
+    monkeypatch.setattr(
+        diagnostics,
+        "python_environment_report",
+        lambda: {
+            "schema_version": "1",
+            "ok": True,
+            "runtime_mode": "release",
+            "runtime_fingerprint": "test-fingerprint",
+            "executable": "D:/runtime/python.exe",
+            "version": "3.13.15",
+            "prefix": "D:/runtime",
+            "environment_type": "uv-private",
+            "user_site_on_sys_path": False,
+            "package_origins": {},
+            "issues": [],
+        },
+    )
+    monkeypatch.setattr(
+        diagnostics,
+        "_playwright_check",
+        lambda: diagnostics.DoctorCheck(
+            name="playwright",
+            required=True,
+            ok=True,
+            message="Playwright 与 Chromium 可用",
+            details={
+                "package_version": "1.61.0",
+                "chromium_executable": str(chromium),
+            },
+        ),
+    )
+    return isolated_environment
 
 
 def test_root_help_is_task_oriented() -> None:
@@ -27,8 +77,9 @@ def test_command_groups_without_leaf_show_help_and_succeed() -> None:
 
 
 def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
-    isolated_environment: Path,
+    trusted_doctor_environment: Path,
 ) -> None:
+    isolated_environment = trusted_doctor_environment
     runtime = isolated_environment / "runtime"
     config = isolated_environment / "doctor.toml"
     config.write_text(
@@ -43,15 +94,17 @@ def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
     assert report["schema_version"] == "1"
     assert report["ok"] is True
     assert result.stderr == ""
-    log_path = runtime / "logs" / "jiejian.log"
+    log_path = runtime / "logs" / "app" / "jiejian.log"
     log_payload = json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])
     assert log_payload["component"] == "doctor"
     assert log_payload["event_code"] == "DOCTOR_COMPLETED"
     assert [check["name"] for check in report["checks"]] == [
         "python",
         "dependencies",
+        "uv",
         "node",
         "pnpm",
+        "frontend",
         "config",
         "var_dir",
         "sqlite",
@@ -68,9 +121,8 @@ def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
     for name in ("node", "pnpm"):
         check = next(item for item in report["checks"] if item["name"] == name)
         assert check["ok"] is True
-        assert check["details"]["path"]
-        assert check["details"]["version"]
-        assert check["details"]["expected"]
+        assert check["required"] is False
+        assert "运行不需要" in check["message"]
 
 
 def test_doctor_returns_nonzero_when_a_required_check_fails(
@@ -95,8 +147,9 @@ def test_doctor_returns_nonzero_when_a_required_check_fails(
 
 
 def test_doctor_uses_cli_trace_override_without_polluting_json_stdout(
-    isolated_environment: Path,
+    trusted_doctor_environment: Path,
 ) -> None:
+    isolated_environment = trusted_doctor_environment
     config = isolated_environment / "doctor.toml"
     config.write_text(
         '[jiejian]\nvar_dir = "runtime"\nlog_level = "INFO"\ntrace_id = "config-trace"\n',
@@ -111,11 +164,12 @@ def test_doctor_uses_cli_trace_override_without_polluting_json_stdout(
     assert result.exit_code == 0
     assert json.loads(result.stdout)["ok"] is True
     assert result.stderr == ""
-    log_path = Path("runtime") / "logs" / "jiejian.log"
+    log_path = Path("runtime") / "logs" / "app" / "jiejian.log"
     assert json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])["trace_id"] == "cli-trace"
 
 
-def test_doctor_respects_error_log_level(isolated_environment: Path) -> None:
+def test_doctor_respects_error_log_level(trusted_doctor_environment: Path) -> None:
+    isolated_environment = trusted_doctor_environment
     config = isolated_environment / "doctor.toml"
     config.write_text(
         '[jiejian]\nvar_dir = "runtime"\nlog_level = "ERROR"\n',
@@ -130,8 +184,9 @@ def test_doctor_respects_error_log_level(isolated_environment: Path) -> None:
 
 
 def test_doctor_human_uses_named_checks_and_conclusion(
-    isolated_environment: Path,
+    trusted_doctor_environment: Path,
 ) -> None:
+    isolated_environment = trusted_doctor_environment
     config = isolated_environment / "doctor-human.toml"
     config.write_text(
         '[jiejian]\nvar_dir = "runtime"\nlog_level = "INFO"\n',
@@ -161,6 +216,18 @@ def test_toolchain_probe_is_local_version_check_without_network(
         '{"engines":{"node":">=24.13.0 <25"},"packageManager":"pnpm@11.21.0"}',
         encoding="utf-8",
     )
+    config = project / "product" / "config"
+    config.mkdir()
+    (config / "toolchain.json").write_text(
+        json.dumps(
+            {
+                "node": {"development_range": ">=24.13.0 <25"},
+                "pnpm": {"version": "11.21.0"},
+                "uv": {"version": "0.11.12"},
+            }
+        ),
+        encoding="utf-8",
+    )
     node = tmp_path / "node.exe"
     pnpm = tmp_path / "pnpm.cmd"
     node.touch()
@@ -179,10 +246,10 @@ def test_toolchain_probe_is_local_version_check_without_network(
 
     monkeypatch.setattr(diagnostics.subprocess, "run", fake_run)
     node_check = diagnostics._local_tool_check(
-        name="node", executable_name="node", expected=None, project_root=project
+        name="node", executable_name="node", required=True, project_root=project
     )
     pnpm_check = diagnostics._local_tool_check(
-        name="pnpm", executable_name="pnpm", expected=None, project_root=project
+        name="pnpm", executable_name="pnpm", required=True, project_root=project
     )
 
     assert node_check.ok and pnpm_check.ok
@@ -198,3 +265,24 @@ def test_guide_requires_an_interactive_human_terminal() -> None:
 
     assert result.exit_code == 3
     assert "引导模式需要交互式终端" in result.stderr
+
+
+def test_cache_cli_uses_application_service_and_preserves_data(tmp_path: Path) -> None:
+    var_dir = tmp_path / "var"
+    data = var_dir / "data" / "keep.txt"
+    cached = var_dir / "cache" / "uv" / "rebuild.bin"
+    data.parent.mkdir(parents=True)
+    cached.parent.mkdir(parents=True)
+    data.write_text("keep", encoding="utf-8")
+    cached.write_bytes(b"cache")
+
+    status = CliRunner().invoke(app, ["--var-dir", str(var_dir), "cache", "status"])
+    cleaned = CliRunner().invoke(
+        app, ["--var-dir", str(var_dir), "cache", "clean", "--confirm"]
+    )
+
+    assert status.exit_code == 0, status.stdout + status.stderr
+    assert json.loads(status.stdout)["protected"]["data"] == str(var_dir / "data")
+    assert cleaned.exit_code == 0, cleaned.stdout + cleaned.stderr
+    assert data.read_text(encoding="utf-8") == "keep"
+    assert not cached.exists()

@@ -30,6 +30,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.artifacts.run_packages import PUBLICATION_MANIFEST_NAME, StagedAttempt, attempt_paths_for, validate_published_run, validate_runner_staging
+from product.backend.infra.runtime.paths import RuntimePaths
 
 
 class ReconciliationResult(BaseModel):
@@ -85,7 +86,7 @@ class RunReconciler:
         counts: dict[str, int],
         known_secrets: Sequence[str],
     ) -> None:
-        projects_root = self.var_dir / "projects"
+        projects_root = RuntimePaths(self.var_dir).projects
         if not projects_root.is_dir():
             return
         for final_dir in sorted(projects_root.glob("*/runs/*")):
@@ -121,7 +122,7 @@ class RunReconciler:
         counts: dict[str, int],
         known_secrets: Sequence[str],
     ) -> None:
-        jobs_root = self.var_dir / "jobs"
+        jobs_root = RuntimePaths(self.var_dir).jobs
         if not jobs_root.is_dir():
             return
         for staging in sorted(jobs_root.glob("job_*/attempts/*/staging")):
@@ -176,7 +177,7 @@ class RunReconciler:
             return work.jobs.get(job_id)
 
     def _quarantine(self, path: Path, category: str) -> None:
-        quarantine_root = Path(os.path.abspath(self.var_dir / "quarantine" / category))
+        quarantine_root = Path(os.path.abspath(RuntimePaths(self.var_dir).data / "quarantine" / category))
         source = Path(os.path.abspath(path))
         if os.path.commonpath((self.var_dir, source)) != str(self.var_dir):
             raise JiejianError(ErrorCode.ARTIFACT_RECONCILE, "隔离源路径越界")

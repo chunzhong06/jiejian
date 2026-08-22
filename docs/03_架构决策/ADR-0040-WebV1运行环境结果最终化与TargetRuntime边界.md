@@ -22,7 +22,7 @@
 
 ### 3. Node 与 pnpm 只属于开发和发布构建
 
-`product/frontend/node_modules` 是开发安装视图，`product/frontend/node_modules/.pnpm` 是 pnpm 虚拟依赖目录，`var/cache/pnpm-store` 才是内容寻址缓存。正式构建记录精确 Node、pnpm、锁文件和资源摘要；正式运行只读取随 Wheel 发布的 `dist`。
+`product/frontend/node_modules` 是开发安装视图，`product/frontend/node_modules/.pnpm` 是 pnpm 虚拟依赖目录，`var/cache/pnpm-store` 才是内容寻址缓存；Vite 缓存固定进入 `var/cache/vite`。正式构建记录精确 Node、pnpm、锁文件和资源摘要，把唯一 Wheel 写入 `var/runtime/release-artifacts`；正式运行只读取随 Wheel 发布的 `dist`。
 
 ### 4. 运行目录由唯一路径对象分区
 

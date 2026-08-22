@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from product.backend.api import create_app
 from product.backend.infra.runtime.serve_lock import ServeLock
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.cli.app import app as cli_app
 from product.backend.core.contracts.models import ContractStatus
 from product.backend.core.errors import JiejianError
@@ -127,6 +128,35 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
     restarted = create_app(var_dir, start_worker=False)
     with TestClient(restarted) as client:
         assert client.get(f"/api/projects/{project_id}").status_code == 200
+
+
+def test_system_cache_api_previews_and_preserves_product_data(tmp_path: Path) -> None:
+    var_dir = tmp_path / "var"
+    app = create_app(var_dir, start_worker=False)
+    data_marker = app.state.context.paths.data / "keep.txt"
+    cache_marker = app.state.context.paths.uv_cache / "rebuild.bin"
+    data_marker.write_text("keep", encoding="utf-8")
+    cache_marker.write_bytes(b"cache")
+
+    with TestClient(app) as client:
+        status = client.get("/api/system/cache")
+        preview = client.post(
+            "/api/system/cache/clean",
+            json={"confirmed": False, "dry_run": True},
+        )
+        applied = client.post(
+            "/api/system/cache/clean",
+            json={"confirmed": True, "dry_run": False},
+        )
+
+    assert status.status_code == 200
+    assert status.json()["data"]["protected"]["data"] == str(
+        app.state.context.paths.data
+    )
+    assert preview.json()["data"]["estimated_bytes"] >= len(b"cache")
+    assert applied.status_code == 200
+    assert data_marker.read_text(encoding="utf-8") == "keep"
+    assert not cache_marker.exists()
 
 
 def test_control_plane_shutdown_requires_explicit_local_control_header(tmp_path: Path) -> None:
@@ -422,7 +452,7 @@ def test_serve_lock_releases_normally_and_diagnoses_existing_lock(tmp_path: Path
 
 
 def test_serve_lock_reclaims_stale_owner(tmp_path: Path) -> None:
-    lock_path = tmp_path / "var" / ".serve.lock"
+    lock_path = RuntimePaths(tmp_path / "var").locks / "serve.lock"
     lock_path.parent.mkdir(parents=True)
     lock_path.write_text(
         json.dumps({"schema_version": "1", "pid": 2_147_483_647}),
@@ -469,7 +499,7 @@ def test_serve_lock_is_released_by_process_exit(tmp_path: Path) -> None:
 
     lock = ServeLock.acquire(var_dir)
     lock.release()
-    assert (var_dir / ".serve.lock").is_file()
+    assert (RuntimePaths(var_dir).locks / "serve.lock").is_file()
 
 
 def test_serve_requires_frontend_index_and_releases_lock(tmp_path: Path) -> None:
@@ -480,7 +510,7 @@ def test_serve_requires_frontend_index_and_releases_lock(tmp_path: Path) -> None
     )
     assert result.exit_code != 0
     assert "SERVE_FAILED" in result.output
-    assert (tmp_path / "var" / ".serve.lock").is_file()
+    assert (RuntimePaths(tmp_path / "var").locks / "serve.lock").is_file()
 
 
 def test_serve_rejects_non_loopback_before_frontend_and_releases_lock(tmp_path: Path) -> None:
@@ -498,7 +528,7 @@ def test_serve_rejects_non_loopback_before_frontend_and_releases_lock(tmp_path: 
     )
     assert result.exit_code != 0
     assert json.loads(result.stderr)["error"]["code"] == "API_BINDING_REJECTED"
-    assert not (tmp_path / "var" / ".serve.lock").exists()
+    assert not (RuntimePaths(tmp_path / "var").locks / "serve.lock").exists()
 
 
 @pytest.mark.parametrize(
@@ -649,7 +679,7 @@ def test_api_worker_runner_publication_matches_cli_report(
         api_report = api_report_response.json()["data"]
     assert api_report == cli_payload
 
-    report_path = var_dir / "reports" / "runs" / run_id / report_id / "report.json"
+    report_path = var_dir / "data" / "reports" / "runs" / run_id / report_id / "report.json"
     report_path.write_text('{"tampered":true}', encoding="utf-8")
     with TestClient(create_app(var_dir, start_worker=False)) as client:
         tampered = client.get(f"/api/runs/{run_id}/reports/{report_id}")

@@ -37,6 +37,7 @@ from .recording import (
     parse_recording_event,
     parse_recording_request,
     parse_recording_result,
+    required_recording_secret_names,
 )
 from .observer import (
     CausalityStatus,
@@ -110,6 +111,7 @@ from .runner import (
     parse_runner_input,
     parse_runner_result,
     required_secret_refs,
+    required_identity_secret_refs,
 )
 from .recording_flow import Flow, FlowStep, FlowVariableSource
 from product.backend.core.verification.differential import (

@@ -20,7 +20,6 @@ import re
 import secrets
 import shutil
 import subprocess
-import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from queue import Empty, Queue
@@ -29,11 +28,13 @@ from typing import Any
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import JobState, RunLifecycle
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.process_environment import spawn_python_module
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.workflows.onboarding.models import DemoVariant, OnboardingConfirmations, OnboardingDemoStatus, OnboardingSessionUpdate
 
 _READY_RE = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})$")
-_DEMO_LOG_RELATIVE = "var/logs/onboarding-demo.log"
+_DEMO_LOG_RELATIVE = "var/logs/app/onboarding-demo.log"
 _DEMO_OWNER_ENV = "JIEJIAN_DEMO_OWNER_TOKEN"
 _DEMO_ATTACKER_ENV = "JIEJIAN_DEMO_ATTACKER_TOKEN"
 _DEMO_PEER_ENV = "JIEJIAN_DEMO_PEER_TOKEN"
@@ -122,7 +123,7 @@ class DemoRuntimeSupervisor:
                 self._status = self._status.model_copy(
                     update={
                         "status": "failed",
-                        "message": "内置演示进程意外退出，请查看 var/logs/onboarding-demo.log 后重试。",
+                        "message": "内置演示进程意外退出，请查看 var/logs/app/onboarding-demo.log 后重试。",
                     }
                 )
             if self._status.session_id:
@@ -243,8 +244,7 @@ class DemoRuntimeSupervisor:
 
         var_root = self._var_dir.resolve()
         demo_entry = (
-            var_root
-            / "temp"
+            RuntimePaths(var_root).temp
             / "onboarding-demo"
             / f"demo_{secrets.token_hex(16)}"
         )
@@ -275,24 +275,37 @@ class DemoRuntimeSupervisor:
     ) -> None:
         """以最小环境和独立日志流启动由当前对象拥有的演示进程。"""
 
-        log_path = self._var_dir / "logs" / "onboarding-demo.log"
+        log_path = RuntimePaths(self._var_dir).app_logs / "onboarding-demo.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        environment = minimal_process_environment(self._base_environment)
+        environment = dict(self._base_environment)
+        environment.setdefault("JIEJIAN_VAR_DIR", str(self._var_dir))
         environment[_DEMO_OWNER_ENV] = owner_token
         environment[_DEMO_ATTACKER_ENV] = attacker_token
         environment[_DEMO_PEER_ENV] = peer_token
+        runtime_paths = RuntimePaths(self._var_dir).ensure_layout()
         # 每个 Demo 会话重建小日志，避免演示输出长期无界累积。
         self._stderr = log_path.open("wb")
         try:
-            self._process = self._popen(
-                [sys.executable, "-B", "-m", "product.backend.workflows.onboarding.demo_target", "--variant", variant, "--port", "0"],
+            self._process = spawn_python_module(
+                environment,
+                "product.backend.workflows.onboarding.demo_target",
+                "--variant",
+                variant,
+                "--port",
+                "0",
+                secret_names=(
+                    _DEMO_OWNER_ENV,
+                    _DEMO_ATTACKER_ENV,
+                    _DEMO_PEER_ENV,
+                ),
+                cwd=runtime_paths.temp,
                 shell=False,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=self._stderr,
-                env=environment,
                 text=True,
                 bufsize=1,
+                popen=self._popen,
             )
         except Exception:
             self._close_stderr_locked()
@@ -336,20 +349,10 @@ class DemoRuntimeSupervisor:
 
         process, self._process = self._process, None
         if process is not None:
-            try:
-                if process.poll() is None:
-                    # 资源生命周期：先给演示进程正常退出机会，超时后再强制终止并回收流。
-                    process.terminate()
-                    try:
-                        process.wait(timeout=2)
-                    except Exception:
-                        process.kill()
-                        try:
-                            process.wait(timeout=2)
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+            if process.poll() is None:
+                terminate_process_tree(process, 2.0)
+            else:
+                release_process_tree(process)
             self._close_process_streams_locked(process)
         self._close_stderr_locked()
         self._cleanup_source_locked()
@@ -386,7 +389,7 @@ class DemoRuntimeSupervisor:
         root, self._source_root = self._source_root, None
         if root is None:
             return
-        temp_root = (self._var_dir / "temp" / "onboarding-demo").resolve()
+        temp_root = (RuntimePaths(self._var_dir).temp / "onboarding-demo").resolve()
         resolved = root.resolve()
         if resolved.parent != temp_root or not resolved.is_relative_to(self._var_dir):
             return

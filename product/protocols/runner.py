@@ -451,6 +451,18 @@ def required_secret_refs(snapshot: ExecutionProjectSnapshot) -> tuple[str, ...]:
     return tuple(dict.fromkeys(references))
 
 
+def required_identity_secret_refs(identity: ExecutionIdentity) -> tuple[str, ...]:
+    """返回单个 Web 身份在录制边界需要的 env 引用，不解析秘密值。"""
+
+    references = list(_binding_secret_refs(identity.binding.model_dump(mode="python")))
+    references.extend(
+        _binding_secret_refs(
+            tuple(item.model_dump(mode="python") for item in identity.bootstrap_requests)
+        )
+    )
+    return tuple(dict.fromkeys(references))
+
+
 def _binding_secret_refs(value: Any) -> tuple[str, ...]:
     found: list[str] = []
     pending = [value]

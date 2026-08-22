@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.runtime.paths import RuntimePaths
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 _CURRENT_MIGRATION_REVISION = "0001_initial"
@@ -37,9 +38,9 @@ _INCOMPATIBLE_DATABASE_MESSAGE = "数据库格式与当前版本不兼容，请�
 
 
 def default_database_path(var_dir: Path) -> Path:
-    """返回配置运行目录下的默认数据库路径。"""
+    """返回唯一 data 分区中的数据库路径；不读取旧 VarDir 根布局。"""
 
-    return var_dir / "jiejian.db"
+    return RuntimePaths(var_dir).database
 
 
 def configure_sqlite_engine(engine: Engine) -> None:

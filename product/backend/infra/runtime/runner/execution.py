@@ -21,7 +21,6 @@ import hmac
 import json
 import os
 import secrets
-import sys
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -290,7 +289,6 @@ class RunnerExecutor:
         kwargs = {
             "attempt_dir": self.staging.parent,
             "parent_environ": self.environ,
-            "python_executable": sys.executable,
         }
         if spec.observer_type is ObserverType.READ_ONLY_SQLITE:
             result = run_sqlite_observer(spec, correlation, phase, **kwargs)

@@ -39,7 +39,7 @@ pnpm test
 pnpm build
 ```
 
-pnpm 的内容寻址 store 位于项目根 `var/cache/pnpm-store`；不要从前端目录传入相对 `--store-dir`。已安装依赖继续使用 `product/frontend/node_modules` 与其默认 `.pnpm` 虚拟依赖目录，保证 TypeScript 和 Vite 按标准祖先链解析类型；删除该目录后由启动器自动识别并重建。
+pnpm 的内容寻址 store 位于项目根 `var/cache/pnpm-store`，Vite 缓存位于 `var/cache/vite`；不要从前端目录传入相对 `--store-dir`。已安装依赖继续使用 `product/frontend/node_modules` 与其默认 `.pnpm` 虚拟依赖目录，保证 TypeScript 和 Vite 按标准祖先链解析类型；删除该目录后由开发入口自动识别并重建。
 
 组件测试与源码放在一起，文件名使用 `*.test.tsx` 或 `*.test.ts`。涉及真实路由、下拉交互、浏览器或完整产品闭环时，再补后端 `tests/e2e/` 测试。
 

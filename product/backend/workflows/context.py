@@ -38,6 +38,8 @@ from product.backend.workflows.projects.catalog import ProjectCatalog
 from product.backend.workflows.recording.submission import RecordingSubmission
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.infra.runtime.jobs.recording import RecordingJobHandler
+from product.backend.infra.runtime.paths import RuntimePaths
+from product.backend.infra.runtime.cache import CacheMaintenanceService
 from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
 from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
 from product.backend.infra.recording.request_store import RecordingRequestStore
@@ -52,6 +54,7 @@ from product.backend.workflows.onboarding.secrets import RuntimeSecretVault
 from product.backend.workflows.onboarding.demo import DemoExecutionStatusReader, DemoRuntimeSupervisor
 from product.backend.workflows.onboarding.models import DemoVariant, OnboardingDemoStatus
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.protocols import required_recording_secret_names
 from product.protocols import RunnerResult
 
 
@@ -72,7 +75,12 @@ class ApplicationCore:
         from product.backend.infra.storage import create_session_factory, create_sqlite_engine, default_database_path, upgrade_database
 
         self.var_dir = var_dir.resolve()
+        self.paths = RuntimePaths(self.var_dir).ensure_layout()
         self._base_environment = dict(environ if environ is not None else os.environ)
+        self.cache = CacheMaintenanceService(
+            self.var_dir,
+            environment=self._base_environment,
+        )
         database_path = default_database_path(self.var_dir)
         if not _minimal:
             upgrade_database(database_path)
@@ -134,7 +142,11 @@ class ApplicationCore:
         )
         self.recording_lifecycle = RecordingLifecycle(factory, var_dir=self.var_dir)
         self.onboarding = OnboardingWorkflow(
-            folder_selector or SystemFolderSelector(environment=self._base_environment),
+            folder_selector
+            or SystemFolderSelector(
+                environment=self._base_environment,
+                var_dir=self.var_dir,
+            ),
             var_dir=self.var_dir,
             vault=self.secret_vault,
             projects=self.projects,
@@ -231,22 +243,35 @@ class ApplicationCore:
 
     def run_recording(self, command, *, timeout_seconds: int, secret_names: tuple[str, ...] = ()):
         """提交 Recording 并等待其 Worker 完成；入口层不直接装配调度基础设施。"""
-        submission = self.recording_submission.submit(command)
+        requested_names = required_recording_secret_names(command.request)
+        if secret_names and tuple(secret_names) != requested_names:
+            raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制秘密引用与调用参数不一致")
+        environment = self.environment_for_secret_names(requested_names)
+        known_secrets = tuple(
+            value for name in requested_names if (value := environment.get(name))
+        )
+        submission = self.recording_submission.submit(
+            command,
+            known_secrets=known_secrets,
+        )
         dispatcher = WorkerDispatcher(
             var_dir=self.var_dir,
             uow_factory=self.uow_factory,
-            environ=self._base_environment,
+            environ=environment,
         )
         process = dispatcher.start(
             job_id=submission.job.job_id,
             lease_owner=f"recording-worker-{os.getpid()}-{id(submission)}",
-            secret_names=secret_names,
+            secret_names=requested_names,
         )
-        dispatcher.wait_recording(
-            submission.job.job_id,
-            process,
-            timeout_seconds=timeout_seconds,
-        )
+        try:
+            dispatcher.wait_recording(
+                submission.job.job_id,
+                process,
+                timeout_seconds=timeout_seconds,
+            )
+        finally:
+            dispatcher.close_process(process)
         return submission
 
     def guide_snapshot(self) -> dict[str, object]:
@@ -313,13 +338,16 @@ class ApplicationCore:
                 lease_owner=f"guide-worker-{os.getpid()}-{id(status)}",
                 secret_names=secret_names,
             )
-            staged = dispatcher.wait(
-                status.job_id,
-                process,
-                known_secrets=known_secrets,
-                timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000
-                + 60,
-            )
+            try:
+                staged = dispatcher.wait(
+                    status.job_id,
+                    process,
+                    known_secrets=known_secrets,
+                    timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000
+                    + 60,
+                )
+            finally:
+                dispatcher.close_process(process)
             return status, staged.result
         finally:
             self.demo.stop()

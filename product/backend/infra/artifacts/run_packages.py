@@ -29,6 +29,7 @@ from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN,
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RUNNER_RESULT_MAX_BYTES, RunnerResult, RunnerResultType, StagedArtifact, parse_evidence, parse_runner_result
 from product.backend.infra.storage import EvidenceIndexRecord, JobRecord
+from product.backend.infra.runtime.paths import RuntimePaths
 
 PUBLICATION_MANIFEST_NAME = "publication-manifest.json"
 _LEASE_OWNER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
@@ -118,7 +119,7 @@ class ValidatedPublication:
 def attempt_paths_for(var_dir: Path, job: JobRecord) -> AttemptPaths:
     """以受约束 Job ID、attempt 和 token 唯一定位当前尝试。"""
 
-    jobs_root = (var_dir.resolve() / "jobs").resolve()
+    jobs_root = RuntimePaths(var_dir).jobs.resolve()
     attempt_dir = (
         jobs_root / job.job_id / "attempts" / f"{job.attempt}-{job.fencing_token}"
     ).resolve()
@@ -136,7 +137,7 @@ def attempt_paths_for(var_dir: Path, job: JobRecord) -> AttemptPaths:
 
 
 def final_run_dir(var_dir: Path, project_id: str, run_id: str) -> Path:
-    root = Path(os.path.abspath(var_dir.resolve() / "projects"))
+    root = Path(os.path.abspath(RuntimePaths(var_dir).projects))
     target = Path(os.path.abspath(root / project_id / "runs" / run_id))
     if os.path.commonpath((root, target)) != str(root):
         raise JiejianError(ErrorCode.ARTIFACT_PUBLISH, "最终运行目录越界")

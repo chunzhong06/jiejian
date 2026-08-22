@@ -125,7 +125,16 @@ class RecordingBudget(RecordingProtocolModel):
 class RecordingSessionRef(RecordingProtocolModel):
     identity_id: str = Field(pattern=PROJECT_ID_PATTERN)
     session_ref: str = Field(pattern=_SESSION_REF)
+    secret_refs: tuple[str, ...] = Field(max_length=32)
     expires_at_us: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_secret_refs(self) -> RecordingSessionRef:
+        if len(set(self.secret_refs)) != len(self.secret_refs):
+            raise ValueError("recording secret references must be unique")
+        if any(re.fullmatch(r"env:[A-Z][A-Z0-9_]{0,127}", item) is None for item in self.secret_refs):
+            raise ValueError("recording secret reference is invalid")
+        return self
 
 
 # Worker 交给 Recording Runner 的冻结目标、身份引用、范围与预算。
@@ -153,6 +162,18 @@ class RecordingRunnerRequest(RecordingProtocolModel):
             raise ValueError("recording session reference must be short-lived and active")
         _reject_inline_secret_material(self.model_dump(mode="python"))
         return self
+
+
+def required_recording_secret_names(request: RecordingRunnerRequest) -> tuple[str, ...]:
+    """返回当前录制明确引用的环境变量名，调用方只可按此集合解析值。"""
+
+    return tuple(
+        dict.fromkeys(
+            reference.removeprefix("env:")
+            for session in request.sessions
+            for reference in session.secret_refs
+        )
+    )
 
 
 class RecordingHeader(RecordingProtocolModel):
@@ -480,7 +501,8 @@ def _reject_known_secret_material(value: Any, known_secrets: Sequence[str]) -> N
 def _reject_inline_secret_material(value: Any) -> None:
     if isinstance(value, Mapping):
         for key, item in value.items():
-            if _SENSITIVE_KEY.search(str(key)):
+            # secret_refs 只保存已受模型约束的 env:NAME 引用，不是持久秘密值。
+            if str(key) != "secret_refs" and _SENSITIVE_KEY.search(str(key)):
                 raise ValueError("recording request contains persistent secret material")
             _reject_inline_secret_material(item)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):

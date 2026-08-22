@@ -35,7 +35,10 @@ from product.backend.core.errors import JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.runtime.settings import Settings, load_settings
 from product.backend.infra.runtime.logging import configure_logging
-from product.backend.infra.runtime.environment_identity import python_environment_report
+from product.backend.infra.runtime.environment_identity import (
+    SUPPORTED_PYTHON,
+    python_environment_report,
+)
 
 
 class DoctorCheck(BaseModel):
@@ -58,11 +61,10 @@ class DoctorReport(BaseModel):
 
 
 def _python_check() -> DoctorCheck:
-    current = sys.version_info[:3]
     environment = python_environment_report()
-    ok = current >= (3, 12) and bool(environment["ok"])
-    if current < (3, 12):
-        message = "需要 Python 3.12 或更高版本"
+    ok = sys.version_info[:2] == SUPPORTED_PYTHON and bool(environment["ok"])
+    if sys.version_info[:2] != SUPPORTED_PYTHON:
+        message = "需要 CPython 3.13"
     elif not environment["ok"]:
         message = "Python 环境来源异常：" + "；".join(environment["issues"])
     else:
@@ -76,39 +78,58 @@ def _python_check() -> DoctorCheck:
     )
 
 
-def _toolchain_requirements(project_root: Path) -> tuple[str, str] | None:
+def _toolchain_requirements(project_root: Path) -> tuple[str, str, str] | None:
     package_path = project_root / "product" / "frontend" / "package.json"
+    manifest_path = project_root / "product" / "config" / "toolchain.json"
     try:
-        package = json.loads(package_path.read_text(encoding="utf-8"))
-        node_range = str(package["engines"]["node"])
-        package_manager = str(package["packageManager"])
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_range = str(manifest["node"]["development_range"])
+        manifest_pnpm = str(manifest["pnpm"]["version"])
+        manifest_uv = str(manifest["uv"]["version"])
     except (OSError, KeyError, TypeError, ValueError):
         return None
-    if package_manager.startswith("pnpm@") and node_range:
-        return node_range, package_manager.removeprefix("pnpm@")
-    return None
+    if package_path.is_file():
+        try:
+            package = json.loads(package_path.read_text(encoding="utf-8"))
+            if (
+                str(package["engines"]["node"]) != manifest_range
+                or str(package["packageManager"]) != f"pnpm@{manifest_pnpm}"
+            ):
+                return None
+        except (OSError, KeyError, TypeError, ValueError):
+            return None
+    return manifest_range, manifest_pnpm, manifest_uv
 
 
 def _local_tool_check(
-    *, name: str, executable_name: str, expected: str | tuple[str, str] | None,
+    *, name: str, executable_name: str, required: bool,
     project_root: Path,
 ) -> DoctorCheck:
     requirements = _toolchain_requirements(project_root)
     if requirements is None:
         return DoctorCheck(
             name=name,
-            required=True,
+            required=required,
             ok=False,
-            message="前端 package.json 版本真源不可读取",
+            message="工具链清单与前端版本真源不一致",
         )
     expected_value = requirements[1] if name == "pnpm" else requirements[0]
-    executable = shutil.which(executable_name)
+    environment_key = (
+        "JIEJIAN_NODE_EXECUTABLE" if name == "node" else "JIEJIAN_PNPM_EXECUTABLE"
+    )
+    executable = os.environ.get(environment_key)
+    if not executable and required:
+        executable = shutil.which(executable_name)
     if not executable:
         return DoctorCheck(
             name=name,
-            required=True,
-            ok=False,
-            message=f"未找到 {name} 可执行文件",
+            required=required,
+            ok=not required,
+            message=(
+                f"未找到 {name} 可执行文件"
+                if required
+                else f"发布运行不需要 {name}"
+            ),
             details={"expected": expected_value},
         )
     path = Path(executable).resolve()
@@ -148,10 +169,53 @@ def _local_tool_check(
         ok = output == expected_value
     return DoctorCheck(
         name=name,
-        required=True,
+        required=required,
         ok=ok,
         message=(f"{name} 版本符合 package.json" if ok else f"{name} 版本不符合 package.json"),
         details={"version": output or None, "path": str(path), "expected": expected_value},
+    )
+
+
+def _uv_check(project_root: Path) -> DoctorCheck:
+    requirements = _toolchain_requirements(project_root)
+    expected = requirements[2] if requirements else None
+    executable = os.environ.get("JIEJIAN_UV_EXECUTABLE")
+    actual = os.environ.get("JIEJIAN_UV_VERSION")
+    path = Path(executable).resolve() if executable else None
+    ok = bool(expected and actual == expected and path and path.is_file())
+    return DoctorCheck(
+        name="uv",
+        required=True,
+        ok=ok,
+        message="uv 版本与工具链清单一致" if ok else "uv 运行时未被启动器完整确认",
+        details={
+            "version": actual,
+            "path": str(path) if path else None,
+            "expected": expected,
+        },
+    )
+
+
+def _frontend_check(runtime_mode: str) -> DoctorCheck:
+    if runtime_mode == "release":
+        root = os.environ.get("JIEJIAN_FRONTEND_DIST")
+        index = Path(root).resolve() / "index.html" if root else None
+        ok = bool(index and index.is_file())
+        return DoctorCheck(
+            name="frontend",
+            required=True,
+            ok=ok,
+            message="预构建图形界面可用" if ok else "正式发布缺少预构建图形界面",
+            details={"dist": str(index.parent) if index else None, "mode": "prebuilt"},
+        )
+    detail = os.environ.get("JIEJIAN_FRONTEND_DEPENDENCIES")
+    ok = bool(detail)
+    return DoctorCheck(
+        name="frontend",
+        required=True,
+        ok=ok,
+        message="开发前端依赖已确认" if ok else "开发前端依赖尚未同步",
+        details={"state": detail, "mode": "development"},
     )
 
 
@@ -338,6 +402,8 @@ def runtime_environment_details() -> dict[str, Any]:
     """生成 GUI 可展示的当前进程环境身份，不执行浏览器或目标请求。"""
 
     python = python_environment_report()
+    runtime_mode = str(python.get("runtime_mode") or "unknown")
+    node_required = runtime_mode == "development"
     chromium = _playwright_check()
     chromium_details = dict(chromium.details)
     chromium_details["status"] = (
@@ -349,17 +415,30 @@ def runtime_environment_details() -> dict[str, Any]:
     )
     return {
         "schema_version": "1",
+        "runtime_mode": runtime_mode,
+        "runtime_fingerprint": python.get("runtime_fingerprint"),
         "python": python,
+        "uv": {
+            "version": os.environ.get("JIEJIAN_UV_VERSION"),
+            "executable": os.environ.get("JIEJIAN_UV_EXECUTABLE"),
+            "required": True,
+        },
         "node": {
             "version": os.environ.get("JIEJIAN_NODE_VERSION"),
-            "executable": os.environ.get("JIEJIAN_NODE_EXECUTABLE") or shutil.which("node"),
+            "executable": os.environ.get("JIEJIAN_NODE_EXECUTABLE"),
+            "required": node_required,
         },
         "pnpm": {
             "version": os.environ.get("JIEJIAN_PNPM_VERSION"),
-            "executable": os.environ.get("JIEJIAN_PNPM_EXECUTABLE") or shutil.which("pnpm"),
+            "executable": os.environ.get("JIEJIAN_PNPM_EXECUTABLE"),
+            "required": node_required,
         },
         "playwright": chromium_details,
-        "frontend_dependencies": os.environ.get("JIEJIAN_FRONTEND_DEPENDENCIES", "未由启动器确认"),
+        "frontend": {
+            "mode": "development" if node_required else "prebuilt",
+            "dependencies": os.environ.get("JIEJIAN_FRONTEND_DEPENDENCIES"),
+            "dist": os.environ.get("JIEJIAN_FRONTEND_DIST"),
+        },
     }
 
 
@@ -416,11 +495,25 @@ def run_doctor(
 
     config_check, settings = _config_check(config_path, cli_overrides or {})
     frontend_root = (project_root or Path(__file__).resolve().parents[4]).resolve()
+    runtime_mode = os.environ.get("JIEJIAN_RUNTIME_MODE", "").strip().lower()
+    node_required = runtime_mode == "development"
     checks: tuple[DoctorCheck, ...] = (
         _python_check(),
         _dependency_check(),
-        _local_tool_check(name="node", executable_name="node", expected=None, project_root=frontend_root),
-        _local_tool_check(name="pnpm", executable_name="pnpm", expected=None, project_root=frontend_root),
+        _uv_check(frontend_root),
+        _local_tool_check(
+            name="node",
+            executable_name="node",
+            required=node_required,
+            project_root=frontend_root,
+        ),
+        _local_tool_check(
+            name="pnpm",
+            executable_name="pnpm",
+            required=node_required,
+            project_root=frontend_root,
+        ),
+        _frontend_check(runtime_mode),
         config_check,
         _var_check(settings),
         _sqlite_check(),

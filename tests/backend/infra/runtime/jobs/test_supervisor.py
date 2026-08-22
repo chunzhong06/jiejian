@@ -265,9 +265,10 @@ def test_local_supervisor_exit_accepts_terminal_or_closes_owned_running_state(
         parts.engine.dispose()
 
 
-def test_local_supervisor_recovers_expired_job_only_after_worker_lock_is_free(
+def test_local_supervisor_recovers_expired_job_only_after_exit_proof(
     tmp_path: Path,
     stage23_request_factory,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     parts = _runtime(tmp_path / "var")
     try:
@@ -298,6 +299,16 @@ def test_local_supervisor_recovers_expired_job_only_after_worker_lock_is_free(
         still_running = _job(parts, submitted.job.job_id)
         assert still_running is not None and still_running.state is JobState.RUNNING
         lifetime.release()
+        manager._next_recovery_scan_us = 0
+        manager._recover_expired_workers()
+        no_tree_proof = _job(parts, submitted.job.job_id)
+        assert no_tree_proof is not None and no_tree_proof.state is JobState.RUNNING
+
+        monkeypatch.setattr(
+            WorkerLifetimeLock,
+            "execution_has_exited",
+            staticmethod(lambda *_args: True),
+        )
         manager._next_recovery_scan_us = 0
         manager._recover_expired_workers()
 

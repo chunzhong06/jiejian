@@ -213,7 +213,7 @@ def test_publication_rejects_old_fencing_token(tmp_path: Path) -> None:
         with pytest.raises(JiejianError) as captured:
             publisher.publish(staged)
         assert captured.value.code == ErrorCode.ARTIFACT_FENCE.value
-        assert not (var_dir / "projects" / "publication-project" / "runs").exists()
+        assert not (var_dir / "data" / "projects" / "publication-project" / "runs").exists()
     finally:
         parts.engine.dispose()
 
@@ -268,7 +268,7 @@ def test_reconciliation_completes_promoted_run_once_after_commit_failure(
         with pytest.raises(JiejianError) as captured:
             failing_publisher.publish(staged)
         assert captured.value.code == ErrorCode.STORAGE_FAILURE.value
-        final_dir = var_dir / "projects" / "publication-project" / "runs" / parts.job.run_id
+        final_dir = var_dir / "data" / "projects" / "publication-project" / "runs" / parts.job.run_id
         assert (final_dir / "publication-manifest.json").is_file()
 
         publisher = RunPublisher(
@@ -316,6 +316,7 @@ def test_result_reader_rejects_tampered_published_report(tmp_path: Path) -> None
         assert reader.report(reader.read(parts.job.run_id)) == {}
         report = (
             var_dir
+            / "data"
             / "projects"
             / "publication-project"
             / "runs"
@@ -425,6 +426,7 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
         assert reader.evidence_detail(view, evidence.evidence_id)["evidence_id"] == evidence.evidence_id
         published_evidence_path = (
             var_dir
+            / "data"
             / "projects"
             / parts.job.project_id
             / "runs"

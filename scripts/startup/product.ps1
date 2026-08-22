@@ -13,7 +13,7 @@ function Get-DatabaseRevision([string]$DatabasePath) {
 }
 
 function Prepare-Migration {
-    $database = Join-Path $script:VarDir "jiejian.db"
+    $database = Join-Path $script:VarDir "data\jiejian.db"
     $migrationFiles = @((Join-Path $script:ProjectRoot "product\backend\alembic.ini"), (Join-Path $script:ProjectRoot "product\backend\migrations"))
     $fingerprint = Get-StageFingerprint $migrationFiles @{ database_path = [IO.Path]::GetFullPath($database) }
     $entry = Get-PhaseState "migration"
@@ -123,8 +123,13 @@ function Write-RuntimeSummary {
     Write-Host ("  Python    {0}  {1}" -f $script:PythonVersion, $script:PythonExecutable) -ForegroundColor Gray
     Write-Host ("  环境来源  {0}  {1}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath) -ForegroundColor Gray
     Write-Host ("  用户级包  {0}" -f ($(if ($script:PythonEnvironmentReport.user_site_on_sys_path) { "检测到" } else { "未使用" }))) -ForegroundColor Gray
-    Write-Host ("  Node.js   {0}  {1}" -f $script:NodeVersion, $script:NodeExecutable) -ForegroundColor Gray
-    Write-Host ("  pnpm      {0}  {1}" -f $script:PnpmVersion, $script:PnpmExecutable) -ForegroundColor Gray
+    if ($env:JIEJIAN_RUNTIME_MODE -eq "release") {
+        Write-Host "  Node.js   正式运行不需要" -ForegroundColor DarkGray
+        Write-Host "  pnpm      正式运行不需要" -ForegroundColor DarkGray
+    } else {
+        Write-Host ("  Node.js   {0}  {1}" -f $script:NodeVersion, $script:NodeExecutable) -ForegroundColor Gray
+        Write-Host ("  pnpm      {0}  {1}" -f $script:PnpmVersion, $script:PnpmExecutable) -ForegroundColor Gray
+    }
     Write-Host ("  Chromium  {0}" -f $script:ChromiumExecutable) -ForegroundColor Gray
 }
 
@@ -154,7 +159,8 @@ function Invoke-CliShell([bool]$StartGuide = $false) {
         Fail-Start 50 "cli" "无法定位已解析的 Python 可执行文件" "重新执行准备阶段后重试"
     }
     $pythonLiteral = & $quote $script:PythonExecutable
-    $projectLiteral = & $quote $script:ProjectRoot
+    $shellRoot = if ($env:JIEJIAN_RUNTIME_MODE -eq "release") { $script:ReleaseLaunchRoot } else { $script:ProjectRoot }
+    $projectLiteral = & $quote $shellRoot
     $varLiteral = & $quote $script:VarDir
     $guideLiteral = if ($StartGuide) { '$true' } else { '$false' }
     $childScript = @"
@@ -193,6 +199,8 @@ function Write-Stage([string]$Stage, [string]$Message) {
 
 function Get-StageFailureCode([string]$Stage) {
     switch ($Stage) {
+        "prepare-lock" { return 22 }
+        "release-assets" { return 40 }
         "conda" { return 20 }
         "uv" { return 21 }
         "lock" { return 22 }

@@ -25,6 +25,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.core.identifiers import JOB_ID_PATTERN
 from product.protocols import RUNNER_INPUT_MAX_BYTES
 from product.protocols.execution_request import (
@@ -39,7 +40,7 @@ class ExecutionRequestStore:
     """在受控 var 子树按 job_id 原子保存请求，并用 request_hash 绑定数据库记录。"""
 
     def __init__(self, var_dir: Path) -> None:
-        self._root = var_dir.resolve() / "jobs"
+        self._root = RuntimePaths(var_dir).jobs
 
     def write(self, job_id: str, request: PersistedExecutionRequest, *, known_secrets: Sequence[str] = ()) -> tuple[str, bool]:
         """创建不可覆盖快照；相同内容幂等返回，不同内容立即冲突。"""

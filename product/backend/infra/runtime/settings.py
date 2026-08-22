@@ -25,6 +25,7 @@ from typing import Any, Mapping
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.runtime.paths import RuntimePaths
 
 _ENVIRONMENT_KEYS = {
     "JIEJIAN_SCHEMA_VERSION": "schema_version",
@@ -41,6 +42,12 @@ class Settings(BaseModel):
     var_dir: Path = Path("var")
     log_level: str = "INFO"
     trace_id: str | None = None
+
+    @property
+    def paths(self) -> RuntimePaths:
+        """返回当前配置对应的唯一运行目录分区。"""
+
+        return RuntimePaths(self.var_dir)
 
     @field_validator("schema_version")
     @classmethod

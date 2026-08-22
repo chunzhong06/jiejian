@@ -21,7 +21,6 @@ import os
 import re
 import secrets
 import subprocess
-import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -31,7 +30,8 @@ from urllib.parse import urlsplit
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.verification.permissions import PermissionContract
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.process_environment import confirmed_python_executable, minimal_process_environment, run_python_module
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.workflows.onboarding.discovery import canonical_folder, discover_folder
 from product.backend.workflows.onboarding.models import DemoVariant, DiscoveryLimits, DiscoveryResult, FolderSelectionResult, OnboardingConfirmations, OnboardingCredentialStatus, OnboardingQuickCheckResult, OnboardingSession, OnboardingSessionUpdate, OnboardingSessionView
 from product.backend.workflows.onboarding.secrets import RuntimeSecretVault
@@ -64,6 +64,7 @@ class SystemFolderSelector:
         environment: Mapping[str, str] | None = None,
         timeout_seconds: float = 120.0,
         python_executable: str | None = None,
+        var_dir: Path | None = None,
         platform_name: str | None = None,
         runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
     ) -> None:
@@ -71,9 +72,11 @@ class SystemFolderSelector:
             raise ValueError("folder selector timeout must be positive")
         self._environment = dict(environment if environment is not None else os.environ)
         self._timeout_seconds = timeout_seconds
-        self._python_executable = python_executable or sys.executable
+        self._python_executable = python_executable
+        selected_var = var_dir or Path(self._environment.get("JIEJIAN_VAR_DIR", "var"))
+        self._runtime_paths = RuntimePaths(selected_var.resolve()).ensure_layout()
         self._platform_name = platform_name or os.name
-        self._runner = runner or subprocess.run
+        self._runner = runner
         self._selection_lock = threading.Lock()
 
     def select_folder(self) -> FolderSelectionResult:
@@ -97,24 +100,45 @@ class SystemFolderSelector:
                     value = source_by_casefold.get(name.casefold())
                     if value:
                         child_environment[name] = value
-                completed = self._runner(
-                    [
-                        self._python_executable,
-                        "-B",
-                        "-m",
+                if self._runner is not None:
+                    completed = self._runner(
+                        [
+                            self._python_executable
+                            or confirmed_python_executable(child_environment),
+                            "-B",
+                            "-m",
+                            "product.backend.workflows.onboarding.folder_picker_process",
+                        ],
+                        cwd=str(Path(__file__).resolve().parents[4]),
+                        env=child_environment,
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=self._timeout_seconds,
+                        check=False,
+                        shell=False,
+                    )
+                else:
+                    source_environment = dict(self._environment)
+                    source_environment.setdefault(
+                        "JIEJIAN_VAR_DIR", str(self._runtime_paths.root)
+                    )
+                    desktop_environment = {
+                        name: child_environment[name]
+                        for name in self._DESKTOP_ENVIRONMENT_KEYS
+                        if name in child_environment
+                    }
+                    completed = run_python_module(
+                        source_environment,
                         "product.backend.workflows.onboarding.folder_picker_process",
-                    ],
-                    cwd=str(Path(__file__).resolve().parents[4]),
-                    env=child_environment,
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=self._timeout_seconds,
-                    check=False,
-                    shell=False,
-                )
+                        cwd=self._runtime_paths.temp,
+                        timeout_seconds=self._timeout_seconds,
+                        extra_environment=desktop_environment,
+                        allowed_extra_names=tuple(desktop_environment),
+                        python_executable=self._python_executable,
+                    )
             except subprocess.TimeoutExpired:
                 return FolderSelectionResult(
                     status="unavailable",

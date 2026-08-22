@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import typer
 
+from product.backend.core.errors import JiejianError
+from product.backend.infra.runtime.environment_identity import require_python_environment
 from product.backend.cli.bootstrap import CliOptions
 from product.backend.cli.presentation import configure_presentation
 from product.backend.cli.commands.contracts import contract_assessment_command, contract_derive_command, contract_diff_command, contract_draft_command, contract_history_command, contract_requirement_add_command, contract_revise_command, contract_transition_command, contract_validate_command, contract_workspace_command, contract_drift_command
@@ -15,7 +18,7 @@ from product.backend.cli.commands.recordings import recording_finalize_command, 
 from product.backend.cli.commands.results import ci_command, report_command
 from product.backend.cli.commands.gating import baseline_accept_command, gate_evaluate_command, gate_result_command
 from product.backend.cli.commands.runs import run_command
-from product.backend.cli.commands.system import doctor_command, serve_command
+from product.backend.cli.commands.system import cache_clean_command, cache_prune_command, cache_status_command, doctor_command, runtime_repair_command, serve_command
 from product.backend.cli.commands.guide import guide_command
 
 
@@ -32,11 +35,15 @@ contract_app = typer.Typer(help="管理高级权限契约", invoke_without_comma
 recording_app = typer.Typer(help="录制并确认业务流程", invoke_without_command=True)
 baseline_app = typer.Typer(help="管理回归基线", invoke_without_command=True)
 gate_app = typer.Typer(help="评估交付门禁", invoke_without_command=True)
+cache_app = typer.Typer(help="查看和清理可重建缓存", invoke_without_command=True)
+runtime_app = typer.Typer(help="检查和修复运行时", invoke_without_command=True)
 app.add_typer(project_app, name="project", rich_help_panel="高级")
 app.add_typer(contract_app, name="contract", rich_help_panel="高级")
 app.add_typer(recording_app, name="recording", rich_help_panel="常用操作")
 app.add_typer(baseline_app, name="baseline", rich_help_panel="高级")
 app.add_typer(gate_app, name="gate", rich_help_panel="高级")
+app.add_typer(cache_app, name="cache", rich_help_panel="运行环境")
+app.add_typer(runtime_app, name="runtime", rich_help_panel="运行环境")
 
 
 def root(
@@ -87,12 +94,18 @@ contract_app.callback()(_group_help)
 recording_app.callback()(_group_help)
 baseline_app.callback()(_group_help)
 gate_app.callback()(_group_help)
+cache_app.callback()(_group_help)
+runtime_app.callback()(_group_help)
 
 
 app.command("serve", help="打开图形界面", rich_help_panel="常用操作")(serve_command)
 app.callback()(root)
 app.command("guide", help="打开新手引导", rich_help_panel="常用操作")(guide_command)
 app.command("doctor", help="检查运行环境", rich_help_panel="常用操作")(doctor_command)
+cache_app.command("status", help="查看缓存状态")(cache_status_command)
+cache_app.command("prune", help="按预算清理缓存")(cache_prune_command)
+cache_app.command("clean", help="清空可重建缓存")(cache_clean_command)
+runtime_app.command("repair", help="修复损坏运行时")(runtime_repair_command)
 
 project_app.command("validate")(project_validate_command)
 
@@ -123,4 +136,17 @@ gate_app.command("result")(gate_result_command)
 
 
 def main() -> None:
+    if "doctor" not in sys.argv[1:]:
+        try:
+            require_python_environment()
+        except JiejianError as exc:
+            typer.echo("界鉴运行环境不可信，已拒绝启动。", err=True)
+            details = exc.to_dict().get("details", {})
+            for issue in details.get("issues", ()):
+                typer.echo(f"- {issue}", err=True)
+            typer.echo(
+                "仓库开发请使用 .\\scripts\\dev.ps1 start；正式运行请使用 .\\start.cmd。",
+                err=True,
+            )
+            raise SystemExit(40) from None
     app(prog_name="jiejian")

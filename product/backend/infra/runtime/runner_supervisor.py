@@ -21,7 +21,6 @@ import json
 import logging
 import os
 import subprocess
-import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -35,7 +34,9 @@ from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailureCode, FatalFailure, RetryableFailureCode, RetryableFailure
 from product.backend.infra.runtime.process_control import DEFAULT_LEASE_DURATION_US, DEFAULT_POLL_INTERVAL_SECONDS, DEFAULT_TERMINATION_GRACE_SECONDS, AttemptProcessControl
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.process_environment import spawn_python_module
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.artifacts.run_packages import AttemptPaths, StagedAttempt, TrustedResultReceipt, attempt_paths_for, validate_runner_staging
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore, PersistedExecutionRequest, required_secret_names
@@ -118,28 +119,24 @@ class RunnerSupervisor:
         paths = attempt_paths_for(self.var_dir, job)
         runner_input = self._runner_input(job, request)
         self._write_runner_input(paths, runner_input, known_secrets)
-        child_environment = minimal_process_environment(
-            self._environ,
-            secret_names=secret_names,
-        )
+        source_environment = dict(self._environ)
+        source_environment.setdefault("JIEJIAN_VAR_DIR", str(self.var_dir))
+        paths_runtime = RuntimePaths(self.var_dir).ensure_layout()
         try:
-            process = self._popen(
-                [
-                    sys.executable,
-                    "-B",
-                    "-m",
-                    "product.backend.infra.runtime.runner",
-                    "--input",
-                    str(paths.input_path),
-                    "--staging",
-                    str(paths.staging_dir),
-                ],
-                cwd=str(Path(__file__).resolve().parents[4]),
-                env=child_environment,
+            process = spawn_python_module(
+                source_environment,
+                "product.backend.infra.runtime.runner",
+                "--input",
+                str(paths.input_path),
+                "--staging",
+                str(paths.staging_dir),
+                secret_names=secret_names,
+                cwd=paths_runtime.temp,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 close_fds=True,
+                popen=self._popen,
             )
         except OSError:
             logger.exception(
@@ -153,12 +150,25 @@ class RunnerSupervisor:
             ) from None
 
         # --- 监督 lease、取消和 Runner 退出 ---
-        timed_out, forced_after_cancel = self._process_control.monitor(
-            process,
-            job,
-            max_duration_us=request.budget.max_duration_us,
-            cancel_path=paths.cancel_path,
-        )
+        try:
+            timed_out, forced_after_cancel = self._process_control.monitor(
+                process,
+                job,
+                max_duration_us=request.budget.max_duration_us,
+                cancel_path=paths.cancel_path,
+            )
+        except Exception:
+            try:
+                if process.poll() is None:
+                    terminate_process_tree(process, self._process_control.termination_grace_seconds)
+                else:
+                    release_process_tree(process)
+            except Exception:
+                raise JiejianError(
+                    ErrorCode.PROCESS_TREE_FAILED,
+                    "Runner 异常后进程树未能完整退出",
+                ) from None
+            raise
         if timed_out or forced_after_cancel:
             logger.warning(
                 "runner process stopped by control boundary",
@@ -179,6 +189,14 @@ class RunnerSupervisor:
             )
 
         return_code = process.returncode
+        try:
+            release_process_tree(process)
+        except Exception:
+            self._record_fatal(job, FatalFailureCode.CLEANUP_FAILED)
+            raise JiejianError(
+                ErrorCode.PROCESS_TREE_FAILED,
+                "Runner 退出后仍存在未回收后代",
+            ) from None
         if return_code != 0:
             logger.error(
                 "runner exited with non-zero status",

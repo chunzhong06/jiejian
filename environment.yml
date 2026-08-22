@@ -3,5 +3,3 @@ channels:
   - defaults
 dependencies:
   - python=3.13
-  - pip
-# scripts/start.ps1 优先使用本环境，并从 pyproject.toml 安装第三方依赖和 Chromium。

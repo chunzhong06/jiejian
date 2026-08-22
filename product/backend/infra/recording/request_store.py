@@ -24,13 +24,14 @@ from uuid import uuid4
 from product.backend.core.identifiers import JOB_ID_PATTERN
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RECORDING_REQUEST_MAX_BYTES, RecordingRunnerRequest, canonical_recording_json_bytes, parse_recording_request
+from product.backend.infra.runtime.paths import RuntimePaths
 
 
 class RecordingRequestStore:
     """用 job_id 持久化不含长期秘密的 Recording 请求。"""
 
     def __init__(self, var_dir: Path) -> None:
-        self._root = var_dir.resolve() / "jobs"
+        self._root = RuntimePaths(var_dir).jobs
 
     def write(
         self,

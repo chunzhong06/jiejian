@@ -50,6 +50,33 @@ def build_system_router(
             }
         )
 
+    @router.get("/api/system/cache", response_model=ApiResponse)
+    def cache_status() -> JSONResponse:
+        """只读取同一缓存服务的状态，不遍历或删除 data。"""
+
+        return data_response(context.cache.status())
+
+    @router.post("/api/system/cache/{operation}", response_model=ApiResponse)
+    def cache_operation(
+        operation: Literal["prune", "clean", "runtime-repair"],
+        body: CacheOperationRequest,
+    ) -> JSONResponse:
+        """统一执行 GUI/CLI 同语义的预览、确认和维护操作。"""
+
+        if operation == "prune":
+            result = context.cache.prune(dry_run=body.dry_run)
+        elif operation == "clean":
+            result = context.cache.clean(
+                confirmed=body.confirmed,
+                dry_run=body.dry_run,
+            )
+        else:
+            result = context.cache.repair_runtime(
+                confirmed=body.confirmed,
+                dry_run=body.dry_run,
+            )
+        return data_response(result)
+
     @router.post("/api/system/shutdown", response_model=ApiResponse, status_code=202)
     def shutdown(
         x_jiejian_control: str | None = Header(default=None, alias="X-Jiejian-Control"),
@@ -86,3 +113,8 @@ class HealthResponse(ApiModel):
 class ReadyResponse(ApiModel):
     status: Literal["ready"]
     worker: Literal["running", "stopped"]
+
+
+class CacheOperationRequest(ApiModel):
+    confirmed: bool = False
+    dry_run: bool = True

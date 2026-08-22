@@ -12,7 +12,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -20,17 +19,12 @@ from uuid import uuid4
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.jobs.handlers import JobHandler
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.process_environment import spawn_python_module
+from product.backend.infra.runtime.paths import RuntimePaths
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
 from product.protocols.artifacts import ArtifactCheckRequest, ArtifactResultFile, ArtifactResultManifest, ArtifactScanResult
 
 _JOB_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
-
-
-def _package_import_root() -> Path:
-    for parent in Path(__file__).resolve().parents:
-        if (parent / "product" / "backend").is_dir():
-            return parent
-    raise RuntimeError("无法定位产物扫描器的 Python 导入根")
 
 
 class ArtifactCheckJobHandler(JobHandler[ArtifactScanResult]):
@@ -40,7 +34,7 @@ class ArtifactCheckJobHandler(JobHandler[ArtifactScanResult]):
         self,
         var_dir: Path,
         *,
-        python_executable: str = sys.executable,
+        python_executable: str | None = None,
         popen: Any = subprocess.Popen,
         monotonic: Any = time.monotonic,
         sleep: Any = time.sleep,
@@ -56,20 +50,28 @@ class ArtifactCheckJobHandler(JobHandler[ArtifactScanResult]):
 
         if not re.fullmatch(_JOB_ID, job_id):
             raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查任务标识无效")
-        job_dir = (self.var_dir / "artifact-checks" / "jobs" / job_id).resolve()
+        job_dir = (RuntimePaths(self.var_dir).artifact_checks / "jobs" / job_id).resolve()
         request_path = job_dir / "request.json"
         request = self._load_request(job_dir, request_path)
         output_path = job_dir / f".artifact-result.tmp-{uuid4().hex}.json"
-        environment = minimal_process_environment(os.environ)
+        source_environment = dict(os.environ)
+        source_environment.setdefault("JIEJIAN_VAR_DIR", str(self.var_dir))
+        runtime_paths = RuntimePaths(self.var_dir).ensure_layout()
         try:
-            process = self._popen(
-                [self._python, "-B", "-m", "product.backend.infra.artifacts.scanner_process", "--request", str(request_path), "--output", str(output_path)],
-                cwd=str(_package_import_root()),
-                env=environment,
+            process = spawn_python_module(
+                source_environment,
+                "product.backend.infra.artifacts.scanner_process",
+                "--request",
+                str(request_path),
+                "--output",
+                str(output_path),
+                cwd=runtime_paths.temp,
+                python_executable=self._python,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 close_fds=True,
+                popen=self._popen,
             )
         except OSError:
             raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查进程启动失败") from None
@@ -78,10 +80,7 @@ class ArtifactCheckJobHandler(JobHandler[ArtifactScanResult]):
         while process.poll() is None and self._monotonic() < deadline:
             self._sleep(0.01)
         if process.poll() is None:
-            try:
-                process.kill()
-            except OSError:
-                pass
+            terminate_process_tree(process, 2.0)
             raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查超过时间预算")
         try:
             if process.returncode != 0:
@@ -99,10 +98,11 @@ class ArtifactCheckJobHandler(JobHandler[ArtifactScanResult]):
         except (OSError, ValueError):
             raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查结果无效") from None
         finally:
+            release_process_tree(process)
             output_path.unlink(missing_ok=True)
 
     def _load_request(self, job_dir: Path, request_path: Path) -> ArtifactCheckRequest:
-        if not job_dir.is_relative_to(self.var_dir / "artifact-checks" / "jobs"):
+        if not job_dir.is_relative_to(RuntimePaths(self.var_dir).artifact_checks / "jobs"):
             raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查任务路径越界")
         try:
             request = ArtifactCheckRequest.model_validate_json(request_path.read_bytes(), strict=True)
@@ -110,7 +110,8 @@ class ArtifactCheckJobHandler(JobHandler[ArtifactScanResult]):
             raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查请求无效") from None
         root = Path(request.artifact_root).resolve()
         manifest = Path(request.manifest_path).resolve()
-        allowed_roots = (self.var_dir / "projects", self.var_dir / "jobs")
+        paths = RuntimePaths(self.var_dir)
+        allowed_roots = (paths.projects, paths.jobs)
         if not any(root.is_relative_to(allowed) and manifest.is_relative_to(allowed) for allowed in allowed_roots):
             raise JiejianError(ErrorCode.ARTIFACT_SCAN_FAILED, "产物检查根目录未授权")
         if not manifest.is_relative_to(root.parent) or manifest.parent != root.parent:

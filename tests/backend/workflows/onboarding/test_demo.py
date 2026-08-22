@@ -115,7 +115,7 @@ class FakeProcess:
         self.terminated = True
 
     def wait(self, timeout: float):
-        assert timeout == 2
+        assert 0 < timeout <= 2
         return 0
 
     def kill(self):
@@ -154,11 +154,17 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
 
     assert len(calls) == 1
     command, kwargs = calls[0]
-    assert command == [
+    assert command[:4] == [
         sys.executable,
         "-B",
         "-m",
+        "product.backend.infra.runtime.process_bootstrap",
+    ]
+    assert command[4] == "--gate"
+    assert command[6:] == [
+        "--module",
         "product.backend.workflows.onboarding.demo_target",
+        "--",
         "--variant",
         "fixed",
         "--port",
@@ -166,7 +172,19 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
     ]
     assert kwargs["shell"] is False
     assert kwargs["stdin"] is not None
-    assert set(kwargs["env"]) == {"PATH", "PYTHONDONTWRITEBYTECODE", "PYTHONNOUSERSITE", "PYTHONUTF8", "JIEJIAN_DEMO_OWNER_TOKEN", "JIEJIAN_DEMO_ATTACKER_TOKEN", "JIEJIAN_DEMO_PEER_TOKEN"}
+    assert set(kwargs["env"]) == {
+        "PATH",
+        "TEMP",
+        "TMP",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONNOUSERSITE",
+        "PYTHONUTF8",
+        "JIEJIAN_PYTHON_EXECUTABLE",
+        "JIEJIAN_VAR_DIR",
+        "JIEJIAN_DEMO_OWNER_TOKEN",
+        "JIEJIAN_DEMO_ATTACKER_TOKEN",
+        "JIEJIAN_DEMO_PEER_TOKEN",
+    }
     assert kwargs["env"]["JIEJIAN_DEMO_ATTACKER_TOKEN"] != kwargs["env"]["JIEJIAN_DEMO_PEER_TOKEN"]
     assert onboarding.demo_credentials == secret_values
     assert "JIEJIAN_OTHER_SECRET" not in kwargs["env"]
@@ -176,7 +194,7 @@ def test_demo_fake_process_is_fixed_concurrent_and_secret_minimal(tmp_path: Path
     assert (demo_roots[0] / "source" / "package.json").is_file()
     assert manager.stop().status == "stopped"
     assert not demo_roots[0].exists()
-    assert (tmp_path / "var" / "logs" / "onboarding-demo.log").is_file()
+    assert (tmp_path / "var" / "logs" / "app" / "onboarding-demo.log").is_file()
     assert vault.cleared == [onboarding.session.session_id]
     assert processes[0].stdout.closed
 
@@ -399,7 +417,7 @@ def test_demo_preclaim_worker_process_failure_is_logged_and_not_relaunched(
             "/api/onboarding/demo/start",
             json={"schema_version": "1", "variant": "fixed"},
         ).json()["data"]
-        broken = var_dir / "projects" / "broken" / "runs" / "broken"
+        broken = var_dir / "data" / "projects" / "broken" / "runs" / "broken"
         broken.mkdir(parents=True)
         (broken / PUBLICATION_MANIFEST_NAME).write_text("{}", encoding="utf-8")
         (var_dir / "quarantine").write_text("block quarantine", encoding="utf-8")
@@ -440,7 +458,7 @@ def test_demo_preclaim_worker_process_failure_is_logged_and_not_relaunched(
             worker_log = (
                 var_dir / "logs" / "workers" / f"{started['job_id']}.log"
             ).read_text(encoding="utf-8")
-            main_log = (var_dir / "logs" / "jiejian.log").read_text(encoding="utf-8")
+            main_log = (var_dir / "logs" / "app" / "jiejian.log").read_text(encoding="utf-8")
             assert worker_log.count("WORKER_PROCESS_ERROR") == 1
             assert started["job_id"] in worker_log
             for sentinel in (

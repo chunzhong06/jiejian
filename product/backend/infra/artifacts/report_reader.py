@@ -16,6 +16,7 @@ from pathlib import Path
 
 from product.protocols.artifacts import ArtifactCheckRequest, ArtifactResultManifest, ArtifactScanResult
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.runtime.paths import RuntimePaths
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
@@ -37,7 +38,7 @@ class ArtifactResultReader:
     def for_run(self, run_id: str, project_id: str) -> tuple[PublishedArtifactResult, ...]:
         """枚举并验证绑定到指定 Run/Project 的已发布产物检查结果。"""
 
-        jobs_root = self._var_dir / "artifact-checks" / "jobs"
+        jobs_root = RuntimePaths(self._var_dir).artifact_checks / "jobs"
         self._check_parent_chain(jobs_root)
         if not os.path.lexists(jobs_root):
             return ()

@@ -108,7 +108,7 @@ def _stored_gate(tmp_path: Path):
 
 
 def _write_artifact_result(var_dir: Path) -> None:
-    job_dir = var_dir / "artifact-checks" / "jobs" / "artifact-job-1"
+    job_dir = var_dir / "data" / "artifact-checks" / "jobs" / "artifact-job-1"
     published = job_dir / "published"
     published.mkdir(parents=True)
     request = {
@@ -116,8 +116,8 @@ def _write_artifact_result(var_dir: Path) -> None:
         "project_id": PROJECT_ID,
         "artifact_id": ARTIFACT_ID,
         "run_id": RUN_ID,
-        "artifact_root": str(var_dir / "projects" / PROJECT_ID / "runs" / RUN_ID / "artifacts"),
-        "manifest_path": str(var_dir / "projects" / PROJECT_ID / "runs" / RUN_ID / "publication-manifest.json"),
+        "artifact_root": str(var_dir / "data" / "projects" / PROJECT_ID / "runs" / RUN_ID / "artifacts"),
+        "manifest_path": str(var_dir / "data" / "projects" / PROJECT_ID / "runs" / RUN_ID / "publication-manifest.json"),
         "ruleset_version": "artifact-local-2026.08.18",
         "budget": {"schema_version": "1", "max_parallel_files": 1, "max_files": 4096, "max_file_bytes": 16777216, "max_total_bytes": 536870912, "max_results": 4096, "max_duration_us": 30000000, "max_compressed_layers": 0},
     }
@@ -229,7 +229,7 @@ def test_report_json_is_deterministic_and_four_formats_share_ids_gate_and_eviden
         assert "NO_ARTIFACT_RESULT" not in junit
         sarif_payload = json.loads(service.read_format(RUN_ID, report_id, "sarif"))
         assert sarif_payload["runs"][0]["invocations"][0]["executionSuccessful"] is True
-        assert (var_dir / "reports" / "runs" / RUN_ID / report_id / "report.json").is_file()
+        assert (var_dir / "data" / "reports" / "runs" / RUN_ID / report_id / "report.json").is_file()
     finally:
         engine.dispose()
 
@@ -238,7 +238,7 @@ def test_tampered_projection_is_rejected_without_overwriting_report(tmp_path: Pa
     service, engine, var_dir = _service(tmp_path)
     try:
         report = service.generate(RUN_ID, GATE_ID)
-        report_dir = var_dir / "reports" / "runs" / RUN_ID / report["report_id"]
+        report_dir = var_dir / "data" / "reports" / "runs" / RUN_ID / report["report_id"]
         original = (report_dir / "report.html").read_bytes()
         (report_dir / "report.html").write_bytes(original + b"tampered")
         with pytest.raises(JiejianError) as captured:
@@ -253,7 +253,7 @@ def test_tampered_projection_is_rejected_without_overwriting_report(tmp_path: Pa
 def test_artifact_manifest_file_hash_mismatch_is_rejected(tmp_path: Path) -> None:
     service, engine, var_dir = _service(tmp_path)
     try:
-        manifest_path = var_dir / "artifact-checks" / "jobs" / "artifact-job-1" / "published" / "artifact-check-manifest.json"
+        manifest_path = var_dir / "data" / "artifact-checks" / "jobs" / "artifact-job-1" / "published" / "artifact-check-manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["files"][0]["sha256"] = "0" * 64
         manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")), encoding="utf-8")
@@ -267,7 +267,7 @@ def test_artifact_manifest_file_hash_mismatch_is_rejected(tmp_path: Path) -> Non
 def test_inconclusive_and_missing_artifact_facts_are_visible_in_projections(tmp_path: Path) -> None:
     service, engine, var_dir = _service(tmp_path)
     try:
-        shutil.rmtree(var_dir / "artifact-checks")
+        shutil.rmtree(var_dir / "data" / "artifact-checks")
         report = service.generate(RUN_ID, GATE_ID)
         assert report["limitations"] == ["NO_ARTIFACT_RESULT"]
         sarif = json.loads(service.read_format(RUN_ID, report["report_id"], "sarif"))

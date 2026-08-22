@@ -220,7 +220,13 @@ def test_queue_parent_cancel_timeout_crash_and_cleanup(tmp_path: Path, monkeypat
         def __init__(self) -> None:
             self.killed = False
         def wait(self, timeout: float | None = None) -> int:
+            if self.killed:
+                return -9
             raise subprocess.TimeoutExpired("queue", timeout)
+        def poll(self) -> int | None:
+            return -9 if self.killed else None
+        def terminate(self) -> None:
+            return None
         def kill(self) -> None:
             self.killed = True
 
@@ -232,7 +238,7 @@ def test_queue_parent_cancel_timeout_crash_and_cleanup(tmp_path: Path, monkeypat
     assert result.envelope is not None and result.envelope.completeness is ObservationCompleteness.TIMED_OUT
     assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
     assert process.killed
-    assert not list((tmp_path / "timeout").glob("*"))
+    assert not list((tmp_path / "timeout").rglob("*observer*"))
 
     monkeypatch.setattr(queue_module.subprocess, "Popen", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("missing interpreter")))
     crash = queue_module.run_azure_queue_observer(spec, CORRELATION, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "crash", parent_environ={"QUEUE_SAS": SAS}, python_executable="C:\\missing-python.exe")
@@ -244,6 +250,10 @@ def test_queue_parent_selects_only_referenced_sas_and_keeps_command_secret_free(
 
     class Process:
         returncode = 7
+
+        def poll(self) -> int:
+            return self.returncode
+
         def wait(self, timeout: float | None = None) -> int:
             return 0
 
@@ -280,6 +290,8 @@ def _assert_parent_rejects_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         returncode = 0
         def __init__(self, output: Path) -> None:
             self.output = output
+        def poll(self) -> int:
+            return self.returncode
         def wait(self, timeout: float | None = None) -> int:
             self.output.write_bytes(payload)
             return 0
@@ -298,7 +310,7 @@ def _assert_parent_rejects_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     )
     assert result.envelope is None
     assert result.outcome.status is ObserverOutcomeStatus.EXECUTION_ERROR
-    assert not list(attempt.glob("*"))
+    assert not list(attempt.rglob("*observer*"))
 
 
 def test_queue_output_binding_rejects_wrong_target(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -13,7 +13,7 @@ import typer
 
 from product.backend.core.recording import RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command
+from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command, required_identity_secret_refs
 from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.cli.bootstrap import application_scope
 from product.backend.cli.presentation import emit_json, fail, human_wait
@@ -46,14 +46,15 @@ def recording_start_command(
 
     try:
         profile = parse_execution_profile(profile_path.resolve().read_bytes())
-        selected = identity or [item.id for item in profile.identities]
-        known = {item.id for item in profile.identities}
+        selected = identity or [item.identity_id for item in profile.identities]
+        known = {item.identity_id for item in profile.identities}
         if not selected or len(set(selected)) != len(selected) or any(
             item not in known for item in selected
         ):
             raise JiejianError(ErrorCode.INPUT_INVALID, "录制身份选择无效")
         now_us = time.time_ns() // 1_000
         duration_us = duration_seconds * 1_000_000
+        identities_by_id = {item.identity_id: item for item in profile.identities}
         request = RecordingRunnerRequest(
             schema_version="1",
             recording_id=f"rec_{uuid4().hex}",
@@ -65,6 +66,7 @@ def recording_start_command(
                     schema_version="1",
                     identity_id=item,
                     session_ref=f"session_{uuid4().hex}",
+                    secret_refs=required_identity_secret_refs(identities_by_id[item]),
                     expires_at_us=now_us + duration_us,
                 )
                 for item in selected

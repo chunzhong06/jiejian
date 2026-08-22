@@ -21,7 +21,7 @@ import json
 import os
 import re
 import subprocess
-import sys
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -31,7 +31,8 @@ from urllib.parse import quote, unquote
 
 import httpx
 
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.core.errors import JiejianError
+from product.backend.infra.runtime.process_environment import spawn_python_module
 from product.protocols.observer import AzureBlobObjectLocator, CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, OBSERVER_JSON_MAX_BYTES, ObserverInvocation, ObserverOutcomeStatus, ObserverOutcome, ObserverSpec, ObserverType, ProvenanceType, build_normalized_state, canonical_sha256, evaluate_observer_outcome, parse_observer_json
 
 
@@ -603,20 +604,6 @@ def child_main(input_path: str, output_path: str) -> int:
         return 3
 
 
-def _reap_after_stop(process: Any) -> None:
-    try:
-        process.wait(timeout=_PROCESS_REAP_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        try:
-            process.kill()
-        except OSError:
-            pass
-        try:
-            process.wait(timeout=_PROCESS_REAP_TIMEOUT_SECONDS)
-        except subprocess.TimeoutExpired:
-            pass
-
-
 def _validate_output_binding(invocation: ObserverInvocation, envelope: ObservationEnvelope) -> None:
     if envelope.observer_id != invocation.spec.observer_id or envelope.observer_type is not ObserverType.AZURE_BLOB_OBJECT:
         raise ValueError("azure blob output binding mismatch")
@@ -653,24 +640,32 @@ def run_azure_blob_observer(
     deadline_ns = time.monotonic_ns() + spec.budget.timeout_us * 1_000
     try:
         source_name = _secret_name(spec)
-        environment = minimal_process_environment(parent_environ if parent_environ is not None else os.environ, secret_names=(source_name,))
-        environment["JIEJIAN_ATTEMPT_DIR"] = str(attempt_root)
+        environment = dict(parent_environ if parent_environ is not None else os.environ)
+        environment.setdefault("JIEJIAN_VAR_DIR", str(attempt_root))
         _write_atomic(input_path, invocation.model_dump_json().encode("utf-8"))
         remaining = (deadline_ns - time.monotonic_ns()) / 1_000_000_000
         if remaining <= 0:
             envelope = _failure_envelope(invocation, ObservationCompleteness.TIMED_OUT, AZURE_BLOB_OBSERVATION_TIMEOUT, started_at_us, _now_us())
             return BlobObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
-        command = [python_executable or sys.executable, "-B", "-m", "product.backend.infra.observers.azure_blob", "--input", str(input_path), "--output", str(output_path)]
+        command = ["product.backend.infra.observers.azure_blob", "--input", str(input_path), "--output", str(output_path)]
         try:
-            process = subprocess.Popen(command, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process = spawn_python_module(
+                environment,
+                command[0],
+                *command[1:],
+                secret_names=(source_name,),
+                extra_environment={"JIEJIAN_ATTEMPT_DIR": str(attempt_root)},
+                cwd=attempt_root,
+                python_executable=python_executable,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except OSError:
             return BlobObserverResult(None, _execution_error(spec))
         try:
             while True:
                 if (attempt_root / "cancel.requested").is_file():
-                    terminator = getattr(process, "terminate", process.kill)
-                    terminator()
-                    _reap_after_stop(process)
+                    terminate_process_tree(process, _PROCESS_REAP_TIMEOUT_SECONDS)
                     envelope = _failure_envelope(invocation, ObservationCompleteness.PARTIAL, AZURE_BLOB_CANCELLED, started_at_us, _now_us())
                     return BlobObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
                 remaining = (deadline_ns - time.monotonic_ns()) / 1_000_000_000
@@ -683,10 +678,9 @@ def run_azure_blob_observer(
                     continue
         except subprocess.TimeoutExpired:
             try:
-                process.kill()
+                terminate_process_tree(process, _PROCESS_REAP_TIMEOUT_SECONDS)
             except OSError:
                 pass
-            _reap_after_stop(process)
             envelope = _failure_envelope(invocation, ObservationCompleteness.TIMED_OUT, AZURE_BLOB_OBSERVATION_TIMEOUT, started_at_us, _now_us())
             return BlobObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
         if process.returncode != 0 or not output_path.is_file():
@@ -697,10 +691,12 @@ def run_azure_blob_observer(
             known_secret = environment.get(source_name, "")
             envelope = parse_observer_json(output_path.read_bytes(), ObservationEnvelope, known_secrets=(known_secret,))
             _validate_output_binding(invocation, envelope)
-        except (OSError, ValueError):
+        except (OSError, ValueError, JiejianError):
             return BlobObserverResult(None, _execution_error(spec))
         return BlobObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
     finally:
+        if "process" in locals():
+            release_process_tree(process)
         for path in (input_path, output_path, *temporary_paths):
             path.unlink(missing_ok=True)
 

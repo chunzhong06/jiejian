@@ -27,7 +27,7 @@ JOB_ID = "job_" + "2" * 32
 
 def _artifact_tree(tmp_path: Path, files: dict[str, bytes]) -> ArtifactCheckRequest:
     var_dir = tmp_path / "var"
-    final_dir = var_dir / "projects" / PROJECT_ID / "runs" / RUN_ID
+    final_dir = var_dir / "data" / "projects" / PROJECT_ID / "runs" / RUN_ID
     root = final_dir / "artifacts"
     root.mkdir(parents=True)
     (final_dir / "result.json").write_bytes(b"{}")
@@ -136,7 +136,7 @@ def test_zip_magic_is_not_interpreted_as_safe_when_archive_layer_budget_is_zero(
 
 def test_handler_rejects_child_result_with_mismatched_run_id(tmp_path: Path) -> None:
     request = _artifact_tree(tmp_path, {"app.js": b"const safe = true;"})
-    job_dir = tmp_path / "var" / "artifact-checks" / "jobs" / "artifact-job-run-mismatch"
+    job_dir = tmp_path / "var" / "data" / "artifact-checks" / "jobs" / "artifact-job-run-mismatch"
     job_dir.mkdir(parents=True)
     (job_dir / "request.json").write_bytes(json.dumps(request.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode())
     child_result = scan_artifact(request).model_copy(update={"run_id": "run_" + "3" * 32})
@@ -163,7 +163,7 @@ def test_handler_rejects_child_result_with_mismatched_run_id(tmp_path: Path) -> 
 @pytest.mark.process
 def test_worker_handler_forms_isolated_prepare_check_assert_publish_cleanup_loop(tmp_path: Path) -> None:
     request = _artifact_tree(tmp_path, {"app.js": b"const safe = true;"})
-    job_dir = tmp_path / "var" / "artifact-checks" / "jobs" / "artifact-job-1"
+    job_dir = tmp_path / "var" / "data" / "artifact-checks" / "jobs" / "artifact-job-1"
     job_dir.mkdir(parents=True)
     (job_dir / "request.json").write_bytes(json.dumps(request.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode())
     result = ArtifactCheckJobHandler(tmp_path / "var").run_job("artifact-job-1")

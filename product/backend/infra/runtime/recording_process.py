@@ -27,7 +27,7 @@ from typing import BinaryIO, TextIO
 from playwright.sync_api import Error as PlaywrightError
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import RECORDING_REQUEST_MAX_BYTES, RecordingRunnerRequest, canonical_recording_json_bytes, parse_recording_request
+from product.protocols import RECORDING_REQUEST_MAX_BYTES, RecordingRunnerRequest, canonical_recording_json_bytes, parse_recording_request, required_recording_secret_names
 from product.backend.infra.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
 from product.backend.infra.recording.control import control_paths_for_attempt, valid_control_marker, write_control_marker
 
@@ -55,6 +55,16 @@ def execute_recording_runner(
     try:
         raw = stdin.read(RECORDING_REQUEST_MAX_BYTES + 1)
         request = parse_recording_request(raw)
+        secret_names = required_recording_secret_names(request)
+        missing_names = tuple(name for name in secret_names if not environment.get(name))
+        if missing_names:
+            raise JiejianError(
+                ErrorCode.RUNTIME_ENVIRONMENT_INVALID,
+                "录制进程缺少身份秘密",
+                details={"missing_secret_names": missing_names},
+            )
+        known_secrets = tuple(environment[name] for name in secret_names)
+        request = parse_recording_request(raw, known_secrets=known_secrets)
     except (JiejianError, OSError):
         logger.error(
             "recording request protocol invalid",
@@ -85,16 +95,19 @@ def execute_recording_runner(
             cancellation_requested,
             monotonic,
         )
+        runner = adapter or BrowserRecordingAdapter()
         if control is None:
-            result = adapter.run(
+            result = runner.run(
                 request,
                 interaction,
+                known_secrets=known_secrets,
                 cancellation_requested=cancellation_requested,
             )
         else:
-            result = adapter.run(
+            result = runner.run(
                 request,
                 interaction,
+                known_secrets=known_secrets,
                 cancellation_requested=cancellation_requested,
                 capture_controlled=True,
                 ready_callback=lambda: write_control_marker(
@@ -109,7 +122,9 @@ def execute_recording_runner(
                 stop_requested=lambda: valid_control_marker(control.stop_path),
                 monotonic=monotonic,
             )
-        stdout.write(canonical_recording_json_bytes(result))
+        stdout.write(
+            canonical_recording_json_bytes(result, known_secrets=known_secrets)
+        )
         stdout.flush()
         return RECORDING_RUNNER_EXIT_OK
     except (JiejianError, OSError):

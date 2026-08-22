@@ -30,6 +30,7 @@ from product.backend.infra.storage import EvidenceIndexRecord, JobRecord, RunRec
 from product.protocols import RunnerResult
 from product.backend.infra.artifacts.run_packages import ValidatedPublication, evidence_records_for_publication, final_run_dir, validate_published_run
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore, PersistedExecutionRequest
+from product.backend.infra.runtime.paths import RuntimePaths
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,7 +218,7 @@ class PublishedResultReader:
             "CLEANUP_FAILED": ("资源清理", "受控浏览器或临时资源未能完整清理。", "重新启动界鉴触发自动恢复；若仍失败，请提供日志。"),
             "PROTOCOL_INVALID": ("结果校验", "执行结果格式或关联信息未通过完整性校验。", "不要手工修改运行文件；请提供日志以定位环境或程序问题。"),
         }.get(reason_code, ("后台执行", "任务未能完整结束。", "查看任务日志后重新发起检查。"))
-        log_path = str(self._var_dir / "logs" / "workers" / f"{job.job_id}.log")
+        log_path = str(RuntimePaths(self._var_dir).worker_logs / f"{job.job_id}.log")
         copy_text = (
             f"界鉴任务失败\n阶段：{stage}\n原因：{cause}\n任务：{job.job_id}\n"
             f"错误代码：{reason_code}\n日志：{log_path}\n建议：{recovery}"

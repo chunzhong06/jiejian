@@ -235,12 +235,15 @@ class ExecutionWorkflow:
             lease_owner=f"worker-{self._clock_us()}",
             secret_names=secret_names,
         )
-        staged = dispatcher.wait(
-            submission.job.job_id,
-            process,
-            known_secrets=known_secrets,
-            timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000 + 60,
-        )
+        try:
+            staged = dispatcher.wait(
+                submission.job.job_id,
+                process,
+                known_secrets=known_secrets,
+                timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000 + 60,
+            )
+        finally:
+            dispatcher.close_process(process)
         return staged.result
 
     def _record(self, profile_id: str) -> ExecutionProfileRecord:

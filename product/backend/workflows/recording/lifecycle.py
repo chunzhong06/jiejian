@@ -32,6 +32,7 @@ from product.protocols.recording_flow import Flow
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import FlowDraftReviewCommand, FlowDraft, canonical_flow_draft_json_bytes
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.recording.control import control_paths_for_attempt, valid_control_marker, write_control_marker
 from product.backend.infra.storage import FlowDraftRevisionRecord, RecordingRecord, StorageUnitOfWork
 from product.backend.workflows.recording.review import FlowDraftReviewer
@@ -284,7 +285,7 @@ class RecordingLifecycle:
 
     @staticmethod
     def flow_path(var_dir: Path, recording: RecordingRecord) -> Path:
-        root = var_dir.resolve() / "projects" / recording.project_id / "recordings"
+        root = RuntimePaths(var_dir).projects / recording.project_id / "recordings"
         path = (root / recording.recording_id / "flow.json").resolve()
         if not path.is_relative_to(root.resolve()):
             raise JiejianError(ErrorCode.RECORD_FLOW_PUBLISH, "最终 Flow 路径越界")

@@ -11,7 +11,7 @@ from fastapi import APIRouter
 
 from product.backend.workflows.context import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command
+from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command, required_identity_secret_refs
 from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
@@ -49,6 +49,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
                     schema_version="1",
                     identity_id=selected.identity_id,
                     session_ref=f"session_{uuid4().hex}",
+                    secret_refs=required_identity_secret_refs(selected),
                     expires_at_us=now_us + body.duration_seconds * 1_000_000,
                 ),
             ),

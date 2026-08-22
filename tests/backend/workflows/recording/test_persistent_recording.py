@@ -245,7 +245,10 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
                     "created_at_us": NOW_US,
                     "sessions": (
                         request.sessions[0].model_copy(
-                            update={"expires_at_us": NOW_US + 60_000_000}
+                            update={
+                                "expires_at_us": NOW_US + 60_000_000,
+                                "secret_refs": ("env:RECORDING_SECRET",),
+                            }
                         ),
                     ),
                 }
@@ -295,7 +298,7 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
             request_store=context.request_store,
             cancel_path_for=lambda root, job: attempt_paths_for(root, job).cancel_path,
             controlled_runner=lambda _request, _cancelled: result,
-            known_secrets=(sentinel,),
+            environ={"RECORDING_SECRET": sentinel},
             utc_now_us=lambda: next(times),
         )
 
@@ -390,7 +393,10 @@ def test_secret_bearing_runner_result_fails_without_persisting_payload(
     context = _context(tmp_path)
     sentinel = "stage33-real-secret-sentinel"
     try:
-        request = _request("rec_" + "3" * 32)
+        request = _request(
+            "rec_" + "3" * 32,
+            secret_refs=("env:RECORDING_SECRET",),
+        )
         submission = context.application.submit(
             SubmitRecording(
                 request=request,
@@ -416,7 +422,7 @@ def test_secret_bearing_runner_result_fails_without_persisting_payload(
                 request.recording_id,
                 response_body=f'{{"id":"{sentinel}"}}',
             ),
-            known_secrets=(sentinel,),
+            environ={"RECORDING_SECRET": sentinel},
             utc_now_us=lambda: next(times),
         )
 
@@ -486,7 +492,7 @@ def test_waiting_worker_fatal_finishes_recording_without_creating_attempt(
 class _Context:
     def __init__(self, tmp_path: Path) -> None:
         self.var_dir = tmp_path / "var"
-        self.database_path = self.var_dir / "jiejian.db"
+        self.database_path = self.var_dir / "data" / "jiejian.db"
         upgrade_database(self.database_path)
         self.engine = create_sqlite_engine(self.database_path)
         factory = create_session_factory(self.engine)
@@ -529,7 +535,11 @@ class _ControlledAdapter:
         return self._result
 
 
-def _request(recording_id: str) -> RecordingRunnerRequest:
+def _request(
+    recording_id: str,
+    *,
+    secret_refs: tuple[str, ...] = (),
+) -> RecordingRunnerRequest:
     return RecordingRunnerRequest(
         schema_version="1",
         recording_id=recording_id,
@@ -548,6 +558,7 @@ def _request(recording_id: str) -> RecordingRunnerRequest:
                 schema_version="1",
                 identity_id="owner",
                 session_ref="session_" + "5" * 32,
+                secret_refs=secret_refs,
                 expires_at_us=NOW_US + 1_000_000,
             ),
         ),

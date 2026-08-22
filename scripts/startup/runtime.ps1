@@ -2,22 +2,25 @@
 # 启动运行时准备
 #
 # 定位
-# 为 start.ps1 提供外部工具探测、固定运行时恢复与依赖验证。
+# 为 start.ps1 提供外部命令、失败诊断和历史准备函数；正式运行时由 release.ps1 负责。
 #
 # 职责
-# 探测 Python/Node/pnpm｜记录外部命令与退出码｜准备环境与浏览器依赖
+# 记录外部命令与退出码｜统一失败表达｜保留尚未删除的旧准备函数
 #
 # 边界
-# 不吞外部退出码，不静默回退到错误 Python，也不接管服务业务逻辑。
+# 正式启动不得调用本文件中的 Conda/Node/pnpm 旧准备函数，也不接管服务业务逻辑。
 #
 # 调用链
-# start.cmd → scripts/start.ps1 → 本脚本 → 固定运行时与依赖检查
+# start.cmd → scripts/start.ps1 → 本脚本的公共命令/诊断能力
 # =============================================================================
 # 机器阶段码保留给日志与错误代码，界面使用稳定中文名称。
 function Get-StageDisplayName([string]$Stage) {
     $names = @{
         "arguments" = "启动参数"
         "mode" = "启动方式"
+        "preflight" = "正式运行资源"
+        "release-assets" = "正式运行资源"
+        "prepare-lock" = "运行环境准备锁"
         "conda" = "Python 环境"
         "uv" = "Python 环境"
         "python" = "Python 环境"
@@ -80,7 +83,7 @@ function Invoke-External(
     $script:FailureStage = $Stage
     $fullCommand = @($Command) + @($Arguments)
     Write-Startup ("[{0}] & {1} {2}" -f $Stage, $fullCommand[0], (($fullCommand | Select-Object -Skip 1) -join " "))
-    $invokeArguments = @()
+    [object[]]$invokeArguments = @()
     if ($fullCommand.Count -gt 1) {
         $invokeArguments = @($fullCommand[1..($fullCommand.Count - 1)])
     }
