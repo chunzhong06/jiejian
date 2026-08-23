@@ -21,7 +21,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from product.backend.core.verification.permissions import canonical_sha256
+from product.backend.core.verification.permissions import permission_model_sha256
 from product.protocols.http_binding_candidate import (
     HttpBindingCandidate,
     HttpBindingCandidateBatch,
@@ -58,7 +58,7 @@ def build_recording_http_binding_candidates(flow: Flow) -> HttpBindingCandidateB
                 HttpResponseSchemaCandidate(
                     status_code="recorded",
                     media_type="application/x-jiejian-extractors",
-                    schema_fingerprint=canonical_sha256(
+                    schema_fingerprint=permission_model_sha256(
                         tuple(
                             (
                                 item.kind.value,
@@ -103,7 +103,7 @@ def build_recording_http_binding_candidates(flow: Flow) -> HttpBindingCandidateB
     )
     return HttpBindingCandidateBatch(
         candidates=tuple(sorted(candidates, key=lambda item: (item.source_priority, item.candidate_id))),
-        input_fingerprint=canonical_sha256(flow),
+        input_fingerprint=permission_model_sha256(flow),
     )
 
 
@@ -196,7 +196,7 @@ def build_openapi_http_binding_candidates(
                             source_expression=f"$response.body#/{matched}",
                         )
                     )
-        links = list({canonical_sha256(item): item for item in links}.values())
+        links = list({permission_model_sha256(item): item for item in links}.values())
         source = (
             HttpBindingCandidateSource.OPENAPI_LINK
             if any(item.kind in {HttpProducerConsumerKind.OPENAPI_LINK, HttpProducerConsumerKind.LOCATION_HEADER} for item in links)
@@ -217,13 +217,13 @@ def build_openapi_http_binding_candidates(
                 request_schema_fingerprint=operation["request_schema_fingerprint"],
                 response_schemas=operation["response_schemas"],
                 security_scheme_ids=operation["security_scheme_ids"],
-                links=tuple(sorted(links, key=canonical_sha256)),
+                links=tuple(sorted(links, key=permission_model_sha256)),
             )
         )
     ordered = tuple(sorted(candidates, key=lambda item: (item.source_priority, item.candidate_id)))
     return HttpBindingCandidateBatch(
         candidates=ordered,
-        input_fingerprint=canonical_sha256(document),
+        input_fingerprint=permission_model_sha256(document),
     )
 
 
@@ -249,7 +249,6 @@ def _candidate(
         HttpBindingCandidateSource.NAME_HEURISTIC: 3,
     }[source]
     payload = {
-        "schema_version": "1",
         "source": source,
         "source_priority": priority,
         "source_locator": source_locator,
@@ -265,7 +264,7 @@ def _candidate(
         "producer_consumer_links": links,
         "requires_confirmation": True,
     }
-    fingerprint = canonical_sha256(payload)
+    fingerprint = permission_model_sha256(payload)
     return HttpBindingCandidate(
         **payload,
         candidate_id=f"httpbind-{fingerprint[:32]}",
@@ -288,7 +287,7 @@ def _response_schemas(value: Any) -> tuple[HttpResponseSchemaCandidate, ...]:
                 HttpResponseSchemaCandidate(
                     status_code=str(status),
                     media_type=str(media_type),
-                    schema_fingerprint=canonical_sha256(shape),
+                    schema_fingerprint=permission_model_sha256(shape),
                     property_paths=_property_paths(shape),
                 )
             )
@@ -327,7 +326,7 @@ def _openapi_request_fingerprint(operation: Mapping[str, Any]) -> str | None:
         for media_type, media in sorted(body["content"].items(), key=lambda item: str(item[0]))
         if isinstance(media, Mapping)
     )
-    return canonical_sha256(shapes) if shapes else None
+    return permission_model_sha256(shapes) if shapes else None
 
 
 def _recording_body_fingerprint(body: Any) -> str | None:
@@ -356,7 +355,7 @@ def _recording_body_fingerprint(body: Any) -> str | None:
                 )
             ),
         )
-    return canonical_sha256(shape)
+    return permission_model_sha256(shape)
 
 
 def _openapi_schema_shape(schema: Mapping[str, Any]) -> dict[str, Any]:

@@ -20,7 +20,7 @@ from pydantic import ValidationError
 from product.backend.core.contracts.models import CandidateRiskKind, CandidateSuggestion
 from product.backend.core.contracts.analysis.models import ContractCandidate, ContractSourceType, Requirement
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisReasonCode, AnalysisSeverity, CandidateBatch
-from product.backend.core.contracts.analysis.canonical import _candidate, _issue, _issue_key, canonical_sha256
+from product.backend.core.contracts.analysis.canonical import _candidate, _issue, _issue_key, contract_analysis_sha256
 
 
 def parse_requirement(requirement: Requirement) -> CandidateBatch:
@@ -81,7 +81,6 @@ def parse_requirement(requirement: Requirement) -> CandidateBatch:
             continue
         try:
             rule = CandidateSuggestion(
-                schema_version="1",
                 id=fields["id"],
                 kind=CandidateRiskKind(fields["kind"]),
                 required_observations=tuple(
@@ -125,5 +124,5 @@ def parse_requirement(requirement: Requirement) -> CandidateBatch:
         adapter="requirement_template",
         candidates=tuple(sorted(candidates, key=lambda item: item.candidate_id)),
         issues=tuple(sorted(issues, key=_issue_key)),
-        input_sha256=canonical_sha256(requirement),
+        input_sha256=contract_analysis_sha256(requirement),
     )

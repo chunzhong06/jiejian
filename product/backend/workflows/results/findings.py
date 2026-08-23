@@ -11,40 +11,44 @@
 #   不修改 Evidence 或 Verdict，不重新执行 Verification，也不把缺失事实推断为已修复。
 #
 # 调用链
-#   API / Results → PublishedResultReader → FindingProjection → UoW
+#   Finalizer → FindingMaterializer → UoW；API / Results → FindingQueries → UoW
 # =============================================================================
 
 from __future__ import annotations
 
+import hashlib
 import json
+import time
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict
 from product.protocols import RunnerResult
-from product.backend.infra.storage import StorageUnitOfWork
+from product.backend.infra.storage import BaseReportFinalizationState, FindingFinalizationState, RunFinalizationRecord, StorageUnitOfWork
 from product.backend.infra.storage.findings import FindingOccurrenceRecord, FindingRecord
 from product.backend.core.verification.findings import Finding, FindingIdentity, FindingInput, FindingOccurrence, OccurrenceStatus, occurrence_id_for
 
-if TYPE_CHECKING:
-    from product.backend.workflows.results.published import PublishedResultReader, PublishedRunView
+from product.backend.workflows.results.published import PublishedResultReader, PublishedRunView
 
 
 _SEVERITY_ORDER = {"unknown": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 
-class FindingProjection:
-    """只接受已发布读取器交付的 View，不能绕过 publication 自行读取结果。"""
+class FindingMaterializer:
+    """只接受已验证 PublishedRunView，并在最终化事务中写入 Finding/Occurrence。"""
 
-    def __init__(self, uow_factory, published_reader: PublishedResultReader) -> None:
+    def __init__(self, uow_factory, published_reader: PublishedResultReader, *, utc_now_us=None) -> None:
         self._uow_factory = uow_factory
         self._published_reader = published_reader
+        self._utc_now_us = utc_now_us or (lambda: time.time_ns() // 1_000)
 
-    def findings_for_run(self, run_id: str) -> list[dict[str, Any]]:
-        """从已发布 Evidence 幂等物化本次 Occurrence，并返回稳定 Finding 视图。"""
+    def materialize(self, view: PublishedRunView) -> str:
+        """幂等写入单个 publication，并返回按 Finding/Occurrence 排序的快照摘要。"""
 
-        view = self._published_reader.read(run_id)
+        if not isinstance(view, PublishedRunView):
+            raise TypeError("finding materializer requires a published run view")
         inputs = finding_inputs(self._published_reader, view)
         timestamp = view.run.finished_at_us or view.run.updated_at_us
         # --- 阶段：按稳定问题身份聚合本次 Evidence ---
@@ -54,6 +58,13 @@ class FindingProjection:
 
         # --- 阶段：在事务内追加 Occurrence 并更新 Finding 当前摘要 ---
         with self._uow_factory() as work:
+            finalization = work.finalizations.get(view.run.run_id)
+            if finalization is None:
+                raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_FOUND, "结果最终化记录不存在")
+            if finalization.findings_state is FindingFinalizationState.COMPLETE:
+                return finalization.findings_snapshot_sha256 or ""
+            if finalization.findings_state not in {FindingFinalizationState.PENDING, FindingFinalizationState.RUNNING}:
+                raise JiejianError(ErrorCode.RESULT_FINALIZATION_BLOCKED, "Finding 最终化当前不可写入")
             for finding_id, items in sorted(grouped.items()):
                 identity = items[0].identity
                 existing = work.findings.get(finding_id)
@@ -79,16 +90,24 @@ class FindingProjection:
                         updated_at_us=finding.last_seen_at_us,
                     ))
                     existing = work.findings.get(finding_id)
-                if existing is None or work.findings.get_occurrence(finding_id, run_id) is not None:
+                if existing is None or work.findings.get_occurrence(finding_id, view.run.run_id) is not None:
                     continue
                 previous = work.findings.latest_occurrence(finding_id)
                 verdict = _aggregate_verdict(items)
-                status = _occurrence_status(previous, verdict)
+                status = _occurrence_status(
+                    previous,
+                    verdict,
+                    allow_disappeared=(
+                        view.run.lifecycle.value != "SAFETY_STOPPED"
+                        and view.publication.result.coverage_gap_count == 0
+                        and all(item.verdict is not CaseVerdict.INCONCLUSIVE for item in items)
+                    ),
+                )
                 occurrence = FindingOccurrence(
-                    occurrence_id=occurrence_id_for(finding_id, run_id),
+                    occurrence_id=occurrence_id_for(finding_id, view.run.run_id),
                     finding_id=finding_id,
                     project_id=identity.project_id,
-                    run_id=run_id,
+                    run_id=view.run.run_id,
                     status=status,
                     verdict=verdict,
                     severity=_aggregate_severity(items),
@@ -111,10 +130,56 @@ class FindingProjection:
                     created_at_us=occurrence.created_at_us,
                 ))
                 work.findings.touch(finding_id, max(timestamp, existing.updated_at_us))
+            occurrences = tuple(
+                sorted(
+                    work.findings.list_occurrences_for_run(view.run.run_id),
+                    key=lambda value: (value.finding_id, value.occurrence_id),
+                )
+            )
+            snapshot_payload = [
+                _view_record(work.findings.get(item.finding_id), item)
+                for item in occurrences
+            ]
+            snapshot_sha256 = _finding_snapshot_sha256(snapshot_payload)
+            completed_at_us = max(
+                self._utc_now_us(),
+                finalization.created_at_us,
+                timestamp,
+            )
+            next_state = BaseReportFinalizationState.PENDING if finalization.base_report_state is BaseReportFinalizationState.BLOCKED else finalization.base_report_state
+            work.finalizations.save(
+                _evolve_finalization(
+                    finalization,
+                    findings_state=FindingFinalizationState.COMPLETE,
+                    findings_error_code=None,
+                    findings_snapshot_sha256=snapshot_sha256,
+                    findings_completed_at_us=completed_at_us,
+                    blocked_by_run_id=None,
+                    base_report_state=next_state,
+                    updated_at_us=completed_at_us,
+                )
+            )
             work.commit()
+            return snapshot_sha256
 
+
+class FindingQueries:
+    """只读 Finding/Occurrence 查询；未完成的最终化不会返回部分事实。"""
+
+    def __init__(self, uow_factory) -> None:
+        self._uow_factory = uow_factory
+
+    def findings_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        """只读取 COMPLETE finalization 产生的 Finding/Occurrence。"""
+
+        self._require_complete(run_id)
         with self._uow_factory() as work:
-            occurrences = work.findings.list_occurrences_for_run(run_id)
+            occurrences = tuple(
+                sorted(
+                    work.findings.list_occurrences_for_run(run_id),
+                    key=lambda value: (value.finding_id, value.occurrence_id),
+                )
+            )
             records = {item.finding_id: work.findings.get(item.finding_id) for item in occurrences}
         return [
             _view_record(records[item.finding_id], item)
@@ -122,17 +187,18 @@ class FindingProjection:
             if records[item.finding_id] is not None
         ]
 
-    def stored_findings_for_run(self, run_id: str) -> list[dict[str, Any]]:
-        """只读取已持久化 Finding/Occurrence，不因报告读取产生新的事实。"""
-
+    def _require_complete(self, run_id: str) -> RunFinalizationRecord:
         with self._uow_factory() as work:
-            occurrences = work.findings.list_occurrences_for_run(run_id)
-            records = {item.finding_id: work.findings.get(item.finding_id) for item in occurrences}
-        return [
-            _view_record(records[item.finding_id], item)
-            for item in occurrences
-            if records[item.finding_id] is not None
-        ]
+            finalization = work.finalizations.get(run_id)
+        if finalization is None:
+            raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_FOUND, "结果最终化记录不存在")
+        if finalization.findings_state is FindingFinalizationState.COMPLETE:
+            return finalization
+        if finalization.findings_state is FindingFinalizationState.BLOCKED:
+            raise JiejianError(ErrorCode.RESULT_FINALIZATION_BLOCKED, "Finding 最终化被前序 Run 阻断")
+        if finalization.findings_state is FindingFinalizationState.FAILED:
+            raise JiejianError(ErrorCode.RESULT_FINALIZATION_FAILED, "Finding 最终化失败")
+        raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_READY, "Finding 尚未完成最终化")
 
 
 def finding_inputs(reader: PublishedResultReader, view: PublishedRunView) -> tuple[FindingInput, ...]:
@@ -153,9 +219,12 @@ def _permission_inputs(reader: PublishedResultReader, view: PublishedRunView) ->
     resources = {item.resource_id: item for item in contract.resources}
     relations = {item.relation_id: item for item in contract.relations}
     rules = {item.rule_id: item for item in contract.rules}
+    planned_case_ids = {item.case_id for item in snapshot.plan.cases}
     outputs: list[FindingInput] = []
     for evidence in result.evidence:
         case = evidence.case_snapshot
+        if case.case_id not in planned_case_ids:
+            continue
         subject = subjects[case.subject_id]
         action = actions[case.action_id]
         case_resources = tuple(resources[item] for item in case.resource_ids)
@@ -248,9 +317,9 @@ def _aggregate_severity(items: Iterable[FindingInput]) -> str:
     return max((item.severity for item in items), key=lambda value: _SEVERITY_ORDER[value])
 
 
-def _occurrence_status(previous, verdict: CaseVerdict) -> OccurrenceStatus:
+def _occurrence_status(previous, verdict: CaseVerdict, *, allow_disappeared: bool = True) -> OccurrenceStatus:
     if verdict is CaseVerdict.SAFE:
-        return OccurrenceStatus.DISAPPEARED if previous is not None and previous.verdict != "SAFE" else OccurrenceStatus.PRESENT
+        return OccurrenceStatus.DISAPPEARED if allow_disappeared and previous is not None and previous.verdict != "SAFE" else OccurrenceStatus.PRESENT
     if previous is None or previous.verdict == "SAFE":
         return OccurrenceStatus.APPEARED if previous is None else OccurrenceStatus.REAPPEARED
     if previous.verdict != verdict.value:
@@ -291,7 +360,15 @@ def _view_record(finding_record_value, occurrence_record_value) -> dict[str, Any
         created_at_us=occurrence_record_value.created_at_us,
     )
     return {
-        "schema_version": "2",
         "finding": finding.model_dump(mode="json"),
         "occurrence": occurrence.model_dump(mode="json"),
     }
+
+
+def _finding_snapshot_sha256(value: Any) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _evolve_finalization(record: RunFinalizationRecord, **updates: Any) -> RunFinalizationRecord:
+    return RunFinalizationRecord.model_validate({**record.model_dump(mode="python"), **updates})

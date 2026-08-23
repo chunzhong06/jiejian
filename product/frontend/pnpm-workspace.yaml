@@ -1,3 +1,2 @@
 allowBuilds:
   esbuild: true
-storeDir: ../../var/cache/pnpm-store

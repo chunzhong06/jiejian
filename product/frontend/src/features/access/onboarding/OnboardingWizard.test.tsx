@@ -10,9 +10,6 @@ const mockApi = vi.hoisted(() => ({
   updateSession: vi.fn(),
   putCredentials: vi.fn(),
   quickCheck: vi.fn(),
-  demoStatus: vi.fn(),
-  demoStart: vi.fn(),
-  demoStop: vi.fn(),
 }))
 
 vi.mock('../../../api/onboarding', () => ({ onboardingApi: mockApi }))
@@ -60,22 +57,12 @@ describe('OnboardingWizard', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
-    mockApi.demoStatus.mockResolvedValue({ status: 'stopped', demo_data: true, variant: null, session_id: null, project_id: null, run_id: null, job_id: null, message: '内置演示尚未启动。' })
   })
 
   it('首屏只有新手主入口，高级执行配置不在向导默认路径', () => {
     render(<OnboardingWizard />)
     expect(screen.getByRole('button', { name: '选择应用文件夹' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: '开始体验' })).toHaveLength(3)
-    expect(screen.getByText('安全示例')).toBeInTheDocument()
-    expect(screen.getByText('权限漏洞示例')).toBeInTheDocument()
-    expect(screen.getByText('证据不足示例')).toBeInTheDocument()
-    expect(screen.getByText('预期：未发现权限越界')).toBeInTheDocument()
-    expect(screen.getByText('预期：发现权限越界')).toBeInTheDocument()
-    expect(screen.getByText('预期：证据不足，暂时无法下结论')).toBeInTheDocument()
-    expect(screen.queryByText('预期结果：PASS')).not.toBeInTheDocument()
-    expect(screen.queryByText('预期结果：BLOCK')).not.toBeInTheDocument()
-    expect(screen.queryByText('预期结果：INCONCLUSIVE')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '开始体验' })).not.toBeInTheDocument()
     expect(screen.queryByText('项目 YAML')).not.toBeInTheDocument()
   })
 
@@ -195,26 +182,6 @@ describe('OnboardingWizard', () => {
     expect(screen.queryByDisplayValue('two-secret')).not.toBeInTheDocument()
     expect(localStorage.getItem('one-secret')).toBeNull()
     expect(mockApi.updateSession).toHaveBeenCalledWith('onb_session', 3, expect.objectContaining({ confirmations: expect.objectContaining({ app_started: true, target_authorized: true }) }))
-  })
-
-  it('演示成功只把后端返回的真实标识交给控制壳', async () => {
-    const onSubmitted = vi.fn()
-    mockApi.demoStart.mockResolvedValue({ status: 'running', demo_data: true, variant: 'vulnerable', session_id: 'onb_demo', project_id: 'onboarding_demo', run_id: 'run_demo', job_id: 'job_demo', message: '演示任务已提交。' })
-    render(<OnboardingWizard onSubmitted={onSubmitted} />)
-    fireEvent.click(screen.getAllByRole('button', { name: '开始体验' })[1])
-    await waitFor(() => expect(onSubmitted).toHaveBeenCalledWith({ project_id: 'onboarding_demo', run_id: 'run_demo', job_id: 'job_demo', demo_data: true }))
-    expect(mockApi.demoStart).toHaveBeenCalledWith('vulnerable')
-    expect(mockApi.createSession).not.toHaveBeenCalled()
-    expect(mockApi.putCredentials).not.toHaveBeenCalled()
-  })
-
-  it('恢复运行中的演示时只复用后端标识继续查看', async () => {
-    const onSubmitted = vi.fn()
-    mockApi.demoStatus.mockResolvedValue({ status: 'running', demo_data: true, variant: 'fixed', session_id: 'onb_demo', project_id: 'project_demo', run_id: 'run_demo', job_id: 'job_demo', message: '演示任务正在后台处理。' })
-    render(<OnboardingWizard onSubmitted={onSubmitted} />)
-    fireEvent.click(await screen.findByRole('button', { name: '继续查看演示' }))
-    expect(onSubmitted).toHaveBeenCalledWith({ project_id: 'project_demo', run_id: 'run_demo', job_id: 'job_demo', demo_data: true })
-    expect(mockApi.demoStart).not.toHaveBeenCalled()
   })
 
   it('快速检查直接转交后端已排队的真实标识，不重复创建运行任务', async () => {

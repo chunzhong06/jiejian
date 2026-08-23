@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 import pytest
 
-from product.backend.workflows.onboarding.demo_target import create_demo_target_server
+from samples.web.target.server import create_authorization_sample_server
 
 
 @pytest.fixture
@@ -37,9 +37,11 @@ def sample_server_factory(request: pytest.FixtureRequest) -> Callable[..., Any]:
             "attacker": f"attacker-{token_urlsafe(18)}",
             "peer": f"peer-{token_urlsafe(18)}",
         }
-        server = create_demo_target_server(
+        observer_token = f"observer-{token_urlsafe(18)}"
+        server = create_authorization_sample_server(
             variant=variant,
             tokens=tokens,
+            observer_token=observer_token,
             fail_cleanup=fail_cleanup,
             echo_secret=tokens.get(echo_identity) if echo_identity else None,
             request_delay_seconds=request_delay_seconds,
@@ -55,7 +57,7 @@ def sample_server_factory(request: pytest.FixtureRequest) -> Callable[..., Any]:
                 "JIEJIAN_AUTHORIZATION_OWNER_TOKEN": tokens["owner"],
                 "JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN": tokens["attacker"],
                 "JIEJIAN_AUTHORIZATION_PEER_TOKEN": tokens["peer"],
-                "JIEJIAN_AUTHORIZATION_OWNER_OBSERVER": tokens["owner"],
+                "JIEJIAN_AUTHORIZATION_OWNER_OBSERVER": observer_token,
             },
         )
 

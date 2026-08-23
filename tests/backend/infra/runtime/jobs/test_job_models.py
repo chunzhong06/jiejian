@@ -14,13 +14,13 @@ from product.backend.infra.runtime.jobs.models import (
 )
 
 
-def test_worker_dtos_are_strict_frozen_and_versioned() -> None:
+def test_worker_dtos_are_strict_and_frozen_without_root_document_version() -> None:
     request = ClaimJob(
         lease_owner="worker-1",
         now_us=100,
         lease_duration_us=10,
     )
-    assert request.schema_version == "1"
+    assert "schema_version" not in request.model_dump(mode="python")
     with pytest.raises(ValidationError):
         ClaimJob(
             lease_owner="worker-1",
@@ -40,7 +40,7 @@ def test_worker_dtos_are_strict_frozen_and_versioned() -> None:
 
 def test_submit_ids_are_optional_but_strict_when_supplied() -> None:
     values = {
-        "project_id": "stage22-project",
+        "project_id": "job-runtime-project",
         "operation_type": "ACTIVE_RUN",
         "idempotency_key": "request-1",
         "request_hash": "a" * 64,

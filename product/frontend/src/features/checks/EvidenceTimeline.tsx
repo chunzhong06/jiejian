@@ -24,7 +24,7 @@ function text(value: unknown): string {
 }
 function list(value: unknown) { return Array.isArray(value) && value.length > 0 ? value.map(text).join('、') : '未提供' }
 function requirementLabel(value: unknown) { return ({ resource_state: '资源状态' } as Record<string, string>)[String(value)] ?? `观察要求：${text(value)}` }
-function targetLabel(value: unknown) { return ({ WEB: 'Web 应用', PROCESS: '本地进程', MCP: 'MCP/Agent 服务', MCP_AGENT: 'MCP/Agent 服务' } as Record<string, string>)[String(value)] ?? `目标：${text(value)}` }
+function targetLabel(value: unknown) { return ({ WEB: 'Web 应用' } as Record<string, string>)[String(value)] ?? `目标：${text(value)}` }
 function outcomeLabel(value: unknown) { return ({ ACCEPTED: '执行已允许', DENIED: '执行已拒绝', FAILED: '执行失败', UNKNOWN: '执行结果无法确定' } as Record<string, string>)[String(value)] ?? `执行状态：${text(value)}` }
 function effectLabel(value: unknown) { return ({ CONFIRMED: '资源状态发生变化', ABSENT: '资源状态未变化', UNKNOWN: '无法可靠获取资源状态' } as Record<string, string>)[String(value)] ?? `观察结果：${text(value)}` }
 function securityEffectLabel(value: unknown) { return ({ STATE_MUTATION: '状态变更', DATA_DISCLOSURE: '受保护数据披露', OBJECT_CREATION: '对象创建', EXTERNAL_DISPATCH: '外部发送', RESTRICTED_FUNCTION_INVOCATION: '受限功能调用', CREDENTIAL_ACCESS: '凭据访问' } as Record<string, string>)[String(value)] ?? text(value) }

@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.verification.permissions import (
     SecurityEffectKind,
-    canonical_sha256,
+    permission_model_sha256,
 )
 
 
 class SqlTraceModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
-    schema_version: Literal["1"] = "1"
+
+def sql_trace_advisory_sha256(value: Any) -> str:
+    """复用 Verification canonical 规则，但显式限定为 SQL Trace Advisory 身份。"""
+
+    return permission_model_sha256(value)
 
 
 class SqlStatementKind(StrEnum):
@@ -50,6 +54,6 @@ class SqlTraceAdvisory(SqlTraceModel):
         if len(set(self.effect_suggestions)) != len(self.effect_suggestions):
             raise ValueError("SQL trace effect suggestions must be unique")
         payload = self.model_dump(mode="json", exclude={"trace_fingerprint"})
-        if self.trace_fingerprint != canonical_sha256(payload):
+        if self.trace_fingerprint != sql_trace_advisory_sha256(payload):
             raise ValueError("SQL trace advisory fingerprint does not match its facts")
         return self

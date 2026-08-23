@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from product.backend.core.contracts.models import ContractCandidate, ContractSourceType, ContractVersion
-from product.backend.core.contracts.analysis.canonical import _issue, _issue_key, canonical_sha256
+from product.backend.core.contracts.analysis.canonical import _issue, _issue_key, contract_analysis_sha256
 from product.backend.core.contracts.analysis.merge import merge_candidates
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisReasonCode, AnalysisSeverity, ContractReviewAssessment
 
@@ -99,5 +99,5 @@ def assess_contract(
         eligible=not blocking,
         blocking_issues=blocking,
         warnings=warnings,
-        canonical_sha256=canonical_sha256(body),
+        canonical_sha256=contract_analysis_sha256(body),
     )

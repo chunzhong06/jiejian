@@ -11,7 +11,7 @@
 # 不序列化、不落盘、不返回全量值，repr 和状态输出只暴露计数。
 #
 # 调用链
-# OnboardingWorkflow / DemoRuntimeSupervisor → RuntimeSecretVault → execution environment
+# OnboardingWorkflow → RuntimeSecretVault → execution environment
 # =============================================================================
 
 from __future__ import annotations

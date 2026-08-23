@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -57,4 +58,5 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
 
 
 class ProjectRegisterRequest(ApiModel):
+    schema_version: Literal["1"]
     profile_path: str = Field(min_length=1, max_length=2048)

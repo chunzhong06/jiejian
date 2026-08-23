@@ -9,7 +9,6 @@ body { color: #172033; background: #f5f7fb; }
 .status-cluster { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .status-cluster .ant-tag { white-space: nowrap; }
 .content { background: #f6f7fb; min-width: 0; padding: 28px; }
-.demo-data-banner { background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; color: #614700; margin-bottom: 16px; padding: 8px 12px; }
 @media (max-width: 900px) { .topbar { padding: 8px 16px; } .content { padding: 16px; } }
 @media (max-width: 600px) {
   .topbar.ant-layout-header { align-content: center; display: flex; height: auto; line-height: normal; min-height: 104px; padding: 8px 12px; }

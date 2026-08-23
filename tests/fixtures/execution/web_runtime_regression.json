@@ -1,0 +1,20 @@
+{
+  "profile_sha256": "b9464334d2f5e478defb589ae46671edb546a5003723a0065e0efd17da9876df",
+  "contract_fingerprint": "c64596cecc7cf260b5b083a1be4f448516b3c5a45d893b4f81f1e4b182d0843b",
+  "plan_fingerprint": "99c876974d904cefd49fe19eeda3b50750073b6e459bd12cbf3f08382dd3f893",
+  "differential_fingerprint": "0b4b5dfbec0c8cf8cff866617112bb2a0fd781612d0cbb876604e17987cd65c3",
+  "execution_request_sha256": "e2289d30ee3e3dad460407ba4f309992ad9952658069e36f2b41e867ea1b8c33",
+  "evidence_id": "ev_2be715031a76f7b2e57e",
+  "evidence_hash": "2be715031a76f7b2e57e148e0f59de71010480e6238ebd7d97e59ee4ea26dc8c",
+  "finding_pre_identity": "e355f7becfb2116f53fb617b68cacc89af9e32bd34d8eee2caab696847dde62c",
+  "finding_id": "finding_8a0a921da3072c9d95b31f98aa001ba8",
+  "base_report_id": "report_2ee9087139584774d9b6b03d626d5e23",
+  "base_report_sha256": "11dc68d0ef9a1a9101b30f21c5bdfcc3d4f548c8a087ec831ca1e6de4298c45b",
+  "gate_report_id": "report_34d9960ac1e92bd483b6fc7ecdc9aac1",
+  "gate_report_sha256": "c490cfb25416c9b7a5211800d333ddfecde8203ef26750cc0aace78ed9589af6",
+  "golden_run_verdicts": {
+    "fixed": "PASS",
+    "vulnerable": "BLOCK",
+    "inconclusive": "INCONCLUSIVE"
+  }
+}

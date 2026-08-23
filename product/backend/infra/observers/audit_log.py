@@ -13,7 +13,7 @@ import os
 import re
 import stat
 import subprocess
-import sys
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
 import time
 import ctypes
 import ctypes.wintypes
@@ -22,8 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from product.backend.infra.runtime.process_environment import minimal_process_environment
-from product.protocols.observer import AuditLogObserverInvocation, AuditLogStartCursor, CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType, OBSERVER_JSON_MAX_BYTES, ProvenanceType, StructuredAuditLogLocator, build_normalized_state, canonical_json_bytes, canonical_sha256, evaluate_observer_outcome, parse_observer_json
+from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
+from product.protocols.observer import AuditLogObserverInvocation, AuditLogStartCursor, CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType, OBSERVER_JSON_MAX_BYTES, ProvenanceType, StructuredAuditLogLocator, build_normalized_state, canonical_json_bytes, observer_canonical_sha256, evaluate_observer_outcome, parse_observer_json
 
 
 AUDIT_OBSERVER_PROCESS_ERROR = "AUDIT_OBSERVER_PROCESS_ERROR"
@@ -513,7 +513,7 @@ def _run_child(invocation: AuditLogObserverInvocation, *, utc_now_us: Callable[[
         reasons.add(AUDIT_TIMEOUT)
     next_offsets.sort(key=lambda item: item["file_name"])
     consumed.sort(key=lambda item: (item["file_name"], item["offset"], item["record_sha256"]))
-    source_sha256 = canonical_sha256(consumed)
+    source_sha256 = observer_canonical_sha256(consumed)
     if AUDIT_TIMEOUT in reasons:
         return _failure_envelope(invocation, ObservationCompleteness.TIMED_OUT, AUDIT_TIMEOUT, started_at_us, utc_now_us())
     if AUDIT_CURSOR_UNMATCHED in reasons or AUDIT_CURSOR_AMBIGUOUS in reasons:
@@ -580,11 +580,22 @@ def run_audit_log_observer(
     parent_deadline_ns = time.monotonic_ns() + spec.budget.timeout_us * 1_000
     try:
         source_name = _secret_name(spec)
-        environment = minimal_process_environment(parent_environ if parent_environ is not None else os.environ, secret_names=(source_name,))
+        environment = dict(parent_environ if parent_environ is not None else os.environ)
+        environment.setdefault("JIEJIAN_VAR_DIR", str(attempt_root))
         _write_atomic(input_path, invocation.model_dump_json().encode("utf-8"))
-        command = [python_executable or sys.executable, "-B", "-m", "product.backend.infra.observers.audit_log", "--input", str(input_path), "--output", str(output_path)]
+        command = ["product.backend.infra.observers.audit_log", "--input", str(input_path), "--output", str(output_path)]
         try:
-            process = subprocess.Popen(command, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process = spawn_python_module(
+                environment,
+                command[0],
+                *command[1:],
+                role=ProcessEnvironmentRole.OBSERVER,
+                secret_names=(source_name,),
+                cwd=attempt_root,
+                python_executable=python_executable,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except OSError:
             return AuditLogObserverResult(None, _execution_error(spec))
         try:
@@ -593,7 +604,7 @@ def run_audit_log_observer(
                 raise subprocess.TimeoutExpired(command, 0)
             process.wait(timeout=remaining)
         except subprocess.TimeoutExpired:
-            process.kill()
+            terminate_process_tree(process, _PROCESS_REAP_TIMEOUT_SECONDS)
             try:
                 process.wait(timeout=_PROCESS_REAP_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired:
@@ -606,12 +617,22 @@ def run_audit_log_observer(
             return AuditLogObserverResult(None, _execution_error(spec))
         payload = output_path.read_bytes()
         try:
-            envelope = parse_observer_json(payload, ObservationEnvelope)
+            envelope = parse_observer_json(
+                payload,
+                ObservationEnvelope,
+                known_secrets=tuple(
+                    value
+                    for key, value in environment.items()
+                    if key == source_name and value
+                ),
+            )
             _validate_output_binding(invocation, envelope)
         except (OSError, ValueError):
             return AuditLogObserverResult(None, _execution_error(spec))
         return AuditLogObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
     finally:
+        if "process" in locals():
+            release_process_tree(process)
         for path in (input_path, output_path, *temporary_paths):
             path.unlink(missing_ok=True)
 

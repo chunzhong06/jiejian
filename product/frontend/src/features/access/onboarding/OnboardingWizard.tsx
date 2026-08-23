@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { ApiError } from '../../../api/http'
-import { DemoVariant, DiscoveryResult, OnboardingSession, onboardingApi, QuickCheckResult } from '../../../api/onboarding'
+import { DiscoveryResult, OnboardingSession, onboardingApi, QuickCheckResult } from '../../../api/onboarding'
 import { browserState } from '../../../app/browserState'
 import { OnboardingSteps, type OnboardingFields } from './OnboardingSteps'
 import { OnboardingWelcome } from './OnboardingWelcome'
 
 const FOLDER_SELECTOR_CLIENT_TIMEOUT_MS = 125_000
 
-type Submitted = Pick<QuickCheckResult, 'project_id' | 'run_id' | 'job_id'> & { demo_data?: boolean }
+type Submitted = Pick<QuickCheckResult, 'project_id' | 'run_id' | 'job_id'>
 type Confirmations = OnboardingSession['confirmations']
 
 const emptyConfirmations: Confirmations = {
@@ -49,7 +49,6 @@ export function OnboardingWizard({ onSubmitted }: { onSubmitted?: (result: Submi
   const [readPath, setReadPath] = useState('/resources/{resource_id}')
   const [recoveryPath, setRecoveryPath] = useState('/reset')
   const [confirmations, setConfirmations] = useState<Confirmations>(emptyConfirmations)
-  const [demo, setDemo] = useState<Awaited<ReturnType<typeof onboardingApi.demoStatus>> | null>(null)
 
   const applySession = (next: OnboardingSession, position = true) => {
     setSession(next)
@@ -100,7 +99,6 @@ export function OnboardingWizard({ onSubmitted }: { onSubmitted?: (result: Submi
         setError('之前的新手会话已失效，请重新选择应用文件夹。')
       }).finally(() => setLoading(false))
     }
-    void onboardingApi.demoStatus().then(setDemo).catch(() => undefined)
   }, [])
 
   const update = async (patch: Parameters<typeof onboardingApi.updateSession>[2]) => {
@@ -177,31 +175,6 @@ export function OnboardingWizard({ onSubmitted }: { onSubmitted?: (result: Submi
       setChooserMessage('已复制候选命令。界鉴不会执行它，请由你自行启动应用。')
     } catch {
       setChooserMessage('无法自动复制，请手动选择命令文本；界鉴不会执行它。')
-    }
-  }
-
-  const startDemo = async (variant: DemoVariant) => {
-    setLoading(true)
-    setError('')
-    try {
-      const result = await onboardingApi.demoStart(variant)
-      setDemo(result)
-      if (result.project_id && result.run_id && result.job_id) onSubmitted?.({ project_id: result.project_id, run_id: result.run_id, job_id: result.job_id, demo_data: true })
-    } catch (e) {
-      setError(`启动内置演示失败：${ordinaryError(e, '请稍后重试，并查看可展开的诊断信息。')}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const stopDemo = async () => {
-    setLoading(true)
-    try {
-      setDemo(await onboardingApi.demoStop())
-    } catch (e) {
-      setError(`停止内置演示失败：${ordinaryError(e, '请稍后重试。')}`)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -297,7 +270,7 @@ export function OnboardingWizard({ onSubmitted }: { onSubmitted?: (result: Submi
 
   const missing = session?.missing_items ?? []
   const submitted = session?.status === 'SUBMITTED'
-  if (!session) return <OnboardingWelcome loading={loading} manualPath={manualPath} chooserMessage={chooserMessage} error={error} demo={demo} onManualPathChange={setManualPath} onChooseFolder={() => void chooseFolder()} onSubmitManualPath={() => void submitManualPath()} onStartDemo={(variant) => void startDemo(variant)} onStopDemo={() => void stopDemo()} onContinueDemo={() => { if (demo?.project_id && demo.run_id && demo.job_id) onSubmitted?.({ project_id: demo.project_id, run_id: demo.run_id, job_id: demo.job_id, demo_data: true }) }} />
+  if (!session) return <OnboardingWelcome loading={loading} manualPath={manualPath} chooserMessage={chooserMessage} error={error} onManualPathChange={setManualPath} onChooseFolder={() => void chooseFolder()} onSubmitManualPath={() => void submitManualPath()} />
 
   const fields: OnboardingFields = { targetAddress, primaryName, comparisonName, primaryResource, comparisonResource, primaryPassword, comparisonPassword, readPath, recoveryPath }
   const changeField = <K extends keyof OnboardingFields>(key: K, value: OnboardingFields[K]) => {

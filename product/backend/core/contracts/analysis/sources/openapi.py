@@ -21,7 +21,7 @@ from typing import Any
 from product.backend.core.contracts.models import CandidateSuggestion, CandidateRiskKind
 from product.backend.core.contracts.models import ContractCandidate, ContractSourceType
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisReasonCode, AnalysisSeverity, CandidateBatch
-from product.backend.core.contracts.analysis.canonical import _candidate, _issue, _issue_key, _rule_id, canonical_sha256
+from product.backend.core.contracts.analysis.canonical import _candidate, _issue, _issue_key, _rule_id, contract_analysis_sha256
 
 
 _SENSITIVE_FIELD = re.compile(
@@ -42,7 +42,7 @@ def build_openapi_candidates(
 ) -> CandidateBatch:
     """消费受控 OpenAPI Mapping；不解析外部文件引用。"""
 
-    document_hash = canonical_sha256(document)
+    document_hash = contract_analysis_sha256(document)
     if not isinstance(document, Mapping):
         return CandidateBatch(
             adapter="openapi",
@@ -97,7 +97,6 @@ def build_openapi_candidates(
                     f"{source_locator}:{method_upper}:{path}",
                     document_hash,
                     CandidateSuggestion(
-                        schema_version="1",
                         id=_rule_id("route", method_upper.lower(), path, kind.value),
                         kind=kind,
                         required_observations=observations,
@@ -113,7 +112,6 @@ def build_openapi_candidates(
                         f"{source_locator}:{method_upper}:{path}:field:{field}",
                         document_hash,
                         CandidateSuggestion(
-                            schema_version="1",
                             id=_rule_id("route", method_upper.lower(), path, "privileged-field", field),
                             kind=CandidateRiskKind.PRIVILEGED_FIELD,
                             required_observations=("resource_state",),

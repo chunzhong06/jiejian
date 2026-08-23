@@ -74,7 +74,7 @@ def guide_command(context: typer.Context) -> None:
 
 def _write_workspace(context: typer.Context) -> None:
     with application_scope(context) as application:
-        snapshot = application.guide_snapshot()
+        snapshot = application.guide.snapshot()
     projects = snapshot["projects"]
     recent_runs = snapshot["recent_runs"]
     typer.echo("界鉴命令行 · 引导模式")
@@ -87,7 +87,7 @@ def _write_workspace(context: typer.Context) -> None:
         typer.echo("└─ ○ 尚未开始检查")
         typer.echo("")
         typer.echo("下一步")
-        typer.echo("└─ 运行内置演示，或打开图形界面接入你的 Web 应用")
+        typer.echo("└─ 打开图形界面接入你的 Web 应用")
     else:
         rules_ready = any(item["permission_rules_ready"] for item in projects)
         typer.echo("当前状态")
@@ -113,47 +113,21 @@ def _first_check(context: typer.Context) -> None:
     choice = _choose(
         "从哪里开始？",
         (
-            "运行内置演示（推荐）",
             "检查已经接入的应用",
             "打开图形界面接入应用",
             "返回",
         ),
     )
     if choice == 0:
-        _demo(context)
-    elif choice == 1:
         _existing_application(context)
-    elif choice == 2:
+    elif choice == 1:
         _open_gui(context)
-
-
-def _demo(context: typer.Context) -> None:
-    choice = _choose(
-        "选择你想看到的结果",
-        (
-            "存在权限问题（推荐）",
-            "权限限制正常",
-            "证据不足，暂时不能下结论",
-            "返回",
-        ),
-    )
-    if choice == 3:
-        return
-    variant = ("vulnerable", "fixed", "inconclusive")[choice]
-    try:
-        with application_scope(context) as application:
-            with human_wait("正在运行内置权限检查"):
-                _status, result = application.run_demo(variant)
-        emit_guide_result(result)
-        _pause()
-    except JiejianError as exc:
-        fail(exc)
 
 
 def _existing_application(context: typer.Context) -> None:
     try:
         with application_scope(context) as application:
-            snapshot = application.guide_snapshot()
+            snapshot = application.guide.snapshot()
         candidates = [
             item
             for item in snapshot["projects"]
@@ -191,11 +165,11 @@ def _existing_application(context: typer.Context) -> None:
 def _recent_result(context: typer.Context) -> None:
     try:
         with application_scope(context) as application:
-            recent = application.guide_snapshot()["recent_runs"]
+            recent = application.guide.snapshot()["recent_runs"]
             if not recent:
                 typer.echo("")
                 typer.echo("还没有检查结果。")
-                typer.echo("下一步：运行内置演示或开始第一次检查。")
+                typer.echo("下一步：接入应用并开始第一次检查。")
                 _pause()
                 return
             labels = tuple(

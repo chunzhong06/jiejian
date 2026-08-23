@@ -484,7 +484,7 @@ def fail(error: JiejianError) -> NoReturn:
     else:
         typer.echo(
             json.dumps(
-                {"schema_version": "1", "error": error.to_dict()},
+                {"schema_version": "2", "error": error.to_dict()},
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),

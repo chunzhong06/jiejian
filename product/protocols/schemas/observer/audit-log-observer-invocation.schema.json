@@ -3,12 +3,6 @@
     "AsyncTaskApiLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "ASYNC_TASK_STATUS",
           "default": "ASYNC_TASK_STATUS",
@@ -58,12 +52,6 @@
     "AsyncTaskPollBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "max_polls": {
           "maximum": 256,
           "minimum": 1,
@@ -101,12 +89,6 @@
     "AuditLogScanBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "max_files": {
           "maximum": 64,
           "minimum": 1,
@@ -137,12 +119,6 @@
     "AuditLogStartCursor": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "file_name": {
           "pattern": "^[a-z][a-z0-9_-]{0,48}(?:\\.[1-9][0-9]{0,8})?\\.jsonl$",
           "title": "File Name",
@@ -206,12 +182,6 @@
     "AzureBlobObjectLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "AZURE_BLOB_OBJECT",
           "default": "AZURE_BLOB_OBJECT",
@@ -278,12 +248,6 @@
     "AzureQueuePeekLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "AZURE_QUEUE_PEEK",
           "default": "AZURE_QUEUE_PEEK",
@@ -343,12 +307,6 @@
     "BlobObjectScanBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "page_size": {
           "maximum": 5000,
           "minimum": 1,
@@ -414,12 +372,6 @@
     "Correlation": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Case Id",
@@ -458,12 +410,6 @@
     "ObserverBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "timeout_us": {
           "maximum": 120000000,
           "minimum": 1,
@@ -494,12 +440,6 @@
     "ObserverSpec": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "observer_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Observer Id",
@@ -548,12 +488,6 @@
     "ObserverTarget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "target_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Target Id",
@@ -628,12 +562,6 @@
     "OwnerApiLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "OWNER_API",
           "default": "OWNER_API",
@@ -656,12 +584,6 @@
     "QueuePeekBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "max_messages": {
           "maximum": 32,
           "minimum": 1,
@@ -713,12 +635,6 @@
     "SqliteQueryLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "READ_ONLY_SQLITE",
           "default": "READ_ONLY_SQLITE",
@@ -752,12 +668,6 @@
     "StructuredAuditLogLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "STRUCTURED_AUDIT_LOG",
           "default": "STRUCTURED_AUDIT_LOG",
@@ -800,8 +710,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },

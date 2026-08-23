@@ -5,13 +5,13 @@
 #   product.backend.infra.runtime.worker_process 的长期进程壳与 Execution 调度之间的组合边界
 #
 # 职责
-#   解析单任务参数｜创建 ApplicationCore｜调度注册的 JobHandler
+#   解析单任务参数｜创建 WorkerContainer｜调度注册的 JobHandler
 #
 # 边界
 #   进程入口不解释 Job 业务结果；退出码只表达调度完成或稳定失败类别。
 #
 # 调用链
-#   python -m product.backend.infra.runtime.worker_process → ApplicationCore → WorkerDispatcher
+#   python -m product.backend.infra.runtime.worker_process → WorkerContainer → JobHandler
 # =============================================================================
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ def main() -> int:
     try:
         from product.backend.infra.runtime.environment_identity import require_python_environment
         from product.backend.infra.runtime.worker_lifetime import WorkerLifetimeLock
-        from product.backend.workflows.context import WorkerContext
+        from product.backend.workflows.worker_container import WorkerContainer
         from product.backend.core.lifecycle import JobState
         from product.backend.core.errors import JiejianError
 
@@ -101,7 +101,7 @@ def main() -> int:
             arguments.job_id,
             arguments.lease_owner,
         )
-        context = WorkerContext(var_dir, environ=os.environ)
+        context = WorkerContainer(var_dir, environ=os.environ)
         watchdog_thread = _start_service_watchdog(
             context,
             arguments.job_id,
@@ -111,7 +111,7 @@ def main() -> int:
             initial_job = work.jobs.get(arguments.job_id)
         if initial_job is None:
             return 1
-        handler = context.build_job_handler_registry(
+        handler = context.handler_factory.build_registry(
             arguments.lease_owner,
             os.environ,
         ).resolve(initial_job)

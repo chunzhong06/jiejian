@@ -22,7 +22,7 @@ from enum import StrEnum
 from pydantic import Field, model_validator
 
 from product.backend.core.verification.permission_coverage import PermissionMutationCase, PermissionMutationPlan
-from product.backend.core.verification.permissions import CoverageDimension, PermissionContract, PermissionExpectation, PermissionModel, canonical_sha256
+from product.backend.core.verification.permissions import CoverageDimension, PermissionContract, PermissionExpectation, PermissionModel, permission_model_sha256
 
 
 class TwinPlanGapCode(StrEnum):
@@ -77,7 +77,7 @@ class PermissionTwin(PermissionModel):
         if self.allow_case.resource_ids != self.deny_case.resource_ids or self.allow_case.resource_ids != self.invariant.resource_ids:
             raise ValueError("twin resource invariant is inconsistent")
         payload = self.model_dump(mode="json", exclude={"twin_id", "twin_fingerprint"})
-        expected = canonical_sha256(payload)
+        expected = permission_model_sha256(payload)
         if self.twin_id != f"twin-{expected[:32]}" or self.twin_fingerprint != expected:
             raise ValueError("twin fingerprint does not match its semantic payload")
         return self
@@ -105,7 +105,7 @@ class DifferentialExperimentPlan(PermissionModel):
         if len({item.deny_case_id for item in self.gaps}) != len(self.gaps):
             raise ValueError("differential gaps must be unique per DENY case")
         payload = self.model_dump(mode="json", exclude={"differential_plan_id", "differential_fingerprint"})
-        expected = canonical_sha256(payload)
+        expected = permission_model_sha256(payload)
         if self.differential_plan_id != f"dplan-{expected[:32]}" or self.differential_fingerprint != expected:
             raise ValueError("differential plan fingerprint does not match its semantic payload")
         return self
@@ -164,8 +164,8 @@ def build_differential_experiment_plan(
         mutation = PermissionMutationDescriptor(
             dimension=dimension,
             changed_fields=changed_fields,
-            allow_value_fingerprint=canonical_sha256(_variation_payload(allow, changed_fields)),
-            deny_value_fingerprint=canonical_sha256(_variation_payload(deny, changed_fields)),
+            allow_value_fingerprint=permission_model_sha256(_variation_payload(allow, changed_fields)),
+            deny_value_fingerprint=permission_model_sha256(_variation_payload(deny, changed_fields)),
         )
         invariant = TwinInvariantSpecification(
             action_id=deny.action_id,
@@ -177,7 +177,6 @@ def build_differential_experiment_plan(
             normalization_version=normalization_version,
         )
         payload = {
-            "schema_version": "3",
             "source_rule_id": deny.source_rule_ids[0],
             "allow_case": allow,
             "deny_case": deny,
@@ -185,15 +184,14 @@ def build_differential_experiment_plan(
             "mutation": mutation,
             "invariant": invariant,
         }
-        fingerprint = canonical_sha256(payload)
+        fingerprint = permission_model_sha256(payload)
         twins.append(PermissionTwin(**payload, twin_id=f"twin-{fingerprint[:32]}", twin_fingerprint=fingerprint))
     body = {
-        "schema_version": "3",
         "coverage_plan_fingerprint": coverage.plan_fingerprint,
         "twins": tuple(sorted(twins, key=lambda item: item.twin_id)),
         "gaps": tuple(sorted(gaps, key=lambda item: item.deny_case_id)),
     }
-    fingerprint = canonical_sha256(body)
+    fingerprint = permission_model_sha256(body)
     return DifferentialExperimentPlan(
         **body,
         differential_plan_id=f"dplan-{fingerprint[:32]}",

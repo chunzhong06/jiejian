@@ -1,0 +1,916 @@
+{
+  "$defs": {
+    "EmptyBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "EMPTY",
+          "default": "EMPTY",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EmptyBody",
+      "type": "object"
+    },
+    "FlowStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "identity_id": {
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "alternate_identity_id": {
+          "title": "Alternate Identity Id",
+          "type": "string"
+        },
+        "alternate_resource_id": {
+          "title": "Alternate Resource Id",
+          "type": "string"
+        },
+        "request_template": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "classifier": {
+          "$ref": "#/$defs/HttpOutcomeClassifier"
+        },
+        "action_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Action Ids",
+          "type": "array"
+        },
+        "depends_on_step_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Depends On Step Ids",
+          "type": "array"
+        },
+        "variable_sources": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FlowVariableSource"
+          },
+          "maxItems": 128,
+          "title": "Variable Sources",
+          "type": "array"
+        },
+        "sensitive_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Sensitive Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "identity_id",
+        "resource_id",
+        "alternate_identity_id",
+        "alternate_resource_id",
+        "request_template",
+        "classifier"
+      ],
+      "title": "FlowStep",
+      "type": "object"
+    },
+    "FlowVariableSource": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "source_step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Source Step Id",
+          "type": "string"
+        },
+        "source_event_sequence": {
+          "minimum": 1,
+          "title": "Source Event Sequence",
+          "type": "integer"
+        },
+        "json_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Json Path",
+          "type": "string"
+        },
+        "consumer": {
+          "$ref": "#/$defs/ValueSlotConsumer",
+          "default": "JSON_BODY"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "source_step_id",
+        "source_event_sequence",
+        "json_path"
+      ],
+      "title": "FlowVariableSource",
+      "type": "object"
+    },
+    "FormUrlEncodedBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "FORM_URLENCODED",
+          "default": "FORM_URLENCODED",
+          "title": "Kind",
+          "type": "string"
+        },
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Fields",
+          "type": "array"
+        }
+      },
+      "title": "FormUrlEncodedBody",
+      "type": "object"
+    },
+    "HttpOutcomeClassifier": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpPredicate"
+          },
+          "maxItems": 128,
+          "title": "Accepted",
+          "type": "array"
+        },
+        "denied": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpPredicate"
+          },
+          "maxItems": 128,
+          "title": "Denied",
+          "type": "array"
+        },
+        "completion_binding": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Binding"
+        }
+      },
+      "title": "HttpOutcomeClassifier",
+      "type": "object"
+    },
+    "HttpParameter": {
+      "additionalProperties": false,
+      "description": "受控 Query/Header/Form 字段；字段值只能是 literal 或已声明 Slot。",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "HttpParameter",
+      "type": "object"
+    },
+    "HttpPredicate": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/HttpPredicateKind"
+        },
+        "statuses": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 32,
+          "title": "Statuses",
+          "type": "array"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "expected": {
+          "default": null,
+          "title": "Expected"
+        },
+        "values": {
+          "default": [],
+          "items": {},
+          "maxItems": 32,
+          "title": "Values",
+          "type": "array"
+        },
+        "redirect_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Redirect Path"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "attribute": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribute"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "HttpPredicate",
+      "type": "object"
+    },
+    "HttpPredicateKind": {
+      "enum": [
+        "STATUS_IN",
+        "JSON_PATH_EXISTS",
+        "JSON_PATH_EQUALS",
+        "JSON_PATH_IN",
+        "HEADER_EXISTS",
+        "HEADER_EQUALS",
+        "REDIRECT_PATH_MATCHES",
+        "HTML_SELECTOR_EXISTS",
+        "HTML_ATTRIBUTE_EQUALS",
+        "BODY_CONTAINS_LITERAL"
+      ],
+      "title": "HttpPredicateKind",
+      "type": "string"
+    },
+    "HttpRequestTemplate": {
+      "additionalProperties": false,
+      "description": "单请求受控模板；不接受 URL、脚本、任意文件或保留认证头。",
+      "properties": {
+        "method": {
+          "enum": [
+            "GET",
+            "PATCH",
+            "POST",
+            "PUT",
+            "DELETE",
+            "HEAD"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Path",
+          "type": "string"
+        },
+        "query": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Query",
+          "type": "array"
+        },
+        "headers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Headers",
+          "type": "array"
+        },
+        "body": {
+          "discriminator": {
+            "mapping": {
+              "EMPTY": "#/$defs/EmptyBody",
+              "FORM_URLENCODED": "#/$defs/FormUrlEncodedBody",
+              "JSON": "#/$defs/JsonBody",
+              "MULTIPART": "#/$defs/MultipartBody"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EmptyBody"
+            },
+            {
+              "$ref": "#/$defs/JsonBody"
+            },
+            {
+              "$ref": "#/$defs/FormUrlEncodedBody"
+            },
+            {
+              "$ref": "#/$defs/MultipartBody"
+            }
+          ],
+          "title": "Body"
+        },
+        "input_slots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ValueSlot"
+          },
+          "maxItems": 128,
+          "title": "Input Slots",
+          "type": "array"
+        },
+        "response_extractors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResponseExtractor"
+          },
+          "maxItems": 128,
+          "title": "Response Extractors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "method",
+        "path"
+      ],
+      "title": "HttpRequestTemplate",
+      "type": "object"
+    },
+    "JsonBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "JSON",
+          "default": "JSON",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "JsonBody",
+      "type": "object"
+    },
+    "MultipartBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "MULTIPART",
+          "default": "MULTIPART",
+          "title": "Kind",
+          "type": "string"
+        },
+        "parts": {
+          "items": {
+            "$ref": "#/$defs/MultipartPart"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Parts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "parts"
+      ],
+      "title": "MultipartBody",
+      "type": "object"
+    },
+    "MultipartPart": {
+      "additionalProperties": false,
+      "description": "Multipart 只允许 literal、Slot 或已登记 fixture/artifact 标识。",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        },
+        "fixture_artifact_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixture Artifact Id"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Type"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MultipartPart",
+      "type": "object"
+    },
+    "ResponseExtractor": {
+      "additionalProperties": false,
+      "properties": {
+        "extractor_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Extractor Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ResponseExtractorKind"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "cookie_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cookie Name"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "attribute": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z_:][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribute"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "extractor_id",
+        "kind"
+      ],
+      "title": "ResponseExtractor",
+      "type": "object"
+    },
+    "ResponseExtractorKind": {
+      "enum": [
+        "JSON_PATH",
+        "HEADER",
+        "COOKIE",
+        "LOCATION",
+        "HTML_SELECTOR",
+        "HTML_ATTRIBUTE"
+      ],
+      "title": "ResponseExtractorKind",
+      "type": "string"
+    },
+    "ValueSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "slot_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ValueSlotSource"
+        },
+        "consumer": {
+          "$ref": "#/$defs/ValueSlotConsumer"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "literal": {
+          "default": null,
+          "title": "Literal"
+        },
+        "secret_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secret Ref"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Path"
+        },
+        "producer_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Producer Step Id"
+        },
+        "consumer_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Step Id"
+        },
+        "producer_step": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Producer Step"
+        },
+        "consumer_step": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Step"
+        }
+      },
+      "required": [
+        "slot_id",
+        "source",
+        "consumer"
+      ],
+      "title": "ValueSlot",
+      "type": "object"
+    },
+    "ValueSlotConsumer": {
+      "enum": [
+        "PATH",
+        "QUERY",
+        "HEADER",
+        "JSON_BODY",
+        "FORM_FIELD",
+        "MULTIPART_FIELD"
+      ],
+      "title": "ValueSlotConsumer",
+      "type": "string"
+    },
+    "ValueSlotSource": {
+      "enum": [
+        "CASE_SUBJECT_ID",
+        "CASE_RESOURCE_ID",
+        "FIXED_LITERAL",
+        "SECRET_REF",
+        "PRIOR_STEP_JSON_PATH",
+        "PRIOR_STEP_HEADER",
+        "PRIOR_STEP_COOKIE",
+        "PRIOR_STEP_LOCATION"
+      ],
+      "title": "ValueSlotSource",
+      "type": "string"
+    },
+    "ValueType": {
+      "enum": [
+        "STRING",
+        "INTEGER",
+        "BOOLEAN",
+        "JSON"
+      ],
+      "title": "ValueType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "4",
+      "default": "4",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/FlowStep"
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    },
+    "owner_observer_path": {
+      "default": "/owner/resources/{resource_id}",
+      "title": "Owner Observer Path",
+      "type": "string"
+    },
+    "reset_path": {
+      "default": "/reset",
+      "title": "Reset Path",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "steps"
+  ],
+  "title": "Flow",
+  "type": "object"
+}

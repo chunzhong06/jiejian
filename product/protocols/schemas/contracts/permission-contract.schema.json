@@ -3,12 +3,6 @@
     "ActionDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "action_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Action Id",
@@ -50,12 +44,6 @@
     "BatchPermissionRule": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "rule_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Rule Id",
@@ -132,12 +120,6 @@
     "BatchResourceExpectation": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "resource_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Resource Id",
@@ -178,12 +160,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "workflow_states": {
           "default": [],
           "items": {
@@ -235,12 +211,6 @@
     "PermissionRule": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "rule_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Rule Id",
@@ -322,12 +292,6 @@
     "RelationEndpoint": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "endpoint_type": {
           "enum": [
             "subject",
@@ -352,12 +316,6 @@
     "RelationFact": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "relation_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Relation Id",
@@ -398,12 +356,6 @@
     "ResourceDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "resource_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Resource Id",
@@ -483,12 +435,6 @@
     "SecurityEffectDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "effect_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Effect Id",
@@ -548,12 +494,6 @@
     "SubjectDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "subject_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Subject Id",
@@ -625,12 +565,6 @@
     "WorkflowTransition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "allowed_from_states": {
           "items": {
             "type": "string"
@@ -657,8 +591,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "3",
-      "default": "3",
+      "const": "4",
+      "default": "4",
       "title": "Schema Version",
       "type": "string"
     },

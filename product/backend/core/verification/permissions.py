@@ -40,8 +40,6 @@ _SECRET_OR_URL = re.compile(
 class PermissionModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
-    schema_version: Literal["3"] = "3"
-
 
 class RelationType(StrEnum):
     OWNS = "OWNS"
@@ -344,6 +342,7 @@ class BatchPermissionRule(PermissionModel):
 
 # 完整、冻结的权限关系图与规则集合；所有跨引用在构造时一次校验。
 class PermissionContract(PermissionModel):
+    schema_version: Literal["4"] = "4"
     contract_id: str = Field(pattern=_ID_PATTERN)
     version: int = Field(ge=1, le=2_147_483_647)
     role_ids: tuple[str, ...] = Field(min_length=1, max_length=128)
@@ -566,6 +565,7 @@ class PermissionContract(PermissionModel):
         object.__setattr__(self, "batch_rules", tuple(sorted(self.batch_rules, key=lambda item: item.rule_id)))
         return self
 
+
     @staticmethod
     def _validate_relation_path(
         rule: PermissionRule,
@@ -715,6 +715,36 @@ class PermissionContract(PermissionModel):
                 raise ValueError("same batch permission semantics cannot conflict")
             batch_seen[key] = expectations
 
+
+def parse_permission_contract(raw: bytes | str) -> PermissionContract:
+    """严格读取唯一当前版本的权限契约根文档。"""
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+
+        return result
+
+    if isinstance(raw, str):
+        encoded = raw.encode("utf-8")
+    elif isinstance(raw, bytes):
+        encoded = raw
+    else:
+        raise TypeError("permission contract must be UTF-8 JSON bytes or text")
+    if encoded.startswith(b"\xef\xbb\xbf"):
+        raise ValueError("permission contract does not accept BOM")
+    parsed = json.loads(
+        encoded.decode("utf-8"),
+        object_pairs_hook=reject_duplicate_keys,
+        parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)),
+    )
+    if not isinstance(parsed, dict) or parsed.get("schema_version") != "4":
+        raise ValueError("permission contract schema_version is missing or unsupported")
+    return PermissionContract.model_validate_json(encoded, strict=True)
+
 class NormalizedPermissionCase(PermissionModel):
     case_id: str = Field(pattern=_ID_PATTERN)
     fingerprint: str = Field(pattern=_HEX_PATTERN)
@@ -775,7 +805,7 @@ def canonical_json_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def canonical_sha256(value: Any) -> str:
+def permission_model_sha256(value: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 
@@ -789,7 +819,7 @@ def compile_permission_plan(
 
     cases: list[NormalizedPermissionCase] = []
     for rule in contract.rules:
-        fingerprint = canonical_sha256(
+        fingerprint = permission_model_sha256(
             {
                 "contract_id": contract.contract_id,
                 "rule": rule,
@@ -816,7 +846,7 @@ def compile_permission_plan(
             )
         )
     plan = NormalizedPermissionPlan(
-        plan_id=f"plan-{canonical_sha256(cases)[:32]}",
+        plan_id=f"plan-{permission_model_sha256(cases)[:32]}",
         source_contract_id=contract.contract_id,
         seed=seed,
         engine_version=engine_version,

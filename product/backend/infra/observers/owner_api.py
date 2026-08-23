@@ -14,11 +14,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from product.protocols.observer import CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverBudget, ObserverSpec, ObserverTarget, ObserverType, OwnerApiLocator, ProvenanceType, build_normalized_state, canonical_sha256
+from product.protocols.observer import CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverBudget, ObserverSpec, ObserverTarget, ObserverType, OwnerApiLocator, ProvenanceType, build_normalized_state, observer_canonical_sha256
 from product.backend.core.redaction import redact_known_secrets
 
 if TYPE_CHECKING:
-    from product.backend.infra.execution.http_identity import HttpIdentityRuntime
+    from product.backend.infra.execution.web.identity import HttpIdentityRuntime
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +110,7 @@ class OwnerApiObserverAdapter:
                     provenance_type=ProvenanceType.OWNER_API,
                     adapter_version="owner-api-1",
                     target_id=self.spec.target.target_id,
-                    source_sha256=canonical_sha256(payload),
+                    source_sha256=observer_canonical_sha256(payload),
                 ),
             )
         return ObservationEnvelope(

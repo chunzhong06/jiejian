@@ -23,7 +23,7 @@ from typing import Protocol
 
 from pydantic import ValidationError
 
-from product.backend.core.contracts.analysis.canonical import canonical_sha256
+from product.backend.core.contracts.analysis.canonical import contract_analysis_sha256
 from product.backend.core.contracts.models import ContractCandidate, ContractSourceType, LLMGenerationMetadata, Requirement, SourceReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import redact_known_secrets
@@ -282,7 +282,7 @@ class ContractCandidateGenerator:
                 locator=f"llm:{provider_id}:{adapter_version}",
                 content_sha256=output_hash,
             )
-            fingerprint = canonical_sha256(
+            fingerprint = contract_analysis_sha256(
                 {
                     "project_id": project_id,
                     "metadata": _stable_generation_metadata(metadata),

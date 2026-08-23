@@ -1,21 +1,106 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "jiejian/reports/report-package-manifest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "report_id", "run_id", "gate_result_id", "report_sha256", "files"],
-  "properties": {
-    "schema_version": {"const": "2"},
-    "report_id": {"type": "string", "pattern": "^report_[0-9a-f]{32}$"},
-    "run_id": {"type": "string", "pattern": "^run_[0-9a-f]{32}$"},
-    "gate_result_id": {"type": "string", "pattern": "^gate_[0-9a-f]{32}$"},
-    "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "files": {
-      "type": "array", "minItems": 4, "maxItems": 4,
-      "items": {"type": "object", "additionalProperties": false, "required": ["schema_version", "path", "byte_count", "sha256"], "properties": {
-        "schema_version": {"const": "2"}, "path": {"enum": ["report.json", "report.html", "report.sarif.json", "report.junit.xml"]},
-        "byte_count": {"type": "integer", "minimum": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-      }}
+  "$defs": {
+    "ReportPackageFile": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "enum": [
+            "report.json",
+            "report.html",
+            "report.sarif.json",
+            "report.junit.xml"
+          ],
+          "title": "Path",
+          "type": "string"
+        },
+        "byte_count": {
+          "maximum": 16777216,
+          "minimum": 1,
+          "title": "Byte Count",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_count",
+        "sha256"
+      ],
+      "title": "ReportPackageFile",
+      "type": "object"
     }
-  }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "4",
+      "default": "4",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "report_id": {
+      "pattern": "^report_[0-9a-f]{32}$",
+      "title": "Report Id",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "report_type": {
+      "enum": [
+        "BASE",
+        "GATE"
+      ],
+      "title": "Report Type",
+      "type": "string"
+    },
+    "base_report_id": {
+      "pattern": "^report_[0-9a-f]{32}$",
+      "title": "Base Report Id",
+      "type": "string"
+    },
+    "gate_result_id": {
+      "anyOf": [
+        {
+          "pattern": "^gate_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gate Result Id"
+    },
+    "canonical_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Canonical Sha256",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/ReportPackageFile"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "Files",
+      "type": "array"
+    }
+  },
+  "required": [
+    "report_id",
+    "run_id",
+    "report_type",
+    "base_report_id",
+    "canonical_sha256",
+    "files"
+  ],
+  "title": "ReportPackageManifest",
+  "type": "object"
 }

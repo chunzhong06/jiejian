@@ -7,7 +7,7 @@ from product.backend.core.verification.gating import (
     GateFinding,
     GatePolicy,
     RegressionBaseline,
-    canonical_sha256,
+    gate_canonical_sha256,
     evaluate_gate,
 )
 
@@ -31,7 +31,7 @@ def _baseline() -> RegressionBaseline:
             ),
         ),
         coverage_ids=("case:case-a:fingerprint-a", "case:case-b:fingerprint-b"),
-        coverage_digest=canonical_sha256(("case:case-a:fingerprint-a", "case:case-b:fingerprint-b")),
+        coverage_digest=gate_canonical_sha256(("case:case-a:fingerprint-a", "case:case-b:fingerprint-b")),
         request_snapshot_sha256="1" * 64,
         engine_version="runner-v2",
         protocol_versions=("observer-v2", "runner-result-v2"),

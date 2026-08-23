@@ -64,20 +64,6 @@ export type QuickCheckResult = {
   created: boolean
 }
 
-export type DemoVariant = 'fixed' | 'vulnerable' | 'inconclusive'
-
-export type DemoStatus = {
-  schema_version: '1'
-  status: 'stopped' | 'starting' | 'running' | 'failed'
-  demo_data: true
-  variant: DemoVariant | null
-  session_id: string | null
-  project_id: string | null
-  run_id: string | null
-  job_id: string | null
-  message: string
-}
-
 type SessionPatch = {
   project_name?: string
   target_address?: string
@@ -99,7 +85,4 @@ export const onboardingApi = {
   updateSession: (sessionId: string, revision: number, patch: SessionPatch) => request<OnboardingSession>(`/api/onboarding/sessions/${encodeURIComponent(sessionId)}`, { method: 'PATCH', body: JSON.stringify({ schema_version: '1', revision, ...patch }) }),
   putCredentials: (sessionId: string, primary: string, comparison: string) => request<{ primary_configured: boolean; comparison_configured: boolean }>(`/api/onboarding/sessions/${encodeURIComponent(sessionId)}/credentials`, { method: 'POST', body: JSON.stringify({ schema_version: '1', primary, comparison }) }),
   quickCheck: (sessionId: string) => request<QuickCheckResult>(`/api/onboarding/sessions/${encodeURIComponent(sessionId)}/quick-check`, { method: 'POST', body: JSON.stringify({ schema_version: '1' }) }),
-  demoStatus: () => request<DemoStatus>('/api/onboarding/demo'),
-  demoStart: (variant: DemoVariant) => request<DemoStatus>('/api/onboarding/demo/start', { method: 'POST', body: JSON.stringify({ schema_version: '1', variant }) }),
-  demoStop: () => request<DemoStatus>('/api/onboarding/demo/stop', { method: 'POST' }),
 }

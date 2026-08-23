@@ -69,8 +69,6 @@ class RecordingModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"] = "1"
-
 
 class RecordingStateEvent(RecordingModel):
     sequence: int = Field(ge=1)
@@ -251,7 +249,6 @@ def transition_recording_state(
         reason_codes = (*reason_codes, stable_reason)
     updates["reason_codes"] = reason_codes
     event = RecordingStateEvent(
-        schema_version="1",
         sequence=len(recording.events) + 1,
         source=recording.state,
         target=resolved,

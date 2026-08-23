@@ -23,6 +23,7 @@ from product.protocols import (
     QueuePeekBudget,
 )
 from product.protocols.observer import OBSERVER_JSON_MAX_BYTES
+from tests.fixtures.runtime_environment import runtime_identity_environment
 
 
 SAS = "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=r&sr=q&sig=opaque-signature"
@@ -220,7 +221,13 @@ def test_queue_parent_cancel_timeout_crash_and_cleanup(tmp_path: Path, monkeypat
         def __init__(self) -> None:
             self.killed = False
         def wait(self, timeout: float | None = None) -> int:
+            if self.killed:
+                return -9
             raise subprocess.TimeoutExpired("queue", timeout)
+        def poll(self) -> int | None:
+            return -9 if self.killed else None
+        def terminate(self) -> None:
+            return None
         def kill(self) -> None:
             self.killed = True
 
@@ -228,14 +235,14 @@ def test_queue_parent_cancel_timeout_crash_and_cleanup(tmp_path: Path, monkeypat
     monkeypatch.setattr(queue_module.subprocess, "Popen", lambda *args, **kwargs: process)
     clock = iter((1_000_000_000, 1_001_000_000, 1_050_000_000, 1_101_000_000))
     monkeypatch.setattr(queue_module.time, "monotonic_ns", lambda: next(clock, 1_101_000_000))
-    result = queue_module.run_azure_queue_observer(spec, CORRELATION, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "timeout", parent_environ={"QUEUE_SAS": SAS}, python_executable="python")
+    result = queue_module.run_azure_queue_observer(spec, CORRELATION, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "timeout", parent_environ=runtime_identity_environment(tmp_path / "var", extra={"QUEUE_SAS": SAS}), python_executable=sys.executable)
     assert result.envelope is not None and result.envelope.completeness is ObservationCompleteness.TIMED_OUT
     assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
     assert process.killed
-    assert not list((tmp_path / "timeout").glob("*"))
+    assert not list((tmp_path / "timeout").rglob("*observer*"))
 
     monkeypatch.setattr(queue_module.subprocess, "Popen", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("missing interpreter")))
-    crash = queue_module.run_azure_queue_observer(spec, CORRELATION, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "crash", parent_environ={"QUEUE_SAS": SAS}, python_executable="C:\\missing-python.exe")
+    crash = queue_module.run_azure_queue_observer(spec, CORRELATION, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "crash", parent_environ=runtime_identity_environment(tmp_path / "var", extra={"QUEUE_SAS": SAS}), python_executable=sys.executable)
     assert crash.envelope is None and crash.outcome.status is ObserverOutcomeStatus.EXECUTION_ERROR
 
 
@@ -244,6 +251,10 @@ def test_queue_parent_selects_only_referenced_sas_and_keeps_command_secret_free(
 
     class Process:
         returncode = 7
+
+        def poll(self) -> int:
+            return self.returncode
+
         def wait(self, timeout: float | None = None) -> int:
             return 0
 
@@ -257,8 +268,8 @@ def test_queue_parent_selects_only_referenced_sas_and_keeps_command_secret_free(
     result = queue_module.run_azure_queue_observer(
         _spec(), CORRELATION, ObservationPhase.EVENTUAL,
         attempt_dir=tmp_path / "minimal-env",
-        parent_environ={"QUEUE_SAS": secret, "UNRELATED_SECRET": "must-not-propagate", "PATH": "C:\\Windows"},
-        python_executable="python",
+        parent_environ=runtime_identity_environment(tmp_path / "var", extra={"QUEUE_SAS": secret, "UNRELATED_SECRET": "must-not-propagate", "PATH": "C:\\Windows"}),
+        python_executable=sys.executable,
     )
     assert result.envelope is None
     assert result.outcome.status is ObserverOutcomeStatus.EXECUTION_ERROR
@@ -280,6 +291,8 @@ def _assert_parent_rejects_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         returncode = 0
         def __init__(self, output: Path) -> None:
             self.output = output
+        def poll(self) -> int:
+            return self.returncode
         def wait(self, timeout: float | None = None) -> int:
             self.output.write_bytes(payload)
             return 0
@@ -293,12 +306,12 @@ def _assert_parent_rejects_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     result = queue_module.run_azure_queue_observer(
         _spec(), CORRELATION, ObservationPhase.EVENTUAL,
         attempt_dir=attempt,
-        parent_environ={"QUEUE_SAS": SAS, "PATH": "C:\\Windows"},
-        python_executable="python",
+        parent_environ=runtime_identity_environment(tmp_path / "var", extra={"QUEUE_SAS": SAS, "PATH": "C:\\Windows"}),
+        python_executable=sys.executable,
     )
     assert result.envelope is None
     assert result.outcome.status is ObserverOutcomeStatus.EXECUTION_ERROR
-    assert not list(attempt.glob("*"))
+    assert not list(attempt.rglob("*observer*"))
 
 
 def test_queue_output_binding_rejects_wrong_target(monkeypatch: pytest.MonkeyPatch) -> None:

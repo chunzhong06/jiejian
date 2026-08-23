@@ -19,8 +19,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.verification.permission_coverage import PermissionMutationCase
-from product.backend.core.verification.permissions import canonical_sha256
-from product.protocols.http import (
+from product.backend.core.verification.permissions import permission_model_sha256
+from product.protocols.web.workflow import (
     HttpWorkflowBinding,
     HttpWorkflowStep,
     WorkflowStepPurpose,
@@ -29,7 +29,6 @@ from product.protocols.http import (
 
 class SetupMinimizationModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
-    schema_version: Literal["1"] = "1"
 
 
 class SetupMinimizationInvariant(SetupMinimizationModel):
@@ -55,7 +54,7 @@ class SetupMinimizationResult(SetupMinimizationModel):
             raise ValueError("setup minimization cannot remove the TARGET")
         if _target_fingerprint(self.minimized_workflow) != self.invariant.target_fingerprint:
             raise ValueError("setup minimization changed the TARGET")
-        if canonical_sha256(self.minimized_workflow.baseline_projections) != self.invariant.baseline_fingerprint:
+        if permission_model_sha256(self.minimized_workflow.baseline_projections) != self.invariant.baseline_fingerprint:
             raise ValueError("setup minimization changed the baseline")
         return self
 
@@ -72,7 +71,7 @@ def minimize_failure_setup(
     invariant = SetupMinimizationInvariant(
         target_fingerprint=_target_fingerprint(workflow),
         permission_mutation_fingerprint=case.fingerprint,
-        baseline_fingerprint=canonical_sha256(workflow.baseline_projections),
+        baseline_fingerprint=permission_model_sha256(workflow.baseline_projections),
         security_effect_fingerprint=security_effect_fingerprint,
     )
     attempts = 1
@@ -130,4 +129,4 @@ def _without_setup(workflow: HttpWorkflowBinding, setup_step_id: str) -> HttpWor
 def _target_fingerprint(workflow: HttpWorkflowBinding) -> str:
     target = next(step for step in workflow.steps if step.id == workflow.target_step_id)
     payload = target.model_dump(mode="json", exclude={"depends_on_step_ids"})
-    return canonical_sha256(payload)
+    return permission_model_sha256(payload)

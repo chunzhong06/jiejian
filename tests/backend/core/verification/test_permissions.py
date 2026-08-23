@@ -20,8 +20,9 @@ from product.backend.core.verification.permissions import (
     SecurityEffectKind,
     SubjectDefinition,
     canonical_json_bytes,
-    canonical_sha256,
+    permission_model_sha256,
     compile_permission_plan,
+    parse_permission_contract,
 )
 
 
@@ -83,7 +84,22 @@ def _contract(*, expectation: PermissionExpectation = PermissionExpectation.ALLO
     )
 
 
-def test_v2_contract_has_strict_six_dimensions_and_stable_plan() -> None:
+def test_permission_contract_reader_accepts_only_current_root_version() -> None:
+    raw = canonical_json_bytes(_contract())
+    assert parse_permission_contract(raw) == _contract()
+    old = json.loads(raw)
+    old["schema_version"] = "3"
+    with pytest.raises(ValueError):
+        parse_permission_contract(json.dumps(old, separators=(",", ":")))
+    missing = json.loads(raw)
+    missing.pop("schema_version")
+    with pytest.raises(ValueError):
+        parse_permission_contract(json.dumps(missing, separators=(",", ":")))
+    with pytest.raises(ValueError):
+        parse_permission_contract(b'{"schema_version":"4","schema_version":"4"}')
+
+
+def test_contract_has_strict_six_dimensions_and_stable_plan() -> None:
     contract = _contract()
     plan = compile_permission_plan(contract, engine_version="permissions", seed=7, )
     assert plan.cases[0].expected is PermissionExpectation.ALLOW
@@ -99,8 +115,8 @@ def test_v2_contract_has_strict_six_dimensions_and_stable_plan() -> None:
         rules=tuple(reversed(contract.rules)),
     )
     reordered = PermissionContract(**reordered_data)
-    assert canonical_sha256(contract) == canonical_sha256(reordered)
-    assert plan.model_dump(mode="python")["schema_version"] == "3"
+    assert permission_model_sha256(contract) == permission_model_sha256(reordered)
+    assert "schema_version" not in plan.model_dump(mode="python")
 
 
 @pytest.mark.parametrize(
@@ -111,14 +127,14 @@ def test_v2_contract_has_strict_six_dimensions_and_stable_plan() -> None:
         {"workflow_states": ("unknown",)},
     ],
 )
-def test_v2_rejects_undeclared_or_cross_boundary_facts(change: dict) -> None:
+def test_contract_rejects_undeclared_or_cross_boundary_facts(change: dict) -> None:
     data = _contract().model_dump(mode="python")
     data.update(change)
     with pytest.raises(ValidationError):
         PermissionContract.model_validate(data)
 
 
-def test_v2_rejects_undeclared_role_action_and_state() -> None:
+def test_contract_rejects_undeclared_role_action_and_state() -> None:
     data = _contract().model_dump(mode="python")
     data["subjects"] = (
         {**data["subjects"][0], "roles": ("root",)},
@@ -153,7 +169,7 @@ def test_v2_rejects_undeclared_role_action_and_state() -> None:
         ("manages-owner", "manages-owner"),
     ],
 )
-def test_v2_rejects_disconnected_or_incomplete_relation_paths(
+def test_contract_rejects_disconnected_or_incomplete_relation_paths(
     relation_path: tuple[str, ...],
 ) -> None:
     data = _contract().model_dump(mode="python")
@@ -171,7 +187,7 @@ def test_v2_rejects_disconnected_or_incomplete_relation_paths(
         PermissionContext(resource_ids=("other-document",)),
     ],
 )
-def test_v2_rejects_context_that_does_not_describe_the_rule_resource(
+def test_contract_rejects_context_that_does_not_describe_the_rule_resource(
     context: PermissionContext,
 ) -> None:
     data = _contract().model_dump(mode="python")
@@ -191,7 +207,7 @@ def test_v2_rejects_context_that_does_not_describe_the_rule_resource(
         PermissionContract.model_validate(data)
 
 
-def test_v2_rejects_bad_relation_endpoints_cycles_and_conflicts() -> None:
+def test_contract_rejects_bad_relation_endpoints_cycles_and_conflicts() -> None:
     data = _contract().model_dump(mode="python")
     data["relations"] = (
         RelationFact(
@@ -229,7 +245,7 @@ def test_permission_rules_use_semantic_observation_requirements() -> None:
 
 
 @pytest.mark.parametrize("schema_name, model", [("permission-contract.schema.json", PermissionContract), ("normalized-permission-plan.schema.json", NormalizedPermissionPlan)])
-def test_checked_in_v2_schema_has_no_drift(schema_name: str, model: type) -> None:
+def test_checked_in_contract_schema_has_no_drift(schema_name: str, model: type) -> None:
     checked_in = json.loads((PROJECT_ROOT / "product" / "protocols" / "schemas" / "contracts" / schema_name).read_text(encoding="utf-8"))
     assert checked_in == model.model_json_schema()
 

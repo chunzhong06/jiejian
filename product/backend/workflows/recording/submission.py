@@ -44,8 +44,6 @@ class RecordingApplicationModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"] = "1"
-
 
 class SubmitRecording(RecordingApplicationModel):
     request: RecordingRunnerRequest
@@ -220,7 +218,6 @@ class RecordingSubmission:
             if work.projects.get(command.request.project_id) is None:
                 raise JiejianError(ErrorCode.JOB_PERSISTENCE, "录制所属项目不存在")
             domain = Recording(
-                schema_version="1",
                 recording_id=command.request.recording_id,
                 project_id=command.request.project_id,
                 created_at_us=command.now_us,
@@ -438,7 +435,6 @@ class RecordingSubmission:
             RecordingState.SAFETY_STOPPED,
         }
         domain = Recording(
-            schema_version="1",
             recording_id=existing.recording_id,
             project_id=existing.project_id,
             state=result.recording_state,

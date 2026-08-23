@@ -24,8 +24,6 @@ from product.backend.core.lifecycle import RunVerdict
 
 class CollisionModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
-    schema_version: Literal["1"] = "1"
-
 
 class CollisionAnomaly(StrEnum):
     UNAUTHORIZED_EFFECT = "UNAUTHORIZED_EFFECT"

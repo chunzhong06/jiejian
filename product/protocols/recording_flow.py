@@ -23,7 +23,12 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN
-from product.protocols.http import HttpOutcomeClassifier, HttpRequestTemplate, ValueSlotConsumer, ValueType
+from product.protocols.web.workflow import (
+    HttpOutcomeClassifier,
+    HttpRequestTemplate,
+    ValueSlotConsumer,
+    ValueType,
+)
 
 
 class RecordingFlowModel(BaseModel):
@@ -34,7 +39,6 @@ class RecordingFlowModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["3"] = "3"
 
 
 class FlowVariableSource(RecordingFlowModel):
@@ -75,6 +79,7 @@ class FlowStep(RecordingFlowModel):
 
 # 已确认、无环且不含秘密的录制流程；变量只能引用先前步骤。
 class Flow(RecordingFlowModel):
+    schema_version: Literal["4"] = "4"
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     steps: tuple[FlowStep, ...] = Field(min_length=1)
     owner_observer_path: str = "/owner/resources/{resource_id}"

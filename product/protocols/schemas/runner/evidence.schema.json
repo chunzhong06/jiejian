@@ -31,12 +31,6 @@
     "Correlation": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Case Id",
@@ -76,12 +70,6 @@
     "DisclosureProof": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "projection_version": {
           "maxLength": 64,
           "minLength": 1,
@@ -126,12 +114,6 @@
     "ExecutionFact": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Case Id",
@@ -198,12 +180,6 @@
     "NormalizedState": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "canonical_data": {
           "additionalProperties": true,
           "title": "Canonical Data",
@@ -245,8 +221,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -259,8 +235,8 @@
           "$ref": "#/$defs/ObserverType"
         },
         "protocol_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Protocol Version",
           "type": "string"
         },
@@ -332,12 +308,6 @@
     "ObservationFact": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "requirement_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Requirement Id",
@@ -402,12 +372,6 @@
     "ObservationProvenance": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "provenance_type": {
           "$ref": "#/$defs/ProvenanceType"
         },
@@ -452,12 +416,6 @@
     "ObservationWindow": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "phase": {
           "$ref": "#/$defs/ObservationPhase"
         },
@@ -499,12 +457,6 @@
     "ObserverOutcome": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "observer_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Observer Id",
@@ -547,12 +499,6 @@
     "ObserverRequirementBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "requirement_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Requirement Id",
@@ -637,12 +583,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "workflow_states": {
           "default": [],
           "items": {
@@ -694,12 +634,6 @@
     "PermissionMutationCase": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Case Id",
@@ -823,12 +757,6 @@
     "PermissionMutationDescriptor": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "dimension": {
           "$ref": "#/$defs/CoverageDimension"
         },
@@ -864,12 +792,6 @@
     "PermissionTwin": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "twin_id": {
           "pattern": "^twin-[0-9a-f]{32}$",
           "title": "Twin Id",
@@ -938,12 +860,6 @@
     "SecurityEffectFact": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "effect_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Effect Id",
@@ -1038,9 +954,7 @@
     },
     "TargetType": {
       "enum": [
-        "WEB",
-        "CLI_APPLICATION",
-        "MCP_AGENT"
+        "WEB"
       ],
       "title": "TargetType",
       "type": "string"
@@ -1065,12 +979,6 @@
     "TwinInvariantSpecification": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "action_id": {
           "title": "Action Id",
           "type": "string"
@@ -1127,8 +1035,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "3",
-      "default": "3",
+      "const": "4",
+      "default": "4",
       "title": "Schema Version",
       "type": "string"
     },

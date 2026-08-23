@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from product.backend.core.contracts.models import ContractCandidate
-from product.backend.core.contracts.analysis.canonical import _issue, _issue_key, canonical_sha256
+from product.backend.core.contracts.analysis.canonical import _issue, _issue_key, contract_analysis_sha256
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisReasonCode, AnalysisSeverity, CandidateMergeResult, MergedCandidate
 
 
@@ -27,7 +27,7 @@ def merge_candidates(candidates: Sequence[ContractCandidate]) -> CandidateMergeR
     groups: dict[tuple[str, str], list[ContractCandidate]] = {}
     for candidate in ordered:
         groups.setdefault(
-            (candidate.project_id, canonical_sha256(candidate.suggestion)),
+            (candidate.project_id, contract_analysis_sha256(candidate.suggestion)),
             [],
         ).append(candidate)
     issues: list[AnalysisIssue] = []
@@ -46,7 +46,7 @@ def merge_candidates(candidates: Sequence[ContractCandidate]) -> CandidateMergeR
     for candidate in ordered:
         by_rule_id.setdefault(candidate.suggestion.id, []).append(candidate)
     for rule_id, same_id in sorted(by_rule_id.items()):
-        if len({canonical_sha256(item.suggestion) for item in same_id}) > 1:
+        if len({contract_analysis_sha256(item.suggestion) for item in same_id}) > 1:
             issues.append(
                 _issue(
                     AnalysisReasonCode.CONFLICTING_CANDIDATE,
@@ -73,7 +73,7 @@ def merge_candidates(candidates: Sequence[ContractCandidate]) -> CandidateMergeR
         suggestion = min((item.suggestion for item in group), key=lambda item: item.id)
         merged.append(
             MergedCandidate(
-                merged_id=f"cand_{canonical_sha256({'project_id': project_id, 'rule': rule_fingerprint})[:32]}",
+                merged_id=f"cand_{contract_analysis_sha256({'project_id': project_id, 'rule': rule_fingerprint})[:32]}",
                 project_id=project_id,
                 suggestion=suggestion,
                 candidate_ids=candidate_ids,
@@ -87,5 +87,5 @@ def merge_candidates(candidates: Sequence[ContractCandidate]) -> CandidateMergeR
     return CandidateMergeResult(
         candidates=tuple(sorted(merged, key=lambda item: item.merged_id)),
         issues=sorted_issues,
-        canonical_sha256=canonical_sha256(body),
+        canonical_sha256=contract_analysis_sha256(body),
     )

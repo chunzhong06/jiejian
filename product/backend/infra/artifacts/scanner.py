@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from product.backend.core.errors import JiejianError
-from product.backend.infra.artifacts.run_packages import PublicationManifest
+from product.backend.infra.artifacts.run_packages import PublicationManifest, read_publication_manifest
 from product.protocols.artifacts import ArtifactCheckRequest, ArtifactEvidence, ArtifactFinding, ArtifactScanResult, ArtifactScanStatus, ArtifactVerdict, RULESET_VERSION, stable_artifact_fingerprint, stable_artifact_ids
 
 _ASSIGNMENT = re.compile(
@@ -120,9 +120,9 @@ def _load_manifest(root: Path, manifest_path: Path) -> tuple[bytes, PublicationM
     if manifest_path.parent.resolve() != root.parent.resolve():
         raise ArtifactScanFailure("MANIFEST_OUTSIDE_ROOT")
     _regular_file(manifest_path)
-    raw = manifest_path.read_bytes()
     try:
-        manifest = PublicationManifest.model_validate_json(raw, strict=True)
+        raw = manifest_path.read_bytes()
+        manifest = read_publication_manifest(manifest_path)
     except Exception:
         raise ArtifactScanFailure("MANIFEST_INVALID") from None
     return raw, manifest

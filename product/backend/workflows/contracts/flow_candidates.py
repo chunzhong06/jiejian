@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from product.backend.core.contracts.analysis.canonical import canonical_sha256, _candidate, _rule_id
+from product.backend.core.contracts.analysis.canonical import contract_analysis_sha256, _candidate, _rule_id
 from product.backend.core.contracts.analysis.models import CandidateBatch
 from product.backend.core.contracts.models import CandidateRiskKind, CandidateSuggestion, ContractCandidate, ContractSourceType
 from product.protocols.recording_flow import Flow
@@ -13,7 +13,7 @@ def build_flow_candidates(project_id: str, flow: Flow) -> CandidateBatch:
 
     if not isinstance(flow, Flow):
         raise TypeError("flow candidate builder requires a compiled Flow")
-    flow_hash = canonical_sha256(flow)
+    flow_hash = contract_analysis_sha256(flow)
     candidates: list[ContractCandidate] = []
     for step in flow.steps:
         if step.request_template.method == "GET":
@@ -24,7 +24,6 @@ def build_flow_candidates(project_id: str, flow: Flow) -> CandidateBatch:
                     f"flow:{flow.id}/step:{step.id}",
                     flow_hash,
                     CandidateSuggestion(
-                        schema_version="1",
                         id=_rule_id("flow", step.id, "foreign-read"),
                         kind=CandidateRiskKind.FOREIGN_READ,
                         required_observations=("resource_state",),
@@ -40,7 +39,6 @@ def build_flow_candidates(project_id: str, flow: Flow) -> CandidateBatch:
                     f"flow:{flow.id}/step:{step.id}",
                     flow_hash,
                     CandidateSuggestion(
-                        schema_version="1",
                         id=_rule_id("flow", step.id, "unauthorized-side-effect"),
                         kind=CandidateRiskKind.UNAUTHORIZED_SIDE_EFFECT,
                         required_observations=("resource_state",),
@@ -56,7 +54,6 @@ def build_flow_candidates(project_id: str, flow: Flow) -> CandidateBatch:
                     f"flow:{flow.id}/step:{step.id}/fields:{','.join(sorted(step.sensitive_fields))}",
                     flow_hash,
                     CandidateSuggestion(
-                        schema_version="1",
                         id=_rule_id("flow", step.id, "privileged-field"),
                         kind=CandidateRiskKind.PRIVILEGED_FIELD,
                         required_observations=("resource_state",),

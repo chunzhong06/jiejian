@@ -35,20 +35,14 @@ from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RunnerResultType
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.infra.runtime.paths import RuntimePaths
+from product.backend.infra.runtime.worker_lifetime import write_worker_tree_identity, worker_tree_name
 from product.backend.infra.artifacts.run_packages import StagedAttempt, TrustedResultReceipt, attempt_paths_for, final_run_dir, validate_published_run, _parse_runner_result
 
 WORKER_LOG_MAX_BYTES = 1_048_576
 WORKER_LOG_BACKUPS = 2
-
-
-def _worker_import_root() -> Path:
-    """返回包含 product 包的源码树或 site-packages 导入根。"""
-
-    for parent in Path(__file__).resolve().parents:
-        if (parent / "product" / "backend").is_dir():
-            return parent
-    raise RuntimeError("无法定位 Worker 的 Python 导入根")
 
 
 class WorkerDispatcher:
@@ -65,6 +59,7 @@ class WorkerDispatcher:
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.var_dir = var_dir.resolve()
+        self._paths = RuntimePaths(self.var_dir).ensure_layout()
         self._uow_factory = uow_factory
         self._environ = os.environ if environ is None else environ
         self._popen = popen
@@ -80,19 +75,16 @@ class WorkerDispatcher:
     ) -> subprocess.Popen[Any]:
         """以最小环境启动独立 Worker；秘密仅通过受控名称解析，不继承完整父进程环境。"""
 
-        environment = minimal_process_environment(
-            self._environ,
-            secret_names=secret_names,
+        source_environment = dict(self._environ)
+        source_environment.setdefault("JIEJIAN_VAR_DIR", str(self.var_dir))
+        source_environment.setdefault(
+            "JIEJIAN_PYTHON_EXECUTABLE", str(Path(sys.executable).resolve())
         )
-        # 即使调用者绕过 start.cmd，Worker 也必须绑定到当前主进程的同一解释器身份。
-        environment.setdefault("JIEJIAN_PYTHON_EXECUTABLE", str(Path(sys.executable).resolve()))
-        environment.setdefault("JIEJIAN_PYTHON_ENVIRONMENT_PATH", str(Path(sys.prefix).resolve()))
-        environment.setdefault("JIEJIAN_PYTHON_ENVIRONMENT_TYPE", "当前 Python 环境")
-        command = [
-            sys.executable,
-            "-B",
-            "-m",
-            "product.backend.infra.runtime.worker_process",
+        source_environment.setdefault(
+            "JIEJIAN_PYTHON_ENVIRONMENT_PATH", str(Path(sys.prefix).resolve())
+        )
+        source_environment.setdefault("JIEJIAN_PYTHON_ENVIRONMENT_TYPE", "当前 Python 环境")
+        arguments = [
             "--var-dir",
             str(self.var_dir),
             "--job-id",
@@ -101,7 +93,7 @@ class WorkerDispatcher:
             lease_owner,
         ]
         for name in secret_names:
-            command.extend(("--secret-name", name))
+            arguments.extend(("--secret-name", name))
         log_path = self._prepare_worker_log(job_id)
         try:
             worker_log = log_path.open("ab", buffering=0)
@@ -110,23 +102,28 @@ class WorkerDispatcher:
                 ErrorCode.RUNNER_START_FAILED,
                 "Worker 诊断日志无法打开",
             ) from None
-        kwargs: dict[str, Any] = {
-            "cwd": str(_worker_import_root()),
-            "env": environment,
-            "stdin": subprocess.DEVNULL,
-            "stdout": worker_log,
-            "stderr": worker_log,
-            "close_fds": True,
-        }
-        if os.name == "nt":
-            kwargs["creationflags"] = (
-                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-            )
-        else:
-            kwargs["start_new_session"] = True
         try:
-            return self._popen(command, **kwargs)
-        except OSError:
+            return spawn_python_module(
+                source_environment,
+                "product.backend.infra.runtime.worker_process",
+                *arguments,
+                role=ProcessEnvironmentRole.WORKER,
+                secret_names=secret_names,
+                cwd=self._paths.temp,
+                popen=self._popen,
+                tree_name=worker_tree_name(job_id, lease_owner),
+                before_release=lambda _process, controller: write_worker_tree_identity(
+                    self.var_dir,
+                    job_id,
+                    lease_owner,
+                    controller,
+                ),
+                stdin=subprocess.DEVNULL,
+                stdout=worker_log,
+                stderr=worker_log,
+                close_fds=True,
+            )
+        except (OSError, JiejianError):
             raise JiejianError(
                 ErrorCode.RUNNER_START_FAILED,
                 "独立 Worker 进程启动失败",
@@ -139,7 +136,7 @@ class WorkerDispatcher:
 
         if re.fullmatch(JOB_ID_PATTERN, job_id) is None:
             raise JiejianError(ErrorCode.RUNNER_START_FAILED, "Worker 任务 ID 无效")
-        root = (self.var_dir / "logs" / "workers").resolve()
+        root = RuntimePaths(self.var_dir).worker_logs.resolve()
         path = (root / f"{job_id}.log").resolve()
         if not path.is_relative_to(root):
             raise JiejianError(ErrorCode.RUNNER_START_FAILED, "Worker 日志路径越界")
@@ -337,6 +334,23 @@ class WorkerDispatcher:
             if job is None:
                 raise JiejianError(ErrorCode.JOB_NOT_FOUND, "任务不存在")
             return job
+
+    @staticmethod
+    def close_process(process: subprocess.Popen[Any] | None, timeout: float = 2.0) -> None:
+        """结束同步调用者拥有的 Worker 整棵进程树；清理失败不得伪装为任务完成。"""
+
+        if process is None:
+            return
+        try:
+            if process.poll() is None:
+                terminate_process_tree(process, timeout)
+            else:
+                release_process_tree(process, timeout)
+        except Exception:
+            raise JiejianError(
+                ErrorCode.PROCESS_TREE_FAILED,
+                "Worker 进程树未能完整退出",
+            ) from None
 
 
 def _unique_receipt_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -4,7 +4,7 @@
 
 ## 目的与消费者
 
-Recording Runner、GUI/CLI 录制入口、FlowDraft 审阅、ExecutionProfile 编译和回放工作流共享本协议族。录制资产不是 PermissionContract，也不是可直接执行的 Profile。
+Recording Runner、GUI/CLI 录制入口、FlowDraft 审阅、WebExecutionProfile 编译和回放工作流共享本协议族。录制资产不是 PermissionContract，也不是可直接执行的 Profile。
 
 ## 协议边界
 

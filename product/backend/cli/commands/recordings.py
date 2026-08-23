@@ -13,12 +13,12 @@ import typer
 
 from product.backend.core.recording import RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command
+from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command, required_identity_secret_refs
 from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.cli.bootstrap import application_scope
 from product.backend.cli.presentation import emit_json, fail, human_wait
 from product.backend.workflows.recording.review import compile_flow_bindings
-from product.protocols import parse_execution_profile
+from product.protocols import parse_web_execution_profile
 
 
 def recording_start_command(
@@ -45,32 +45,32 @@ def recording_start_command(
     """校验项目并提交一次隔离 Recording。"""
 
     try:
-        profile = parse_execution_profile(profile_path.resolve().read_bytes())
-        selected = identity or [item.id for item in profile.identities]
-        known = {item.id for item in profile.identities}
+        profile = parse_web_execution_profile(profile_path.resolve().read_bytes())
+        selected = identity or [item.identity_id for item in profile.identities]
+        known = {item.identity_id for item in profile.identities}
         if not selected or len(set(selected)) != len(selected) or any(
             item not in known for item in selected
         ):
             raise JiejianError(ErrorCode.INPUT_INVALID, "录制身份选择无效")
         now_us = time.time_ns() // 1_000
         duration_us = duration_seconds * 1_000_000
+        identities_by_id = {item.identity_id: item for item in profile.identities}
         request = RecordingRunnerRequest(
-            schema_version="1",
+            schema_version="2",
             recording_id=f"rec_{uuid4().hex}",
             project_id=profile.project_id,
             created_at_us=now_us,
             target_scope=profile.target.scope,
             sessions=tuple(
                 RecordingSessionRef(
-                    schema_version="1",
                     identity_id=item,
                     session_ref=f"session_{uuid4().hex}",
+                    secret_refs=required_identity_secret_refs(identities_by_id[item]),
                     expires_at_us=now_us + duration_us,
                 )
                 for item in selected
             ),
             budget=RecordingBudget(
-                schema_version="1",
                 max_duration_us=duration_us,
                 max_contexts=len(selected),
             ),
@@ -79,7 +79,7 @@ def recording_start_command(
         )
         with application_scope(context, environ=os.environ) as application:
             application.projects.register(profile_path)
-            submission = application.run_recording(
+            submission = application.recording_runs.run(
                 SubmitRecording(
                     request=request,
                     flow_id=profile.profile_id,
@@ -167,7 +167,7 @@ def recording_finalize_command(
 def recording_replay_command(
     context: typer.Context,
     recording_id: str,
-    profile_path: Path = typer.Option(..., "--profile", help="当前执行配置（ExecutionProfile）JSON"),
+    profile_path: Path = typer.Option(..., "--profile", help="当前 Web 执行配置（WebExecutionProfile）JSON"),
     runs: int = typer.Option(3, "--runs", min=1, max=3, help="连续回放次数"),
 ) -> None:
     """通过独立 Verification Runner 连续回放已完成 Flow。"""

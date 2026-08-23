@@ -7,7 +7,7 @@ name = "jiejian"
 version = "0.1.0"
 description = "面向 AI 生成 Web 应用的交付前安全验证与持续回归平台"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "alembic>=1.14,<2",
     "fastapi>=0.115,<1",
@@ -26,6 +26,8 @@ jiejian = "product.backend.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.3,<9",
+    # Conda 的 Python 基线保留 distutils-precedence.pth，开发同步必须由 uv 提供其入口。
+    "setuptools>=80,<84",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -33,7 +35,8 @@ only-include = ["product/backend", "product/protocols"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "product/config/default.toml" = "product/config/default.toml"
-"product/frontend/dist" = "product/frontend/dist"
+"product/config/toolchain.json" = "product/config/toolchain.json"
+"var/runtime/frontend" = "product/frontend/dist"
 
 [tool.pytest.ini_options]
 addopts = "-ra"

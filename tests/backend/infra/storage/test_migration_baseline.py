@@ -7,7 +7,8 @@ import pytest
 from sqlalchemy import inspect
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.storage import Base, create_sqlite_engine, upgrade_database
+from product.backend.infra.storage import Base, create_sqlite_engine, default_database_path, upgrade_database
+from product.backend.workflows.context import ApplicationCore
 
 pytestmark = [pytest.mark.database, pytest.mark.essential]
 
@@ -25,6 +26,27 @@ def test_empty_database_reaches_current_head_and_is_repeatable(tmp_path: Path) -
             ).scalar_one() == "0001_initial"
     finally:
         engine.dispose()
+
+
+def test_application_recreates_current_database_after_explicit_reset(
+    tmp_path: Path,
+) -> None:
+    var_dir = tmp_path / "var"
+    initial = ApplicationCore(var_dir)
+    initial.close()
+    database = default_database_path(var_dir)
+    database.unlink()
+    assert not database.exists()
+
+    restarted = ApplicationCore(var_dir)
+    try:
+        assert database.is_file()
+        with restarted.engine.connect() as connection:
+            assert connection.exec_driver_sql(
+                "SELECT version_num FROM alembic_version"
+            ).scalar_one() == "0001_initial"
+    finally:
+        restarted.close()
 
 
 @pytest.mark.parametrize("revision", ["0011_contract_profile_application_core", "unknown"])
@@ -105,7 +127,7 @@ def test_current_head_with_extra_table_is_rejected_without_modification(
 def test_current_head_with_legacy_unique_cardinality_is_rejected_without_modification(
     tmp_path: Path,
 ) -> None:
-    database = tmp_path / "current-head-with-legacy-cardinality.db"
+    database = tmp_path / "current-head-with-incompatible-cardinality.db"
     upgrade_database(database)
     connection = sqlite3.connect(database)
     try:

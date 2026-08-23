@@ -11,7 +11,7 @@ from fastapi import APIRouter
 
 from product.backend.workflows.context import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command
+from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command, required_identity_secret_refs
 from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
@@ -39,21 +39,20 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             raise JiejianError(ErrorCode.INPUT_INVALID, "录制身份选择无效")
         now_us = time.time_ns() // 1_000
         request = RecordingRunnerRequest(
-            schema_version="1",
+            schema_version="2",
             recording_id=f"rec_{uuid4().hex}",
             project_id=project_id,
             created_at_us=now_us,
             target_scope=profile.target.scope,
             sessions=(
                 RecordingSessionRef(
-                    schema_version="1",
                     identity_id=selected.identity_id,
                     session_ref=f"session_{uuid4().hex}",
+                    secret_refs=required_identity_secret_refs(selected),
                     expires_at_us=now_us + body.duration_seconds * 1_000_000,
                 ),
             ),
             budget=RecordingBudget(
-                schema_version="1",
                 max_duration_us=body.duration_seconds * 1_000_000,
                 max_contexts=1,
             ),
@@ -62,7 +61,6 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         )
         result = context.recording_submission.submit(
             SubmitRecording(
-                schema_version="1",
                 request=request,
                 flow_id=profile.profile_id,
                 idempotency_key=body.idempotency_key,
@@ -103,13 +101,11 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         return data_response(view)
 
     @router.post("/api/recordings/{recording_id}/capture/start", response_model=ApiResponse)
-    @router.post("/api/recordings/{recording_id}/start", response_model=ApiResponse)
     async def start_recording(recording_id: str):
         view = context.recording_lifecycle.start_capture(recording_id)
         return data_response(view.model_dump(mode="json"))
 
     @router.post("/api/recordings/{recording_id}/capture/stop", response_model=ApiResponse)
-    @router.post("/api/recordings/{recording_id}/stop", response_model=ApiResponse)
     async def stop_recording(recording_id: str):
         view = context.recording_lifecycle.stop_capture(recording_id)
         return data_response(view.model_dump(mode="json"))
@@ -165,7 +161,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
 
 # Recording 请求模型。
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -173,6 +169,7 @@ from product.backend.api.envelope import ApiModel
 
 
 class RecordingCreateRequest(ApiModel):
+    schema_version: Literal["1"]
     profile_id: str = Field(min_length=1, max_length=64)
     identity_id: str = Field(min_length=1, max_length=64)
     duration_seconds: int = Field(default=60, ge=1, le=3_600)
@@ -180,11 +177,13 @@ class RecordingCreateRequest(ApiModel):
 
 
 class ReviewRequest(ApiModel):
+    schema_version: Literal["1"]
     command: dict[str, Any]
     bindings: dict[str, dict[str, str]] | None = None
 
 
 class FinalizeRequest(ApiModel):
+    schema_version: Literal["1"]
     bindings: dict[str, dict[str, str]] | None = None
 
 

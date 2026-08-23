@@ -9,11 +9,11 @@ from tests.fixtures.runner import runner_input
 
 
 @pytest.fixture
-def stage23_request_factory() -> Callable[[], PersistedExecutionRequest]:
+def runtime_request_factory() -> Callable[[], PersistedExecutionRequest]:
     def create() -> PersistedExecutionRequest:
         current_input = runner_input()
         return PersistedExecutionRequest(
-            schema_version="3",
+            schema_version="4",
             budget=current_input.budget,
             project_snapshot=current_input.project_snapshot,
         )

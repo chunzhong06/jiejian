@@ -22,6 +22,7 @@ def _status_for(code: str) -> int:
         ErrorCode.LLM_PROFILE_NOT_FOUND.value,
         ErrorCode.ONBOARDING_SESSION_NOT_FOUND.value,
         ErrorCode.EXECUTION_PROFILE_NOT_FOUND.value,
+        ErrorCode.RESULT_FINALIZATION_NOT_FOUND.value,
     }:
         return 404
     if code in {
@@ -34,6 +35,10 @@ def _status_for(code: str) -> int:
         ErrorCode.ONBOARDING_SESSION_CONFLICT.value,
         ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT.value,
         ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT.value,
+        ErrorCode.RESULT_FINALIZATION_NOT_READY.value,
+        ErrorCode.RESULT_FINALIZATION_FAILED.value,
+        ErrorCode.RESULT_FINALIZATION_CONFLICT.value,
+        ErrorCode.RESULT_FINALIZATION_BLOCKED.value,
     }:
         return 409
     if code in {
@@ -45,7 +50,6 @@ def _status_for(code: str) -> int:
         ErrorCode.LLM_SECRET_UNAVAILABLE.value,
         ErrorCode.LLM_PROFILE_STORAGE_FAILED.value,
         ErrorCode.ONBOARDING_SELECTOR_UNAVAILABLE.value,
-        ErrorCode.ONBOARDING_DEMO_FAILED.value,
         ErrorCode.EXECUTION_PROFILE_STORAGE_FAILED.value,
     }:
         return 503
@@ -66,7 +70,7 @@ async def jiejian_error_handler(request: Request, exc: JiejianError) -> JSONResp
     return JSONResponse(
         status_code=_status_for(exc.code),
         content={
-            "schema_version": "1",
+            "schema_version": "2",
             "error": exc.to_dict(),
             "trace_id": request.state.trace_id,
         },
@@ -80,7 +84,7 @@ async def request_validation_error_handler(
     return JSONResponse(
         status_code=422,
         content={
-            "schema_version": "1",
+            "schema_version": "2",
             "error": error.to_dict(),
             "trace_id": request.state.trace_id,
         },
@@ -94,7 +98,7 @@ async def validation_error_handler(
     return JSONResponse(
         status_code=422,
         content={
-            "schema_version": "1",
+            "schema_version": "2",
             "error": error.to_dict(),
             "trace_id": request.state.trace_id,
         },

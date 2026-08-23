@@ -2,96 +2,123 @@
 # 统一报告应用服务
 #
 # 定位
-# 已发布 Run、稳定 Finding、GateResult 与 Artifact Result 的只读报告组合边界。
-#
-# 职责
-# 核对报告输入｜构造统一 Report｜持久化格式投影｜读取既有报告 publication
+#   从可信 PublishedRunView、已完成 Finding、Artifact 快照和明确 GateResult
+#   构造不可变 Base/Gate Report v3。
 #
 # 边界
-# 只消费已发布事实，不调用 Verification、Gate evaluate 或扫描器，也不修改任何 Verdict。
-#
-# 调用链
-# CLI / API → ReportBuilder → PublishedResultReader / Finding / Gate / Artifact stores
+#   只读已发布事实；不物化 Finding、不重新读取 Target、不改变 Verdict。
 # =============================================================================
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 import json
+from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
-from product.backend.core.lifecycle import RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import RunnerResult
+from product.backend.core.lifecycle import RunLifecycle
 from product.backend.core.verification.gating import GateResult
 from product.backend.infra.artifacts.report_reader import ArtifactResultReader
-from product.protocols.report import ReportArtifact, ReportEvidenceRef, ReportFinding, ReportGate, ReportObserverStatus, ReportRun, ReportRuntime, Report, ReportVersions, REPORT_RULESET_VERSION, canonical_sha256, report_id_for
 from product.backend.infra.artifacts.report_store import ReportStore
+from product.backend.infra.storage import BaseReportFinalizationState
+from product.backend.workflows.results.published import PublishedResultReader
+from product.protocols import RunnerResult
+from product.protocols.report import (
+    ArtifactSummary,
+    ArtifactSummaryStatus,
+    BaseRunReport,
+    GateRunReport,
+    REPORT_RULESET_VERSION,
+    ReportArtifact,
+    ReportEvidenceRef,
+    ReportFinding,
+    ReportGate,
+    ReportObserverStatus,
+    ReportRun,
+    ReportRuntime,
+    ReportVersions,
+    base_semantic_input_sha256,
+    gate_semantic_input_sha256,
+    report_id_for,
+)
 
 
 class ReportBuilder:
-    """生成、读取和列举独立报告 publication。"""
+    """生成、读取和列举唯一 ReportStore 中的不可变报告。"""
 
-    def __init__(self, var_dir, results, findings, gating) -> None:
+    def __init__(self, var_dir: Path, results: PublishedResultReader, findings, gating, uow_factory=None) -> None:
         self._results = results
         self._findings = findings
         self._gating = gating
+        self._uow_factory = uow_factory
         self._artifacts = ArtifactResultReader(var_dir)
         self._publication = ReportStore(var_dir)
 
-    def generate(self, run_id: str, gate_result_id: str) -> dict[str, Any]:
-        """核对同一 Run 的发布事实与 GateResult，生成一次不可变报告 publication。"""
-
-        # --- 阶段：读取并交叉核对已发布输入 ---
+    def generate_base(self, run_id: str) -> BaseRunReport:
         view = self._results.read(run_id)
+        finalization = self._finalization(run_id)
+        if finalization.findings_state.value != "COMPLETE":
+            raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_READY, "Finding 尚未完成最终化")
+        if finalization.findings_snapshot_sha256 is None:
+            raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_READY, "Finding 快照缺失")
+        stored_findings = self._findings.findings_for_run(run_id)
+        runtime = self._runtime(view, stored_findings)
+        artifact_summary = self._artifact_summary(run_id, view.run.project_id)
+        versions = self._versions(view, artifact_summary)
+        semantic_input = base_semantic_input_sha256(
+            run_id,
+            finalization.publication_sha256,
+            finalization.findings_snapshot_sha256,
+            artifact_summary.snapshot_sha256,
+            versions,
+        )
+        report_id = report_id_for("BASE", semantic_input)
+        limitations = self._limitations(view, runtime, artifact_summary)
+        report = BaseRunReport.create(
+            report_id=report_id,
+            report_type="BASE",
+            run_id=run_id,
+            project_id=view.run.project_id,
+            semantic_input_sha256=semantic_input,
+            run=self._run(view),
+            runtime=runtime,
+            artifact_summary=artifact_summary,
+            versions=versions,
+            limitations=limitations,
+        )
+        self._publication.publish(report)
+        return report
+
+    def generate_gate(self, run_id: str, gate_result_id: str) -> GateRunReport:
+        finalization = self._finalization(run_id)
+        if finalization.base_report_state is not BaseReportFinalizationState.COMPLETE or finalization.base_report_id is None:
+            raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_READY, "基础报告尚未完成")
+        base = self._publication.read(run_id, finalization.base_report_id)
+        if not isinstance(base, BaseRunReport):
+            raise JiejianError(ErrorCode.REPORT_INTEGRITY, "基础报告类型无效")
+        if finalization.base_report_input_sha256 != base.semantic_input_sha256:
+            raise JiejianError(ErrorCode.REPORT_INTEGRITY, "基础报告身份已漂移")
         gate_payload = self._gating.get_gate_result(gate_result_id)
         gate = GateResult.model_validate_json(json.dumps(gate_payload, ensure_ascii=False), strict=True)
         baseline = self._gating.get_baseline(gate.baseline_id)
-        if gate.run_id != run_id or baseline["project_id"] != view.run.project_id:
-            raise JiejianError(ErrorCode.REPORT_INPUT_INVALID, "报告与明确 GateResult 关联不一致")
-
-        stored_findings = self._stored_findings(run_id)
-        artifacts = self._artifacts.for_run(run_id, view.run.project_id)
-        runtime = self._runtime(view, stored_findings)
-        artifact_models = tuple(self._artifact(item.result) for item in artifacts)
-        limitations = self._limitations(view, runtime, artifact_models)
-        result = view.publication.result
-        runner_version = result.schema_version
-        observer_version = "2"
-        semantic_input = canonical_sha256(
-            {
-                "run_publication_sha256": view.publication.manifest.result_sha256,
-                "runtime": runtime.model_dump(mode="json"),
-                "artifacts": [item.model_dump(mode="json") for item in artifact_models],
-                "gate": gate.model_dump(mode="json"),
-                "versions": {
-                    "contract_id": view.run.contract_id,
-                    "contract_version": view.run.contract_version,
-                    "engine_version": view.run.engine_version,
-                    "runner_schema_version": runner_version,
-                    "observer_schema_version": observer_version,
-                    "report_schema_version": "2",
-                    "ruleset_versions": sorted({REPORT_RULESET_VERSION, *(item.ruleset_version for item in artifact_models)}),
-                },
-            }
-        )
-        # --- 阶段：构造统一领域报告 ---
-        report = Report.create(
-            report_id=report_id_for(run_id, gate_result_id, semantic_input),
-            run_id=run_id,
-            project_id=view.run.project_id,
-            gate_result_id=gate_result_id,
+        if gate.run_id != run_id or baseline.get("project_id") != base.project_id:
+            raise JiejianError(ErrorCode.REPORT_INPUT_INVALID, "GateResult 与 Run 关联不一致")
+        semantic_input = gate_semantic_input_sha256(base.report_id, base.canonical_sha256, gate.gate_result_id, gate.input_hash)
+        report = GateRunReport.create(
+            report_id=report_id_for("GATE", semantic_input),
+            report_type="GATE",
+            run_id=base.run_id,
+            project_id=base.project_id,
+            base_report_id=base.report_id,
+            base_report_sha256=base.canonical_sha256,
+            gate_result_id=gate.gate_result_id,
             semantic_input_sha256=semantic_input,
-            run=ReportRun(
-                run_id=run_id,
-                project_id=view.run.project_id,
-                lifecycle=view.run.lifecycle.value,
-                verdict=view.run.verdict.value if view.run.verdict is not None else None,
-                created_at_us=view.run.created_at_us,
-                finished_at_us=view.run.finished_at_us,
-            ),
-            runtime=runtime,
-            artifacts=artifact_models,
+            run=base.run,
+            runtime=base.runtime,
+            artifact_summary=base.artifact_summary,
+            versions=base.versions,
+            limitations=base.limitations,
             gate=ReportGate(
                 gate_result_id=gate.gate_result_id,
                 baseline_id=gate.baseline_id,
@@ -102,19 +129,9 @@ class ReportBuilder:
                 reasons=tuple(item.model_dump(mode="json") for item in gate.reasons),
                 evaluated_at_us=gate.evaluated_at_us,
             ),
-            versions=ReportVersions(
-                contract_id=view.run.contract_id,
-                contract_version=view.run.contract_version,
-                engine_version=view.run.engine_version,
-                runner_schema_version=runner_version,
-                observer_schema_version=observer_version,
-                ruleset_versions=tuple(sorted({REPORT_RULESET_VERSION, *(item.ruleset_version for item in artifact_models)})),
-            ),
-            limitations=limitations,
         )
-        # --- 阶段：原子发布 canonical 与格式投影 ---
         self._publication.publish(report)
-        return report.model_dump(mode="json")
+        return report
 
     def read(self, run_id: str, report_id: str) -> dict[str, Any]:
         return self._publication.read(run_id, report_id).model_dump(mode="json")
@@ -125,19 +142,54 @@ class ReportBuilder:
     def list(self, run_id: str) -> list[dict[str, str]]:
         return self._publication.list(run_id)
 
-    def _stored_findings(self, run_id: str) -> list[dict[str, Any]]:
-        method = getattr(self._findings, "stored_findings_for_run", None)
-        if method is None:
-            raise JiejianError(ErrorCode.REPORT_INPUT_INVALID, "Finding 持久化读取能力不可用")
-        return method(run_id)
+    def _finalization(self, run_id: str):
+        if self._uow_factory is None:
+            raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_READY, "结果最终化仓储未装配")
+        with self._uow_factory() as work:
+            record = work.finalizations.get(run_id)
+        if record is None:
+            raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_FOUND, "结果最终化记录不存在")
+        return record
+
+    @staticmethod
+    def _run(view) -> ReportRun:
+        return ReportRun(
+            run_id=view.run.run_id,
+            project_id=view.run.project_id,
+            lifecycle=view.run.lifecycle.value,
+            verdict=view.run.verdict.value if view.run.verdict is not None else None,
+            created_at_us=view.run.created_at_us,
+            finished_at_us=view.run.finished_at_us,
+        )
+
+    def _versions(self, view, artifact_summary: ArtifactSummary) -> ReportVersions:
+        return ReportVersions(
+            contract_id=view.run.contract_id,
+            contract_version=view.run.contract_version,
+            engine_version=view.run.engine_version,
+            runner_schema_version=view.publication.result.schema_version,
+            evidence_schema_version="4",
+            observer_schema_version="3",
+            artifact_schema_version="2",
+            ruleset_versions=tuple(sorted({REPORT_RULESET_VERSION, *(item.ruleset_version for item in artifact_summary.results)})),
+        )
+
+    def _artifact_summary(self, run_id: str, project_id: str) -> ArtifactSummary:
+        published = self._artifacts.for_run(run_id, project_id)
+        if not published:
+            return ArtifactSummary.create(ArtifactSummaryStatus.NOT_REQUESTED)
+        if any(item.result is None for item in published):
+            return ArtifactSummary.create(ArtifactSummaryStatus.INCONCLUSIVE, reason_codes=("ARTIFACT_RESULT_NOT_PUBLISHED",))
+        artifacts = tuple(self._artifact(item.result) for item in published if item.result is not None)
+        inconclusive = tuple(item.error_code for item in artifacts if item.status == "INCONCLUSIVE" and item.error_code)
+        if inconclusive:
+            return ArtifactSummary.create(ArtifactSummaryStatus.INCONCLUSIVE, artifacts, inconclusive)
+        return ArtifactSummary.create(ArtifactSummaryStatus.COMPLETE, artifacts)
 
     @staticmethod
     def _runtime(view, stored_findings: list[dict[str, Any]]) -> ReportRuntime:
         result = view.publication.result
-        evidence_refs = tuple(
-            ReportEvidenceRef(evidence_id=item.evidence_id, source_type="RUNTIME")
-            for item in view.evidence
-        )
+        evidence_refs = tuple(ReportEvidenceRef(evidence_id=item.evidence_id, source_type="RUNTIME") for item in view.evidence)
         findings = tuple(
             ReportFinding(
                 finding_id=item["finding"]["finding_id"],
@@ -149,38 +201,30 @@ class ReportBuilder:
             )
             for item in stored_findings
         )
-        observer_statuses: list[ReportObserverStatus] = []
-        execution_errors: list[str] = []
+        statuses: list[ReportObserverStatus] = []
+        errors: list[str] = []
         if isinstance(result, RunnerResult):
             for evidence in result.evidence:
-                for outcome in evidence.outcomes:
-                    observer_statuses.append(
-                        ReportObserverStatus(
-                            observer_id=outcome.observer_id,
-                            required=outcome.required,
-                            status=outcome.status.value,
-                            reason_codes=outcome.reason_codes,
-                        )
-                    )
+                statuses.extend(
+                    ReportObserverStatus(observer_id=outcome.observer_id, required=outcome.required, status=outcome.status.value, reason_codes=outcome.reason_codes)
+                    for outcome in evidence.outcomes
+                )
             if result.error is not None:
-                execution_errors.append(result.error.code)
+                errors.append(result.error.code)
         elif result.error is not None:
-            execution_errors.append(result.error.code)
+            errors.append(result.error.code)
         return ReportRuntime(
             lifecycle=view.run.lifecycle.value,
             verdict=view.run.verdict.value if view.run.verdict is not None else None,
             evidence_refs=evidence_refs,
             findings=findings,
-            observer_statuses=tuple(sorted(observer_statuses, key=lambda item: item.observer_id)),
-            execution_errors=tuple(sorted(set(execution_errors))),
+            observer_statuses=tuple(sorted(statuses, key=lambda item: item.observer_id)),
+            execution_errors=tuple(sorted(set(errors))),
         )
 
     @staticmethod
     def _artifact(result) -> ReportArtifact:
-        evidence = tuple(
-            ReportEvidenceRef(evidence_id=item.evidence_id, source_type="ARTIFACT")
-            for item in result.evidence
-        )
+        evidence = tuple(ReportEvidenceRef(evidence_id=item.evidence_id, source_type="ARTIFACT") for item in result.evidence)
         findings = tuple(
             ReportFinding(
                 finding_id=item.finding_id,
@@ -207,8 +251,7 @@ class ReportBuilder:
         )
 
     @staticmethod
-    def _limitations(view, runtime: ReportRuntime, artifacts: Iterable[ReportArtifact]) -> tuple[str, ...]:
-        artifacts = tuple(artifacts)
+    def _limitations(view, runtime: ReportRuntime, artifact_summary: ArtifactSummary) -> tuple[str, ...]:
         values = set(runtime.execution_errors)
         if view.run.lifecycle is not RunLifecycle.COMPLETED:
             values.add("RUN_NOT_COMPLETED")
@@ -216,11 +259,6 @@ class ReportBuilder:
             values.add("RUNTIME_INCONCLUSIVE")
         if any(item.required and item.status != "AVAILABLE" for item in runtime.observer_statuses):
             values.add("REQUIRED_OBSERVER_NOT_AVAILABLE")
-        if not artifacts:
-            values.add("NO_ARTIFACT_RESULT")
-        for artifact in artifacts:
-            if artifact.status == "INCONCLUSIVE":
-                values.add("ARTIFACT_INCONCLUSIVE")
-            if artifact.error_code is not None:
-                values.add("ARTIFACT_ERROR")
+        if artifact_summary.status is ArtifactSummaryStatus.INCONCLUSIVE:
+            values.update(artifact_summary.reason_codes)
         return tuple(sorted(values))

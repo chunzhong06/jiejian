@@ -22,7 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from product.backend.core.contracts.analysis.models import AnalysisSeverity, CandidateBatch, CandidateMergeResult, ContractReviewAssessment, ContractVersionDiff
-from product.backend.core.contracts.analysis.canonical import canonical_sha256
+from product.backend.core.contracts.analysis.canonical import contract_analysis_sha256
 from product.backend.core.contracts.models import ContractCandidate, ContractSourceType, ContractVersion, Requirement, SourceReference
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.core.contracts.analysis.drift import DriftReport
@@ -43,8 +43,6 @@ class WorkbenchModel(BaseModel):
         strict=True,
         hide_input_in_errors=True,
     )
-
-    schema_version: Literal["1"] = "1"
 
 
 class CandidateDerivationResult(WorkbenchModel):
@@ -104,7 +102,7 @@ class ContractWorkbench:
     ) -> Requirement:
         normalized_text = text.strip()
         normalized_tags = tuple(sorted({tag.strip() for tag in security_tags}))
-        content_hash = canonical_sha256(
+        content_hash = contract_analysis_sha256(
             {"text": normalized_text, "security_tags": normalized_tags}
         )
         return self._governance.create_requirement(

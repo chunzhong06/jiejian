@@ -11,19 +11,22 @@ from product.backend.core.verification.permissions import PermissionContract
 from product.backend.workflows.recording.review import compile_flow_bindings
 from product.backend.workflows.runs.execution import ExecutionWorkflow
 from product.protocols import ExecutionBudget, HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind, HttpRequestTemplate, RunnerInput, ValueSlot, ValueSlotConsumer, ValueSlotSource
-from product.protocols.execution_profile import canonical_execution_profile_json_bytes, parse_execution_profile
+from product.protocols.web.profile import (
+    canonical_web_execution_profile_json_bytes,
+    parse_web_execution_profile,
+)
 from product.protocols.recording_flow import Flow, FlowStep
 
 
 ROOT = Path(__file__).resolve().parents[2]
 VARIANTS = ("fixed", "vulnerable", "inconclusive")
 def _sample_paths() -> list[Path]:
-    return [ROOT / "samples" / "http" / variant / "profile.json" for variant in VARIANTS]
+    return [ROOT / "samples" / "web" / variant / "profile.json" for variant in VARIANTS]
 
 
 def test_all_official_sample_profiles_compile_through_current_execution_types() -> None:
     for path in _sample_paths():
-        profile = parse_execution_profile(path.read_bytes())
+        profile = parse_web_execution_profile(path.read_bytes())
         contract = PermissionContract.model_validate_json(path.with_name("contract.json").read_bytes(), strict=True)
         plan = ExecutionWorkflow._compile_plan(profile, contract)
         assert not plan.gaps
@@ -54,14 +57,14 @@ def test_all_official_sample_profiles_compile_through_current_execution_types() 
         if expected_count is None:
             expected_count = scenario["formal_profile"]["required_case_count"]
         assert len(plan.cases) == expected_count
-        assert canonical_execution_profile_json_bytes(profile).rstrip() == path.read_bytes().rstrip()
+        assert canonical_web_execution_profile_json_bytes(profile).rstrip() == path.read_bytes().rstrip()
         truth = json.loads(path.with_name("truth.json").read_text(encoding="utf-8"))
         assert truth["formal_profile"]["run_verdict"] in {"PASS", "BLOCK", "INCONCLUSIVE"}
 
 
 def test_recording_flow_compiles_to_authorization_profile_bindings() -> None:
-    path = ROOT / "samples" / "http" / "fixed" / "profile.json"
-    profile = parse_execution_profile(path.read_bytes())
+    path = ROOT / "samples" / "web" / "fixed" / "profile.json"
+    profile = parse_web_execution_profile(path.read_bytes())
     contract = PermissionContract.model_validate_json(path.with_name("contract.json").read_bytes(), strict=True)
     plan = ExecutionWorkflow._compile_plan(profile, contract)
     step = FlowStep(

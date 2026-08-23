@@ -23,13 +23,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle
+from product.backend.core.lifecycle import JobState, RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.storage import EvidenceIndexRecord, JobRecord, RunRecord, StorageUnitOfWork
 from product.protocols import RunnerResult
 from product.backend.infra.artifacts.run_packages import ValidatedPublication, evidence_records_for_publication, final_run_dir, validate_published_run
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore, PersistedExecutionRequest
+from product.backend.infra.runtime.paths import RuntimePaths
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,29 +110,6 @@ class PublishedResultReader:
         )
         return request.project_snapshot
 
-    def report(self, view: PublishedRunView) -> dict[str, Any]:
-        return self.document(view, "artifacts/report/report.json")
-
-    def findings(self, view: PublishedRunView) -> list[dict[str, Any]]:
-        """只从已验证 Evidence 派生可跟踪问题，SAFE 不构成 Finding。"""
-
-        findings: list[dict[str, Any]] = []
-        for record in view.evidence:
-            item = self.evidence_document(view, record.evidence_id)
-            verdict = item.get("verdict")
-            if verdict == "SAFE":
-                continue
-            findings.append(
-                {
-                    "schema_version": "2",
-                    "finding_id": item.get("evidence_id"),
-                    "verdict": verdict,
-                    "severity": "high" if verdict == "VULNERABLE" else "unknown",
-                    "evidence_refs": [item.get("evidence_id")],
-                }
-            )
-        return findings
-
     def overview(self, run_id: str, *, published: PublishedRunView | None = None) -> dict[str, Any]:
         """从当前执行快照和可信发布结果生成 GUI 只读运行概览。"""
 
@@ -146,7 +124,7 @@ class PublishedResultReader:
         required_observations = sorted({requirement for case in snapshot.plan.cases for requirement in case.required_observations})
         binding_map = {binding.requirement_id: binding for binding in snapshot.observer_bindings if binding.kind.value == "OBSERVER_SPEC"}
         spec_map = {spec.observer_id: spec for spec in snapshot.observers}
-        observer_health: dict[str, Any] = {"schema_version": "1", "required_observations": required_observations}
+        observer_health: dict[str, Any] = {"required_observations": required_observations}
         for requirement in required_observations:
             binding = binding_map.get(requirement)
             spec = spec_map.get(binding.observer_id) if binding is not None else None
@@ -158,19 +136,6 @@ class PublishedResultReader:
                 "phases": [phase.value for phase in binding.phases] if binding is not None else [],
             }
         reason_codes = list(published.publication.result.reason_codes) if published is not None else []
-        finding_count = None
-        if published is not None:
-            from product.backend.workflows.results.findings import finding_inputs
-
-            # 孪生执行可为同一稳定问题产生多份 Evidence；概览按 Finding 身份计数，
-            # 不能把证据基数直接暴露成问题数量。
-            finding_count = len(
-                {
-                    item.identity.finding_id()
-                    for item in finding_inputs(self, published)
-                    if item.verdict is not CaseVerdict.SAFE
-                }
-            )
         completed_case_count = (
             len({item.case_id for item in published.evidence})
             if published is not None
@@ -178,14 +143,12 @@ class PublishedResultReader:
         )
         execution_errors = self._execution_errors(job, events)
         return {
-            "schema_version": "1",
-            "execution_schema_version": "3",
-            "result_schema_version": "2" if published is not None else None,
+            "execution_schema_version": "4",
+            "result_schema_version": published.publication.result.schema_version if published is not None else None,
             "target_scope": snapshot.target.scope.model_dump(mode="json"),
             "budget": request.budget.model_dump(mode="json"),
             "observer_health": observer_health,
             "case_progress": {
-                "schema_version": "1",
                 "status": (
                     "PUBLISHED"
                     if published is not None
@@ -196,7 +159,9 @@ class PublishedResultReader:
                 "completed": completed_case_count,
                 "total": len(snapshot.plan.cases),
             },
-            "finding_count": finding_count,
+            # Finding 只能由最终化事务写入，并由上层 FindingQueries 补充数量；
+            # publication reader 不在 GET 路径临时投影或写入 Finding。
+            "finding_count": None,
             "reason_codes": reason_codes,
             "execution_errors": execution_errors,
             "coverage_record_count": len(snapshot.plan.coverage),
@@ -217,13 +182,12 @@ class PublishedResultReader:
             "CLEANUP_FAILED": ("资源清理", "受控浏览器或临时资源未能完整清理。", "重新启动界鉴触发自动恢复；若仍失败，请提供日志。"),
             "PROTOCOL_INVALID": ("结果校验", "执行结果格式或关联信息未通过完整性校验。", "不要手工修改运行文件；请提供日志以定位环境或程序问题。"),
         }.get(reason_code, ("后台执行", "任务未能完整结束。", "查看任务日志后重新发起检查。"))
-        log_path = str(self._var_dir / "logs" / "workers" / f"{job.job_id}.log")
+        log_path = str(RuntimePaths(self._var_dir).worker_logs / f"{job.job_id}.log")
         copy_text = (
             f"界鉴任务失败\n阶段：{stage}\n原因：{cause}\n任务：{job.job_id}\n"
             f"错误代码：{reason_code}\n日志：{log_path}\n建议：{recovery}"
         )
         return [{
-            "schema_version": "1",
             "stage": stage,
             "message": cause,
             "code": reason_code,

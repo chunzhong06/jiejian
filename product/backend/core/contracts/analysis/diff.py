@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.contracts.models import ContractVersion
-from product.backend.core.contracts.analysis.canonical import canonical_sha256
+from product.backend.core.contracts.analysis.canonical import contract_analysis_sha256
 from product.backend.core.contracts.analysis.models import ContractVersionDiff, ProvenanceDelta, RuleDiff
 
 
@@ -69,5 +69,5 @@ def diff_contract_versions(
         changed=changed,
         provenance_added=provenance_added,
         provenance_removed=provenance_removed,
-        canonical_sha256=canonical_sha256(body),
+        canonical_sha256=contract_analysis_sha256(body),
     )

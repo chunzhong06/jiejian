@@ -22,8 +22,11 @@ from product.protocols import (
     HttpPredicateKind,
     build_normalized_state,
 )
-from product.backend.infra.execution.http import HttpResponse
-from product.backend.infra.runtime.runner import execution
+from product.backend.infra.execution.web import runtime as web_runtime
+from product.backend.infra.execution.web.adapter import HttpResponse
+from product.backend.infra.runtime.runner import composition
+from product.backend.infra.runtime.runner.executor import RunnerExecutor
+from product.backend.infra.runtime.runner.result_builder import evidence_from_case
 from tests.fixtures.runner import runner_input
 
 
@@ -60,15 +63,25 @@ def _owner_envelope(spec, correlation, phase, *, changed: bool) -> ObservationEn
 
 def _run(monkeypatch, tmp_path: Path, outcome: ExecutionOutcome):
     _FakeHttp.outcome = outcome
+
     def observe(self, executor, *, resource_id, owner_token, case_id, phase, known_secrets=(), identity_runtime=None):
         return _owner_envelope(self.spec, Correlation(case_id=case_id, resource_id=resource_id, request_marker=case_id), phase, changed=phase is ObservationPhase.AFTER)
-    monkeypatch.setattr(execution, "HttpExecutionAdapter", _FakeHttp)
-    monkeypatch.setattr(execution.OwnerApiObserverAdapter, "observe", observe)
-    runner = execution.RunnerExecutor(runner_input(), environ={"JIEJIAN_TEST_TOKEN": "subject-secret", "OWNER_READ_ONLY": "owner-secret"}, staging=tmp_path / "staging", clock=lambda: 10)
+
+    monkeypatch.setattr(web_runtime, "HttpExecutionAdapter", _FakeHttp)
+    monkeypatch.setattr(web_runtime.OwnerApiObserverAdapter, "observe", observe)
+    document = runner_input()
+    runner = RunnerExecutor(
+        document,
+        runtime_factory=web_runtime.WebTargetRuntimeFactory(),
+        environ={"JIEJIAN_TEST_TOKEN": "subject-secret", "OWNER_READ_ONLY": "owner-secret"},
+        staging=tmp_path / "staging",
+        clock=lambda: 10,
+    )
     try:
-        return runner.run_case(runner_input().project_snapshot.plan.cases[0])
+        result = runner.run_case(document.project_snapshot.plan.cases[0])
+        return evidence_from_case(document, result)
     finally:
-        runner.http.close()
+        runner.close()
 
 
 def test_runner_maps_accepted_execution_and_observed_effect(monkeypatch, tmp_path: Path) -> None:
@@ -87,6 +100,66 @@ def test_runner_maps_transport_failure_to_inconclusive(monkeypatch, tmp_path: Pa
     import pytest
     with pytest.raises(JiejianError, match=ErrorCode.TARGET_EXECUTION_FAILED.value):
         _run(monkeypatch, tmp_path, ExecutionOutcome.FAILED)
+
+
+def test_runner_stops_before_target_when_baseline_observer_is_unavailable(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    def observe(
+        self,
+        executor,
+        *,
+        resource_id,
+        owner_token,
+        case_id,
+        phase,
+        known_secrets=(),
+        identity_runtime=None,
+    ):
+        del executor, owner_token, known_secrets, identity_runtime
+        return ObservationEnvelope(
+            observer_id=self.spec.observer_id,
+            observer_type=self.spec.observer_type,
+            phase=phase,
+            target_id=self.spec.target.target_id,
+            window=ObservationWindow(
+                phase=phase,
+                started_at_us=1,
+                finished_at_us=2,
+                timeout_us=self.spec.budget.timeout_us,
+            ),
+            correlation=Correlation(
+                case_id=case_id,
+                resource_id=resource_id,
+                request_marker=case_id,
+            ),
+            causality=CausalityStatus.UNVERIFIED,
+            completeness=ObservationCompleteness.MISSING,
+            reason_codes=("REQUIRED_OBSERVER_INCOMPLETE",),
+        )
+
+    monkeypatch.setattr(web_runtime, "HttpExecutionAdapter", _FakeHttp)
+    monkeypatch.setattr(web_runtime.OwnerApiObserverAdapter, "observe", observe)
+    document = runner_input()
+    runner = RunnerExecutor(
+        document,
+        runtime_factory=web_runtime.WebTargetRuntimeFactory(),
+        environ={
+            "JIEJIAN_TEST_TOKEN": "subject-secret",
+            "OWNER_READ_ONLY": "owner-secret",
+        },
+        staging=tmp_path / "staging",
+        clock=lambda: 10,
+    )
+    try:
+        result = runner.run_case(document.project_snapshot.plan.cases[0])
+    finally:
+        runner.close()
+
+    assert result.verdict is CaseVerdict.INCONCLUSIVE
+    assert result.reason_codes == ("BASELINE_OBSERVATION_INCOMPLETE",)
+    assert all(method != "PATCH" for method, _path in _FakeHttp.instances[-1].requests)
 
 
 def test_runner_resolves_202_only_after_bound_async_success() -> None:
@@ -131,23 +204,96 @@ def test_runner_resolves_202_only_after_bound_async_success() -> None:
     response = HttpResponse(status_code=202, data={}, body=b"{}")
     bindings = {"task_completion": SimpleNamespace(observer_id="async-observer")}
 
-    without_terminal = execution._apply_terminal_completion(
+    without_terminal = web_runtime._apply_terminal_completion(
         pending,
         response,
         classifier,
         completion_bindings=bindings,
-        envelopes=(),
+        observations=(),
         case_id="case-202",
     )
-    completed = execution._apply_terminal_completion(
+    completed = web_runtime._apply_terminal_completion(
         pending,
         response,
         classifier,
         completion_bindings=bindings,
-        envelopes=(terminal,),
+        observations=(terminal,),
         case_id="case-202",
     )
 
     assert without_terminal.outcome is ExecutionOutcome.UNKNOWN
     assert completed.outcome is ExecutionOutcome.ACCEPTED
     assert completed.reason_codes == ()
+
+
+def test_runner_cleanup_failure_is_a_single_fatal_reason() -> None:
+    result = composition._result_error(
+        runner_input(),
+        ErrorCode.CLEANUP_FAILED.value,
+        finished_at_us=20,
+        cleanup_failed=True,
+    )
+    assert result.result_type.value == "FATAL_ERROR"
+    assert result.error is not None and result.error.code == ErrorCode.CLEANUP_FAILED.value
+    assert result.reason_codes == (ErrorCode.CLEANUP_FAILED.value,)
+    assert result.cleanup.status.value == "FAILED"
+    assert result.cleanup.finished_at_us == 20
+
+    completed_cleanup = composition._result_error(
+        runner_input(),
+        "RUNNER_FATAL",
+        finished_at_us=21,
+    )
+    assert completed_cleanup.cleanup.status.value == "SUCCEEDED"
+    assert completed_cleanup.cleanup.finished_at_us == 21
+
+
+def test_runner_safety_stop_with_cleanup_failure_is_fatal() -> None:
+    result = composition._result_error(
+        runner_input(),
+        ErrorCode.SCOPE_URL.value,
+        finished_at_us=20,
+        safety_stopped=True,
+        cleanup_failed=True,
+    )
+    assert result.result_type.value == "FATAL_ERROR"
+    assert result.run_lifecycle.value == "FAILED"
+    assert result.job_state.value == "FAILED"
+    assert result.error is not None and result.error.code == ErrorCode.CLEANUP_FAILED.value
+    assert result.reason_codes == (ErrorCode.CLEANUP_FAILED.value,)
+    assert result.cleanup.status.value == "FAILED"
+    assert result.cleanup.reason_codes == (ErrorCode.CLEANUP_FAILED.value,)
+
+
+def test_runner_runtime_close_failure_is_cleanup_failure(monkeypatch, tmp_path: Path) -> None:
+    class _FailingRuntime:
+        instances = 0
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.instance_id = self.__class__.instances
+            self.__class__.instances += 1
+
+        def bootstrap(self, _sender, *, requests=()) -> None:
+            return None
+
+        def set_csrf(self, *_args, **_kwargs) -> None:
+            return None
+
+        def close(self) -> None:
+            if self.instance_id == 0:
+                raise RuntimeError("runtime close failure")
+
+    monkeypatch.setattr(web_runtime, "HttpIdentityRuntime", _FailingRuntime)
+    document = runner_input()
+    runner = RunnerExecutor(
+        document,
+        runtime_factory=web_runtime.WebTargetRuntimeFactory(),
+        environ={"JIEJIAN_TEST_TOKEN": "subject-secret", "OWNER_READ_ONLY": "owner-secret"},
+        staging=tmp_path / "staging",
+        clock=lambda: 20,
+    )
+    import pytest
+    with pytest.raises(JiejianError) as captured:
+        runner.run_case(document.project_snapshot.plan.cases[0])
+    assert captured.value.code == ErrorCode.CLEANUP_FAILED.value
+    runner.close()

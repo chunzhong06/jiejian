@@ -2,7 +2,7 @@
  * 接入页面
  *
  * 定位
- *   本地 ExecutionProfile 路径进入控制面的首个用户能力页面
+ *   本地 WebExecutionProfile 路径进入控制面的首个用户能力页面
  *
  * 职责
  *   收集项目路径｜调用项目登记 API｜把已登记 Project 交给控制壳
@@ -35,7 +35,7 @@ export function AccessPage({
   onSelect: (project: ProjectDto) => void
   onContinue: () => void
   onRegister: (v: { path: string }) => void
-  onOnboardingSubmitted?: (result: { project_id: string; run_id: string; job_id: string; demo_data?: boolean }) => void
+  onOnboardingSubmitted?: (result: { project_id: string; run_id: string; job_id: string }) => void
   loading: boolean
 }) {
   return (
@@ -45,7 +45,7 @@ export function AccessPage({
       <Collapse className="access-advanced" items={[{ key: 'advanced', label: '高级配置（执行配置、已有应用与继续入口）', forceRender: true, children: <div className="access-grid">
         <Card title="接入项目" extra={<Tag>{projects.length} 个项目</Tag>}>
           <Form className="access-form" layout="inline" onFinish={onRegister}>
-            <Form.Item name="path" rules={[{ required: true, message: '请输入执行配置（ExecutionProfile）的绝对路径' }]}>
+            <Form.Item name="path" rules={[{ required: true, message: '请输入 Web 执行配置的绝对路径' }]}>
               <Input placeholder="D:\\profiles\\profile.json" style={{ width: 'min(420px, 100%)' }} />
             </Form.Item>
             <Button type="primary" htmlType="submit" loading={loading}>注册并校验</Button>

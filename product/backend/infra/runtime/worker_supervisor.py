@@ -39,8 +39,12 @@ from product.backend.infra.runtime.jobs.models import (
 )
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore, required_secret_names
+from product.backend.infra.recording.request_store import RecordingRequestStore
+from product.protocols import required_recording_secret_names
 from product.backend.infra.runtime.worker_lifetime import WorkerLifetimeLock
-from product.backend.infra.runtime.process_control import force_terminate_process_tree
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.runtime.paths import RuntimePaths
 
 logger = logging.getLogger("jiejian.runtime.worker_supervisor")
 
@@ -105,7 +109,6 @@ class LocalWorkerSupervisor:
                 if self._job_id is not None:
                     self._job_queue.request_cancellation(
                         RequestCancellation(
-                            schema_version="1",
                             job_id=self._job_id,
                             now_us=time.time_ns() // 1_000,
                         )
@@ -119,25 +122,22 @@ class LocalWorkerSupervisor:
                 process.wait(timeout=timeout)
             except Exception:
                 logger.warning(
-                    "worker terminate requested",
+                    "worker process tree termination requested",
                     extra={"component": "worker_supervisor", "event_code": "WORKER_TERMINATE"},
                 )
-                process.terminate()
                 try:
-                    process.wait(timeout=2.0)
+                    terminate_process_tree(process, 2.0)
                 except Exception:
-                    logger.error(
-                        "worker kill requested",
-                        extra={"component": "worker_supervisor", "event_code": "WORKER_KILL"},
+                    logger.exception(
+                        "Worker 进程树无法完整退出",
+                        extra={"component": "worker_supervisor", "event_code": "WORKER_TREE_EXIT_FAILED", "job_id": stopping_job_id},
                     )
-                    try:
-                        force_terminate_process_tree(process, 2.0)
-                    except Exception:
-                        logger.exception(
-                            "Worker 强制结束后仍未退出",
-                            extra={"component": "worker_supervisor", "event_code": "WORKER_KILL_WAIT_FAILED", "job_id": stopping_job_id},
-                        )
+                    raise JiejianError(
+                        ErrorCode.PROCESS_TREE_FAILED,
+                        "Worker 进程树无法在有界时间内退出",
+                    ) from None
         if process is not None and process.poll() is not None and stopping_job_id is not None:
+            release_process_tree(process)
             self._finish_worker_exit(stopping_job_id, process.returncode, stopping_lease_owner)
             self._process = None
             self._job_id = None
@@ -172,6 +172,7 @@ class LocalWorkerSupervisor:
         finished_job_id = self._job_id
         finished_lease_owner = self._lease_owner
         return_code = process.returncode
+        release_process_tree(process)
         self._process = None
         self._job_id = None
         self._lease_owner = None
@@ -191,6 +192,12 @@ class LocalWorkerSupervisor:
                     expected_hash=job.request_hash,
                 )
                 secret_names = required_secret_names(request)
+            elif job.recording_id is not None:
+                recording_request = RecordingRequestStore(self.var_dir).load(
+                    job.job_id,
+                    expected_hash=job.request_hash,
+                )
+                secret_names = required_recording_secret_names(recording_request)
             environment = self._environment_provider(secret_names)
             self._process = WorkerDispatcher(
                 var_dir=self.var_dir,
@@ -207,7 +214,7 @@ class LocalWorkerSupervisor:
                     "component": "worker_supervisor",
                     "event_code": "WORKER_STARTED",
                     "job_id": job.job_id,
-                    "log_path": str(self.var_dir / "logs" / "workers" / f"{job.job_id}.log"),
+                    "log_path": str(RuntimePaths(self.var_dir).worker_logs / f"{job.job_id}.log"),
                 },
             )
         except Exception:
@@ -250,7 +257,7 @@ class LocalWorkerSupervisor:
                 "job_id": job_id,
                 "return_code": return_code,
                 "log_path": str(
-                    self.var_dir / "logs" / "workers" / f"{job_id}.log"
+                    RuntimePaths(self.var_dir).worker_logs / f"{job_id}.log"
                 ),
             },
         )
@@ -308,7 +315,11 @@ class LocalWorkerSupervisor:
         for candidate in self._recovery.list_recovery_candidates(
             RecoveryScan(now_us=now_us, limit=100)
         ):
-            if not WorkerLifetimeLock.execution_has_exited(self.var_dir, candidate.job_id):
+            if not WorkerLifetimeLock.execution_has_exited(
+                self.var_dir,
+                candidate.job_id,
+                candidate.lease_owner,
+            ):
                 continue
             try:
                 self._confirm_exited_recovery(candidate, now_us)
@@ -323,6 +334,15 @@ class LocalWorkerSupervisor:
                 )
 
     def _confirm_exited_recovery(self, current, now_us: int) -> None:
+        if not WorkerLifetimeLock.execution_has_exited(
+            self.var_dir,
+            current.job_id,
+            current.lease_owner,
+        ):
+            raise JiejianError(
+                ErrorCode.PROCESS_TREE_FAILED,
+                "Worker 锁或内核进程树退出证明不足，任务不会自动重试",
+            )
         result = self._recovery.confirm_recovery(
             ConfirmRecovery(
                 job_id=current.job_id,

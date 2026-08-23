@@ -94,12 +94,14 @@ def create_app(
         from product.backend.infra.artifacts.run_publication import RunPublisher
         from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
 
+        app.state.startup_maintenance = context.cache.startup_maintenance()
         reconciliation = RunReconciler(
             context.var_dir,
             context.uow_factory,
             RunPublisher(context.var_dir, context.uow_factory),
         ).reconcile()
         app.state.startup_reconciliation = reconciliation
+        app.state.startup_finalization = context.result_finalizer.reconcile()
         if start_worker:
             workers.start()
 

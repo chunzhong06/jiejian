@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import sys
 import threading
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.workflows.onboarding.models import FolderSelectionResult
 from product.backend.workflows.onboarding.workflow import OnboardingWorkflow, SystemFolderSelector
+from tests.fixtures.runtime_environment import runtime_identity_environment
 
 
 class FakeFolderSelector:
@@ -62,7 +64,9 @@ def test_system_selector_reports_unavailable_without_starting_process() -> None:
     assert calls == []
 
 
-def test_system_selector_runs_bounded_process_with_controlled_desktop_environment() -> None:
+def test_system_selector_runs_bounded_process_with_controlled_desktop_environment(
+    tmp_path: Path,
+) -> None:
     calls: list[tuple[list[str], dict[str, object]]] = []
 
     def runner(command, **kwargs):
@@ -71,21 +75,28 @@ def test_system_selector_runs_bounded_process_with_controlled_desktop_environmen
             command,
             0,
             stdout=json.dumps(
-                {"schema_version": "1", "status": "selected", "path": "D:\\apps\\demo"}
+                {
+                    "schema_version": "1",
+                    "status": "selected",
+                    "path": "D:\\apps\\demo",
+                }
             ),
             stderr="",
         )
 
     result = SystemFolderSelector(
-        environment={
-            "PATH": "C:\\Windows",
-            "SYSTEMROOT": "C:\\Windows",
-            "SystemDrive": "C:",
-            "ProgramData": "C:\\ProgramData",
-            "SECRET_TOKEN": "must-not-propagate",
-        },
+        environment=runtime_identity_environment(
+            tmp_path / "var",
+            extra={
+                "PATH": "C:\\Windows",
+                "SYSTEMROOT": "C:\\Windows",
+                "SystemDrive": "C:",
+                "ProgramData": "C:\\ProgramData",
+                "SECRET_TOKEN": "must-not-propagate",
+            },
+        ),
         timeout_seconds=2.0,
-        python_executable="C:\\Python\\python.exe",
+        python_executable=sys.executable,
         platform_name="nt",
         runner=runner,
     ).select_folder()
@@ -94,7 +105,7 @@ def test_system_selector_runs_bounded_process_with_controlled_desktop_environmen
     assert result.path == "D:\\apps\\demo"
     command, kwargs = calls[0]
     assert command == [
-        "C:\\Python\\python.exe",
+        str(Path(sys.executable).resolve()),
         "-B",
         "-m",
         "product.backend.workflows.onboarding.folder_picker_process",

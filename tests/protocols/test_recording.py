@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from product.backend.core.recording import RecordingState
-from product.protocols.runner import WebTargetScope
+from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import JiejianError
 from product.protocols import (
     RecordingBudget,
@@ -33,12 +33,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def recording_request() -> RecordingRunnerRequest:
     return RecordingRunnerRequest(
-        schema_version="1",
+        schema_version="2",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         created_at_us=1_000_000,
         target_scope=WebTargetScope(
-            schema_version="2",
             base_url="http://127.0.0.1:8765",
             allowed_origins=("http://127.0.0.1:8765",),
             allowed_hosts=("127.0.0.1",),
@@ -47,20 +46,19 @@ def recording_request() -> RecordingRunnerRequest:
         ),
         sessions=(
             RecordingSessionRef(
-                schema_version="1",
                 identity_id="owner",
                 session_ref="session_0123456789abcdef0123456789abcdef",
+                secret_refs=(),
                 expires_at_us=2_000_000,
             ),
             RecordingSessionRef(
-                schema_version="1",
                 identity_id="attacker",
                 session_ref="session_fedcba9876543210fedcba9876543210",
+                secret_refs=(),
                 expires_at_us=2_000_000,
             ),
         ),
         budget=RecordingBudget(
-            schema_version="1",
             max_duration_us=10_000_000,
             max_events=128,
             max_pages=4,
@@ -74,7 +72,7 @@ def recording_request() -> RecordingRunnerRequest:
 
 def recording_event() -> RecordingEvent:
     return RecordingEvent(
-        schema_version="1",
+        schema_version="2",
         sequence=1,
         occurred_at_us=1_000_001,
         kind=RecordingEventKind.REQUEST,
@@ -86,7 +84,6 @@ def recording_event() -> RecordingEvent:
         method="GET",
         headers=(
             RecordingHeader(
-                schema_version="1",
                 name="authorization",
                 value="[REDACTED]",
             ),
@@ -96,7 +93,7 @@ def recording_event() -> RecordingEvent:
 
 def recording_result() -> RecordingRunnerResult:
     return RecordingRunnerResult(
-        schema_version="1",
+        schema_version="2",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         finished_at_us=1_000_002,
@@ -125,11 +122,11 @@ def test_recording_protocols_are_strict_frozen_and_round_trip() -> None:
 @pytest.mark.parametrize(
     "raw",
     [
-        b'{"schema_version":"1","schema_version":"1"}',
-        b'{"schema_version":"1","value":NaN}',
-        b'\xef\xbb\xbf{"schema_version":"1"}',
+        b'{"schema_version":"2","schema_version":"2"}',
+        b'{"schema_version":"2","value":NaN}',
+        b'\xef\xbb\xbf{"schema_version":"2"}',
         b'{"schema_version":"2"}',
-        b'{"schema_version":"1","unknown":true}',
+        b'{"schema_version":"2","unknown":true}',
     ],
 )
 def test_recording_parser_rejects_non_strict_json_and_unknown_contract(raw: bytes) -> None:
@@ -171,7 +168,7 @@ def test_recording_result_matrix_and_sensitive_headers_are_enforced() -> None:
         RecordingRunnerResult.model_validate(data)
 
     failed = RecordingRunnerResult(
-        schema_version="1",
+        schema_version="2",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         finished_at_us=1_000_002,
@@ -179,7 +176,6 @@ def test_recording_result_matrix_and_sensitive_headers_are_enforced() -> None:
         recording_state=RecordingState.FAILED,
         cleanup_status=RecordingCleanupStatus.FAILED,
         error=RecordingRunnerError(
-            schema_version="1",
             code="RECORD_CLEANUP_FAILED",
             retryable=False,
         ),
@@ -187,7 +183,6 @@ def test_recording_result_matrix_and_sensitive_headers_are_enforced() -> None:
     assert failed.error is not None
     with pytest.raises(ValidationError):
         RecordingHeader(
-            schema_version="1",
             name="cookie",
             value="raw-cookie",
         )

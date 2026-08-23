@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from product.backend.api import create_app
 from product.backend.infra.runtime.serve_lock import ServeLock
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.cli.app import app as cli_app
 from product.backend.core.contracts.models import ContractStatus
 from product.backend.core.errors import JiejianError
@@ -21,16 +22,20 @@ from product.backend.infra.runtime.job_requests import ExecutionRequestStore
 from product.backend.infra.runtime.jobs.models import WaitingFatalFailure
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.cli.commands.system import _wait_for_ready
-from product.protocols import canonical_execution_profile_json_bytes, parse_execution_profile
+from product.protocols import (
+    canonical_web_execution_profile_json_bytes,
+    parse_web_execution_profile,
+)
+from tests.fixtures.runtime_environment import runtime_identity_environment
 
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 
-PROFILE_SOURCE = Path("samples/http/fixed/profile.json").resolve()
-CONTRACT_SOURCE = Path("samples/http/fixed/contract.json").resolve()
+PROFILE_SOURCE = Path("samples/web/fixed/profile.json").resolve()
+CONTRACT_SOURCE = Path("samples/web/fixed/contract.json").resolve()
 
 
 def _write_profile(tmp_path: Path, *, port: int | None = None) -> Path:
-    profile = parse_execution_profile(PROFILE_SOURCE.read_bytes())
+    profile = parse_web_execution_profile(PROFILE_SOURCE.read_bytes())
     if port is not None:
         scope = profile.target.scope.model_copy(
             update={
@@ -41,7 +46,7 @@ def _write_profile(tmp_path: Path, *, port: int | None = None) -> Path:
         )
         profile = profile.model_copy(update={"target": profile.target.model_copy(update={"scope": scope})})
     path = tmp_path / "profile.json"
-    path.write_bytes(canonical_execution_profile_json_bytes(profile))
+    path.write_bytes(canonical_web_execution_profile_json_bytes(profile))
     return path
 
 
@@ -105,7 +110,7 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         assert client.get("/ready").json()["status"] == "ready"
         status = client.get("/api/system/status")
         assert status.status_code == 200
-        assert status.json()["schema_version"] == "1"
+        assert status.json()["schema_version"] == "2"
         assert status.json()["data"]["api"] == "available"
         assert status.json()["data"]["worker"] == "stopped"
         assert status.json()["data"]["browser"] in {"available", "unavailable", "unknown"}
@@ -115,7 +120,7 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         assert openapi.status_code == 200
         assert "ApiResponse" in openapi.json()["components"]["schemas"]
         assert "202" in openapi.json()["paths"]["/api/projects/{project_id}/runs"]["post"]["responses"]
-        project_path = Path("samples/http/fixed/profile.json").resolve()
+        project_path = Path("samples/web/fixed/profile.json").resolve()
         response = client.post(
             "/api/projects",
                 json={"schema_version": "1", "profile_path": str(project_path)},
@@ -127,6 +132,35 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
     restarted = create_app(var_dir, start_worker=False)
     with TestClient(restarted) as client:
         assert client.get(f"/api/projects/{project_id}").status_code == 200
+
+
+def test_system_cache_api_previews_and_preserves_product_data(tmp_path: Path) -> None:
+    var_dir = tmp_path / "var"
+    app = create_app(var_dir, start_worker=False)
+    data_marker = app.state.context.paths.data / "keep.txt"
+    cache_marker = app.state.context.paths.uv_cache / "rebuild.bin"
+    data_marker.write_text("keep", encoding="utf-8")
+    cache_marker.write_bytes(b"cache")
+
+    with TestClient(app) as client:
+        status = client.get("/api/system/cache")
+        preview = client.post(
+            "/api/system/cache/clean",
+            json={"schema_version": "1", "confirmed": False, "dry_run": True},
+        )
+        applied = client.post(
+            "/api/system/cache/clean",
+            json={"schema_version": "1", "confirmed": True, "dry_run": False},
+        )
+
+    assert status.status_code == 200
+    assert status.json()["data"]["protected"]["data"] == str(
+        app.state.context.paths.data
+    )
+    assert preview.json()["data"]["estimated_bytes"] >= len(b"cache")
+    assert applied.status_code == 200
+    assert data_marker.read_text(encoding="utf-8") == "keep"
+    assert not cache_marker.exists()
 
 
 def test_control_plane_shutdown_requires_explicit_local_control_header(tmp_path: Path) -> None:
@@ -195,7 +229,7 @@ def test_control_plane_rejects_invalid_binding_and_redacts_trace(tmp_path: Path)
         )
         assert response.status_code == 400
         assert response.json()["trace_id"] == "trace-safe"
-        assert response.json()["error"]["schema_version"] == "1"
+        assert "schema_version" not in response.json()["error"]
 
 
 def test_execution_profile_summary_exposes_only_user_confirmable_workflow_and_effect_facts(
@@ -211,7 +245,7 @@ def test_execution_profile_summary_exposes_only_user_confirmable_workflow_and_ef
 
     assert response.status_code == 200, response.text
     summary = response.json()["data"]
-    assert summary["schema_version"] == "1"
+    assert "schema_version" not in summary
     assert summary["workflows"]
     assert all(item["target_step"]["method"] for item in summary["workflows"])
     assert summary["effect_bindings"]
@@ -401,7 +435,7 @@ def test_recording_api_uses_registered_profile_and_single_identity(tmp_path: Pat
                 "profile_path": str(profile_path),
                 "identities": ["owner"],
                 "headless": True,
-                "idempotency_key": "legacy-fields",
+                "idempotency_key": "unsupported-fields",
             },
         )
         assert rejected.status_code == 422, rejected.text
@@ -422,7 +456,7 @@ def test_serve_lock_releases_normally_and_diagnoses_existing_lock(tmp_path: Path
 
 
 def test_serve_lock_reclaims_stale_owner(tmp_path: Path) -> None:
-    lock_path = tmp_path / "var" / ".serve.lock"
+    lock_path = RuntimePaths(tmp_path / "var").locks / "serve.lock"
     lock_path.parent.mkdir(parents=True)
     lock_path.write_text(
         json.dumps({"schema_version": "1", "pid": 2_147_483_647}),
@@ -469,7 +503,7 @@ def test_serve_lock_is_released_by_process_exit(tmp_path: Path) -> None:
 
     lock = ServeLock.acquire(var_dir)
     lock.release()
-    assert (var_dir / ".serve.lock").is_file()
+    assert (RuntimePaths(var_dir).locks / "serve.lock").is_file()
 
 
 def test_serve_requires_frontend_index_and_releases_lock(tmp_path: Path) -> None:
@@ -480,7 +514,7 @@ def test_serve_requires_frontend_index_and_releases_lock(tmp_path: Path) -> None
     )
     assert result.exit_code != 0
     assert "SERVE_FAILED" in result.output
-    assert (tmp_path / "var" / ".serve.lock").is_file()
+    assert (RuntimePaths(tmp_path / "var").locks / "serve.lock").is_file()
 
 
 def test_serve_rejects_non_loopback_before_frontend_and_releases_lock(tmp_path: Path) -> None:
@@ -498,7 +532,7 @@ def test_serve_rejects_non_loopback_before_frontend_and_releases_lock(tmp_path: 
     )
     assert result.exit_code != 0
     assert json.loads(result.stderr)["error"]["code"] == "API_BINDING_REJECTED"
-    assert not (tmp_path / "var" / ".serve.lock").exists()
+    assert not (RuntimePaths(tmp_path / "var").locks / "serve.lock").exists()
 
 
 @pytest.mark.parametrize(
@@ -557,11 +591,11 @@ def test_browser_wait_opens_once_only_after_ready() -> None:
 def test_create_app_serves_a_readable_frontend_index(tmp_path: Path) -> None:
     frontend = tmp_path / "dist"
     frontend.mkdir()
-    (frontend / "index.html").write_text("<html>stage4</html>", encoding="utf-8")
+    (frontend / "index.html").write_text("<html>frontend-shell</html>", encoding="utf-8")
     with TestClient(create_app(tmp_path / "var", frontend_dir=frontend, start_worker=False)) as client:
         response = client.get("/")
     assert response.status_code == 200
-    assert "stage4" in response.text
+    assert "frontend-shell" in response.text
 
 
 @pytest.mark.essential
@@ -575,6 +609,9 @@ def test_api_worker_runner_publication_matches_cli_report(
     for key, value in sample.environ.items():
         monkeypatch.setenv(key, value)
     var_dir = tmp_path / "api-real"
+    for key, value in runtime_identity_environment(var_dir).items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("PYTHONNOUSERSITE", "1")
     app = create_app(var_dir, start_worker=True)
     with TestClient(app) as client:
         project, _, profile = _register_active_profile(app, client, profile_path)
@@ -590,7 +627,11 @@ def test_api_worker_runner_publication_matches_cli_report(
             response = client.get(f"/api/runs/{run_id}")
             if response.status_code == 200:
                 detail = response.json()["data"]
-                if detail["lifecycle"] in {"COMPLETED", "FAILED", "CANCELLED", "SAFETY_STOPPED"}:
+                finalization = detail.get("finalization", {})
+                if (
+                    detail["lifecycle"] in {"FAILED", "CANCELLED"}
+                    or finalization.get("base_report_state") == "COMPLETE"
+                ):
                     break
             time.sleep(0.1)
         assert detail is not None and detail["lifecycle"] == "COMPLETED", detail
@@ -610,6 +651,10 @@ def test_api_worker_runner_publication_matches_cli_report(
         assert report["case_progress"]["completed"] == report["case_progress"]["total"]
         assert report["case_progress"]["total"] > 0
         assert report["safety_context"] is None
+        assert report["finalization"]["findings_state"] == "COMPLETE"
+        assert report["finalization"]["base_report_state"] == "COMPLETE"
+        base_report_id = report["finalization"]["base_report_id"]
+        assert base_report_id
         evidence = client.get(f"/api/runs/{run_id}/evidence").json()["data"]
         assert evidence
         evidence_detail = client.get(f"/api/runs/{run_id}/evidence/{evidence[0]['evidence_id']}")
@@ -618,9 +663,32 @@ def test_api_worker_runner_publication_matches_cli_report(
         assert evidence_payload.get("evidence_id") == evidence[0]["evidence_id"], evidence_detail.text
         assert evidence_payload.get("execution_fact") is not None
         assert evidence_payload.get("observation_facts")
+        available = client.get(f"/api/runs/{run_id}/reports")
+        assert available.status_code == 200, available.text
+        listed_reports = available.json()["data"]
+        assert len(listed_reports) == 1
+        assert listed_reports[0]["schema_version"] == "4"
+        assert listed_reports[0]["report_id"] == base_report_id
+        assert listed_reports[0]["run_id"] == run_id
+        assert listed_reports[0]["report_type"] == "BASE"
+        api_report_response = client.get(f"/api/runs/{run_id}/reports/{base_report_id}")
+        assert api_report_response.status_code == 200, api_report_response.text
+        api_report = api_report_response.json()["data"]
+        assert api_report["report_type"] == "BASE"
+        assert api_report["artifact_summary"]["status"] == "NOT_REQUESTED"
+        for output_format in ("json", "html", "sarif", "junit"):
+            projection = client.get(
+                f"/api/runs/{run_id}/reports/{base_report_id}/formats/{output_format}"
+            )
+            assert projection.status_code == 200, projection.text
         baseline_response = client.post(
             f"/api/projects/{project['project_id']}/baselines",
-            json={"schema_version": "1", "accepted_run_id": run_id, "actor": "test", "reason": "current publication baseline"},
+            json={
+                "schema_version": "1",
+                "accepted_run_id": run_id,
+                "actor": "test",
+                "reason": "current publication baseline",
+            },
         )
         assert baseline_response.status_code == 200, baseline_response.text
         baseline_id = baseline_response.json()["data"]["baseline_id"]
@@ -630,28 +698,54 @@ def test_api_worker_runner_publication_matches_cli_report(
         )
         assert gate_response.status_code == 200, gate_response.text
         gate_result_id = gate_response.json()["data"]["gate_result_id"]
+        gate_report_response = client.post(
+            f"/api/runs/{run_id}/reports/gate",
+            json={"schema_version": "1", "gate_result_id": gate_result_id},
+        )
+        assert gate_report_response.status_code == 200, gate_report_response.text
+        gate_report = gate_report_response.json()["data"]
+        assert gate_report["report_type"] == "GATE"
+        assert gate_report["base_report_id"] == base_report_id
+        assert gate_report["base_report_sha256"] == api_report["canonical_sha256"]
+        for copied_field in (
+            "run",
+            "runtime",
+            "artifact_summary",
+            "versions",
+            "limitations",
+        ):
+            assert gate_report[copied_field] == api_report[copied_field]
+        assert len(client.get(f"/api/runs/{run_id}/reports").json()["data"]) == 2
         runner_process_ids = tuple(sample.server.runner_process_ids)
     assert runner_process_ids and set(runner_process_ids) != {os.getpid()}
     cli_report = CliRunner().invoke(
         cli_app,
-        ["--var-dir", str(var_dir), "report", run_id, "--format", "json", "--gate-result-id", gate_result_id],
+        ["--var-dir", str(var_dir), "report", run_id, "--format", "json"],
         env=sample.environ,
     )
     assert cli_report.exit_code == 0, cli_report.output
     cli_payload = json.loads(cli_report.stdout)
     assert cli_payload["run_id"] == run_id
+    assert cli_payload["report_id"] == base_report_id
+    assert cli_payload == api_report
+    cli_repair = CliRunner().invoke(
+        cli_app,
+        ["--var-dir", str(var_dir), "result-repair", run_id],
+        env=sample.environ,
+    )
+    assert cli_repair.exit_code == 0, cli_repair.output
+    assert json.loads(cli_repair.stdout)["base_report_state"] == "COMPLETE"
+    assert tuple(sample.server.runner_process_ids) == runner_process_ids
     with TestClient(create_app(var_dir, start_worker=False)) as client:
         available = client.get(f"/api/runs/{run_id}/reports")
         assert available.status_code == 200
-        report_id = cli_payload["report_id"]
-        api_report_response = client.get(f"/api/runs/{run_id}/reports/{report_id}")
+        api_report_response = client.get(f"/api/runs/{run_id}/reports/{base_report_id}")
         assert api_report_response.status_code == 200, api_report_response.text
-        api_report = api_report_response.json()["data"]
-    assert api_report == cli_payload
+        assert api_report_response.json()["data"] == cli_payload
 
-    report_path = var_dir / "reports" / "runs" / run_id / report_id / "report.json"
+    report_path = var_dir / "data" / "reports" / "runs" / run_id / base_report_id / "report.json"
     report_path.write_text('{"tampered":true}', encoding="utf-8")
     with TestClient(create_app(var_dir, start_worker=False)) as client:
-        tampered = client.get(f"/api/runs/{run_id}/reports/{report_id}")
+        tampered = client.get(f"/api/runs/{run_id}/reports/{base_report_id}")
     assert tampered.status_code != 200
     assert tampered.json()["error"]["code"] in {"ARTIFACT_HASH_MISMATCH", "ARTIFACT_MANIFEST", "REPORT_INTEGRITY"}

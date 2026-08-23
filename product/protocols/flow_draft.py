@@ -58,7 +58,6 @@ class FlowDraftProtocolModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"]
 
 
 class FlowDraftVariableStatus(StrEnum):
@@ -189,6 +188,7 @@ class FlowDraftStep(FlowDraftProtocolModel):
 
 # Recording 事件生成的版本化审阅对象；未确认变量和绑定保持显式状态。
 class FlowDraft(FlowDraftProtocolModel):
+    schema_version: Literal["2"] = "2"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
     revision: int = Field(ge=1)
@@ -236,23 +236,27 @@ class FlowDraft(FlowDraftProtocolModel):
 
 
 class DeleteFlowDraftStep(FlowDraftProtocolModel):
+    schema_version: Literal["1"] = "1"
     operation: Literal["DELETE_STEP"]
     step_id: str = Field(pattern=PROJECT_ID_PATTERN)
 
 
 class MergeFlowDraftSteps(FlowDraftProtocolModel):
+    schema_version: Literal["1"] = "1"
     operation: Literal["MERGE_ADJACENT_STEPS"]
     left_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
     right_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
 
 
 class RenameFlowDraftStep(FlowDraftProtocolModel):
+    schema_version: Literal["1"] = "1"
     operation: Literal["RENAME_STEP"]
     step_id: str = Field(pattern=PROJECT_ID_PATTERN)
     name: str = Field(min_length=1, max_length=128)
 
 
 class ConfirmFlowDraftVariable(FlowDraftProtocolModel):
+    schema_version: Literal["1"] = "1"
     operation: Literal["CONFIRM_VARIABLE_SOURCE"]
     variable_name: str = Field(pattern=PROJECT_ID_PATTERN)
     source_event_sequence: int = Field(ge=1)
@@ -309,7 +313,8 @@ def parse_flow_draft(
     known_secrets: Sequence[str] = (),
 ) -> FlowDraft:
     parsed = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, known_secrets)
-    del parsed
+    if parsed.get("schema_version") != "2":
+        raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 草稿版本不受支持")
     try:
         return FlowDraft.model_validate_json(raw, strict=True)
     except ValidationError as exc:
@@ -322,7 +327,8 @@ def parse_flow_draft_review_command(
     known_secrets: Sequence[str] = (),
 ) -> FlowDraftReviewCommand:
     parsed = _strict_json(raw, FLOW_DRAFT_COMMAND_MAX_BYTES, known_secrets)
-    del parsed
+    if parsed.get("schema_version") != "1":
+        raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 审阅命令版本不受支持")
     try:
         return _COMMAND_ADAPTER.validate_json(raw, strict=True)
     except ValidationError as exc:

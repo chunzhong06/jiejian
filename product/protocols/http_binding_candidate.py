@@ -7,13 +7,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from product.backend.core.verification.permissions import canonical_sha256
+from product.backend.core.verification.permissions import permission_model_sha256
 
 
 class HttpBindingCandidateModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
-    schema_version: Literal["1"] = "1"
-
 
 class HttpBindingCandidateSource(StrEnum):
     RECORDING = "RECORDING"
@@ -81,7 +79,7 @@ class HttpBindingCandidate(HttpBindingCandidateModel):
             if len(set(values)) != len(values) or values != tuple(sorted(values)):
                 raise ValueError("HTTP binding candidate fields must be unique and sorted")
         payload = self.model_dump(mode="json", exclude={"candidate_id", "candidate_fingerprint"})
-        expected = canonical_sha256(payload)
+        expected = permission_model_sha256(payload)
         if self.candidate_id != f"httpbind-{expected[:32]}" or self.candidate_fingerprint != expected:
             raise ValueError("HTTP binding candidate fingerprint does not match its payload")
         return self

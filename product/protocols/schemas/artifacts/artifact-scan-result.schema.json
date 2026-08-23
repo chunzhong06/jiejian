@@ -1,23 +1,283 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "jiejian/artifacts/artifact-scan-result",
-  "type": "object",
+  "$defs": {
+    "ArtifactEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "pattern": "^aev_[0-9a-f]{20}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "source_type": {
+          "const": "ARTIFACT",
+          "default": "ARTIFACT",
+          "title": "Source Type",
+          "type": "string"
+        },
+        "artifact_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "rule_id": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "maximum": 10000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "reason_code": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Reason Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "artifact_id",
+        "manifest_sha256",
+        "rule_id",
+        "path",
+        "fingerprint",
+        "reason_code"
+      ],
+      "title": "ArtifactEvidence",
+      "type": "object"
+    },
+    "ArtifactFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "finding_id": {
+          "pattern": "^af_[0-9a-f]{32}$",
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "source_type": {
+          "const": "ARTIFACT",
+          "default": "ARTIFACT",
+          "title": "Source Type",
+          "type": "string"
+        },
+        "artifact_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "rule_id": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "SECRET_CANDIDATE",
+            "FORBIDDEN_FILE",
+            "SOURCE_MAP",
+            "FRONTEND_SERVER_SECRET",
+            "DEPENDENCY_VERSION"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "evidence_id": {
+          "pattern": "^aev_[0-9a-f]{20}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "message": {
+          "enum": [
+            "检测到秘密候选",
+            "检测到禁止发布文件",
+            "检测到 Source Map",
+            "前端产物包含明显服务端秘密",
+            "依赖版本低于固定本地规则集要求"
+          ],
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "artifact_id",
+        "rule_id",
+        "category",
+        "severity",
+        "path",
+        "evidence_id",
+        "message"
+      ],
+      "title": "ArtifactFinding",
+      "type": "object"
+    },
+    "ArtifactScanStatus": {
+      "enum": [
+        "COMPLETE",
+        "INCONCLUSIVE"
+      ],
+      "title": "ArtifactScanStatus",
+      "type": "string"
+    },
+    "ArtifactVerdict": {
+      "enum": [
+        "SAFE",
+        "VULNERABLE",
+        "INCONCLUSIVE"
+      ],
+      "title": "ArtifactVerdict",
+      "type": "string"
+    }
+  },
   "additionalProperties": false,
-  "required": ["schema_version", "project_id", "artifact_id", "source_type", "ruleset_version", "status", "verdict", "manifest_sha256", "scanned_file_count", "scanned_byte_count", "findings", "evidence"],
   "properties": {
-    "schema_version": {"const": "1"},
-    "project_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
-    "artifact_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
-    "run_id": {"type": ["string", "null"], "pattern": "^run_[0-9a-f]{32}$"},
-    "source_type": {"const": "ARTIFACT"},
-    "ruleset_version": {"const": "artifact-local-2026.08.18"},
-    "status": {"enum": ["COMPLETE", "INCONCLUSIVE"]},
-    "verdict": {"enum": ["SAFE", "VULNERABLE", "INCONCLUSIVE"]},
-    "error_code": {"type": ["string", "null"]},
-    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "scanned_file_count": {"type": "integer", "minimum": 0, "maximum": 4096},
-    "scanned_byte_count": {"type": "integer", "minimum": 0, "maximum": 1073741824},
-    "findings": {"type": "array", "maxItems": 4096},
-    "evidence": {"type": "array", "maxItems": 4096}
-  }
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "artifact_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "source_type": {
+      "const": "ARTIFACT",
+      "default": "ARTIFACT",
+      "title": "Source Type",
+      "type": "string"
+    },
+    "ruleset_version": {
+      "const": "artifact-local-2026.08.18",
+      "default": "artifact-local-2026.08.18",
+      "title": "Ruleset Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ArtifactScanStatus"
+    },
+    "verdict": {
+      "$ref": "#/$defs/ArtifactVerdict"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Manifest Sha256",
+      "type": "string"
+    },
+    "scanned_file_count": {
+      "maximum": 4096,
+      "minimum": 0,
+      "title": "Scanned File Count",
+      "type": "integer"
+    },
+    "scanned_byte_count": {
+      "maximum": 1073741824,
+      "minimum": 0,
+      "title": "Scanned Byte Count",
+      "type": "integer"
+    },
+    "findings": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ArtifactFinding"
+      },
+      "maxItems": 4096,
+      "title": "Findings",
+      "type": "array"
+    },
+    "evidence": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ArtifactEvidence"
+      },
+      "maxItems": 4096,
+      "title": "Evidence",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "artifact_id",
+    "status",
+    "verdict",
+    "manifest_sha256",
+    "scanned_file_count",
+    "scanned_byte_count"
+  ],
+  "title": "ArtifactScanResult",
+  "type": "object"
 }

@@ -1,15 +1,79 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "jiejian/artifacts/artifact-result-manifest",
-  "type": "object",
+  "$defs": {
+    "ArtifactResultFile": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "const": "artifact-result.json",
+          "title": "Path",
+          "type": "string"
+        },
+        "byte_count": {
+          "maximum": 4194304,
+          "minimum": 1,
+          "title": "Byte Count",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_count",
+        "sha256"
+      ],
+      "title": "ArtifactResultFile",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
-  "required": ["schema_version", "artifact_id", "project_id", "result_sha256", "input_manifest_sha256", "files"],
   "properties": {
-    "schema_version": {"const": "1"},
-    "artifact_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
-    "project_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
-    "result_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "input_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "files": {"type": "array", "minItems": 1, "maxItems": 1}
-  }
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "artifact_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "result_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Result Sha256",
+      "type": "string"
+    },
+    "input_manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Input Manifest Sha256",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/ArtifactResultFile"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    }
+  },
+  "required": [
+    "artifact_id",
+    "project_id",
+    "result_sha256",
+    "input_manifest_sha256",
+    "files"
+  ],
+  "title": "ArtifactResultManifest",
+  "type": "object"
 }

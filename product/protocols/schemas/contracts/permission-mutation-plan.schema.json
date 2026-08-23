@@ -24,12 +24,6 @@
     "CoverageGap": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "rule_id": {
           "title": "Rule Id",
           "type": "string"
@@ -89,12 +83,6 @@
     "CoverageRecord": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "rule_id": {
           "title": "Rule Id",
           "type": "string"
@@ -161,12 +149,6 @@
     "EliminatedCandidate": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "candidate_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Candidate Fingerprint",
@@ -204,12 +186,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "workflow_states": {
           "default": [],
           "items": {
@@ -261,12 +237,6 @@
     "PermissionMutationCase": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Case Id",
@@ -400,12 +370,6 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "3",
-      "default": "3",
-      "title": "Schema Version",
-      "type": "string"
-    },
     "plan_id": {
       "pattern": "^plan-[0-9a-f]{32}$",
       "title": "Plan Id",

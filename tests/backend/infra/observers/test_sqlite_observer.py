@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
 
 import pytest
 
+from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import (
     Correlation,
     CausalityStatus,
@@ -34,9 +36,14 @@ from product.backend.infra.observers.sqlite import (
     run_sqlite_observer,
 )
 import product.backend.infra.observers.sqlite as sqlite_observer
+from tests.fixtures.runtime_environment import runtime_identity_environment
 
 
 PYTHON = sys.executable
+
+
+def _environment(tmp_path: Path, **extra: str) -> dict[str, str]:
+    return runtime_identity_environment(tmp_path / "var", extra=extra)
 
 
 def _spec(*, timeout_us: int = 5_000_000, max_rows: int = 10, max_bytes: int = 4096, template: str = "resource-state", table: str = "resource_state") -> ObserverSpec:
@@ -73,7 +80,11 @@ def _observe(tmp_path: Path, db_path: Path, spec: ObserverSpec | None = None):
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "attempt",
-        parent_environ={"DB_SECRET": str(db_path), "OTHER_SECRET": "must-not-propagate"},
+        parent_environ={
+            **os.environ,
+            "DB_SECRET": str(db_path),
+            "OTHER_SECRET": "must-not-propagate",
+        },
         python_executable=PYTHON,
     )
 
@@ -133,13 +144,18 @@ def test_sqlite_observer_budget_is_inconclusive(tmp_path: Path, spec: ObserverSp
         assert result.envelope.provenance is None
 
 
-def test_sqlite_observer_secret_missing_and_child_failure_are_not_safety_results(tmp_path: Path) -> None:
+def test_sqlite_observer_secret_missing_and_child_failure_are_not_safety_results(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing_environment = dict(os.environ)
+    missing_environment.pop("DB_SECRET", None)
     missing = run_sqlite_observer(
         _spec(),
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "missing",
-        parent_environ={},
+        parent_environ=missing_environment,
         python_executable=PYTHON,
     )
     assert missing.envelope is not None
@@ -154,13 +170,18 @@ def test_sqlite_observer_secret_missing_and_child_failure_are_not_safety_results
     assert unavailable.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
     assert unavailable.envelope.provenance is None
 
+    monkeypatch.setattr(
+        sqlite_observer.subprocess,
+        "Popen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("missing interpreter")),
+    )
     crashed = run_sqlite_observer(
         _spec(),
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "crash",
-        parent_environ={"DB_SECRET": "C:\\private\\source.db"},
-        python_executable=r"C:\missing-python.exe",
+        parent_environ=_environment(tmp_path, DB_SECRET="C:\\private\\source.db"),
+        python_executable=PYTHON,
     )
     assert crashed.envelope is None
     assert crashed.outcome.status is ObserverOutcomeStatus.EXECUTION_ERROR
@@ -172,6 +193,9 @@ def test_supervisor_passes_only_the_referenced_secret_and_no_query_text(monkeypa
 
     class FailedProcess:
         returncode = 7
+
+        def poll(self) -> int:
+            return self.returncode
 
         def wait(self, **kwargs: object) -> None:
             return None
@@ -187,7 +211,11 @@ def test_supervisor_passes_only_the_referenced_secret_and_no_query_text(monkeypa
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "supervisor",
-        parent_environ={"DB_SECRET": "opaque-db-source", "OTHER_SECRET": "must-not-propagate"},
+        parent_environ=_environment(
+            tmp_path,
+            DB_SECRET="opaque-db-source",
+            OTHER_SECRET="must-not-propagate",
+        ),
         python_executable=PYTHON,
     )
     assert result.envelope is None
@@ -201,6 +229,9 @@ def test_supervisor_passes_only_the_referenced_secret_and_no_query_text(monkeypa
 def test_supervisor_rejects_oversized_output_before_reading(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     class Process:
         returncode = 0
+
+        def poll(self) -> int:
+            return self.returncode
 
         def wait(self, **kwargs: object) -> None:
             return None
@@ -226,7 +257,7 @@ def test_supervisor_rejects_oversized_output_before_reading(monkeypatch: pytest.
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "oversized-output",
-        parent_environ={"DB_SECRET": "opaque-db-source"},
+        parent_environ=_environment(tmp_path, DB_SECRET="opaque-db-source"),
         python_executable=PYTHON,
     )
     assert output_reads == 0
@@ -263,7 +294,7 @@ def test_supervisor_rejects_output_bound_to_another_invocation(monkeypatch: pyte
             adapter_version="sqlite-observer-1",
             target_id=spec.target.target_id,
             query_template_id="resource-state",
-            source_sha256=sqlite_observer.canonical_sha256(state.canonical_data),
+            source_sha256=sqlite_observer.observer_canonical_sha256(state.canonical_data),
         ),
     )
     updates = {
@@ -276,6 +307,9 @@ def test_supervisor_rejects_output_bound_to_another_invocation(monkeypatch: pyte
 
     class Process:
         returncode = 0
+
+        def poll(self) -> int:
+            return self.returncode
 
         def wait(self, **kwargs: object) -> None:
             return None
@@ -290,7 +324,7 @@ def test_supervisor_rejects_output_bound_to_another_invocation(monkeypatch: pyte
         correlation,
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / field,
-        parent_environ={"DB_SECRET": "opaque-db-source"},
+        parent_environ=_environment(tmp_path, DB_SECRET="opaque-db-source"),
         python_executable=PYTHON,
     )
     assert result.envelope is None
@@ -321,6 +355,9 @@ def test_parent_wait_timeout_deducts_launch_time(monkeypatch: pytest.MonkeyPatch
     class Process:
         returncode = 7
 
+        def poll(self) -> int:
+            return self.returncode
+
         def wait(self, **kwargs: object) -> None:
             captured["timeout"] = float(kwargs["timeout"])
 
@@ -331,7 +368,7 @@ def test_parent_wait_timeout_deducts_launch_time(monkeypatch: pytest.MonkeyPatch
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "budget",
-        parent_environ={"DB_SECRET": "opaque-db-source"},
+        parent_environ=_environment(tmp_path, DB_SECRET="opaque-db-source"),
         python_executable=PYTHON,
     )
     assert captured["timeout"] <= 10 / 1_000_000
@@ -342,6 +379,9 @@ def test_parent_wait_timeout_deducts_launch_time(monkeypatch: pytest.MonkeyPatch
 def test_sqlite_observer_corrupt_output_is_execution_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     class CorruptProcess:
         returncode = 0
+
+        def poll(self) -> int:
+            return self.returncode
 
         def wait(self, **kwargs: object) -> None:
             output = Path(kwargs.pop("output_path")) if "output_path" in kwargs else None
@@ -359,7 +399,7 @@ def test_sqlite_observer_corrupt_output_is_execution_error(monkeypatch: pytest.M
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "corrupt",
-        parent_environ={"DB_SECRET": "opaque-db-source"},
+        parent_environ=_environment(tmp_path, DB_SECRET="opaque-db-source"),
         python_executable=PYTHON,
     )
     assert result.envelope is None
@@ -369,6 +409,9 @@ def test_sqlite_observer_corrupt_output_is_execution_error(monkeypatch: pytest.M
 def test_supervisor_timeout_window_starts_before_child_launch(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     class TimedOutProcess:
         returncode = -9
+
+        def poll(self) -> int:
+            return self.returncode
 
         def wait(self, **kwargs: object) -> None:
             if kwargs.get("timeout") is not None:
@@ -385,7 +428,7 @@ def test_supervisor_timeout_window_starts_before_child_launch(monkeypatch: pytes
         Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
         ObservationPhase.AFTER,
         attempt_dir=tmp_path / "timeout-window",
-        parent_environ={"DB_SECRET": "opaque-db-source"},
+        parent_environ=_environment(tmp_path, DB_SECRET="opaque-db-source"),
         python_executable=PYTHON,
     )
     assert result.envelope is not None
@@ -400,6 +443,9 @@ def test_timeout_reap_is_bounded_when_kill_does_not_exit(monkeypatch: pytest.Mon
     class StuckProcess:
         returncode = None
 
+        def poll(self) -> None:
+            return None
+
         def wait(self, **kwargs: object) -> None:
             waits.append(kwargs.get("timeout"))
             raise sqlite_observer.subprocess.TimeoutExpired("observer", kwargs.get("timeout"))
@@ -407,20 +453,24 @@ def test_timeout_reap_is_bounded_when_kill_does_not_exit(monkeypatch: pytest.Mon
         def kill(self) -> None:
             return None
 
+        def terminate(self) -> None:
+            return None
+
     monkeypatch.setattr(sqlite_observer.subprocess, "Popen", lambda *args, **kwargs: StuckProcess())
     monkeypatch.setattr(sqlite_observer.time, "monotonic_ns", iter((1_000, 1_001)).__next__)
-    result = run_sqlite_observer(
-        _spec(timeout_us=10),
-        Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
-        ObservationPhase.AFTER,
-        attempt_dir=tmp_path / "stuck-reap",
-        parent_environ={"DB_SECRET": "opaque-db-source"},
-        python_executable=PYTHON,
-    )
-    assert waits == [pytest.approx(10 / 1_000_000, abs=10e-6), 1.0]
-    assert result.envelope is not None
-    assert result.envelope.completeness is ObservationCompleteness.TIMED_OUT
-    assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
+    with pytest.raises(JiejianError) as captured:
+        run_sqlite_observer(
+            _spec(timeout_us=10),
+            Correlation(case_id="case-1", resource_id="document", request_marker="case-1"),
+            ObservationPhase.AFTER,
+            attempt_dir=tmp_path / "stuck-reap",
+            parent_environ=_environment(tmp_path, DB_SECRET="opaque-db-source"),
+            python_executable=PYTHON,
+        )
+    assert captured.value.code == ErrorCode.PROCESS_TREE_FAILED
+    assert len(waits) == 3
+    assert waits[0] == pytest.approx(10 / 1_000_000, abs=10e-6)
+    assert all(timeout is not None and 0 <= timeout <= 1.0 for timeout in waits[1:])
 
 
 def test_sqlite_observer_timeout_is_inconclusive(tmp_path: Path) -> None:

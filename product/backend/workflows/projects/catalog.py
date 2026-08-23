@@ -9,7 +9,7 @@ from pathlib import Path
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.infra.storage import ProjectRecord, StorageUnitOfWork
-from product.protocols import ExecutionProfile, TargetType, parse_execution_profile
+from product.protocols import TargetType, WebExecutionProfile, parse_web_execution_profile
 
 
 class ProjectCatalog:
@@ -32,9 +32,9 @@ class ProjectCatalog:
     def register(
         self,
         profile_path: Path,
-    ) -> tuple[ProjectRecord, ExecutionProfile]:
+    ) -> tuple[ProjectRecord, WebExecutionProfile]:
         try:
-            profile = parse_execution_profile(profile_path.resolve().read_bytes())
+            profile = parse_web_execution_profile(profile_path.resolve().read_bytes())
         except OSError:
             raise JiejianError(ErrorCode.EXECUTION_PROFILE_INVALID, "当前执行 Profile 不可读取") from None
         if profile.target_type is not TargetType.WEB:

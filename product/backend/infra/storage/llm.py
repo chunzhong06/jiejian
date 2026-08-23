@@ -101,7 +101,7 @@ class LLMProfileRepository:
     def _row_values(profile: LLMProfileConfig) -> dict[str, object]:
         return {
             "profile_name": profile.profile_name,
-            "schema_version": profile.schema_version,
+            "schema_version": "1",
             "provider": profile.provider.value,
             "model": profile.model,
             "base_url": profile.base_url,
@@ -120,7 +120,6 @@ class LLMProfileRepository:
     def _record(row: LLMProfileRow) -> LLMProfileConfig:
         return LLMProfileConfig.model_validate(
             {
-                "schema_version": row.schema_version,
                 "profile_name": row.profile_name,
                 "provider": LLMProviderType(row.provider),
                 "model": row.model,

@@ -190,7 +190,6 @@ class RecordingRecord(StorageRecord):
 
     def to_domain(self) -> Recording:
         return Recording(
-            schema_version="1",
             recording_id=self.recording_id,
             project_id=self.project_id,
             state=self.state,

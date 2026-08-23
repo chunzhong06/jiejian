@@ -173,7 +173,6 @@ class BrowserRecordingAdapter:
 
         clock = now_us or (lambda: time.time_ns() // 1_000)
         recording = Recording(
-            schema_version="1",
             recording_id=request.recording_id,
             project_id=request.project_id,
             created_at_us=request.created_at_us,
@@ -351,7 +350,6 @@ class BrowserRecordingAdapter:
             cleanup_status = RecordingCleanupStatus.SUCCEEDED
 
         return RecordingRunnerResult(
-            schema_version="1",
             recording_id=request.recording_id,
             project_id=request.project_id,
             finished_at_us=clock(),
@@ -363,7 +361,6 @@ class BrowserRecordingAdapter:
             events=collector.events,
             error=(
                 RecordingRunnerError(
-                    schema_version="1",
                     code=error_code,
                     retryable=retryable,
                 )

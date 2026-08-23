@@ -24,15 +24,11 @@ from product.protocols import (
     RunnerResult,
     StagedArtifact,
     canonical_runner_json_bytes,
-    CleanupResult,
-    CleanupStatus,
-    RunnerResultType,
-    RunnerResult,
-    StagedArtifact,
-    canonical_runner_json_bytes,
 )
 from product.backend.infra.storage import (
+    BaseReportFinalizationState,
     EvidenceIndexRecord,
+    FindingFinalizationState,
     ProjectRecord,
     StorageUnitOfWork,
     create_session_factory,
@@ -129,17 +125,16 @@ def _claimed_job(
 def _staged_attempt(var_dir: Path, job) -> StagedAttempt:
     paths = attempt_paths_for(var_dir, job)
     paths.staging_dir.mkdir(parents=True)
-    artifact_path = paths.staging_dir / "artifacts" / "report" / "report.json"
+    artifact_path = paths.staging_dir / "artifacts" / "fixture.json"
     artifact_path.parent.mkdir(parents=True)
     artifact_path.write_bytes(b"{}")
     artifact = StagedArtifact(
-        schema_version="2",
-        path="artifacts/report/report.json",
+        path="artifacts/fixture.json",
         byte_count=2,
         sha256=hashlib.sha256(b"{}").hexdigest(),
     )
     result = RunnerResult(
-        schema_version="2",
+        schema_version="4",
         run_id=job.run_id,
         job_id=job.job_id,
         attempt=job.attempt,
@@ -155,7 +150,6 @@ def _staged_attempt(var_dir: Path, job) -> StagedAttempt:
         coverage_gap_count=0,
         error=None,
         cleanup=CleanupResult(
-            schema_version="2",
             status=CleanupStatus.NOT_REQUIRED,
         ),
         artifacts=(artifact,),
@@ -213,7 +207,7 @@ def test_publication_rejects_old_fencing_token(tmp_path: Path) -> None:
         with pytest.raises(JiejianError) as captured:
             publisher.publish(staged)
         assert captured.value.code == ErrorCode.ARTIFACT_FENCE.value
-        assert not (var_dir / "projects" / "publication-project" / "runs").exists()
+        assert not (var_dir / "data" / "projects" / "publication-project" / "runs").exists()
     finally:
         parts.engine.dispose()
 
@@ -223,7 +217,7 @@ def test_publication_rejects_tampered_artifact_hash(tmp_path: Path) -> None:
     parts = _claimed_job(var_dir, "8")
     staged = _staged_attempt(var_dir, parts.job)
     try:
-        (staged.paths.staging_dir / "artifacts" / "report" / "report.json").write_bytes(
+        (staged.paths.staging_dir / "artifacts" / "fixture.json").write_bytes(
             b'{"tampered":true}'
         )
         publisher = RunPublisher(
@@ -268,7 +262,7 @@ def test_reconciliation_completes_promoted_run_once_after_commit_failure(
         with pytest.raises(JiejianError) as captured:
             failing_publisher.publish(staged)
         assert captured.value.code == ErrorCode.STORAGE_FAILURE.value
-        final_dir = var_dir / "projects" / "publication-project" / "runs" / parts.job.run_id
+        final_dir = var_dir / "data" / "projects" / "publication-project" / "runs" / parts.job.run_id
         assert (final_dir / "publication-manifest.json").is_file()
 
         publisher = RunPublisher(
@@ -286,23 +280,29 @@ def test_reconciliation_completes_promoted_run_once_after_commit_failure(
         with parts.uow_factory() as work:
             job = work.jobs.get(parts.job.job_id)
             run = work.runs.get(parts.job.run_id)
+            finalization = work.finalizations.get(parts.job.run_id)
             events = work.job_events.list_for_job(parts.job.job_id)
         assert first.published_completed == 1
         assert job is not None and job.state is JobState.SUCCEEDED
         assert run is not None and run.lifecycle is RunLifecycle.COMPLETED
         assert run.verdict is RunVerdict.PASS
+        assert finalization is not None
+        assert finalization.findings_state is FindingFinalizationState.PENDING
+        assert finalization.base_report_state is BaseReportFinalizationState.BLOCKED
         assert events[-1].event_type == "JOB_SUCCEEDED"
 
         second = reconciliation.reconcile()
         with parts.uow_factory() as work:
             repeated_events = work.job_events.list_for_job(parts.job.job_id)
+            repeated_finalization = work.finalizations.get(parts.job.run_id)
         assert second.published_already_complete == 1
         assert repeated_events == events
+        assert repeated_finalization == finalization
     finally:
         parts.engine.dispose()
 
 
-def test_result_reader_rejects_tampered_published_report(tmp_path: Path) -> None:
+def test_result_reader_rejects_tampered_published_artifact(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     parts = _claimed_job(var_dir, "a")
     staged = _staged_attempt(var_dir, parts.job)
@@ -313,18 +313,17 @@ def test_result_reader_rejects_tampered_published_report(tmp_path: Path) -> None
             utc_now_us=lambda: NOW_US + 3,
         ).publish(staged)
         reader = PublishedResultReader(var_dir, parts.uow_factory)
-        assert reader.report(reader.read(parts.job.run_id)) == {}
-        report = (
+        artifact = (
             var_dir
+            / "data"
             / "projects"
             / "publication-project"
             / "runs"
             / parts.job.run_id
             / "artifacts"
-            / "report"
-            / "report.json"
+            / "fixture.json"
         )
-        report.write_text('{"tampered":true}', encoding="utf-8")
+        artifact.write_text('{"tampered":true}', encoding="utf-8")
         with pytest.raises(JiejianError) as captured:
             reader.read(parts.job.run_id)
         assert captured.value.code == ErrorCode.ARTIFACT_MANIFEST.value
@@ -336,7 +335,7 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="3",
+        schema_version="4",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )
@@ -348,13 +347,12 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
     evidence = make_evidence()
     evidence_raw = canonical_runner_json_bytes(evidence)
     evidence_artifact = StagedArtifact(
-        schema_version="2",
         path=f"artifacts/evidence/{evidence.evidence_id}.json",
         byte_count=len(evidence_raw),
         sha256=hashlib.sha256(evidence_raw).hexdigest(),
     )
     result = RunnerResult(
-        schema_version="2",
+        schema_version="4",
         run_id=parts.job.run_id,
         job_id=parts.job.job_id,
         attempt=parts.job.attempt,
@@ -366,7 +364,7 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
         job_state=JobState.SUCCEEDED,
         verdict=RunVerdict.PASS,
         reason_codes=(),
-        cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED),
+        cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED, finished_at_us=NOW_US + 2),
         error=None,
         plan_fingerprint=execution_snapshot().plan.plan_fingerprint,
         coverage_record_count=1,
@@ -397,20 +395,24 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
         )
         reader = PublishedResultReader(var_dir, parts.uow_factory)
         view = reader.read(parts.job.run_id)
+        with parts.uow_factory() as work:
+            finalization = work.finalizations.get(parts.job.run_id)
         assert published.result == result
+        assert finalization is not None
+        assert finalization.findings_state is FindingFinalizationState.PENDING
+        assert finalization.base_report_state is BaseReportFinalizationState.BLOCKED
         assert len(view.evidence) == 1
         assert view.evidence[0].case_id == evidence.case_snapshot.case_id
         overview = reader.overview(parts.job.run_id, published=view)
         assert overview["target_scope"] == execution_snapshot().target.scope.model_dump(mode="json")
         assert overview["budget"] == request.budget.model_dump(mode="json")
-        assert overview["execution_schema_version"] == "3"
-        assert overview["result_schema_version"] == "2"
+        assert overview["execution_schema_version"] == "4"
+        assert overview["result_schema_version"] == "4"
         assert overview["observer_health"]["required_observations"] == ["resource_state"]
         assert overview["observer_health"]["resource_state"]["observer_type"] == "OWNER_API"
         assert overview["coverage_record_count"] == 2
         assert overview["coverage_gap_count"] == 1
         assert overview["case_progress"] == {
-            "schema_version": "1",
             "status": "PUBLISHED",
             "completed": 1,
             "total": 1,
@@ -418,13 +420,11 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
         unpublished_overview = reader.overview(parts.job.run_id)
         assert unpublished_overview["case_progress"]["status"] == "UNAVAILABLE"
         assert unpublished_overview["case_progress"]["completed"] is None
-        with pytest.raises(JiejianError) as report_error:
-            reader.report(view)
-        assert report_error.value.code == ErrorCode.ARTIFACT_NOT_PUBLISHED.value
-        assert reader.findings(view) == []
+        assert unpublished_overview["result_schema_version"] is None
         assert reader.evidence_detail(view, evidence.evidence_id)["evidence_id"] == evidence.evidence_id
         published_evidence_path = (
             var_dir
+            / "data"
             / "projects"
             / parts.job.project_id
             / "runs"
@@ -455,7 +455,7 @@ def test_result_reader_rejects_mismatched_evidence_index(tmp_path: Path) -> None
                     evidence_id="ev_" + "b" * 20,
                     run_id=parts.job.run_id,
                     case_id="forged-case",
-                    artifact_path="artifacts/report/report.json",
+                    artifact_path="artifacts/fixture.json",
                     sha256="b" * 64,
                     byte_count=2,
                     created_at_us=NOW_US + 3,

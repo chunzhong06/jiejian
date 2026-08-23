@@ -24,12 +24,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "workflow_states": {
           "default": [],
           "items": {
@@ -81,12 +75,6 @@
     "PermissionMutationCase": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Case Id",
@@ -210,12 +198,6 @@
     "PermissionMutationDescriptor": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "dimension": {
           "$ref": "#/$defs/CoverageDimension"
         },
@@ -251,12 +233,6 @@
     "PermissionTwin": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "twin_id": {
           "pattern": "^twin-[0-9a-f]{32}$",
           "title": "Twin Id",
@@ -313,12 +289,6 @@
     "TwinInvariantSpecification": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "action_id": {
           "title": "Action Id",
           "type": "string"
@@ -374,12 +344,6 @@
     "TwinPlanGap": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "deny_case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Deny Case Id",
@@ -416,12 +380,6 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "3",
-      "default": "3",
-      "title": "Schema Version",
-      "type": "string"
-    },
     "differential_plan_id": {
       "pattern": "^dplan-[0-9a-f]{32}$",
       "title": "Differential Plan Id",

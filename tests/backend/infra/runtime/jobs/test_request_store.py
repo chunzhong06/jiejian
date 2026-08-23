@@ -14,15 +14,16 @@ from product.backend.infra.runtime.job_requests import (
     parse_execution_request,
     required_secret_names,
 )
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, minimal_process_environment
+from tests.fixtures.runtime_environment import runtime_identity_environment
 from tests.fixtures.runner import runner_input as make_runner_input
 
 
 def test_request_store_is_canonical_hashed_atomic_and_idempotent(
-    stage23_request_factory,
+    runtime_request_factory,
     tmp_path: Path,
 ) -> None:
-    request = stage23_request_factory()
+    request = runtime_request_factory()
     store = ExecutionRequestStore(tmp_path / "var")
     job_id = "job_0123456789abcdef0123456789abcdef"
     request_hash, created = store.write(job_id, request)
@@ -39,21 +40,21 @@ def test_request_store_is_canonical_hashed_atomic_and_idempotent(
 
 
 def test_request_store_rejects_drift_duplicate_keys_and_known_secrets(
-    stage23_request_factory,
+    runtime_request_factory,
     tmp_path: Path,
 ) -> None:
-    request = stage23_request_factory()
+    request = runtime_request_factory()
     store = ExecutionRequestStore(tmp_path / "var")
     job_id = "job_fedcba9876543210fedcba9876543210"
     request_hash, _ = store.write(job_id, request)
     path = store.path_for(job_id)
-    path.write_bytes(path.read_bytes().replace(b'"schema_version":"2"', b'"schema_version":"2","schema_version":"2"', 1))
+    path.write_bytes(path.read_bytes().replace(b'"schema_version":"4"', b'"schema_version":"4","schema_version":"4"', 1))
     drift_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     with pytest.raises(JiejianError) as duplicate:
         store.load(job_id, expected_hash=drift_hash)
     assert duplicate.value.code == ErrorCode.JOB_REQUEST_CONFLICT.value
 
-    sentinel = "stage23-real-secret-sentinel"
+    sentinel = "runtime-request-real-secret-sentinel"
     exposed_payload = request.model_dump(mode="python")
     exposed_payload["project_snapshot"]["project_name"] = f"ordinary-{sentinel}"
     exposed_request = PersistedExecutionRequest.model_validate(
@@ -68,18 +69,22 @@ def test_request_store_rejects_drift_duplicate_keys_and_known_secrets(
 
 
 def test_request_parser_and_minimal_environment_do_not_copy_parent_values(
-    stage23_request_factory,
+    runtime_request_factory,
+    tmp_path: Path,
 ) -> None:
-    request = stage23_request_factory()
+    request = runtime_request_factory()
     raw = canonical_execution_request_bytes(request)
     assert parse_execution_request(raw) == request
     environment = minimal_process_environment(
-        {
-            "SYSTEMROOT": "C:\\Windows",
-            "PATH": "C:\\Tools",
-            "UNRELATED_PARENT_SECRET": "must-not-cross",
-            "NEEDED_SECRET": "only-this-value",
-        },
+        runtime_identity_environment(
+            tmp_path / "var",
+            extra={
+                "PATH": "C:\\Tools",
+                "UNRELATED_PARENT_SECRET": "must-not-cross",
+                "NEEDED_SECRET": "only-this-value",
+            },
+        ),
+        role=ProcessEnvironmentRole.RUNNER,
         secret_names=("NEEDED_SECRET",),
     )
     assert environment["NEEDED_SECRET"] == "only-this-value"
@@ -87,10 +92,10 @@ def test_request_parser_and_minimal_environment_do_not_copy_parent_values(
     assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
 
 
-def test_v2_request_store_dispatches_canonical_and_uses_minimal_secret_refs(tmp_path: Path) -> None:
+def test_current_request_store_dispatches_canonical_and_uses_minimal_secret_refs(tmp_path: Path) -> None:
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="3",
+        schema_version="4",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )

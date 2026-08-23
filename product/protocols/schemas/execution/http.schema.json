@@ -3,12 +3,6 @@
     "EmptyBody": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "EMPTY",
           "default": "EMPTY",
@@ -22,12 +16,6 @@
     "FormUrlEncodedBody": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "FORM_URLENCODED",
           "default": "FORM_URLENCODED",
@@ -51,12 +39,6 @@
       "additionalProperties": false,
       "description": "受控 Query/Header/Form 字段；字段值只能是 literal 或已声明 Slot。",
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "name": {
           "maxLength": 128,
           "minLength": 1,
@@ -100,12 +82,6 @@
     "JsonBody": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "JSON",
           "default": "JSON",
@@ -125,12 +101,6 @@
     "MultipartBody": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "MULTIPART",
           "default": "MULTIPART",
@@ -157,12 +127,6 @@
       "additionalProperties": false,
       "description": "Multipart 只允许 literal、Slot 或已登记 fixture/artifact 标识。",
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "name": {
           "maxLength": 128,
           "minLength": 1,
@@ -247,12 +211,6 @@
     "ResponseExtractor": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "extractor_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Extractor Id",
@@ -361,12 +319,6 @@
     "ValueSlot": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "slot_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Slot Id",
@@ -527,12 +479,6 @@
   "additionalProperties": false,
   "description": "单请求受控模板；不接受 URL、脚本、任意文件或保留认证头。",
   "properties": {
-    "schema_version": {
-      "const": "2",
-      "default": "2",
-      "title": "Schema Version",
-      "type": "string"
-    },
     "method": {
       "enum": [
         "GET",

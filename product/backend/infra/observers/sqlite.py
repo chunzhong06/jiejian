@@ -10,14 +10,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
+from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping
 
-from product.backend.infra.runtime.process_environment import minimal_process_environment
-from product.protocols.observer import CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverInvocation, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType, OBSERVER_JSON_MAX_BYTES, ProvenanceType, build_normalized_state, canonical_sha256, evaluate_observer_outcome, parse_observer_json
+from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
+from product.protocols.observer import CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverInvocation, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType, OBSERVER_JSON_MAX_BYTES, ProvenanceType, build_normalized_state, observer_canonical_sha256, evaluate_observer_outcome, parse_observer_json
 
 
 SQLITE_OBSERVER_PROCESS_ERROR = "SQLITE_OBSERVER_PROCESS_ERROR"
@@ -143,7 +143,7 @@ def _complete_envelope(
             adapter_version="sqlite-observer-1",
             target_id=invocation.spec.target.target_id,
             query_template_id=_QUERY_TEMPLATE_ID,
-            source_sha256=canonical_sha256(state.canonical_data),
+            source_sha256=observer_canonical_sha256(state.canonical_data),
         ),
     )
 
@@ -250,7 +250,7 @@ def _run_child(invocation: ObserverInvocation, *, utc_now_us: Callable[[], int])
                 adapter_version="sqlite-observer-1",
                 target_id=invocation.spec.target.target_id,
                 query_template_id=_QUERY_TEMPLATE_ID,
-                source_sha256=canonical_sha256(state.canonical_data),
+                source_sha256=observer_canonical_sha256(state.canonical_data),
             ),
             reason_codes=(SQLITE_ROW_LIMIT,),
         )
@@ -307,10 +307,21 @@ def run_sqlite_observer(
             source = parent_environ.get(_secret_name(spec))
         _write_atomic(input_path, invocation.model_dump_json().encode("utf-8"))
         source_name = _secret_name(spec)
-        environment = minimal_process_environment(parent_environ if parent_environ is not None else os.environ, secret_names=(source_name,))
-        command = [python_executable or sys.executable, "-B", "-m", "product.backend.infra.observers.sqlite", "--input", str(input_path), "--output", str(output_path)]
+        environment = dict(parent_environ if parent_environ is not None else os.environ)
+        environment.setdefault("JIEJIAN_VAR_DIR", str(attempt_root))
+        command = ["product.backend.infra.observers.sqlite", "--input", str(input_path), "--output", str(output_path)]
         try:
-            process = subprocess.Popen(command, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process = spawn_python_module(
+                environment,
+                command[0],
+                *command[1:],
+                role=ProcessEnvironmentRole.OBSERVER,
+                secret_names=(source_name,),
+                cwd=attempt_root,
+                python_executable=python_executable,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except OSError:
             return SqliteObserverResult(None, _execution_error(spec))
         try:
@@ -319,11 +330,7 @@ def run_sqlite_observer(
                 raise subprocess.TimeoutExpired(command, 0)
             process.wait(timeout=remaining_seconds)
         except subprocess.TimeoutExpired:
-            process.kill()
-            try:
-                process.wait(timeout=_PROCESS_REAP_TIMEOUT_SECONDS)
-            except subprocess.TimeoutExpired:
-                pass
+            terminate_process_tree(process, _PROCESS_REAP_TIMEOUT_SECONDS)
             envelope = _failure_envelope(invocation, ObservationCompleteness.TIMED_OUT, SQLITE_QUERY_TIMEOUT, parent_started_at_us, _now_us())
             return SqliteObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
         if process.returncode != 0 or not output_path.is_file():
@@ -338,6 +345,8 @@ def run_sqlite_observer(
             return SqliteObserverResult(None, _execution_error(spec))
         return SqliteObserverResult(envelope, evaluate_observer_outcome(envelope, required=spec.required))
     finally:
+        if "process" in locals():
+            release_process_tree(process)
         for path in (input_path, output_path):
             try:
                 path.unlink()

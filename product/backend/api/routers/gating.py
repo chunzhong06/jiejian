@@ -62,7 +62,7 @@ from product.backend.api.envelope import ApiModel
 
 
 class BaselineAcceptRequest(ApiModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1"]
     accepted_run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
     actor: str = Field(min_length=1, max_length=128)
     reason: str = Field(min_length=1, max_length=1024)
@@ -76,5 +76,5 @@ class BaselineAcceptRequest(ApiModel):
 
 
 class GateEvaluateRequest(ApiModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1"]
     minimum_severity: Literal["low", "medium", "high", "critical"] = "low"

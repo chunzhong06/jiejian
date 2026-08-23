@@ -17,26 +17,29 @@
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 import json
 import math
 import re
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from typing import Any, Literal, TypeAlias, TypeVar
-from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
-from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
+from product.backend.core.identifiers import JOB_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle, RunVerdict
 from product.backend.core.errors import JiejianError
-from product.backend.core.verification.differential import DifferentialExperimentPlan, PermissionTwin, TwinExecutionRole
-from product.backend.core.verification.permissions import PermissionContract
-from product.backend.core.verification.permission_coverage import PermissionMutationCase, PermissionMutationPlan
-from product.backend.core.verification.permissions import canonical_sha256
-from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, ObservationFact, ObservedEffect, SecurityEffectFact, TargetType
-from product.protocols.observer import ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObserverOutcome, ObserverSpec, ObserverType
+from product.backend.core.verification.differential import PermissionTwin, TwinExecutionRole
+from product.backend.core.verification.permission_coverage import PermissionMutationCase
+from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, ObservationFact, ObservedEffect, SecurityEffectFact
+from product.protocols.execution import (
+    ExecutionBudget,
+    ObserverRequirementBinding,
+    ObserverRequirementKind,
+    ProtocolModel,
+)
+from product.protocols.observer import ObservationCompleteness, ObservationEnvelope, ObserverOutcome
+from product.protocols.web.profile import WebExecutionSnapshot
 
 
 RUNNER_INPUT_MAX_BYTES = 1_048_576
@@ -58,15 +61,6 @@ _WINDOWS_RESERVED_NAMES = frozenset(
 )
 
 
-class ProtocolModel(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid", frozen=True, hide_input_in_errors=True)
-    schema_version: Literal["2"] = "2"
-
-
-# HTTP 工作流模型复用本模块协议基类；延迟导入用于避免拆出第二套基类或形成循环依赖。
-from .http import CASE_SUBJECT_IDENTITY, CookieSessionIdentityBinding, HttpIdentityBinding, HttpIdentityKind, HttpWorkflowBinding, IdentityBootstrapRequest, LoginWorkflowIdentityBinding, ValueSlotSource
-
-
 class RunnerResultType(StrEnum):
     SUCCESS = "SUCCESS"
     SAFETY_STOPPED = "SAFETY_STOPPED"
@@ -86,388 +80,14 @@ class ResourceInjection(StrEnum):
     JSON_RESOURCE_IDS = "JSON_RESOURCE_IDS"
 
 
-# 冻结身份以受控 HTTP binding 表达运行时认证，不保存秘密值。
-class ExecutionIdentity(ProtocolModel):
-    """执行配置中的身份，只保存非秘密环境引用。"""
-
-    schema_version: Literal["3"] = "3"
-    identity_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    role: str = Field(min_length=1, max_length=64)
-    label: str | None = Field(default=None, min_length=1, max_length=128)
-    binding: HttpIdentityBinding
-    bootstrap_requests: tuple[IdentityBootstrapRequest, ...] = Field(default=(), max_length=32)
-
-    @model_validator(mode="after")
-    def validate_bootstrap(self) -> ExecutionIdentity:
-        ids = tuple(item.template_id for item in self.bootstrap_requests)
-        if len(set(ids)) != len(ids):
-            raise ValueError("identity bootstrap request IDs must be unique")
-        if isinstance(self.binding, CookieSessionIdentityBinding):
-            if ids != self.binding.bootstrap_template_ids or not ids:
-                raise ValueError("COOKIE_SESSION bootstrap requests must exactly match declared template IDs")
-        elif isinstance(self.binding, LoginWorkflowIdentityBinding):
-            if not ids:
-                raise ValueError("LOGIN_WORKFLOW requires frozen bootstrap requests")
-        elif self.binding.kind in {
-            HttpIdentityKind.BEARER,
-            HttpIdentityKind.STATIC_HEADERS,
-            HttpIdentityKind.OAUTH2_CLIENT_CREDENTIALS,
-            HttpIdentityKind.OAUTH2_REFRESH_TOKEN,
-        } and ids:
-            raise ValueError("this identity kind cannot carry business-origin bootstrap requests")
-        csrf_slot_id = getattr(self.binding, "csrf_slot_id", None)
-        completed: set[str] = set()
-        produced: dict[str, str] = {}
-        prior_sources = {
-            ValueSlotSource.PRIOR_STEP_JSON_PATH,
-            ValueSlotSource.PRIOR_STEP_HEADER,
-            ValueSlotSource.PRIOR_STEP_COOKIE,
-            ValueSlotSource.PRIOR_STEP_LOCATION,
-        }
-        for request in self.bootstrap_requests:
-            for slot in request.request_template.input_slots:
-                if slot.source in {ValueSlotSource.CASE_SUBJECT_ID, ValueSlotSource.CASE_RESOURCE_ID}:
-                    raise ValueError("identity bootstrap cannot consume business case slots")
-                if slot.source in prior_sources and (
-                    slot.producer_step_id not in completed
-                    or produced.get(slot.slot_id) != slot.producer_step_id
-                ):
-                    raise ValueError("identity bootstrap slot must reference an earlier declared extractor")
-            for extractor in request.request_template.response_extractors:
-                produced[extractor.extractor_id] = request.template_id
-            completed.add(request.template_id)
-        if csrf_slot_id is not None:
-            extractors = {
-                item.extractor_id: item
-                for request in self.bootstrap_requests
-                for item in request.request_template.response_extractors
-            }
-            extractor = extractors.get(csrf_slot_id)
-            if extractor is None or not extractor.secret:
-                raise ValueError("CSRF slot must come from an explicitly secret bootstrap extractor")
-        return self
-
-
-class WebTargetScope(ProtocolModel):
-    """Web 目标的协议级授权范围；不依赖 Core 的历史 TargetScope。"""
-
-    base_url: str
-    allowed_origins: tuple[str, ...]
-    allowed_hosts: tuple[str, ...]
-    allowed_ports: tuple[int, ...]
-    allow_private_network: bool = False
-    follow_redirects: Literal[False] = False
-    timeout_seconds: float = Field(default=5.0, gt=0, le=30)
-    max_requests: int = Field(default=64, ge=1, le=500)
-    max_response_bytes: int = Field(default=262_144, ge=1, le=4_194_304)
-
-    @field_validator("allowed_hosts")
-    @classmethod
-    def normalize_hosts(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        normalized = tuple(dict.fromkeys(value.strip().lower() for value in values))
-        if not normalized or any(not value for value in normalized):
-            raise ValueError("allowed_hosts must contain explicit hosts")
-        try:
-            return tuple(str(ipaddress.IPv4Address(value)) for value in normalized)
-        except ipaddress.AddressValueError as exc:
-            raise ValueError("allowed_hosts must be IPv4 literals") from exc
-
-    @field_validator("allowed_ports")
-    @classmethod
-    def normalize_ports(cls, values: tuple[int, ...]) -> tuple[int, ...]:
-        normalized = tuple(dict.fromkeys(values))
-        if not normalized or any(port < 1 or port > 65535 for port in normalized):
-            raise ValueError("allowed_ports must contain valid explicit ports")
-        return normalized
-
-    @model_validator(mode="after")
-    def validate_scope(self) -> WebTargetScope:
-        parsed = urlsplit(self.base_url)
-        if parsed.scheme not in {"http", "https"} or parsed.username is not None or parsed.password is not None:
-            raise ValueError("base_url must be an HTTP origin without user information")
-        if parsed.hostname is None or parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
-            raise ValueError("base_url must be an origin without path, query, or fragment")
-        try:
-            port = parsed.port or (443 if parsed.scheme == "https" else 80)
-            host = str(ipaddress.IPv4Address(parsed.hostname.lower()))
-        except (ValueError, ipaddress.AddressValueError) as exc:
-            raise ValueError("base_url must use an IPv4 literal and valid port") from exc
-        if host not in self.allowed_hosts or port not in self.allowed_ports:
-            raise ValueError("base_url is outside the declared host or port allowlist")
-        origins: list[str] = []
-        for raw_origin in self.allowed_origins:
-            origin = urlsplit(raw_origin)
-            if (
-                origin.scheme not in {"http", "https"}
-                or origin.hostname is None
-                or origin.username is not None
-                or origin.password is not None
-                or origin.path not in {"", "/"}
-                or origin.query
-                or origin.fragment
-            ):
-                raise ValueError("allowed_origins must contain normalized HTTP origins")
-            try:
-                origin_port = origin.port or (443 if origin.scheme == "https" else 80)
-                origin_host = str(ipaddress.IPv4Address(origin.hostname.lower()))
-            except (ValueError, ipaddress.AddressValueError) as exc:
-                raise ValueError("allowed_origins must use IPv4 literals and valid ports") from exc
-            origins.append(f"{origin.scheme}://{origin_host}:{origin_port}")
-        normalized_origins = tuple(dict.fromkeys(origins))
-        if f"{parsed.scheme}://{host}:{port}" not in normalized_origins:
-            raise ValueError("base_url origin is outside allowed_origins")
-        if not self.allow_private_network and not ipaddress.IPv4Address(host).is_global:
-            raise ValueError("private or local base_url requires explicit authorization")
-        object.__setattr__(self, "base_url", self.base_url.rstrip("/"))
-        object.__setattr__(self, "allowed_origins", normalized_origins)
-        return self
-
-
-class WebTargetDefinition(ProtocolModel):
-    scope: WebTargetScope
-    reset_path: str = Field(pattern=r"^/[A-Za-z0-9_./{}-]{1,255}$")
-
-
 def _validate_reason_codes(values: tuple[str, ...], label: str) -> tuple[str, ...]:
     if len(set(values)) != len(values) or any(re.fullmatch(_REASON_CODE, value) is None for value in values):
         raise ValueError(f"{label} must contain unique stable codes")
     return tuple(sorted(values))
 
 
-class ExecutionBudget(ProtocolModel):
-    max_requests: int = Field(ge=1, le=500)
-    request_timeout_us: int = Field(ge=1, le=30_000_000)
-    max_duration_us: int = Field(ge=1, le=3_600_000_000)
-    max_response_bytes: int = Field(ge=1, le=4_194_304)
-    max_cases: int = Field(ge=1, le=8192)
-    max_parallel_cases: Literal[1]
-
-
-class SubjectExecutionBinding(ProtocolModel):
-    subject_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    identity_id: str = Field(pattern=PROJECT_ID_PATTERN)
-
-
-class ObserverRequirementKind(StrEnum):
-    OBSERVER_SPEC = "OBSERVER_SPEC"
-
-
-class EffectClosurePolicy(StrEnum):
-    IMMEDIATE = "IMMEDIATE"
-    TERMINAL_STATE = "TERMINAL_STATE"
-    BOUNDED_QUIESCENCE = "BOUNDED_QUIESCENCE"
-    EXCLUSIVE_CHANNEL_WINDOW = "EXCLUSIVE_CHANNEL_WINDOW"
-
-
-# 把 Contract 安全效果绑定到权威通道与可选佐证通道，不暴露适配器实现。
-class EffectBinding(ProtocolModel):
-    schema_version: Literal["3"] = "3"
-    effect_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    required_channels: tuple[str, ...] = Field(min_length=1, max_length=32)
-    corroborating_channels: tuple[str, ...] = Field(default=(), max_length=32)
-    closure_policy: EffectClosurePolicy
-    projection_version: str = Field(pattern=_TEXT)
-
-    @model_validator(mode="after")
-    def validate_effect_binding(self) -> EffectBinding:
-        if len(set(self.required_channels)) != len(self.required_channels):
-            raise ValueError("required effect channels must be unique")
-        if len(set(self.corroborating_channels)) != len(self.corroborating_channels):
-            raise ValueError("corroborating effect channels must be unique")
-        if set(self.required_channels) & set(self.corroborating_channels):
-            raise ValueError("required and corroborating effect channels must be disjoint")
-        return self
-
-
-class ObserverRequirementBinding(ProtocolModel):
-    requirement_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    kind: ObserverRequirementKind
-    observer_id: str | None = Field(default=None, pattern=PROJECT_ID_PATTERN)
-    observer_type: ObserverType | None = None
-    credential_ref: str | None = Field(default=None, pattern=r"^env:[A-Z][A-Z0-9_]{0,127}$")
-    phases: tuple[ObservationPhase, ...] = Field(default=(), max_length=5)
-
-    @model_validator(mode="after")
-    def validate_binding(self) -> ObserverRequirementBinding:
-        if len(set(self.phases)) != len(self.phases):
-            raise ValueError("observer binding phases must be unique")
-        if any(phase not in {ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER, ObservationPhase.EVENTUAL} for phase in self.phases):
-            raise ValueError("Runner observer binding phases must be BASELINE, BEFORE, AFTER, or EVENTUAL")
-        if self.observer_id is None or self.observer_type is None or not self.phases:
-            raise ValueError("OBSERVER_SPEC binding requires an observer and phase window")
-        return self
-
-
-# 单次 Run 使用的目标、Contract、覆盖计划、身份和 Observer 冻结快照。
-class ExecutionProjectSnapshot(ProtocolModel):
-    schema_version: Literal["3"] = "3"
-    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    project_name: str = Field(min_length=1, max_length=128)
-    target_type: TargetType = TargetType.WEB
-    target: WebTargetDefinition
-    identities: tuple[ExecutionIdentity, ...] = Field(min_length=1, max_length=4096)
-    contract: PermissionContract
-    plan: PermissionMutationPlan
-    differential_plan: DifferentialExperimentPlan
-    observers: tuple[ObserverSpec, ...] = Field(default=(), max_length=256)
-    subject_bindings: tuple[SubjectExecutionBinding, ...] = Field(min_length=1, max_length=4096)
-    workflow_bindings: tuple[HttpWorkflowBinding, ...] = Field(min_length=1, max_length=4096)
-    effect_bindings: tuple[EffectBinding, ...] = Field(min_length=1, max_length=4096)
-    observer_bindings: tuple[ObserverRequirementBinding, ...] = Field(min_length=1, max_length=256)
-    contract_fingerprint: str = Field(pattern=_HEX)
-    plan_fingerprint: str = Field(pattern=_HEX)
-    differential_fingerprint: str = Field(pattern=_HEX)
-
-    @model_validator(mode="after")
-    def validate_snapshot(self) -> ExecutionProjectSnapshot:
-        identity_ids = {item.identity_id for item in self.identities}
-        subject_ids = {item.subject_id for item in self.contract.subjects}
-        resource_ids = {item.resource_id for item in self.contract.resources}
-        action_map = {item.action_id: item for item in self.contract.actions}
-        effect_ids = {item.effect_id for item in self.contract.effects}
-        plan_cases = {item.case_id: item for item in self.plan.cases}
-        case_actions = {case.action_id for case in self.plan.cases}
-        if len(identity_ids) != len(self.identities):
-            raise ValueError("snapshot identity IDs must be unique")
-        if len({item.subject_id for item in self.subject_bindings}) != len(self.subject_bindings):
-            raise ValueError("subject bindings must be unique")
-        if len({item.action_id for item in self.workflow_bindings}) != len(self.workflow_bindings):
-            raise ValueError("workflow bindings must be unique")
-        if len({item.observer_id for item in self.observers}) != len(self.observers):
-            raise ValueError("observer IDs must be unique")
-        if len({item.requirement_id for item in self.observer_bindings}) != len(self.observer_bindings):
-            raise ValueError("observer requirement IDs must be unique")
-        if len({item.effect_id for item in self.effect_bindings}) != len(self.effect_bindings):
-            raise ValueError("effect bindings must be unique")
-        bound_observer_ids = [
-            item.observer_id
-            for item in self.observer_bindings
-            if item.kind is ObserverRequirementKind.OBSERVER_SPEC
-        ]
-        if len(set(bound_observer_ids)) != len(bound_observer_ids):
-            raise ValueError("an observer spec cannot serve multiple requirements")
-        if self.contract_fingerprint != canonical_sha256(self.contract):
-            raise ValueError("contract fingerprint does not match canonical contract")
-        if self.plan_fingerprint != self.plan.plan_fingerprint:
-            raise ValueError("plan fingerprint does not match plan")
-        if self.differential_fingerprint != self.differential_plan.differential_fingerprint:
-            raise ValueError("differential fingerprint does not match plan")
-        if self.differential_plan.coverage_plan_fingerprint != self.plan.plan_fingerprint:
-            raise ValueError("differential plan does not bind this coverage plan")
-        if any(
-            plan_cases.get(case.case_id) != case
-            for twin in self.differential_plan.twins
-            for case in (twin.allow_case, twin.deny_case)
-        ):
-            raise ValueError("differential twin cases must come from the frozen coverage plan")
-        if self.plan.contract_fingerprint != self.contract_fingerprint:
-            raise ValueError("plan contract fingerprint does not match snapshot")
-        if not case_actions.issubset(action_map):
-            raise ValueError("plan case action is not declared by contract")
-        if not case_actions.issubset({item.action_id for item in self.workflow_bindings}):
-            raise ValueError("workflow bindings must cover every plan case action")
-        for binding in self.subject_bindings:
-            if binding.subject_id not in subject_ids or binding.identity_id not in identity_ids:
-                raise ValueError("subject binding must reference the contract subject and snapshot identity")
-        if {item.subject_id for item in self.subject_bindings} != {case.subject_id for case in self.plan.cases}:
-            raise ValueError("subject bindings must cover every plan subject")
-        for binding in self.workflow_bindings:
-            action = action_map[binding.action_id]
-            if any(step.identity_id != CASE_SUBJECT_IDENTITY and step.identity_id not in identity_ids for step in binding.steps):
-                raise ValueError("workflow step references an unknown identity")
-            if action.is_batch and not binding.logical_resource_slots:
-                raise ValueError("batch actions require a logical resource slot")
-        spec_map = {item.observer_id: item for item in self.observers}
-        requirement_map = {item.requirement_id: item for item in self.observer_bindings}
-        effect_binding_map = {item.effect_id: item for item in self.effect_bindings}
-        for workflow in self.workflow_bindings:
-            target_step = next(step for step in workflow.steps if step.id == workflow.target_step_id)
-            completion_id = target_step.classifier.completion_binding
-            if completion_id is None:
-                continue
-            completion = requirement_map.get(completion_id)
-            if (
-                completion is None
-                or completion.observer_type is not ObserverType.ASYNC_TASK_STATUS
-                or ObservationPhase.EVENTUAL not in completion.phases
-            ):
-                raise ValueError(
-                    "HTTP completion binding must reference an EVENTUAL async task observer"
-                )
-        required_plan_observations = {requirement for case in self.plan.cases for requirement in case.required_observations}
-        if not required_plan_observations.issubset(requirement_map):
-            raise ValueError("observer bindings must cover every plan requirement")
-        required_effect_ids = {effect_id for action_id in case_actions for effect_id in action_map[action_id].effect_ids}
-        if required_effect_ids != set(effect_binding_map) or not required_effect_ids.issubset(effect_ids):
-            raise ValueError("effect bindings must exactly cover every planned action effect")
-        if any(channel not in requirement_map for binding in self.effect_bindings for channel in (*binding.required_channels, *binding.corroborating_channels)):
-            raise ValueError("effect binding references an unknown observation requirement")
-        for binding in self.observer_bindings:
-            if binding.kind is ObserverRequirementKind.OBSERVER_SPEC:
-                spec = spec_map.get(binding.observer_id or "")
-                if spec is None or not spec.required or spec.observer_type is not binding.observer_type or not set(binding.phases).issubset(spec.phases):
-                    raise ValueError("observer binding must reference a required spec with matching phases")
-        bound_observer_ids = {item.observer_id for item in self.observer_bindings if item.kind is ObserverRequirementKind.OBSERVER_SPEC}
-        if any(spec.required and spec.observer_id not in bound_observer_ids for spec in self.observers):
-            raise ValueError("every required observer spec must have an explicit binding")
-        if self.target_type is not TargetType.WEB:
-            raise ValueError("only WEB target snapshots are executable in this release")
-        _reject_secret_material(self.model_dump(mode="python"))
-        return self
-
-
-def required_secret_refs(snapshot: ExecutionProjectSnapshot) -> tuple[str, ...]:
-    """返回  Runner 实际使用的非秘密 env 引用，调用方不得在此解析值。"""
-
-    identity_ids = {item.identity_id for item in snapshot.subject_bindings}
-    identity_ids.update(
-        step.identity_id
-        for workflow in snapshot.workflow_bindings
-        for step in workflow.steps
-        if step.identity_id != CASE_SUBJECT_IDENTITY
-    )
-    references: list[str] = []
-    for identity in snapshot.identities:
-        if identity.identity_id in identity_ids:
-            references.extend(_binding_secret_refs(identity.binding.model_dump(mode="python")))
-            references.extend(_binding_secret_refs(tuple(item.model_dump(mode="python") for item in identity.bootstrap_requests)))
-    references.extend(
-        binding.credential_ref
-        for binding in snapshot.observer_bindings
-            if binding.credential_ref is not None
-    )
-    for spec in snapshot.observers:
-        locator = spec.target.locator
-        references.extend(
-            value
-            for name in (
-                "database_secret_ref",
-                "authorized_root_ref",
-                "read_only_credential_ref",
-                "read_only_sas_ref",
-            )
-            if (value := getattr(locator, name, None)) is not None
-        )
-    return tuple(dict.fromkeys(references))
-
-
-def _binding_secret_refs(value: Any) -> tuple[str, ...]:
-    found: list[str] = []
-    pending = [value]
-    while pending:
-        item = pending.pop()
-        if isinstance(item, Mapping):
-            for key, child in item.items():
-                if isinstance(key, str) and key.endswith("_ref") and isinstance(child, str):
-                    found.append(child)
-                pending.append(child)
-        elif isinstance(item, (list, tuple)):
-            pending.extend(item)
-    return tuple(found)
-
-
 class RunnerInput(ProtocolModel):
-    schema_version: Literal["3"] = "3"
+    schema_version: Literal["4"] = "4"
     run_id: str = Field(pattern=RUN_ID_PATTERN)
     job_id: str = Field(pattern=JOB_ID_PATTERN)
     attempt: int = Field(ge=1)
@@ -475,7 +95,7 @@ class RunnerInput(ProtocolModel):
     fencing_token: int = Field(ge=1)
     created_at_us: int = Field(ge=0)
     budget: ExecutionBudget
-    project_snapshot: ExecutionProjectSnapshot
+    project_snapshot: WebExecutionSnapshot
 
     @model_validator(mode="after")
     def validate_budget(self) -> RunnerInput:
@@ -499,7 +119,7 @@ class RunnerInput(ProtocolModel):
 
 # 单个 case 的不可变执行与观察事实，以及由确定性 Verification 给出的 Verdict。
 class Evidence(ProtocolModel):
-    schema_version: Literal["3"] = "3"
+    schema_version: Literal["4"] = "4"
     evidence_id: str = Field(pattern=r"^ev_[0-9a-f]{20}$")
     run_id: str = Field(pattern=RUN_ID_PATTERN)
     case_snapshot: PermissionMutationCase
@@ -631,7 +251,7 @@ class Evidence(ProtocolModel):
         object.__setattr__(self, "outcomes", outcomes)
         object.__setattr__(self, "observation_facts", tuple(sorted(self.observation_facts, key=lambda item: (item.requirement_id, item.resource_id))))
         object.__setattr__(self, "reason_codes", normalized_reasons)
-        expected = _sha256_json(_evidence_semantic_payload(self))
+        expected = _evidence_semantic_sha256(_evidence_semantic_payload(self))
         if self.evidence_id != f"ev_{expected[:20]}" or self.evidence_hash != expected:
             raise ValueError("evidence_hash does not match the evidence semantic payload")
         return self
@@ -660,7 +280,7 @@ def build_evidence(**fields: Any) -> Evidence:
         key=lambda item: (item["observer_id"], item["phase"], item["correlation"]["resource_id"]),
     )
     semantic_payload["outcomes"] = sorted(semantic_payload.get("outcomes", ()), key=lambda item: item["observer_id"])
-    expected = _sha256_json(semantic_payload)
+    expected = _evidence_semantic_sha256(semantic_payload)
     return Evidence(
         **fields,
         evidence_id=f"ev_{expected[:20]}",
@@ -670,14 +290,21 @@ def build_evidence(**fields: Any) -> Evidence:
 
 class CleanupResult(ProtocolModel):
     status: CleanupStatus
+    finished_at_us: int | None = Field(default=None, ge=0)
     reason_codes: tuple[str, ...] = Field(default=(), max_length=64)
 
     @model_validator(mode="after")
     def validate_cleanup(self) -> CleanupResult:
         reasons = _validate_reason_codes(self.reason_codes, "cleanup reason_codes")
-        if self.status is CleanupStatus.FAILED and not reasons:
-            raise ValueError("failed cleanup requires a reason")
-        if self.status is not CleanupStatus.FAILED and reasons:
+        if self.status is CleanupStatus.NOT_REQUIRED:
+            if self.finished_at_us is not None or reasons:
+                raise ValueError("not-required cleanup cannot contain completion facts")
+        elif self.finished_at_us is None:
+            raise ValueError("performed cleanup requires a completion time")
+        if self.status is CleanupStatus.FAILED:
+            if reasons != ("CLEANUP_FAILED",):
+                raise ValueError("failed cleanup must use CLEANUP_FAILED")
+        elif reasons:
             raise ValueError("successful cleanup cannot contain a reason")
         object.__setattr__(self, "reason_codes", reasons)
         return self
@@ -714,6 +341,7 @@ class StagedArtifact(ProtocolModel):
 
 # 一次 attempt 的生命周期结果、聚合 Verdict、Evidence 与 staging 工件清单。
 class RunnerResult(ProtocolModel):
+    schema_version: Literal["4"] = "4"
     run_id: str = Field(pattern=RUN_ID_PATTERN)
     job_id: str = Field(pattern=JOB_ID_PATTERN)
     attempt: int = Field(ge=1)
@@ -761,13 +389,19 @@ class RunnerResult(ProtocolModel):
         elif self.result_type is RunnerResultType.CANCELLED:
             valid = self.run_lifecycle is RunLifecycle.CANCELLED and self.job_state is JobState.CANCELLED and self.verdict is None and self.error is None and self.cleanup.status is CleanupStatus.SUCCEEDED
         elif self.result_type is RunnerResultType.RETRYABLE_ERROR:
-            valid = self.run_lifecycle in {RunLifecycle.PREFLIGHT, RunLifecycle.PLANNING, RunLifecycle.EXECUTING, RunLifecycle.VERIFYING, RunLifecycle.REPORTING} and self.job_state is JobState.RETRY_WAIT and self.verdict is None and self.error is not None and self.error.retryable and self.cleanup.status in allowed_cleanup
+            valid = self.run_lifecycle is RunLifecycle.RUNNING and self.job_state is JobState.RETRY_WAIT and self.verdict is None and self.error is not None and self.error.retryable and self.cleanup.status in allowed_cleanup
         else:
             valid = self.run_lifecycle is RunLifecycle.FAILED and self.job_state is JobState.FAILED and self.verdict is None and self.error is not None and not self.error.retryable and self.cleanup.status in {CleanupStatus.NOT_REQUIRED, CleanupStatus.SUCCEEDED, CleanupStatus.FAILED}
+        if self.cleanup.status is CleanupStatus.FAILED:
+            valid = valid and self.result_type is RunnerResultType.FATAL_ERROR and self.error is not None and self.error.code == "CLEANUP_FAILED" and "CLEANUP_FAILED" in reasons
         if not valid:
             raise ValueError("runner  result violates the lifecycle and verdict matrix")
         if any(item.run_id != self.run_id for item in self.evidence):
             raise ValueError("evidence run_id must match the runner result")
+        if any(item.window.finished_at_us > self.finished_at_us for item in (observation for evidence in self.evidence for observation in evidence.observations)):
+            raise ValueError("runner finish time precedes an evidence observation window")
+        if self.cleanup.finished_at_us is not None and self.cleanup.finished_at_us > self.finished_at_us:
+            raise ValueError("runner finish time precedes cleanup completion")
         execution_keys = {
             (
                 item.case_snapshot.case_id,
@@ -807,7 +441,7 @@ def _canonical_bytes(value: Any) -> bytes:
     return json.dumps(_jsonable(value), ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
-def _sha256_json(value: Any) -> str:
+def _evidence_semantic_sha256(value: Any) -> str:
     return hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
@@ -865,7 +499,15 @@ def _reject_nonfinite(value: str) -> None:
     raise ValueError(" JSON contains a non-finite number")
 
 
-def _parse_(raw: bytes, model: type[ProtocolT], maximum: int, label: str, known_secrets: Sequence[str]) -> ProtocolT:
+def _parse_(
+    raw: bytes,
+    model: type[ProtocolT],
+    maximum: int,
+    label: str,
+    known_secrets: Sequence[str],
+    *,
+    expected_schema_version: str | None = None,
+) -> ProtocolT:
     if not isinstance(raw, bytes):
         raise TypeError(" parser requires bytes")
     if len(raw) > maximum or raw.startswith(b"\xef\xbb\xbf"):
@@ -874,6 +516,8 @@ def _parse_(raw: bytes, model: type[ProtocolT], maximum: int, label: str, known_
         parsed = json.loads(raw.decode("utf-8"), object_pairs_hook=_reject_pairs, parse_constant=_reject_nonfinite)
         if not isinstance(parsed, dict):
             raise ValueError(" root must be an object")
+        if expected_schema_version is not None and parsed.get("schema_version") != expected_schema_version:
+            raise ValueError(" schema_version is missing or unsupported")
         _reject_secret_material(parsed)
         if any(secret and secret in raw.decode("utf-8") for secret in known_secrets):
             raise JiejianError("PROTOCOL_SECRET_EXPOSED", f"{label} contains known secret material")
@@ -885,12 +529,33 @@ def _parse_(raw: bytes, model: type[ProtocolT], maximum: int, label: str, known_
 
 
 def parse_runner_input(raw: bytes, *, known_secrets: Sequence[str] = ()) -> RunnerInput:
-    return _parse_(raw, RunnerInput, RUNNER_INPUT_MAX_BYTES, "Runner  input", known_secrets)
+    return _parse_(
+        raw,
+        RunnerInput,
+        RUNNER_INPUT_MAX_BYTES,
+        "Runner  input",
+        known_secrets,
+        expected_schema_version="4",
+    )
 
 
 def parse_runner_result(raw: bytes, *, known_secrets: Sequence[str] = ()) -> RunnerResult:
-    return _parse_(raw, RunnerResult, RUNNER_RESULT_MAX_BYTES, "Runner  result", known_secrets)
+    return _parse_(
+        raw,
+        RunnerResult,
+        RUNNER_RESULT_MAX_BYTES,
+        "Runner  result",
+        known_secrets,
+        expected_schema_version="4",
+    )
 
 
 def parse_evidence(raw: bytes, *, known_secrets: Sequence[str] = ()) -> Evidence:
-    return _parse_(raw, Evidence, EVIDENCE_MAX_BYTES, "Evidence ", known_secrets)
+    return _parse_(
+        raw,
+        Evidence,
+        EVIDENCE_MAX_BYTES,
+        "Evidence ",
+        known_secrets,
+        expected_schema_version="4",
+    )

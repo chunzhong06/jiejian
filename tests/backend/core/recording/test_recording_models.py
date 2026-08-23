@@ -15,7 +15,6 @@ from product.backend.core.errors import JiejianError
 
 def _recording() -> Recording:
     return Recording(
-        schema_version="1",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         created_at_us=1,

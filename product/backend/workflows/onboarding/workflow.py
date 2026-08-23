@@ -21,7 +21,6 @@ import os
 import re
 import secrets
 import subprocess
-import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -30,15 +29,13 @@ from typing import Protocol
 from urllib.parse import urlsplit
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.verification.permissions import PermissionContract
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.core.verification.permissions import PermissionContract, parse_permission_contract
+from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, confirmed_python_executable, minimal_process_environment, run_python_module
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.workflows.onboarding.discovery import canonical_folder, discover_folder
-from product.backend.workflows.onboarding.models import DemoVariant, DiscoveryLimits, DiscoveryResult, FolderSelectionResult, OnboardingConfirmations, OnboardingCredentialStatus, OnboardingQuickCheckResult, OnboardingSession, OnboardingSessionUpdate, OnboardingSessionView
+from product.backend.workflows.onboarding.models import DiscoveryLimits, DiscoveryResult, FolderSelectionResult, OnboardingConfirmations, OnboardingCredentialStatus, OnboardingQuickCheckResult, OnboardingSession, OnboardingSessionUpdate, OnboardingSessionView
 from product.backend.workflows.onboarding.secrets import RuntimeSecretVault
 from product.backend.workflows.onboarding.session import OnboardingSessionStore
-
-_DEMO_PEER_ENV = "JIEJIAN_DEMO_PEER_TOKEN"
-
 
 class FolderSelector(Protocol):
     def select_folder(self) -> FolderSelectionResult:
@@ -64,6 +61,7 @@ class SystemFolderSelector:
         environment: Mapping[str, str] | None = None,
         timeout_seconds: float = 120.0,
         python_executable: str | None = None,
+        var_dir: Path | None = None,
         platform_name: str | None = None,
         runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
     ) -> None:
@@ -71,9 +69,11 @@ class SystemFolderSelector:
             raise ValueError("folder selector timeout must be positive")
         self._environment = dict(environment if environment is not None else os.environ)
         self._timeout_seconds = timeout_seconds
-        self._python_executable = python_executable or sys.executable
+        self._python_executable = python_executable
+        selected_var = var_dir or Path(self._environment.get("JIEJIAN_VAR_DIR", "var"))
+        self._runtime_paths = RuntimePaths(selected_var.resolve()).ensure_layout()
         self._platform_name = platform_name or os.name
-        self._runner = runner or subprocess.run
+        self._runner = runner
         self._selection_lock = threading.Lock()
 
     def select_folder(self) -> FolderSelectionResult:
@@ -89,7 +89,10 @@ class SystemFolderSelector:
             )
         try:
             try:
-                child_environment = minimal_process_environment(self._environment)
+                child_environment = minimal_process_environment(
+                    self._environment,
+                    role=ProcessEnvironmentRole.ONBOARDING_SELECTOR,
+                )
                 source_by_casefold = {
                     key.casefold(): value for key, value in self._environment.items()
                 }
@@ -97,24 +100,53 @@ class SystemFolderSelector:
                     value = source_by_casefold.get(name.casefold())
                     if value:
                         child_environment[name] = value
-                completed = self._runner(
-                    [
-                        self._python_executable,
-                        "-B",
-                        "-m",
+                confirmed_executable = confirmed_python_executable(child_environment)
+                if self._python_executable is not None:
+                    # 测试替身也必须声明同一解释器，避免目录选择器形成例外旁路。
+                    requested_executable = Path(self._python_executable).resolve()
+                    if requested_executable != Path(confirmed_executable):
+                        raise JiejianError(
+                            ErrorCode.ONBOARDING_SELECTOR_UNAVAILABLE,
+                            "系统目录选择器不能替换界鉴已确认的 Python 解释器",
+                        )
+                if self._runner is not None:
+                    completed = self._runner(
+                        [
+                            confirmed_executable,
+                            "-B",
+                            "-m",
+                            "product.backend.workflows.onboarding.folder_picker_process",
+                        ],
+                        cwd=str(Path(__file__).resolve().parents[4]),
+                        env=child_environment,
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=self._timeout_seconds,
+                        check=False,
+                        shell=False,
+                    )
+                else:
+                    source_environment = dict(self._environment)
+                    source_environment.setdefault(
+                        "JIEJIAN_VAR_DIR", str(self._runtime_paths.root)
+                    )
+                    desktop_environment = {
+                        name: child_environment[name]
+                        for name in self._DESKTOP_ENVIRONMENT_KEYS
+                        if name in child_environment
+                    }
+                    completed = run_python_module(
+                        source_environment,
                         "product.backend.workflows.onboarding.folder_picker_process",
-                    ],
-                    cwd=str(Path(__file__).resolve().parents[4]),
-                    env=child_environment,
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=self._timeout_seconds,
-                    check=False,
-                    shell=False,
-                )
+                        role=ProcessEnvironmentRole.ONBOARDING_SELECTOR,
+                        cwd=self._runtime_paths.temp,
+                        timeout_seconds=self._timeout_seconds,
+                        extra_environment=desktop_environment,
+                        python_executable=confirmed_executable,
+                    )
             except subprocess.TimeoutExpired:
                 return FolderSelectionResult(
                     status="unavailable",
@@ -131,9 +163,10 @@ class SystemFolderSelector:
                     "系统目录选择器当前不可用，请改用手工绝对路径",
                 )
             try:
-                result = FolderSelectionResult.model_validate(
-                    json.loads(completed.stdout.strip())
-                )
+                payload = json.loads(completed.stdout.strip())
+                if not isinstance(payload, dict) or payload.pop("schema_version", None) != "1":
+                    raise ValueError("unsupported folder selector result version")
+                result = FolderSelectionResult.model_validate(payload)
             except Exception as exc:
                 raise JiejianError(
                     ErrorCode.ONBOARDING_SELECTOR_UNAVAILABLE,
@@ -238,27 +271,6 @@ class OnboardingWorkflow:
             self._require_store().save(session.model_copy(update={"status": "READY", "revision": session.revision + 1}))
         return self._credential_status(session)
 
-    def put_demo_credentials(
-        self, session_id: str, owner: str, attacker: str, peer: str
-    ) -> OnboardingCredentialStatus:
-        """保留现有凭据校验，并为内置演示写入独立的 peer 运行时秘密。"""
-        session = self._require_store().load(session_id)
-        if session.status == "SUBMITTED":
-            raise JiejianError(ErrorCode.ONBOARDING_SESSION_CONFLICT, "已提交的新手检查不能修改凭据")
-        if not owner or not attacker or not peer or len({owner, attacker, peer}) != 3:
-            raise JiejianError(ErrorCode.ONBOARDING_CREDENTIALS_INVALID, "三个演示凭据必须非空且互不相同")
-        self._vault.put(
-            session_id,
-            {
-                session.primary_secret_ref.removeprefix("env:"): owner,
-                session.comparison_secret_ref.removeprefix("env:"): attacker,
-                _DEMO_PEER_ENV: peer,
-            },
-        )
-        if not self._missing(session):
-            self._require_store().save(session.model_copy(update={"status": "READY", "revision": session.revision + 1}))
-        return self._credential_status(session)
-
     def quick_check(self, session_id: str) -> OnboardingQuickCheckResult:
         """把完整会话冻结为只读首检任务；重复调用返回已提交的同一 Run/Job。"""
 
@@ -291,9 +303,7 @@ class OnboardingWorkflow:
         registered = False
         try:
             self._projects.register(profile_path)
-            contract = PermissionContract.model_validate_json(
-                self._contract_document(session), strict=True
-            )
+            contract = parse_permission_contract(self._contract_document(session))
             if self._contracts is None:
                 raise JiejianError(ErrorCode.ONBOARDING_BUNDLE_FAILED, "Contract 治理服务尚未完成装配")
             with self._projects._uow_factory() as work:
@@ -329,65 +339,6 @@ class OnboardingWorkflow:
             if not registered and not session.submitted_run_id:
                 self._remove_profile_if_safe(profile_path)
             raise
-        updated = session.model_copy(update={
-            "status": "SUBMITTED", "revision": session.revision + 1,
-            "submitted_run_id": result.run.run_id, "submitted_job_id": result.job.job_id,
-        })
-        store.save(updated)
-        return OnboardingQuickCheckResult(
-            session=self._view(updated), project_id=record.project_id,
-            run_id=result.run.run_id, job_id=result.job.job_id, created=result.created,
-        )
-
-    def demo_check(self, session_id: str, variant: DemoVariant) -> OnboardingQuickCheckResult:
-        """提交专用 modify 演示；普通 quick_check 仍只生成 view/GET。"""
-        store = self._require_store()
-        session = store.load(session_id)
-        self._validate_session_values(session)
-        missing = self._missing(session)
-        credentials = self._credential_status(session)
-        if not credentials.primary_configured or not credentials.comparison_configured:
-            missing += ("测试凭据",)
-        if missing:
-            raise JiejianError(ErrorCode.ONBOARDING_SESSION_INCOMPLETE, "请先补充演示所需信息", details={"missing": missing})
-        self._assert_no_secret_in_session(session)
-        profile_path = self._write_profile_document(session, self._demo_profile_document(session))
-        registered = False
-        try:
-            self._projects.register(profile_path)
-            contract = PermissionContract.model_validate_json(
-                self._demo_contract_document(session), strict=True
-            )
-            with self._projects._uow_factory() as work:
-                active = work.contract_versions.get_active(session.project_id, contract.contract_id)
-            if active is None:
-                draft = self._contracts.create_draft(
-                    session.project_id, contract.contract_id, snapshot=contract, actor="onboarding-demo"
-                )
-                reviewed = self._contracts.submit_review(
-                    session.project_id, draft.contract_id, draft.version, actor="onboarding-demo"
-                )
-                self._contracts.activate_review(
-                    session.project_id, reviewed.contract_id, reviewed.version, actor="onboarding-demo"
-                )
-            record = self._execution.register(profile_path, accept_source_changes=True)
-            registered = True
-            now_us = time.time_ns() // 1_000
-            result, _request, _names = self._execution.submit(
-                record.profile_id,
-                project_id=record.project_id,
-                idempotency_key=f"onboarding:{session.session_id}:demo:{variant}",
-                now_us=now_us,
-                available_at_us=now_us,
-                run_id=f"run_{secrets.token_hex(16)}",
-                job_id=f"job_{secrets.token_hex(16)}",
-            )
-        except Exception:
-            # 失败语义：只清理尚未完成登记且不属于既有提交的临时 Profile。
-            if not registered and not session.submitted_run_id:
-                self._remove_profile_if_safe(profile_path)
-            raise
-        # --- 阶段：提交成功后持久化不可逆的 Run/Job 关联 ---
         updated = session.model_copy(update={
             "status": "SUBMITTED", "revision": session.revision + 1,
             "submitted_run_id": result.run.run_id, "submitted_job_id": result.job.job_id,
@@ -466,7 +417,7 @@ class OnboardingWorkflow:
         target, _port = self._parse_loopback(session.target_address or "")
         return json.dumps(
             {
-                "schema_version": "3",
+                "schema_version": "4",
                 "contract_id": f"{session.project_id}-contract",
                 "version": 1,
                 "role_ids": ["owner", "user"],
@@ -495,45 +446,10 @@ class OnboardingWorkflow:
             separators=(",", ":"),
         ).encode("utf-8")
 
-    def _demo_contract_document(self, session: OnboardingSession) -> bytes:
-        return json.dumps(
-            {
-                "schema_version": "3",
-                "contract_id": f"{session.project_id}-demo-contract",
-                "version": 1,
-                "role_ids": ["user", "guest"],
-                "workflow_states": ["DRAFT"],
-                "subjects": [
-                    {"subject_id": "attacker", "roles": ["user"], "tenant_id": "tenant", "department_id": "department"},
-                    {"subject_id": "owner", "roles": ["user"], "tenant_id": "tenant", "department_id": "department"},
-                    {"subject_id": "peer", "roles": ["guest"], "tenant_id": "tenant", "department_id": "department"},
-                ],
-                "effects": [{"effect_id": "resource-mutated", "kind": "STATE_MUTATION", "resource_type": "document"}],
-                "actions": [{"action_id": "modify", "effect_ids": ["resource-mutated"], "is_batch": False, "workflow_transition": None}],
-                "resources": [
-                    {"resource_id": session.comparison_resource_id, "resource_type": "document", "owner_subject_id": "attacker", "tenant_id": "tenant", "department_id": "department", "workflow_state": "DRAFT", "parent_resource_id": None},
-                    {"resource_id": session.primary_resource_id, "resource_type": "document", "owner_subject_id": "owner", "tenant_id": "tenant", "department_id": "department", "workflow_state": "DRAFT", "parent_resource_id": None},
-                ],
-                "relations": [
-                    {"relation_id": "same-tenant-owner", "relation": "SAME_TENANT", "source": {"endpoint_type": "subject", "endpoint_id": "attacker"}, "target": {"endpoint_type": "subject", "endpoint_id": "owner"}},
-                    {"relation_id": "owns-owner-resource", "relation": "OWNS", "source": {"endpoint_type": "subject", "endpoint_id": "owner"}, "target": {"endpoint_type": "resource", "endpoint_id": session.primary_resource_id}},
-                    {"relation_id": "owns-attacker-resource", "relation": "OWNS", "source": {"endpoint_type": "subject", "endpoint_id": "attacker"}, "target": {"endpoint_type": "resource", "endpoint_id": session.comparison_resource_id}},
-                ],
-                "rules": [
-                    {"rule_id": "owner-modify", "subject_id": "owner", "action_id": "modify", "resource_id": session.primary_resource_id, "relation_path": ["owns-owner-resource"], "context": {"resource_ids": [session.primary_resource_id], "tenant_ids": [], "department_ids": [], "workflow_states": []}, "expectation": "ALLOW", "required_observations": ["resource_state"], "coverage_dimensions": ["RELATION"], "severity": "high"},
-                    {"rule_id": "unauthorized-modify", "subject_id": "attacker", "action_id": "modify", "resource_id": session.primary_resource_id, "relation_path": ["same-tenant-owner", "owns-owner-resource"], "context": {"resource_ids": [session.primary_resource_id], "tenant_ids": [], "department_ids": [], "workflow_states": []}, "expectation": "DENY", "required_observations": ["resource_state"], "coverage_dimensions": ["RELATION"], "severity": "critical"},
-                ],
-                "batch_rules": [],
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-
     def _profile_document(self, session: OnboardingSession) -> dict:
         target, port = self._parse_loopback(session.target_address or "")
         return {
-            "schema_version": "3",
+            "schema_version": "4",
             "profile_id": session.project_id,
             "project_id": session.project_id,
             "project_name": session.project_name,
@@ -550,36 +466,8 @@ class OnboardingWorkflow:
                 {"subject_id": "primary", "identity_id": "primary"},
                 {"subject_id": "comparison", "identity_id": "comparison"},
             ],
-            "workflow_bindings": [{"schema_version": "3", "workflow_id": "view-workflow", "source_flow_id": "onboarding-flow", "action_id": "view", "steps": [{"id": "target-view", "purpose": "TARGET", "identity_id": "CASE_SUBJECT", "request_template": {"method": "GET", "path": session.read_only_path_template, "input_slots": [{"slot_id": "resource_id", "source": "CASE_RESOURCE_ID", "consumer": "PATH", "consumer_step_id": "target-view"}]}, "classifier": {"accepted": [{"kind": "STATUS_IN", "statuses": [200]}], "denied": [{"kind": "STATUS_IN", "statuses": [401, 403, 404]}]}}], "target_step_id": "target-view", "baseline_projections": [{"projection_id": "resource-state", "logical_resource_handle": "case-resource", "normalization_version": "1", "projection_version": "1", "integrity_mode": "EXACT_RESTORE"}], "reset_strategy": {"kind": "RESET_ENDPOINT", "path": session.recovery_path}}],
+            "workflow_bindings": [{ "workflow_id": "view-workflow", "source_flow_id": "onboarding-flow", "action_id": "view", "steps": [{"id": "target-view", "purpose": "TARGET", "identity_id": "CASE_SUBJECT", "request_template": {"method": "GET", "path": session.read_only_path_template, "input_slots": [{"slot_id": "resource_id", "source": "CASE_RESOURCE_ID", "consumer": "PATH", "consumer_step_id": "target-view"}]}, "classifier": {"accepted": [{"kind": "STATUS_IN", "statuses": [200]}], "denied": [{"kind": "STATUS_IN", "statuses": [401, 403, 404]}]}}], "target_step_id": "target-view", "baseline_projections": [{"projection_id": "resource-state", "logical_resource_handle": "case-resource", "normalization_version": "1", "projection_version": "1", "integrity_mode": "EXACT_RESTORE"}], "reset_strategy": {"kind": "RESET_ENDPOINT", "path": session.recovery_path}}],
             "effect_bindings": [{"effect_id": "resource-disclosed", "required_channels": ["resource_state"], "corroborating_channels": [], "closure_policy": "IMMEDIATE", "projection_version": "v1"}],
-            "observer_bindings": [{"requirement_id": "resource_state", "kind": "OBSERVER_SPEC", "observer_id": "owner-observer", "observer_type": "OWNER_API", "credential_ref": session.primary_secret_ref, "phases": ["BASELINE", "BEFORE", "AFTER"]}],
-            "seed": 7,
-            "case_budget": 8,
-            "max_relation_depth": 8,
-            "max_duration_us": 300_000_000,
-        }
-
-    def _demo_profile_document(self, session: OnboardingSession) -> dict:
-        target, port = self._parse_loopback(session.target_address or "")
-        contract_id = f"{session.project_id}-demo-contract"
-        return {
-            "schema_version": "3",
-            "profile_id": f"{session.project_id}-demo",
-            "project_id": session.project_id,
-            "project_name": session.project_name,
-            "target_type": "WEB",
-            "contract_id": contract_id,
-            "contract_version": 1,
-            "target": {"scope": {"base_url": target, "allowed_origins": [target], "allowed_hosts": ["127.0.0.1"], "allowed_ports": [port], "allow_private_network": True, "follow_redirects": False, "timeout_seconds": 5, "max_requests": 64, "max_response_bytes": 262144}, "reset_path": session.recovery_path},
-            "identities": [
-                {"identity_id": "owner", "role": "user", "binding": {"kind": "BEARER", "secret_ref": session.primary_secret_ref}},
-                {"identity_id": "attacker", "role": "user", "binding": {"kind": "BEARER", "secret_ref": session.comparison_secret_ref}},
-                {"identity_id": "peer", "role": "guest", "binding": {"kind": "BEARER", "secret_ref": "env:JIEJIAN_DEMO_PEER_TOKEN"}},
-            ],
-            "observers": [{"observer_id": "owner-observer", "observer_type": "OWNER_API", "target": {"target_id": "owner-target", "locator": {"locator_type": "OWNER_API", "relative_path_template": "/owner/resources/{resource_id}"}, "normalization_id": "owner-state", "normalization_version": "1"}, "phases": ["BASELINE", "BEFORE", "AFTER"], "required": True, "protocol_version": "2", "budget": {"timeout_us": 5000000, "max_rows": 1, "max_bytes": 262144}}],
-            "subject_bindings": [{"subject_id": "owner", "identity_id": "owner"}, {"subject_id": "attacker", "identity_id": "attacker"}, {"subject_id": "peer", "identity_id": "peer"}],
-            "workflow_bindings": [{"schema_version": "3", "workflow_id": "modify-workflow", "source_flow_id": "demo-flow", "action_id": "modify", "steps": [{"id": "target-modify", "purpose": "TARGET", "identity_id": "CASE_SUBJECT", "request_template": {"method": "PATCH", "path": "/resources/{resource_id}", "body": {"kind": "JSON", "value": {"value": "bounded"}}, "input_slots": [{"slot_id": "resource_id", "source": "CASE_RESOURCE_ID", "consumer": "PATH", "consumer_step_id": "target-modify"}]}, "classifier": {"accepted": [{"kind": "STATUS_IN", "statuses": [200]}], "denied": [{"kind": "STATUS_IN", "statuses": [401, 403, 404]}]}}], "target_step_id": "target-modify", "baseline_projections": [{"projection_id": "resource-state", "logical_resource_handle": "case-resource", "normalization_version": "1", "projection_version": "1", "integrity_mode": "EXACT_RESTORE"}], "reset_strategy": {"kind": "RESET_ENDPOINT", "path": session.recovery_path}}],
-            "effect_bindings": [{"effect_id": "resource-mutated", "required_channels": ["resource_state"], "corroborating_channels": [], "closure_policy": "IMMEDIATE", "projection_version": "v1"}],
             "observer_bindings": [{"requirement_id": "resource_state", "kind": "OBSERVER_SPEC", "observer_id": "owner-observer", "observer_type": "OWNER_API", "credential_ref": session.primary_secret_ref, "phases": ["BASELINE", "BEFORE", "AFTER"]}],
             "seed": 7,
             "case_budget": 8,

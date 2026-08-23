@@ -4,8 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.execution.http import HttpExecutionAdapter, WebTargetGuard
-from product.protocols.runner import WebTargetDefinition, WebTargetScope
+from product.backend.infra.execution.web.adapter import HttpExecutionAdapter, WebTargetGuard
+from product.protocols.web.target import WebTargetDefinition, WebTargetScope
 
 
 def make_scope(

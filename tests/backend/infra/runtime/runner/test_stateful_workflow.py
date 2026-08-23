@@ -8,14 +8,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.infra.runtime.runner import execution as runner_execution
-from product.backend.infra.runtime.runner.execution import RunnerExecutor
+from product.backend.core.verification.differential import TwinExecutionRole
+from product.backend.infra.execution.port import TargetBaselineResult
+from product.backend.infra.execution.web.runtime import WebTargetRuntimeFactory
+from product.backend.infra.runtime.runner import executor as runner_execution
+from product.backend.infra.runtime.runner.executor import RunnerExecutor, _validate_twin_baseline
+from product.backend.infra.runtime.runner.result_builder import evidence_from_case
 from product.protocols import (
-    BaselineIntegrity,
     BaselineIntegrityMode,
     BaselineProjection,
     CookieSessionIdentityBinding,
-    ExecutionIdentity,
+    WebExecutionIdentity,
     HttpOutcomeClassifier,
     HttpPredicate,
     HttpPredicateKind,
@@ -30,10 +33,9 @@ from product.protocols import (
     ValueSlotSource,
     WebTargetDefinition,
     WebTargetScope,
-    TwinExecutionRole,
     WorkflowStepPurpose,
 )
-from product.protocols.http import CASE_SUBJECT_IDENTITY
+from product.protocols.web.workflow import CASE_SUBJECT_IDENTITY
 from tests.fixtures.runner import runner_input
 
 
@@ -109,13 +111,13 @@ def _document(port: int, *, expected_fingerprint: str | None = None):
             allowed_ports=(port,),
             allow_private_network=True,
             timeout_seconds=5,
-            max_requests=10,
+            max_requests=11,
             max_response_bytes=262_144,
         ),
         reset_path="/reset",
     )
     original_identity = document.project_snapshot.identities[0]
-    cookie_identity = ExecutionIdentity(
+    cookie_identity = WebExecutionIdentity(
         identity_id=original_identity.identity_id,
         role=original_identity.role,
         binding=CookieSessionIdentityBinding(bootstrap_template_ids=("login",)),
@@ -200,52 +202,45 @@ def _document(port: int, *, expected_fingerprint: str | None = None):
         reset_strategy={"kind": "RESET_ENDPOINT", "path": "/reset"},
     )
     snapshot = document.project_snapshot.model_copy(update={"target": target, "identities": (cookie_identity,), "workflow_bindings": (workflow,)})
-    return document.model_copy(update={"budget": document.budget.model_copy(update={"max_requests": 10}), "project_snapshot": snapshot})
+    return document.model_copy(update={"budget": document.budget.model_copy(update={"max_requests": 11}), "project_snapshot": snapshot})
 
 
 def test_permission_twin_requires_same_observed_baseline() -> None:
     stored: dict[str, tuple[str, ...]] = {}
     twin = SimpleNamespace(twin_id="twin-test")
-    allow = (
-        BaselineIntegrity(
-            mode=BaselineIntegrityMode.NORMALIZED_EQUIVALENCE,
-            observed_fingerprint="a" * 64,
-            valid=True,
-        ),
+    allow = TargetBaselineResult(
+        valid=True,
+        comparison_fingerprints=("a" * 64,),
     )
-    same = (
-        BaselineIntegrity(
-            mode=BaselineIntegrityMode.NORMALIZED_EQUIVALENCE,
-            observed_fingerprint="a" * 64,
-            valid=True,
-        ),
+    same = TargetBaselineResult(
+        valid=True,
+        comparison_fingerprints=("a" * 64,),
     )
-    changed = (
-        BaselineIntegrity(
-            mode=BaselineIntegrityMode.NORMALIZED_EQUIVALENCE,
-            observed_fingerprint="b" * 64,
-            valid=True,
-        ),
+    changed = TargetBaselineResult(
+        valid=True,
+        comparison_fingerprints=("b" * 64,),
     )
 
-    assert runner_execution._bind_twin_baseline(
+    assert _validate_twin_baseline(
         stored,
         twin,
         TwinExecutionRole.ALLOW_CONTROL,
         allow,
-    )
-    assert runner_execution._bind_twin_baseline(
+    ).valid
+    assert _validate_twin_baseline(
         stored,
         twin,
         TwinExecutionRole.DENY_VARIANT,
         same,
-    )
-    assert not runner_execution._bind_twin_baseline(
+    ).valid
+    mismatch = _validate_twin_baseline(
         stored,
         twin,
         TwinExecutionRole.DENY_VARIANT,
         changed,
     )
+    assert mismatch.valid is False
+    assert mismatch.reason_codes == ("TWIN_BASELINE_MISMATCH",)
 
 
 def test_real_dynamic_workflow_runs_setup_baseline_before_target_and_cleanup(
@@ -264,11 +259,13 @@ def test_real_dynamic_workflow_runs_setup_baseline_before_target_and_cleanup(
         document = _document(server.server_port)
         runner = RunnerExecutor(
             document,
+            runtime_factory=WebTargetRuntimeFactory(),
             environ={"JIEJIAN_TEST_TOKEN": "subject-secret", "OWNER_READ_ONLY": "owner-secret"},
             staging=tmp_path / "staging",
             clock=iter(range(100, 200)).__next__,
         )
-        evidence = runner.run_case(document.project_snapshot.plan.cases[0])
+        result = runner.run_case(document.project_snapshot.plan.cases[0])
+        evidence = evidence_from_case(document, result)
         events = server.events  # type: ignore[attr-defined]
         assert events[:7] == [
             "/reset",
@@ -286,9 +283,10 @@ def test_real_dynamic_workflow_runs_setup_baseline_before_target_and_cleanup(
             "/reset",
         ]
         assert evidence.execution_fact.action_id == "modify"
-        assert runner.baseline_integrities[evidence.case_snapshot.case_id][0].valid is True
+        assert runner.runtime.baseline_integrities[evidence.case_snapshot.case_id][0]["valid"] is True
         assert "project-dynamic" not in evidence.model_dump_json()
         assert "csrf-bootstrap-secret" not in evidence.model_dump_json()
+        runner.close()
     finally:
         server.shutdown()
         server.server_close()
@@ -301,15 +299,18 @@ def test_baseline_mismatch_stops_before_target(tmp_path: Path) -> None:
         document = _document(server.server_port, expected_fingerprint="0" * 64)
         runner = RunnerExecutor(
             document,
+            runtime_factory=WebTargetRuntimeFactory(),
             environ={"JIEJIAN_TEST_TOKEN": "subject-secret", "OWNER_READ_ONLY": "owner-secret"},
             staging=tmp_path / "staging",
             clock=iter(range(100, 200)).__next__,
         )
-        evidence = runner.run_case(document.project_snapshot.plan.cases[0])
+        result = runner.run_case(document.project_snapshot.plan.cases[0])
+        evidence = evidence_from_case(document, result)
         assert evidence.verdict.value == "INCONCLUSIVE"
         assert evidence.baseline_integrity is False
         assert "BASELINE_INTEGRITY_INVALID" in evidence.reason_codes
         assert "/projects/project-dynamic/approve" not in server.events  # type: ignore[attr-defined]
+        runner.close()
     finally:
         server.shutdown()
         server.server_close()

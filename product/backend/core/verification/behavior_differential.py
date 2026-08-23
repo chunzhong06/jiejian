@@ -29,15 +29,13 @@ from product.backend.core.verification.facts import (
 )
 from product.backend.core.verification.permissions import (
     SecurityEffectKind,
-    canonical_sha256,
+    permission_model_sha256,
 )
 from product.protocols.runner import Evidence
 
 
 class BehaviorDifferentialModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
-    schema_version: Literal["1"] = "1"
-
 
 class EvidenceSufficiency(StrEnum):
     SUFFICIENT = "SUFFICIENT"
@@ -79,7 +77,7 @@ class BehaviorSnapshot(BehaviorDifferentialModel):
     @model_validator(mode="after")
     def validate_fingerprint(self) -> BehaviorSnapshot:
         payload = self.model_dump(mode="json", exclude={"behavior_fingerprint"})
-        if self.behavior_fingerprint != canonical_sha256(payload):
+        if self.behavior_fingerprint != permission_model_sha256(payload):
             raise ValueError("behavior fingerprint does not match normalized security fields")
         return self
 
@@ -153,7 +151,6 @@ def normalize_evidence_behavior(
         else evidence.case_snapshot.fingerprint
     )
     payload = {
-        "schema_version": "1",
         "contract_fingerprint": contract_fingerprint,
         "workflow_fingerprint": workflow_fingerprint,
         "experiment_fingerprint": experiment_fingerprint,
@@ -166,7 +163,7 @@ def normalize_evidence_behavior(
     }
     return BehaviorSnapshot(
         **payload,
-        behavior_fingerprint=canonical_sha256(payload),
+        behavior_fingerprint=permission_model_sha256(payload),
     )
 
 
@@ -194,8 +191,8 @@ def compare_behavior_snapshots(
     differences = tuple(
         BehaviorDifference(
             kind=kind,
-            before_fingerprint=canonical_sha256(old),
-            after_fingerprint=canonical_sha256(new),
+            before_fingerprint=permission_model_sha256(old),
+            after_fingerprint=permission_model_sha256(new),
         )
         for kind, old, new in comparable
         if old != new

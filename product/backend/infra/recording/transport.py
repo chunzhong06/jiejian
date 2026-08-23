@@ -19,9 +19,9 @@ from typing import Mapping
 import httpx
 from playwright.sync_api import BrowserContext, Request
 
-from product.protocols.runner import WebTargetScope
+from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.execution.http import WebTargetGuard
+from product.backend.infra.execution.web.adapter import WebTargetGuard
 
 _HOP_BY_HOP_HEADERS = {
     "connection",

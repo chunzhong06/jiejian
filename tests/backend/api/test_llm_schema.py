@@ -12,6 +12,7 @@ from product.backend.infra.llm.config import LLMProviderType
 
 def test_llm_write_only_secret_is_not_serialized_or_represented() -> None:
     request = LLMProfileCreateRequest(
+        schema_version="1",
         profile_name="local",
         provider=LLMProviderType.OPENAI,
         model="gpt-test",
@@ -58,6 +59,7 @@ def test_llm_dto_reuses_secret_and_url_security_validation() -> None:
     for updates in invalid_values:
         try:
             LLMProfileCreateRequest(
+                schema_version="1",
                 profile_name="local",
                 provider="openai",
                 model="gpt-test",
@@ -69,7 +71,7 @@ def test_llm_dto_reuses_secret_and_url_security_validation() -> None:
             raise AssertionError(f"invalid DTO value was accepted: {updates}")
     for updates in invalid_values:
         try:
-            LLMProfileUpdateRequest(**updates)
+            LLMProfileUpdateRequest(schema_version="1", **updates)
         except ValidationError:
             pass
         else:
@@ -88,6 +90,7 @@ def test_llm_dto_reuses_secret_and_url_security_validation() -> None:
         raise AssertionError("local HTTP must require explicit authorization")
 
     update = LLMProfileUpdateRequest(
+        schema_version="1",
         base_url="http://127.0.0.1:8080/v1",
         allow_local_http=None,
     )

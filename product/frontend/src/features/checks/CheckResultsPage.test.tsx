@@ -9,7 +9,7 @@ vi.mock('../../api/runs', () => ({ runsApi }))
 
 describe('CheckResultsPage', () => {
   it('把表面拒绝但真实资源已改变的 Finding 作为首要权限问题解释', async () => {
-    const run = { run_id: 'run-block', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', observer_health: { schema_version: '1', required_observations: ['resource_state'], resource_state: { configured: true } } }
+    const run = { run_id: 'run-block', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', observer_health: { required_observations: ['resource_state'], resource_state: { configured: true } } }
     runsApi.run.mockResolvedValue(run)
     resultsApi.findings.mockResolvedValue([{ finding: { finding_id: 'finding-block', identity: { permission_intent: '成员不能修改他人文档', subject_class: '成员', action: 'modify', resource_class: 'document' } }, occurrence: { occurrence_id: 'occ-block', status: 'APPEARED', verdict: 'VULNERABLE', severity: 'critical', evidence_refs: ['ev-block'] } }])
     resultsApi.evidence.mockResolvedValue([{ evidence_id: 'ev-block' }])
@@ -29,7 +29,7 @@ describe('CheckResultsPage', () => {
   })
 
   it('展示稳定 Finding、当前 Evidence 时间线并分开报告结论和门禁', async () => {
-    const run = { run_id: 'run-1', execution_schema_version: '2', lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED', coverage_record_count: 1, coverage_gap_count: 0, case_progress: { completed: 1, total: 1 }, observer_health: { schema_version: '1', required_observations: ['resource_state'], resource_state: { configured: true, required: true } } }
+    const run = { run_id: 'run-1', execution_schema_version: '4', lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED', coverage_record_count: 1, coverage_gap_count: 0, case_progress: { completed: 1, total: 1 }, observer_health: { required_observations: ['resource_state'], resource_state: { configured: true, required: true } } }
     runsApi.run.mockResolvedValue(run)
     resultsApi.findings.mockResolvedValue([{ finding: { finding_id: 'finding-1', identity: { permission_intent: '读取文档', subject_class: '用户', action: 'read', resource_class: 'document' } }, occurrence: { occurrence_id: 'occ-1', status: 'APPEARED', verdict: 'INCONCLUSIVE', severity: 'high', evidence_refs: ['ev-1'] } }])
     resultsApi.evidence.mockResolvedValue([{ evidence_id: 'ev-1' }])
@@ -50,7 +50,7 @@ describe('CheckResultsPage', () => {
   })
 
   it('必需观察缺失时明确显示缺失而不是已配置', async () => {
-    const run = { run_id: 'run-missing', execution_schema_version: '2', lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED', observer_health: { schema_version: '1', required_observations: ['resource_state'], resource_state: { configured: false, required: true } } }
+    const run = { run_id: 'run-missing', execution_schema_version: '4', lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED', observer_health: { required_observations: ['resource_state'], resource_state: { configured: false, required: true } } }
     runsApi.run.mockResolvedValue(run)
     resultsApi.findings.mockResolvedValue([])
     resultsApi.evidence.mockResolvedValue([])
@@ -60,7 +60,7 @@ describe('CheckResultsPage', () => {
   })
 
   it('PASS 首屏明确限制结论范围', async () => {
-    const run = { run_id: 'run-pass', lifecycle: 'COMPLETED', verdict: 'PASS', result_integrity: 'VERIFIED', observer_health: { schema_version: '1', required_observations: [] } }
+    const run = { run_id: 'run-pass', lifecycle: 'COMPLETED', verdict: 'PASS', result_integrity: 'VERIFIED', observer_health: { required_observations: [] } }
     runsApi.run.mockResolvedValue(run)
     resultsApi.findings.mockResolvedValue([])
     resultsApi.evidence.mockResolvedValue([])

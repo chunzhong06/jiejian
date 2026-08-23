@@ -4,8 +4,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import product.backend.infra.runtime.worker_supervisor as worker_supervisor_module
-from product.backend.infra.runtime.process_environment import minimal_process_environment
+from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, minimal_process_environment
 from product.backend.infra.runtime.worker_supervisor import LocalWorkerSupervisor
+from tests.fixtures.runtime_environment import runtime_identity_environment
 
 
 def test_worker_supervisor_receives_only_requested_secret_names(tmp_path: Path) -> None:
@@ -21,12 +22,12 @@ def test_worker_supervisor_receives_only_requested_secret_names(tmp_path: Path) 
 
 
 def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_filter(
-    tmp_path: Path, monkeypatch, stage23_request_factory, caplog
+    tmp_path: Path, monkeypatch, runtime_request_factory, caplog
 ) -> None:
     requested: list[tuple[str, ...]] = []
     dispatched: dict[str, object] = {}
     job = SimpleNamespace(job_id="job-1", run_id="run-1", request_hash="hash-1")
-    request = stage23_request_factory()
+    request = runtime_request_factory()
 
     class FakeRequestStore:
         def __init__(self, var_dir: Path) -> None:
@@ -86,7 +87,12 @@ def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_f
     }
     assert dispatched["secret_names"] == ("JIEJIAN_TEST_TOKEN", "OWNER_READ_ONLY")
     filtered = minimal_process_environment(
-        dispatched["environ"], secret_names=dispatched["secret_names"]
+        runtime_identity_environment(
+            tmp_path / "var",
+            extra=dispatched["environ"],
+        ),
+        role=ProcessEnvironmentRole.WORKER,
+        secret_names=dispatched["secret_names"],
     )
     assert filtered["JIEJIAN_TEST_TOKEN"] == "identity-secret-value"
     assert filtered["OWNER_READ_ONLY"] == "observer-secret-value"

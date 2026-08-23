@@ -16,8 +16,6 @@ class OnboardingModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"] = "1"
-
 
 class DiscoveryLimits(OnboardingModel):
     max_depth: int = Field(default=2, ge=0, le=2)
@@ -158,17 +156,3 @@ class OnboardingQuickCheckResult(OnboardingModel):
     run_id: str
     job_id: str
     created: bool
-
-
-DemoVariant = Literal["fixed", "vulnerable", "inconclusive"]
-
-
-class OnboardingDemoStatus(OnboardingModel):
-    status: Literal["stopped", "starting", "running", "failed"]
-    demo_data: Literal[True] = True
-    variant: DemoVariant | None = None
-    session_id: str | None = None
-    project_id: str | None = None
-    run_id: str | None = None
-    job_id: str | None = None
-    message: str = Field(min_length=1, max_length=256)

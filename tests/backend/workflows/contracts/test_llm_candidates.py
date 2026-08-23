@@ -72,7 +72,6 @@ def _output(requirement_id: str) -> str:
                 {
                     "requirement_ids": [requirement_id],
                     "suggestion": {
-                        "schema_version": "1",
                         "id": "foreign-read",
                         "kind": "FOREIGN_READ",
                         "required_observations": ["resource_state"],

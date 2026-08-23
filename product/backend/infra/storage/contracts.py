@@ -178,7 +178,7 @@ from product.backend.core.contracts.models import ContractAuditEntry, ContractCa
 from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
 from product.backend.core.lifecycle import ContractStatus
 from product.backend.core.contracts.models import CandidateSuggestion
-from product.backend.core.verification.permissions import PermissionContract
+from product.backend.core.verification.permissions import PermissionContract, parse_permission_contract
 from product.backend.core.recording import Recording, RecordingState, RecordingStateEvent, RecordingTerminalState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import STAGED_ARTIFACT_MAX_BYTES, FlowDraft, RecordingEventKind, RecordingEvent, RecordingHeader, StagedArtifact, canonical_flow_draft_json_bytes
@@ -201,7 +201,7 @@ class RequirementRepository:
         self._session.add(
             RequirementRow(
                 requirement_id=requirement.requirement_id,
-                schema_version=requirement.schema_version,
+                schema_version="1",
                 project_id=requirement.project_id,
                 source_type=requirement.source.source_type.value,
                 source_locator=requirement.source.locator,
@@ -233,7 +233,6 @@ class RequirementRepository:
     @staticmethod
     def _record(row: RequirementRow) -> Requirement:
         return Requirement(
-            schema_version=row.schema_version,
             requirement_id=row.requirement_id,
             project_id=row.project_id,
             source=SourceReference(
@@ -257,7 +256,7 @@ class ContractCandidateRepository:
         self._session.add(
             ContractCandidateRow(
                 candidate_id=candidate.candidate_id,
-                schema_version=candidate.schema_version,
+                schema_version="1",
                 project_id=candidate.project_id,
                 source_type=candidate.source.source_type.value,
                 source_locator=candidate.source.locator,
@@ -294,7 +293,6 @@ class ContractCandidateRepository:
     @staticmethod
     def _record(row: ContractCandidateRow) -> ContractCandidate:
         return ContractCandidate(
-            schema_version=row.schema_version,
             candidate_id=row.candidate_id,
             project_id=row.project_id,
             source=SourceReference(
@@ -324,7 +322,7 @@ class ContractVersionRepository:
                 project_id=contract.project_id,
                 contract_id=contract.contract_id,
                 version=contract.version,
-                schema_version=contract.schema_version,
+                schema_version="1",
                 status=contract.status.value,
                 snapshot_json=_canonical_json(contract.snapshot.model_dump(mode="json")),
                 provenance_json=_canonical_json(contract.provenance.model_dump(mode="json")),
@@ -426,12 +424,11 @@ class ContractVersionRepository:
     @staticmethod
     def _record(row: ContractVersionRow) -> ContractVersion:
         return ContractVersion(
-            schema_version=row.schema_version,
             project_id=row.project_id,
             contract_id=row.contract_id,
             version=row.version,
             status=ContractStatus(row.status),
-            snapshot=PermissionContract.model_validate_json(row.snapshot_json),
+            snapshot=parse_permission_contract(row.snapshot_json),
             provenance=ContractProvenance.model_validate_json(row.provenance_json),
             supersedes_version=row.supersedes_version,
             audit=tuple(

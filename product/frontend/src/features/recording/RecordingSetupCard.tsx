@@ -20,7 +20,7 @@ export function RecordingSetupCard({ profiles, identities, profileId, identityId
 }) {
   return <Card title="选择录制身份">
     {profiles.length === 0
-      ? <Alert type="info" showIcon message="当前应用还没有已登记的执行配置" description="请先在权限规则中登记执行配置（ExecutionProfile），再回来选择录制身份。" />
+      ? <Alert type="info" showIcon message="当前应用还没有已登记的 Web 执行配置" description="请先在权限规则中登记 Web 执行配置，再回来选择录制身份。" />
       : <Space wrap size="middle">
         {profiles.length > 1 && <Select aria-label="选择执行配置" value={profileId} onChange={onProfileChange} style={{ minWidth: 220 }} options={profiles.map((item, index) => ({ value: item.profile_id, label: item.name ?? `执行配置 ${index + 1}` }))} />}
         <Select aria-label="选择录制身份" placeholder="选择一个身份" value={identityId} onChange={onIdentityChange} style={{ minWidth: 260 }} options={identities.map((item) => ({ value: item.identity_id, label: <Space><Typography.Text strong>{productTermLabel('role', item.role, false)}</Typography.Text><Typography.Text type="secondary">{productTermLabel('identity', item.identity_id, false)} · {item.identity_id}</Typography.Text></Space> }))} />

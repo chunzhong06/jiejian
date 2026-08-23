@@ -14,8 +14,9 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from product.protocols.artifacts import ArtifactCheckRequest, ArtifactResultManifest, ArtifactScanResult
+from product.protocols.artifacts import ArtifactCheckRequest, ArtifactResultManifest, ArtifactScanResult, parse_artifact_check_request, parse_artifact_result_manifest, parse_artifact_scan_result
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.runtime.paths import RuntimePaths
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
@@ -25,7 +26,7 @@ _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 class PublishedArtifactResult:
     job_id: str
     request: ArtifactCheckRequest
-    result: ArtifactScanResult
+    result: ArtifactScanResult | None
 
 
 class ArtifactResultReader:
@@ -37,7 +38,7 @@ class ArtifactResultReader:
     def for_run(self, run_id: str, project_id: str) -> tuple[PublishedArtifactResult, ...]:
         """枚举并验证绑定到指定 Run/Project 的已发布产物检查结果。"""
 
-        jobs_root = self._var_dir / "artifact-checks" / "jobs"
+        jobs_root = RuntimePaths(self._var_dir).artifact_checks / "jobs"
         self._check_parent_chain(jobs_root)
         if not os.path.lexists(jobs_root):
             return ()
@@ -59,13 +60,14 @@ class ArtifactResultReader:
                 raise JiejianError(ErrorCode.REPORT_INTEGRITY, "产物检查项目关联不一致")
             published = entry / "published"
             if not os.path.lexists(published):
-                raise JiejianError(ErrorCode.REPORT_INTEGRITY, "产物检查结果尚未发布")
+                results.append(PublishedArtifactResult(entry.name, request, None))
+                continue
             results.append(PublishedArtifactResult(entry.name, request, self._read_published(published, request, run_id, project_id)))
         return tuple(results)
 
     def _parse_request(self, path: Path) -> ArtifactCheckRequest:
         try:
-            return ArtifactCheckRequest.model_validate_json(path.read_bytes(), strict=True)
+            return parse_artifact_check_request(path.read_bytes())
         except (OSError, ValueError):
             raise JiejianError(ErrorCode.REPORT_INTEGRITY, "产物检查请求完整性无效") from None
 
@@ -83,8 +85,8 @@ class ArtifactResultReader:
         for item in entries:
             self._regular_file(item)
         try:
-            manifest = ArtifactResultManifest.model_validate_json(
-                (published / "artifact-check-manifest.json").read_bytes(), strict=True
+            manifest = parse_artifact_result_manifest(
+                (published / "artifact-check-manifest.json").read_bytes()
             )
             result_raw = (published / "artifact-result.json").read_bytes()
             result_hash = hashlib.sha256(result_raw).hexdigest()
@@ -96,7 +98,7 @@ class ArtifactResultReader:
                 or result_hash != manifest.result_sha256
             ):
                 raise ValueError("artifact result hash")
-            result = ArtifactScanResult.model_validate_json(result_raw, strict=True)
+            result = parse_artifact_scan_result(result_raw)
         except (OSError, ValueError):
             raise JiejianError(ErrorCode.REPORT_INTEGRITY, "产物检查发布内容无效") from None
         if (

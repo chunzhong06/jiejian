@@ -6,10 +6,11 @@
 
 | 文件 | 负责什么 |
 | --- | --- |
-| `runner.py` | Web Target、执行预算、RunnerInput/Result、Evidence 和 staged artifact。 |
+| `runner.py` | RunnerInput/Result、Evidence、staged artifact 和 Runner canonical 编码。 |
+| `execution.py` | 与 Target 无关的执行预算、效果绑定和 Observer requirement binding。 |
 | `execution_request.py` | Worker 交给 Runner 的冻结执行请求。 |
 | `observer.py` | Observer 配置、调用、关联、完整性、provenance、Envelope 和 Outcome。 |
-| `execution_profile.py` | ExecutionProfile、身份/秘密引用、Contract 绑定和 canonical profile。 |
+| `web/` | WebExecutionProfile/Snapshot、身份/秘密引用、Target scope、HTTP workflow 和 canonical profile。 |
 | `recording.py` | Recording Runner 请求、事件、预算、结果和清理状态。 |
 | `flow_draft.py` | FlowDraft、步骤编辑和变量确认命令。 |
 | `recording_flow.py` | 审阅确认后的稳定 Flow。 |
@@ -21,7 +22,8 @@
 
 ## 版本与 canonical 约束
 
-- `schema_version` 表示具体 wire/schema 格式，不是产品版本，也不是数据库 revision。
+- `schema_version` 只存在于能够独立交换或持久化且有独立 reader 的根文档；嵌套 DTO 不重复版本。
+- 每个根文档只接受一个当前 wire/schema 格式；该版本不是产品版本，也不是数据库 revision。
 - 未知版本、额外字段、重复键、非有限数、超预算内容和秘密材料必须严格失败，不能猜测兼容。
 - canonical 编码必须对同一语义产生稳定字节；ID、fingerprint 和 hash 只能基于对应协议定义的 canonical payload。
 - Python 模型、JSON Schema、解析器和 canonical/hash 测试必须保持一致。数据库结构另由 `product/backend/migrations/` 管理。

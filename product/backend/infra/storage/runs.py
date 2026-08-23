@@ -23,8 +23,7 @@ class RunRow(Base):
             name="run_id_format",
         ),
         CheckConstraint(
-            "lifecycle IN ('QUEUED', 'PREFLIGHT', 'PLANNING', 'EXECUTING', "
-            "'VERIFYING', 'REPORTING', 'COMPLETED', 'FAILED', 'CANCELLED', "
+            "lifecycle IN ('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', "
             "'SAFETY_STOPPED')",
             name="lifecycle_value",
         ),
@@ -183,6 +182,35 @@ class RunRepository:
             select(RunRow)
             .where(RunRow.project_id == project_id)
             .order_by(RunRow.created_at_us.desc(), RunRow.run_id),
+        )
+        return tuple(
+            RunRecord(
+                run_id=row.run_id,
+                project_id=row.project_id,
+                contract_id=row.contract_id,
+                contract_version=row.contract_version,
+                engine_version=row.engine_version,
+                lifecycle=RunLifecycle(row.lifecycle),
+                verdict=RunVerdict(row.verdict) if row.verdict is not None else None,
+                created_at_us=row.created_at_us,
+                updated_at_us=row.updated_at_us,
+                finished_at_us=row.finished_at_us,
+            )
+            for row in rows
+        )
+
+    def list_finished_for_project(self, project_id: str) -> tuple[RunRecord, ...]:
+        """按冻结完成时间和 Run ID 返回可参与结果最终化的历史 Run。"""
+
+        rows = _scalars(
+            self._session,
+            select(RunRow)
+            .where(
+                RunRow.project_id == project_id,
+                RunRow.lifecycle.in_((RunLifecycle.COMPLETED.value, RunLifecycle.SAFETY_STOPPED.value)),
+                RunRow.finished_at_us.is_not(None),
+            )
+            .order_by(RunRow.finished_at_us, RunRow.run_id),
         )
         return tuple(
             RunRecord(

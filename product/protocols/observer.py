@@ -50,7 +50,6 @@ class ObserverModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["2"] = "2"
 
 
 class ObserverType(StrEnum):
@@ -538,6 +537,7 @@ class AuditLogStartCursor(ObserverModel):
 
 
 class ObserverInvocation(ObserverModel):
+    schema_version: Literal["3"] = "3"
     spec: ObserverSpec
     correlation: Correlation
     phase: ObservationPhase
@@ -554,6 +554,7 @@ class ObserverInvocation(ObserverModel):
 
 
 class AsyncTaskObserverInvocation(ObserverModel):
+    schema_version: Literal["3"] = "3"
     spec: ObserverSpec
     correlation: Correlation
     phase: ObservationPhase
@@ -568,6 +569,7 @@ class AsyncTaskObserverInvocation(ObserverModel):
 
 
 class AuditLogObserverInvocation(ObserverModel):
+    schema_version: Literal["3"] = "3"
     spec: ObserverSpec
     correlation: Correlation
     phase: ObservationPhase
@@ -717,9 +719,10 @@ class ObservationProvenance(ObserverModel):
 
 # 一次带 phase、correlation、完整性和 provenance 的不可变观察。
 class ObservationEnvelope(ObserverModel):
+    schema_version: Literal["3"] = "3"
     observer_id: str = Field(pattern=_ID_PATTERN)
     observer_type: ObserverType
-    protocol_version: Literal["2"] = "2"
+    protocol_version: Literal["3"] = "3"
     phase: ObservationPhase
     target_id: str = Field(pattern=_ID_PATTERN)
     window: ObservationWindow
@@ -803,7 +806,7 @@ def canonical_json_bytes(value: Any) -> bytes:
     return _json_bytes(value)
 
 
-def canonical_sha256(value: Any) -> str:
+def observer_canonical_sha256(value: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 
@@ -834,6 +837,14 @@ def parse_observer_json(
     )
     if not isinstance(parsed, dict):
         raise ValueError("observer JSON root must be an object")
+    expected_version = {
+        ObserverInvocation: "3",
+        AsyncTaskObserverInvocation: "3",
+        AuditLogObserverInvocation: "3",
+        ObservationEnvelope: "3",
+    }.get(model_type)
+    if expected_version is None or parsed.get("schema_version") != expected_version:
+        raise ValueError("observer root schema_version is missing or unsupported")
     _reject_secret_values(parsed, known_secrets)
     # 上方先在解码树中拒绝重复键、非有限数与 BOM；随后仍经 Pydantic JSON 入口
     # 解析 enum 和 tuple wire 值，以保留严格模型语义。

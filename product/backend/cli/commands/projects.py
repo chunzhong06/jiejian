@@ -1,5 +1,5 @@
 # Project CLI 命令组
-# 解析 ExecutionProfile 路径并调用共享输入校验，输出稳定 Project 摘要。
+# 解析 WebExecutionProfile 路径并调用共享输入校验，输出稳定 Project 摘要。
 
 from __future__ import annotations
 
@@ -8,15 +8,15 @@ from pathlib import Path
 import typer
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import parse_execution_profile
+from product.protocols import parse_web_execution_profile
 from product.backend.cli.presentation import emit_json, fail
 
 
 def project_validate_command(path: Path) -> None:
-    """离线校验当前执行配置（ExecutionProfile）及其治理引用。"""
+    """离线校验当前 Web 执行配置及其治理引用。"""
 
     try:
-        profile = parse_execution_profile(path.read_bytes())
+        profile = parse_web_execution_profile(path.read_bytes())
         emit_json(
             {
                 "schema_version": "1",
@@ -31,4 +31,4 @@ def project_validate_command(path: Path) -> None:
     except JiejianError as exc:
         fail(exc)
     except (OSError, ValueError):
-        fail(JiejianError(ErrorCode.INPUT_FILE, "执行配置（ExecutionProfile）文件不可读取"))
+        fail(JiejianError(ErrorCode.INPUT_FILE, "Web 执行配置（WebExecutionProfile）文件不可读取"))

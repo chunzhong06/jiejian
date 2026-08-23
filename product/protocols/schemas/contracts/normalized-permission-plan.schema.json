@@ -3,12 +3,6 @@
     "NormalizedPermissionCase": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Case Id",
@@ -185,12 +179,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "workflow_states": {
           "default": [],
           "items": {
@@ -242,12 +230,6 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "3",
-      "default": "3",
-      "title": "Schema Version",
-      "type": "string"
-    },
     "plan_id": {
       "pattern": "^[a-z][a-z0-9_-]{0,63}$",
       "title": "Plan Id",

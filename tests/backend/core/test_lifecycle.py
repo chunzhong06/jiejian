@@ -27,11 +27,7 @@ pytestmark = pytest.mark.essential
             RunLifecycle,
             {
                 "QUEUED",
-                "PREFLIGHT",
-                "PLANNING",
-                "EXECUTING",
-                "VERIFYING",
-                "REPORTING",
+                "RUNNING",
                 "COMPLETED",
                 "FAILED",
                 "CANCELLED",
@@ -48,13 +44,13 @@ def test_shared_lifecycle_enum_values_are_stable(enum_type, expected) -> None:
     assert {state.value for state in enum_type} == expected
 
 
-def test_domain_model_public_schema_baseline_is_stable() -> None:
+def test_domain_model_strict_frozen_baseline_is_stable() -> None:
     model = DomainModel()
-    assert model.schema_version == "1"
+    assert "schema_version" not in model.model_dump(mode="python")
     assert DomainModel.model_config["extra"] == "forbid"
     assert DomainModel.model_config["frozen"] is True
 
     with pytest.raises(ValidationError):
         DomainModel(unexpected=True)
     with pytest.raises(ValidationError):
-        model.schema_version = "2"
+        model.unexpected = True

@@ -42,7 +42,6 @@ class SubmitExecution(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["2"] = "2"
     request: PersistedExecutionRequest
     idempotency_key: str = Field(min_length=1, max_length=128)
     max_attempts: int = Field(default=3, ge=1, le=1_000)

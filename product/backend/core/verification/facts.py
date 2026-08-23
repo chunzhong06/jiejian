@@ -32,13 +32,10 @@ _REASON = r"^[A-Z][A-Z0-9_]{0,127}$"
 
 class FactModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
-    schema_version: Literal["3"] = "3"
 
 
 class TargetType(StrEnum):
     WEB = "WEB"
-    CLI_APPLICATION = "CLI_APPLICATION"
-    MCP_AGENT = "MCP_AGENT"
 
 
 class ExecutionOutcome(StrEnum):

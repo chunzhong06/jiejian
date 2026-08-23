@@ -9,7 +9,7 @@ import pytest
 
 from product.backend.core.lifecycle import JobState, ProjectStatus
 from product.backend.core.recording import RecordingState, RecordingStateEvent
-from product.protocols.runner import WebTargetScope
+from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import (
     RecordingBudget,
@@ -57,7 +57,7 @@ from tests.backend.infra.recording.test_browser_boundary import browser_server, 
 pytestmark = pytest.mark.database
 
 NOW_US = 1_820_000_000_000_000
-PROJECT_ID = "stage33-project"
+PROJECT_ID = "recording-project"
 
 
 def test_recording_runner_uses_single_json_stdin_and_stdout() -> None:
@@ -245,7 +245,10 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
                     "created_at_us": NOW_US,
                     "sessions": (
                         request.sessions[0].model_copy(
-                            update={"expires_at_us": NOW_US + 60_000_000}
+                            update={
+                                "expires_at_us": NOW_US + 60_000_000,
+                                "secret_refs": ("env:RECORDING_SECRET",),
+                            }
                         ),
                     ),
                 }
@@ -295,7 +298,7 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
             request_store=context.request_store,
             cancel_path_for=lambda root, job: attempt_paths_for(root, job).cancel_path,
             controlled_runner=lambda _request, _cancelled: result,
-            known_secrets=(sentinel,),
+            environ={"RECORDING_SECRET": sentinel},
             utc_now_us=lambda: next(times),
         )
 
@@ -388,9 +391,12 @@ def test_secret_bearing_runner_result_fails_without_persisting_payload(
     tmp_path: Path,
 ) -> None:
     context = _context(tmp_path)
-    sentinel = "stage33-real-secret-sentinel"
+    sentinel = "recording-real-secret-sentinel"
     try:
-        request = _request("rec_" + "3" * 32)
+        request = _request(
+            "rec_" + "3" * 32,
+            secret_refs=("env:RECORDING_SECRET",),
+        )
         submission = context.application.submit(
             SubmitRecording(
                 request=request,
@@ -416,7 +422,7 @@ def test_secret_bearing_runner_result_fails_without_persisting_payload(
                 request.recording_id,
                 response_body=f'{{"id":"{sentinel}"}}',
             ),
-            known_secrets=(sentinel,),
+            environ={"RECORDING_SECRET": sentinel},
             utc_now_us=lambda: next(times),
         )
 
@@ -486,7 +492,7 @@ def test_waiting_worker_fatal_finishes_recording_without_creating_attempt(
 class _Context:
     def __init__(self, tmp_path: Path) -> None:
         self.var_dir = tmp_path / "var"
-        self.database_path = self.var_dir / "jiejian.db"
+        self.database_path = self.var_dir / "data" / "jiejian.db"
         upgrade_database(self.database_path)
         self.engine = create_sqlite_engine(self.database_path)
         factory = create_session_factory(self.engine)
@@ -495,7 +501,7 @@ class _Context:
             work.projects.add(
                 ProjectRecord(
                     project_id=PROJECT_ID,
-                    name="阶段 3.3 项目",
+                    name="录制项目",
                     status=ProjectStatus.READY,
                     created_at_us=NOW_US - 1,
                     updated_at_us=NOW_US - 1,
@@ -529,14 +535,17 @@ class _ControlledAdapter:
         return self._result
 
 
-def _request(recording_id: str) -> RecordingRunnerRequest:
+def _request(
+    recording_id: str,
+    *,
+    secret_refs: tuple[str, ...] = (),
+) -> RecordingRunnerRequest:
     return RecordingRunnerRequest(
-        schema_version="1",
+        schema_version="2",
         recording_id=recording_id,
         project_id=PROJECT_ID,
         created_at_us=NOW_US if recording_id.endswith("1" * 32) else NOW_US + 100,
         target_scope=WebTargetScope(
-            schema_version="2",
             base_url="http://127.0.0.1:18080",
             allowed_origins=("http://127.0.0.1:18080",),
             allowed_hosts=("127.0.0.1",),
@@ -545,14 +554,13 @@ def _request(recording_id: str) -> RecordingRunnerRequest:
         ),
         sessions=(
             RecordingSessionRef(
-                schema_version="1",
                 identity_id="owner",
                 session_ref="session_" + "5" * 32,
+                secret_refs=secret_refs,
                 expires_at_us=NOW_US + 1_000_000,
             ),
         ),
         budget=RecordingBudget(
-            schema_version="1",
             max_duration_us=1_000_000,
         ),
         headless=True,
@@ -598,7 +606,6 @@ def _captured_result(
     )
     events = (
         RecordingEvent(
-            schema_version="1",
             sequence=1,
             occurred_at_us=NOW_US + 12,
             kind=RecordingEventKind.UI_SUBMIT,
@@ -609,7 +616,6 @@ def _captured_result(
             element_locator="#resource-form",
         ),
         RecordingEvent(
-            schema_version="1",
             sequence=2,
             occurred_at_us=NOW_US + 12,
             kind=RecordingEventKind.REQUEST,
@@ -624,7 +630,6 @@ def _captured_result(
             body='{"name":"demo"}',
         ),
         RecordingEvent(
-            schema_version="1",
             sequence=3,
             occurred_at_us=NOW_US + 13,
             kind=RecordingEventKind.RESPONSE,
@@ -636,7 +641,6 @@ def _captured_result(
             status_code=201,
             headers=(
                 RecordingHeader(
-                    schema_version="1",
                     name="location",
                     value="/resources/resource-42",
                 ),
@@ -644,7 +648,6 @@ def _captured_result(
             body=response_body,
         ),
         RecordingEvent(
-            schema_version="1",
             sequence=4,
             occurred_at_us=NOW_US + 14,
             kind=RecordingEventKind.REQUEST,
@@ -657,7 +660,6 @@ def _captured_result(
             resource_type="fetch",
         ),
         RecordingEvent(
-            schema_version="1",
             sequence=5,
             occurred_at_us=NOW_US + 15,
             kind=RecordingEventKind.RESPONSE,
@@ -671,7 +673,7 @@ def _captured_result(
         ),
     )
     return RecordingRunnerResult(
-        schema_version="1",
+        schema_version="2",
         recording_id=recording_id,
         project_id=PROJECT_ID,
         finished_at_us=NOW_US + 20,

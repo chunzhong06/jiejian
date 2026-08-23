@@ -9,7 +9,7 @@ from product.backend.core.verification.behavior_differential import (
     compare_behavior_snapshots,
     normalize_evidence_behavior,
 )
-from product.backend.core.verification.permissions import canonical_sha256
+from product.backend.core.verification.permissions import permission_model_sha256
 from tests.fixtures.runner import evidence
 
 
@@ -27,7 +27,7 @@ def _changed(snapshot: BehaviorSnapshot, **updates) -> BehaviorSnapshot:
     payload.update(updates)
     return BehaviorSnapshot(
         **payload,
-        behavior_fingerprint=canonical_sha256(payload),
+        behavior_fingerprint=permission_model_sha256(payload),
     )
 
 

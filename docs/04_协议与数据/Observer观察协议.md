@@ -13,7 +13,7 @@ Observer 为 Runner 和 Verification 提供真实副作用、异步状态和审�
 - `ObserverInvocation` 描述一次 phase 调用及其 correlation。
 - `ObservationEnvelope` 携带 target、window、correlation、causality 和 completeness。
 - `ObserverOutcome` 表达状态、观察事实、可靠性、原因和限制。
-- 当前类型包括 API、SQLite、Azure Queue、Azure Blob、结构化审计和异步任务观察；具体外部读取边界由实现和配置决定。
+- 当前六类观察器是 Owner API、SQLite、Azure Queue、Azure Blob、结构化审计日志和异步任务；具体外部读取边界由实现和配置决定。
 
 ## 生命周期与数据流
 
@@ -36,7 +36,7 @@ Observer 只读取用户明确授权的目标或本机资源；凭据、日志�
 
 ## 版本规则与 Schema 真源
 
-Observer 模型和当前 Observer Schema 主要为 2。协议正文不复制完整 JSON 字段；严格解析、required 和枚举以：
+Observer Invocation 与 `ObservationEnvelope` 独立根文档的当前版本为 3；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复携带版本。协议正文不复制完整 JSON 字段；严格解析、required 和枚举以：
 
 - `product/protocols/observer.py`
 - `product/protocols/schemas/observer/`

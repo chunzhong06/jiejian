@@ -39,6 +39,7 @@ class FakeTransport:
 
 def _payload(**overrides: object) -> dict[str, object]:
     return {
+        "schema_version": "1",
         "profile_name": "api-test",
         "provider": "openai",
         "model": "gpt-test",
@@ -133,7 +134,7 @@ def test_profile_api_rotates_existing_credential_without_secret_ref(
 
         rotated = client.patch(
             "/api/llm/profiles/api-test",
-            json={"secret": "value-b"},
+            json={"schema_version": "1", "secret": "value-b"},
         )
         assert rotated.status_code == 200
         assert store.values["cred:jiejian/llm/api-test"] == "value-b"

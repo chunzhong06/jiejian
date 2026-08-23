@@ -6,7 +6,7 @@ from pathlib import Path
 from product.backend.core.verification.differential import DifferentialExperimentPlan
 from product.backend.core.verification.permission_coverage import build_permission_coverage_plan
 from product.backend.core.verification.permissions import PermissionContract
-from product.protocols.execution_profile import ExecutionProfile
+from product.protocols.web.profile import WebExecutionProfile
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -15,11 +15,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 def test_http_samples_build_stable_single_variation_permission_twins() -> None:
     fingerprints: set[str] = set()
     for name in ("fixed", "vulnerable", "inconclusive"):
-        sample = PROJECT_ROOT / "samples" / "http" / name
+        sample = PROJECT_ROOT / "samples" / "web" / name
         contract = PermissionContract.model_validate_json(
             (sample / "contract.json").read_text(encoding="utf-8")
         )
-        profile = ExecutionProfile.model_validate_json(
+        profile = WebExecutionProfile.model_validate_json(
             (sample / "profile.json").read_text(encoding="utf-8")
         )
         coverage = build_permission_coverage_plan(

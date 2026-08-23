@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 import urllib.error
@@ -286,7 +287,7 @@ def test_fixed_batch_all_allow_persists_to_sqlite_observer(permission_server, tm
             Correlation(case_id="batch-persist", resource_id=resource_id, request_marker="batch-persist"),
             ObservationPhase.AFTER,
             attempt_dir=tmp_path / resource_id,
-            parent_environ={"BATCH_DB_SECRET": str(server.database_path)},
+            parent_environ={**os.environ, "BATCH_DB_SECRET": str(server.database_path)},
             python_executable=sys.executable,
         )
         assert result.outcome.status is ObserverOutcomeStatus.AVAILABLE
@@ -333,13 +334,17 @@ def test_fixed_and_vulnerable_pair_http_403_with_sqlite_before_after_evidence(pe
             Correlation(case_id="pairing-case", resource_id="document-b", request_marker="pairing-case"),
             phase,
             attempt_dir=tmp_path / f"{server.variant}-{name}",
-            parent_environ={"PAIRING_DB_SECRET": str(server.database_path), "UNRELATED_SECRET": "not-forwarded"},
+            parent_environ={
+                **os.environ,
+                "PAIRING_DB_SECRET": str(server.database_path),
+                "UNRELATED_SECRET": "not-forwarded",
+            },
             python_executable=sys.executable,
         )
         assert result.outcome.status is ObserverOutcomeStatus.AVAILABLE
         assert result.envelope is not None
         assert result.envelope.observer_type is ObserverType.READ_ONLY_SQLITE
-        assert result.envelope.protocol_version == "2"
+        assert result.envelope.protocol_version == "3"
         assert result.envelope.target_id == "sqlite_state"
         assert result.envelope.phase is phase
         assert result.envelope.completeness is ObservationCompleteness.COMPLETE

@@ -12,8 +12,8 @@ import typer
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.diagnostics import run_doctor
-from product.backend.cli.bootstrap import default_frontend_dir, runtime_settings
-from product.backend.cli.presentation import emit_doctor, fail, set_command_mode
+from product.backend.cli.bootstrap import application_scope, default_frontend_dir, runtime_settings
+from product.backend.cli.presentation import emit_doctor, emit_json, fail
 
 logger = logging.getLogger("jiejian.cli.system")
 
@@ -155,14 +155,7 @@ def serve_command(
 
 def doctor_command(
     context: typer.Context,
-    json_output: bool | None = typer.Option(
-        None, "--json", help="兼容旧位置；建议使用全局 --json", hidden=True
-    ),
 ) -> None:
-
-    if json_output:
-        set_command_mode("json")
-
     options = context.obj
     overrides = {
         "var_dir": options.var_dir,
@@ -172,3 +165,50 @@ def doctor_command(
     report = run_doctor(config_path=options.config, cli_overrides=overrides)
     emit_doctor(report)
     raise typer.Exit(code=0 if report.ok else 1)
+
+
+def cache_status_command(context: typer.Context) -> None:
+    """查看缓存体积、预算与不会受影响的产品事实。"""
+
+    with application_scope(context, environ=os.environ) as application:
+        emit_json(application.cache.status())
+
+
+def cache_prune_command(
+    context: typer.Context,
+    apply: bool = typer.Option(False, "--apply", help="执行预览中的按预算清理"),
+) -> None:
+    """预览或执行仅针对超预算缓存的安全清理。"""
+
+    with application_scope(context, environ=os.environ) as application:
+        emit_json(application.cache.prune(dry_run=not apply))
+
+
+def cache_clean_command(
+    context: typer.Context,
+    confirm: bool = typer.Option(False, "--confirm", help="确认清空全部可重建缓存"),
+) -> None:
+    """预览或确认清空可重建缓存，不删除运行时和产品数据。"""
+
+    with application_scope(context, environ=os.environ) as application:
+        emit_json(
+            application.cache.clean(
+                confirmed=confirm,
+                dry_run=not confirm,
+            )
+        )
+
+
+def runtime_repair_command(
+    context: typer.Context,
+    confirm: bool = typer.Option(False, "--confirm", help="确认重建已标记损坏的运行时"),
+) -> None:
+    """预览或确认修复损坏运行时，不处理数据库和业务结果。"""
+
+    with application_scope(context, environ=os.environ) as application:
+        emit_json(
+            application.cache.repair_runtime(
+                confirmed=confirm,
+                dry_run=not confirm,
+            )
+        )

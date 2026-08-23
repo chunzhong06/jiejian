@@ -8,7 +8,7 @@ from product.backend.infra.storage import create_sqlite_engine, upgrade_database
 
 
 def test_current_migration_adds_immutable_baseline_and_gate_tables(tmp_path: Path) -> None:
-    database = tmp_path / "stage72.db"
+    database = tmp_path / "gating-baseline.db"
     upgrade_database(database)
     engine = create_sqlite_engine(database)
     try:

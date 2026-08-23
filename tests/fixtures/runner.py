@@ -17,7 +17,7 @@ from product.backend.core.verification.permissions import (
     SecurityEffectDefinition,
     SecurityEffectKind,
     SubjectDefinition,
-    canonical_sha256,
+    permission_model_sha256,
 )
 from product.protocols import (
     BearerIdentityBinding,
@@ -30,9 +30,9 @@ from product.protocols import (
     EffectClosurePolicy,
     ExecutionBudget,
     ExecutionFact,
-    ExecutionIdentity,
-    ExecutionProfile,
-    ExecutionProjectSnapshot,
+    WebExecutionIdentity,
+    WebExecutionProfile,
+    WebExecutionSnapshot,
     ObservationCompleteness,
     ObservationEnvelope,
     ObservationFact,
@@ -91,7 +91,7 @@ def contract_and_plan() -> tuple[PermissionContract, object]:
     return contract, plan
 
 
-def execution_snapshot() -> ExecutionProjectSnapshot:
+def execution_snapshot() -> WebExecutionSnapshot:
     contract, plan = contract_and_plan()
     target = WebTargetDefinition(
         scope=WebTargetScope(
@@ -106,8 +106,7 @@ def execution_snapshot() -> ExecutionProjectSnapshot:
         ),
         reset_path="/reset",
     )
-    identity = ExecutionIdentity(
-        schema_version="3",
+    identity = WebExecutionIdentity(
         identity_id="identity-member",
         role="member",
         binding=BearerIdentityBinding(secret_ref="env:JIEJIAN_TEST_TOKEN"),
@@ -154,7 +153,7 @@ def execution_snapshot() -> ExecutionProjectSnapshot:
         ),),
     )
     observer_binding = ObserverRequirementBinding(requirement_id="resource_state", kind=ObserverRequirementKind.OBSERVER_SPEC, observer_id="owner_observer", observer_type=ObserverType.OWNER_API, credential_ref="env:OWNER_READ_ONLY", phases=(ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER))
-    profile = ExecutionProfile(
+    profile = WebExecutionProfile(
         project_id="runner-project",
         profile_id="runner-profile",
         project_name="Runner test",
@@ -305,7 +304,7 @@ def evidence(
         for resource_id in resources
     )
     return build_evidence(
-        schema_version="3",
+        schema_version="4",
         run_id="run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         case_snapshot=case,
         twin_snapshot=None,

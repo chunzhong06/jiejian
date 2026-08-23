@@ -1,6 +1,6 @@
 # Verification Run CLI 命令组。
 #
-# 定位：当前 ExecutionProfile 的命令行适配器；提交、等待和结果读取
+# 定位：当前 WebExecutionProfile 的命令行适配器；提交、等待和结果读取
 # 均由唯一 ExecutionWorkflow 编排，CLI 不直接装配执行基础设施。
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from product.protocols import RunnerResultType
 def run_command(
     context: typer.Context,
     profile_path: Path,
-    accept_source_changes: bool = typer.Option(False, "--accept-profile-changes", help="显式接受当前 ExecutionProfile 文件变化"),
+    accept_source_changes: bool = typer.Option(False, "--accept-profile-changes", help="显式接受当前 Web 执行配置文件变化"),
 ) -> None:
     """登记当前执行配置并等待隔离 Runner 的当前结果。"""
 

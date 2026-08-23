@@ -35,7 +35,6 @@ ExecutionProfile、RunnerInput、Evidence、Flow 和相关 Schema 升级为单�
 ## 相关真源
 
 - [执行与观察架构](../02_架构设计/执行与观察架构.md)
-- [ExecutionProfile与执行配置](../04_协议与数据/ExecutionProfile与执行配置.md)
+- [Web 执行配置与冻结快照](../04_协议与数据/Web执行配置与冻结快照.md)
 - [Runner执行协议](../04_协议与数据/Runner执行协议.md)
 - [录制与Flow协议](../04_协议与数据/录制与Flow协议.md)
-

@@ -22,7 +22,7 @@ from product.backend.infra.runtime.jobs.models import SubmitJob
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.runtime.jobs.recovery import JobRecovery
 
-PROJECT_ID = "stage22-project"
+PROJECT_ID = "job-runtime-project"
 NOW_US = 1_790_000_000_000_000
 
 
@@ -53,7 +53,7 @@ class WorkerServices:
 
 @pytest.fixture
 def worker_services(tmp_path: Path) -> Iterator[WorkerServices]:
-    database_path = tmp_path / "stage22.db"
+    database_path = tmp_path / "job-runtime.db"
     upgrade_database(database_path)
     engine = create_sqlite_engine(database_path)
     factory = create_session_factory(engine)
@@ -61,7 +61,7 @@ def worker_services(tmp_path: Path) -> Iterator[WorkerServices]:
         work.projects.add(
             ProjectRecord(
                 project_id=PROJECT_ID,
-                name="阶段 2.2 项目",
+                name="任务项目",
                 status=ProjectStatus.READY,
                 created_at_us=NOW_US - 100,
                 updated_at_us=NOW_US - 100,

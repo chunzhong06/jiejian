@@ -8,14 +8,17 @@ import pytest
 from product.backend.core.errors import JiejianError
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.workflows.context import ApplicationCore
-from product.protocols import ExecutionIdentity, ExecutionProfile, ExecutionProjectSnapshot, TargetType
-from product.protocols.execution_profile import canonical_execution_profile_json_bytes, parse_execution_profile
+from product.protocols import TargetType, WebExecutionProfile, WebExecutionSnapshot
+from product.protocols.web.profile import (
+    canonical_web_execution_profile_json_bytes,
+    parse_web_execution_profile,
+)
 from tests.fixtures.runner import execution_snapshot
 
 
-def _profile(profile_id: str = "profile-runner") -> ExecutionProfile:
+def _profile(profile_id: str = "profile-runner") -> WebExecutionProfile:
     snapshot = execution_snapshot()
-    return ExecutionProfile(
+    return WebExecutionProfile(
         profile_id=profile_id, project_id=snapshot.project_id, project_name=snapshot.project_name,
         target_type=TargetType.WEB, target=snapshot.target,
         identities=snapshot.identities,
@@ -27,18 +30,28 @@ def _profile(profile_id: str = "profile-runner") -> ExecutionProfile:
     )
 
 
-def _write_profile(path: Path, profile: ExecutionProfile) -> None:
-    path.write_bytes(canonical_execution_profile_json_bytes(profile))
+def _write_profile(path: Path, profile: WebExecutionProfile) -> None:
+    path.write_bytes(canonical_web_execution_profile_json_bytes(profile))
 
 
 def test_profile_roundtrip_has_explicit_contract_reference_only() -> None:
     profile = _profile()
-    encoded = canonical_execution_profile_json_bytes(profile)
-    assert parse_execution_profile(encoded) == profile
+    encoded = canonical_web_execution_profile_json_bytes(profile)
+    assert parse_web_execution_profile(encoded) == profile
     payload = json.loads(encoded)
     assert payload["target_type"] == "WEB"
     assert payload["contract_id"] == profile.contract_id
     assert "contract" not in payload and "flow" not in payload
+
+
+def test_checked_in_web_execution_profile_schema_has_no_drift() -> None:
+    schema_path = (
+        Path(__file__).parents[2]
+        / "product/protocols/schemas/execution/web-execution-profile.schema.json"
+    )
+    assert json.loads(schema_path.read_text(encoding="utf-8")) == (
+        WebExecutionProfile.model_json_schema()
+    )
 
 
 @pytest.mark.parametrize("completion_binding", ["missing_requirement", "resource_state"])
@@ -50,7 +63,7 @@ def test_snapshot_rejects_missing_or_non_async_completion_binding(
     payload["workflow_bindings"][0]["workflow_fingerprint"] = None
 
     with pytest.raises(ValueError, match="EVENTUAL async task observer"):
-        ExecutionProjectSnapshot.model_validate(payload)
+        WebExecutionSnapshot.model_validate(payload)
 
 
 def test_profile_registration_requires_active_governed_version_and_rejects_drift(tmp_path: Path) -> None:
@@ -80,5 +93,5 @@ def test_profile_registration_requires_active_governed_version_and_rejects_drift
         application.close()
 
 
-def profile_contract(profile: ExecutionProfile) -> PermissionContract:
+def profile_contract(profile: WebExecutionProfile) -> PermissionContract:
     return execution_snapshot().contract

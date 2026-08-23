@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from product.backend.core.verification.permissions import canonical_sha256
+from product.backend.core.verification.permissions import permission_model_sha256
 from product.backend.workflows.contracts.setup_minimizer import minimize_failure_setup
-from product.protocols.http import CASE_SUBJECT_IDENTITY
+from product.protocols.web.workflow import CASE_SUBJECT_IDENTITY
 from product.protocols import (
     HttpOutcomeClassifier,
     HttpRequestTemplate,
@@ -34,7 +34,7 @@ def test_failure_minimizer_removes_only_unused_setup_and_preserves_security_prob
     result = minimize_failure_setup(
         workflow,
         snapshot.plan.cases[0],
-        security_effect_fingerprint=canonical_sha256(snapshot.contract.effects),
+        security_effect_fingerprint=permission_model_sha256(snapshot.contract.effects),
         reproduces=lambda candidate: any(
             step.id == candidate.target_step_id and step.request_template == target_before.request_template
             for step in candidate.steps

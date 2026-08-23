@@ -67,7 +67,6 @@ class RecordingSanitizer:
                     value_truncated = True
             records.append(
                 RecordingHeader(
-                    schema_version="1",
                     name=name,
                     value=safe_value,
                 )
@@ -105,14 +104,13 @@ class RecordingSanitizer:
     ) -> tuple[str | None, bool]:
         if value is None:
             return None, False
-        prefix = value[: self.budget.max_body_bytes]
-        encoded = prefix.encode("utf-8", errors="replace")
-        truncated = len(value) > len(prefix) or len(encoded) > self.budget.max_body_bytes
-        return self.sanitize_body_bytes(
-            encoded[: self.budget.max_body_bytes],
-            content_type,
-            already_limited=truncated,
-        )
+        try:
+            encoded = value.encode("utf-8", errors="strict")
+        except UnicodeEncodeError:
+            return None, True
+        if len(encoded) > self.budget.max_body_bytes:
+            return None, True
+        return self.sanitize_body_bytes(encoded, content_type)
 
     def sanitize_body_bytes(
         self,
@@ -121,15 +119,20 @@ class RecordingSanitizer:
         *,
         already_limited: bool = False,
     ) -> tuple[str | None, bool]:
-        """按 content-type 解析有界正文；无法安全解析时只返回脱敏文本。"""
+        """按 content-type 解析有界正文；无法证明安全时丢弃原文并标记截断。"""
 
-        truncated = already_limited or len(value) > self.budget.max_body_bytes
-        limited = value[: self.budget.max_body_bytes].decode("utf-8", errors="replace")
-        if "json" in content_type.casefold():
+        if already_limited or len(value) > self.budget.max_body_bytes:
+            return None, True
+        try:
+            limited = value.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            return None, True
+        normalized_type = content_type.casefold()
+        if "json" in normalized_type:
             try:
                 parsed: Any = json.loads(limited)
             except json.JSONDecodeError:
-                return self._limit_body_text(limited, already_limited=truncated)
+                return None, True
             safe = self._sanitize_value(parsed, depth=0)
             serialized = json.dumps(
                 safe,
@@ -138,8 +141,8 @@ class RecordingSanitizer:
                 separators=(",", ":"),
                 allow_nan=False,
             )
-            return self._limit_body_text(serialized, already_limited=truncated)
-        if "application/x-www-form-urlencoded" in content_type.casefold():
+            return self._limit_body_text(serialized, already_limited=False)
+        if "application/x-www-form-urlencoded" in normalized_type:
             pairs = []
             for key, item in parse_qsl(limited, keep_blank_values=True):
                 safe_key, _ = self.sanitize_text(key)
@@ -150,9 +153,13 @@ class RecordingSanitizer:
                 )
                 pairs.append((safe_key, safe_item))
             return self._limit_body_text(
-                urlencode(pairs), already_limited=truncated
+                urlencode(pairs), already_limited=False
             )
-        return self._limit_body_text(limited, already_limited=truncated)
+        if normalized_type.startswith("text/") or any(
+            marker in normalized_type for marker in ("javascript", "xml")
+        ):
+            return self._limit_body_text(limited, already_limited=False)
+        return None, True
 
     def sanitize_text(self, value: str) -> tuple[str, bool]:
         safe = str(redact_known_secrets(value, self.known_secrets))

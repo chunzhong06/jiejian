@@ -29,6 +29,7 @@ from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN,
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RUNNER_RESULT_MAX_BYTES, RunnerResult, RunnerResultType, StagedArtifact, parse_evidence, parse_runner_result
 from product.backend.infra.storage import EvidenceIndexRecord, JobRecord
+from product.backend.infra.runtime.paths import RuntimePaths
 
 PUBLICATION_MANIFEST_NAME = "publication-manifest.json"
 _LEASE_OWNER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
@@ -84,7 +85,7 @@ class PublicationManifest(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["2"] = "2"
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     run_id: str = Field(pattern=RUN_ID_PATTERN)
     job_id: str = Field(pattern=JOB_ID_PATTERN)
@@ -118,7 +119,7 @@ class ValidatedPublication:
 def attempt_paths_for(var_dir: Path, job: JobRecord) -> AttemptPaths:
     """以受约束 Job ID、attempt 和 token 唯一定位当前尝试。"""
 
-    jobs_root = (var_dir.resolve() / "jobs").resolve()
+    jobs_root = RuntimePaths(var_dir).jobs.resolve()
     attempt_dir = (
         jobs_root / job.job_id / "attempts" / f"{job.attempt}-{job.fencing_token}"
     ).resolve()
@@ -136,7 +137,7 @@ def attempt_paths_for(var_dir: Path, job: JobRecord) -> AttemptPaths:
 
 
 def final_run_dir(var_dir: Path, project_id: str, run_id: str) -> Path:
-    root = Path(os.path.abspath(var_dir.resolve() / "projects"))
+    root = Path(os.path.abspath(RuntimePaths(var_dir).projects))
     target = Path(os.path.abspath(root / project_id / "runs" / run_id))
     if os.path.commonpath((root, target)) != str(root):
         raise JiejianError(ErrorCode.ARTIFACT_PUBLISH, "最终运行目录越界")
@@ -261,7 +262,6 @@ def _artifact_record(artifact: RunnerArtifact) -> StagedArtifact:
     """将结果工件绑定到发布清单中的当前协议形状。"""
 
     return StagedArtifact(
-        schema_version="2",
         path=artifact.path,
         byte_count=artifact.byte_count,
         sha256=artifact.sha256,
@@ -329,7 +329,9 @@ def read_publication_manifest(path: Path) -> PublicationManifest:
         if path.stat().st_size > RUNNER_RESULT_MAX_BYTES:
             raise ValueError("manifest too large")
         raw = path.read_bytes()
-        json.loads(raw, object_pairs_hook=_unique_object)
+        parsed = json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_reject_nonfinite)
+        if not isinstance(parsed, dict) or parsed.get("schema_version") != "2":
+            raise ValueError("unsupported publication manifest schema version")
         return PublicationManifest.model_validate_json(raw, strict=True)
     except (OSError, json.JSONDecodeError, ValidationError, ValueError):
         raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "发布清单无效") from None
@@ -395,7 +397,6 @@ def _inventory_regular_files(
                     raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "工件包含已知秘密")
                 records.append(
                     StagedArtifact(
-                        schema_version="2",
                         path=relative,
                         byte_count=len(raw),
                         sha256=hashlib.sha256(raw).hexdigest(),
@@ -414,7 +415,9 @@ def _inventory_regular_files(
 def _parse_receipt(path: Path) -> TrustedResultReceipt:
     try:
         raw = path.read_bytes()
-        document = json.loads(raw, object_pairs_hook=_unique_object)
+        document = json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_reject_nonfinite)
+        if not isinstance(document, dict) or document.get("schema_version") != "1":
+            raise ValueError("unsupported trusted receipt schema version")
         return TrustedResultReceipt.model_validate(document, strict=True)
     except (OSError, json.JSONDecodeError, ValidationError, ValueError):
         raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "可信结果回执无效") from None

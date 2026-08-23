@@ -33,6 +33,7 @@ def build_llm_router(context: ApplicationCore) -> APIRouter:
     )
     async def create_llm_profile(body: LLMProfileCreateRequest):
         values = body.model_dump(mode="python", exclude={"secret"})
+        values.pop("schema_version", None)
         secret = body.secret.get_secret_value() if body.secret is not None else None
         profile = context.llm_profiles.create(values, secret=secret)
         return data_response(profile.model_dump(mode="json"), status_code=201)
@@ -47,6 +48,7 @@ def build_llm_router(context: ApplicationCore) -> APIRouter:
             exclude={"secret"},
             exclude_unset=True,
         )
+        values.pop("schema_version", None)
         secret = body.secret.get_secret_value() if body.secret is not None else None
         profile = context.llm_profiles.update(profile_name, values, secret=secret)
         return data_response(profile.model_dump(mode="json"))
@@ -113,6 +115,7 @@ class LLMProfileBase(ApiModel):
 
 
 class LLMProfileCreateRequest(LLMProfileBase):
+    schema_version: Literal["1"]
     secret: SecretStr | None = Field(default=None, exclude=True, repr=False)
 
     @model_validator(mode="after")
@@ -123,6 +126,7 @@ class LLMProfileCreateRequest(LLMProfileBase):
 
 
 class LLMProfileUpdateRequest(ApiModel):
+    schema_version: Literal["1"]
     provider: LLMProviderType | None = None
     model: str | None = Field(default=None, min_length=1, max_length=256)
     allow_local_http: bool | None = None
@@ -158,7 +162,18 @@ class LLMProfileUpdateRequest(ApiModel):
         return None if value is None else validate_secret_ref(value)
 
 
-class LLMProfileResponse(LLMProfileBase):
+class LLMProfileResponse(ApiModel):
+    profile_name: str = Field(pattern=PROFILE_NAME_PATTERN)
+    provider: LLMProviderType
+    model: str = Field(min_length=1, max_length=256)
+    allow_local_http: bool = False
+    base_url: str | None = Field(default=None, max_length=2048)
+    timeout_ms: int = Field(default=30_000, ge=100, le=300_000)
+    max_input_bytes: int = Field(default=131_072, ge=1, le=1_048_576)
+    max_output_bytes: int = Field(default=65_536, ge=1, le=1_048_576)
+    max_budget_microusd: int = Field(default=1_000_000, ge=0, le=1_000_000_000)
+    enabled: bool = True
+    secret_ref: str | None = Field(default=None, max_length=256)
     created_at_us: int = Field(ge=0)
     updated_at_us: int = Field(ge=0)
     secret_configured: bool

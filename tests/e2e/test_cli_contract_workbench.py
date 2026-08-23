@@ -19,8 +19,8 @@ def _invoke(runner: CliRunner, var_dir: Path, *args: str):
 
 def test_cli_contract_workbench_profile_lifecycle(tmp_path: Path) -> None:
     runner = CliRunner()
-    profile = Path("samples/http/fixed/profile.json").resolve()
-    contract = Path("samples/http/fixed/contract.json").resolve()
+    profile = Path("samples/web/fixed/profile.json").resolve()
+    contract = Path("samples/web/fixed/contract.json").resolve()
     var_dir = tmp_path / "var"
     contract_v2 = tmp_path / "contract-v2.json"
     contract_payload = json.loads(contract.read_text(encoding="utf-8"))
@@ -104,7 +104,7 @@ def test_cli_contract_workbench_profile_lifecycle(tmp_path: Path) -> None:
 
 def test_cli_contract_workbench_rejects_invalid_action(tmp_path: Path) -> None:
     runner = CliRunner()
-    profile = Path("samples/http/fixed/profile.json").resolve()
+    profile = Path("samples/web/fixed/profile.json").resolve()
     result = runner.invoke(
         app,
         ["--var-dir", str(tmp_path / "var"), "contract", "transition", str(profile), "missing", "1", "bogus"],

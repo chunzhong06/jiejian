@@ -196,31 +196,36 @@ def build_contracts_router(context: ApplicationCore) -> APIRouter:
 # Contract 治理请求模型。
 
 import json
+from typing import Literal
 
 from pydantic import Field, field_validator
 
 from product.backend.api.envelope import ApiModel
-from product.backend.core.verification.permissions import PermissionContract
+from product.backend.core.verification.permissions import PermissionContract, parse_permission_contract
 
 
 class RequirementCreateRequest(ApiModel):
+    schema_version: Literal["1"]
     text: str = Field(min_length=1, max_length=16_384)
     security_tags: list[str] = Field(default_factory=list, max_length=64)
     actor: str = Field(min_length=1, max_length=128)
 
 
 class CandidateDeriveRequest(ApiModel):
+    schema_version: Literal["1"]
     requirement_ids: list[str] = Field(min_length=1, max_length=512)
     actor: str = Field(min_length=1, max_length=128)
 
 
 class LLMCandidateRequest(ApiModel):
+    schema_version: Literal["1"]
     requirement_ids: list[str] = Field(min_length=1, max_length=512)
     actor: str = Field(min_length=1, max_length=128)
     profile_name: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class ContractDraftRequest(ApiModel):
+    schema_version: Literal["1"]
     contract_id: str = Field(min_length=1, max_length=128)
     snapshot: PermissionContract
     candidate_ids: list[str] = Field(default_factory=list, max_length=512)
@@ -230,10 +235,11 @@ class ContractDraftRequest(ApiModel):
     @field_validator("snapshot", mode="before")
     @classmethod
     def parse_snapshot(cls, value):
-        return value if isinstance(value, PermissionContract) else PermissionContract.model_validate_json(json.dumps(value), strict=True)
+        return value if isinstance(value, PermissionContract) else parse_permission_contract(json.dumps(value))
 
 
 class ContractRevisionRequest(ApiModel):
+    schema_version: Literal["1"]
     snapshot: PermissionContract
     candidate_ids: list[str] = Field(default_factory=list, max_length=512)
     requirement_ids: list[str] = Field(default_factory=list, max_length=512)
@@ -242,8 +248,9 @@ class ContractRevisionRequest(ApiModel):
     @field_validator("snapshot", mode="before")
     @classmethod
     def parse_snapshot(cls, value):
-        return value if isinstance(value, PermissionContract) else PermissionContract.model_validate_json(json.dumps(value), strict=True)
+        return value if isinstance(value, PermissionContract) else parse_permission_contract(json.dumps(value))
 
 
 class GovernanceActorRequest(ApiModel):
+    schema_version: Literal["1"]
     actor: str = Field(min_length=1, max_length=128)

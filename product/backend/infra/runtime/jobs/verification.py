@@ -28,6 +28,11 @@ from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore, required_secret_names
 from product.backend.infra.runtime.runner_supervisor import RunnerSupervisor
+from product.backend.workflows.results.finalizer import ResultFinalizer
+import logging
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class VerificationRunJobHandler(JobHandler[StagedAttempt]):
@@ -43,11 +48,13 @@ class VerificationRunJobHandler(JobHandler[StagedAttempt]):
         request_store: ExecutionRequestStore,
         publication_service: RunPublisher,
         reconciliation_service: RunReconciler,
+        result_finalizer: ResultFinalizer,
         environ: Mapping[str, str] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._request_store = request_store
         self._reconciliation = reconciliation_service
+        self._result_finalizer = result_finalizer
         self._environ = environ or {}
         self._prepared = False
         self._known_secrets: tuple[str, ...] = ()
@@ -83,7 +90,13 @@ class VerificationRunJobHandler(JobHandler[StagedAttempt]):
             self._reconciliation.reconcile(known_secrets=self._known_secrets)
             self._prepared = True
         try:
-            return self._supervisor.run_job(job_id)
+            staged = self._supervisor.run_job(job_id)
+            if staged is not None and staged.result.result_type.value in {"SUCCESS", "SAFETY_STOPPED"}:
+                try:
+                    self._result_finalizer.finalize(staged.result.run_id)
+                except JiejianError as exc:
+                    _LOGGER.error("结果最终化未能完成", extra={"code": exc.code, "run_id": staged.result.run_id})
+            return staged
         except JiejianError:
             # 失败路径仍需收敛可能已完成 publication 但尚未提交数据库的窗口。
             self._reconciliation.reconcile(known_secrets=self._known_secrets)

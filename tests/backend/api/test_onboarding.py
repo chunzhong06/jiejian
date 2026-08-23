@@ -9,7 +9,7 @@ import pytest
 from product.backend.api import create_app
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.workflows.onboarding.models import FolderSelectionResult
-from product.protocols.execution_profile import parse_execution_profile
+from product.protocols.web.profile import parse_web_execution_profile
 
 
 class FakeFolderSelector:
@@ -43,7 +43,6 @@ def test_onboarding_select_folder_uses_injected_selector(tmp_path: Path) -> None
 
     assert response.status_code == 200
     assert response.json()["data"] == {
-        "schema_version": "1",
         "status": "selected",
         "path": str(selected),
     }
@@ -62,7 +61,6 @@ def test_onboarding_cancelled_selector_is_not_an_error(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["data"] == {
-        "schema_version": "1",
         "status": "cancelled",
     }
 
@@ -80,7 +78,7 @@ def test_onboarding_inspect_returns_versioned_safe_result(tmp_path: Path) -> Non
 
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["schema_version"] == "1"
+    assert "schema_version" not in payload
     assert payload["start_candidates"][0]["executed"] is False
     assert "echo secret" not in response.text
 
@@ -139,6 +137,7 @@ def test_onboarding_routes_are_present_in_openapi(tmp_path: Path) -> None:
     assert document["paths"]["/api/onboarding/select-folder"]["post"]
     inspect = document["paths"]["/api/onboarding/inspect"]["post"]
     assert "OnboardingInspectRequest" in str(inspect)
+    assert not any(path.startswith("/api/onboarding/demo") for path in document["paths"])
 
 
 def test_onboarding_quick_check_creates_current_profile_and_is_idempotent(tmp_path: Path) -> None:
@@ -210,7 +209,7 @@ def test_onboarding_quick_check_creates_current_profile_and_is_idempotent(tmp_pa
         assert repeated.json()["data"]["created"] is False
 
     profile_path = tmp_path / "var" / "onboarding" / session_id / "profile.json"
-    profile = parse_execution_profile(profile_path.read_bytes())
+    profile = parse_web_execution_profile(profile_path.read_bytes())
     assert profile.target.scope.base_url == "http://127.0.0.1:8765"
     assert profile.target.scope.follow_redirects is False
     assert profile.target.scope.max_requests == 10
@@ -279,7 +278,7 @@ def test_onboarding_quick_check_rejects_changed_session_after_submission_failure
         )
         assert first.status_code == 400
         profile_path = tmp_path / "var" / "onboarding" / session_id / "profile.json"
-        old_profile = parse_execution_profile(profile_path.read_bytes())
+        old_profile = parse_web_execution_profile(profile_path.read_bytes())
         assert old_profile.target.scope.base_url == "http://127.0.0.1:8765"
         current = client.get(f"/api/onboarding/sessions/{session_id}").json()["data"]
 
@@ -299,7 +298,7 @@ def test_onboarding_quick_check_rejects_changed_session_after_submission_failure
     assert retry.status_code == 409
     assert retry.json()["error"]["code"] == "ONBOARDING_SESSION_CONFLICT"
     assert len(calls) == 1
-    assert parse_execution_profile(profile_path.read_bytes()).target.scope.base_url == "http://127.0.0.1:8765"
+    assert parse_web_execution_profile(profile_path.read_bytes()).target.scope.base_url == "http://127.0.0.1:8765"
 
 
 @pytest.mark.parametrize(

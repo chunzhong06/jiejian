@@ -1,18 +1,20 @@
-# 首次使用与演示 API：只负责请求适配、ApplicationCore 调用和版本化脱敏响应。
+# 首次使用 API：只负责请求适配、ApplicationCore 调用和版本化脱敏响应。
 # 安全边界：选择目录不扫描，识别只经受限 onboarding，路由本身不执行目标。
 
 from __future__ import annotations
+
+from typing import Literal
 
 from fastapi import APIRouter
 
 from product.backend.workflows.context import ApplicationCore
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
-from product.backend.workflows.onboarding.models import DemoVariant, OnboardingConfirmations, OnboardingSessionUpdate
+from product.backend.workflows.onboarding.models import OnboardingConfirmations, OnboardingSessionUpdate
 
 
 def build_onboarding_router(context: ApplicationCore) -> APIRouter:
-    """构造首次使用与演示路由；所有业务和安全判断委托给 ApplicationCore。"""
+    """构造首次使用路由；所有业务和安全判断委托给 ApplicationCore。"""
 
     router = APIRouter()
 
@@ -38,6 +40,7 @@ def build_onboarding_router(context: ApplicationCore) -> APIRouter:
     @router.patch("/api/onboarding/sessions/{session_id}", response_model=ApiResponse)
     def update_session(session_id: str, body: OnboardingSessionUpdateRequest):
         values = body.model_dump(exclude_unset=True)
+        values.pop("schema_version", None)
         confirmations = values.get("confirmations")
         if confirmations is not None:
             values["confirmations"] = OnboardingConfirmations.model_validate(confirmations, strict=True)
@@ -58,18 +61,6 @@ def build_onboarding_router(context: ApplicationCore) -> APIRouter:
         result = context.onboarding.quick_check(session_id)
         return data_response(result.model_dump(mode="json"), status_code=202)
 
-    @router.post("/api/onboarding/demo/start", response_model=ApiResponse)
-    def start_demo(body: OnboardingDemoStartRequest):
-        return data_response(context.demo.start(body.variant).model_dump(mode="json"))
-
-    @router.get("/api/onboarding/demo", response_model=ApiResponse)
-    def get_demo():
-        return data_response(context.demo.status().model_dump(mode="json"))
-
-    @router.post("/api/onboarding/demo/stop", response_model=ApiResponse)
-    def stop_demo():
-        return data_response(context.demo.stop().model_dump(mode="json"))
-
     return router
 
 # 请求模型留在传输层，不把 FastAPI/Pydantic 约束泄漏到 onboarding 领域能力。
@@ -80,15 +71,18 @@ from product.backend.api.envelope import ApiModel
 
 
 class OnboardingInspectRequest(ApiModel):
+    schema_version: Literal["1"]
     path: str = Field(min_length=1, max_length=32_768)
 
 
 class OnboardingSessionCreateRequest(ApiModel):
+    schema_version: Literal["1"]
     path: str = Field(min_length=1, max_length=32_768)
     project_name: str = Field(min_length=1, max_length=128)
 
 
 class OnboardingSessionUpdateRequest(ApiModel):
+    schema_version: Literal["1"]
     revision: int = Field(ge=0, le=1_000_000)
     project_name: str | None = Field(default=None, min_length=1, max_length=128)
     target_address: str | None = Field(default=None, max_length=256)
@@ -103,13 +97,11 @@ class OnboardingSessionUpdateRequest(ApiModel):
 
 
 class OnboardingCredentialsRequest(ApiModel):
+    schema_version: Literal["1"]
     primary: SecretStr = Field(min_length=1, max_length=4096, exclude=True, repr=False)
     comparison: SecretStr = Field(min_length=1, max_length=4096, exclude=True, repr=False)
 
 
 class OnboardingQuickCheckRequest(ApiModel):
+    schema_version: Literal["1"]
     pass
-
-
-class OnboardingDemoStartRequest(ApiModel):
-    variant: DemoVariant

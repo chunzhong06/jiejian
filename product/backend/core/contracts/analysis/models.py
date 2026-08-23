@@ -22,8 +22,6 @@ class AnalysisModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"] = "1"
-
 
 class AnalysisSeverity(StrEnum):
     WARNING = "WARNING"

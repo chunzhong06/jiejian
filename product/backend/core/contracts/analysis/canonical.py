@@ -27,7 +27,7 @@ from product.backend.core.contracts.models import CandidateSuggestion
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisReasonCode, AnalysisSeverity
 
 
-def canonical_sha256(value: Any) -> str:
+def contract_analysis_sha256(value: Any) -> str:
     """对纯数据计算规范 SHA-256；不读取文件或调用外部服务。"""
 
     payload = _jsonable(value)
@@ -61,7 +61,7 @@ def _candidate(
     *,
     requirement_ids: tuple[str, ...] = (),
 ) -> ContractCandidate:
-    fingerprint = canonical_sha256(
+    fingerprint = contract_analysis_sha256(
         {
             "project_id": project_id,
             "source_type": source_type,

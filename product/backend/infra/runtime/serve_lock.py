@@ -25,6 +25,7 @@ from typing import BinaryIO
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.process_lock import try_lock_stream, unlock_stream
+from product.backend.infra.runtime.paths import RuntimePaths
 
 
 @dataclass(slots=True)
@@ -40,7 +41,7 @@ class ServeLock:
     def acquire(cls, var_dir: Path) -> ServeLock:
         """非阻塞获取系统锁；遗留诊断文件不会阻止异常退出后的自动恢复。"""
 
-        path = var_dir.resolve() / ".serve.lock"
+        path = RuntimePaths(var_dir).locks / "serve.lock"
         path.parent.mkdir(parents=True, exist_ok=True)
         lock = cls(path)
         stream: BinaryIO | None = None

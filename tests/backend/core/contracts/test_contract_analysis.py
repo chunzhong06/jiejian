@@ -14,7 +14,7 @@ from product.backend.core.contracts.analysis.sources.requirement import parse_re
 from product.backend.core.contracts.models import CandidateRiskKind, CandidateSuggestion, ContractAuditAction, ContractAuditEntry, ContractProvenance, ContractSourceType, ContractVersion, Requirement, SourceReference
 from product.backend.core.lifecycle import ContractStatus
 from product.protocols.recording_flow import Flow, FlowStep
-from product.protocols.http import HttpOutcomeClassifier, HttpRequestTemplate, ValueSlot, ValueSlotConsumer, ValueSlotSource
+from product.protocols.web.workflow import HttpOutcomeClassifier, HttpRequestTemplate, ValueSlot, ValueSlotConsumer, ValueSlotSource
 from product.backend.core.verification.permissions import ActionDefinition, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionRule, RelationEndpoint, RelationFact, RelationType, ResourceDefinition, SecurityEffectDefinition, SecurityEffectKind, SubjectDefinition
 
 SHA256 = "a" * 64

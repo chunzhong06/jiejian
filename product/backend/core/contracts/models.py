@@ -36,8 +36,6 @@ class GovernanceModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"] = "1"
-
 
 class SourceReference(GovernanceModel):
     source_type: ContractSourceType

@@ -27,12 +27,12 @@ from product.backend.core.verification.behavior_differential import (
     compare_behavior_snapshots,
     normalize_evidence_behavior,
 )
-from product.backend.core.verification.permissions import canonical_sha256 as canonical_model_sha256
+from product.backend.core.verification.permissions import permission_model_sha256
 from product.protocols import ObserverOutcomeStatus, RunnerResult
 from product.backend.infra.storage.gating import GateResultRecord, RegressionBaselineRecord
-from product.backend.core.verification.gating import BaselineFindingRef, GateFacts, GateFinding, GatePolicy, GateResult, RegressionBaseline, baseline_id_for, canonical_sha256, evaluate_gate, gate_input_hash
+from product.backend.core.verification.gating import BaselineFindingRef, GateFacts, GateFinding, GatePolicy, GateResult, RegressionBaseline, baseline_id_for, gate_canonical_sha256, evaluate_gate, gate_input_hash
 from product.backend.workflows.results.published import PublishedResultReader, PublishedRunView
-from product.backend.workflows.results.findings import FindingProjection
+from product.backend.workflows.results.findings import FindingQueries
 
 
 class RegressionGate:
@@ -42,7 +42,7 @@ class RegressionGate:
         self,
         uow_factory,
         published_reader: PublishedResultReader,
-        findings: FindingProjection,
+        findings: FindingQueries,
         *,
         clock_us=None,
     ) -> None:
@@ -102,8 +102,8 @@ class RegressionGate:
         else:
             if view.run.project_id != baseline.project_id:
                 raise JiejianError(ErrorCode.GATE_INPUT_INVALID, "基线与当前 Run 不属于同一项目")
+            findings = self._findings.findings_for_run(run_id)
             try:
-                findings = self._findings.findings_for_run(run_id)
                 baseline_view = self._reader.read(baseline.accepted_run_id)
                 facts = _published_facts(self._reader, view, findings, baseline_view=baseline_view)
             except (JiejianError, KeyError, TypeError, ValueError) as exc:
@@ -149,13 +149,13 @@ def _build_baseline(view: PublishedRunView, facts: GateFacts, findings: list[dic
         for item in sorted(findings, key=lambda value: value["finding"]["finding_id"])
     )
     return RegressionBaseline(
-        baseline_id=baseline_id_for(view.run.project_id, view.run.run_id, facts.request_snapshot_sha256 or canonical_sha256(view.run), canonical_sha256(facts.coverage_ids)),
+        baseline_id=baseline_id_for(view.run.project_id, view.run.run_id, facts.request_snapshot_sha256 or gate_canonical_sha256(view.run), gate_canonical_sha256(facts.coverage_ids)),
         project_id=view.run.project_id,
         accepted_run_id=view.run.run_id,
         finding_refs=refs,
         coverage_ids=facts.coverage_ids,
-        coverage_digest=canonical_sha256(facts.coverage_ids),
-        request_snapshot_sha256=facts.request_snapshot_sha256 or canonical_sha256(view.run),
+        coverage_digest=gate_canonical_sha256(facts.coverage_ids),
+        request_snapshot_sha256=facts.request_snapshot_sha256 or gate_canonical_sha256(view.run),
         engine_version=facts.engine_version or view.run.engine_version,
         protocol_versions=facts.protocol_versions or (f"runner-result-{view.publication.result.schema_version}",),
         actor=actor,
@@ -173,7 +173,7 @@ def _published_facts(
 ) -> GateFacts:
     result = view.publication.result
     snapshot = reader.request_snapshot(view)
-    request_hash = canonical_sha256(snapshot)
+    request_hash = gate_canonical_sha256(snapshot)
     gate_findings = tuple(
         GateFinding(
             finding_id=item["finding"]["finding_id"],
@@ -223,7 +223,7 @@ def _published_facts(
         behavior_comparison_issues=behavior_comparison_issues,
         request_snapshot_sha256=request_hash,
         engine_version=view.run.engine_version,
-        protocol_versions=("evidence-3", "observer-2", "runner-result-2"),
+        protocol_versions=("evidence-3", "observer-2", "runner-result-3"),
     )
 
 
@@ -261,13 +261,13 @@ def _behavior_differences(
                 old,
                 contract_fingerprint=baseline_snapshot.contract_fingerprint,
                 workflow_fingerprint=old_workflow.workflow_fingerprint,
-                baseline_fingerprint=canonical_model_sha256(old_workflow.baseline_projections),
+                baseline_fingerprint=permission_model_sha256(old_workflow.baseline_projections),
             )
             after = normalize_evidence_behavior(
                 new,
                 contract_fingerprint=current_snapshot.contract_fingerprint,
                 workflow_fingerprint=new_workflow.workflow_fingerprint,
-                baseline_fingerprint=canonical_model_sha256(new_workflow.baseline_projections),
+                baseline_fingerprint=permission_model_sha256(new_workflow.baseline_projections),
             )
             if compare_behavior_snapshots(before, after).changed:
                 changes.append(subject)

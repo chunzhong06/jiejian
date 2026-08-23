@@ -124,7 +124,6 @@ class FlowDraftProcessor:
         )
         draft_variables = tuple(
             FlowDraftVariable(
-                schema_version="1",
                 name=variable.name,
                 placeholder="{" + variable.name + "}",
                 status=(
@@ -139,7 +138,7 @@ class FlowDraftProcessor:
         )
         # --- 阶段：构造草稿并执行 canonical 安全校验 ---
         draft = FlowDraft(
-            schema_version="1",
+            schema_version="2",
             recording_id=recording_id,
             flow_id=flow_id,
             revision=1,
@@ -237,7 +236,6 @@ class FlowDraftProcessor:
                                 _ValueSource(
                                     value=value,
                                     source=FlowDraftVariableSource(
-                                        schema_version="1",
                                         source_step_id=step.step_id,
                                         source_event_sequence=response.sequence,
                                         json_path=path,
@@ -259,8 +257,7 @@ class FlowDraftProcessor:
                     sources.append(
                         _ValueSource(
                             value=segments[-1],
-                            source=FlowDraftVariableSource(
-                                schema_version="1",
+                                source=FlowDraftVariableSource(
                                 source_step_id=step.step_id,
                                 source_event_sequence=response.sequence,
                                 json_path="$location.path",
@@ -273,7 +270,6 @@ class FlowDraftProcessor:
                             _ValueSource(
                                 value=value,
                                 source=FlowDraftVariableSource(
-                                    schema_version="1",
                                     source_step_id=step.step_id,
                                     source_event_sequence=response.sequence,
                                     json_path=f"$location.query.{self._safe_name(key)}",
@@ -363,7 +359,6 @@ class FlowDraftProcessor:
         if step.response is not None:
             sequences.append(step.response.sequence)
         return FlowDraftStep(
-            schema_version="1",
             id=step.step_id,
             name=self._step_name(step),
             identity_id=step.identity_id,

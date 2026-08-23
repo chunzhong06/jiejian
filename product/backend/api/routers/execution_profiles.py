@@ -53,7 +53,6 @@ def build_execution_profiles_router(context: ApplicationCore) -> APIRouter:
         profile = context.execution.current(profile_id, project_id=project_id)
         return data_response(
             {
-                "schema_version": "1",
                 "workflows": [
                     {
                         "action_id": binding.action_id,
@@ -107,6 +106,6 @@ from product.backend.api.envelope import ApiModel
 
 
 class ExecutionProfileCreateRequest(ApiModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1"]
     profile_path: str = Field(min_length=1, max_length=2048)
     accept_source_changes: bool = False

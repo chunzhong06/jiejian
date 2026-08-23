@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 import pytest
 
-from product.protocols.runner import WebTargetScope
+from product.protocols.web.target import WebTargetScope
 from product.protocols import (
     RecordingBudget,
     RecordingEventKind,
@@ -163,12 +163,11 @@ def browser_server(secret: str) -> Iterator[LocalBrowserServer]:
 def recording_request(port: int) -> RecordingRunnerRequest:
     created_at_us = time.time_ns() // 1_000
     return RecordingRunnerRequest(
-        schema_version="1",
+        schema_version="2",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         created_at_us=created_at_us,
         target_scope=WebTargetScope(
-            schema_version="2",
             base_url=f"http://127.0.0.1:{port}",
             allowed_origins=(f"http://127.0.0.1:{port}",),
             allowed_hosts=("127.0.0.1",),
@@ -180,20 +179,19 @@ def recording_request(port: int) -> RecordingRunnerRequest:
         ),
         sessions=(
             RecordingSessionRef(
-                schema_version="1",
                 identity_id="owner",
                 session_ref="session_0123456789abcdef0123456789abcdef",
+                secret_refs=(),
                 expires_at_us=created_at_us + 60_000_000,
             ),
             RecordingSessionRef(
-                schema_version="1",
                 identity_id="attacker",
                 session_ref="session_fedcba9876543210fedcba9876543210",
+                secret_refs=(),
                 expires_at_us=created_at_us + 60_000_000,
             ),
         ),
         budget=RecordingBudget(
-            schema_version="1",
             max_duration_us=30_000_000,
             max_events=256,
             max_pages=8,

@@ -11,12 +11,6 @@
     "Correlation": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Case Id",
@@ -44,12 +38,6 @@
     "NormalizedState": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "canonical_data": {
           "additionalProperties": true,
           "title": "Canonical Data",
@@ -101,12 +89,6 @@
     "ObservationProvenance": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "provenance_type": {
           "$ref": "#/$defs/ProvenanceType"
         },
@@ -151,12 +133,6 @@
     "ObservationWindow": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "phase": {
           "$ref": "#/$defs/ObservationPhase"
         },
@@ -214,8 +190,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },
@@ -228,8 +204,8 @@
       "$ref": "#/$defs/ObserverType"
     },
     "protocol_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Protocol Version",
       "type": "string"
     },

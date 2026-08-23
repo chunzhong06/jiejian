@@ -9,7 +9,6 @@ import { projectsApi, type ProjectDto } from '../api/projects'
 import { runsApi, type RunDto } from '../api/runs'
 import { llmApi, LLMProfile } from '../api/llm'
 import { systemApi, SystemStatus } from '../api/system'
-import { onboardingApi } from '../api/onboarding'
 import { ErrorRecovery } from '../components/ErrorRecovery'
 import { AccessPage } from '../features/access/AccessPage'
 import { PermissionRulesPage } from '../features/permissions/PermissionRulesPage'
@@ -60,7 +59,6 @@ function ControlShellContent() {
   const [llmLoadFailed, setLlmLoadFailed] = useState(false)
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({ api: 'unknown', worker: 'unknown', browser: 'unknown' })
   const [retryEpoch, setRetryEpoch] = useState(0)
-  const [demoData, setDemoData] = useState(false)
   const [shutdownConfirmOpen, setShutdownConfirmOpen] = useState(false)
   const [shutdownRequested, setShutdownRequested] = useState(false)
 
@@ -75,9 +73,9 @@ function ControlShellContent() {
       setError(null)
     } catch (e) { setError(e as ApiError) }
   }
-  const choose = (project: ProjectDto) => { setSelected(project); setDemoData(false); browserState.writeProject(project); navigate('/apps/rules') }
-  const onboardingSubmitted = async (result: { project_id: string; run_id: string; job_id: string; demo_data?: boolean }) => {
-    setLoading(true); setDemoData(Boolean(result.demo_data))
+  const choose = (project: ProjectDto) => { setSelected(project); browserState.writeProject(project); navigate('/apps/rules') }
+  const onboardingSubmitted = async (result: { project_id: string; run_id: string; job_id: string }) => {
+    setLoading(true)
     try {
       const current = await projectsApi.projects()
       setProjects(current)
@@ -96,9 +94,7 @@ function ControlShellContent() {
   const refreshSystemStatus = () => { void systemApi.status().then(setSystemStatus).catch(() => setSystemStatus({ api: 'unknown', worker: 'unknown', browser: 'unknown' })) }
   useEffect(() => { refreshSystemStatus(); const onFocus = () => refreshSystemStatus(); window.addEventListener('focus', onFocus); return () => window.removeEventListener('focus', onFocus) }, [])
   useEffect(() => { void refreshRuns() }, [selected?.project_id])
-  useEffect(() => { if (!selected?.project_id) return; void onboardingApi.demoStatus().then((status) => { if (status.project_id === selected.project_id && status.demo_data) setDemoData(true) }).catch(() => undefined) }, [selected?.project_id])
   useEffect(() => {
-    if (location.pathname === '/report') { navigate({ pathname: '/checks/results', search: '?view=report' }, { replace: true }); return }
     if (location.pathname !== route) navigate(route, { replace: true })
   }, [location.pathname, navigate, route])
 
@@ -131,7 +127,7 @@ function ControlShellContent() {
   return <Layout className="app-shell">
     <Layout.Sider breakpoint="lg" collapsedWidth="0"><div className="brand">界鉴<span>安全意图一致性验证</span></div><Menu theme="dark" mode="inline" defaultOpenKeys={['apps', 'checks', 'advanced']} selectedKeys={[route]} items={menuItems} onClick={({ key }) => { if (String(key).startsWith('/')) navigate(String(key)) }} /></Layout.Sider>
     <Layout><Layout.Header className="topbar"><Typography.Text className="topbar-context">{selected ? String(selected.name ?? '当前应用') : '尚未选择应用'}</Typography.Text><Button className="topbar-settings" type="link" onClick={() => setSettingsOpen(true)}>模型服务</Button><Button type="text" aria-label="退出界鉴" icon={<PoweroffOutlined />} onClick={requestShutdown}>退出界鉴</Button><div className="status-cluster"><Tag color={service.color}>服务 · {service.label}</Tag><Tag color={execution.color}>执行 · {execution.label}</Tag><Tag color={browser.color}>浏览器 · {browser.label}</Tag><Tag color={model.color}>模型 · {model.label}</Tag></div></Layout.Header>
-      <Layout.Content className="content">{error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onBackAccess={() => { setError(null); navigate('/apps/access') }} onClose={() => setError(null)} />}{demoData && route !== '/apps/access' && <div className="demo-data-banner">演示数据，不代表真实项目</div>}{content()}</Layout.Content>
+      <Layout.Content className="content">{error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onBackAccess={() => { setError(null); navigate('/apps/access') }} onClose={() => setError(null)} />}{content()}</Layout.Content>
     </Layout>
     <Modal
       open={shutdownConfirmOpen}

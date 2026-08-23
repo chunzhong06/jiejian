@@ -133,7 +133,6 @@ class EvidenceIndexRecord(StorageRecord):
     @model_validator(mode="after")
     def validate_content_address_and_path(self) -> EvidenceIndexRecord:
         StagedArtifact(
-            schema_version="2",
             path=self.artifact_path,
             byte_count=self.byte_count,
             sha256=self.sha256,

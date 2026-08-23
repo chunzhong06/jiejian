@@ -51,7 +51,7 @@ def _clean_actor(value: str) -> str:
     return normalized
 
 
-def canonical_sha256(value: Any) -> str:
+def gate_canonical_sha256(value: Any) -> str:
     payload = value.model_dump(mode="json") if hasattr(value, "model_dump") else value
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -121,7 +121,7 @@ class RegressionBaseline(DomainModel):
     def validate_baseline(self) -> RegressionBaseline:
         if tuple(sorted(ref.finding_id for ref in self.finding_refs)) != tuple(ref.finding_id for ref in self.finding_refs):
             raise ValueError("baseline finding references must be sorted")
-        if self.coverage_digest != canonical_sha256(self.coverage_ids):
+        if self.coverage_digest != gate_canonical_sha256(self.coverage_ids):
             raise ValueError("baseline coverage digest does not match coverage IDs")
         return self
 
@@ -200,15 +200,15 @@ class GateResult(DomainModel):
 
 
 def baseline_id_for(project_id: str, run_id: str, request_snapshot_sha256: str, coverage_digest: str) -> str:
-    return f"baseline_{canonical_sha256((project_id, run_id, request_snapshot_sha256, coverage_digest))[:32]}"
+    return f"baseline_{gate_canonical_sha256((project_id, run_id, request_snapshot_sha256, coverage_digest))[:32]}"
 
 
 def gate_input_hash(baseline_id: str, facts: GateFacts, policy: GatePolicy) -> str:
-    return canonical_sha256((baseline_id, policy.model_dump(mode="json"), facts.model_dump(mode="json")))
+    return gate_canonical_sha256((baseline_id, policy.model_dump(mode="json"), facts.model_dump(mode="json")))
 
 
 def gate_result_id_for(baseline_id: str, run_id: str, policy_version: str, input_hash: str) -> str:
-    return f"gate_{canonical_sha256((baseline_id, run_id, policy_version, input_hash))[:32]}"
+    return f"gate_{gate_canonical_sha256((baseline_id, run_id, policy_version, input_hash))[:32]}"
 
 
 def _reason(code: str, subject: str) -> GateReason:

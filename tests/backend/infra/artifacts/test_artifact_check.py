@@ -27,16 +27,16 @@ JOB_ID = "job_" + "2" * 32
 
 def _artifact_tree(tmp_path: Path, files: dict[str, bytes]) -> ArtifactCheckRequest:
     var_dir = tmp_path / "var"
-    final_dir = var_dir / "projects" / PROJECT_ID / "runs" / RUN_ID
+    final_dir = var_dir / "data" / "projects" / PROJECT_ID / "runs" / RUN_ID
     root = final_dir / "artifacts"
     root.mkdir(parents=True)
     (final_dir / "result.json").write_bytes(b"{}")
-    manifest_files = [StagedArtifact(schema_version="2", path="result.json", byte_count=2, sha256=hashlib.sha256(b"{}").hexdigest())]
+    manifest_files = [StagedArtifact(path="result.json", byte_count=2, sha256=hashlib.sha256(b"{}").hexdigest())]
     for relative, raw in files.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw)
-        manifest_files.append(StagedArtifact(schema_version="2", path=f"artifacts/{relative}", byte_count=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
+        manifest_files.append(StagedArtifact(path=f"artifacts/{relative}", byte_count=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
     manifest = PublicationManifest(
         project_id=PROJECT_ID,
         run_id=RUN_ID,
@@ -101,9 +101,9 @@ def test_fixed_artifact_is_safe(tmp_path: Path) -> None:
             encoding="utf-8"
         )
     )
-    budget_schema = schema["properties"]["budget"]
-    assert budget_schema["properties"]["max_parallel_files"] == {"const": 1}
-    assert "max_parallel_files" in budget_schema["required"]
+    budget_ref = schema["properties"]["budget"]["$ref"].removeprefix("#/$defs/")
+    budget_schema = schema["$defs"][budget_ref]
+    assert budget_schema["properties"]["max_parallel_files"]["const"] == 1
 
 
 def test_artifact_handler_is_auxiliary_and_does_not_add_a_persistent_target() -> None:
@@ -136,7 +136,7 @@ def test_zip_magic_is_not_interpreted_as_safe_when_archive_layer_budget_is_zero(
 
 def test_handler_rejects_child_result_with_mismatched_run_id(tmp_path: Path) -> None:
     request = _artifact_tree(tmp_path, {"app.js": b"const safe = true;"})
-    job_dir = tmp_path / "var" / "artifact-checks" / "jobs" / "artifact-job-run-mismatch"
+    job_dir = tmp_path / "var" / "data" / "artifact-checks" / "jobs" / "artifact-job-run-mismatch"
     job_dir.mkdir(parents=True)
     (job_dir / "request.json").write_bytes(json.dumps(request.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode())
     child_result = scan_artifact(request).model_copy(update={"run_id": "run_" + "3" * 32})
@@ -163,7 +163,7 @@ def test_handler_rejects_child_result_with_mismatched_run_id(tmp_path: Path) -> 
 @pytest.mark.process
 def test_worker_handler_forms_isolated_prepare_check_assert_publish_cleanup_loop(tmp_path: Path) -> None:
     request = _artifact_tree(tmp_path, {"app.js": b"const safe = true;"})
-    job_dir = tmp_path / "var" / "artifact-checks" / "jobs" / "artifact-job-1"
+    job_dir = tmp_path / "var" / "data" / "artifact-checks" / "jobs" / "artifact-job-1"
     job_dir.mkdir(parents=True)
     (job_dir / "request.json").write_bytes(json.dumps(request.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode())
     result = ArtifactCheckJobHandler(tmp_path / "var").run_job("artifact-job-1")

@@ -17,7 +17,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.report import ReportPackageFile, ReportPackageManifest, Report
+from product.backend.infra.runtime.paths import RuntimePaths
+from product.protocols.report import ReportDocument, ReportPackageFile, ReportPackageManifest, parse_report_document, parse_report_package_manifest
 from product.backend.core.reporting import render_format
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -29,17 +30,20 @@ _NAMES = {"json": "report.json", "html": "report.html", "sarif": "report.sarif.j
 class ReportStore:
     def __init__(self, var_dir: Path) -> None:
         self._var_dir = var_dir.resolve()
-        self._root = self._var_dir / "reports" / "runs"
+        self._var_dir.mkdir(parents=True, exist_ok=True)
+        self._root = RuntimePaths(self._var_dir).reports / "runs"
 
-    def publish(self, report: Report) -> ReportPackageManifest:
+    def publish(self, report: ReportDocument) -> ReportPackageManifest:
         """将 canonical 报告及其格式投影原子发布；同一身份禁止内容漂移。"""
 
         files = {name: render_format(report, fmt) for fmt, name in _NAMES.items()}
         manifest = ReportPackageManifest(
             report_id=report.report_id,
             run_id=report.run_id,
-            gate_result_id=report.gate_result_id,
-            report_sha256=hashlib.sha256(files["report.json"]).hexdigest(),
+            report_type=report.report_type,
+            base_report_id=report.report_id if report.report_type == "BASE" else report.base_report_id,
+            gate_result_id=report.gate_result_id if report.report_type == "GATE" else None,
+            canonical_sha256=report.canonical_sha256,
             files=tuple(
                 ReportPackageFile(path=name, byte_count=len(raw), sha256=hashlib.sha256(raw).hexdigest())
                 for name, raw in sorted(files.items())
@@ -70,16 +74,23 @@ class ReportStore:
                 shutil.rmtree(temporary, ignore_errors=True)
         return manifest
 
-    def read(self, run_id: str, report_id: str) -> Report:
+    def read(self, run_id: str, report_id: str) -> ReportDocument:
         """完整性校验报告包，并确认所有格式仍由同一 canonical Report 派生。"""
 
         final_dir = self._path(run_id, report_id)
         files, manifest = self._validated_files(final_dir, run_id, report_id)
         try:
-            report = Report.model_validate_json(files["report.json"], strict=True)
+            report = parse_report_document(files["report.json"])
         except ValueError:
             raise JiejianError(ErrorCode.REPORT_INTEGRITY, "统一报告 JSON 无效") from None
-        if report.run_id != run_id or report.report_id != report_id or report.gate_result_id != manifest.gate_result_id:
+        if (
+            report.run_id != run_id
+            or report.report_id != report_id
+            or report.report_type != manifest.report_type
+            or report.canonical_sha256 != manifest.canonical_sha256
+            or (report.report_type == "GATE" and (report.base_report_id != manifest.base_report_id or report.gate_result_id != manifest.gate_result_id))
+            or (report.report_type == "BASE" and manifest.base_report_id != report.report_id)
+        ):
             raise JiejianError(ErrorCode.REPORT_INTEGRITY, "统一报告身份不一致")
         for fmt, name in _NAMES.items():
             if render_format(report, fmt) != files[name]:
@@ -107,7 +118,10 @@ class ReportStore:
             if not _SAFE_ID.fullmatch(entry.name):
                 raise JiejianError(ErrorCode.REPORT_INTEGRITY, "报告目录标识无效")
             report = self.read(run_id, entry.name)
-            output.append({"schema_version": "2", "report_id": report.report_id, "run_id": run_id, "gate_result_id": report.gate_result_id, "gate_decision": report.gate.decision, "canonical_sha256": report.canonical_sha256})
+            item = {"schema_version": "4", "report_id": report.report_id, "run_id": run_id, "report_type": report.report_type, "canonical_sha256": report.canonical_sha256}
+            if report.report_type == "GATE":
+                item.update({"gate_result_id": report.gate_result_id, "gate_decision": report.gate.decision})
+            output.append(item)
         return output
 
     def _validated_files(self, final_dir: Path, run_id: str, report_id: str) -> tuple[dict[str, bytes], ReportPackageManifest]:
@@ -120,10 +134,10 @@ class ReportStore:
         for item in entries:
             self._regular_file(item)
         try:
-            manifest = ReportPackageManifest.model_validate_json((final_dir / "report-manifest.json").read_bytes(), strict=True)
+            manifest = parse_report_package_manifest((final_dir / "report-manifest.json").read_bytes())
             files = {name: (final_dir / name).read_bytes() for name in _NAMES.values()}
             expected = {item.path: item for item in manifest.files}
-            if manifest.run_id != run_id or manifest.report_id != report_id or manifest.report_sha256 != hashlib.sha256(files["report.json"]).hexdigest():
+            if manifest.run_id != run_id or manifest.report_id != report_id:
                 raise ValueError("report manifest identity")
             for name, raw in files.items():
                 item = expected[name]
@@ -144,7 +158,7 @@ class ReportStore:
         try:
             for name in (*_NAMES.values(), "report-manifest.json"):
                 self._regular_file(final_dir / name)
-            stored = ReportPackageManifest.model_validate_json((final_dir / "report-manifest.json").read_bytes(), strict=True)
+            stored = parse_report_package_manifest((final_dir / "report-manifest.json").read_bytes())
             return stored == manifest and all((final_dir / name).read_bytes() == raw for name, raw in files.items())
         except (OSError, ValueError):
             return False

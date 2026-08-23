@@ -1,31 +1,120 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "jiejian/artifacts/artifact-check-request",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "project_id", "artifact_id", "artifact_root", "manifest_path", "ruleset_version", "budget"],
-  "properties": {
-    "schema_version": {"const": "1"},
-    "project_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
-    "artifact_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
-    "run_id": {"type": ["string", "null"], "pattern": "^run_[0-9a-f]{32}$"},
-    "artifact_root": {"type": "string", "minLength": 1, "maxLength": 1024},
-    "manifest_path": {"type": "string", "minLength": 1, "maxLength": 1024},
-    "ruleset_version": {"const": "artifact-local-2026.08.18"},
-    "budget": {
-      "type": "object",
+  "$defs": {
+    "ScanBudget": {
       "additionalProperties": false,
-      "required": ["schema_version", "max_parallel_files", "max_files", "max_file_bytes", "max_total_bytes", "max_results", "max_duration_us", "max_compressed_layers"],
       "properties": {
-        "schema_version": {"const": "1"},
-        "max_parallel_files": {"const": 1},
-        "max_files": {"type": "integer", "minimum": 1, "maximum": 4096},
-        "max_file_bytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
-        "max_total_bytes": {"type": "integer", "minimum": 1, "maximum": 1073741824},
-        "max_results": {"type": "integer", "minimum": 1, "maximum": 4096},
-        "max_duration_us": {"type": "integer", "minimum": 1000, "maximum": 300000000},
-        "max_compressed_layers": {"const": 0}
-      }
+        "max_parallel_files": {
+          "const": 1,
+          "default": 1,
+          "title": "Max Parallel Files",
+          "type": "integer"
+        },
+        "max_files": {
+          "default": 4096,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Files",
+          "type": "integer"
+        },
+        "max_file_bytes": {
+          "default": 16777216,
+          "maximum": 67108864,
+          "minimum": 1,
+          "title": "Max File Bytes",
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "default": 536870912,
+          "maximum": 1073741824,
+          "minimum": 1,
+          "title": "Max Total Bytes",
+          "type": "integer"
+        },
+        "max_results": {
+          "default": 4096,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "max_duration_us": {
+          "default": 30000000,
+          "maximum": 300000000,
+          "minimum": 1000,
+          "title": "Max Duration Us",
+          "type": "integer"
+        },
+        "max_compressed_layers": {
+          "default": 0,
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Max Compressed Layers",
+          "type": "integer"
+        }
+      },
+      "title": "ScanBudget",
+      "type": "object"
     }
-  }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "artifact_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "artifact_root": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Artifact Root",
+      "type": "string"
+    },
+    "manifest_path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Manifest Path",
+      "type": "string"
+    },
+    "ruleset_version": {
+      "const": "artifact-local-2026.08.18",
+      "default": "artifact-local-2026.08.18",
+      "title": "Ruleset Version",
+      "type": "string"
+    },
+    "budget": {
+      "$ref": "#/$defs/ScanBudget"
+    }
+  },
+  "required": [
+    "project_id",
+    "artifact_id",
+    "artifact_root",
+    "manifest_path"
+  ],
+  "title": "ArtifactCheckRequest",
+  "type": "object"
 }

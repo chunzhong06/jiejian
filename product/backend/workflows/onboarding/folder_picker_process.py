@@ -79,7 +79,10 @@ def main() -> int:
         )
     print(
         json.dumps(
-            result.model_dump(mode="json", exclude_none=True),
+            {
+                "schema_version": "1",
+                **result.model_dump(mode="json", exclude_none=True),
+            },
             ensure_ascii=False,
             separators=(",", ":"),
         ),

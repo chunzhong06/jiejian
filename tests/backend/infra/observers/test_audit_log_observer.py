@@ -101,7 +101,11 @@ def _observe(root: Path, *, spec: ObserverSpec | None = None, phase: Observation
         Correlation(case_id="case-1", resource_id="resource-a", request_marker="case-1"),
         phase,
         attempt_dir=root / "attempt",
-        parent_environ={"AUDIT_ROOT": str(root), "UNRELATED_ROOT": "D:/private/audit"},
+        parent_environ={
+            **os.environ,
+            "AUDIT_ROOT": str(root),
+            "UNRELATED_ROOT": "D:/private/audit",
+        },
         python_executable=PYTHON,
         start_cursors=cursors,
     )
@@ -308,9 +312,15 @@ def test_audit_observer_parent_timeout_kills_reaps_and_cleans(tmp_path: Path, mo
 
         def wait(self, timeout: float | None = None) -> int:
             self.wait_timeouts.append(timeout)
-            if len(self.wait_timeouts) == 1:
+            if not self.killed:
                 raise subprocess.TimeoutExpired("audit", timeout)
             return 0
+
+        def poll(self) -> int | None:
+            return -9 if self.killed else None
+
+        def terminate(self) -> None:
+            return None
 
         def kill(self) -> None:
             self.killed = True
@@ -324,9 +334,13 @@ def test_audit_observer_parent_timeout_kills_reaps_and_cleans(tmp_path: Path, mo
     assert result.envelope is not None
     assert result.envelope.completeness is ObservationCompleteness.TIMED_OUT
     assert process.killed
-    assert len(process.wait_timeouts) == 2
+    assert len(process.wait_timeouts) == 4
     assert process.wait_timeouts[0] is not None and process.wait_timeouts[0] <= 0.001
-    assert process.wait_timeouts[1] == audit_module._PROCESS_REAP_TIMEOUT_SECONDS
+    assert all(
+        timeout is not None
+        and 0 <= timeout <= audit_module._PROCESS_REAP_TIMEOUT_SECONDS
+        for timeout in process.wait_timeouts[1:]
+    )
     assert not list((tmp_path / "attempt").glob("audit-observer-*.json"))
     assert not list((tmp_path / "attempt").glob(".*audit-observer-*.tmp"))
 

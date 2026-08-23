@@ -74,7 +74,6 @@ def parse_fastapi_source_candidates(
                     locator,
                     source_hash,
                     CandidateSuggestion(
-                        schema_version="1",
                         id=_rule_id("route", method.lower(), path, kind.value),
                         kind=kind,
                         required_observations=observations,
@@ -91,7 +90,6 @@ def parse_fastapi_source_candidates(
                             f"{locator}:field:{argument.arg}",
                             source_hash,
                             CandidateSuggestion(
-                                schema_version="1",
                                 id=_rule_id("route", method.lower(), path, "privileged-field", argument.arg),
                                 kind=CandidateRiskKind.PRIVILEGED_FIELD,
                                 required_observations=("resource_state",),

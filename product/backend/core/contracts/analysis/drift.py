@@ -20,7 +20,7 @@ from pydantic import Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisModel, AnalysisReasonCode, AnalysisSeverity
-from product.backend.core.contracts.analysis.canonical import canonical_sha256
+from product.backend.core.contracts.analysis.canonical import contract_analysis_sha256
 from product.backend.core.contracts.models import ContractCandidate, ContractSourceType, ContractVersion, Requirement
 from product.backend.core.identifiers import LONG_SLUG_ID_PATTERN, PROJECT_ID_PATTERN, RUN_ID_PATTERN
 from product.backend.core.verification.permissions import PermissionRule
@@ -217,7 +217,7 @@ def build_drift_report(
         contract_version=contract.version,
         entries=ordered_entries,
         analysis_issues=body["analysis_issues"],
-        canonical_sha256=canonical_sha256(body),
+        canonical_sha256=contract_analysis_sha256(body),
     )
 
 

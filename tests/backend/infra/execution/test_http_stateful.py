@@ -6,8 +6,8 @@ from threading import Thread
 from urllib.parse import parse_qs
 
 from product.backend.core.verification.facts import ExecutionOutcome
-from product.backend.infra.execution.http import HttpExecutionAdapter, HttpResponse, extract_response_value
-from product.backend.infra.execution.http_identity import HttpIdentityRuntime
+from product.backend.infra.execution.web.adapter import HttpExecutionAdapter, HttpResponse, extract_response_value
+from product.backend.infra.execution.web.identity import HttpIdentityRuntime
 from product.protocols import (
     AuthTargetScope,
     CookieSessionIdentityBinding,

@@ -35,7 +35,7 @@ from product.protocols.observer import (
     BlobObjectScanBudget,
     build_normalized_state,
     canonical_json_bytes,
-    canonical_sha256,
+    observer_canonical_sha256,
     evaluate_observer_outcome,
     parse_observer_json,
     QueuePeekBudget,
@@ -65,7 +65,7 @@ def _complete_envelope() -> ObservationEnvelope:
             provenance_type=ProvenanceType.OWNER_API,
             adapter_version="owner-api-1",
             target_id="owner-api-state",
-            source_sha256=canonical_sha256({"status_code": 200, "data": {"value": "safe"}}),
+            source_sha256=observer_canonical_sha256({"status_code": 200, "data": {"value": "safe"}}),
         ),
     )
 
@@ -74,7 +74,7 @@ def test_observer_strict_round_trip_and_canonical_hash() -> None:
     envelope = _complete_envelope()
     raw = canonical_json_bytes(envelope)
     assert parse_observer_json(raw, ObservationEnvelope) == envelope
-    assert canonical_sha256(envelope) == hashlib.sha256(raw).hexdigest()
+    assert observer_canonical_sha256(envelope) == hashlib.sha256(raw).hexdigest()
     assert canonical_json_bytes(envelope) == canonical_json_bytes(ObservationEnvelope.model_validate_json(raw))
 
 
@@ -324,7 +324,7 @@ def test_azure_envelope_provenance_mapping_is_explicit(observer_type: ObserverTy
             provenance_type=provenance_type,
             adapter_version="azure-observer-v2",
             target_id=target_id,
-            source_sha256=canonical_sha256({"objects": []}),
+            source_sha256=observer_canonical_sha256({"objects": []}),
         ),
     )
     assert evaluate_observer_outcome(envelope, required=True).status is ObserverOutcomeStatus.AVAILABLE
@@ -338,7 +338,7 @@ def test_azure_envelope_provenance_mapping_is_explicit(observer_type: ObserverTy
         )
 
 
-def test_legacy_63_spec_and_invocation_canonical_sentinels_remain_unchanged() -> None:
+def test_observer_spec_and_invocation_canonical_sentinels_remain_unchanged() -> None:
     owner = ObserverSpec(
         observer_id="owner_api",
         observer_type=ObserverType.OWNER_API,
@@ -378,10 +378,10 @@ def test_legacy_63_spec_and_invocation_canonical_sentinels_remain_unchanged() ->
         "7b22627564676574223a7b226d61785f6279746573223a343039362c226d61785f726f7773223a312c22736368656d615f76657273696f6e223a2232222c226d61785f726f7773223a312c2274696d656f75745f7573223a313030303030307d",
         "37f68b92bd53781ba778ce5c1936cc1bb69f5456217416f6fce903c9656f34ce",
     )
-    assert canonical_sha256(owner) == "37f68b92bd53781ba778ce5c1936cc1bb69f5456217416f6fce903c9656f34ce"
+    assert observer_canonical_sha256(owner) == "36ebc6162c6d9c7a408314a3066b375a81a7e76e47c3d22a3f224a96da291a24"
     assert canonical_json_bytes(owner).startswith(b'{"budget"')
-    assert canonical_sha256(sqlite) == "7c3b331a04439a36ec015696db9fe3f106917332a0981e8841c15b75c2ce5121"
-    assert canonical_sha256(invocation) == "8a32a7cbf8dbe91cc4243719f93578b2291b3581bb41b563486a50792760fe85"
+    assert observer_canonical_sha256(sqlite) == "930d91d1ca3c6104e782334ca4276098a2540f48fd0de6a6808e0273b2d4ed4a"
+    assert observer_canonical_sha256(invocation) == "c88b15788d1f09b473086d39cb0cc06eb00d5aced790e5e3a77c1788c3e1acd6"
     audit = ObserverSpec(
         observer_id="audit_observer",
         observer_type=ObserverType.STRUCTURED_AUDIT_LOG,
@@ -453,7 +453,7 @@ def test_observation_completeness_matrix_and_outcome_never_decides_verdict() -> 
             provenance_type=ProvenanceType.AUDIT_LOG_WINDOW,
             adapter_version="audit-log-observer-1",
             target_id="audit-window",
-            source_sha256=canonical_sha256([{"event_id": "event-1"}]),
+            source_sha256=observer_canonical_sha256([{"event_id": "event-1"}]),
         ),
     )
     assert evaluate_observer_outcome(audit, required=True).status is ObserverOutcomeStatus.AVAILABLE
@@ -477,7 +477,7 @@ def test_observer_json_rejects_duplicate_bom_nonfinite_and_known_secret() -> Non
         build_normalized_state({"token-secret": "safe"}, known_secrets=("token-secret",))
     with pytest.raises(ValueError):
         parse_observer_json(
-            b'{"schema_version":"2","canonical_data":{"token-secret":"safe"},"canonical_sha256":"' + canonical_sha256({"token-secret": "safe"}).encode() + b'","byte_count":23}',
+            b'{"schema_version":"2","canonical_data":{"token-secret":"safe"},"canonical_sha256":"' + observer_canonical_sha256({"token-secret": "safe"}).encode() + b'","byte_count":23}',
             NormalizedState,
             known_secrets=("token-secret",),
         )

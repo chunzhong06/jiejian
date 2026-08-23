@@ -22,6 +22,7 @@ from product.protocols import (
     ObserverTarget,
     ObserverType,
 )
+from tests.fixtures.runtime_environment import runtime_identity_environment
 
 
 def _spec(*, base_url: str = "https://127.0.0.1:8443", allow_loopback_http: bool = False, max_polls: int = 4, poll_interval_us: int = 0, timeout_us: int = 5_000_000, max_response_bytes: int = 8192, common_max_bytes: int | None = None) -> ObserverSpec:
@@ -213,7 +214,12 @@ def test_async_task_parent_timeout_cancel_and_cleanup(tmp_path: Path, monkeypatc
             self.waits: list[float | None] = []
         def wait(self, timeout: float | None = None) -> int:
             self.waits.append(timeout)
+            if self.killed:
+                return -9
             raise subprocess.TimeoutExpired("async", timeout)
+
+        def poll(self) -> int | None:
+            return -9 if self.killed else None
         def terminate(self) -> None:
             self.terminated = True
         def kill(self) -> None:
@@ -224,13 +230,17 @@ def test_async_task_parent_timeout_cancel_and_cleanup(tmp_path: Path, monkeypatc
     clock_values = iter((0, 0, 1_000_000))
     monkeypatch.setattr(async_module.time, "monotonic_ns", lambda: next(clock_values))
     spec = _spec(timeout_us=1_000)
-    result = async_module.run_async_task_observer(spec, _invocation(spec).correlation, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "attempt", parent_environ={"TASK_TOKEN": "opaque-task-secret"})
+    result = async_module.run_async_task_observer(spec, _invocation(spec).correlation, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "attempt", parent_environ=runtime_identity_environment(tmp_path / "var", extra={"TASK_TOKEN": "opaque-task-secret"}))
     assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
     assert result.envelope is not None and result.envelope.completeness is ObservationCompleteness.TIMED_OUT
     assert process.killed
-    assert len(process.waits) == 2
+    assert len(process.waits) == 3
     assert process.waits[0] <= async_module._SUPERVISION_SLICE_SECONDS
-    assert process.waits[1] == async_module._PROCESS_REAP_TIMEOUT_SECONDS
+    assert all(
+        timeout is not None
+        and 0 <= timeout <= async_module._PROCESS_REAP_TIMEOUT_SECONDS
+        for timeout in process.waits[1:]
+    )
     assert not list((tmp_path / "attempt").glob("async-task-observer-*.json"))
     assert not list((tmp_path / "attempt").glob(".*async-task-observer-*.tmp"))
 
@@ -247,9 +257,14 @@ def test_async_task_parent_cancel_terminates_and_returns_inconclusive(tmp_path: 
         def wait(self, timeout: float | None = None) -> int:
             self.waits += 1
             self.wait_timeouts.append(timeout)
+            if self.terminated:
+                return -15
             if self.waits == 2:
                 (tmp_path / "attempt" / "cancel.requested").write_text("", encoding="ascii")
             raise subprocess.TimeoutExpired("async", timeout)
+
+        def poll(self) -> int | None:
+            return -15 if self.terminated else None
 
         def terminate(self) -> None:
             self.terminated = True
@@ -260,14 +275,18 @@ def test_async_task_parent_cancel_terminates_and_returns_inconclusive(tmp_path: 
     process = Process()
     monkeypatch.setattr(async_module.subprocess, "Popen", lambda *args, **kwargs: process)
     spec = _spec(timeout_us=1_000_000)
-    result = async_module.run_async_task_observer(spec, _invocation(spec).correlation, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "attempt", parent_environ={"TASK_TOKEN": "opaque-task-secret"})
+    result = async_module.run_async_task_observer(spec, _invocation(spec).correlation, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "attempt", parent_environ=runtime_identity_environment(tmp_path / "var", extra={"TASK_TOKEN": "opaque-task-secret"}))
     assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
     assert result.envelope is not None and "ASYNC_TASK_CANCELLED" in result.envelope.reason_codes
     assert process.terminated
     assert (tmp_path / "attempt" / "cancel.requested").is_file()
     assert process.waits >= 2
     assert process.wait_timeouts[0] <= async_module._SUPERVISION_SLICE_SECONDS
-    assert all(timeout == async_module._PROCESS_REAP_TIMEOUT_SECONDS for timeout in process.wait_timeouts[2:]), process.wait_timeouts
+    assert all(
+        timeout is not None
+        and 0 <= timeout <= async_module._PROCESS_REAP_TIMEOUT_SECONDS
+        for timeout in process.wait_timeouts[2:]
+    ), process.wait_timeouts
 
 
 def test_async_task_request_error_is_inconclusive(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -371,6 +390,9 @@ def test_async_task_parent_environment_and_process_failure_are_bounded(tmp_path:
     class FailedProcess:
         returncode = 7
 
+        def poll(self) -> int:
+            return self.returncode
+
         def wait(self, timeout: float | None = None) -> int:
             return self.returncode
 
@@ -381,7 +403,7 @@ def test_async_task_parent_environment_and_process_failure_are_bounded(tmp_path:
 
     monkeypatch.setattr(async_module.subprocess, "Popen", popen)
     spec = _spec()
-    result = async_module.run_async_task_observer(spec, _invocation(spec).correlation, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "attempt", parent_environ={"TASK_TOKEN": "opaque-task-secret", "OTHER_SECRET": "not-forwarded"})
+    result = async_module.run_async_task_observer(spec, _invocation(spec).correlation, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "attempt", parent_environ=runtime_identity_environment(tmp_path / "var", extra={"TASK_TOKEN": "opaque-task-secret", "OTHER_SECRET": "not-forwarded"}))
     assert result.outcome.status is ObserverOutcomeStatus.EXECUTION_ERROR
     assert result.envelope is None
     assert captured["env"]["TASK_TOKEN"] == "opaque-task-secret"
@@ -423,6 +445,9 @@ def test_async_task_corrupt_child_output_is_execution_error(tmp_path: Path, monk
     class Process:
         returncode = 0
 
+        def poll(self) -> int:
+            return self.returncode
+
         def wait(self, timeout: float | None = None) -> int:
             return 0
 
@@ -433,7 +458,7 @@ def test_async_task_corrupt_child_output_is_execution_error(tmp_path: Path, monk
 
     monkeypatch.setattr(async_module.subprocess, "Popen", popen)
     spec = _spec()
-    result = async_module.run_async_task_observer(spec, _invocation(spec).correlation, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "attempt", parent_environ={"TASK_TOKEN": "opaque-task-secret"})
+    result = async_module.run_async_task_observer(spec, _invocation(spec).correlation, ObservationPhase.EVENTUAL, attempt_dir=tmp_path / "attempt", parent_environ=runtime_identity_environment(tmp_path / "var", extra={"TASK_TOKEN": "opaque-task-secret"}))
     assert result.outcome.status is ObserverOutcomeStatus.EXECUTION_ERROR
     assert result.envelope is None
 

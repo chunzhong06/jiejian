@@ -35,7 +35,7 @@ from pydantic import (
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN
 from product.backend.core.recording import RecordingState, RecordingStateEvent
-from product.protocols.runner import WebTargetScope
+from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import REDACTED
 
@@ -71,7 +71,6 @@ class RecordingProtocolModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"]
 
 
 class RecordingRunnerResultType(StrEnum):
@@ -125,11 +124,21 @@ class RecordingBudget(RecordingProtocolModel):
 class RecordingSessionRef(RecordingProtocolModel):
     identity_id: str = Field(pattern=PROJECT_ID_PATTERN)
     session_ref: str = Field(pattern=_SESSION_REF)
+    secret_refs: tuple[str, ...] = Field(max_length=32)
     expires_at_us: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_secret_refs(self) -> RecordingSessionRef:
+        if len(set(self.secret_refs)) != len(self.secret_refs):
+            raise ValueError("recording secret references must be unique")
+        if any(re.fullmatch(r"env:[A-Z][A-Z0-9_]{0,127}", item) is None for item in self.secret_refs):
+            raise ValueError("recording secret reference is invalid")
+        return self
 
 
 # Worker 交给 Recording Runner 的冻结目标、身份引用、范围与预算。
 class RecordingRunnerRequest(RecordingProtocolModel):
+    schema_version: Literal["2"] = "2"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     created_at_us: int = Field(ge=0)
@@ -155,6 +164,18 @@ class RecordingRunnerRequest(RecordingProtocolModel):
         return self
 
 
+def required_recording_secret_names(request: RecordingRunnerRequest) -> tuple[str, ...]:
+    """返回当前录制明确引用的环境变量名，调用方只可按此集合解析值。"""
+
+    return tuple(
+        dict.fromkeys(
+            reference.removeprefix("env:")
+            for session in request.sessions
+            for reference in session.secret_refs
+        )
+    )
+
+
 class RecordingHeader(RecordingProtocolModel):
     name: str = Field(pattern=_HEADER_NAME)
     value: str = Field(max_length=8_192)
@@ -174,6 +195,7 @@ class RecordingHeader(RecordingProtocolModel):
 
 
 class RecordingEvent(RecordingProtocolModel):
+    schema_version: Literal["2"] = "2"
     sequence: int = Field(ge=1, le=RECORDING_EVENT_MAX_COUNT)
     occurred_at_us: int = Field(ge=0)
     kind: RecordingEventKind
@@ -252,6 +274,7 @@ class RecordingRunnerError(RecordingProtocolModel):
 
 # Recording Runner 的完成、取消、安全停止或失败结果；清理状态独立表达。
 class RecordingRunnerResult(RecordingProtocolModel):
+    schema_version: Literal["2"] = "2"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     finished_at_us: int = Field(ge=0)
@@ -421,6 +444,9 @@ def _parse_recording_json(
             object_pairs_hook=_unique_object,
             parse_constant=_reject_non_finite,
         )
+        expected_version = "2"
+        if not isinstance(parsed, dict) or parsed.get("schema_version") != expected_version:
+            raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制协议版本不受支持")
         _reject_known_secret_material(parsed, known_secrets)
         return model.model_validate_json(raw, strict=True)
     except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateKey, _NonFinite):
@@ -480,7 +506,8 @@ def _reject_known_secret_material(value: Any, known_secrets: Sequence[str]) -> N
 def _reject_inline_secret_material(value: Any) -> None:
     if isinstance(value, Mapping):
         for key, item in value.items():
-            if _SENSITIVE_KEY.search(str(key)):
+            # secret_refs 只保存已受模型约束的 env:NAME 引用，不是持久秘密值。
+            if str(key) != "secret_refs" and _SENSITIVE_KEY.search(str(key)):
                 raise ValueError("recording request contains persistent secret material")
             _reject_inline_secret_material(item)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):

@@ -14,7 +14,7 @@ from product.backend.infra.storage import StorageUnitOfWork
 
 pytestmark = pytest.mark.database
 
-SAMPLE_CONTRACT = Path("samples/http/fixed/contract.json").resolve()
+SAMPLE_CONTRACT = Path("samples/web/fixed/contract.json").resolve()
 
 
 def _contract_snapshot(contract_id: str, version: int = 1) -> dict:
@@ -32,7 +32,6 @@ def _output(requirement_id: str) -> str:
                 {
                     "requirement_ids": [requirement_id],
                     "suggestion": {
-                        "schema_version": "1",
                         "id": "llm-rule",
                         "kind": "FOREIGN_READ",
                         "required_observations": ["resource_state"],
@@ -49,7 +48,7 @@ def _register(client: TestClient, path: Path | None = None) -> str:
         "/api/projects",
         json={
             "schema_version": "1",
-            "profile_path": str((path or Path("samples/http/fixed/profile.json")).resolve()),
+            "profile_path": str((path or Path("samples/web/fixed/profile.json")).resolve()),
         },
     )
     assert response.status_code == 200
@@ -317,7 +316,7 @@ def test_contract_workbench_api_rejects_cross_project_requirement(tmp_path: Path
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app) as client:
         first_project = _register(client)
-        second_project = _register(client, Path("samples/http/vulnerable/profile.json"))
+        second_project = _register(client, Path("samples/web/vulnerable/profile.json"))
         requirement = client.post(
             f"/api/projects/{first_project}/contract-governance/requirements",
             json={

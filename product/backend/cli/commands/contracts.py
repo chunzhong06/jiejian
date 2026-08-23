@@ -10,7 +10,7 @@ from typing import Iterator
 import typer
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.verification.permissions import PermissionContract
+from product.backend.core.verification.permissions import PermissionContract, parse_permission_contract
 from product.backend.cli.bootstrap import application_scope
 from product.backend.cli.presentation import emit_json, fail
 
@@ -19,7 +19,7 @@ def contract_validate_command(path: Path) -> None:
     """离线校验独立 Contract Schema。"""
 
     try:
-        contract = PermissionContract.model_validate_json(path.read_bytes(), strict=True)
+        contract = parse_permission_contract(path.read_bytes())
         emit_json(
             {
                 "schema_version": "1",
@@ -51,7 +51,7 @@ def _workbench_emit(context: typer.Context, profile_path: Path, action) -> None:
 
 
 def contract_workspace_command(context: typer.Context, profile_path: Path) -> None:
-    """登记当前 ExecutionProfile，输出契约治理工作台快照。"""
+    """登记当前 WebExecutionProfile，输出契约治理工作台快照。"""
 
     _workbench_emit(
         context,
@@ -236,6 +236,6 @@ def contract_history_command(context: typer.Context, run_id: str) -> None:
 
 def _read_contract(path: Path) -> PermissionContract:
     try:
-        return PermissionContract.model_validate_json(path.read_bytes(), strict=True)
+        return parse_permission_contract(path.read_bytes())
     except (OSError, ValueError):
         raise JiejianError(ErrorCode.CONTRACT_REFERENCE_INVALID, "完整 PermissionContract 不可读取") from None

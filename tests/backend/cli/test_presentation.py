@@ -13,7 +13,7 @@ from product.backend.cli.presentation import configure_presentation, emit_guide_
 from product.backend.core.errors import ErrorCode, JiejianError
 
 
-PROFILE = Path(__file__).parents[3] / "samples" / "http" / "vulnerable" / "profile.json"
+PROFILE = Path(__file__).parents[3] / "samples" / "web" / "vulnerable" / "profile.json"
 
 
 def test_non_tty_auto_mode_keeps_project_result_as_json() -> None:
@@ -60,7 +60,7 @@ def test_human_error_is_separate_from_machine_error() -> None:
     assert human.stdout == ""
     machine_error = json.loads(machine.stderr)["error"]
     assert machine_error["code"] == "INPUT_FILE"
-    assert machine_error["message"] == "执行配置（ExecutionProfile）文件不可读取"
+    assert machine_error["message"] == "Web 执行配置（WebExecutionProfile）文件不可读取"
 
 
 def test_ci_forces_machine_mode_even_when_human_is_requested() -> None:

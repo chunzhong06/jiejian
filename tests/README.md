@@ -68,39 +68,37 @@ L5 是独立维度，不是“比 L4 更大”的测试集合，可以与任一�
 
 ## 常用命令
 
-命令只是执行手段，先根据验证合同选择实际模块和程度。Python 检查同时设置 `PYTHONDONTWRITEBYTECODE` 并使用 `python -B`：
+命令只是执行手段，先根据验证合同选择实际模块和程度。所有仓库 pytest 都经 `scripts/dev.ps1 test` 运行；脚本会固定解释器与完整运行身份，并自行设置 `-B`、禁用 cacheprovider、创建和精确清理唯一 basetemp。不要直接运行 `python -m pytest`，仅激活 `jiejian_env` 并不足以建立 Worker、Runner 和 Observer 所需的受控身份。
 
 L3 确实需要阶段中间 `essential` 门禁时：
 
 ```powershell
-$env:PYTHONDONTWRITEBYTECODE = '1'
-New-Item -ItemType Directory -Path var/test -Force | Out-Null
-python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-essential-local -m essential
+.\scripts\dev.ps1 test -CommandArguments @('-m', 'essential')
 ```
 
 L4 直接运行全量，不先运行上面的 `essential`：
 
 ```powershell
-$env:PYTHONDONTWRITEBYTECODE = '1'
-New-Item -ItemType Directory -Path var/test -Force | Out-Null
-python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-full-local
+.\scripts\dev.ps1 test
 ```
 
 L1～L3 优先把命令末尾替换为直接测试文件或对应模块目录，例如 `tests/backend/cli`、`tests/backend/workflows/recording`、`tests/protocols/test_example.py`。L4 仓库级全量还要运行：
 
 ```powershell
-pnpm --dir product/frontend test
-pnpm --dir product/frontend build
+.\scripts\dev.ps1 frontend-test
+.\scripts\dev.ps1 prepare -ForcePrepare
 ```
+
+前端测试、TypeScript 和 Vite 只允许在 `var/runtime/build/frontend-workspace` 中运行；不要从 `product/frontend` 直接调用 pnpm。`frontend-test` 接受 Vitest 参数，前端 production build 由受控 prepare 写入 `var/runtime/frontend`。
 
 只收集不执行时加 `--collect-only -q`。E2E 和 architecture 可分别运行：
 
 ```powershell
-python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-e2e-local tests/e2e
-python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-architecture-local tests/architecture
+.\scripts\dev.ps1 test tests/e2e
+.\scripts\dev.ps1 test tests/architecture
 ```
 
-每次使用 `var/test/` 下唯一的 `--basetemp`，完成后只清理这次创建的目录；`var/test` 整体都不属于产品事实。需要 `--lf`、`--ff` 或 `--stepwise` 时才临时启用 pytest cache。
+测试路径或测试节点直接追加在命令末尾；pytest 选项通过 `-CommandArguments` 数组传递。`dev.ps1` 负责 `var/test/` 下本次唯一 basetemp 的创建与精确清理；`var/test` 整体都不属于产品事实。需要 `--lf`、`--ff` 或 `--stepwise` 时才临时启用 pytest cache。
 
 ## fixture 规则
 
@@ -108,6 +106,7 @@ python -B -m pytest -p no:cacheprovider --basetemp var/test/pytest-architecture-
 - 某一层或某个能力专用的 fixture 放在最近的 `conftest.py`，例如 `backend/infra/runtime/` 和其 `jobs/` 子树。
 - 跨能力域复用的稳定构造器放在 `fixtures/`，不要从另一个 `test_*.py` 导入通用 Runner 或 Evidence 构造器。同一能力内只服务一个边界 harness 的辅助对象可以留在该边界测试旁，但不得形成循环依赖或进入根 `conftest.py`。
 - 只被一个文件使用的 fixture 留在该文件。没有多个真实消费者时不要上移到根。
+- 启动真实 Python 子进程的正向 fixture 使用 `{**os.environ, "本用例秘密": "值"}` 保留官方测试入口建立的完整身份；只有专门验证环境闸门拒绝行为的负向测试才传入缺失或伪造的环境。
 - 只有两个测试确实保护同一行为，或旧行为已经不存在，才允许删除、合并或参数化；目录变整齐不是删测试的理由。
 
 ## 新测试放在哪里

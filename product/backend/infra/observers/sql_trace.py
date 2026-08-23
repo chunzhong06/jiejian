@@ -18,12 +18,12 @@ from collections.abc import Sequence
 
 from product.backend.core.verification.permissions import (
     SecurityEffectKind,
-    canonical_sha256,
 )
 from product.backend.core.verification.sql_trace import (
     SqlStatementKind,
     SqlTraceAdvisory,
     SqlTraceEvent,
+    sql_trace_advisory_sha256,
 )
 
 
@@ -61,7 +61,7 @@ def build_sql_trace_advisory(
                 sequence=sequence,
                 statement_kind=kind,
                 relation_name=relation_match.group(1) if relation_match is not None else None,
-                normalized_statement_fingerprint=canonical_sha256(normalized),
+                normalized_statement_fingerprint=sql_trace_advisory_sha256(normalized),
             )
         )
     relations = tuple(sorted({item.relation_name for item in events if item.relation_name is not None}))
@@ -72,7 +72,6 @@ def build_sql_trace_advisory(
         effect_suggestions.append(SecurityEffectKind.STATE_MUTATION)
     observer_suggestions = ("read_only_database",) if relations else ()
     payload = {
-        "schema_version": "1",
         "events": tuple(events),
         "effect_suggestions": tuple(effect_suggestions),
         "contract_drift_subjects": relations,
@@ -81,7 +80,7 @@ def build_sql_trace_advisory(
     }
     return SqlTraceAdvisory(
         **payload,
-        trace_fingerprint=canonical_sha256(payload),
+        trace_fingerprint=sql_trace_advisory_sha256(payload),
     )
 
 

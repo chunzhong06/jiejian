@@ -24,7 +24,7 @@ from typing import Any
 
 from pydantic import Field, model_validator
 
-from product.backend.core.verification.permissions import BatchAuthorizationMode, BatchPermissionRule, BatchResourceExpectation, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionModel, PermissionRule, RelationFact, RelationType, canonical_sha256
+from product.backend.core.verification.permissions import BatchAuthorizationMode, BatchPermissionRule, BatchResourceExpectation, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionModel, PermissionRule, RelationFact, RelationType, permission_model_sha256
 
 
 class CoverageGapCode(StrEnum):
@@ -241,7 +241,7 @@ def _candidate_case(
         "batch_mode": batch_mode,
         "atomic": atomic,
     }
-    fingerprint = canonical_sha256(semantic)
+    fingerprint = permission_model_sha256(semantic)
     subjects = {item.subject_id: item for item in contract.subjects}
     resources = {item.resource_id: item for item in contract.resources}
     relation_index = {item.relation_id: item.relation for item in contract.relations}
@@ -254,7 +254,7 @@ def _candidate_case(
         }
         for resource_id in resource_ids
     )
-    finding_pre_identity = canonical_sha256(
+    finding_pre_identity = permission_model_sha256(
         {
             "subject_class": {
                 "roles": subject.roles,
@@ -550,7 +550,7 @@ def build_permission_coverage_plan(
     def sort_key(item: _Candidate) -> tuple[Any, ...]:
         return (
             -item.priority,
-            canonical_sha256({"seed": seed, "engine_version": engine_version, "candidate": item.case.fingerprint}),
+            permission_model_sha256({"seed": seed, "engine_version": engine_version, "candidate": item.case.fingerprint}),
             item.case.fingerprint,
             item.source_rule_ids,
         )
@@ -622,7 +622,7 @@ def build_permission_coverage_plan(
     gaps = sorted(gaps, key=lambda item: (item.rule_id, item.dimension.value if item.dimension else "", item.expectation.value if item.expectation else "", item.code.value, item.detail))
     eliminated = sorted(eliminated, key=lambda item: (item.candidate_fingerprint, item.reason.value, item.source_rule_ids))
     body = {
-        "contract_fingerprint": canonical_sha256(contract),
+        "contract_fingerprint": permission_model_sha256(contract),
         "seed": seed,
         "engine_version": engine_version,
         "case_budget": case_budget,
@@ -631,7 +631,7 @@ def build_permission_coverage_plan(
         "gaps": tuple(gaps),
         "eliminated": tuple(eliminated),
     }
-    plan_fingerprint = canonical_sha256(body)
+    plan_fingerprint = permission_model_sha256(body)
     return PermissionMutationPlan(
         plan_id=f"plan-{plan_fingerprint[:32]}",
         plan_fingerprint=plan_fingerprint,

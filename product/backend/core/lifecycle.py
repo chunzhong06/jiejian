@@ -24,11 +24,7 @@ class ContractStatus(StrEnum):
 
 class RunLifecycle(StrEnum):
     QUEUED = "QUEUED"
-    PREFLIGHT = "PREFLIGHT"
-    PLANNING = "PLANNING"
-    EXECUTING = "EXECUTING"
-    VERIFYING = "VERIFYING"
-    REPORTING = "REPORTING"
+    RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -70,5 +66,3 @@ class JobState(StrEnum):
 
 class DomainModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-    schema_version: Literal["1"] = "1"

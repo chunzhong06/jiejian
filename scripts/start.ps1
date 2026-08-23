@@ -3,16 +3,16 @@
 # Windows 一键启动编排
 #
 # 定位
-#   start.cmd 与界鉴 Python、Playwright、前端运行环境之间的首次准备和启动边界
+#   start.cmd 与当前仓库 editable 源码、受控依赖及本地控制面之间的一键启动边界
 #
 # 职责
-#   选择 Conda 或 uv｜执行迁移和环境诊断｜构建前端并启动本地控制面
+#   准备 Conda/uv/editable 源码｜按指纹构建前端｜诊断并启动本地控制面
 #
 # 边界
-#   只准备本地运行依赖与产品进程；失败必须保留稳定退出码并完成子进程清理。
+#   Wheel 不参与普通启动；全部运行产物只进入 var，失败保留稳定退出码并清理子进程。
 #
 # 调用链
-#   start.cmd / user shell → scripts/start.ps1 → package CLI / pnpm / Playwright
+#   start.cmd / user shell → scripts/start.ps1 → scripts/dev.ps1 prepare → editable package CLI
 # =============================================================================
 
 [CmdletBinding(PositionalBinding = $false)]
@@ -20,7 +20,6 @@ param(
     [string]$VarDir = "",
     [ValidateSet("Interactive", "Gui", "Cli", "Prepare")]
     [string]$Mode = "Interactive",
-    [switch]$PrepareOnly,
     [switch]$ForcePrepare,
     [Parameter(DontShow = $true)][switch]$DisplaySpinnerProcess,
     [Parameter(DontShow = $true)][string]$DisplaySpinnerStage = "startup",
@@ -29,7 +28,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:ModeExplicit = $PSBoundParameters.ContainsKey("Mode")
-$script:FinalMode = if ($PrepareOnly) { "Prepare" } else { $Mode }
+$script:FinalMode = $Mode
 $script:ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 if ([string]::IsNullOrWhiteSpace($VarDir)) {
     $VarDir = Join-Path $script:ProjectRoot "var"
@@ -41,6 +40,7 @@ $script:LogDir = Join-Path $script:VarDir "logs\startup"
 $script:StartupDir = Join-Path $script:VarDir "cache\startup"
 $script:StatePath = Join-Path $script:StartupDir "prepare-state.json"
 $script:LogPath = Join-Path $script:LogDir ("{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff"))
+$script:ToolchainPath = Join-Path $script:ProjectRoot "product\config\toolchain.json"
 $script:StartupLogInitialized = $false
 $script:FailureStage = "startup"
 $script:FailureCode = 0
@@ -78,6 +78,8 @@ $script:ChromiumExecutable = $null
 $script:PythonEnvironmentReport = $null
 $script:ServeReadyObserved = $false
 $script:CliEntryMode = "Shell"
+$script:PrepareLock = $null
+$script:FrontendDist = $null
 $script:PrepareState = [pscustomobject]@{
     schema_version = "1"
     phases = [pscustomobject]@{}
@@ -147,8 +149,8 @@ try {
 
 
 
-# 上下文变量初始化后再加载四个职责模块，确保 dot-source 只共享本轮启动状态。
-foreach ($module in @("presentation.ps1", "state.ps1", "runtime.ps1", "product.ps1")) {
+# 上下文变量初始化后再加载职责模块；源码准备由 dev.ps1 独占准备锁并返回可信回执。
+foreach ($module in @("presentation.ps1", "runtime.ps1", "source.ps1", "product.ps1")) {
     . (Join-Path $PSScriptRoot "startup\$module")
 }
 
@@ -158,13 +160,9 @@ if ($DisplaySpinnerProcess) {
 }
 
 try {
-    if ($PrepareOnly -and $script:ModeExplicit -and $Mode -ne "Prepare") {
-        Fail-Start 40 "arguments" "-PrepareOnly 只能与 -Mode Prepare 组合" "使用 -Mode Prepare 或移除 -PrepareOnly"
-    }
     if ($script:FinalMode -eq "Interactive" -and -not $script:DisplayInteractive) {
         Fail-Start 40 "mode" "Interactive 模式需要可交互的输入和输出；请显式使用 -Mode Gui、-Mode Cli 或 -Mode Prepare" "使用 -Mode Gui、-Mode Cli 或 -Mode Prepare"
     }
-    # --- 启动环节：检查运行环境 ---
     Set-Location -LiteralPath $script:ProjectRoot
     Write-Banner
     $env:PYTHONDONTWRITEBYTECODE = "1"
@@ -173,69 +171,45 @@ try {
     Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
     $env:PYTHONUTF8 = "1"
     $env:PYTHONIOENCODING = "utf-8"
-    $env:PLAYWRIGHT_BROWSERS_PATH = [IO.Path]::GetFullPath((Join-Path $script:VarDir "runtime\playwright"))
     Start-DisplayStage 1 "检查运行环境"
-    Write-Stage "preflight" "检查 Node.js 与 pnpm"
-    New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null
-    Load-PrepareState
-    Test-NodeAndPnpm
-    $env:JIEJIAN_NODE_EXECUTABLE = $script:NodeExecutable
-    $env:JIEJIAN_NODE_VERSION = $script:NodeVersion
-    $env:JIEJIAN_PNPM_EXECUTABLE = $script:PnpmExecutable
-    $env:JIEJIAN_PNPM_VERSION = $script:PnpmVersion
-    Write-DisplayResult "Node.js" "完成" $false $script:NodeRuntimeDetail
-    Write-DisplayResult "pnpm" "完成" $false $script:PnpmRuntimeDetail
+    Write-Stage "source-prepare" "准备当前仓库的受控源码运行环境"
+    Prepare-SourceRuntime
+    $frontendStatus = if ($script:FrontendBuildDetail -eq "reused") { "指纹命中，已复用" } else { "指纹变化，已构建" }
+    Write-DisplayResult "固定工具链" "完成" $false ("uv {0}" -f $script:UvVersion)
+    Write-DisplayResult "源码环境" "完成" $false "Conda jiejian_env · editable 当前仓库"
+    Write-DisplayResult "前端资源" "完成" $false $frontendStatus
     Write-DisplayResult "PowerShell" "完成" $true $PSVersionTable.PSVersion.ToString()
-    Write-Startup "项目根: $script:ProjectRoot`n运行目录: $script:VarDir`n模式: $script:FinalMode`n日志: $script:LogPath`nNode=$script:NodeVersion pnpm=$script:PnpmVersion"
+    Write-Startup "项目根: $script:ProjectRoot`n运行目录: $script:VarDir`n模式: source/$script:FinalMode`n日志: $script:LogPath`nuv=$script:UvVersion`n前端=$script:FrontendBuildDetail"
     Complete-DisplayStage "完成"
-    # --- 启动环节：准备 Python ---
+
     Start-DisplayStage 2 "准备 Python"
-    Write-Stage "python" "选择并准备 Python 环境"
-    $pythonFingerprint = Prepare-PythonDependencies
-    $criticalFacts = @{
-        powershell = $PSVersionTable.PSVersion.ToString()
-        python = $script:PythonVersion
-        node = $script:NodeVersion
-        pnpm = $script:PnpmVersion
-        environment_type = $script:PythonEnvironmentType
-        environment_path = $script:PythonEnvironmentPath
-        conda_version = $script:CondaVersion
-        uv_version = $script:UvVersion
-    }
-    $criticalFingerprint = Get-StageFingerprint @() $criticalFacts
-    if (Test-PhaseHit "critical_runtime" $criticalFingerprint) {
-        Write-Startup "[critical_runtime] 跳过：运行时身份指纹命中"
-    } else {
-        Set-PhaseState "critical_runtime" $criticalFingerprint $criticalFacts
-    }
+    Write-Stage "python" "确认 Conda、uv.lock 与 editable 当前源码"
     Write-PythonEnvironment
     Write-DisplayResult "Python" "完成" $false $script:PythonVersion
     Write-DisplayResult "Python 依赖" "完成" $false $script:PythonDependenciesDetail
     Write-DisplayResult "运行环境" "完成" $true ("{0} · {1}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath)
     Complete-DisplayStage
     Start-DisplayStage 3 "准备浏览器"
-    Write-Stage "playwright" "安装或校验 Chromium"
-    Prepare-Playwright $pythonFingerprint
-    $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE = $script:ChromiumExecutable
+    Write-Stage "playwright" "确认受控 Playwright Chromium"
     Write-DisplayResult "Chromium" "完成" $true $script:ChromiumDetail
     Complete-DisplayStage
     Write-RuntimeSummary
-    # --- 启动环节：准备数据 ---
+
     Start-DisplayStage 4 "准备数据"
     Write-Stage "doctor" "运行环境诊断"
-    Invoke-Package @("--var-dir", $script:VarDir, "doctor", "--json") "doctor" 42
+    Set-Location -LiteralPath $script:ProjectRoot
+    Invoke-Package @("--var-dir", $script:VarDir, "--json", "doctor") "doctor" 42
     Write-DisplayResult "环境诊断" "完成" $false
-    Write-Stage "migration" "升级 VarDir 数据库"
-    Prepare-Migration
-    Write-DisplayResult "本地数据" "完成" $true $script:MigrationDetail
+    Write-DisplayResult "本地数据" "完成" $true "已迁移并校验"
     Complete-DisplayStage
+
     Start-DisplayStage 5 "准备界面"
-    Write-Stage "frontend" "按指纹安装并构建前端"
-    Prepare-Frontend
-    $env:JIEJIAN_FRONTEND_DEPENDENCIES = $script:FrontendDependenciesDetail
-    Write-DisplayResult "前端依赖" "完成" $false $script:FrontendDependenciesDetail
-    Write-DisplayResult "前端构建" "完成" $true $script:FrontendBuildDetail
+    Write-Stage "frontend" "确认 var/runtime/frontend 源码构建"
+    Confirm-SourceFrontend
+    Write-DisplayResult "前端资源" "完成" $false $script:FrontendDist
+    Write-DisplayResult "构建状态" "完成" $true $frontendStatus
     Complete-DisplayStage "完成"
+
     Start-DisplayStage 6 "启动界鉴"
     if ($script:FinalMode -eq "Interactive") {
         $script:FinalMode = Select-StartupMode
@@ -260,12 +234,12 @@ try {
         Complete-DisplayStage
         exit 0
     }
-    # --- 启动环节：把控制权交给正式 serve 入口 ---
+    # --- 启动环节：把控制权交给当前仓库的统一 serve 入口 ---
     Write-Stage "serve" "启动本地控制面"
     Invoke-Package @(
         "--var-dir", $script:VarDir,
         "serve", "--open",
-        "--frontend-dir", (Join-Path $script:ProjectRoot "product\frontend\dist")
+        "--frontend-dir", $script:FrontendDist
     ) "serve" 50
     Write-DisplayResult "本地服务" "已停止" $true
     Complete-DisplayStage

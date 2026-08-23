@@ -9,7 +9,7 @@ from product.backend.api import create_app
 
 def test_project_register_uses_profile_without_governed_binding(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
-    profile_path = Path("samples/http/fixed/profile.json").resolve()
+    profile_path = Path("samples/web/fixed/profile.json").resolve()
     with TestClient(app) as client:
         response = client.post(
             "/api/projects",

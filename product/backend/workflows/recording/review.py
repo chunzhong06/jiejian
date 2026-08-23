@@ -25,9 +25,9 @@ from pydantic import ValidationError
 from product.protocols.recording_flow import Flow, FlowStep, FlowVariableSource
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.flow_draft import ConfirmFlowDraftVariable, DeleteFlowDraftStep, FlowDraftReviewCommand, FlowDraftStep, FlowDraft, FlowDraftVariableSource, FlowDraftVariableStatus, FlowDraftVariable, MergeFlowDraftSteps, RenameFlowDraftStep
-from product.protocols.execution_profile import ExecutionProfile
-from product.protocols.http import CASE_SUBJECT_IDENTITY, EmptyBody, HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind, HttpRequestTemplate, HttpWorkflowBinding, HttpWorkflowStep, JsonBody, ResponseExtractor, ResponseExtractorKind, ValueSlot, ValueSlotConsumer, ValueSlotSource, WorkflowStepPurpose
-from product.protocols.runner import WebTargetDefinition
+from product.protocols.web.profile import WebExecutionProfile
+from product.protocols.web.target import WebTargetDefinition
+from product.protocols.web.workflow import CASE_SUBJECT_IDENTITY, EmptyBody, HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind, HttpRequestTemplate, HttpWorkflowBinding, HttpWorkflowStep, JsonBody, ResponseExtractor, ResponseExtractorKind, ValueSlot, ValueSlotConsumer, ValueSlotSource, WorkflowStepPurpose
 
 _SENSITIVE_FIELD = re.compile(
     r"(?:authorization|cookie|credential|password|passwd|secret|token|api[_-]?key)",
@@ -98,7 +98,6 @@ class FlowDraftReviewer:
                 placeholder = "{" + variable.name + "}"
                 sources_by_consumer.setdefault(consumer, []).append(
                     FlowVariableSource(
-                        schema_version="3",
                         name=variable.name,
                         source_step_id=source.source_step_id,
                         source_event_sequence=source.source_event_sequence,
@@ -156,7 +155,6 @@ class FlowDraftReviewer:
                     response_extractors=tuple(sorted(extractors_by_producer.get(step.id, ()), key=lambda item: item.extractor_id)),
                 )
                 steps.append(FlowStep(
-                    schema_version="3",
                     id=step.id,
                     name=step.name,
                     identity_id=step.identity_id,
@@ -170,7 +168,7 @@ class FlowDraftReviewer:
                     sensitive_fields=step.sensitive_fields,
                 ))
             return Flow(
-                schema_version="3",
+                schema_version="4",
                 id=draft.flow_id,
                 steps=tuple(steps),
                 owner_observer_path=draft.owner_observer_path,
@@ -455,7 +453,7 @@ class FlowDraftReviewer:
 
 def compile_flow_bindings(
     flow: Flow,
-    profile: ExecutionProfile,
+    profile: WebExecutionProfile,
 ) -> tuple[WebTargetDefinition, tuple[HttpWorkflowBinding, ...]]:
     """把已确认 Flow 投影为当前 Profile 可接受的 Web 执行绑定。"""
 

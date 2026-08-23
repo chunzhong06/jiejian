@@ -93,7 +93,7 @@ class FindingOccurrenceRow(Base):
 #   幂等写入 Finding｜按 Run 读取 Occurrence｜提供状态转换所需历史
 #
 # 调用链
-#   FindingProjection → FindingRepository → SQLAlchemy rows
+#   FindingMaterializer / FindingQueries → FindingRepository → SQLAlchemy rows
 # =============================================================================
 
 from collections.abc import Sequence
@@ -200,11 +200,17 @@ class FindingRepository:
         return None if row is None else _occurrence_record(row)
 
     def latest_occurrence(self, finding_id: str) -> FindingOccurrenceRecord | None:
+        """按 ResultFinalizer 的完成时间、Run ID 顺序返回最近一次 Occurrence。"""
+
         row = _scalar(
             self._session,
             select(FindingOccurrenceRow)
             .where(FindingOccurrenceRow.finding_id == finding_id)
-            .order_by(FindingOccurrenceRow.created_at_us.desc(), FindingOccurrenceRow.occurrence_id.desc())
+            .order_by(
+                FindingOccurrenceRow.created_at_us.desc(),
+                FindingOccurrenceRow.run_id.desc(),
+                FindingOccurrenceRow.occurrence_id.desc(),
+            )
             .limit(1),
         )
         return None if row is None else _occurrence_record(row)

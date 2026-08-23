@@ -11,7 +11,7 @@ def test_workbench_service_derivation_is_atomic_and_idempotent(tmp_path: Path) -
     app = create_app(tmp_path / "var", start_worker=False)
     with TestClient(app):
         context = app.state.context
-        project, _ = context.projects.register(Path("samples/http/fixed/profile.json").resolve())
+        project, _ = context.projects.register(Path("samples/web/fixed/profile.json").resolve())
         malformed = context.contract_workbench.create_requirement(
             project.project_id,
             text="uncovered natural language",

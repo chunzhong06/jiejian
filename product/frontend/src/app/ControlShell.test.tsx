@@ -5,14 +5,15 @@ import ControlShell from './ControlShell'
 const mockApi = vi.hoisted(() => ({
   projects: vi.fn().mockResolvedValue([]), runs: vi.fn().mockResolvedValue([]), run: vi.fn(),
   llmProfiles: vi.fn().mockResolvedValue([]), systemStatus: vi.fn().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }), shutdown: vi.fn().mockResolvedValue({ status: 'stopping' }),
+  cacheStatus: vi.fn().mockResolvedValue({ schema_version: '1', entries: {}, protected: { data: 'var/data', data_unchanged: true, current_runtime_unchanged_by_cache: true } }),
+  cacheOperation: vi.fn(),
   profiles: vi.fn().mockResolvedValue([]), contract: vi.fn(), summary: vi.fn().mockResolvedValue({ schema_version: '1', workflows: [], effect_bindings: [] }), submit: vi.fn(), cancel: vi.fn().mockResolvedValue({}), findings: vi.fn().mockResolvedValue([]), evidence: vi.fn().mockResolvedValue([]), evidenceDetail: vi.fn().mockResolvedValue({}), reports: vi.fn().mockResolvedValue([]), report: vi.fn().mockResolvedValue({}), contracts: vi.fn().mockResolvedValue([]), contractGovernance: vi.fn().mockResolvedValue({ project: {}, requirements: [], candidates: [], versions: [], llm_available: false }),
 }))
 
 vi.mock('../api/projects', () => ({ projectsApi: { projects: mockApi.projects } }))
 vi.mock('../api/runs', () => ({ runsApi: { runs: mockApi.runs, run: mockApi.run, cancel: mockApi.cancel, createRun: vi.fn() } }))
 vi.mock('../api/llm', () => ({ llmApi: { profiles: mockApi.llmProfiles } }))
-vi.mock('../api/system', () => ({ systemApi: { status: mockApi.systemStatus, shutdown: mockApi.shutdown } }))
-vi.mock('../api/onboarding', () => ({ onboardingApi: { demoStatus: vi.fn().mockResolvedValue({}), } }))
+vi.mock('../api/system', () => ({ systemApi: { status: mockApi.systemStatus, cacheStatus: mockApi.cacheStatus, cacheOperation: mockApi.cacheOperation, shutdown: mockApi.shutdown } }))
 vi.mock('../api/executionProfiles', () => ({ executionProfilesApi: { profiles: mockApi.profiles, contract: mockApi.contract, summary: mockApi.summary, submit: mockApi.submit, register: vi.fn() } }))
 vi.mock('../api/contracts', () => ({ contractsApi: { contracts: mockApi.contracts, contractGovernance: mockApi.contractGovernance } }))
 vi.mock('../api/results', () => ({ resultsApi: { findings: mockApi.findings, evidence: mockApi.evidence, evidenceDetail: mockApi.evidenceDetail, reports: mockApi.reports, report: mockApi.report, reportFormat: (runId: string, reportId: string, format: string) => `/api/runs/${runId}/reports/${reportId}/formats/${format}` } }))
@@ -38,13 +39,6 @@ describe('应用壳', () => {
     fireEvent.click(screen.getByRole('button', { name: '安全退出' }))
     await waitFor(() => expect(mockApi.shutdown).toHaveBeenCalledOnce())
     expect(await screen.findByText('界鉴正在安全退出')).toBeInTheDocument()
-  })
-
-  it('旧报告路径重定向到检查结果并保留无应用提示', async () => {
-    window.location.hash = '#/report'
-    render(<ControlShell />)
-    expect(await screen.findByText('先选择要检查的应用')).toBeInTheDocument()
-    await waitFor(() => expect(window.location.hash).toBe('#/checks/results?view=report'))
   })
 
   it('工作台菜单项可从其他路由点击返回', async () => {
@@ -75,7 +69,7 @@ describe('应用壳', () => {
         node: { version: '24.13.0', executable: 'D:\\runtime\\node.exe' },
         pnpm: { version: '11.21.0', executable: 'D:\\runtime\\pnpm.cmd' },
         playwright: { package_version: '1.58.0', chromium_executable: 'D:\\runtime\\chromium.exe' },
-        frontend_dependencies: '已验证并复用',
+        frontend: { mode: 'prebuilt', dependencies: '已验证并复用' },
       },
     })
     window.location.hash = '#/advanced/system'
@@ -95,7 +89,7 @@ describe('应用壳', () => {
 
   it('串起执行配置、矩阵、已发布结果、证据、报告和历史入口', async () => {
     const contract = { subjects: [{ subject_id: 'member', roles: ['reader'] }], resources: [{ resource_id: 'document', resource_type: '文档' }], relations: [{ relation_id: 'owns-document', relation: '拥有', source: { endpoint_type: 'subject', endpoint_id: 'member' }, target: { endpoint_type: 'resource', endpoint_id: 'document' } }], rules: [{ rule_id: 'read-document', subject_id: 'member', action_id: 'read', resource_id: 'document', expectation: 'DENY', severity: 'high' }], batch_rules: [] }
-    const run = { run_id: 'run-current', created_at_us: 3, execution_schema_version: '2', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', case_progress: { completed: 1, total: 1 }, observer_health: { schema_version: '1', required_observations: ['resource_state'], resource_state: { configured: true, required: true } } }
+    const run = { run_id: 'run-current', created_at_us: 3, execution_schema_version: '4', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', case_progress: { completed: 1, total: 1 }, observer_health: { required_observations: ['resource_state'], resource_state: { configured: true, required: true } } }
     mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
     mockApi.runs.mockResolvedValue([run, { run_id: 'run-history', created_at_us: 1, lifecycle: 'COMPLETED', result_integrity: 'VERIFIED' }])
     mockApi.run.mockResolvedValue(run)

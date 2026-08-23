@@ -61,7 +61,7 @@ class RecoveryReasonCode(StrEnum):
 
 
 class WorkerControlModel(BaseModel):
-    """Job 控制 对外 DTO 的共同严格边界。"""
+    """Job 控制内部 DTO 的共同严格边界。"""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -69,8 +69,6 @@ class WorkerControlModel(BaseModel):
         strict=True,
         hide_input_in_errors=True,
     )
-
-    schema_version: Literal["1"] = "1"
 
 
 class RetryPolicy(WorkerControlModel):

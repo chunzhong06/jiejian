@@ -35,7 +35,7 @@ from product.backend.infra.storage import (
 from product.backend.infra.storage.db import _migration_resource_root
 from product.backend.infra.storage import Base, EvidenceIndexRow, JobRow, ProjectRow, RunRow
 
-PROJECT_ID = "stage21-project"
+PROJECT_ID = "storage-project"
 RUN_ID = "run_" + "1" * 32
 JOB_ID = "job_" + "2" * 32
 SHA256 = "a" * 64
@@ -47,7 +47,7 @@ NOW_US = 1_780_000_000_000_000
 def migrated_storage(
     tmp_path: Path,
 ) -> Iterator[tuple[Path, Engine, sessionmaker[Session]]]:
-    database_path = tmp_path / "stage21.db"
+    database_path = tmp_path / "storage.db"
     upgrade_database(database_path)
     engine = create_sqlite_engine(database_path)
     yield database_path, engine, create_session_factory(engine)
@@ -57,7 +57,7 @@ def migrated_storage(
 def _project(**changes: Any) -> ProjectRecord:
     values = {
         "project_id": PROJECT_ID,
-        "name": "阶段 2.1 项目",
+        "name": "存储项目",
         "status": ProjectStatus.READY,
         "created_at_us": NOW_US,
         "updated_at_us": NOW_US + 1,
@@ -88,7 +88,7 @@ def _job(**changes: Any) -> JobRecord:
         "run_id": RUN_ID,
         "operation_type": "ACTIVE_RUN",
         "state": JobState.SUCCEEDED,
-        "idempotency_key": "stage21-request",
+        "idempotency_key": "storage-request",
         "request_hash": "b" * 64,
         "attempt": 1,
         "max_attempts": 3,
@@ -187,6 +187,7 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
             "recordings",
             "requirements",
             "runs",
+            "run_finalizations",
         }
         with engine.connect() as connection:
             assert connection.execute(
@@ -389,7 +390,7 @@ def test_committed_records_survive_engine_restart_with_exact_values(
             assert work.jobs.get_by_idempotency(
                 PROJECT_ID,
                 "ACTIVE_RUN",
-                "stage21-request",
+                "storage-request",
             ) == expected_job
             assert work.job_events.list_for_job(JOB_ID) == (expected_event,)
             assert work.evidence.list_for_run(RUN_ID) == (expected_evidence,)
@@ -463,7 +464,7 @@ def test_idempotency_scope_is_unique_and_constraint_error_is_stable(
     assert captured.value.code == ErrorCode.STORAGE_CONSTRAINT.value
     assert captured.value.to_dict()["message"] == "数据库约束拒绝写入"
     serialized_error = str(captured.value) + repr(captured.value.to_dict())
-    assert "stage21-request" not in serialized_error
+    assert "storage-request" not in serialized_error
     assert "INSERT" not in serialized_error
     assert ".db" not in serialized_error
     with StorageUnitOfWork(factory) as reader:
@@ -523,7 +524,7 @@ def test_job_database_checks_reject_invalid_protocol_fields(
         (RunLifecycle.COMPLETED, None),
         (RunLifecycle.FAILED, RunVerdict.INCONCLUSIVE),
         (RunLifecycle.CANCELLED, RunVerdict.PASS),
-        (RunLifecycle.EXECUTING, RunVerdict.BLOCK),
+        (RunLifecycle.RUNNING, RunVerdict.BLOCK),
     ],
 )
 def test_run_lifecycle_and_verdict_invalid_combinations_are_rejected(
@@ -669,7 +670,7 @@ def test_known_secret_and_evidence_body_never_enter_database(
     migrated_storage: tuple[Path, Engine, sessionmaker[Session]],
 ) -> None:
     path, engine, factory = migrated_storage
-    sentinel = "stage21-real-secret-sentinel"
+    sentinel = "storage-real-secret-sentinel"
     with pytest.raises(JiejianError) as captured:
         with StorageUnitOfWork(factory, known_secrets=("", sentinel)) as work:
             work.projects.add(_project(name=f"prefix-{sentinel}-suffix"))
@@ -711,7 +712,7 @@ def test_known_secret_and_evidence_body_never_enter_database(
 
 
 def test_default_database_path_and_uow_public_boundary(tmp_path: Path) -> None:
-    assert default_database_path(tmp_path) == tmp_path / "jiejian.db"
+    assert default_database_path(tmp_path) == tmp_path / "data" / "jiejian.db"
     engine = create_sqlite_engine(tmp_path / "boundary.db")
     try:
         work = StorageUnitOfWork(create_session_factory(engine))
@@ -726,7 +727,7 @@ def test_default_database_path_and_uow_public_boundary(tmp_path: Path) -> None:
 def test_database_initialization_errors_are_stable_and_hide_paths(
     tmp_path: Path,
 ) -> None:
-    sentinel = "stage21-path-secret-sentinel"
+    sentinel = "storage-path-secret-sentinel"
     blocking_file = tmp_path / sentinel
     blocking_file.write_text("not a directory", encoding="utf-8")
 

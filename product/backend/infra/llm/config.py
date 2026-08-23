@@ -48,8 +48,6 @@ class LLMConfigModel(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["1"] = "1"
-
 
 class LLMProfileConfig(LLMConfigModel):
     """只包含非秘密持久化字段的 LLM profile。"""

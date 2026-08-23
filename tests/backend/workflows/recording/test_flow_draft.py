@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 def recorded_events() -> tuple[RecordingEvent, ...]:
     common = {
-        "schema_version": "1",
+        "schema_version": "2",
         "identity_id": "owner",
         "page_id": "page_000001",
         "frame_id": "frame_000001",
@@ -74,12 +74,10 @@ def recorded_events() -> tuple[RecordingEvent, ...]:
             resource_type="fetch",
             headers=(
                 RecordingHeader(
-                    schema_version="1",
                     name="authorization",
                     value="[REDACTED]",
                 ),
                 RecordingHeader(
-                    schema_version="1",
                     name="content-type",
                     value="application/json",
                 ),
@@ -96,7 +94,6 @@ def recorded_events() -> tuple[RecordingEvent, ...]:
             status_code=201,
             headers=(
                 RecordingHeader(
-                    schema_version="1",
                     name="location",
                     value="/resources/resource-42",
                 ),
@@ -309,7 +306,6 @@ def test_processor_preserves_dynamic_project_id_across_create_get_and_approval()
         update={
             "headers": (
                 RecordingHeader(
-                    schema_version="1",
                     name="location",
                     value=f"/projects/{project_id}/resources/resource-42",
                 ),

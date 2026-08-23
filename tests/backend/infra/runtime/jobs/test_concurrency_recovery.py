@@ -365,7 +365,7 @@ def test_known_secret_as_owner_is_rejected_without_owner_echo(
     worker_services: Any,
 ) -> None:
     submitted = worker_services.queue.submit(worker_services.submit_request())
-    sentinel = "stage22-owner-secret"
+    sentinel = "job-owner-secret"
     with pytest.raises(JiejianError) as captured:
         worker_services.attempts.claim(
             ClaimJob(

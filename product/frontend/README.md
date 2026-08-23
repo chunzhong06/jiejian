@@ -31,15 +31,16 @@
 
 ## 开发与验证
 
-在 `product/frontend` 目录运行：
+前端测试统一从仓库根运行：
 
 ```powershell
-pnpm dev
-pnpm test
-pnpm build
+.\scripts\dev.ps1 frontend-test
+.\scripts\dev.ps1 frontend-test src/features/checks/StartCheckPage.test.tsx --reporter=verbose
 ```
 
-pnpm 的内容寻址 store 位于项目根 `var/cache/pnpm-store`；不要从前端目录传入相对 `--store-dir`。已安装依赖继续使用 `product/frontend/node_modules` 与其默认 `.pnpm` 虚拟依赖目录，保证 TypeScript 和 Vite 按标准祖先链解析类型；删除该目录后由启动器自动识别并重建。
+`scripts/dev.ps1 frontend-test` 与源码启动共用 `var/runtime/build/frontend-workspace`：同一份前端源码输入集合在排除 `node_modules`、`dist`、`*.tsbuildinfo` 等明确生成物后，同时形成构建指纹和工作区镜像。pnpm 安装视图与 TypeScript 增量文件只留在该工作区，内容寻址 store 位于 `var/cache/pnpm-store`，Vite 缓存位于 `var/cache/vite`，最终网页只进入 `var/runtime/frontend`。不要在 `product/frontend` 直接执行 pnpm install、test 或 build；该目录始终只保留 Git 管理的源码与配置。
+
+生产构建由 `start.cmd` 或 `scripts/dev.ps1 prepare` 按指纹执行。可选 Wheel 使用 `scripts/dev.ps1 package`，直接把 `var/runtime/frontend` 映射为包内 `product/frontend/dist`，不会回写源码目录。
 
 组件测试与源码放在一起，文件名使用 `*.test.tsx` 或 `*.test.ts`。涉及真实路由、下拉交互、浏览器或完整产品闭环时，再补后端 `tests/e2e/` 测试。
 

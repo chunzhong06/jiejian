@@ -3,12 +3,6 @@
     "ActionDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "action_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Action Id",
@@ -50,12 +44,6 @@
     "AsyncTaskApiLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "ASYNC_TASK_STATUS",
           "default": "ASYNC_TASK_STATUS",
@@ -105,12 +93,6 @@
     "AsyncTaskPollBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "max_polls": {
           "maximum": 256,
           "minimum": 1,
@@ -148,12 +130,6 @@
     "AuditLogScanBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "max_files": {
           "maximum": 64,
           "minimum": 1,
@@ -183,14 +159,8 @@
     },
     "AuthTargetScope": {
       "additionalProperties": false,
-      "description": "身份端点的独立授权范围；不能借用业务目标的 origin 或预算。",
+      "description": "身份端点的独立授权范围；不能借用业务目标预算。",
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "base_url": {
           "maxLength": 2048,
           "minLength": 1,
@@ -269,12 +239,6 @@
     "AzureBlobObjectLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "AZURE_BLOB_OBJECT",
           "default": "AZURE_BLOB_OBJECT",
@@ -341,12 +305,6 @@
     "AzureQueuePeekLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "AZURE_QUEUE_PEEK",
           "default": "AZURE_QUEUE_PEEK",
@@ -414,12 +372,6 @@
     "BaselineProjection": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "projection_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Projection Id",
@@ -484,12 +436,6 @@
     "BatchPermissionRule": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "rule_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Rule Id",
@@ -566,12 +512,6 @@
     "BatchResourceExpectation": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "resource_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Resource Id",
@@ -600,12 +540,6 @@
     "BearerIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "BEARER",
           "default": "BEARER",
@@ -627,12 +561,6 @@
     "BlobObjectScanBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "page_size": {
           "maximum": 5000,
           "minimum": 1,
@@ -698,12 +626,6 @@
     "CookieSessionIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "COOKIE_SESSION",
           "default": "COOKIE_SESSION",
@@ -751,12 +673,6 @@
     "CoverageGap": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "rule_id": {
           "title": "Rule Id",
           "type": "string"
@@ -816,12 +732,6 @@
     "CoverageRecord": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "rule_id": {
           "title": "Rule Id",
           "type": "string"
@@ -888,12 +798,6 @@
     "DifferentialExperimentPlan": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "differential_plan_id": {
           "pattern": "^dplan-[0-9a-f]{32}$",
           "title": "Differential Plan Id",
@@ -938,13 +842,8 @@
     },
     "EffectBinding": {
       "additionalProperties": false,
+      "description": "把安全效果绑定到权威通道与可选佐证通道。",
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "effect_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Effect Id",
@@ -999,12 +898,6 @@
     "EliminatedCandidate": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "candidate_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Candidate Fingerprint",
@@ -1042,12 +935,6 @@
     "EmptyBody": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "EMPTY",
           "default": "EMPTY",
@@ -1061,12 +948,6 @@
     "ExecutionBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "max_requests": {
           "maximum": 500,
           "minimum": 1,
@@ -1114,227 +995,9 @@
       "title": "ExecutionBudget",
       "type": "object"
     },
-    "ExecutionIdentity": {
-      "additionalProperties": false,
-      "description": "执行配置中的身份，只保存非秘密环境引用。",
-      "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "identity_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Identity Id",
-          "type": "string"
-        },
-        "role": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Role",
-          "type": "string"
-        },
-        "label": {
-          "anyOf": [
-            {
-              "maxLength": 128,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Label"
-        },
-        "binding": {
-          "discriminator": {
-            "mapping": {
-              "BEARER": "#/$defs/BearerIdentityBinding",
-              "COOKIE_SESSION": "#/$defs/CookieSessionIdentityBinding",
-              "LOGIN_WORKFLOW": "#/$defs/LoginWorkflowIdentityBinding",
-              "OAUTH2_CLIENT_CREDENTIALS": "#/$defs/OAuth2ClientCredentialsIdentityBinding",
-              "OAUTH2_REFRESH_TOKEN": "#/$defs/OAuth2RefreshTokenIdentityBinding",
-              "STATIC_HEADERS": "#/$defs/StaticHeadersIdentityBinding"
-            },
-            "propertyName": "kind"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/BearerIdentityBinding"
-            },
-            {
-              "$ref": "#/$defs/StaticHeadersIdentityBinding"
-            },
-            {
-              "$ref": "#/$defs/CookieSessionIdentityBinding"
-            },
-            {
-              "$ref": "#/$defs/LoginWorkflowIdentityBinding"
-            },
-            {
-              "$ref": "#/$defs/OAuth2ClientCredentialsIdentityBinding"
-            },
-            {
-              "$ref": "#/$defs/OAuth2RefreshTokenIdentityBinding"
-            }
-          ],
-          "title": "Binding"
-        },
-        "bootstrap_requests": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/IdentityBootstrapRequest"
-          },
-          "maxItems": 32,
-          "title": "Bootstrap Requests",
-          "type": "array"
-        }
-      },
-      "required": [
-        "identity_id",
-        "role",
-        "binding"
-      ],
-      "title": "ExecutionIdentity",
-      "type": "object"
-    },
-    "ExecutionProjectSnapshot": {
-      "additionalProperties": false,
-      "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "project_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Project Id",
-          "type": "string"
-        },
-        "project_name": {
-          "maxLength": 128,
-          "minLength": 1,
-          "title": "Project Name",
-          "type": "string"
-        },
-        "target_type": {
-          "$ref": "#/$defs/TargetType",
-          "default": "WEB"
-        },
-        "target": {
-          "$ref": "#/$defs/WebTargetDefinition"
-        },
-        "identities": {
-          "items": {
-            "$ref": "#/$defs/ExecutionIdentity"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Identities",
-          "type": "array"
-        },
-        "contract": {
-          "$ref": "#/$defs/PermissionContract"
-        },
-        "plan": {
-          "$ref": "#/$defs/PermissionMutationPlan"
-        },
-        "differential_plan": {
-          "$ref": "#/$defs/DifferentialExperimentPlan"
-        },
-        "observers": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/ObserverSpec"
-          },
-          "maxItems": 256,
-          "title": "Observers",
-          "type": "array"
-        },
-        "subject_bindings": {
-          "items": {
-            "$ref": "#/$defs/SubjectExecutionBinding"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Subject Bindings",
-          "type": "array"
-        },
-        "workflow_bindings": {
-          "items": {
-            "$ref": "#/$defs/HttpWorkflowBinding"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Workflow Bindings",
-          "type": "array"
-        },
-        "effect_bindings": {
-          "items": {
-            "$ref": "#/$defs/EffectBinding"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Effect Bindings",
-          "type": "array"
-        },
-        "observer_bindings": {
-          "items": {
-            "$ref": "#/$defs/ObserverRequirementBinding"
-          },
-          "maxItems": 256,
-          "minItems": 1,
-          "title": "Observer Bindings",
-          "type": "array"
-        },
-        "contract_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Contract Fingerprint",
-          "type": "string"
-        },
-        "plan_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Plan Fingerprint",
-          "type": "string"
-        },
-        "differential_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Differential Fingerprint",
-          "type": "string"
-        }
-      },
-      "required": [
-        "project_id",
-        "project_name",
-        "target",
-        "identities",
-        "contract",
-        "plan",
-        "differential_plan",
-        "subject_bindings",
-        "workflow_bindings",
-        "effect_bindings",
-        "observer_bindings",
-        "contract_fingerprint",
-        "plan_fingerprint",
-        "differential_fingerprint"
-      ],
-      "title": "ExecutionProjectSnapshot",
-      "type": "object"
-    },
     "FormUrlEncodedBody": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "FORM_URLENCODED",
           "default": "FORM_URLENCODED",
@@ -1357,12 +1020,6 @@
     "HttpOutcomeClassifier": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "accepted": {
           "default": [],
           "items": {
@@ -1402,12 +1059,6 @@
       "additionalProperties": false,
       "description": "受控 Query/Header/Form 字段；字段值只能是 literal 或已声明 Slot。",
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "name": {
           "maxLength": 128,
           "minLength": 1,
@@ -1451,12 +1102,6 @@
     "HttpPredicate": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "$ref": "#/$defs/HttpPredicateKind"
         },
@@ -1579,12 +1224,6 @@
       "additionalProperties": false,
       "description": "单请求受控模板；不接受 URL、脚本、任意文件或保留认证头。",
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "method": {
           "enum": [
             "GET",
@@ -1677,12 +1316,6 @@
     "HttpWorkflowBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "workflow_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Workflow Id",
@@ -1779,12 +1412,6 @@
     "HttpWorkflowStep": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Id",
@@ -1849,12 +1476,6 @@
     "IdentityBootstrapRequest": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "template_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Template Id",
@@ -1874,12 +1495,6 @@
     "JsonBody": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "JSON",
           "default": "JSON",
@@ -1899,12 +1514,6 @@
     "LogicalResourceSlot": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "slot_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Slot Id",
@@ -1943,12 +1552,6 @@
     "LoginWorkflowIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "LOGIN_WORKFLOW",
           "default": "LOGIN_WORKFLOW",
@@ -1983,12 +1586,6 @@
     "MultipartBody": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "MULTIPART",
           "default": "MULTIPART",
@@ -2015,12 +1612,6 @@
       "additionalProperties": false,
       "description": "Multipart 只允许 literal、Slot 或已登记 fixture/artifact 标识。",
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "name": {
           "maxLength": 128,
           "minLength": 1,
@@ -2105,12 +1696,6 @@
     "OAuth2ClientCredentialsIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "OAUTH2_CLIENT_CREDENTIALS",
           "default": "OAUTH2_CLIENT_CREDENTIALS",
@@ -2161,12 +1746,6 @@
     "OAuth2RefreshTokenIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "OAUTH2_REFRESH_TOKEN",
           "default": "OAUTH2_REFRESH_TOKEN",
@@ -2215,12 +1794,6 @@
     "ObserverBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "timeout_us": {
           "maximum": 120000000,
           "minimum": 1,
@@ -2251,12 +1824,6 @@
     "ObserverRequirementBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "requirement_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Requirement Id",
@@ -2329,12 +1896,6 @@
     "ObserverSpec": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "observer_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Observer Id",
@@ -2383,12 +1944,6 @@
     "ObserverTarget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "target_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Target Id",
@@ -2463,12 +2018,6 @@
     "OwnerApiLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "OWNER_API",
           "default": "OWNER_API",
@@ -2491,12 +2040,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "workflow_states": {
           "default": [],
           "items": {
@@ -2541,8 +2084,8 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "3",
-          "default": "3",
+          "const": "4",
+          "default": "4",
           "title": "Schema Version",
           "type": "string"
         },
@@ -2664,12 +2207,6 @@
     "PermissionMutationCase": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Case Id",
@@ -2793,12 +2330,6 @@
     "PermissionMutationDescriptor": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "dimension": {
           "$ref": "#/$defs/CoverageDimension"
         },
@@ -2834,12 +2365,6 @@
     "PermissionMutationPlan": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "plan_id": {
           "pattern": "^plan-[0-9a-f]{32}$",
           "title": "Plan Id",
@@ -2936,12 +2461,6 @@
     "PermissionRule": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "rule_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Rule Id",
@@ -3023,12 +2542,6 @@
     "PermissionTwin": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "twin_id": {
           "pattern": "^twin-[0-9a-f]{32}$",
           "title": "Twin Id",
@@ -3075,12 +2588,6 @@
     "QueuePeekBudget": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "max_messages": {
           "maximum": 32,
           "minimum": 1,
@@ -3132,12 +2639,6 @@
     "RelationEndpoint": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "endpoint_type": {
           "enum": [
             "subject",
@@ -3162,12 +2663,6 @@
     "RelationFact": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "relation_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Relation Id",
@@ -3208,12 +2703,6 @@
     "ResetEndpointStrategy": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "RESET_ENDPOINT",
           "default": "RESET_ENDPOINT",
@@ -3235,12 +2724,6 @@
     "ResourceDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "resource_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Resource Id",
@@ -3320,12 +2803,6 @@
     "ResponseExtractor": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "extractor_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Extractor Id",
@@ -3444,12 +2921,6 @@
     "SecurityEffectDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "effect_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Effect Id",
@@ -3509,12 +2980,6 @@
     "SnapshotProviderResetStrategy": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "SNAPSHOT_PROVIDER",
           "default": "SNAPSHOT_PROVIDER",
@@ -3536,12 +3001,6 @@
     "SqliteQueryLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "READ_ONLY_SQLITE",
           "default": "READ_ONLY_SQLITE",
@@ -3574,13 +3033,8 @@
     },
     "StaticHeaderCredential": {
       "additionalProperties": false,
+      "description": "一个有界身份头，只持有秘密引用。",
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "name": {
           "maxLength": 128,
           "minLength": 1,
@@ -3604,12 +3058,6 @@
     "StaticHeadersIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "STATIC_HEADERS",
           "default": "STATIC_HEADERS",
@@ -3635,12 +3083,6 @@
     "StructuredAuditLogLocator": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "locator_type": {
           "const": "STRUCTURED_AUDIT_LOG",
           "default": "STRUCTURED_AUDIT_LOG",
@@ -3682,12 +3124,6 @@
     "SubjectDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "subject_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Subject Id",
@@ -3759,12 +3195,6 @@
     "SubjectExecutionBinding": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "subject_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Subject Id",
@@ -3785,9 +3215,7 @@
     },
     "TargetType": {
       "enum": [
-        "WEB",
-        "CLI_APPLICATION",
-        "MCP_AGENT"
+        "WEB"
       ],
       "title": "TargetType",
       "type": "string"
@@ -3795,12 +3223,6 @@
     "TwinInvariantSpecification": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "action_id": {
           "title": "Action Id",
           "type": "string"
@@ -3856,12 +3278,6 @@
     "TwinPlanGap": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "deny_case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Deny Case Id",
@@ -3898,12 +3314,6 @@
     "UniqueResourceWorkflowResetStrategy": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "const": "UNIQUE_RESOURCE_WORKFLOW",
           "default": "UNIQUE_RESOURCE_WORKFLOW",
@@ -3925,12 +3335,6 @@
     "ValueSlot": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "slot_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Slot Id",
@@ -4087,15 +3491,210 @@
       "title": "ValueType",
       "type": "string"
     },
+    "WebExecutionIdentity": {
+      "additionalProperties": false,
+      "description": "Web 执行配置中的身份，只保存非秘密环境引用。",
+      "properties": {
+        "identity_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "role": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "binding": {
+          "discriminator": {
+            "mapping": {
+              "BEARER": "#/$defs/BearerIdentityBinding",
+              "COOKIE_SESSION": "#/$defs/CookieSessionIdentityBinding",
+              "LOGIN_WORKFLOW": "#/$defs/LoginWorkflowIdentityBinding",
+              "OAUTH2_CLIENT_CREDENTIALS": "#/$defs/OAuth2ClientCredentialsIdentityBinding",
+              "OAUTH2_REFRESH_TOKEN": "#/$defs/OAuth2RefreshTokenIdentityBinding",
+              "STATIC_HEADERS": "#/$defs/StaticHeadersIdentityBinding"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BearerIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/StaticHeadersIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/CookieSessionIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/LoginWorkflowIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/OAuth2ClientCredentialsIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/OAuth2RefreshTokenIdentityBinding"
+            }
+          ],
+          "title": "Binding"
+        },
+        "bootstrap_requests": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/IdentityBootstrapRequest"
+          },
+          "maxItems": 32,
+          "title": "Bootstrap Requests",
+          "type": "array"
+        }
+      },
+      "required": [
+        "identity_id",
+        "role",
+        "binding"
+      ],
+      "title": "WebExecutionIdentity",
+      "type": "object"
+    },
+    "WebExecutionSnapshot": {
+      "additionalProperties": false,
+      "description": "单次 Web Run 的目标、Contract、计划、身份和观察冻结快照。",
+      "properties": {
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "project_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Project Name",
+          "type": "string"
+        },
+        "target_type": {
+          "$ref": "#/$defs/TargetType",
+          "default": "WEB"
+        },
+        "target": {
+          "$ref": "#/$defs/WebTargetDefinition"
+        },
+        "identities": {
+          "items": {
+            "$ref": "#/$defs/WebExecutionIdentity"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Identities",
+          "type": "array"
+        },
+        "contract": {
+          "$ref": "#/$defs/PermissionContract"
+        },
+        "plan": {
+          "$ref": "#/$defs/PermissionMutationPlan"
+        },
+        "differential_plan": {
+          "$ref": "#/$defs/DifferentialExperimentPlan"
+        },
+        "observers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObserverSpec"
+          },
+          "maxItems": 256,
+          "title": "Observers",
+          "type": "array"
+        },
+        "subject_bindings": {
+          "items": {
+            "$ref": "#/$defs/SubjectExecutionBinding"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Subject Bindings",
+          "type": "array"
+        },
+        "workflow_bindings": {
+          "items": {
+            "$ref": "#/$defs/HttpWorkflowBinding"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Workflow Bindings",
+          "type": "array"
+        },
+        "effect_bindings": {
+          "items": {
+            "$ref": "#/$defs/EffectBinding"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Effect Bindings",
+          "type": "array"
+        },
+        "observer_bindings": {
+          "items": {
+            "$ref": "#/$defs/ObserverRequirementBinding"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Observer Bindings",
+          "type": "array"
+        },
+        "contract_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Contract Fingerprint",
+          "type": "string"
+        },
+        "plan_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Fingerprint",
+          "type": "string"
+        },
+        "differential_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Differential Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "project_name",
+        "target",
+        "identities",
+        "contract",
+        "plan",
+        "differential_plan",
+        "subject_bindings",
+        "workflow_bindings",
+        "effect_bindings",
+        "observer_bindings",
+        "contract_fingerprint",
+        "plan_fingerprint",
+        "differential_fingerprint"
+      ],
+      "title": "WebExecutionSnapshot",
+      "type": "object"
+    },
     "WebTargetDefinition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "scope": {
           "$ref": "#/$defs/WebTargetScope"
         },
@@ -4114,14 +3713,8 @@
     },
     "WebTargetScope": {
       "additionalProperties": false,
-      "description": "Web 目标的协议级授权范围；不依赖 Core 的历史 TargetScope。",
+      "description": "Web 目标的协议级授权范围。",
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "base_url": {
           "title": "Base Url",
           "type": "string"
@@ -4209,12 +3802,6 @@
     "WorkflowTransition": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "allowed_from_states": {
           "items": {
             "type": "string"
@@ -4241,8 +3828,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "3",
-      "default": "3",
+      "const": "4",
+      "default": "4",
       "title": "Schema Version",
       "type": "string"
     },
@@ -4280,7 +3867,7 @@
       "$ref": "#/$defs/ExecutionBudget"
     },
     "project_snapshot": {
-      "$ref": "#/$defs/ExecutionProjectSnapshot"
+      "$ref": "#/$defs/WebExecutionSnapshot"
     }
   },
   "required": [

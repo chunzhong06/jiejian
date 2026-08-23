@@ -24,11 +24,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.runner import (
-    ExecutionBudget,
-    ExecutionProjectSnapshot,
-    RUNNER_INPUT_MAX_BYTES,
-    required_secret_refs,
+from product.protocols.execution import ExecutionBudget
+from product.protocols.runner import RUNNER_INPUT_MAX_BYTES
+from product.protocols.web.profile import (
+    WebExecutionSnapshot,
+    required_web_secret_refs,
 )
 
 
@@ -37,9 +37,9 @@ class PersistedExecutionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
 
-    schema_version: Literal["3"] = "3"
+    schema_version: Literal["4"] = "4"
     budget: ExecutionBudget
-    project_snapshot: ExecutionProjectSnapshot
+    project_snapshot: WebExecutionSnapshot
 
     @model_validator(mode="after")
     def validate_budget_snapshot(self) -> PersistedExecutionRequest:
@@ -95,7 +95,7 @@ def parse_execution_request(
             parse_constant=_reject_nonfinite,
         )
         _reject_known_secrets(parsed, known_secrets)
-        if not isinstance(parsed, dict) or parsed.get("schema_version") != "3":
+        if not isinstance(parsed, dict) or parsed.get("schema_version") != "4":
             raise ValueError("unsupported request schema version")
         return PersistedExecutionRequest.model_validate_json(raw, strict=True)
     except JiejianError:
@@ -106,7 +106,10 @@ def parse_execution_request(
 
 def required_secret_names(request: PersistedExecutionRequest) -> tuple[str, ...]:
     return tuple(
-        dict.fromkeys(reference.removeprefix("env:") for reference in required_secret_refs(request.project_snapshot))
+        dict.fromkeys(
+            reference.removeprefix("env:")
+            for reference in required_web_secret_refs(request.project_snapshot)
+        )
     )
 
 

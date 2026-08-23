@@ -12,7 +12,7 @@
 .\start.cmd
 ```
 
-启动器会优先复用符合 `product/frontend/package.json` 要求的系统 Node.js 24 与 pnpm 11.21.0；未找到时，会在项目 `var/` 中准备受控运行时，不修改系统 PATH 或全局安装。首次准备需要网络。准备完成并选择“图形界面”后，界鉴会在本机回环地址启动服务并打开浏览器。
+启动器会准备或复用项目专用 Conda 环境 `jiejian_env`，由仓库受控 uv 按 `uv.lock` 精确同步并 editable 指向当前源码。前端只在 `var/runtime/frontend` 缺失或构建指纹变化时，把源码输入镜像到 `var/runtime/build/frontend-workspace`，在该工作区准备受控 Node/pnpm 并重新构建；后续启动直接复用。全部安装视图、缓存和构建产物都在本地 `var/` 中生成，不进入 Git，也不修改系统 PATH 或全局安装。首次准备需要网络。
 
 ## 界面预览
 
@@ -32,10 +32,10 @@
 
 1. 获取项目并打开项目根目录。
 2. 运行 `.\start.cmd`。
-3. 等待界鉴准备 Node.js、pnpm、Python 环境、浏览器、数据库和前端资源。
+3. 等待界鉴准备源码运行环境、浏览器、数据库和前端资源；Node/pnpm 只会在前端需要重建时出现。
 4. 选择图形界面、命令行或仅完成环境准备。
 
-启动脚本会自动准备 Node.js、pnpm、Python 运行环境、浏览器、数据库和前端资源；准备完成后，控制台会给出适用于本机的 CLI 调用方式。
+启动脚本会自动准备 Conda + uv.lock + editable 当前源码、浏览器、数据库和前端资源；准备完成后，控制台会给出适用于本机的 CLI 调用方式。Wheel 仅可通过 `./scripts/dev.ps1 package` 独立生成，不参与普通启动。
 
 ## 第一次使用
 
@@ -48,13 +48,13 @@
 
 流程录制、模型服务和运行环境属于高级能力，不是第一次检查的必经步骤。
 
-如果暂时没有准备自己的应用，可以在“应用接入”直接试用三个内置演示，无需配置 Token、Profile 或 Contract：
+如果暂时没有准备自己的应用，可以使用 `samples/web` 中同一个 Authorization Target 的三个行为变体：
 
 - **安全示例**：接口拒绝未授权修改，真实资源没有变化，结果为 `PASS`。
 - **权限漏洞示例**：接口表面拒绝，但真实资源仍被修改，结果为 `BLOCK`。
 - **证据不足示例**：关键资源状态无法可靠观察，结果为 `INCONCLUSIVE`。
 
-三个演示都通过真实检查、证据发布和确定性判断得到结果，不使用预先写好的结论代替执行。
+三个变体都通过正常 GUI 或公开 `jiejian run`、Worker/Runner、证据发布和确定性判断得到结果，不使用预先写好的结论代替执行。启动方式见 [`samples/README.md`](samples/README.md)；Sample 不绕过应用接入或 Contract Governance。
 
 ## 结果怎么看
 
@@ -73,9 +73,8 @@
 | `PASS`         | 当前规则覆盖范围内未发现越权 |
 | `BLOCK`        | 发现可能的权限越界，需要处理 |
 | `INCONCLUSIVE` | 证据不足，暂时不能下结论     |
-| `INVALID`      | 结果无效，不能形成安全结论   |
 
-在检查结果中，可以继续查看真实证据和完整报告。`INCONCLUSIVE` 不表示安全，也不表示未发现问题。
+在检查结果中，可以继续查看真实证据和完整报告。`INCONCLUSIVE` 不表示安全，也不表示未发现问题；执行失败或结果完整性无效会作为独立失败状态展示，不冒充第四种安全结论。
 
 ## 命令行与自动化
 
@@ -101,10 +100,10 @@ jiejian ci <execution_profile.json>
 
 - **启动失败**：`start.cmd` 会保留错误窗口；先查看屏幕上的失败阶段和恢复建议，再按需查看 `var/logs/startup/` 中最近的启动日志。
 - **浏览器未打开**：手工打开 [http://127.0.0.1:8765/](http://127.0.0.1:8765/)。
-- **运行环境不可用**：按启动输出恢复；只需重建环境时可删除 `var/runtime/`、`var/cache/` 和 `var/temp/`。整个 `var/` 还包含数据库、Job、项目、报告和工件检查等产品事实，只有明确要清空全部本地数据时才整体删除。需要同时重建已安装的前端依赖时，再删除 `product/frontend/node_modules`，启动器会按标准位置重新安装。
+- **运行环境不可用**：按启动输出恢复。`cache clean` 只清理 `var/cache`；损坏的前端工作区或其他运行时由 `runtime repair` 清理，前端工作区在源码变化、最终网页缺失或强制准备等确需构建时重建，健康的最终网页仍可直接复用。删除整个 `var/` 表示从零重建仓库本地运行态，也会删除其中的数据库、Job、项目、报告和工件检查等产品事实，但不会删除全局项目 Conda 环境 `jiejian_env`。`product/frontend` 不保存依赖或构建产物，无需单独清理。
 - **检查无法开始**：确认已经完成应用接入，目标使用授权的回环地址，权限规则已准备好，运行环境状态正常。
 
-`-PrepareOnly` 和 `-ForcePrepare` 仅用于高级恢复，不是正常启动流程。
+`-Mode Prepare` 和 `-ForcePrepare` 仅用于高级恢复，不是正常启动流程。
 
 ## 适用范围
 
@@ -115,7 +114,7 @@ jiejian ci <execution_profile.json>
 - [技术文档总入口](docs/README.md)：按任务路由到当前 Architecture、ADR、Protocol、Schema 和 Migration。
 - [系统总体架构](docs/02_架构设计/系统总体架构.md)：模块化单体、ApplicationCore 和执行边界。
 - [Runner 执行协议](docs/04_协议与数据/Runner执行协议.md)：Worker、Runner、Evidence 和发布边界。
-- [ADR 索引](docs/03_架构决策/README.md)：当前决策与历史决策的状态和取代关系。
+- [ADR 索引](docs/03_架构决策/README.md)：仍约束当前实现的长期决策。
 - [开发路线图](docs/05_路线与研究/开发路线图.md)：按需查看下一步目标和验收边界。
 
 深入技术内容以这些现有文档为准；后续文档入口调整时，再同步更新本页链接。

@@ -33,14 +33,17 @@ from product.backend.infra.storage import ExecutionProfileRecord, StorageUnitOfW
 from product.backend.workflows.runs.submission import RunSubmission, SubmitExecution
 from product.protocols import (
     ExecutionBudget,
-    ExecutionProfile,
     HttpWorkflowBinding,
     ObserverRequirementKind,
     RunnerResult,
+    WebExecutionProfile,
     WebTargetDefinition,
-    required_secret_refs,
+    required_web_secret_refs,
 )
-from product.protocols.execution_profile import EXECUTION_PROFILE_MAX_BYTES, parse_execution_profile
+from product.protocols.web.profile import (
+    WEB_EXECUTION_PROFILE_MAX_BYTES,
+    parse_web_execution_profile,
+)
 
 
 class ExecutionWorkflow:
@@ -103,7 +106,7 @@ class ExecutionWorkflow:
                 raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
             return work.execution_profiles.list_for_project(project_id)
 
-    def current(self, profile_id: str, *, project_id: str | None = None) -> ExecutionProfile:
+    def current(self, profile_id: str, *, project_id: str | None = None) -> WebExecutionProfile:
         record, profile, _, _, metadata = self._validated(profile_id, project_id=project_id)
         if not _metadata_matches(record, metadata):
             raise JiejianError(ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, "Profile 发生漂移，请显式重新校验")
@@ -235,19 +238,22 @@ class ExecutionWorkflow:
             lease_owner=f"worker-{self._clock_us()}",
             secret_names=secret_names,
         )
-        staged = dispatcher.wait(
-            submission.job.job_id,
-            process,
-            known_secrets=known_secrets,
-            timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000 + 60,
-        )
+        try:
+            staged = dispatcher.wait(
+                submission.job.job_id,
+                process,
+                known_secrets=known_secrets,
+                timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000 + 60,
+            )
+        finally:
+            dispatcher.close_process(process)
         return staged.result
 
     def _record(self, profile_id: str) -> ExecutionProfileRecord:
         with self._uow_factory() as work:
             record = work.execution_profiles.get(profile_id)
         if record is None:
-            raise JiejianError(ErrorCode.EXECUTION_PROFILE_NOT_FOUND, "ExecutionProfile 不存在")
+            raise JiejianError(ErrorCode.EXECUTION_PROFILE_NOT_FOUND, "Web 执行配置（WebExecutionProfile）不存在")
         return record
 
     def _validated(self, profile_id: str, *, project_id: str | None):
@@ -266,17 +272,17 @@ class ExecutionWorkflow:
         return record, profile, contract, plan, metadata
 
     @staticmethod
-    def _read_source(source_path: Path) -> tuple[ExecutionProfile, bytes, str]:
+    def _read_source(source_path: Path) -> tuple[WebExecutionProfile, bytes, str]:
         path = source_path.resolve()
         try:
-            if not path.is_file() or path.stat().st_size > EXECUTION_PROFILE_MAX_BYTES:
+            if not path.is_file() or path.stat().st_size > WEB_EXECUTION_PROFILE_MAX_BYTES:
                 raise OSError
             raw = path.read_bytes()
-            profile = parse_execution_profile(raw)
+            profile = parse_web_execution_profile(raw)
         except JiejianError:
             raise
         except (OSError, ValueError):
-            raise JiejianError(ErrorCode.EXECUTION_PROFILE_INVALID, "ExecutionProfile 文件不可读取") from None
+            raise JiejianError(ErrorCode.EXECUTION_PROFILE_INVALID, "Web 执行配置（WebExecutionProfile）文件不可读取") from None
         return profile, raw, hashlib.sha256(raw).hexdigest()
 
     @staticmethod
@@ -294,7 +300,7 @@ class ExecutionWorkflow:
         }
 
     @staticmethod
-    def _compile_plan(profile: ExecutionProfile, contract):
+    def _compile_plan(profile: WebExecutionProfile, contract):
         available_observations = tuple(item.requirement_id for item in profile.observer_bindings)
         return build_permission_coverage_plan(
             contract,
@@ -314,5 +320,5 @@ def _metadata_matches(record: ExecutionProfileRecord, metadata: Mapping[str, Any
 
 def _fatal_secret_names(request: PersistedExecutionRequest) -> tuple[str, ...]:
     snapshot = request.project_snapshot
-    references = list(required_secret_refs(snapshot))
+    references = list(required_web_secret_refs(snapshot))
     return tuple(dict.fromkeys(reference.removeprefix("env:") for reference in references))

@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "StagedArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "byte_count": {
+          "maximum": 1073741824,
+          "minimum": 0,
+          "title": "Byte Count",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_count",
+        "sha256"
+      ],
+      "title": "StagedArtifact",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "随最终目录发布且不允许原地修改的 Worker manifest。",
+  "properties": {
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "lease_owner": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Lease Owner",
+      "type": "string"
+    },
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "lease_expires_at_us": {
+      "minimum": 0,
+      "title": "Lease Expires At Us",
+      "type": "integer"
+    },
+    "published_at_us": {
+      "minimum": 0,
+      "title": "Published At Us",
+      "type": "integer"
+    },
+    "result_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Result Sha256",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/StagedArtifact"
+      },
+      "maxItems": 4097,
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "run_id",
+    "job_id",
+    "attempt",
+    "lease_owner",
+    "fencing_token",
+    "lease_expires_at_us",
+    "published_at_us",
+    "result_sha256",
+    "files"
+  ],
+  "title": "PublicationManifest",
+  "type": "object"
+}

@@ -3,12 +3,6 @@
     "HttpBindingCandidate": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "1",
-          "default": "1",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "candidate_id": {
           "pattern": "^httpbind-[0-9a-f]{32}$",
           "title": "Candidate Id",
@@ -168,12 +162,6 @@
     "HttpProducerConsumerLink": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "1",
-          "default": "1",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "kind": {
           "$ref": "#/$defs/HttpProducerConsumerKind"
         },
@@ -229,12 +217,6 @@
     "HttpResponseSchemaCandidate": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "1",
-          "default": "1",
-          "title": "Schema Version",
-          "type": "string"
-        },
         "status_code": {
           "maxLength": 16,
           "minLength": 3,
@@ -273,12 +255,6 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "1",
-      "default": "1",
-      "title": "Schema Version",
-      "type": "string"
-    },
     "candidates": {
       "default": [],
       "items": {

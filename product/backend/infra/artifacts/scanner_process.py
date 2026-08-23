@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from product.protocols.artifacts import ArtifactCheckRequest, ArtifactScanResult
+from product.protocols.artifacts import parse_artifact_check_request
 from product.backend.infra.artifacts.scanner import scan_artifact
 
 
@@ -16,7 +16,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
     try:
-        request = ArtifactCheckRequest.model_validate_json(arguments.request.read_bytes(), strict=True)
+        request = parse_artifact_check_request(arguments.request.read_bytes())
         result = scan_artifact(request)
         arguments.output.parent.mkdir(parents=True, exist_ok=True)
         arguments.output.write_bytes(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))

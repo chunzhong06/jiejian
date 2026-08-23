@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import re
 import tomllib
 from pathlib import Path
@@ -8,6 +9,9 @@ from pathlib import Path
 import pytest
 
 from product.backend import __version__
+from product.backend.core.verification.facts import TargetType
+from product.backend.workflows.context import ApplicationCore
+from product.backend.workflows.worker_container import WorkerContainer
 
 
 pytestmark = pytest.mark.essential
@@ -32,48 +36,158 @@ def _imports(path: Path) -> set[str]:
     return result
 
 
-def test_backend_top_level_is_the_frozen_product_shape() -> None:
-    names = {path.name for path in BACKEND.iterdir()}
-    assert names == {"__init__.py", "README.md", "api", "cli", "core", "workflows", "infra", "migrations", "alembic.ini"}
-    assert not (BACKEND / "jiejian").exists()
-    assert not any((BACKEND / name).exists() for name in ("application", "domain", "execution", "runner", "worker", "recording_runner", "results", "storage"))
-
-
-def test_storage_runtime_and_protocol_roots_are_unique() -> None:
-    assert (BACKEND / "infra" / "storage" / "db.py").is_file()
-    assert not (BACKEND / "infra" / "storage" / "storage").exists()
-    assert (BACKEND / "infra" / "execution" / "http.py").is_file()
-    assert not (BACKEND / "infra" / "runtime" / "runner" / "http.py").exists()
-    assert (PROTOCOLS / "execution_request.py").is_file()
-    assert (PROTOCOLS / "execution_profile.py").is_file()
-    assert not (BACKEND / "protocols").exists()
+def _forbidden_imports(path: Path, prefixes: tuple[str, ...]) -> set[str]:
+    return {
+        item
+        for item in _imports(path)
+        if any(item == prefix or item.startswith(prefix + ".") for prefix in prefixes)
+    }
 
 
 def test_core_and_protocol_dependencies_preserve_boundaries() -> None:
     core_forbidden = ("product.backend.workflows", "product.backend.infra", "product.backend.api", "product.backend.cli", "fastapi", "sqlalchemy", "httpx", "playwright")
     for path in _python_files(BACKEND / "core"):
-        assert not {item for item in _imports(path) if item == core_forbidden or item.startswith(core_forbidden)}, path
+        assert not _forbidden_imports(path, core_forbidden), path
+    protocol_forbidden = (
+        "product.backend.workflows",
+        "product.backend.infra",
+        "product.backend.api",
+        "product.backend.cli",
+    )
     for path in _python_files(PROTOCOLS):
-        imports = _imports(path)
-        assert not any(
-            item.startswith("product.backend.")
-            and not item.startswith("product.backend.core")
-            for item in imports
-        ), path
+        assert not _forbidden_imports(path, protocol_forbidden), path
 
 
-def test_http_adapter_and_process_boundaries_are_explicit() -> None:
-    adapter = BACKEND / "infra" / "execution" / "http.py"
-    assert "class HttpExecutionAdapter" in adapter.read_text(encoding="utf-8")
-    assert "class HttpExecutor" not in adapter.read_text(encoding="utf-8")
+def test_control_plane_and_verification_do_not_reach_target_adapters() -> None:
+    control_forbidden = (
+        "product.backend.infra.execution",
+        "product.backend.infra.observers",
+        "product.backend.infra.runtime.runner",
+        "product.protocols.web",
+    )
+    for root in (BACKEND / "api", BACKEND / "cli"):
+        for path in _python_files(root):
+            assert not _forbidden_imports(path, control_forbidden), path
+
+    verification_forbidden = (
+        "product.backend.infra.execution",
+        "product.backend.infra.runtime",
+        "product.protocols.web",
+    )
+    for path in _python_files(BACKEND / "core" / "verification"):
+        assert not _forbidden_imports(path, verification_forbidden), path
+
+
+def test_target_runtime_dependencies_have_one_web_composition_point() -> None:
+    execution = BACKEND / "infra" / "execution"
+    port = execution / "port.py"
+    registry = execution / "registry.py"
+    web_runtime = execution / "web" / "runtime.py"
+    composition = BACKEND / "infra" / "runtime" / "runner" / "composition.py"
+
+    assert not _forbidden_imports(port, ("product.backend.infra.execution.web",))
+    assert not _forbidden_imports(registry, ("product.backend.infra.execution.web",))
+    assert "product.backend.infra.execution.port" in _imports(web_runtime)
+    factory_users = {
+        path.relative_to(ROOT).as_posix()
+        for path in _python_files(BACKEND)
+        if "WebTargetRuntimeFactory" in path.read_text(encoding="utf-8")
+    }
+    assert factory_users == {
+        "product/backend/infra/execution/web/runtime.py",
+        "product/backend/infra/runtime/runner/composition.py",
+    }
+    assert "registry.register(WebTargetRuntimeFactory())" in composition.read_text(encoding="utf-8")
+
+
+def test_generic_runner_modules_do_not_import_web_protocol_or_runtime() -> None:
+    runner = BACKEND / "infra" / "runtime" / "runner"
+    forbidden = (
+        "product.backend.infra.execution.web",
+        "product.protocols.web",
+    )
+    for name in ("executor.py", "case_orchestrator.py", "result_builder.py", "staging.py"):
+        path = runner / name
+        assert not _forbidden_imports(path, forbidden), path
+
+
+def test_current_target_capability_is_web_only_without_test_or_placeholder_kinds() -> None:
+    assert tuple(TargetType) == (TargetType.WEB,)
+    schema_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((PROTOCOLS / "schemas").rglob("*.json"))
+    )
+    production_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in _python_files(ROOT / "product")
+    )
+    for name in ("CLI_APPLICATION", "MCP_AGENT", "TEST_FAKE"):
+        assert name not in schema_text
+        assert name not in production_text
+
+
+def test_application_and_worker_containers_are_independent_complete_roots() -> None:
+    assert ApplicationCore not in WorkerContainer.__mro__
+    assert WorkerContainer not in ApplicationCore.__mro__
+    assert "_minimal" not in inspect.signature(ApplicationCore).parameters
+    container_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            BACKEND / "workflows" / "context.py",
+            BACKEND / "workflows" / "worker_container.py",
+        )
+    )
+    assert "WorkerContext" not in container_text
+    assert "_minimal" not in container_text
+
+
+def test_removed_execution_abstractions_have_no_definition_alias_or_export() -> None:
+    old_names = {
+        "ExecutionRouter",
+        "ExecutionAdapter",
+        "ExecutionProfile",
+        "ExecutionIdentity",
+        "ExecutionProjectSnapshot",
+        "WorkerContext",
+    }
+    for path in _python_files(ROOT / "product"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        declared = {
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        imported = {
+            alias.asname or alias.name.rsplit(".", 1)[-1]
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Import, ast.ImportFrom))
+            for alias in node.names
+        }
+        assigned = {
+            target.id
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Assign, ast.AnnAssign))
+            for target in (
+                node.targets if isinstance(node, ast.Assign) else (node.target,)
+            )
+            if isinstance(target, ast.Name)
+        }
+        assert not old_names.intersection(declared | imported | assigned), path
+
+    for path in (
+        BACKEND / "infra" / "execution" / "router.py",
+        BACKEND / "infra" / "execution" / "http.py",
+        BACKEND / "infra" / "execution" / "http_identity.py",
+        PROTOCOLS / "execution_profile.py",
+        PROTOCOLS / "http.py",
+    ):
+        assert not path.exists(), path
+
+
+def test_worker_runner_and_recording_process_boundaries_are_explicit() -> None:
     assert (BACKEND / "infra" / "runtime" / "runner" / "__main__.py").is_file()
     assert (BACKEND / "infra" / "runtime" / "worker_process.py").is_file()
     assert (BACKEND / "infra" / "runtime" / "recording_process.py").is_file()
-    for root in (BACKEND / "api", BACKEND / "cli"):
-        for path in _python_files(root):
-            imports = _imports(path)
-            assert not any(item.startswith("product.backend.infra.execution") for item in imports), path
-            assert not any(item.startswith("product.backend.infra.observers") for item in imports), path
 
 
 def test_product_names_do_not_encode_development_generations() -> None:
@@ -102,50 +216,15 @@ def test_product_names_do_not_encode_development_generations() -> None:
     assert not any("_new" in path.name or "_latest" in path.name for path in ROOT.rglob("*.py"))
 
 
-def test_current_execution_and_protocol_boundaries_are_unique() -> None:
-    router = BACKEND / "infra" / "execution" / "router.py"
-    http = BACKEND / "infra" / "execution" / "http.py"
-    facts = BACKEND / "core" / "verification" / "facts.py"
-    assert router.is_file() and "class ExecutionRouter" in router.read_text(encoding="utf-8")
-    assert http.is_file() and "class HttpExecutionAdapter" in http.read_text(encoding="utf-8")
-    assert "class TargetType" in facts.read_text(encoding="utf-8")
-    assert not (BACKEND / "infra" / "execution" / "process.py").exists()
-    assert not (BACKEND / "infra" / "execution" / "mcp.py").exists()
-    assert not (BACKEND / "mcp").exists()
-
-    current_protocols = {
-        "runner.py",
-        "observer.py",
-        "execution_request.py",
-        "execution_profile.py",
-        "recording.py",
-        "flow_draft.py",
-        "artifacts.py",
-        "report.py",
-    }
-    assert current_protocols <= {path.name for path in PROTOCOLS.iterdir()}
-    assert not any(PROTOCOLS.glob("runner_v*.py"))
-    assert not any(PROTOCOLS.glob("observer_v*.py"))
-    assert not any(PROTOCOLS.glob("recording_v*.py"))
-
-
-def test_current_migration_api_and_runner_document_boundaries() -> None:
-    migration_versions = BACKEND / "migrations" / "versions"
-    assert {path.name for path in migration_versions.glob("*.py")} == {"0001_initial.py"}
-    execution_profiles = (BACKEND / "infra" / "storage" / "execution_profiles.py").read_text(encoding="utf-8")
-    assert '__tablename__ = "execution_profiles"' in execution_profiles
+def test_public_api_does_not_reintroduce_generation_paths() -> None:
     for path in _python_files(BACKEND / "api"):
         assert not re.search(r"/api/v[12](?:/|['\"])", path.read_text(encoding="utf-8")), path
-    protocol_doc = ROOT / "docs" / "04_协议与数据" / "Runner执行协议.md"
-    assert protocol_doc.is_file()
-    assert not (protocol_doc.parent / "Runner执行协议V1.md").exists()
 
 
 def test_no_compatibility_import_mechanisms_or_old_python_root() -> None:
     files = _python_files(ROOT / "product")
     text = "\n".join(path.read_text(encoding="utf-8") for path in files)
     assert "backend/src/jiejian" not in text
-    assert "PYTHONPATH" not in text
     assert "import jiejian." not in text
     for path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -162,26 +241,50 @@ def test_no_compatibility_import_mechanisms_or_old_python_root() -> None:
             ), path
 
 
-def test_official_samples_have_one_way_dependency_and_fixed_tree() -> None:
+def test_samples_are_one_way_test_data_not_product_dependencies() -> None:
     samples = ROOT / "samples"
-    assert (samples / "http" / "target" / "server.py").is_file()
+    sample_web = samples / "web"
+    assert not (samples / "http").exists()
+    assert (sample_web / "target" / "server.py").is_file()
+    assert (sample_web / "launch" / "gui.ps1").is_file()
+    assert (sample_web / "launch" / "cli.ps1").is_file()
     for variant in ("fixed", "vulnerable", "inconclusive"):
-        bundle = samples / "http" / variant
-        assert {path.name for path in bundle.iterdir()} == {"contract.json", "profile.json", "scenario.json", "truth.json"}
-    assert not (samples / "http" / "authorization").exists()
-    assert not (samples / "http" / "targets").exists()
-    assert not any((samples / "http" / variant / scenario).exists() for variant in ("fixed", "vulnerable", "inconclusive") for scenario in ("ownership", "permissions"))
-    for old in ("fixed_apps", "vulnerable_apps", "inconclusive_apps"):
-        assert not (samples / old).exists()
-    assert not (samples / "cli").exists()
-    assert not (samples / "mcp").exists()
-
+        assert {path.name for path in (sample_web / variant).iterdir()} == {
+            "contract.json",
+            "profile.json",
+            "scenario.json",
+            "truth.json",
+        }
     for path in _python_files(ROOT / "product"):
         assert not any(item == "samples" or item.startswith("samples.") for item in _imports(path)), path
     for path in _python_files(samples):
         assert not any(item == "tests" or item.startswith("tests.") for item in _imports(path)), path
     product_text = "\n".join(path.read_text(encoding="utf-8") for path in _python_files(ROOT / "product"))
     assert "truth.json" not in product_text
+    frontend_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for suffix in ("*.ts", "*.tsx")
+        for path in sorted((ROOT / "product" / "frontend" / "src").rglob(suffix))
+    )
+    assert "samples/" not in frontend_text
+    for removed_handle in (
+        "DemoRuntimeSupervisor",
+        "DemoRunService",
+        "OnboardingDemoStatus",
+        "ONBOARDING_DEMO_FAILED",
+        "/api/onboarding/demo",
+        "demoStatus",
+        "demoStart",
+        "demoStop",
+        "demo_data",
+    ):
+        assert removed_handle not in product_text + frontend_text
+    for removed_path in (
+        BACKEND / "workflows" / "onboarding" / "demo.py",
+        BACKEND / "workflows" / "onboarding" / "demo_service.py",
+        BACKEND / "workflows" / "onboarding" / "demo_target.py",
+    ):
+        assert not removed_path.exists()
 
 
 def test_frontend_and_wheel_sources_are_scoped() -> None:
@@ -189,57 +292,20 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
     assert (frontend / "src" / "app").is_dir()
     assert (frontend / "src" / "api").is_dir()
     workspace_text = (frontend / "pnpm-workspace.yaml").read_text(encoding="utf-8")
-    assert "storeDir: ../../var/cache/pnpm-store" in workspace_text
+    assert "storeDir" not in workspace_text
     assert "virtualStoreDir" not in workspace_text
-    assert (frontend / "../../var/cache/pnpm-store").resolve() == (ROOT / "var/cache/pnpm-store").resolve()
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
     assert wheel["only-include"] == ["product/backend", "product/protocols"]
-    assert wheel["force-include"]["product/frontend/dist"] == "product/frontend/dist"
+    assert wheel["force-include"]["var/runtime/frontend"] == "product/frontend/dist"
     assert "product/frontend/src" not in str(wheel)
     assert project["project"]["scripts"]["jiejian"] == "product.backend.cli:main"
     assert project["project"]["version"] == __version__
 
 
-def test_frontend_uses_task_pages_without_legacy_wrappers() -> None:
-    frontend = ROOT / "product" / "frontend" / "src"
-    control_shell = (frontend / "app" / "ControlShell.tsx").read_text(encoding="utf-8")
-    for route in ("/workspace", "/apps/access", "/apps/rules", "/checks/start", "/checks/results", "/checks/history", "/advanced/recording", "/advanced/models", "/advanced/system"):
-        assert route in control_shell
-    assert "StageGuide" not in control_shell
-    assert all(name not in control_shell for name in ("ContractPage", "RunPage", "VerifyPage", "ReportPage"))
-    assert "import { HistoryPage }" not in control_shell
-    assert (frontend / "features" / "permissions" / "PermissionRulesPage.tsx").is_file()
-    for path in (
-        frontend / "app" / "browserState.ts",
-        frontend / "features" / "access" / "onboarding" / "OnboardingWizard.tsx",
-        frontend / "features" / "access" / "onboarding" / "OnboardingWelcome.tsx",
-        frontend / "features" / "access" / "onboarding" / "OnboardingSteps.tsx",
-        frontend / "features" / "permissions" / "explorer" / "PermissionExplorer.tsx",
-        frontend / "features" / "permissions" / "explorer" / "PermissionMatrix.tsx",
-        frontend / "features" / "permissions" / "explorer" / "PermissionGraph.tsx",
-        frontend / "features" / "permissions" / "explorer" / "projection.ts",
-        frontend / "features" / "permissions" / "governance" / "PermissionGovernancePanel.tsx",
-        frontend / "features" / "recording" / "RecordingSetupCard.tsx",
-        frontend / "features" / "recording" / "RecordingCaptureCard.tsx",
-        frontend / "features" / "recording" / "FlowDraftReview.tsx",
-        frontend / "features" / "access" / "access.css",
-        frontend / "features" / "permissions" / "permissions.css",
-        frontend / "features" / "checks" / "checks.css",
-    ):
-        assert path.is_file(), path
-    assert not (frontend / "features" / "sharedStatus.ts").exists()
-    for path in (*sorted((frontend / "app").rglob("*.ts*")), *sorted((frontend / "features").rglob("*.ts*"))):
-        if ".test." not in path.name:
-            assert "type Item = Record<string, any>" not in path.read_text(encoding="utf-8"), path
-    for name in ("StartCheckPage.tsx", "CheckProgress.tsx", "CheckResultsPage.tsx", "EvidenceTimeline.tsx", "ReportPanel.tsx", "CheckHistoryPage.tsx"):
-        assert (frontend / "features" / "checks" / name).is_file()
-    for legacy in (
-        frontend / "features" / "contracts" / "ContractPage.tsx",
-        frontend / "features" / "runs" / "RunPage.tsx",
-        frontend / "features" / "verification" / "VerifyPage.tsx",
-        frontend / "features" / "results" / "ReportPage.tsx",
-        frontend / "features" / "history" / "HistoryPage.tsx",
-        frontend / "features" / "runs" / "JobProgress.tsx",
-    ):
-        assert not legacy.exists(), legacy
+def test_frontend_source_tree_contains_no_generated_install_or_build_artifacts() -> None:
+    frontend = ROOT / "product" / "frontend"
+
+    assert not (frontend / "node_modules").exists()
+    assert not (frontend / "dist").exists()
+    assert not tuple(frontend.rglob("*.tsbuildinfo"))

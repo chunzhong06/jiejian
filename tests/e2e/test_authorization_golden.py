@@ -16,16 +16,16 @@ from product.backend.core.verification.permissions import PermissionContract
 from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
 from product.backend.workflows.context import ApplicationCore
 from product.backend.workflows.runs.execution import ExecutionWorkflow
-from product.protocols.execution_profile import (
-    ExecutionProfile,
-    canonical_execution_profile_json_bytes,
-    parse_execution_profile,
+from product.protocols.web.profile import (
+    WebExecutionProfile,
+    canonical_web_execution_profile_json_bytes,
+    parse_web_execution_profile,
 )
-from samples.http.target.server import create_authorization_sample_server
+from samples.web.target.server import create_authorization_sample_server
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SAMPLE_ROOT = ROOT / "samples" / "http"
+SAMPLE_ROOT = ROOT / "samples" / "web"
 SECRET_NAMES = (
     "JIEJIAN_AUTHORIZATION_OWNER_TOKEN",
     "JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN",
@@ -50,8 +50,8 @@ def _temporary_environment() -> dict[str, str]:
     return {name: secrets.token_urlsafe(24) for name in SECRET_NAMES}
 
 
-def _dynamic_profile(variant: str, source: Path, destination: Path, port: int) -> ExecutionProfile:
-    profile = ExecutionProfile.model_validate_json(source.read_bytes())
+def _dynamic_profile(variant: str, source: Path, destination: Path, port: int) -> WebExecutionProfile:
+    profile = WebExecutionProfile.model_validate_json(source.read_bytes())
     dynamic_id = f"permission-check-{variant}-e2e"
     scope = profile.target.scope.model_copy(
         update={
@@ -68,7 +68,7 @@ def _dynamic_profile(variant: str, source: Path, destination: Path, port: int) -
             "target": profile.target.model_copy(update={"scope": scope}),
         }
     )
-    destination.write_bytes(canonical_execution_profile_json_bytes(result) + b"\n")
+    destination.write_bytes(canonical_web_execution_profile_json_bytes(result) + b"\n")
     return result
 
 
@@ -127,6 +127,49 @@ def _reset_target(server, *, variant: str, observer_token: str) -> None:
     with response_context as response:
         assert response.status == HTTPStatus.OK
         assert json.loads(response.read())["value"] == "initial-owner-value"
+
+
+def test_authorization_sample_keeps_bounded_test_controls() -> None:
+    owner_token = "sample-owner-control"
+    canary = "sample-secret-canary"
+    server = create_authorization_sample_server(
+        variant="fixed",
+        port=0,
+        tokens={"owner": owner_token, "attacker": "sample-attacker", "peer": "sample-peer"},
+        observer_token="sample-observer",
+        fail_cleanup=True,
+        echo_secret=canary,
+        request_delay_seconds=0.001,
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/resources/owner-resource",
+            headers={
+                "Authorization": f"Bearer {owner_token}",
+                "X-Jiejian-Runner-PID": "4242",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read())
+        assert payload["ordinary_field"] == f"prefix::{canary}::suffix"
+        assert payload["nested"] == {"items": [canary]}
+        assert server.runner_process_ids == [4242]
+        assert server.request_delay_seconds == 0.001
+        reset = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/reset",
+            method="POST",
+            headers={"X-Jiejian-Test-Mode": "1"},
+        )
+        with pytest.raises(HTTPError) as failed_cleanup:
+            urllib.request.urlopen(reset, timeout=3)
+        assert failed_cleanup.value.code == HTTPStatus.INTERNAL_SERVER_ERROR
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+        assert not thread.is_alive()
 
 
 @pytest.mark.e2e
@@ -214,7 +257,7 @@ def test_authorization_profile_worker_runner_publication_loop(variant: str, tmp_
         )
         assert len(view.evidence) == expected_evidence_count
         assert view.publication.result.coverage_gap_count == truth["formal_profile"]["coverage_gaps"]
-        assert context.results.overview(submitted.run.run_id, published=view)["execution_schema_version"] == "3"
+        assert context.results.overview(submitted.run.run_id, published=view)["execution_schema_version"] == "4"
         _reset_target(
             server,
             variant=variant,
@@ -240,8 +283,8 @@ def test_checked_in_authorization_profiles_are_strict_identical_and_gap_free() -
     for variant in ("fixed", "vulnerable", "inconclusive"):
         asset_dir = SAMPLE_ROOT / variant
         profile_path = asset_dir / "profile.json"
-        profile = parse_execution_profile(profile_path.read_bytes())
-        assert canonical_execution_profile_json_bytes(profile).rstrip() == profile_path.read_bytes().rstrip()
+        profile = parse_web_execution_profile(profile_path.read_bytes())
+        assert canonical_web_execution_profile_json_bytes(profile).rstrip() == profile_path.read_bytes().rstrip()
         contract = PermissionContract.model_validate_json((asset_dir / "contract.json").read_bytes(), strict=True)
         plan = ExecutionWorkflow._compile_plan(profile, contract)
         assert not plan.gaps

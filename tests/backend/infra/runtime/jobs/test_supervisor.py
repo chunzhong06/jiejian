@@ -104,7 +104,7 @@ class _ExitedWorker:
 def test_local_supervisor_nonzero_preclaim_exit_launches_once_and_fails_run(
     tmp_path: Path,
     monkeypatch,
-    stage23_request_factory,
+    runtime_request_factory,
 ) -> None:
     parts = _runtime(tmp_path / "var")
     launches: list[str] = []
@@ -119,7 +119,7 @@ def test_local_supervisor_nonzero_preclaim_exit_launches_once_and_fails_run(
 
     monkeypatch.setattr(worker_supervisor_module, "WorkerDispatcher", FakeDispatcher)
     try:
-        submitted = _submit(parts, stage23_request_factory(), "4")
+        submitted = _submit(parts, runtime_request_factory(), "4")
         manager = LocalWorkerSupervisor(
             tmp_path / "var",
             parts.uow_factory,
@@ -153,7 +153,7 @@ def test_local_supervisor_nonzero_preclaim_exit_launches_once_and_fails_run(
 def test_local_supervisor_bootstrap_failures_finish_waiting_job(
     tmp_path: Path,
     monkeypatch,
-    stage23_request_factory,
+    runtime_request_factory,
     failure_point: str,
 ) -> None:
     parts = _runtime(tmp_path / "var")
@@ -173,7 +173,7 @@ def test_local_supervisor_bootstrap_failures_finish_waiting_job(
             raise OSError("worker start failed")
 
     try:
-        submitted = _submit(parts, stage23_request_factory(), "5")
+        submitted = _submit(parts, runtime_request_factory(), "5")
         if failure_point == "request_load":
             monkeypatch.setattr(
                 worker_supervisor_module,
@@ -211,12 +211,12 @@ def test_local_supervisor_bootstrap_failures_finish_waiting_job(
 @pytest.mark.parametrize("database_state", ("failed", "running"))
 def test_local_supervisor_exit_accepts_terminal_or_closes_owned_running_state(
     tmp_path: Path,
-    stage23_request_factory,
+    runtime_request_factory,
     database_state: str,
 ) -> None:
     parts = _runtime(tmp_path / "var")
     try:
-        submitted = _submit(parts, stage23_request_factory(), "6")
+        submitted = _submit(parts, runtime_request_factory(), "6")
         if database_state == "failed":
             parts.attempts.record_waiting_fatal_failure(
                 WaitingFatalFailure(
@@ -265,13 +265,14 @@ def test_local_supervisor_exit_accepts_terminal_or_closes_owned_running_state(
         parts.engine.dispose()
 
 
-def test_local_supervisor_recovers_expired_job_only_after_worker_lock_is_free(
+def test_local_supervisor_recovers_expired_job_only_after_exit_proof(
     tmp_path: Path,
-    stage23_request_factory,
+    runtime_request_factory,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     parts = _runtime(tmp_path / "var")
     try:
-        submitted = _submit(parts, stage23_request_factory(), "7")
+        submitted = _submit(parts, runtime_request_factory(), "7")
         claimed = parts.attempts.claim(
             ClaimJob(
                 job_id=submitted.job.job_id,
@@ -300,6 +301,16 @@ def test_local_supervisor_recovers_expired_job_only_after_worker_lock_is_free(
         lifetime.release()
         manager._next_recovery_scan_us = 0
         manager._recover_expired_workers()
+        no_tree_proof = _job(parts, submitted.job.job_id)
+        assert no_tree_proof is not None and no_tree_proof.state is JobState.RUNNING
+
+        monkeypatch.setattr(
+            WorkerLifetimeLock,
+            "execution_has_exited",
+            staticmethod(lambda *_args: True),
+        )
+        manager._next_recovery_scan_us = 0
+        manager._recover_expired_workers()
 
         recovered = _job(parts, submitted.job.job_id)
         assert recovered is not None and recovered.state is JobState.RETRY_WAIT
@@ -311,14 +322,13 @@ def test_local_supervisor_recovers_expired_job_only_after_worker_lock_is_free(
 def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_path: Path) -> None:
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="3",
+        schema_version="4",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )
     command = SubmitExecution(
-        schema_version="2",
         request=request,
-        idempotency_key="worker-v2-bridge",
+        idempotency_key="worker-current-bridge",
         available_at_us=NOW_US,
         now_us=NOW_US,
         run_id=runner_input.run_id,
@@ -326,7 +336,7 @@ def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_
     )
     supervisor = RunnerSupervisor(
         var_dir=tmp_path / "var",
-        lease_owner="worker-v2-bridge",
+        lease_owner="worker-current-bridge",
         uow_factory=lambda **kwargs: None,
         attempt_service=None,
         request_store=ExecutionRequestStore(tmp_path / "var"),
@@ -336,13 +346,13 @@ def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_
         "run_id": runner_input.run_id,
         "job_id": runner_input.job_id,
         "attempt": 1,
-        "lease_owner": "worker-v2-bridge",
+        "lease_owner": "worker-current-bridge",
         "fencing_token": 1,
         "updated_at_us": NOW_US,
     })()
     built = supervisor._runner_input(job, command.request)
     assert isinstance(built, RunnerInput)
-    assert built.schema_version == "3"
+    assert built.schema_version == "4"
     assert canonical_runner_json_bytes(built)
 
 
@@ -357,7 +367,7 @@ def test_worker_current_non_success_uses_existing_fatal_lifecycle_bridge(tmp_pat
     attempts = FatalCapture()
     supervisor = RunnerSupervisor(
         var_dir=tmp_path / "var",
-        lease_owner="worker-v2-fatal",
+        lease_owner="worker-current-fatal",
         uow_factory=lambda **kwargs: None,
         attempt_service=attempts,
         request_store=ExecutionRequestStore(tmp_path / "var"),
@@ -369,14 +379,14 @@ def test_worker_current_non_success_uses_existing_fatal_lifecycle_bridge(tmp_pat
         run_id="run_" + "b" * 32,
         job_id=job.job_id,
         attempt=1,
-        lease_owner="worker-v2-fatal",
+        lease_owner="worker-current-fatal",
         fencing_token=3,
         finished_at_us=NOW_US,
         result_type=RunnerResultType.FATAL_ERROR,
         run_lifecycle=RunLifecycle.FAILED,
         job_state=JobState.FAILED,
         verdict=None,
-        cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED),
+        cleanup=CleanupResult(status=CleanupStatus.SUCCEEDED, finished_at_us=NOW_US),
         error=RunnerError(code="RUNNER_FATAL", retryable=False),
         plan_fingerprint="0" * 64,
         coverage_record_count=0,

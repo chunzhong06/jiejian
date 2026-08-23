@@ -39,7 +39,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.infra.runtime.job_requests import ExecutionRequestStore
 from product.protocols.flow_draft import FlowDraft
-from product.backend.core.contracts.analysis.canonical import canonical_sha256
+from product.backend.core.contracts.analysis.canonical import contract_analysis_sha256
 from product.backend.workflows.recording.review import FlowDraftReviewer
 
 
@@ -289,7 +289,7 @@ def _history_resolution(
         contract=contract,
         execution_job_id=execution_job_id,
         governed_version=governed_version,
-        canonical_sha256=canonical_sha256(body),
+        canonical_sha256=contract_analysis_sha256(body),
     )
 
 
@@ -309,7 +309,7 @@ def _analysis_issue_batch(
     return CandidateBatch(
         adapter=adapter,
         issues=(issue,),
-        input_sha256=canonical_sha256(
+        input_sha256=contract_analysis_sha256(
             {"adapter": adapter, "subject_id": subject_id, "code": code, "input": str(input_value)}
         ),
     )

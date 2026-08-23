@@ -16,7 +16,6 @@ def test_jiejian_error_keeps_stable_external_structure() -> None:
     assert error.code == ErrorCode.CFG_INVALID.value
     assert str(error) == "CFG_INVALID: 配置无效"
     assert error.to_dict() == {
-        "schema_version": "1",
         "code": "CFG_INVALID",
         "message": "配置无效",
         "details": {"field": "schema_version"},

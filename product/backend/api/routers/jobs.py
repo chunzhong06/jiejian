@@ -36,7 +36,6 @@ def build_jobs_router(context: ApplicationCore) -> APIRouter:
     async def cancel_job(job_id: str):
         result = context.job_queue.request_cancellation(
             RequestCancellation(
-                schema_version="1",
                 job_id=job_id,
                 now_us=time.time_ns() // 1_000,
             )
