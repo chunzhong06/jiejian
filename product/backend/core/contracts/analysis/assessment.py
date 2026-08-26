@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from product.backend.core.contracts.models import ContractCandidate, ContractSourceType, ContractVersion
+from product.backend.core.contracts.models import ContractCandidate, ContractVersion
 from product.backend.core.contracts.analysis.canonical import _issue, _issue_key, contract_analysis_sha256
 from product.backend.core.contracts.analysis.merge import merge_candidates
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisReasonCode, AnalysisSeverity, ContractReviewAssessment
@@ -65,20 +65,6 @@ def assess_contract(
                 detail="rule_marked_unexecutable",
             )
         )
-    explicit = [item for item in candidates if item.source.source_type is not ContractSourceType.LLM]
-    for llm in (item for item in candidates if item.source.source_type is ContractSourceType.LLM):
-        for other in explicit:
-            if set(llm.requirement_ids) & set(other.requirement_ids) and llm.suggestion != other.suggestion:
-                issues.append(
-                    _issue(
-                        AnalysisReasonCode.LLM_REQUIREMENT_CONFLICT,
-                        AnalysisSeverity.BLOCKING,
-                        llm.suggestion.id,
-                        candidate_ids=(llm.candidate_id, other.candidate_id),
-                        requirement_ids=tuple(sorted(set(llm.requirement_ids) & set(other.requirement_ids))),
-                        detail="llm_candidate_conflicts_with_explicit_requirement",
-                    )
-                )
     ordered = tuple(sorted(set(issues), key=_issue_key))
     blocking = tuple(item for item in ordered if item.severity is AnalysisSeverity.BLOCKING)
     warnings = tuple(item for item in ordered if item.severity is AnalysisSeverity.WARNING)

@@ -1,3 +1,5 @@
+# 验证进程运行时中的缓存管理。
+
 from __future__ import annotations
 
 import json
@@ -113,3 +115,35 @@ def test_startup_maintenance_only_removes_expired_temp_and_partial(tmp_path: Pat
     assert not partial.exists()
     assert service.paths.data.is_dir()
     assert str(expired) in result["removed"]
+
+
+def test_startup_maintenance_never_scans_large_cache_roots(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    service = _service(tmp_path / "var")
+    marker = service.paths.pnpm_store / "v11" / "files" / "package.bin"
+    data = service.paths.data / "product.db"
+    marker.parent.mkdir(parents=True)
+    marker.write_bytes(b"cache")
+    data.write_bytes(b"product")
+    calls: dict[Path, int] = {}
+    original = CacheMaintenanceService._measure
+
+    def counted(root: Path, *, collect_partials: bool):
+        resolved = root.resolve()
+        calls[resolved] = calls.get(resolved, 0) + 1
+        return original(root, collect_partials=collect_partials)
+
+    monkeypatch.setattr(
+        CacheMaintenanceService,
+        "_measure",
+        staticmethod(counted),
+    )
+
+    result = service.startup_maintenance()
+
+    assert calls == {}
+    assert result["cache_budget_maintenance"] == "on_demand"
+    assert marker.read_bytes() == b"cache"
+    assert data.read_bytes() == b"product"

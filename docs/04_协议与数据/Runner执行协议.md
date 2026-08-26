@@ -11,7 +11,7 @@
 - `PersistedExecutionRequest` 是执行真源，保存项目、Contract/plan/孪生快照、workflow/effect bindings、身份、目标范围、预算、Observer 引用和指纹。
 - `RunnerInput` 绑定 run、job、attempt、lease owner、fencing token、创建时间、预算和项目快照。
 - `Evidence` 绑定不可变 case/twin snapshot、ExecutionFact、ObservationFact、SecurityEffectFact、基线/闭合状态、verdict 和 evidence hash。
-- `RunnerResult` 返回结果类型、生命周期状态、Job 状态、Verdict、清理结果、错误和覆盖计数。
+- `RunnerResult` 返回结果类型、生命周期状态、Job 状态、Verdict、清理结果、错误和覆盖计数。失败时 `RunnerError` 分别保存主错误 `code`、有限 `phase`、可选稳定 `cause_code` 和可重试性；`CleanupResult.issues` 另存现场恢复、身份关闭、Runtime 关闭或进程树清理问题，不覆盖主错误。
 - Worker/Runner 通过稳定 ID、attempt 和 fencing token 关联；Runner 不自行声明最终发布完成。
 
 ## 生命周期与数据流
@@ -26,7 +26,13 @@ ApplicationCore → PersistedExecutionRequest
   → RunnerResult/staging → Worker 校验 → publication
 ```
 
-目标流量只在受控 Runner 内产生。通用 Orchestrator 的输入输出不含 HTTP 类型；当前 Web Runtime 负责全部 HTTP 细节。Runner 退出、取消、超时或清理失败必须返回可区分的结果，不得将基础设施失败伪装成安全 PASS。`finished_at_us` 只能在全部观察、Evidence 准备和 Cleanup 完成后取得。
+目标流量只在受控 Runner 内产生。通用 Orchestrator 的输入输出不含 HTTP 类型；当前 Web Runtime 负责全部 HTTP 细节。Runner 退出、取消、超时或清理失败必须返回可区分的结果，不得将基础设施失败伪装成安全 PASS。主流程失败后又发生 cleanup 问题时保留原主错误和阶段；只有没有主错误而 cleanup 失败时，主错误才是 `CLEANUP_FAILED`。`finished_at_us` 只能在全部观察、Evidence 准备和 Cleanup 完成后取得。
+
+## 运行中展示旁路
+
+`attempt/progress.jsonl` 是内部、可删除、非权威的运行中展示旁路，不属于 `RunnerResult`、Evidence 或 publication 协议。每行是格式 1 的严格 `RunnerProgressEvent` 根，只允许 `schema_version`、连续 `sequence`、受限 `case_id`/`action_id`、可空 `twin_role`、`phase`、`state` 和 `recorded_at_us`；差分角色只允许 ALLOW control 或 DENY variant，阶段只允许 PREPARE、BASELINE、TARGET、OBSERVE、VERIFY、RECOVERY，状态只允许 STARTED、COMPLETED。
+
+writer 最多追加 256 条、64 KiB、单行 2 KiB，任一构造、校验、文件或预算失败都静默禁用自身，不影响 Runner 主流程。reader 只从数据库当前 Job 的 attempt/fencing 推导固定文件，要求完整换行、逐行 strict 校验和从 1 连续的序号；文件缺失、截断、超限或篡改统一返回空事件。该旁路禁止保存 URL、请求或响应、实际身份或资源值、秘密、错误正文、reason code、HTTP 状态、安全效果或 Verdict，也不得被 Worker 用来完成 Job、发布结果或恢复现场。
 
 ## 失败与安全语义
 
@@ -36,17 +42,19 @@ ApplicationCore → PersistedExecutionRequest
 
 ## 版本规则与 Schema 真源
 
-状态化工作流与效果事实使 RunnerInput、Evidence 和 RunnerResult 升级为单一当前格式；`schema_version` 是机器格式版本，不表示产品代际。协议正文不复制完整字段表，严格模型、required、枚举和 canonical 规则以：
+当前 `PersistedExecutionRequest`、`RunnerInput`、`Evidence` 与 `RunnerResult` 都以字符串 `schema_version="1"` 作为 Web V1 发布基线。每个 reader 只接受各自唯一当前格式，`schema_version` 是机器格式版本，不表示产品代际。协议正文不复制完整字段表，严格模型、required、枚举和 canonical 规则以：
 
-- `product/protocols/runner.py`
+- `product/protocols/runner/`
 - `product/protocols/execution_request.py`
 - `product/protocols/schemas/runner/`
 
 为准。旧开发请求、结果和 wire format 不兼容读取。
 
+`RunnerProgressEvent` 的严格模型和唯一 reader 位于 `product/backend/infra/runtime/runner/progress.py`；它没有 checked-in Runner Schema，因为它不是跨进程结果或 publication 输入。字段变化必须同步该 reader、只读 API 和前端类型，不能通过扩展 `RunnerResult` 偷渡运行中状态。
+
 ## 相关真源
 
 - [执行与观察架构](../02_架构设计/执行与观察架构.md)
 - [工件发布、完整性与恢复边界](../03_架构决策/ADR-0033-工件发布完整性与恢复边界.md)
-- `product/protocols/runner.py`
+- `product/protocols/runner/`
 - `product/protocols/execution_request.py`

@@ -1,6 +1,6 @@
 # 官方 Samples
 
-`samples/web` 是界鉴随源码仓库提供的唯一 Web 演示真源，包含同一个 Authorization Target 的三种行为变体、权限契约、执行配置、外部预期和公开启动脚本。界鉴产品代码不包含被测 Demo 应用，也不会读取 Sample Truth 决定结论。
+`samples/web` 是界鉴随源码仓库提供的唯一 Web 演示真源，包含同一个 Authorization Target 的三种行为变体、公开 OpenAPI 描述、权限契约、执行配置、外部预期和公开启动脚本。界鉴产品代码不包含被测 Demo 应用，也不会读取 Sample Truth 决定结论。
 
 ## 三态权限检查 Golden
 
@@ -18,6 +18,8 @@
 - `truth.json`：只供测试在产品完成真实执行和发布后比较的外部预期。
 
 唯一 Target 实现在 `samples/web/target/server.py`。固定端口分别为 `8865`、`8766`、`8767`；界鉴控制面默认使用 `8765`。Target 只绑定 `127.0.0.1`，reset 只接受回环请求和 `X-Jiejian-Test-Mode: 1`。Owner、attacker、peer 与独立 Owner Observer 使用不同临时凭据。
+
+根目录的 `openapi.json` 只描述三个 loopback 变体地址、明确的 `x-roles` 权限组、OAuth scope 和公开业务接口。普通应用接入只从 `x-roles` 提出权限组候选，并从公开路径提出动作候选；仍需用户逐步确认，不能把 OAuth scope 当成权限组，也不能读取 `truth.json` 或据此产生权限结论。
 
 ## 图形界面入口
 

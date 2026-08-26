@@ -1,5 +1,21 @@
 /* 权限矩阵、只读关系图与高级治理。 */
 .permission-intent-summary { margin-bottom: 16px; }
+.permission-intent-card > .ant-card-body { display: grid; gap: 24px; padding: 24px; }
+.permission-actions-list { margin: 0; }
+.permission-action-card > .ant-card-body { padding: 20px 24px; }
+.permission-action-summary { background: #f8fafc; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 10px 28px; margin-bottom: 8px; padding: 14px 16px; }
+.permission-intent-row { align-items: center; border-bottom: 1px solid #f0f0f0; display: grid; gap: 20px; grid-template-columns: minmax(220px, 1fr) auto minmax(0, .8fr); padding: 18px 0; }
+.permission-intent-row:last-of-type { border-bottom: 0; }
+.permission-action-gaps { margin: 12px 0 0 !important; }
+.permission-compile-panel { border-top: 1px solid #f0f0f0; display: grid; gap: 16px; padding-top: 20px; }
+.permission-compile-actions { margin: 0; }
+.governance-panel { gap: 24px; }
+.governance-form-card > .ant-card-body { display: grid; gap: 18px; padding: 24px; }
+.governance-form-card .ant-typography { margin-bottom: 0; }
+.governance-requirement-form { display: grid !important; gap: 16px; grid-template-columns: minmax(320px, 2fr) minmax(220px, .8fr) minmax(130px, .4fr) auto; }
+.governance-requirement-form .ant-form-item { margin: 0; min-width: 0; }
+.governance-requirement-form .ant-form-item-control-input-content,
+.governance-requirement-form .ant-input { width: 100%; }
 .permission-matrix .ant-table-cell { vertical-align: middle; }
 .permission-matrix .ant-table-cell-fix-left { background: #f8fafc; }
 .permission-cell { min-width: 96px; }
@@ -39,6 +55,11 @@ button.permission-entity-card:focus-visible { background: #172033; border-color:
 .governance-version-item .ant-list-item-action > li { padding: 0; }
 
 @media (max-width: 768px) {
+  .permission-intent-card > .ant-card-body,
+  .permission-action-card > .ant-card-body,
+  .governance-form-card > .ant-card-body { padding: 16px; }
+  .permission-intent-row { align-items: start; grid-template-columns: 1fr; }
+  .governance-requirement-form { grid-template-columns: 1fr; }
   .permission-relationship-board { padding: 12px; }
   .permission-relation-row { grid-template-columns: 1fr; }
   .permission-relation-connector { min-height: 44px; }

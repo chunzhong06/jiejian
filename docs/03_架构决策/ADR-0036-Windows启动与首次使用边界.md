@@ -12,6 +12,8 @@
 
 根 `start.cmd` 是唯一默认双击入口，调用 `scripts/start.ps1`，完成六阶段运行环境检查、Python、Chromium、数据库和前端准备。Python 固定使用项目专用 Conda `jiejian_env`，由受控 uv 按 `uv.lock` frozen 同步并 editable 指向当前仓库。普通启动不安装或运行 Wheel，也不改写锁文件。
 
+`scripts/dev.ps1 start` 仅作为开发者快捷入口薄转发到 `scripts/start.ps1 -Mode Gui`；它不再自行执行 `prepare → serve`。因此 `start.cmd`、直接调用 `start.ps1` 与 `dev.ps1 start` 只有一条产品启动编排，开发环境准备和普通用户启动展示仍保持职责分离。
+
 Node/pnpm 只在 `var/runtime/frontend` 缺失或源码输入、配置、固定工具链构成的指纹变化时准备。前端以同一套“源码输入减明确生成物”同时计算指纹并镜像到 `VarDir/runtime/build/frontend-workspace`；pnpm 安装、TypeScript/Vite build 和 Vitest 都只在该工作区运行。内容寻址 store 进入 `VarDir/cache/pnpm-store`，Vite 缓存进入 `VarDir/cache/vite`，最终网页进入 `VarDir/runtime/frontend`。指纹与 `index.html` 同时命中时直接复用，不解析、下载或启动 Node/pnpm；命中路径仍清除源码树中旧设计遗留的明确生成物。
 
 `VarDir` 按生命周期分成六类：`data` 保存数据库、Job、项目、报告等不可重建事实；`runtime` 保存 uv、Node/pnpm、Playwright、前端工作区与最终网页、Worker 和锁；`cache` 保存 uv、pnpm store、Vite、下载和启动缓存；`logs` 保存有界诊断；`temp` 正常结束后应为空；`test` 只供仓库测试。不得向 `%LOCALAPPDATA%\jiejian`、`VarDir` 根部或 `product/frontend` 写入安装/构建产物。
@@ -26,7 +28,11 @@ Node/pnpm 只在 `var/runtime/frontend` 缺失或源码输入、配置、固定�
 
 既有等待动画只覆盖真实外部等待：查找 Node.js、检查 pnpm、查找或验证 Python、准备 Python 依赖、检查或准备 Chromium、检查或升级本地数据、准备前端依赖、构建界面和启动界面。动画子进程延迟 130 ms 显示首帧，每个 Start 必须在 finally 中 Stop；重定向、CI 和非交互输出完全禁用动画，动画自身失败不得改变准备逻辑或错误码。
 
-`serve` 的 ready 探针成功后必须立即停止“正在启动界面”动画，并在终端提示网页已打开、GUI 退出入口和 `Ctrl+C`。GUI 退出请求携带专用本地控制头并进入 Uvicorn/FastAPI shutdown；该链停止 Worker、Runner、受控浏览器和 ApplicationCore。直接关闭窗口时，系统释放 Serve 锁，Worker 根据随机 owner token 失配请求取消；下次启动用系统锁证明恢复过期任务，遗留 PID 文件不能阻塞启动或决定锁是否有效。
+`serve` 只在 `/ready` 返回 HTTP 200、根版本 1 且 `status=ready` 后认定服务可用。等待约 10 秒只产生一次“启动时间较长，仍在准备”软提示并继续探测，不代表失败，也不得尝试浏览器；serve 在 ready 前退出形成独立启动失败。ready 成立后才尝试 `webbrowser.open()`，浏览器调用失败只表示需要手工访问已经立即可用的地址。Python 产生 `still-starting`、`ready-browser-opened`、`ready-browser-open-failed`、`startup-failed` 稳定事件，PowerShell 只负责展示。ready 成立后必须立即停止“正在启动界面”动画，并在终端提示网页退出入口和 `Ctrl+C`。
+
+创建 ApplicationCore、Run 恢复、结果最终化和 Worker 启动保留在 readiness 关键路径；只处理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留的 startup maintenance 移到关键路径完成后的受控后台任务。该任务由应用生命周期持有，关闭时明确等待，失败只进入现有启动诊断且不撤销 ready。完整 pnpm store、uv cache 等预算统计和 prune 只在用户查看状态或显式维护时执行，并在单次操作复用同一目录快照；普通启动不再递归扫描大型工具缓存，也不计算没有消费者的缓存摘要。启动诊断分别记录关键阶段、有界启动维护、ready 总耗时和浏览器调用耗时。
+
+GUI 退出请求复用由根页面取得的当前 control session，并由统一门禁验证真实 `Host` 与精确同源 `Origin` 后进入 Uvicorn/FastAPI shutdown；不再使用可重放的静态控制头。该链停止 Worker、Runner、受控浏览器和 ApplicationCore。直接关闭窗口时，系统释放 Serve 锁，Worker 根据随机 owner token 失配请求取消；下次启动用系统锁证明恢复过期任务，遗留 PID 文件不能阻塞启动或决定锁是否有效。
 
 自动化和重定向输入场景必须显式选择 GUI、CLI 或 prepare 模式，不能依赖菜单。显式 CLI 模式直接进入普通命令行，不读取键盘。CLI 子会话直接调用启动时解析出的 Python 绝对路径，不为每条命令重复执行 Conda 或 uv wrapper；运行环境只影响该子进程，不永久写入 `PATH`、PowerShell profile 或系统环境变量。不保留旧 `PrepareOnly` 兼容参数，自动化使用 `-Mode Prepare`。
 
@@ -40,7 +46,9 @@ CLI 的人类结果、机器结果和运行日志分开：Human 只在终端展�
 
 PowerShell 启动脚本统一保存为带 BOM 的 UTF-8，使 Windows PowerShell 5.1 在系统“Beta：使用 Unicode UTF-8”关闭时仍能确定性解析中文。`start.cmd` 保持无 BOM 且仅含 ASCII；代码页 65001 只负责后续控制台输入输出，不能让 `cmd.exe` 可靠解析 UTF-8 中文批处理字节，也不能替代 PowerShell 脚本文件的编码标记。
 
-Onboarding 先让用户选择目录，再在 allowlist、深度、文件数和字节预算内只读识别。识别不运行目标命令、不联网、不读取源码正文或秘密；推断出的地址、身份、写操作和 reset 必须由用户确认。快速检查与 Sample 都走普通 Contract/Profile/ExecutionWorkflow。
+Onboarding 先让用户选择目录，再在 allowlist、深度、文件数和字节预算内只读识别结构化配置元数据。基础识别不运行目标命令、不联网、不读取普通源码正文或秘密。系统可以从 OpenAPI、显式 IPv4 loopback 配置、启动参数字面量和已识别框架的有限默认端口产生候选，并以小超时、请求数和响应体预算探测 `127.0.0.1`；不扫描任意端口，不跟随离开 loopback 的重定向，最终地址必须由用户确认。
+
+普通源码正文只有在用户确认 endpoint 后再次明确授权才可读取。源码理解拒绝 reparse point 逃逸，跳过秘密和生成目录，限制深度、文件数、单文件与总字节，不 import、eval、exec、启动项目子进程或联网；长期只保存相对路径、行号、符号、detector 和 hash 等结构证据。普通开始检查与 Sample 仍走唯一 Contract/Profile/ExecutionWorkflow，应用理解候选不得旁路该安全链；旧版手工快速检查不保留兼容入口。
 
 ## 理由与取舍
 

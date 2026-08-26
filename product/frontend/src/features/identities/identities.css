@@ -1,0 +1,18 @@
+/* 测试账号页面只补充本功能需要的纵向节奏与表单宽度。 */
+
+.identity-page { display: grid; gap: 16px; }
+.identity-intro { background: linear-gradient(180deg, rgba(8, 145, 178, .12), rgba(79, 70, 229, .04)); }
+.identity-create { width: min(760px, 100%); margin-top: 20px; }
+.identity-create .ant-select { min-width: 180px; }
+.identity-create .ant-input { min-width: 260px; }
+.identity-login-steps { border-color: #bfdbfe; }
+.identity-login-steps .ant-card-head-title { color: #1e3a8a; }
+.identity-login-step-list { display: grid; gap: 16px; list-style: none; margin: 0; padding: 0; }
+.identity-login-step-list li { align-items: start; display: grid; gap: 10px; grid-template-columns: auto 1fr; }
+.identity-login-step-list li > div { display: grid; gap: 4px; }
+.identity-login-step-list .ant-btn { justify-self: start; margin-top: 4px; }
+
+@media (max-width: 600px) {
+  .identity-create { align-items: stretch; display: flex; flex-direction: column; }
+  .identity-create .ant-select, .identity-create .ant-input, .identity-create .ant-btn { min-width: 0; width: 100%; }
+}

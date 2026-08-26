@@ -24,7 +24,7 @@ def evidence_from_case(document, case_result) -> Evidence:
     """按 CaseResult 的已冻结事实构造内容寻址 Evidence。"""
 
     return build_evidence(
-        schema_version="4",
+        schema_version="1",
         run_id=document.run_id,
         case_snapshot=case_result.case,
         twin_snapshot=case_result.twin_snapshot,

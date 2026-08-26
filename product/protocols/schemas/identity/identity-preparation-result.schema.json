@@ -1,0 +1,184 @@
+{
+  "$defs": {
+    "IdentityPreparationResultType": {
+      "enum": [
+        "PREPARED",
+        "UNSUPPORTED",
+        "CANCELLED",
+        "FAILED"
+      ],
+      "title": "IdentityPreparationResultType",
+      "type": "string"
+    },
+    "PreparedCookieRef": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "maxLength": 253,
+          "minLength": 1,
+          "title": "Domain",
+          "type": "string"
+        },
+        "expires_at_us": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At Us"
+        },
+        "http_only": {
+          "title": "Http Only",
+          "type": "boolean"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "same_site": {
+          "pattern": "^(STRICT|LAX|NONE)$",
+          "title": "Same Site",
+          "type": "string"
+        },
+        "secure": {
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "value_secret_ref": {
+          "maxLength": 512,
+          "pattern": "^cred:jiejian/test-identity/[a-z][a-z0-9_-]{0,63}/tid_[0-9a-f]{32}/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "title": "Value Secret Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "domain",
+        "path",
+        "secure",
+        "http_only",
+        "same_site",
+        "value_secret_ref"
+      ],
+      "title": "PreparedCookieRef",
+      "type": "object"
+    },
+    "TestIdentityAuthMethod": {
+      "enum": [
+        "COOKIE_SESSION",
+        "BEARER"
+      ],
+      "title": "TestIdentityAuthMethod",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "auth_method": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TestIdentityAuthMethod"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "bearer_secret_ref": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "pattern": "^cred:jiejian/test-identity/[a-z][a-z0-9_-]{0,63}/tid_[0-9a-f]{32}/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Bearer Secret Ref"
+    },
+    "cookies": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PreparedCookieRef"
+      },
+      "maxItems": 32,
+      "title": "Cookies",
+      "type": "array"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Identity Id",
+      "type": "string"
+    },
+    "preparation_id": {
+      "pattern": "^prep_[0-9a-f]{32}$",
+      "title": "Preparation Id",
+      "type": "string"
+    },
+    "prepared_at_us": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prepared At Us"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "result_type": {
+      "$ref": "#/$defs/IdentityPreparationResultType"
+    },
+    "schema_version": {
+      "const": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "preparation_id",
+    "project_id",
+    "identity_id",
+    "result_type"
+  ],
+  "title": "IdentityPreparationResult",
+  "type": "object"
+}

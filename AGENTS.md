@@ -15,6 +15,8 @@
 
 当前用户指令优先于项目规范。一个阶段可以继续使用一份完整的大阶段提示词；它始终是范围、禁令和最终验收真源，不因中间规划或分批执行而被拆成多个互不完整的局部真源。设计线程规划、主线程执行和执行线程子阶段交接都必须保持对该完整提示词的可追溯映射，详见 [协作与阶段执行规范](docs/01_技术规范/协作与阶段执行规范.md)。
 
+用户只提供背景而未明确当前动作或交付物时，只确认边界，不启动仓库检查、测试、修改或设计；完整用户意图门禁见[协作与阶段执行规范](docs/01_技术规范/协作与阶段执行规范.md)。
+
 发现规范错误、冲突或不可实施时，不得只迁就旧文档修改代码：先说明证据与影响；涉及架构、入口、状态机、持久化、安全或公共接口时同步 Architecture，长期决策同步 ADR，机器边界同步 Protocol/Schema/Migration，路线或验收边界变化时才更新 Roadmap。
 
 ## 二、架构与安全硬约束
@@ -37,7 +39,7 @@
 - Python 检查同时设置 `PYTHONDONTWRITEBYTECODE=1` 并使用 `python -B`；语法优先 `ast.parse`。仓库 pytest 统一通过 `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test ...` 运行，由该入口注入受控 Python 身份、禁用 cacheprovider，并在 `var/test/` 创建和精确清理唯一 basetemp；不得把裸 `python -m pytest` 的结果作为正式验证证据。
 - 验证范围按“模块范围 × L1～L4 验证程度 × 是否需要 L5”确定；局部改动从最小直接证据开始，只有出现明确升级证据才扩大。同一代码状态不重复 L4。
 - 测试失败先区分产品、测试/fixture 和环境工具；修复后先只重跑失败项与直接邻域。
-- 修改生产源码后，最终验证前使用 `.agents/skills/jiejian-comments/SKILL.md` 校准注释。
+- 修改项目自有源码或测试后，最终验证前使用 `.agents/skills/jiejian-comments/SKILL.md` 校准注释；所有项目自有 Python 文件（包括测试、fixture 和 migration version）至少保留一行职责性 `#` 文件头。
 
 完整测试合同、L1～L5 定义和提交前检查见 [验证与提交规范](docs/01_技术规范/验证与提交规范.md)；沙箱、ACL、权限交接和 Git 保护见 [工作区与权限规范](docs/01_技术规范/工作区与权限规范.md)。
 

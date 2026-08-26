@@ -6,7 +6,6 @@ import type { RecordingDto } from '../api/recordings'
 const keys = {
   project: 'jiejian.project',
   recording: 'jiejian.resource',
-  onboardingSession: 'product.backend.workflows.onboarding.session',
   jobCursor: 'jiejian.cursor',
 } as const
 
@@ -31,10 +30,6 @@ export const browserState = {
   readRecording: () => readJson<RecordingDto>(keys.recording),
   writeRecording: (recording: RecordingDto) => writeJson(keys.recording, recording),
   clearRecording: () => localStorage.removeItem(keys.recording),
-
-  readOnboardingSession: () => localStorage.getItem(keys.onboardingSession),
-  writeOnboardingSession: (sessionId: string) => localStorage.setItem(keys.onboardingSession, sessionId),
-  clearOnboardingSession: () => localStorage.removeItem(keys.onboardingSession),
 
   readJobCursor: (jobId: string) => {
     const raw = localStorage.getItem(`${keys.jobCursor}.${jobId}`)

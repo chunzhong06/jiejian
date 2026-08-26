@@ -1,3 +1,5 @@
+# 提供测试套件共用的环境隔离与基础夹具。
+
 from __future__ import annotations
 
 import os

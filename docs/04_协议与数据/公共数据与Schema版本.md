@@ -10,19 +10,25 @@
 
 | 独立根文档 | Python 真源 | checked-in Schema | 当前格式 |
 | --- | --- | --- | --- |
-| `PermissionContract` | `product/backend/core/verification/permissions.py` | `schemas/contracts/permission-contract.schema.json` | 4 |
-| `WebExecutionProfile` | `web/profile.py` | `schemas/execution/web-execution-profile.schema.json` | 4 |
-| `PersistedExecutionRequest`、`RunnerInput`、`Evidence`、`RunnerResult` | `execution_request.py`、`runner.py` | `schemas/runner/` | 4 |
-| Observer Invocation 与 `ObservationEnvelope` | `observer.py` | `schemas/observer/` | 3 |
-| `RecordingRunnerRequest`、`RecordingEvent`、`RecordingRunnerResult`、`FlowDraft` | `recording.py`、`flow_draft.py` | `schemas/recording/` | 2 |
-| FlowDraft 审阅命令 | `flow_draft.py` | `flow-draft-review-command.schema.json` | 1 |
-| `Flow` | `recording_flow.py` | `schemas/recording/flow.schema.json` | 4 |
-| `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest` | `artifacts.py` | `schemas/artifacts/` | 2 |
-| `BaseRunReport`、`GateRunReport`、`ReportPackageManifest` | `report.py` | `schemas/reports/` | 4 |
+| `PermissionContract`、规范化/覆盖/差分计划 | `product/backend/core/verification/permissions/`、`differential.py` | `schemas/contracts/` | 1 |
+| `WebExecutionProfile`、`HttpRequestTemplate` | `web/profile.py`、`web/request.py` | `schemas/execution/` | 1 |
+| `PersistedExecutionRequest`、`RunnerInput`、`Evidence`、`RunnerResult` | `execution_request.py`、`runner/` | `schemas/runner/` | 1 |
+| Observer Invocation、`ObservationEnvelope` | `observer/` | `schemas/observer/`；同时签入 `ObserverSpec`/`ObserverOutcome` 组件 Schema | 1 |
+| `RecordingRunnerRequest`、`RecordingEvent`、`RecordingRunnerResult` | `recording.py` | `schemas/recording/` | 1 |
+| `FlowDraft`、FlowDraft 审阅命令 | `flow_draft.py` | `schemas/recording/` | 1 |
+| `Flow` | `recording_flow.py` | `schemas/recording/flow.schema.json` | 1 |
+| `IdentityPreparationRequest`、`IdentityPreparationResult` | `test_identity_preparation.py` | `schemas/identity/` | 1 |
+| `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest`、`PublicationManifest` | `artifacts.py`、`run_packages.py` | `schemas/artifacts/` | 1 |
+| `BaseRunReport`、`GateRunReport`、`ReportPackageManifest` | `report.py` | `schemas/reports/` | 1 |
 | `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
-| `PublicationManifest` | `product/backend/infra/artifacts/run_packages.py` | `schemas/artifacts/publication-manifest.schema.json` | 2 |
+| `HttpBindingCandidateBatch` | `product/protocols/http_binding_candidate.py` | `schemas/execution/http-binding-candidate.schema.json` | 1 |
+| `RunnerProgressEvent` | `product/backend/infra/runtime/runner/progress.py` | 无；内部有界 JSONL reader | 1 |
 
-API `ApiResponse` 根格式为 2，`HealthResponse`、`ReadyResponse` 和各独立请求体为 1；运行配置 `Settings` 为 1，CLI `DoctorReport` 为 2。它们的 Python 真源位于相应 API 或运行时入口，目前没有 checked-in JSON Schema。Sample 的 `scenario.json`、`truth.json` 是版本 2 的演示根文档，只由 Sample 启动器和测试读取，产品代码不得据此决定 Verdict。
+API `ApiResponse` 根格式为字符串 1，前端必须先严格验证该最外层版本再读取 `data` 或脱敏错误；未知或缺失版本直接失败。`HealthResponse`、`ReadyResponse`、各独立请求体、运行配置 `Settings` 和 CLI `DoctorReport` 也为 1。ApplicationUnderstanding、ApplicationConnectionView、EndpointDiscoveryResult、ProjectReadiness、AIAssistanceSettings、GuidanceSnapshot、AssistantGuidanceView、ErrorDiagnosis、LLMModelCatalog、LLMProfileView 和其他 `ApiResponse.data` 或 error 内部视图不重复声明版本。它们的 Python 真源位于相应 API 或运行时入口，目前没有 checked-in JSON Schema。Sample 的 `scenario.json`、`truth.json`、`contract.json`、`profile.json` 是当前 Web V1 演示根文档，格式版本统一为 1；样例不扩展 Verdict 覆盖范围。
+
+AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache entry 是各自拥有严格 reader 的版本 1 根文档。模型输出只接受固定模板身份、最多三条不重复 recommendation 和本次系统提供的 option ID；缓存成功记录只保存 provider/profile/model、推理设置、模板身份、事实指纹、已验证推荐和生成时间，失败记录只保存稳定错误码与退避时间。它们没有 checked-in Schema，严格 Python reader 与本地白名单 validator 是当前机器边界真源。
+
+`RunnerProgressEvent` 每行独立持久化并由专用 reader 读取，因此携带自己的格式 1；`GET /api/jobs/{job_id}/progress` 的 `data` 只是 `ApiResponse` 内部视图，不再重复版本。该事件是 staging 外的非权威运行中旁路，不进入 RunnerResult、Evidence、publication、Finding、Report、Gate 或恢复语义。
 
 ## 生命周期与数据流
 
@@ -34,7 +40,7 @@ API `ApiResponse` 根格式为 2，`HealthResponse`、`ReadyResponse` 和各独�
 
 ## 兼容规则
 
-当前不兼容旧开发数据库、Profile、Run、Evidence、Artifact、Report 或旧 wire format。每个根只接受上表当前格式，不提供旧 reader、fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库只接受唯一 Alembic revision `0001_initial`，数据库 revision 与根文档版本不能互相替代。
+当前不兼容旧开发数据库、Profile、Run、Evidence、Artifact、Report 或旧 wire format。每个根只接受上表当前格式，不提供旧 reader、fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库只接受签入的单一 `0001_web_v1` Alembic 基线，数据库 revision 与根文档版本不能互相替代。
 
 ## 版本规则与 Schema 真源
 

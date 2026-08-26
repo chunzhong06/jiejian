@@ -20,6 +20,7 @@ Roadmap 只说明后续方向，不是普通任务的默认必读文档；ADR �
 | Observer、Runner、Case Orchestrator、Web Runtime | [执行与观察架构](02_架构设计/执行与观察架构.md) | [安全意图与验证架构](02_架构设计/安全意图与验证架构.md)、Runner/Observer 协议 |
 | Target Runtime、增加下一种 Target | [Target 扩展指南](02_架构设计/Target扩展指南.md) | [执行与观察架构](02_架构设计/执行与观察架构.md)、Runner 执行协议 |
 | Storage、migration、publication、recovery | [数据与持久化架构](02_架构设计/数据与持久化架构.md) | [系统总体架构](02_架构设计/系统总体架构.md)、相关 migration、Schema |
+| 根 `schema_version`、Schema 漂移或数据库发布基线 | [公共数据与 Schema 版本](04_协议与数据/公共数据与Schema版本.md) | [ADR-0042](03_架构决策/ADR-0042-WebV1协议与数据库发布基线.md)、`product/protocols/schema.py`、当前 migration |
 | GUI、API、CLI、CI、onboarding | [产品入口与控制面架构](02_架构设计/产品入口与控制面架构.md) | [系统总体架构](02_架构设计/系统总体架构.md)、相关 ADR 与代码 |
 | 模块边界、依赖、命名与注释 | [工程设计规范](01_技术规范/工程设计规范.md) | [系统总体架构](02_架构设计/系统总体架构.md)、相关代码与测试 |
 | 测试范围、L1～L5、失败重测与提交 | [验证与提交规范](01_技术规范/验证与提交规范.md) | [测试导航](../tests/README.md)、相关代码与测试 |

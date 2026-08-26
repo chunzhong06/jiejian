@@ -1,3 +1,5 @@
+# 验证权限契约工作流中的Web 绑定候选。
+
 from __future__ import annotations
 
 import json
@@ -17,6 +19,10 @@ from product.protocols import (
     JsonBody,
     ResponseExtractor,
     ResponseExtractorKind,
+    ValueSlot,
+    ValueSlotConsumer,
+    ValueSlotSource,
+    WorkflowStepPurpose,
 )
 
 
@@ -113,17 +119,24 @@ def test_openapi_http_candidates_are_separate_confirmable_execution_hints() -> N
 def test_recording_candidates_have_highest_source_priority() -> None:
     flow = Flow(
         id="recorded-flow",
+        action_candidate_id="action_0123456789abcdef0123456789abcdef",
+        target_step_id="create-project",
         steps=(
             FlowStep(
                 id="create-project",
-                identity_id="owner",
-                resource_id="project",
-                alternate_identity_id="attacker",
-                alternate_resource_id="foreign-project",
+                purpose=WorkflowStepPurpose.TARGET,
                 request_template=HttpRequestTemplate(
                     method="POST",
-                    path="/projects",
+                    path="/projects/{resource_id}",
                     body=JsonBody(value={"name": "bounded"}),
+                    input_slots=(
+                        ValueSlot(
+                            slot_id="resource_id",
+                            source=ValueSlotSource.CASE_RESOURCE_ID,
+                            consumer=ValueSlotConsumer.PATH,
+                            consumer_step_id="create-project",
+                        ),
+                    ),
                     response_extractors=(
                         ResponseExtractor(
                             extractor_id="project-id",

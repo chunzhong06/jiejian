@@ -2,8 +2,8 @@
 # 统一报告应用服务
 #
 # 定位
-#   从可信 PublishedRunView、已完成 Finding、Artifact 快照和明确 GateResult
-#   构造不可变 Base/Gate Report v3。
+#   从可信 PublishedRunView、已完成 Finding、确定性展示快照、Artifact 快照
+#   和明确 GateResult 构造不可变 Base/Gate Report。
 #
 # 边界
 #   只读已发布事实；不物化 Finding、不重新读取 Target、不改变 Verdict。
@@ -35,6 +35,7 @@ from product.protocols.report import (
     ReportFinding,
     ReportGate,
     ReportObserverStatus,
+    ReportPresentation,
     ReportRun,
     ReportRuntime,
     ReportVersions,
@@ -47,10 +48,20 @@ from product.protocols.report import (
 class ReportBuilder:
     """生成、读取和列举唯一 ReportStore 中的不可变报告。"""
 
-    def __init__(self, var_dir: Path, results: PublishedResultReader, findings, gating, uow_factory=None) -> None:
+    def __init__(
+        self,
+        var_dir: Path,
+        results: PublishedResultReader,
+        findings,
+        gating,
+        uow_factory=None,
+        *,
+        presentation=None,
+    ) -> None:
         self._results = results
         self._findings = findings
         self._gating = gating
+        self._presentation = presentation
         self._uow_factory = uow_factory
         self._artifacts = ArtifactResultReader(var_dir)
         self._publication = ReportStore(var_dir)
@@ -66,6 +77,7 @@ class ReportBuilder:
         runtime = self._runtime(view, stored_findings)
         artifact_summary = self._artifact_summary(run_id, view.run.project_id)
         versions = self._versions(view, artifact_summary)
+        presentation = self._presentation_snapshot(run_id, view.run.project_id)
         semantic_input = base_semantic_input_sha256(
             run_id,
             finalization.publication_sha256,
@@ -83,6 +95,7 @@ class ReportBuilder:
             semantic_input_sha256=semantic_input,
             run=self._run(view),
             runtime=runtime,
+            presentation=presentation,
             artifact_summary=artifact_summary,
             versions=versions,
             limitations=limitations,
@@ -116,6 +129,7 @@ class ReportBuilder:
             semantic_input_sha256=semantic_input,
             run=base.run,
             runtime=base.runtime,
+            presentation=base.presentation,
             artifact_summary=base.artifact_summary,
             versions=base.versions,
             limitations=base.limitations,
@@ -151,6 +165,19 @@ class ReportBuilder:
             raise JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_FOUND, "结果最终化记录不存在")
         return record
 
+    def _presentation_snapshot(self, run_id: str, project_id: str) -> ReportPresentation:
+        """把 D-3 确定性投影冻结进 BASE；不在后续读取或 Gate 阶段重算。"""
+
+        if self._presentation is None:
+            raise JiejianError(ErrorCode.REPORT_INPUT_INVALID, "报告展示投影未装配")
+        snapshot = ReportPresentation.model_validate_json(
+            self._presentation.build(run_id).model_dump_json(),
+            strict=True,
+        )
+        if snapshot.run_id != run_id or snapshot.project_id != project_id:
+            raise JiejianError(ErrorCode.REPORT_INPUT_INVALID, "报告展示快照与 Run 关联不一致")
+        return snapshot
+
     @staticmethod
     def _run(view) -> ReportRun:
         return ReportRun(
@@ -168,9 +195,9 @@ class ReportBuilder:
             contract_version=view.run.contract_version,
             engine_version=view.run.engine_version,
             runner_schema_version=view.publication.result.schema_version,
-            evidence_schema_version="4",
-            observer_schema_version="3",
-            artifact_schema_version="2",
+            evidence_schema_version="1",
+            observer_schema_version="1",
+            artifact_schema_version="1",
             ruleset_versions=tuple(sorted({REPORT_RULESET_VERSION, *(item.ruleset_version for item in artifact_summary.results)})),
         )
 

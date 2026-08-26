@@ -3,22 +3,23 @@
 export type AppRoute =
   | '/workspace'
   | '/apps/access'
+  | '/apps/identities'
+  | '/apps/flows'
   | '/apps/rules'
   | '/checks/start'
   | '/checks/results'
   | '/checks/history'
-  | '/advanced/recording'
-  | '/advanced/models'
-  | '/advanced/system'
+  | '/settings/models'
+  | '/settings/system'
 
 export const navigationGroups = [
-  { key: 'apps', label: '应用', items: [{ key: '/apps/access', label: '应用接入' }, { key: '/apps/rules', label: '权限规则' }] },
+  { key: 'apps', label: '应用', items: [{ key: '/apps/access', label: '应用接入' }, { key: '/apps/identities', label: '测试账号' }, { key: '/apps/flows', label: '业务流程' }, { key: '/apps/rules', label: '权限规则' }] },
   { key: 'checks', label: '检查', items: [{ key: '/checks/start', label: '开始检查' }, { key: '/checks/results', label: '检查结果' }, { key: '/checks/history', label: '历史变化' }] },
-  { key: 'advanced', label: '高级', items: [{ key: '/advanced/recording', label: '流程录制' }, { key: '/advanced/models', label: '模型服务' }, { key: '/advanced/system', label: '运行环境' }] },
 ] as const
 
 export function normalizeRoute(pathname: string): AppRoute {
   if (pathname === '/workspace') return pathname
+  if (pathname === '/settings/models' || pathname === '/settings/system') return pathname
   if (navigationGroups.some((group) => group.items.some((item) => item.key === pathname))) return pathname as AppRoute
   return '/workspace'
 }

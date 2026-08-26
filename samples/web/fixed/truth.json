@@ -1,1 +1,1 @@
-{"schema_version":"2","variant":"fixed","expected":"PASS","http_status":403,"resource_state":"UNCHANGED","owner_observer":"AVAILABLE","formal_profile":{"run_verdict":"PASS","coverage_gaps":0}}
+{"schema_version":"1","variant":"fixed","expected":"PASS","http_status":403,"resource_state":"UNCHANGED","owner_observer":"AVAILABLE","formal_profile":{"run_verdict":"PASS","coverage_gaps":0}}

@@ -1,5 +1,11 @@
 /* 检查过程、结果证据和历史变化。 */
-.check-progress { display: flex; flex-direction: column; gap: 8px; }
+.check-preview-card > .ant-card-body { padding: 24px; }
+.check-preview-summary { background: #f8fafc; border-radius: 10px; padding: 16px; }
+.check-preview-action > .ant-card-body { padding: 20px 24px; }
+.check-preview-action .ant-typography { margin-bottom: 12px; }
+.check-preview-list .ant-list-item { padding-block: 14px; }
+.check-start-action { align-self: flex-start; min-width: 140px; }
+.check-progress { display: flex; flex-direction: column; gap: 16px; }
 .check-progress-value { max-width: 620px; }
 .evidence-timeline { margin: 22px 0 8px; padding-left: 28px; position: relative; }
 .evidence-timeline::before { background: linear-gradient(#818cf8, #cbd5e1); bottom: 34px; content: ''; left: 7px; position: absolute; top: 10px; width: 2px; }
@@ -16,6 +22,8 @@
 .finding-list-item { align-items: stretch !important; }
 
 @media (max-width: 768px) {
+  .check-preview-card > .ant-card-body,
+  .check-preview-action > .ant-card-body { padding: 16px; }
   .evidence-timeline { padding-left: 24px; }
   .evidence-timeline-dot { left: -24px; }
 }

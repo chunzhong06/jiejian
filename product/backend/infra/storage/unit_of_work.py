@@ -23,24 +23,31 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.storage.job_control import JobControlRepository
+from product.backend.infra.storage.execution.job_control import JobControlRepository
+from product.backend.infra.storage.application_understanding import ApplicationUnderstandingRepository
 from product.backend.infra.storage.contracts import ContractCandidateRepository, ContractVersionRepository, RequirementRepository
-from product.backend.infra.storage.llm import LLMProfileRepository
+from product.backend.infra.storage.llm import AIAssistanceSettingsRepository, LLMProfileRepository
 from product.backend.infra.storage.execution_profiles import ExecutionProfileRepository
-from product.backend.infra.storage.evidence import EvidenceIndexRepository
-from product.backend.infra.storage.findings import FindingRepository
-from product.backend.infra.storage.finalizations import RunFinalizationRepository
-from product.backend.infra.storage.gating import GatingRepository
-from product.backend.infra.storage.jobs import JobEventRepository, JobRepository
+from product.backend.infra.storage.results.evidence import EvidenceIndexRepository
+from product.backend.infra.storage.results.findings import FindingRepository
+from product.backend.infra.storage.results.finalizations import RunFinalizationRepository
+from product.backend.infra.storage.results.gating import GatingRepository
+from product.backend.infra.storage.execution.jobs import JobEventRepository, JobRepository
 from product.backend.infra.storage.projects import ProjectRepository
 from product.backend.infra.storage.recordings import FlowDraftRevisionRepository, RecordingRepository
-from product.backend.infra.storage.runs import RunRepository
+from product.backend.infra.storage.execution.runs import RunRepository
+from product.backend.infra.storage.setup import (
+    ActionSafetySetupRepository,
+    PermissionIntentRepository,
+    TestIdentityRepository,
+)
 
 
 class StorageUnitOfWork:
     """一个实例只承载一个显式事务；退出时不会隐式提交。"""
 
     projects: ProjectRepository
+    application_understanding: ApplicationUnderstandingRepository
     requirements: RequirementRepository
     contract_candidates: ContractCandidateRepository
     contract_versions: ContractVersionRepository
@@ -52,10 +59,14 @@ class StorageUnitOfWork:
     job_control: JobControlRepository
     evidence: EvidenceIndexRepository
     llm_profiles: LLMProfileRepository
+    ai_assistance_settings: AIAssistanceSettingsRepository
     execution_profiles: ExecutionProfileRepository
     findings: FindingRepository
     finalizations: RunFinalizationRepository
     gating: GatingRepository
+    test_identities: TestIdentityRepository
+    action_safety_setups: ActionSafetySetupRepository
+    permission_intents: PermissionIntentRepository
 
     def __init__(
         self,
@@ -78,6 +89,10 @@ class StorageUnitOfWork:
         self._session = session
         self._committed = False
         self.projects = ProjectRepository(session, self._known_secrets)
+        self.application_understanding = ApplicationUnderstandingRepository(
+            session,
+            self._known_secrets,
+        )
         self.requirements = RequirementRepository(session, self._known_secrets)
         self.contract_candidates = ContractCandidateRepository(
             session, self._known_secrets
@@ -96,12 +111,22 @@ class StorageUnitOfWork:
         self.job_control = JobControlRepository(session, self._known_secrets)
         self.evidence = EvidenceIndexRepository(session, self._known_secrets)
         self.llm_profiles = LLMProfileRepository(session, self._known_secrets)
+        self.ai_assistance_settings = AIAssistanceSettingsRepository(session, self._known_secrets)
         self.execution_profiles = ExecutionProfileRepository(
             session, self._known_secrets
         )
         self.findings = FindingRepository(session, self._known_secrets)
         self.finalizations = RunFinalizationRepository(session, self._known_secrets)
         self.gating = GatingRepository(session, self._known_secrets)
+        self.test_identities = TestIdentityRepository(session, self._known_secrets)
+        self.action_safety_setups = ActionSafetySetupRepository(
+            session,
+            self._known_secrets,
+        )
+        self.permission_intents = PermissionIntentRepository(
+            session,
+            self._known_secrets,
+        )
         return self
 
     def commit(self) -> None:

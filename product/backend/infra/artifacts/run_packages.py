@@ -85,7 +85,7 @@ class PublicationManifest(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     run_id: str = Field(pattern=RUN_ID_PATTERN)
     job_id: str = Field(pattern=JOB_ID_PATTERN)
@@ -330,7 +330,7 @@ def read_publication_manifest(path: Path) -> PublicationManifest:
             raise ValueError("manifest too large")
         raw = path.read_bytes()
         parsed = json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_reject_nonfinite)
-        if not isinstance(parsed, dict) or parsed.get("schema_version") != "2":
+        if not isinstance(parsed, dict) or parsed.get("schema_version") != "1":
             raise ValueError("unsupported publication manifest schema version")
         return PublicationManifest.model_validate_json(raw, strict=True)
     except (OSError, json.JSONDecodeError, ValidationError, ValueError):

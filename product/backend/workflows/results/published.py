@@ -27,10 +27,11 @@ from product.backend.core.lifecycle import JobState, RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.storage import EvidenceIndexRecord, JobRecord, RunRecord, StorageUnitOfWork
-from product.protocols import RunnerResult
+from product.protocols import CleanupIssueCode, RunnerFailurePhase, RunnerResult
 from product.backend.infra.artifacts.run_packages import ValidatedPublication, evidence_records_for_publication, final_run_dir, validate_published_run
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore, PersistedExecutionRequest
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, PersistedExecutionRequest
 from product.backend.infra.runtime.paths import RuntimePaths
+from product.backend.workflows.assistant import ErrorDiagnosisContext, diagnose_error
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,7 +144,7 @@ class PublishedResultReader:
         )
         execution_errors = self._execution_errors(job, events)
         return {
-            "execution_schema_version": "4",
+            "execution_schema_version": "1",
             "result_schema_version": published.publication.result.schema_version if published is not None else None,
             "target_scope": snapshot.target.scope.model_dump(mode="json"),
             "budget": request.budget.model_dump(mode="json"),
@@ -175,26 +176,77 @@ class PublishedResultReader:
         if job.state is not JobState.FAILED:
             return []
         latest = next((event for event in reversed(events) if event.target_state is JobState.FAILED), None)
-        reason_code = str((latest.metadata if latest else {}).get("reason_code") or "WORKER_FATAL")
-        stage, cause, recovery = {
-            "WORKER_FATAL": ("后台执行", "Worker 在任务完成前异常退出。", "重新启动界鉴即可自动恢复其他中断任务；本任务可重新发起检查。"),
-            "RUNNER_FATAL": ("隔离执行", "隔离运行进程未能形成可信结果。", "检查任务日志与运行环境后重新发起检查。"),
-            "CLEANUP_FAILED": ("资源清理", "受控浏览器或临时资源未能完整清理。", "重新启动界鉴触发自动恢复；若仍失败，请提供日志。"),
-            "PROTOCOL_INVALID": ("结果校验", "执行结果格式或关联信息未通过完整性校验。", "不要手工修改运行文件；请提供日志以定位环境或程序问题。"),
-        }.get(reason_code, ("后台执行", "任务未能完整结束。", "查看任务日志后重新发起检查。"))
+        metadata = latest.metadata if latest else {}
+        reason_code = str(metadata.get("reason_code") or "WORKER_FATAL")
+        error_code = str(metadata.get("error_code") or reason_code)
+        phase_code = metadata.get("phase")
+        phase_code = str(phase_code) if phase_code else None
+        stage = {
+            "TARGET_VALIDATION": "目标校验",
+            "PREPARE_RECOVERY": "执行前恢复",
+            "IDENTITY_PREPARATION": "身份准备",
+            "SETUP": "测试准备",
+            "BASELINE": "基线观察",
+            "BEFORE": "执行前观察",
+            "TARGET": "目标操作",
+            "AFTER": "执行后观察",
+            "EVENTUAL": "最终状态观察",
+            "VERIFY": "事实验证",
+            "POST_CASE_RECOVERY": "现场恢复",
+            "RUNTIME_CLOSE": "运行资源关闭",
+        }.get(phase_code, "后台执行")
+        cause_code = metadata.get("cause_code")
+        cause_code = str(cause_code) if cause_code else None
+        cleanup_value = metadata.get("cleanup_issue_codes")
+        cleanup_issues = (
+            [item for item in cleanup_value.split(",") if item]
+            if isinstance(cleanup_value, str)
+            else []
+        )
+        runner_phase = (
+            RunnerFailurePhase(phase_code)
+            if phase_code in {item.value for item in RunnerFailurePhase}
+            else None
+        )
+        cleanup_codes = tuple(
+            CleanupIssueCode(item)
+            for item in cleanup_issues
+            if item in {code.value for code in CleanupIssueCode}
+        )
+        diagnosis = diagnose_error(
+            ErrorDiagnosisContext(
+                error_code=error_code,
+                runner_phase=runner_phase,
+                cause_code=cause_code,
+                cleanup_issue_codes=cleanup_codes,
+            )
+        )
+        cause = f"检查在{stage}阶段未完整结束，错误代码为 {error_code}。"
+        if cause_code is not None:
+            cause += f" 底层原因为 {cause_code}。"
+        if cleanup_issues:
+            cause += " 同时记录到现场恢复或资源关闭问题。"
+        recovery = "查看对应任务日志，确认目标服务和测试环境后重新发起检查。"
         log_path = str(RuntimePaths(self._var_dir).worker_logs / f"{job.job_id}.log")
         copy_text = (
             f"界鉴任务失败\n阶段：{stage}\n原因：{cause}\n任务：{job.job_id}\n"
-            f"错误代码：{reason_code}\n日志：{log_path}\n建议：{recovery}"
+            f"错误代码：{error_code}\n"
+            f"底层原因：{cause_code or '无'}\n"
+            f"清理问题：{','.join(cleanup_issues) or '无'}\n"
+            f"日志：{log_path}\n建议：{recovery}"
         )
         return [{
             "stage": stage,
             "message": cause,
-            "code": reason_code,
+            "code": error_code,
+            "phase": phase_code,
+            "cause_code": cause_code,
+            "cleanup_issues": cleanup_issues,
             "job_id": job.job_id,
             "log_path": log_path,
             "recovery": recovery,
             "copy_text": copy_text,
+            "diagnosis": diagnosis.model_dump(mode="json"),
         }]
     def evidence_document(self, view: PublishedRunView, evidence_id: str) -> dict[str, Any]:
         record = next((item for item in view.evidence if item.evidence_id == evidence_id), None)

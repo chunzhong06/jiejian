@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from product.backend.infra.runtime.process_lock import lock_is_available
+from product.backend.infra.runtime.process.lock import lock_is_available
 
 
 def serve_owner_is_alive(path: Path, owner_token: str) -> bool:

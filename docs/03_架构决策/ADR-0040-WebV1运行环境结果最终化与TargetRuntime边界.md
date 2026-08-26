@@ -22,7 +22,7 @@
 
 ### 3. Node 与 pnpm 只属于前端构建
 
-`product/frontend` 只保存 Git 管理的源码与配置。前端源码输入集合排除 `node_modules`、`dist`、`*.tsbuildinfo` 等明确生成物后，同时驱动构建指纹和 `var/runtime/build/frontend-workspace` 镜像；pnpm install、TypeScript/Vite build 和 Vitest 都只在该工作区运行。pnpm store 与 Vite cache 分别进入 `var/cache/pnpm-store` 和 `var/cache/vite`，最终网页只进入 `var/runtime/frontend`。命中时普通启动直接复用；可选 package 复用同一最终网页并由 Hatch 映射进 Wheel，不回写源码 dist。
+`product/frontend` 只保存 Git 管理的源码与配置。前端源码输入集合排除 `node_modules`、`dist`、`*.tsbuildinfo` 等明确生成物后，同时驱动构建指纹和 `var/runtime/build/frontend-workspace` 镜像；pnpm install、TypeScript/Vite build 和 Vitest 都只在该工作区运行。pnpm store 与 Vite cache 分别进入 `var/cache/pnpm-store` 和 `var/cache/vite`，最终网页只进入 `var/runtime/frontend`。命中时普通启动直接复用。editable 安装明确跳过前端打包输入，不依赖尚未产生的 `var/runtime/frontend`；独立 package 命令先验证该最终网页，再通过 Hatch 构建钩子映射进 Wheel，不回写源码 dist。
 
 ### 4. 运行目录由唯一路径对象分区
 
@@ -31,6 +31,8 @@
 ### 5. 缓存维护与数据重置分离
 
 自动回收和 `cache status/prune/clean` 只能处理 `var/cache` 中的可重建内容；`runtime repair` 负责可证明损坏的前端工作区和其他运行时。它们都不得触碰 `var/data`、健康运行时、活锁、Evidence、报告或凭据。删除整个 `var` 表示从零重建仓库本地运行态，不删除全局项目 Conda 环境。GUI、CLI 和 API 复用 ApplicationCore 下同一缓存维护服务，破坏性操作先预览并确认；`data reset` 不进入缓存入口。
+
+完整缓存统计和预算 prune 只在用户查看状态或显式维护时执行，不属于普通启动。应用完成必要恢复、结果最终化和 Worker 启动后即可对外 ready，再由生命周期持有的后台任务清理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留。按需维护用一个目录快照同时得到字节数、文件数、预算和递归 partial 候选；只有外部 prune 实际改变目录后才再扫描一次。无安全、并发或身份消费者的 cache digest 不计算。启动维护失败只记录诊断，不反向改变服务可用状态。
 
 ### 6. 同一解释器和内核进程树是恢复前提
 
@@ -46,7 +48,7 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ### 9. 当前开发基线不保留历史兼容
 
-旧数据库、旧 Profile、旧 Runner/Evidence/Report、旧路由 alias、旧参数位置、旧类名 re-export、旧 Demo Target 和旧 Schema reader 一次删除。当前 parser 每个根文档只接受一个明确版本；最终数据库只保留基于当前 ORM 生成的 `0001_initial`。Repository-owned Sample、fixture、Schema、客户端和 CURRENT 文档同步迁移，不提供 fallback 或 wrapper。
+旧数据库、旧 Profile、旧 Runner/Evidence/Report、旧路由 alias、旧参数位置、旧类名 re-export、旧 Demo Target 和旧 Schema reader 一次删除。当前 parser 每个根文档只接受一个明确版本；最终数据库只保留显式的 `0001_web_v1` 发布基线。Repository-owned Sample、fixture、Schema、客户端和 CURRENT 文档同步迁移，不提供 fallback 或 wrapper。
 
 ## 理由与取舍
 
@@ -58,7 +60,7 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ## 迁移与兼容
 
-当前单代基线不读取或迁移旧运行目录和旧数据库。仓库自身调用方、Sample、fixture、Schema、前端客户端和文档已一次迁移；数据库只保留根据最终 metadata 生成的唯一 `0001_initial`。Windows 验收从全新本地运行态双击仓库根 `start.cmd`，证明 editable 当前源码、受控依赖和 `var/runtime/frontend` 可以完整再生；旧兼容入口直接删除。
+当前单代基线不读取或迁移旧运行目录和旧数据库。仓库自身调用方、Sample、fixture、Schema、前端客户端和文档已一次迁移；数据库只保留唯一显式 `0001_web_v1`。Windows 验收从全新本地运行态双击仓库根 `start.cmd`，证明 editable 当前源码、受控依赖和 `var/runtime/frontend` 可以完整再生；旧兼容入口直接删除。
 
 ## 相关真源
 

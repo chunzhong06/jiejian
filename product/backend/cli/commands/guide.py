@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from uuid import uuid4
 
 import click
@@ -14,9 +13,8 @@ from product.backend.cli.bootstrap import application_scope
 from product.backend.cli.commands.system import serve_command
 from product.backend.cli.presentation import (
     emit_doctor,
-    emit_guide_result,
+    emit_result_presentation,
     fail,
-    human_wait,
     presentation_mode,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
@@ -74,9 +72,18 @@ def guide_command(context: typer.Context) -> None:
 
 def _write_workspace(context: typer.Context) -> None:
     with application_scope(context) as application:
-        snapshot = application.guide.snapshot()
-    projects = snapshot["projects"]
-    recent_runs = snapshot["recent_runs"]
+        projects = application.projects.list()
+        guidance = tuple(
+            (project, application.assistant_guidance.get(project.project_id))
+            for project in projects
+        )
+        recent = tuple(
+            (
+                project,
+                application.project_readiness.get(project.project_id),
+            )
+            for project in projects
+        )
     typer.echo("界鉴命令行 · 引导模式")
     typer.echo("")
     typer.secho("运行环境已经准备完成  ✓", fg="green")
@@ -89,22 +96,24 @@ def _write_workspace(context: typer.Context) -> None:
         typer.echo("下一步")
         typer.echo("└─ 打开图形界面接入你的 Web 应用")
     else:
-        rules_ready = any(item["permission_rules_ready"] for item in projects)
+        runnable = any(snapshot.current_scope_runnable for _, snapshot in guidance)
         typer.echo("当前状态")
         typer.echo(f"├─ ✓ 已接入 {len(projects)} 个应用")
         typer.echo(
-            "├─ ✓ 权限规则已准备" if rules_ready else "├─ ! 还需要确认权限规则"
+            "├─ ✓ 有可直接检查的当前范围" if runnable else "├─ ! 还需要在图形界面完成准备"
         )
-        if recent_runs:
-            typer.echo(f"└─ {_verdict_line(recent_runs[0][1].verdict)}")
+        latest = next(
+            (readiness.latest_verified_run_id for _, readiness in recent if readiness.latest_verified_run_id),
+            None,
+        )
+        if latest:
+            typer.echo("└─ 已有最近一次可信检查结果")
         else:
             typer.echo("└─ ○ 尚未开始检查")
         typer.echo("")
         typer.echo("下一步")
         typer.echo(
-            "└─ 查看最近检查结果"
-            if recent_runs
-            else "└─ 开始第一次检查" if rules_ready else "└─ 在图形界面确认权限规则"
+            "└─ 查看最近检查结果" if latest else "└─ 开始第一次检查" if runnable else "└─ 在图形界面完成准备"
         )
     typer.echo("")
 
@@ -127,36 +136,27 @@ def _first_check(context: typer.Context) -> None:
 def _existing_application(context: typer.Context) -> None:
     try:
         with application_scope(context) as application:
-            snapshot = application.guide.snapshot()
-        candidates = [
-            item
-            for item in snapshot["projects"]
-            if item["permission_rules_ready"] and item["profiles"]
-        ]
+            projects = application.projects.list()
+            candidates = [
+                project
+                for project in projects
+                if application.assistant_guidance.get(project.project_id).current_scope_runnable
+            ]
         if not candidates:
-            _complex_in_gui(context, "接入应用并确认权限规则")
+            _complex_in_gui(context, "接入应用并完成权限规则准备")
             return
-        labels = tuple(item["project"].name for item in candidates) + ("返回",)
+        labels = tuple(project.name for project in candidates) + ("返回",)
         selected = _choose("选择应用", labels)
         if selected == len(candidates):
             return
-        profiles = candidates[selected]["profiles"]
-        if len(profiles) > 1:
-            profile_labels = tuple(
-                f"检查方式 {index + 1}" for index in range(len(profiles))
-            ) + ("返回",)
-            profile_index = _choose("选择检查方式", profile_labels)
-            if profile_index == len(profiles):
-                return
-        else:
-            profile_index = 0
+        project = candidates[selected]
         with application_scope(context) as application:
-            with human_wait("正在执行权限检查"):
-                result = application.execution.run_profile(
-                    Path(profiles[profile_index].source_path),
-                    idempotency_key=f"guide-{uuid4().hex}",
-                )
-        emit_guide_result(result)
+            submission, _, _ = application.checks.submit(
+                project.project_id,
+                idempotency_key=f"guide-{uuid4().hex}",
+            )
+        typer.echo("检查已提交。请打开图形界面查看运行进度。")
+        typer.echo(f"任务已进入队列：{submission.job.job_id}")
         _pause()
     except JiejianError as exc:
         fail(exc)
@@ -165,24 +165,29 @@ def _existing_application(context: typer.Context) -> None:
 def _recent_result(context: typer.Context) -> None:
     try:
         with application_scope(context) as application:
-            recent = application.guide.snapshot()["recent_runs"]
-            if not recent:
+            candidates = []
+            for project in application.projects.list():
+                readiness = application.project_readiness.get(project.project_id)
+                if readiness.latest_verified_run_id:
+                    presentation = application.result_presentation.build(
+                        readiness.latest_verified_run_id
+                    )
+                    candidates.append((project, presentation))
+            if not candidates:
                 typer.echo("")
                 typer.echo("还没有检查结果。")
                 typer.echo("下一步：接入应用并开始第一次检查。")
                 _pause()
                 return
             labels = tuple(
-                f"{project.name} · {_verdict_text(run.verdict)}"
-                for project, run in recent[:5]
+                f"{project.name} · {presentation.headline}"
+                for project, presentation in candidates[:5]
             ) + ("返回",)
             selected = _choose("选择检查结果", labels)
             if selected == len(labels) - 1:
                 return
-            run = recent[selected][1]
-            view = application.results.read(run.run_id)
-            result = view.publication.result
-        emit_guide_result(result)
+            presentation = candidates[selected][1]
+        emit_result_presentation(presentation)
         _pause()
     except JiejianError as exc:
         fail(exc)
@@ -236,19 +241,3 @@ def _choose(title: str, items: tuple[str, ...]) -> int:
 def _pause() -> None:
     typer.prompt("按 Enter 返回", default="", show_default=False)
     typer.echo("")
-
-
-def _verdict_text(verdict: object) -> str:
-    return {
-        "PASS": "未发现确认问题",
-        "BLOCK": "发现权限问题",
-        "INCONCLUSIVE": "证据不足",
-    }.get(str(verdict), "检查尚未完成")
-
-
-def _verdict_line(verdict: object) -> str:
-    return {
-        "PASS": "✓ 最近检查未发现确认问题",
-        "BLOCK": "× 最近检查发现权限问题",
-        "INCONCLUSIVE": "! 最近检查证据不足",
-    }.get(str(verdict), "○ 最近检查尚未完成")

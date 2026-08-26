@@ -1,31 +1,29 @@
-/* 录制准备卡：选择执行配置、单一身份和有界录制时长。 */
+/* 录制准备卡：选择已确认业务动作、已准备测试身份和有界录制时长。 */
 
 import { Alert, Button, Card, InputNumber, Select, Space, Typography } from 'antd'
-import type { ExecutionProfileDto } from '../../api/executionProfiles'
-import type { RecordingIdentityDto } from '../../api/recordings'
-import { productTermLabel } from '../../app/presentation'
+import type { RecordingActionDto, RecordingTestIdentityDto } from '../../api/recordings'
 
-export function RecordingSetupCard({ profiles, identities, profileId, identityId, duration, busy, disabled, onProfileChange, onIdentityChange, onDurationChange, onCreate }: {
-  profiles: ExecutionProfileDto[]
-  identities: RecordingIdentityDto[]
-  profileId?: string
-  identityId?: string
+export function RecordingSetupCard({ actions, identities, actionId, testIdentityId, duration, busy, disabled, onActionChange, onIdentityChange, onDurationChange, onCreate }: {
+  actions: RecordingActionDto[]
+  identities: RecordingTestIdentityDto[]
+  actionId?: string
+  testIdentityId?: string
   duration: number
   busy: boolean
   disabled: boolean
-  onProfileChange: (value: string) => void
+  onActionChange: (value: string) => void
   onIdentityChange: (value: string) => void
   onDurationChange: (value: number) => void
   onCreate: () => void
 }) {
-  return <Card title="选择录制身份">
-    {profiles.length === 0
-      ? <Alert type="info" showIcon message="当前应用还没有已登记的 Web 执行配置" description="请先在权限规则中登记 Web 执行配置，再回来选择录制身份。" />
+  return <Card title="选择要录制的业务动作">
+    {actions.length === 0 || identities.length === 0
+      ? <Alert type="info" showIcon message="还不能开始录制" description={actions.length === 0 ? '请先在应用理解中确认至少一个业务动作。' : '请先准备一个通常能够成功执行该动作的测试身份。'} />
       : <Space wrap size="middle">
-        {profiles.length > 1 && <Select aria-label="选择执行配置" value={profileId} onChange={onProfileChange} style={{ minWidth: 220 }} options={profiles.map((item, index) => ({ value: item.profile_id, label: item.name ?? `执行配置 ${index + 1}` }))} />}
-        <Select aria-label="选择录制身份" placeholder="选择一个身份" value={identityId} onChange={onIdentityChange} style={{ minWidth: 260 }} options={identities.map((item) => ({ value: item.identity_id, label: <Space><Typography.Text strong>{productTermLabel('role', item.role, false)}</Typography.Text><Typography.Text type="secondary">{productTermLabel('identity', item.identity_id, false)} · {item.identity_id}</Typography.Text></Space> }))} />
+        <Select aria-label="选择业务动作" value={actionId} onChange={onActionChange} style={{ minWidth: 260 }} options={actions.map((item) => ({ value: item.action_candidate_id, label: item.display_name }))} />
+        <Select aria-label="选择测试身份" placeholder="选择一个已准备身份" value={testIdentityId} onChange={onIdentityChange} style={{ minWidth: 280 }} options={identities.map((item) => ({ value: item.test_identity_id, label: <Space><Typography.Text strong>{item.label}</Typography.Text><Typography.Text type="secondary">{item.role_display_name}</Typography.Text></Space> }))} />
         <Space.Compact><InputNumber aria-label="最长录制时间（秒）" min={60} max={3600} value={duration} onChange={(value) => onDurationChange(value ?? 600)} /><Button disabled>秒</Button></Space.Compact>
-        <Button type="primary" loading={busy} disabled={!profileId || !identityId || disabled} onClick={onCreate}>打开浏览器并准备登录</Button>
+        <Button type="primary" loading={busy} disabled={!actionId || !testIdentityId || disabled} onClick={onCreate}>打开浏览器并开始准备</Button>
       </Space>}
   </Card>
 }

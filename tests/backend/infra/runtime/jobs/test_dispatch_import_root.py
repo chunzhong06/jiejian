@@ -1,3 +1,5 @@
+# 验证作业运行时中的调度子进程导入根。
+
 from __future__ import annotations
 
 import os
@@ -8,7 +10,7 @@ import pytest
 
 from product.backend.infra.runtime.jobs.dispatch import WORKER_LOG_MAX_BYTES, WorkerDispatcher
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, run_python_module
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, run_python_module
 from tests.fixtures.runtime_environment import runtime_identity_environment
 
 
@@ -45,10 +47,10 @@ def test_worker_dispatch_uses_import_root_for_child_cwd(tmp_path: Path) -> None:
     assert command[1:4] == [
         "-B",
         "-m",
-        "product.backend.infra.runtime.process_bootstrap",
+        "product.backend.infra.runtime.process.bootstrap",
     ]
     module_index = command.index("--module")
-    assert command[module_index + 1] == "product.backend.infra.runtime.worker_process"
+    assert command[module_index + 1] == "product.backend.infra.runtime.worker.process"
     assert captured["cwd"] == str(RuntimePaths(var_dir).temp)
     assert captured["cwd"] != str(var_dir.resolve())
     assert command[command.index("--var-dir") + 1] == str(var_dir.resolve())
@@ -107,7 +109,7 @@ def test_real_recording_module_imports_away_from_repository_root(tmp_path: Path)
 
     completed = run_python_module(
         os.environ,
-        "product.backend.infra.runtime.recording_process",
+        "product.backend.infra.recording.process",
         role=ProcessEnvironmentRole.RECORDING,
         cwd=outside,
         timeout_seconds=10,

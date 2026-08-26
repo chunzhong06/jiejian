@@ -10,13 +10,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping
 
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
 from product.protocols.observer import CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverInvocation, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType, OBSERVER_JSON_MAX_BYTES, ProvenanceType, build_normalized_state, observer_canonical_sha256, evaluate_observer_outcome, parse_observer_json
 
 

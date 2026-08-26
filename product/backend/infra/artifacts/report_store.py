@@ -118,7 +118,7 @@ class ReportStore:
             if not _SAFE_ID.fullmatch(entry.name):
                 raise JiejianError(ErrorCode.REPORT_INTEGRITY, "报告目录标识无效")
             report = self.read(run_id, entry.name)
-            item = {"schema_version": "4", "report_id": report.report_id, "run_id": run_id, "report_type": report.report_type, "canonical_sha256": report.canonical_sha256}
+            item = {"report_id": report.report_id, "run_id": run_id, "report_type": report.report_type, "canonical_sha256": report.canonical_sha256}
             if report.report_type == "GATE":
                 item.update({"gate_result_id": report.gate_result_id, "gate_decision": report.gate.decision})
             output.append(item)

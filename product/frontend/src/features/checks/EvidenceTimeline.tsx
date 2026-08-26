@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Alert, Card, Collapse, Descriptions, List, Select, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { resultsApi, type EvidenceCaseSnapshotDto, type EvidenceDto, type ExecutionFactDto, type ObservationFactDto, type SecurityEffectFactDto } from '../../api/results'
-import { expectationLabel, productTermLabel, verdictLabel } from '../../app/presentation'
+import { expectationLabel, verdictLabel } from '../../app/presentation'
 
 type TechnicalObservationDto = {
   observer_type?: string
@@ -78,11 +78,11 @@ function CaseFacts({ value = {} }: { value?: EvidenceCaseSnapshotDto }) {
   const resources = Array.isArray(value.resource_ids) ? value.resource_ids : []
   const expectations = Array.isArray(value.expectations) ? value.expectations : []
   return <Descriptions size="small" column={{ xs: 1, sm: 2 }}>
-    <Descriptions.Item label="身份">{productTermLabel('identity', value.subject_id)}</Descriptions.Item>
-    <Descriptions.Item label="动作">{productTermLabel('action', value.action_id)}</Descriptions.Item>
-    <Descriptions.Item label="资源">{resources.map((item: unknown) => productTermLabel('resource', item)).join('、') || '未提供'}</Descriptions.Item>
+    <Descriptions.Item label="身份">{ordinaryIdentityLabel(value.subject_id)}</Descriptions.Item>
+    <Descriptions.Item label="动作">{ordinaryActionLabel(value.action_id)}</Descriptions.Item>
+    <Descriptions.Item label="资源">{resources.map((item: unknown) => ordinaryResourceLabel(item)).join('、') || '未提供'}</Descriptions.Item>
     <Descriptions.Item label="预期">{expectations.map(expectationLabel).join('、') || '未提供'}</Descriptions.Item>
-    <Descriptions.Item label="关系路径">{Array.isArray(value.relation_paths) ? value.relation_paths.map((path: unknown) => list(path)).join('；') : '未提供'}</Descriptions.Item>
+    <Descriptions.Item label="关系路径">{Array.isArray(value.relation_paths) && value.relation_paths.length > 0 ? '已按权限关系检查' : '未提供'}</Descriptions.Item>
     <Descriptions.Item label="必需观察">{Array.isArray(value.required_observations) && value.required_observations.length > 0 ? value.required_observations.map(requirementLabel).join('、') : '未提供'}</Descriptions.Item>
   </Descriptions>
 }
@@ -91,11 +91,13 @@ function ExecutionFacts({ value = {} }: { value?: ExecutionFactDto }) {
   if (!value || Object.keys(value).length === 0) return <Typography.Text type="secondary">未提供执行事实</Typography.Text>
   return <Descriptions size="small" column={{ xs: 1, sm: 2 }}>
     <Descriptions.Item label="检查目标">{targetLabel(value.target_type)}</Descriptions.Item>
-    <Descriptions.Item label="动作">{productTermLabel('action', value.action_id)}</Descriptions.Item>
+    <Descriptions.Item label="动作">{ordinaryActionLabel(value.action_id)}</Descriptions.Item>
     <Descriptions.Item label="执行结果"><Tag>{outcomeLabel(value.outcome)}</Tag></Descriptions.Item>
-    {Array.isArray(value.reason_codes) && value.reason_codes.length > 0 && <Descriptions.Item label="原因">{list(value.reason_codes)}</Descriptions.Item>}
   </Descriptions>
 }
+function ordinaryIdentityLabel(value: unknown) { return value ? '测试账号' : '未提供测试账号' }
+function ordinaryActionLabel(value: unknown) { return value ? '业务动作' : '未提供业务动作' }
+function ordinaryResourceLabel(value: unknown) { return value ? '测试资源' : '未提供测试资源' }
 
 function DifferentialFacts({ value }: { value: EvidenceDto }) {
   return <Descriptions size="small" column={{ xs: 1, sm: 2 }}>
@@ -109,18 +111,17 @@ function SecurityEffectFacts({ values }: { values: SecurityEffectFactDto[] }) {
   if (values.length === 0) return <Typography.Text type="secondary">未提供聚合后的真实影响</Typography.Text>
   return <List size="small" dataSource={values} renderItem={(item) => <List.Item className="observation-item"><Descriptions size="small" column={{ xs: 1, sm: 2 }} className="full-width">
     <Descriptions.Item label="影响类型">{securityEffectLabel(item.kind)}</Descriptions.Item>
-    <Descriptions.Item label="资源">{productTermLabel('resource', item.resource_id)}</Descriptions.Item>
+    <Descriptions.Item label="资源">{ordinaryResourceLabel(item.resource_id)}</Descriptions.Item>
     <Descriptions.Item label="影响状态"><Tag color={item.state === 'CONFIRMED' ? 'red' : item.state === 'ABSENT' ? 'green' : 'gold'}>{effectStateLabel(item.state)}</Tag></Descriptions.Item>
     <Descriptions.Item label="证据闭合">{closureLabel(item.temporal_closure)}</Descriptions.Item>
     <Descriptions.Item label="证据质量">{item.complete && item.reliable && item.correlated ? '完整、可靠且已关联' : '仍有证据缺口'}</Descriptions.Item>
     <Descriptions.Item label="基线">{booleanLabel(item.baseline_integrity, '一致', '无法确认')}</Descriptions.Item>
-    {Array.isArray(item.reason_codes) && item.reason_codes.length > 0 && <Descriptions.Item label="原因代码">{list(item.reason_codes)}</Descriptions.Item>}
   </Descriptions></List.Item>} />
 }
 
 function ObservationFacts({ values }: { values: ObservationFactDto[] }) {
   if (values.length === 0) return <Typography.Text type="secondary">未提供真实观察事实</Typography.Text>
-  return <List size="small" dataSource={values} renderItem={(item) => <List.Item className="observation-item"><Descriptions size="small" column={{ xs: 1, sm: 2 }} className="full-width"><Descriptions.Item label="观察要求">{requirementLabel(item.requirement_id)}</Descriptions.Item><Descriptions.Item label="资源">{productTermLabel('resource', item.resource_id)}</Descriptions.Item><Descriptions.Item label="效果"><Tag>{effectLabel(item.effect)}</Tag></Descriptions.Item><Descriptions.Item label="完整性">{booleanLabel(item.complete, '完整', '未完成')}</Descriptions.Item><Descriptions.Item label="可靠性">{booleanLabel(item.reliable, '可靠', '不可靠')}</Descriptions.Item>{Array.isArray(item.reason_codes) && item.reason_codes.length > 0 && <Descriptions.Item label="原因代码">{list(item.reason_codes)}</Descriptions.Item>}</Descriptions></List.Item>} />
+  return <List size="small" dataSource={values} renderItem={(item) => <List.Item className="observation-item"><Descriptions size="small" column={{ xs: 1, sm: 2 }} className="full-width"><Descriptions.Item label="观察要求">{requirementLabel(item.requirement_id)}</Descriptions.Item><Descriptions.Item label="资源">{ordinaryResourceLabel(item.resource_id)}</Descriptions.Item><Descriptions.Item label="效果"><Tag>{effectLabel(item.effect)}</Tag></Descriptions.Item><Descriptions.Item label="完整性">{booleanLabel(item.complete, '完整', '未完成')}</Descriptions.Item><Descriptions.Item label="可靠性">{booleanLabel(item.reliable, '可靠', '不可靠')}</Descriptions.Item></Descriptions></List.Item>} />
 }
 
 function TechnicalDetails({ detail }: { detail: EvidenceDto }) {

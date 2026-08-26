@@ -1,22 +1,71 @@
 {
   "$defs": {
-    "ConfirmFlowDraftVariable": {
+    "ConfirmFlowDraftResource": {
       "additionalProperties": false,
       "properties": {
+        "candidate_id": {
+          "pattern": "^resource-[0-9a-f]{16}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "operation": {
+          "const": "CONFIRM_RESOURCE_SLOT",
+          "title": "Operation",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "candidate_id"
+      ],
+      "title": "ConfirmFlowDraftResource",
+      "type": "object"
+    },
+    "ConfirmFlowDraftTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "const": "CONFIRM_TARGET_STEP",
+          "title": "Operation",
+          "type": "string"
+        },
         "schema_version": {
           "const": "1",
           "default": "1",
           "title": "Schema Version",
           "type": "string"
         },
+        "step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Step Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "step_id"
+      ],
+      "title": "ConfirmFlowDraftTarget",
+      "type": "object"
+    },
+    "ConfirmFlowDraftVariable": {
+      "additionalProperties": false,
+      "properties": {
         "operation": {
           "const": "CONFIRM_VARIABLE_SOURCE",
           "title": "Operation",
           "type": "string"
         },
-        "variable_name": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Variable Name",
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
           "type": "string"
         },
         "source_event_sequence": {
@@ -28,6 +77,11 @@
           "maxLength": 512,
           "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_-]*|\\[[0-9]+\\])*$|^\\$location(?:\\.[A-Za-z0-9_-]+)*$",
           "title": "Source Json Path",
+          "type": "string"
+        },
+        "variable_name": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Variable Name",
           "type": "string"
         }
       },
@@ -43,15 +97,15 @@
     "DeleteFlowDraftStep": {
       "additionalProperties": false,
       "properties": {
+        "operation": {
+          "const": "DELETE_STEP",
+          "title": "Operation",
+          "type": "string"
+        },
         "schema_version": {
           "const": "1",
           "default": "1",
           "title": "Schema Version",
-          "type": "string"
-        },
-        "operation": {
-          "const": "DELETE_STEP",
-          "title": "Operation",
           "type": "string"
         },
         "step_id": {
@@ -70,10 +124,9 @@
     "MergeFlowDraftSteps": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "1",
-          "default": "1",
-          "title": "Schema Version",
+        "left_step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Left Step Id",
           "type": "string"
         },
         "operation": {
@@ -81,14 +134,15 @@
           "title": "Operation",
           "type": "string"
         },
-        "left_step_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Left Step Id",
-          "type": "string"
-        },
         "right_step_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Right Step Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
           "type": "string"
         }
       },
@@ -103,10 +157,10 @@
     "RenameFlowDraftStep": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "1",
-          "default": "1",
-          "title": "Schema Version",
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Name",
           "type": "string"
         },
         "operation": {
@@ -114,15 +168,15 @@
           "title": "Operation",
           "type": "string"
         },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
         "step_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Step Id",
-          "type": "string"
-        },
-        "name": {
-          "maxLength": 128,
-          "minLength": 1,
-          "title": "Name",
           "type": "string"
         }
       },
@@ -137,6 +191,8 @@
   },
   "discriminator": {
     "mapping": {
+      "CONFIRM_RESOURCE_SLOT": "#/$defs/ConfirmFlowDraftResource",
+      "CONFIRM_TARGET_STEP": "#/$defs/ConfirmFlowDraftTarget",
       "CONFIRM_VARIABLE_SOURCE": "#/$defs/ConfirmFlowDraftVariable",
       "DELETE_STEP": "#/$defs/DeleteFlowDraftStep",
       "MERGE_ADJACENT_STEPS": "#/$defs/MergeFlowDraftSteps",
@@ -156,6 +212,12 @@
     },
     {
       "$ref": "#/$defs/ConfirmFlowDraftVariable"
+    },
+    {
+      "$ref": "#/$defs/ConfirmFlowDraftTarget"
+    },
+    {
+      "$ref": "#/$defs/ConfirmFlowDraftResource"
     }
   ]
 }

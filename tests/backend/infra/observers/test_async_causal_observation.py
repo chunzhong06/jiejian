@@ -1,3 +1,5 @@
+# 验证观察器基础设施中的异步因果观察。
+
 from __future__ import annotations
 
 import http.client

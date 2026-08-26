@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 import os
 import logging
+from enum import StrEnum
 from pathlib import Path
 
 import typer
@@ -18,6 +19,15 @@ from product.backend.cli.presentation import emit_doctor, emit_json, fail
 logger = logging.getLogger("jiejian.cli.system")
 
 
+class ServeReadinessStatus(StrEnum):
+    """Python 端持有的服务就绪与浏览器打开事实。"""
+
+    STARTUP_STILL_WAITING = "still-starting"
+    READY_BROWSER_OPENED = "ready-browser-opened"
+    READY_BROWSER_OPEN_FAILED = "ready-browser-open-failed"
+    SERVER_STOPPED_BEFORE_READY = "startup-failed"
+
+
 def _wait_for_ready(
     server,
     host: str,
@@ -25,9 +35,14 @@ def _wait_for_ready(
     *,
     client_factory=None,
     open_browser=None,
-    timeout_seconds: float = 10.0,
-) -> bool:
-    """等待 lifespan 就绪响应后再打开浏览器，避免把端口监听误判为可用。"""
+    soft_wait_seconds: float = 10.0,
+    poll_interval_seconds: float = 0.05,
+    status_callback=None,
+    stopped_event=None,
+    monotonic=time.monotonic,
+    sleeper=time.sleep,
+) -> ServeReadinessStatus:
+    """持续等待真实 /ready；软阈值只报告仍在启动，不形成失败结论。"""
 
     if client_factory is None:
         import httpx
@@ -41,9 +56,15 @@ def _wait_for_ready(
         import httpx
     open_browser = open_browser or __import__("webbrowser").open
     browser_host = f"[{host}]" if ":" in host else host
-    deadline = time.monotonic() + timeout_seconds
+    soft_deadline = monotonic() + soft_wait_seconds
+    waiting_reported = False
     with client_factory() as client:
-        while time.monotonic() < deadline:
+        while True:
+            if (
+                (stopped_event is not None and stopped_event.is_set())
+                or getattr(server, "should_exit", False)
+            ):
+                return ServeReadinessStatus.SERVER_STOPPED_BEFORE_READY
             if getattr(server, "started", False):
                 try:
                     response = client.get(
@@ -51,18 +72,39 @@ def _wait_for_ready(
                         headers={"Accept": "application/json"},
                     )
                     if response.status_code != 200:
-                        time.sleep(0.05)
-                        continue
-                    payload = response.json()
-                    if (
+                        payload = None
+                    else:
+                        payload = response.json()
+                    if isinstance(payload, dict) and (
                         payload.get("schema_version") == "1"
                         and payload.get("status") == "ready"
                     ):
-                        return bool(open_browser(f"http://{browser_host}:{port}/"))
+                        browser_started = monotonic()
+                        opened = bool(open_browser(f"http://{browser_host}:{port}/"))
+                        logger.info(
+                            "browser open completed",
+                            extra={
+                                "component": "serve",
+                                "event_code": "BROWSER_OPEN_COMPLETED",
+                                "elapsed_ms": round(
+                                    (monotonic() - browser_started) * 1_000,
+                                    3,
+                                ),
+                                "opened": opened,
+                            },
+                        )
+                        return (
+                            ServeReadinessStatus.READY_BROWSER_OPENED
+                            if opened
+                            else ServeReadinessStatus.READY_BROWSER_OPEN_FAILED
+                        )
                 except (httpx.HTTPError, OSError, ValueError, UnicodeError):
                     pass
-            time.sleep(0.05)
-    return False
+            if not waiting_reported and monotonic() >= soft_deadline:
+                waiting_reported = True
+                if status_callback is not None:
+                    status_callback(ServeReadinessStatus.STARTUP_STILL_WAITING)
+            sleeper(poll_interval_seconds)
 
 
 def serve_command(
@@ -84,8 +126,11 @@ def serve_command(
 
     try:
         address = ipaddress.ip_address(host)
-        if not address.is_loopback:
-            raise JiejianError(ErrorCode.API_BINDING_REJECTED, "API 只允许绑定本机回环地址")
+        if str(address) != "127.0.0.1":
+            raise JiejianError(
+                ErrorCode.API_BINDING_REJECTED,
+                "API 当前只允许绑定 127.0.0.1",
+            )
         settings = runtime_settings(context)
         from product.backend.infra.runtime.serve_lock import ServeLock
 
@@ -109,6 +154,7 @@ def serve_command(
 
             api = create_app(
                 settings.var_dir,
+                control_origin=f"http://127.0.0.1:{port}",
                 frontend_dir=frontend_dir,
                 shutdown_callback=request_shutdown,
             )
@@ -117,22 +163,34 @@ def serve_command(
             )
             server = uvicorn.Server(config)
             server_holder["server"] = server
+            ready_thread = None
+            stopped_event = threading.Event()
             if open_browser:
                 def open_when_ready() -> None:
-                    opened = _wait_for_ready(
+                    status = _wait_for_ready(
                         server,
                         host,
                         port,
                         open_browser=webbrowser.open,
+                        status_callback=lambda value: print(
+                            f"__JIEJIAN_SERVE_STATUS__:{value.value}",
+                            flush=True,
+                        ),
+                        stopped_event=stopped_event,
                     )
-                    marker = "browser-opened" if opened else "browser-open-failed"
-                    print(f"__JIEJIAN_SERVE_READY__:{marker}", flush=True)
+                    print(f"__JIEJIAN_SERVE_STATUS__:{status.value}", flush=True)
 
-                threading.Thread(
+                ready_thread = threading.Thread(
                     target=open_when_ready,
                     daemon=True,
-                ).start()
-            server.run()
+                )
+                ready_thread.start()
+            try:
+                server.run()
+            finally:
+                stopped_event.set()
+                if ready_thread is not None:
+                    ready_thread.join(timeout=1.0)
         finally:
             if previous_lock_path is None:
                 os.environ.pop("JIEJIAN_SERVE_LOCK_PATH", None)
@@ -203,7 +261,7 @@ def runtime_repair_command(
     context: typer.Context,
     confirm: bool = typer.Option(False, "--confirm", help="确认重建已标记损坏的运行时"),
 ) -> None:
-    """预览或确认修复损坏运行时，不处理数据库和业务结果。"""
+    """预览或确认修复运行环境，不处理数据库和业务结果。"""
 
     with application_scope(context, environ=os.environ) as application:
         emit_json(

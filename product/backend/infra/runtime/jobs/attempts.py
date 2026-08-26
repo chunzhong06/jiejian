@@ -340,8 +340,7 @@ class JobAttempts:
             occurred_at_us=request.now_us,
             metadata=self._failure_metadata(
                 job,
-                request.reason_code.value,
-                request.fencing_token,
+                request,
                 available_at_us,
             ),
         )
@@ -422,15 +421,24 @@ class JobAttempts:
     def _failure_metadata(
         self,
         job: JobRecord,
-        reason_code: str,
-        fencing_token: int,
+        request: RetryableFailure | FatalFailure,
         available_at_us: int | None,
     ) -> EventMetadata:
         metadata: EventMetadata = {
             "attempt": job.attempt,
-            "fencing_token": fencing_token,
-            "reason_code": reason_code,
+            "fencing_token": request.fencing_token,
+            "reason_code": request.reason_code.value,
         }
+        if request.error_code is not None:
+            metadata["error_code"] = request.error_code
+        if request.phase is not None:
+            metadata["phase"] = request.phase.value
+        if request.cause_code is not None:
+            metadata["cause_code"] = request.cause_code
+        if request.cleanup_issue_codes:
+            metadata["cleanup_issue_codes"] = ",".join(
+                item.value for item in request.cleanup_issue_codes
+            )
         if available_at_us is not None:
             metadata["available_at_us"] = available_at_us
         return metadata

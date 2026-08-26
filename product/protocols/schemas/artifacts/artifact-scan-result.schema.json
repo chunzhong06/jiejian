@@ -3,36 +3,14 @@
     "ArtifactEvidence": {
       "additionalProperties": false,
       "properties": {
-        "evidence_id": {
-          "pattern": "^aev_[0-9a-f]{20}$",
-          "title": "Evidence Id",
-          "type": "string"
-        },
-        "source_type": {
-          "const": "ARTIFACT",
-          "default": "ARTIFACT",
-          "title": "Source Type",
-          "type": "string"
-        },
         "artifact_id": {
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
           "title": "Artifact Id",
           "type": "string"
         },
-        "manifest_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Manifest Sha256",
-          "type": "string"
-        },
-        "rule_id": {
-          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
-          "title": "Rule Id",
-          "type": "string"
-        },
-        "path": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Path",
+        "evidence_id": {
+          "pattern": "^aev_[0-9a-f]{20}$",
+          "title": "Evidence Id",
           "type": "string"
         },
         "fingerprint": {
@@ -54,9 +32,31 @@
           "default": null,
           "title": "Line"
         },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
         "reason_code": {
           "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
           "title": "Reason Code",
+          "type": "string"
+        },
+        "rule_id": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "source_type": {
+          "const": "ARTIFACT",
+          "default": "ARTIFACT",
+          "title": "Source Type",
           "type": "string"
         }
       },
@@ -75,25 +75,9 @@
     "ArtifactFinding": {
       "additionalProperties": false,
       "properties": {
-        "finding_id": {
-          "pattern": "^af_[0-9a-f]{32}$",
-          "title": "Finding Id",
-          "type": "string"
-        },
-        "source_type": {
-          "const": "ARTIFACT",
-          "default": "ARTIFACT",
-          "title": "Source Type",
-          "type": "string"
-        },
         "artifact_id": {
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
           "title": "Artifact Id",
-          "type": "string"
-        },
-        "rule_id": {
-          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
-          "title": "Rule Id",
           "type": "string"
         },
         "category": {
@@ -107,25 +91,14 @@
           "title": "Category",
           "type": "string"
         },
-        "severity": {
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "critical"
-          ],
-          "title": "Severity",
-          "type": "string"
-        },
-        "path": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Path",
-          "type": "string"
-        },
         "evidence_id": {
           "pattern": "^aev_[0-9a-f]{20}$",
           "title": "Evidence Id",
+          "type": "string"
+        },
+        "finding_id": {
+          "pattern": "^af_[0-9a-f]{32}$",
+          "title": "Finding Id",
           "type": "string"
         },
         "message": {
@@ -137,6 +110,33 @@
             "依赖版本低于固定本地规则集要求"
           ],
           "title": "Message",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "rule_id": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "source_type": {
+          "const": "ARTIFACT",
+          "default": "ARTIFACT",
+          "title": "Source Type",
           "type": "string"
         }
       },
@@ -173,10 +173,45 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "2",
-      "default": "2",
-      "title": "Schema Version",
+    "artifact_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "evidence": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ArtifactEvidence"
+      },
+      "maxItems": 4096,
+      "title": "Evidence",
+      "type": "array"
+    },
+    "findings": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ArtifactFinding"
+      },
+      "maxItems": 4096,
+      "title": "Findings",
+      "type": "array"
+    },
+    "manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Manifest Sha256",
       "type": "string"
     },
     "project_id": {
@@ -184,9 +219,10 @@
       "title": "Project Id",
       "type": "string"
     },
-    "artifact_id": {
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-      "title": "Artifact Id",
+    "ruleset_version": {
+      "const": "artifact-local-2026.08.18",
+      "default": "artifact-local-2026.08.18",
+      "title": "Ruleset Version",
       "type": "string"
     },
     "run_id": {
@@ -202,41 +238,11 @@
       "default": null,
       "title": "Run Id"
     },
-    "source_type": {
-      "const": "ARTIFACT",
-      "default": "ARTIFACT",
-      "title": "Source Type",
-      "type": "string"
-    },
-    "ruleset_version": {
-      "const": "artifact-local-2026.08.18",
-      "default": "artifact-local-2026.08.18",
-      "title": "Ruleset Version",
-      "type": "string"
-    },
-    "status": {
-      "$ref": "#/$defs/ArtifactScanStatus"
-    },
-    "verdict": {
-      "$ref": "#/$defs/ArtifactVerdict"
-    },
-    "error_code": {
-      "anyOf": [
-        {
-          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Error Code"
-    },
-    "manifest_sha256": {
-      "pattern": "^[0-9a-f]{64}$",
-      "title": "Manifest Sha256",
-      "type": "string"
+    "scanned_byte_count": {
+      "maximum": 1073741824,
+      "minimum": 0,
+      "title": "Scanned Byte Count",
+      "type": "integer"
     },
     "scanned_file_count": {
       "maximum": 4096,
@@ -244,29 +250,23 @@
       "title": "Scanned File Count",
       "type": "integer"
     },
-    "scanned_byte_count": {
-      "maximum": 1073741824,
-      "minimum": 0,
-      "title": "Scanned Byte Count",
-      "type": "integer"
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
     },
-    "findings": {
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/ArtifactFinding"
-      },
-      "maxItems": 4096,
-      "title": "Findings",
-      "type": "array"
+    "source_type": {
+      "const": "ARTIFACT",
+      "default": "ARTIFACT",
+      "title": "Source Type",
+      "type": "string"
     },
-    "evidence": {
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/ArtifactEvidence"
-      },
-      "maxItems": 4096,
-      "title": "Evidence",
-      "type": "array"
+    "status": {
+      "$ref": "#/$defs/ArtifactScanStatus"
+    },
+    "verdict": {
+      "$ref": "#/$defs/ArtifactVerdict"
     }
   },
   "required": [

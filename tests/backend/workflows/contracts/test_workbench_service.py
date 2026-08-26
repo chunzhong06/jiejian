@@ -1,10 +1,10 @@
+# 验证权限契约工作流中的权限契约工作台服务。
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi.testclient import TestClient
-
-from product.backend.api import create_app
+from tests.fixtures.control_plane import TestClient, create_app
 
 
 def test_workbench_service_derivation_is_atomic_and_idempotent(tmp_path: Path) -> None:

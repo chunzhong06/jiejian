@@ -37,12 +37,12 @@ class HttpxLLMTransport:
                 trust_env=False,
                 timeout=timeout,
                 transport=self._client_transport,
-            ) as client:
+                ) as client:
                 with client.stream(
-                    "POST",
+                    request.method,
                     request.url,
                     headers=request.headers,
-                    content=request.body,
+                    content=request.body if request.method == "POST" else None,
                 ) as response:
                     body = bytearray()
                     # 流式计数可在完整响应进入内存前终止超预算 provider 输出。

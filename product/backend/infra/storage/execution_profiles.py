@@ -11,7 +11,6 @@ from product.backend.infra.storage.base import Base
 class ExecutionProfileRow(Base):
     __tablename__ = "execution_profiles"
     __table_args__ = (
-        CheckConstraint("schema_version = '2'", name="profile_schema_version_value"),
         CheckConstraint(
             "length(profile_id) BETWEEN 1 AND 64 AND "
             "substr(profile_id, 1, 1) GLOB '[a-z]' AND "
@@ -32,7 +31,6 @@ class ExecutionProfileRow(Base):
     )
 
     profile_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    schema_version: Mapped[str] = mapped_column(String(8), nullable=False)
     project_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("projects.project_id"), nullable=False
     )
@@ -63,7 +61,6 @@ from product.backend.infra.storage.base import StorageRecord, _flush, _scalar, _
 
 
 class ExecutionProfileRecord(StorageRecord):
-    schema_version: str = Field(default="2", pattern=r"^2$")
     profile_id: str = Field(pattern=PROJECT_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     source_path: str = Field(min_length=1, max_length=2048)
@@ -89,8 +86,7 @@ class ExecutionProfileRepository:
         self._known_secrets = known_secrets
 
     def add(self, record: ExecutionProfileRecord) -> None:
-        values = record.model_dump(mode="json", exclude={"schema_version"})
-        values["schema_version"] = record.schema_version
+        values = record.model_dump(mode="json")
         ensure_storage_payload_safe(values, self._known_secrets)
         self._session.add(ExecutionProfileRow(**values))
         _flush(self._session)
@@ -137,7 +133,6 @@ class ExecutionProfileRepository:
     def _record(row: ExecutionProfileRow) -> ExecutionProfileRecord:
         return ExecutionProfileRecord.model_validate(
             {
-                "schema_version": row.schema_version,
                 "profile_id": row.profile_id,
                 "project_id": row.project_id,
                 "source_path": row.source_path,

@@ -25,6 +25,8 @@ from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from product.backend.infra.secrets.refs import credential_ref
+
 
 PROFILE_NAME_PATTERN = r"^[a-z][a-z0-9_-]{0,127}$"
 _MODEL_NAME = r"^[^\x00-\x1f\x7f]{1,256}$"
@@ -55,6 +57,7 @@ class LLMProfileConfig(LLMConfigModel):
     profile_name: str = Field(pattern=PROFILE_NAME_PATTERN)
     provider: LLMProviderType
     model: str = Field(min_length=1, max_length=256, pattern=_MODEL_NAME)
+    reasoning_effort: str | None = Field(default=None, max_length=16)
     allow_local_http: bool = False
     base_url: str | None = Field(default=None, max_length=2048)
     timeout_ms: int = Field(default=30_000, ge=100, le=300_000)
@@ -110,6 +113,27 @@ class LLMProfileConfig(LLMConfigModel):
             expected = f"cred:jiejian/llm/{self.profile_name}"
             if self.secret_ref != expected:
                 raise ValueError("credential secret_ref must use the profile name")
+        if self.provider is not LLMProviderType.OPENAI_COMPATIBLE and (
+            self.base_url is not None or self.allow_local_http
+        ):
+            raise ValueError("正式供应商不得覆盖 base_url 或允许本地 HTTP")
+        options = reasoning_options_for(self.provider, self.model)
+        if self.reasoning_effort is not None and self.reasoning_effort not in options:
+            raise ValueError("reasoning_effort 不属于当前供应商模型能力")
+        return self
+
+
+class AIAssistanceSettings(LLMConfigModel):
+    """全局单行 AI 辅助开关；不携带项目、秘密或连接状态。"""
+
+    enabled: bool = False
+    default_profile_name: str | None = Field(default=None, pattern=PROFILE_NAME_PATTERN)
+    updated_at_us: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_enabled_default(self) -> AIAssistanceSettings:
+        if self.enabled and self.default_profile_name is None:
+            raise ValueError("启用 AI 辅助时必须指定默认 profile")
         return self
 
 
@@ -128,7 +152,35 @@ def validate_credential_secret_ref(value: str) -> str:
     profile_name = value.removeprefix(prefix)
     if re.fullmatch(PROFILE_NAME_PATTERN, profile_name) is None:
         raise ValueError("credential secret_ref profile is invalid")
-    return f"{prefix}{profile_name}"
+    return credential_ref("llm", profile_name)
+
+
+_KNOWN_REASONING_OPTIONS: dict[LLMProviderType, dict[str, tuple[str, ...]]] = {
+    LLMProviderType.OPENAI: {
+        model: ("none", "low", "medium", "high", "xhigh", "max")
+        for model in ("gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
+    },
+    LLMProviderType.DEEPSEEK: {
+        "deepseek-v4-flash": ("high", "max"),
+        "deepseek-v4-pro": ("high", "max"),
+    },
+    LLMProviderType.GEMINI: {
+        "gemini-3.7-flash": ("low", "medium", "high"),
+        "gemini-3.6-flash": ("minimal", "low", "medium", "high"),
+        "gemini-3.5-flash": ("minimal", "low", "medium", "high"),
+        "gemini-3.1-pro-preview": ("low", "medium", "high"),
+        "gemini-3.5-flash-lite": ("minimal", "low", "medium", "high"),
+        "gemini-3.1-flash-lite": ("minimal", "low", "medium", "high"),
+        "gemini-3-flash-preview": ("minimal", "low", "medium", "high"),
+    },
+    LLMProviderType.OPENAI_COMPATIBLE: {},
+}
+
+
+def reasoning_options_for(provider: LLMProviderType, model: str) -> tuple[str, ...]:
+    """返回后端已核验的模型能力；未知模型不做名称推测。"""
+
+    return _KNOWN_REASONING_OPTIONS.get(provider, {}).get(model, ())
 
 
 def normalize_llm_base_url(

@@ -74,6 +74,10 @@ class RuntimePaths:
         return self.runtime / "workers"
 
     @property
+    def identity_preparations(self) -> Path:
+        return self.runtime / "identity-preparations"
+
+    @property
     def python_runtime(self) -> Path:
         return self.runtime / "python"
 
@@ -142,6 +146,10 @@ class RuntimePaths:
         return self.logs / "recording"
 
     @property
+    def identity_preparation_logs(self) -> Path:
+        return self.logs / "identity-preparations"
+
+    @property
     def app_logs(self) -> Path:
         return self.logs / "app"
 
@@ -169,6 +177,7 @@ class RuntimePaths:
             self.playwright_runtime,
             self.release_artifacts,
             self.worker_runtime,
+            self.identity_preparations,
             self.locks,
             self.cache,
             self.uv_cache,
@@ -182,6 +191,7 @@ class RuntimePaths:
             self.worker_logs,
             self.runner_logs,
             self.recording_logs,
+            self.identity_preparation_logs,
             self.app_logs,
             self.temp,
             self.test,

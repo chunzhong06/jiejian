@@ -15,10 +15,11 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("bootstrap", "sync", "update", "prepare", "start", "cli", "test", "frontend-test", "shell", "package")]
+    [ValidateSet("bootstrap", "sync", "update", "prepare", "start", "cli", "test", "frontend-test", "schema", "shell", "package")]
     [string]$Command = "start",
     [string]$VarDir = "",
     [switch]$ForcePrepare,
+    [switch]$Update,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$CommandArguments = @()
 )
@@ -68,6 +69,14 @@ function Invoke-External([string]$Stage, [string[]]$Invocation) {
     }
 }
 
+# prepare 子进程只输出固定机器标记；路径、秘密和外部命令正文继续留在日志边界。
+function Write-PrepareStatus(
+    [ValidateSet("toolchain", "python", "browser", "frontend-dependencies", "frontend-build", "database")][string]$Token,
+    [ValidateSet("start", "done")][string]$State
+) {
+    [Console]::Out.WriteLine(("__JIEJIAN_PREPARE_STATUS__:{0}:{1}" -f $Token, $State))
+}
+
 function Get-FileDigest([string]$Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
@@ -83,6 +92,39 @@ function Get-CombinedDigest([string[]]$Paths) {
     $sha = [Security.Cryptography.SHA256]::Create()
     try { return ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace "-", "").ToLowerInvariant() }
     finally { $sha.Dispose() }
+}
+
+function Get-PathSetDigest([string[]]$Paths) {
+    $lines = @(
+        $Paths |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+            ForEach-Object { [IO.Path]::GetFullPath($_) } |
+            Sort-Object
+    )
+    $bytes = $script:Utf8NoBom.GetBytes(($lines -join "`n"))
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace "-", "").ToLowerInvariant() }
+    finally { $sha.Dispose() }
+}
+
+function Get-ProjectPackageTopologyInputs {
+    $paths = New-Object System.Collections.Generic.List[string]
+    # Hatch editable 会冻结包发现结果；包目录新增、删除或移动时必须重新同步。
+    foreach ($relativeRoot in @("product\backend", "product\protocols")) {
+        $root = Join-Path $script:ProjectRoot $relativeRoot
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
+        foreach ($packageMarker in (Get-ChildItem -LiteralPath $root -Recurse -Filter "__init__.py" -File)) {
+            $null = $paths.Add($packageMarker.FullName)
+        }
+    }
+    return @($paths)
+}
+
+function Get-ProjectSyncInputs {
+    return @(
+        (Join-Path $script:ProjectRoot "pyproject.toml")
+        (Join-Path $script:ProjectRoot "uv.lock")
+    )
 }
 
 function Enter-PrepareLock {
@@ -286,7 +328,7 @@ function Set-DevelopmentEnvironment {
 
 function Read-DevelopmentIdentity {
     Remove-Item Env:JIEJIAN_RUNTIME_FINGERPRINT -ErrorAction SilentlyContinue
-    $probe = "import json; from product.backend.infra.runtime.environment_identity import python_environment_report; print(json.dumps(python_environment_report(), ensure_ascii=False))"
+    $probe = "import json; from product.backend.infra.runtime.process.identity import python_environment_report; print(json.dumps(python_environment_report(), ensure_ascii=False))"
     $raw = (& $script:Python -B -c $probe 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { return $null }
     try { return $raw | ConvertFrom-Json } catch { return $null }
@@ -301,25 +343,29 @@ function Confirm-DevelopmentIdentity {
         Fail-Development "python-identity" ("Python 环境来源异常：" + (@($report.issues) -join "；")) "执行 .\scripts\dev.ps1 bootstrap"
     }
     $env:JIEJIAN_RUNTIME_FINGERPRINT = [string]$report.runtime_fingerprint
-    & $script:Python -B -c "from product.backend.infra.runtime.environment_identity import require_python_environment; require_python_environment()" 2>$null
+    & $script:Python -B -c "from product.backend.infra.runtime.process.identity import require_python_environment; require_python_environment()" 2>$null
     if ($LASTEXITCODE -ne 0) { Fail-Development "python-identity" "主进程环境指纹复核失败" "执行 .\scripts\dev.ps1 sync" }
     Set-StateValue "runtime_fingerprint" $env:JIEJIAN_RUNTIME_FINGERPRINT
 }
 
 function Sync-Project([bool]$ForceSync) {
-    $syncDigest = Get-CombinedDigest @(
-        (Join-Path $script:ProjectRoot "pyproject.toml"),
-        (Join-Path $script:ProjectRoot "uv.lock")
-    )
+    $syncDigest = Get-CombinedDigest @(Get-ProjectSyncInputs)
+    $topologyDigest = Get-PathSetDigest @(Get-ProjectPackageTopologyInputs)
     Push-Location -LiteralPath $script:ProjectRoot
     try {
         Invoke-External "uv-lock" @($script:Uv, "lock", "--check")
         $stateDigest = [string](Get-StateValue "sync_digest")
+        $stateTopologyDigest = [string](Get-StateValue "package_topology_digest")
         $identity = if ($stateDigest -eq $syncDigest) { Read-DevelopmentIdentity } else { $null }
-        if ($ForceSync -or $stateDigest -ne $syncDigest -or $null -eq $identity -or -not $identity.ok) {
+        if ($ForceSync -or $stateDigest -ne $syncDigest -or $stateTopologyDigest -ne $topologyDigest -or $null -eq $identity -or -not $identity.ok) {
             Write-Host "正在按 uv.lock 精确同步项目依赖……" -ForegroundColor Cyan
-            Invoke-External "uv-sync" @($script:Uv, "sync", "--frozen", "--all-groups")
+            $syncArguments = @($script:Uv, "sync", "--frozen", "--all-groups")
+            if ($ForceSync -or $stateTopologyDigest -ne $topologyDigest -or $null -eq $identity -or -not $identity.ok) {
+                $syncArguments += @("--reinstall-package", "jiejian")
+            }
+            Invoke-External "uv-sync" $syncArguments
             Set-StateValue "sync_digest" $syncDigest
+            Set-StateValue "package_topology_digest" $topologyDigest
         } else {
             Write-Host "Python 依赖指纹未变化，复用 jiejian_env。" -ForegroundColor DarkGray
         }
@@ -329,17 +375,22 @@ function Sync-Project([bool]$ForceSync) {
 }
 
 function Prepare-Python([ValidateSet("auto", "bootstrap", "sync")][string]$Mode) {
+    Write-PrepareStatus "toolchain" "start"
     $toolchain = Read-Toolchain
+    Resolve-Uv $toolchain
+    Write-PrepareStatus "toolchain" "done"
+    Write-PrepareStatus "python" "start"
     if ($Mode -eq "bootstrap") { Ensure-Conda "force" }
     elseif ($Mode -eq "sync") { Ensure-Conda "existing" }
     else { Ensure-Conda "auto" }
-    Resolve-Uv $toolchain
     Set-DevelopmentEnvironment
     Sync-Project ($Mode -in @("bootstrap", "sync"))
+    Write-PrepareStatus "python" "done"
     return $toolchain
 }
 
 function Prepare-Chromium {
+    Write-PrepareStatus "browser" "start"
     $probe = "from pathlib import Path; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); x=Path(p.chromium.executable_path).resolve(); p.stop(); print(x); raise SystemExit(0 if x.is_file() else 1)"
     $path = (& $script:Python -B -c $probe 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($path)) {
@@ -351,6 +402,7 @@ function Prepare-Chromium {
         Fail-Development "playwright" "Chromium 可执行文件探针失败" "检查网络和 var/runtime/playwright 后重试"
     }
     $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE = [IO.Path]::GetFullPath($path)
+    Write-PrepareStatus "browser" "done"
 }
 
 function Resolve-DevelopmentNode($Toolchain, [bool]$Exact) {
@@ -509,6 +561,12 @@ function Get-FrontendDigest($Inputs) {
     foreach ($input in $Inputs) {
         $null = $lines.Add(("{0}|{1}" -f [string]$input.relative, (Get-FileDigest ([string]$input.source))))
     }
+    $editorPlugin = Get-FrontendEditorPluginRoot
+    $editorPrefix = $editorPlugin.TrimEnd("\") + "\"
+    foreach ($file in Get-ChildItem -LiteralPath $editorPlugin -File -Recurse | Sort-Object FullName) {
+        $relative = $file.FullName.Substring($editorPrefix.Length).Replace("\", "/")
+        $null = $lines.Add(("../editor/{0}|{1}" -f $relative, (Get-FileDigest $file.FullName)))
+    }
     $null = $lines.Add(("../config/toolchain.json|{0}" -f (Get-FileDigest $script:ToolchainPath)))
     $bytes = $script:Utf8NoBom.GetBytes(($lines -join "`n"))
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -518,6 +576,34 @@ function Get-FrontendDigest($Inputs) {
 
 function Get-FrontendWorkspace {
     return Join-Path $script:VarDir "runtime\build\frontend-workspace"
+}
+
+function Get-FrontendEditorPluginRoot {
+    return Join-Path $script:ProjectRoot "scripts\editor\typescript-plugins\jiejian-controlled-workspace-resolver"
+}
+
+function Get-FrontendEditorPluginTarget([string]$Workspace) {
+    return Join-Path $Workspace "node_modules\jiejian-controlled-workspace-resolver"
+}
+
+function Test-FrontendEditorPluginInstalled([string]$Workspace) {
+    $target = Get-FrontendEditorPluginTarget $Workspace
+    return (Test-Path -LiteralPath (Join-Path $target "package.json") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $target "index.cjs") -PathType Leaf)
+}
+
+function Install-FrontendEditorPlugin([string]$Workspace) {
+    $source = Get-FrontendEditorPluginRoot
+    $target = Get-FrontendEditorPluginTarget $Workspace
+    if (-not (Test-Path -LiteralPath (Join-Path $source "package.json") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $source "index.cjs") -PathType Leaf)) {
+        Fail-Development "frontend-editor" "编辑器解析插件源码不完整" "恢复 scripts/editor/typescript-plugins 后重试"
+    }
+    Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath $source -Destination $target -Recurse -Force
+    if (-not (Test-FrontendEditorPluginInstalled $Workspace)) {
+        Fail-Development "frontend-editor" "编辑器解析插件未进入受控前端工作区" "执行 runtime repair 后重试"
+    }
 }
 
 function Get-FrontendBuildReceiptPath {
@@ -551,7 +637,8 @@ function Prepare-FrontendWorkspace($Toolchain, $Inputs, [string]$Fingerprint) {
     $modules = Join-Path $workspace "node_modules\.modules.yaml"
     $healthy = (Test-Path -LiteralPath $workspaceDigest -PathType Leaf) -and
         ((Get-Content -LiteralPath $workspaceDigest -Raw -Encoding UTF8).Trim() -eq $Fingerprint) -and
-        (Test-Path -LiteralPath $modules -PathType Leaf)
+        (Test-Path -LiteralPath $modules -PathType Leaf) -and
+        (Test-FrontendEditorPluginInstalled $workspace)
     if ($healthy) { return }
 
     Remove-Item -LiteralPath $workspace -Recurse -Force -ErrorAction SilentlyContinue
@@ -569,6 +656,8 @@ function Prepare-FrontendWorkspace($Toolchain, $Inputs, [string]$Fingerprint) {
         if (-not (Test-Path -LiteralPath $modules -PathType Leaf)) {
             Fail-Development "frontend-install" "pnpm 未在 var/runtime/build/frontend-workspace 生成完整依赖安装视图" "执行 runtime repair 后重试"
         }
+        # VS Code 禁止工作区覆盖机器级插件探测目录；插件必须随可重建依赖视图安装。
+        Install-FrontendEditorPlugin $workspace
         [IO.File]::WriteAllText($workspaceDigest, $Fingerprint, $script:Utf8NoBom)
     } catch {
         # runtime repair 只处理可证明损坏的运行时；失败安装用标记提供该证明。
@@ -619,23 +708,31 @@ function Prepare-SourceFrontend($Toolchain) {
     $dist = Join-Path $script:VarDir "runtime\frontend"
     $index = Join-Path $dist "index.html"
     $record = Read-FrontendBuildReceipt
+    $workspace = Get-FrontendWorkspace
     $recordHit = -not $ForcePrepare -and $null -ne $record -and
         [string]$record.digest -eq $fingerprint -and
         [string]$record.dist -eq [IO.Path]::GetFullPath($dist) -and
-        (Test-Path -LiteralPath $index -PathType Leaf)
+        (Test-Path -LiteralPath $index -PathType Leaf) -and
+        (Test-FrontendEditorPluginInstalled $workspace)
     if ($recordHit) {
+        Write-PrepareStatus "frontend-dependencies" "start"
         Set-FrontendToolEnvironment $record
+        Write-PrepareStatus "frontend-dependencies" "done"
+        Write-PrepareStatus "frontend-build" "start"
         $script:FrontendBuildState = "reused"
         $env:JIEJIAN_FRONTEND_DEPENDENCIES = "构建指纹命中，运行阶段无需 Node/pnpm"
         $env:JIEJIAN_FRONTEND_DIST = [IO.Path]::GetFullPath($dist)
         $env:JIEJIAN_FRONTEND_BUILD_STATE = $script:FrontendBuildState
+        Write-PrepareStatus "frontend-build" "done"
         Write-Host "前端构建指纹未变化，复用 var/runtime/frontend。" -ForegroundColor DarkGray
         return
     }
 
     # Node/pnpm 只属于构建阶段；已有可验证构建命中时不会解析、下载或启动它们。
+    Write-PrepareStatus "frontend-dependencies" "start"
     Prepare-FrontendWorkspace $Toolchain $inputs $fingerprint
-    $workspace = Get-FrontendWorkspace
+    Write-PrepareStatus "frontend-dependencies" "done"
+    Write-PrepareStatus "frontend-build" "start"
     Invoke-FrontendBuild $workspace $dist
     if (-not (Test-Path -LiteralPath $index -PathType Leaf)) {
         Fail-Development "frontend-build" "前端构建没有生成 var/runtime/frontend/index.html" "检查 TypeScript/Vite 输出"
@@ -654,6 +751,7 @@ function Prepare-SourceFrontend($Toolchain) {
     $env:JIEJIAN_FRONTEND_DEPENDENCIES = "pnpm $($script:PnpmVersion) · 已同步并构建"
     $env:JIEJIAN_FRONTEND_DIST = [IO.Path]::GetFullPath($dist)
     $env:JIEJIAN_FRONTEND_BUILD_STATE = $script:FrontendBuildState
+    Write-PrepareStatus "frontend-build" "done"
 }
 
 function Prepare-Database {
@@ -709,28 +807,34 @@ function Write-SourceReceipt {
 }
 
 function Prepare-SourceRuntime($Toolchain) {
-    Prepare-SourceFrontend $Toolchain
     Prepare-Chromium
+    Prepare-SourceFrontend $Toolchain
+    Write-PrepareStatus "database" "start"
     Prepare-Database
+    Write-PrepareStatus "database" "done"
     Write-SourceReceipt
 }
 
-function Invoke-DevelopmentStart($Toolchain) {
-    Prepare-SourceRuntime $Toolchain
-    Exit-PrepareLock
-    Write-Host "界鉴开发环境已准备完成，正在打开图形界面。" -ForegroundColor Cyan
-    Invoke-External "serve" @(
-        $script:Python,
-        "-B",
-        "-m",
-        "product.backend.cli",
-        "--var-dir",
-        $script:VarDir,
-        "serve",
-        "--open",
-        "--frontend-dir",
-        $env:JIEJIAN_FRONTEND_DIST
+function Invoke-DevelopmentStart {
+    if ($CommandArguments.Count -gt 0) {
+        Fail-Development "start" "dev.ps1 start 不接受额外参数" "直接调用 scripts/start.ps1 并传入受支持的产品启动参数"
+    }
+    $shellName = if ($PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
+    $shell = Join-Path $PSHOME $shellName
+    if (-not (Test-Path -LiteralPath $shell -PathType Leaf)) {
+        Fail-Development "start" "无法定位当前 PowerShell 产品启动入口" "修复 PowerShell 后直接运行 start.cmd"
+    }
+    $arguments = @(
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", (Join-Path $script:ProjectRoot "scripts\start.ps1"),
+        "-Mode", "Gui",
+        "-VarDir", $script:VarDir
     )
+    if ($ForcePrepare) { $arguments += "-ForcePrepare" }
+    & $shell @arguments | Out-Host
+    return [int]$LASTEXITCODE
 }
 
 function Invoke-DevelopmentTest {
@@ -745,12 +849,29 @@ function Invoke-DevelopmentTest {
     }
 }
 
+function Invoke-Schema {
+    Exit-PrepareLock
+    if ($CommandArguments.Count -gt 0) {
+        Fail-Development "schema" "dev.ps1 schema 不接受位置参数" "使用 .\scripts\dev.ps1 schema 或追加 -Update"
+    }
+    $arguments = @($script:Python, "-B", "-m", "product.protocols.schema")
+    if ($Update) { $arguments += "--update" }
+    Invoke-External "schema" $arguments
+}
+
 function Invoke-FrontendTest($Toolchain) {
     Remove-LegacyFrontendArtifacts
     $inputs = @(Get-FrontendSourceInputs)
     $fingerprint = Get-FrontendDigest $inputs
     Prepare-FrontendWorkspace $Toolchain $inputs $fingerprint
     $workspace = Get-FrontendWorkspace
+    Invoke-External "frontend-editor" @(
+        $script:Node,
+        (Join-Path $script:ProjectRoot "scripts\editor\verify-controlled-workspace-resolver.cjs"),
+        $workspace,
+        $script:ProjectRoot,
+        $script:VarDir
+    )
     $savedCacheDir = $env:JIEJIAN_FRONTEND_CACHE_DIR
     Push-Location -LiteralPath $workspace
     try {
@@ -801,9 +922,10 @@ function Invoke-Update {
     Push-Location -LiteralPath $script:ProjectRoot
     try {
         Invoke-External "uv-update" (@($script:Uv, "lock") + $CommandArguments)
-        Invoke-External "uv-sync" @($script:Uv, "sync", "--frozen", "--all-groups")
+        Invoke-External "uv-sync" @($script:Uv, "sync", "--frozen", "--all-groups", "--reinstall-package", "jiejian")
     } finally { Pop-Location }
-    Set-StateValue "sync_digest" (Get-CombinedDigest @((Join-Path $script:ProjectRoot "pyproject.toml"), (Join-Path $script:ProjectRoot "uv.lock")))
+    Set-StateValue "sync_digest" (Get-CombinedDigest @(Get-ProjectSyncInputs))
+    Set-StateValue "package_topology_digest" (Get-PathSetDigest @(Get-ProjectPackageTopologyInputs))
     Confirm-DevelopmentIdentity
     Save-State
 }
@@ -812,11 +934,21 @@ function Invoke-Package($Toolchain) {
     Prepare-SourceFrontend $Toolchain
     Prepare-Chromium
     $dist = Join-Path $script:VarDir "runtime\release-artifacts"
+    $frontend = Join-Path $script:VarDir "runtime\frontend"
+    if (-not (Test-Path -LiteralPath (Join-Path $frontend "index.html") -PathType Leaf)) {
+        Fail-Development "wheel" "可选发布构建缺少已准备的前端入口" "执行 .\scripts\dev.ps1 prepare 后重试"
+    }
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Get-ChildItem -LiteralPath $dist -Filter "jiejian-*.whl" -File -ErrorAction SilentlyContinue | Remove-Item -Force
+    $savedPackageFrontend = $env:JIEJIAN_PACKAGE_FRONTEND_DIR
+    $env:JIEJIAN_PACKAGE_FRONTEND_DIR = [IO.Path]::GetFullPath($frontend)
     Push-Location -LiteralPath $script:ProjectRoot
     try { Invoke-External "wheel" @($script:Uv, "build", "--wheel", "--out-dir", $dist) }
-    finally { Pop-Location }
+    finally {
+        Pop-Location
+        if ($null -eq $savedPackageFrontend) { Remove-Item Env:JIEJIAN_PACKAGE_FRONTEND_DIR -ErrorAction SilentlyContinue }
+        else { $env:JIEJIAN_PACKAGE_FRONTEND_DIR = $savedPackageFrontend }
+    }
     $wheels = @(Get-ChildItem -LiteralPath $dist -Filter "jiejian-*.whl" -File)
     if ($wheels.Count -ne 1) { Fail-Development "wheel" "发布构建没有形成唯一 Wheel" "检查 uv build 输出" }
     Write-Host ("发布资源已生成：{0}" -f $wheels[0].FullName) -ForegroundColor Green
@@ -826,6 +958,12 @@ try {
     [Console]::InputEncoding = $script:Utf8NoBom
     [Console]::OutputEncoding = $script:Utf8NoBom
     $OutputEncoding = $script:Utf8NoBom
+    if ($Update -and $Command -ne "schema") {
+        Fail-Development "arguments" "-Update 只允许与 schema 命令一起使用" "使用 .\scripts\dev.ps1 schema -Update"
+    }
+    if ($Command -eq "start") {
+        exit (Invoke-DevelopmentStart)
+    }
     Enter-PrepareLock
     Read-State
     if ($Command -eq "update") {
@@ -839,10 +977,10 @@ try {
         "bootstrap" { Write-Host "jiejian_env 已按 environment.yml 与 uv.lock 完整准备。" -ForegroundColor Green }
         "sync" { Write-Host "jiejian_env 已按 uv.lock 精确同步。" -ForegroundColor Green }
         "prepare" { Prepare-SourceRuntime $toolchain }
-        "start" { Invoke-DevelopmentStart $toolchain }
         "cli" { Invoke-DevelopmentCli }
         "test" { Invoke-DevelopmentTest }
         "frontend-test" { Invoke-FrontendTest $toolchain }
+        "schema" { Invoke-Schema }
         "shell" { Invoke-DevelopmentShell }
         "package" { Invoke-Package $toolchain }
     }

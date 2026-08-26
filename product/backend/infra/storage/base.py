@@ -34,7 +34,7 @@ class Base(DeclarativeBase):
 import json
 import re
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Select
@@ -65,8 +65,6 @@ class StorageRecord(BaseModel):
         strict=True,
         hide_input_in_errors=True,
     )
-
-    schema_version: Literal["1"] = "1"
 
 def ensure_storage_payload_safe(value: Any, known_secrets: Sequence[str]) -> None:
     """在进入数据库前拒绝内联凭据和本次尝试的已知秘密。"""

@@ -17,6 +17,7 @@ import hashlib
 import os
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -24,19 +25,55 @@ from pydantic import ValidationError
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict, JobState, RunLifecycle, RunVerdict
 from product.backend.core.verification.differential import TwinExecutionRole
-from product.backend.infra.execution.port import TargetRuntimeContext
+from product.backend.infra.execution.port import TargetCleanupIssue
 from product.backend.infra.execution.registry import TargetRuntimeRegistry
 from product.backend.infra.execution.web.runtime import WebTargetRuntimeFactory
+from product.backend.infra.runtime.runner.case_orchestrator import CaseExecutionFailure
 from product.backend.infra.runtime.runner.executor import RunnerExecutor
+from product.backend.infra.runtime.runner.progress import RunnerProgressWriter
 from product.backend.infra.runtime.runner.result_builder import evidence_from_case, run_verdict
 from product.backend.infra.runtime.runner.staging import atomic_write, write_evidence
-from product.protocols import CleanupResult, CleanupStatus, RunnerError, RunnerInput, RunnerResult, RunnerResultType, canonical_runner_json_bytes, parse_runner_input, required_web_secret_refs
+from product.protocols import (
+    CleanupIssue,
+    CleanupIssueCode,
+    CleanupResult,
+    CleanupStatus,
+    RunnerError,
+    RunnerFailurePhase,
+    RunnerInput,
+    RunnerResult,
+    RunnerResultType,
+    canonical_runner_json_bytes,
+    parse_runner_input,
+    required_web_secret_refs,
+)
 
 
 RUNNER_EXIT_OK = 0
 RUNNER_EXIT_PROTOCOL = 64
 RUNNER_EXIT_INTERNAL = 70
 RUNNER_EXIT_WRITE = 74
+
+_SAFETY_STOP_CODES = {
+    ErrorCode.SCOPE_URL.value,
+    ErrorCode.SCOPE_HOST.value,
+    ErrorCode.SCOPE_PORT.value,
+    ErrorCode.SCOPE_PRIVATE_NETWORK.value,
+    ErrorCode.SCOPE_REDIRECT.value,
+    ErrorCode.EXEC_BUDGET.value,
+    ErrorCode.EXEC_RESPONSE_TOO_LARGE.value,
+    ErrorCode.SELF_TARGET_FORBIDDEN.value,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class _AttemptFailure:
+    code: str
+    phase: RunnerFailurePhase
+    cause_code: str | None = None
+    cancelled: bool = False
+    safety_stopped: bool = False
+    cleanup_issues: tuple[CleanupIssue, ...] = ()
 
 
 def _now_us() -> int:
@@ -51,9 +88,19 @@ def build_target_runtime_registry() -> TargetRuntimeRegistry:
     return registry
 
 
-def _result_error(document: RunnerInput, code: str, *, finished_at_us: int, cleanup_finished_at_us: int | None = None, cleanup_failed: bool = False, cancelled: bool = False, safety_stopped: bool = False) -> RunnerResult:
-    if cleanup_failed:
-        code = ErrorCode.CLEANUP_FAILED.value
+def _result_error(
+    document: RunnerInput,
+    code: str,
+    *,
+    phase: RunnerFailurePhase,
+    finished_at_us: int,
+    cause_code: str | None = None,
+    cleanup_finished_at_us: int | None = None,
+    cleanup_issues: tuple[CleanupIssue, ...] = (),
+    cancelled: bool = False,
+    safety_stopped: bool = False,
+) -> RunnerResult:
+    if cleanup_issues:
         cancelled = False
         safety_stopped = False
     if cancelled:
@@ -73,7 +120,12 @@ def _result_error(document: RunnerInput, code: str, *, finished_at_us: int, clea
         lifecycle = RunLifecycle.FAILED
         job_state = JobState.FAILED
         reasons = (code,)
-        error = RunnerError(code=code, retryable=False)
+        error = RunnerError(
+            code=code,
+            phase=phase,
+            cause_code=cause_code,
+            retryable=False,
+        )
     return RunnerResult(
         run_id=document.run_id,
         job_id=document.job_id,
@@ -86,7 +138,19 @@ def _result_error(document: RunnerInput, code: str, *, finished_at_us: int, clea
         job_state=job_state,
         verdict=None,
         reason_codes=reasons,
-        cleanup=CleanupResult(status=CleanupStatus.FAILED if cleanup_failed else CleanupStatus.SUCCEEDED, finished_at_us=cleanup_finished_at_us if cleanup_finished_at_us is not None else finished_at_us, reason_codes=(ErrorCode.CLEANUP_FAILED.value,) if cleanup_failed else ()),
+        cleanup=CleanupResult(
+            status=(
+                CleanupStatus.FAILED
+                if cleanup_issues
+                else CleanupStatus.SUCCEEDED
+            ),
+            finished_at_us=(
+                cleanup_finished_at_us
+                if cleanup_finished_at_us is not None
+                else finished_at_us
+            ),
+            issues=cleanup_issues,
+        ),
         error=error,
         plan_fingerprint=document.project_snapshot.plan.plan_fingerprint,
         coverage_record_count=len(document.project_snapshot.plan.coverage),
@@ -94,6 +158,35 @@ def _result_error(document: RunnerInput, code: str, *, finished_at_us: int, clea
         evidence=(),
         artifacts=(),
     )
+
+
+def _cause_code(error: Exception) -> str | None:
+    current = error.__cause__
+    while current is not None:
+        if isinstance(current, JiejianError):
+            return current.code
+        current = current.__cause__
+    return None
+
+
+def _protocol_cleanup_issues(
+    issues: tuple[TargetCleanupIssue, ...],
+) -> tuple[CleanupIssue, ...]:
+    return tuple(
+        CleanupIssue(code=item.code, cause_code=item.cause_code)
+        for item in issues
+    )
+
+
+def _merge_cleanup_issues(
+    *groups: tuple[CleanupIssue, ...],
+) -> tuple[CleanupIssue, ...]:
+    merged = {
+        item.code: item
+        for group in groups
+        for item in group
+    }
+    return tuple(merged.values())
 
 
 def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str, str] | None = None, finished_at_us: Callable[[], int] | None = None) -> int:
@@ -114,10 +207,15 @@ def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str
         staging.mkdir(parents=True, exist_ok=False)
         web_factory = build_target_runtime_registry().factory(document.project_snapshot.target_type.value)
         cancellation_requested = lambda: (staging.parent / "cancel.requested").is_file()
-        executor = RunnerExecutor(document, runtime_factory=web_factory, environ=environment, staging=staging, clock=finish_clock, cancellation_requested=cancellation_requested)
+        progress = RunnerProgressWriter(staging.parent / "progress.jsonl")
+        try:
+            executor = RunnerExecutor(document, runtime_factory=web_factory, environ=environment, staging=staging, clock=finish_clock, cancellation_requested=cancellation_requested, progress=progress, progress_clock=_now_us)
+        except Exception:
+            progress.close()
+            raise
         evidences = []
         artifacts = []
-        failure: tuple[str, bool, bool, bool] | None = None
+        failure: _AttemptFailure | None = None
         try:
             paired: set[str] = set()
             for twin in document.project_snapshot.differential_plan.twins:
@@ -129,47 +227,72 @@ def execute_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str
                 if case.case_id not in paired:
                     evidences.append(evidence_from_case(document, executor.run_case(case)))
             artifacts = [write_evidence(staging, item, known_secrets=known_secrets) for item in evidences]
+        except CaseExecutionFailure as exc:
+            primary = exc.primary
+            code = (
+                primary.code
+                if isinstance(primary, JiejianError)
+                else "RUNNER_FATAL"
+            )
+            failure = _AttemptFailure(
+                code=code,
+                phase=exc.phase,
+                cause_code=_cause_code(primary),
+                cancelled=code == ErrorCode.EXEC_CANCELLED.value,
+                safety_stopped=code in _SAFETY_STOP_CODES,
+                cleanup_issues=_protocol_cleanup_issues(exc.cleanup_issues),
+            )
         except JiejianError as exc:
-            failure = (
-                exc.code,
-                exc.code == ErrorCode.EXEC_CANCELLED.value,
-                exc.code in {
-                    ErrorCode.SCOPE_URL.value,
-                    ErrorCode.SCOPE_HOST.value,
-                    ErrorCode.SCOPE_PORT.value,
-                    ErrorCode.SCOPE_PRIVATE_NETWORK.value,
-                    ErrorCode.SCOPE_REDIRECT.value,
-                    ErrorCode.EXEC_BUDGET.value,
-                    ErrorCode.EXEC_RESPONSE_TOO_LARGE.value,
-                },
-                exc.code == ErrorCode.CLEANUP_FAILED.value,
+            failure = _AttemptFailure(
+                code=exc.code,
+                phase=RunnerFailurePhase.TARGET_VALIDATION,
+                cause_code=_cause_code(exc),
+                cancelled=exc.code == ErrorCode.EXEC_CANCELLED.value,
+                safety_stopped=exc.code in _SAFETY_STOP_CODES,
             )
         except Exception:
-            failure = ("RUNNER_FATAL", False, False, False)
-        close_failed = False
+            failure = _AttemptFailure(
+                code="RUNNER_FATAL",
+                phase=RunnerFailurePhase.TARGET_VALIDATION,
+            )
+        close_issues: tuple[CleanupIssue, ...] = ()
         try:
             executor.close()
-        except Exception:
-            close_failed = True
+        except Exception as exc:
+            close_issues = (
+                CleanupIssue(
+                    code=CleanupIssueCode.RUNTIME_CLOSE_FAILED,
+                    cause_code=(
+                        exc.code if isinstance(exc, JiejianError) else None
+                    ),
+                ),
+            )
+        progress.close()
         cleanup_finished_at_us = finish_clock()
         result_finished_at_us = finish_clock()
-        if close_failed or (failure is not None and failure[3]):
+        if failure is None and close_issues:
             result = _result_error(
                 document,
                 ErrorCode.CLEANUP_FAILED.value,
+                phase=RunnerFailurePhase.RUNTIME_CLOSE,
                 finished_at_us=result_finished_at_us,
                 cleanup_finished_at_us=cleanup_finished_at_us,
-                cleanup_failed=True,
+                cleanup_issues=close_issues,
             )
         elif failure is not None:
-            code, cancelled, safety_stopped, _cleanup_failed = failure
             result = _result_error(
                 document,
-                code,
+                failure.code,
+                phase=failure.phase,
+                cause_code=failure.cause_code,
                 finished_at_us=result_finished_at_us,
                 cleanup_finished_at_us=cleanup_finished_at_us,
-                cancelled=cancelled,
-                safety_stopped=safety_stopped,
+                cleanup_issues=_merge_cleanup_issues(
+                    failure.cleanup_issues,
+                    close_issues,
+                ),
+                cancelled=failure.cancelled,
+                safety_stopped=failure.safety_stopped,
             )
         else:
             result = RunnerResult(

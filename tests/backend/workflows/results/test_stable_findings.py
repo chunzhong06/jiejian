@@ -1,3 +1,5 @@
+# 验证结果工作流中的稳定发现生成。
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -61,7 +63,7 @@ def _view(run_id: str, result: RunnerResult):
 def _result(run_id: str, evidence):
     snapshot = runner_input().project_snapshot
     return RunnerResult(
-        schema_version="4",
+        schema_version="1",
         run_id=run_id,
         job_id="job_" + run_id[4:],
         attempt=1,

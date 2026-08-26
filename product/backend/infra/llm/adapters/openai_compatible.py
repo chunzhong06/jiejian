@@ -1,4 +1,4 @@
-# OpenAI、DeepSeek 与 OpenAI-compatible 的请求/响应投影。
+# OpenAI-compatible 高级适配器的请求/响应投影。
 # 边界：只构造和解析 provider 消息，实际网络约束由 LLMTransport 承担。
 
 from __future__ import annotations
@@ -6,23 +6,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, normalize_llm_base_url
+from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, normalize_llm_base_url, reasoning_options_for
 from product.backend.infra.llm.adapters.base import LLMAdapter, LLMHttpRequest, LLMHttpResponse, LLMTransportError, json_body, max_output_tokens
-
-
-DEFAULT_BASE_URLS = {
-    LLMProviderType.OPENAI: "https://api.openai.com/v1",
-    LLMProviderType.DEEPSEEK: "https://api.deepseek.com",
-}
 
 
 class OpenAICompatibleAdapter:
     def __init__(self, provider: LLMProviderType) -> None:
-        if provider not in {
-            LLMProviderType.OPENAI,
-            LLMProviderType.DEEPSEEK,
-            LLMProviderType.OPENAI_COMPATIBLE,
-        }:
+        if provider is not LLMProviderType.OPENAI_COMPATIBLE:
             raise ValueError("provider is not OpenAI-compatible")
         self.provider = provider
 
@@ -31,14 +21,16 @@ class OpenAICompatibleAdapter:
         profile: LLMProfileConfig,
         secret: str,
         prompt: str,
+        *,
+        reasoning_effort: str | None = None,
+        json_schema: dict[str, object] | None = None,
     ) -> LLMHttpRequest:
-        base_url = profile.base_url or DEFAULT_BASE_URLS.get(self.provider)
-        if base_url is None:
+        if profile.base_url is None:
             raise LLMTransportError("invalid_request")
-        if self.provider is LLMProviderType.OPENAI_COMPATIBLE and profile.base_url is None:
+        if reasoning_effort is not None and reasoning_effort not in reasoning_options_for(profile.provider, profile.model):
             raise LLMTransportError("invalid_request")
         normalized = normalize_llm_base_url(
-            base_url,
+            profile.base_url,
             allow_local_http=profile.allow_local_http,
         )
         payload = {
@@ -48,12 +40,13 @@ class OpenAICompatibleAdapter:
             "stream": False,
         }
         payload[
-            "max_completion_tokens"
-            if self.provider is LLMProviderType.OPENAI
-            else "max_tokens"
+            "max_tokens"
         ] = max_output_tokens(profile)
+        if reasoning_effort is not None:
+            payload["reasoning_effort"] = reasoning_effort
         body = json_body(payload)
         return LLMHttpRequest(
+            method="POST",
             provider=self.provider,
             url=f"{normalized.rstrip('/')}/chat/completions",
             headers={

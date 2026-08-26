@@ -43,6 +43,6 @@ export type CacheOperationResult = {
 export const systemApi = {
   status: () => request<SystemStatus>('/api/system/status'),
   cacheStatus: () => request<CacheStatus>('/api/system/cache'),
-  cacheOperation: (operation: CacheOperation, body: { confirmed: boolean; dry_run: boolean }) => request<CacheOperationResult>(`/api/system/cache/${operation}`, { method: 'POST', body: JSON.stringify(body) }),
-  shutdown: () => request<{ status: 'stopping'; message: string }>('/api/system/shutdown', { method: 'POST', headers: { 'X-Jiejian-Control': 'shutdown' } }),
+  cacheOperation: (operation: CacheOperation, body: { confirmed: boolean; dry_run: boolean }) => request<CacheOperationResult>(`/api/system/cache/${operation}`, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) }),
+  shutdown: () => request<{ status: 'stopping'; message: string }>('/api/system/shutdown', { method: 'POST' }),
 }

@@ -9,7 +9,7 @@ from pathlib import Path
 import typer
 
 from product.backend.core.errors import JiejianError
-from product.backend.infra.runtime.environment_identity import require_python_environment
+from product.backend.infra.runtime.process.identity import require_python_environment
 from product.backend.cli.bootstrap import CliOptions
 from product.backend.cli.presentation import configure_presentation
 from product.backend.cli.commands.contracts import contract_assessment_command, contract_derive_command, contract_diff_command, contract_draft_command, contract_history_command, contract_requirement_add_command, contract_revise_command, contract_transition_command, contract_validate_command, contract_workspace_command, contract_drift_command
@@ -105,7 +105,7 @@ app.command("doctor", help="检查运行环境", rich_help_panel="常用操作")
 cache_app.command("status", help="查看缓存状态")(cache_status_command)
 cache_app.command("prune", help="按预算清理缓存")(cache_prune_command)
 cache_app.command("clean", help="清空可重建缓存")(cache_clean_command)
-runtime_app.command("repair", help="修复损坏运行时")(runtime_repair_command)
+runtime_app.command("repair", help="修复运行环境")(runtime_repair_command)
 
 project_app.command("validate")(project_validate_command)
 

@@ -37,7 +37,7 @@ class PersistedExecutionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
 
-    schema_version: Literal["4"] = "4"
+    schema_version: Literal["1"] = "1"
     budget: ExecutionBudget
     project_snapshot: WebExecutionSnapshot
 
@@ -95,7 +95,7 @@ def parse_execution_request(
             parse_constant=_reject_nonfinite,
         )
         _reject_known_secrets(parsed, known_secrets)
-        if not isinstance(parsed, dict) or parsed.get("schema_version") != "4":
+        if not isinstance(parsed, dict) or parsed.get("schema_version") != "1":
             raise ValueError("unsupported request schema version")
         return PersistedExecutionRequest.model_validate_json(raw, strict=True)
     except JiejianError:

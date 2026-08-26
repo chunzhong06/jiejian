@@ -20,12 +20,12 @@ function Write-Banner {
     Write-Host ""
     if ($script:DisplayUnicode) {
         $lines = @(
-            "   ██╗██╗███████╗     ██╗██╗ █████╗ ███╗   ██╗",
-            "   ██║██║██╔════╝     ██║██║██╔══██╗████╗  ██║",
-            "   ██║██║█████╗       ██║██║███████║██╔██╗ ██║",
-            "██ ██║██║██╔══╝    ██ ██║██║██╔══██║██║╚██╗██║",
-            "╚███╔╝██║███████╗  ╚███╔╝██║██║  ██║██║ ╚████║",
-            " ╚══╝ ╚═╝╚══════╝   ╚══╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝"
+            "     ██╗██╗███████╗       ██╗██╗ █████╗ ███╗   ██╗",
+            "     ██║██║██╔════╝       ██║██║██╔══██╗████╗  ██║",
+            "     ██║██║█████╗         ██║██║███████║██╔██╗ ██║",
+            "██   ██║██║██╔══╝    ██   ██║██║██╔══██║██║╚██╗██║",
+            "╚█████╔╝██║███████╗  ╚█████╔╝██║██║  ██║██║ ╚████║",
+            " ╚════╝ ╚═╝╚══════╝   ╚════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝"
         )
         $colors = @(
             @(0, 102, 153),
@@ -241,12 +241,17 @@ function Get-WaitIndicatorLabel([string]$Stage) {
         { $_ -in @("conda", "uv", "python-search") } { return "正在查找 Python 环境" }
         { $_ -in @("python", "python-version", "python-verify") } { return "正在验证 Python 环境" }
         { $_ -in @("lock", "uv-sync", "python-dependencies") } { return "正在准备 Python 依赖" }
+        "source-prepare" { return "正在准备工具链" }
+        "toolchain" { return "正在准备工具链" }
+        "python" { return "正在同步 Python 依赖" }
+        "browser" { return "正在准备浏览器" }
         "chromium-check" { return "正在检查 Chromium" }
         { $_ -in @("playwright", "chromium-prepare") } { return "正在准备 Chromium" }
         { $_ -in @("doctor", "database-check") } { return "正在检查本地数据" }
         { $_ -in @("migration", "database-upgrade") } { return "正在升级本地数据" }
-        { $_ -in @("frontend-install", "frontend-dependencies") } { return "正在准备前端依赖" }
+        { $_ -in @("frontend-install", "frontend-dependencies") } { return "正在准备界面依赖" }
         { $_ -in @("frontend-build", "frontend") } { return "正在构建界面" }
+        "database" { return "正在检查本地数据" }
         "serve" { return "正在启动界面" }
         default { return "正在处理" }
     }
@@ -260,7 +265,8 @@ function Start-WaitIndicator([string]$Stage) {
         $shell = (Get-Process -Id $PID -ErrorAction Stop).Path
         $spinnerScript = Join-Path $script:ProjectRoot "scripts\start.ps1"
         $quotedScript = '"' + $spinnerScript.Replace('"', '""') + '"'
-        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File $quotedScript -DisplaySpinnerProcess -DisplaySpinnerStage $Stage"
+        $startedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File $quotedScript -DisplaySpinnerProcess -DisplaySpinnerStage $Stage -DisplaySpinnerStartedAt $startedAt"
         if (-not $script:DisplayUnicode) { $arguments += " -DisplaySpinnerAscii" }
         $script:WaitIndicatorProcess = Start-Process -FilePath $shell -ArgumentList $arguments -NoNewWindow -PassThru -ErrorAction Stop
     } catch {
@@ -289,14 +295,15 @@ function Stop-WaitIndicator {
     }
 }
 
-function Invoke-WaitIndicatorProcess([string]$Stage, [bool]$Ascii) {
+function Invoke-WaitIndicatorProcess([string]$Stage, [bool]$Ascii, [long]$StartedAt = 0) {
     $frames = if ($Ascii) { @("|", "/", "-", "\") } else { @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏") }
     $label = Get-WaitIndicatorLabel $Stage
     $index = 0
     # 快速探针在首帧出现前结束，避免终端闪烁。
     Start-Sleep -Milliseconds 130
     while ($true) {
-        [Console]::Write(("`r{0} {1}" -f $frames[$index % $frames.Count], $label))
+        $elapsed = if ($StartedAt -gt 0) { [Math]::Max(0, [int][Math]::Floor(([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $StartedAt) / 1000)) } else { 0 }
+        [Console]::Write(("`r{0} {1} {2}s" -f $frames[$index % $frames.Count], $label, $elapsed))
         $index += 1
         Start-Sleep -Milliseconds 90
     }

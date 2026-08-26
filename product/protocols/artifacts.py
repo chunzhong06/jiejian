@@ -29,7 +29,7 @@ from product.backend.core.identifiers import PROJECT_ID_PATTERN, RUN_ID_PATTERN,
 _SAFE_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 _RELATIVE_PATH = re.compile(r"^[A-Za-z0-9_./:@+\-]{1,512}$")
 RULESET_VERSION = "artifact-local-2026.08.18"
-_ARTIFACT_ROOT_VERSIONS = {"ArtifactCheckRequest": "2", "ArtifactScanResult": "2", "ArtifactResultManifest": "2"}
+_ARTIFACT_ROOT_VERSIONS = {"ArtifactCheckRequest": "1", "ArtifactScanResult": "1", "ArtifactResultManifest": "1"}
 
 
 class ArtifactModel(BaseModel):
@@ -55,7 +55,7 @@ class ScanBudget(ArtifactModel):
 
 # 一次扫描的受控根、严格 manifest 与规则集身份。
 class ArtifactCheckRequest(ArtifactModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     artifact_id: str = Field(pattern=_SAFE_ID)
     run_id: str | None = Field(default=None, pattern=RUN_ID_PATTERN)
@@ -134,7 +134,7 @@ class ArtifactFinding(ArtifactModel):
 
 # 只含脱敏 Finding、稳定摘要和独立 ArtifactVerdict 的扫描结果。
 class ArtifactScanResult(ArtifactModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     artifact_id: str = Field(pattern=_SAFE_ID)
     run_id: str | None = Field(default=None, pattern=RUN_ID_PATTERN)
@@ -195,7 +195,7 @@ class ArtifactResultFile(ArtifactModel):
 
 # 已发布 Artifact Result 文件清单及其字节数、hash 与语义身份。
 class ArtifactResultManifest(ArtifactModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     artifact_id: str = Field(pattern=_SAFE_ID)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     result_sha256: str = Field(pattern=SHA256_PATTERN)

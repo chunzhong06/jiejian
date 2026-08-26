@@ -1,3 +1,5 @@
+# 验证核心领域中的敏感信息脱敏。
+
 from __future__ import annotations
 
 import json

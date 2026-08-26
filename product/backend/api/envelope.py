@@ -13,12 +13,12 @@ class ApiModel(BaseModel):
 
 
 class ApiResponse(ApiModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     data: Any
 
 
 def data_response(value: Any, *, status_code: int = 200) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
-        content={"schema_version": "2", "data": value},
+        content={"schema_version": "1", "data": value},
     )

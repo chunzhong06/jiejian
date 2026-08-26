@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from functools import partial
 from pathlib import Path
 
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
 from product.backend.infra.runtime.jobs.attempts import JobAttempts

@@ -31,7 +31,7 @@ from product.backend.core.verification.differential import (
     build_differential_experiment_plan,
 )
 from product.backend.core.verification.facts import TargetType
-from product.backend.core.verification.permission_coverage import PermissionMutationPlan
+from product.backend.core.verification.permissions.coverage import PermissionMutationPlan
 from product.backend.core.verification.permissions import PermissionContract, permission_model_sha256
 from product.protocols.execution import (
     EffectBinding,
@@ -236,6 +236,8 @@ class WebExecutionSnapshot(ProtocolModel):
                 raise ValueError(
                     "observer binding must reference a required spec with matching phases"
                 )
+            if binding.identity_id is not None and binding.identity_id not in identity_ids:
+                raise ValueError("observer binding references an unknown prepared identity")
         bound_ids = {item.observer_id for item in self.observer_bindings}
         if any(
             spec.required and spec.observer_id not in bound_ids
@@ -259,6 +261,11 @@ def required_web_secret_refs(snapshot: WebExecutionSnapshot) -> tuple[str, ...]:
         for workflow in snapshot.workflow_bindings
         for step in workflow.steps
         if step.identity_id != CASE_SUBJECT_IDENTITY
+    )
+    identity_ids.update(
+        binding.identity_id
+        for binding in snapshot.observer_bindings
+        if binding.identity_id is not None
     )
     references: list[str] = []
     for identity in snapshot.identities:
@@ -304,7 +311,7 @@ class WebExecutionProfile(BaseModel):
         hide_input_in_errors=True,
     )
 
-    schema_version: Literal["4"] = "4"
+    schema_version: Literal["1"] = "1"
     profile_id: str = Field(pattern=_PROFILE_ID.pattern)
     project_id: str = Field(pattern=_PROFILE_ID.pattern)
     project_name: str = Field(min_length=1, max_length=128)
@@ -414,25 +421,40 @@ def _contract_fingerprint(contract: PermissionContract) -> str:
 
 
 def _reject_secret_material(value: Any) -> None:
-    pending = [value]
+    pending: list[tuple[tuple[str | int, ...], Any]] = [((), value)]
     while pending:
-        item = pending.pop()
+        path, item = pending.pop()
         if isinstance(item, Mapping):
             for key, child in item.items():
+                child_path = (*path, key)
                 if (
                     isinstance(key, str)
                     and not (key == "secret" and isinstance(child, bool))
                     and not key.endswith("_ref")
+                    # 这里只放行严格身份模型中的 Cookie 描述集合；集合内部仍递归检查，
+                    # 任意流程正文或其他位置出现同名字段仍按敏感字段拒绝。
+                    and not _is_prepared_cookie_descriptor_path(child_path)
                     and _SECRET_KEY.search(key)
                 ):
                     raise ValueError("profile contains a sensitive field")
-                pending.append(child)
+                pending.append((child_path, child))
         elif isinstance(item, (list, tuple)):
-            pending.extend(item)
+            pending.extend(((*path, index), child) for index, child in enumerate(item))
         elif isinstance(item, float) and not math.isfinite(item):
             raise ValueError("profile contains a non-finite number")
         elif isinstance(item, str) and not item.startswith("env:") and _INLINE_SECRET.search(item):
             raise ValueError("profile contains inline sensitive material")
+
+
+def _is_prepared_cookie_descriptor_path(path: tuple[str | int, ...]) -> bool:
+    """只识别类型化身份绑定中的 Cookie 元数据集合。"""
+
+    return (
+        len(path) == 4
+        and path[0] == "identities"
+        and isinstance(path[1], int)
+        and path[2:] == ("binding", "cookies")
+    )
 
 
 def canonical_web_execution_profile_json_bytes(
@@ -493,7 +515,7 @@ def parse_web_execution_profile(
         )
         if not isinstance(data, dict):
             raise ValueError("profile root must be an object")
-        if data.get("schema_version") != "4":
+        if data.get("schema_version") != "1":
             raise ValueError("profile schema_version is missing or unsupported")
         # 先用 json.loads 只做重复键/根类型检查，再由 Pydantic 的 JSON
         # strict parser 保留 tuple 等 JSON 数组到严格模型的合法转换。

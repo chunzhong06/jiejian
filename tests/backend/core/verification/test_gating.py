@@ -1,3 +1,5 @@
+# 验证验证领域中的验证闸门。
+
 from __future__ import annotations
 
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict

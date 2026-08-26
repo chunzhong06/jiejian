@@ -18,6 +18,8 @@ HTTP 请求模板只允许固定 method、相对 path、受控 query/header、�
 
 身份绑定是有界联合：BEARER、STATIC_HEADERS、COOKIE_SESSION、LOGIN_WORKFLOW、OAUTH2_CLIENT_CREDENTIALS、OAUTH2_REFRESH_TOKEN。每个身份拥有独立、仅内存 Cookie jar；不读取系统代理或浏览器 Cookie，不跨 case 复用。bootstrap 与业务工作流分离，失败不得回退匿名。CSRF 值只在同身份、同 origin 和允许目标内作为 secret slot 传播，不写日志、Evidence 或持久化数据。认证端点使用独立 `AuthTargetScope`，不得扩大业务和 Observer scope；只在明确 token-expired 分类后刷新一次。
 
+项目级 TestIdentity 只是已确认角色与可安全重放登录状态的控制面资产，不等同于 `HttpIdentityBinding`。其准备过程在独立 headed BrowserContext 中由用户登录并显式确认，只保存当前 host 的有限 Cookie 或当前 origin 的单一 Bearer 到共享 SecretStore；数据库保存元数据与精确引用。TestIdentity 在后续确定性编译前不得直接进入 Runner，身份准备也不生成业务 Recording 事件。
+
 确认后的 Flow 编译为冻结 `HttpWorkflowBinding`。步骤目的只允许 SETUP、TARGET、CLEANUP，且恰有一个 TARGET；动态值只能从 case、固定常量、secret ref 或先前步骤的有限响应位置取得。执行顺序固定为恢复/清理、身份准备、SETUP、BASELINE、BEFORE、TARGET、AFTER、EVENTUAL、效果聚合、Verification、CLEANUP。TARGET 未执行、身份/SETUP/提取/基线失败均不得形成 PASS。
 
 ## 理由与取舍

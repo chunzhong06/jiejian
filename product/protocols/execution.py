@@ -89,6 +89,7 @@ class ObserverRequirementBinding(ProtocolModel):
     credential_ref: str | None = Field(
         default=None, pattern=r"^env:[A-Z][A-Z0-9_]{0,127}$"
     )
+    identity_id: str | None = Field(default=None, pattern=PROJECT_ID_PATTERN)
     phases: tuple[ObservationPhase, ...] = Field(default=(), max_length=5)
 
     @model_validator(mode="after")
@@ -108,5 +109,9 @@ class ObserverRequirementBinding(ProtocolModel):
         if self.observer_id is None or self.observer_type is None or not self.phases:
             raise ValueError(
                 "OBSERVER_SPEC binding requires an observer and phase window"
+            )
+        if self.credential_ref is not None and self.identity_id is not None:
+            raise ValueError(
+                "observer binding must use either a credential ref or a prepared identity"
             )
         return self

@@ -1,3 +1,5 @@
+# 验证结果工作流中的报告生成。
+
 from __future__ import annotations
 
 import hashlib
@@ -7,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.reporting import render_junit, render_sarif
+from product.backend.core.reporting import render_html, render_junit, render_sarif
 from product.backend.infra.artifacts.report_store import ReportStore
 from product.backend.infra.artifacts import report_store as report_store_module
 from product.backend.workflows.results.reporting import ReportBuilder
@@ -26,6 +28,8 @@ from product.protocols.report import (
     GateRunReport,
     ReportGate,
     ReportPackageManifest,
+    ReportPresentation,
+    ReportPresentationIssue,
     ReportRun,
     ReportRuntime,
     ReportVersions,
@@ -47,18 +51,53 @@ def _versions() -> ReportVersions:
         contract_id="contract",
         contract_version=1,
         engine_version="engine-v1",
-        runner_schema_version="4",
-        evidence_schema_version="4",
-        observer_schema_version="3",
-        artifact_schema_version="2",
+        runner_schema_version="1",
+        evidence_schema_version="1",
+        observer_schema_version="1",
+        artifact_schema_version="1",
     )
 
 
-def _base(status: ArtifactSummaryStatus = ArtifactSummaryStatus.NOT_REQUESTED) -> BaseRunReport:
+def _presentation(*, verdict: str | None = None) -> ReportPresentation:
+    return ReportPresentation(
+        run_id=RUN_ID,
+        project_id=PROJECT_ID,
+        project_name="报告测试项目",
+        run_lifecycle="COMPLETED",
+        verdict=verdict,
+        headline="结果不可用" if verdict is None else "发现权限问题",
+        scope_statement="当前运行没有形成可用安全结论。",
+        checked_count=0,
+        safe_count=0,
+        problem_count=0,
+        inconclusive_count=0,
+        uncovered_count=0,
+    )
+
+
+def _base(
+    status: ArtifactSummaryStatus = ArtifactSummaryStatus.NOT_REQUESTED,
+    *,
+    verdict: str | None = None,
+    presentation: ReportPresentation | None = None,
+) -> BaseRunReport:
     versions = _versions()
     summary = ArtifactSummary.create(status)
-    run = ReportRun(run_id=RUN_ID, project_id=PROJECT_ID, lifecycle="COMPLETED", created_at_us=1, finished_at_us=2)
-    runtime = ReportRuntime(lifecycle="COMPLETED", evidence_refs=(), findings=(), observer_statuses=())
+    run = ReportRun(
+        run_id=RUN_ID,
+        project_id=PROJECT_ID,
+        lifecycle="COMPLETED",
+        verdict=verdict,
+        created_at_us=1,
+        finished_at_us=2,
+    )
+    runtime = ReportRuntime(
+        lifecycle="COMPLETED",
+        verdict=verdict,
+        evidence_refs=(),
+        findings=(),
+        observer_statuses=(),
+    )
     semantic = base_semantic_input_sha256(RUN_ID, "a" * 64, "b" * 64, summary.snapshot_sha256, versions)
     return BaseRunReport.create(
         report_type="BASE",
@@ -68,6 +107,7 @@ def _base(status: ArtifactSummaryStatus = ArtifactSummaryStatus.NOT_REQUESTED) -
         semantic_input_sha256=semantic,
         run=run,
         runtime=runtime,
+        presentation=presentation or _presentation(verdict=verdict),
         artifact_summary=summary,
         versions=versions,
     )
@@ -128,7 +168,7 @@ def _write_artifact_request(
     return job_dir
 
 
-def test_report_v3_discriminator_and_versions_fail_closed() -> None:
+def test_current_report_discriminator_and_versions_fail_closed() -> None:
     base = _base()
     encoded = base.model_dump(mode="json")
     assert parse_report_document(encoded).report_type == "BASE"
@@ -143,11 +183,11 @@ def test_report_v3_discriminator_and_versions_fail_closed() -> None:
     with pytest.raises(ValueError):
         ReportVersions(
             contract_id="contract", contract_version=1, engine_version="engine-v1",
-            runner_schema_version="2", evidence_schema_version="4", observer_schema_version="3", artifact_schema_version="2",
+            runner_schema_version="2", evidence_schema_version="1", observer_schema_version="1", artifact_schema_version="1",
         )
 
 
-def test_report_v3_checked_in_schema_matches_runtime_union() -> None:
+def test_current_report_checked_in_schema_matches_runtime_union() -> None:
     schema_path = Path("product/protocols/schemas/reports/report.schema.json")
     assert json.loads(schema_path.read_text(encoding="utf-8")) == report_json_schema()
     manifest_path = Path(
@@ -159,7 +199,7 @@ def test_report_v3_checked_in_schema_matches_runtime_union() -> None:
 
 
 def test_base_and_gate_ids_and_bytes_are_deterministic(tmp_path: Path) -> None:
-    base = _base()
+    base = _base(verdict="BLOCK")
     gate_input = gate_semantic_input_sha256(base.report_id, base.canonical_sha256, GATE_ID, "c" * 64)
     gate = GateRunReport.create(
         report_type="GATE",
@@ -172,6 +212,7 @@ def test_base_and_gate_ids_and_bytes_are_deterministic(tmp_path: Path) -> None:
         semantic_input_sha256=gate_input,
         run=base.run,
         runtime=base.runtime,
+        presentation=base.presentation,
         artifact_summary=base.artifact_summary,
         versions=base.versions,
         limitations=base.limitations,
@@ -187,7 +228,108 @@ def test_base_and_gate_ids_and_bytes_are_deterministic(tmp_path: Path) -> None:
     assert store.publish(gate) == gate_manifest
     assert store.read(RUN_ID, base.report_id).model_dump(mode="json") == base.model_dump(mode="json")
     assert store.read(RUN_ID, gate.report_id).model_dump(mode="json") == gate.model_dump(mode="json")
+    assert render_html(base) == render_html(base)
+    assert b"Gate decision" not in render_html(base)
+    assert b"Gate decision" in render_html(gate)
+    gate_html = render_html(gate).decode("utf-8")
+    assert "Gate decision：PASS" in gate_html
+    assert "安全结论：BLOCK" in gate_html
     assert json.loads(store.read_format(RUN_ID, base.report_id, "sarif"))["runs"][0]["invocations"][0]["executionSuccessful"] is True
+
+
+def test_html_uses_presentation_snapshot_and_escapes_dynamic_content() -> None:
+    injected = '<script>alert("x")</script> & "quoted"'
+    issue = ReportPresentationIssue(
+        finding_id="finding_" + "c" * 32,
+        title="权限问题 & <script>",
+        subject_group="普通用户",
+        action=injected,
+        resource="资源 & \"R\"",
+        relation="自己的资源",
+        expectation="不应允许",
+        surface_result="页面返回拒绝",
+        actual_result="数据已经变化",
+        conclusion="权限限制未生效",
+        explanation=injected,
+        severity="high",
+        evidence_refs=("ev_" + "d" * 20,),
+        verdict="VULNERABLE",
+    )
+    presentation = ReportPresentation(
+        run_id=RUN_ID,
+        project_id=PROJECT_ID,
+        project_name=injected,
+        run_lifecycle="COMPLETED",
+        verdict="BLOCK",
+        headline="发现权限问题",
+        scope_statement="本次只覆盖已确认范围 & <限制>",
+        checked_count=1,
+        safe_count=0,
+        problem_count=1,
+        inconclusive_count=0,
+        uncovered_count=2,
+        issues=(issue,),
+        limitations=("业务限制 & <script>",),
+    )
+    document = render_html(_base(verdict="BLOCK", presentation=presentation)).decode("utf-8")
+    assert "界鉴 · 权限安全检查报告" in document
+    assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &quot;quoted&quot;" in document
+    assert '<div class="summary-item"><span>检查项</span><strong>1</strong>' in document
+    assert '<div class="summary-item"><span>未覆盖</span><strong>2</strong>' in document
+    assert '<article class="issue-card">' in document
+    assert "可信观察到的真实结果" in document
+    assert 'severity-high">高风险' in document
+    assert "<th>标题</th>" not in document
+    assert "本次只覆盖已确认范围 &amp; &lt;限制&gt;" in document
+    assert "<script" not in document
+    assert "<form" not in document
+    assert "http://" not in document and "https://" not in document
+    assert "src=" not in document and "url(" not in document
+
+
+def test_presentation_is_canonical_and_gate_copies_base_safety_facts() -> None:
+    base = _base(verdict="BLOCK")
+    tampered = base.model_dump(mode="json")
+    tampered["presentation"]["project_name"] = "后来改名的项目"
+    with pytest.raises(ValueError, match="canonical hash"):
+        parse_report_document(tampered)
+
+    gate_input = gate_semantic_input_sha256(
+        base.report_id,
+        base.canonical_sha256,
+        GATE_ID,
+        "c" * 64,
+    )
+    gate = GateRunReport.create(
+        report_type="GATE",
+        report_id=report_id_for("GATE", gate_input),
+        run_id=RUN_ID,
+        project_id=PROJECT_ID,
+        base_report_id=base.report_id,
+        base_report_sha256=base.canonical_sha256,
+        gate_result_id=GATE_ID,
+        semantic_input_sha256=gate_input,
+        run=base.run,
+        runtime=base.runtime,
+        presentation=base.presentation,
+        artifact_summary=base.artifact_summary,
+        versions=base.versions,
+        limitations=base.limitations,
+        gate=ReportGate(
+            gate_result_id=GATE_ID,
+            baseline_id="baseline_" + "c" * 32,
+            run_id=RUN_ID,
+            policy_version="gate-v1",
+            input_hash="c" * 64,
+            decision="PASS",
+            reasons=(),
+            evaluated_at_us=3,
+        ),
+    )
+    assert gate.presentation == base.presentation
+    assert gate.runtime.verdict == "BLOCK"
+    assert gate.presentation.verdict == "BLOCK"
+    assert gate.gate.decision == "PASS"
 
 
 def test_report_store_detects_projection_tamper_and_same_id_conflict(tmp_path: Path) -> None:

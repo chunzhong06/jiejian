@@ -19,9 +19,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from enum import StrEnum
 
+from typing import Literal
+
 from pydantic import Field, model_validator
 
-from product.backend.core.verification.permission_coverage import PermissionMutationCase, PermissionMutationPlan
+from product.backend.core.verification.permissions.coverage import PermissionMutationCase, PermissionMutationPlan
 from product.backend.core.verification.permissions import CoverageDimension, PermissionContract, PermissionExpectation, PermissionModel, permission_model_sha256
 
 
@@ -90,6 +92,7 @@ class TwinPlanGap(PermissionModel):
 
 
 class DifferentialExperimentPlan(PermissionModel):
+    schema_version: Literal["1"] = "1"
     differential_plan_id: str = Field(pattern=r"^dplan-[0-9a-f]{32}$")
     differential_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     coverage_plan_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -104,7 +107,10 @@ class DifferentialExperimentPlan(PermissionModel):
             raise ValueError("each DENY case can belong to only one twin")
         if len({item.deny_case_id for item in self.gaps}) != len(self.gaps):
             raise ValueError("differential gaps must be unique per DENY case")
-        payload = self.model_dump(mode="json", exclude={"differential_plan_id", "differential_fingerprint"})
+        payload = self.model_dump(
+            mode="json",
+            exclude={"schema_version", "differential_plan_id", "differential_fingerprint"},
+        )
         expected = permission_model_sha256(payload)
         if self.differential_plan_id != f"dplan-{expected[:32]}" or self.differential_fingerprint != expected:
             raise ValueError("differential plan fingerprint does not match its semantic payload")

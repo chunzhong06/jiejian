@@ -1,3 +1,5 @@
+# 验证权限契约工作流中的前置条件最小化。
+
 from __future__ import annotations
 
 from product.backend.core.verification.permissions import permission_model_sha256

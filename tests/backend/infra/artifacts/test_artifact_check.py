@@ -1,3 +1,5 @@
+# 验证产物基础设施中的产物完整性检查。
+
 from __future__ import annotations
 
 import hashlib

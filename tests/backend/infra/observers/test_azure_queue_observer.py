@@ -1,3 +1,5 @@
+# 验证观察器基础设施中的Azure 队列观察器。
+
 from __future__ import annotations
 
 import base64

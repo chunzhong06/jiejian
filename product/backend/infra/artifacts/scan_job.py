@@ -19,9 +19,9 @@ from uuid import uuid4
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.jobs.handlers import JobHandler
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
 from product.protocols.artifacts import ArtifactCheckRequest, ArtifactResultFile, ArtifactResultManifest, ArtifactScanResult, parse_artifact_check_request, parse_artifact_scan_result
 
 _JOB_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"

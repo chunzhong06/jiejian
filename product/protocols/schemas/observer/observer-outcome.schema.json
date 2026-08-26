@@ -17,13 +17,6 @@
       "title": "Observer Id",
       "type": "string"
     },
-    "required": {
-      "title": "Required",
-      "type": "boolean"
-    },
-    "status": {
-      "$ref": "#/$defs/ObserverOutcomeStatus"
-    },
     "reason_codes": {
       "default": [],
       "items": {
@@ -32,6 +25,13 @@
       "maxItems": 16,
       "title": "Reason Codes",
       "type": "array"
+    },
+    "required": {
+      "title": "Required",
+      "type": "boolean"
+    },
+    "status": {
+      "$ref": "#/$defs/ObserverOutcomeStatus"
     }
   },
   "required": [

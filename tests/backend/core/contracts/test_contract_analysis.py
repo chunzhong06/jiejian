@@ -1,3 +1,5 @@
+# 验证权限契约领域中的权限契约分析。
+
 from __future__ import annotations
 
 import hashlib
@@ -14,7 +16,7 @@ from product.backend.core.contracts.analysis.sources.requirement import parse_re
 from product.backend.core.contracts.models import CandidateRiskKind, CandidateSuggestion, ContractAuditAction, ContractAuditEntry, ContractProvenance, ContractSourceType, ContractVersion, Requirement, SourceReference
 from product.backend.core.lifecycle import ContractStatus
 from product.protocols.recording_flow import Flow, FlowStep
-from product.protocols.web.workflow import HttpOutcomeClassifier, HttpRequestTemplate, ValueSlot, ValueSlotConsumer, ValueSlotSource
+from product.protocols.web.workflow import HttpOutcomeClassifier, HttpRequestTemplate, ValueSlot, ValueSlotConsumer, ValueSlotSource, WorkflowStepPurpose
 from product.backend.core.verification.permissions import ActionDefinition, CoverageDimension, PermissionContract, PermissionContext, PermissionExpectation, PermissionRule, RelationEndpoint, RelationFact, RelationType, ResourceDefinition, SecurityEffectDefinition, SecurityEffectKind, SubjectDefinition
 
 SHA256 = "a" * 64
@@ -59,7 +61,31 @@ def test_requirement_template_is_deterministic_and_candidate_is_non_authoritativ
 
 def test_flow_and_openapi_adapters_produce_suggestions() -> None:
     resource_slot = ValueSlot(slot_id="resource_id", source=ValueSlotSource.CASE_RESOURCE_ID, consumer=ValueSlotConsumer.PATH)
-    flow = Flow(id="analysis-flow", steps=(FlowStep(id="read-resource", request_template=HttpRequestTemplate(method="GET", path="/resources/{resource_id}", input_slots=(resource_slot,)), classifier=HttpOutcomeClassifier(), identity_id="owner", resource_id="resource", alternate_identity_id="attacker", alternate_resource_id="foreign-resource"), FlowStep(id="update-resource", request_template=HttpRequestTemplate(method="PATCH", path="/resources/{resource_id}", input_slots=(resource_slot,)), classifier=HttpOutcomeClassifier(), identity_id="owner", resource_id="resource", alternate_identity_id="attacker", alternate_resource_id="foreign-resource", sensitive_fields=("email",))))
+    flow = Flow(
+        id="analysis-flow",
+        action_candidate_id="action_0123456789abcdef0123456789abcdef",
+        target_step_id="update-resource",
+        steps=(
+            FlowStep(
+                id="read-resource",
+                purpose=WorkflowStepPurpose.SETUP,
+                request_template=HttpRequestTemplate(method="GET", path="/resources/reference"),
+                classifier=HttpOutcomeClassifier(),
+            ),
+            FlowStep(
+                id="update-resource",
+                purpose=WorkflowStepPurpose.TARGET,
+                request_template=HttpRequestTemplate(
+                    method="PATCH",
+                    path="/resources/{resource_id}",
+                    input_slots=(resource_slot.model_copy(update={"consumer_step_id": "update-resource"}),),
+                ),
+                classifier=HttpOutcomeClassifier(),
+                depends_on_step_ids=("read-resource",),
+                sensitive_fields=("email",),
+            ),
+        ),
+    )
     flow_batch = build_flow_candidates("analysis-project", flow)
     assert {item.suggestion.kind for item in flow_batch.candidates} == {CandidateRiskKind.FOREIGN_READ, CandidateRiskKind.PRIVILEGED_FIELD, CandidateRiskKind.UNAUTHORIZED_SIDE_EFFECT}
     assert all(item.source.locator.startswith("flow:analysis-flow/step:") for item in flow_batch.candidates)

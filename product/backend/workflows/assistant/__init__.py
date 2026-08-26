@@ -1,0 +1,63 @@
+# 确定性引导、错误诊断与受限 AI 辅助的公共应用层入口。
+
+from product.backend.workflows.assistant.diagnosis import (
+    ErrorArea,
+    ErrorDiagnosis,
+    ErrorDiagnosisContext,
+    ErrorIntervention,
+    ErrorPhase,
+    RecoveryAction,
+    diagnose_error,
+)
+from product.backend.workflows.assistant.guidance import (
+    GuidanceOption,
+    GuidanceOptionKind,
+    GuidancePhase,
+    GuidancePriorityTier,
+    GuidanceQueryService,
+    GuidanceSnapshot,
+    build_guidance_snapshot,
+)
+from product.backend.workflows.assistant.templates import (
+    ASSISTANT_SAFETY_INSTRUCTIONS,
+    ASSISTANT_TEMPLATES,
+    AssistantFact,
+    AssistantFactField,
+    AssistantRecommendation,
+    AssistantResult,
+    AssistantTemplateId,
+    AssistantTemplateInput,
+    AssistantTemplateSpec,
+    build_template_input,
+    parse_assistant_result,
+    render_assistant_prompt,
+)
+
+__all__ = [
+    "ASSISTANT_SAFETY_INSTRUCTIONS",
+    "ASSISTANT_TEMPLATES",
+    "AssistantFact",
+    "AssistantFactField",
+    "AssistantRecommendation",
+    "AssistantResult",
+    "AssistantTemplateId",
+    "AssistantTemplateInput",
+    "AssistantTemplateSpec",
+    "ErrorArea",
+    "ErrorDiagnosis",
+    "ErrorDiagnosisContext",
+    "ErrorIntervention",
+    "ErrorPhase",
+    "GuidanceOption",
+    "GuidanceOptionKind",
+    "GuidancePhase",
+    "GuidancePriorityTier",
+    "GuidanceQueryService",
+    "GuidanceSnapshot",
+    "RecoveryAction",
+    "build_guidance_snapshot",
+    "build_template_input",
+    "diagnose_error",
+    "parse_assistant_result",
+    "render_assistant_prompt",
+]

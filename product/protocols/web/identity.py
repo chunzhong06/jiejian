@@ -37,6 +37,7 @@ class HttpIdentityKind(StrEnum):
     BEARER = "BEARER"
     STATIC_HEADERS = "STATIC_HEADERS"
     COOKIE_SESSION = "COOKIE_SESSION"
+    PREPARED_COOKIE_SESSION = "PREPARED_COOKIE_SESSION"
     LOGIN_WORKFLOW = "LOGIN_WORKFLOW"
     OAUTH2_CLIENT_CREDENTIALS = "OAUTH2_CLIENT_CREDENTIALS"
     OAUTH2_REFRESH_TOKEN = "OAUTH2_REFRESH_TOKEN"
@@ -180,6 +181,40 @@ class CookieSessionIdentityBinding(ProtocolModel):
     csrf_slot_id: str | None = Field(default=None, pattern=_IDENTIFIER)
 
 
+class PreparedCookieCredential(ProtocolModel):
+    """已准备 Cookie 的非秘密元数据；真实值只通过环境引用注入。"""
+
+    name: str = Field(min_length=1, max_length=256)
+    domain: str = Field(min_length=1, max_length=253)
+    path: str = Field(min_length=1, max_length=2048)
+    secure: bool
+    value_ref: str = Field(pattern=r"^env:[A-Z][A-Z0-9_]{0,127}$")
+
+    @model_validator(mode="after")
+    def validate_cookie(self) -> PreparedCookieCredential:
+        if self.name != self.name.strip() or any(ord(char) < 33 for char in self.name):
+            raise ValueError("prepared cookie name must be trimmed and printable")
+        if not self.path.startswith("/"):
+            raise ValueError("prepared cookie path must be absolute")
+        return self
+
+
+class PreparedCookieSessionIdentityBinding(ProtocolModel):
+    """把 Credential Manager 中已确认的 Cookie 会话投影到一次隔离 Case。"""
+
+    kind: Literal[HttpIdentityKind.PREPARED_COOKIE_SESSION] = (
+        HttpIdentityKind.PREPARED_COOKIE_SESSION
+    )
+    cookies: tuple[PreparedCookieCredential, ...] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_cookies(self) -> PreparedCookieSessionIdentityBinding:
+        keys = {(item.name, item.domain, item.path) for item in self.cookies}
+        if len(keys) != len(self.cookies):
+            raise ValueError("prepared cookie metadata must be unique")
+        return self
+
+
 class LoginWorkflowIdentityBinding(ProtocolModel):
     kind: Literal[HttpIdentityKind.LOGIN_WORKFLOW] = HttpIdentityKind.LOGIN_WORKFLOW
     workflow_id: str = Field(pattern=_IDENTIFIER)
@@ -211,6 +246,7 @@ HttpIdentityBinding: TypeAlias = Annotated[
     BearerIdentityBinding
     | StaticHeadersIdentityBinding
     | CookieSessionIdentityBinding
+    | PreparedCookieSessionIdentityBinding
     | LoginWorkflowIdentityBinding
     | OAuth2ClientCredentialsIdentityBinding
     | OAuth2RefreshTokenIdentityBinding,
@@ -245,6 +281,7 @@ class WebExecutionIdentity(ProtocolModel):
         elif self.binding.kind in {
             HttpIdentityKind.BEARER,
             HttpIdentityKind.STATIC_HEADERS,
+            HttpIdentityKind.PREPARED_COOKIE_SESSION,
             HttpIdentityKind.OAUTH2_CLIENT_CREDENTIALS,
             HttpIdentityKind.OAUTH2_REFRESH_TOKEN,
         } and ids:

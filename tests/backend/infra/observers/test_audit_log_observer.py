@@ -1,3 +1,5 @@
+# 验证观察器基础设施中的审计日志观察器。
+
 from __future__ import annotations
 
 import hashlib

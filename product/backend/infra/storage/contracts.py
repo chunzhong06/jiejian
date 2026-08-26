@@ -19,7 +19,6 @@ from product.backend.infra.storage.base import Base
 class RequirementRow(Base):
     __tablename__ = "requirements"
     __table_args__ = (
-        CheckConstraint("schema_version = '1'", name="schema_version_value"),
         CheckConstraint(
             "source_type IN ('requirement_text', 'project_config', 'recording_flow', "
             "'static_analysis', 'llm')",
@@ -43,7 +42,6 @@ class RequirementRow(Base):
     )
 
     requirement_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    schema_version: Mapped[str] = mapped_column(String(8), nullable=False)
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.project_id", ondelete="RESTRICT"), nullable=False
     )
@@ -57,7 +55,6 @@ class RequirementRow(Base):
 class ContractCandidateRow(Base):
     __tablename__ = "contract_candidates"
     __table_args__ = (
-        CheckConstraint("schema_version = '1'", name="schema_version_value"),
         CheckConstraint(
             "source_type IN ('requirement_text', 'project_config', 'recording_flow', "
             "'static_analysis', 'llm')",
@@ -81,7 +78,6 @@ class ContractCandidateRow(Base):
     )
 
     candidate_id: Mapped[str] = mapped_column(String(37), primary_key=True)
-    schema_version: Mapped[str] = mapped_column(String(8), nullable=False)
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.project_id", ondelete="RESTRICT"), nullable=False
     )
@@ -96,8 +92,6 @@ class ContractCandidateRow(Base):
 class ContractVersionRow(Base):
     __tablename__ = "contract_versions"
     __table_args__ = (
-        CheckConstraint("schema_version = '1'", name="schema_version_value"),
-
         CheckConstraint("version >= 1", name="version_positive"),
         CheckConstraint(
             "status IN ('DRAFT', 'REVIEW', 'ACTIVE', 'SUPERSEDED', 'REJECTED')",
@@ -131,7 +125,6 @@ class ContractVersionRow(Base):
     )
     contract_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    schema_version: Mapped[str] = mapped_column(String(8), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
     provenance_json: Mapped[str] = mapped_column(Text, nullable=False)
@@ -182,11 +175,11 @@ from product.backend.core.verification.permissions import PermissionContract, pa
 from product.backend.core.recording import Recording, RecordingState, RecordingStateEvent, RecordingTerminalState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import STAGED_ARTIFACT_MAX_BYTES, FlowDraft, RecordingEventKind, RecordingEvent, RecordingHeader, StagedArtifact, canonical_flow_draft_json_bytes
-from product.backend.infra.storage.evidence import EvidenceIndexRow
+from product.backend.infra.storage.results.evidence import EvidenceIndexRow
 from product.backend.infra.storage.recordings import FlowDraftRevisionRow, RecordingRow
-from product.backend.infra.storage.jobs import JobEventRow, JobRow
+from product.backend.infra.storage.execution.jobs import JobEventRow, JobRow
 from product.backend.infra.storage.projects import ProjectRow
-from product.backend.infra.storage.runs import RunRow
+from product.backend.infra.storage.execution.runs import RunRow
 from product.backend.infra.storage.base import MetadataValue, StorageRecord, _METADATA_KEY, _SENSITIVE_METADATA_KEY, _canonical_json, _flush, _scalar, _scalars, ensure_storage_payload_safe
 
 class RequirementRepository:
@@ -201,7 +194,6 @@ class RequirementRepository:
         self._session.add(
             RequirementRow(
                 requirement_id=requirement.requirement_id,
-                schema_version="1",
                 project_id=requirement.project_id,
                 source_type=requirement.source.source_type.value,
                 source_locator=requirement.source.locator,
@@ -256,7 +248,6 @@ class ContractCandidateRepository:
         self._session.add(
             ContractCandidateRow(
                 candidate_id=candidate.candidate_id,
-                schema_version="1",
                 project_id=candidate.project_id,
                 source_type=candidate.source.source_type.value,
                 source_locator=candidate.source.locator,
@@ -322,7 +313,6 @@ class ContractVersionRepository:
                 project_id=contract.project_id,
                 contract_id=contract.contract_id,
                 version=contract.version,
-                schema_version="1",
                 status=contract.status.value,
                 snapshot_json=_canonical_json(contract.snapshot.model_dump(mode="json")),
                 provenance_json=_canonical_json(contract.provenance.model_dump(mode="json")),

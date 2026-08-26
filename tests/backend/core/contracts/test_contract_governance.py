@@ -1,3 +1,5 @@
+# 验证权限契约领域中的权限契约治理。
+
 from __future__ import annotations
 
 import pytest

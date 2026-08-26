@@ -2,16 +2,13 @@
 # LLM Profile 治理
 #
 # 定位
-# 控制面、非秘密 profile 存储、秘密端口与 provider 适配器之间的应用边界。
+#   控制面、非秘密 profile 存储与全局 AI 设置的事务边界。
 #
 # 职责
-# 管理 profile 元数据｜分离秘密引用｜解析 provider｜执行显式连接测试
+#   管理 profile 元数据｜执行秘密补偿｜维护连接状态视图
 #
 # 边界
-# 不在响应中返回秘密，不让 LLM 决定安全结论，也不在未显式请求时连接外部 provider。
-#
-# 调用链
-# API / Contract workflow → LLMProfileRegistry → Storage / SecretStore / LLMAdapter
+#   不在响应中返回秘密，不在 GET/读取路径联网；provider 运行时由 provider 模块负责。
 # =============================================================================
 
 from __future__ import annotations
@@ -20,22 +17,22 @@ import os
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.llm.adapters.base import LLMAdapter, LLMInvokeResult, LLMTransport, LLMTransportError
+from product.backend.infra.llm.catalog import LLMModelCatalog, LLMModelCatalogService
+from product.backend.infra.llm.config import AIAssistanceSettings, LLMProfileConfig, LLMProviderType, reasoning_options_for
+from product.backend.infra.secrets import SecretStore, credential_ref, default_secret_store
 from product.backend.infra.storage import StorageUnitOfWork
-from product.backend.infra.llm.adapters.base import LLMAdapter, LLMTransport, LLMTransportError
-from product.backend.infra.llm.adapters.gemini import GeminiAdapter
-from product.backend.infra.llm.adapters.openai_compatible import OpenAICompatibleAdapter
-from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType
-from product.backend.infra.llm.secrets import LLMSecretStore, WindowsCredentialManagerSecretStore, credential_ref_for
-
+from product.backend.infra.llm.provider import (
+    ResolvedLLMProvider, _ConnectionState, _error_for_transport,
+    _jiejian_error_for_transport, _safe_profile_error, adapter_for, probe_provider,
+)
 
 ConnectionStatus = Literal["testing", "configured", "available", "unavailable", "unknown"]
-
 
 class LLMProfileView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
@@ -43,6 +40,7 @@ class LLMProfileView(BaseModel):
     profile_name: str
     provider: LLMProviderType
     model: str
+    reasoning_effort: str | None = None
     base_url: str | None = None
     timeout_ms: int
     max_input_bytes: int
@@ -60,70 +58,6 @@ class LLMProfileView(BaseModel):
     error_code: str | None = None
     error_message: str | None = None
 
-
-@dataclass(frozen=True, slots=True)
-class _ConnectionState:
-    status: ConnectionStatus
-    tested_at_us: int | None = None
-    duration_ms: int | None = None
-    error_code: str | None = None
-    error_message: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedLLMProvider:
-    """已解析秘密的单次 provider；repr 不包含秘密、请求或响应。"""
-
-    provider: LLMProviderType
-    profile_name: str
-    model: str
-    adapter_version: str
-    prompt_version: str
-    input_max_bytes: int
-    output_max_bytes: int
-    budget_limit_microusd: int
-    _adapter: LLMAdapter = field(repr=False)
-    _transport: LLMTransport = field(repr=False)
-    _secret: str = field(repr=False)
-    _profile: LLMProfileConfig = field(repr=False)
-    known_secrets: tuple[str, ...] = field(default=(), repr=False)
-
-    def __call__(self, prompt: str) -> str:
-        prompt_bytes = prompt.encode("utf-8")
-        if len(prompt_bytes) > self.input_max_bytes or self.budget_limit_microusd <= 0:
-            raise LLMTransportError("budget_exceeded")
-        request = self._adapter.build_request(self._profile, self._secret, prompt)
-        if len(request.body) > self.input_max_bytes:
-            raise LLMTransportError("budget_exceeded")
-        response = self._transport.send(request)
-        if len(response.body) > self.output_max_bytes:
-            raise LLMTransportError("response_too_large")
-        return self._adapter.parse_response(response)
-
-class UnavailableCredentialStore:
-    """非 Windows 默认边界；离线启动可用，显式 cred 访问返回稳定错误。"""
-
-    def write(self, secret_ref: str, secret: str) -> None:
-        raise JiejianError(ErrorCode.LLM_SECRET_UNAVAILABLE, "本机秘密存储不可用")
-
-    def read(self, secret_ref: str) -> str | None:
-        raise JiejianError(ErrorCode.LLM_SECRET_UNAVAILABLE, "本机秘密存储不可用")
-
-    def delete(self, secret_ref: str) -> None:
-        raise JiejianError(ErrorCode.LLM_SECRET_UNAVAILABLE, "本机秘密存储不可用")
-
-    def configured(self, secret_ref: str | None) -> bool:
-        if secret_ref is None:
-            return False
-        raise JiejianError(ErrorCode.LLM_SECRET_UNAVAILABLE, "本机秘密存储不可用")
-
-
-def default_credential_store() -> LLMSecretStore:
-    if os.name == "nt":
-        return WindowsCredentialManagerSecretStore()
-    return UnavailableCredentialStore()
-
-
 class LLMProfileRegistry:
     """Profile 配置编排；供应商 JSON 解析始终留在 adapter。"""
 
@@ -132,15 +66,16 @@ class LLMProfileRegistry:
         uow_factory: Callable[..., StorageUnitOfWork],
         *,
         transport: LLMTransport,
-        secret_store: LLMSecretStore | None = None,
+        secret_store: SecretStore | None = None,
         environ: Mapping[str, str] | None = None,
         clock_us: Callable[[], int] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._transport = transport
-        self._secret_store = secret_store or default_credential_store()
+        self._secret_store = secret_store or default_secret_store()
         self._environ = os.environ if environ is None else environ
         self._clock_us = clock_us or (lambda: time.time_ns() // 1000)
+        self._catalog = LLMModelCatalogService(transport)
         self._states: dict[str, _ConnectionState] = {}
         self._test_locks: dict[str, threading.Lock] = {}
         self._test_locks_guard = threading.Lock()
@@ -151,6 +86,127 @@ class LLMProfileRegistry:
             item.enabled and item.secret_configured
             for item in self.list()
         )
+
+    def get_settings(self) -> AIAssistanceSettings:
+        with self._uow_factory() as work:
+            return work.ai_assistance_settings.get()
+
+    def update_settings(self, *, enabled: bool, default_profile_name: str | None) -> AIAssistanceSettings:
+        if enabled and default_profile_name is None:
+            raise JiejianError(ErrorCode.LLM_PROFILE_INVALID, "启用 AI 辅助时必须指定默认 profile")
+        if default_profile_name is not None:
+            with self._uow_factory() as work:
+                profile = work.llm_profiles.get(default_profile_name)
+            if profile is None:
+                raise JiejianError(ErrorCode.LLM_PROFILE_INVALID, "默认 profile 不存在")
+            if enabled and (not profile.enabled or not self._secret_configured(profile.secret_ref)):
+                raise JiejianError(ErrorCode.LLM_PROFILE_INVALID, "默认 profile 不可用")
+        settings = AIAssistanceSettings(
+            enabled=enabled,
+            default_profile_name=default_profile_name,
+            updated_at_us=self._clock_us(),
+        )
+        with self._uow_factory() as work:
+            work.ai_assistance_settings.replace(settings)
+            work.commit()
+        return settings
+
+    def discover_models(
+        self,
+        provider: LLMProviderType,
+        secret: str,
+        *,
+        base_url: str | None = None,
+        allow_local_http: bool = False,
+    ) -> LLMModelCatalog:
+        try:
+            return self._catalog.discover(provider, secret, base_url=base_url, allow_local_http=allow_local_http)
+        except LLMTransportError as exc:
+            raise _jiejian_error_for_transport(exc.kind) from None
+        except ValueError:
+            raise _jiejian_error_for_transport("invalid_request") from None
+
+    def refresh_models(self, profile_name: str) -> LLMModelCatalog:
+        with self._uow_factory() as work:
+            profile = work.llm_profiles.get(profile_name)
+        if profile is None:
+            raise JiejianError(ErrorCode.LLM_PROFILE_NOT_FOUND, "模型 profile 不存在")
+        try:
+            return self._catalog.refresh(profile, self._resolve_secret(profile.secret_ref))
+        except LLMTransportError as exc:
+            raise _jiejian_error_for_transport(exc.kind) from None
+        except ValueError:
+            raise _jiejian_error_for_transport("invalid_request") from None
+
+    def save_default_profile(
+        self,
+        values: Mapping[str, object],
+        *,
+        secret: str | None = None,
+    ) -> LLMProfileView:
+        """普通配置先做一次有界 probe，再把 profile、设置和秘密补偿式保存。"""
+
+        # 默认目标由全局单行设置决定；首次配置才使用固定的 assistant-default。
+        payload = dict(values)
+        now = self._clock_us()
+        with self._uow_factory() as work:
+            settings = work.ai_assistance_settings.get()
+            target_name = settings.default_profile_name or "assistant-default"
+            current = work.llm_profiles.get(target_name)
+        payload["profile_name"] = target_name
+        if current is not None:
+            merged = current.model_dump(mode="python")
+            merged.update(payload)
+            merged["created_at_us"] = current.created_at_us
+            merged["updated_at_us"] = now
+            payload = merged
+            if secret is not None:
+                if current.secret_ref is not None and current.secret_ref.startswith("env:"):
+                    raise JiejianError(ErrorCode.LLM_PROFILE_INVALID, "更新秘密时不得覆盖环境变量引用")
+                payload.pop("secret_ref", None)
+        else:
+            payload.setdefault("created_at_us", now)
+            payload.setdefault("updated_at_us", now)
+        profile = self._build_profile(payload, secret=secret)
+        if secret is not None:
+            probe_secret = secret
+        else:
+            probe_secret = self._resolve_secret(profile.secret_ref)
+        try:
+            probe_provider(self._transport, profile, probe_secret)
+        except LLMTransportError as exc:
+            raise _jiejian_error_for_transport(exc.kind) from None
+        except ValueError:
+            raise _jiejian_error_for_transport("invalid_request") from None
+        previous = self._credential_value(profile.secret_ref) if secret is not None else None
+        known_secrets = self._known_secrets(profile, secret, fallback=probe_secret)
+        # 已有默认 profile 的普通编辑只更新模型配置，不能因保存动作重开用户已关闭的 AI。
+        next_enabled = True if settings.default_profile_name is None else settings.enabled
+        try:
+            self._write_credential(profile.secret_ref, secret)
+            with self._uow_factory(known_secrets=known_secrets) as work:
+                if current is None:
+                    work.llm_profiles.add(profile)
+                else:
+                    work.llm_profiles.replace(profile)
+                work.ai_assistance_settings.replace(
+                    AIAssistanceSettings(
+                        enabled=next_enabled,
+                        default_profile_name=target_name,
+                        updated_at_us=self._clock_us(),
+                    )
+                )
+                work.commit()
+        except JiejianError:
+            if secret is not None:
+                self._restore_credential(profile.secret_ref, previous)
+            raise
+        except Exception:
+            if secret is not None:
+                self._restore_credential(profile.secret_ref, previous)
+            raise _safe_profile_error()
+        self._states.pop(profile.profile_name, None)
+        return self._view(profile)
 
     def list(self) -> tuple[LLMProfileView, ...]:
         with self._uow_factory() as work:
@@ -262,19 +318,16 @@ class LLMProfileRegistry:
                     raise LLMTransportError("budget_exceeded")
                 if profile.max_budget_microusd <= 0:
                     raise LLMTransportError("budget_exceeded")
-                adapter = self._adapter(profile.provider)
-                request = adapter.build_request(profile, secret, prompt)
-                if len(request.body) > profile.max_input_bytes:
-                    raise LLMTransportError("budget_exceeded")
-                response = self._transport.send(request)
-                if len(response.body) > profile.max_output_bytes:
-                    raise LLMTransportError("response_too_large")
-                adapter.parse_response(response)
+                probe_provider(self._transport, profile, secret, prompt=prompt)
             except JiejianError as exc:
                 self._record_failure(profile_name, started, exc.code)
                 raise
             except LLMTransportError as exc:
                 code = _error_for_transport(exc.kind)
+                self._record_failure(profile_name, started, code.value)
+                raise JiejianError(code, "模型连接测试失败") from None
+            except ValueError:
+                code = _error_for_transport("invalid_request")
                 self._record_failure(profile_name, started, code.value)
                 raise JiejianError(code, "模型连接测试失败") from None
             duration_ms = max(0, (self._clock_us() - started) // 1000)
@@ -298,7 +351,7 @@ class LLMProfileRegistry:
         if not profile.enabled:
             raise JiejianError(ErrorCode.LLM_PROVIDER_UNAVAILABLE, "模型 profile 不可用")
         secret = self._resolve_secret(profile.secret_ref)
-        adapter = self._adapter(profile.provider)
+        adapter = adapter_for(profile.provider)
         return ResolvedLLMProvider(
             provider=profile.provider,
             profile_name=profile.profile_name,
@@ -401,11 +454,6 @@ class LLMProfileRegistry:
         )
         return self.get(profile_name)
 
-    def _adapter(self, provider: LLMProviderType) -> LLMAdapter:
-        if provider is LLMProviderType.GEMINI:
-            return GeminiAdapter()
-        return OpenAICompatibleAdapter(provider)
-
     def _view(self, profile: LLMProfileConfig) -> LLMProfileView:
         state = self._states.get(profile.profile_name)
         configured = self._secret_configured(profile.secret_ref)
@@ -431,21 +479,3 @@ class LLMProfileRegistry:
             return self._secret_store.configured(secret_ref)
         except Exception:
             return False
-
-
-def _error_for_transport(kind: str) -> ErrorCode:
-    return {
-        "auth_failed": ErrorCode.LLM_AUTH_FAILED,
-        "rate_limited": ErrorCode.LLM_RATE_LIMITED,
-        "timeout": ErrorCode.LLM_TIMEOUT,
-        "invalid_response": ErrorCode.LLM_INVALID_RESPONSE,
-        "budget_exceeded": ErrorCode.LLM_BUDGET_EXCEEDED,
-        "response_too_large": ErrorCode.LLM_BUDGET_EXCEEDED,
-        "invalid_request": ErrorCode.LLM_BUDGET_EXCEEDED,
-        "provider_unavailable": ErrorCode.LLM_PROVIDER_UNAVAILABLE_WIRE,
-        "network": ErrorCode.LLM_PROVIDER_UNAVAILABLE_WIRE,
-    }.get(kind, ErrorCode.LLM_PROVIDER_UNAVAILABLE_WIRE)
-
-
-def _safe_profile_error() -> JiejianError:
-    return JiejianError(ErrorCode.LLM_PROFILE_STORAGE_FAILED, "模型 profile 保存失败")

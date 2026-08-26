@@ -1,3 +1,5 @@
+# 验证隔离 Runner 运行时中的稳定执行身份回归。
+
 from __future__ import annotations
 
 import hashlib
@@ -94,6 +96,7 @@ def test_current_web_stable_identities_and_three_golden_verdicts_do_not_drift() 
         semantic_input_sha256=gate_input,
         run=base.run,
         runtime=base.runtime,
+        presentation=base.presentation,
         artifact_summary=base.artifact_summary,
         versions=base.versions,
         limitations=base.limitations,

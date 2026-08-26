@@ -13,7 +13,7 @@ import os
 import re
 import stat
 import subprocess
-from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
 import time
 import ctypes
 import ctypes.wintypes
@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
 from product.protocols.observer import AuditLogObserverInvocation, AuditLogStartCursor, CausalityStatus, Correlation, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType, OBSERVER_JSON_MAX_BYTES, ProvenanceType, StructuredAuditLogLocator, build_normalized_state, canonical_json_bytes, observer_canonical_sha256, evaluate_observer_outcome, parse_observer_json
 
 

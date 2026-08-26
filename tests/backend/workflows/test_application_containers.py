@@ -1,3 +1,5 @@
+# 验证应用工作流中的应用容器组装。
+
 from __future__ import annotations
 
 import inspect

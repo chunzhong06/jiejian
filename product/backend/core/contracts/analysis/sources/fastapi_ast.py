@@ -20,7 +20,8 @@ from product.backend.core.contracts.models import CandidateSuggestion, Candidate
 from product.backend.core.contracts.models import ContractCandidate, ContractSourceType
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisReasonCode, AnalysisSeverity, CandidateBatch
 from product.backend.core.contracts.analysis.canonical import _candidate, _issue, _issue_key, _rule_id
-from product.backend.core.contracts.analysis.sources.openapi import _HTTP_METHODS, _SENSITIVE_FIELD, _safe_route_path
+from product.backend.core.contracts.analysis.sources.openapi import _SENSITIVE_FIELD
+from product.backend.core.http_routes import HTTP_METHODS, safe_route_path
 
 
 def parse_fastapi_source_candidates(
@@ -57,10 +58,10 @@ def parse_fastapi_source_candidates(
             call = decorator if isinstance(decorator, ast.Call) else None
             target = call.func if call is not None else decorator
             method = target.attr.upper() if isinstance(target, ast.Attribute) else None
-            if method not in _HTTP_METHODS:
+            if method not in HTTP_METHODS:
                 continue
             path_node = call.args[0] if call is not None and call.args else None
-            if not isinstance(path_node, ast.Constant) or not isinstance(path_node.value, str) or not _safe_route_path(path_node.value):
+            if not isinstance(path_node, ast.Constant) or not isinstance(path_node.value, str) or not safe_route_path(path_node.value):
                 issues.append(_issue(AnalysisReasonCode.AMBIGUOUS_SOURCE, AnalysisSeverity.BLOCKING, f"{source_locator}:line:{node.lineno}", detail="fastapi_route_path_not_literal"))
                 continue
             path = path_node.value

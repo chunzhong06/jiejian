@@ -1,47 +1,75 @@
+/* 全局样式：统一应用壳、通知中心与共享间距尺度，不承载业务语义。 */
+:root { --space-4: 4px; --space-8: 8px; --space-12: 12px; --space-16: 16px; --space-24: 24px; --space-32: 32px; }
 html, body, #root { margin: 0; min-height: 100%; }
 body { color: #172033; background: #f5f7fb; }
 .app-shell { min-height: 100vh; min-width: 0; }
-.brand { color: #fff; font-size: 24px; font-weight: 700; padding: 22px 20px 18px; }
-.brand span { display: block; color: #a5b4fc; font-size: 11px; font-weight: 400; margin-top: 4px; }
-.topbar { align-items: center; background: #fff; display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: space-between; min-height: 64px; padding: 8px 28px; }
-.topbar-context { color: #344054; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topbar-settings, .status-cluster { min-width: 0; }
-.status-cluster { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
-.status-cluster .ant-tag { white-space: nowrap; }
-.content { background: #f6f7fb; min-width: 0; padding: 28px; }
-@media (max-width: 900px) { .topbar { padding: 8px 16px; } .content { padding: 16px; } }
+.brand { color: #fff; font-size: 24px; font-weight: 700; padding: var(--space-24) var(--space-16); }
+.brand span { display: block; color: #a5b4fc; font-size: 11px; font-weight: 400; margin-top: var(--space-4); }
+.topbar { align-items: center; background: #fff; display: flex; flex-wrap: wrap; gap: var(--space-8) var(--space-16); justify-content: space-between; min-height: 64px; padding: var(--space-8) var(--space-24); }
+.topbar-left, .topbar-tools { align-items: center; display: flex; min-width: 0; }
+.topbar-left { flex: 1 1 240px; gap: var(--space-8); }
+.topbar-tools { flex: 0 1 auto; justify-content: flex-end; }
+.topbar-context { color: #344054; flex: 0 1 auto; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-tools .ant-btn { max-width: 100%; }
+.content { background: #f6f7fb; min-width: 0; padding: var(--space-24); }
+@media (max-width: 900px) { .topbar { padding: var(--space-8) var(--space-16); } .content { padding: var(--space-16); } }
 @media (max-width: 600px) {
-  .topbar.ant-layout-header { align-content: center; display: flex; height: auto; line-height: normal; min-height: 104px; padding: 8px 12px; }
-  .topbar-context { flex: 1 1 auto; line-height: 32px; max-width: calc(100% - 112px); }
-  .topbar-settings { flex: 0 0 auto; line-height: 32px; padding-inline: 4px; white-space: nowrap; }
-  .status-cluster { flex: 1 0 100%; justify-content: flex-start; margin-left: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; scrollbar-width: thin; white-space: nowrap; }
-  .status-cluster .ant-tag { flex: 0 0 auto; }
-  .content { padding: 12px; }
+  .topbar.ant-layout-header { align-content: center; display: flex; height: auto; line-height: normal; min-height: 104px; padding: var(--space-8) var(--space-12); }
+  .topbar-left { flex: 1 1 100%; max-width: 100%; }
+  .topbar-tools { flex: 1 1 100%; justify-content: flex-start; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+  .topbar-tools .ant-btn { flex: 0 0 auto; }
+  .content { padding: var(--space-12); }
   .content > .ant-alert { min-width: 0; max-width: 100%; }
 }
-.report-view { background: #101828; border-radius: 8px; color: #d0d5dd; max-height: 520px; overflow: auto; padding: 18px; }
-.page-task-header { background: linear-gradient(135deg, rgba(238,242,255,.9), rgba(236,254,255,.7)); border: 1px solid #dbeafe; border-radius: 12px; margin-bottom: 20px; padding: 22px 24px; }
-.page-task-header-main { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
+.report-view { background: #101828; border-radius: 8px; color: #d0d5dd; max-height: 520px; overflow: auto; padding: var(--space-16); }
+.page-task-header { background: linear-gradient(135deg, rgba(238,242,255,.9), rgba(236,254,255,.7)); border: 1px solid #dbeafe; border-radius: 12px; margin-bottom: var(--space-16); padding: var(--space-16) var(--space-24); }
+.page-task-header-main { align-items: flex-start; display: flex; gap: var(--space-16); justify-content: space-between; }
 .page-task-header-main h2 { margin: 0 0 6px; }
 .page-task-header-main .ant-typography { min-width: 0; }
 .page-task-header-next { margin-top: 4px; }
-.workbench-issues { margin: 20px 0; }
-.workbench-empty { background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 40px; text-align: center; }
-.workbench-overview .ant-statistic { background: #f8fafc; border-radius: 10px; height: 100%; padding: 14px; }
+.workbench-issues { margin: var(--space-16) 0; }
+.workbench-empty { background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px; padding: var(--space-32); text-align: center; }
+.workbench-overview .ant-statistic { background: #f8fafc; border-radius: 10px; height: 100%; padding: var(--space-12); }
+.assistant-assistance-card { border-left: 3px solid #722ed1; }
+.assistant-label { color: #722ed1; }
+.assistant-scope-table { border-collapse: collapse; margin-bottom: 16px; width: 100%; }
+.assistant-scope-table th, .assistant-scope-table td { border-bottom: 1px solid #f0f0f0; padding: 10px 12px; text-align: left; }
+.assistant-scope-table th { background: #fafafa; color: #172033; font-weight: 600; }
 .latest-run { background: #f8fafc; border-radius: 10px; padding-inline: 14px !important; }
 .error-recovery { margin-bottom: 16px; }
 .error-recovery .ant-alert-description { width: 100%; }
+.notification-center { bottom: var(--space-16); display: flex; flex-direction: column; gap: var(--space-8); max-width: min(420px, calc(100vw - var(--space-32))); position: fixed; right: var(--space-16); z-index: 1100; }
+.notification-stack { display: flex; flex-direction: column; gap: var(--space-8); }
+.notification-card { box-shadow: 0 8px 24px rgba(15, 23, 42, .16); width: min(420px, calc(100vw - var(--space-32))); }
+.notification-card .ant-alert-description { width: 100%; }
+.notification-overflow { align-self: flex-end; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(15, 23, 42, .12); padding: var(--space-4) var(--space-8); }
 .sr-only { height: 1px; margin: -1px; overflow: hidden; position: absolute; width: 1px; clip: rect(0, 0, 0, 0); }
 .full-width { width: 100%; }
 .recording-merge-action { padding: 12px 0 0; text-align: center; }
 .recording-review-warning { margin-top: 16px; }
 .recording-finalize-action { margin-top: 20px; }
 .recording-raw-draft { overflow-wrap: anywhere; white-space: pre-wrap; }
+.recording-capture-guide { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px; }
+.recording-capture-guide ol { display: grid; gap: 16px; list-style: none; margin: 0; padding: 0; }
+.recording-capture-guide li { align-items: start; display: grid; gap: 10px; grid-template-columns: auto 1fr; }
+.recording-capture-guide li > div { display: grid; gap: 4px; }
+.recording-capture-guide .ant-btn { justify-self: start; margin-top: 4px; }
+.action-safety-card .ant-card-body { padding: var(--space-24); }
+.action-safety-content > .ant-typography { margin-bottom: 0; }
+.action-safety-resource-fields { display: grid; gap: var(--space-16); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.action-safety-resource-fields .ant-form-item { margin-bottom: var(--space-8); min-width: 0; }
+.action-safety-choice { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: var(--space-24); padding: 20px 20px var(--space-16); }
+.action-safety-choice .ant-select { width: 100%; }
+.action-safety-form .ant-input,
+.action-safety-form .ant-select-selection-item,
+.action-safety-form .ant-select-selection-placeholder { font-size: 14px; }
 
 @media (max-width: 768px) {
   .page-task-header-main { flex-direction: column; gap: 8px; }
   .page-task-header { padding: 18px; }
   .ant-descriptions-view { overflow-x: auto; }
+  .action-safety-card .ant-card-body { padding: var(--space-16); }
+  .action-safety-resource-fields { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

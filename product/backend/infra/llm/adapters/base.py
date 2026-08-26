@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType
 
@@ -27,6 +27,7 @@ from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType
 class LLMHttpRequest:
     """一次请求的内部边界；repr 不包含 headers、body 或 secret。"""
 
+    method: Literal["GET", "POST"]
     provider: LLMProviderType
     url: str
     headers: dict[str, str]
@@ -34,10 +35,16 @@ class LLMHttpRequest:
     timeout_ms: int
     max_output_bytes: int
 
+    def __post_init__(self) -> None:
+        if self.method not in {"GET", "POST"}:
+            raise ValueError("LLM HTTP method must be GET or POST")
+        if self.method == "GET" and self.body:
+            raise ValueError("GET LLM request must not contain a body")
+
     def __repr__(self) -> str:
         return (
             "LLMHttpRequest(" 
-            f"provider={self.provider.value!r}, url='<redacted>', "
+            f"method={self.method!r}, provider={self.provider.value!r}, url='<redacted>', "
             f"timeout_ms={self.timeout_ms}, max_output_bytes={self.max_output_bytes})"
         )
 
@@ -71,6 +78,9 @@ class LLMAdapter(Protocol):
         profile: LLMProfileConfig,
         secret: str,
         prompt: str,
+        *,
+        reasoning_effort: str | None = None,
+        json_schema: dict[str, object] | None = None,
     ) -> LLMHttpRequest: ...
 
     def parse_response(self, response: LLMHttpResponse) -> str: ...
@@ -93,3 +103,15 @@ def max_output_tokens(profile: LLMProfileConfig) -> int:
     """从字节预算推导保守、固定且有上限的 token 预算。"""
 
     return max(1, min(profile.max_output_bytes // 4, 256))
+
+
+@dataclass(frozen=True, slots=True)
+class LLMInvokeResult:
+    """统一 provider 调用结果；只保留最终文本与安全统计，不携带思考内容。"""
+
+    model: str
+    reasoning_effort: str | None
+    structured_output_mode: str
+    final_payload: str
+    usage: dict[str, int] | None
+    latency_ms: int

@@ -20,10 +20,21 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict
 from product.backend.core.verification.differential import PermissionTwin, TwinExecutionRole
 from product.backend.core.verification.facts import ExecutionFact, ObservationFact, SecurityEffectFact
-from product.backend.core.verification.permission_coverage import PermissionMutationCase
-from product.backend.infra.execution.port import TargetBaselineResult, TargetCaseSession
+from product.backend.core.verification.permissions.coverage import PermissionMutationCase
+from product.backend.infra.execution.port import (
+    TargetBaselineResult,
+    TargetCaseSession,
+    TargetCleanupError,
+    TargetCleanupIssue,
+)
 from product.backend.infra.observers.coordinator import ObserverCoordinator
-from product.protocols import ObservationEnvelope, ObservationPhase, ObserverOutcome
+from product.protocols import (
+    CleanupIssueCode,
+    ObservationEnvelope,
+    ObservationPhase,
+    ObserverOutcome,
+    RunnerFailurePhase,
+)
 from product.protocols.execution import ObserverRequirementBinding
 
 
@@ -48,14 +59,35 @@ class CaseResult:
     stage_trace: tuple[str, ...] = ()
 
 
+class CaseExecutionFailure(Exception):
+    """同时保留主执行失败、失败阶段与后置清理问题。"""
+
+    def __init__(
+        self,
+        primary: Exception,
+        phase: RunnerFailurePhase,
+        cleanup_issues: tuple[TargetCleanupIssue, ...] = (),
+    ) -> None:
+        self.primary = primary
+        self.phase = phase
+        self.cleanup_issues = cleanup_issues
+        super().__init__("case execution failed")
+
+
+class _CaseResultReady(Exception):
+    """让 TARGET 前的确定性 INCONCLUSIVE 仍经过统一 cleanup 收敛。"""
+
+
 class CaseOrchestrator:
     """执行一个 Case 的固定阶段，并把目标清理放入 finally。"""
 
-    def __init__(self, *, observers: ObserverCoordinator, bindings, clock, cancellation_requested) -> None:
+    def __init__(self, *, observers: ObserverCoordinator, bindings, clock, cancellation_requested, progress=None, progress_clock=None) -> None:
         self.observers = observers
         self.bindings = bindings
         self.clock = clock
         self.cancellation_requested = cancellation_requested
+        self.progress = progress
+        self.progress_clock = progress_clock or clock
 
     def run(self, session: TargetCaseSession, case: PermissionMutationCase, *, action: Any, verify, finding_pre_identity: str, twin: PermissionTwin | None = None, twin_role: TwinExecutionRole | None = None, allow_control_valid: bool = False, baseline_validate=None, baseline_invalid=None) -> Any:
         """运行固定阶段；verify 在 cleanup 前执行既有事实归约与 Verification。"""
@@ -64,12 +96,37 @@ class CaseOrchestrator:
         outcomes: dict[str, ObserverOutcome] = {}
         cursors: dict[tuple[str, str], tuple[Any, ...]] = {}
         trace: list[str] = []
+        phase = RunnerFailurePhase.TARGET_VALIDATION
+        result: Any = None
+        primary: Exception | None = None
+        cleanup_issues: tuple[TargetCleanupIssue, ...] = ()
+
+        def progress_event(phase_name: str, state: str) -> None:
+            try:
+                if self.progress is not None:
+                    self.progress.record(
+                        case_id=case.case_id,
+                        action_id=case.action_id,
+                        twin_role=twin_role.value if twin_role is not None else None,
+                        phase=phase_name,
+                        state=state,
+                        recorded_at_us=max(int(self.progress_clock()), 0),
+                    )
+            except Exception:
+                # 进度旁路不得改变执行、清理或安全结论。
+                return
+
         try:
             if self.cancellation_requested():
                 raise JiejianError(ErrorCode.EXEC_CANCELLED, "复杂权限执行已取消")
             trace.append("PREPARE")
+            phase = RunnerFailurePhase.PREPARE_RECOVERY
+            progress_event("PREPARE", "STARTED")
             session.prepare()
+            progress_event("PREPARE", "COMPLETED")
             trace.append("BASELINE")
+            phase = RunnerFailurePhase.BASELINE
+            progress_event("BASELINE", "STARTED")
             baseline_unavailable = self.observers.observe_phase(
                 session,
                 case,
@@ -97,23 +154,83 @@ class CaseOrchestrator:
                 baseline = baseline_validate(baseline)
             if not baseline.valid:
                 if baseline_invalid is not None:
-                    return baseline_invalid(session, baseline, tuple(envelopes), dict(outcomes))
+                    result = baseline_invalid(
+                        session,
+                        baseline,
+                        tuple(envelopes),
+                        dict(outcomes),
+                    )
+                    raise _CaseResultReady
                 raise JiejianError(ErrorCode.BASELINE_INVALID, "目标基线无效")
             trace.append("BEFORE")
+            phase = RunnerFailurePhase.BEFORE
             if self.observers.observe_phase(session, case, ObservationPhase.BEFORE, envelopes, outcomes, cursors):
                 raise JiejianError(ErrorCode.OBSERVER_INCOMPLETE, "BEFORE 观察不完整")
+            progress_event("BASELINE", "COMPLETED")
             trace.append("TARGET")
+            phase = RunnerFailurePhase.TARGET
+            progress_event("TARGET", "STARTED")
             execution = session.execute_target()
+            progress_event("TARGET", "COMPLETED")
             trace.append("AFTER")
+            phase = RunnerFailurePhase.AFTER
+            progress_event("OBSERVE", "STARTED")
             self.observers.observe_phase(session, case, ObservationPhase.AFTER, envelopes, outcomes, cursors)
             trace.append("EVENTUAL")
+            phase = RunnerFailurePhase.EVENTUAL
             self.observers.observe_phase(session, case, ObservationPhase.EVENTUAL, envelopes, outcomes, cursors)
             trace.append("RESOLVE")
+            phase = RunnerFailurePhase.VERIFY
             execution = session.resolve_execution(tuple(envelopes))
-            return verify(session, tuple(envelopes), tuple(outcomes.values()), execution)
+            progress_event("OBSERVE", "COMPLETED")
+            progress_event("VERIFY", "STARTED")
+            result = verify(
+                session,
+                tuple(envelopes),
+                tuple(outcomes.values()),
+                execution,
+            )
+            progress_event("VERIFY", "COMPLETED")
+        except _CaseResultReady:
+            pass
+        except Exception as exc:
+            primary = exc
         finally:
             trace.append("CLEANUP")
+            progress_event("RECOVERY", "STARTED")
             try:
                 session.cleanup()
+                progress_event("RECOVERY", "COMPLETED")
+            except TargetCleanupError as exc:
+                cleanup_issues = exc.issues
             except Exception as exc:
-                raise JiejianError(ErrorCode.CLEANUP_FAILED, "资源清理失败") from exc
+                cleanup_issues = (
+                    TargetCleanupIssue(
+                        CleanupIssueCode.POST_CASE_RECOVERY_FAILED,
+                        exc.code if isinstance(exc, JiejianError) else None,
+                    ),
+                )
+        if primary is None and cleanup_issues:
+            primary = JiejianError(ErrorCode.CLEANUP_FAILED, "资源清理失败")
+            phase = RunnerFailurePhase.POST_CASE_RECOVERY
+        if primary is not None:
+            phase = _specific_failure_phase(primary, phase)
+            raise CaseExecutionFailure(primary, phase, cleanup_issues) from primary
+        return result
+
+
+def _specific_failure_phase(
+    error: Exception,
+    fallback: RunnerFailurePhase,
+) -> RunnerFailurePhase:
+    """把 PREPARE 内可稳定区分的失败映射到有限阶段。"""
+
+    if not isinstance(error, JiejianError):
+        return fallback
+    return {
+        ErrorCode.PREPARE_RECOVERY_FAILED.value: RunnerFailurePhase.PREPARE_RECOVERY,
+        ErrorCode.IDENTITY_PREPARATION_FAILED.value: RunnerFailurePhase.IDENTITY_PREPARATION,
+        ErrorCode.SETUP_STEP_FAILED.value: RunnerFailurePhase.SETUP,
+        ErrorCode.VALUE_EXTRACTION_FAILED.value: RunnerFailurePhase.SETUP,
+        ErrorCode.SELF_TARGET_FORBIDDEN.value: RunnerFailurePhase.TARGET_VALIDATION,
+    }.get(error.code, fallback)

@@ -4,12 +4,32 @@ import { request } from './http'
 
 export type LLMProvider = 'openai' | 'deepseek' | 'gemini' | 'openai_compatible'
 export type LLMConnectionStatus = 'testing' | 'configured' | 'available' | 'unavailable' | 'unknown'
+export type LLMModelOption = {
+  model: string
+  display_name: string | null
+  reasoning_options: string[]
+  reasoning_default_label: string
+  structured_output_mode: string
+}
+export type LLMModelCatalog = {
+  schema_version: '1'
+  provider: LLMProvider
+  models: LLMModelOption[]
+  manual_model_allowed: boolean
+  truncated: boolean
+}
+export type AIAssistanceSettings = {
+  enabled: boolean
+  default_profile_name: string | null
+  updated_at_us: number
+}
 
 export type LLMProfile = {
   schema_version: '1'
   profile_name: string
   provider: LLMProvider
   model: string
+  reasoning_effort: string | null
   base_url: string | null
   timeout_ms: number
   max_input_bytes: number
@@ -32,6 +52,7 @@ export type LLMProfileWrite = {
   profile_name?: string
   provider?: LLMProvider
   model?: string
+  reasoning_effort?: string | null
   base_url?: string | null
   timeout_ms?: number
   max_input_bytes?: number
@@ -44,6 +65,17 @@ export type LLMProfileWrite = {
 }
 
 export const llmApi = {
+  settings: () => request<AIAssistanceSettings>('/api/llm/settings'),
+  patchSettings: (body: Pick<AIAssistanceSettings, 'enabled' | 'default_profile_name'>) => request<AIAssistanceSettings>('/api/llm/settings', {
+    method: 'PATCH', body: JSON.stringify({ schema_version: '1', ...body }),
+  }),
+  discoverModels: (body: { provider: LLMProvider; secret: string; base_url?: string; allow_local_http?: boolean }) => request<LLMModelCatalog>('/api/llm/models/discover', {
+    method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }),
+  }),
+  refreshModels: (name: string) => request<LLMModelCatalog>(`/api/llm/profiles/${encodeURIComponent(name)}/models/refresh`, { method: 'POST' }),
+  saveDefault: (body: LLMProfileWrite) => request<LLMProfile>('/api/llm/default-profile', {
+    method: 'PUT', body: JSON.stringify({ schema_version: '1', ...body }),
+  }),
   profiles: () => request<LLMProfile[]>('/api/llm/profiles'),
   profile: (name: string) => request<LLMProfile>(`/api/llm/profiles/${encodeURIComponent(name)}`),
   create: (body: LLMProfileWrite) => request<LLMProfile>('/api/llm/profiles', {

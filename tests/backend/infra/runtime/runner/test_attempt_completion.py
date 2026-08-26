@@ -1,3 +1,5 @@
+# 验证隔离 Runner 运行时中的执行尝试完成。
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,8 +10,13 @@ import pytest
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict
 from product.backend.infra.runtime.runner import composition
+from product.backend.infra.execution.web import runtime as web_runtime
+from product.backend.infra.execution.port import TargetCleanupIssue
+from product.backend.infra.runtime.runner.case_orchestrator import CaseExecutionFailure
 from product.protocols import (
+    CleanupIssueCode,
     CleanupStatus,
+    RunnerFailurePhase,
     RunnerResultType,
     canonical_runner_json_bytes,
     parse_runner_result,
@@ -141,6 +148,117 @@ def test_runtime_close_failure_overrides_staged_success(
     assert result.finished_at_us == 2001
     assert result.error is not None
     assert result.error.code == ErrorCode.CLEANUP_FAILED.value
+    assert result.error.phase is RunnerFailurePhase.RUNTIME_CLOSE
     assert result.reason_codes == (ErrorCode.CLEANUP_FAILED.value,)
+    assert result.cleanup.issues[0].code is CleanupIssueCode.RUNTIME_CLOSE_FAILED
     assert result.evidence == ()
     assert result.artifacts == ()
+
+
+def test_attempt_preserves_primary_target_failure_when_cleanup_also_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Executor:
+        def __init__(self, *_args, **_kwargs) -> None:
+            return None
+
+        def run_case(self, *_args, **_kwargs):
+            cause = JiejianError(ErrorCode.EXEC_TIMEOUT, "目标请求超时")
+            primary = JiejianError(
+                ErrorCode.TARGET_EXECUTION_FAILED,
+                "TARGET 请求失败",
+            )
+            primary.__cause__ = cause
+            raise CaseExecutionFailure(
+                primary,
+                RunnerFailurePhase.TARGET,
+                (
+                    TargetCleanupIssue(
+                        CleanupIssueCode.POST_CASE_RECOVERY_FAILED,
+                        ErrorCode.TARGET_UNREACHABLE.value,
+                    ),
+                ),
+            )
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(composition, "RunnerExecutor", _Executor)
+    input_path = tmp_path / "input.json"
+    staging = tmp_path / "staging"
+    _write_input(input_path)
+
+    assert composition.execute_attempt(
+        input_path,
+        staging,
+        environ={
+            "JIEJIAN_TEST_TOKEN": "subject-secret",
+            "OWNER_READ_ONLY": "owner-secret",
+        },
+    ) == composition.RUNNER_EXIT_OK
+    result = parse_runner_result((staging / "result.json").read_bytes())
+
+    assert result.error is not None
+    assert result.error.code == ErrorCode.TARGET_EXECUTION_FAILED.value
+    assert result.error.phase is RunnerFailurePhase.TARGET
+    assert result.error.cause_code == ErrorCode.EXEC_TIMEOUT.value
+    assert result.cleanup.issues[0].code is CleanupIssueCode.POST_CASE_RECOVERY_FAILED
+
+
+def test_attempt_rejects_control_origin_as_target_without_network(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.json"
+    staging = tmp_path / "staging"
+    _write_input(input_path)
+
+    assert composition.execute_attempt(
+        input_path,
+        staging,
+        environ={
+            "JIEJIAN_TEST_TOKEN": "subject-secret",
+            "OWNER_READ_ONLY": "owner-secret",
+            "JIEJIAN_CONTROL_ORIGIN": "http://127.0.0.1:8765",
+        },
+    ) == composition.RUNNER_EXIT_OK
+    result = parse_runner_result((staging / "result.json").read_bytes())
+
+    assert result.result_type is RunnerResultType.SAFETY_STOPPED
+    assert result.reason_codes == (ErrorCode.SELF_TARGET_FORBIDDEN.value,)
+    assert result.error is None
+    assert result.cleanup.status is CleanupStatus.SUCCEEDED
+
+
+def test_prepare_recovery_failure_keeps_unreachable_cause(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_recovery(*_args, **_kwargs) -> None:
+        raise JiejianError(ErrorCode.TARGET_UNREACHABLE, "目标服务不可达")
+
+    monkeypatch.setattr(
+        web_runtime.HttpExecutionAdapter,
+        "cleanup",
+        fail_recovery,
+    )
+    input_path = tmp_path / "input.json"
+    staging = tmp_path / "staging"
+    _write_input(input_path)
+
+    assert composition.execute_attempt(
+        input_path,
+        staging,
+        environ={
+            "JIEJIAN_TEST_TOKEN": "subject-secret",
+            "OWNER_READ_ONLY": "owner-secret",
+        },
+    ) == composition.RUNNER_EXIT_OK
+    result = parse_runner_result((staging / "result.json").read_bytes())
+
+    assert result.verdict is None
+    assert result.error is not None
+    assert result.error.code == ErrorCode.PREPARE_RECOVERY_FAILED.value
+    assert result.error.phase is RunnerFailurePhase.PREPARE_RECOVERY
+    assert result.error.cause_code == ErrorCode.TARGET_UNREACHABLE.value
+    assert result.cleanup.issues[0].code is CleanupIssueCode.POST_CASE_RECOVERY_FAILED

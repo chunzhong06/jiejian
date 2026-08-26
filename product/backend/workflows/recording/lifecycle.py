@@ -11,7 +11,7 @@
 #   不执行浏览器请求；仅在审阅完成且绑定有效后发布最终 Flow。
 #
 # 调用链
-#   CLI / API → RecordingLifecycle → FlowDraftReviewer / Storage / final flow file
+#   CLI / API → RecordingLifecycle → reviewer + compiler / Storage / final flow file
 # =============================================================================
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
@@ -35,6 +35,7 @@ from product.backend.infra.artifacts.run_packages import attempt_paths_for
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.recording.control import control_paths_for_attempt, valid_control_marker, write_control_marker
 from product.backend.infra.storage import FlowDraftRevisionRecord, RecordingRecord, StorageUnitOfWork
+from product.backend.workflows.recording.flow_compiler import FlowDraftCompiler
 from product.backend.workflows.recording.review import FlowDraftReviewer
 
 
@@ -79,10 +80,12 @@ class RecordingLifecycle:
         *,
         var_dir: Path | None = None,
         reviewer: FlowDraftReviewer | None = None,
+        compiler: FlowDraftCompiler | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._var_dir = var_dir.resolve() if var_dir is not None else None
         self._reviewer = reviewer or FlowDraftReviewer()
+        self._compiler = compiler or FlowDraftCompiler()
 
     def status(self, recording_id: str) -> RecordingStatusView:
         with self._uow_factory() as work:
@@ -178,8 +181,6 @@ class RecordingLifecycle:
         self,
         recording_id: str,
         command: FlowDraftReviewCommand,
-        *,
-        bindings: Mapping[str, Mapping[str, str]] | None = None,
     ) -> RecordingStatusView:
         """追加一个审阅 revision；旧 FlowDraft 与已发布 Flow 均保持不可变。"""
 
@@ -196,8 +197,6 @@ class RecordingLifecycle:
             if draft_record is None:
                 raise JiejianError(ErrorCode.RECORD_DRAFT_INVALID, "录制缺少 Flow 草稿")
             draft = self._reviewer.apply(draft_record.draft, command)
-            if bindings:
-                draft = _confirm_bindings(draft, bindings)
             encoded = canonical_flow_draft_json_bytes(draft)
             work.flow_drafts.add(
                 FlowDraftRevisionRecord(
@@ -223,9 +222,8 @@ class RecordingLifecycle:
         *,
         var_dir: Path,
         now_us: int,
-        bindings: Mapping[str, Mapping[str, str]] | None = None,
     ) -> RecordingFinalizationView:
-        """确认可选映射、编译最新 revision，并在状态提交前原子发布 Flow。"""
+        """编译已明确确认的最新 revision，并在状态提交前原子发布 Flow。"""
 
         # --- 阶段：读取并编译明确记录的最新草稿 revision ---
         with self._uow_factory() as work:
@@ -243,28 +241,8 @@ class RecordingLifecycle:
                     ErrorCode.RECORD_REVIEW_STATE,
                     "录制当前状态不允许最终化",
                 )
-            if bindings:
-                confirmed = _confirm_bindings(draft_record.draft, bindings)
-                if confirmed != draft_record.draft:
-                    confirmed_data = confirmed.model_dump(mode="python")
-                    confirmed_data["revision"] = draft_record.revision + 1
-                    draft = FlowDraft.model_validate(confirmed_data)
-                    encoded_draft = canonical_flow_draft_json_bytes(draft)
-                    work.flow_drafts.add(
-                        FlowDraftRevisionRecord(
-                            recording_id=draft.recording_id,
-                            revision=draft.revision,
-                            flow_id=draft.flow_id,
-                            draft=draft,
-                            draft_sha256=hashlib.sha256(encoded_draft).hexdigest(),
-                            created_at_us=now_us,
-                        )
-                    )
-                else:
-                    draft = draft_record.draft
-            else:
-                draft = draft_record.draft
-            flow = self._reviewer.compile(draft)
+            draft = draft_record.draft
+            flow = self._compiler.compile(draft)
             path = self.flow_path(var_dir, recording)
             encoded = _canonical_flow_bytes(flow)
             # --- 阶段：先原子发布文件，再提交数据库完成态 ---
@@ -303,7 +281,7 @@ class RecordingLifecycle:
         try:
             raw = path.read_bytes()
             parsed = json.loads(raw, object_pairs_hook=_unique_json_object)
-            if not isinstance(parsed, dict) or parsed.get("schema_version") != "4":
+            if not isinstance(parsed, dict) or parsed.get("schema_version") != "1":
                 raise ValueError("unsupported flow schema version")
             return Flow.model_validate_json(raw, strict=True)
         except (OSError, ValueError):
@@ -352,48 +330,3 @@ def _canonical_flow_bytes(flow: Flow) -> bytes:
         ).encode("utf-8")
     except (TypeError, ValueError):
         raise JiejianError(ErrorCode.RECORD_FLOW_PUBLISH, "最终 Flow 无法序列化") from None
-
-
-def _confirm_bindings(
-    draft: FlowDraft,
-    bindings: Mapping[str, Mapping[str, str]],
-) -> FlowDraft:
-    known = {step.id for step in draft.steps}
-    if any(step_id not in known for step_id in bindings):
-        raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "绑定步骤引用不存在")
-    updated = []
-    for step in draft.steps:
-        binding = bindings.get(step.id)
-        if binding is None:
-            updated.append(step)
-            continue
-        if step.method is None or set(binding) != {
-            "alternate_identity_id",
-            "resource_id",
-            "alternate_resource_id",
-        }:
-            raise JiejianError(ErrorCode.RECORD_DRAFT_INVALID, "Flow 绑定字段不完整")
-        alternate_identity = binding["alternate_identity_id"]
-        resource_id = binding["resource_id"]
-        alternate_resource_id = binding["alternate_resource_id"]
-        if not all(
-            isinstance(value, str) and value.strip()
-            for value in (alternate_identity, resource_id, alternate_resource_id)
-        ):
-            raise JiejianError(ErrorCode.RECORD_DRAFT_INVALID, "Flow 绑定值无效")
-        updated.append(
-            step.model_copy(
-                update={
-                    "alternate_identity_id": alternate_identity,
-                    "resource_id": resource_id,
-                    "alternate_resource_id": alternate_resource_id,
-                    "bindings_confirmed": True,
-                }
-            )
-        )
-    try:
-        return FlowDraft.model_validate(
-            draft.model_copy(update={"steps": tuple(updated)}).model_dump(mode="python")
-        )
-    except ValueError:
-        raise JiejianError(ErrorCode.RECORD_DRAFT_INVALID, "Flow 绑定结果无效") from None

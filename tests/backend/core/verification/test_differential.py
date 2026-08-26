@@ -1,10 +1,12 @@
+# 验证验证领域中的差分判定。
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 from product.backend.core.verification.differential import DifferentialExperimentPlan
-from product.backend.core.verification.permission_coverage import build_permission_coverage_plan
+from product.backend.core.verification.permissions.coverage import build_permission_coverage_plan
 from product.backend.core.verification.permissions import PermissionContract
 from product.protocols.web.profile import WebExecutionProfile
 

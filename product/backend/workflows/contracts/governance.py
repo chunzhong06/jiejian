@@ -117,20 +117,47 @@ class ContractGovernance:
             work.commit()
         return revision
 
-    def submit_review(self, project_id: str, contract_id: str, version: int, *, actor: str) -> ContractVersion:
-        return self._transition(project_id, contract_id, version, ContractStatus.REVIEW, actor)
+    def submit_review(
+        self,
+        project_id: str,
+        contract_id: str,
+        version: int,
+        *,
+        actor: str,
+        available_observations: tuple[str, ...] | None = None,
+    ) -> ContractVersion:
+        return self._transition(
+            project_id,
+            contract_id,
+            version,
+            ContractStatus.REVIEW,
+            actor,
+            available_observations=available_observations,
+        )
 
     def reject_review(self, project_id: str, contract_id: str, version: int, *, actor: str) -> ContractVersion:
         return self._transition(project_id, contract_id, version, ContractStatus.REJECTED, actor)
 
-    def activate_review(self, project_id: str, contract_id: str, version: int, *, actor: str) -> ContractVersion:
+    def activate_review(
+        self,
+        project_id: str,
+        contract_id: str,
+        version: int,
+        *,
+        actor: str,
+        available_observations: tuple[str, ...] | None = None,
+    ) -> ContractVersion:
         now_us = self._clock_us()
         with self._uow_factory() as work:
             self._require_project(work, project_id)
             reviewed = work.contract_versions.get(project_id, contract_id, version)
             if reviewed is None:
                 raise JiejianError(ErrorCode.CONTRACT_NOT_FOUND, "契约版本不存在")
-            self._ensure_review_assessment(work, reviewed)
+            self._ensure_review_assessment(
+                work,
+                reviewed,
+                available_observations=available_observations,
+            )
             active = work.contract_versions.get_active(project_id, contract_id)
             activated = transition_contract_version(reviewed, ContractStatus.ACTIVE, actor=actor, occurred_at_us=now_us)
             if active is not None:
@@ -148,7 +175,16 @@ class ContractGovernance:
             self._require_project(work, project_id)
             return work.contract_versions.list_for_contract(project_id, contract_id)
 
-    def _transition(self, project_id: str, contract_id: str, version: int, target: ContractStatus, actor: str) -> ContractVersion:
+    def _transition(
+        self,
+        project_id: str,
+        contract_id: str,
+        version: int,
+        target: ContractStatus,
+        actor: str,
+        *,
+        available_observations: tuple[str, ...] | None = None,
+    ) -> ContractVersion:
         """在同一事务中校验评估、转换状态并追加审计记录。"""
 
         with self._uow_factory() as work:
@@ -157,23 +193,36 @@ class ContractGovernance:
             if current is None:
                 raise JiejianError(ErrorCode.CONTRACT_NOT_FOUND, "契约版本不存在")
             if target is ContractStatus.REVIEW:
-                self._ensure_review_assessment(work, current)
+                self._ensure_review_assessment(
+                    work,
+                    current,
+                    available_observations=available_observations,
+                )
             updated = transition_contract_version(current, target, actor=actor, occurred_at_us=self._clock_us())
             work.contract_versions.replace(updated)
             work.commit()
         return updated
 
-    def _ensure_review_assessment(self, work: StorageUnitOfWork, contract: ContractVersion) -> None:
+    def _ensure_review_assessment(
+        self,
+        work: StorageUnitOfWork,
+        contract: ContractVersion,
+        *,
+        available_observations: tuple[str, ...] | None = None,
+    ) -> None:
         candidates = tuple(
             candidate for candidate_id in contract.provenance.candidate_ids
             if (candidate := work.contract_candidates.get(candidate_id)) is not None
         )
         if len(candidates) != len(contract.provenance.candidate_ids):
             raise JiejianError(ErrorCode.CONTRACT_ASSESSMENT_BLOCKED, "契约引用的候选不存在")
+        observations = available_observations or self._available_observations
+        if observations is None and self._observer_resolver is not None:
+            observations = self._observer_resolver(contract.project_id)
         assessment = assess_contract(
             contract,
             candidates=candidates,
-            available_observations=self._available_observations or ("resource_state",),
+            available_observations=observations or ("resource_state",),
         )
         if not assessment.eligible:
             raise JiejianError(ErrorCode.CONTRACT_ASSESSMENT_BLOCKED, "契约未通过确定性审阅评估")
@@ -193,6 +242,8 @@ class ContractGovernance:
             candidate = work.contract_candidates.get(candidate_id)
             if candidate is None or candidate.project_id != project_id:
                 raise JiejianError(ErrorCode.CONTRACT_REFERENCE_INVALID, "契约引用了不存在或跨项目的候选")
+            if candidate.source.source_type is ContractSourceType.LLM:
+                raise JiejianError(ErrorCode.CONTRACT_REFERENCE_INVALID, "旧模型候选不能进入当前契约治理")
 
     @classmethod
     def _provenance(cls, work, project_id, sources, requirement_ids, candidate_ids) -> ContractProvenance:

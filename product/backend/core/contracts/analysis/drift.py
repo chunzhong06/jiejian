@@ -21,7 +21,7 @@ from pydantic import Field
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisModel, AnalysisReasonCode, AnalysisSeverity
 from product.backend.core.contracts.analysis.canonical import contract_analysis_sha256
-from product.backend.core.contracts.models import ContractCandidate, ContractSourceType, ContractVersion, Requirement
+from product.backend.core.contracts.models import ContractCandidate, ContractVersion, Requirement
 from product.backend.core.identifiers import LONG_SLUG_ID_PATTERN, PROJECT_ID_PATTERN, RUN_ID_PATTERN
 from product.backend.core.verification.permissions import PermissionRule
 
@@ -32,7 +32,6 @@ class DriftType(StrEnum):
     ROUTE_CHANGED = "ROUTE_CHANGED"
     OBSERVER_UNAVAILABLE = "OBSERVER_UNAVAILABLE"
     BEHAVIOR_CHANGED = "BEHAVIOR_CHANGED"
-    LLM_REQUIREMENT_CONFLICT = "LLM_REQUIREMENT_CONFLICT"
 
 
 class VerifiedBehaviorFingerprint(AnalysisModel):
@@ -76,7 +75,6 @@ def build_drift_report(
     available_observations: tuple[str, ...] = ("resource_state",),
     accepted_behavior: VerifiedBehaviorFingerprint | None = None,
     current_behavior: VerifiedBehaviorFingerprint | None = None,
-    llm_candidates: tuple[ContractCandidate, ...] = (),
     analysis_issues: tuple[AnalysisIssue, ...] = (),
 ) -> DriftReport:
     """对显式输入生成六类漂移报告，不改变任何运行结论。"""
@@ -84,7 +82,7 @@ def build_drift_report(
     for requirement in requirements:
         if requirement.project_id != contract.project_id:
             raise JiejianError(ErrorCode.CONTRACT_ANALYSIS_INVALID, "漂移需求与契约项目不一致")
-    for candidate in (*requirement_candidates, *capability_candidates, *llm_candidates):
+    for candidate in (*requirement_candidates, *capability_candidates):
         if candidate.project_id != contract.project_id:
             raise JiejianError(ErrorCode.CONTRACT_ANALYSIS_INVALID, "漂移候选与契约项目不一致")
 
@@ -187,22 +185,6 @@ def build_drift_report(
                     detail="verified_run_behavior_fingerprint_changed",
                 )
             )
-    explicit = [item for item in (*requirement_candidates, *llm_candidates) if item.source.source_type is not ContractSourceType.LLM]
-    for llm in llm_candidates:
-        for other in explicit:
-            overlap = tuple(sorted(set(llm.requirement_ids) & set(other.requirement_ids)))
-        if overlap and llm.suggestion != other.suggestion:
-                entries.append(
-                    DriftEntry(
-                        drift_type=DriftType.LLM_REQUIREMENT_CONFLICT,
-                        reason_code=AnalysisReasonCode.LLM_REQUIREMENT_CONFLICT,
-                        subject_id=llm.candidate_id,
-                        candidate_ids=tuple(sorted((llm.candidate_id, other.candidate_id))),
-                        requirement_ids=overlap,
-                        rule_ids=(llm.suggestion.id, other.suggestion.id),
-                        detail="llm_candidate_conflicts_with_explicit_requirement",
-                    )
-                )
     ordered_entries = tuple(sorted(set(entries), key=_entry_key))
     body = {
         "project_id": contract.project_id,

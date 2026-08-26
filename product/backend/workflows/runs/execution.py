@@ -25,8 +25,8 @@ from typing import Any
 from product.backend import __version__
 from product.backend.core.contracts.execution_binding import resolve_execution_contract
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.verification.permission_coverage import build_permission_coverage_plan
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore, PersistedExecutionRequest, required_secret_names
+from product.backend.core.verification.permissions.coverage import build_permission_coverage_plan
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, PersistedExecutionRequest, required_secret_names
 from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
 from product.backend.infra.runtime.jobs.models import JobSubmissionResult
 from product.backend.infra.storage import ExecutionProfileRecord, StorageUnitOfWork
@@ -65,6 +65,17 @@ class ExecutionWorkflow:
         self._environment_provider = environment_provider
         self._var_dir = var_dir.resolve() if var_dir is not None else None
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
+        self._generated_profile_validator: (
+            Callable[[ExecutionProfileRecord, WebExecutionProfile], None] | None
+        ) = None
+
+    def set_generated_profile_validator(
+        self,
+        validator: Callable[[ExecutionProfileRecord, WebExecutionProfile], None],
+    ) -> None:
+        """安装普通模式生成资产的实时权威输入校验器。"""
+
+        self._generated_profile_validator = validator
 
     def register(self, source_path: Path, *, accept_source_changes: bool = False) -> ExecutionProfileRecord:
         """校验并登记 Profile；任何源漂移都必须由调用者显式接受。"""
@@ -93,6 +104,7 @@ class ExecutionWorkflow:
                 created_at_us=existing.created_at_us if existing else now_us,
                 updated_at_us=max(now_us, existing.updated_at_us) if existing else now_us,
             )
+            self._validate_generated_profile(record, profile)
             if existing is None:
                 work.execution_profiles.add(record)
             else:
@@ -261,6 +273,7 @@ class ExecutionWorkflow:
         if project_id is not None and record.project_id != project_id:
             raise JiejianError(ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT, "Profile 与项目不匹配")
         profile, _, source_hash = self._read_source(Path(record.source_path))
+        self._validate_generated_profile(record, profile)
         with self._uow_factory() as work:
             project = work.projects.get(record.project_id)
             governed = work.contract_versions.get(record.project_id, record.contract_id, record.contract_version)
@@ -270,6 +283,15 @@ class ExecutionWorkflow:
         plan = self._compile_plan(profile, contract)
         metadata = self._metadata(profile, Path(record.source_path), source_hash, contract, plan)
         return record, profile, contract, plan, metadata
+
+    def _validate_generated_profile(
+        self,
+        record: ExecutionProfileRecord,
+        profile: WebExecutionProfile,
+    ) -> None:
+        validator = self._generated_profile_validator
+        if validator is not None:
+            validator(record, profile)
 
     @staticmethod
     def _read_source(source_path: Path) -> tuple[WebExecutionProfile, bytes, str]:

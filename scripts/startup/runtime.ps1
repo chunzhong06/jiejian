@@ -66,7 +66,53 @@ function Fail-Start([int]$Code, [string]$Stage, [string]$Diagnostic, [string]$Re
     exit $Code
 }
 
-# 外部 stdout/stderr 只写启动日志；serve ready 标记例外，用来终止动画并提示安全退出。
+function Set-PrepareDisplayTask([string]$Token) {
+    switch ($Token) {
+        "toolchain" { if ($script:DisplayStageIndex -ne 1) { Start-DisplayStage 1 "准备工具链" } }
+        "python" { if ($script:DisplayStageIndex -ne 2) { Start-DisplayStage 2 "准备 Python" } }
+        "browser" { if ($script:DisplayStageIndex -ne 3) { Start-DisplayStage 3 "准备浏览器" } }
+        "frontend-dependencies" { if ($script:DisplayStageIndex -ne 4) { Start-DisplayStage 4 "准备界面" } }
+        "frontend-build" { if ($script:DisplayStageIndex -ne 4) { Start-DisplayStage 4 "准备界面" } }
+        "database" { if ($script:DisplayStageIndex -ne 5) { Start-DisplayStage 5 "检查本地数据" } }
+    }
+    if ($script:DisplayInteractive -and -not [Console]::IsOutputRedirected) {
+        Stop-WaitIndicator
+        Start-WaitIndicator $Token
+    }
+}
+
+function Complete-PrepareDisplayTask([string]$Token) {
+    switch ($Token) {
+        "toolchain" { Write-DisplayResult "工具链" "完成" $true; Complete-DisplayStage }
+        "python" { Write-DisplayResult "Python 环境" "完成" $true; Complete-DisplayStage }
+        "browser" { Write-DisplayResult "Chromium" "完成" $true; Complete-DisplayStage }
+        "frontend-dependencies" { Write-DisplayResult "界面依赖" "完成" $false }
+        "frontend-build" { Write-DisplayResult "界面构建" "完成" $true; Complete-DisplayStage }
+        "database" { Write-DisplayResult "数据库准备" "完成" $false }
+    }
+}
+
+function Handle-PrepareStatus([string]$Line) {
+    $match = [regex]::Match(
+        $Line,
+        '^__JIEJIAN_PREPARE_STATUS__:(toolchain|python|browser|frontend-dependencies|frontend-build|database):(start|done)$'
+    )
+    if (-not $match.Success) { return $false }
+    $token = $match.Groups[1].Value
+    $state = $match.Groups[2].Value
+    # Windows PowerShell 将 x.5 转 int 时可能向最近整数舍入；显式向下取整才能保持 start/done 成对。
+    $expectedTokenIndex = [int]([Math]::Floor([double]$script:PrepareStatusIndex / 2.0))
+    $expectedToken = [string]$script:PrepareStatusOrder[$expectedTokenIndex]
+    $expectedState = if ($script:PrepareStatusIndex % 2 -eq 0) { "start" } else { "done" }
+    if ($token -ne $expectedToken -or $state -ne $expectedState) { return $false }
+    $script:PrepareStatusState[$token] = $state
+    $script:PrepareStatusIndex += 1
+    if ($state -eq "start") { Set-PrepareDisplayTask $token }
+    else { Complete-PrepareDisplayTask $token }
+    return $true
+}
+
+# 外部 stdout/stderr 只写启动日志；Python 状态事件是服务就绪事实的唯一来源。
 function Invoke-External(
     [string]$Stage,
     [object[]]$Command,
@@ -104,23 +150,38 @@ function Invoke-External(
                 ForEach-Object {
                     $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
                     [IO.File]::AppendAllText($script:LogPath, $line + [Environment]::NewLine, $script:Utf8Encoding)
-                    if (-not $script:ServeReadyObserved -and $line.StartsWith("__JIEJIAN_SERVE_READY__:")) {
-                        $script:ServeReadyObserved = $true
-                        Stop-WaitIndicator
-                        Write-Host ""
-                        if ($line.EndsWith("browser-opened")) {
+                    if ($Stage -eq "source-prepare") { [void](Handle-PrepareStatus $line) }
+                    if ($line.StartsWith("__JIEJIAN_SERVE_STATUS__:")) {
+                        if ($line.EndsWith("still-starting")) {
+                            Write-Host "界鉴启动时间较长，仍在准备，请稍候……" -ForegroundColor Yellow
+                        } elseif (-not $script:ServeReadyObserved -and $line.EndsWith("ready-browser-opened")) {
+                            $script:ServeReadyObserved = $true
+                            Stop-WaitIndicator
+                            Write-Host ""
                             Write-Host "界鉴网页已打开。" -ForegroundColor Cyan
-                        } else {
-                            Write-Host "界鉴服务已启动，但未能自动打开网页。" -ForegroundColor Yellow
+                            Write-Host "请使用网页右上角“退出界鉴”，或在此终端按 Ctrl+C 安全退出。" -ForegroundColor Gray
+                            Write-Host "此终端会保持运行，用于管理服务、Worker 和浏览器资源。" -ForegroundColor DarkGray
+                        } elseif (-not $script:ServeReadyObserved -and $line.EndsWith("ready-browser-open-failed")) {
+                            $script:ServeReadyObserved = $true
+                            Stop-WaitIndicator
+                            Write-Host ""
+                            Write-Host "界鉴已经启动，但未能自动打开网页。" -ForegroundColor Yellow
                             Write-Host "请在浏览器访问 http://127.0.0.1:8765/" -ForegroundColor Gray
+                            Write-Host "请使用网页右上角“退出界鉴”，或在此终端按 Ctrl+C 安全退出。" -ForegroundColor Gray
+                            Write-Host "此终端会保持运行，用于管理服务、Worker 和浏览器资源。" -ForegroundColor DarkGray
+                        } elseif ($line.EndsWith("startup-failed")) {
+                            $script:ServeStartupFailed = $true
+                            Stop-WaitIndicator
+                            Write-Host "界鉴服务在就绪前停止。" -ForegroundColor Red
                         }
-                        Write-Host "请使用网页右上角“退出界鉴”，或在此终端按 Ctrl+C 安全退出。" -ForegroundColor Gray
-                        Write-Host "此终端会保持运行，用于管理服务、Worker 和浏览器资源。" -ForegroundColor DarkGray
                     }
                 } |
                 Out-Null
         }
         $code = $LASTEXITCODE
+        if ($Stage -eq "serve" -and $script:ServeStartupFailed -and $code -eq 0) {
+            $code = 50
+        }
     } finally {
         if ($waitIndicatorStarted) { Stop-WaitIndicator }
         $ErrorActionPreference = $previousErrorActionPreference

@@ -22,7 +22,7 @@ function bytes(value: number | undefined) {
 const operationLabels: Record<CacheOperation, string> = {
   prune: '按预算清理',
   clean: '清空可重建缓存',
-  'runtime-repair': '修复损坏运行时',
+  'runtime-repair': '修复运行环境',
 }
 
 const cacheLabels: Record<string, string> = {
@@ -101,18 +101,18 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       <Tag style={{ marginTop: 16 }} color={python?.ok === false ? 'red' : 'blue'}>{python?.ok === false ? '环境需要处理' : '状态来自当前运行环境'}</Tag>
     </Card>
 
-    <Card title="缓存与运行时维护" extra={busy ? <Spin size="small" /> : <Button onClick={refreshCache}>刷新状态</Button>}>
+    <Card title="缓存与运行环境维护" extra={busy ? <Spin size="small" /> : <Button onClick={refreshCache}>刷新状态</Button>}>
       <Typography.Paragraph type="secondary">所有操作都由后端维护服务执行。预览和结果不会包含数据库、Evidence、报告或凭据。</Typography.Paragraph>
       {maintenanceError && <Alert type="error" showIcon message="维护操作失败" description={maintenanceError} closable onClose={() => setMaintenanceError(null)} />}
-      {completed && <Alert style={{ marginBottom: 12 }} type="success" showIcon message="维护操作已完成" description={`已处理 ${completed.removed.length} 项，共 ${bytes(completed.estimated_bytes)}。${completed.requires_restart ? '请重新启动界鉴以重建运行时。' : ''}`} />}
+      {completed && <Alert style={{ marginBottom: 12 }} type="success" showIcon message="维护操作已完成" description={`已处理 ${completed.removed.length} 项，共 ${bytes(completed.estimated_bytes)}。${completed.requires_restart ? '请重新启动界鉴以重建运行环境。' : ''}`} />}
       <Row gutter={[12, 12]}>
         {Object.entries(cache?.entries ?? {}).map(([name, entry]) => <Col xs={24} md={8} key={name}><Card size="small"><Statistic title={cacheLabels[name] ?? name} value={bytes(entry.bytes)} /><Tag color={entry.over_budget ? 'orange' : 'green'}>{entry.over_budget ? '超过软预算' : '预算内'}</Tag></Card></Col>)}
       </Row>
-      <Alert style={{ marginTop: 12 }} type="info" showIcon message="产品事实始终保留" description={`不受影响：${cache?.protected.data ?? 'var/data'}、当前运行时、数据库、证据、报告和凭据。`} />
+      <Alert style={{ marginTop: 12 }} type="info" showIcon message="产品事实始终保留" description={`不受影响：${cache?.protected.data ?? 'var/data'}、当前有效运行环境、数据库、证据、报告和凭据。`} />
       <Space wrap style={{ marginTop: 16 }}>
         <Button disabled={busy} onClick={() => void showPreview('prune')}>按预算清理</Button>
         <Button disabled={busy} onClick={() => void showPreview('clean')}>清空可重建缓存</Button>
-        <Button disabled={busy} onClick={() => void showPreview('runtime-repair')}>修复损坏运行时</Button>
+        <Button disabled={busy} onClick={() => void showPreview('runtime-repair')}>修复运行环境</Button>
       </Space>
     </Card>
 

@@ -5,10 +5,10 @@
 #   已脱敏事件序列与待审阅 FlowDraft 之间的确定性转换
 #
 # 职责
-#   关联逻辑动作｜提取变量来源｜生成稳定 step、依赖和规范草稿
+#   关联逻辑动作｜提取变量与有限资源候选｜推荐 TARGET 并生成规范草稿
 #
 # 边界
-#   只消费已脱敏事件，不访问浏览器或目标，也不把推断变量自动视为人工确认。
+#   只消费已脱敏事件，不访问浏览器或目标，也不让任何推荐自动生效。
 #
 # 调用链
 #   RecordingSubmission → FlowDraftProcessor → FlowDraft
@@ -25,8 +25,17 @@ from typing import Any
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.flow_draft import FlowDraftStep, FlowDraft, FlowDraftVariableSource, FlowDraftVariableStatus, FlowDraftVariable, canonical_flow_draft_json_bytes
+from product.protocols.flow_draft import (
+    FlowDraft,
+    FlowDraftResourceCandidate,
+    FlowDraftStep,
+    FlowDraftVariable,
+    FlowDraftVariableSource,
+    FlowDraftVariableStatus,
+    canonical_flow_draft_json_bytes,
+)
 from product.protocols.recording import RecordingEventKind, RecordingEvent
+from product.protocols.web.workflow import ValueSlotConsumer
 from product.backend.core.redaction import REDACTED
 
 _UI_KINDS = {
@@ -85,17 +94,14 @@ class FlowDraftProcessor:
         *,
         recording_id: str,
         flow_id: str,
+        action_candidate_id: str,
         events: Sequence[RecordingEvent],
-        alternate_identities: Mapping[str, str] | None = None,
-        resource_bindings: Mapping[str, tuple[str, str]] | None = None,
         known_secrets: Sequence[str] = (),
     ) -> FlowDraft:
         """把连续、已脱敏事件确定性编译为仍需人工确认的首个 FlowDraft revision。"""
 
         # --- 阶段：验证事件序列并关联逻辑动作 ---
         ordered = tuple(events)
-        alternate_identities = alternate_identities or {}
-        resource_bindings = resource_bindings or {}
         if not ordered or tuple(event.sequence for event in ordered) != tuple(
             range(1, len(ordered) + 1)
         ):
@@ -115,12 +121,15 @@ class FlowDraftProcessor:
         sources = self._response_sources(steps)
         variables = self._replace_dynamic_values(steps, sources)
         draft_steps = tuple(
-            self._build_step(
-                step,
-                alternate_identities,
-                resource_bindings,
-            )
+            self._build_step(step)
             for step in steps
+        )
+        directly_triggered_requests = frozenset(
+            event.request_id
+            for event in ordered
+            if event.kind is RecordingEventKind.REQUEST
+            and event.request_id is not None
+            and event.caused_by_action_id is not None
         )
         draft_variables = tuple(
             FlowDraftVariable(
@@ -138,12 +147,17 @@ class FlowDraftProcessor:
         )
         # --- 阶段：构造草稿并执行 canonical 安全校验 ---
         draft = FlowDraft(
-            schema_version="2",
+            schema_version="1",
             recording_id=recording_id,
             flow_id=flow_id,
+            action_candidate_id=action_candidate_id,
             revision=1,
             steps=draft_steps,
             variables=draft_variables,
+            recommended_target_step_id=self._recommend_target(
+                draft_steps,
+                directly_triggered_requests,
+            ),
         )
         canonical_flow_draft_json_bytes(draft, known_secrets=known_secrets)
         return draft
@@ -342,17 +356,8 @@ class FlowDraftProcessor:
     def _build_step(
         self,
         step: _StepData,
-        alternate_identities: Mapping[str, str],
-        resource_bindings: Mapping[str, tuple[str, str]],
     ) -> FlowDraftStep:
         request = step.request
-        resource_pair = (
-            resource_bindings.get(request.request_id)
-            if request is not None and request.request_id is not None
-            else None
-        )
-        alternate = alternate_identities.get(step.identity_id)
-        confirmed = request is not None and alternate is not None and resource_pair is not None
         sequences = [event.sequence for event in step.actions]
         if request is not None:
             sequences.append(request.sequence)
@@ -361,11 +366,6 @@ class FlowDraftProcessor:
         return FlowDraftStep(
             id=step.step_id,
             name=self._step_name(step),
-            identity_id=step.identity_id,
-            alternate_identity_id=alternate,
-            resource_id=resource_pair[0] if resource_pair else None,
-            alternate_resource_id=resource_pair[1] if resource_pair else None,
-            bindings_confirmed=confirmed,
             method=request.method if request is not None else None,
             path=step.path,
             json_body=step.json_body,
@@ -377,13 +377,93 @@ class FlowDraftProcessor:
                 else ()
             ),
             request_id=request.request_id if request is not None else None,
-            action_ids=tuple(
-                event.action_id for event in step.actions if event.action_id is not None
-            ),
             source_event_sequences=tuple(sorted(sequences)),
             depends_on_step_ids=tuple(sorted(step.dependencies)),
             sensitive_fields=self._sensitive_fields(step),
+            resource_candidates=self._resource_candidates(step),
         )
+
+    def _resource_candidates(
+        self,
+        step: _StepData,
+    ) -> tuple[FlowDraftResourceCandidate, ...]:
+        """只列出已录制目标请求中的有界字段位置，不让用户输入任意资源值。"""
+
+        if step.request is None:
+            return ()
+        candidates: list[FlowDraftResourceCandidate] = []
+        parsed = urlsplit(step.path or "/")
+        path_segments = [segment for segment in parsed.path.split("/") if segment]
+        for index, segment in enumerate(path_segments):
+            value = unquote(segment)
+            if self._candidate_value(value):
+                candidates.append(
+                    self._resource_candidate(
+                        step.step_id,
+                        ValueSlotConsumer.PATH,
+                        f"path[{index}]",
+                        f"路径第 {index + 1} 段",
+                    )
+                )
+        for name, value in parse_qsl(parsed.query, keep_blank_values=True):
+            if self._candidate_value(value) and not _SENSITIVE_FIELD.search(name):
+                candidates.append(
+                    self._resource_candidate(
+                        step.step_id,
+                        ValueSlotConsumer.QUERY,
+                        f"query.{name}",
+                        f"查询参数 {name}",
+                    )
+                )
+        for path, value in self._walk_scalars(step.json_body):
+            if self._candidate_value(value) and not self._path_sensitive(path):
+                candidates.append(
+                    self._resource_candidate(
+                        step.step_id,
+                        ValueSlotConsumer.JSON_BODY,
+                        path,
+                        f"请求正文 {path}",
+                    )
+                )
+        return tuple(candidates[:128])
+
+    @staticmethod
+    def _resource_candidate(
+        step_id: str,
+        consumer: ValueSlotConsumer,
+        location: str,
+        label: str,
+    ) -> FlowDraftResourceCandidate:
+        digest = hashlib.sha256(
+            f"{step_id}\0{consumer.value}\0{location}".encode("utf-8")
+        ).hexdigest()[:16]
+        return FlowDraftResourceCandidate(
+            candidate_id=f"resource-{digest}",
+            consumer=consumer,
+            location=location,
+            label=label,
+        )
+
+    @staticmethod
+    def _recommend_target(
+        steps: tuple[FlowDraftStep, ...],
+        directly_triggered_requests: frozenset[str],
+    ) -> str | None:
+        network = tuple(step for step in steps if step.method is not None)
+        if not network:
+            return None
+        # 用户点击直接触发的请求才是业务动作的首选目标；同一点击随后自动执行的
+        # 观察或恢复请求即使也是 PATCH，也不能反向覆盖真正的 TARGET。
+        ranked = sorted(
+            network,
+            key=lambda step: (
+                step.request_id in directly_triggered_requests,
+                step.method in {"PATCH", "POST", "PUT", "DELETE"},
+                bool(step.resource_candidates),
+                step.source_event_sequences[-1],
+            ),
+        )
+        return ranked[-1].id
 
     @staticmethod
     def _relative_path(url: str | None) -> str:

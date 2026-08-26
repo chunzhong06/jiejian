@@ -50,19 +50,6 @@ def build_contracts_router(context: ApplicationCore) -> APIRouter:
         return data_response(result.model_dump(mode="json"))
 
     @router.post(
-        "/api/projects/{project_id}/contract-governance/candidates/llm",
-        response_model=ApiResponse,
-    )
-    async def generate_llm_candidates(project_id: str, body: LLMCandidateRequest):
-        result = context.contract_workbench.generate_llm(
-            project_id,
-            requirement_ids=tuple(body.requirement_ids),
-            actor=body.actor,
-            profile_name=body.profile_name,
-        )
-        return data_response(result.model_dump(mode="json"))
-
-    @router.post(
         "/api/projects/{project_id}/contract-governance/contracts",
         response_model=ApiResponse,
     )
@@ -215,13 +202,6 @@ class CandidateDeriveRequest(ApiModel):
     schema_version: Literal["1"]
     requirement_ids: list[str] = Field(min_length=1, max_length=512)
     actor: str = Field(min_length=1, max_length=128)
-
-
-class LLMCandidateRequest(ApiModel):
-    schema_version: Literal["1"]
-    requirement_ids: list[str] = Field(min_length=1, max_length=512)
-    actor: str = Field(min_length=1, max_length=128)
-    profile_name: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class ContractDraftRequest(ApiModel):

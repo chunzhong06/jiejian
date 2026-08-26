@@ -1,3 +1,5 @@
+# 验证观察器基础设施中的观察事实投影。
+
 from __future__ import annotations
 
 from pathlib import Path

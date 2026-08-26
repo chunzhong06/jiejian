@@ -237,7 +237,7 @@ class RunPublisher:
                 raise JiejianError(ErrorCode.ARTIFACT_MANIFEST, "暂存发布清单不匹配")
             return manifest
         manifest = PublicationManifest(
-            schema_version="2",
+            schema_version="1",
             project_id=job.project_id,
             run_id=job.run_id,
             job_id=job.job_id,

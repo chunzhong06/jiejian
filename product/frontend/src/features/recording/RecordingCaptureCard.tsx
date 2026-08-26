@@ -14,7 +14,7 @@ export function captureLabel(recording: RecordingDto | null) {
   if (recording.state === 'COMPLETED') return '流程已保存'
   if (recording.state === 'CANCELLED') return '本次录制已取消'
   if (recording.state === 'FAILED' || recording.state === 'SAFETY_STOPPED') return '录制未完成'
-  return ({ PREPARING_BROWSER: '正在准备浏览器', AWAITING_CAPTURE: '等待登录准备', CAPTURE_STARTING: '正在开始录制', CAPTURING: '正在录制', STOPPING: '正在生成流程', FINISHED: '正在整理结果' } as Record<string, string>)[String(recording.capture_phase)] ?? '正在准备录制'
+  return ({ PREPARING_BROWSER: '正在准备浏览器', AWAITING_CAPTURE: '等待开始记录', CAPTURE_STARTING: '正在开始记录', CAPTURING: '正在记录业务动作', STOPPING: '正在整理流程', FINISHED: '正在整理结果' } as Record<string, string>)[String(recording.capture_phase)] ?? '正在准备录制'
 }
 
 export function RecordingCaptureCard({ recording, busy, canCancel, onRefresh, onControl, onError }: {
@@ -26,9 +26,27 @@ export function RecordingCaptureCard({ recording, busy, canCancel, onRefresh, on
   onError: (error: ApiError) => void
 }) {
   const phase = String(recording.capture_phase ?? '')
-  return <Card title="录制进度" extra={<Button onClick={onRefresh}>刷新状态</Button>}><Space direction="vertical" className="full-width" size="middle">
-    <Alert type={phase === 'CAPTURING' ? 'warning' : recording.state === 'FAILED' || recording.state === 'SAFETY_STOPPED' ? 'error' : 'info'} showIcon message={captureLabel(recording)} description={phase === 'PREPARING_BROWSER' ? '正在启动有界 Chromium，请稍候。' : phase === 'AWAITING_CAPTURE' ? '浏览器已经打开。请先完成登录并进入要录制的页面；这些准备操作不会写入流程。' : phase === 'CAPTURING' ? '现在开始记录你的操作。完成业务流程后，点击“停止录制并生成流程”。' : phase === 'STOPPING' ? '正在停止采集、整理事件并生成步骤草稿。' : recording.state === 'CANCELLED' ? '本次事件已丢弃，没有生成流程草稿。' : '界鉴会保留当前状态；关闭页面只会断开显示。'} />
-    <Space wrap>{phase === 'AWAITING_CAPTURE' && <Button type="primary" size="large" loading={busy} onClick={() => onControl('start')}>开始录制</Button>}{phase === 'CAPTURING' && <Button type="primary" danger size="large" loading={busy} onClick={() => onControl('stop')}>停止录制并生成流程</Button>}<RecordingProgress job={recording.job ?? undefined} canCancel={canCancel} onRefresh={onRefresh} onError={onError} /></Space>
+  const actionName = recording.action?.display_name ?? '这个业务动作'
+  const captureGuide = phase === 'AWAITING_CAPTURE'
+    ? <div className="recording-capture-guide">
+      <ol>
+        <li><Tag color="green">1</Tag><div><Typography.Text strong>浏览器已打开</Typography.Text><Typography.Text type="secondary">请进入要执行操作的页面。</Typography.Text><Typography.Text type="secondary">现在的浏览和登录不会写进业务流程。</Typography.Text></div></li>
+        <li><Tag color="blue">2</Tag><div><Typography.Text strong>准备开始记录</Typography.Text><Button type="primary" size="large" loading={busy} onClick={() => onControl('start')}>开始记录这个操作</Button></div></li>
+        <li><Tag>3</Tag><div><Typography.Text strong>在浏览器里正常完成一次“{actionName}”</Typography.Text><Typography.Text type="secondary">完成后不要关闭浏览器。</Typography.Text></div></li>
+        <li><Tag>4</Tag><div><Typography.Text strong>回到界鉴</Typography.Text><Typography.Text type="secondary">完成业务动作后，在这里确认。</Typography.Text></div></li>
+      </ol>
+    </div>
+    : phase === 'CAPTURING'
+      ? <Alert type="warning" showIcon message={`正在记录“${actionName}”`} description="请在浏览器里正常完成一次这个业务动作。完成后不要关闭浏览器，再回到界鉴点击“我已完成这个操作”。" />
+      : null
+  const phaseContent = phase === 'AWAITING_CAPTURE'
+    ? captureGuide
+    : phase === 'CAPTURING'
+      ? captureGuide
+      : <Alert type={recording.state === 'FAILED' || recording.state === 'SAFETY_STOPPED' ? 'error' : 'info'} showIcon message={captureLabel(recording)} description={phase === 'PREPARING_BROWSER' ? '正在启动有界 Chromium，请稍候。' : phase === 'STOPPING' ? `正在整理刚才的操作并寻找真正执行“${actionName}”的请求…` : recording.state === 'CANCELLED' ? '本次事件已丢弃，没有生成流程草稿。' : '界鉴会保留当前状态；关闭页面只会断开显示。'} />
+  return <Card title={`录制「${actionName}」`} extra={<Button onClick={onRefresh}>刷新状态</Button>}><Space direction="vertical" className="full-width" size="middle">
+    {phaseContent}
+    <Space wrap>{phase === 'CAPTURING' && <Button type="primary" size="large" loading={busy} onClick={() => onControl('stop')}>我已完成这个操作</Button>}<RecordingProgress job={recording.job ?? undefined} canCancel={canCancel} onRefresh={onRefresh} onError={onError} /></Space>
   </Space></Card>
 }
 

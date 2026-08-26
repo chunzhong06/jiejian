@@ -1,3 +1,5 @@
+# 验证隔离 Runner 运行时中的目标运行时替身编排。
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,11 +15,11 @@ from product.backend.core.verification.facts import (
     TemporalClosure,
     aggregate_security_effect,
 )
-from product.backend.core.verification.permission_coverage import (
+from product.backend.core.verification.permissions.coverage import (
     PermissionMutationCase,
     RetentionReason,
 )
-from product.backend.core.verification.permission_evaluation import (
+from product.backend.core.verification.permissions.evaluation import (
     CaseDecisionInput,
     evaluate_permission_case,
 )

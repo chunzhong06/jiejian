@@ -5,10 +5,10 @@
 # 人工确认的录制步骤进入后续执行绑定前的稳定、不可变协议。
 #
 # 职责
-# 表达步骤依赖与变量来源｜校验相对路径｜约束身份和资源绑定
+# 表达动作步骤与变量来源｜校验唯一 TARGET｜约束主体和资源运行时 slot
 #
 # 边界
-# 不属于 Verification Core 或 Execution Profile，不携带 secret，也不自行执行请求。
+# 不属于 Verification Core 或 Execution Profile，不携带具体身份、资源、secret 或观察/恢复实现。
 #
 # 调用链
 # FlowDraftReviewer → Flow → Contract candidate / replay boundaries
@@ -16,18 +16,18 @@
 
 from __future__ import annotations
 
-import re
 from typing import Literal
-from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN
 from product.protocols.web.workflow import (
     HttpOutcomeClassifier,
     HttpRequestTemplate,
     ValueSlotConsumer,
+    ValueSlotSource,
     ValueType,
+    WorkflowStepPurpose,
 )
 
 
@@ -55,13 +55,9 @@ class FlowVariableSource(RecordingFlowModel):
 class FlowStep(RecordingFlowModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     name: str | None = Field(default=None, min_length=1, max_length=128)
-    identity_id: str
-    resource_id: str
-    alternate_identity_id: str
-    alternate_resource_id: str
+    purpose: WorkflowStepPurpose
     request_template: HttpRequestTemplate
     classifier: HttpOutcomeClassifier
-    action_ids: tuple[str, ...] = Field(default=(), max_length=16)
     depends_on_step_ids: tuple[str, ...] = Field(default=(), max_length=128)
     variable_sources: tuple[FlowVariableSource, ...] = Field(default=(), max_length=128)
     sensitive_fields: tuple[str, ...] = Field(default=(), max_length=256)
@@ -79,27 +75,11 @@ class FlowStep(RecordingFlowModel):
 
 # 已确认、无环且不含秘密的录制流程；变量只能引用先前步骤。
 class Flow(RecordingFlowModel):
-    schema_version: Literal["4"] = "4"
+    schema_version: Literal["1"] = "1"
     id: str = Field(pattern=PROJECT_ID_PATTERN)
+    action_candidate_id: str = Field(pattern=r"^action_[0-9a-f]{32}$")
+    target_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
     steps: tuple[FlowStep, ...] = Field(min_length=1)
-    owner_observer_path: str = "/owner/resources/{resource_id}"
-    reset_path: str = "/reset"
-
-    @field_validator("owner_observer_path", "reset_path")
-    @classmethod
-    def validate_support_path(cls, value: str) -> str:
-        parsed = urlsplit(value)
-        if (
-            not value.startswith("/")
-            or value.startswith("//")
-            or parsed.scheme
-            or parsed.netloc
-            or parsed.query
-            or parsed.fragment
-            or any(segment in {".", ".."} for segment in parsed.path.split("/"))
-        ):
-            raise ValueError("support endpoint must be an absolute-path reference")
-        return value
 
     @model_validator(mode="after")
     def validate_dependency_graph(self) -> Flow:
@@ -107,6 +87,19 @@ class Flow(RecordingFlowModel):
         if len(set(step_ids)) != len(step_ids):
             raise ValueError("flow step IDs must be unique")
         known = set(step_ids)
+        targets = tuple(step for step in self.steps if step.purpose is WorkflowStepPurpose.TARGET)
+        if len(targets) != 1 or targets[0].id != self.target_step_id:
+            raise ValueError("flow must bind exactly one declared target step")
+        if any(step.purpose is WorkflowStepPurpose.CLEANUP for step in self.steps):
+            raise ValueError("recorded business flow may contain only setup and target steps")
+        resource_slots = tuple(
+            (step.id, slot)
+            for step in self.steps
+            for slot in step.request_template.input_slots
+            if slot.source is ValueSlotSource.CASE_RESOURCE_ID
+        )
+        if len(resource_slots) != 1 or resource_slots[0][0] != self.target_step_id:
+            raise ValueError("flow target must bind exactly one case resource slot")
         graph = {step.id: set(step.depends_on_step_ids) for step in self.steps}
         if any(
             dependency not in known or dependency == step_id

@@ -1,3 +1,5 @@
+# 验证命令行入口中的诊断信息。
+
 from __future__ import annotations
 
 import json
@@ -91,7 +93,7 @@ def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
 
     assert result.exit_code == 0, result.stdout
     report = json.loads(result.stdout)
-    assert report["schema_version"] == "2"
+    assert report["schema_version"] == "1"
     assert report["ok"] is True
     assert result.stderr == ""
     log_path = runtime / "logs" / "app" / "jiejian.log"

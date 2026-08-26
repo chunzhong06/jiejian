@@ -22,6 +22,7 @@ from product.backend.core.contracts.models import CandidateSuggestion, Candidate
 from product.backend.core.contracts.models import ContractCandidate, ContractSourceType
 from product.backend.core.contracts.analysis.models import AnalysisIssue, AnalysisReasonCode, AnalysisSeverity, CandidateBatch
 from product.backend.core.contracts.analysis.canonical import _candidate, _issue, _issue_key, _rule_id, contract_analysis_sha256
+from product.backend.core.http_routes import HTTP_METHODS, safe_route_path
 
 
 _SENSITIVE_FIELD = re.compile(
@@ -29,7 +30,6 @@ _SENSITIVE_FIELD = re.compile(
     r"id[_-]?card|ssn|email|phone|address|full[_-]?name)",
     re.IGNORECASE,
 )
-_HTTP_METHODS = ("GET", "PATCH", "POST", "PUT", "DELETE")
 _OPENAPI_MAX_BYTES = 1_048_576
 
 
@@ -72,7 +72,7 @@ def build_openapi_candidates(
     candidates: list[ContractCandidate] = []
     issues: list[AnalysisIssue] = []
     for path, path_item in sorted(document["paths"].items(), key=lambda item: str(item[0])):
-        if not isinstance(path, str) or not _safe_route_path(path):
+        if not isinstance(path, str) or not safe_route_path(path):
             issues.append(_issue(AnalysisReasonCode.INVALID_OPENAPI, AnalysisSeverity.BLOCKING, str(path), detail="openapi_path_invalid"))
             continue
         if not isinstance(path_item, Mapping):
@@ -82,7 +82,7 @@ def build_openapi_candidates(
             method_upper = str(method).upper()
             if method_upper in {"PARAMETERS", "SUMMARY", "DESCRIPTION", "SERVERS"}:
                 continue
-            if method_upper not in _HTTP_METHODS:
+            if method_upper not in HTTP_METHODS:
                 issues.append(_issue(AnalysisReasonCode.UNSUPPORTED_SOURCE, AnalysisSeverity.WARNING, f"{source_locator}:{path}:{method}", detail="openapi_method_unsupported"))
                 continue
             if not isinstance(operation, Mapping):
@@ -125,10 +125,6 @@ def build_openapi_candidates(
         issues=tuple(sorted(issues, key=_issue_key)),
         input_sha256=document_hash,
     )
-
-def _safe_route_path(path: str) -> bool:
-    return bool(path.startswith("/") and not path.startswith("//") and ".." not in path.split("/"))
-
 
 def _contains_external_ref(value: Any) -> bool:
     if isinstance(value, Mapping):

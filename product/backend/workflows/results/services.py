@@ -21,6 +21,8 @@ from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.results.findings import FindingMaterializer, FindingQueries
 from product.backend.workflows.results.finalizer import ResultFinalizer
 from product.backend.workflows.results.gating import RegressionGate
+from product.backend.workflows.results.history import HistoryComparisonBuilder
+from product.backend.workflows.results.presentation import ResultPresentationBuilder
 from product.backend.workflows.results.published import PublishedResultReader
 from product.backend.workflows.results.reporting import ReportBuilder
 
@@ -33,6 +35,8 @@ class ResultServices:
     materializer: FindingMaterializer
     queries: FindingQueries
     gate: RegressionGate
+    presentation: ResultPresentationBuilder
+    history: HistoryComparisonBuilder
     reports: ReportBuilder
     finalizer: ResultFinalizer
 
@@ -48,7 +52,16 @@ def build_result_services(
     materializer = FindingMaterializer(uow_factory, reader, utc_now_us=clock_us)
     queries = FindingQueries(uow_factory)
     gate = RegressionGate(uow_factory, reader, queries, clock_us=clock_us)
-    reports = ReportBuilder(var_dir, reader, queries, gate, uow_factory)
+    presentation = ResultPresentationBuilder(reader, queries)
+    history = HistoryComparisonBuilder(uow_factory, presentation)
+    reports = ReportBuilder(
+        var_dir,
+        reader,
+        queries,
+        gate,
+        uow_factory,
+        presentation=presentation,
+    )
     finalizer = ResultFinalizer(
         var_dir,
         uow_factory,
@@ -62,6 +75,8 @@ def build_result_services(
         materializer=materializer,
         queries=queries,
         gate=gate,
+        presentation=presentation,
+        history=history,
         reports=reports,
         finalizer=finalizer,
     )

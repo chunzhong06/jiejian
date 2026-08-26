@@ -2,8 +2,8 @@
 # 统一报告严格协议
 #
 # 定位
-#   以已发布 Run、Finalizer 快照、Artifact 三态和明确 GateResult 组成
-#   不可变 Report v3；report.json 是唯一语义真源。
+#   以已发布 Run、Finalizer 快照、确定性展示快照、Artifact 三态和明确
+#   GateResult 组成不可变 Report；report.json 是唯一语义真源。
 #
 # 职责
 #   约束 Base/Gate 判别联合｜计算语义输入与稳定身份｜约束 package manifest。
@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from product.backend.core.redaction import redact
 
-REPORT_SCHEMA_VERSION = "4"
+REPORT_SCHEMA_VERSION = "1"
 REPORT_RULESET_VERSION = "report-local-2026.08.18"
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/@+\-]{0,255}$")
 _SHA256 = r"^[0-9a-f]{64}$"
@@ -163,11 +163,11 @@ class ReportVersions(ReportModel):
     contract_id: str = Field(min_length=1, max_length=128)
     contract_version: int = Field(ge=1)
     engine_version: str = Field(min_length=1, max_length=64)
-    runner_schema_version: Literal["4"]
-    evidence_schema_version: Literal["4"]
-    observer_schema_version: Literal["3"]
-    artifact_schema_version: Literal["2"]
-    report_schema_version: Literal["4"] = REPORT_SCHEMA_VERSION
+    runner_schema_version: Literal["1"]
+    evidence_schema_version: Literal["1"]
+    observer_schema_version: Literal["1"]
+    artifact_schema_version: Literal["1"]
+    report_schema_version: Literal["1"] = REPORT_SCHEMA_VERSION
     ruleset_versions: tuple[str, ...] = Field(default=(), max_length=16)
 
     @model_validator(mode="after")
@@ -197,8 +197,73 @@ class ReportGate(ReportModel):
     evaluated_at_us: int = Field(ge=0)
 
 
+class ReportPresentationIssue(ReportModel):
+    """冻结单个权限问题的人类可读表达，不承载新的安全判断。"""
+
+    finding_id: str = Field(pattern=r"^(?:finding_[0-9a-f]{32}|af_[0-9a-f]{32})$")
+    title: str = Field(min_length=1, max_length=200)
+    subject_group: str = Field(min_length=1, max_length=160)
+    action: str = Field(min_length=1, max_length=160)
+    resource: str = Field(min_length=1, max_length=160)
+    relation: str = Field(min_length=1, max_length=160)
+    expectation: str = Field(min_length=1, max_length=240)
+    surface_result: str = Field(min_length=1, max_length=240)
+    actual_result: str = Field(min_length=1, max_length=240)
+    conclusion: str = Field(min_length=1, max_length=160)
+    explanation: str = Field(min_length=1, max_length=480)
+    severity: Literal["unknown", "low", "medium", "high", "critical"]
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=8192)
+    verdict: Literal["SAFE", "VULNERABLE", "INCONCLUSIVE"]
+    occurrence_status: str | None = Field(
+        default=None,
+        pattern=r"^[A-Z][A-Z0-9_]{0,31}$",
+    )
+
+    @model_validator(mode="after")
+    def validate_evidence_refs(self) -> ReportPresentationIssue:
+        if any(
+            re.fullmatch(r"^(?:ev_[0-9a-f]{20}|aev_[0-9a-f]{20})$", item) is None
+            for item in self.evidence_refs
+        ):
+            raise ValueError("presentation issue evidence reference is invalid")
+        return self
+
+
+class ReportPresentation(ReportModel):
+    """冻结 D-3 确定性结果投影，供所有人类报告格式复用。"""
+
+    run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
+    project_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    project_name: str = Field(min_length=1, max_length=128)
+    run_lifecycle: Literal[
+        "QUEUED",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "SAFETY_STOPPED",
+    ]
+    verdict: Literal["PASS", "BLOCK", "INCONCLUSIVE"] | None
+    headline: str = Field(min_length=1, max_length=160)
+    scope_statement: str = Field(min_length=1, max_length=320)
+    checked_count: int = Field(ge=0)
+    safe_count: int = Field(ge=0)
+    problem_count: int = Field(ge=0)
+    inconclusive_count: int = Field(ge=0)
+    uncovered_count: int = Field(ge=0)
+    execution_problem: str | None = Field(default=None, max_length=320)
+    issues: tuple[ReportPresentationIssue, ...] = Field(default=(), max_length=8192)
+    limitations: tuple[str, ...] = Field(default=(), max_length=128)
+
+    @model_validator(mode="after")
+    def validate_counts(self) -> ReportPresentation:
+        if self.safe_count + self.problem_count + self.inconclusive_count != self.checked_count:
+            raise ValueError("presentation summary counts are inconsistent")
+        return self
+
+
 class BaseRunReport(ReportModel):
-    schema_version: Literal["4"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["1"] = REPORT_SCHEMA_VERSION
     report_type: Literal["BASE"]
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
@@ -207,6 +272,7 @@ class BaseRunReport(ReportModel):
     canonical_sha256: str = Field(pattern=_SHA256)
     run: ReportRun
     runtime: ReportRuntime
+    presentation: ReportPresentation
     artifact_summary: ArtifactSummary
     versions: ReportVersions
     limitations: tuple[str, ...] = Field(default=(), max_length=256)
@@ -215,6 +281,7 @@ class BaseRunReport(ReportModel):
     def validate_base(self) -> BaseRunReport:
         if self.run_id != self.run.run_id or self.project_id != self.run.project_id:
             raise ValueError("base report run identity is inconsistent")
+        _validate_presentation_identity(self)
         if self.report_id != report_id_for("BASE", self.semantic_input_sha256):
             raise ValueError("base report ID is not deterministic")
         if self.canonical_sha256 != report_canonical_sha256(self.semantic_payload()):
@@ -233,7 +300,7 @@ class BaseRunReport(ReportModel):
 
 
 class GateRunReport(ReportModel):
-    schema_version: Literal["4"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["1"] = REPORT_SCHEMA_VERSION
     report_type: Literal["GATE"]
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
@@ -245,6 +312,7 @@ class GateRunReport(ReportModel):
     canonical_sha256: str = Field(pattern=_SHA256)
     run: ReportRun
     runtime: ReportRuntime
+    presentation: ReportPresentation
     artifact_summary: ArtifactSummary
     versions: ReportVersions
     limitations: tuple[str, ...] = Field(default=(), max_length=256)
@@ -256,6 +324,7 @@ class GateRunReport(ReportModel):
             raise ValueError("gate report run identity is inconsistent")
         if self.gate_result_id != self.gate.gate_result_id:
             raise ValueError("gate report identity is inconsistent")
+        _validate_presentation_identity(self)
         if self.report_id != report_id_for("GATE", self.semantic_input_sha256):
             raise ValueError("gate report ID is not deterministic")
         if self.canonical_sha256 != report_canonical_sha256(self.semantic_payload()):
@@ -287,7 +356,7 @@ class ReportPackageFile(ReportModel):
 
 
 class ReportPackageManifest(ReportModel):
-    schema_version: Literal["4"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["1"] = REPORT_SCHEMA_VERSION
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
     report_type: Literal["BASE", "GATE"]
@@ -389,7 +458,7 @@ def _reject_nonfinite(value: str) -> Any:
 
 
 def report_json_schema() -> dict[str, Any]:
-    """返回运行时 parser 使用的 Report v3 判别联合 Schema。"""
+    """返回运行时 parser 使用的当前 Report 判别联合 Schema。"""
 
     return _REPORT_ADAPTER.json_schema()
 
@@ -399,3 +468,16 @@ def _validate_public(model: BaseRunReport | GateRunReport) -> None:
         raise ValueError("report limitation is not bounded")
     if redact(model.model_dump(mode="python")) != model.model_dump(mode="python"):
         raise ValueError("report contains sensitive material")
+
+
+def _validate_presentation_identity(model: BaseRunReport | GateRunReport) -> None:
+    presentation = model.presentation
+    if presentation.run_id != model.run_id or presentation.project_id != model.project_id:
+        raise ValueError("report presentation identity is inconsistent")
+    if (
+        presentation.run_lifecycle != model.run.lifecycle
+        or presentation.run_lifecycle != model.runtime.lifecycle
+        or presentation.verdict != model.run.verdict
+        or presentation.verdict != model.runtime.verdict
+    ):
+        raise ValueError("report presentation safety facts are inconsistent")

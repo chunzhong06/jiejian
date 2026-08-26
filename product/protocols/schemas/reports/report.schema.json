@@ -3,17 +3,6 @@
     "ArtifactSummary": {
       "additionalProperties": false,
       "properties": {
-        "status": {
-          "$ref": "#/$defs/ArtifactSummaryStatus"
-        },
-        "results": {
-          "items": {
-            "$ref": "#/$defs/ReportArtifact"
-          },
-          "maxItems": 256,
-          "title": "Results",
-          "type": "array"
-        },
         "reason_codes": {
           "default": [],
           "items": {
@@ -23,10 +12,21 @@
           "title": "Reason Codes",
           "type": "array"
         },
+        "results": {
+          "items": {
+            "$ref": "#/$defs/ReportArtifact"
+          },
+          "maxItems": 256,
+          "title": "Results",
+          "type": "array"
+        },
         "snapshot_sha256": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Snapshot Sha256",
           "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ArtifactSummaryStatus"
         }
       },
       "required": [
@@ -49,53 +49,13 @@
     "BaseRunReport": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "4",
-          "default": "4",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "report_type": {
-          "const": "BASE",
-          "title": "Report Type",
-          "type": "string"
-        },
-        "report_id": {
-          "pattern": "^report_[0-9a-f]{32}$",
-          "title": "Report Id",
-          "type": "string"
-        },
-        "run_id": {
-          "pattern": "^run_[0-9a-f]{32}$",
-          "title": "Run Id",
-          "type": "string"
-        },
-        "project_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Project Id",
-          "type": "string"
-        },
-        "semantic_input_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Semantic Input Sha256",
-          "type": "string"
+        "artifact_summary": {
+          "$ref": "#/$defs/ArtifactSummary"
         },
         "canonical_sha256": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Canonical Sha256",
           "type": "string"
-        },
-        "run": {
-          "$ref": "#/$defs/ReportRun"
-        },
-        "runtime": {
-          "$ref": "#/$defs/ReportRuntime"
-        },
-        "artifact_summary": {
-          "$ref": "#/$defs/ArtifactSummary"
-        },
-        "versions": {
-          "$ref": "#/$defs/ReportVersions"
         },
         "limitations": {
           "default": [],
@@ -105,6 +65,49 @@
           "maxItems": 256,
           "title": "Limitations",
           "type": "array"
+        },
+        "presentation": {
+          "$ref": "#/$defs/ReportPresentation"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "report_id": {
+          "pattern": "^report_[0-9a-f]{32}$",
+          "title": "Report Id",
+          "type": "string"
+        },
+        "report_type": {
+          "const": "BASE",
+          "title": "Report Type",
+          "type": "string"
+        },
+        "run": {
+          "$ref": "#/$defs/ReportRun"
+        },
+        "run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "runtime": {
+          "$ref": "#/$defs/ReportRuntime"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "semantic_input_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Semantic Input Sha256",
+          "type": "string"
+        },
+        "versions": {
+          "$ref": "#/$defs/ReportVersions"
         }
       },
       "required": [
@@ -116,6 +119,7 @@
         "canonical_sha256",
         "run",
         "runtime",
+        "presentation",
         "artifact_summary",
         "versions"
       ],
@@ -125,31 +129,8 @@
     "GateRunReport": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "4",
-          "default": "4",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "report_type": {
-          "const": "GATE",
-          "title": "Report Type",
-          "type": "string"
-        },
-        "report_id": {
-          "pattern": "^report_[0-9a-f]{32}$",
-          "title": "Report Id",
-          "type": "string"
-        },
-        "run_id": {
-          "pattern": "^run_[0-9a-f]{32}$",
-          "title": "Run Id",
-          "type": "string"
-        },
-        "project_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Project Id",
-          "type": "string"
+        "artifact_summary": {
+          "$ref": "#/$defs/ArtifactSummary"
         },
         "base_report_id": {
           "pattern": "^report_[0-9a-f]{32}$",
@@ -161,32 +142,18 @@
           "title": "Base Report Sha256",
           "type": "string"
         },
-        "gate_result_id": {
-          "pattern": "^gate_[0-9a-f]{32}$",
-          "title": "Gate Result Id",
-          "type": "string"
-        },
-        "semantic_input_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Semantic Input Sha256",
-          "type": "string"
-        },
         "canonical_sha256": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Canonical Sha256",
           "type": "string"
         },
-        "run": {
-          "$ref": "#/$defs/ReportRun"
+        "gate": {
+          "$ref": "#/$defs/ReportGate"
         },
-        "runtime": {
-          "$ref": "#/$defs/ReportRuntime"
-        },
-        "artifact_summary": {
-          "$ref": "#/$defs/ArtifactSummary"
-        },
-        "versions": {
-          "$ref": "#/$defs/ReportVersions"
+        "gate_result_id": {
+          "pattern": "^gate_[0-9a-f]{32}$",
+          "title": "Gate Result Id",
+          "type": "string"
         },
         "limitations": {
           "default": [],
@@ -197,8 +164,48 @@
           "title": "Limitations",
           "type": "array"
         },
-        "gate": {
-          "$ref": "#/$defs/ReportGate"
+        "presentation": {
+          "$ref": "#/$defs/ReportPresentation"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "report_id": {
+          "pattern": "^report_[0-9a-f]{32}$",
+          "title": "Report Id",
+          "type": "string"
+        },
+        "report_type": {
+          "const": "GATE",
+          "title": "Report Type",
+          "type": "string"
+        },
+        "run": {
+          "$ref": "#/$defs/ReportRun"
+        },
+        "run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "runtime": {
+          "$ref": "#/$defs/ReportRuntime"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "semantic_input_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Semantic Input Sha256",
+          "type": "string"
+        },
+        "versions": {
+          "$ref": "#/$defs/ReportVersions"
         }
       },
       "required": [
@@ -213,6 +220,7 @@
         "canonical_sha256",
         "run",
         "runtime",
+        "presentation",
         "artifact_summary",
         "versions",
         "gate"
@@ -226,6 +234,46 @@
         "artifact_id": {
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
           "title": "Artifact Id",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/ReportEvidenceRef"
+          },
+          "maxItems": 4096,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/ReportFinding"
+          },
+          "maxItems": 4096,
+          "title": "Findings",
+          "type": "array"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "ruleset_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Ruleset Version",
           "type": "string"
         },
         "status": {
@@ -244,46 +292,6 @@
           ],
           "title": "Verdict",
           "type": "string"
-        },
-        "error_code": {
-          "anyOf": [
-            {
-              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Error Code"
-        },
-        "manifest_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Manifest Sha256",
-          "type": "string"
-        },
-        "ruleset_version": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Ruleset Version",
-          "type": "string"
-        },
-        "evidence_refs": {
-          "items": {
-            "$ref": "#/$defs/ReportEvidenceRef"
-          },
-          "maxItems": 4096,
-          "title": "Evidence Refs",
-          "type": "array"
-        },
-        "findings": {
-          "items": {
-            "$ref": "#/$defs/ReportFinding"
-          },
-          "maxItems": 4096,
-          "title": "Findings",
-          "type": "array"
         }
       },
       "required": [
@@ -325,18 +333,45 @@
     "ReportFinding": {
       "additionalProperties": false,
       "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/ReportEvidenceRef"
+          },
+          "maxItems": 64,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
         "finding_id": {
           "pattern": "^(?:finding_[0-9a-f]{32}|af_[0-9a-f]{32})$",
           "title": "Finding Id",
           "type": "string"
         },
-        "source_type": {
-          "enum": [
-            "RUNTIME",
-            "ARTIFACT"
+        "message": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Source Type",
-          "type": "string"
+          "default": null,
+          "title": "Message"
         },
         "occurrence_id": {
           "anyOf": [
@@ -350,62 +385,6 @@
           ],
           "default": null,
           "title": "Occurrence Id"
-        },
-        "verdict": {
-          "enum": [
-            "SAFE",
-            "VULNERABLE",
-            "INCONCLUSIVE",
-            "SKIPPED",
-            "ERROR"
-          ],
-          "title": "Verdict",
-          "type": "string"
-        },
-        "severity": {
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "critical",
-            "unknown"
-          ],
-          "title": "Severity",
-          "type": "string"
-        },
-        "evidence_refs": {
-          "items": {
-            "$ref": "#/$defs/ReportEvidenceRef"
-          },
-          "maxItems": 64,
-          "title": "Evidence Refs",
-          "type": "array"
-        },
-        "rule_id": {
-          "anyOf": [
-            {
-              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Rule Id"
-        },
-        "category": {
-          "anyOf": [
-            {
-              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Category"
         },
         "path": {
           "anyOf": [
@@ -421,11 +400,10 @@
           "default": null,
           "title": "Path"
         },
-        "message": {
+        "rule_id": {
           "anyOf": [
             {
-              "maxLength": 128,
-              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
               "type": "string"
             },
             {
@@ -433,7 +411,37 @@
             }
           ],
           "default": null,
-          "title": "Message"
+          "title": "Rule Id"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical",
+            "unknown"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "source_type": {
+          "enum": [
+            "RUNTIME",
+            "ARTIFACT"
+          ],
+          "title": "Source Type",
+          "type": "string"
+        },
+        "verdict": {
+          "enum": [
+            "SAFE",
+            "VULNERABLE",
+            "INCONCLUSIVE",
+            "SKIPPED",
+            "ERROR"
+          ],
+          "title": "Verdict",
+          "type": "string"
         }
       },
       "required": [
@@ -449,29 +457,9 @@
     "ReportGate": {
       "additionalProperties": false,
       "properties": {
-        "gate_result_id": {
-          "pattern": "^gate_[0-9a-f]{32}$",
-          "title": "Gate Result Id",
-          "type": "string"
-        },
         "baseline_id": {
           "pattern": "^baseline_[0-9a-f]{32}$",
           "title": "Baseline Id",
-          "type": "string"
-        },
-        "run_id": {
-          "pattern": "^run_[0-9a-f]{32}$",
-          "title": "Run Id",
-          "type": "string"
-        },
-        "policy_version": {
-          "const": "gate-v1",
-          "title": "Policy Version",
-          "type": "string"
-        },
-        "input_hash": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Input Hash",
           "type": "string"
         },
         "decision": {
@@ -481,6 +469,26 @@
             "ERROR"
           ],
           "title": "Decision",
+          "type": "string"
+        },
+        "evaluated_at_us": {
+          "minimum": 0,
+          "title": "Evaluated At Us",
+          "type": "integer"
+        },
+        "gate_result_id": {
+          "pattern": "^gate_[0-9a-f]{32}$",
+          "title": "Gate Result Id",
+          "type": "string"
+        },
+        "input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "policy_version": {
+          "const": "gate-v1",
+          "title": "Policy Version",
           "type": "string"
         },
         "reasons": {
@@ -494,10 +502,10 @@
           "title": "Reasons",
           "type": "array"
         },
-        "evaluated_at_us": {
-          "minimum": 0,
-          "title": "Evaluated At Us",
-          "type": "integer"
+        "run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Run Id",
+          "type": "string"
         }
       },
       "required": [
@@ -522,15 +530,6 @@
           "title": "Observer Id",
           "type": "string"
         },
-        "required": {
-          "title": "Required",
-          "type": "boolean"
-        },
-        "status": {
-          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
-          "title": "Status",
-          "type": "string"
-        },
         "reason_codes": {
           "default": [],
           "items": {
@@ -539,6 +538,15 @@
           "maxItems": 16,
           "title": "Reason Codes",
           "type": "array"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "status": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Status",
+          "type": "string"
         }
       },
       "required": [
@@ -549,25 +557,189 @@
       "title": "ReportObserverStatus",
       "type": "object"
     },
-    "ReportRun": {
+    "ReportPresentation": {
       "additionalProperties": false,
+      "description": "冻结 D-3 确定性结果投影，供所有人类报告格式复用。",
       "properties": {
-        "run_id": {
-          "pattern": "^run_[0-9a-f]{32}$",
-          "title": "Run Id",
+        "checked_count": {
+          "minimum": 0,
+          "title": "Checked Count",
+          "type": "integer"
+        },
+        "execution_problem": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Problem"
+        },
+        "headline": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Headline",
           "type": "string"
+        },
+        "inconclusive_count": {
+          "minimum": 0,
+          "title": "Inconclusive Count",
+          "type": "integer"
+        },
+        "issues": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ReportPresentationIssue"
+          },
+          "maxItems": 8192,
+          "title": "Issues",
+          "type": "array"
+        },
+        "limitations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Limitations",
+          "type": "array"
+        },
+        "problem_count": {
+          "minimum": 0,
+          "title": "Problem Count",
+          "type": "integer"
         },
         "project_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Project Id",
           "type": "string"
         },
-        "lifecycle": {
-          "pattern": "^[A-Z][A-Z0-9_]{0,31}$",
-          "title": "Lifecycle",
+        "project_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Project Name",
           "type": "string"
         },
+        "run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "run_lifecycle": {
+          "enum": [
+            "QUEUED",
+            "RUNNING",
+            "COMPLETED",
+            "FAILED",
+            "CANCELLED",
+            "SAFETY_STOPPED"
+          ],
+          "title": "Run Lifecycle",
+          "type": "string"
+        },
+        "safe_count": {
+          "minimum": 0,
+          "title": "Safe Count",
+          "type": "integer"
+        },
+        "scope_statement": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Scope Statement",
+          "type": "string"
+        },
+        "uncovered_count": {
+          "minimum": 0,
+          "title": "Uncovered Count",
+          "type": "integer"
+        },
         "verdict": {
+          "anyOf": [
+            {
+              "enum": [
+                "PASS",
+                "BLOCK",
+                "INCONCLUSIVE"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Verdict"
+        }
+      },
+      "required": [
+        "run_id",
+        "project_id",
+        "project_name",
+        "run_lifecycle",
+        "verdict",
+        "headline",
+        "scope_statement",
+        "checked_count",
+        "safe_count",
+        "problem_count",
+        "inconclusive_count",
+        "uncovered_count"
+      ],
+      "title": "ReportPresentation",
+      "type": "object"
+    },
+    "ReportPresentationIssue": {
+      "additionalProperties": false,
+      "description": "冻结单个权限问题的人类可读表达，不承载新的安全判断。",
+      "properties": {
+        "action": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Action",
+          "type": "string"
+        },
+        "actual_result": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Actual Result",
+          "type": "string"
+        },
+        "conclusion": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Conclusion",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8192,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "expectation": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Expectation",
+          "type": "string"
+        },
+        "explanation": {
+          "maxLength": 480,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "finding_id": {
+          "pattern": "^(?:finding_[0-9a-f]{32}|af_[0-9a-f]{32})$",
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "occurrence_status": {
           "anyOf": [
             {
               "pattern": "^[A-Z][A-Z0-9_]{0,31}$",
@@ -578,8 +750,80 @@
             }
           ],
           "default": null,
-          "title": "Verdict"
+          "title": "Occurrence Status"
         },
+        "relation": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Relation",
+          "type": "string"
+        },
+        "resource": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Resource",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "unknown",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "subject_group": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Subject Group",
+          "type": "string"
+        },
+        "surface_result": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Surface Result",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "verdict": {
+          "enum": [
+            "SAFE",
+            "VULNERABLE",
+            "INCONCLUSIVE"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "title",
+        "subject_group",
+        "action",
+        "resource",
+        "relation",
+        "expectation",
+        "surface_result",
+        "actual_result",
+        "conclusion",
+        "explanation",
+        "severity",
+        "verdict"
+      ],
+      "title": "ReportPresentationIssue",
+      "type": "object"
+    },
+    "ReportRun": {
+      "additionalProperties": false,
+      "properties": {
         "created_at_us": {
           "minimum": 0,
           "title": "Created At Us",
@@ -597,23 +841,20 @@
           ],
           "default": null,
           "title": "Finished At Us"
-        }
-      },
-      "required": [
-        "run_id",
-        "project_id",
-        "lifecycle",
-        "created_at_us"
-      ],
-      "title": "ReportRun",
-      "type": "object"
-    },
-    "ReportRuntime": {
-      "additionalProperties": false,
-      "properties": {
+        },
         "lifecycle": {
           "pattern": "^[A-Z][A-Z0-9_]{0,31}$",
           "title": "Lifecycle",
+          "type": "string"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Run Id",
           "type": "string"
         },
         "verdict": {
@@ -628,29 +869,26 @@
           ],
           "default": null,
           "title": "Verdict"
-        },
+        }
+      },
+      "required": [
+        "run_id",
+        "project_id",
+        "lifecycle",
+        "created_at_us"
+      ],
+      "title": "ReportRun",
+      "type": "object"
+    },
+    "ReportRuntime": {
+      "additionalProperties": false,
+      "properties": {
         "evidence_refs": {
           "items": {
             "$ref": "#/$defs/ReportEvidenceRef"
           },
           "maxItems": 8192,
           "title": "Evidence Refs",
-          "type": "array"
-        },
-        "findings": {
-          "items": {
-            "$ref": "#/$defs/ReportFinding"
-          },
-          "maxItems": 8192,
-          "title": "Findings",
-          "type": "array"
-        },
-        "observer_statuses": {
-          "items": {
-            "$ref": "#/$defs/ReportObserverStatus"
-          },
-          "maxItems": 8192,
-          "title": "Observer Statuses",
           "type": "array"
         },
         "execution_errors": {
@@ -661,6 +899,40 @@
           "maxItems": 256,
           "title": "Execution Errors",
           "type": "array"
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/ReportFinding"
+          },
+          "maxItems": 8192,
+          "title": "Findings",
+          "type": "array"
+        },
+        "lifecycle": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,31}$",
+          "title": "Lifecycle",
+          "type": "string"
+        },
+        "observer_statuses": {
+          "items": {
+            "$ref": "#/$defs/ReportObserverStatus"
+          },
+          "maxItems": 8192,
+          "title": "Observer Statuses",
+          "type": "array"
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Verdict"
         }
       },
       "required": [
@@ -675,6 +947,11 @@
     "ReportVersions": {
       "additionalProperties": false,
       "properties": {
+        "artifact_schema_version": {
+          "const": "1",
+          "title": "Artifact Schema Version",
+          "type": "string"
+        },
         "contract_id": {
           "maxLength": 128,
           "minLength": 1,
@@ -692,29 +969,19 @@
           "title": "Engine Version",
           "type": "string"
         },
-        "runner_schema_version": {
-          "const": "4",
-          "title": "Runner Schema Version",
-          "type": "string"
-        },
         "evidence_schema_version": {
-          "const": "4",
+          "const": "1",
           "title": "Evidence Schema Version",
           "type": "string"
         },
         "observer_schema_version": {
-          "const": "3",
+          "const": "1",
           "title": "Observer Schema Version",
           "type": "string"
         },
-        "artifact_schema_version": {
-          "const": "2",
-          "title": "Artifact Schema Version",
-          "type": "string"
-        },
         "report_schema_version": {
-          "const": "4",
-          "default": "4",
+          "const": "1",
+          "default": "1",
           "title": "Report Schema Version",
           "type": "string"
         },
@@ -726,6 +993,11 @@
           "maxItems": 16,
           "title": "Ruleset Versions",
           "type": "array"
+        },
+        "runner_schema_version": {
+          "const": "1",
+          "title": "Runner Schema Version",
+          "type": "string"
         }
       },
       "required": [

@@ -34,12 +34,12 @@ export type ReportDto = {
 }
 export type FindingIdentityDto = {
   finding_id?: string
-  permission_intent?: string
+  permission_intent?: string | string[]
   problem_category?: string
-  subject_class?: string
+  subject_class?: string | string[]
   action?: string
-  resource_class?: string
-  resource_relation?: string
+  resource_class?: string | string[]
+  resource_relation?: string | string[]
 }
 export type FindingOccurrenceDto = {
   occurrence_id?: string
@@ -95,11 +95,78 @@ export type EvidenceDto = {
   [key: string]: unknown
 }
 
+export type ResultPresentationIssueDto = {
+  finding_id: string
+  title: string
+  subject_group: string
+  action: string
+  resource: string
+  relation: string
+  expectation: string
+  surface_result: string
+  actual_result: string
+  conclusion: string
+  explanation: string
+  severity: 'unknown' | 'low' | 'medium' | 'high' | 'critical'
+  evidence_refs: string[]
+  verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'
+  occurrence_status: string | null
+}
+
+export type ResultPresentationDto = {
+  run_id: string
+  project_id: string
+  project_name: string
+  run_lifecycle: string
+  verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE' | null
+  headline: string
+  scope_statement: string
+  checked_count: number
+  safe_count: number
+  problem_count: number
+  inconclusive_count: number
+  uncovered_count: number
+  execution_problem: string | null
+  issues: ResultPresentationIssueDto[]
+  limitations: string[]
+}
+
+export type HistoryChangeDto = {
+  finding_id: string
+  title: string
+  subject_group: string
+  action: string
+  resource: string
+  relation: string
+  status: 'NEW' | 'FIXED' | 'PERSISTENT' | 'INCONCLUSIVE' | 'NOT_COVERED'
+  status_label: string
+  explanation: string
+  severity: string
+  evidence_refs: string[]
+  current_verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE' | null
+  occurrence_status: string | null
+}
+
+export type HistoryComparisonDto = {
+  run_id: string
+  previous_run_id: string | null
+  checked_at_us: number
+  changes: HistoryChangeDto[]
+}
+
+export type HistoryViewDto = {
+  project_id: string
+  comparisons: HistoryComparisonDto[]
+}
+
 export const resultsApi = {
   reports: (runId: string) => request<ReportDto[]>(`/api/runs/${runId}/reports`),
   report: (runId: string, reportId: string) => request<ReportDto>(`/api/runs/${runId}/reports/${encodeURIComponent(reportId)}`),
   findings: (runId: string) => request<FindingDto[]>(`/api/runs/${runId}/findings`),
   evidence: (runId: string) => request<EvidenceDto[]>(`/api/runs/${runId}/evidence`),
   evidenceDetail: (runId: string, evidenceId: string) => request<EvidenceDto>(`/api/runs/${runId}/evidence/${evidenceId}`),
-  reportFormat: (runId: string, reportId: string, format: 'json' | 'html' | 'sarif' | 'junit') => `/api/runs/${runId}/reports/${encodeURIComponent(reportId)}/formats/${format}`,
+  reportView: (runId: string, reportId: string) => `/api/runs/${encodeURIComponent(runId)}/reports/${encodeURIComponent(reportId)}/view`,
+  presentation: (runId: string) => request<ResultPresentationDto>(`/api/runs/${runId}/presentation`),
+  history: (projectId: string) => request<HistoryViewDto>(`/api/projects/${projectId}/results/history`),
+  reportFormat: (runId: string, reportId: string, format: 'json' | 'html' | 'sarif' | 'junit') => `/api/runs/${encodeURIComponent(runId)}/reports/${encodeURIComponent(reportId)}/formats/${format}`,
 }

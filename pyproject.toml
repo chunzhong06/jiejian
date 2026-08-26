@@ -25,6 +25,8 @@ jiejian = "product.backend.cli:main"
 
 [dependency-groups]
 dev = [
+    # 自定义 Wheel 钩子由编辑器和开发检查直接导入，开发环境必须能够解析其公开接口。
+    "hatchling>=1.27,<2",
     "pytest>=8.3,<9",
     # Conda 的 Python 基线保留 distutils-precedence.pth，开发同步必须由 uv 提供其入口。
     "setuptools>=80,<84",
@@ -36,7 +38,9 @@ only-include = ["product/backend", "product/protocols"]
 [tool.hatch.build.targets.wheel.force-include]
 "product/config/default.toml" = "product/config/default.toml"
 "product/config/toolchain.json" = "product/config/toolchain.json"
-"var/runtime/frontend" = "product/frontend/dist"
+
+[tool.hatch.build.hooks.custom]
+path = "scripts/hatch_build.py"
 
 [tool.pytest.ini_options]
 addopts = "-ra"

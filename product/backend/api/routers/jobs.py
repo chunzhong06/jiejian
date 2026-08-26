@@ -42,6 +42,21 @@ def build_jobs_router(context: ApplicationCore) -> APIRouter:
         )
         return data_response(result.model_dump(mode="json"))
 
+    @router.get("/api/jobs/{job_id}/progress", response_model=ApiResponse)
+    async def job_progress(job_id: str):
+        with context.uow_factory() as work:
+            job = work.jobs.get(job_id)
+        if job is None:
+            raise JiejianError(ErrorCode.JOB_NOT_FOUND, "任务不存在")
+        events = context.runner_progress_reader.read(job)
+        return data_response(
+            {
+                "job_id": job_id,
+                "attempt": job.attempt,
+                "events": [item.model_dump(mode="json") for item in events],
+            }
+        )
+
     @router.get("/api/jobs/{job_id}/events", response_model=None)
     async def job_events(
         job_id: str,

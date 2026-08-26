@@ -1,3 +1,5 @@
+# 验证作业运行时中的并发租约恢复。
+
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor

@@ -18,7 +18,7 @@ from pathlib import Path
 
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
 from product.backend.infra.artifacts.scan_job import ArtifactCheckJobHandler
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.handlers import JobHandlerRegistry
 from product.backend.infra.runtime.jobs.recording import RecordingJobHandler

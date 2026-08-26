@@ -16,12 +16,6 @@
     "FormUrlEncodedBody": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "FORM_URLENCODED",
-          "default": "FORM_URLENCODED",
-          "title": "Kind",
-          "type": "string"
-        },
         "fields": {
           "default": [],
           "items": {
@@ -30,6 +24,12 @@
           "maxItems": 128,
           "title": "Fields",
           "type": "array"
+        },
+        "kind": {
+          "const": "FORM_URLENCODED",
+          "default": "FORM_URLENCODED",
+          "title": "Kind",
+          "type": "string"
         }
       },
       "title": "FormUrlEncodedBody",
@@ -39,13 +39,6 @@
       "additionalProperties": false,
       "description": "受控 Query/Header/Form 字段；字段值只能是 literal 或已声明 Slot。",
       "properties": {
-        "name": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9_.~\\-]+$",
-          "title": "Name",
-          "type": "string"
-        },
         "literal": {
           "anyOf": [
             {
@@ -58,6 +51,13 @@
           ],
           "default": null,
           "title": "Literal"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
         },
         "slot_id": {
           "anyOf": [
@@ -127,17 +127,11 @@
       "additionalProperties": false,
       "description": "Multipart 只允许 literal、Slot 或已登记 fixture/artifact 标识。",
       "properties": {
-        "name": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9_.~\\-]+$",
-          "title": "Name",
-          "type": "string"
-        },
-        "literal": {
+        "content_type": {
           "anyOf": [
             {
-              "maxLength": 1024,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$",
               "type": "string"
             },
             {
@@ -145,33 +139,7 @@
             }
           ],
           "default": null,
-          "title": "Literal"
-        },
-        "slot_id": {
-          "anyOf": [
-            {
-              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Slot Id"
-        },
-        "fixture_artifact_id": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Fixture Artifact Id"
+          "title": "Content Type"
         },
         "filename": {
           "anyOf": [
@@ -187,11 +155,10 @@
           "default": null,
           "title": "Filename"
         },
-        "content_type": {
+        "fixture_artifact_id": {
           "anyOf": [
             {
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$",
+              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
               "type": "string"
             },
             {
@@ -199,7 +166,40 @@
             }
           ],
           "default": null,
-          "title": "Content Type"
+          "title": "Fixture Artifact Id"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
         }
       },
       "required": [
@@ -211,65 +211,6 @@
     "ResponseExtractor": {
       "additionalProperties": false,
       "properties": {
-        "extractor_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Extractor Id",
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/$defs/ResponseExtractorKind"
-        },
-        "json_path": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Json Path"
-        },
-        "header_name": {
-          "anyOf": [
-            {
-              "maxLength": 128,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Header Name"
-        },
-        "cookie_name": {
-          "anyOf": [
-            {
-              "maxLength": 128,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cookie Name"
-        },
-        "selector": {
-          "anyOf": [
-            {
-              "maxLength": 256,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Selector"
-        },
         "attribute": {
           "anyOf": [
             {
@@ -284,6 +225,52 @@
           "default": null,
           "title": "Attribute"
         },
+        "cookie_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cookie Name"
+        },
+        "extractor_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Extractor Id",
+          "type": "string"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "kind": {
+          "$ref": "#/$defs/ResponseExtractorKind"
+        },
         "max_length": {
           "default": 256,
           "maximum": 4096,
@@ -295,6 +282,19 @@
           "default": false,
           "title": "Secret",
           "type": "boolean"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
         }
       },
       "required": [
@@ -319,75 +319,22 @@
     "ValueSlot": {
       "additionalProperties": false,
       "properties": {
-        "slot_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Slot Id",
-          "type": "string"
-        },
-        "source": {
-          "$ref": "#/$defs/ValueSlotSource"
-        },
         "consumer": {
           "$ref": "#/$defs/ValueSlotConsumer"
         },
-        "value_type": {
-          "$ref": "#/$defs/ValueType",
-          "default": "STRING"
-        },
-        "max_length": {
-          "default": 256,
-          "maximum": 4096,
-          "minimum": 1,
-          "title": "Max Length",
-          "type": "integer"
-        },
-        "secret": {
-          "default": false,
-          "title": "Secret",
-          "type": "boolean"
-        },
-        "literal": {
-          "default": null,
-          "title": "Literal"
-        },
-        "secret_ref": {
+        "consumer_step": {
           "anyOf": [
             {
-              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
-              "type": "string"
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Secret Ref"
-        },
-        "source_path": {
-          "anyOf": [
-            {
-              "maxLength": 256,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Source Path"
-        },
-        "producer_step_id": {
-          "anyOf": [
-            {
-              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Producer Step Id"
+          "title": "Consumer Step"
         },
         "consumer_step_id": {
           "anyOf": [
@@ -401,6 +348,17 @@
           ],
           "default": null,
           "title": "Consumer Step Id"
+        },
+        "literal": {
+          "default": null,
+          "title": "Literal"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
         },
         "producer_step": {
           "anyOf": [
@@ -416,19 +374,61 @@
           "default": null,
           "title": "Producer Step"
         },
-        "consumer_step": {
+        "producer_step_id": {
           "anyOf": [
             {
-              "maximum": 255,
-              "minimum": 0,
-              "type": "integer"
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Consumer Step"
+          "title": "Producer Step Id"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "secret_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secret Ref"
+        },
+        "slot_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ValueSlotSource"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Path"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
         }
       },
       "required": [
@@ -479,6 +479,50 @@
   "additionalProperties": false,
   "description": "单请求受控模板；不接受 URL、脚本、任意文件或保留认证头。",
   "properties": {
+    "body": {
+      "discriminator": {
+        "mapping": {
+          "EMPTY": "#/$defs/EmptyBody",
+          "FORM_URLENCODED": "#/$defs/FormUrlEncodedBody",
+          "JSON": "#/$defs/JsonBody",
+          "MULTIPART": "#/$defs/MultipartBody"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/EmptyBody"
+        },
+        {
+          "$ref": "#/$defs/JsonBody"
+        },
+        {
+          "$ref": "#/$defs/FormUrlEncodedBody"
+        },
+        {
+          "$ref": "#/$defs/MultipartBody"
+        }
+      ],
+      "title": "Body"
+    },
+    "headers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/HttpParameter"
+      },
+      "maxItems": 128,
+      "title": "Headers",
+      "type": "array"
+    },
+    "input_slots": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ValueSlot"
+      },
+      "maxItems": 128,
+      "title": "Input Slots",
+      "type": "array"
+    },
     "method": {
       "enum": [
         "GET",
@@ -507,50 +551,6 @@
       "title": "Query",
       "type": "array"
     },
-    "headers": {
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/HttpParameter"
-      },
-      "maxItems": 128,
-      "title": "Headers",
-      "type": "array"
-    },
-    "body": {
-      "discriminator": {
-        "mapping": {
-          "EMPTY": "#/$defs/EmptyBody",
-          "FORM_URLENCODED": "#/$defs/FormUrlEncodedBody",
-          "JSON": "#/$defs/JsonBody",
-          "MULTIPART": "#/$defs/MultipartBody"
-        },
-        "propertyName": "kind"
-      },
-      "oneOf": [
-        {
-          "$ref": "#/$defs/EmptyBody"
-        },
-        {
-          "$ref": "#/$defs/JsonBody"
-        },
-        {
-          "$ref": "#/$defs/FormUrlEncodedBody"
-        },
-        {
-          "$ref": "#/$defs/MultipartBody"
-        }
-      ],
-      "title": "Body"
-    },
-    "input_slots": {
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/ValueSlot"
-      },
-      "maxItems": 128,
-      "title": "Input Slots",
-      "type": "array"
-    },
     "response_extractors": {
       "default": [],
       "items": {
@@ -559,6 +559,12 @@
       "maxItems": 128,
       "title": "Response Extractors",
       "type": "array"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
     }
   },
   "required": [

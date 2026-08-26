@@ -3,6 +3,12 @@
     "ReportPackageFile": {
       "additionalProperties": false,
       "properties": {
+        "byte_count": {
+          "maximum": 16777216,
+          "minimum": 1,
+          "title": "Byte Count",
+          "type": "integer"
+        },
         "path": {
           "enum": [
             "report.json",
@@ -12,12 +18,6 @@
           ],
           "title": "Path",
           "type": "string"
-        },
-        "byte_count": {
-          "maximum": 16777216,
-          "minimum": 1,
-          "title": "Byte Count",
-          "type": "integer"
         },
         "sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -36,47 +36,10 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "4",
-      "default": "4",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "report_id": {
-      "pattern": "^report_[0-9a-f]{32}$",
-      "title": "Report Id",
-      "type": "string"
-    },
-    "run_id": {
-      "pattern": "^run_[0-9a-f]{32}$",
-      "title": "Run Id",
-      "type": "string"
-    },
-    "report_type": {
-      "enum": [
-        "BASE",
-        "GATE"
-      ],
-      "title": "Report Type",
-      "type": "string"
-    },
     "base_report_id": {
       "pattern": "^report_[0-9a-f]{32}$",
       "title": "Base Report Id",
       "type": "string"
-    },
-    "gate_result_id": {
-      "anyOf": [
-        {
-          "pattern": "^gate_[0-9a-f]{32}$",
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Gate Result Id"
     },
     "canonical_sha256": {
       "pattern": "^[0-9a-f]{64}$",
@@ -91,6 +54,43 @@
       "minItems": 4,
       "title": "Files",
       "type": "array"
+    },
+    "gate_result_id": {
+      "anyOf": [
+        {
+          "pattern": "^gate_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gate Result Id"
+    },
+    "report_id": {
+      "pattern": "^report_[0-9a-f]{32}$",
+      "title": "Report Id",
+      "type": "string"
+    },
+    "report_type": {
+      "enum": [
+        "BASE",
+        "GATE"
+      ],
+      "title": "Report Type",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
     }
   },
   "required": [

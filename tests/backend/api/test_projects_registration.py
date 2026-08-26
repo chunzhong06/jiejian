@@ -1,10 +1,10 @@
+# 验证后端 API中的项目注册与就绪度接口。
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi.testclient import TestClient
-
-from product.backend.api import create_app
+from tests.fixtures.control_plane import TestClient, create_app
 
 
 def test_project_register_uses_profile_without_governed_binding(tmp_path: Path) -> None:
@@ -18,3 +18,9 @@ def test_project_register_uses_profile_without_governed_binding(tmp_path: Path) 
         assert response.status_code == 200
         assert response.json()["data"]["governed_contract_id"] is None
         assert response.json()["data"]["governed_contract_version"] is None
+
+        readiness = client.get(
+            f"/api/projects/{response.json()['data']['project_id']}/readiness"
+        )
+        assert readiness.status_code == 200
+        assert readiness.json()["data"]["endpoint_status"] == "LEGACY_PROFILE"

@@ -26,8 +26,8 @@ from product.backend.infra.runtime.jobs.handlers import JobHandler
 from product.backend.infra.artifacts.run_packages import StagedAttempt
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore, required_secret_names
-from product.backend.infra.runtime.runner_supervisor import RunnerSupervisor
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, required_secret_names
+from product.backend.infra.runtime.runner.supervisor import RunnerSupervisor
 from product.backend.workflows.results.finalizer import ResultFinalizer
 import logging
 

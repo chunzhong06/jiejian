@@ -17,6 +17,36 @@
 .onboarding-form-grid { display: grid; gap: 12px 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .onboarding-form-grid .ant-form-item { margin-bottom: 8px; min-width: 0; }
 .access-advanced { margin-bottom: 20px; }
+.application-setup { display: grid; gap: 20px; margin-bottom: 24px; }
+.application-setup > .ant-alert { margin-bottom: 0; }
+.application-step { border-color: #dbeafe; }
+.application-step .ant-card-head-title { color: #1e3a8a; }
+.application-step .ant-card-body { display: grid; gap: 20px; padding: 24px; }
+.application-welcome { background: linear-gradient(120deg, #eef2ff, #ecfeff); }
+.endpoint-list { width: 100%; }
+.application-discovery { background: #f8fafc; border-radius: 8px; display: grid; gap: 8px; padding: 12px; }
+.candidate-row { align-items: stretch !important; }
+.candidate-main { display: grid; gap: 12px; width: 100%; }
+.candidate-review-block { display: grid; gap: 16px; padding: 4px 0 12px; }
+.candidate-review-block + .candidate-review-block { border-top: 1px solid #dbe3ef; padding-top: 28px; }
+.candidate-review-heading { display: grid; gap: 4px; }
+.candidate-review-heading .ant-typography { margin: 0; }
+.candidate-section { border-radius: 12px; padding: 20px 22px; }
+.candidate-section-heading { align-items: center; display: flex; gap: 16px; justify-content: space-between; }
+.candidate-section-heading .ant-typography { margin: 0; }
+.candidate-section .ant-list-empty-text { padding: 24px 0 18px; }
+.candidate-section-confirmed { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.candidate-section-pending { background: #eff6ff; border: 1px solid #bfdbfe; }
+.candidate-row { padding-block: 16px !important; }
+.candidate-row-confirmed { border-inline-start: 4px solid #22c55e; padding-inline-start: 16px !important; }
+.candidate-title { font-size: 16px; line-height: 1.6; }
+.candidate-row-ignored { color: #64748b; }
+.candidate-row-ignored .candidate-main { grid-template-columns: auto 1fr; }
+.candidate-row-ignored .candidate-main > :last-child { grid-column: 1 / -1; }
+.application-manual-section { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 20px 22px; }
+.application-manual-section > .ant-typography { margin: 0 0 12px; }
+.application-manual { align-items: center; display: grid; gap: 12px; grid-template-columns: minmax(280px, 680px) max-content; width: 100%; }
+.application-manual-path { max-width: 680px; width: 100%; }
 
 @media (max-width: 900px) { .access-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) {
@@ -27,6 +57,11 @@
   .overview-list, .onboarding-form-grid { grid-template-columns: 1fr; }
   .onboarding-manual-path { align-items: stretch; flex-direction: column; }
   .onboarding-manual-path .ant-btn { width: 100%; }
+  .candidate-section, .application-manual-section { padding: 16px; }
+  .application-manual { align-items: stretch; display: flex; flex-direction: column; }
+  .application-manual .ant-btn, .application-manual .ant-input { width: 100%; }
+  .application-manual-path { align-items: stretch; display: flex; flex-direction: column; }
+  .application-manual-path .ant-btn, .application-manual-path .ant-input { width: 100%; }
 }
 @media (max-width: 768px) {
   .onboarding-manual-path { width: 100%; }

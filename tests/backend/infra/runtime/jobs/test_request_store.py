@@ -1,3 +1,5 @@
+# 验证作业运行时中的执行请求存储。
+
 from __future__ import annotations
 
 import hashlib
@@ -7,14 +9,14 @@ from pathlib import Path
 import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.runtime.job_requests import (
+from product.backend.infra.runtime.jobs.requests import (
     ExecutionRequestStore,
     PersistedExecutionRequest,
     canonical_execution_request_bytes,
     parse_execution_request,
     required_secret_names,
 )
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, minimal_process_environment
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, minimal_process_environment
 from tests.fixtures.runtime_environment import runtime_identity_environment
 from tests.fixtures.runner import runner_input as make_runner_input
 
@@ -48,7 +50,7 @@ def test_request_store_rejects_drift_duplicate_keys_and_known_secrets(
     job_id = "job_fedcba9876543210fedcba9876543210"
     request_hash, _ = store.write(job_id, request)
     path = store.path_for(job_id)
-    path.write_bytes(path.read_bytes().replace(b'"schema_version":"4"', b'"schema_version":"4","schema_version":"4"', 1))
+    path.write_bytes(path.read_bytes().replace(b'"schema_version":"1"', b'"schema_version":"1","schema_version":"1"', 1))
     drift_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     with pytest.raises(JiejianError) as duplicate:
         store.load(job_id, expected_hash=drift_hash)
@@ -95,7 +97,7 @@ def test_request_parser_and_minimal_environment_do_not_copy_parent_values(
 def test_current_request_store_dispatches_canonical_and_uses_minimal_secret_refs(tmp_path: Path) -> None:
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="4",
+        schema_version="1",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )

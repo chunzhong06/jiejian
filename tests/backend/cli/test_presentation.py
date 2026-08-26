@@ -1,5 +1,8 @@
+# 验证命令行入口中的用户可见信息呈现。
+
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,8 +11,10 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
+from product.backend.cli.commands import guide as guide_commands
+from product.backend.cli.commands import results as result_commands
 from product.backend.cli.app import app
-from product.backend.cli.presentation import configure_presentation, emit_guide_result, emit_human, fail
+from product.backend.cli.presentation import configure_presentation, emit_human, emit_result_presentation, fail
 from product.backend.core.errors import ErrorCode, JiejianError
 
 
@@ -63,8 +68,11 @@ def test_human_error_is_separate_from_machine_error() -> None:
     assert machine_error["message"] == "Web 执行配置（WebExecutionProfile）文件不可读取"
 
 
-def test_ci_forces_machine_mode_even_when_human_is_requested() -> None:
-    result = CliRunner().invoke(app, ["--human", "ci", "missing.yaml"])
+def test_ci_forces_machine_mode_even_when_human_is_requested(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        app,
+        ["--var-dir", str(tmp_path / "var"), "--human", "ci", "missing.yaml"],
+    )
 
     assert result.exit_code == 4
     assert result.stdout == ""
@@ -103,34 +111,111 @@ def test_verbose_and_json_are_rejected_as_ambiguous() -> None:
     assert "--verbose 只能用于普通人类可读输出" in result.stderr
 
 
-def test_guide_result_uses_surface_and_real_effect_language(capsys) -> None:
-    evidence = SimpleNamespace(
-        verdict="VULNERABLE",
-        case_snapshot=SimpleNamespace(
-            subject_id="attacker",
-            action_id="modify",
-            resource_ids=("owner-resource",),
-        ),
-        execution_fact=SimpleNamespace(outcome="DENIED"),
-        observation_facts=(SimpleNamespace(effect="CONFIRMED"),),
-    )
+def test_result_presentation_uses_surface_and_real_effect_language(capsys) -> None:
     result = SimpleNamespace(
         verdict="BLOCK",
-        evidence=(evidence,),
+        run_lifecycle="COMPLETED",
+        headline="发现权限问题",
+        scope_statement="可信执行与观察事实确认存在不符合权限预期的真实影响。",
+        checked_count=1,
+        safe_count=0,
+        problem_count=1,
+        inconclusive_count=0,
+        uncovered_count=0,
+        execution_problem=None,
+        issues=(SimpleNamespace(
+            finding_id="finding_demo",
+            title="成员账号不应对文档执行修改",
+            conclusion="发现权限问题",
+            explanation="页面或接口虽然显示已拒绝，但外部可信观察确认真实资源已经变化；权限限制没有真正阻止修改，表面拒绝没有阻止真实副作用。",
+            verdict=SimpleNamespace(value="VULNERABLE"),
+        ),),
+        limitations=(),
         run_id="run_demo",
-        reason_codes=(),
+        project_id="project_demo",
     )
     configure_presentation("human")
-    emit_guide_result(result)
+    emit_result_presentation(result)
     output = capsys.readouterr().out
     configure_presentation("auto")
 
-    assert "发现 1 个权限问题" in output
-    assert "普通成员修改了不属于自己的资源" in output
-    assert "系统表面结果\n└─ 请求被拒绝" in output
-    assert "真实结果\n└─ 资源内容已经发生变化" in output
-    assert "权限限制没有真正阻止这次操作" in output
+    assert "发现权限问题" in output
+    assert "成员账号不应对文档执行修改" in output
+    assert "权限限制没有真正阻止修改" in output
     assert "run_demo" not in output
+
+
+def test_explicit_json_report_stays_canonical_in_human_mode(monkeypatch, capsys) -> None:
+    reports = SimpleNamespace(
+        read=lambda run_id, report_id: {
+            "run_id": run_id,
+            "report_id": report_id,
+            "runtime": {"verdict": "BLOCK"},
+        }
+    )
+    application = SimpleNamespace(
+        result_presentation=SimpleNamespace(
+            build=lambda _run_id: pytest.fail("显式 JSON 不应读取人类结果投影")
+        ),
+        result_finalizer=SimpleNamespace(
+            status=lambda _run_id: SimpleNamespace(base_report_id="report_demo")
+        ),
+        reports=reports,
+    )
+
+    @contextmanager
+    def fake_scope(_context):
+        yield application
+
+    monkeypatch.setattr(result_commands, "application_scope", fake_scope)
+    configure_presentation("human")
+    try:
+        result_commands.report_command(
+            SimpleNamespace(),
+            "run_demo",
+            output_format="json",
+            gate_result_id=None,
+            report_id=None,
+        )
+        payload = json.loads(capsys.readouterr().out)
+    finally:
+        configure_presentation("auto", machine_only=False)
+
+    assert payload["runtime"]["verdict"] == "BLOCK"
+    assert payload["report_id"] == "report_demo"
+
+
+def test_guide_submits_current_scope_without_profile_choice(monkeypatch, capsys) -> None:
+    project = SimpleNamespace(project_id="project_demo", name="演示应用")
+    submission = SimpleNamespace(job=SimpleNamespace(job_id="job_demo"))
+    application = SimpleNamespace(
+        projects=SimpleNamespace(list=lambda: (project,)),
+        assistant_guidance=SimpleNamespace(
+            get=lambda _project_id: SimpleNamespace(current_scope_runnable=True)
+        ),
+        checks=SimpleNamespace(
+            submit=lambda project_id, **_: (
+                submission,
+                SimpleNamespace(project_id=project_id),
+                (),
+            )
+        ),
+    )
+
+    @contextmanager
+    def fake_scope(_context):
+        yield application
+
+    monkeypatch.setattr(guide_commands, "application_scope", fake_scope)
+    monkeypatch.setattr(guide_commands, "_choose", lambda _title, _items: 0)
+    monkeypatch.setattr(guide_commands, "_pause", lambda: None)
+
+    guide_commands._existing_application(SimpleNamespace())
+    output = capsys.readouterr().out
+
+    assert "检查已提交" in output
+    assert "任务已进入队列：job_demo" in output
+    assert "Profile" not in output
 
 
 def test_human_error_recovery_is_category_specific(capsys) -> None:

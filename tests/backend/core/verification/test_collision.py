@@ -1,3 +1,5 @@
+# 验证验证领域中的并发碰撞判定。
+
 from __future__ import annotations
 
 from product.backend.core.lifecycle import RunVerdict

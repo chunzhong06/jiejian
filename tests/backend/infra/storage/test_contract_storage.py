@@ -1,3 +1,5 @@
+# 验证持久化基础设施中的权限契约存储。
+
 from __future__ import annotations
 
 from collections.abc import Iterator

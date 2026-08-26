@@ -1,0 +1,210 @@
+/* =============================================================================
+ * 测试账号页面
+ *
+ * 定位
+ *   已确认应用权限组与业务流程录制之间的普通用户登录状态准备步骤
+ *
+ * 职责
+ *   推荐每个权限组的账号｜解释秘密边界｜显式确认保存｜处理复核、重置和删除
+ *
+ * 边界
+ *   页面不收集密码；登录只发生在独立浏览器，API 只返回非秘密状态
+ * ============================================================================= */
+
+import { useEffect, useMemo, useState } from 'react'
+import { Alert, Button, Card, Collapse, Divider, Empty, Input, List, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
+import { ApiError } from '../../api/http'
+import { projectsApi, type ProjectDto, type RoleCandidateDto } from '../../api/projects'
+import {
+  testIdentitiesApi,
+  type IdentityPreparationDto,
+  type TestIdentityDto,
+} from '../../api/testIdentities'
+import { PageTaskHeader } from '../../components/PageTaskHeader'
+import './identities.css'
+
+function statusTag(identity: TestIdentityDto) {
+  if (identity.status === 'PREPARED') return <Tag color="green">登录状态已准备</Tag>
+  if (identity.status === 'NEEDS_REVIEW') return <Tag color="orange">需要重新确认</Tag>
+  return <Tag>尚未准备登录状态</Tag>
+}
+
+function methodLabel(identity: TestIdentityDto) {
+  if (identity.auth_method === 'COOKIE_SESSION') return `当前主机 Cookie（${identity.cookie_count} 项）`
+  if (identity.auth_method === 'BEARER') return '当前地址 Bearer 登录状态'
+  return '尚未保存'
+}
+
+function preparationStatus(preparation: IdentityPreparationDto | null) {
+  if (!preparation) return '等待选择权限组'
+  if (preparation.status === 'WAITING_FOR_LOGIN') return '等待你完成登录'
+  if (preparation.status === 'SAVING') return '正在保存登录状态'
+  if (preparation.status === 'PREPARED') return '登录状态已准备'
+  return preparation.status === 'FAILED' ? '登录准备失败' : preparation.message
+}
+
+function preparationNext(preparation: IdentityPreparationDto | null) {
+  if (!preparation) return '先选择权限组并添加测试账号'
+  if (['STARTING', 'WAITING_FOR_LOGIN', 'SAVING'].includes(preparation.status)) return '完成当前登录准备'
+  if (preparation.status === 'PREPARED') return '继续准备业务流程'
+  if (['FAILED', 'UNSUPPORTED', 'CANCELLED'].includes(preparation.status)) return '查看当前提示并重试或关闭'
+  return '完成当前登录准备'
+}
+
+export function TestIdentityPage({ project, onError, onNext }: {
+  project: ProjectDto
+  onError: (error: ApiError) => void
+  onNext: () => void
+}) {
+  const [roles, setRoles] = useState<RoleCandidateDto[]>([])
+  const [identities, setIdentities] = useState<TestIdentityDto[]>([])
+  const [selectedRole, setSelectedRole] = useState('')
+  const [label, setLabel] = useState('')
+  const [preparation, setPreparation] = useState<IdentityPreparationDto | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const load = async () => {
+    const [understanding, accounts] = await Promise.all([
+      projectsApi.understanding(project.project_id),
+      testIdentitiesApi.list(project.project_id),
+    ])
+    const confirmed = understanding.role_candidates.filter((item) => item.decision === 'CONFIRMED' && !item.stale)
+    setRoles(confirmed)
+    setIdentities(accounts)
+    setSelectedRole((current) => current || confirmed[0]?.candidate_id || '')
+  }
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    void load().catch((error) => { if (active) onError(error as ApiError) }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [project.project_id])
+
+  useEffect(() => {
+    if (!preparation || ['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status)) return
+    const timer = window.setTimeout(() => {
+      void testIdentitiesApi.preparation(preparation.preparation_id).then(async (next) => {
+        setPreparation(next)
+        if (next.status === 'PREPARED') await load()
+      }).catch((error) => onError(error as ApiError))
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [preparation, project.project_id])
+
+  const counts = useMemo(() => Object.fromEntries(roles.map((role) => [
+    role.candidate_id,
+    identities.filter((identity) => identity.role_candidate_id === role.candidate_id).length,
+  ])), [roles, identities])
+  const preparationIdentity = preparation ? identities.find((identity) => identity.identity_id === preparation.identity_id) : undefined
+
+  const createIdentity = async () => {
+    if (!selectedRole || !label.trim()) return
+    setBusy(true)
+    try {
+      await testIdentitiesApi.create(project.project_id, selectedRole, label.trim())
+      setLabel('')
+      await load()
+    } catch (error) { onError(error as ApiError) } finally { setBusy(false) }
+  }
+
+  const start = async (identityId: string) => {
+    setBusy(true)
+    try { setPreparation(await testIdentitiesApi.startPreparation(identityId)) }
+    catch (error) { onError(error as ApiError) } finally { setBusy(false) }
+  }
+
+  const confirm = async () => {
+    if (!preparation) return
+    setBusy(true)
+    try { setPreparation(await testIdentitiesApi.confirmPreparation(preparation.preparation_id)) }
+    catch (error) { onError(error as ApiError) } finally { setBusy(false) }
+  }
+
+  const cancel = async () => {
+    if (!preparation) return
+    setBusy(true)
+    try { setPreparation(await testIdentitiesApi.cancelPreparation(preparation.preparation_id)) }
+    catch (error) { onError(error as ApiError) } finally { setBusy(false) }
+  }
+
+  const reset = (identity: TestIdentityDto) => Modal.confirm({
+    title: `清除“${identity.label}”的登录状态？`,
+    content: '界鉴会精确删除该测试账号保存的 Cookie 或 Token；账号与权限组绑定会保留。',
+    okText: '清除登录状态', cancelText: '取消', okButtonProps: { danger: true },
+    onOk: async () => {
+      try { await testIdentitiesApi.reset(identity.identity_id); await load() }
+      catch (error) { onError(error as ApiError); throw error }
+    },
+  })
+
+  const remove = (identity: TestIdentityDto) => Modal.confirm({
+    title: `删除测试账号“${identity.label}”？`,
+    content: '界鉴会先删除该账号的全部安全登录状态；如果安全存储清理失败，账号信息会保留以便重试。',
+    okText: '删除测试账号', cancelText: '取消', okButtonProps: { danger: true },
+    onOk: async () => {
+      try { await testIdentitiesApi.delete(identity.identity_id); await load() }
+      catch (error) { onError(error as ApiError); throw error }
+    },
+  })
+
+  if (loading) return <Card><Spin /> 正在读取测试账号…</Card>
+
+  return <div className="identity-page">
+    <PageTaskHeader title="测试账号" description="为已确认权限组准备一个安全登录状态，供后续业务流程录制和检查使用。" status={preparationStatus(preparation)} next={preparationNext(preparation)} />
+    <Card className="identity-intro" title="测试账号">
+      <Typography.Title level={3}>为已确认权限组准备真实测试账号</Typography.Title>
+      <Typography.Paragraph>界鉴不会要求你把账号密码长期交给它。点击“打开登录浏览器”后，请在独立窗口中自行完成密码、单点登录或多因素认证；只有你明确确认后，界鉴才保存当前目标所需的有限登录状态。</Typography.Paragraph>
+      <Alert type="info" showIcon message="默认每个已确认权限组准备一个测试账号" description="缺少账号只会形成覆盖缺口，不会被当作检查通过。同权限组资源隔离检查可能还会建议准备第二个账号。" />
+    </Card>
+
+    <Card title="权限组准备情况">
+      <Space wrap>
+        {roles.map((role) => <Tag key={role.candidate_id} color={counts[role.candidate_id] ? 'green' : 'orange'}>{role.display_name} · {counts[role.candidate_id] || 0} 个账号</Tag>)}
+      </Space>
+      {roles.length === 0 && <Empty description="请先在应用接入中确认至少一个权限组" />}
+      {roles.length > 0 && <Space.Compact className="identity-create">
+        <Select aria-label="选择已确认权限组" value={selectedRole} onChange={setSelectedRole} options={roles.map((role) => ({ value: role.candidate_id, label: role.display_name }))} />
+        <Input aria-label="测试账号名称" value={label} maxLength={128} onChange={(event) => setLabel(event.target.value)} placeholder="例如：普通用户A / 管理员测试账号" />
+        <Button type="primary" loading={busy} disabled={!selectedRole || !label.trim()} onClick={() => void createIdentity()}>添加测试账号</Button>
+      </Space.Compact>}
+    </Card>
+
+    {preparation?.status === 'WAITING_FOR_LOGIN' && <Card className="identity-login-steps" title={`准备“${preparationIdentity?.label ?? '普通用户测试账号'}”`}>
+      <ol className="identity-login-step-list">
+        <li><Tag color="green">✓</Tag><div><Typography.Text strong>登录窗口已经打开</Typography.Text><Typography.Text type="secondary">界鉴正在等待你完成这个测试账号的登录。</Typography.Text></div></li>
+        <li><Tag color="blue">当前</Tag><div><Typography.Text strong>在新窗口完成登录</Typography.Text><Typography.Text type="secondary">正常输入密码，完成 SSO 或 MFA。登录成功后不要关闭这个窗口。</Typography.Text></div></li>
+        <li><Tag>3</Tag><div><Typography.Text strong>回到界鉴确认</Typography.Text><Button type="primary" loading={busy} onClick={() => void confirm()}>我已完成登录</Button></div></li>
+      </ol>
+      <Alert type="warning" showIcon message="不要关闭这个窗口" description="点击确认后，界鉴会安全保存当前应用所需的有限登录状态；不会保存你的密码。" />
+      <Button loading={busy} onClick={() => void cancel()}>取消准备</Button>
+    </Card>}
+    {preparation && preparation.status !== 'WAITING_FOR_LOGIN' && <Alert
+      type={preparation.status === 'FAILED' ? 'error' : preparation.status === 'UNSUPPORTED' ? 'warning' : preparation.status === 'PREPARED' ? 'success' : 'info'}
+      showIcon
+      message={preparation.status === 'SAVING' ? '正在安全保存这个应用所需的登录状态…' : preparation.status === 'PREPARED' ? '登录状态已准备；界鉴没有保存你的密码' : preparation.message}
+      description={preparation.error_code ? <Space direction="vertical" size={2}><span>错误代码：{preparation.error_code}</span><span>诊断日志：{preparation.log_path}</span></Space> : undefined}
+      action={<Space>
+        {preparation.status === 'STARTING' && <Button loading={busy} onClick={() => void cancel()}>取消准备</Button>}
+        {['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status) && <Button onClick={() => setPreparation(null)}>关闭提示</Button>}
+      </Space>}
+    />}
+
+    <Card title="已添加的测试账号">
+      <List dataSource={identities} locale={{ emptyText: '还没有测试账号。' }} renderItem={(identity) => <List.Item actions={[
+        identity.status === 'NOT_PREPARED' ? <Button key="prepare" type="primary" loading={busy} onClick={() => void start(identity.identity_id)}>打开登录浏览器</Button> : null,
+        identity.status === 'PREPARED' ? <Button key="reset" onClick={() => reset(identity)}>清除登录状态</Button> : null,
+        identity.status === 'NEEDS_REVIEW' ? <Button key="rebind" onClick={() => reset(identity)}>更新绑定并重新准备</Button> : null,
+        <Button key="delete" danger onClick={() => remove(identity)}>删除</Button>,
+      ].filter(Boolean)}>
+        <List.Item.Meta title={<Space>{identity.label}{statusTag(identity)}</Space>} description={<Space direction="vertical" size={2}><span>权限组：{identity.role_display_name}</span><Collapse ghost items={[{ key: 'details', label: '查看保存详情', children: <Space direction="vertical" size={2}><span>保存方式：{methodLabel(identity)}</span><span>绑定地址：{identity.confirmed_endpoint}</span></Space> }]} /></Space>} />
+      </List.Item>} />
+    </Card>
+    <Divider />
+    <Space>
+      <Button type="primary" onClick={onNext}>继续准备业务流程</Button>
+      <Typography.Text type="secondary">尚未准备的权限组会在后续显示为覆盖缺口。</Typography.Text>
+    </Space>
+  </div>
+}

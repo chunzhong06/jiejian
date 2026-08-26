@@ -1,3 +1,5 @@
+# 验证权限契约工作流中的权限契约治理服务。
+
 from __future__ import annotations
 
 from collections.abc import Iterator

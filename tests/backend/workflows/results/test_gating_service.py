@@ -1,3 +1,5 @@
+# 验证结果工作流中的结果闸门服务。
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -35,7 +37,7 @@ def _result(run_id: str, verdict: CaseVerdict, *, observer_status: ObserverOutco
     snapshot = runner_input().project_snapshot
     run_verdict = RunVerdict.BLOCK if verdict is CaseVerdict.VULNERABLE else RunVerdict.INCONCLUSIVE if verdict is CaseVerdict.INCONCLUSIVE else RunVerdict.PASS
     return RunnerResult(
-        schema_version="4",
+        schema_version="1",
         run_id=run_id,
         job_id="job_" + run_id[4:],
         attempt=1,
@@ -113,6 +115,7 @@ def test_vulnerable_fixed_vulnerable_reappears_and_gate_result_is_immutable(tmp_
         service = RegressionGate(lambda: StorageUnitOfWork(factory), reader, finding_service, clock_us=lambda: 999)
         assert findings[INITIAL_VULNERABLE_RUN][0]["occurrence"]["verdict"] == "VULNERABLE"
         baseline = service.accept_baseline(FIXED_RUN, actor="operator", reason="fixed run")
+        assert baseline["protocol_versions"] == ["evidence-1", "observer-1", "runner-result-1"]
         assert service.accept_baseline(FIXED_RUN, actor="operator", reason="fixed run") == baseline
         with pytest.raises(JiejianError):
             service.accept_baseline(FIXED_RUN, actor="operator", reason="changed reason")

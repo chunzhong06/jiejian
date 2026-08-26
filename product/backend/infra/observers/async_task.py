@@ -11,7 +11,7 @@ import hashlib
 import json
 import os
 import subprocess
-from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 import httpx
 
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
 from product.protocols.observer import AsyncTaskApiLocator, AsyncTaskObserverInvocation, AsyncTaskStatus, CausalityStatus, ObservationCompleteness, ObservationEnvelope, ObservationPhase, ObservationProvenance, ObservationWindow, OBSERVER_JSON_MAX_BYTES, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType, ProvenanceType, build_normalized_state, canonical_json_bytes, observer_canonical_sha256, evaluate_observer_outcome, parse_observer_json
 from product.protocols.web.target import WebTargetDefinition, WebTargetScope
 from product.backend.infra.execution.web.adapter import WebTargetGuard

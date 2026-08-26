@@ -7,7 +7,7 @@ import json
 from typing import Any
 from urllib.parse import quote
 
-from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, normalize_llm_base_url
+from product.backend.infra.llm.config import LLMProfileConfig, LLMProviderType, reasoning_options_for
 from product.backend.infra.llm.adapters.base import LLMHttpRequest, LLMHttpResponse, LLMTransportError, json_body, max_output_tokens
 from product.backend.infra.llm.adapters.openai_compatible import _raise_for_status
 
@@ -23,11 +23,14 @@ class GeminiAdapter:
         profile: LLMProfileConfig,
         secret: str,
         prompt: str,
+        *,
+        reasoning_effort: str | None = None,
+        json_schema: dict[str, object] | None = None,
     ) -> LLMHttpRequest:
-        normalized = normalize_llm_base_url(
-            profile.base_url or DEFAULT_BASE_URL,
-            allow_local_http=profile.allow_local_http,
-        )
+        if profile.base_url is not None or profile.allow_local_http:
+            raise LLMTransportError("invalid_request")
+        if reasoning_effort is not None and reasoning_effort not in reasoning_options_for(profile.provider, profile.model):
+            raise LLMTransportError("invalid_request")
         encoded_model = quote(profile.model, safe="")
         body = json_body(
             {
@@ -35,12 +38,15 @@ class GeminiAdapter:
                 "generationConfig": {
                     "candidateCount": 1,
                     "maxOutputTokens": max_output_tokens(profile),
+                    **({"thinkingConfig": {"thinkingLevel": reasoning_effort}} if reasoning_effort is not None else {}),
+                    **({"responseMimeType": "application/json", "responseJsonSchema": json_schema} if json_schema is not None else {}),
                 },
             }
         )
         return LLMHttpRequest(
+            method="POST",
             provider=self.provider,
-            url=f"{normalized.rstrip('/')}/models/{encoded_model}:generateContent",
+            url=f"{DEFAULT_BASE_URL}/models/{encoded_model}:generateContent",
             headers={
                 "accept": "application/json",
                 "content-type": "application/json",
@@ -66,8 +72,8 @@ class GeminiAdapter:
         parts = content.get("parts") if isinstance(content, dict) else None
         if not isinstance(parts, list) or not parts:
             raise LLMTransportError("invalid_response")
-        texts = [part.get("text") for part in parts if isinstance(part, dict)]
-        if len(texts) != len(parts) or any(not isinstance(text, str) for text in texts):
+        texts = [part.get("text") for part in parts if isinstance(part, dict) and not part.get("thought", False)]
+        if not texts or any(not isinstance(text, str) for text in texts):
             raise LLMTransportError("invalid_response")
         result = "".join(texts)
         if not result.strip():

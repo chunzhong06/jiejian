@@ -1,3 +1,5 @@
+# 验证执行基础设施中的有状态 Web 执行。
+
 from __future__ import annotations
 
 import json
@@ -5,6 +7,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from urllib.parse import parse_qs
 
+import pytest
+
+from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.verification.facts import ExecutionOutcome
 from product.backend.infra.execution.web.adapter import HttpExecutionAdapter, HttpResponse, extract_response_value
 from product.backend.infra.execution.web.identity import HttpIdentityRuntime
@@ -174,8 +179,9 @@ def test_real_cookie_csrf_form_multipart_and_identity_isolation() -> None:
         assert multipart_fact.outcome is ExecutionOutcome.ACCEPTED
 
         isolated = HttpIdentityRuntime(binding, resolve_secret=lambda _ref: None, business_origin=origin)
-        denied_fact = adapter.execute(form_template, case_id="case-isolated", action_id="submit", classifier=classifier, slot_values={"csrf": "csrf-local"}, identity_runtime=isolated)
-        assert denied_fact.outcome is ExecutionOutcome.FAILED
+        with pytest.raises(JiejianError) as captured:
+            adapter.execute(form_template, case_id="case-isolated", action_id="submit", classifier=classifier, slot_values={"csrf": "csrf-local"}, identity_runtime=isolated)
+        assert captured.value.code == ErrorCode.EXEC_REQUEST.value
         isolated.close()
         runtime.close()
     finally:

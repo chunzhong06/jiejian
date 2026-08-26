@@ -1,3 +1,5 @@
+# 验证命令行入口中的运行提交。
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,7 +21,7 @@ class FakeRunnerResult:
 
     def model_dump(self, *, mode: str) -> dict[str, str]:
         assert mode == "json"
-        return {"schema_version": "2", "verdict": self.verdict.value}
+        return {"schema_version": "1", "verdict": self.verdict.value}
 
 
 class FakeExecutionWorkflow:

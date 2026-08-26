@@ -1,3 +1,5 @@
+# 验证端到端安全闭环中的授权安全闭环。
+
 from __future__ import annotations
 
 import json
@@ -257,7 +259,7 @@ def test_authorization_profile_worker_runner_publication_loop(variant: str, tmp_
         )
         assert len(view.evidence) == expected_evidence_count
         assert view.publication.result.coverage_gap_count == truth["formal_profile"]["coverage_gaps"]
-        assert context.results.overview(submitted.run.run_id, published=view)["execution_schema_version"] == "4"
+        assert context.results.overview(submitted.run.run_id, published=view)["execution_schema_version"] == "1"
         _reset_target(
             server,
             variant=variant,

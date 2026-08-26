@@ -37,10 +37,10 @@ from product.protocols.recording_flow import Flow
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import StorageUnitOfWork
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
 from product.protocols.flow_draft import FlowDraft
 from product.backend.core.contracts.analysis.canonical import contract_analysis_sha256
-from product.backend.workflows.recording.review import FlowDraftReviewer
+from product.backend.workflows.recording.flow_compiler import FlowDraftCompiler
 
 
 _SOURCE_FILE_MAX_BYTES = 1_048_576
@@ -72,7 +72,7 @@ class ContractAnalysis:
         if isinstance(flow, Flow):
             return build_flow_candidates(project_id, flow)
         try:
-            compiled = FlowDraftReviewer().compile(flow)
+            compiled = FlowDraftCompiler().compile(flow)
         except (JiejianError, TypeError, ValidationError):
             return _analysis_issue_batch(
                 "recording_flow",

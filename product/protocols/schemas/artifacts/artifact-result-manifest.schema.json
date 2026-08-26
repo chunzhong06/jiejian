@@ -3,16 +3,16 @@
     "ArtifactResultFile": {
       "additionalProperties": false,
       "properties": {
-        "path": {
-          "const": "artifact-result.json",
-          "title": "Path",
-          "type": "string"
-        },
         "byte_count": {
           "maximum": 4194304,
           "minimum": 1,
           "title": "Byte Count",
           "type": "integer"
+        },
+        "path": {
+          "const": "artifact-result.json",
+          "title": "Path",
+          "type": "string"
         },
         "sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -31,15 +31,23 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "2",
-      "default": "2",
-      "title": "Schema Version",
-      "type": "string"
-    },
     "artifact_id": {
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
       "title": "Artifact Id",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/ArtifactResultFile"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    },
+    "input_manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Input Manifest Sha256",
       "type": "string"
     },
     "project_id": {
@@ -52,19 +60,11 @@
       "title": "Result Sha256",
       "type": "string"
     },
-    "input_manifest_sha256": {
-      "pattern": "^[0-9a-f]{64}$",
-      "title": "Input Manifest Sha256",
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
       "type": "string"
-    },
-    "files": {
-      "items": {
-        "$ref": "#/$defs/ArtifactResultFile"
-      },
-      "maxItems": 1,
-      "minItems": 1,
-      "title": "Files",
-      "type": "array"
     }
   },
   "required": [

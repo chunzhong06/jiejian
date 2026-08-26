@@ -17,8 +17,9 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Literal
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,6 +29,7 @@ from product.backend.core.lifecycle import JobState
 from product.backend.core.recording import Recording, RecordingState, transition_recording_state
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import FlowDraft, RecordingRunnerRequest, RecordingRunnerResultType, RecordingRunnerResult, canonical_flow_draft_json_bytes, canonical_recording_json_bytes
+from product.protocols.web.target import WebTargetScope
 from product.backend.infra.storage import FlowDraftRevisionRecord, JobRecord, RecordingRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.events import append_job_event
 from product.backend.infra.runtime.jobs.handlers import JobAttemptPort
@@ -65,6 +67,24 @@ class RecordingCompletionResult(RecordingApplicationModel):
     job: JobRecord
     recording: RecordingRecord
     draft: FlowDraft | None = None
+
+
+def recording_target_scope(endpoint: str) -> WebTargetScope:
+    """在应用层把已确认 endpoint 收敛为录制 Runner 的 Web 目标范围。"""
+
+    parsed = urlsplit(endpoint)
+    if parsed.hostname is None:
+        raise JiejianError(ErrorCode.APPLICATION_ENDPOINT_INVALID, "应用运行地址无效")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    origin = f"{parsed.scheme}://{parsed.hostname}:{port}"
+    return WebTargetScope(
+        base_url=origin,
+        allowed_origins=(origin,),
+        allowed_hosts=(parsed.hostname,),
+        allowed_ports=(port,),
+        allow_private_network=True,
+        follow_redirects=False,
+    )
 
 
 class RecordingSubmission:
@@ -130,8 +150,6 @@ class RecordingSubmission:
         result: RecordingRunnerResult,
         now_us: int,
         known_secrets: Sequence[str] = (),
-        alternate_identities: Mapping[str, str] | None = None,
-        resource_bindings: Mapping[str, tuple[str, str]] | None = None,
     ) -> RecordingCompletionResult:
         """校验 RunnerResult 后按结果类型完成、取消或重试当前 fenced attempt。"""
 
@@ -151,8 +169,6 @@ class RecordingSubmission:
                 result=result,
                 now_us=now_us,
                 known_secrets=known_secrets,
-                alternate_identities=alternate_identities,
-                resource_bindings=resource_bindings,
             )
         # --- 阶段：非成功结果只更新 Job/Recording 生命周期 ---
         if result.result_type is RecordingRunnerResultType.CANCELLED:
@@ -273,8 +289,6 @@ class RecordingSubmission:
         result: RecordingRunnerResult,
         now_us: int,
         known_secrets: Sequence[str],
-        alternate_identities: Mapping[str, str] | None,
-        resource_bindings: Mapping[str, tuple[str, str]] | None,
     ) -> RecordingCompletionResult:
         """把已捕获事件编译为 FlowDraft，并与 fenced Job 完成态原子提交。"""
 
@@ -299,12 +313,16 @@ class RecordingSubmission:
             persisted = self._record_from_result(existing, result)
             draft = None
             if result.result_type is RecordingRunnerResultType.CAPTURED:
+                request = self._request_store.load(
+                    job.job_id,
+                    expected_hash=job.request_hash,
+                    known_secrets=known_secrets,
+                )
                 draft = self._processor.build(
                     recording_id=result.recording_id,
                     flow_id=existing.flow_id,
+                    action_candidate_id=request.action_candidate_id,
                     events=result.events,
-                    alternate_identities=alternate_identities,
-                    resource_bindings=resource_bindings,
                     known_secrets=known_secrets,
                 )
                 pending = transition_recording_state(

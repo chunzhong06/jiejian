@@ -12,6 +12,7 @@ import click
 import typer
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.workflows.results.presentation import ResultPresentation
 
 
 _configured_presentation = "auto"
@@ -319,110 +320,63 @@ def emit_doctor(report: object) -> None:
         _emit_section("如何解决", [("", _doctor_recovery(check.name), "")])
 
 
-def emit_guide_result(result: object) -> None:
-    """用与图形结果页一致的层级展示已发布检查事实，不改写 Verdict。"""
+def emit_result_presentation(presentation: ResultPresentation) -> None:
+    """直接展示后端结果投影；CLI 不从 Evidence 重新推导业务结论。"""
 
-    verdict = str(result.verdict)
-    evidence = tuple(result.evidence)
-    issues = sum(str(item.verdict) == "VULNERABLE" for item in evidence)
-    marker, color = _marker(verdict, unicode=_supports_unicode())
-    typer.echo("界鉴检查完成")
-    typer.echo("")
-    conclusion = {
-        "PASS": "当前证据范围内未发现确认问题",
-        "BLOCK": f"发现 {issues or 1} 个权限问题",
-        "INCONCLUSIVE": "证据不足，暂时不能下结论",
-    }.get(verdict, "检查没有形成可展示的结论")
-    typer.secho(f"{conclusion}  {marker}", fg=color)
-    selected = next(
-        (
-            item
-            for item in evidence
-            if str(item.verdict)
-            == ("VULNERABLE" if verdict == "BLOCK" else "INCONCLUSIVE")
-        ),
-        evidence[0] if evidence else None,
+    marker, color = _marker(
+        presentation.verdict or presentation.run_lifecycle,
+        unicode=_supports_unicode(),
     )
-    if selected is not None:
-        case = selected.case_snapshot
-        typer.echo("")
-        typer.echo(_case_summary(case))
-        typer.echo("")
-        _emit_section(
-            "系统表面结果",
-            [("", _execution_summary(selected.execution_fact.outcome), "")],
-        )
-        typer.echo("")
-        _emit_section(
-            "真实结果",
-            [("", _observation_summary(selected.observation_facts), "")],
-        )
-        typer.echo("")
-        _emit_section("因此", [("", _verdict_reason(verdict, selected), "")])
+    typer.echo(presentation.headline)
+    typer.echo("")
+    typer.secho(presentation.scope_statement, fg=color)
     typer.echo("")
     _emit_section(
-        "下一步",
-        [("", "在图形界面的“检查结果”中查看完整证据。", "")],
+        "检查概览",
+        [
+            ("本次检查", f"{presentation.checked_count} 项", ""),
+            ("符合预期", f"{presentation.safe_count} 项", ""),
+            ("权限问题", f"{presentation.problem_count} 项", ""),
+            ("证据不足", f"{presentation.inconclusive_count} 项", ""),
+            ("权限要求未覆盖", f"{presentation.uncovered_count} 项", ""),
+        ],
     )
+    if presentation.execution_problem:
+        typer.echo("")
+        _emit_section("执行状态", [("", presentation.execution_problem, "FAILED")])
+    if presentation.issues:
+        typer.echo("")
+        _emit_section(
+            "权限问题与检查项",
+            [
+                (
+                    issue.title,
+                    f"{issue.conclusion}；{issue.explanation}",
+                    issue.verdict.value,
+                )
+                for issue in presentation.issues
+            ],
+        )
+    if presentation.limitations:
+        typer.echo("")
+        _emit_section(
+            "限制与下一步",
+            [("", item, "") for item in presentation.limitations],
+        )
     if verbose_enabled():
         typer.echo("")
         _emit_section(
             "高级：技术详情",
             [
-                ("运行标识", result.run_id, ""),
-                ("证据数量", len(evidence), ""),
-                ("原因代码", _technical_value(result.reason_codes), ""),
+                ("运行标识", presentation.run_id, ""),
+                ("项目标识", presentation.project_id, ""),
+                (
+                    "问题标识",
+                    "、".join(item.finding_id for item in presentation.issues) or "无",
+                    "",
+                ),
             ],
         )
-
-
-def _case_summary(case: object) -> str:
-    subject = {
-        "attacker": "普通成员",
-        "peer": "访客",
-        "owner": "资源所有者",
-    }.get(str(case.subject_id), "测试身份")
-    action = {"modify": "修改", "view": "查看"}.get(
-        str(case.action_id), "操作"
-    )
-    resource = (
-        "不属于自己的资源"
-        if "owner-resource" in tuple(str(item) for item in case.resource_ids)
-        else "目标资源"
-    )
-    return f"{subject}{action}了{resource}"
-
-
-def _execution_summary(outcome: object) -> str:
-    return {
-        "ACCEPTED": "请求被接受",
-        "DENIED": "请求被拒绝",
-        "FAILED": "请求执行失败",
-        "UNKNOWN": "没有取得可靠的请求结果",
-    }.get(str(outcome), "请求结果未知")
-
-
-def _observation_summary(facts: object) -> str:
-    effects = {str(item.effect) for item in facts}
-    if "CONFIRMED" in effects:
-        return "资源内容已经发生变化"
-    if effects and effects == {"ABSENT"}:
-        return "资源保持不变"
-    return "没有取得完整、可靠的资源状态"
-
-
-def _verdict_reason(verdict: str, evidence: object) -> str:
-    if verdict == "BLOCK":
-        if str(evidence.execution_fact.outcome) == "DENIED" and any(
-            str(item.effect) == "CONFIRMED" for item in evidence.observation_facts
-        ):
-            return "权限限制没有真正阻止这次操作"
-        return "不应允许的操作影响了真实资源"
-    if verdict == "PASS":
-        return "权限规则、请求结果和真实资源状态一致"
-    return "关键观察不完整，不能把未知结果当作安全通过"
-
-
 def _doctor_value(check: object) -> str:
     details = check.details
     if check.name in {"python", "node", "pnpm"} and details.get("version"):
@@ -484,7 +438,7 @@ def fail(error: JiejianError) -> NoReturn:
     else:
         typer.echo(
             json.dumps(
-                {"schema_version": "2", "error": error.to_dict()},
+                {"schema_version": "1", "error": error.to_dict()},
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),

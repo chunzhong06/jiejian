@@ -18,7 +18,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from product.backend.core.verification.permission_coverage import PermissionMutationCase
+from product.backend.core.verification.permissions.coverage import PermissionMutationCase
 from product.backend.core.verification.permissions import permission_model_sha256
 from product.protocols.web.workflow import (
     HttpWorkflowBinding,

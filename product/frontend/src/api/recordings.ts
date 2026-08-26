@@ -13,24 +13,21 @@
 
 import { request } from './http'
 
-export type RecordingIdentityDto = { identity_id: string; role: string }
-export type RecordingProfileDto = { profile_id: string; name?: string }
+export type RecordingTestIdentityDto = { test_identity_id: string; label: string; role_display_name: string }
+export type RecordingActionDto = { action_candidate_id: string; display_name: string; risk_hint: string }
 export type RecordingSetupDto = {
   schema_version?: '1'
   project_id?: string
-  profiles?: RecordingProfileDto[]
-  identity_options: RecordingIdentityDto[]
+  action_options: RecordingActionDto[]
+  test_identity_options: RecordingTestIdentityDto[]
 }
 export type RecordingJobDto = { job_id: string; state: string }
 export type FlowDraftStepDto = {
   id: string
   name: string
-  identity_id: string
-  alternate_identity_id?: string | null
-  resource_id?: string | null
-  alternate_resource_id?: string | null
   method?: string | null
   path?: string | null
+  resource_candidates: Array<{ candidate_id: string; consumer: 'PATH' | 'QUERY' | 'JSON_BODY'; location: string; label: string }>
 }
 export type FlowDraftVariableSourceDto = {
   source_step_id: string
@@ -47,7 +44,11 @@ export type FlowDraftDto = {
   schema_version?: '1'
   recording_id: string
   flow_id: string
+  action_candidate_id: string
   revision: number
+  recommended_target_step_id?: string | null
+  target_step_id?: string | null
+  resource_candidate_id?: string | null
   steps: FlowDraftStepDto[]
   variables?: FlowDraftVariableDto[]
 }
@@ -64,7 +65,8 @@ export type RecordingDto = {
   created_at_us?: number
   updated_at_us?: number
   flow_path?: string
-  identity_options?: RecordingIdentityDto[]
+  action?: RecordingActionDto
+  test_identity?: RecordingTestIdentityDto
 }
 export type RecordingViewDto = {
   schema_version?: '1'
@@ -73,20 +75,90 @@ export type RecordingViewDto = {
   job?: RecordingJobDto | null
   capture_phase?: string
   flow_path?: string
-  identity_options?: RecordingIdentityDto[]
+  action?: RecordingActionDto
+  test_identity?: RecordingTestIdentityDto
 }
 export type RecordingReviewCommand = Record<string, unknown>
 
+export type TestResourceCandidateDto = {
+  candidate_id: string
+  label: string
+  suggested_resource_type: string
+  actual_resource_id: string
+  consumer: 'PATH' | 'QUERY' | 'JSON_BODY'
+  location: string
+}
+export type ObservationCandidateDto = {
+  candidate_id: string
+  label: string
+  source_step_id: string
+  method: 'GET'
+  path_template: string
+  trusted_test_identity_id: string
+}
+export type RecoveryCandidateDto = {
+  candidate_id: string
+  label: string
+  source_step_id: string
+  method: 'PATCH' | 'POST' | 'PUT' | 'DELETE'
+  path_template: string
+  json_body_template: Record<string, unknown>
+  test_identity_id: string
+}
+export type SecurityEffectCandidateDto = {
+  candidate_id: string
+  kind: string
+  label: string
+  protected_fields: string[]
+}
+export type ActionSafetySetupDto = {
+  resource: {
+    resource_id: string
+    logical_name: string
+    resource_type: string
+    actual_resource_id: string
+    owner_test_identity_id: string
+  }
+  observation?: { source_step_id: string; path_template: string } | null
+  recovery?: { kind: 'RECORDED_REQUEST' | 'NOT_REQUIRED'; source_step_id?: string | null; path_template?: string | null } | null
+  effect?: { kind: string } | null
+}
+export type ActionSafetySetupViewDto = {
+  recording_id: string
+  action_candidate_id: string
+  action_display_name: string
+  target_method: string
+  recording_identity: { identity_id: string; label: string; role_display_name: string; status: string }
+  state_changing: boolean
+  resource_candidates: TestResourceCandidateDto[]
+  observation_candidates: ObservationCandidateDto[]
+  recovery_candidates: RecoveryCandidateDto[]
+  security_effect_candidates: SecurityEffectCandidateDto[]
+  confirmed_setup?: ActionSafetySetupDto | null
+  gaps: string[]
+  automatic_execution_allowed: boolean
+}
+export type ConfirmActionSafetySetupInput = {
+  resource_candidate_id: string
+  logical_name: string
+  resource_type: string
+  owner_test_identity_id: string
+  observation_candidate_id?: string | null
+  recovery_candidate_id?: string | null
+  confirm_recovery_not_required: boolean
+  security_effect_candidate_id?: string | null
+}
+
 export const recordingsApi = {
-  setup: (projectId: string, profileId: string) =>
-    request<RecordingSetupDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings/setup?profile_id=${encodeURIComponent(profileId)}`),
-  createRecording: (projectId: string, profileId: string, identityId: string, durationSeconds: number) =>
+  setup: (projectId: string) =>
+    request<RecordingSetupDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings/setup`),
+  createRecording: (projectId: string, actionCandidateId: string, testIdentityId: string, durationSeconds: number) =>
     request<RecordingViewDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings`, {
       method: 'POST',
       body: JSON.stringify({
         schema_version: '1',
-        profile_id: profileId,
-        identity_id: identityId,
+        action_candidate_id: actionCandidateId,
+        test_identity_id: testIdentityId,
         duration_seconds: durationSeconds,
         idempotency_key: `gui-recording-${crypto.randomUUID()}`,
       }),
@@ -98,15 +170,21 @@ export const recordingsApi = {
   reviewRecording: (
     id: string,
     command: RecordingReviewCommand,
-    bindings?: Record<string, Record<string, string>>,
   ) =>
     request<RecordingViewDto>(`/api/recordings/${encodeURIComponent(id)}/review`, {
       method: 'POST',
-      body: JSON.stringify({ schema_version: '1', command, bindings }),
+      body: JSON.stringify({ schema_version: '1', command }),
     }),
-  finalizeRecording: (id: string, bindings: Record<string, Record<string, string>>) =>
+  finalizeRecording: (id: string) =>
     request<RecordingViewDto>(`/api/recordings/${encodeURIComponent(id)}/finalize`, {
       method: 'POST',
-      body: JSON.stringify({ schema_version: '1', bindings }),
+      body: JSON.stringify({ schema_version: '1' }),
+    }),
+  safetySetup: (id: string) =>
+    request<ActionSafetySetupViewDto>(`/api/recordings/${encodeURIComponent(id)}/safety-setup`),
+  confirmSafetySetup: (id: string, input: ConfirmActionSafetySetupInput) =>
+    request<ActionSafetySetupViewDto>(`/api/recordings/${encodeURIComponent(id)}/safety-setup`, {
+      method: 'PUT',
+      body: JSON.stringify({ schema_version: '1', ...input }),
     }),
 }

@@ -1,3 +1,5 @@
+# 验证录制基础设施中的录制控制。
+
 from __future__ import annotations
 
 from pathlib import Path

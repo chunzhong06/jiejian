@@ -1,3 +1,5 @@
+# 提供作业队列、恢复与调度测试夹具。
+
 from __future__ import annotations
 
 from dataclasses import dataclass

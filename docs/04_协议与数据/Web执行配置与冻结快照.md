@@ -4,7 +4,7 @@
 
 ## 目的与消费者
 
-`WebExecutionProfile` 是用户可管理的 Web 执行配置，供应用接入、CLI、GUI、CI 和 ApplicationCore 登记与提交。`WebExecutionSnapshot` 和 `PersistedExecutionRequest` 是提交后不可变的执行输入，供 Worker/Runner 消费。
+`WebExecutionProfile` 是 Web 执行配置根文档：高级路径可以由用户管理，普通路径由 SecuritySetupCompiler 内容寻址生成；两者都只经 ApplicationCore/ExecutionWorkflow 登记与提交。`WebExecutionSnapshot` 和 `PersistedExecutionRequest` 是提交后不可变的执行输入，供 Worker/Runner 消费。
 
 ## 协议边界
 
@@ -12,7 +12,9 @@ Profile 包含 project、Business/Auth/Observer scope、`WebExecutionIdentity`�
 
 `HttpWorkflowBinding` 只允许一个 TARGET，并以 SETUP/TARGET/CLEANUP、受控请求模板、ValueSlot、确定性结果分类、基线投影和清理策略表达状态化流程。身份 bootstrap 与业务流程分离；Cookie jar 只在 Web Runtime 内存中按 identity 隔离。
 
-登记时必须确认 ACTIVE Contract、项目绑定、target scope、bindings、Observer 和 fingerprint。Profile 变化、Contract 漂移、plan/binding hash 不一致或未知结构默认拒绝。
+普通生成配置可使用 `PREPARED_COOKIE_SESSION`：Profile 只保存有限 Cookie 元数据与 `env:` 引用，正文由主进程从共享 SecretStore 按冻结请求需要最小注入。Owner API Observer 可以通过 `identity_id` 复用同一已准备身份；`credential_ref` 与 `identity_id` 互斥。
+
+登记时必须确认 ACTIVE Contract、项目绑定、target scope、bindings、Observer 和 fingerprint。普通生成配置还必须匹配当前 ApplicationUnderstanding、编译时选定的 TestIdentity 代表、Flow、测试安全事实与组级 PermissionIntent 的 authority fingerprint；代表补充或替换不会改变 PermissionIntent，但会产生新的生成配置身份。任一配置输入变化后，即使旧文件仍存在也拒绝构造或提交请求。Profile 变化、Contract 漂移、plan/binding hash 不一致或未知结构默认拒绝。
 
 提交时冻结完整 Contract、Coverage/PermissionMutationPlan、DifferentialExperimentPlan、workflow/effect bindings、目标范围、预算、身份和 fingerprint，形成 `WebExecutionSnapshot`，再写入 `PersistedExecutionRequest`。执行期间不重新读取当前 Profile 或治理表。
 
@@ -36,7 +38,7 @@ GUI 读取执行配置时只使用专用摘要投影：返回动作对应的目�
 
 ## 版本规则与 Schema 真源
 
-当前 Web Profile、Web Snapshot 和 PersistedExecutionRequest 只接受单一当前格式；Schema/protocol 版本表示机器格式，不表示产品代际。严格模型和 canonical/hash 以：
+当前 `WebExecutionProfile` 与 `PersistedExecutionRequest` 独立根以字符串 `schema_version="1"` 起步，`WebExecutionSnapshot` 作为冻结请求内的嵌套对象不重复版本；各 reader 只接受单一当前格式。Schema/protocol 版本表示机器格式，不表示产品代际。严格模型和 canonical/hash 以：
 
 - `product/protocols/web/profile.py`
 - `product/protocols/web/identity.py`

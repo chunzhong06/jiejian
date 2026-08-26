@@ -1,3 +1,5 @@
+# 验证观察器基础设施中的SQL 跟踪建议。
+
 from __future__ import annotations
 
 from product.backend.core.verification.permissions import SecurityEffectKind

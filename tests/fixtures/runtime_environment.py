@@ -1,3 +1,5 @@
+# 提供受控 Python 运行环境身份测试夹具。
+
 from __future__ import annotations
 
 import os

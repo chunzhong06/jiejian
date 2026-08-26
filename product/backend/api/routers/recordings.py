@@ -11,8 +11,12 @@ from fastapi import APIRouter
 
 from product.backend.workflows.context import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command, required_identity_secret_refs
-from product.backend.workflows.recording.submission import SubmitRecording
+from product.backend.core.application_understanding import CandidateDecision
+from product.backend.core.lifecycle import JobState
+from product.backend.workflows.test_identities import TestIdentityStatus
+from product.protocols import RecordingBudget, RecordingRunnerRequest, parse_flow_draft_review_command
+from product.backend.workflows.recording.submission import SubmitRecording, recording_target_scope
+from product.backend.workflows.recording.safety_setup import ConfirmActionSafetySetup
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
 
@@ -26,32 +30,40 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         status_code=202,
     )
     async def create_recording(project_id: str, body: RecordingCreateRequest):
-        profile = context.execution.current(body.profile_id, project_id=project_id)
-        selected = next(
+        understanding = context.application_understanding.get(project_id)
+        action = next(
             (
                 item
-                for item in profile.identities
-                if item.identity_id == body.identity_id
+                for item in understanding.action_candidates
+                if item.candidate_id == body.action_candidate_id
+                and item.decision is CandidateDecision.CONFIRMED
+                and not item.stale
             ),
             None,
         )
-        if selected is None:
-            raise JiejianError(ErrorCode.INPUT_INVALID, "录制身份选择无效")
+        if action is None:
+            raise JiejianError(ErrorCode.INPUT_INVALID, "录制动作尚未确认或已经失效")
+        if understanding.confirmed_endpoint is None:
+            raise JiejianError(ErrorCode.APPLICATION_ENDPOINT_INVALID, "请先确认应用运行地址")
         now_us = time.time_ns() // 1_000
-        request = RecordingRunnerRequest(
-            schema_version="2",
-            recording_id=f"rec_{uuid4().hex}",
+        recording_id = f"rec_{uuid4().hex}"
+        expires_at_us = now_us + body.duration_seconds * 1_000_000
+        session = context.recording_credentials.prepare(
             project_id=project_id,
+            test_identity_id=body.test_identity_id,
+            recording_id=recording_id,
+            session_ref=f"session_{uuid4().hex}",
+            now_us=now_us,
+            expires_at_us=expires_at_us,
+        )
+        request = RecordingRunnerRequest(
+            schema_version="1",
+            recording_id=recording_id,
+            project_id=project_id,
+            action_candidate_id=action.candidate_id,
             created_at_us=now_us,
-            target_scope=profile.target.scope,
-            sessions=(
-                RecordingSessionRef(
-                    identity_id=selected.identity_id,
-                    session_ref=f"session_{uuid4().hex}",
-                    secret_refs=required_identity_secret_refs(selected),
-                    expires_at_us=now_us + body.duration_seconds * 1_000_000,
-                ),
-            ),
+            target_scope=recording_target_scope(understanding.confirmed_endpoint),
+            sessions=(session,),
             budget=RecordingBudget(
                 max_duration_us=body.duration_seconds * 1_000_000,
                 max_contexts=1,
@@ -59,20 +71,27 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             headless=False,
             trace_enabled=False,
         )
-        result = context.recording_submission.submit(
-            SubmitRecording(
-                request=request,
-                flow_id=profile.profile_id,
-                idempotency_key=body.idempotency_key,
-                now_us=now_us,
-                available_at_us=now_us,
+        try:
+            result = context.recording_submission.submit(
+                SubmitRecording(
+                    request=request,
+                    flow_id=f"flow-{action.candidate_id.removeprefix('action_')}",
+                    idempotency_key=body.idempotency_key,
+                    now_us=now_us,
+                    available_at_us=now_us,
+                )
             )
-        )
+        except Exception:
+            context.recording_credentials.clear(recording_id)
+            raise
         return data_response(
             {
                 "job": result.job.model_dump(mode="json"),
                 "recording": result.recording.model_dump(mode="json"),
-                "identity_options": _identity_options(profile),
+                "action": _action_option(action),
+                "test_identity": _identity_option(
+                    context.test_identities.get(body.test_identity_id)
+                ),
             },
             status_code=202,
         )
@@ -80,13 +99,21 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
     @router.get(
         "/api/projects/{project_id}/recordings/setup", response_model=ApiResponse
     )
-    async def recording_setup(project_id: str, profile_id: str):
-        profile = context.execution.current(profile_id, project_id=project_id)
+    async def recording_setup(project_id: str):
+        understanding = context.application_understanding.get(project_id)
         return data_response(
             {
-                "profile_id": profile.profile_id,
-                "project_id": profile.project_id,
-                "identity_options": _identity_options(profile),
+                "project_id": understanding.project_id,
+                "action_options": [
+                    _action_option(item)
+                    for item in understanding.action_candidates
+                    if item.decision is CandidateDecision.CONFIRMED and not item.stale
+                ],
+                "test_identity_options": [
+                    _identity_option(item)
+                    for item in context.test_identities.list(project_id)
+                    if item.status is TestIdentityStatus.PREPARED
+                ],
             }
         )
 
@@ -97,7 +124,14 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         )
         with context.uow_factory() as work:
             job = work.jobs.get_by_recording(recording_id)
+        if job is not None and job.state in {
+            JobState.SUCCEEDED,
+            JobState.FAILED,
+            JobState.CANCELLED,
+        }:
+            context.recording_credentials.clear(recording_id)
         view["job"] = job.model_dump(mode="json") if job else None
+        view.update(_recording_metadata(context, job))
         return data_response(view)
 
     @router.post("/api/recordings/{recording_id}/capture/start", response_model=ApiResponse)
@@ -137,9 +171,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         command = parse_flow_draft_review_command(
             json.dumps(body.command, ensure_ascii=False).encode("utf-8")
         )
-        view = context.recording_lifecycle.review(
-            recording_id, command, bindings=body.bindings
-        )
+        view = context.recording_lifecycle.review(recording_id, command)
         return data_response(view.model_dump(mode="json"))
 
     @router.post(
@@ -153,7 +185,37 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             recording_id,
             var_dir=context.var_dir,
             now_us=time.time_ns() // 1_000,
-            bindings=body.bindings if body is not None else None,
+        )
+        data = view.model_dump(mode="json")
+        with context.uow_factory() as work:
+            job = work.jobs.get_by_recording(recording_id)
+        data.update(_recording_metadata(context, job))
+        return data_response(data)
+
+    @router.get(
+        "/api/recordings/{recording_id}/safety-setup",
+        response_model=ApiResponse,
+    )
+    async def get_action_safety_setup(recording_id: str):
+        """读取有限候选与已确认事实；该查询不会访问目标应用。"""
+
+        view = context.action_safety_setup.preview(recording_id)
+        return data_response(view.model_dump(mode="json"))
+
+    @router.put(
+        "/api/recordings/{recording_id}/safety-setup",
+        response_model=ApiResponse,
+    )
+    async def confirm_action_safety_setup(
+        recording_id: str,
+        body: ActionSafetySetupConfirmRequest,
+    ):
+        view = context.action_safety_setup.confirm(
+            recording_id,
+            ConfirmActionSafetySetup.model_validate(
+                body.model_dump(exclude={"schema_version"}),
+                strict=True,
+            ),
         )
         return data_response(view.model_dump(mode="json"))
 
@@ -170,8 +232,8 @@ from product.backend.api.envelope import ApiModel
 
 class RecordingCreateRequest(ApiModel):
     schema_version: Literal["1"]
-    profile_id: str = Field(min_length=1, max_length=64)
-    identity_id: str = Field(min_length=1, max_length=64)
+    action_candidate_id: str = Field(pattern=r"^action_[0-9a-f]{32}$")
+    test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")
     duration_seconds: int = Field(default=60, ge=1, le=3_600)
     idempotency_key: str = Field(min_length=1, max_length=128)
 
@@ -179,18 +241,85 @@ class RecordingCreateRequest(ApiModel):
 class ReviewRequest(ApiModel):
     schema_version: Literal["1"]
     command: dict[str, Any]
-    bindings: dict[str, dict[str, str]] | None = None
 
 
 class FinalizeRequest(ApiModel):
     schema_version: Literal["1"]
-    bindings: dict[str, dict[str, str]] | None = None
 
 
-def _identity_options(profile) -> list[dict[str, str]]:
-    """仅投影身份 ID 与可读角色，避免把 secret_ref 带到产品响应。"""
+class ActionSafetySetupConfirmRequest(ApiModel):
+    schema_version: Literal["1"]
+    resource_candidate_id: str = Field(pattern=r"^trc_[0-9a-f]{32}$")
+    logical_name: str = Field(min_length=1, max_length=128)
+    resource_type: str = Field(min_length=1, max_length=128)
+    owner_test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")
+    observation_candidate_id: str | None = Field(
+        default=None,
+        pattern=r"^obc_[0-9a-f]{32}$",
+    )
+    recovery_candidate_id: str | None = Field(
+        default=None,
+        pattern=r"^rcc_[0-9a-f]{32}$",
+    )
+    confirm_recovery_not_required: bool = False
+    security_effect_candidate_id: str | None = Field(
+        default=None,
+        pattern=r"^sfc_[0-9a-f]{32}$",
+    )
 
-    return [
-        {"identity_id": identity.identity_id, "role": identity.role}
-        for identity in profile.identities
-    ]
+
+def _identity_option(identity) -> dict[str, str]:
+    """仅投影录制选择所需字段，避免把 secret_ref 带到产品响应。"""
+
+    return {
+        "test_identity_id": identity.identity_id,
+        "label": identity.label,
+        "role_display_name": identity.role_display_name,
+    }
+
+
+def _action_option(action) -> dict[str, str]:
+    return {
+        "action_candidate_id": action.candidate_id,
+        "display_name": action.display_name,
+        "risk_hint": action.risk_hint.value,
+    }
+
+
+def _recording_metadata(context: ApplicationCore, job) -> dict[str, object]:
+    """从持久请求恢复普通页面所需的非秘密动作与录制身份标签。"""
+
+    if job is None:
+        return {}
+    request = context.recording_request_store.load(
+        job.job_id,
+        expected_hash=job.request_hash,
+    )
+    understanding = context.application_understanding.get(request.project_id)
+    action = next(
+        (
+            item
+            for item in understanding.action_candidates
+            if item.candidate_id == request.action_candidate_id
+        ),
+        None,
+    )
+    test_identity_id = request.sessions[0].test_identity_id
+    try:
+        identity = context.test_identities.get(test_identity_id)
+    except JiejianError as exc:
+        if exc.code != ErrorCode.TEST_IDENTITY_NOT_FOUND.value:
+            raise
+        identity = None
+    return {
+        "action": _action_option(action) if action is not None else None,
+        "test_identity": (
+            _identity_option(identity)
+            if identity is not None
+            else {
+                "test_identity_id": test_identity_id,
+                "label": "已删除的测试账号",
+                "role_display_name": "已删除",
+            }
+        ),
+    }

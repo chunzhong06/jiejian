@@ -3,44 +3,32 @@
     "NormalizedPermissionCase": {
       "additionalProperties": false,
       "properties": {
-        "case_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Case Id",
-          "type": "string"
-        },
-        "fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Fingerprint",
-          "type": "string"
-        },
-        "source_kind": {
-          "const": "permission",
-          "title": "Source Kind",
-          "type": "string"
-        },
-        "source_contract_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Source Contract Id",
-          "type": "string"
-        },
-        "source_rule_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Source Rule Id",
-          "type": "string"
-        },
-        "subject_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Subject Id",
-          "type": "string"
-        },
         "action_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Action Id",
           "type": "string"
         },
-        "resource_id": {
+        "case_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Resource Id",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
+        },
+        "engine_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+          "title": "Engine Version",
+          "type": "string"
+        },
+        "expected": {
+          "$ref": "#/$defs/PermissionExpectation"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
           "type": "string"
         },
         "relation_path": {
@@ -52,12 +40,6 @@
           "title": "Relation Path",
           "type": "array"
         },
-        "context": {
-          "$ref": "#/$defs/PermissionContext"
-        },
-        "expected": {
-          "$ref": "#/$defs/PermissionExpectation"
-        },
         "required_observations": {
           "items": {
             "type": "string"
@@ -67,16 +49,14 @@
           "title": "Required Observations",
           "type": "array"
         },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
         "seed": {
           "title": "Seed",
           "type": "integer"
-        },
-        "engine_version": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
-          "title": "Engine Version",
-          "type": "string"
         },
         "source_case_id": {
           "anyOf": [
@@ -91,18 +71,10 @@
           "default": null,
           "title": "Source Case Id"
         },
-        "source_step_id": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Source Step Id"
+        "source_contract_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Source Contract Id",
+          "type": "string"
         },
         "source_identity_id": {
           "anyOf": [
@@ -117,10 +89,15 @@
           "default": null,
           "title": "Source Identity Id"
         },
-        "source_resource_id": {
+        "source_kind": {
+          "const": "permission",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "source_mutation": {
           "anyOf": [
             {
-              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
               "type": "string"
             },
             {
@@ -128,7 +105,7 @@
             }
           ],
           "default": null,
-          "title": "Source Resource Id"
+          "title": "Source Mutation"
         },
         "source_owner_identity_id": {
           "anyOf": [
@@ -143,10 +120,10 @@
           "default": null,
           "title": "Source Owner Identity Id"
         },
-        "source_mutation": {
+        "source_resource_id": {
           "anyOf": [
             {
-              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
               "type": "string"
             },
             {
@@ -154,7 +131,30 @@
             }
           ],
           "default": null,
-          "title": "Source Mutation"
+          "title": "Source Resource Id"
+        },
+        "source_rule_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Source Rule Id",
+          "type": "string"
+        },
+        "source_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Step Id"
+        },
+        "subject_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Subject Id",
+          "type": "string"
         }
       },
       "required": [
@@ -179,24 +179,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "workflow_states": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Workflow States",
-          "type": "array"
-        },
-        "tenant_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Tenant Ids",
-          "type": "array"
-        },
         "department_ids": {
           "default": [],
           "items": {
@@ -214,6 +196,24 @@
           "maxItems": 256,
           "title": "Resource Ids",
           "type": "array"
+        },
+        "tenant_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Tenant Ids",
+          "type": "array"
+        },
+        "workflow_states": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Workflow States",
+          "type": "array"
         }
       },
       "title": "PermissionContext",
@@ -230,27 +230,6 @@
   },
   "additionalProperties": false,
   "properties": {
-    "plan_id": {
-      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-      "title": "Plan Id",
-      "type": "string"
-    },
-    "source_contract_id": {
-      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-      "title": "Source Contract Id",
-      "type": "string"
-    },
-    "seed": {
-      "title": "Seed",
-      "type": "integer"
-    },
-    "engine_version": {
-      "maxLength": 128,
-      "minLength": 1,
-      "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
-      "title": "Engine Version",
-      "type": "string"
-    },
     "cases": {
       "items": {
         "$ref": "#/$defs/NormalizedPermissionCase"
@@ -259,6 +238,33 @@
       "minItems": 1,
       "title": "Cases",
       "type": "array"
+    },
+    "engine_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "plan_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Plan Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    },
+    "source_contract_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Source Contract Id",
+      "type": "string"
     }
   },
   "required": [

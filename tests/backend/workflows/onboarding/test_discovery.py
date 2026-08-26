@@ -1,3 +1,5 @@
+# 验证首次使用工作流中的受限项目识别。
+
 from __future__ import annotations
 
 from pathlib import Path

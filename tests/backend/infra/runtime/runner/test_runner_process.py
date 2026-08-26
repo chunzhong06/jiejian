@@ -1,10 +1,12 @@
+# 验证隔离 Runner 运行时中的Runner 进程隔离。
+
 from __future__ import annotations
 
 import subprocess
 import sys
 from pathlib import Path
 
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, minimal_process_environment
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, minimal_process_environment
 from tests.fixtures.runtime_environment import runtime_identity_environment
 
 

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 import time
@@ -13,21 +12,26 @@ import typer
 
 from product.backend.core.recording import RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import RecordingBudget, RecordingRunnerRequest, RecordingSessionRef, parse_flow_draft_review_command, required_identity_secret_refs
+from product.protocols import RecordingBudget, RecordingRunnerRequest, parse_flow_draft_review_command
 from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.cli.bootstrap import application_scope
 from product.backend.cli.presentation import emit_json, fail, human_wait
-from product.backend.workflows.recording.review import compile_flow_bindings
+from product.backend.workflows.recording.flow_compiler import compile_flow_bindings
 from product.protocols import parse_web_execution_profile
 
 
 def recording_start_command(
     context: typer.Context,
     profile_path: Path,
-    identity: list[str] | None = typer.Option(
-        None,
-        "--identity",
-        help="录制身份 ID；可重复指定，默认使用项目全部身份",
+    action_candidate_id: str = typer.Option(
+        ...,
+        "--action",
+        help="已确认业务动作候选 ID",
+    ),
+    test_identity_id: str = typer.Option(
+        ...,
+        "--test-identity",
+        help="已准备测试身份 ID",
     ),
     duration_seconds: int = typer.Option(
         60,
@@ -46,52 +50,51 @@ def recording_start_command(
 
     try:
         profile = parse_web_execution_profile(profile_path.resolve().read_bytes())
-        selected = identity or [item.identity_id for item in profile.identities]
-        known = {item.identity_id for item in profile.identities}
-        if not selected or len(set(selected)) != len(selected) or any(
-            item not in known for item in selected
-        ):
-            raise JiejianError(ErrorCode.INPUT_INVALID, "录制身份选择无效")
         now_us = time.time_ns() // 1_000
         duration_us = duration_seconds * 1_000_000
-        identities_by_id = {item.identity_id: item for item in profile.identities}
-        request = RecordingRunnerRequest(
-            schema_version="2",
-            recording_id=f"rec_{uuid4().hex}",
-            project_id=profile.project_id,
-            created_at_us=now_us,
-            target_scope=profile.target.scope,
-            sessions=tuple(
-                RecordingSessionRef(
-                    identity_id=item,
-                    session_ref=f"session_{uuid4().hex}",
-                    secret_refs=required_identity_secret_refs(identities_by_id[item]),
-                    expires_at_us=now_us + duration_us,
-                )
-                for item in selected
-            ),
-            budget=RecordingBudget(
-                max_duration_us=duration_us,
-                max_contexts=len(selected),
-            ),
-            headless=headless,
-            trace_enabled=False,
-        )
         with application_scope(context, environ=os.environ) as application:
             application.projects.register(profile_path)
-            submission = application.recording_runs.run(
-                SubmitRecording(
-                    request=request,
-                    flow_id=profile.profile_id,
-                    idempotency_key=f"cli-recording-{uuid4().hex}",
-                    max_attempts=3,
-                    available_at_us=now_us,
-                    now_us=now_us,
-                ),
-                timeout_seconds=duration_seconds + 30,
+            if action_candidate_id not in {
+                item.action_id for item in profile.workflow_bindings
+            }:
+                raise JiejianError(ErrorCode.INPUT_INVALID, "执行配置未登记当前业务动作")
+            recording_id = f"rec_{uuid4().hex}"
+            session = application.recording_credentials.prepare(
+                project_id=profile.project_id,
+                test_identity_id=test_identity_id,
+                recording_id=recording_id,
+                session_ref=f"session_{uuid4().hex}",
+                now_us=now_us,
+                expires_at_us=now_us + duration_us,
             )
-            with human_wait("正在录制流程"):
-                view = application.recording_lifecycle.status(request.recording_id)
+            request = RecordingRunnerRequest(
+                schema_version="1",
+                recording_id=recording_id,
+                project_id=profile.project_id,
+                action_candidate_id=action_candidate_id,
+                created_at_us=now_us,
+                target_scope=profile.target.scope,
+                sessions=(session,),
+                budget=RecordingBudget(max_duration_us=duration_us, max_contexts=1),
+                headless=headless,
+                trace_enabled=False,
+            )
+            try:
+                submission = application.recording_runs.run(
+                    SubmitRecording(
+                        request=request,
+                        flow_id=profile.profile_id,
+                        idempotency_key=f"cli-recording-{uuid4().hex}",
+                        max_attempts=3,
+                        available_at_us=now_us,
+                        now_us=now_us,
+                    ),
+                    timeout_seconds=duration_seconds + 30,
+                )
+                with human_wait("正在录制流程"):
+                    view = application.recording_lifecycle.status(request.recording_id)
+            finally:
+                application.recording_credentials.clear(recording_id)
             emit_json(
                 {
                     "schema_version": "1",
@@ -120,23 +123,13 @@ def recording_review_command(
     context: typer.Context,
     recording_id: str,
     command_path: Path = typer.Option(..., "--command", help="流程审阅命令 JSON"),
-    bindings_path: Path | None = typer.Option(
-        None,
-        "--bindings",
-        help="显式身份/资源绑定 JSON，可选",
-    ),
 ) -> None:
     """应用一个不可变 FlowDraft 审阅命令并生成新 revision。"""
 
     try:
         command = parse_flow_draft_review_command(command_path.read_bytes())
-        bindings = _load_recording_bindings(bindings_path) if bindings_path else None
         with application_scope(context, environ=os.environ) as application:
-            view = application.recording_lifecycle.review(
-                recording_id,
-                command,
-                bindings=bindings,
-            )
+            view = application.recording_lifecycle.review(recording_id, command)
             emit_json(view.model_dump(mode="json"))
     except (OSError, JiejianError) as exc:
         fail(
@@ -214,23 +207,3 @@ def recording_replay_command(
             if isinstance(exc, JiejianError)
             else JiejianError(ErrorCode.RECORD_REPLAY_FAILED, "回放输入不可读取")
         )
-
-
-def _load_recording_bindings(path: Path) -> dict[str, dict[str, str]]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        raise JiejianError(ErrorCode.INPUT_FILE, "绑定文件不可读取") from None
-    if not isinstance(value, dict):
-        raise JiejianError(ErrorCode.INPUT_INVALID, "绑定文件必须是对象")
-    result: dict[str, dict[str, str]] = {}
-    for step_id, binding in value.items():
-        if not isinstance(step_id, str) or not isinstance(binding, dict):
-            raise JiejianError(ErrorCode.INPUT_INVALID, "绑定文件结构无效")
-        if any(
-            not isinstance(key, str) or not isinstance(item, str)
-            for key, item in binding.items()
-        ):
-            raise JiejianError(ErrorCode.INPUT_INVALID, "绑定文件值无效")
-        result[step_id] = dict(binding)
-    return result

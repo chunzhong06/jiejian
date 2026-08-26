@@ -3,11 +3,13 @@
     "AsyncTaskApiLocator": {
       "additionalProperties": false,
       "properties": {
-        "locator_type": {
-          "const": "ASYNC_TASK_STATUS",
-          "default": "ASYNC_TASK_STATUS",
-          "title": "Locator Type",
-          "type": "string"
+        "allow_loopback_http": {
+          "title": "Allow Loopback Http",
+          "type": "boolean"
+        },
+        "allow_private_network": {
+          "title": "Allow Private Network",
+          "type": "boolean"
         },
         "base_url": {
           "maxLength": 256,
@@ -15,27 +17,25 @@
           "title": "Base Url",
           "type": "string"
         },
-        "relative_path_template": {
-          "maxLength": 512,
-          "minLength": 18,
-          "title": "Relative Path Template",
+        "locator_type": {
+          "const": "ASYNC_TASK_STATUS",
+          "default": "ASYNC_TASK_STATUS",
+          "title": "Locator Type",
           "type": "string"
+        },
+        "poll_budget": {
+          "$ref": "#/$defs/AsyncTaskPollBudget"
         },
         "read_only_credential_ref": {
           "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
           "title": "Read Only Credential Ref",
           "type": "string"
         },
-        "allow_private_network": {
-          "title": "Allow Private Network",
-          "type": "boolean"
-        },
-        "allow_loopback_http": {
-          "title": "Allow Loopback Http",
-          "type": "boolean"
-        },
-        "poll_budget": {
-          "$ref": "#/$defs/AsyncTaskPollBudget"
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 18,
+          "title": "Relative Path Template",
+          "type": "string"
         }
       },
       "required": [
@@ -58,10 +58,10 @@
           "title": "Max Polls",
           "type": "integer"
         },
-        "poll_interval_us": {
-          "maximum": 120000000,
-          "minimum": 0,
-          "title": "Poll Interval Us",
+        "max_response_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Response Bytes",
           "type": "integer"
         },
         "per_request_timeout_us": {
@@ -70,10 +70,10 @@
           "title": "Per Request Timeout Us",
           "type": "integer"
         },
-        "max_response_bytes": {
-          "maximum": 262144,
-          "minimum": 1,
-          "title": "Max Response Bytes",
+        "poll_interval_us": {
+          "maximum": 120000000,
+          "minimum": 0,
+          "title": "Poll Interval Us",
           "type": "integer"
         }
       },
@@ -95,16 +95,16 @@
           "title": "Max Files",
           "type": "integer"
         },
-        "max_lines": {
-          "maximum": 100000,
-          "minimum": 1,
-          "title": "Max Lines",
-          "type": "integer"
-        },
         "max_line_bytes": {
           "maximum": 262144,
           "minimum": 1,
           "title": "Max Line Bytes",
+          "type": "integer"
+        },
+        "max_lines": {
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Max Lines",
           "type": "integer"
         }
       },
@@ -119,25 +119,33 @@
     "AzureBlobObjectLocator": {
       "additionalProperties": false,
       "properties": {
-        "locator_type": {
-          "const": "AZURE_BLOB_OBJECT",
-          "default": "AZURE_BLOB_OBJECT",
-          "title": "Locator Type",
-          "type": "string"
-        },
         "allow_loopback_http": {
           "title": "Allow Loopback Http",
           "type": "boolean"
         },
-        "service_url": {
-          "maxLength": 256,
-          "minLength": 24,
-          "title": "Service Url",
-          "type": "string"
+        "allowed_metadata_fields": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "title": "Allowed Metadata Fields",
+          "type": "array"
         },
         "container_name": {
           "pattern": "^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$",
           "title": "Container Name",
+          "type": "string"
+        },
+        "exclusive_test_container": {
+          "const": true,
+          "title": "Exclusive Test Container",
+          "type": "boolean"
+        },
+        "locator_type": {
+          "const": "AZURE_BLOB_OBJECT",
+          "default": "AZURE_BLOB_OBJECT",
+          "title": "Locator Type",
           "type": "string"
         },
         "prefix_template": {
@@ -151,22 +159,14 @@
           "title": "Read Only Sas Ref",
           "type": "string"
         },
-        "exclusive_test_container": {
-          "const": true,
-          "title": "Exclusive Test Container",
-          "type": "boolean"
-        },
-        "allowed_metadata_fields": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 16,
-          "minItems": 2,
-          "title": "Allowed Metadata Fields",
-          "type": "array"
-        },
         "scan_budget": {
           "$ref": "#/$defs/BlobObjectScanBudget"
+        },
+        "service_url": {
+          "maxLength": 256,
+          "minLength": 24,
+          "title": "Service Url",
+          "type": "string"
         }
       },
       "required": [
@@ -185,35 +185,8 @@
     "AzureQueuePeekLocator": {
       "additionalProperties": false,
       "properties": {
-        "locator_type": {
-          "const": "AZURE_QUEUE_PEEK",
-          "default": "AZURE_QUEUE_PEEK",
-          "title": "Locator Type",
-          "type": "string"
-        },
         "allow_loopback_http": {
           "title": "Allow Loopback Http",
-          "type": "boolean"
-        },
-        "service_url": {
-          "maxLength": 256,
-          "minLength": 24,
-          "title": "Service Url",
-          "type": "string"
-        },
-        "queue_name": {
-          "pattern": "^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$",
-          "title": "Queue Name",
-          "type": "string"
-        },
-        "read_only_sas_ref": {
-          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
-          "title": "Read Only Sas Ref",
-          "type": "string"
-        },
-        "exclusive_test_queue": {
-          "const": true,
-          "title": "Exclusive Test Queue",
           "type": "boolean"
         },
         "allowed_fields": {
@@ -225,8 +198,35 @@
           "title": "Allowed Fields",
           "type": "array"
         },
+        "exclusive_test_queue": {
+          "const": true,
+          "title": "Exclusive Test Queue",
+          "type": "boolean"
+        },
+        "locator_type": {
+          "const": "AZURE_QUEUE_PEEK",
+          "default": "AZURE_QUEUE_PEEK",
+          "title": "Locator Type",
+          "type": "string"
+        },
         "peek_budget": {
           "$ref": "#/$defs/QueuePeekBudget"
+        },
+        "queue_name": {
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$",
+          "title": "Queue Name",
+          "type": "string"
+        },
+        "read_only_sas_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Read Only Sas Ref",
+          "type": "string"
+        },
+        "service_url": {
+          "maxLength": 256,
+          "minLength": 24,
+          "title": "Service Url",
+          "type": "string"
         }
       },
       "required": [
@@ -244,22 +244,10 @@
     "BlobObjectScanBudget": {
       "additionalProperties": false,
       "properties": {
-        "page_size": {
-          "maximum": 5000,
+        "max_attempts": {
+          "maximum": 3,
           "minimum": 1,
-          "title": "Page Size",
-          "type": "integer"
-        },
-        "max_pages": {
-          "maximum": 256,
-          "minimum": 1,
-          "title": "Max Pages",
-          "type": "integer"
-        },
-        "max_objects": {
-          "maximum": 10000,
-          "minimum": 1,
-          "title": "Max Objects",
+          "title": "Max Attempts",
           "type": "integer"
         },
         "max_object_bytes": {
@@ -268,16 +256,28 @@
           "title": "Max Object Bytes",
           "type": "integer"
         },
+        "max_objects": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Max Objects",
+          "type": "integer"
+        },
+        "max_pages": {
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Max Pages",
+          "type": "integer"
+        },
         "max_total_bytes": {
           "maximum": 262144,
           "minimum": 1,
           "title": "Max Total Bytes",
           "type": "integer"
         },
-        "max_attempts": {
-          "maximum": 3,
+        "page_size": {
+          "maximum": 5000,
           "minimum": 1,
-          "title": "Max Attempts",
+          "title": "Page Size",
           "type": "integer"
         },
         "per_request_timeout_us": {
@@ -314,14 +314,14 @@
           "title": "Case Id",
           "type": "string"
         },
-        "resource_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Resource Id",
-          "type": "string"
-        },
         "request_marker": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
           "title": "Request Marker",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
           "type": "string"
         }
       },
@@ -347,10 +347,10 @@
     "ObserverBudget": {
       "additionalProperties": false,
       "properties": {
-        "timeout_us": {
-          "maximum": 120000000,
+        "max_bytes": {
+          "maximum": 262144,
           "minimum": 1,
-          "title": "Timeout Us",
+          "title": "Max Bytes",
           "type": "integer"
         },
         "max_rows": {
@@ -359,10 +359,10 @@
           "title": "Max Rows",
           "type": "integer"
         },
-        "max_bytes": {
-          "maximum": 262144,
+        "timeout_us": {
+          "maximum": 120000000,
           "minimum": 1,
-          "title": "Max Bytes",
+          "title": "Timeout Us",
           "type": "integer"
         }
       },
@@ -377,6 +377,9 @@
     "ObserverSpec": {
       "additionalProperties": false,
       "properties": {
+        "budget": {
+          "$ref": "#/$defs/ObserverBudget"
+        },
         "observer_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Observer Id",
@@ -384,15 +387,6 @@
         },
         "observer_type": {
           "$ref": "#/$defs/ObserverType"
-        },
-        "protocol_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Protocol Version",
-          "type": "string"
-        },
-        "target": {
-          "$ref": "#/$defs/ObserverTarget"
         },
         "phases": {
           "items": {
@@ -403,12 +397,18 @@
           "title": "Phases",
           "type": "array"
         },
+        "protocol_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Protocol Version",
+          "type": "string"
+        },
         "required": {
           "title": "Required",
           "type": "boolean"
         },
-        "budget": {
-          "$ref": "#/$defs/ObserverBudget"
+        "target": {
+          "$ref": "#/$defs/ObserverTarget"
         }
       },
       "required": [
@@ -425,11 +425,6 @@
     "ObserverTarget": {
       "additionalProperties": false,
       "properties": {
-        "target_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Target Id",
-          "type": "string"
-        },
         "locator": {
           "discriminator": {
             "mapping": {
@@ -472,6 +467,11 @@
         "normalization_version": {
           "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
           "title": "Normalization Version",
+          "type": "string"
+        },
+        "target_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Target Id",
           "type": "string"
         }
       },
@@ -521,10 +521,10 @@
     "QueuePeekBudget": {
       "additionalProperties": false,
       "properties": {
-        "max_messages": {
-          "maximum": 32,
+        "max_attempts": {
+          "maximum": 3,
           "minimum": 1,
-          "title": "Max Messages",
+          "title": "Max Attempts",
           "type": "integer"
         },
         "max_message_bytes": {
@@ -533,16 +533,16 @@
           "title": "Max Message Bytes",
           "type": "integer"
         },
+        "max_messages": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Messages",
+          "type": "integer"
+        },
         "max_total_bytes": {
           "maximum": 262144,
           "minimum": 1,
           "title": "Max Total Bytes",
-          "type": "integer"
-        },
-        "max_attempts": {
-          "maximum": 3,
-          "minimum": 1,
-          "title": "Max Attempts",
           "type": "integer"
         },
         "per_request_timeout_us": {
@@ -572,6 +572,11 @@
     "SqliteQueryLocator": {
       "additionalProperties": false,
       "properties": {
+        "database_secret_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Database Secret Ref",
+          "type": "string"
+        },
         "locator_type": {
           "const": "READ_ONLY_SQLITE",
           "default": "READ_ONLY_SQLITE",
@@ -587,11 +592,6 @@
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Table Or View",
           "type": "string"
-        },
-        "database_secret_ref": {
-          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
-          "title": "Database Secret Ref",
-          "type": "string"
         }
       },
       "required": [
@@ -605,22 +605,6 @@
     "StructuredAuditLogLocator": {
       "additionalProperties": false,
       "properties": {
-        "locator_type": {
-          "const": "STRUCTURED_AUDIT_LOG",
-          "default": "STRUCTURED_AUDIT_LOG",
-          "title": "Locator Type",
-          "type": "string"
-        },
-        "authorized_root_ref": {
-          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
-          "title": "Authorized Root Ref",
-          "type": "string"
-        },
-        "relative_file_pattern": {
-          "pattern": "^[a-z][a-z0-9_-]{0,48}\\.jsonl$",
-          "title": "Relative File Pattern",
-          "type": "string"
-        },
         "allowed_fields": {
           "items": {
             "type": "string"
@@ -629,6 +613,22 @@
           "minItems": 6,
           "title": "Allowed Fields",
           "type": "array"
+        },
+        "authorized_root_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Authorized Root Ref",
+          "type": "string"
+        },
+        "locator_type": {
+          "const": "STRUCTURED_AUDIT_LOG",
+          "default": "STRUCTURED_AUDIT_LOG",
+          "title": "Locator Type",
+          "type": "string"
+        },
+        "relative_file_pattern": {
+          "pattern": "^[a-z][a-z0-9_-]{0,48}\\.jsonl$",
+          "title": "Relative File Pattern",
+          "type": "string"
         },
         "scan_budget": {
           "$ref": "#/$defs/AuditLogScanBudget"
@@ -646,20 +646,20 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "3",
-      "default": "3",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "spec": {
-      "$ref": "#/$defs/ObserverSpec"
-    },
     "correlation": {
       "$ref": "#/$defs/Correlation"
     },
     "phase": {
       "$ref": "#/$defs/ObservationPhase"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "spec": {
+      "$ref": "#/$defs/ObserverSpec"
     }
   },
   "required": [

@@ -28,12 +28,48 @@
       "title": "CausalityStatus",
       "type": "string"
     },
+    "CleanupIssue": {
+      "additionalProperties": false,
+      "description": "一个清理问题及其可选稳定底层原因。",
+      "properties": {
+        "cause_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cause Code"
+        },
+        "code": {
+          "$ref": "#/$defs/CleanupIssueCode"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "CleanupIssue",
+      "type": "object"
+    },
+    "CleanupIssueCode": {
+      "description": "不覆盖主错误的有限清理问题类型。",
+      "enum": [
+        "POST_CASE_RECOVERY_FAILED",
+        "IDENTITY_CLOSE_FAILED",
+        "RUNTIME_CLOSE_FAILED",
+        "PROCESS_TREE_CLEANUP_FAILED"
+      ],
+      "title": "CleanupIssueCode",
+      "type": "string"
+    },
     "CleanupResult": {
       "additionalProperties": false,
+      "description": "独立于主错误的现场恢复与资源关闭结果。",
       "properties": {
-        "status": {
-          "$ref": "#/$defs/CleanupStatus"
-        },
         "finished_at_us": {
           "anyOf": [
             {
@@ -47,14 +83,17 @@
           "default": null,
           "title": "Finished At Us"
         },
-        "reason_codes": {
+        "issues": {
           "default": [],
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/CleanupIssue"
           },
           "maxItems": 64,
-          "title": "Reason Codes",
+          "title": "Issues",
           "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/CleanupStatus"
         }
       },
       "required": [
@@ -80,14 +119,14 @@
           "title": "Case Id",
           "type": "string"
         },
-        "resource_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Resource Id",
-          "type": "string"
-        },
         "request_marker": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
           "title": "Request Marker",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
           "type": "string"
         }
       },
@@ -114,14 +153,13 @@
     "DisclosureProof": {
       "additionalProperties": false,
       "properties": {
-        "projection_version": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Projection Version",
+        "correlation_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Correlation Digest",
           "type": "string"
         },
-        "projection_complete": {
-          "title": "Projection Complete",
+        "matched": {
+          "title": "Matched",
           "type": "boolean"
         },
         "owner_digest": {
@@ -129,18 +167,19 @@
           "title": "Owner Digest",
           "type": "string"
         },
+        "projection_complete": {
+          "title": "Projection Complete",
+          "type": "boolean"
+        },
+        "projection_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Projection Version",
+          "type": "string"
+        },
         "response_digest": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Response Digest",
-          "type": "string"
-        },
-        "matched": {
-          "title": "Matched",
-          "type": "boolean"
-        },
-        "correlation_digest": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Correlation Digest",
           "type": "string"
         }
       },
@@ -158,47 +197,6 @@
     "Evidence": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "4",
-          "default": "4",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "evidence_id": {
-          "pattern": "^ev_[0-9a-f]{20}$",
-          "title": "Evidence Id",
-          "type": "string"
-        },
-        "run_id": {
-          "pattern": "^run_[0-9a-f]{32}$",
-          "title": "Run Id",
-          "type": "string"
-        },
-        "case_snapshot": {
-          "$ref": "#/$defs/PermissionMutationCase"
-        },
-        "twin_snapshot": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PermissionTwin"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "twin_role": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TwinExecutionRole"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
         "allow_control_valid": {
           "title": "Allow Control Valid",
           "type": "boolean"
@@ -207,22 +205,26 @@
           "title": "Baseline Integrity",
           "type": "boolean"
         },
-        "finding_pre_identity": {
+        "case_snapshot": {
+          "$ref": "#/$defs/PermissionMutationCase"
+        },
+        "evidence_hash": {
           "pattern": "^[0-9a-f]{64}$",
-          "title": "Finding Pre Identity",
+          "title": "Evidence Hash",
+          "type": "string"
+        },
+        "evidence_id": {
+          "pattern": "^ev_[0-9a-f]{20}$",
+          "title": "Evidence Id",
           "type": "string"
         },
         "execution_fact": {
           "$ref": "#/$defs/ExecutionFact"
         },
-        "requirement_bindings": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/ObserverRequirementBinding"
-          },
-          "maxItems": 16,
-          "title": "Requirement Bindings",
-          "type": "array"
+        "finding_pre_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Finding Pre Identity",
+          "type": "string"
         },
         "observation_facts": {
           "default": [],
@@ -231,15 +233,6 @@
           },
           "maxItems": 19200,
           "title": "Observation Facts",
-          "type": "array"
-        },
-        "security_effect_facts": {
-          "items": {
-            "$ref": "#/$defs/SecurityEffectFact"
-          },
-          "maxItems": 19200,
-          "minItems": 1,
-          "title": "Security Effect Facts",
           "type": "array"
         },
         "observations": {
@@ -260,9 +253,6 @@
           "title": "Outcomes",
           "type": "array"
         },
-        "verdict": {
-          "$ref": "#/$defs/CaseVerdict"
-        },
         "reason_codes": {
           "default": [],
           "items": {
@@ -272,10 +262,59 @@
           "title": "Reason Codes",
           "type": "array"
         },
-        "evidence_hash": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Evidence Hash",
+        "requirement_bindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObserverRequirementBinding"
+          },
+          "maxItems": 16,
+          "title": "Requirement Bindings",
+          "type": "array"
+        },
+        "run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Run Id",
           "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "security_effect_facts": {
+          "items": {
+            "$ref": "#/$defs/SecurityEffectFact"
+          },
+          "maxItems": 19200,
+          "minItems": 1,
+          "title": "Security Effect Facts",
+          "type": "array"
+        },
+        "twin_role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TwinExecutionRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "twin_snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionTwin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "verdict": {
+          "$ref": "#/$defs/CaseVerdict"
         }
       },
       "required": [
@@ -296,21 +335,15 @@
     "ExecutionFact": {
       "additionalProperties": false,
       "properties": {
-        "case_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Case Id",
-          "type": "string"
-        },
         "action_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Action Id",
           "type": "string"
         },
-        "target_type": {
-          "$ref": "#/$defs/TargetType"
-        },
-        "outcome": {
-          "$ref": "#/$defs/ExecutionOutcome"
+        "case_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Case Id",
+          "type": "string"
         },
         "execution_marker": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
@@ -321,6 +354,9 @@
           "pattern": "^[0-9a-f]{64}$",
           "title": "Input Hash",
           "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ExecutionOutcome"
         },
         "output_hash": {
           "pattern": "^[0-9a-f]{64}$",
@@ -335,6 +371,9 @@
           "maxItems": 16,
           "title": "Reason Codes",
           "type": "array"
+        },
+        "target_type": {
+          "$ref": "#/$defs/TargetType"
         }
       },
       "required": [
@@ -374,6 +413,12 @@
     "NormalizedState": {
       "additionalProperties": false,
       "properties": {
+        "byte_count": {
+          "maximum": 262144,
+          "minimum": 2,
+          "title": "Byte Count",
+          "type": "integer"
+        },
         "canonical_data": {
           "additionalProperties": true,
           "title": "Canonical Data",
@@ -383,12 +428,6 @@
           "pattern": "^[0-9a-f]{64}$",
           "title": "Canonical Sha256",
           "type": "string"
-        },
-        "byte_count": {
-          "maximum": 262144,
-          "minimum": 2,
-          "title": "Byte Count",
-          "type": "integer"
         }
       },
       "required": [
@@ -414,11 +453,14 @@
     "ObservationEnvelope": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "3",
-          "default": "3",
-          "title": "Schema Version",
-          "type": "string"
+        "causality": {
+          "$ref": "#/$defs/CausalityStatus"
+        },
+        "completeness": {
+          "$ref": "#/$defs/ObservationCompleteness"
+        },
+        "correlation": {
+          "$ref": "#/$defs/Correlation"
         },
         "observer_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
@@ -428,42 +470,14 @@
         "observer_type": {
           "$ref": "#/$defs/ObserverType"
         },
+        "phase": {
+          "$ref": "#/$defs/ObservationPhase"
+        },
         "protocol_version": {
           "const": "3",
           "default": "3",
           "title": "Protocol Version",
           "type": "string"
-        },
-        "phase": {
-          "$ref": "#/$defs/ObservationPhase"
-        },
-        "target_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Target Id",
-          "type": "string"
-        },
-        "window": {
-          "$ref": "#/$defs/ObservationWindow"
-        },
-        "correlation": {
-          "$ref": "#/$defs/Correlation"
-        },
-        "causality": {
-          "$ref": "#/$defs/CausalityStatus"
-        },
-        "completeness": {
-          "$ref": "#/$defs/ObservationCompleteness"
-        },
-        "state": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/NormalizedState"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
         },
         "provenance": {
           "anyOf": [
@@ -484,6 +498,31 @@
           "maxItems": 16,
           "title": "Reason Codes",
           "type": "array"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NormalizedState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "target_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Target Id",
+          "type": "string"
+        },
+        "window": {
+          "$ref": "#/$defs/ObservationWindow"
         }
       },
       "required": [
@@ -502,6 +541,30 @@
     "ObservationFact": {
       "additionalProperties": false,
       "properties": {
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "correlated": {
+          "title": "Correlated",
+          "type": "boolean"
+        },
+        "effect": {
+          "$ref": "#/$defs/ObservedEffect"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "reliable": {
+          "title": "Reliable",
+          "type": "boolean"
+        },
         "requirement_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Requirement Id",
@@ -512,32 +575,8 @@
           "title": "Resource Id",
           "type": "string"
         },
-        "effect": {
-          "$ref": "#/$defs/ObservedEffect"
-        },
-        "complete": {
-          "title": "Complete",
-          "type": "boolean"
-        },
-        "reliable": {
-          "title": "Reliable",
-          "type": "boolean"
-        },
-        "correlated": {
-          "title": "Correlated",
-          "type": "boolean"
-        },
         "temporal_closure": {
           "$ref": "#/$defs/TemporalClosure"
-        },
-        "reason_codes": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 16,
-          "title": "Reason Codes",
-          "type": "array"
         }
       },
       "required": [
@@ -566,18 +605,13 @@
     "ObservationProvenance": {
       "additionalProperties": false,
       "properties": {
-        "provenance_type": {
-          "$ref": "#/$defs/ProvenanceType"
-        },
         "adapter_version": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
           "title": "Adapter Version",
           "type": "string"
         },
-        "target_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Target Id",
-          "type": "string"
+        "provenance_type": {
+          "$ref": "#/$defs/ProvenanceType"
         },
         "query_template_id": {
           "anyOf": [
@@ -596,6 +630,11 @@
           "pattern": "^[0-9a-f]{64}$",
           "title": "Source Sha256",
           "type": "string"
+        },
+        "target_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Target Id",
+          "type": "string"
         }
       },
       "required": [
@@ -610,17 +649,17 @@
     "ObservationWindow": {
       "additionalProperties": false,
       "properties": {
+        "finished_at_us": {
+          "minimum": 0,
+          "title": "Finished At Us",
+          "type": "integer"
+        },
         "phase": {
           "$ref": "#/$defs/ObservationPhase"
         },
         "started_at_us": {
           "minimum": 0,
           "title": "Started At Us",
-          "type": "integer"
-        },
-        "finished_at_us": {
-          "minimum": 0,
-          "title": "Finished At Us",
           "type": "integer"
         },
         "timeout_us": {
@@ -656,13 +695,6 @@
           "title": "Observer Id",
           "type": "string"
         },
-        "required": {
-          "title": "Required",
-          "type": "boolean"
-        },
-        "status": {
-          "$ref": "#/$defs/ObserverOutcomeStatus"
-        },
         "reason_codes": {
           "default": [],
           "items": {
@@ -671,6 +703,13 @@
           "maxItems": 16,
           "title": "Reason Codes",
           "type": "array"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/ObserverOutcomeStatus"
         }
       },
       "required": [
@@ -693,10 +732,31 @@
     "ObserverRequirementBinding": {
       "additionalProperties": false,
       "properties": {
-        "requirement_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Requirement Id",
-          "type": "string"
+        "credential_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Ref"
+        },
+        "identity_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identity Id"
         },
         "kind": {
           "$ref": "#/$defs/ObserverRequirementKind"
@@ -725,19 +785,6 @@
           ],
           "default": null
         },
-        "credential_ref": {
-          "anyOf": [
-            {
-              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Credential Ref"
-        },
         "phases": {
           "default": [],
           "items": {
@@ -746,6 +793,11 @@
           "maxItems": 5,
           "title": "Phases",
           "type": "array"
+        },
+        "requirement_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Requirement Id",
+          "type": "string"
         }
       },
       "required": [
@@ -777,24 +829,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "workflow_states": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Workflow States",
-          "type": "array"
-        },
-        "tenant_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Tenant Ids",
-          "type": "array"
-        },
         "department_ids": {
           "default": [],
           "items": {
@@ -812,6 +846,24 @@
           "maxItems": 256,
           "title": "Resource Ids",
           "type": "array"
+        },
+        "tenant_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Tenant Ids",
+          "type": "array"
+        },
+        "workflow_states": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Workflow States",
+          "type": "array"
         }
       },
       "title": "PermissionContext",
@@ -828,29 +880,33 @@
     "PermissionMutationCase": {
       "additionalProperties": false,
       "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "atomic": {
+          "default": false,
+          "title": "Atomic",
+          "type": "boolean"
+        },
+        "batch_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BatchAuthorizationMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Case Id",
           "type": "string"
         },
-        "fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Fingerprint",
-          "type": "string"
-        },
-        "finding_pre_identity": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Finding Pre Identity",
-          "type": "string"
-        },
-        "source_rule_ids": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 32,
-          "minItems": 1,
-          "title": "Source Rule Ids",
-          "type": "array"
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
         },
         "dimensions": {
           "items": {
@@ -858,26 +914,6 @@
           },
           "maxItems": 6,
           "title": "Dimensions",
-          "type": "array"
-        },
-        "retention_reason": {
-          "$ref": "#/$defs/RetentionReason"
-        },
-        "subject_id": {
-          "title": "Subject Id",
-          "type": "string"
-        },
-        "action_id": {
-          "title": "Action Id",
-          "type": "string"
-        },
-        "resource_ids": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 256,
-          "minItems": 1,
-          "title": "Resource Ids",
           "type": "array"
         },
         "expectations": {
@@ -888,6 +924,16 @@
           "minItems": 1,
           "title": "Expectations",
           "type": "array"
+        },
+        "finding_pre_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Finding Pre Identity",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
         },
         "relation_paths": {
           "items": {
@@ -901,9 +947,6 @@
           "title": "Relation Paths",
           "type": "array"
         },
-        "context": {
-          "$ref": "#/$defs/PermissionContext"
-        },
         "required_observations": {
           "items": {
             "type": "string"
@@ -913,21 +956,30 @@
           "title": "Required Observations",
           "type": "array"
         },
-        "batch_mode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/BatchAuthorizationMode"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Resource Ids",
+          "type": "array"
         },
-        "atomic": {
-          "default": false,
-          "title": "Atomic",
-          "type": "boolean"
+        "retention_reason": {
+          "$ref": "#/$defs/RetentionReason"
+        },
+        "source_rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Source Rule Ids",
+          "type": "array"
+        },
+        "subject_id": {
+          "title": "Subject Id",
+          "type": "string"
         }
       },
       "required": [
@@ -951,8 +1003,10 @@
     "PermissionMutationDescriptor": {
       "additionalProperties": false,
       "properties": {
-        "dimension": {
-          "$ref": "#/$defs/CoverageDimension"
+        "allow_value_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Allow Value Fingerprint",
+          "type": "string"
         },
         "changed_fields": {
           "items": {
@@ -963,15 +1017,13 @@
           "title": "Changed Fields",
           "type": "array"
         },
-        "allow_value_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Allow Value Fingerprint",
-          "type": "string"
-        },
         "deny_value_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Deny Value Fingerprint",
           "type": "string"
+        },
+        "dimension": {
+          "$ref": "#/$defs/CoverageDimension"
         }
       },
       "required": [
@@ -986,34 +1038,34 @@
     "PermissionTwin": {
       "additionalProperties": false,
       "properties": {
-        "twin_id": {
-          "pattern": "^twin-[0-9a-f]{32}$",
-          "title": "Twin Id",
-          "type": "string"
-        },
-        "source_rule_id": {
-          "title": "Source Rule Id",
-          "type": "string"
-        },
         "allow_case": {
           "$ref": "#/$defs/PermissionMutationCase"
         },
         "deny_case": {
           "$ref": "#/$defs/PermissionMutationCase"
         },
-        "varied_dimension": {
-          "$ref": "#/$defs/CoverageDimension"
+        "invariant": {
+          "$ref": "#/$defs/TwinInvariantSpecification"
         },
         "mutation": {
           "$ref": "#/$defs/PermissionMutationDescriptor"
         },
-        "invariant": {
-          "$ref": "#/$defs/TwinInvariantSpecification"
+        "source_rule_id": {
+          "title": "Source Rule Id",
+          "type": "string"
         },
         "twin_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Twin Fingerprint",
           "type": "string"
+        },
+        "twin_id": {
+          "pattern": "^twin-[0-9a-f]{32}$",
+          "title": "Twin Id",
+          "type": "string"
+        },
+        "varied_dimension": {
+          "$ref": "#/$defs/CoverageDimension"
         }
       },
       "required": [
@@ -1074,11 +1126,28 @@
     },
     "RunnerError": {
       "additionalProperties": false,
+      "description": "一次 Runner 失败的主错误、阶段和稳定原因。",
       "properties": {
+        "cause_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cause Code"
+        },
         "code": {
           "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
           "title": "Code",
           "type": "string"
+        },
+        "phase": {
+          "$ref": "#/$defs/RunnerFailurePhase"
         },
         "retryable": {
           "title": "Retryable",
@@ -1087,10 +1156,30 @@
       },
       "required": [
         "code",
+        "phase",
         "retryable"
       ],
       "title": "RunnerError",
       "type": "object"
+    },
+    "RunnerFailurePhase": {
+      "description": "Runner 主错误发生的有限执行阶段。",
+      "enum": [
+        "TARGET_VALIDATION",
+        "PREPARE_RECOVERY",
+        "IDENTITY_PREPARATION",
+        "SETUP",
+        "BASELINE",
+        "BEFORE",
+        "TARGET",
+        "AFTER",
+        "EVENTUAL",
+        "VERIFY",
+        "POST_CASE_RECOVERY",
+        "RUNTIME_CLOSE"
+      ],
+      "title": "RunnerFailurePhase",
+      "type": "string"
     },
     "RunnerResultType": {
       "enum": [
@@ -1106,49 +1195,17 @@
     "SecurityEffectFact": {
       "additionalProperties": false,
       "properties": {
-        "effect_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Effect Id",
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/$defs/SecurityEffectKind"
-        },
-        "resource_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Resource Id",
-          "type": "string"
-        },
-        "state": {
-          "$ref": "#/$defs/ObservedEffect"
+        "baseline_integrity": {
+          "title": "Baseline Integrity",
+          "type": "boolean"
         },
         "complete": {
           "title": "Complete",
           "type": "boolean"
         },
-        "reliable": {
-          "title": "Reliable",
-          "type": "boolean"
-        },
         "correlated": {
           "title": "Correlated",
           "type": "boolean"
-        },
-        "temporal_closure": {
-          "$ref": "#/$defs/TemporalClosure"
-        },
-        "baseline_integrity": {
-          "title": "Baseline Integrity",
-          "type": "boolean"
-        },
-        "source_requirement_ids": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "minItems": 1,
-          "title": "Source Requirement Ids",
-          "type": "array"
         },
         "disclosure_proof": {
           "anyOf": [
@@ -1161,6 +1218,14 @@
           ],
           "default": null
         },
+        "effect_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SecurityEffectKind"
+        },
         "reason_codes": {
           "default": [],
           "items": {
@@ -1169,6 +1234,30 @@
           "maxItems": 32,
           "title": "Reason Codes",
           "type": "array"
+        },
+        "reliable": {
+          "title": "Reliable",
+          "type": "boolean"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "source_requirement_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Source Requirement Ids",
+          "type": "array"
+        },
+        "state": {
+          "$ref": "#/$defs/ObservedEffect"
+        },
+        "temporal_closure": {
+          "$ref": "#/$defs/TemporalClosure"
         }
       },
       "required": [
@@ -1201,17 +1290,17 @@
     "StagedArtifact": {
       "additionalProperties": false,
       "properties": {
-        "path": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Path",
-          "type": "string"
-        },
         "byte_count": {
           "maximum": 1073741824,
           "minimum": 0,
           "title": "Byte Count",
           "type": "integer"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
         },
         "sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -1258,6 +1347,27 @@
           "title": "Action Id",
           "type": "string"
         },
+        "baseline_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Baseline Fingerprint",
+          "type": "string"
+        },
+        "effect_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Effect Fingerprint",
+          "type": "string"
+        },
+        "normalization_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Normalization Version",
+          "type": "string"
+        },
+        "observer_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Observer Fingerprint",
+          "type": "string"
+        },
         "resource_ids": {
           "items": {
             "type": "string"
@@ -1270,27 +1380,6 @@
         "workflow_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Workflow Fingerprint",
-          "type": "string"
-        },
-        "effect_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Effect Fingerprint",
-          "type": "string"
-        },
-        "observer_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Observer Fingerprint",
-          "type": "string"
-        },
-        "baseline_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Baseline Fingerprint",
-          "type": "string"
-        },
-        "normalization_version": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Normalization Version",
           "type": "string"
         }
       },
@@ -1309,72 +1398,34 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "4",
-      "default": "4",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "run_id": {
-      "pattern": "^run_[0-9a-f]{32}$",
-      "title": "Run Id",
-      "type": "string"
-    },
-    "job_id": {
-      "pattern": "^job_[0-9a-f]{32}$",
-      "title": "Job Id",
-      "type": "string"
+    "artifacts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StagedArtifact"
+      },
+      "maxItems": 8192,
+      "title": "Artifacts",
+      "type": "array"
     },
     "attempt": {
       "minimum": 1,
       "title": "Attempt",
       "type": "integer"
     },
-    "lease_owner": {
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-      "title": "Lease Owner",
-      "type": "string"
-    },
-    "fencing_token": {
-      "minimum": 1,
-      "title": "Fencing Token",
-      "type": "integer"
-    },
-    "finished_at_us": {
-      "minimum": 0,
-      "title": "Finished At Us",
-      "type": "integer"
-    },
-    "result_type": {
-      "$ref": "#/$defs/RunnerResultType"
-    },
-    "run_lifecycle": {
-      "$ref": "#/$defs/RunLifecycle"
-    },
-    "job_state": {
-      "$ref": "#/$defs/JobState"
-    },
-    "verdict": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/RunVerdict"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "reason_codes": {
-      "default": [],
-      "items": {
-        "type": "string"
-      },
-      "maxItems": 128,
-      "title": "Reason Codes",
-      "type": "array"
-    },
     "cleanup": {
       "$ref": "#/$defs/CleanupResult"
+    },
+    "coverage_gap_count": {
+      "maximum": 16384,
+      "minimum": 0,
+      "title": "Coverage Gap Count",
+      "type": "integer"
+    },
+    "coverage_record_count": {
+      "maximum": 16384,
+      "minimum": 0,
+      "title": "Coverage Record Count",
+      "type": "integer"
     },
     "error": {
       "anyOf": [
@@ -1386,23 +1437,6 @@
         }
       ]
     },
-    "plan_fingerprint": {
-      "pattern": "^[0-9a-f]{64}$",
-      "title": "Plan Fingerprint",
-      "type": "string"
-    },
-    "coverage_record_count": {
-      "maximum": 16384,
-      "minimum": 0,
-      "title": "Coverage Record Count",
-      "type": "integer"
-    },
-    "coverage_gap_count": {
-      "maximum": 16384,
-      "minimum": 0,
-      "title": "Coverage Gap Count",
-      "type": "integer"
-    },
     "evidence": {
       "default": [],
       "items": {
@@ -1412,14 +1446,69 @@
       "title": "Evidence",
       "type": "array"
     },
-    "artifacts": {
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "finished_at_us": {
+      "minimum": 0,
+      "title": "Finished At Us",
+      "type": "integer"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "job_state": {
+      "$ref": "#/$defs/JobState"
+    },
+    "lease_owner": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Lease Owner",
+      "type": "string"
+    },
+    "plan_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Plan Fingerprint",
+      "type": "string"
+    },
+    "reason_codes": {
       "default": [],
       "items": {
-        "$ref": "#/$defs/StagedArtifact"
+        "type": "string"
       },
-      "maxItems": 8192,
-      "title": "Artifacts",
+      "maxItems": 128,
+      "title": "Reason Codes",
       "type": "array"
+    },
+    "result_type": {
+      "$ref": "#/$defs/RunnerResultType"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "run_lifecycle": {
+      "$ref": "#/$defs/RunLifecycle"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunVerdict"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

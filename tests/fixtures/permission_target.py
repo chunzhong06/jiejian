@@ -1,10 +1,9 @@
 # =============================================================================
-# Complex permission test Target/fixture.
+# 复杂权限测试 Target/fixture
 #
-# The target is loopback-only, keeps opaque credentials in memory, and exposes
-# reset only to loopback callers carrying the test-mode header. It is a sample
-# process for the current HTTP execution and observation tests, not a product
-# Verification implementation.
+# 该目标只监听 loopback，在内存中保存不透明凭据；仅携带测试模式请求头的
+# loopback 调用方可以执行 reset。它服务于当前 HTTP 执行与观察测试，
+# 不承担产品 Verification 实现职责。
 # =============================================================================
 
 from __future__ import annotations

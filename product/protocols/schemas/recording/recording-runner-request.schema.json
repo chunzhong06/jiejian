@@ -1,8 +1,30 @@
 {
   "$defs": {
+    "RecordingAuthMethod": {
+      "enum": [
+        "COOKIE_SESSION",
+        "BEARER"
+      ],
+      "title": "RecordingAuthMethod",
+      "type": "string"
+    },
     "RecordingBudget": {
       "additionalProperties": false,
       "properties": {
+        "max_body_bytes": {
+          "default": 65536,
+          "maximum": 245760,
+          "minimum": 256,
+          "title": "Max Body Bytes",
+          "type": "integer"
+        },
+        "max_contexts": {
+          "default": 4,
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Contexts",
+          "type": "integer"
+        },
         "max_duration_us": {
           "maximum": 3600000000,
           "minimum": 1,
@@ -16,20 +38,6 @@
           "title": "Max Events",
           "type": "integer"
         },
-        "max_pages": {
-          "default": 8,
-          "maximum": 32,
-          "minimum": 1,
-          "title": "Max Pages",
-          "type": "integer"
-        },
-        "max_contexts": {
-          "default": 4,
-          "maximum": 32,
-          "minimum": 1,
-          "title": "Max Contexts",
-          "type": "integer"
-        },
         "max_field_chars": {
           "default": 2048,
           "maximum": 8192,
@@ -37,11 +45,11 @@
           "title": "Max Field Chars",
           "type": "integer"
         },
-        "max_body_bytes": {
-          "default": 65536,
-          "maximum": 245760,
-          "minimum": 256,
-          "title": "Max Body Bytes",
+        "max_pages": {
+          "default": 8,
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Pages",
           "type": "integer"
         },
         "max_total_payload_bytes": {
@@ -58,37 +66,123 @@
       "title": "RecordingBudget",
       "type": "object"
     },
+    "RecordingCookieRef": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "maxLength": 253,
+          "minLength": 1,
+          "title": "Domain",
+          "type": "string"
+        },
+        "expires_at_us": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At Us"
+        },
+        "http_only": {
+          "title": "Http Only",
+          "type": "boolean"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "same_site": {
+          "enum": [
+            "STRICT",
+            "LAX",
+            "NONE"
+          ],
+          "title": "Same Site",
+          "type": "string"
+        },
+        "secure": {
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "value_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Value Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "domain",
+        "path",
+        "secure",
+        "http_only",
+        "same_site",
+        "value_ref"
+      ],
+      "title": "RecordingCookieRef",
+      "type": "object"
+    },
     "RecordingSessionRef": {
       "additionalProperties": false,
       "properties": {
-        "identity_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Identity Id",
-          "type": "string"
+        "auth_method": {
+          "$ref": "#/$defs/RecordingAuthMethod"
         },
-        "session_ref": {
-          "pattern": "^session_[0-9a-f]{32}$",
-          "title": "Session Ref",
-          "type": "string"
+        "bearer_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bearer Ref"
         },
-        "secret_refs": {
+        "cookies": {
+          "default": [],
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/RecordingCookieRef"
           },
           "maxItems": 32,
-          "title": "Secret Refs",
+          "title": "Cookies",
           "type": "array"
         },
         "expires_at_us": {
           "minimum": 0,
           "title": "Expires At Us",
           "type": "integer"
+        },
+        "session_ref": {
+          "pattern": "^session_[0-9a-f]{32}$",
+          "title": "Session Ref",
+          "type": "string"
+        },
+        "test_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Test Identity Id",
+          "type": "string"
         }
       },
       "required": [
-        "identity_id",
+        "test_identity_id",
         "session_ref",
-        "secret_refs",
+        "auth_method",
         "expires_at_us"
       ],
       "title": "RecordingSessionRef",
@@ -98,22 +192,23 @@
       "additionalProperties": false,
       "description": "Web 目标的协议级授权范围。",
       "properties": {
-        "base_url": {
-          "title": "Base Url",
-          "type": "string"
-        },
-        "allowed_origins": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Allowed Origins",
-          "type": "array"
+        "allow_private_network": {
+          "default": false,
+          "title": "Allow Private Network",
+          "type": "boolean"
         },
         "allowed_hosts": {
           "items": {
             "type": "string"
           },
           "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "allowed_origins": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Origins",
           "type": "array"
         },
         "allowed_ports": {
@@ -123,23 +218,15 @@
           "title": "Allowed Ports",
           "type": "array"
         },
-        "allow_private_network": {
-          "default": false,
-          "title": "Allow Private Network",
-          "type": "boolean"
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
         },
         "follow_redirects": {
           "const": false,
           "default": false,
           "title": "Follow Redirects",
           "type": "boolean"
-        },
-        "timeout_seconds": {
-          "default": 5.0,
-          "exclusiveMinimum": 0,
-          "maximum": 30,
-          "title": "Timeout Seconds",
-          "type": "number"
         },
         "max_requests": {
           "default": 64,
@@ -154,6 +241,13 @@
           "minimum": 1,
           "title": "Max Response Bytes",
           "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Timeout Seconds",
+          "type": "number"
         }
       },
       "required": [
@@ -168,10 +262,27 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "2",
-      "default": "2",
-      "title": "Schema Version",
+    "action_candidate_id": {
+      "pattern": "^action_[0-9a-f]{32}$",
+      "title": "Action Candidate Id",
+      "type": "string"
+    },
+    "budget": {
+      "$ref": "#/$defs/RecordingBudget"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "headless": {
+      "default": true,
+      "title": "Headless",
+      "type": "boolean"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
       "type": "string"
     },
     "recording_id": {
@@ -179,35 +290,23 @@
       "title": "Recording Id",
       "type": "string"
     },
-    "project_id": {
-      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-      "title": "Project Id",
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
       "type": "string"
-    },
-    "created_at_us": {
-      "minimum": 0,
-      "title": "Created At Us",
-      "type": "integer"
-    },
-    "target_scope": {
-      "$ref": "#/$defs/WebTargetScope"
     },
     "sessions": {
       "items": {
         "$ref": "#/$defs/RecordingSessionRef"
       },
-      "maxItems": 32,
+      "maxItems": 1,
       "minItems": 1,
       "title": "Sessions",
       "type": "array"
     },
-    "budget": {
-      "$ref": "#/$defs/RecordingBudget"
-    },
-    "headless": {
-      "default": true,
-      "title": "Headless",
-      "type": "boolean"
+    "target_scope": {
+      "$ref": "#/$defs/WebTargetScope"
     },
     "trace_enabled": {
       "const": false,
@@ -219,6 +318,7 @@
   "required": [
     "recording_id",
     "project_id",
+    "action_candidate_id",
     "created_at_us",
     "target_scope",
     "sessions",

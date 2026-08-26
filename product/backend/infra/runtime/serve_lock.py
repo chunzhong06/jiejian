@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.runtime.process_lock import try_lock_stream, unlock_stream
+from product.backend.infra.runtime.process.lock import try_lock_stream, unlock_stream
 from product.backend.infra.runtime.paths import RuntimePaths
 
 

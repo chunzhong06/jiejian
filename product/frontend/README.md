@@ -4,16 +4,16 @@
 
 ## 页面与用户路径
 
-普通用户主路径是：工作台 → 应用接入 → 权限规则 → 开始检查 → 检查结果。历史变化用于查看回归；流程录制、模型服务和运行环境放在高级能力中。
+普通用户主路径是：工作台 → 应用接入 → 测试账号 → 业务流程 → 权限规则 → 开始检查 → 检查结果。历史变化用于查看回归；模型服务、运行环境和手工 Profile 放在高级能力中。旧版手工快速检查已删除，不保留第二套新手入口。
 
 展示层以中文任务表达为默认。按钮、状态、说明和已知业务枚举使用中文；品牌、命令、JSON 等文件格式、协议字段、路径和需要对照的原始标识保留原文。已知机器值需要同时可辨识时使用“中文含义（原值）”，不得修改 API 数据完成翻译。
 
 页面主要位于 `src/features/`：
 
 - `workspace/`：工作台和下一步提示。
-- `access/`：应用接入；`onboarding/` 内分别组织欢迎页、步骤表单和向导编排。
+- `access/`：应用接入、目录选择和受控源码理解。
 - `permissions/`：权限规则；`explorer/` 放矩阵、关系图与纯 projection，`governance/` 放规则版本治理。
-- `checks/`：检查提交、进度、结果、证据、报告和历史变化。
+- `checks/`：当前检查预览、普通提交、进度、结果、证据、报告和历史变化；普通提交只消费后端当前生成的唯一配置，不展示 Profile 选择器，完整报告直接展示已发布的同一份 `report.html`。
 - `recording/`：分别组织录制准备、采集控制、FlowDraft 审阅和页面编排。
 - `settings/`、`system/`：模型服务和运行环境。
 
@@ -39,6 +39,8 @@
 ```
 
 `scripts/dev.ps1 frontend-test` 与源码启动共用 `var/runtime/build/frontend-workspace`：同一份前端源码输入集合在排除 `node_modules`、`dist`、`*.tsbuildinfo` 等明确生成物后，同时形成构建指纹和工作区镜像。pnpm 安装视图与 TypeScript 增量文件只留在该工作区，内容寻址 store 位于 `var/cache/pnpm-store`，Vite 缓存位于 `var/cache/vite`，最终网页只进入 `var/runtime/frontend`。不要在 `product/frontend` 直接执行 pnpm install、test 或 build；该目录始终只保留 Git 管理的源码与配置。
+
+使用 VS Code 直接编辑正式源码时，先执行一次 `scripts/dev.ps1 prepare -ForcePrepare`，再打开仓库根的 `jiejian.code-workspace`。准备入口会把编辑器解析插件安装到 `var/runtime/build/frontend-workspace/node_modules`；工作区 TypeScript 因而能够自动发现插件，并在普通解析失败时只读复用同一受控依赖安装视图。该机制不会在 `product/frontend` 生成 `node_modules`，也不参与 `tsc`、Vite、Vitest 或产品运行。首次打开时若 VS Code 询问是否使用工作区 TypeScript，选择“允许”，然后执行一次“TypeScript: Restart TS Server”。受控工作区尚未准备或已损坏时，编辑器继续显示真实的依赖缺失，不用声明文件掩盖错误。
 
 生产构建由 `start.cmd` 或 `scripts/dev.ps1 prepare` 按指纹执行。可选 Wheel 使用 `scripts/dev.ps1 package`，直接把 `var/runtime/frontend` 映射为包内 `product/frontend/dist`，不会回写源码目录。
 

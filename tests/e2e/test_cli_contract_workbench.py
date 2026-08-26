@@ -1,3 +1,5 @@
+# 验证端到端安全闭环中的CLI 权限契约工作台。
+
 from __future__ import annotations
 
 import json

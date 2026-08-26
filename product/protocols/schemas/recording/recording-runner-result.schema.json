@@ -11,70 +11,6 @@
     "RecordingEvent": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "sequence": {
-          "maximum": 10000,
-          "minimum": 1,
-          "title": "Sequence",
-          "type": "integer"
-        },
-        "occurred_at_us": {
-          "minimum": 0,
-          "title": "Occurred At Us",
-          "type": "integer"
-        },
-        "kind": {
-          "$ref": "#/$defs/RecordingEventKind"
-        },
-        "identity_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Identity Id",
-          "type": "string"
-        },
-        "page_id": {
-          "anyOf": [
-            {
-              "pattern": "^page_[0-9]{6}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Page Id"
-        },
-        "frame_id": {
-          "anyOf": [
-            {
-              "pattern": "^frame_[0-9]{6}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Frame Id"
-        },
-        "request_id": {
-          "anyOf": [
-            {
-              "pattern": "^(?:request|websocket)_[0-9]{6}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Request Id"
-        },
         "action_id": {
           "anyOf": [
             {
@@ -88,6 +24,19 @@
           "default": null,
           "title": "Action Id"
         },
+        "body": {
+          "anyOf": [
+            {
+              "maxLength": 262144,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body"
+        },
         "caused_by_action_id": {
           "anyOf": [
             {
@@ -100,19 +49,6 @@
           ],
           "default": null,
           "title": "Caused By Action Id"
-        },
-        "parent_page_id": {
-          "anyOf": [
-            {
-              "pattern": "^page_[0-9]{6}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Parent Page Id"
         },
         "element_locator": {
           "anyOf": [
@@ -140,6 +76,33 @@
           "default": null,
           "title": "Field Name"
         },
+        "frame_id": {
+          "anyOf": [
+            {
+              "pattern": "^frame_[0-9]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        },
+        "headers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RecordingHeader"
+          },
+          "maxItems": 256,
+          "title": "Headers",
+          "type": "array"
+        },
+        "identity_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Identity Id",
+          "type": "string"
+        },
         "input_type": {
           "anyOf": [
             {
@@ -153,7 +116,10 @@
           "default": null,
           "title": "Input Type"
         },
-        "url": {
+        "kind": {
+          "$ref": "#/$defs/RecordingEventKind"
+        },
+        "message": {
           "anyOf": [
             {
               "maxLength": 8192,
@@ -164,7 +130,7 @@
             }
           ],
           "default": null,
-          "title": "Url"
+          "title": "Message"
         },
         "method": {
           "anyOf": [
@@ -179,6 +145,63 @@
           "default": null,
           "title": "Method"
         },
+        "occurred_at_us": {
+          "minimum": 0,
+          "title": "Occurred At Us",
+          "type": "integer"
+        },
+        "page_id": {
+          "anyOf": [
+            {
+              "pattern": "^page_[0-9]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Id"
+        },
+        "parent_page_id": {
+          "anyOf": [
+            {
+              "pattern": "^page_[0-9]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Page Id"
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason Code"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^(?:request|websocket)_[0-9]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
         "resource_type": {
           "anyOf": [
             {
@@ -191,6 +214,18 @@
           ],
           "default": null,
           "title": "Resource Type"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sequence": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
         },
         "status_code": {
           "anyOf": [
@@ -206,29 +241,12 @@
           "default": null,
           "title": "Status Code"
         },
-        "headers": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/RecordingHeader"
-          },
-          "maxItems": 256,
-          "title": "Headers",
-          "type": "array"
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
         },
-        "body": {
-          "anyOf": [
-            {
-              "maxLength": 262144,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Body"
-        },
-        "message": {
+        "url": {
           "anyOf": [
             {
               "maxLength": 8192,
@@ -239,25 +257,7 @@
             }
           ],
           "default": null,
-          "title": "Message"
-        },
-        "reason_code": {
-          "anyOf": [
-            {
-              "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Reason Code"
-        },
-        "truncated": {
-          "default": false,
-          "title": "Truncated",
-          "type": "boolean"
+          "title": "Url"
         }
       },
       "required": [
@@ -360,27 +360,16 @@
     "RecordingStateEvent": {
       "additionalProperties": false,
       "properties": {
-        "sequence": {
-          "minimum": 1,
-          "title": "Sequence",
+        "occurred_at_us": {
+          "minimum": 0,
+          "title": "Occurred At Us",
           "type": "integer"
-        },
-        "source": {
-          "$ref": "#/$defs/RecordingState"
-        },
-        "target": {
-          "$ref": "#/$defs/RecordingState"
         },
         "operator": {
           "maxLength": 128,
           "minLength": 1,
           "title": "Operator",
           "type": "string"
-        },
-        "occurred_at_us": {
-          "minimum": 0,
-          "title": "Occurred At Us",
-          "type": "integer"
         },
         "reason_code": {
           "anyOf": [
@@ -394,6 +383,17 @@
           ],
           "default": null,
           "title": "Reason Code"
+        },
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "source": {
+          "$ref": "#/$defs/RecordingState"
+        },
+        "target": {
+          "$ref": "#/$defs/RecordingState"
         }
       },
       "required": [
@@ -409,62 +409,8 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "2",
-      "default": "2",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "recording_id": {
-      "pattern": "^rec_[0-9a-f]{32}$",
-      "title": "Recording Id",
-      "type": "string"
-    },
-    "project_id": {
-      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-      "title": "Project Id",
-      "type": "string"
-    },
-    "finished_at_us": {
-      "minimum": 0,
-      "title": "Finished At Us",
-      "type": "integer"
-    },
-    "result_type": {
-      "$ref": "#/$defs/RecordingRunnerResultType"
-    },
-    "recording_state": {
-      "$ref": "#/$defs/RecordingState"
-    },
     "cleanup_status": {
       "$ref": "#/$defs/RecordingCleanupStatus"
-    },
-    "reason_codes": {
-      "default": [],
-      "items": {
-        "type": "string"
-      },
-      "maxItems": 64,
-      "title": "Reason Codes",
-      "type": "array"
-    },
-    "state_events": {
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/RecordingStateEvent"
-      },
-      "maxItems": 128,
-      "title": "State Events",
-      "type": "array"
-    },
-    "events": {
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/RecordingEvent"
-      },
-      "maxItems": 10000,
-      "title": "Events",
-      "type": "array"
     },
     "error": {
       "anyOf": [
@@ -476,6 +422,60 @@
         }
       ],
       "default": null
+    },
+    "events": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RecordingEvent"
+      },
+      "maxItems": 10000,
+      "title": "Events",
+      "type": "array"
+    },
+    "finished_at_us": {
+      "minimum": 0,
+      "title": "Finished At Us",
+      "type": "integer"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "reason_codes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "recording_id": {
+      "pattern": "^rec_[0-9a-f]{32}$",
+      "title": "Recording Id",
+      "type": "string"
+    },
+    "recording_state": {
+      "$ref": "#/$defs/RecordingState"
+    },
+    "result_type": {
+      "$ref": "#/$defs/RecordingRunnerResultType"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "state_events": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RecordingStateEvent"
+      },
+      "maxItems": 128,
+      "title": "State Events",
+      "type": "array"
     }
   },
   "required": [

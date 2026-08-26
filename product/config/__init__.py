@@ -1,1 +1,1 @@
-# Product runtime configuration namespace.
+# 产品运行配置命名空间。

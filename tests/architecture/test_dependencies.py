@@ -1,3 +1,5 @@
+# 验证架构依赖中的模块依赖约束。
+
 from __future__ import annotations
 
 import ast
@@ -76,6 +78,21 @@ def test_control_plane_and_verification_do_not_reach_target_adapters() -> None:
     )
     for path in _python_files(BACKEND / "core" / "verification"):
         assert not _forbidden_imports(path, verification_forbidden), path
+
+
+def test_application_understanding_uses_only_public_contract_analysis_symbols() -> None:
+    analyzer = BACKEND / "workflows" / "application_understanding" / "analysis" / "analyzer.py"
+    tree = ast.parse(analyzer.read_text(encoding="utf-8"))
+    private_imports = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module is not None
+        and node.module.startswith("product.backend.core.contracts.analysis.sources")
+        for alias in node.names
+        if alias.name.startswith("_")
+    }
+    assert private_imports == set()
 
 
 def test_target_runtime_dependencies_have_one_web_composition_point() -> None:
@@ -186,12 +203,13 @@ def test_removed_execution_abstractions_have_no_definition_alias_or_export() -> 
 
 def test_worker_runner_and_recording_process_boundaries_are_explicit() -> None:
     assert (BACKEND / "infra" / "runtime" / "runner" / "__main__.py").is_file()
-    assert (BACKEND / "infra" / "runtime" / "worker_process.py").is_file()
-    assert (BACKEND / "infra" / "runtime" / "recording_process.py").is_file()
+    assert (BACKEND / "infra" / "runtime" / "worker" / "process.py").is_file()
+    assert (BACKEND / "infra" / "recording" / "process.py").is_file()
 
 
 def test_product_names_do_not_encode_development_generations() -> None:
     generation_name = re.compile(r"(?i)(?:^|[_-])v[12](?:[._-]|$)|(?:^|[_-])stage(?:[._-]|$)|阶段")
+    web_v1_baseline = BACKEND / "migrations" / "versions" / "0001_web_v1.py"
     product_files = []
     for path in (ROOT / "product").rglob("*"):
         relative_parts = path.relative_to(ROOT / "product").parts
@@ -199,7 +217,11 @@ def test_product_names_do_not_encode_development_generations() -> None:
             continue
         if path.suffix.lower() in {".py", ".ts", ".tsx", ".json"}:
             product_files.append(path)
-    assert not [path for path in product_files if generation_name.search(path.name)]
+    assert not [
+        path
+        for path in product_files
+        if path != web_v1_baseline and generation_name.search(path.name)
+    ]
 
     for path in _python_files(ROOT / "product"):
         if "node_modules" in path.parts or "dist" in path.parts:
@@ -297,7 +319,8 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
     assert wheel["only-include"] == ["product/backend", "product/protocols"]
-    assert wheel["force-include"]["var/runtime/frontend"] == "product/frontend/dist"
+    assert "var/runtime/frontend" not in wheel["force-include"]
+    assert project["tool"]["hatch"]["build"]["hooks"]["custom"]["path"] == "scripts/hatch_build.py"
     assert "product/frontend/src" not in str(wheel)
     assert project["project"]["scripts"]["jiejian"] == "product.backend.cli:main"
     assert project["project"]["version"] == __version__

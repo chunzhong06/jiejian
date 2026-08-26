@@ -1,3 +1,5 @@
+# 验证后端 API中的模型 Schema 边界。
+
 from __future__ import annotations
 
 from pydantic import ValidationError
@@ -21,6 +23,19 @@ def test_llm_write_only_secret_is_not_serialized_or_represented() -> None:
     dumped = request.model_dump(mode="json")
     assert "secret" not in dumped
     assert "not-a-real-secret" not in repr(request)
+
+
+def test_llm_write_requests_carry_optional_reasoning_effort() -> None:
+    create = LLMProfileCreateRequest(
+        schema_version="1",
+        profile_name="local",
+        provider=LLMProviderType.OPENAI,
+        model="gpt-5.6",
+        reasoning_effort="high",
+    )
+    update = LLMProfileUpdateRequest(schema_version="1", reasoning_effort=None)
+    assert create.reasoning_effort == "high"
+    assert update.reasoning_effort is None
 
 
 def test_llm_response_contains_reference_and_configuration_state_only() -> None:

@@ -1,122 +1,192 @@
-// 模型服务配置抽屉；秘密输入只短暂驻留表单，保存或关闭后立即清空。
+// AI 辅助设置抽屉；普通配置只接触后端目录与能力，秘密只短暂驻留表单。
 
-import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Drawer, Form, Input, InputNumber, List, Select, Space, Tag, Typography } from 'antd'
-import { llmApi, LLMProfile, LLMProfileWrite, LLMProvider } from '../../api/llm'
+import { useEffect, useRef, useState } from 'react'
+import { Alert, Button, Card, Checkbox, Collapse, Drawer, Form, Input, InputNumber, List, Select, Space, Switch, Tag } from 'antd'
+import { llmApi, type AIAssistanceSettings, type LLMModelCatalog, type LLMProfile, type LLMProfileWrite, type LLMProvider } from '../../api/llm'
 import { ApiError } from '../../api/http'
 
 const providerOptions: { label: string; value: LLMProvider }[] = [
   { label: 'OpenAI', value: 'openai' },
   { label: 'DeepSeek', value: 'deepseek' },
   { label: 'Gemini', value: 'gemini' },
-  { label: 'OpenAI-compatible', value: 'openai_compatible' },
+]
+const advancedProviderOptions: { label: string; value: LLMProvider }[] = [
+  ...providerOptions,
+  { label: 'OpenAI-compatible（高级）', value: 'openai_compatible' },
 ]
 
 type FormValues = LLMProfileWrite & { profile_name: string; provider: LLMProvider; model: string }
 
-function statusLabel(profile: LLMProfile): string {
+function statusLabel(profile: LLMProfile | undefined): string {
+  if (!profile) return '未连接'
   if (profile.connection_status === 'testing') return '正在测试'
-  if (!profile.secret_configured) return '未知'
-  return {
-    configured: '已配置',
-    available: '可用',
-    unavailable: '不可用',
-    unknown: '未知',
-  }[profile.connection_status]
+  if (!profile.secret_configured) return '未配置'
+  return { configured: '已配置', available: '可用', unavailable: '不可用', unknown: '未知' }[profile.connection_status]
 }
 
 export function LLMSettingsDrawer({
-  open,
-  profiles,
-  onClose,
-  onChanged,
-  onError,
+  open, profiles, aiSettings, onClose, onChanged, onSettingsChanged, onError,
 }: {
   open: boolean
   profiles: LLMProfile[]
+  aiSettings?: AIAssistanceSettings
   onClose: () => void
   onChanged: (profiles: LLMProfile[]) => void
+  onSettingsChanged?: (settings: AIAssistanceSettings) => void
   onError: (error: ApiError) => void
 }) {
   const [form] = Form.useForm<FormValues>()
   const [editing, setEditing] = useState<string | null>(null)
+  const [catalog, setCatalog] = useState<LLMModelCatalog | null>(null)
   const [saving, setSaving] = useState(false)
+  const [discovering, setDiscovering] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [enabled, setEnabled] = useState(aiSettings?.enabled ?? false)
+  const initializedRef = useRef(false)
+  const currentModel = Form.useWatch('model', form)
+
+  useEffect(() => { setEnabled(aiSettings?.enabled ?? false) }, [aiSettings?.enabled])
 
   const resetForm = () => {
     form.resetFields()
     form.setFieldsValue({
-      profile_name: '', provider: 'openai', model: '', timeout_ms: 30000,
-      max_input_bytes: 131072, max_output_bytes: 65536,
+      profile_name: 'assistant-default', provider: 'openai', model: '', reasoning_effort: null,
+      timeout_ms: 30000, max_input_bytes: 131072, max_output_bytes: 65536,
       max_budget_microusd: 1000000, enabled: true, allow_local_http: false,
       base_url: undefined, secret_ref: undefined, secret: undefined,
     })
-    setEditing(null)
+    setEditing(null); setCatalog(null); setAdvancedOpen(false)
   }
 
-  useEffect(() => { if (open && !editing) resetForm() }, [open])
-
-  const loadProfile = (profile: LLMProfile) => {
-    setEditing(profile.profile_name)
+  const loadProfile = (profile: LLMProfile, openAdvanced = true) => {
+    setEditing(profile.profile_name); setCatalog(null); setAdvancedOpen(openAdvanced)
     form.setFieldsValue({
-      profile_name: profile.profile_name,
-      provider: profile.provider,
-      model: profile.model,
-      base_url: profile.base_url ?? undefined,
-      timeout_ms: profile.timeout_ms,
-      max_input_bytes: profile.max_input_bytes,
-      max_output_bytes: profile.max_output_bytes,
-      max_budget_microusd: profile.max_budget_microusd,
-      enabled: profile.enabled,
-      allow_local_http: profile.allow_local_http,
-      secret_ref: profile.secret_ref?.startsWith('env:') ? profile.secret_ref : undefined,
-      secret: undefined,
+      profile_name: profile.profile_name, provider: profile.provider, model: profile.model,
+      reasoning_effort: profile.reasoning_effort, base_url: profile.base_url ?? undefined,
+      timeout_ms: profile.timeout_ms, max_input_bytes: profile.max_input_bytes,
+      max_output_bytes: profile.max_output_bytes, max_budget_microusd: profile.max_budget_microusd,
+      enabled: profile.enabled, allow_local_http: profile.allow_local_http,
+      secret_ref: profile.secret_ref?.startsWith('env:') ? profile.secret_ref : undefined, secret: undefined,
     })
   }
 
+  useEffect(() => {
+    if (!open) {
+      initializedRef.current = false
+      return
+    }
+    if (initializedRef.current) return
+    const defaultProfile = aiSettings?.default_profile_name
+      ? profiles.find((profile) => profile.profile_name === aiSettings.default_profile_name)
+      : undefined
+    if (aiSettings?.default_profile_name && !defaultProfile) return
+    if (defaultProfile) loadProfile(defaultProfile, false)
+    else resetForm()
+    initializedRef.current = true
+  }, [open, aiSettings?.default_profile_name, profiles])
+
+  const startAdvancedProfile = () => {
+    setEditing(null); setAdvancedOpen(true); setCatalog(null)
+    form.setFieldsValue({
+      profile_name: 'advanced-profile', provider: 'openai_compatible', model: '', reasoning_effort: null,
+      timeout_ms: 30000, max_input_bytes: 131072, max_output_bytes: 65536,
+      max_budget_microusd: 1000000, enabled: true, allow_local_http: false,
+      base_url: undefined, secret_ref: undefined, secret: undefined,
+    })
+  }
+
+  const changeAdvancedMode = (keys: string | string[]) => {
+    const nextOpen = Array.isArray(keys) ? keys.includes('advanced') : keys === 'advanced'
+    const defaultProfile = aiSettings?.default_profile_name
+      ? profiles.find((profile) => profile.profile_name === aiSettings.default_profile_name)
+      : undefined
+    if (nextOpen) {
+      if (defaultProfile) loadProfile(defaultProfile, true)
+      else startAdvancedProfile()
+    } else if (defaultProfile) {
+      loadProfile(defaultProfile, false)
+    } else {
+      resetForm()
+    }
+  }
+
+  const changeProvider = (provider: LLMProvider) => {
+    setCatalog(null)
+    form.setFieldsValue({
+      model: '',
+      reasoning_effort: null,
+      ...(provider === 'openai_compatible' ? {} : { base_url: undefined, allow_local_http: false }),
+    })
+  }
+
+  const discover = async () => {
+    const values = form.getFieldsValue()
+    if (!values.provider) return
+    setDiscovering(true)
+    try {
+      // 新 Key 只在本次表单内短暂驻留；没有新 Key 时改用已保存 profile 的显式刷新。
+      const result = values.secret
+        ? await llmApi.discoverModels({
+          provider: values.provider,
+          secret: values.secret,
+          ...(values.provider === 'openai_compatible' && values.base_url
+            ? { base_url: values.base_url, allow_local_http: values.allow_local_http }
+            : {}),
+        })
+        : editing
+          ? await llmApi.refreshModels(editing)
+          : null
+      if (!result) return
+      setCatalog(result)
+      if (result.models[0] && !values.model) form.setFieldValue('model', result.models[0].model)
+      form.setFieldValue('reasoning_effort', null)
+    } catch (error) {
+      form.setFieldValue('secret', undefined); onError(error as ApiError)
+    } finally { setDiscovering(false) }
+  }
+
   const save = async (values: FormValues) => {
-    if (values.secret && values.secret_ref) {
-      form.setFields([{ name: 'secret', errors: ['API Key 与环境变量引用不能同时填写'] }])
-      return
-    }
-    if (values.provider === 'openai_compatible' && !values.base_url) {
-      form.setFields([{ name: 'base_url', errors: ['OpenAI-compatible 必须填写 Base URL'] }])
-      return
-    }
-    if (values.base_url?.startsWith('http://')) {
-      // 明文 HTTP 只允许用户显式授权的回环地址，前端先阻断明显误配；后端仍是最终边界。
-      let localLoopback = false
-      try {
-        const hostname = new URL(values.base_url).hostname
-        const octets = hostname.split('.').map(Number)
-        localLoopback = hostname === '::1' || hostname === '[::1]' || (
-          octets.length === 4 && octets[0] === 127 && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
-        )
-      } catch { localLoopback = false }
-      if (!values.allow_local_http || !localLoopback) {
-        form.setFields([{ name: 'base_url', errors: ['HTTP 仅允许显式授权的本机回环地址'] }])
-        return
-      }
-    }
     setSaving(true)
     try {
-      const body: LLMProfileWrite = { ...values }
-      if (editing) delete body.profile_name
-      if (!body.secret) delete body.secret
-      if (!body.secret_ref) delete body.secret_ref
-      const result = editing ? await llmApi.update(editing, body) : await llmApi.create(body)
-      // 响应永不回显秘密；清空表单可避免 React 状态继续持有刚提交的明文。
+      const saveAsDefault = !advancedOpen
+      const body: LLMProfileWrite = saveAsDefault
+        ? {
+          provider: values.provider,
+          model: values.model,
+          reasoning_effort: values.reasoning_effort ?? null,
+          ...(values.secret ? { secret: values.secret } : {}),
+        }
+        : { ...values }
+      if (saveAsDefault) delete body.profile_name
+      else body.profile_name = editing ?? values.profile_name
+      if (!values.secret) delete body.secret
+      if (!values.secret_ref) delete body.secret_ref
+      else delete body.secret
+      const result = saveAsDefault
+        ? await llmApi.saveDefault(body)
+        : editing === null
+          ? await llmApi.create(body)
+          : await llmApi.update(editing ?? values.profile_name, { ...body, profile_name: editing ?? values.profile_name })
       form.setFieldValue('secret', undefined)
       const next = editing
         ? profiles.map((item) => item.profile_name === result.profile_name ? result : item)
-        : [...profiles, result].sort((a, b) => a.profile_name.localeCompare(b.profile_name))
+        : [...profiles.filter((item) => item.profile_name !== result.profile_name), result].sort((a, b) => a.profile_name.localeCompare(b.profile_name))
       onChanged(next)
-      loadProfile(result)
-      form.setFieldValue('secret', undefined)
+      const settings = await llmApi.settings()
+      if (settings) onSettingsChanged?.(settings)
+      loadProfile(result, !saveAsDefault); form.setFieldValue('secret', undefined)
     } catch (error) {
-      form.setFieldValue('secret', undefined)
-      onError(error as ApiError)
+      form.setFieldValue('secret', undefined); onError(error as ApiError)
     } finally { setSaving(false) }
+  }
+
+  const toggle = async (nextEnabled: boolean) => {
+    setEnabled(nextEnabled)
+    try {
+      const result = await llmApi.patchSettings({ enabled: nextEnabled, default_profile_name: aiSettings?.default_profile_name ?? profiles[0]?.profile_name ?? null })
+      onSettingsChanged?.(result)
+    } catch (error) { setEnabled(!nextEnabled); onError(error as ApiError) }
   }
 
   const test = async (profile: LLMProfile) => {
@@ -125,74 +195,67 @@ export function LLMSettingsDrawer({
     try {
       const result = await llmApi.test(profile.profile_name)
       onChanged(profiles.map((item) => item.profile_name === result.profile_name ? result : item))
+      if (!aiSettings?.default_profile_name) {
+        const settings = await llmApi.patchSettings({ enabled: true, default_profile_name: result.profile_name })
+        onSettingsChanged?.(settings)
+      }
     } catch (error) {
-      // 连接测试可能已在后端持久化失败状态，优先重新读取权威 profile 再回退为 unknown。
       try {
         const refreshed = await llmApi.profile(profile.profile_name)
         onChanged(profiles.map((item) => item.profile_name === refreshed.profile_name ? refreshed : item))
       } catch {
-        onChanged(profiles.map((item) => item.profile_name === profile.profile_name
-          ? { ...item, connection_status: 'unknown', error_code: null, error_message: null }
-          : item))
+        onChanged(profiles.map((item) => item.profile_name === profile.profile_name ? { ...item, connection_status: 'unknown', error_code: null, error_message: null } : item))
       }
       onError(error as ApiError)
     } finally { setTesting(null) }
   }
 
-  return <Drawer
-    title="模型服务"
-    open={open}
-    onClose={() => { form.setFieldValue('secret', undefined); resetForm(); onClose() }}
-    width={520}
-    destroyOnClose
-  >
+  const selectedModel = catalog?.models.find((item) => item.model === currentModel)
+  const modelOptions = catalog?.models.map((item) => ({ label: item.display_name ? `${item.display_name}（${item.model}）` : item.model, value: item.model }))
+    ?? (currentModel ? [{ label: currentModel, value: currentModel }] : [])
+  const reasoningOptions = selectedModel?.reasoning_options.map((item) => ({ label: item, value: item })) ?? []
+  const currentProfile = editing ? profiles.find((item) => item.profile_name === editing) : undefined
+
+  return <Drawer title="AI 辅助" open={open} onClose={() => { form.setFieldValue('secret', undefined); initializedRef.current = false; resetForm(); onClose() }} width={560} destroyOnClose>
     <Space direction="vertical" style={{ width: '100%' }}>
-      <List
-        size="small"
-        header="已保存的模型服务"
-        dataSource={profiles}
-        locale={{ emptyText: '尚未配置模型服务，当前离线' }}
-        renderItem={(profile) => <List.Item actions={[
-          <Button size="small" onClick={() => loadProfile(profile)}>编辑</Button>,
-          <Button size="small" loading={testing === profile.profile_name} disabled={testing !== null} onClick={() => void test(profile)}>测试连接</Button>,
-        ]}>
-          <Space direction="vertical" size={0}>
-            <Space><span>{profile.profile_name}</span><Tag>{statusLabel(profile)}</Tag></Space>
-            {profile.error_message && <Typography.Text type="secondary">{profile.error_code ? `${profile.error_code}: ` : ''}{profile.error_message}</Typography.Text>}
-          </Space>
-        </List.Item>}
-      />
-      <Card size="small" title={editing ? `编辑 ${editing}` : '新增模型服务'}>
-        <Form form={form} layout="vertical" onFinish={save}>
-          <Space.Compact block>
-            <Form.Item name="profile_name" label="配置名称" rules={[{ required: true }, { pattern: /^[a-z][a-z0-9_-]{0,127}$/ }]} style={{ width: '50%' }}>
-              <Input disabled={Boolean(editing)} />
-            </Form.Item>
-            <Form.Item name="provider" label="供应商" rules={[{ required: true }]} style={{ width: '50%' }}>
-              <Select options={providerOptions} />
-            </Form.Item>
-          </Space.Compact>
-          <Form.Item name="model" label="模型" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="secret" label="API Key（只写入，不回显）"><Input.Password autoComplete="new-password" /></Form.Item>
-          <Form.Item name="secret_ref" label="环境变量引用"><Input placeholder="env:NAME" /></Form.Item>
-          <Form.Item name="base_url" label="Base URL"><Input placeholder="OpenAI-compatible 必填；默认仅 HTTPS" /></Form.Item>
-          <Space.Compact block>
-            <Form.Item name="timeout_ms" label="超时 ms"><InputNumber min={100} max={300000} style={{ width: '100%' }} /></Form.Item>
-            <Form.Item name="max_input_bytes" label="最大输入字节"><InputNumber min={1} max={1048576} style={{ width: '100%' }} /></Form.Item>
-            <Form.Item name="max_output_bytes" label="最大输出字节"><InputNumber min={1} max={1048576} style={{ width: '100%' }} /></Form.Item>
-          </Space.Compact>
-          <Form.Item name="max_budget_microusd" label="单次预算（微美元）"><InputNumber min={0} max={1000000000} style={{ width: '100%' }} /></Form.Item>
-          <Space>
-            <Form.Item name="enabled" valuePropName="checked"><Checkbox>允许候选生成使用</Checkbox></Form.Item>
-            <Form.Item name="allow_local_http" valuePropName="checked"><Checkbox>允许本机回环 HTTP</Checkbox></Form.Item>
-          </Space>
-          <Alert type="info" showIcon message="LLM 只生成待审候选，不能直接激活契约或决定漏洞结论。" />
-          <Space style={{ marginTop: 16 }}>
-            <Button type="primary" htmlType="submit" loading={saving}>保存</Button>
-            <Button onClick={resetForm}>清空</Button>
-          </Space>
-        </Form>
-      </Card>
+      <Form form={form} layout="vertical" onFinish={save}>
+      <Alert type="info" showIcon message="AI 只在系统确定事实之上提供辅助，不能决定权限要求或检查结论。" />
+      {!advancedOpen && <Card size="small" title="普通设置">
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Space><Switch checked={enabled} onChange={(value) => void toggle(value)} /><span>AI 辅助</span></Space>
+            <Form.Item name="provider" label="供应商" rules={[{ required: true }]}><Select options={providerOptions} onChange={changeProvider} /></Form.Item>
+            <Form.Item name="secret" label="API Key（只写入，不回显）"><Input.Password autoComplete="new-password" /></Form.Item>
+            <Button type="primary" loading={discovering} onClick={() => void discover()}>获取当前账号可用模型</Button>
+            <Form.Item name="model" label="模型" rules={[{ required: true }]}><Select options={modelOptions} disabled={!catalog} placeholder="先获取当前账号可用模型" /></Form.Item>
+            <Form.Item name="reasoning_effort" label="推理强度"><Select allowClear options={[{ label: selectedModel?.reasoning_default_label ?? '跟随模型默认', value: '__default__' }, ...reasoningOptions]} onChange={(value) => { if (value === '__default__') form.setFieldValue('reasoning_effort', null) }} /></Form.Item>
+            <Space style={{ marginTop: 8 }}><Button type="primary" htmlType="submit" loading={saving}>保存并测试</Button><Tag>{statusLabel(currentProfile)}</Tag></Space>
+        </Space>
+      </Card>}
+      <Collapse destroyOnHidden activeKey={advancedOpen ? ['advanced'] : []} onChange={changeAdvancedMode} items={[{
+        key: 'advanced', label: '高级设置', children: advancedOpen ? <Space direction="vertical" style={{ width: '100%' }}>
+          <Button onClick={startAdvancedProfile}>新增高级 profile</Button>
+          <List size="small" header="已保存的模型服务" dataSource={profiles} locale={{ emptyText: '尚未配置模型服务' }} renderItem={(profile) => <List.Item actions={[<Button size="small" onClick={() => loadProfile(profile)}>编辑</Button>, <Button size="small" loading={testing === profile.profile_name} disabled={testing !== null} onClick={() => void test(profile)}>测试连接</Button>]}><Space><span>{profile.profile_name}</span><Tag>{statusLabel(profile)}</Tag></Space></List.Item>} />
+          <Card size="small" title={editing ? `编辑 ${editing}` : '高级 profile 字段'}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Form.Item name="provider" label="供应商（高级）" rules={[{ required: true }]}><Select options={advancedProviderOptions} onChange={changeProvider} /></Form.Item>
+              <Form.Item name="secret" label="API Key（只写入，不回显）"><Input.Password autoComplete="new-password" /></Form.Item>
+              <Button type="primary" loading={discovering} onClick={() => void discover()}>获取当前账号可用模型</Button>
+              <Form.Item name="profile_name" label="profile_name"><Input disabled={Boolean(editing)} /></Form.Item>
+              <Form.Item name="model" label="model">
+                {catalog?.manual_model_allowed ? <Input placeholder="兼容服务未提供模型目录，请手工填写" /> : <Select options={modelOptions} disabled={!catalog} placeholder="先获取当前账号可用模型" />}
+              </Form.Item>
+              <Form.Item name="reasoning_effort" label="推理强度"><Select allowClear options={[{ label: selectedModel?.reasoning_default_label ?? '跟随模型默认', value: '__default__' }, ...reasoningOptions]} onChange={(value) => { if (value === '__default__') form.setFieldValue('reasoning_effort', null) }} /></Form.Item>
+              <Form.Item name="secret_ref" label="env: secret_ref"><Input placeholder="env:NAME" /></Form.Item>
+              <Form.Item name="base_url" label="Base URL"><Input placeholder="OpenAI-compatible 必填" /></Form.Item>
+              <Space.Compact block><Form.Item name="timeout_ms" label="timeout_ms"><InputNumber min={100} max={300000} /></Form.Item><Form.Item name="max_input_bytes" label="max_input_bytes"><InputNumber min={1} max={1048576} /></Form.Item><Form.Item name="max_output_bytes" label="max_output_bytes"><InputNumber min={1} max={1048576} /></Form.Item></Space.Compact>
+              <Form.Item name="max_budget_microusd" label="budget"><InputNumber min={0} max={1000000000} style={{ width: '100%' }} /></Form.Item>
+              <Space><Form.Item name="enabled" valuePropName="checked"><Checkbox>允许 AI 辅助使用</Checkbox></Form.Item><Form.Item name="allow_local_http" valuePropName="checked"><Checkbox>允许本机回环 HTTP</Checkbox></Form.Item></Space>
+              <Button type="primary" htmlType="submit" loading={saving}>{editing ? '保存高级配置' : '创建高级 profile'}</Button>
+            </Space>
+          </Card>
+        </Space> : null,
+      }]} />
+      </Form>
     </Space>
   </Drawer>
 }

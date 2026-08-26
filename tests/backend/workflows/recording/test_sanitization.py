@@ -1,3 +1,5 @@
+# 验证录制工作流中的录制数据清洗。
+
 from __future__ import annotations
 
 from product.backend.workflows.recording.sanitization import RecordingSanitizer

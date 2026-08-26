@@ -86,6 +86,7 @@ class HttpBindingCandidate(HttpBindingCandidateModel):
 
 
 class HttpBindingCandidateBatch(HttpBindingCandidateModel):
+    schema_version: Literal["1"] = "1"
     candidates: tuple[HttpBindingCandidate, ...] = Field(default=(), max_length=4096)
     input_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
 

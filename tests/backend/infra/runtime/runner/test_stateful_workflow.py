@@ -1,3 +1,5 @@
+# 验证隔离 Runner 运行时中的有状态 Runner 工作流。
+
 from __future__ import annotations
 
 import json
@@ -188,6 +190,20 @@ def _document(port: int, *, expected_fingerprint: str | None = None):
                 purpose=WorkflowStepPurpose.CLEANUP,
                 identity_id=CASE_SUBJECT_IDENTITY,
                 request_template=HttpRequestTemplate(method="POST", path="/workflow-cleanup"),
+                classifier=HttpOutcomeClassifier(
+                    accepted=(
+                        HttpPredicate(
+                            kind=HttpPredicateKind.STATUS_IN,
+                            statuses=(200, 201, 204),
+                        ),
+                    ),
+                    denied=(
+                        HttpPredicate(
+                            kind=HttpPredicateKind.STATUS_IN,
+                            statuses=(401, 403, 404),
+                        ),
+                    ),
+                ),
                 depends_on_step_ids=("approve-project",),
             ),
         ),

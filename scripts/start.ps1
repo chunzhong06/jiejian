@@ -23,6 +23,7 @@ param(
     [switch]$ForcePrepare,
     [Parameter(DontShow = $true)][switch]$DisplaySpinnerProcess,
     [Parameter(DontShow = $true)][string]$DisplaySpinnerStage = "startup",
+    [Parameter(DontShow = $true)][long]$DisplaySpinnerStartedAt = 0,
     [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii
 )
 
@@ -77,6 +78,7 @@ $script:FrontendBuildDetail = $null
 $script:ChromiumExecutable = $null
 $script:PythonEnvironmentReport = $null
 $script:ServeReadyObserved = $false
+$script:ServeStartupFailed = $false
 $script:CliEntryMode = "Shell"
 $script:PrepareLock = $null
 $script:FrontendDist = $null
@@ -118,6 +120,9 @@ $script:DisplayInteractive = $false
 $script:DisplayUnicode = $false
 $script:DisplayTrueColor = $false
 $script:WaitIndicatorProcess = $null
+$script:PrepareStatusOrder = @("toolchain", "python", "browser", "frontend-dependencies", "frontend-build", "database")
+$script:PrepareStatusIndex = 0
+$script:PrepareStatusState = @{}
 
 $script:Utf8Encoding = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
 [Console]::InputEncoding = $script:Utf8Encoding
@@ -127,11 +132,12 @@ $OutputEncoding = [Console]::OutputEncoding
 try {
     $script:DisplayInteractive = -not [Console]::IsInputRedirected -and
         -not [Console]::IsOutputRedirected
-    $script:DisplayUnicode = $script:DisplayInteractive -and
-        [Console]::OutputEncoding.CodePage -eq 65001 -and
-        $Host.UI.RawUI.WindowSize.Width -ge 72
     $supportsVirtualTerminal = $false
     try { $supportsVirtualTerminal = [bool]$Host.UI.SupportsVirtualTerminal } catch { $supportsVirtualTerminal = $false }
+    $script:DisplayUnicode = $script:DisplayInteractive -and
+        [Console]::OutputEncoding.CodePage -eq 65001 -and
+        $Host.UI.RawUI.WindowSize.Width -ge 72 -and
+        $supportsVirtualTerminal
     $hasTerminalHint = -not [string]::IsNullOrWhiteSpace([string]$env:WT_SESSION) -or
         -not [string]::IsNullOrWhiteSpace([string]$env:COLORTERM) -or
         -not [string]::IsNullOrWhiteSpace([string]$env:ANSICON) -or
@@ -155,7 +161,7 @@ foreach ($module in @("presentation.ps1", "runtime.ps1", "source.ps1", "product.
 }
 
 if ($DisplaySpinnerProcess) {
-    try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) } catch { }
+    try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) $DisplaySpinnerStartedAt } catch { }
     exit 0
 }
 
@@ -171,44 +177,27 @@ try {
     Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
     $env:PYTHONUTF8 = "1"
     $env:PYTHONIOENCODING = "utf-8"
-    Start-DisplayStage 1 "检查运行环境"
+    $script:PrepareStatusIndex = 0
+    $script:PrepareStatusState = @{}
+    Start-DisplayStage 1 "准备工具链"
     Write-Stage "source-prepare" "准备当前仓库的受控源码运行环境"
     Prepare-SourceRuntime
     $frontendStatus = if ($script:FrontendBuildDetail -eq "reused") { "指纹命中，已复用" } else { "指纹变化，已构建" }
-    Write-DisplayResult "固定工具链" "完成" $false ("uv {0}" -f $script:UvVersion)
-    Write-DisplayResult "源码环境" "完成" $false "Conda jiejian_env · editable 当前仓库"
-    Write-DisplayResult "前端资源" "完成" $false $frontendStatus
-    Write-DisplayResult "PowerShell" "完成" $true $PSVersionTable.PSVersion.ToString()
     Write-Startup "项目根: $script:ProjectRoot`n运行目录: $script:VarDir`n模式: source/$script:FinalMode`n日志: $script:LogPath`nuv=$script:UvVersion`n前端=$script:FrontendBuildDetail"
-    Complete-DisplayStage "完成"
 
-    Start-DisplayStage 2 "准备 Python"
-    Write-Stage "python" "确认 Conda、uv.lock 与 editable 当前源码"
-    Write-PythonEnvironment
-    Write-DisplayResult "Python" "完成" $false $script:PythonVersion
-    Write-DisplayResult "Python 依赖" "完成" $false $script:PythonDependenciesDetail
-    Write-DisplayResult "运行环境" "完成" $true ("{0} · {1}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath)
-    Complete-DisplayStage
-    Start-DisplayStage 3 "准备浏览器"
-    Write-Stage "playwright" "确认受控 Playwright Chromium"
-    Write-DisplayResult "Chromium" "完成" $true $script:ChromiumDetail
-    Complete-DisplayStage
-    Write-RuntimeSummary
-
-    Start-DisplayStage 4 "准备数据"
+    # prepare 已经真实闭合工具链、Python、浏览器和界面；此处只进入本地数据核验，不重放前四阶段。
+    if ($script:DisplayStageIndex -ne 5) { Start-DisplayStage 5 "检查本地数据" }
     Write-Stage "doctor" "运行环境诊断"
     Set-Location -LiteralPath $script:ProjectRoot
     Invoke-Package @("--var-dir", $script:VarDir, "--json", "doctor") "doctor" 42
-    Write-DisplayResult "环境诊断" "完成" $false
-    Write-DisplayResult "本地数据" "完成" $true "已迁移并校验"
-    Complete-DisplayStage
-
-    Start-DisplayStage 5 "准备界面"
     Write-Stage "frontend" "确认 var/runtime/frontend 源码构建"
     Confirm-SourceFrontend
+    Write-DisplayResult "环境诊断" "完成" $false
     Write-DisplayResult "前端资源" "完成" $false $script:FrontendDist
+    Write-DisplayResult "本地数据" "完成" $false "已迁移并校验"
     Write-DisplayResult "构建状态" "完成" $true $frontendStatus
-    Complete-DisplayStage "完成"
+    Complete-DisplayStage
+    Write-RuntimeSummary
 
     Start-DisplayStage 6 "启动界鉴"
     if ($script:FinalMode -eq "Interactive") {

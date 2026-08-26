@@ -88,7 +88,6 @@ export type GovernanceWorkspaceDto = {
   requirements?: GovernanceRequirementDto[]
   candidates?: GovernanceCandidateDto[]
   versions?: GovernanceVersionDto[]
-  llm_available?: boolean
 }
 export type CandidateDerivationDto = {
   batches?: Array<{ issues?: GovernanceIssueDto[] }>
@@ -124,9 +123,5 @@ export const contractsApi = {
   assessment: (id: string, contractId: string, version: number) => request<GovernanceAnalysisDto>(`/api/projects/${id}/contract-governance/contracts/${contractId}/versions/${version}/assessment`),
   diff: (id: string, contractId: string, version: number, fromVersion: number) => request<GovernanceAnalysisDto>(`/api/projects/${id}/contract-governance/contracts/${contractId}/versions/${version}/diff?from_version=${fromVersion}`),
   drift: (id: string, contractId: string, version: number) => request<GovernanceAnalysisDto>(`/api/projects/${id}/contract-governance/contracts/${contractId}/versions/${version}/drift`),
-  llmCandidates: (id: string, requirementIds: string[], actor: string, profileName: string) =>
-    request<CandidateDerivationDto>(`/api/projects/${id}/contract-governance/candidates/llm`, {
-      method: 'POST', body: JSON.stringify({ schema_version: '1', requirement_ids: requirementIds, actor, profile_name: profileName }),
-    }),
   runContract: (runId: string) => request<PermissionContractDto>(`/api/runs/${runId}/contract`),
 }

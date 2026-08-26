@@ -1,4 +1,4 @@
-# Results API Router
+# 结果 API 路由
 # 只读取完整性已确认的报告、Evidence 与 Finding，不重新执行 Verification。
 
 from __future__ import annotations
@@ -41,6 +41,19 @@ def build_results_router(
     async def get_result_status(run_id: str):
         return data_response(context.result_finalizer.status(run_id).model_dump(mode="json"))
 
+    @router.get("/api/runs/{run_id}/presentation", response_model=ApiResponse)
+    async def get_result_presentation(run_id: str):
+        return data_response(
+            context.result_presentation.build(run_id).model_dump(mode="json")
+        )
+
+    @router.get("/api/projects/{project_id}/results/history", response_model=ApiResponse)
+    async def get_result_history(project_id: str):
+        context.projects.get(project_id)
+        return data_response(
+            context.result_history.build(project_id).model_dump(mode="json")
+        )
+
     @router.post("/api/runs/{run_id}/result-repair", response_model=ApiResponse)
     async def repair_result(run_id: str):
         return data_response(context.result_finalizer.repair(run_id).model_dump(mode="json"))
@@ -56,6 +69,24 @@ def build_results_router(
     @router.get("/api/runs/{run_id}/reports/{report_id}", response_model=ApiResponse)
     async def get_permission_report(run_id: str, report_id: str):
         return data_response(context.reports.read(run_id, report_id))
+
+    @router.get("/api/runs/{run_id}/reports/{report_id}/view")
+    async def view_permission_report(run_id: str, report_id: str):
+        return Response(
+            content=context.reports.read_format(run_id, report_id, "html"),
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": 'inline; filename="report.html"',
+                "Content-Security-Policy": (
+                    "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; "
+                    "img-src 'none'; font-src 'none'; connect-src 'none'; media-src 'none'; "
+                    "object-src 'none'; frame-src 'none'; child-src 'none'; form-action 'none'; "
+                    "base-uri 'none'; frame-ancestors 'self'"
+                ),
+                "X-Content-Type-Options": "nosniff",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
 
     @router.get("/api/runs/{run_id}/reports/{report_id}/formats/{output_format}")
     async def download_permission_report(run_id: str, report_id: str, output_format: str):

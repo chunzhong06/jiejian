@@ -18,7 +18,7 @@ from pathlib import Path
 from product.backend.core.lifecycle import CaseVerdict
 from product.backend.core.verification.differential import PermissionTwin, TwinExecutionRole
 from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, ObservedEffect, TemporalClosure, aggregate_security_effect
-from product.backend.core.verification.permission_evaluation import CaseDecisionInput, evaluate_permission_case
+from product.backend.core.verification.permissions.evaluation import CaseDecisionInput, evaluate_permission_case
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.infra.execution.port import TargetBaselineResult, TargetRuntime, TargetRuntimeContext, TargetRuntimeFactory
 from product.backend.infra.observers.coordinator import ObserverCoordinator, default_observer_registry
@@ -87,14 +87,25 @@ def _apply_required_observer_guard(
 class RunnerExecutor:
     """跨 Target 的 attempt 内 Case 执行器；不持有任何 Web 专属状态。"""
 
-    def __init__(self, document: RunnerInput, *, runtime_factory: TargetRuntimeFactory, environ: Mapping[str, str], staging: Path, clock: Callable[[], int], cancellation_requested: Callable[[], bool] | None = None) -> None:
+    def __init__(self, document: RunnerInput, *, runtime_factory: TargetRuntimeFactory, environ: Mapping[str, str], staging: Path, clock: Callable[[], int], cancellation_requested: Callable[[], bool] | None = None, progress=None, progress_clock: Callable[[], int] | None = None) -> None:
         self.document = document
         self.snapshot = document.project_snapshot
         self.environ = environ
         self.staging = staging
         self.clock = clock
         self.cancellation_requested = cancellation_requested or (lambda: False)
-        self.runtime: TargetRuntime = runtime_factory.create(self.snapshot, TargetRuntimeContext(environ=environ, staging=staging, clock=clock, cancellation_requested=self.cancellation_requested))
+        self.progress = progress
+        self.progress_clock = progress_clock or clock
+        self.runtime: TargetRuntime = runtime_factory.create(
+            self.snapshot,
+            TargetRuntimeContext(
+                environ=environ,
+                staging=staging,
+                clock=clock,
+                cancellation_requested=self.cancellation_requested,
+                control_origin=environ.get("JIEJIAN_CONTROL_ORIGIN"),
+            ),
+        )
         self.actions = {item.action_id: item for item in self.snapshot.contract.actions}
         self.effects = {item.effect_id: item for item in self.snapshot.contract.effects}
         self.effect_bindings = {item.effect_id: item for item in self.snapshot.effect_bindings}
@@ -151,7 +162,7 @@ class RunnerExecutor:
             )
             return CaseResult(case=case, execution_fact=execution, verdict=verdict, finding_pre_identity=case.finding_pre_identity, baseline_integrity=True, twin_snapshot=twin, twin_role=twin_role, allow_control_valid=(verdict is CaseVerdict.SAFE) if is_allow_control else allow_control_valid, requirement_bindings=tuple(self.bindings[item] for item in case.required_observations), observation_facts=facts, security_effect_facts=effects, observations=envelopes, outcomes=outcomes, reason_codes=tuple(reasons), stage_trace=("PREPARE", "BASELINE", "BEFORE", "TARGET", "AFTER", "EVENTUAL", "RESOLVE", "VERIFICATION", "CLEANUP"))
 
-        return CaseOrchestrator(observers=self.observers, bindings=self.bindings, clock=self.clock, cancellation_requested=self.cancellation_requested).run(session, case, action=action, verify=verify, finding_pre_identity=case.finding_pre_identity, twin=twin, twin_role=twin_role, allow_control_valid=allow_control_valid, baseline_validate=validate_baseline, baseline_invalid=baseline_invalid)
+        return CaseOrchestrator(observers=self.observers, bindings=self.bindings, clock=self.clock, cancellation_requested=self.cancellation_requested, progress=self.progress, progress_clock=self.progress_clock).run(session, case, action=action, verify=verify, finding_pre_identity=case.finding_pre_identity, twin=twin, twin_role=twin_role, allow_control_valid=allow_control_valid, baseline_validate=validate_baseline, baseline_invalid=baseline_invalid)
 
     def _baseline_inconclusive(self, session, case, action, baseline, envelopes, outcomes, *, twin, twin_role) -> CaseResult:
         """基线不可比时在 TARGET 前形成 INCONCLUSIVE，并仍由编排器执行 cleanup。"""

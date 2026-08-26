@@ -1,3 +1,5 @@
+# 验证后端 API中的结果闸门接口。
+
 from __future__ import annotations
 
 from contextlib import contextmanager

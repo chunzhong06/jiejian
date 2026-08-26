@@ -1,3 +1,5 @@
+# 验证作业运行时中的结果发布恢复。
+
 from __future__ import annotations
 
 import hashlib
@@ -48,13 +50,13 @@ from product.backend.infra.runtime.jobs.queue import JobQueue
 
 pytestmark = pytest.mark.database
 from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
 from product.backend.infra.artifacts.run_packages import (
     StagedAttempt,
     TrustedResultReceipt,
     attempt_paths_for,
 )
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore, PersistedExecutionRequest
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, PersistedExecutionRequest
 from tests.fixtures.runner import (
     evidence as make_evidence,
     execution_snapshot,
@@ -134,7 +136,7 @@ def _staged_attempt(var_dir: Path, job) -> StagedAttempt:
         sha256=hashlib.sha256(b"{}").hexdigest(),
     )
     result = RunnerResult(
-        schema_version="4",
+        schema_version="1",
         run_id=job.run_id,
         job_id=job.job_id,
         attempt=job.attempt,
@@ -335,7 +337,7 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="4",
+        schema_version="1",
         budget=runner_input.budget,
         project_snapshot=runner_input.project_snapshot,
     )
@@ -352,7 +354,7 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
         sha256=hashlib.sha256(evidence_raw).hexdigest(),
     )
     result = RunnerResult(
-        schema_version="4",
+        schema_version="1",
         run_id=parts.job.run_id,
         job_id=parts.job.job_id,
         attempt=parts.job.attempt,
@@ -406,8 +408,8 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
         overview = reader.overview(parts.job.run_id, published=view)
         assert overview["target_scope"] == execution_snapshot().target.scope.model_dump(mode="json")
         assert overview["budget"] == request.budget.model_dump(mode="json")
-        assert overview["execution_schema_version"] == "4"
-        assert overview["result_schema_version"] == "4"
+        assert overview["execution_schema_version"] == "1"
+        assert overview["result_schema_version"] == "1"
         assert overview["observer_health"]["required_observations"] == ["resource_state"]
         assert overview["observer_health"]["resource_state"]["observer_type"] == "OWNER_API"
         assert overview["coverage_record_count"] == 2

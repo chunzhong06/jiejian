@@ -2,17 +2,17 @@
  * 接入页面
  *
  * 定位
- *   本地 WebExecutionProfile 路径进入控制面的首个用户能力页面
+ *   普通用户连接本地应用并建立应用理解的首个产品页面
  *
  * 职责
- *   收集项目路径｜调用项目登记 API｜把已登记 Project 交给控制壳
+ *   承载默认应用理解向导｜恢复已有 Project｜隔离旧版高级接入
  *
  * 调用链
- *   ControlShell → AccessPage → projectsApi.register
+ *   ControlShell → AccessPage → ApplicationSetup / 高级旧版接入
  * ============================================================================= */
 
 import { Button, Card, Collapse, Form, Input, List, Space, Tag, Typography } from 'antd'
-import { OnboardingWizard } from './onboarding/OnboardingWizard'
+import { ApplicationSetup } from './ApplicationSetup'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { lifecycleLabel, productStatusLabel, verdictLabel } from '../../app/presentation'
 import type { ProjectDto } from '../../api/projects'
@@ -24,8 +24,9 @@ export function AccessPage({
   selected,
   runs,
   onSelect,
+  onConnected,
+  onUnderstandingChanged,
   onRegister,
-  onOnboardingSubmitted,
   onContinue,
   loading,
 }: {
@@ -33,16 +34,17 @@ export function AccessPage({
   selected: ProjectDto | null
   runs: RunDto[]
   onSelect: (project: ProjectDto) => void
+  onConnected: (project: ProjectDto) => void
+  onUnderstandingChanged: () => void
   onContinue: () => void
   onRegister: (v: { path: string }) => void
-  onOnboardingSubmitted?: (result: { project_id: string; run_id: string; job_id: string }) => void
   loading: boolean
 }) {
   return (
     <>
-      <PageTaskHeader title="应用接入" description="选择要检查的应用，并确认检查范围与授权信息。" status={selected ? '已选择应用' : '尚未选择应用'} next={selected ? '继续完善权限规则' : '选择应用文件夹开始'} actionLabel={selected ? '去权限规则' : undefined} onAction={selected ? onContinue : undefined} />
-      <OnboardingWizard onSubmitted={onOnboardingSubmitted} />
-      <Collapse className="access-advanced" items={[{ key: 'advanced', label: '高级配置（执行配置、已有应用与继续入口）', forceRender: true, children: <div className="access-grid">
+      <PageTaskHeader title="应用接入" description="选择本地应用，确认访问地址，再审阅界鉴发现的权限组与关键业务动作。" status={selected ? '已选择应用' : '尚未选择应用'} next={selected ? '完成当前应用理解' : '选择应用文件夹开始'} />
+      <ApplicationSetup selected={selected} onConnected={onConnected} onChanged={onUnderstandingChanged} onContinue={onContinue} />
+      <Collapse className="access-advanced" items={[{ key: 'advanced', label: '高级配置（已有 Profile 项目）', children: <div className="access-grid">
         <Card title="接入项目" extra={<Tag>{projects.length} 个项目</Tag>}>
           <Form className="access-form" layout="inline" onFinish={onRegister}>
             <Form.Item name="path" rules={[{ required: true, message: '请输入 Web 执行配置的绝对路径' }]}>
@@ -65,7 +67,7 @@ export function AccessPage({
               <div className="overview-item">当前权限规则<br /><Typography.Text>{selected.governed_contract_id ? '已绑定' : '尚未确认'}</Typography.Text></div>
               <div className="overview-item">最近检查<br /><Typography.Text>{runs[0] ? `${lifecycleLabel(runs[0].lifecycle)} · ${verdictLabel(runs[0].verdict)}` : '暂无'}</Typography.Text></div>
             </div>
-            <Button type="primary" disabled={!selected} onClick={onContinue}>去权限规则</Button>
+            <Button type="primary" disabled={!selected} onClick={onContinue}>去业务流程</Button>
           </Space> : <Typography.Text type="secondary">暂无已确认的当前项目</Typography.Text>}
         </Card>
       </div> }]} />

@@ -29,7 +29,7 @@ from product.backend.core.verification.behavior_differential import (
 )
 from product.backend.core.verification.permissions import permission_model_sha256
 from product.protocols import ObserverOutcomeStatus, RunnerResult
-from product.backend.infra.storage.gating import GateResultRecord, RegressionBaselineRecord
+from product.backend.infra.storage.results.gating import GateResultRecord, RegressionBaselineRecord
 from product.backend.core.verification.gating import BaselineFindingRef, GateFacts, GateFinding, GatePolicy, GateResult, RegressionBaseline, baseline_id_for, gate_canonical_sha256, evaluate_gate, gate_input_hash
 from product.backend.workflows.results.published import PublishedResultReader, PublishedRunView
 from product.backend.workflows.results.findings import FindingQueries
@@ -223,7 +223,7 @@ def _published_facts(
         behavior_comparison_issues=behavior_comparison_issues,
         request_snapshot_sha256=request_hash,
         engine_version=view.run.engine_version,
-        protocol_versions=("evidence-3", "observer-2", "runner-result-3"),
+        protocol_versions=("evidence-1", "observer-1", "runner-result-1"),
     )
 
 

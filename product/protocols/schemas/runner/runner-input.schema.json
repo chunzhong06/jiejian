@@ -44,11 +44,13 @@
     "AsyncTaskApiLocator": {
       "additionalProperties": false,
       "properties": {
-        "locator_type": {
-          "const": "ASYNC_TASK_STATUS",
-          "default": "ASYNC_TASK_STATUS",
-          "title": "Locator Type",
-          "type": "string"
+        "allow_loopback_http": {
+          "title": "Allow Loopback Http",
+          "type": "boolean"
+        },
+        "allow_private_network": {
+          "title": "Allow Private Network",
+          "type": "boolean"
         },
         "base_url": {
           "maxLength": 256,
@@ -56,27 +58,25 @@
           "title": "Base Url",
           "type": "string"
         },
-        "relative_path_template": {
-          "maxLength": 512,
-          "minLength": 18,
-          "title": "Relative Path Template",
+        "locator_type": {
+          "const": "ASYNC_TASK_STATUS",
+          "default": "ASYNC_TASK_STATUS",
+          "title": "Locator Type",
           "type": "string"
+        },
+        "poll_budget": {
+          "$ref": "#/$defs/AsyncTaskPollBudget"
         },
         "read_only_credential_ref": {
           "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
           "title": "Read Only Credential Ref",
           "type": "string"
         },
-        "allow_private_network": {
-          "title": "Allow Private Network",
-          "type": "boolean"
-        },
-        "allow_loopback_http": {
-          "title": "Allow Loopback Http",
-          "type": "boolean"
-        },
-        "poll_budget": {
-          "$ref": "#/$defs/AsyncTaskPollBudget"
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 18,
+          "title": "Relative Path Template",
+          "type": "string"
         }
       },
       "required": [
@@ -99,10 +99,10 @@
           "title": "Max Polls",
           "type": "integer"
         },
-        "poll_interval_us": {
-          "maximum": 120000000,
-          "minimum": 0,
-          "title": "Poll Interval Us",
+        "max_response_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Response Bytes",
           "type": "integer"
         },
         "per_request_timeout_us": {
@@ -111,10 +111,10 @@
           "title": "Per Request Timeout Us",
           "type": "integer"
         },
-        "max_response_bytes": {
-          "maximum": 262144,
-          "minimum": 1,
-          "title": "Max Response Bytes",
+        "poll_interval_us": {
+          "maximum": 120000000,
+          "minimum": 0,
+          "title": "Poll Interval Us",
           "type": "integer"
         }
       },
@@ -136,16 +136,16 @@
           "title": "Max Files",
           "type": "integer"
         },
-        "max_lines": {
-          "maximum": 100000,
-          "minimum": 1,
-          "title": "Max Lines",
-          "type": "integer"
-        },
         "max_line_bytes": {
           "maximum": 262144,
           "minimum": 1,
           "title": "Max Line Bytes",
+          "type": "integer"
+        },
+        "max_lines": {
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Max Lines",
           "type": "integer"
         }
       },
@@ -161,20 +161,10 @@
       "additionalProperties": false,
       "description": "身份端点的独立授权范围；不能借用业务目标预算。",
       "properties": {
-        "base_url": {
-          "maxLength": 2048,
-          "minLength": 1,
-          "title": "Base Url",
-          "type": "string"
-        },
-        "allowed_origins": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 16,
-          "minItems": 1,
-          "title": "Allowed Origins",
-          "type": "array"
+        "allow_private_network": {
+          "default": false,
+          "title": "Allow Private Network",
+          "type": "boolean"
         },
         "allowed_hosts": {
           "items": {
@@ -183,6 +173,15 @@
           "maxItems": 16,
           "minItems": 1,
           "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "allowed_origins": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Allowed Origins",
           "type": "array"
         },
         "allowed_ports": {
@@ -194,10 +193,11 @@
           "title": "Allowed Ports",
           "type": "array"
         },
-        "allow_private_network": {
-          "default": false,
-          "title": "Allow Private Network",
-          "type": "boolean"
+        "base_url": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Base Url",
+          "type": "string"
         },
         "follow_redirects": {
           "const": false,
@@ -212,19 +212,19 @@
           "title": "Max Requests",
           "type": "integer"
         },
-        "timeout_seconds": {
-          "default": 5.0,
-          "exclusiveMinimum": 0,
-          "maximum": 30,
-          "title": "Timeout Seconds",
-          "type": "number"
-        },
         "max_response_bytes": {
           "default": 262144,
           "maximum": 4194304,
           "minimum": 1,
           "title": "Max Response Bytes",
           "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Timeout Seconds",
+          "type": "number"
         }
       },
       "required": [
@@ -239,25 +239,33 @@
     "AzureBlobObjectLocator": {
       "additionalProperties": false,
       "properties": {
-        "locator_type": {
-          "const": "AZURE_BLOB_OBJECT",
-          "default": "AZURE_BLOB_OBJECT",
-          "title": "Locator Type",
-          "type": "string"
-        },
         "allow_loopback_http": {
           "title": "Allow Loopback Http",
           "type": "boolean"
         },
-        "service_url": {
-          "maxLength": 256,
-          "minLength": 24,
-          "title": "Service Url",
-          "type": "string"
+        "allowed_metadata_fields": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "title": "Allowed Metadata Fields",
+          "type": "array"
         },
         "container_name": {
           "pattern": "^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$",
           "title": "Container Name",
+          "type": "string"
+        },
+        "exclusive_test_container": {
+          "const": true,
+          "title": "Exclusive Test Container",
+          "type": "boolean"
+        },
+        "locator_type": {
+          "const": "AZURE_BLOB_OBJECT",
+          "default": "AZURE_BLOB_OBJECT",
+          "title": "Locator Type",
           "type": "string"
         },
         "prefix_template": {
@@ -271,22 +279,14 @@
           "title": "Read Only Sas Ref",
           "type": "string"
         },
-        "exclusive_test_container": {
-          "const": true,
-          "title": "Exclusive Test Container",
-          "type": "boolean"
-        },
-        "allowed_metadata_fields": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 16,
-          "minItems": 2,
-          "title": "Allowed Metadata Fields",
-          "type": "array"
-        },
         "scan_budget": {
           "$ref": "#/$defs/BlobObjectScanBudget"
+        },
+        "service_url": {
+          "maxLength": 256,
+          "minLength": 24,
+          "title": "Service Url",
+          "type": "string"
         }
       },
       "required": [
@@ -305,35 +305,8 @@
     "AzureQueuePeekLocator": {
       "additionalProperties": false,
       "properties": {
-        "locator_type": {
-          "const": "AZURE_QUEUE_PEEK",
-          "default": "AZURE_QUEUE_PEEK",
-          "title": "Locator Type",
-          "type": "string"
-        },
         "allow_loopback_http": {
           "title": "Allow Loopback Http",
-          "type": "boolean"
-        },
-        "service_url": {
-          "maxLength": 256,
-          "minLength": 24,
-          "title": "Service Url",
-          "type": "string"
-        },
-        "queue_name": {
-          "pattern": "^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$",
-          "title": "Queue Name",
-          "type": "string"
-        },
-        "read_only_sas_ref": {
-          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
-          "title": "Read Only Sas Ref",
-          "type": "string"
-        },
-        "exclusive_test_queue": {
-          "const": true,
-          "title": "Exclusive Test Queue",
           "type": "boolean"
         },
         "allowed_fields": {
@@ -345,8 +318,35 @@
           "title": "Allowed Fields",
           "type": "array"
         },
+        "exclusive_test_queue": {
+          "const": true,
+          "title": "Exclusive Test Queue",
+          "type": "boolean"
+        },
+        "locator_type": {
+          "const": "AZURE_QUEUE_PEEK",
+          "default": "AZURE_QUEUE_PEEK",
+          "title": "Locator Type",
+          "type": "string"
+        },
         "peek_budget": {
           "$ref": "#/$defs/QueuePeekBudget"
+        },
+        "queue_name": {
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$",
+          "title": "Queue Name",
+          "type": "string"
+        },
+        "read_only_sas_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Read Only Sas Ref",
+          "type": "string"
+        },
+        "service_url": {
+          "maxLength": 256,
+          "minLength": 24,
+          "title": "Service Url",
+          "type": "string"
         }
       },
       "required": [
@@ -372,31 +372,6 @@
     "BaselineProjection": {
       "additionalProperties": false,
       "properties": {
-        "projection_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Projection Id",
-          "type": "string"
-        },
-        "logical_resource_handle": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Logical Resource Handle",
-          "type": "string"
-        },
-        "normalization_version": {
-          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
-          "title": "Normalization Version",
-          "type": "string"
-        },
-        "projection_version": {
-          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
-          "title": "Projection Version",
-          "type": "string"
-        },
-        "required": {
-          "default": true,
-          "title": "Required",
-          "type": "boolean"
-        },
         "expected_fingerprint": {
           "anyOf": [
             {
@@ -413,6 +388,31 @@
         "integrity_mode": {
           "$ref": "#/$defs/BaselineIntegrityMode",
           "default": "EXACT_RESTORE"
+        },
+        "logical_resource_handle": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Logical Resource Handle",
+          "type": "string"
+        },
+        "normalization_version": {
+          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
+          "title": "Normalization Version",
+          "type": "string"
+        },
+        "projection_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Projection Id",
+          "type": "string"
+        },
+        "projection_version": {
+          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
+          "title": "Projection Version",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
         }
       },
       "required": [
@@ -436,28 +436,26 @@
     "BatchPermissionRule": {
       "additionalProperties": false,
       "properties": {
-        "rule_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Rule Id",
-          "type": "string"
-        },
-        "subject_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Subject Id",
-          "type": "string"
-        },
         "action_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Action Id",
           "type": "string"
         },
-        "resource_expectations": {
+        "atomic": {
+          "default": true,
+          "title": "Atomic",
+          "type": "boolean"
+        },
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
+        },
+        "coverage_dimensions": {
           "items": {
-            "$ref": "#/$defs/BatchResourceExpectation"
+            "$ref": "#/$defs/CoverageDimension"
           },
-          "maxItems": 256,
-          "minItems": 2,
-          "title": "Resource Expectations",
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Coverage Dimensions",
           "type": "array"
         },
         "required_observations": {
@@ -469,22 +467,19 @@
           "title": "Required Observations",
           "type": "array"
         },
-        "context": {
-          "$ref": "#/$defs/PermissionContext"
-        },
-        "atomic": {
-          "default": true,
-          "title": "Atomic",
-          "type": "boolean"
-        },
-        "coverage_dimensions": {
+        "resource_expectations": {
           "items": {
-            "$ref": "#/$defs/CoverageDimension"
+            "$ref": "#/$defs/BatchResourceExpectation"
           },
-          "maxItems": 6,
-          "minItems": 1,
-          "title": "Coverage Dimensions",
+          "maxItems": 256,
+          "minItems": 2,
+          "title": "Resource Expectations",
           "type": "array"
+        },
+        "rule_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
         },
         "severity": {
           "default": "high",
@@ -495,6 +490,11 @@
             "critical"
           ],
           "title": "Severity",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Subject Id",
           "type": "string"
         }
       },
@@ -512,11 +512,6 @@
     "BatchResourceExpectation": {
       "additionalProperties": false,
       "properties": {
-        "resource_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Resource Id",
-          "type": "string"
-        },
         "expectation": {
           "$ref": "#/$defs/PermissionExpectation"
         },
@@ -528,6 +523,11 @@
           "maxItems": 64,
           "title": "Relation Path",
           "type": "array"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
         }
       },
       "required": [
@@ -561,22 +561,10 @@
     "BlobObjectScanBudget": {
       "additionalProperties": false,
       "properties": {
-        "page_size": {
-          "maximum": 5000,
+        "max_attempts": {
+          "maximum": 3,
           "minimum": 1,
-          "title": "Page Size",
-          "type": "integer"
-        },
-        "max_pages": {
-          "maximum": 256,
-          "minimum": 1,
-          "title": "Max Pages",
-          "type": "integer"
-        },
-        "max_objects": {
-          "maximum": 10000,
-          "minimum": 1,
-          "title": "Max Objects",
+          "title": "Max Attempts",
           "type": "integer"
         },
         "max_object_bytes": {
@@ -585,16 +573,28 @@
           "title": "Max Object Bytes",
           "type": "integer"
         },
+        "max_objects": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Max Objects",
+          "type": "integer"
+        },
+        "max_pages": {
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Max Pages",
+          "type": "integer"
+        },
         "max_total_bytes": {
           "maximum": 262144,
           "minimum": 1,
           "title": "Max Total Bytes",
           "type": "integer"
         },
-        "max_attempts": {
-          "maximum": 3,
+        "page_size": {
+          "maximum": 5000,
           "minimum": 1,
-          "title": "Max Attempts",
+          "title": "Page Size",
           "type": "integer"
         },
         "per_request_timeout_us": {
@@ -626,12 +626,6 @@
     "CookieSessionIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "COOKIE_SESSION",
-          "default": "COOKIE_SESSION",
-          "title": "Kind",
-          "type": "string"
-        },
         "bootstrap_template_ids": {
           "default": [],
           "items": {
@@ -653,6 +647,12 @@
           ],
           "default": null,
           "title": "Csrf Slot Id"
+        },
+        "kind": {
+          "const": "COOKIE_SESSION",
+          "default": "COOKIE_SESSION",
+          "title": "Kind",
+          "type": "string"
         }
       },
       "title": "CookieSessionIdentityBinding",
@@ -673,8 +673,13 @@
     "CoverageGap": {
       "additionalProperties": false,
       "properties": {
-        "rule_id": {
-          "title": "Rule Id",
+        "code": {
+          "$ref": "#/$defs/CoverageGapCode"
+        },
+        "detail": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Detail",
           "type": "string"
         },
         "dimension": {
@@ -699,13 +704,8 @@
           ],
           "default": null
         },
-        "code": {
-          "$ref": "#/$defs/CoverageGapCode"
-        },
-        "detail": {
-          "maxLength": 128,
-          "minLength": 1,
-          "title": "Detail",
+        "rule_id": {
+          "title": "Rule Id",
           "type": "string"
         }
       },
@@ -732,9 +732,14 @@
     "CoverageRecord": {
       "additionalProperties": false,
       "properties": {
-        "rule_id": {
-          "title": "Rule Id",
-          "type": "string"
+        "case_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Case Ids",
+          "type": "array"
         },
         "dimension": {
           "anyOf": [
@@ -758,18 +763,6 @@
           ],
           "default": null
         },
-        "status": {
-          "$ref": "#/$defs/CoverageStatus"
-        },
-        "case_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 32,
-          "title": "Case Ids",
-          "type": "array"
-        },
         "gap_codes": {
           "default": [],
           "items": {
@@ -778,6 +771,13 @@
           "maxItems": 8,
           "title": "Gap Codes",
           "type": "array"
+        },
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CoverageStatus"
         }
       },
       "required": [
@@ -798,9 +798,9 @@
     "DifferentialExperimentPlan": {
       "additionalProperties": false,
       "properties": {
-        "differential_plan_id": {
-          "pattern": "^dplan-[0-9a-f]{32}$",
-          "title": "Differential Plan Id",
+        "coverage_plan_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Coverage Plan Fingerprint",
           "type": "string"
         },
         "differential_fingerprint": {
@@ -808,9 +808,24 @@
           "title": "Differential Fingerprint",
           "type": "string"
         },
-        "coverage_plan_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Coverage Plan Fingerprint",
+        "differential_plan_id": {
+          "pattern": "^dplan-[0-9a-f]{32}$",
+          "title": "Differential Plan Id",
+          "type": "string"
+        },
+        "gaps": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TwinPlanGap"
+          },
+          "maxItems": 8192,
+          "title": "Gaps",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
           "type": "string"
         },
         "twins": {
@@ -820,15 +835,6 @@
           },
           "maxItems": 8192,
           "title": "Twins",
-          "type": "array"
-        },
-        "gaps": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/TwinPlanGap"
-          },
-          "maxItems": 8192,
-          "title": "Gaps",
           "type": "array"
         }
       },
@@ -844,19 +850,8 @@
       "additionalProperties": false,
       "description": "把安全效果绑定到权威通道与可选佐证通道。",
       "properties": {
-        "effect_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Effect Id",
-          "type": "string"
-        },
-        "required_channels": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 32,
-          "minItems": 1,
-          "title": "Required Channels",
-          "type": "array"
+        "closure_policy": {
+          "$ref": "#/$defs/EffectClosurePolicy"
         },
         "corroborating_channels": {
           "default": [],
@@ -867,13 +862,24 @@
           "title": "Corroborating Channels",
           "type": "array"
         },
-        "closure_policy": {
-          "$ref": "#/$defs/EffectClosurePolicy"
+        "effect_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Effect Id",
+          "type": "string"
         },
         "projection_version": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$",
           "title": "Projection Version",
           "type": "string"
+        },
+        "required_channels": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Required Channels",
+          "type": "array"
         }
       },
       "required": [
@@ -903,6 +909,9 @@
           "title": "Candidate Fingerprint",
           "type": "string"
         },
+        "reason": {
+          "$ref": "#/$defs/EliminatedReason"
+        },
         "source_rule_ids": {
           "items": {
             "type": "string"
@@ -911,9 +920,6 @@
           "minItems": 1,
           "title": "Source Rule Ids",
           "type": "array"
-        },
-        "reason": {
-          "$ref": "#/$defs/EliminatedReason"
         }
       },
       "required": [
@@ -948,16 +954,10 @@
     "ExecutionBudget": {
       "additionalProperties": false,
       "properties": {
-        "max_requests": {
-          "maximum": 500,
+        "max_cases": {
+          "maximum": 8192,
           "minimum": 1,
-          "title": "Max Requests",
-          "type": "integer"
-        },
-        "request_timeout_us": {
-          "maximum": 30000000,
-          "minimum": 1,
-          "title": "Request Timeout Us",
+          "title": "Max Cases",
           "type": "integer"
         },
         "max_duration_us": {
@@ -966,21 +966,27 @@
           "title": "Max Duration Us",
           "type": "integer"
         },
+        "max_parallel_cases": {
+          "const": 1,
+          "title": "Max Parallel Cases",
+          "type": "integer"
+        },
+        "max_requests": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
         "max_response_bytes": {
           "maximum": 4194304,
           "minimum": 1,
           "title": "Max Response Bytes",
           "type": "integer"
         },
-        "max_cases": {
-          "maximum": 8192,
+        "request_timeout_us": {
+          "maximum": 30000000,
           "minimum": 1,
-          "title": "Max Cases",
-          "type": "integer"
-        },
-        "max_parallel_cases": {
-          "const": 1,
-          "title": "Max Parallel Cases",
+          "title": "Request Timeout Us",
           "type": "integer"
         }
       },
@@ -998,12 +1004,6 @@
     "FormUrlEncodedBody": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "FORM_URLENCODED",
-          "default": "FORM_URLENCODED",
-          "title": "Kind",
-          "type": "string"
-        },
         "fields": {
           "default": [],
           "items": {
@@ -1012,6 +1012,12 @@
           "maxItems": 128,
           "title": "Fields",
           "type": "array"
+        },
+        "kind": {
+          "const": "FORM_URLENCODED",
+          "default": "FORM_URLENCODED",
+          "title": "Kind",
+          "type": "string"
         }
       },
       "title": "FormUrlEncodedBody",
@@ -1029,15 +1035,6 @@
           "title": "Accepted",
           "type": "array"
         },
-        "denied": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/HttpPredicate"
-          },
-          "maxItems": 128,
-          "title": "Denied",
-          "type": "array"
-        },
         "completion_binding": {
           "anyOf": [
             {
@@ -1050,6 +1047,15 @@
           ],
           "default": null,
           "title": "Completion Binding"
+        },
+        "denied": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpPredicate"
+          },
+          "maxItems": 128,
+          "title": "Denied",
+          "type": "array"
         }
       },
       "title": "HttpOutcomeClassifier",
@@ -1059,13 +1065,6 @@
       "additionalProperties": false,
       "description": "受控 Query/Header/Form 字段；字段值只能是 literal 或已声明 Slot。",
       "properties": {
-        "name": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9_.~\\-]+$",
-          "title": "Name",
-          "type": "string"
-        },
         "literal": {
           "anyOf": [
             {
@@ -1078,6 +1077,13 @@
           ],
           "default": null,
           "title": "Literal"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
         },
         "slot_id": {
           "anyOf": [
@@ -1102,19 +1108,7 @@
     "HttpPredicate": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "$ref": "#/$defs/HttpPredicateKind"
-        },
-        "statuses": {
-          "default": [],
-          "items": {
-            "type": "integer"
-          },
-          "maxItems": 32,
-          "title": "Statuses",
-          "type": "array"
-        },
-        "json_path": {
+        "attribute": {
           "anyOf": [
             {
               "type": "string"
@@ -1124,7 +1118,11 @@
             }
           ],
           "default": null,
-          "title": "Json Path"
+          "title": "Attribute"
+        },
+        "expected": {
+          "default": null,
+          "title": "Expected"
         },
         "header_name": {
           "anyOf": [
@@ -1138,16 +1136,32 @@
           "default": null,
           "title": "Header Name"
         },
-        "expected": {
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "default": null,
-          "title": "Expected"
+          "title": "Json Path"
         },
-        "values": {
-          "default": [],
-          "items": {},
-          "maxItems": 32,
-          "title": "Values",
-          "type": "array"
+        "kind": {
+          "$ref": "#/$defs/HttpPredicateKind"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
         },
         "redirect_path": {
           "anyOf": [
@@ -1173,29 +1187,21 @@
           "default": null,
           "title": "Selector"
         },
-        "attribute": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Attribute"
+        "statuses": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 32,
+          "title": "Statuses",
+          "type": "array"
         },
-        "literal": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Literal"
+        "values": {
+          "default": [],
+          "items": {},
+          "maxItems": 32,
+          "title": "Values",
+          "type": "array"
         }
       },
       "required": [
@@ -1224,6 +1230,50 @@
       "additionalProperties": false,
       "description": "单请求受控模板；不接受 URL、脚本、任意文件或保留认证头。",
       "properties": {
+        "body": {
+          "discriminator": {
+            "mapping": {
+              "EMPTY": "#/$defs/EmptyBody",
+              "FORM_URLENCODED": "#/$defs/FormUrlEncodedBody",
+              "JSON": "#/$defs/JsonBody",
+              "MULTIPART": "#/$defs/MultipartBody"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EmptyBody"
+            },
+            {
+              "$ref": "#/$defs/JsonBody"
+            },
+            {
+              "$ref": "#/$defs/FormUrlEncodedBody"
+            },
+            {
+              "$ref": "#/$defs/MultipartBody"
+            }
+          ],
+          "title": "Body"
+        },
+        "headers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Headers",
+          "type": "array"
+        },
+        "input_slots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ValueSlot"
+          },
+          "maxItems": 128,
+          "title": "Input Slots",
+          "type": "array"
+        },
         "method": {
           "enum": [
             "GET",
@@ -1252,50 +1302,6 @@
           "title": "Query",
           "type": "array"
         },
-        "headers": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/HttpParameter"
-          },
-          "maxItems": 128,
-          "title": "Headers",
-          "type": "array"
-        },
-        "body": {
-          "discriminator": {
-            "mapping": {
-              "EMPTY": "#/$defs/EmptyBody",
-              "FORM_URLENCODED": "#/$defs/FormUrlEncodedBody",
-              "JSON": "#/$defs/JsonBody",
-              "MULTIPART": "#/$defs/MultipartBody"
-            },
-            "propertyName": "kind"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/EmptyBody"
-            },
-            {
-              "$ref": "#/$defs/JsonBody"
-            },
-            {
-              "$ref": "#/$defs/FormUrlEncodedBody"
-            },
-            {
-              "$ref": "#/$defs/MultipartBody"
-            }
-          ],
-          "title": "Body"
-        },
-        "input_slots": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/ValueSlot"
-          },
-          "maxItems": 128,
-          "title": "Input Slots",
-          "type": "array"
-        },
         "response_extractors": {
           "default": [],
           "items": {
@@ -1304,6 +1310,12 @@
           "maxItems": 128,
           "title": "Response Extractors",
           "type": "array"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
         }
       },
       "required": [
@@ -1316,43 +1328,10 @@
     "HttpWorkflowBinding": {
       "additionalProperties": false,
       "properties": {
-        "workflow_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Workflow Id",
-          "type": "string"
-        },
-        "source_flow_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Source Flow Id",
-          "type": "string"
-        },
         "action_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Action Id",
           "type": "string"
-        },
-        "steps": {
-          "items": {
-            "$ref": "#/$defs/HttpWorkflowStep"
-          },
-          "maxItems": 256,
-          "minItems": 1,
-          "title": "Steps",
-          "type": "array"
-        },
-        "target_step_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Target Step Id",
-          "type": "string"
-        },
-        "logical_resource_slots": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/LogicalResourceSlot"
-          },
-          "maxItems": 128,
-          "title": "Logical Resource Slots",
-          "type": "array"
         },
         "baseline_projections": {
           "default": [],
@@ -1361,6 +1340,15 @@
           },
           "maxItems": 128,
           "title": "Baseline Projections",
+          "type": "array"
+        },
+        "logical_resource_slots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LogicalResourceSlot"
+          },
+          "maxItems": 128,
+          "title": "Logical Resource Slots",
           "type": "array"
         },
         "reset_strategy": {
@@ -1385,6 +1373,25 @@
           ],
           "title": "Reset Strategy"
         },
+        "source_flow_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Source Flow Id",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/HttpWorkflowStep"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "target_step_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Target Step Id",
+          "type": "string"
+        },
         "workflow_fingerprint": {
           "anyOf": [
             {
@@ -1397,6 +1404,11 @@
           ],
           "default": null,
           "title": "Workflow Fingerprint"
+        },
+        "workflow_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Workflow Id",
+          "type": "string"
         }
       },
       "required": [
@@ -1412,25 +1424,32 @@
     "HttpWorkflowStep": {
       "additionalProperties": false,
       "properties": {
+        "classifier": {
+          "$ref": "#/$defs/HttpOutcomeClassifier"
+        },
+        "depends_on_step_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Depends On Step Ids",
+          "type": "array"
+        },
+        "failure_policy": {
+          "$ref": "#/$defs/WorkflowFailurePolicy",
+          "default": "INCONCLUSIVE"
+        },
         "id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Id",
           "type": "string"
-        },
-        "purpose": {
-          "$ref": "#/$defs/WorkflowStepPurpose"
         },
         "identity_id": {
           "maxLength": 64,
           "minLength": 1,
           "title": "Identity Id",
           "type": "string"
-        },
-        "request_template": {
-          "$ref": "#/$defs/HttpRequestTemplate"
-        },
-        "classifier": {
-          "$ref": "#/$defs/HttpOutcomeClassifier"
         },
         "input_slots": {
           "default": [],
@@ -1450,18 +1469,11 @@
           "title": "Output Extractors",
           "type": "array"
         },
-        "depends_on_step_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 128,
-          "title": "Depends On Step Ids",
-          "type": "array"
+        "purpose": {
+          "$ref": "#/$defs/WorkflowStepPurpose"
         },
-        "failure_policy": {
-          "$ref": "#/$defs/WorkflowFailurePolicy",
-          "default": "INCONCLUSIVE"
+        "request_template": {
+          "$ref": "#/$defs/HttpRequestTemplate"
         }
       },
       "required": [
@@ -1476,13 +1488,13 @@
     "IdentityBootstrapRequest": {
       "additionalProperties": false,
       "properties": {
+        "request_template": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
         "template_id": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Template Id",
           "type": "string"
-        },
-        "request_template": {
-          "$ref": "#/$defs/HttpRequestTemplate"
         }
       },
       "required": [
@@ -1514,19 +1526,10 @@
     "LogicalResourceSlot": {
       "additionalProperties": false,
       "properties": {
-        "slot_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Slot Id",
-          "type": "string"
-        },
         "logical_resource_handle": {
           "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
           "title": "Logical Resource Handle",
           "type": "string"
-        },
-        "value_type": {
-          "$ref": "#/$defs/ValueType",
-          "default": "STRING"
         },
         "max_length": {
           "default": 256,
@@ -1540,6 +1543,15 @@
           "default": false,
           "title": "Secret",
           "type": "boolean"
+        },
+        "slot_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
         }
       },
       "required": [
@@ -1552,17 +1564,6 @@
     "LoginWorkflowIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "LOGIN_WORKFLOW",
-          "default": "LOGIN_WORKFLOW",
-          "title": "Kind",
-          "type": "string"
-        },
-        "workflow_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Workflow Id",
-          "type": "string"
-        },
         "csrf_slot_id": {
           "anyOf": [
             {
@@ -1575,6 +1576,17 @@
           ],
           "default": null,
           "title": "Csrf Slot Id"
+        },
+        "kind": {
+          "const": "LOGIN_WORKFLOW",
+          "default": "LOGIN_WORKFLOW",
+          "title": "Kind",
+          "type": "string"
+        },
+        "workflow_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Workflow Id",
+          "type": "string"
         }
       },
       "required": [
@@ -1612,17 +1624,11 @@
       "additionalProperties": false,
       "description": "Multipart 只允许 literal、Slot 或已登记 fixture/artifact 标识。",
       "properties": {
-        "name": {
-          "maxLength": 128,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9_.~\\-]+$",
-          "title": "Name",
-          "type": "string"
-        },
-        "literal": {
+        "content_type": {
           "anyOf": [
             {
-              "maxLength": 1024,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$",
               "type": "string"
             },
             {
@@ -1630,33 +1636,7 @@
             }
           ],
           "default": null,
-          "title": "Literal"
-        },
-        "slot_id": {
-          "anyOf": [
-            {
-              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Slot Id"
-        },
-        "fixture_artifact_id": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Fixture Artifact Id"
+          "title": "Content Type"
         },
         "filename": {
           "anyOf": [
@@ -1672,11 +1652,10 @@
           "default": null,
           "title": "Filename"
         },
-        "content_type": {
+        "fixture_artifact_id": {
           "anyOf": [
             {
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$",
+              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
               "type": "string"
             },
             {
@@ -1684,7 +1663,40 @@
             }
           ],
           "default": null,
-          "title": "Content Type"
+          "title": "Fixture Artifact Id"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
         }
       },
       "required": [
@@ -1696,16 +1708,8 @@
     "OAuth2ClientCredentialsIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "OAUTH2_CLIENT_CREDENTIALS",
-          "default": "OAUTH2_CLIENT_CREDENTIALS",
-          "title": "Kind",
-          "type": "string"
-        },
-        "token_path": {
-          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
-          "title": "Token Path",
-          "type": "string"
+        "auth_scope": {
+          "$ref": "#/$defs/AuthTargetScope"
         },
         "client_id_ref": {
           "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
@@ -1715,6 +1719,12 @@
         "client_secret_ref": {
           "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
           "title": "Client Secret Ref",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OAUTH2_CLIENT_CREDENTIALS",
+          "default": "OAUTH2_CLIENT_CREDENTIALS",
+          "title": "Kind",
           "type": "string"
         },
         "scope": {
@@ -1730,8 +1740,10 @@
           "default": null,
           "title": "Scope"
         },
-        "auth_scope": {
-          "$ref": "#/$defs/AuthTargetScope"
+        "token_path": {
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Token Path",
+          "type": "string"
         }
       },
       "required": [
@@ -1746,20 +1758,18 @@
     "OAuth2RefreshTokenIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "OAUTH2_REFRESH_TOKEN",
-          "default": "OAUTH2_REFRESH_TOKEN",
-          "title": "Kind",
-          "type": "string"
-        },
-        "token_path": {
-          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
-          "title": "Token Path",
-          "type": "string"
+        "auth_scope": {
+          "$ref": "#/$defs/AuthTargetScope"
         },
         "client_id_ref": {
           "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
           "title": "Client Id Ref",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OAUTH2_REFRESH_TOKEN",
+          "default": "OAUTH2_REFRESH_TOKEN",
+          "title": "Kind",
           "type": "string"
         },
         "refresh_token_ref": {
@@ -1767,8 +1777,10 @@
           "title": "Refresh Token Ref",
           "type": "string"
         },
-        "auth_scope": {
-          "$ref": "#/$defs/AuthTargetScope"
+        "token_path": {
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Token Path",
+          "type": "string"
         }
       },
       "required": [
@@ -1794,10 +1806,10 @@
     "ObserverBudget": {
       "additionalProperties": false,
       "properties": {
-        "timeout_us": {
-          "maximum": 120000000,
+        "max_bytes": {
+          "maximum": 262144,
           "minimum": 1,
-          "title": "Timeout Us",
+          "title": "Max Bytes",
           "type": "integer"
         },
         "max_rows": {
@@ -1806,10 +1818,10 @@
           "title": "Max Rows",
           "type": "integer"
         },
-        "max_bytes": {
-          "maximum": 262144,
+        "timeout_us": {
+          "maximum": 120000000,
           "minimum": 1,
-          "title": "Max Bytes",
+          "title": "Timeout Us",
           "type": "integer"
         }
       },
@@ -1824,10 +1836,31 @@
     "ObserverRequirementBinding": {
       "additionalProperties": false,
       "properties": {
-        "requirement_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Requirement Id",
-          "type": "string"
+        "credential_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Ref"
+        },
+        "identity_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identity Id"
         },
         "kind": {
           "$ref": "#/$defs/ObserverRequirementKind"
@@ -1856,19 +1889,6 @@
           ],
           "default": null
         },
-        "credential_ref": {
-          "anyOf": [
-            {
-              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Credential Ref"
-        },
         "phases": {
           "default": [],
           "items": {
@@ -1877,6 +1897,11 @@
           "maxItems": 5,
           "title": "Phases",
           "type": "array"
+        },
+        "requirement_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Requirement Id",
+          "type": "string"
         }
       },
       "required": [
@@ -1896,6 +1921,9 @@
     "ObserverSpec": {
       "additionalProperties": false,
       "properties": {
+        "budget": {
+          "$ref": "#/$defs/ObserverBudget"
+        },
         "observer_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Observer Id",
@@ -1903,15 +1931,6 @@
         },
         "observer_type": {
           "$ref": "#/$defs/ObserverType"
-        },
-        "protocol_version": {
-          "const": "2",
-          "default": "2",
-          "title": "Protocol Version",
-          "type": "string"
-        },
-        "target": {
-          "$ref": "#/$defs/ObserverTarget"
         },
         "phases": {
           "items": {
@@ -1922,12 +1941,18 @@
           "title": "Phases",
           "type": "array"
         },
+        "protocol_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Protocol Version",
+          "type": "string"
+        },
         "required": {
           "title": "Required",
           "type": "boolean"
         },
-        "budget": {
-          "$ref": "#/$defs/ObserverBudget"
+        "target": {
+          "$ref": "#/$defs/ObserverTarget"
         }
       },
       "required": [
@@ -1944,11 +1969,6 @@
     "ObserverTarget": {
       "additionalProperties": false,
       "properties": {
-        "target_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Target Id",
-          "type": "string"
-        },
         "locator": {
           "discriminator": {
             "mapping": {
@@ -1991,6 +2011,11 @@
         "normalization_version": {
           "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
           "title": "Normalization Version",
+          "type": "string"
+        },
+        "target_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Target Id",
           "type": "string"
         }
       },
@@ -2040,24 +2065,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "workflow_states": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Workflow States",
-          "type": "array"
-        },
-        "tenant_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Tenant Ids",
-          "type": "array"
-        },
         "department_ids": {
           "default": [],
           "items": {
@@ -2075,6 +2082,24 @@
           "maxItems": 256,
           "title": "Resource Ids",
           "type": "array"
+        },
+        "tenant_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Tenant Ids",
+          "type": "array"
+        },
+        "workflow_states": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Workflow States",
+          "type": "array"
         }
       },
       "title": "PermissionContext",
@@ -2083,59 +2108,6 @@
     "PermissionContract": {
       "additionalProperties": false,
       "properties": {
-        "schema_version": {
-          "const": "4",
-          "default": "4",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "contract_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Contract Id",
-          "type": "string"
-        },
-        "version": {
-          "maximum": 2147483647,
-          "minimum": 1,
-          "title": "Version",
-          "type": "integer"
-        },
-        "role_ids": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 128,
-          "minItems": 1,
-          "title": "Role Ids",
-          "type": "array"
-        },
-        "workflow_states": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 128,
-          "minItems": 1,
-          "title": "Workflow States",
-          "type": "array"
-        },
-        "subjects": {
-          "items": {
-            "$ref": "#/$defs/SubjectDefinition"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Subjects",
-          "type": "array"
-        },
-        "effects": {
-          "items": {
-            "$ref": "#/$defs/SecurityEffectDefinition"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Effects",
-          "type": "array"
-        },
         "actions": {
           "items": {
             "$ref": "#/$defs/ActionDefinition"
@@ -2145,13 +2117,27 @@
           "title": "Actions",
           "type": "array"
         },
-        "resources": {
+        "batch_rules": {
+          "default": [],
           "items": {
-            "$ref": "#/$defs/ResourceDefinition"
+            "$ref": "#/$defs/BatchPermissionRule"
+          },
+          "maxItems": 2048,
+          "title": "Batch Rules",
+          "type": "array"
+        },
+        "contract_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Contract Id",
+          "type": "string"
+        },
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/SecurityEffectDefinition"
           },
           "maxItems": 4096,
           "minItems": 1,
-          "title": "Resources",
+          "title": "Effects",
           "type": "array"
         },
         "relations": {
@@ -2163,6 +2149,24 @@
           "title": "Relations",
           "type": "array"
         },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/ResourceDefinition"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Resources",
+          "type": "array"
+        },
+        "role_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Role Ids",
+          "type": "array"
+        },
         "rules": {
           "items": {
             "$ref": "#/$defs/PermissionRule"
@@ -2172,13 +2176,34 @@
           "title": "Rules",
           "type": "array"
         },
-        "batch_rules": {
-          "default": [],
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "subjects": {
           "items": {
-            "$ref": "#/$defs/BatchPermissionRule"
+            "$ref": "#/$defs/SubjectDefinition"
           },
-          "maxItems": 2048,
-          "title": "Batch Rules",
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Subjects",
+          "type": "array"
+        },
+        "version": {
+          "maximum": 2147483647,
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "workflow_states": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Workflow States",
           "type": "array"
         }
       },
@@ -2207,29 +2232,33 @@
     "PermissionMutationCase": {
       "additionalProperties": false,
       "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "atomic": {
+          "default": false,
+          "title": "Atomic",
+          "type": "boolean"
+        },
+        "batch_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BatchAuthorizationMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Case Id",
           "type": "string"
         },
-        "fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Fingerprint",
-          "type": "string"
-        },
-        "finding_pre_identity": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Finding Pre Identity",
-          "type": "string"
-        },
-        "source_rule_ids": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 32,
-          "minItems": 1,
-          "title": "Source Rule Ids",
-          "type": "array"
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
         },
         "dimensions": {
           "items": {
@@ -2237,26 +2266,6 @@
           },
           "maxItems": 6,
           "title": "Dimensions",
-          "type": "array"
-        },
-        "retention_reason": {
-          "$ref": "#/$defs/RetentionReason"
-        },
-        "subject_id": {
-          "title": "Subject Id",
-          "type": "string"
-        },
-        "action_id": {
-          "title": "Action Id",
-          "type": "string"
-        },
-        "resource_ids": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 256,
-          "minItems": 1,
-          "title": "Resource Ids",
           "type": "array"
         },
         "expectations": {
@@ -2267,6 +2276,16 @@
           "minItems": 1,
           "title": "Expectations",
           "type": "array"
+        },
+        "finding_pre_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Finding Pre Identity",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
         },
         "relation_paths": {
           "items": {
@@ -2280,9 +2299,6 @@
           "title": "Relation Paths",
           "type": "array"
         },
-        "context": {
-          "$ref": "#/$defs/PermissionContext"
-        },
         "required_observations": {
           "items": {
             "type": "string"
@@ -2292,21 +2308,30 @@
           "title": "Required Observations",
           "type": "array"
         },
-        "batch_mode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/BatchAuthorizationMode"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Resource Ids",
+          "type": "array"
         },
-        "atomic": {
-          "default": false,
-          "title": "Atomic",
-          "type": "boolean"
+        "retention_reason": {
+          "$ref": "#/$defs/RetentionReason"
+        },
+        "source_rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Source Rule Ids",
+          "type": "array"
+        },
+        "subject_id": {
+          "title": "Subject Id",
+          "type": "string"
         }
       },
       "required": [
@@ -2330,8 +2355,10 @@
     "PermissionMutationDescriptor": {
       "additionalProperties": false,
       "properties": {
-        "dimension": {
-          "$ref": "#/$defs/CoverageDimension"
+        "allow_value_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Allow Value Fingerprint",
+          "type": "string"
         },
         "changed_fields": {
           "items": {
@@ -2342,15 +2369,13 @@
           "title": "Changed Fields",
           "type": "array"
         },
-        "allow_value_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Allow Value Fingerprint",
-          "type": "string"
-        },
         "deny_value_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Deny Value Fingerprint",
           "type": "string"
+        },
+        "dimension": {
+          "$ref": "#/$defs/CoverageDimension"
         }
       },
       "required": [
@@ -2365,47 +2390,16 @@
     "PermissionMutationPlan": {
       "additionalProperties": false,
       "properties": {
-        "plan_id": {
-          "pattern": "^plan-[0-9a-f]{32}$",
-          "title": "Plan Id",
-          "type": "string"
-        },
-        "plan_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Plan Fingerprint",
-          "type": "string"
-        },
-        "contract_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Contract Fingerprint",
-          "type": "string"
-        },
-        "seed": {
-          "title": "Seed",
-          "type": "integer"
-        },
-        "engine_version": {
-          "maxLength": 128,
-          "minLength": 1,
-          "title": "Engine Version",
-          "type": "string"
-        },
-        "case_budget": {
-          "maximum": 8192,
-          "minimum": 0,
-          "title": "Case Budget",
-          "type": "integer"
-        },
         "candidate_count": {
           "maximum": 8192,
           "minimum": 0,
           "title": "Candidate Count",
           "type": "integer"
         },
-        "retained_count": {
+        "case_budget": {
           "maximum": 8192,
           "minimum": 0,
-          "title": "Retained Count",
+          "title": "Case Budget",
           "type": "integer"
         },
         "cases": {
@@ -2416,20 +2410,17 @@
           "title": "Cases",
           "type": "array"
         },
+        "contract_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Contract Fingerprint",
+          "type": "string"
+        },
         "coverage": {
           "items": {
             "$ref": "#/$defs/CoverageRecord"
           },
           "maxItems": 16384,
           "title": "Coverage",
-          "type": "array"
-        },
-        "gaps": {
-          "items": {
-            "$ref": "#/$defs/CoverageGap"
-          },
-          "maxItems": 16384,
-          "title": "Gaps",
           "type": "array"
         },
         "eliminated": {
@@ -2439,6 +2430,46 @@
           "maxItems": 16384,
           "title": "Eliminated",
           "type": "array"
+        },
+        "engine_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Engine Version",
+          "type": "string"
+        },
+        "gaps": {
+          "items": {
+            "$ref": "#/$defs/CoverageGap"
+          },
+          "maxItems": 16384,
+          "title": "Gaps",
+          "type": "array"
+        },
+        "plan_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Fingerprint",
+          "type": "string"
+        },
+        "plan_id": {
+          "pattern": "^plan-[0-9a-f]{32}$",
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "retained_count": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Retained Count",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
         }
       },
       "required": [
@@ -2461,49 +2492,13 @@
     "PermissionRule": {
       "additionalProperties": false,
       "properties": {
-        "rule_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Rule Id",
-          "type": "string"
-        },
-        "subject_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Subject Id",
-          "type": "string"
-        },
         "action_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Action Id",
           "type": "string"
         },
-        "resource_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Resource Id",
-          "type": "string"
-        },
-        "relation_path": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "minItems": 1,
-          "title": "Relation Path",
-          "type": "array"
-        },
         "context": {
           "$ref": "#/$defs/PermissionContext"
-        },
-        "expectation": {
-          "$ref": "#/$defs/PermissionExpectation"
-        },
-        "required_observations": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 16,
-          "minItems": 1,
-          "title": "Required Observations",
-          "type": "array"
         },
         "coverage_dimensions": {
           "items": {
@@ -2514,6 +2509,37 @@
           "title": "Coverage Dimensions",
           "type": "array"
         },
+        "expectation": {
+          "$ref": "#/$defs/PermissionExpectation"
+        },
+        "relation_path": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Relation Path",
+          "type": "array"
+        },
+        "required_observations": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Required Observations",
+          "type": "array"
+        },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "rule_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
         "severity": {
           "default": "high",
           "enum": [
@@ -2523,6 +2549,11 @@
             "critical"
           ],
           "title": "Severity",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Subject Id",
           "type": "string"
         }
       },
@@ -2542,34 +2573,34 @@
     "PermissionTwin": {
       "additionalProperties": false,
       "properties": {
-        "twin_id": {
-          "pattern": "^twin-[0-9a-f]{32}$",
-          "title": "Twin Id",
-          "type": "string"
-        },
-        "source_rule_id": {
-          "title": "Source Rule Id",
-          "type": "string"
-        },
         "allow_case": {
           "$ref": "#/$defs/PermissionMutationCase"
         },
         "deny_case": {
           "$ref": "#/$defs/PermissionMutationCase"
         },
-        "varied_dimension": {
-          "$ref": "#/$defs/CoverageDimension"
+        "invariant": {
+          "$ref": "#/$defs/TwinInvariantSpecification"
         },
         "mutation": {
           "$ref": "#/$defs/PermissionMutationDescriptor"
         },
-        "invariant": {
-          "$ref": "#/$defs/TwinInvariantSpecification"
+        "source_rule_id": {
+          "title": "Source Rule Id",
+          "type": "string"
         },
         "twin_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Twin Fingerprint",
           "type": "string"
+        },
+        "twin_id": {
+          "pattern": "^twin-[0-9a-f]{32}$",
+          "title": "Twin Id",
+          "type": "string"
+        },
+        "varied_dimension": {
+          "$ref": "#/$defs/CoverageDimension"
         }
       },
       "required": [
@@ -2585,13 +2616,81 @@
       "title": "PermissionTwin",
       "type": "object"
     },
+    "PreparedCookieCredential": {
+      "additionalProperties": false,
+      "description": "已准备 Cookie 的非秘密元数据；真实值只通过环境引用注入。",
+      "properties": {
+        "domain": {
+          "maxLength": 253,
+          "minLength": 1,
+          "title": "Domain",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "secure": {
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "value_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Value Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "domain",
+        "path",
+        "secure",
+        "value_ref"
+      ],
+      "title": "PreparedCookieCredential",
+      "type": "object"
+    },
+    "PreparedCookieSessionIdentityBinding": {
+      "additionalProperties": false,
+      "description": "把 Credential Manager 中已确认的 Cookie 会话投影到一次隔离 Case。",
+      "properties": {
+        "cookies": {
+          "items": {
+            "$ref": "#/$defs/PreparedCookieCredential"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Cookies",
+          "type": "array"
+        },
+        "kind": {
+          "const": "PREPARED_COOKIE_SESSION",
+          "default": "PREPARED_COOKIE_SESSION",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cookies"
+      ],
+      "title": "PreparedCookieSessionIdentityBinding",
+      "type": "object"
+    },
     "QueuePeekBudget": {
       "additionalProperties": false,
       "properties": {
-        "max_messages": {
-          "maximum": 32,
+        "max_attempts": {
+          "maximum": 3,
           "minimum": 1,
-          "title": "Max Messages",
+          "title": "Max Attempts",
           "type": "integer"
         },
         "max_message_bytes": {
@@ -2600,16 +2699,16 @@
           "title": "Max Message Bytes",
           "type": "integer"
         },
+        "max_messages": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Messages",
+          "type": "integer"
+        },
         "max_total_bytes": {
           "maximum": 262144,
           "minimum": 1,
           "title": "Max Total Bytes",
-          "type": "integer"
-        },
-        "max_attempts": {
-          "maximum": 3,
-          "minimum": 1,
-          "title": "Max Attempts",
           "type": "integer"
         },
         "per_request_timeout_us": {
@@ -2639,17 +2738,17 @@
     "RelationEndpoint": {
       "additionalProperties": false,
       "properties": {
+        "endpoint_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Endpoint Id",
+          "type": "string"
+        },
         "endpoint_type": {
           "enum": [
             "subject",
             "resource"
           ],
           "title": "Endpoint Type",
-          "type": "string"
-        },
-        "endpoint_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Endpoint Id",
           "type": "string"
         }
       },
@@ -2663,13 +2762,13 @@
     "RelationFact": {
       "additionalProperties": false,
       "properties": {
+        "relation": {
+          "$ref": "#/$defs/RelationType"
+        },
         "relation_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Relation Id",
           "type": "string"
-        },
-        "relation": {
-          "$ref": "#/$defs/RelationType"
         },
         "source": {
           "$ref": "#/$defs/RelationEndpoint"
@@ -2724,29 +2823,6 @@
     "ResourceDefinition": {
       "additionalProperties": false,
       "properties": {
-        "resource_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Resource Id",
-          "type": "string"
-        },
-        "resource_type": {
-          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
-          "title": "Resource Type",
-          "type": "string"
-        },
-        "tenant_id": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tenant Id"
-        },
         "department_id": {
           "anyOf": [
             {
@@ -2786,6 +2862,29 @@
           "default": null,
           "title": "Parent Resource Id"
         },
+        "resource_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "resource_type": {
+          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+          "title": "Resource Type",
+          "type": "string"
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant Id"
+        },
         "workflow_state": {
           "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
           "title": "Workflow State",
@@ -2803,65 +2902,6 @@
     "ResponseExtractor": {
       "additionalProperties": false,
       "properties": {
-        "extractor_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Extractor Id",
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/$defs/ResponseExtractorKind"
-        },
-        "json_path": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Json Path"
-        },
-        "header_name": {
-          "anyOf": [
-            {
-              "maxLength": 128,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Header Name"
-        },
-        "cookie_name": {
-          "anyOf": [
-            {
-              "maxLength": 128,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cookie Name"
-        },
-        "selector": {
-          "anyOf": [
-            {
-              "maxLength": 256,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Selector"
-        },
         "attribute": {
           "anyOf": [
             {
@@ -2876,6 +2916,52 @@
           "default": null,
           "title": "Attribute"
         },
+        "cookie_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cookie Name"
+        },
+        "extractor_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Extractor Id",
+          "type": "string"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "kind": {
+          "$ref": "#/$defs/ResponseExtractorKind"
+        },
         "max_length": {
           "default": 256,
           "maximum": 4096,
@@ -2887,6 +2973,19 @@
           "default": false,
           "title": "Secret",
           "type": "boolean"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
         }
       },
       "required": [
@@ -2926,14 +3025,6 @@
           "title": "Effect Id",
           "type": "string"
         },
-        "kind": {
-          "$ref": "#/$defs/SecurityEffectKind"
-        },
-        "resource_type": {
-          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
-          "title": "Resource Type",
-          "type": "string"
-        },
         "expected_state": {
           "anyOf": [
             {
@@ -2947,6 +3038,9 @@
           "default": null,
           "title": "Expected State"
         },
+        "kind": {
+          "$ref": "#/$defs/SecurityEffectKind"
+        },
         "protected_fields": {
           "default": [],
           "items": {
@@ -2955,6 +3049,11 @@
           "maxItems": 64,
           "title": "Protected Fields",
           "type": "array"
+        },
+        "resource_type": {
+          "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+          "title": "Resource Type",
+          "type": "string"
         }
       },
       "required": [
@@ -3001,6 +3100,11 @@
     "SqliteQueryLocator": {
       "additionalProperties": false,
       "properties": {
+        "database_secret_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Database Secret Ref",
+          "type": "string"
+        },
         "locator_type": {
           "const": "READ_ONLY_SQLITE",
           "default": "READ_ONLY_SQLITE",
@@ -3015,11 +3119,6 @@
         "table_or_view": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Table Or View",
-          "type": "string"
-        },
-        "database_secret_ref": {
-          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
-          "title": "Database Secret Ref",
           "type": "string"
         }
       },
@@ -3058,12 +3157,6 @@
     "StaticHeadersIdentityBinding": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "const": "STATIC_HEADERS",
-          "default": "STATIC_HEADERS",
-          "title": "Kind",
-          "type": "string"
-        },
         "headers": {
           "items": {
             "$ref": "#/$defs/StaticHeaderCredential"
@@ -3072,6 +3165,12 @@
           "minItems": 1,
           "title": "Headers",
           "type": "array"
+        },
+        "kind": {
+          "const": "STATIC_HEADERS",
+          "default": "STATIC_HEADERS",
+          "title": "Kind",
+          "type": "string"
         }
       },
       "required": [
@@ -3083,22 +3182,6 @@
     "StructuredAuditLogLocator": {
       "additionalProperties": false,
       "properties": {
-        "locator_type": {
-          "const": "STRUCTURED_AUDIT_LOG",
-          "default": "STRUCTURED_AUDIT_LOG",
-          "title": "Locator Type",
-          "type": "string"
-        },
-        "authorized_root_ref": {
-          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
-          "title": "Authorized Root Ref",
-          "type": "string"
-        },
-        "relative_file_pattern": {
-          "pattern": "^[a-z][a-z0-9_-]{0,48}\\.jsonl$",
-          "title": "Relative File Pattern",
-          "type": "string"
-        },
         "allowed_fields": {
           "items": {
             "type": "string"
@@ -3107,6 +3190,22 @@
           "minItems": 6,
           "title": "Allowed Fields",
           "type": "array"
+        },
+        "authorized_root_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Authorized Root Ref",
+          "type": "string"
+        },
+        "locator_type": {
+          "const": "STRUCTURED_AUDIT_LOG",
+          "default": "STRUCTURED_AUDIT_LOG",
+          "title": "Locator Type",
+          "type": "string"
+        },
+        "relative_file_pattern": {
+          "pattern": "^[a-z][a-z0-9_-]{0,48}\\.jsonl$",
+          "title": "Relative File Pattern",
+          "type": "string"
         },
         "scan_budget": {
           "$ref": "#/$defs/AuditLogScanBudget"
@@ -3124,32 +3223,12 @@
     "SubjectDefinition": {
       "additionalProperties": false,
       "properties": {
-        "subject_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Subject Id",
-          "type": "string"
-        },
-        "roles": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "minItems": 1,
-          "title": "Roles",
-          "type": "array"
-        },
-        "tenant_id": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tenant Id"
+        "admin_level": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Admin Level",
+          "type": "integer"
         },
         "department_id": {
           "anyOf": [
@@ -3164,13 +3243,6 @@
           "default": null,
           "title": "Department Id"
         },
-        "admin_level": {
-          "default": 0,
-          "maximum": 100,
-          "minimum": 0,
-          "title": "Admin Level",
-          "type": "integer"
-        },
         "parent_subject_id": {
           "anyOf": [
             {
@@ -3183,6 +3255,33 @@
           ],
           "default": null,
           "title": "Parent Subject Id"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Roles",
+          "type": "array"
+        },
+        "subject_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant Id"
         }
       },
       "required": [
@@ -3195,14 +3294,14 @@
     "SubjectExecutionBinding": {
       "additionalProperties": false,
       "properties": {
-        "subject_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Subject Id",
-          "type": "string"
-        },
         "identity_id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Identity Id",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Subject Id",
           "type": "string"
         }
       },
@@ -3227,6 +3326,27 @@
           "title": "Action Id",
           "type": "string"
         },
+        "baseline_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Baseline Fingerprint",
+          "type": "string"
+        },
+        "effect_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Effect Fingerprint",
+          "type": "string"
+        },
+        "normalization_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Normalization Version",
+          "type": "string"
+        },
+        "observer_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Observer Fingerprint",
+          "type": "string"
+        },
         "resource_ids": {
           "items": {
             "type": "string"
@@ -3239,27 +3359,6 @@
         "workflow_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Workflow Fingerprint",
-          "type": "string"
-        },
-        "effect_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Effect Fingerprint",
-          "type": "string"
-        },
-        "observer_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Observer Fingerprint",
-          "type": "string"
-        },
-        "baseline_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Baseline Fingerprint",
-          "type": "string"
-        },
-        "normalization_version": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Normalization Version",
           "type": "string"
         }
       },
@@ -3278,13 +3377,13 @@
     "TwinPlanGap": {
       "additionalProperties": false,
       "properties": {
+        "code": {
+          "$ref": "#/$defs/TwinPlanGapCode"
+        },
         "deny_case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Deny Case Id",
           "type": "string"
-        },
-        "code": {
-          "$ref": "#/$defs/TwinPlanGapCode"
         },
         "detail": {
           "maxLength": 160,
@@ -3335,75 +3434,22 @@
     "ValueSlot": {
       "additionalProperties": false,
       "properties": {
-        "slot_id": {
-          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-          "title": "Slot Id",
-          "type": "string"
-        },
-        "source": {
-          "$ref": "#/$defs/ValueSlotSource"
-        },
         "consumer": {
           "$ref": "#/$defs/ValueSlotConsumer"
         },
-        "value_type": {
-          "$ref": "#/$defs/ValueType",
-          "default": "STRING"
-        },
-        "max_length": {
-          "default": 256,
-          "maximum": 4096,
-          "minimum": 1,
-          "title": "Max Length",
-          "type": "integer"
-        },
-        "secret": {
-          "default": false,
-          "title": "Secret",
-          "type": "boolean"
-        },
-        "literal": {
-          "default": null,
-          "title": "Literal"
-        },
-        "secret_ref": {
+        "consumer_step": {
           "anyOf": [
             {
-              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
-              "type": "string"
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Secret Ref"
-        },
-        "source_path": {
-          "anyOf": [
-            {
-              "maxLength": 256,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Source Path"
-        },
-        "producer_step_id": {
-          "anyOf": [
-            {
-              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Producer Step Id"
+          "title": "Consumer Step"
         },
         "consumer_step_id": {
           "anyOf": [
@@ -3417,6 +3463,17 @@
           ],
           "default": null,
           "title": "Consumer Step Id"
+        },
+        "literal": {
+          "default": null,
+          "title": "Literal"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
         },
         "producer_step": {
           "anyOf": [
@@ -3432,19 +3489,61 @@
           "default": null,
           "title": "Producer Step"
         },
-        "consumer_step": {
+        "producer_step_id": {
           "anyOf": [
             {
-              "maximum": 255,
-              "minimum": 0,
-              "type": "integer"
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Consumer Step"
+          "title": "Producer Step Id"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "secret_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secret Ref"
+        },
+        "slot_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ValueSlotSource"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Path"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
         }
       },
       "required": [
@@ -3495,31 +3594,6 @@
       "additionalProperties": false,
       "description": "Web 执行配置中的身份，只保存非秘密环境引用。",
       "properties": {
-        "identity_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Identity Id",
-          "type": "string"
-        },
-        "role": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Role",
-          "type": "string"
-        },
-        "label": {
-          "anyOf": [
-            {
-              "maxLength": 128,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Label"
-        },
         "binding": {
           "discriminator": {
             "mapping": {
@@ -3528,6 +3602,7 @@
               "LOGIN_WORKFLOW": "#/$defs/LoginWorkflowIdentityBinding",
               "OAUTH2_CLIENT_CREDENTIALS": "#/$defs/OAuth2ClientCredentialsIdentityBinding",
               "OAUTH2_REFRESH_TOKEN": "#/$defs/OAuth2RefreshTokenIdentityBinding",
+              "PREPARED_COOKIE_SESSION": "#/$defs/PreparedCookieSessionIdentityBinding",
               "STATIC_HEADERS": "#/$defs/StaticHeadersIdentityBinding"
             },
             "propertyName": "kind"
@@ -3541,6 +3616,9 @@
             },
             {
               "$ref": "#/$defs/CookieSessionIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/PreparedCookieSessionIdentityBinding"
             },
             {
               "$ref": "#/$defs/LoginWorkflowIdentityBinding"
@@ -3562,6 +3640,31 @@
           "maxItems": 32,
           "title": "Bootstrap Requests",
           "type": "array"
+        },
+        "identity_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "role": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
         }
       },
       "required": [
@@ -3576,68 +3679,21 @@
       "additionalProperties": false,
       "description": "单次 Web Run 的目标、Contract、计划、身份和观察冻结快照。",
       "properties": {
-        "project_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Project Id",
-          "type": "string"
-        },
-        "project_name": {
-          "maxLength": 128,
-          "minLength": 1,
-          "title": "Project Name",
-          "type": "string"
-        },
-        "target_type": {
-          "$ref": "#/$defs/TargetType",
-          "default": "WEB"
-        },
-        "target": {
-          "$ref": "#/$defs/WebTargetDefinition"
-        },
-        "identities": {
-          "items": {
-            "$ref": "#/$defs/WebExecutionIdentity"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Identities",
-          "type": "array"
-        },
         "contract": {
           "$ref": "#/$defs/PermissionContract"
         },
-        "plan": {
-          "$ref": "#/$defs/PermissionMutationPlan"
+        "contract_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Contract Fingerprint",
+          "type": "string"
+        },
+        "differential_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Differential Fingerprint",
+          "type": "string"
         },
         "differential_plan": {
           "$ref": "#/$defs/DifferentialExperimentPlan"
-        },
-        "observers": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/ObserverSpec"
-          },
-          "maxItems": 256,
-          "title": "Observers",
-          "type": "array"
-        },
-        "subject_bindings": {
-          "items": {
-            "$ref": "#/$defs/SubjectExecutionBinding"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Subject Bindings",
-          "type": "array"
-        },
-        "workflow_bindings": {
-          "items": {
-            "$ref": "#/$defs/HttpWorkflowBinding"
-          },
-          "maxItems": 4096,
-          "minItems": 1,
-          "title": "Workflow Bindings",
-          "type": "array"
         },
         "effect_bindings": {
           "items": {
@@ -3646,6 +3702,15 @@
           "maxItems": 4096,
           "minItems": 1,
           "title": "Effect Bindings",
+          "type": "array"
+        },
+        "identities": {
+          "items": {
+            "$ref": "#/$defs/WebExecutionIdentity"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Identities",
           "type": "array"
         },
         "observer_bindings": {
@@ -3657,20 +3722,58 @@
           "title": "Observer Bindings",
           "type": "array"
         },
-        "contract_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Contract Fingerprint",
-          "type": "string"
+        "observers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ObserverSpec"
+          },
+          "maxItems": 256,
+          "title": "Observers",
+          "type": "array"
+        },
+        "plan": {
+          "$ref": "#/$defs/PermissionMutationPlan"
         },
         "plan_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Plan Fingerprint",
           "type": "string"
         },
-        "differential_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Differential Fingerprint",
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
           "type": "string"
+        },
+        "project_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Project Name",
+          "type": "string"
+        },
+        "subject_bindings": {
+          "items": {
+            "$ref": "#/$defs/SubjectExecutionBinding"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Subject Bindings",
+          "type": "array"
+        },
+        "target": {
+          "$ref": "#/$defs/WebTargetDefinition"
+        },
+        "target_type": {
+          "$ref": "#/$defs/TargetType",
+          "default": "WEB"
+        },
+        "workflow_bindings": {
+          "items": {
+            "$ref": "#/$defs/HttpWorkflowBinding"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Workflow Bindings",
+          "type": "array"
         }
       },
       "required": [
@@ -3695,13 +3798,13 @@
     "WebTargetDefinition": {
       "additionalProperties": false,
       "properties": {
-        "scope": {
-          "$ref": "#/$defs/WebTargetScope"
-        },
         "reset_path": {
           "pattern": "^/[A-Za-z0-9_./{}-]{1,255}$",
           "title": "Reset Path",
           "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/WebTargetScope"
         }
       },
       "required": [
@@ -3715,22 +3818,23 @@
       "additionalProperties": false,
       "description": "Web 目标的协议级授权范围。",
       "properties": {
-        "base_url": {
-          "title": "Base Url",
-          "type": "string"
-        },
-        "allowed_origins": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Allowed Origins",
-          "type": "array"
+        "allow_private_network": {
+          "default": false,
+          "title": "Allow Private Network",
+          "type": "boolean"
         },
         "allowed_hosts": {
           "items": {
             "type": "string"
           },
           "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "allowed_origins": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Origins",
           "type": "array"
         },
         "allowed_ports": {
@@ -3740,23 +3844,15 @@
           "title": "Allowed Ports",
           "type": "array"
         },
-        "allow_private_network": {
-          "default": false,
-          "title": "Allow Private Network",
-          "type": "boolean"
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
         },
         "follow_redirects": {
           "const": false,
           "default": false,
           "title": "Follow Redirects",
           "type": "boolean"
-        },
-        "timeout_seconds": {
-          "default": 5.0,
-          "exclusiveMinimum": 0,
-          "maximum": 30,
-          "title": "Timeout Seconds",
-          "type": "number"
         },
         "max_requests": {
           "default": 64,
@@ -3771,6 +3867,13 @@
           "minimum": 1,
           "title": "Max Response Bytes",
           "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Timeout Seconds",
+          "type": "number"
         }
       },
       "required": [
@@ -3827,47 +3930,47 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "4",
-      "default": "4",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "run_id": {
-      "pattern": "^run_[0-9a-f]{32}$",
-      "title": "Run Id",
-      "type": "string"
-    },
-    "job_id": {
-      "pattern": "^job_[0-9a-f]{32}$",
-      "title": "Job Id",
-      "type": "string"
-    },
     "attempt": {
       "minimum": 1,
       "title": "Attempt",
       "type": "integer"
     },
-    "lease_owner": {
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-      "title": "Lease Owner",
-      "type": "string"
-    },
-    "fencing_token": {
-      "minimum": 1,
-      "title": "Fencing Token",
-      "type": "integer"
+    "budget": {
+      "$ref": "#/$defs/ExecutionBudget"
     },
     "created_at_us": {
       "minimum": 0,
       "title": "Created At Us",
       "type": "integer"
     },
-    "budget": {
-      "$ref": "#/$defs/ExecutionBudget"
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "lease_owner": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Lease Owner",
+      "type": "string"
     },
     "project_snapshot": {
       "$ref": "#/$defs/WebExecutionSnapshot"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
     }
   },
   "required": [

@@ -1,1 +1,1 @@
-{"schema_version":"2","variant":"inconclusive","expected":"INCONCLUSIVE","http_status":403,"resource_state":"UNAVAILABLE","owner_observer":"UNAVAILABLE_503","formal_profile":{"run_verdict":"INCONCLUSIVE","coverage_gaps":0}}
+{"schema_version":"1","variant":"inconclusive","expected":"INCONCLUSIVE","http_status":403,"resource_state":"UNAVAILABLE","owner_observer":"UNAVAILABLE_503","formal_profile":{"run_verdict":"INCONCLUSIVE","coverage_gaps":0}}

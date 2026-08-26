@@ -1,3 +1,5 @@
+# 验证模型接入基础设施中的模型配置注册表。
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -58,7 +60,7 @@ class RaisingSecretStore(FakeSecretStore):
 
 class FakeTransport:
     def __init__(self, response: LLMHttpResponse | None = None, error: str | None = None) -> None:
-        self.response = response or LLMHttpResponse(200, b'{"choices":[{"message":{"content":"ok"}}]}')
+        self.response = response or LLMHttpResponse(200, b'{"output_text":"ok"}')
         self.error = error
         self.calls = []
 
@@ -114,6 +116,24 @@ def _values(name: str = "test") -> dict[str, object]:
     }
 
 
+def test_registry_default_secret_store_is_shared_and_does_not_call_provider(tmp_path: Path) -> None:
+    """默认秘密存储由共享 infra/secrets 提供，构造注册表不应触发联网。"""
+
+    transport = FakeTransport()
+    database = tmp_path / "profiles.db"
+    upgrade_database(database)
+    engine = create_sqlite_engine(database)
+    factory = create_session_factory(engine)
+    service = LLMProfileRegistry(
+        lambda **kwargs: StorageUnitOfWork(factory, **kwargs),
+        transport=transport,
+        environ={},
+    )
+
+    assert isinstance(service, LLMProfileRegistry)
+    assert transport.calls == []
+
+
 def test_profile_crud_and_explicit_test_connection_is_single_request(tmp_path: Path) -> None:
     transport = FakeTransport()
     store = FakeSecretStore()
@@ -165,6 +185,63 @@ def test_existing_credential_secret_can_be_rotated_without_secret_ref(tmp_path: 
     tested = service.test_connection("rotate")
     assert tested.connection_status == "available"
     assert service._transport.calls[0].headers["authorization"] == "Bearer new-value"
+    engine.dispose()
+
+
+def test_default_save_rotates_existing_credential_and_keeps_disabled_setting(tmp_path: Path) -> None:
+    store = FakeSecretStore()
+    service, engine = _service(tmp_path, store=store)
+    service.create(
+        {"profile_name": "custom-default", "provider": LLMProviderType.OPENAI, "model": "gpt-test"},
+        secret="old-value",
+    )
+    service.update_settings(enabled=True, default_profile_name="custom-default")
+    service.update_settings(enabled=False, default_profile_name="custom-default")
+    updated = service.save_default_profile(
+        {"provider": LLMProviderType.OPENAI, "model": "gpt-5.6", "reasoning_effort": "high"},
+        secret="new-value",
+    )
+    assert updated.profile_name == "custom-default"
+    assert updated.reasoning_effort == "high"
+    assert store.values == {"cred:jiejian/llm/custom-default": "new-value"}
+    assert service.get_settings().enabled is False
+    assert [item.profile_name for item in service.list()] == ["custom-default"]
+    engine.dispose()
+
+
+def test_default_save_probe_failure_keeps_existing_credential_and_profile(tmp_path: Path) -> None:
+    store = FakeSecretStore()
+    transport = FakeTransport()
+    service, engine = _service(tmp_path, transport=transport, store=store)
+    service.create(
+        {"profile_name": "custom-default", "provider": LLMProviderType.OPENAI, "model": "gpt-test"},
+        secret="old-value",
+    )
+    service.update_settings(enabled=False, default_profile_name="custom-default")
+    transport.error = "auth_failed"
+    with pytest.raises(JiejianError) as captured:
+        service.save_default_profile(
+            {"provider": LLMProviderType.OPENAI, "model": "gpt-5.6"},
+            secret="new-value",
+        )
+    assert captured.value.code == ErrorCode.LLM_AUTH_FAILED.value
+    assert store.values == {"cred:jiejian/llm/custom-default": "old-value"}
+    assert service.get("custom-default").model == "gpt-test"
+    assert service.get_settings().enabled is False
+    engine.dispose()
+
+
+def test_resolved_provider_rejects_reasoning_override_for_unknown_model(tmp_path: Path) -> None:
+    service, engine = _service(tmp_path)
+    service.create(
+        {"profile_name": "unknown-model", "provider": LLMProviderType.OPENAI, "model": "gpt-test"},
+        secret="secret-value",
+    )
+    provider = service.resolve_provider("unknown-model")
+    with pytest.raises(LLMTransportError) as captured:
+        provider.invoke("ping", reasoning_effort="high")
+    assert captured.value.kind == "invalid_request"
+    assert provider._transport.calls == []
     engine.dispose()
 
 
@@ -312,7 +389,10 @@ def test_profile_state_is_invalidated_after_configuration_change(tmp_path: Path)
     service.create(_values())
     assert service.test_connection("test").connection_status == "available"
     assert service.update("test", {"model": "changed"}).connection_status == "configured"
-    assert service.update("test", {"base_url": "https://example.test/v1"}).connection_status == "configured"
+    assert service.update(
+        "test",
+        {"provider": LLMProviderType.OPENAI_COMPATIBLE, "base_url": "https://example.test/v1"},
+    ).connection_status == "configured"
     engine.dispose()
 
 

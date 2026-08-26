@@ -1,0 +1,58 @@
+{
+  "openapi": "3.1.0",
+  "x-roles": [
+    "owner",
+    "attacker",
+    "peer"
+  ],
+  "info": {
+    "title": "界鉴权限验证示例应用",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8865"
+    },
+    {
+      "url": "http://127.0.0.1:8766"
+    },
+    {
+      "url": "http://127.0.0.1:8767"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "sampleBearer": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "/token",
+            "scopes": {
+              "owner": "资源所有者",
+              "attacker": "非所有者测试身份",
+              "peer": "同级访客"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "readHealth",
+        "summary": "查看应用状态"
+      }
+    },
+    "/resources/{resource_id}": {
+      "get": {
+        "operationId": "readResource",
+        "summary": "查看资源"
+      },
+      "patch": {
+        "operationId": "modifyResource",
+        "summary": "修改资源"
+      }
+    }
+  }
+}

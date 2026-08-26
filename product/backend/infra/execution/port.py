@@ -28,7 +28,7 @@ from product.backend.core.verification.facts import (
     DisclosureProof,
     ExecutionFact,
 )
-from product.backend.core.verification.permission_coverage import (
+from product.backend.core.verification.permissions.coverage import (
     PermissionMutationCase,
     PermissionMutationPlan,
 )
@@ -45,6 +45,7 @@ from product.protocols.observer import (
     ObserverSpec,
 )
 from product.protocols.execution import EffectBinding, ObserverRequirementBinding
+from product.protocols.runner import CleanupIssueCode
 
 
 @runtime_checkable
@@ -69,6 +70,7 @@ class TargetRuntimeContext:
     staging: Path
     clock: Callable[[], int]
     cancellation_requested: Callable[[], bool]
+    control_origin: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +100,24 @@ class TargetObservationResult:
 
     envelope: ObservationEnvelope
     outcome: ObserverOutcome
+
+
+@dataclass(frozen=True, slots=True)
+class TargetCleanupIssue:
+    """Runtime 清理失败的进程内安全摘要，不携带原始异常正文。"""
+
+    code: CleanupIssueCode
+    cause_code: str | None = None
+
+
+class TargetCleanupError(Exception):
+    """把一次 Case 的多个清理问题完整交还通用编排。"""
+
+    def __init__(self, issues: tuple[TargetCleanupIssue, ...]) -> None:
+        if not issues:
+            raise ValueError("target cleanup error requires issues")
+        self.issues = issues
+        super().__init__("target cleanup failed")
 
 
 @runtime_checkable

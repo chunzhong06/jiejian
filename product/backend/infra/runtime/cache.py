@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
@@ -25,9 +24,9 @@ from pathlib import Path
 from typing import Any
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.runtime.environment_identity import require_python_environment
+from product.backend.infra.runtime.process.identity import require_python_environment
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.process_lock import lock_is_available, try_lock_stream, unlock_stream
+from product.backend.infra.runtime.process.lock import lock_is_available, try_lock_stream, unlock_stream
 
 _BUDGETS = {
     "uv": 2 * 1024**3,
@@ -63,33 +62,57 @@ class CacheMaintenanceService:
     def status(self) -> dict[str, object]:
         """返回实际体积、预算和最近成功事实，不执行删除。"""
 
+        return self._status_snapshot(include_partials=False)[0]
+
+    def _status_snapshot(
+        self,
+        *,
+        include_partials: bool,
+    ) -> tuple[dict[str, object], list[Path]]:
+        """一次遍历形成预算状态与可选 partial 候选，避免维护链重复扫描。"""
+
         state = self._read_json(self._state_path) or {}
-        entries = {
-            "uv": self._entry(self.paths.uv_cache, _BUDGETS["uv"], state),
-            "pnpm_store": self._entry(
-                self.paths.pnpm_store, _BUDGETS["pnpm_store"], state
-            ),
-            "npm": self._entry(self.paths.npm_cache, _BUDGETS["npm"], state),
-            "vite": self._entry(self.paths.vite_cache, _BUDGETS["vite"], state),
-            "downloads": self._entry(self.paths.downloads, None, state),
-            "startup": self._entry(self.paths.startup_cache, None, state),
-            "retired_runtime": self._entry_paths(
-                self._retired_runtime_candidates(), state
-            ),
-        }
-        return {
+        entries: dict[str, dict[str, object]] = {}
+        partials: list[Path] = []
+        roots = (
+            ("uv", self.paths.uv_cache, _BUDGETS["uv"]),
+            ("pnpm_store", self.paths.pnpm_store, _BUDGETS["pnpm_store"]),
+            ("npm", self.paths.npm_cache, _BUDGETS["npm"]),
+            ("vite", self.paths.vite_cache, _BUDGETS["vite"]),
+            ("downloads", self.paths.downloads, None),
+            ("startup", self.paths.startup_cache, None),
+        )
+        for name, root, budget in roots:
+            size, files, found = self._measure(
+                root,
+                collect_partials=include_partials,
+            )
+            partials.extend(found)
+            entries[name] = self._entry(root, budget, state, size=size, files=files)
+        entries["retired_runtime"] = self._entry_paths(
+            self._retired_runtime_candidates(),
+            state,
+        )
+        status = {
             "schema_version": "1",
             "var_dir": str(self.paths.root),
             "entries": entries,
             "last_successful_operation": state.get("last_successful_operation"),
             "protected": self._protected_summary(),
         }
+        selected: list[Path] = []
+        for path in sorted(set(partials), key=lambda item: len(item.parts)):
+            resolved = path.resolve()
+            if any(resolved.is_relative_to(parent.resolve()) for parent in selected):
+                continue
+            selected.append(path)
+        return status, sorted(selected, key=str, reverse=True)
 
     def prune(self, *, dry_run: bool = True) -> dict[str, object]:
         """仅在超预算时调用对应工具官方 prune，并清理确定孤立的 partial。"""
 
         with self._locked():
-            return self._prune_locked(dry_run=dry_run, startup=False)
+            return self._prune_locked(dry_run=dry_run)
 
     def clean(
         self,
@@ -149,31 +172,33 @@ class CacheMaintenanceService:
             }
 
     def startup_maintenance(self) -> dict[str, object]:
-        """启动时清理确定孤儿和日志保留项；只有超预算缓存才进入官方 prune。"""
+        """只做有界孤儿与日志清理；大型缓存预算留给显式状态和 prune。"""
 
         with self._locked():
             orphaned = self._expired_orphan_candidates()
             logs = self._expired_log_candidates()
+            partials = self._startup_partial_candidates()
             removed: list[str] = []
-            for path in (*orphaned, *logs):
-                self._remove_startup_path(path)
+            for path in (*orphaned, *logs, *partials):
+                if path in partials:
+                    self._remove_cache_path(path)
+                else:
+                    self._remove_startup_path(path)
                 removed.append(str(path))
-            result = self._prune_locked(dry_run=False, startup=True)
             self._record(
                 "startup_maintenance",
-                {"removed": removed, "prune_tools": result["tool_results"]},
+                {"removed": removed, "prune_tools": []},
             )
             return {
                 "schema_version": "1",
                 "operation": "startup_maintenance",
                 "removed": removed,
-                "prune": result,
+                "cache_budget_maintenance": "on_demand",
                 "protected": self._protected_summary(),
             }
 
-    def _prune_locked(self, *, dry_run: bool, startup: bool) -> dict[str, object]:
-        before = self.status()
-        partials = self._partial_candidates()
+    def _prune_locked(self, *, dry_run: bool) -> dict[str, object]:
+        before, partials = self._status_snapshot(include_partials=True)
         entries = before["entries"]
         assert isinstance(entries, dict)
         over_budget = tuple(
@@ -187,7 +212,15 @@ class CacheMaintenanceService:
             *retired_runtime,
             *(self._cache_path(name) for name in over_budget),
         ]
-        preview = self._preview("prune", targets)
+        known_sizes = {
+            str(self._cache_path(name).resolve()): int(entries[name]["bytes"])
+            for name in over_budget
+        }
+        preview = self._preview("prune", targets, known_sizes=known_sizes)
+        removal_measurements = {
+            path: self._measure_path_details(path)
+            for path in (*partials, *retired_runtime)
+        }
         removed: list[str] = []
         tool_results: list[dict[str, object]] = []
         if not dry_run:
@@ -205,18 +238,22 @@ class CacheMaintenanceService:
                 else:
                     tool_results.append(self._official_prune(name))
             self._revalidate_after_prune(over_budget)
-            if not startup:
-                self._record(
-                    "prune",
-                    {"removed": removed, "tool_results": tool_results},
-                )
+            self._record(
+                "prune",
+                {"removed": removed, "tool_results": tool_results},
+            )
+        status = (
+            self.status()
+            if over_budget and not dry_run
+            else self._status_after_known_removals(before, removed, removal_measurements)
+        )
         return {
             **preview,
             "dry_run": dry_run,
             "over_budget": over_budget,
             "removed": removed,
             "tool_results": tool_results,
-            "status": self.status(),
+            "status": status,
         }
 
     def _official_prune(self, name: str) -> dict[str, object]:
@@ -278,15 +315,16 @@ class CacheMaintenanceService:
         root: Path,
         budget: int | None,
         state: Mapping[str, object],
+        *,
+        size: int,
+        files: int,
     ) -> dict[str, object]:
-        size, files, digest = self._measure(root)
         usage = state.get("successful_usage", {})
         usage_value = usage.get(root.name) if isinstance(usage, dict) else None
         return {
             "path": str(root),
             "bytes": size,
             "files": files,
-            "digest": digest,
             "budget": budget,
             "over_budget": bool(budget is not None and size > budget),
             "last_successful_usage": usage_value,
@@ -298,17 +336,16 @@ class CacheMaintenanceService:
         paths: list[Path],
         state: Mapping[str, object],
     ) -> dict[str, object]:
-        measured = [(path, self._measure(path)) for path in paths]
+        measured = [
+            (path, self._measure(path, collect_partials=False))
+            for path in paths
+        ]
         size = sum(result[0] for _, result in measured)
         files = sum(result[1] for _, result in measured)
-        digest_lines = [f"{path}|{result[2]}" for path, result in measured]
         return {
             "path": str(self.paths.runtime),
             "bytes": size,
             "files": files,
-            "digest": hashlib.sha256(
-                "\n".join(digest_lines).encode("utf-8")
-            ).hexdigest(),
             "budget": None,
             "over_budget": False,
             "last_successful_usage": state.get("last_successful_operation"),
@@ -316,27 +353,90 @@ class CacheMaintenanceService:
         }
 
     @staticmethod
-    def _measure(root: Path) -> tuple[int, int, str]:
+    def _measure(
+        root: Path,
+        *,
+        collect_partials: bool,
+    ) -> tuple[int, int, list[Path]]:
         size = 0
         files = 0
-        identity = hashlib.sha256()
+        partials: list[Path] = []
         if root.is_dir():
-            for path in sorted(root.rglob("*"), key=lambda item: str(item)):
+            for path in root.rglob("*"):
+                if collect_partials and (
+                    path.name.endswith(".partial")
+                    or path.name.startswith(".tmp-")
+                ):
+                    partials.append(path)
                 if not path.is_file():
                     continue
                 try:
-                    relative = path.relative_to(root).as_posix()
                     stat = path.stat()
                 except OSError:
                     continue
                 size += stat.st_size
                 files += 1
-                identity.update(relative.encode("utf-8"))
-                identity.update(str(stat.st_size).encode("ascii"))
-        return size, files, identity.hexdigest()
+        return size, files, partials
 
-    def _preview(self, operation: str, targets: list[Path]) -> dict[str, object]:
-        sizes = [(path, self._measure_path(path)) for path in targets]
+    @classmethod
+    def _measure_path_details(cls, path: Path) -> tuple[int, int]:
+        if path.is_file():
+            try:
+                return path.stat().st_size, 1
+            except OSError:
+                return 0, 0
+        if path.is_dir():
+            size, files, _ = cls._measure(path, collect_partials=False)
+            return size, files
+        return 0, 0
+
+    @staticmethod
+    def _status_after_known_removals(
+        status: dict[str, object],
+        removed: list[str],
+        measurements: Mapping[Path, tuple[int, int]],
+    ) -> dict[str, object]:
+        """用删除前已取得的局部计数修正快照，不为 partial 再扫整棵缓存。"""
+
+        entries = status.get("entries")
+        if not isinstance(entries, dict):
+            return status
+        for raw in removed:
+            path = Path(raw)
+            size, files = measurements.get(path, (0, 0))
+            resolved = path.resolve()
+            for entry in entries.values():
+                if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+                    continue
+                root = Path(entry["path"]).resolve()
+                if resolved != root and not resolved.is_relative_to(root):
+                    continue
+                entry["bytes"] = max(0, int(entry.get("bytes", 0)) - size)
+                entry["files"] = max(0, int(entry.get("files", 0)) - files)
+                budget = entry.get("budget")
+                entry["over_budget"] = bool(
+                    isinstance(budget, int) and int(entry["bytes"]) > budget
+                )
+                break
+        return status
+
+    def _preview(
+        self,
+        operation: str,
+        targets: list[Path],
+        *,
+        known_sizes: Mapping[str, int] | None = None,
+    ) -> dict[str, object]:
+        known = known_sizes or {}
+        sizes = [
+            (
+                path,
+                known[str(path.resolve())]
+                if str(path.resolve()) in known
+                else self._measure_path(path),
+            )
+            for path in targets
+        ]
         return {
             "schema_version": "1",
             "operation": operation,
@@ -356,22 +456,6 @@ class CacheMaintenanceService:
             "includes_evidence_or_reports": False,
             "includes_credentials": False,
         }
-
-    def _partial_candidates(self) -> list[Path]:
-        candidates: list[Path] = []
-        for root in (
-            self.paths.uv_cache,
-            self.paths.pnpm_store,
-            self.paths.npm_cache,
-            self.paths.downloads,
-            self.paths.startup_cache,
-        ):
-            candidates.extend(
-                path
-                for path in root.rglob("*")
-                if path.name.endswith(".partial") or path.name.startswith(".tmp-")
-            )
-        return sorted(candidates, key=str, reverse=True)
 
     def _expired_orphan_candidates(self) -> list[Path]:
         cutoff = time.time() - _ORPHAN_MIN_AGE_SECONDS
@@ -402,6 +486,17 @@ class CacheMaintenanceService:
             cutoff=now - _WORKER_LOG_MAX_AGE_SECONDS,
         )
         return [*startup, *workers]
+
+    def _startup_partial_candidates(self) -> list[Path]:
+        """只看缓存根的直接子项，不为启动递归进入大型工具缓存。"""
+
+        candidates: list[Path] = []
+        for name in _CACHE_ROOTS:
+            root = self.paths.cache / name
+            for path in tuple(root.iterdir()) if root.is_dir() else ():
+                if path.name.endswith(".partial") or path.name.startswith(".tmp-"):
+                    candidates.append(path)
+        return sorted(candidates, key=str)
 
     @staticmethod
     def _retained_logs(root: Path, *, keep: int | None, cutoff: float) -> list[Path]:

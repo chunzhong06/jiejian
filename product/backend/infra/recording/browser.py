@@ -28,7 +28,7 @@ from playwright.sync_api import (
 
 from product.backend.core.recording import Recording, RecordingReasonCode, RecordingState, RecordingTerminalState, transition_recording_state
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.recording import RecordingCleanupStatus, RecordingRunnerError, RecordingRunnerRequest, RecordingRunnerResultType, RecordingRunnerResult
+from product.protocols.recording import RecordingAuthMethod, RecordingCleanupStatus, RecordingRunnerError, RecordingRunnerRequest, RecordingRunnerResultType, RecordingRunnerResult, required_recording_secret_names
 from product.backend.infra.recording.events import RecordingEventCollector
 
 
@@ -160,6 +160,7 @@ class BrowserRecordingAdapter:
         interaction: Interaction,
         *,
         known_secrets: Sequence[str] = (),
+        secret_values: Mapping[str, str] | None = None,
         cancellation_requested: Callable[[], bool] = lambda: False,
         now_us: Callable[[], int] | None = None,
         capture_controlled: bool = False,
@@ -172,6 +173,15 @@ class BrowserRecordingAdapter:
         """运行一次有预算的录制；返回前冻结事件，并在所有出口关闭浏览器资源。"""
 
         clock = now_us or (lambda: time.time_ns() // 1_000)
+        values = dict(secret_values or {})
+        required_names = required_recording_secret_names(request)
+        if set(values) != set(required_names) or any(
+            not values[name] for name in required_names
+        ):
+            raise JiejianError(
+                ErrorCode.RUNTIME_ENVIRONMENT_INVALID,
+                "录制浏览器缺少精确的身份秘密",
+            )
         recording = Recording(
             recording_id=request.recording_id,
             project_id=request.project_id,
@@ -222,8 +232,9 @@ class BrowserRecordingAdapter:
                     timeout_ms = request.target_scope.timeout_seconds * 1_000
                     context.set_default_timeout(timeout_ms)
                     context.set_default_navigation_timeout(timeout_ms)
-                    collector.attach_context(session.identity_id, context)
-                    contexts[session.identity_id] = context
+                    self._restore_login_state(context, session, values)
+                    collector.attach_context(session.test_identity_id, context)
+                    contexts[session.test_identity_id] = context
                 ready_callback()
                 capture_deadline = monotonic() + request.budget.max_duration_us / 1_000_000
 
@@ -240,7 +251,7 @@ class BrowserRecordingAdapter:
                 if not capture_controlled:
                     collector.begin_capture()
                     mark_capture_started()
-                collector.check_runtime_budget(request.sessions[0].identity_id)
+                collector.check_runtime_budget(request.sessions[0].test_identity_id)
                 session = RecordingBrowserSession(
                     contexts,
                     collector,
@@ -258,7 +269,7 @@ class BrowserRecordingAdapter:
                         ErrorCode.RECORD_INTERACTION_FAILED,
                         "录制未收到开始采集动作",
                     )
-                collector.check_runtime_budget(request.sessions[0].identity_id)
+                collector.check_runtime_budget(request.sessions[0].test_identity_id)
                 if collector.safety_error is not None:
                     result_type = RecordingRunnerResultType.SAFETY_STOPPED
                     terminal = RecordingTerminalState.SAFETY_STOPPED
@@ -368,6 +379,32 @@ class BrowserRecordingAdapter:
                 else None
             ),
         )
+
+    @staticmethod
+    def _restore_login_state(context: BrowserContext, session, values: Mapping[str, str]) -> None:
+        """只按请求声明的引用恢复一个隔离 BrowserContext 的认证状态。"""
+
+        if session.auth_method is RecordingAuthMethod.BEARER:
+            assert session.bearer_ref is not None
+            name = session.bearer_ref.removeprefix("env:")
+            context.set_extra_http_headers({"Authorization": f"Bearer {values[name]}"})
+            return
+        same_site = {"STRICT": "Strict", "LAX": "Lax", "NONE": "None"}
+        cookies: list[dict[str, object]] = []
+        for cookie in session.cookies:
+            item: dict[str, object] = {
+                "name": cookie.name,
+                "value": values[cookie.value_ref.removeprefix("env:")],
+                "domain": cookie.domain,
+                "path": cookie.path,
+                "secure": cookie.secure,
+                "httpOnly": cookie.http_only,
+                "sameSite": same_site[cookie.same_site],
+            }
+            if cookie.expires_at_us is not None:
+                item["expires"] = cookie.expires_at_us / 1_000_000
+            cookies.append(item)
+        context.add_cookies(cookies)
 
     @staticmethod
     def _close(

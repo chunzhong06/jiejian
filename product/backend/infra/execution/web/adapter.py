@@ -81,11 +81,17 @@ class AuthorizedTarget:
 
 
 class WebTargetGuard:
-    """在 HTTP 适配器边界内执行 Web scope、重定向和私网安全校验。"""
+    """在 HTTP 适配器边界内执行 scope、自检、重定向和私网安全校验。"""
 
-    def __init__(self, target: WebTargetDefinition | AuthTargetScope) -> None:
+    def __init__(
+        self,
+        target: WebTargetDefinition | AuthTargetScope,
+        *,
+        reserved_origins: Sequence[str] = (),
+    ) -> None:
         self.target = target
         self.scope = target.scope if isinstance(target, WebTargetDefinition) else target
+        self.reserved_origins = frozenset(reserved_origins)
 
     def authorize_path(self, path: str) -> AuthorizedTarget:
         parsed = urlsplit(path)
@@ -111,6 +117,11 @@ class WebTargetGuard:
         if port not in self.scope.allowed_ports:
             raise JiejianError(ErrorCode.SCOPE_PORT, "目标端口不在授权范围")
         origin = f"{parsed.scheme}://{host}:{port}"
+        if origin in self.reserved_origins:
+            raise JiejianError(
+                ErrorCode.SELF_TARGET_FORBIDDEN,
+                "执行目标不得指向界鉴自身服务",
+            )
         if origin not in self.scope.allowed_origins:
             raise JiejianError(ErrorCode.SCOPE_HOST, "目标 origin 不在授权范围")
         try:
@@ -145,6 +156,7 @@ class HttpExecutionAdapter:
         cancellation_requested: Callable[[], bool] | None = None,
         executor_process_id: int | None = None,
         fixture_artifacts: Mapping[str, bytes] | None = None,
+        reserved_origins: Sequence[str] = (),
     ) -> None:
         """创建不读取代理环境、不自动跟随重定向的有界 HTTP 客户端。
 
@@ -154,7 +166,7 @@ class HttpExecutionAdapter:
         """
 
         self.target_type = TargetType.WEB
-        self.guard = WebTargetGuard(target)
+        self.guard = WebTargetGuard(target, reserved_origins=reserved_origins)
         self.requests_used = 0
         self.auth_requests_used: dict[str, int] = {}
         self.cleanup_reserve = cleanup_reserve
@@ -218,7 +230,6 @@ class HttpExecutionAdapter:
             "slots": _non_secret_slot_values(binding.input_slots, values),
         }
         input_hash = _web_json_sha256(request_payload)
-        empty_hash = _web_bytes_sha256(b"")
         try:
             response = self.request(
                 binding.method,
@@ -236,21 +247,8 @@ class HttpExecutionAdapter:
                     if item.secret and item.slot_id in values
                 ),
             )
-        except JiejianError as exc:
-            if exc.code in {
-                ErrorCode.EXEC_TIMEOUT.value,
-                ErrorCode.EXEC_REQUEST.value,
-            }:
-                return ExecutionFact(
-                    case_id=case_id,
-                    action_id=action_id,
-                    target_type=self.target_type,
-                    outcome=ExecutionOutcome.FAILED,
-                    execution_marker=case_id,
-                    input_hash=input_hash,
-                    output_hash=empty_hash,
-                    reason_codes=("TRANSPORT_FAILURE",),
-                ), HttpResponse(status_code=0, data={}, headers={}, body=b"", url="")
+        except JiejianError:
+            # 传输失败必须沿异常链保留具体原因，由 Case/Runner 写入 cause_code。
             raise
         output_hash = _web_json_sha256({"status": response.status_code, "data": response.data})
         resolved = (classifier or HttpOutcomeClassifier()).classify(response, terminal_completed=terminal_completed)
@@ -269,7 +267,10 @@ class HttpExecutionAdapter:
     def cleanup(self, path: str, *, case_id: str) -> None:
         response = self.request("POST", path, case_id=case_id, cleanup_request=True, test_mode=True)
         if not 200 <= response.status_code < 300:
-            raise JiejianError(ErrorCode.CLEANUP_FAILED, "目标清理失败")
+            raise JiejianError(
+                ErrorCode.RECOVERY_UNAVAILABLE,
+                "目标恢复端点未接受恢复请求",
+            )
 
     def request(
         self,
@@ -372,6 +373,11 @@ class HttpExecutionAdapter:
                 )
         except httpx.TimeoutException as exc:
             raise JiejianError(ErrorCode.EXEC_TIMEOUT, "目标请求超时") from exc
+        except httpx.ConnectError as exc:
+            raise JiejianError(
+                ErrorCode.TARGET_UNREACHABLE,
+                "目标服务不可达",
+            ) from exc
         except httpx.RequestError as exc:
             raise JiejianError(
                 ErrorCode.EXEC_REQUEST,

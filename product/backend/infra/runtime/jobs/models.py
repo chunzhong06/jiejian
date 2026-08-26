@@ -12,6 +12,7 @@ from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN,
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord, RecordingRecord, RunRecord
 from product.backend.infra.storage import ensure_storage_payload_safe
+from product.protocols.runner import CleanupIssueCode, RunnerFailurePhase
 
 MAX_LEASE_DURATION_US = 300_000_000
 MAX_RETRY_DELAY_US = 86_400_000_000
@@ -153,11 +154,23 @@ class CompleteCancellation(FencedJobMutation):
 
 
 class RetryableFailure(FencedJobMutation):
+    """带 Runner 失败事实的可重试 Job 终结命令。"""
+
     reason_code: RetryableFailureCode
+    error_code: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]{0,127}$")
+    phase: RunnerFailurePhase | None = None
+    cause_code: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]{0,127}$")
+    cleanup_issue_codes: tuple[CleanupIssueCode, ...] = Field(default=(), max_length=4)
 
 
 class FatalFailure(FencedJobMutation):
+    """带 Runner 主错误与清理问题的不可重试 Job 终结命令。"""
+
     reason_code: FatalFailureCode
+    error_code: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]{0,127}$")
+    phase: RunnerFailurePhase | None = None
+    cause_code: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]{0,127}$")
+    cleanup_issue_codes: tuple[CleanupIssueCode, ...] = Field(default=(), max_length=4)
 
 
 class RecoveryScan(WorkerControlModel):

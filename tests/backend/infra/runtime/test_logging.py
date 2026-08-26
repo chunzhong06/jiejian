@@ -1,3 +1,5 @@
+# 验证进程运行时中的运行日志。
+
 from __future__ import annotations
 
 import json
@@ -5,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 from io import StringIO
 
 from product.backend.infra.runtime.logging import configure_logging
-from product.backend.infra.runtime.worker_process import _RedactingTextStream
+from product.backend.infra.runtime.worker.process import _RedactingTextStream
 from product.backend.core.redaction import REDACTED
 
 

@@ -1,8 +1,10 @@
+# 提供隔离 Runner 的请求构造与执行测试夹具。
+
 from __future__ import annotations
 
 from product.backend.core.lifecycle import CaseVerdict
 from product.backend.core.verification.facts import ExecutionOutcome, ObservedEffect, TargetType, TemporalClosure, aggregate_security_effect
-from product.backend.core.verification.permission_coverage import build_permission_coverage_plan
+from product.backend.core.verification.permissions.coverage import build_permission_coverage_plan
 from product.backend.core.verification.permissions import (
     ActionDefinition,
     CoverageDimension,
@@ -304,7 +306,7 @@ def evidence(
         for resource_id in resources
     )
     return build_evidence(
-        schema_version="4",
+        schema_version="1",
         run_id="run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         case_snapshot=case,
         twin_snapshot=None,

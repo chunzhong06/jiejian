@@ -1,3 +1,5 @@
+# 验证执行基础设施中的Web 运行时纵向链路。
+
 from __future__ import annotations
 
 import json
@@ -14,7 +16,7 @@ from product.backend.core.verification.facts import (
     TemporalClosure,
     aggregate_security_effect,
 )
-from product.backend.core.verification.permission_evaluation import (
+from product.backend.core.verification.permissions.evaluation import (
     CaseDecisionInput,
     evaluate_permission_case,
 )
@@ -174,6 +176,20 @@ def _document(port: int):
                 purpose=WorkflowStepPurpose.CLEANUP,
                 identity_id=CASE_SUBJECT_IDENTITY,
                 request_template=HttpRequestTemplate(method="POST", path="/workflow-cleanup"),
+                classifier=HttpOutcomeClassifier(
+                    accepted=(
+                        HttpPredicate(
+                            kind=HttpPredicateKind.STATUS_IN,
+                            statuses=(200, 201, 204),
+                        ),
+                    ),
+                    denied=(
+                        HttpPredicate(
+                            kind=HttpPredicateKind.STATUS_IN,
+                            statuses=(401, 403, 404),
+                        ),
+                    ),
+                ),
                 depends_on_step_ids=("approve-project",),
             ),
         ),
@@ -182,7 +198,7 @@ def _document(port: int):
         reset_strategy={"kind": "RESET_ENDPOINT", "path": "/reset"},
     )
     snapshot = document.project_snapshot.model_copy(update={"target": target, "identities": (cookie_identity,), "workflow_bindings": (workflow,)})
-    return document.model_copy(update={"budget": document.budget.model_copy(update={"max_requests": 10}), "project_snapshot": snapshot})
+    return document.model_copy(update={"budget": document.budget.model_copy(update={"max_requests": 11}), "project_snapshot": snapshot})
 
 
 def _owner_observation(session, document, case, phase):

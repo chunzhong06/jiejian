@@ -1,6 +1,6 @@
 # Observer 观察协议
 
-> 状态：CURRENT。本文解释观察语义和边界；字段约束以 `observer.py` 与 Observer Schema 为准。
+> 状态：CURRENT。本文解释观察语义和边界；字段约束以 `product/protocols/observer/` 与 Observer Schema 为准。
 
 ## 目的与消费者
 
@@ -36,9 +36,9 @@ Observer 只读取用户明确授权的目标或本机资源；凭据、日志�
 
 ## 版本规则与 Schema 真源
 
-Observer Invocation 与 `ObservationEnvelope` 独立根文档的当前版本为 3；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复携带版本。协议正文不复制完整 JSON 字段；严格解析、required 和枚举以：
+Observer Invocation 与 `ObservationEnvelope` 独立根文档的当前 `schema_version` 均为字符串 1；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复携带根格式版本。协议正文不复制完整 JSON 字段；严格解析、required 和枚举以：
 
-- `product/protocols/observer.py`
+- `product/protocols/observer/`
 - `product/protocols/schemas/observer/`
 
 为准。Schema 版本不表示产品代际，旧开发观察格式不兼容读取。
@@ -47,5 +47,5 @@ Observer Invocation 与 `ObservationEnvelope` 独立根文档的当前版本为 
 
 - [执行与观察架构](../02_架构设计/执行与观察架构.md)
 - [安全意图与验证架构](../02_架构设计/安全意图与验证架构.md)
-- `product/protocols/observer.py`
+- `product/protocols/observer/`
 - [因果关联实验](../05_路线与研究/技术实验/因果关联实验.md)

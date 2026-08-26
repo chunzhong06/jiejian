@@ -1,69 +1,68 @@
 {
   "$defs": {
+    "FlowDraftResourceCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "pattern": "^resource-[0-9a-f]{16}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "consumer": {
+          "$ref": "#/$defs/ValueSlotConsumer"
+        },
+        "label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "location": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Location",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "consumer",
+        "location",
+        "label"
+      ],
+      "title": "FlowDraftResourceCandidate",
+      "type": "object"
+    },
     "FlowDraftStep": {
       "additionalProperties": false,
       "properties": {
+        "depends_on_step_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Depends On Step Ids",
+          "type": "array"
+        },
+        "expected_statuses": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 32,
+          "title": "Expected Statuses",
+          "type": "array"
+        },
         "id": {
           "pattern": "^[a-z][a-z0-9_-]{0,63}$",
           "title": "Id",
           "type": "string"
         },
-        "name": {
-          "maxLength": 128,
-          "minLength": 1,
-          "title": "Name",
-          "type": "string"
-        },
-        "identity_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Identity Id",
-          "type": "string"
-        },
-        "alternate_identity_id": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Alternate Identity Id"
-        },
-        "resource_id": {
-          "anyOf": [
-            {
-              "maxLength": 128,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Resource Id"
-        },
-        "alternate_resource_id": {
-          "anyOf": [
-            {
-              "maxLength": 128,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Alternate Resource Id"
-        },
-        "bindings_confirmed": {
-          "default": false,
-          "title": "Bindings Confirmed",
-          "type": "boolean"
+        "json_body": {
+          "additionalProperties": true,
+          "title": "Json Body",
+          "type": "object"
         },
         "method": {
           "anyOf": [
@@ -84,6 +83,12 @@
           "default": null,
           "title": "Method"
         },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
         "path": {
           "anyOf": [
             {
@@ -96,20 +101,6 @@
           ],
           "default": null,
           "title": "Path"
-        },
-        "json_body": {
-          "additionalProperties": true,
-          "title": "Json Body",
-          "type": "object"
-        },
-        "expected_statuses": {
-          "default": [],
-          "items": {
-            "type": "integer"
-          },
-          "maxItems": 32,
-          "title": "Expected Statuses",
-          "type": "array"
         },
         "request_id": {
           "anyOf": [
@@ -124,31 +115,13 @@
           "default": null,
           "title": "Request Id"
         },
-        "action_ids": {
+        "resource_candidates": {
           "default": [],
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/FlowDraftResourceCandidate"
           },
           "maxItems": 128,
-          "title": "Action Ids",
-          "type": "array"
-        },
-        "source_event_sequences": {
-          "items": {
-            "type": "integer"
-          },
-          "maxItems": 512,
-          "minItems": 1,
-          "title": "Source Event Sequences",
-          "type": "array"
-        },
-        "depends_on_step_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 128,
-          "title": "Depends On Step Ids",
+          "title": "Resource Candidates",
           "type": "array"
         },
         "sensitive_fields": {
@@ -159,12 +132,20 @@
           "maxItems": 256,
           "title": "Sensitive Fields",
           "type": "array"
+        },
+        "source_event_sequences": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 512,
+          "minItems": 1,
+          "title": "Source Event Sequences",
+          "type": "array"
         }
       },
       "required": [
         "id",
         "name",
-        "identity_id",
         "source_event_sequences"
       ],
       "title": "FlowDraftStep",
@@ -173,19 +154,6 @@
     "FlowDraftVariable": {
       "additionalProperties": false,
       "properties": {
-        "name": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Name",
-          "type": "string"
-        },
-        "placeholder": {
-          "pattern": "^\\{[a-z][a-z0-9_-]{0,63}\\}$",
-          "title": "Placeholder",
-          "type": "string"
-        },
-        "status": {
-          "$ref": "#/$defs/FlowDraftVariableStatus"
-        },
         "candidate_sources": {
           "items": {
             "$ref": "#/$defs/FlowDraftVariableSource"
@@ -214,6 +182,19 @@
           "minItems": 1,
           "title": "Consumer Step Ids",
           "type": "array"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "placeholder": {
+          "pattern": "^\\{[a-z][a-z0-9_-]{0,63}\\}$",
+          "title": "Placeholder",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/FlowDraftVariableStatus"
         }
       },
       "required": [
@@ -229,9 +210,10 @@
     "FlowDraftVariableSource": {
       "additionalProperties": false,
       "properties": {
-        "source_step_id": {
-          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
-          "title": "Source Step Id",
+        "json_path": {
+          "maxLength": 512,
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_-]*|\\[[0-9]+\\])*$|^\\$location(?:\\.[A-Za-z0-9_-]+)*$",
+          "title": "Json Path",
           "type": "string"
         },
         "source_event_sequence": {
@@ -239,10 +221,9 @@
           "title": "Source Event Sequence",
           "type": "integer"
         },
-        "json_path": {
-          "maxLength": 512,
-          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_-]*|\\[[0-9]+\\])*$|^\\$location(?:\\.[A-Za-z0-9_-]+)*$",
-          "title": "Json Path",
+        "source_step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Source Step Id",
           "type": "string"
         }
       },
@@ -262,19 +243,25 @@
       ],
       "title": "FlowDraftVariableStatus",
       "type": "string"
+    },
+    "ValueSlotConsumer": {
+      "enum": [
+        "PATH",
+        "QUERY",
+        "HEADER",
+        "JSON_BODY",
+        "FORM_FIELD",
+        "MULTIPART_FIELD"
+      ],
+      "title": "ValueSlotConsumer",
+      "type": "string"
     }
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "2",
-      "default": "2",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "recording_id": {
-      "pattern": "^rec_[0-9a-f]{32}$",
-      "title": "Recording Id",
+    "action_candidate_id": {
+      "pattern": "^action_[0-9a-f]{32}$",
+      "title": "Action Candidate Id",
       "type": "string"
     },
     "flow_id": {
@@ -282,10 +269,47 @@
       "title": "Flow Id",
       "type": "string"
     },
+    "recommended_target_step_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recommended Target Step Id"
+    },
+    "recording_id": {
+      "pattern": "^rec_[0-9a-f]{32}$",
+      "title": "Recording Id",
+      "type": "string"
+    },
+    "resource_candidate_id": {
+      "anyOf": [
+        {
+          "pattern": "^resource-[0-9a-f]{16}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resource Candidate Id"
+    },
     "revision": {
       "minimum": 1,
       "title": "Revision",
       "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
     },
     "steps": {
       "items": {
@@ -296,6 +320,19 @@
       "title": "Steps",
       "type": "array"
     },
+    "target_step_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Step Id"
+    },
     "variables": {
       "default": [],
       "items": {
@@ -304,21 +341,12 @@
       "maxItems": 2000,
       "title": "Variables",
       "type": "array"
-    },
-    "owner_observer_path": {
-      "default": "/owner/resources/{resource_id}",
-      "title": "Owner Observer Path",
-      "type": "string"
-    },
-    "reset_path": {
-      "default": "/reset",
-      "title": "Reset Path",
-      "type": "string"
     }
   },
   "required": [
     "recording_id",
     "flow_id",
+    "action_candidate_id",
     "revision",
     "steps"
   ],

@@ -23,10 +23,11 @@ import json
 import os
 import threading
 import time
+from http.cookies import SimpleCookie
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Literal
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 
 Variant = Literal["fixed", "vulnerable", "inconclusive"]
@@ -83,6 +84,12 @@ class AuthorizationRequestHandler(BaseHTTPRequestHandler):
         self._record_runner_process()
         self._delay_target_request()
         path = urlsplit(self.path).path
+        if path == "/":
+            self._application_page()
+            return
+        if path == "/login":
+            self._login_page()
+            return
         if path == "/health":
             self._send(HTTPStatus.OK, {"status": "ok", "variant": self.server.variant})
             return
@@ -127,10 +134,14 @@ class AuthorizationRequestHandler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.OK if allowed else HTTPStatus.FORBIDDEN, payload)
 
     def do_POST(self) -> None:  # noqa: N802 - standard-library callback name
-        """仅接受本机且带测试标记的 reset 请求。"""
+        """处理样例人工登录，或接受带本机测试标记的 reset 请求。"""
 
         self._record_runner_process()
-        if urlsplit(self.path).path != "/reset":
+        path = urlsplit(self.path).path
+        if path == "/login":
+            self._login()
+            return
+        if path != "/reset":
             self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             return
         if self.client_address[0] != "127.0.0.1" or self.headers.get("X-Jiejian-Test-Mode") != "1":
@@ -145,6 +156,10 @@ class AuthorizationRequestHandler(BaseHTTPRequestHandler):
     def _read_resource(self, resource_id: str) -> None:
         subject_id = self._subject_id()
         if subject_id is None:
+            return
+        # 不确定变体必须让普通录制可确认的所有者读取同样不可用，避免仅关闭旧观察路由后仍形成 PASS。
+        if self.server.variant == "inconclusive":
+            self._send(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "resource_observer_unavailable"})
             return
         with self.server.lock:
             resource = self.server.resources.get(resource_id)
@@ -194,19 +209,143 @@ class AuthorizationRequestHandler(BaseHTTPRequestHandler):
             time.sleep(self.server.request_delay_seconds)
 
     def _subject_id(self) -> str | None:
+        subject_id = self._authenticated_subject_id()
+        if subject_id is not None:
+            return subject_id
+        self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+        return None
+
+    def _authenticated_subject_id(self) -> str | None:
+        """只解析当前会话身份；由具体页面或 API 决定未登录时的响应形式。"""
+
         token = self._authorization_token()
         if token is None:
-            self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return None
         for subject_id, expected in self.server.tokens.items():
             if hmac.compare_digest(token, expected):
                 return subject_id
-        self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
         return None
 
     def _authorization_token(self) -> str | None:
         value = self.headers.get("Authorization", "")
-        return value.removeprefix("Bearer ") if value.startswith("Bearer ") else None
+        if value.startswith("Bearer "):
+            return value.removeprefix("Bearer ")
+        cookies = SimpleCookie()
+        try:
+            cookies.load(self.headers.get("Cookie", ""))
+        except Exception:
+            return None
+        session = cookies.get("jiejian_sample_session")
+        return session.value if session is not None else None
+
+    def _login_page(self) -> None:
+        """提供无需把长期密码交给界鉴的确定性人工登录页面。"""
+
+        body = """<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>界鉴权限样例登录</title></head>
+<body><main><h1>权限样例登录</h1>
+<p>请使用样例账号登录；界鉴不会保存这里输入的密码。</p>
+<form method="post" action="/login">
+<label>账号 <select name="role"><option value="owner">所有者 owner</option><option value="attacker">攻击者 attacker</option><option value="peer">同级用户 peer</option></select></label>
+<label>样例密码 <input name="password" type="password" autocomplete="current-password" required></label>
+<button type="submit">登录样例</button>
+</form>
+<p>样例密码格式：sample-&lt;账号&gt;-password，例如 sample-owner-password。</p>
+</main></body></html>""".encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _application_page(self) -> None:
+        """为已登录账号提供可直接录制的最小资源修改界面。"""
+
+        subject_id = self._authenticated_subject_id()
+        if subject_id is None:
+            self._login_page()
+            return
+        body = f"""<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>界鉴权限样例</title>
+<style>
+body {{ font-family: sans-serif; margin: 2rem; color: #202124; }}
+main {{ max-width: 42rem; }}
+label, button {{ display: block; margin-top: 1rem; }}
+input {{ min-width: 24rem; padding: .5rem; }}
+button {{ padding: .55rem 1rem; }}
+#result {{ margin-top: 1rem; white-space: pre-wrap; }}
+</style></head>
+<body><main><h1>权限样例资源</h1>
+<p>当前账号：<strong>{subject_id}</strong></p>
+<p>开始录制后点击一次操作按钮；样例会依次修改、独立读取、恢复并再次核对资源。</p>
+<label>新的资源内容 <input id="resource-value" value="recorded-owner-value" maxlength="128"></label>
+<button id="modify-resource" type="button">修改、核对并恢复所有者资源</button>
+<p id="result" role="status">尚未执行</p>
+<script>
+const result = document.querySelector('#result');
+document.querySelector('#modify-resource').addEventListener('click', async () => {{
+  result.textContent = '正在执行安全录制序列……';
+  try {{
+    const target = await fetch('/resources/owner-resource', {{
+      method: 'PATCH', credentials: 'include',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{value: document.querySelector('#resource-value').value}})
+    }});
+    if (!target.ok) throw new Error(`修改请求返回 ${{target.status}}`);
+    const observed = await fetch('/resources/owner-resource', {{credentials: 'include'}});
+    if (!observed.ok) throw new Error(`结果核对返回 ${{observed.status}}`);
+    const recovery = await fetch('/resources/owner-resource', {{
+      method: 'PATCH', credentials: 'include',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{value: 'initial-owner-value'}})
+    }});
+    if (!recovery.ok) throw new Error(`恢复请求返回 ${{recovery.status}}`);
+    const restored = await fetch('/resources/owner-resource', {{credentials: 'include'}});
+    if (!restored.ok) throw new Error(`恢复核对返回 ${{restored.status}}`);
+    const restoredPayload = await restored.json();
+    result.textContent = `修改、核对与恢复均已完成；当前值：${{restoredPayload.value}}`;
+  }} catch (_error) {{
+    result.textContent = _error instanceof Error ? `操作未完成：${{_error.message}}` : '操作未完成';
+  }}
+}});
+</script></main></body></html>""".encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _login(self) -> None:
+        length = self._content_length()
+        if length is None:
+            return
+        try:
+            fields = parse_qs(
+                self.rfile.read(length).decode("utf-8"),
+                strict_parsing=True,
+            )
+            role = fields["role"][0]
+            password = fields["password"][0]
+        except (KeyError, UnicodeDecodeError, ValueError):
+            self._send(HTTPStatus.BAD_REQUEST, {"error": "invalid_login"})
+            return
+        token = self.server.tokens.get(role)
+        expected_password = f"sample-{role}-password"
+        if token is None or not hmac.compare_digest(password, expected_password):
+            self._send(HTTPStatus.UNAUTHORIZED, {"error": "invalid_login"})
+            return
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", "/")
+        self.send_header("Content-Length", "0")
+        self.send_header(
+            "Set-Cookie",
+            "jiejian_sample_session="
+            f"{token}; Path=/; HttpOnly; SameSite=Lax",
+        )
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def _content_length(self) -> int | None:
         try:

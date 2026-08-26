@@ -1,3 +1,5 @@
+# 验证核心领域中的生命周期状态。
+
 from __future__ import annotations
 
 import pytest

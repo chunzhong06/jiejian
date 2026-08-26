@@ -1,11 +1,16 @@
+# 验证模型配置、确定性诊断与受控 AI 辅助 API 边界。
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi.testclient import TestClient
+import pytest
 
-from product.backend.api import create_app
+from tests.fixtures.control_plane import TestClient, create_app
 from product.backend.infra.llm.adapters.base import LLMHttpResponse, LLMTransportError
+from product.backend.core.lifecycle import ProjectStatus
+from product.backend.infra.storage import ProjectRecord
+from product.protocols import TargetType
 
 
 class FakeSecretStore:
@@ -29,12 +34,28 @@ class FakeTransport:
     def __init__(self, *, error: str | None = None) -> None:
         self.error = error
         self.calls = 0
+        self.requests = []
 
     def send(self, request):
         self.calls += 1
+        self.requests.append(request)
         if self.error is not None:
             raise LLMTransportError(self.error)
-        return LLMHttpResponse(200, b'{"choices":[{"message":{"content":"ok"}}]}')
+        if request.method == "GET":
+            return LLMHttpResponse(200, b'{"data":[{"id":"gpt-5.6"}]}')
+        return LLMHttpResponse(200, b'{"output_text":"ok"}')
+
+
+class AssistantTransport(FakeTransport):
+    def send(self, request):
+        self.calls += 1
+        self.requests.append(request)
+        if request.method == "GET":
+            return LLMHttpResponse(200, b'{"data":[{"id":"gpt-5.6"}]}')
+        return LLMHttpResponse(
+            200,
+            b'{"output_text":"{\\"schema_version\\":\\"1\\",\\"template_id\\":\\"jiejian.next_step\\",\\"template_version\\":\\"1\\",\\"recommendations\\":[]}"}',
+        )
 
 
 def _payload(**overrides: object) -> dict[str, object]:
@@ -103,6 +124,8 @@ def test_profile_api_rejects_unsafe_values_and_maps_stable_transport_error(
         tested = client.post("/api/llm/profiles/api-test/test")
         assert tested.status_code == 401
         assert tested.json()["error"]["code"] == "llm_auth_failed"
+        assert tested.json()["error"]["diagnosis"]["route"] == "/settings/models"
+        assert "schema_version" not in tested.json()["error"]["diagnosis"]
         assert "env-secret" not in tested.text
 
 
@@ -141,3 +164,150 @@ def test_profile_api_rotates_existing_credential_without_secret_ref(
         assert rotated.json()["data"]["secret_ref"] == "cred:jiejian/llm/api-test"
         assert "value-a" not in rotated.text
         assert "value-b" not in rotated.text
+
+
+def test_settings_and_catalog_routes_are_local_or_explicitly_networked(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    store = FakeSecretStore()
+    app = create_app(tmp_path / "var", start_worker=False, llm_transport=transport, llm_secret_store=store)
+    with TestClient(app) as client:
+        settings = client.get("/api/llm/settings")
+        assert settings.status_code == 200
+        assert settings.json()["data"] == {"enabled": False, "default_profile_name": None, "updated_at_us": 0}
+        assert transport.calls == 0
+        discovered = client.post(
+            "/api/llm/models/discover",
+            json={"schema_version": "1", "provider": "openai", "secret": "temporary-key"},
+        )
+        assert discovered.status_code == 200
+        assert discovered.json()["data"]["models"][0]["model"] == "gpt-5.6"
+        assert "temporary-key" not in discovered.text
+        assert transport.requests[-1].method == "GET"
+
+
+def test_assistant_guidance_get_is_cold_and_refresh_is_single_provider_call(tmp_path: Path) -> None:
+    transport = AssistantTransport()
+    store = FakeSecretStore()
+    app = create_app(tmp_path / "var", start_worker=False, llm_transport=transport, llm_secret_store=store, clock_us=lambda: 1)
+    with app.state.context.uow_factory() as work:
+        work.projects.add(
+            ProjectRecord(
+                project_id="assistant-app",
+                name="AI 测试应用",
+                status=ProjectStatus.DRAFT,
+                target_type=TargetType.WEB,
+                created_at_us=1,
+                updated_at_us=1,
+            )
+        )
+        work.commit()
+    with TestClient(app) as client:
+        assert client.post("/api/llm/profiles", json=_payload(profile_name="assistant-default")).status_code == 201
+        assert client.patch(
+            "/api/llm/settings",
+            json={"schema_version": "1", "enabled": True, "default_profile_name": "assistant-default"},
+        ).status_code == 200
+        before = transport.calls
+        first = client.get("/api/projects/assistant-app/assistant/guidance")
+        assert first.status_code == 200
+        assert first.json()["data"]["status"] == "REFRESH_NEEDED"
+        assert "schema_version" not in first.json()["data"]
+        assert "schema_version" not in first.json()["data"]["guidance"]
+        assert transport.calls == before
+        refreshed = client.post(
+            "/api/projects/assistant-app/assistant/guidance/refresh",
+            json={"schema_version": "1"},
+        )
+        assert refreshed.status_code == 200
+        assert refreshed.json()["data"]["status"] == "READY"
+        assert transport.calls == before + 1
+        ready = client.get("/api/projects/assistant-app/assistant/guidance")
+        assert ready.json()["data"]["status"] == "READY"
+        assert transport.calls == before + 1
+        assert "temporary-key" not in refreshed.text
+
+
+def test_default_profile_probe_precedes_atomic_profile_settings_save(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    store = FakeSecretStore()
+    app = create_app(tmp_path / "var", start_worker=False, llm_transport=transport, llm_secret_store=store)
+    with TestClient(app) as client:
+        result = client.put(
+            "/api/llm/default-profile",
+            json={"schema_version": "1", "provider": "openai", "model": "gpt-test", "secret": "temporary-key"},
+        )
+        assert result.status_code == 200
+        assert "temporary-key" not in result.text
+        assert transport.calls == 1
+        assert transport.requests[0].headers["authorization"] == "Bearer temporary-key"
+        assert store.values["cred:jiejian/llm/assistant-default"] == "temporary-key"
+        settings = client.get("/api/llm/settings")
+        assert settings.json()["data"]["default_profile_name"] == "assistant-default"
+        assert settings.json()["data"]["enabled"] is True
+
+
+def test_default_profile_save_updates_existing_default_and_preserves_disabled_state(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    store = FakeSecretStore()
+    app = create_app(tmp_path / "var", start_worker=False, llm_transport=transport, llm_secret_store=store)
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/llm/profiles",
+            json=_payload(profile_name="custom-default", secret="old-key"),
+        )
+        assert created.status_code == 201
+        assert client.patch(
+            "/api/llm/settings",
+            json={"schema_version": "1", "enabled": True, "default_profile_name": "custom-default"},
+        ).status_code == 200
+        assert client.patch(
+            "/api/llm/settings",
+            json={"schema_version": "1", "enabled": False, "default_profile_name": "custom-default"},
+        ).status_code == 200
+
+        saved = client.put(
+            "/api/llm/default-profile",
+            json={
+                "schema_version": "1",
+                "provider": "openai",
+                "model": "gpt-5.6",
+                "reasoning_effort": "high",
+                "secret": "new-key",
+            },
+        )
+        assert saved.status_code == 200
+        assert saved.json()["data"]["profile_name"] == "custom-default"
+        assert saved.json()["data"]["reasoning_effort"] == "high"
+        names = [item["profile_name"] for item in client.get("/api/llm/profiles").json()["data"]]
+        assert names == ["custom-default"]
+        assert store.values["cred:jiejian/llm/custom-default"] == "new-key"
+        assert client.get("/api/llm/settings").json()["data"]["enabled"] is False
+
+
+@pytest.mark.parametrize(
+    "transport_error,expected_code",
+    [
+        ("auth_failed", "llm_auth_failed"),
+        ("rate_limited", "llm_rate_limited"),
+        ("timeout", "llm_timeout"),
+        ("invalid_response", "llm_invalid_response"),
+        ("network", "llm_provider_unavailable"),
+    ],
+)
+def test_discover_maps_transport_failures_to_stable_codes(
+    tmp_path: Path, transport_error: str, expected_code: str,
+) -> None:
+    app = create_app(
+        tmp_path / "var",
+        start_worker=False,
+        llm_transport=FakeTransport(error=transport_error),
+        llm_secret_store=FakeSecretStore(),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/llm/models/discover",
+            json={"schema_version": "1", "provider": "openai", "secret": "temporary-key"},
+        )
+        assert response.status_code in {400, 401, 408, 429, 502, 503, 504}
+        assert response.json()["error"]["code"] == expected_code
+        assert "temporary-key" not in response.text

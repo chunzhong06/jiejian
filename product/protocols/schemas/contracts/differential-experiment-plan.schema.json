@@ -24,24 +24,6 @@
     "PermissionContext": {
       "additionalProperties": false,
       "properties": {
-        "workflow_states": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Workflow States",
-          "type": "array"
-        },
-        "tenant_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Tenant Ids",
-          "type": "array"
-        },
         "department_ids": {
           "default": [],
           "items": {
@@ -59,6 +41,24 @@
           "maxItems": 256,
           "title": "Resource Ids",
           "type": "array"
+        },
+        "tenant_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Tenant Ids",
+          "type": "array"
+        },
+        "workflow_states": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Workflow States",
+          "type": "array"
         }
       },
       "title": "PermissionContext",
@@ -75,29 +75,33 @@
     "PermissionMutationCase": {
       "additionalProperties": false,
       "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "atomic": {
+          "default": false,
+          "title": "Atomic",
+          "type": "boolean"
+        },
+        "batch_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BatchAuthorizationMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Case Id",
           "type": "string"
         },
-        "fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Fingerprint",
-          "type": "string"
-        },
-        "finding_pre_identity": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Finding Pre Identity",
-          "type": "string"
-        },
-        "source_rule_ids": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 32,
-          "minItems": 1,
-          "title": "Source Rule Ids",
-          "type": "array"
+        "context": {
+          "$ref": "#/$defs/PermissionContext"
         },
         "dimensions": {
           "items": {
@@ -105,26 +109,6 @@
           },
           "maxItems": 6,
           "title": "Dimensions",
-          "type": "array"
-        },
-        "retention_reason": {
-          "$ref": "#/$defs/RetentionReason"
-        },
-        "subject_id": {
-          "title": "Subject Id",
-          "type": "string"
-        },
-        "action_id": {
-          "title": "Action Id",
-          "type": "string"
-        },
-        "resource_ids": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 256,
-          "minItems": 1,
-          "title": "Resource Ids",
           "type": "array"
         },
         "expectations": {
@@ -135,6 +119,16 @@
           "minItems": 1,
           "title": "Expectations",
           "type": "array"
+        },
+        "finding_pre_identity": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Finding Pre Identity",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
         },
         "relation_paths": {
           "items": {
@@ -148,9 +142,6 @@
           "title": "Relation Paths",
           "type": "array"
         },
-        "context": {
-          "$ref": "#/$defs/PermissionContext"
-        },
         "required_observations": {
           "items": {
             "type": "string"
@@ -160,21 +151,30 @@
           "title": "Required Observations",
           "type": "array"
         },
-        "batch_mode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/BatchAuthorizationMode"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Resource Ids",
+          "type": "array"
         },
-        "atomic": {
-          "default": false,
-          "title": "Atomic",
-          "type": "boolean"
+        "retention_reason": {
+          "$ref": "#/$defs/RetentionReason"
+        },
+        "source_rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Source Rule Ids",
+          "type": "array"
+        },
+        "subject_id": {
+          "title": "Subject Id",
+          "type": "string"
         }
       },
       "required": [
@@ -198,8 +198,10 @@
     "PermissionMutationDescriptor": {
       "additionalProperties": false,
       "properties": {
-        "dimension": {
-          "$ref": "#/$defs/CoverageDimension"
+        "allow_value_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Allow Value Fingerprint",
+          "type": "string"
         },
         "changed_fields": {
           "items": {
@@ -210,15 +212,13 @@
           "title": "Changed Fields",
           "type": "array"
         },
-        "allow_value_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Allow Value Fingerprint",
-          "type": "string"
-        },
         "deny_value_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Deny Value Fingerprint",
           "type": "string"
+        },
+        "dimension": {
+          "$ref": "#/$defs/CoverageDimension"
         }
       },
       "required": [
@@ -233,34 +233,34 @@
     "PermissionTwin": {
       "additionalProperties": false,
       "properties": {
-        "twin_id": {
-          "pattern": "^twin-[0-9a-f]{32}$",
-          "title": "Twin Id",
-          "type": "string"
-        },
-        "source_rule_id": {
-          "title": "Source Rule Id",
-          "type": "string"
-        },
         "allow_case": {
           "$ref": "#/$defs/PermissionMutationCase"
         },
         "deny_case": {
           "$ref": "#/$defs/PermissionMutationCase"
         },
-        "varied_dimension": {
-          "$ref": "#/$defs/CoverageDimension"
+        "invariant": {
+          "$ref": "#/$defs/TwinInvariantSpecification"
         },
         "mutation": {
           "$ref": "#/$defs/PermissionMutationDescriptor"
         },
-        "invariant": {
-          "$ref": "#/$defs/TwinInvariantSpecification"
+        "source_rule_id": {
+          "title": "Source Rule Id",
+          "type": "string"
         },
         "twin_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Twin Fingerprint",
           "type": "string"
+        },
+        "twin_id": {
+          "pattern": "^twin-[0-9a-f]{32}$",
+          "title": "Twin Id",
+          "type": "string"
+        },
+        "varied_dimension": {
+          "$ref": "#/$defs/CoverageDimension"
         }
       },
       "required": [
@@ -293,6 +293,27 @@
           "title": "Action Id",
           "type": "string"
         },
+        "baseline_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Baseline Fingerprint",
+          "type": "string"
+        },
+        "effect_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Effect Fingerprint",
+          "type": "string"
+        },
+        "normalization_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Normalization Version",
+          "type": "string"
+        },
+        "observer_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Observer Fingerprint",
+          "type": "string"
+        },
         "resource_ids": {
           "items": {
             "type": "string"
@@ -305,27 +326,6 @@
         "workflow_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Workflow Fingerprint",
-          "type": "string"
-        },
-        "effect_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Effect Fingerprint",
-          "type": "string"
-        },
-        "observer_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Observer Fingerprint",
-          "type": "string"
-        },
-        "baseline_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Baseline Fingerprint",
-          "type": "string"
-        },
-        "normalization_version": {
-          "maxLength": 64,
-          "minLength": 1,
-          "title": "Normalization Version",
           "type": "string"
         }
       },
@@ -344,13 +344,13 @@
     "TwinPlanGap": {
       "additionalProperties": false,
       "properties": {
+        "code": {
+          "$ref": "#/$defs/TwinPlanGapCode"
+        },
         "deny_case_id": {
           "pattern": "^case-[0-9a-f]{32}$",
           "title": "Deny Case Id",
           "type": "string"
-        },
-        "code": {
-          "$ref": "#/$defs/TwinPlanGapCode"
         },
         "detail": {
           "maxLength": 160,
@@ -380,9 +380,9 @@
   },
   "additionalProperties": false,
   "properties": {
-    "differential_plan_id": {
-      "pattern": "^dplan-[0-9a-f]{32}$",
-      "title": "Differential Plan Id",
+    "coverage_plan_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Coverage Plan Fingerprint",
       "type": "string"
     },
     "differential_fingerprint": {
@@ -390,9 +390,24 @@
       "title": "Differential Fingerprint",
       "type": "string"
     },
-    "coverage_plan_fingerprint": {
-      "pattern": "^[0-9a-f]{64}$",
-      "title": "Coverage Plan Fingerprint",
+    "differential_plan_id": {
+      "pattern": "^dplan-[0-9a-f]{32}$",
+      "title": "Differential Plan Id",
+      "type": "string"
+    },
+    "gaps": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TwinPlanGap"
+      },
+      "maxItems": 8192,
+      "title": "Gaps",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
       "type": "string"
     },
     "twins": {
@@ -402,15 +417,6 @@
       },
       "maxItems": 8192,
       "title": "Twins",
-      "type": "array"
-    },
-    "gaps": {
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/TwinPlanGap"
-      },
-      "maxItems": 8192,
-      "title": "Gaps",
       "type": "array"
     }
   },

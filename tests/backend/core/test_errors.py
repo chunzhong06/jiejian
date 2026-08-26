@@ -1,3 +1,5 @@
+# 验证核心领域中的错误模型。
+
 from __future__ import annotations
 
 import json

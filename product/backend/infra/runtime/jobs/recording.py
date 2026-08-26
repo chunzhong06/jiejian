@@ -29,9 +29,9 @@ from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.jobs.handlers import JobAttemptPort
 from product.backend.infra.runtime.jobs.models import ClaimJob, FatalFailureCode, FatalFailure, RetryableFailureCode, RetryableFailure
-from product.backend.infra.runtime.process_control import DEFAULT_LEASE_DURATION_US, DEFAULT_POLL_INTERVAL_SECONDS, DEFAULT_TERMINATION_GRACE_SECONDS, AttemptProcessControl
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
-from product.backend.infra.runtime.process_tree import release_process_tree
+from product.backend.infra.runtime.process.control import DEFAULT_LEASE_DURATION_US, DEFAULT_POLL_INTERVAL_SECONDS, DEFAULT_TERMINATION_GRACE_SECONDS, AttemptProcessControl
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
+from product.backend.infra.runtime.process.tree import release_process_tree
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.protocols import RECORDING_RESULT_MAX_BYTES, RecordingRunnerRequest, RecordingRunnerResult, canonical_recording_json_bytes, parse_recording_result, required_recording_secret_names
 from product.backend.workflows.recording.submission import RecordingSubmission, RecordingCompletionResult
@@ -196,7 +196,7 @@ class RecordingJobHandler:
             try:
                 process = spawn_python_module(
                     source_environment,
-                    "product.backend.infra.runtime.recording_process",
+                    "product.backend.infra.recording.process",
                     role=ProcessEnvironmentRole.RECORDING,
                     secret_names=secret_names,
                     extra_environment={

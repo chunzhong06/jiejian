@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from importlib.resources import as_file, files
@@ -33,8 +34,31 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.paths import RuntimePaths
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-_CURRENT_MIGRATION_REVISION = "0001_initial"
-_INCOMPATIBLE_DATABASE_MESSAGE = "数据库格式与当前版本不兼容，请备份后重新初始化 var 目录"
+_CURRENT_MIGRATION_REVISION = "0001_web_v1"
+_INCOMPATIBLE_DATABASE_MESSAGE = (
+    "旧开发数据库或当前数据库结构与 Web V1 基线不兼容，请备份后重新初始化 var"
+)
+_EXPECTED_TRIGGER_SQL = {
+    "projects_governed_binding_insert": (
+        "CREATE TRIGGER projects_governed_binding_insert "
+        "BEFORE INSERT ON projects BEGIN "
+        "SELECT RAISE(ABORT, 'governed contract binding must be paired') "
+        "WHERE (NEW.governed_contract_id IS NULL) != "
+        "(NEW.governed_contract_version IS NULL) "
+        "OR (NEW.governed_contract_version IS NOT NULL "
+        "AND NEW.governed_contract_version < 1); END"
+    ),
+    "projects_governed_binding_update": (
+        "CREATE TRIGGER projects_governed_binding_update "
+        "BEFORE UPDATE OF governed_contract_id, governed_contract_version "
+        "ON projects BEGIN "
+        "SELECT RAISE(ABORT, 'governed contract binding must be paired') "
+        "WHERE (NEW.governed_contract_id IS NULL) != "
+        "(NEW.governed_contract_version IS NULL) "
+        "OR (NEW.governed_contract_version IS NOT NULL "
+        "AND NEW.governed_contract_version < 1); END"
+    ),
+}
 
 
 def default_database_path(var_dir: Path) -> Path:
@@ -126,6 +150,7 @@ def upgrade_database(database_path: Path) -> None:
                 f"sqlite+pysqlite:///{path.as_posix()}",
             )
             command.upgrade(config, "head")
+        _check_database_compatibility(path)
     except JiejianError:
         raise
     except Exception:
@@ -135,8 +160,10 @@ def upgrade_database(database_path: Path) -> None:
         ) from None
 
 
-def _check_database_compatibility(path: Path) -> None:
-    """在 Alembic 写入前只读拒绝开发期或未知数据库。"""
+def _check_database_compatibility(
+    path: Path,
+) -> None:
+    """只读核验唯一 Web V1 基线；旧开发库或结构漂移在写入前失败。"""
 
     if not path.exists():
         return
@@ -161,16 +188,29 @@ def _check_database_compatibility(path: Path) -> None:
                 row[0]
                 for row in connection.execute("SELECT version_num FROM alembic_version")
             )
-            if revisions != (_CURRENT_MIGRATION_REVISION,):
+            if len(revisions) != 1 or revisions[0] != _CURRENT_MIGRATION_REVISION:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
             from product.backend.infra.storage import Base
 
-            expected_tables = set(Base.metadata.tables) | {"alembic_version"}
+            metadata_tables = dict(Base.metadata.tables)
+            expected_tables = set(metadata_tables) | {"alembic_version"}
             if tables != expected_tables:
+                raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
+            triggers = {
+                str(row[0]): _normalize_sql(str(row[1]))
+                for row in connection.execute(
+                    "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'"
+                )
+            }
+            expected_triggers = {
+                name: _normalize_sql(statement)
+                for name, statement in _EXPECTED_TRIGGER_SQL.items()
+            }
+            if triggers != expected_triggers:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
             expected_columns = {
                 table_name: {column.name for column in table.columns}
-                for table_name, table in Base.metadata.tables.items()
+                for table_name, table in metadata_tables.items()
             }
             expected_columns["alembic_version"] = {"version_num"}
             for table_name, columns in expected_columns.items():
@@ -184,9 +224,9 @@ def _check_database_compatibility(path: Path) -> None:
                         ErrorCode.STORAGE_MIGRATION,
                         _INCOMPATIBLE_DATABASE_MESSAGE,
                     )
-                if table_name != "alembic_version" and not _has_expected_unique_cardinality(
+                if table_name != "alembic_version" and not _has_expected_indexes(
                     connection,
-                    Base.metadata.tables[table_name],
+                    metadata_tables[table_name],
                 ):
                     raise JiejianError(
                         ErrorCode.STORAGE_MIGRATION,
@@ -208,34 +248,47 @@ def _quote_sqlite_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
-def _has_expected_unique_cardinality(
+def _normalize_sql(statement: str) -> str:
+    """折叠 SQLite 保存 SQL 的无意义空白，保留结构比较语义。"""
+
+    return " ".join(statement.split())
+
+
+def _has_expected_indexes(
     connection: sqlite3.Connection,
     table: Table,
 ) -> bool:
-    """核对会改变业务关系基数的唯一列组合与部分唯一语义。"""
+    """核对全部显式索引及唯一关系基数，不接受额外索引。"""
 
-    expected = {
-        (tuple(column.name for column in constraint.columns), False)
+    expected = Counter(
+        (tuple(column.name for column in constraint.columns), True, False)
         for constraint in table.constraints
         if isinstance(constraint, UniqueConstraint)
-    }
+    )
     expected.update(
         (
             tuple(column.name for column in index.columns),
+            bool(index.unique),
             index.dialect_options["sqlite"].get("where") is not None,
         )
         for index in table.indexes
-        if index.unique
     )
-    quoted_table_name = _quote_sqlite_identifier(table.name)
-    actual: set[tuple[tuple[str, ...], bool]] = set()
+    return _sqlite_indexes(connection, table.name) == expected
+
+
+def _sqlite_indexes(
+    connection: sqlite3.Connection,
+    table_name: str,
+) -> Counter[tuple[tuple[str, ...], bool, bool]]:
+    quoted_table_name = _quote_sqlite_identifier(table_name)
+    actual: Counter[tuple[tuple[str, ...], bool, bool]] = Counter()
     for index_row in connection.execute(f"PRAGMA index_list({quoted_table_name})"):
-        if not index_row[2] or index_row[3] == "pk":
+        if index_row[3] == "pk":
             continue
         quoted_index_name = _quote_sqlite_identifier(index_row[1])
         columns = tuple(
             row[2]
             for row in connection.execute(f"PRAGMA index_info({quoted_index_name})")
         )
-        actual.add((columns, bool(index_row[4])))
-    return actual == expected
+        actual[(columns, bool(index_row[2]), bool(index_row[4]))] += 1
+    return actual

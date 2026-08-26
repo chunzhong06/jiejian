@@ -1,43 +1,52 @@
-/* 历史变化：只读取已验证运行中的稳定 Finding/Occurrence，不推断缺失点。 */
+/* 历史变化：直接展示后端 HistoryView，不按缺失记录推断已修复。 */
 
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Card, Collapse, Select, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import { resultsApi, type FindingDto } from '../../api/results'
-import type { RunDto } from '../../api/runs'
-import { formatTimestamp, occurrenceStatusLabel, severityLabel } from '../../app/presentation'
+import { resultsApi, type HistoryViewDto } from '../../api/results'
+import { formatTimestamp, severityLabel } from '../../app/presentation'
 import './checks.css'
 
-type HistoryFindingEvent = FindingDto & { run_id: string; run_created_at_us?: string | number }
-
-export function CheckHistoryPage({ runs, onError }: { runs: RunDto[]; onError: (error: ApiError) => void }) {
-  const [events, setEvents] = useState<HistoryFindingEvent[]>([])
+export function CheckHistoryPage({ projectId, onError }: { projectId?: string; onError: (error: ApiError) => void }) {
+  const [history, setHistory] = useState<HistoryViewDto | null>(null)
   const [loading, setLoading] = useState(false)
-  const [loaded, setLoaded] = useState(false)
   const [status, setStatus] = useState<string>()
   const [findingId, setFindingId] = useState<string>()
-  const readableRuns = useMemo(() => runs.filter((run) => ['COMPLETED', 'SAFETY_STOPPED'].includes(String(run.lifecycle)) && String(run.result_integrity) === 'VERIFIED').sort((left, right) => Number(left.created_at_us ?? left.created_at ?? 0) - Number(right.created_at_us ?? right.created_at ?? 0)), [runs])
+
   useEffect(() => {
-    if (readableRuns.length < 2) { setEvents([]); setLoaded(true); return }
+    setHistory(null)
+    if (!projectId) return
     let active = true
-    setLoading(true); setLoaded(false); setEvents([])
-    void (async () => {
-      const collected: HistoryFindingEvent[] = []
-      for (const run of readableRuns) {
-        const result = await resultsApi.findings(String(run.run_id))
-        if (!active) return
-        for (const item of result) collected.push({ ...item, run_id: String(run.run_id), run_created_at_us: run.created_at_us ?? run.created_at })
-      }
-      if (active) { setEvents(collected); setLoaded(true); setLoading(false) }
-    })().catch((error) => { if (active) { setLoaded(false); setLoading(false); onError(error as ApiError) } })
+    setLoading(true)
+    void resultsApi.history(projectId).then((value) => {
+      if (active) setHistory(value)
+    }).catch((error) => {
+      if (active) onError(error as ApiError)
+    }).finally(() => {
+      if (active) setLoading(false)
+    })
     return () => { active = false }
-  }, [readableRuns.map((run) => run.run_id).join('|')])
-  const identities = [...new Set(events.map((item) => String(item.finding?.finding_id ?? item.finding?.identity?.finding_id ?? '')))].filter(Boolean)
-  const filtered = events.filter((item) => (!status || String(item.occurrence?.status) === status) && (!findingId || String(item.finding?.finding_id) === findingId))
-  const grouped: Array<[string, HistoryFindingEvent[]]> = [...filtered.reduce<Map<string, HistoryFindingEvent[]>>((map, item) => { const key = String(item.finding?.finding_id ?? 'unknown'); const current = map.get(key) ?? []; current.push(item); map.set(key, current); return map }, new Map<string, HistoryFindingEvent[]>()).entries()]
+  }, [projectId])
+
+  const changes = useMemo(() => (history?.comparisons ?? []).flatMap((comparison) => comparison.changes.map((change) => ({ ...change, run_id: comparison.run_id, previous_run_id: comparison.previous_run_id, checked_at_us: comparison.checked_at_us }))), [history])
+  const statuses = [...new Map(changes.map((change) => [change.status, change.status_label])).entries()]
+  const findingIds = [...new Set(changes.map((change) => change.finding_id))]
+  const filtered = changes.filter((change) => (!status || change.status === status) && (!findingId || change.finding_id === findingId))
+  const grouped: Array<[string, typeof filtered]> = [...filtered.reduce<Map<string, typeof filtered>>((map, item) => { const current = map.get(item.finding_id) ?? []; current.push(item); map.set(item.finding_id, current); return map }, new Map<string, typeof filtered>()).entries()]
+
   return <Card title="历史变化">
-    {readableRuns.length < 2 && <Typography.Paragraph type="secondary">还没有两次已完成且结果完整的检查可供比较。</Typography.Paragraph>}
-    {readableRuns.length >= 2 && loading && <Typography.Paragraph type="secondary">正在按检查时间读取真实问题变化。</Typography.Paragraph>}
-    {readableRuns.length >= 2 && loaded && <Space direction="vertical" className="full-width"><Space wrap><Select allowClear placeholder="按变化状态筛选" value={status} onChange={setStatus} options={['APPEARED', 'PRESENT', 'DISAPPEARED', 'REAPPEARED', 'CHANGED'].map((value) => ({ value, label: occurrenceStatusLabel(value) }))} /><Select allowClear placeholder="按问题筛选" value={findingId} onChange={setFindingId} options={identities.map((value, index) => ({ value, label: `问题 ${index + 1}` }))} /></Space>{grouped.length === 0 && <Alert type="info" showIcon message="没有符合筛选条件的真实变化记录。" />}{grouped.map(([key, items]) => <Card size="small" key={key} title={items[0].finding?.identity?.permission_intent ?? items[0].finding?.identity?.problem_category ?? '权限问题'}><Typography.Paragraph type="secondary">{[items[0].finding?.identity?.subject_class, items[0].finding?.identity?.action, items[0].finding?.identity?.resource_class, items[0].finding?.identity?.resource_relation].filter(Boolean).join(' · ') || '身份与资源摘要未提供'}</Typography.Paragraph><ol className="history-timeline">{items.map((item) => <li key={`${item.run_id}-${item.occurrence?.occurrence_id ?? item.occurrence?.status}`}><div className="history-marker" aria-hidden="true" /><div className="history-event"><Typography.Text type="secondary">{formatTimestamp(item.run_created_at_us)}</Typography.Text><Space wrap><Tag>{occurrenceStatusLabel(item.occurrence?.status)}</Tag><Tag>{severityLabel(item.occurrence?.severity)}</Tag></Space><Collapse ghost items={[{ key: 'history-details', label: '高级：检查标识', children: <Typography.Text code>{String(item.run_id)}</Typography.Text> }]} /></div></li>)}</ol></Card>)}</Space>}
+    {!projectId && <Typography.Paragraph type="secondary">先选择应用后才能查看历史变化。</Typography.Paragraph>}
+    {projectId && loading && <Typography.Paragraph type="secondary">正在读取后端整理的历史变化。</Typography.Paragraph>}
+    {projectId && !loading && <Space direction="vertical" className="full-width">
+      <Space wrap>
+        <Select allowClear placeholder="按变化状态筛选" value={status} onChange={setStatus} options={statuses.map(([value, label]) => ({ value, label }))} />
+        <Select allowClear placeholder="按问题筛选" value={findingId} onChange={setFindingId} options={findingIds.map((value, index) => ({ value, label: `问题 ${index + 1}` }))} />
+      </Space>
+      {grouped.length === 0 && <Alert type="info" showIcon message="还没有可比较的历史变化。" />}
+      {grouped.map(([key, items]) => <Card size="small" key={key} title={items[0].title}>
+        <Typography.Paragraph type="secondary">{items[0].subject_group} · {items[0].action} · {items[0].resource} · {items[0].relation}</Typography.Paragraph>
+        <ol className="history-timeline">{items.map((item) => <li key={`${item.run_id}-${item.finding_id}-${item.status}`}><div className="history-marker" aria-hidden="true" /><div className="history-event"><Typography.Text type="secondary">{formatTimestamp(item.checked_at_us)}</Typography.Text><Space wrap><Tag>{item.status_label}</Tag><Tag>{severityLabel(item.severity)}</Tag></Space><Typography.Paragraph>{item.explanation}</Typography.Paragraph><Collapse ghost items={[{ key: `history-details-${item.run_id}`, label: '高级：检查标识', children: <Typography.Text code>运行标识：{item.run_id}；前次运行：{item.previous_run_id ?? '无'}；Occurrence：{item.occurrence_status ?? '未提供'}</Typography.Text> }]} /></div></li>)}</ol>
+      </Card>)}
+    </Space>}
   </Card>
 }

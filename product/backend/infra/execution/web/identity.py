@@ -34,6 +34,7 @@ from product.protocols.web.identity import (
     LoginWorkflowIdentityBinding,
     OAuth2ClientCredentialsIdentityBinding,
     OAuth2RefreshTokenIdentityBinding,
+    PreparedCookieSessionIdentityBinding,
     StaticHeadersIdentityBinding,
 )
 
@@ -62,7 +63,10 @@ class HttpIdentityRuntime:
         self._resolve_secret = resolve_secret
         self.business_origin = _normalize_origin(business_origin)
         self.client = httpx.Client(follow_redirects=False, trust_env=False)
-        self._bootstrapped = binding.kind in {HttpIdentityKind.BEARER, HttpIdentityKind.STATIC_HEADERS}
+        self._bootstrapped = binding.kind in {
+            HttpIdentityKind.BEARER,
+            HttpIdentityKind.STATIC_HEADERS,
+        }
         self._token: IdentityTokenState | None = None
         self._refresh_count = 0
         self._csrf_values: dict[str, str] = {}
@@ -122,6 +126,16 @@ class HttpIdentityRuntime:
         """运行已由上层冻结的 Bootstrap；任一步失败都终止本身份。"""
 
         if isinstance(self.binding, (BearerIdentityBinding, StaticHeadersIdentityBinding)):
+            self._bootstrapped = True
+            return
+        if isinstance(self.binding, PreparedCookieSessionIdentityBinding):
+            for cookie in self.binding.cookies:
+                self.client.cookies.set(
+                    cookie.name,
+                    self._secret(cookie.value_ref),
+                    domain=cookie.domain,
+                    path=cookie.path,
+                )
             self._bootstrapped = True
             return
         if isinstance(self.binding, (CookieSessionIdentityBinding, LoginWorkflowIdentityBinding)):

@@ -35,10 +35,10 @@ from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RunnerResultType
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
-from product.backend.infra.runtime.process_environment import ProcessEnvironmentRole, spawn_python_module
-from product.backend.infra.runtime.process_tree import release_process_tree, terminate_process_tree
+from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
+from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.worker_lifetime import write_worker_tree_identity, worker_tree_name
+from product.backend.infra.runtime.worker.lifetime import write_worker_tree_identity, worker_tree_name
 from product.backend.infra.artifacts.run_packages import StagedAttempt, TrustedResultReceipt, attempt_paths_for, final_run_dir, validate_published_run, _parse_runner_result
 
 WORKER_LOG_MAX_BYTES = 1_048_576
@@ -105,7 +105,7 @@ class WorkerDispatcher:
         try:
             return spawn_python_module(
                 source_environment,
-                "product.backend.infra.runtime.worker_process",
+                "product.backend.infra.runtime.worker.process",
                 *arguments,
                 role=ProcessEnvironmentRole.WORKER,
                 secret_names=secret_names,

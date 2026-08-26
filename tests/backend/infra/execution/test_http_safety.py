@@ -1,5 +1,8 @@
+# 验证执行基础设施中的Web 目标安全边界。
+
 from __future__ import annotations
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -88,6 +91,18 @@ def test_guard_rejects_userinfo_port_and_cross_origin_redirect() -> None:
     assert captured.value.code == ErrorCode.SCOPE_REDIRECT.value
 
 
+def test_guard_rejects_the_runtime_reserved_origin() -> None:
+    origin = "http://127.0.0.1:8080"
+    guard = WebTargetGuard(
+        WebTargetDefinition(scope=make_scope(origin), reset_path="/reset"),
+        reserved_origins=(origin,),
+    )
+
+    with pytest.raises(JiejianError) as captured:
+        guard.authorize_path("/health")
+    assert captured.value.code == ErrorCode.SELF_TARGET_FORBIDDEN.value
+
+
 def test_executor_enforces_request_and_response_budgets(sample_server_factory) -> None:
     running = sample_server_factory()
     executor = HttpExecutionAdapter(
@@ -107,5 +122,59 @@ def test_executor_enforces_request_and_response_budgets(sample_server_factory) -
         with pytest.raises(JiejianError) as captured:
             executor.request("GET", "/health", case_id="budget-case")
         assert captured.value.code == ErrorCode.EXEC_BUDGET.value
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize(
+    ("transport_error", "expected_code"),
+    (
+        (httpx.ConnectError("offline"), ErrorCode.TARGET_UNREACHABLE),
+        (httpx.ReadTimeout("slow target"), ErrorCode.EXEC_TIMEOUT),
+        (httpx.ReadError("broken response"), ErrorCode.EXEC_REQUEST),
+    ),
+)
+def test_executor_preserves_transport_failure_kind(
+    monkeypatch: pytest.MonkeyPatch,
+    transport_error: httpx.RequestError,
+    expected_code: ErrorCode,
+) -> None:
+    executor = HttpExecutionAdapter(
+        WebTargetDefinition(
+            scope=make_scope("http://127.0.0.1:8080"),
+            reset_path="/reset",
+        )
+    )
+
+    def fail_stream(*_args, **_kwargs):
+        raise transport_error
+
+    monkeypatch.setattr(executor.client, "stream", fail_stream)
+    try:
+        with pytest.raises(JiejianError) as captured:
+            executor.request("GET", "/health", case_id="transport-case")
+        assert captured.value.code == expected_code.value
+    finally:
+        executor.close()
+
+
+def test_cleanup_rejects_non_success_as_recovery_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executor = HttpExecutionAdapter(
+        WebTargetDefinition(
+            scope=make_scope("http://127.0.0.1:8080"),
+            reset_path="/reset",
+        )
+    )
+    monkeypatch.setattr(
+        executor,
+        "request",
+        lambda *_args, **_kwargs: type("Response", (), {"status_code": 503})(),
+    )
+    try:
+        with pytest.raises(JiejianError) as captured:
+            executor.cleanup("/reset", case_id="recovery-case")
+        assert captured.value.code == ErrorCode.RECOVERY_UNAVAILABLE.value
     finally:
         executor.close()

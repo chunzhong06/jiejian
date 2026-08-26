@@ -27,7 +27,7 @@ import sys
 import tempfile
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,7 +35,7 @@ from product.backend.core.errors import JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.runtime.settings import Settings, load_settings
 from product.backend.infra.runtime.logging import configure_logging
-from product.backend.infra.runtime.environment_identity import (
+from product.backend.infra.runtime.process.identity import (
     SUPPORTED_PYTHON,
     python_environment_report,
 )
@@ -54,7 +54,7 @@ class DoctorCheck(BaseModel):
 class DoctorReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: str = "2"
+    schema_version: Literal["1"] = "1"
     ok: bool
     checks: tuple[DoctorCheck, ...]
 
@@ -446,7 +446,6 @@ def runtime_environment_details() -> dict[str, Any]:
         else "unknown"
     )
     return {
-        "schema_version": "2",
         "runtime_mode": runtime_mode,
         "runtime_fingerprint": python.get("runtime_fingerprint"),
         "python": python,

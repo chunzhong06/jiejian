@@ -29,7 +29,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import ProjectRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.models import JobSubmissionResult, SubmitJob
 from product.backend.infra.runtime.jobs.queue import JobQueue
-from product.backend.infra.runtime.job_requests import ExecutionRequestStore, PersistedExecutionRequest
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, PersistedExecutionRequest
 
 
 class SubmitExecution(BaseModel):

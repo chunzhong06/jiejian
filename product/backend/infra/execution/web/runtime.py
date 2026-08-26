@@ -31,7 +31,7 @@ from product.backend.core.verification.facts import (
     ExecutionOutcome,
     TargetType,
 )
-from product.backend.core.verification.permission_coverage import PermissionMutationCase
+from product.backend.core.verification.permissions.coverage import PermissionMutationCase
 from product.backend.core.verification.permissions import (
     ActionDefinition,
     SecurityEffectDefinition,
@@ -40,6 +40,8 @@ from product.backend.infra.execution.port import (
     ExecutionSnapshotView,
     TargetBaselineResult,
     TargetCaseSession,
+    TargetCleanupError,
+    TargetCleanupIssue,
     TargetObservationResult,
     TargetRuntime,
     TargetRuntimeContext,
@@ -47,6 +49,7 @@ from product.backend.infra.execution.port import (
 from product.backend.infra.execution.web.adapter import (
     HttpExecutionAdapter,
     HttpResponse,
+    WebTargetGuard,
     extract_response_value,
 )
 from product.backend.infra.execution.web.identity import HttpIdentityRuntime
@@ -61,6 +64,7 @@ from product.protocols import (
     ObserverSpec,
     ObserverType,
     evaluate_observer_outcome,
+    CleanupIssueCode,
 )
 from product.protocols.web.profile import (
     WebExecutionSnapshot,
@@ -191,12 +195,20 @@ class WebTargetRuntime:
             for reference in required_web_secret_refs(snapshot)
             if (value := _secret_value(context.environ, reference, required=True))
         )
+        reserved_origins = (
+            (context.control_origin,) if context.control_origin is not None else ()
+        )
+        self.guard = WebTargetGuard(
+            snapshot.target,
+            reserved_origins=reserved_origins,
+        )
         self.adapter = HttpExecutionAdapter(
             snapshot.target,
             cleanup_reserve=2 * len(snapshot.plan.cases),
             known_secrets=known_secrets,
             cancellation_requested=context.cancellation_requested,
             executor_process_id=os.getpid(),
+            reserved_origins=reserved_origins,
         )
         self._subject_identities = {
             binding.subject_id: self._identity_by_id(binding.identity_id)
@@ -264,6 +276,7 @@ class WebTargetCaseSession:
         self._prepared = False
         self._target_executed = False
         self._cleaned = False
+        self._self_target_blocked = False
 
     def _order_steps(self) -> tuple[Any, ...]:
         pending = {step.id: step for step in self.workflow.steps}
@@ -420,15 +433,42 @@ class WebTargetCaseSession:
             raise RuntimeError("target case session is already prepared")
         if self.context.cancellation_requested():
             raise JiejianError(ErrorCode.EXEC_CANCELLED, "复杂权限执行已取消")
+        try:
+            # 用实际请求共用的 Guard 在任何身份、恢复或目标网络操作前完成第二道自检。
+            self.runtime.guard.authorize_url(
+                self.snapshot.target.scope.base_url
+            )
+        except JiejianError as exc:
+            if exc.code == ErrorCode.SELF_TARGET_FORBIDDEN.value:
+                self._self_target_blocked = True
+            raise
         reset_path = self.snapshot.target.reset_path
         if self.workflow.reset_strategy.kind.value == "RESET_ENDPOINT":
             reset_path = self.workflow.reset_strategy.path
+            try:
+                self.runtime.adapter.cleanup(reset_path, case_id=self.case.case_id)
+            except JiejianError as exc:
+                if exc.code == ErrorCode.SELF_TARGET_FORBIDDEN.value:
+                    # Guard 在任何网络副作用前拒绝，自检场景没有目标状态需要恢复。
+                    self._self_target_blocked = True
+                    raise
+                raise JiejianError(
+                    ErrorCode.PREPARE_RECOVERY_FAILED,
+                    "执行前无法恢复到可比较起始状态",
+                ) from exc
+        elif self.workflow.reset_strategy.kind.value == "UNIQUE_RESOURCE_WORKFLOW":
+            if not any(
+                step.purpose.value == "CLEANUP" for step in self.workflow.steps
+            ):
+                raise JiejianError(
+                    ErrorCode.BASELINE_INVALID,
+                    "唯一资源恢复流程缺少已确认清理步骤",
+                )
         else:
             raise JiejianError(
                 ErrorCode.BASELINE_INVALID,
                 "当前工作流 reset strategy 无可执行恢复器",
             )
-        self.runtime.adapter.cleanup(reset_path, case_id=self.case.case_id)
         required_identity_ids = {
             (
                 self.runtime._subject_identities[self.case.subject_id].identity_id
@@ -503,20 +543,34 @@ class WebTargetCaseSession:
     ) -> TargetObservationResult | None:
         if spec.observer_type is not ObserverType.OWNER_API:
             return None
-        token = _secret_value(
-            self.context.environ,
-            binding.credential_ref or "",
-            required=True,
-        )
-        identity_runtime = HttpIdentityRuntime(
-            BearerIdentityBinding(secret_ref=binding.credential_ref or ""),
-            resolve_secret=lambda reference: _secret_value(
+        token = ""
+        if binding.identity_id is not None:
+            identity = self._identity_definitions[binding.identity_id]
+            identity_runtime = HttpIdentityRuntime(
+                identity.binding,
+                resolve_secret=lambda reference: _secret_value(
+                    self.context.environ,
+                    reference,
+                    required=True,
+                ),
+                business_origin=self.snapshot.target.scope.base_url,
+            )
+            self._bootstrap_identity(binding.identity_id, identity_runtime)
+        else:
+            token = _secret_value(
                 self.context.environ,
-                reference,
+                binding.credential_ref or "",
                 required=True,
-            ),
-            business_origin=self.snapshot.target.scope.base_url,
-        )
+            ) or ""
+            identity_runtime = HttpIdentityRuntime(
+                BearerIdentityBinding(secret_ref=binding.credential_ref or ""),
+                resolve_secret=lambda reference: _secret_value(
+                    self.context.environ,
+                    reference,
+                    required=True,
+                ),
+                business_origin=self.snapshot.target.scope.base_url,
+            )
         try:
             envelope = OwnerApiObserverAdapter(
                 spec=spec,
@@ -524,10 +578,10 @@ class WebTargetCaseSession:
             ).observe(
                 self.runtime.adapter,
                 resource_id=correlation.resource_id,
-                owner_token=token or "",
+                owner_token=token,
                 case_id=correlation.case_id,
                 phase=phase,
-                known_secrets=(token or "",),
+                known_secrets=tuple(value for value in (token,) if value),
                 identity_runtime=identity_runtime,
             )
             return TargetObservationResult(
@@ -635,14 +689,26 @@ class WebTargetCaseSession:
             for step in self._ordered_steps
             if step.id == self.workflow.target_step_id
         )
-        execution, response = self.runtime.adapter.execute_detailed(
-            target.request_template,
-            case_id=self.case.case_id,
-            action_id=self.case.action_id,
-            classifier=target.classifier,
-            slot_values=self._values_for(target),
-            identity_runtime=self._runtime_for(target),
-        )
+        try:
+            execution, response = self.runtime.adapter.execute_detailed(
+                target.request_template,
+                case_id=self.case.case_id,
+                action_id=self.case.action_id,
+                classifier=target.classifier,
+                slot_values=self._values_for(target),
+                identity_runtime=self._runtime_for(target),
+            )
+        except JiejianError as exc:
+            if exc.code not in {
+                ErrorCode.TARGET_UNREACHABLE.value,
+                ErrorCode.EXEC_TIMEOUT.value,
+                ErrorCode.EXEC_REQUEST.value,
+            }:
+                raise
+            raise JiejianError(
+                ErrorCode.TARGET_EXECUTION_FAILED,
+                "TARGET 请求失败",
+            ) from exc
         if execution.outcome is ExecutionOutcome.FAILED:
             raise JiejianError(
                 ErrorCode.TARGET_EXECUTION_FAILED,
@@ -743,12 +809,14 @@ class WebTargetCaseSession:
         if self._cleaned:
             return
         self._cleaned = True
-        cleanup_error: Exception | None = None
+        if self._self_target_blocked:
+            return
+        issues: list[TargetCleanupIssue] = []
         for step in reversed(self._ordered_steps):
             if step.purpose.value != "CLEANUP":
                 continue
             try:
-                self.runtime.adapter.execute_detailed(
+                fact, _ = self.runtime.adapter.execute_detailed(
                     step.request_template,
                     case_id=self.case.case_id,
                     action_id=self.case.action_id,
@@ -757,22 +825,55 @@ class WebTargetCaseSession:
                     identity_runtime=self._runtime_for(step),
                     cleanup_request=True,
                 )
+                if fact.outcome is not ExecutionOutcome.ACCEPTED:
+                    raise JiejianError(
+                        ErrorCode.RECOVERY_UNAVAILABLE,
+                        "已确认恢复请求未被目标接受",
+                    )
             except Exception as exc:
-                cleanup_error = cleanup_error or exc
-        try:
-            self.runtime.adapter.cleanup(
-                self.snapshot.target.reset_path,
-                case_id=self.case.case_id,
-            )
-        except Exception as exc:
-            cleanup_error = cleanup_error or exc
+                issues.append(
+                    TargetCleanupIssue(
+                        CleanupIssueCode.POST_CASE_RECOVERY_FAILED,
+                        _safe_error_code(exc),
+                    )
+                )
+        if self.workflow.reset_strategy.kind.value == "RESET_ENDPOINT":
+            try:
+                self.runtime.adapter.cleanup(
+                    self.workflow.reset_strategy.path,
+                    case_id=self.case.case_id,
+                )
+            except Exception as exc:
+                issues.append(
+                    TargetCleanupIssue(
+                        CleanupIssueCode.POST_CASE_RECOVERY_FAILED,
+                        _safe_error_code(exc),
+                    )
+                )
         for identity_runtime in self._identities.values():
             try:
                 identity_runtime.close()
             except Exception as exc:
-                cleanup_error = cleanup_error or exc
-        if cleanup_error is not None:
-            raise JiejianError(
-                ErrorCode.CLEANUP_FAILED,
-                "资源清理失败",
-            ) from cleanup_error
+                issues.append(
+                    TargetCleanupIssue(
+                        CleanupIssueCode.IDENTITY_CLOSE_FAILED,
+                        _safe_error_code(exc),
+                    )
+                )
+        if issues:
+            # 同类问题只保留首个安全原因，避免重复身份或步骤放大 wire。
+            unique: dict[CleanupIssueCode, TargetCleanupIssue] = {}
+            for item in issues:
+                unique.setdefault(item.code, item)
+            raise TargetCleanupError(tuple(unique.values()))
+
+
+def _safe_error_code(exc: Exception) -> str | None:
+    """仅提取稳定 JiejianError code，不把异常消息带入结果。"""
+
+    current: BaseException | None = exc
+    while current is not None:
+        if isinstance(current, JiejianError):
+            return current.code
+        current = current.__cause__
+    return None

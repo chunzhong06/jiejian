@@ -5,10 +5,10 @@
 #   Worker 与隔离 Recording Runner 之间的稳定版本化 Wire DTO 边界
 #
 # 职责
-#   校验范围和预算｜约束事件与清理结果｜编码严格 JSON 请求和结果
+#   校验 action/session/范围和预算｜约束事件与清理结果｜编码严格 JSON 请求和结果
 #
 # 边界
-#   不执行浏览器、不保存原始 secret；生命周期、清理结果与录制产物分别表达。
+#   不执行浏览器、不保存原始 secret；认证只允许非秘密元数据与 env 引用。
 #
 # 调用链
 #   Recording job handler ↔ Recording JSON files ↔ recording_process
@@ -33,7 +33,11 @@ from pydantic import (
     model_validator,
 )
 
-from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN
+from product.backend.core.identifiers import (
+    PROJECT_ID_PATTERN,
+    RECORDING_ID_PATTERN,
+    TEST_IDENTITY_ID_PATTERN,
+)
 from product.backend.core.recording import RecordingState, RecordingStateEvent
 from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import ErrorCode, JiejianError
@@ -103,6 +107,11 @@ class RecordingEventKind(StrEnum):
     UI_SUBMIT = "UI_SUBMIT"
 
 
+class RecordingAuthMethod(StrEnum):
+    COOKIE_SESSION = "COOKIE_SESSION"
+    BEARER = "BEARER"
+
+
 class RecordingBudget(RecordingProtocolModel):
     max_duration_us: int = Field(ge=1, le=3_600_000_000)
     max_events: int = Field(default=2_000, ge=1, le=RECORDING_EVENT_MAX_COUNT)
@@ -121,36 +130,68 @@ class RecordingBudget(RecordingProtocolModel):
     )
 
 
+class RecordingCookieRef(RecordingProtocolModel):
+    name: str = Field(min_length=1, max_length=256)
+    domain: str = Field(min_length=1, max_length=253)
+    path: str = Field(min_length=1, max_length=2_048)
+    secure: bool
+    http_only: bool
+    same_site: Literal["STRICT", "LAX", "NONE"]
+    expires_at_us: int | None = Field(default=None, ge=0)
+    value_ref: str = Field(pattern=r"^env:[A-Z][A-Z0-9_]{0,127}$")
+
+    @model_validator(mode="after")
+    def validate_cookie_metadata(self) -> RecordingCookieRef:
+        if self.name != self.name.strip() or any(ord(char) < 33 for char in self.name):
+            raise ValueError("recording cookie name must be trimmed and printable")
+        if not self.path.startswith("/"):
+            raise ValueError("recording cookie path must be absolute")
+        return self
+
+
 class RecordingSessionRef(RecordingProtocolModel):
-    identity_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     session_ref: str = Field(pattern=_SESSION_REF)
-    secret_refs: tuple[str, ...] = Field(max_length=32)
+    auth_method: RecordingAuthMethod
+    cookies: tuple[RecordingCookieRef, ...] = Field(default=(), max_length=32)
+    bearer_ref: str | None = Field(
+        default=None,
+        pattern=r"^env:[A-Z][A-Z0-9_]{0,127}$",
+    )
     expires_at_us: int = Field(ge=0)
 
     @model_validator(mode="after")
-    def validate_secret_refs(self) -> RecordingSessionRef:
-        if len(set(self.secret_refs)) != len(self.secret_refs):
+    def validate_auth_boundary(self) -> RecordingSessionRef:
+        refs = tuple(cookie.value_ref for cookie in self.cookies)
+        if self.bearer_ref is not None:
+            refs += (self.bearer_ref,)
+        if len(set(refs)) != len(refs):
             raise ValueError("recording secret references must be unique")
-        if any(re.fullmatch(r"env:[A-Z][A-Z0-9_]{0,127}", item) is None for item in self.secret_refs):
-            raise ValueError("recording secret reference is invalid")
+        if self.auth_method is RecordingAuthMethod.COOKIE_SESSION:
+            valid = bool(self.cookies) and self.bearer_ref is None
+        else:
+            valid = not self.cookies and self.bearer_ref is not None
+        if not valid:
+            raise ValueError("recording auth metadata is inconsistent")
         return self
 
 
 # Worker 交给 Recording Runner 的冻结目标、身份引用、范围与预算。
 class RecordingRunnerRequest(RecordingProtocolModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    action_candidate_id: str = Field(pattern=r"^action_[0-9a-f]{32}$")
     created_at_us: int = Field(ge=0)
     target_scope: WebTargetScope
-    sessions: tuple[RecordingSessionRef, ...] = Field(min_length=1, max_length=32)
+    sessions: tuple[RecordingSessionRef, ...] = Field(min_length=1, max_length=1)
     budget: RecordingBudget
     headless: bool = True
     trace_enabled: Literal[False] = False
 
     @model_validator(mode="after")
     def validate_request_boundary(self) -> RecordingRunnerRequest:
-        identity_ids = {session.identity_id for session in self.sessions}
+        identity_ids = {session.test_identity_id for session in self.sessions}
         session_refs = {session.session_ref for session in self.sessions}
         if len(identity_ids) != len(self.sessions):
             raise ValueError("recording identity IDs must be unique")
@@ -171,7 +212,10 @@ def required_recording_secret_names(request: RecordingRunnerRequest) -> tuple[st
         dict.fromkeys(
             reference.removeprefix("env:")
             for session in request.sessions
-            for reference in session.secret_refs
+            for reference in (
+                *(cookie.value_ref for cookie in session.cookies),
+                *((session.bearer_ref,) if session.bearer_ref is not None else ()),
+            )
         )
     )
 
@@ -195,7 +239,7 @@ class RecordingHeader(RecordingProtocolModel):
 
 
 class RecordingEvent(RecordingProtocolModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     sequence: int = Field(ge=1, le=RECORDING_EVENT_MAX_COUNT)
     occurred_at_us: int = Field(ge=0)
     kind: RecordingEventKind
@@ -274,7 +318,7 @@ class RecordingRunnerError(RecordingProtocolModel):
 
 # Recording Runner 的完成、取消、安全停止或失败结果；清理状态独立表达。
 class RecordingRunnerResult(RecordingProtocolModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     finished_at_us: int = Field(ge=0)
@@ -444,7 +488,7 @@ def _parse_recording_json(
             object_pairs_hook=_unique_object,
             parse_constant=_reject_non_finite,
         )
-        expected_version = "2"
+        expected_version = "1"
         if not isinstance(parsed, dict) or parsed.get("schema_version") != expected_version:
             raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制协议版本不受支持")
         _reject_known_secret_material(parsed, known_secrets)
@@ -506,8 +550,9 @@ def _reject_known_secret_material(value: Any, known_secrets: Sequence[str]) -> N
 def _reject_inline_secret_material(value: Any) -> None:
     if isinstance(value, Mapping):
         for key, item in value.items():
-            # secret_refs 只保存已受模型约束的 env:NAME 引用，不是持久秘密值。
-            if str(key) != "secret_refs" and _SENSITIVE_KEY.search(str(key)):
+            # 这些字段只保存经专用模型约束的认证元数据或 env:NAME 引用，不含正文。
+            safe_auth_metadata = {"cookies", "bearer_ref", "value_ref", "secret_refs"}
+            if str(key) not in safe_auth_metadata and _SENSITIVE_KEY.search(str(key)):
                 raise ValueError("recording request contains persistent secret material")
             _reject_inline_secret_material(item)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):

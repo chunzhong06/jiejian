@@ -1,16 +1,13 @@
+# 验证后端 API中的权限契约工作台接口。
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
-from product.backend.api import create_app
-from product.backend.infra.llm.adapters.base import LLMHttpResponse
-from product.backend.workflows.contracts.candidate_generation import ContractCandidateGenerator
-from product.backend.workflows.contracts.workbench import ContractWorkbench
-from product.backend.infra.storage import StorageUnitOfWork
+from tests.fixtures.control_plane import TestClient, create_app
 
 pytestmark = pytest.mark.database
 
@@ -22,25 +19,6 @@ def _contract_snapshot(contract_id: str, version: int = 1) -> dict:
     snapshot["contract_id"] = contract_id
     snapshot["version"] = version
     return snapshot
-
-
-def _output(requirement_id: str) -> str:
-    return json.dumps(
-        {
-            "schema_version": "1",
-            "candidates": [
-                {
-                    "requirement_ids": [requirement_id],
-                    "suggestion": {
-                        "id": "llm-rule",
-                        "kind": "FOREIGN_READ",
-                        "required_observations": ["resource_state"],
-                        "severity": "high",
-                    },
-                }
-            ],
-        }
-    )
 
 
 def _register(client: TestClient, path: Path | None = None) -> str:
@@ -130,7 +108,7 @@ def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> 
         snapshot = client.get(f"/api/projects/{project_id}/contract-governance")
         assert snapshot.status_code == 200
         assert snapshot.json()["data"]["project"]["governed_contract_id"] == active["contract_id"]
-        assert snapshot.json()["data"]["llm_available"] is False
+        assert "llm_available" not in snapshot.json()["data"]
 
         revision = client.post(
             f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/revisions",
@@ -150,166 +128,12 @@ def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> 
             f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/versions/{active['version']}/drift"
         )
         assert drift.status_code == 200
-def test_contract_workbench_api_llm_offline_and_injected_provider(tmp_path: Path) -> None:
-    app = create_app(tmp_path / "var", start_worker=False)
-    with TestClient(app) as client:
-        project_id = _register(client)
-        requirement = client.post(
-            f"/api/projects/{project_id}/contract-governance/requirements",
-            json={
-                "schema_version": "1",
-                "text": "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high",
-                "security_tags": [],
-                "actor": "analyst",
-            },
-        ).json()["data"]
-        body = {"schema_version": "1", "requirement_ids": [requirement["requirement_id"]], "actor": "analyst"}
-        unavailable = client.post(
+
+        removed = client.post(
             f"/api/projects/{project_id}/contract-governance/candidates/llm",
-            json=body,
+            json={"schema_version": "1", "requirement_ids": [requirement["requirement_id"]], "actor": "analyst"},
         )
-        assert unavailable.status_code == 503
-        assert unavailable.json()["error"]["code"] == "LLM_PROVIDER_UNAVAILABLE"
-
-        context = app.state.context
-        context.llm_candidates = ContractCandidateGenerator(
-            context.uow_factory,
-            provider=lambda _: _output(requirement["requirement_id"]),
-            provider_id="test-provider",
-            model_id="test-model",
-        )
-        context.contract_workbench = ContractWorkbench(
-            context.uow_factory,
-            context.projects,
-            context.contracts,
-            context.contract_analysis,
-            context.llm_candidates,
-        )
-        generated = client.post(
-            f"/api/projects/{project_id}/contract-governance/candidates/llm",
-            json=body,
-        )
-        assert generated.status_code == 200
-        candidate = generated.json()["data"]["candidates"][0]
-        assert candidate["source"]["source_type"] == "llm"
-        assert candidate["llm_metadata"]["provider_id"] == "test-provider"
-        with context.uow_factory() as work:
-            stored = work.contract_candidates.get(candidate["candidate_id"])
-        assert stored is not None and stored.llm_metadata is not None
-
-
-def test_contract_workbench_api_generates_with_explicit_profile_and_persists_provenance(
-    tmp_path: Path,
-) -> None:
-    class SecretStore:
-        def __init__(self) -> None:
-            self.values: dict[str, str] = {}
-
-        def write(self, secret_ref: str, secret: str) -> None:
-            self.values[secret_ref] = secret
-
-        def read(self, secret_ref: str) -> str | None:
-            return self.values.get(secret_ref)
-
-        def delete(self, secret_ref: str) -> None:
-            self.values.pop(secret_ref, None)
-
-        def configured(self, secret_ref: str | None) -> bool:
-            return secret_ref is not None and secret_ref in self.values
-
-    class Transport:
-        def __init__(self) -> None:
-            self.calls = 0
-            self.requests = []
-            self.requirement_id = ""
-
-        def send(self, request):
-            self.calls += 1
-            self.requests.append(request)
-            return LLMHttpResponse(
-                200,
-                json.dumps({"choices": [{"message": {"content": _output(self.requirement_id)}}]}).encode(),
-            )
-
-    store = SecretStore()
-    transport = Transport()
-    app = create_app(
-        tmp_path / "var",
-        start_worker=False,
-        llm_transport=transport,
-        llm_secret_store=store,
-        clock_us=lambda: 1,
-    )
-    with TestClient(app) as client:
-        profile = client.post(
-            "/api/llm/profiles",
-            json={"schema_version": "1", "profile_name": "candidate-profile", "provider": "openai", "model": "gpt-test", "secret": "value-c"},
-        )
-        assert profile.status_code == 201
-        project_id = _register(client)
-        requirement = client.post(
-            f"/api/projects/{project_id}/contract-governance/requirements",
-            json={"schema_version": "1", "text": "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high", "security_tags": [], "actor": "analyst"},
-        ).json()["data"]
-        transport.requirement_id = requirement["requirement_id"]
-        response = client.post(
-            f"/api/projects/{project_id}/contract-governance/candidates/llm",
-            json={"schema_version": "1", "requirement_ids": [requirement["requirement_id"]], "actor": "analyst", "profile_name": "candidate-profile"},
-        )
-        assert response.status_code == 200, response.text
-        candidate = response.json()["data"]["candidates"][0]
-        assert candidate["llm_metadata"]["provenance_schema_version"] == "2"
-        assert candidate["llm_metadata"]["profile_name"] == "candidate-profile"
-        assert "value-c" not in response.text
-        assert transport.calls == 1
-        assert "value-c" not in transport.requests[0].body.decode()
-
-
-def test_contract_workbench_api_unconfigured_profile_sends_no_request(tmp_path: Path) -> None:
-    class Store:
-        def write(self, secret_ref: str, secret: str) -> None:
-            pass
-
-        def read(self, secret_ref: str) -> str | None:
-            return None
-
-        def delete(self, secret_ref: str) -> None:
-            pass
-
-        def configured(self, secret_ref: str | None) -> bool:
-            return False
-
-    class Transport:
-        calls = 0
-
-        def send(self, request):
-            self.calls += 1
-            raise AssertionError("unconfigured profile must not send")
-
-    transport = Transport()
-    app = create_app(
-        tmp_path / "var",
-        start_worker=False,
-        llm_transport=transport,
-        llm_secret_store=Store(),
-    )
-    with TestClient(app) as client:
-        project_id = _register(client)
-        requirement = client.post(
-            f"/api/projects/{project_id}/contract-governance/requirements",
-            json={"schema_version": "1", "text": "suggestion id=foreign-read kind=FOREIGN_READ observations=resource_state severity=high", "security_tags": [], "actor": "analyst"},
-        ).json()["data"]
-        client.post(
-            "/api/llm/profiles",
-            json={"schema_version": "1", "profile_name": "unconfigured", "provider": "openai", "model": "gpt-test", "secret_ref": "env:MISSING"},
-        )
-        response = client.post(
-            f"/api/projects/{project_id}/contract-governance/candidates/llm",
-            json={"schema_version": "1", "requirement_ids": [requirement["requirement_id"]], "actor": "analyst", "profile_name": "unconfigured"},
-        )
-        assert response.status_code == 503
-        assert response.json()["error"]["code"] == "LLM_SECRET_UNAVAILABLE"
-        assert transport.calls == 0
+        assert removed.status_code == 404
 
 
 def test_contract_workbench_api_rejects_cross_project_requirement(tmp_path: Path) -> None:

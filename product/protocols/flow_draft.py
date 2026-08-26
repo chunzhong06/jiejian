@@ -5,10 +5,10 @@
 #   脱敏 Recording Event 与可执行 Verification Flow 之间的审阅数据边界
 #
 # 职责
-#   表达草稿步骤和变量｜校验审阅命令｜提供规范 JSON 与稳定摘要
+#   表达 action/步骤/变量｜约束 TARGET 与资源确认｜提供规范 JSON 与稳定摘要
 #
 # 边界
-#   推断值保持未确认状态；协议不执行 Flow，也不允许敏感字段进入最终绑定。
+#   推荐保持未确认状态；协议不执行 Flow，也不接受任意资源脚本或敏感值。
 #
 # 调用链
 #   Recording processing / review ↔ FlowDraft → confirmed Verification Flow
@@ -36,6 +36,7 @@ from pydantic import (
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import REDACTED
+from product.protocols.web.workflow import ValueSlotConsumer
 
 FLOW_DRAFT_MAX_BYTES = 4_194_304
 FLOW_DRAFT_COMMAND_MAX_BYTES = 262_144
@@ -109,23 +110,46 @@ class FlowDraftVariable(FlowDraftProtocolModel):
         return self
 
 
+class FlowDraftResourceCandidate(FlowDraftProtocolModel):
+    candidate_id: str = Field(pattern=r"^resource-[0-9a-f]{16}$")
+    consumer: ValueSlotConsumer
+    location: str = Field(min_length=1, max_length=512)
+    label: str = Field(min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def validate_resource_location(self) -> FlowDraftResourceCandidate:
+        if self.consumer not in {
+            ValueSlotConsumer.PATH,
+            ValueSlotConsumer.QUERY,
+            ValueSlotConsumer.JSON_BODY,
+        }:
+            raise ValueError("flow draft resource candidate location is unsupported")
+        if self.consumer is ValueSlotConsumer.PATH:
+            valid = re.fullmatch(r"path\[[0-9]{1,3}\]", self.location) is not None
+        elif self.consumer is ValueSlotConsumer.QUERY:
+            valid = re.fullmatch(r"query\.[A-Za-z0-9_.~-]{1,128}", self.location) is not None
+        else:
+            valid = re.fullmatch(_JSON_PATH, self.location) is not None
+        if not valid:
+            raise ValueError("flow draft resource candidate location is invalid")
+        return self
+
+
 class FlowDraftStep(FlowDraftProtocolModel):
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     name: str = Field(min_length=1, max_length=128)
-    identity_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    alternate_identity_id: str | None = Field(default=None, pattern=PROJECT_ID_PATTERN)
-    resource_id: str | None = Field(default=None, min_length=1, max_length=128)
-    alternate_resource_id: str | None = Field(default=None, min_length=1, max_length=128)
-    bindings_confirmed: bool = False
     method: Literal["GET", "PATCH", "POST", "PUT", "DELETE"] | None = None
     path: str | None = Field(default=None, max_length=8_192)
     json_body: dict[str, Any] = Field(default_factory=dict)
     expected_statuses: tuple[int, ...] = Field(default=(), max_length=32)
     request_id: str | None = Field(default=None, pattern=_REQUEST_ID)
-    action_ids: tuple[str, ...] = Field(default=(), max_length=128)
     source_event_sequences: tuple[int, ...] = Field(min_length=1, max_length=512)
     depends_on_step_ids: tuple[str, ...] = Field(default=(), max_length=128)
     sensitive_fields: tuple[str, ...] = Field(default=(), max_length=256)
+    resource_candidates: tuple[FlowDraftResourceCandidate, ...] = Field(
+        default=(),
+        max_length=128,
+    )
 
     @field_validator("path")
     @classmethod
@@ -149,21 +173,23 @@ class FlowDraftStep(FlowDraftProtocolModel):
 
     @model_validator(mode="after")
     def validate_step_boundary(self) -> FlowDraftStep:
-        if len(set(self.action_ids)) != len(self.action_ids):
-            raise ValueError("flow draft action IDs must be unique")
         if tuple(sorted(set(self.source_event_sequences))) != self.source_event_sequences:
             raise ValueError("flow draft source sequences must be sorted and unique")
         if len(set(self.depends_on_step_ids)) != len(self.depends_on_step_ids):
             raise ValueError("flow draft dependencies must be unique")
         if len(set(self.sensitive_fields)) != len(self.sensitive_fields):
             raise ValueError("flow draft sensitive fields must be unique")
+        if len({item.candidate_id for item in self.resource_candidates}) != len(
+            self.resource_candidates
+        ):
+            raise ValueError("flow draft resource candidates must be unique")
         if self.method is None:
             request_valid = (
                 self.path is None
                 and self.request_id is None
                 and not self.json_body
                 and not self.expected_statuses
-                and not self.bindings_confirmed
+                and not self.resource_candidates
             )
         else:
             request_valid = (
@@ -173,29 +199,28 @@ class FlowDraftStep(FlowDraftProtocolModel):
             )
         if not request_valid:
             raise ValueError("flow draft HTTP step fields are inconsistent")
-        if self.bindings_confirmed and any(
-            value is None
-            for value in (
-                self.alternate_identity_id,
-                self.resource_id,
-                self.alternate_resource_id,
-            )
-        ):
-            raise ValueError("flow draft confirmed bindings must be complete")
         _reject_unredacted_sensitive_values(self.json_body)
         return self
 
 
 # Recording 事件生成的版本化审阅对象；未确认变量和绑定保持显式状态。
 class FlowDraft(FlowDraftProtocolModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["1"] = "1"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    action_candidate_id: str = Field(pattern=r"^action_[0-9a-f]{32}$")
     revision: int = Field(ge=1)
     steps: tuple[FlowDraftStep, ...] = Field(min_length=1, max_length=2_000)
     variables: tuple[FlowDraftVariable, ...] = Field(default=(), max_length=2_000)
-    owner_observer_path: str = "/owner/resources/{resource_id}"
-    reset_path: str = "/reset"
+    recommended_target_step_id: str | None = Field(
+        default=None,
+        pattern=PROJECT_ID_PATTERN,
+    )
+    target_step_id: str | None = Field(default=None, pattern=PROJECT_ID_PATTERN)
+    resource_candidate_id: str | None = Field(
+        default=None,
+        pattern=r"^resource-[0-9a-f]{16}$",
+    )
 
     @model_validator(mode="after")
     def validate_draft_graph(self) -> FlowDraft:
@@ -203,13 +228,10 @@ class FlowDraft(FlowDraftProtocolModel):
         if len(set(step_ids)) != len(step_ids):
             raise ValueError("flow draft step IDs must be unique")
         known = set(step_ids)
-        action_ids = tuple(action for step in self.steps for action in step.action_ids)
         request_ids = tuple(
             step.request_id for step in self.steps if step.request_id is not None
         )
-        if len(set(action_ids)) != len(action_ids) or len(set(request_ids)) != len(
-            request_ids
-        ):
+        if len(set(request_ids)) != len(request_ids):
             raise ValueError("flow draft causal IDs must be unique")
         graph = {step.id: set(step.depends_on_step_ids) for step in self.steps}
         if any(
@@ -231,6 +253,26 @@ class FlowDraft(FlowDraftProtocolModel):
             for consumer in variable.consumer_step_ids
         ):
             raise ValueError("flow draft variable reference is invalid")
+        if self.recommended_target_step_id is not None:
+            recommended = next(
+                (step for step in self.steps if step.id == self.recommended_target_step_id),
+                None,
+            )
+            if recommended is None or recommended.method is None:
+                raise ValueError("flow draft target recommendation is invalid")
+        if self.target_step_id is None:
+            if self.resource_candidate_id is not None:
+                raise ValueError("flow draft resource cannot precede target confirmation")
+        else:
+            target = next((step for step in self.steps if step.id == self.target_step_id), None)
+            if target is None or target.method is None:
+                raise ValueError("flow draft confirmed target is invalid")
+            candidate_ids = {item.candidate_id for item in target.resource_candidates}
+            if (
+                self.resource_candidate_id is not None
+                and self.resource_candidate_id not in candidate_ids
+            ):
+                raise ValueError("flow draft resource candidate does not belong to target")
         _reject_cycles(graph)
         return self
 
@@ -263,11 +305,25 @@ class ConfirmFlowDraftVariable(FlowDraftProtocolModel):
     source_json_path: str = Field(pattern=_JSON_PATH, max_length=512)
 
 
+class ConfirmFlowDraftTarget(FlowDraftProtocolModel):
+    schema_version: Literal["1"] = "1"
+    operation: Literal["CONFIRM_TARGET_STEP"]
+    step_id: str = Field(pattern=PROJECT_ID_PATTERN)
+
+
+class ConfirmFlowDraftResource(FlowDraftProtocolModel):
+    schema_version: Literal["1"] = "1"
+    operation: Literal["CONFIRM_RESOURCE_SLOT"]
+    candidate_id: str = Field(pattern=r"^resource-[0-9a-f]{16}$")
+
+
 FlowDraftReviewCommand: TypeAlias = Annotated[
     DeleteFlowDraftStep
     | MergeFlowDraftSteps
     | RenameFlowDraftStep
-    | ConfirmFlowDraftVariable,
+    | ConfirmFlowDraftVariable
+    | ConfirmFlowDraftTarget
+    | ConfirmFlowDraftResource,
     Field(discriminator="operation"),
 ]
 _COMMAND_ADAPTER = TypeAdapter(FlowDraftReviewCommand)
@@ -276,6 +332,8 @@ _COMMAND_TYPES = (
     MergeFlowDraftSteps,
     RenameFlowDraftStep,
     ConfirmFlowDraftVariable,
+    ConfirmFlowDraftTarget,
+    ConfirmFlowDraftResource,
 )
 
 
@@ -313,7 +371,7 @@ def parse_flow_draft(
     known_secrets: Sequence[str] = (),
 ) -> FlowDraft:
     parsed = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, known_secrets)
-    if parsed.get("schema_version") != "2":
+    if parsed.get("schema_version") != "1":
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 草稿版本不受支持")
     try:
         return FlowDraft.model_validate_json(raw, strict=True)

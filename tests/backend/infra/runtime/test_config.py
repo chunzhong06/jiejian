@@ -1,3 +1,5 @@
+# 验证进程运行时中的运行配置。
+
 from __future__ import annotations
 
 from pathlib import Path

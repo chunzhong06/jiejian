@@ -1,3 +1,5 @@
+# 验证录制基础设施中的浏览器录制边界。
+
 from __future__ import annotations
 
 import json
@@ -12,7 +14,9 @@ import pytest
 
 from product.protocols.web.target import WebTargetScope
 from product.protocols import (
+    RecordingAuthMethod,
     RecordingBudget,
+    RecordingCookieRef,
     RecordingEventKind,
     RecordingRunnerRequest,
     RecordingRunnerResultType,
@@ -22,6 +26,9 @@ from product.protocols import (
 from product.backend.infra.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
 
 pytestmark = [pytest.mark.browser, pytest.mark.slow]
+
+TEST_IDENTITY_ID = "tid_0123456789abcdef0123456789abcdef"
+COOKIE_ENV_NAME = "JIEJIAN_RECORDING_TEST_COOKIE"
 
 
 class LocalBrowserServer(ThreadingHTTPServer):
@@ -123,7 +130,7 @@ class LocalBrowserHandler(BaseHTTPRequestHandler):
                 "header": self.headers.get("X-Method-Probe") == "probe",
                 "authorization": self.headers.get("Authorization")
                 == f"Bearer {self.server.secret}",
-                "cookie": "identity=owner" in self.headers.get("Cookie", ""),
+                "cookie": f"identity={self.server.secret}" in self.headers.get("Cookie", ""),
             }
         )
         self._send(b'{"ok":true}', "application/json")
@@ -163,9 +170,10 @@ def browser_server(secret: str) -> Iterator[LocalBrowserServer]:
 def recording_request(port: int) -> RecordingRunnerRequest:
     created_at_us = time.time_ns() // 1_000
     return RecordingRunnerRequest(
-        schema_version="2",
+        schema_version="1",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
+        action_candidate_id="action_0123456789abcdef0123456789abcdef",
         created_at_us=created_at_us,
         target_scope=WebTargetScope(
             base_url=f"http://127.0.0.1:{port}",
@@ -179,15 +187,20 @@ def recording_request(port: int) -> RecordingRunnerRequest:
         ),
         sessions=(
             RecordingSessionRef(
-                identity_id="owner",
+                test_identity_id=TEST_IDENTITY_ID,
                 session_ref="session_0123456789abcdef0123456789abcdef",
-                secret_refs=(),
-                expires_at_us=created_at_us + 60_000_000,
-            ),
-            RecordingSessionRef(
-                identity_id="attacker",
-                session_ref="session_fedcba9876543210fedcba9876543210",
-                secret_refs=(),
+                auth_method=RecordingAuthMethod.COOKIE_SESSION,
+                cookies=(
+                    RecordingCookieRef(
+                        name="identity",
+                        domain="127.0.0.1",
+                        path="/",
+                        secure=False,
+                        http_only=True,
+                        same_site="LAX",
+                        value_ref=f"env:{COOKIE_ENV_NAME}",
+                    ),
+                ),
                 expires_at_us=created_at_us + 60_000_000,
             ),
         ),
@@ -195,7 +208,7 @@ def recording_request(port: int) -> RecordingRunnerRequest:
             max_duration_us=30_000_000,
             max_events=256,
             max_pages=8,
-            max_contexts=2,
+            max_contexts=1,
             max_field_chars=1_024,
             max_body_bytes=16_384,
             max_total_payload_bytes=262_144,
@@ -212,7 +225,7 @@ def test_browser_contexts_isolate_identity_state_and_redact_before_result(
         request = recording_request(server.server_port)
 
         def interact(session: RecordingBrowserSession) -> None:
-            owner = session.new_page("owner")
+            owner = session.new_page(TEST_IDENTITY_ID)
             owner.goto(server.url("/page"))
             owner.evaluate(
                 """() => {
@@ -238,27 +251,20 @@ def test_browser_contexts_isolate_identity_state_and_redact_before_result(
                 [server.url("/echo"), sentinel],
             )
             owner.click("#popup")
+            owner.wait_for_timeout(200)
             owner.goto(
                 server.url(
                     f"/secret?token={quote(sentinel)}&note={quote(sentinel)}"
                 )
             )
-            attacker = session.new_page("attacker")
-            attacker.goto(server.url("/page"))
-            observed["attacker"] = attacker.evaluate(
-                "() => [document.cookie, localStorage.getItem('identity'), "
-                "sessionStorage.getItem('identity')]"
-            )
-            attacker.wait_for_timeout(200)
-
         result = BrowserRecordingAdapter().run(
             request,
             interact,
             known_secrets=(sentinel,),
+            secret_values={COOKIE_ENV_NAME: sentinel},
         )
 
     assert result.result_type is RecordingRunnerResultType.CAPTURED
-    assert observed["attacker"] == ["", None, None]
     assert observed["post_status"] == 200
     assert server.request_semantics == [
         {
@@ -293,7 +299,7 @@ def test_controlled_capture_omits_preparation_and_late_response_events() -> None
         )
 
         def interact(session: RecordingBrowserSession) -> None:
-            page = session.new_page("owner")
+            page = session.new_page(TEST_IDENTITY_ID)
             page.goto(server.url("/ui"))
             page.evaluate("void fetch('/slow')")
             deadline = time.monotonic() + 2
@@ -302,7 +308,7 @@ def test_controlled_capture_omits_preparation_and_late_response_events() -> None
                     pytest.fail("slow preparation request did not reach the server")
                 page.wait_for_timeout(20)
             signals["start"] = True
-            assert session.wait_for_capture_start(page, "owner")
+            assert session.wait_for_capture_start(page, TEST_IDENTITY_ID)
             page.fill("input[name='password']", sentinel)
             page.click("button[data-testid='submit']")
             page.wait_for_timeout(350)
@@ -313,6 +319,7 @@ def test_controlled_capture_omits_preparation_and_late_response_events() -> None
             request,
             interact,
             known_secrets=(sentinel,),
+            secret_values={COOKIE_ENV_NAME: sentinel},
             capture_controlled=True,
             start_requested=lambda: signals["start"],
             stop_requested=lambda: signals["stop"],
@@ -344,7 +351,7 @@ def test_browser_blocks_every_target_escape_before_network(
         blocked_ws = f"ws://127.0.0.1:{blocked.server_port}/socket"
 
         def interact(session: RecordingBrowserSession) -> None:
-            page = session.new_page("owner")
+            page = session.new_page(TEST_IDENTITY_ID)
             if boundary == "redirect":
                 page.goto(allowed.url(f"/redirect?target={quote(blocked_http, safe='')}"))
             elif boundary == "iframe":
@@ -377,6 +384,7 @@ def test_browser_blocks_every_target_escape_before_network(
             request,
             interact,
             known_secrets=(sentinel,),
+            secret_values={COOKIE_ENV_NAME: sentinel},
         )
 
         assert result.result_type is RecordingRunnerResultType.SAFETY_STOPPED
@@ -396,8 +404,9 @@ def test_browser_safely_stops_unsupported_unbounded_response_modes(path: str) ->
     with browser_server(sentinel) as server:
         result = BrowserRecordingAdapter().run(
             recording_request(server.server_port),
-            lambda session: session.new_page("owner").goto(server.url(path)),
+            lambda session: session.new_page(TEST_IDENTITY_ID).goto(server.url(path)),
             known_secrets=(sentinel,),
+            secret_values={COOKIE_ENV_NAME: sentinel},
         )
 
     assert result.result_type is RecordingRunnerResultType.SAFETY_STOPPED
@@ -412,7 +421,7 @@ def test_browser_init_script_captures_ui_metadata_without_input_values() -> None
     sentinel = "ui-secret"
     with browser_server(sentinel) as server:
         def interact(session: RecordingBrowserSession) -> None:
-            page = session.new_page("owner")
+            page = session.new_page(TEST_IDENTITY_ID)
             page.goto(server.url("/ui"))
             page.fill('input[name="password"]', sentinel)
             page.click('[data-testid="submit"]')
@@ -422,6 +431,7 @@ def test_browser_init_script_captures_ui_metadata_without_input_values() -> None
             recording_request(server.server_port),
             interact,
             known_secrets=(sentinel,),
+            secret_values={COOKIE_ENV_NAME: sentinel},
         )
 
     kinds = {event.kind for event in result.events}

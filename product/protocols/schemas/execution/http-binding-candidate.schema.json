@@ -3,31 +3,24 @@
     "HttpBindingCandidate": {
       "additionalProperties": false,
       "properties": {
+        "candidate_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Candidate Fingerprint",
+          "type": "string"
+        },
         "candidate_id": {
           "pattern": "^httpbind-[0-9a-f]{32}$",
           "title": "Candidate Id",
           "type": "string"
         },
-        "source": {
-          "$ref": "#/$defs/HttpBindingCandidateSource"
-        },
-        "source_priority": {
-          "maximum": 3,
-          "minimum": 0,
-          "title": "Source Priority",
-          "type": "integer"
-        },
-        "source_locator": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Source Locator",
-          "type": "string"
-        },
-        "operation_id": {
-          "maxLength": 256,
-          "minLength": 1,
-          "title": "Operation Id",
-          "type": "string"
+        "header_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Header Fields",
+          "type": "array"
         },
         "method": {
           "enum": [
@@ -39,6 +32,12 @@
             "HEAD"
           ],
           "title": "Method",
+          "type": "string"
+        },
+        "operation_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Operation Id",
           "type": "string"
         },
         "path": {
@@ -56,6 +55,15 @@
           "title": "Path Fields",
           "type": "array"
         },
+        "producer_consumer_links": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpProducerConsumerLink"
+          },
+          "maxItems": 256,
+          "title": "Producer Consumer Links",
+          "type": "array"
+        },
         "query_fields": {
           "default": [],
           "items": {
@@ -63,15 +71,6 @@
           },
           "maxItems": 256,
           "title": "Query Fields",
-          "type": "array"
-        },
-        "header_fields": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 256,
-          "title": "Header Fields",
           "type": "array"
         },
         "request_schema_fingerprint": {
@@ -86,6 +85,12 @@
           ],
           "default": null,
           "title": "Request Schema Fingerprint"
+        },
+        "requires_confirmation": {
+          "const": true,
+          "default": true,
+          "title": "Requires Confirmation",
+          "type": "boolean"
         },
         "response_schemas": {
           "default": [],
@@ -105,25 +110,20 @@
           "title": "Security Scheme Ids",
           "type": "array"
         },
-        "producer_consumer_links": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/HttpProducerConsumerLink"
-          },
-          "maxItems": 256,
-          "title": "Producer Consumer Links",
-          "type": "array"
+        "source": {
+          "$ref": "#/$defs/HttpBindingCandidateSource"
         },
-        "requires_confirmation": {
-          "const": true,
-          "default": true,
-          "title": "Requires Confirmation",
-          "type": "boolean"
-        },
-        "candidate_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Candidate Fingerprint",
+        "source_locator": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Source Locator",
           "type": "string"
+        },
+        "source_priority": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Source Priority",
+          "type": "integer"
         }
       },
       "required": [
@@ -162,14 +162,19 @@
     "HttpProducerConsumerLink": {
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "$ref": "#/$defs/HttpProducerConsumerKind"
-        },
-        "producer_operation_id": {
-          "maxLength": 256,
-          "minLength": 1,
-          "title": "Producer Operation Id",
-          "type": "string"
+        "consumer_field": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Field"
         },
         "consumer_operation_id": {
           "anyOf": [
@@ -185,19 +190,14 @@
           "default": null,
           "title": "Consumer Operation Id"
         },
-        "consumer_field": {
-          "anyOf": [
-            {
-              "maxLength": 256,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Consumer Field"
+        "kind": {
+          "$ref": "#/$defs/HttpProducerConsumerKind"
+        },
+        "producer_operation_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Producer Operation Id",
+          "type": "string"
         },
         "source_expression": {
           "maxLength": 512,
@@ -217,21 +217,10 @@
     "HttpResponseSchemaCandidate": {
       "additionalProperties": false,
       "properties": {
-        "status_code": {
-          "maxLength": 16,
-          "minLength": 3,
-          "title": "Status Code",
-          "type": "string"
-        },
         "media_type": {
           "maxLength": 128,
           "minLength": 1,
           "title": "Media Type",
-          "type": "string"
-        },
-        "schema_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Schema Fingerprint",
           "type": "string"
         },
         "property_paths": {
@@ -242,6 +231,17 @@
           "maxItems": 1024,
           "title": "Property Paths",
           "type": "array"
+        },
+        "schema_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Schema Fingerprint",
+          "type": "string"
+        },
+        "status_code": {
+          "maxLength": 16,
+          "minLength": 3,
+          "title": "Status Code",
+          "type": "string"
         }
       },
       "required": [
@@ -267,6 +267,12 @@
     "input_fingerprint": {
       "pattern": "^[0-9a-f]{64}$",
       "title": "Input Fingerprint",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
       "type": "string"
     }
   },

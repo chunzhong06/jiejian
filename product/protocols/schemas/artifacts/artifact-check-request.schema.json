@@ -3,38 +3,11 @@
     "ScanBudget": {
       "additionalProperties": false,
       "properties": {
-        "max_parallel_files": {
-          "const": 1,
-          "default": 1,
-          "title": "Max Parallel Files",
-          "type": "integer"
-        },
-        "max_files": {
-          "default": 4096,
-          "maximum": 4096,
-          "minimum": 1,
-          "title": "Max Files",
-          "type": "integer"
-        },
-        "max_file_bytes": {
-          "default": 16777216,
-          "maximum": 67108864,
-          "minimum": 1,
-          "title": "Max File Bytes",
-          "type": "integer"
-        },
-        "max_total_bytes": {
-          "default": 536870912,
-          "maximum": 1073741824,
-          "minimum": 1,
-          "title": "Max Total Bytes",
-          "type": "integer"
-        },
-        "max_results": {
-          "default": 4096,
-          "maximum": 4096,
-          "minimum": 1,
-          "title": "Max Results",
+        "max_compressed_layers": {
+          "default": 0,
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Max Compressed Layers",
           "type": "integer"
         },
         "max_duration_us": {
@@ -44,11 +17,38 @@
           "title": "Max Duration Us",
           "type": "integer"
         },
-        "max_compressed_layers": {
-          "default": 0,
-          "maximum": 0,
-          "minimum": 0,
-          "title": "Max Compressed Layers",
+        "max_file_bytes": {
+          "default": 16777216,
+          "maximum": 67108864,
+          "minimum": 1,
+          "title": "Max File Bytes",
+          "type": "integer"
+        },
+        "max_files": {
+          "default": 4096,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Files",
+          "type": "integer"
+        },
+        "max_parallel_files": {
+          "const": 1,
+          "default": 1,
+          "title": "Max Parallel Files",
+          "type": "integer"
+        },
+        "max_results": {
+          "default": 4096,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "default": 536870912,
+          "maximum": 1073741824,
+          "minimum": 1,
+          "title": "Max Total Bytes",
           "type": "integer"
         }
       },
@@ -58,10 +58,24 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "const": "2",
-      "default": "2",
-      "title": "Schema Version",
+    "artifact_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "artifact_root": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Artifact Root",
+      "type": "string"
+    },
+    "budget": {
+      "$ref": "#/$defs/ScanBudget"
+    },
+    "manifest_path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Manifest Path",
       "type": "string"
     },
     "project_id": {
@@ -69,9 +83,10 @@
       "title": "Project Id",
       "type": "string"
     },
-    "artifact_id": {
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-      "title": "Artifact Id",
+    "ruleset_version": {
+      "const": "artifact-local-2026.08.18",
+      "default": "artifact-local-2026.08.18",
+      "title": "Ruleset Version",
       "type": "string"
     },
     "run_id": {
@@ -87,26 +102,11 @@
       "default": null,
       "title": "Run Id"
     },
-    "artifact_root": {
-      "maxLength": 1024,
-      "minLength": 1,
-      "title": "Artifact Root",
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
       "type": "string"
-    },
-    "manifest_path": {
-      "maxLength": 1024,
-      "minLength": 1,
-      "title": "Manifest Path",
-      "type": "string"
-    },
-    "ruleset_version": {
-      "const": "artifact-local-2026.08.18",
-      "default": "artifact-local-2026.08.18",
-      "title": "Ruleset Version",
-      "type": "string"
-    },
-    "budget": {
-      "$ref": "#/$defs/ScanBudget"
     }
   },
   "required": [

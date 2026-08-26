@@ -114,6 +114,12 @@ def _is_reparse_point(path: Path) -> bool:
     return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
 
 
+def is_reparse_point(path: Path) -> bool:
+    """供同一接入安全边界复用的链接、junction 与重解析点判定。"""
+
+    return _is_reparse_point(path)
+
+
 def _invalid_path(message: str = "应用文件夹路径无效") -> JiejianError:
     return JiejianError(ErrorCode.ONBOARDING_INPUT_INVALID, message)
 

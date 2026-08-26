@@ -37,6 +37,8 @@
 
 L5 是独立维度，不是“比 L4 更大”的测试集合，可以与任一自动化等级组合。例如 Banner 修改使用 `scripts + L1 + L5`；完整权限关系图使用 `frontend/permissions + L2 + L5`；跨 Protocol、Workflow、Runner 的状态化能力使用相关模块 `+ L3 + L5`；共享 Verification 语义变化才可能需要 `L3 + L4 + L5`。
 
+有状态 L5 的通用只读 preflight 与实例身份门禁以[验证与提交规范](../docs/01_技术规范/验证与提交规范.md)为唯一完整真源；本页只保留测试专属命令、用户态边界和清理要求。
+
 ### `essential` 的定位
 
 `essential` 覆盖架构边界、核心权限语义、公共协议、数据库迁移、Job 恢复、启动入口、控制面和一个授权黄金闭环，是稳定的跨模块重要回归集合，不等于 L1 最小验证，也不能替代改动相关的定向测试。
@@ -86,6 +88,7 @@ L1～L3 优先把命令末尾替换为直接测试文件或对应模块目录，
 
 ```powershell
 .\scripts\dev.ps1 frontend-test
+.\scripts\dev.ps1 schema
 .\scripts\dev.ps1 prepare -ForcePrepare
 ```
 
@@ -97,6 +100,34 @@ L1～L3 优先把命令末尾替换为直接测试文件或对应模块目录，
 .\scripts\dev.ps1 test tests/e2e
 .\scripts\dev.ps1 test tests/architecture
 ```
+
+真实 Windows Credential Manager 与 headed Chromium 的测试账号闭环依赖当前交互用户的 Windows 凭据会话。Codex 配置为 `[windows] sandbox = "elevated"` 时，测试运行在专用低权限沙箱用户中，而不是从当前交互用户令牌派生；该用户不能直接使用交互用户的 Credential Manager，会由 `CredWriteW` 返回 1312。这个结果属于执行身份不匹配，不是产品失败，也不能通过放宽源码目录 ACL 或私有桌面权限解决。`unelevated` 会减弱隔离，不作为本项目为通过测试而修改的默认设置。沙箱语义参见 [OpenAI Docs：Windows sandbox](https://learn.chatgpt.com/docs/windows/windows-sandbox)。
+
+普通测试继续在沙箱内运行；此项 Windows L5 必须由 Codex 申请单次沙箱外授权，或由用户在真实交互式 PowerShell 中运行：
+
+```powershell
+$env:JIEJIAN_RUN_WINDOWS_L5 = '1'
+.\scripts\dev.ps1 test tests/backend/infra/identity/test_windows_l5.py
+```
+
+该用例必须验证真实 headed Chromium、Sample 登录、Cookie 捕获、`CredWriteW` 写入、Credential Manager 读取、应用重启恢复和精确删除闭环。它使用随机 TestIdentity 引用，并注册失败时也执行的精确凭据清理 finalizer；验收回执必须包含 pytest 结果和最终退出码。若沙箱内出现 1312，只记录环境诊断，不重复测试；转入上述真实用户上下文后再形成 L5 验收证据。
+
+B2 的动作录制 Windows L5 使用相同真实用户边界，但由独立开关只验动作中心录制，不重复上面的身份重启闭环：
+
+```powershell
+$env:JIEJIAN_RUN_RECORDING_WINDOWS_L5 = '1'
+.\scripts\dev.ps1 test tests/e2e/test_recording_action_windows_l5.py
+```
+
+该用例必须使用已准备 TestIdentity 的真实 Credential Manager Cookie，在新的 headed Chromium BrowserContext 中修改 fixed Sample 资源，明确确认唯一 TARGET 与有限资源位置，并生成绑定 action、使用 `CASE_RESOURCE_ID` 的当前 Flow 格式 1；整个路径不得创建或要求用户选择 WebExecutionProfile。Codex 使用 `elevated` 沙箱时仍按上一段规则申请单次沙箱外授权。
+
+修改启动 readiness、startup maintenance 或 editable/package 边界后，Windows L5 只覆盖受影响的三种启动事实：
+
+1. 使用包含大量文件的受控 `var` 副本启动 GUI，记录 serve 开始、真实 `/ready` 和浏览器打开顺序，并证明普通启动没有递归统计大型缓存；原始用户 `var` 不得被测量或维护命令修改。
+2. 用直接测试的可控时钟或同步点让 startup 越过软阈值，证明终端只显示“仍在准备”，并在随后真实 ready 后才停止动画和调用浏览器；禁止真实固定等待十秒。
+3. 在服务已经精确 ready 后注入浏览器调用失败，终端才可提示手工地址，并当场证明该地址可访问；ready 前退出必须进入独立启动失败。
+
+后端直接证据集中在 `tests/backend/api/test_control_plane.py`、`tests/backend/infra/runtime/test_cache.py`，PowerShell marker 与 clean source/package 边界由 `tests/scripts/test_start_script.py` 和 `tests/architecture/test_dependencies.py` 保护。真实 L5 回执必须同时记录 `var` 副本、阶段耗时、终端事件顺序、地址可访问性和最终退出码；不能把浏览器窗口出现本身当作 ready 证据。
 
 测试路径或测试节点直接追加在命令末尾；pytest 选项通过 `-CommandArguments` 数组传递。`dev.ps1` 负责 `var/test/` 下本次唯一 basetemp 的创建与精确清理；`var/test` 整体都不属于产品事实。需要 `--lf`、`--ff` 或 `--stepwise` 时才临时启用 pytest cache。
 

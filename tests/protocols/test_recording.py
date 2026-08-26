@@ -1,3 +1,5 @@
+# 验证协议与 Schema中的录制协议。
+
 from __future__ import annotations
 
 import json
@@ -11,7 +13,9 @@ from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import JiejianError
 from product.protocols import (
     RecordingBudget,
+    RecordingAuthMethod,
     RecordingCleanupStatus,
+    RecordingCookieRef,
     RecordingEventKind,
     RecordingEvent,
     RecordingHeader,
@@ -33,9 +37,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def recording_request() -> RecordingRunnerRequest:
     return RecordingRunnerRequest(
-        schema_version="2",
+        schema_version="1",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
+        action_candidate_id="action_0123456789abcdef0123456789abcdef",
         created_at_us=1_000_000,
         target_scope=WebTargetScope(
             base_url="http://127.0.0.1:8765",
@@ -46,15 +51,20 @@ def recording_request() -> RecordingRunnerRequest:
         ),
         sessions=(
             RecordingSessionRef(
-                identity_id="owner",
+                test_identity_id="tid_0123456789abcdef0123456789abcdef",
                 session_ref="session_0123456789abcdef0123456789abcdef",
-                secret_refs=(),
-                expires_at_us=2_000_000,
-            ),
-            RecordingSessionRef(
-                identity_id="attacker",
-                session_ref="session_fedcba9876543210fedcba9876543210",
-                secret_refs=(),
+                auth_method=RecordingAuthMethod.COOKIE_SESSION,
+                cookies=(
+                    RecordingCookieRef(
+                        name="session",
+                        domain="127.0.0.1",
+                        path="/",
+                        secure=False,
+                        http_only=True,
+                        same_site="LAX",
+                        value_ref="env:JIEJIAN_RECORDING_TEST_COOKIE",
+                    ),
+                ),
                 expires_at_us=2_000_000,
             ),
         ),
@@ -62,7 +72,7 @@ def recording_request() -> RecordingRunnerRequest:
             max_duration_us=10_000_000,
             max_events=128,
             max_pages=4,
-            max_contexts=2,
+            max_contexts=1,
             max_field_chars=512,
             max_body_bytes=4_096,
             max_total_payload_bytes=65_536,
@@ -72,7 +82,7 @@ def recording_request() -> RecordingRunnerRequest:
 
 def recording_event() -> RecordingEvent:
     return RecordingEvent(
-        schema_version="2",
+        schema_version="1",
         sequence=1,
         occurred_at_us=1_000_001,
         kind=RecordingEventKind.REQUEST,
@@ -93,7 +103,7 @@ def recording_event() -> RecordingEvent:
 
 def recording_result() -> RecordingRunnerResult:
     return RecordingRunnerResult(
-        schema_version="2",
+        schema_version="1",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         finished_at_us=1_000_002,
@@ -122,11 +132,11 @@ def test_recording_protocols_are_strict_frozen_and_round_trip() -> None:
 @pytest.mark.parametrize(
     "raw",
     [
-        b'{"schema_version":"2","schema_version":"2"}',
-        b'{"schema_version":"2","value":NaN}',
-        b'\xef\xbb\xbf{"schema_version":"2"}',
-        b'{"schema_version":"2"}',
-        b'{"schema_version":"2","unknown":true}',
+        b'{"schema_version":"3","schema_version":"3"}',
+        b'{"schema_version":"3","value":NaN}',
+        b'\xef\xbb\xbf{"schema_version":"3"}',
+        b'{"schema_version":"3"}',
+        b'{"schema_version":"3","unknown":true}',
     ],
 )
 def test_recording_parser_rejects_non_strict_json_and_unknown_contract(raw: bytes) -> None:
@@ -168,7 +178,7 @@ def test_recording_result_matrix_and_sensitive_headers_are_enforced() -> None:
         RecordingRunnerResult.model_validate(data)
 
     failed = RecordingRunnerResult(
-        schema_version="2",
+        schema_version="1",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         finished_at_us=1_000_002,

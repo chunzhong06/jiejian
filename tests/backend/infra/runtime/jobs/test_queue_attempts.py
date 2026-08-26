@@ -1,3 +1,5 @@
+# 验证作业运行时中的队列认领与尝试。
+
 from __future__ import annotations
 
 from functools import partial
@@ -10,6 +12,7 @@ from product.backend.core.lifecycle import JobState, RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import StorageUnitOfWork, create_session_factory, create_sqlite_engine
 from product.backend.infra.storage import JobEventRepository
+from product.protocols import CleanupIssueCode, RunnerFailurePhase
 
 pytestmark = [pytest.mark.database, pytest.mark.essential]
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
@@ -430,11 +433,23 @@ def test_fatal_failure_never_becomes_inconclusive(
             fencing_token=claimed.job.fencing_token,
             now_us=NOW_US + 20,
             reason_code=FatalFailureCode.PROTOCOL_INVALID,
+            error_code="PREPARE_RECOVERY_FAILED",
+            phase=RunnerFailurePhase.PREPARE_RECOVERY,
+            cause_code="TARGET_UNREACHABLE",
+            cleanup_issue_codes=(
+                CleanupIssueCode.POST_CASE_RECOVERY_FAILED,
+            ),
         )
     )
     assert failed.job.state is JobState.FAILED
     assert failed.run.lifecycle is RunLifecycle.FAILED
     assert failed.run.verdict is None
+    with StorageUnitOfWork(worker_services.session_factory) as work:
+        event = work.job_events.list_for_job(failed.job.job_id)[-1]
+    assert event.metadata["error_code"] == "PREPARE_RECOVERY_FAILED"
+    assert event.metadata["phase"] == "PREPARE_RECOVERY"
+    assert event.metadata["cause_code"] == "TARGET_UNREACHABLE"
+    assert event.metadata["cleanup_issue_codes"] == "POST_CASE_RECOVERY_FAILED"
 
 
 def test_state_and_event_roll_back_together(

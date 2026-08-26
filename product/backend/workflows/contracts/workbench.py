@@ -8,10 +8,10 @@
 #   编排候选生成｜聚合治理与分析视图｜绑定项目 ACTIVE Contract
 #
 # 边界
-#   不执行目标请求；LLM 结果始终是不可信候选，必须进入确定性治理与审阅链。
+#   不执行目标请求；只保留确定性候选分析与人工治理链。
 #
 # 调用链
-#   CLI / API → ContractWorkbench → Governance / Analysis / LLM / Projects
+#   CLI / API → ContractWorkbench → Governance / Analysis / Projects
 # =============================================================================
 
 from __future__ import annotations
@@ -31,8 +31,6 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import ProjectRecord, StorageUnitOfWork
 from product.backend.workflows.contracts.analysis import ContractAnalysis, ContractHistoryResolution
 from product.backend.workflows.contracts.governance import ContractGovernance
-from product.backend.workflows.contracts.candidate_generation import ContractCandidateGenerator
-from product.backend.workflows.contracts.candidate_generation import LLMGenerationResult
 from product.backend.workflows.projects.catalog import ProjectCatalog
 
 
@@ -56,11 +54,10 @@ class ContractWorkbenchSnapshot(WorkbenchModel):
     requirements: tuple[Requirement, ...]
     candidates: tuple[ContractCandidate, ...]
     versions: tuple[ContractVersion, ...]
-    llm_available: bool
 
 
 class ContractWorkbench:
-    """把已有治理、分析、LLM 和项目控制服务组合为工作台接口。"""
+    """把已有确定性治理、分析和项目控制服务组合为工作台接口。"""
 
     def __init__(
         self,
@@ -68,13 +65,11 @@ class ContractWorkbench:
         projects: ProjectCatalog,
         governance: ContractGovernance,
         analysis: ContractAnalysis,
-        llm_candidates: ContractCandidateGenerator,
     ) -> None:
         self._uow_factory = uow_factory
         self._projects = projects
         self._governance = governance
         self._analysis = analysis
-        self._llm = llm_candidates
 
     def snapshot(self, project_id: str) -> ContractWorkbenchSnapshot:
         """聚合项目、当前 Contract 与候选统计，不触发任何生成或治理写入。"""
@@ -82,14 +77,17 @@ class ContractWorkbench:
         record = self._projects.get(project_id)
         with self._uow_factory() as work:
             requirements = work.requirements.list_for_project(project_id)
-            candidates = work.contract_candidates.list_for_project(project_id)
+            candidates = tuple(
+                item
+                for item in work.contract_candidates.list_for_project(project_id)
+                if item.source.source_type is not ContractSourceType.LLM
+            )
             versions = work.contract_versions.list_for_project(project_id)
         return ContractWorkbenchSnapshot(
             project=record,
             requirements=requirements,
             candidates=candidates,
             versions=versions,
-            llm_available=self._llm.available,
         )
 
     def create_requirement(
@@ -200,23 +198,6 @@ class ContractWorkbench:
             actor=actor,
         )
 
-    def generate_llm(
-        self,
-        project_id: str,
-        *,
-        requirement_ids: tuple[str, ...],
-        actor: str,
-        profile_name: str | None = None,
-    ) -> LLMGenerationResult:
-        """显式调用受限 LLM 候选服务；返回值仍需后续确定性审阅。"""
-
-        return self._llm.generate(
-            project_id,
-            requirement_ids,
-            actor=actor,
-            profile_name=profile_name,
-        )
-
     def list_versions(self, project_id: str, contract_id: str) -> tuple[ContractVersion, ...]:
         return self._governance.list_versions(project_id, contract_id)
 
@@ -252,9 +233,6 @@ class ContractWorkbench:
             requirements=requirements,
             requirement_candidates=tuple(
                 item for item in candidates if item.source.source_type is not ContractSourceType.LLM
-            ),
-            llm_candidates=tuple(
-                item for item in candidates if item.source.source_type is ContractSourceType.LLM
             ),
             available_rule_ids=(),
             capability_candidates=(),

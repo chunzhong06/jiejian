@@ -12,13 +12,13 @@
 
 Recording Runner 每次只执行一次录制或回放；每个 identity 使用独立的非持久 BrowserContext，不跨身份共享 Cookie、localStorage 或 sessionStorage。请求、响应、WebSocket、错误和事件在写盘前限长、脱敏并形成有界摘要；原始 trace、storage state 和秘密不发布。
 
-普通录制入口只接受已经登记的 `profile_id` 与一个 `identity_id`，后端通过 ApplicationCore 解析当前 `ExecutionProfile`，不接受 GUI 提供磁盘路径，也不让 GUI 控制 headless。产品录制固定使用有头 Chromium；身份表示权限主体/执行身份。人工登录只发生在浏览器准备阶段，不采集登录事件，也不引入虚假的 `session_ref` 或长期 Cookie 恢复。
+普通录制入口只接受当前项目的 `action_candidate_id`、一个已准备 `test_identity_id` 和时长。后端通过 ApplicationCore 读取已确认 action、endpoint 与 TestIdentity 非秘密元数据，不接受 GUI 提供 Profile 路径、目标范围或 headless 开关。产品录制固定使用有头 Chromium；TestIdentity 的精确 SecretStore 引用只在主进程内解析为本次短期环境引用，Recording Runner 在独立 BrowserContext 中恢复 Cookie 或 Bearer。高级 Profile 录制若保留，也必须调用同一应用服务和编译链。
 
 录制分为“准备浏览器、等待明确开始、采集中、停止并生成”四个用户阶段。现有持久状态 `STARTING` 覆盖准备与等待，用户明确开始后才进入 `RECORDING`；更细阶段由当前 attempt 的 ready/start/stop 控制事实确定性投影，不新增持久生命周期枚举。开始采集和停止生成是独立控制动作：停止保留已经采集的事件并进入 `PROCESSING`、`PENDING_REVIEW` 与 `FlowDraft`；取消走既有 Job 取消边界、丢弃本次录制并进入 `CANCELLED`。
 
 登录准备期间仍执行 TargetScope、网络预算、安全停止和清理控制，但事件收集器关闭持久采集；收到开始控制后才为当前页面建立录制关联并追加 `RecordingEvent`。控制事实只使用当前 attempt 目录内的有界、无秘密、原子标记，由 API/ApplicationCore 写入、Worker/Runner 消费；跨 attempt 或过期控制严格拒绝。
 
-事件以 `RecordingEvent` 保存稳定序号、关联标识和脱敏内容。事件处理生成 `FlowDraft`；删除、合并相邻步骤、重命名和变量来源确认产生新 revision。普通审阅界面不要求编辑 JSON，只有 identity、资源、变量来源和安全范围完成审阅后，FlowDraft 才能编译为 Web target/binding。
+事件以 `RecordingEvent` 保存稳定序号、关联标识和脱敏内容。事件处理生成绑定 action 的 `FlowDraft`；删除、合并相邻步骤、重命名、变量来源确认、唯一 TARGET 确认和有限资源位置确认均产生新 revision。推荐不自动生效，普通审阅界面不接受任意 JSONPath 或脚本。完成审阅后只编译动作本身：最终 Flow 保留唯一 TARGET 及其必要 SETUP，以 `CASE_SUBJECT` 与 `CASE_RESOURCE_ID` 作为运行时 slot，不保存具体差分身份/资源、ALLOW/DENY、Observer 或 reset 默认。
 
 回放必须重新经过 TargetScope、Contract、plan、binding、预算和 ExecutionProjectSnapshot 校验，并复用普通 Worker/Runner、Evidence、Verification 和 publication 链。失败不能伪装成成功或绕过当前结果语义。
 

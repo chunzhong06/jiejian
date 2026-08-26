@@ -1,3 +1,5 @@
+# 验证结果工作流中的结果定稿。
+
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +15,7 @@ from product.backend.core.lifecycle import CaseVerdict, JobState, ProjectStatus,
 from product.backend.infra.artifacts.run_packages import PublicationManifest, StagedArtifact, ValidatedPublication
 from product.backend.infra.artifacts.run_publication import publication_manifest_sha256
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.process_lock import try_lock_stream, unlock_stream
+from product.backend.infra.runtime.process.lock import try_lock_stream, unlock_stream
 from product.backend.infra.runtime.jobs.verification import VerificationRunJobHandler
 from product.backend.infra.storage import (
     BaseReportFinalizationState,
@@ -94,7 +96,7 @@ def _result(
         run_verdict = RunVerdict.BLOCK if verdict is CaseVerdict.VULNERABLE else RunVerdict.PASS
         coverage_gap_count = 0
     return RunnerResult(
-        schema_version="4",
+        schema_version="1",
         run_id=run_id,
         job_id="job_" + run_id[4:],
         attempt=1,

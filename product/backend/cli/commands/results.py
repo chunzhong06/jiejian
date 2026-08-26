@@ -11,13 +11,19 @@ from click import get_binary_stream
 from product.backend.core.lifecycle import RunVerdict
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.cli.bootstrap import application_scope
-from product.backend.cli.presentation import emit_json, fail, force_machine_mode
+from product.backend.cli.presentation import (
+    emit_json,
+    emit_result_presentation,
+    fail,
+    force_machine_mode,
+    presentation_mode,
+)
 
 
 def report_command(
     context: typer.Context,
     run_id: str,
-    output_format: str = typer.Option("json", "--format", help="报告格式"),
+    output_format: str | None = typer.Option(None, "--format", help="报告格式"),
     gate_result_id: str | None = typer.Option(None, "--gate-result-id", help="显式门禁结果 ID；提供时生成统一报告"),
     report_id: str | None = typer.Option(None, "--report-id", help="读取已发布统一报告 ID"),
 ) -> None:
@@ -25,6 +31,14 @@ def report_command(
 
     try:
         with application_scope(context) as application:
+            if (
+                output_format is None
+                and gate_result_id is None
+                and report_id is None
+                and presentation_mode() == "human"
+            ):
+                emit_result_presentation(application.result_presentation.build(run_id))
+                return
             selected_id = report_id
             if gate_result_id is not None:
                 if report_id is not None:
@@ -35,11 +49,13 @@ def report_command(
                 selected_id = str(application.result_finalizer.status(run_id).base_report_id or "")
                 if not selected_id:
                     fail(JiejianError(ErrorCode.RESULT_FINALIZATION_NOT_READY, "基础报告尚未完成；请执行 jiejian result-repair " + run_id))
-            if output_format.lower() == "json":
+            selected_format = output_format.lower() if output_format is not None else "json"
+            if selected_format == "json":
+                force_machine_mode()
                 emit_json(application.reports.read(run_id, selected_id))
             else:
                 get_binary_stream("stdout").write(
-                    application.reports.read_format(run_id, selected_id, output_format.lower())
+                    application.reports.read_format(run_id, selected_id, selected_format)
                 )
     except JiejianError as exc:
         fail(exc)

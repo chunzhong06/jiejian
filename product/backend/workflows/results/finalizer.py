@@ -25,7 +25,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle
 from product.backend.infra.artifacts.run_publication import publication_manifest_sha256
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.process_lock import try_lock_stream, unlock_stream
+from product.backend.infra.runtime.process.lock import try_lock_stream, unlock_stream
 from product.backend.infra.storage import (
     BaseReportFinalizationState,
     FindingFinalizationState,

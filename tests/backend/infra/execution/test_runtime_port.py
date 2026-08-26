@@ -1,3 +1,5 @@
+# 验证执行基础设施中的执行运行时端口。
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -64,4 +66,3 @@ def test_registry_rejects_duplicate_unknown_and_invalid_runtime(tmp_path: Path) 
     registry.register(InvalidFactory())
     with pytest.raises(TypeError, match="invalid runtime"):
         registry.create("INVALID", SimpleNamespace(), _context(tmp_path))
-
