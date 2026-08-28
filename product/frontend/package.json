@@ -1,7 +1,6 @@
 {
   "name": "jiejian-web",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
   "engines": {
     "node": ">=24.13.0 <25"

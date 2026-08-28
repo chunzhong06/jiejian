@@ -1,0 +1,93 @@
+# 公共数据与 Schema 版本
+
+> 状态：CURRENT。本文是公共数据族索引和版本规则，不复制完整 JSON Schema。
+
+## 目的与消费者
+
+跨进程 Python 模型、JSON Schema、canonical/hash、strict parsing 和数据库持久化共同构成数据边界。Worker、Runner、Observer、API、CLI、GUI、报告和测试按需读取对应协议文档与 Schema。`schema_version` 只标识能够独立交换或持久化并拥有独立 reader 的根文档；只嵌入其他根的 DTO 不重复携带版本。
+
+## 协议边界与公共数据族
+
+| 独立根文档 | Python 真源 | checked-in Schema | 当前格式 |
+| --- | --- | --- | --- |
+| `PermissionContract`、规范化/覆盖/差分计划 | `product/backend/core/verification/permissions/`、`differential.py` | `schemas/contracts/` | 1 |
+| `WebExecutionProfile`、`HttpRequestTemplate` | `web/profile.py`、`web/request.py` | `schemas/execution/` | 1 |
+| `PersistedExecutionRequest`、`RunnerInput`、`Evidence`、`RunnerResult` | `execution_request.py`、`runner/` | `schemas/runner/` | 1 |
+| Observer Invocation、`ObservationEnvelope` | `observer/` | `schemas/observer/`；同时签入 `ObserverSpec`/`ObserverOutcome` 组件 Schema | 1 |
+| `RecordingRunnerRequest`、`RecordingEvent`、`RecordingRunnerResult` | `recording.py` | `schemas/recording/` | 1 |
+| `FlowDraft`、FlowDraft 审阅命令 | `flow_draft.py` | `schemas/recording/` | 1 |
+| `Flow` | `recording_flow.py` | `schemas/recording/flow.schema.json` | 1 |
+| `IdentityPreparationRequest`、`IdentityPreparationResult` | `test_identity_preparation.py` | `schemas/identity/` | 1 |
+| `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest`、`PublicationManifest` | `artifacts.py`、`run_packages.py` | `schemas/artifacts/` | 1 |
+| `BaseRunReport`、`GateRunReport`、`ReportPackageManifest` | `report.py` | `schemas/reports/` | 1 |
+| `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
+| `HttpBindingCandidateBatch` | `product/protocols/http_binding_candidate.py` | `schemas/execution/http-binding-candidate.schema.json` | 1 |
+| `RunnerProgressEvent` | `product/backend/infra/runtime/runner/progress.py` | 无；内部有界 JSONL reader | 1 |
+
+API `ApiResponse` 根格式为字符串 1，前端必须先严格验证该最外层版本再读取 `data` 或脱敏错误；未知或缺失版本直接失败。`HealthResponse`、`ReadyResponse`、各独立请求体、运行配置 `Settings` 和 CLI `DoctorReport` 也为 1。ApplicationUnderstanding、ApplicationConnectionView、EndpointDiscoveryResult、ProjectReadiness、AIAssistanceSettings、GuidanceSnapshot、AssistantGuidanceView、ErrorDiagnosis、LLMModelCatalog、LLMProfileView 和其他 `ApiResponse.data` 或 error 内部视图不重复声明版本。它们的 Python 真源位于相应 API 或运行时入口，目前没有 checked-in JSON Schema。Sample 的 `scenario.json`、`truth.json`、`contract.json`、`profile.json` 是当前 Web V1 演示根文档，格式版本统一为 1；样例不扩展 Verdict 覆盖范围。
+
+AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache entry 是各自拥有严格 reader 的版本 1 根文档。模型输出只接受固定模板身份、最多三条不重复 recommendation 和本次系统提供的 option ID；缓存成功记录只保存 provider/profile/model、推理设置、模板身份、事实指纹、已验证推荐和生成时间，失败记录只保存稳定错误码与退避时间。它们没有 checked-in Schema，严格 Python reader 与本地白名单 validator 是当前机器边界真源。
+
+`RunnerProgressEvent` 每行独立持久化并由专用 reader 读取，因此携带自己的格式 1；`GET /api/jobs/{job_id}/progress` 的 `data` 只是 `ApiResponse` 内部视图，不再重复版本。该事件是 staging 外的非权威运行中旁路，不进入 RunnerResult、Evidence、publication、Finding、Report、Gate 或恢复语义。
+
+## 生命周期与数据流
+
+根文档先由严格 Python 模型或明确 reader 解析和校验，再通过 canonical 序列化生成稳定 hash；跨进程边界消费 Schema 约束，持久化边界另由 migration 和 Storage 管理。协议版本不等于数据库 revision，也不等于产品代际。关系型拆列记录、API `data` 内部视图、预算、binding、locator、Plan、Fact、Finding 和 Gate 组成对象均不是独立 JSON 根。
+
+## 失败与安全语义
+
+未知版本、缺失 required、额外字段、类型错误、canonical/hash 不一致、身份关联错误、大小/预算越界和秘密出现于公共数据中均严格失败。每个根文档在根类上显式声明自己的当前唯一版本，parser 不从公共基类默认版本或旧 reader 猜测格式；解析错误必须脱敏，不能回退到旧开发格式或猜测迁移。
+
+## 兼容规则
+
+当前不兼容旧开发数据库、Profile、Run、Evidence、Artifact、Report 或旧 wire format。每个根只接受上表当前格式，不提供旧 reader、fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库只接受签入的单一 `0001_web_v1` Alembic 基线，数据库 revision 与根文档版本不能互相替代。
+
+## 版本规则与 Schema 真源
+
+唯一机器真源是 `product/protocols/` 与 `product/protocols/schemas/`。协议 Markdown 只描述消费者、生命周期、安全边界和失败语义；字段、required、枚举和类型以 JSON Schema 与 Python 模型为准。
+
+## 相关真源
+
+- [工程设计规范](../../04_工程约束/工程设计.md)
+- [数据与持久化架构](../../01_系统地图/数据与持久化.md)
+- `product/backend/migrations/`
+- `product/protocols/`
+
+<!-- GENERATED:START -->
+
+<!-- Schema 文件由 product/protocols/schema.py 注册表治理；本区只列当前文件。 -->
+
+- `product/protocols/schemas/artifacts/artifact-check-request.schema.json`
+- `product/protocols/schemas/artifacts/artifact-result-manifest.schema.json`
+- `product/protocols/schemas/artifacts/artifact-scan-result.schema.json`
+- `product/protocols/schemas/artifacts/publication-manifest.schema.json`
+- `product/protocols/schemas/contracts/differential-experiment-plan.schema.json`
+- `product/protocols/schemas/contracts/normalized-permission-plan.schema.json`
+- `product/protocols/schemas/contracts/permission-contract.schema.json`
+- `product/protocols/schemas/contracts/permission-mutation-plan.schema.json`
+- `product/protocols/schemas/execution/http-binding-candidate.schema.json`
+- `product/protocols/schemas/execution/http.schema.json`
+- `product/protocols/schemas/execution/web-execution-profile.schema.json`
+- `product/protocols/schemas/identity/identity-preparation-request.schema.json`
+- `product/protocols/schemas/identity/identity-preparation-result.schema.json`
+- `product/protocols/schemas/observer/async-task-observer-invocation.schema.json`
+- `product/protocols/schemas/observer/audit-log-observer-invocation.schema.json`
+- `product/protocols/schemas/observer/observation-envelope.schema.json`
+- `product/protocols/schemas/observer/observer-invocation.schema.json`
+- `product/protocols/schemas/observer/observer-outcome.schema.json`
+- `product/protocols/schemas/observer/observer-spec.schema.json`
+- `product/protocols/schemas/recording/flow-draft-review-command.schema.json`
+- `product/protocols/schemas/recording/flow-draft.schema.json`
+- `product/protocols/schemas/recording/flow.schema.json`
+- `product/protocols/schemas/recording/recording-event.schema.json`
+- `product/protocols/schemas/recording/recording-runner-request.schema.json`
+- `product/protocols/schemas/recording/recording-runner-result.schema.json`
+- `product/protocols/schemas/reports/report-package-manifest.schema.json`
+- `product/protocols/schemas/reports/report.schema.json`
+- `product/protocols/schemas/runner/evidence.schema.json`
+- `product/protocols/schemas/runner/persisted-execution-request.schema.json`
+- `product/protocols/schemas/runner/runner-input.schema.json`
+- `product/protocols/schemas/runner/runner-result.schema.json`
+- `product/protocols/schemas/runner/trusted-result-receipt.schema.json`
+
+<!-- GENERATED:END -->

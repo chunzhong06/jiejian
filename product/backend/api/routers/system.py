@@ -8,6 +8,7 @@ from typing import Literal
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from product.backend import __version__
 from product.backend.workflows.context import ApplicationCore
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.infra.runtime.diagnostics import runtime_environment_details
@@ -44,6 +45,7 @@ def build_system_router(
         environment = runtime_environment_details()
         return data_response(
             {
+                "version": __version__,
                 "api": "available",
                 "worker": "running" if workers.is_running() else "stopped",
                 "browser": environment["playwright"]["status"],
@@ -60,14 +62,12 @@ def build_system_router(
 
     @router.post("/api/system/cache/{operation}", response_model=ApiResponse)
     def cache_operation(
-        operation: Literal["prune", "clean", "runtime-repair"],
+        operation: Literal["clean", "runtime-repair"],
         body: CacheOperationRequest,
     ) -> JSONResponse:
         """统一执行 GUI/CLI 同语义的预览、确认和维护操作。"""
 
-        if operation == "prune":
-            result = context.cache.prune(dry_run=body.dry_run)
-        elif operation == "clean":
+        if operation == "clean":
             result = context.cache.clean(
                 confirmed=body.confirmed,
                 dry_run=body.dry_run,

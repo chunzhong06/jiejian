@@ -52,6 +52,7 @@ from product.backend.workflows.security_setup.models import (
     _profile_id,
     _replace_resource_slot,
 )
+from product.backend.workflows.security_setup.local_observer_wiring import LocalObserverWiring
 from product.backend.workflows.permission_intents import (
     PermissionIntentMatrixView,
     PermissionIntentService,
@@ -109,6 +110,8 @@ class ProfileBuilderMixin:
         self,
         facts: _CompilationFacts,
         contract: PermissionContract,
+        *,
+        local_wiring: LocalObserverWiring | None = None,
     ) -> WebExecutionProfile:
         identity_by_id = {item.identity_id: item for item in facts.identities}
         required_identity_ids = {
@@ -123,8 +126,27 @@ class ProfileBuilderMixin:
             self._execution_credentials.profile_identity(identity_by_id[item])
             for item in sorted(required_identity_ids)
         )
-        workflows = tuple(self._workflow(action) for action in facts.actions)
-        observers = tuple(self._observer(action) for action in facts.actions)
+        completion_binding = (
+            next(
+                (
+                    item.requirement_id
+                    for item in local_wiring.bindings
+                    if item.observer_type is ObserverType.ASYNC_TASK_STATUS
+                ),
+                None,
+            )
+            if local_wiring is not None
+            else None
+        )
+        workflows = tuple(
+            self._workflow(action, completion_binding=completion_binding)
+            for action in facts.actions
+        )
+        observers = (
+            local_wiring.observers
+            if local_wiring is not None
+            else tuple(self._observer(action) for action in facts.actions)
+        )
         profile_id = _profile_id(facts.authority_fingerprint)
         return WebExecutionProfile(
             profile_id=profile_id,
@@ -143,31 +165,46 @@ class ProfileBuilderMixin:
                 for item in identities
             ),
             workflow_bindings=workflows,
-            effect_bindings=tuple(
-                EffectBinding(
-                    effect_id=_effect_id(action.action_id),
-                    required_channels=(
-                        _observation_requirement(action.action_id),
-                    ),
-                    closure_policy=EffectClosurePolicy.IMMEDIATE,
-                    projection_version="v1",
+            effect_bindings=(
+                tuple(
+                    EffectBinding(
+                        effect_id=_effect_id(action.action_id),
+                        required_channels=local_wiring.required_channels,
+                        corroborating_channels=local_wiring.corroborating_channels,
+                        closure_policy=EffectClosurePolicy.IMMEDIATE,
+                        projection_version="v1",
+                    )
+                    for action in facts.actions
                 )
-                for action in facts.actions
+                if local_wiring is not None
+                else tuple(
+                    EffectBinding(
+                        effect_id=_effect_id(action.action_id),
+                        required_channels=(_observation_requirement(action.action_id),),
+                        closure_policy=EffectClosurePolicy.IMMEDIATE,
+                        projection_version="v1",
+                    )
+                    for action in facts.actions
+                )
             ),
-            observer_bindings=tuple(
-                ObserverRequirementBinding(
-                    requirement_id=_observation_requirement(action.action_id),
-                    kind=ObserverRequirementKind.OBSERVER_SPEC,
+            observer_bindings=(
+                local_wiring.bindings
+                if local_wiring is not None
+                else tuple(
+                    ObserverRequirementBinding(
+                        requirement_id=_observation_requirement(action.action_id),
+                        kind=ObserverRequirementKind.OBSERVER_SPEC,
                         observer_id=_observer_id(action.action_id),
-                    observer_type=ObserverType.OWNER_API,
-                    identity_id=action.setup.resource.owner_test_identity_id,
-                    phases=(
-                        ObservationPhase.BASELINE,
-                        ObservationPhase.BEFORE,
-                        ObservationPhase.AFTER,
-                    ),
+                        observer_type=ObserverType.OWNER_API,
+                        identity_id=action.setup.resource.owner_test_identity_id,
+                        phases=(
+                            ObservationPhase.BASELINE,
+                            ObservationPhase.BEFORE,
+                            ObservationPhase.AFTER,
+                        ),
+                    )
+                    for action in facts.actions
                 )
-                for action in facts.actions
             ),
             seed=int(facts.authority_fingerprint[:15], 16),
             case_budget=min(8192, max(8, sum(len(item.intents) for item in facts.actions) * 4)),
@@ -176,7 +213,12 @@ class ProfileBuilderMixin:
         )
 
 
-    def _workflow(self, action: _ActionFacts) -> HttpWorkflowBinding:
+    def _workflow(
+        self,
+        action: _ActionFacts,
+        *,
+        completion_binding: str | None = None,
+    ) -> HttpWorkflowBinding:
         setup = action.setup
         recovery = setup.recovery
         if recovery is None or recovery.kind is not RecoveryBindingKind.RECORDED_REQUEST:
@@ -192,7 +234,10 @@ class ProfileBuilderMixin:
                 identity_id=CASE_SUBJECT_IDENTITY,
                 request_template=step.request_template,
                 classifier=(
-                    self._permission_target_classifier(step.classifier)
+                    self._permission_target_classifier(
+                        step.classifier,
+                        completion_binding=completion_binding,
+                    )
                     if step.purpose is WorkflowStepPurpose.TARGET
                     else step.classifier
                 ),

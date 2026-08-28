@@ -327,3 +327,118 @@ def test_candidate_decisions_and_manual_items_survive_source_reanalysis(
         assert actions["POST /reports"].decision is CandidateDecision.PROPOSED
     finally:
         application.close()
+
+
+def test_detected_and_manual_candidates_follow_distinct_reversible_states(
+    tmp_path: Path,
+) -> None:
+    """系统候选可回到待确认；手工候选只能在已确认与已排除之间恢复。"""
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "app.py").write_text(
+        "roles = ['owner']\n@app.get('/documents')\ndef list_documents(): pass\n",
+        encoding="utf-8",
+    )
+    endpoint = "http://127.0.0.1:4888"
+    application = ApplicationCore(
+        tmp_path / "var",
+        environ={},
+        endpoint_discovery=_reachable_discovery(endpoint),
+    )
+    try:
+        connected = application.application_understanding.connect(source)
+        current = application.application_understanding.confirm_endpoint(
+            connected.project.project_id,
+            endpoint=endpoint,
+            revision=connected.understanding.revision,
+        )
+        current = application.application_understanding.authorize_source_analysis(
+            connected.project.project_id,
+            revision=current.revision,
+        )
+        current = application.application_understanding.analyze_source(
+            connected.project.project_id,
+            revision=current.revision,
+        )
+        detected_role = current.role_candidates[0]
+        detected_action = current.action_candidates[0]
+
+        for candidate_type, candidate in (
+            ("role", detected_role),
+            ("action", detected_action),
+        ):
+            decide = (
+                application.application_understanding.decide_role
+                if candidate_type == "role"
+                else application.application_understanding.decide_action
+            )
+            current = decide(
+                connected.project.project_id,
+                candidate.candidate_id,
+                revision=current.revision,
+                decision=CandidateDecision.CONFIRMED,
+            )
+            current = decide(
+                connected.project.project_id,
+                candidate.candidate_id,
+                revision=current.revision,
+                decision=CandidateDecision.REJECTED,
+            )
+            current = decide(
+                connected.project.project_id,
+                candidate.candidate_id,
+                revision=current.revision,
+                decision=CandidateDecision.PROPOSED,
+            )
+            candidates = (
+                current.role_candidates
+                if candidate_type == "role"
+                else current.action_candidates
+            )
+            restored = next(
+                item for item in candidates if item.candidate_id == candidate.candidate_id
+            )
+            assert restored.decision is CandidateDecision.PROPOSED
+            assert restored.origin is CandidateOrigin.DETECTED
+
+        current = application.application_understanding.add_manual_role(
+            connected.project.project_id,
+            revision=current.revision,
+            display_name="审核员",
+        )
+        manual = next(
+            item for item in current.role_candidates if item.origin is CandidateOrigin.MANUAL
+        )
+        current = application.application_understanding.decide_role(
+            connected.project.project_id,
+            manual.candidate_id,
+            revision=current.revision,
+            decision=CandidateDecision.REJECTED,
+        )
+        with pytest.raises(JiejianError) as invalid_history:
+            application.application_understanding.decide_role(
+                connected.project.project_id,
+                manual.candidate_id,
+                revision=current.revision,
+                decision=CandidateDecision.PROPOSED,
+            )
+        assert invalid_history.value.code == ErrorCode.ONBOARDING_INPUT_INVALID.value
+        restored_manual = application.application_understanding.decide_role(
+            connected.project.project_id,
+            manual.candidate_id,
+            revision=current.revision,
+            decision=CandidateDecision.CONFIRMED,
+        )
+        manual_after = next(
+            item
+            for item in restored_manual.role_candidates
+            if item.candidate_id == manual.candidate_id
+        )
+        assert manual_after.decision is CandidateDecision.CONFIRMED
+        assert manual_after.origin is CandidateOrigin.MANUAL
+        assert application.project_readiness.get(
+            connected.project.project_id
+        ).next_required_action == "REVIEW_DISCOVERY"
+    finally:
+        application.close()

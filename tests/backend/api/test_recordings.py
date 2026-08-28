@@ -1,6 +1,7 @@
-# 验证 Recording API 的确认动作与已准备测试身份接线。
+# 验证 Recording API 的确认动作、完成时间与已准备测试身份接线。
 
 from __future__ import annotations
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -8,6 +9,8 @@ import subprocess
 import sys
 import threading
 import time
+from types import SimpleNamespace
+from fastapi import FastAPI
 from fastapi.testclient import TestClient as RawTestClient
 import pytest
 from typer.testing import CliRunner
@@ -31,6 +34,7 @@ from product.backend.infra.secrets import credential_ref
 from product.backend.infra.storage import ProjectRecord
 from product.backend.workflows.test_identities import PreparedLoginState
 from product.backend.cli.commands.system import ServeReadinessStatus, _wait_for_ready
+from product.backend.api.routers.recordings import build_recordings_router
 from product.protocols import (
     CleanupIssueCode,
     RunnerFailurePhase,
@@ -44,9 +48,6 @@ from tests.fixtures.control_plane import (
     create_app,
 )
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
-PROFILE_SOURCE = Path("samples/web/fixed/profile.json").resolve()
-CONTRACT_SOURCE = Path("samples/web/fixed/contract.json").resolve()
-
 class RecordingFakeSecretStore:
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
@@ -62,6 +63,49 @@ class RecordingFakeSecretStore:
 
     def configured(self, secret_ref: str | None) -> bool:
         return secret_ref is not None and secret_ref in self.values
+
+
+def test_recording_finalize_api_supplies_runtime_timestamp(tmp_path: Path) -> None:
+    calls: list[tuple[str, Path, int]] = []
+
+    class RecordingLifecycle:
+        def finalize(self, recording_id: str, *, var_dir: Path, now_us: int):
+            calls.append((recording_id, var_dir, now_us))
+            return SimpleNamespace(
+                model_dump=lambda **_kwargs: {"recording_id": recording_id}
+            )
+
+    @contextmanager
+    def uow_factory():
+        yield SimpleNamespace(
+            jobs=SimpleNamespace(get_by_recording=lambda _recording_id: None)
+        )
+
+    var_dir = tmp_path / "var"
+    app = FastAPI()
+    app.include_router(
+        build_recordings_router(
+            SimpleNamespace(
+                recording_lifecycle=RecordingLifecycle(),
+                uow_factory=uow_factory,
+                var_dir=var_dir,
+            )
+        )
+    )
+
+    with RawTestClient(app) as client:
+        response = client.post(
+            "/api/recordings/recording-finalize/finalize",
+            json={"schema_version": "1"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == {"recording_id": "recording-finalize"}
+    assert len(calls) == 1
+    recording_id, supplied_var_dir, now_us = calls[0]
+    assert recording_id == "recording-finalize"
+    assert supplied_var_dir == var_dir
+    assert isinstance(now_us, int) and now_us > 0
 
 @pytest.mark.essential
 def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path: Path) -> None:

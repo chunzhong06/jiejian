@@ -129,13 +129,13 @@ class _AssistantProfiles:
         return self._provider
 
 def test_assistant_service_deduplicates_fingerprint_and_keeps_cache_whitelist(tmp_path) -> None:
-    gap = _guidance_gap("OBSERVATION_UNCONFIRMED", "/apps/flows", "去确认观察方式")
+    gap = _guidance_gap("OBSERVATION_UNCONFIRMED", "/flows", "去确认观察方式")
     preview = CheckPreview(
         project_id="guide-app",
         ready=True,
         actions=(),
         gaps=(gap,),
-        next_path="/apps/flows",
+        next_path="/flows",
         next_label="去确认观察方式",
         case_count=1,
         differential_pair_count=1,

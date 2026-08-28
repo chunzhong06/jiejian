@@ -36,6 +36,7 @@ from product.protocols.report import (
     ReportGate,
     ReportObserverStatus,
     ReportPresentation,
+    ReportPresentationIssue,
     ReportRun,
     ReportRuntime,
     ReportVersions,
@@ -166,12 +167,31 @@ class ReportBuilder:
         return record
 
     def _presentation_snapshot(self, run_id: str, project_id: str) -> ReportPresentation:
-        """把 D-3 确定性投影冻结进 BASE；不在后续读取或 Gate 阶段重算。"""
+        """把确定性结果投影冻结进 BASE；不在后续读取或 Gate 处理中重算。"""
 
         if self._presentation is None:
             raise JiejianError(ErrorCode.REPORT_INPUT_INVALID, "报告展示投影未装配")
+        presentation = self._presentation.build(run_id).model_dump(mode="json")
+        # Report 继续冻结既有机器协议字段；结果页新增的人类解释字段不升级为
+        # report.json 的新事实，也不触发公共 Schema 变化。
+        report_fields = set(ReportPresentation.model_fields)
+        issue_fields = set(ReportPresentationIssue.model_fields)
+        presentation = {
+            key: value
+            for key, value in presentation.items()
+            if key in report_fields
+        }
+        presentation["issues"] = [
+            {key: value for key, value in issue.items() if key in issue_fields}
+            for issue in presentation.get("issues", [])
+        ]
         snapshot = ReportPresentation.model_validate_json(
-            self._presentation.build(run_id).model_dump_json(),
+            json.dumps(
+                presentation,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
             strict=True,
         )
         if snapshot.run_id != run_id or snapshot.project_id != project_id:

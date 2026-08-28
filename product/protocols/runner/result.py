@@ -48,7 +48,9 @@ def _reject_secret_material(value: Any) -> None:
                 key_text = str(key)
                 child_path = (*path, key_text)
                 if (
-                    key_text not in _SAFE_SECRET_KEY_NAMES
+                    # 严格协议模型会保留可选敏感元数据字段的 None；空值不携带秘密正文。
+                    child is not None
+                    and key_text not in _SAFE_SECRET_KEY_NAMES
                     and not key_text.endswith("_ref")
                     and not _is_snapshot_cookie_descriptor_path(child_path)
                     and _SECRET_KEY.search(key_text)

@@ -20,11 +20,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -64,6 +63,10 @@ from product.backend.workflows.security_setup.models import (
     _contract_id,
     _profile_id,
     _sha256,
+)
+from product.backend.workflows.security_setup.local_observer_wiring import (
+    LocalObserverWiring,
+    load_local_observer_wiring,
 )
 from product.backend.workflows.permission_intents import (
     PermissionIntentMatrixView,
@@ -130,6 +133,10 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         execution_credentials: TestIdentityExecutionCredentials,
         contracts: ContractGovernance,
         execution: ExecutionWorkflow,
+        local_observer_environment_resolver: Callable[
+            [str, str | None], str | None
+        ]
+        | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._var_dir = var_dir.resolve()
@@ -137,6 +144,9 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         self._execution_credentials = execution_credentials
         self._contracts = contracts
         self._execution = execution
+        self._local_observer_environment_resolver = (
+            local_observer_environment_resolver or (lambda _source, _origin: None)
+        )
 
 
     def compile(self, project_id: str, *, actor: str) -> SecuritySetupCompileResult:
@@ -146,13 +156,15 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         if not clean_actor or any(ord(char) < 32 for char in clean_actor):
             raise JiejianError(ErrorCode.INPUT_INVALID, "确认人名称无效")
         facts = self._collect(project_id, require_compilable=True)
+        facts, local_wiring = self._with_local_observer_wiring(facts)
         contract_id = _contract_id(project_id)
         contract, reused = self._govern_contract(
             facts,
             contract_id=contract_id,
             actor=clean_actor,
+            local_wiring=local_wiring,
         )
-        profile = self._profile(facts, contract)
+        profile = self._profile(facts, contract, local_wiring=local_wiring)
         raw = canonical_web_execution_profile_json_bytes(profile)
         profile_sha256 = hashlib.sha256(raw).hexdigest()
         profile_path = self._write_profile(project_id, profile_sha256, raw)
@@ -188,10 +200,12 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         except ValueError:
             return
         try:
-            authority = self._collect(
+            authority_facts = self._collect(
                 record.project_id,
                 require_compilable=False,
-            ).authority_fingerprint
+            )
+            authority_facts, _ = self._with_local_observer_wiring(authority_facts)
+            authority = authority_facts.authority_fingerprint
         except JiejianError as exc:
             raise JiejianError(
                 ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT,
@@ -215,6 +229,7 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
 
         try:
             facts = self._collect(project_id, require_compilable=False)
+            facts, _ = self._with_local_observer_wiring(facts)
             with self._uow_factory() as work:
                 project = work.projects.get(project_id)
             if (
@@ -227,6 +242,41 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
             return profile_id
         except JiejianError:
             return None
+
+
+    def _with_local_observer_wiring(
+        self,
+        facts: _CompilationFacts,
+    ) -> tuple[_CompilationFacts, LocalObserverWiring | None]:
+        """把受控本地描述纳入普通 Profile 指纹，避免外部配置静默陈旧。"""
+
+        descriptor_path = self._local_observer_environment_resolver(
+            facts.understanding.source_root,
+            facts.understanding.confirmed_endpoint,
+        )
+        if descriptor_path is None:
+            return facts, None
+        if len(facts.actions) != 1:
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "本地观察环境只能绑定一个已确认业务动作",
+            )
+        action = facts.actions[0]
+        wiring = load_local_observer_wiring(
+            descriptor_path,
+            var_dir=self._var_dir,
+            action_id=action.action_id,
+            expected_origin=facts.understanding.confirmed_endpoint,
+            expected_resource_id=action.setup.resource.actual_resource_id,
+        )
+        if wiring is None:
+            return facts, None
+        return replace(
+            facts,
+            authority_fingerprint=_sha256(
+                (facts.authority_fingerprint, wiring.descriptor_fingerprint)
+            ),
+        ), wiring
 
 
     def _collect(

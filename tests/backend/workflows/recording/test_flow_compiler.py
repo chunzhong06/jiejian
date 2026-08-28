@@ -13,6 +13,10 @@ from product.protocols import (
     ConfirmFlowDraftTarget,
     DeleteFlowDraftStep,
     FlowDraft,
+    FlowDraftResourceCandidate,
+    FlowDraftStep,
+    FlowDraftVariable,
+    FlowDraftVariableSource,
     FlowDraftVariableStatus,
     MergeFlowDraftSteps,
     RecordingEvent,
@@ -23,7 +27,7 @@ from product.protocols import (
     flow_draft_review_command_schema,
     parse_flow_draft,
 )
-from product.protocols.web.workflow import ValueSlotSource, WorkflowStepPurpose
+from product.protocols.web.workflow import ValueSlotConsumer, ValueSlotSource, WorkflowStepPurpose
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 ACTION_CANDIDATE_ID = "action_0123456789abcdef0123456789abcdef"
 
@@ -208,3 +212,97 @@ def test_review_requires_explicit_target_and_recorded_resource_confirmation() ->
             / "flow.schema.json"
         ).read_text(encoding="utf-8")
     ) == type(flow).model_json_schema()
+
+
+def test_compile_drops_extractors_used_only_by_steps_after_target() -> None:
+    setup_source = FlowDraftVariableSource(
+        source_step_id="setup-step",
+        source_event_sequence=2,
+        json_path="$.session_id",
+    )
+    target_source = FlowDraftVariableSource(
+        source_step_id="target-step",
+        source_event_sequence=4,
+        json_path="$.request_marker",
+    )
+    resource = FlowDraftResourceCandidate(
+        candidate_id="resource-0123456789abcdef",
+        consumer=ValueSlotConsumer.JSON_BODY,
+        location="$.project_id",
+        label="项目",
+    )
+    draft = FlowDraft(
+        recording_id="rec_0123456789abcdef0123456789abcdef",
+        flow_id="recorded-flow",
+        action_candidate_id=ACTION_CANDIDATE_ID,
+        revision=1,
+        steps=(
+            FlowDraftStep(
+                id="setup-step",
+                name="准备会话",
+                method="GET",
+                path="/session",
+                expected_statuses=(200,),
+                request_id="request_000001",
+                source_event_sequences=(1, 2),
+            ),
+            FlowDraftStep(
+                id="target-step",
+                name="生成资料包",
+                method="POST",
+                path="/exports",
+                json_body={
+                    "project_id": "project-1",
+                    "session_id": "{session_id}",
+                },
+                expected_statuses=(201,),
+                request_id="request_000002",
+                source_event_sequences=(3, 4),
+                depends_on_step_ids=("setup-step",),
+                resource_candidates=(resource,),
+            ),
+            FlowDraftStep(
+                id="poll-step",
+                name="查询资料包",
+                method="GET",
+                path="/exports/{request_marker}",
+                expected_statuses=(200,),
+                request_id="request_000003",
+                source_event_sequences=(5, 6),
+                depends_on_step_ids=("target-step",),
+            ),
+        ),
+        variables=(
+            FlowDraftVariable(
+                name="session_id",
+                placeholder="{session_id}",
+                status=FlowDraftVariableStatus.CONFIRMED,
+                candidate_sources=(setup_source,),
+                confirmed_source=setup_source,
+                consumer_step_ids=("target-step",),
+            ),
+            FlowDraftVariable(
+                name="request_marker",
+                placeholder="{request_marker}",
+                status=FlowDraftVariableStatus.CONFIRMED,
+                candidate_sources=(target_source,),
+                confirmed_source=target_source,
+                consumer_step_ids=("poll-step",),
+            ),
+        ),
+        recommended_target_step_id="target-step",
+        target_step_id="target-step",
+        resource_candidate_id=resource.candidate_id,
+    )
+
+    flow = FlowDraftCompiler().compile(draft)
+
+    assert tuple(step.id for step in flow.steps) == ("setup-step", "target-step")
+    assert tuple(
+        extractor.extractor_id
+        for extractor in flow.steps[0].request_template.response_extractors
+    ) == ("session_id",)
+    assert flow.steps[1].request_template.response_extractors == ()
+    assert tuple(source.name for source in flow.steps[1].variable_sources) == (
+        "session_id",
+    )

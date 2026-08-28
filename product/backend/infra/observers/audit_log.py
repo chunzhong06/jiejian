@@ -479,7 +479,11 @@ def _run_child(invocation: AuditLogObserverInvocation, *, utc_now_us: Callable[[
                 records.append({key: record[key] for key in locator.allowed_fields if key in record})
                 consumed.append({"file_name": path.name, "offset": line_start, "length": len(line), "record_sha256": hashlib.sha256(canonical).hexdigest()})
         if not any(item["file_name"] == path.name for item in next_offsets):
-            next_offsets.append(_cursor_payload(path.name, offset, data, before.st_size))
+            next_offsets.append(
+                cursor.model_dump(mode="json")
+                if cursor is not None and before.st_size == offset
+                else _cursor_payload(path.name, offset, data, before.st_size)
+            )
         if reasons & {AUDIT_TIMEOUT, AUDIT_BYTE_LIMIT, AUDIT_LINE_LIMIT, AUDIT_LINE_BYTES_LIMIT, AUDIT_RECORD_LIMIT}:
             break
     records.sort(key=lambda record: (int(record["sequence"]) if isinstance(record["sequence"], int) else -1, str(record["event_id"])))

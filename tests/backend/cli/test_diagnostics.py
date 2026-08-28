@@ -65,14 +65,14 @@ def test_root_help_is_task_oriented() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for text in ("guide", "doctor", "run", "report", "recording", "ci"):
+    for text in ("status", "app", "account", "flow", "check", "result", "history", "settings", "system"):
         assert text in result.stdout
-    for section in ("常用操作", "自动化", "高级"):
+    for section in ("普通任务", "图形界面", "运行与维护"):
         assert section in result.stdout
 
 
 def test_command_groups_without_leaf_show_help_and_succeed() -> None:
-    for group in ("project", "contract", "recording", "baseline", "gate"):
+    for group in ("app", "account", "flow", "check", "result", "history", "settings", "system"):
         result = CliRunner().invoke(app, [group])
         assert result.exit_code == 0, (group, result.stdout, result.stderr)
         assert "Usage:" in result.stdout
@@ -89,10 +89,13 @@ def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
         encoding="utf-8",
     )
 
-    result = CliRunner().invoke(app, ["--config", str(config), "--json", "doctor"])
+    result = CliRunner().invoke(app, ["--config", str(config), "--json", "system", "doctor"])
 
     assert result.exit_code == 0, result.stdout
-    report = json.loads(result.stdout)
+    envelope = json.loads(result.stdout)
+    assert envelope["schema_version"] == "1"
+    assert envelope["kind"] == "system-doctor"
+    report = envelope["data"]
     assert report["schema_version"] == "1"
     assert report["ok"] is True
     assert result.stderr == ""
@@ -128,7 +131,7 @@ def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
 
 
 def test_doctor_rejects_legacy_local_json_position() -> None:
-    result = CliRunner().invoke(app, ["doctor", "--json"])
+    result = CliRunner().invoke(app, ["system", "doctor", "--json"])
 
     assert result.exit_code != 0
 
@@ -142,10 +145,10 @@ def test_doctor_returns_nonzero_when_a_required_check_fails(
         encoding="utf-8",
     )
 
-    result = CliRunner().invoke(app, ["--config", str(config), "--json", "doctor"])
+    result = CliRunner().invoke(app, ["--config", str(config), "--json", "system", "doctor"])
 
     assert result.exit_code == 1
-    report = json.loads(result.stdout)
+    report = json.loads(result.stdout)["data"]
     assert report["ok"] is False
     config_check = next(
         check for check in report["checks"] if check["name"] == "config"
@@ -166,11 +169,11 @@ def test_doctor_uses_cli_trace_override_without_polluting_json_stdout(
 
     result = CliRunner().invoke(
         app,
-        ["--config", str(config), "--trace-id", "cli-trace", "--json", "doctor"],
+        ["--config", str(config), "--trace-id", "cli-trace", "--json", "system", "doctor"],
     )
 
     assert result.exit_code == 0
-    assert json.loads(result.stdout)["ok"] is True
+    assert json.loads(result.stdout)["data"]["ok"] is True
     assert result.stderr == ""
     log_path = Path("runtime") / "logs" / "app" / "jiejian.log"
     assert json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])["trace_id"] == "cli-trace"
@@ -184,10 +187,10 @@ def test_doctor_respects_error_log_level(trusted_doctor_environment: Path) -> No
         encoding="utf-8",
     )
 
-    result = CliRunner().invoke(app, ["--config", str(config), "--json", "doctor"])
+    result = CliRunner().invoke(app, ["--config", str(config), "--json", "system", "doctor"])
 
     assert result.exit_code == 0
-    assert json.loads(result.stdout)["ok"] is True
+    assert json.loads(result.stdout)["data"]["ok"] is True
     assert result.stderr == ""
 
 
@@ -202,7 +205,7 @@ def test_doctor_human_uses_named_checks_and_conclusion(
     )
 
     result = CliRunner().invoke(
-        app, ["--human", "--config", str(config), "doctor"]
+        app, ["--human", "--config", str(config), "system", "doctor"]
     )
 
     assert result.exit_code == 0, result.stdout + result.stderr
@@ -268,29 +271,34 @@ def test_toolchain_probe_is_local_version_check_without_network(
     assert all("http" not in str(call[0]).lower() for call in calls)
 
 
-def test_guide_requires_an_interactive_human_terminal() -> None:
-    result = CliRunner().invoke(app, ["--human", "guide"])
+def test_status_human_mode_does_not_require_an_interactive_terminal(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        app,
+        ["--var-dir", str(tmp_path / "var"), "--human", "status"],
+    )
 
-    assert result.exit_code == 3
-    assert "引导模式需要交互式终端" in result.stderr
+    assert result.exit_code == 0
+    assert result.stderr == ""
+    assert result.stdout.startswith("界鉴工作台")
+    assert "接入应用" in result.stdout
 
 
 def test_cache_cli_uses_application_service_and_preserves_data(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     data = var_dir / "data" / "keep.txt"
-    cached = var_dir / "cache" / "uv" / "rebuild.bin"
+    cached = var_dir / "cache" / "assistant" / "rebuild.bin"
     data.parent.mkdir(parents=True)
     cached.parent.mkdir(parents=True)
     data.write_text("keep", encoding="utf-8")
     cached.write_bytes(b"cache")
 
-    status = CliRunner().invoke(app, ["--var-dir", str(var_dir), "cache", "status"])
+    status = CliRunner().invoke(app, ["--var-dir", str(var_dir), "system", "cache", "status"])
     cleaned = CliRunner().invoke(
-        app, ["--var-dir", str(var_dir), "cache", "clean", "--confirm"]
+        app, ["--var-dir", str(var_dir), "system", "cache", "clean", "--confirm"]
     )
 
     assert status.exit_code == 0, status.stdout + status.stderr
-    assert json.loads(status.stdout)["protected"]["data"] == str(var_dir / "data")
+    assert json.loads(status.stdout)["data"]["protected"]["data"] == str(var_dir / "data")
     assert cleaned.exit_code == 0, cleaned.stdout + cleaned.stderr
     assert data.read_text(encoding="utf-8") == "keep"
     assert not cached.exists()

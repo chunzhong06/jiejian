@@ -104,6 +104,20 @@ class ApplicationUnderstandingService:
                         ErrorCode.STORAGE_FAILURE,
                         "应用理解记录引用的项目不存在",
                     )
+                if project.status is ProjectStatus.ARCHIVED:
+                    now_us = self._clock_us()
+                    project = ProjectRecord(
+                        **(
+                            project.model_dump()
+                            | {
+                                "name": (project_name or project.name).strip(),
+                                "status": ProjectStatus.DRAFT,
+                                "updated_at_us": max(now_us, project.updated_at_us),
+                            }
+                        )
+                    )
+                    work.projects.replace(project)
+                    work.commit()
                 return ApplicationConnectionView(
                     project=project,
                     understanding=existing,
@@ -455,12 +469,13 @@ class ApplicationUnderstandingService:
         candidate_type: Literal["role", "action"],
     ) -> ApplicationUnderstanding:
         if decision not in {
+            CandidateDecision.PROPOSED,
             CandidateDecision.CONFIRMED,
             CandidateDecision.REJECTED,
         }:
             raise JiejianError(
                 ErrorCode.ONBOARDING_INPUT_INVALID,
-                "候选只能由用户明确确认或否定",
+                "候选只能处于待确认、已确认或已排除状态",
             )
         with self._uow_factory() as work:
             current = self._current_for_update(work, project_id, revision)
@@ -477,6 +492,15 @@ class ApplicationUnderstandingService:
                 raise JiejianError(
                     ErrorCode.APPLICATION_CANDIDATE_NOT_FOUND,
                     "候选不存在或已被重新分析替换",
+                )
+            if (
+                decision is CandidateDecision.PROPOSED
+                and selected.origin is CandidateOrigin.MANUAL
+            ):
+                # 手工候选从用户明确添加开始即有确认事实，只能排除或恢复，不能伪造系统发现历史。
+                raise JiejianError(
+                    ErrorCode.ONBOARDING_INPUT_INVALID,
+                    "手工补充候选只能恢复为已确认或保持已排除",
                 )
             values = selected.model_dump(mode="python")
             values.update(

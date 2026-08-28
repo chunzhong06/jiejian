@@ -7,20 +7,44 @@ import ControlShell from './ControlShell'
 
 const mockApi = vi.hoisted(() => ({
   projects: vi.fn().mockResolvedValue([]), readiness: vi.fn(), runs: vi.fn().mockResolvedValue([]), run: vi.fn(),
+  removeProject: vi.fn().mockResolvedValue({ project_id: 'p1', status: 'ARCHIVED' }),
   llmProfiles: vi.fn().mockResolvedValue([]), settings: vi.fn().mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }), systemStatus: vi.fn().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }), shutdown: vi.fn().mockResolvedValue({ status: 'stopping' }),
   cacheStatus: vi.fn().mockResolvedValue({ schema_version: '1', entries: {}, protected: { data: 'var/data', data_unchanged: true, current_runtime_unchanged_by_cache: true } }),
   cacheOperation: vi.fn(),
   assistantGuidance: vi.fn(), assistantRefresh: vi.fn(),
-  checkPreview: vi.fn(), checkSubmit: vi.fn(),
-  profiles: vi.fn(), contract: vi.fn(), summary: vi.fn().mockResolvedValue({ schema_version: '1', workflows: [], effect_bindings: [] }), submit: vi.fn(), cancel: vi.fn().mockResolvedValue({}), findings: vi.fn().mockResolvedValue([]), evidence: vi.fn().mockResolvedValue([]), evidenceDetail: vi.fn().mockResolvedValue({}), presentation: vi.fn(), history: vi.fn(), reports: vi.fn().mockResolvedValue([]), report: vi.fn().mockResolvedValue({}), reportView: vi.fn((runId: string, reportId: string) => `/api/runs/${runId}/reports/${reportId}/view`), contracts: vi.fn().mockResolvedValue([]), contractGovernance: vi.fn().mockResolvedValue({ project: {}, requirements: [], candidates: [], versions: [] }),
+  experienceStatus: vi.fn().mockResolvedValue({ available: false, display_name: '协作空间', unavailable_reason: '未配置官方示例目录', active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null }),
+  experienceStart: vi.fn(), experienceIdentities: vi.fn(), experienceFix: vi.fn(), experienceStop: vi.fn(),
+  checkPreview: vi.fn(), checkSubmit: vi.fn(), permissionMatrix: vi.fn(), permissionConfirm: vi.fn(), permissionCompile: vi.fn(),
+  profiles: vi.fn(), contract: vi.fn(), summary: vi.fn().mockResolvedValue({ schema_version: '1', workflows: [], effect_bindings: [] }), submit: vi.fn(), cancel: vi.fn().mockResolvedValue({}), progress: vi.fn().mockResolvedValue({ job_id: 'job', attempt: 1, events: [] }), findings: vi.fn().mockResolvedValue([]), evidence: vi.fn().mockResolvedValue([]), evidenceDetail: vi.fn().mockResolvedValue({}), presentation: vi.fn(), history: vi.fn(), reports: vi.fn().mockResolvedValue([]), report: vi.fn().mockResolvedValue({}), reportView: vi.fn((runId: string, reportId: string) => `/api/runs/${runId}/reports/${reportId}/view`), contracts: vi.fn().mockResolvedValue([]), contractGovernance: vi.fn().mockResolvedValue({ project: {}, requirements: [], candidates: [], versions: [] }),
 }))
 
-vi.mock('../api/projects', () => ({ projectsApi: { projects: mockApi.projects, readiness: mockApi.readiness } }))
-vi.mock('../api/runs', () => ({ runsApi: { runs: mockApi.runs, run: mockApi.run, cancel: mockApi.cancel, createRun: vi.fn() } }))
+vi.mock('../api/projects', () => ({ projectsApi: {
+  projects: mockApi.projects,
+  remove: mockApi.removeProject,
+  status: async (projectId: string) => {
+    const readiness = await mockApi.readiness(projectId)
+    const resultReady = readiness.next_required_action === 'OPEN_RESULT'
+    const checkReady = readiness.next_required_action === 'RUN_CHECK'
+    return {
+      project: { project_id: projectId, name: '未命名应用', status: readiness.project_status, target_type: 'WEB' },
+      readiness,
+      steps: [],
+      next_action: resultReady
+        ? { action: 'OPEN_RESULT', label: '查看检查结果', description: '查看可信检查结果。', route: '/results', cli_command: 'jiejian result show' }
+        : checkReady
+          ? { action: 'RUN_CHECK', label: '开始权限检查', description: '开始当前检查。', route: '/check', cli_command: 'jiejian check run' }
+          : { action: 'RECORD_FLOW', label: '准备测试账号', description: '准备安全登录状态。', route: '/identities', cli_command: 'jiejian account' },
+      latest_result: null,
+    }
+  },
+} }))
+vi.mock('../api/runs', () => ({ runsApi: { runs: mockApi.runs, run: mockApi.run, cancel: mockApi.cancel, progress: mockApi.progress, createRun: vi.fn() } }))
 vi.mock('../api/llm', () => ({ llmApi: { profiles: mockApi.llmProfiles, settings: mockApi.settings } }))
 vi.mock('../api/assistant', () => ({ assistantApi: { guidance: mockApi.assistantGuidance, refresh: mockApi.assistantRefresh } }))
+vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus, start: mockApi.experienceStart, prepareIdentities: mockApi.experienceIdentities, verifyFixedBehavior: mockApi.experienceFix, stop: mockApi.experienceStop } }))
 vi.mock('../api/system', () => ({ systemApi: { status: mockApi.systemStatus, cacheStatus: mockApi.cacheStatus, cacheOperation: mockApi.cacheOperation, shutdown: mockApi.shutdown } }))
 vi.mock('../api/checks', () => ({ checksApi: { preview: mockApi.checkPreview, submit: mockApi.checkSubmit } }))
+vi.mock('../api/permissionIntents', () => ({ permissionIntentsApi: { matrix: mockApi.permissionMatrix, confirm: mockApi.permissionConfirm, compile: mockApi.permissionCompile } }))
 vi.mock('../api/executionProfiles', () => ({ executionProfilesApi: { profiles: mockApi.profiles, contract: mockApi.contract, summary: mockApi.summary, submit: mockApi.submit, register: vi.fn() } }))
 vi.mock('../api/contracts', () => ({ contractsApi: { contracts: mockApi.contracts, contractGovernance: mockApi.contractGovernance } }))
 vi.mock('../api/results', () => ({ resultsApi: { findings: mockApi.findings, evidence: mockApi.evidence, evidenceDetail: mockApi.evidenceDetail, presentation: mockApi.presentation, history: mockApi.history, reports: mockApi.reports, report: mockApi.report, reportView: mockApi.reportView, reportFormat: (runId: string, reportId: string, format: string) => `/api/runs/${runId}/reports/${reportId}/formats/${format}` } }))
@@ -28,17 +52,17 @@ vi.mock('../api/http', () => ({ ApiError: class extends Error {}, request: vi.fn
 
 describe('应用壳', () => {
   afterEach(() => cleanup())
-  beforeEach(() => { localStorage.clear(); window.location.hash = ''; vi.clearAllMocks(); mockApi.projects.mockResolvedValue([]); mockApi.readiness.mockResolvedValue({ project_id: 'p1', project_status: 'READY', application_connected: true, endpoint_status: 'LEGACY_PROFILE', source_analysis_status: 'LEGACY_PROFILE', discovered_role_count: 0, confirmed_role_count: 0, discovered_action_count: 0, confirmed_action_count: 0, execution_profile_available: true, completed_flow_available: false, active_contract_available: false, active_tasks: [], latest_verified_run_id: null, next_required_action: 'RECORD_FLOW' }); mockApi.runs.mockResolvedValue([]); mockApi.llmProfiles.mockResolvedValue([]); mockApi.settings.mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }); mockApi.systemStatus.mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.profiles.mockResolvedValue([]); mockApi.summary.mockResolvedValue({ schema_version: '1', workflows: [], effect_bindings: [] }); mockApi.presentation.mockResolvedValue({ run_id: 'run-current', project_id: 'p1', project_name: '演示应用', run_lifecycle: 'COMPLETED', verdict: 'BLOCK', headline: '发现权限问题', scope_statement: '当前范围已检查。', checked_count: 1, safe_count: 0, problem_count: 1, inconclusive_count: 0, uncovered_count: 0, execution_problem: null, issues: [], limitations: [] }); mockApi.history.mockResolvedValue({ project_id: 'p1', comparisons: [{ run_id: 'run-history', previous_run_id: null, checked_at_us: 1, changes: [{ finding_id: 'finding-1', title: '权限问题', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', status: 'NEW', status_label: '新发现', explanation: '首次确认。', severity: 'high', evidence_refs: [], current_verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }] }] }); mockApi.assistantGuidance.mockRejectedValue(new Error('assistant unavailable')); mockApi.checkPreview.mockResolvedValue({ project_id: 'p1', ready: false, actions: [], gaps: [], next_path: null, next_label: null, case_count: 0, differential_pair_count: 0 }) })
+  beforeEach(() => { localStorage.clear(); window.location.hash = ''; vi.clearAllMocks(); mockApi.projects.mockResolvedValue([]); mockApi.readiness.mockResolvedValue({ project_id: 'p1', project_status: 'READY', application_connected: true, endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED', discovered_role_count: 1, confirmed_role_count: 1, discovered_action_count: 1, confirmed_action_count: 1, execution_profile_available: false, completed_flow_available: false, active_contract_available: false, permission_actions: [], current_scope_runnable: false, remaining_gap_count: 1, active_tasks: [], latest_verified_run_id: null, next_required_action: 'RECORD_FLOW' }); mockApi.runs.mockResolvedValue([]); mockApi.llmProfiles.mockResolvedValue([]); mockApi.settings.mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }); mockApi.systemStatus.mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.profiles.mockResolvedValue([]); mockApi.summary.mockResolvedValue({ schema_version: '1', workflows: [], effect_bindings: [] }); mockApi.permissionMatrix.mockResolvedValue({ project_id: 'p1', actions: [], confirmed_count: 0, review_required_count: 0, unconfirmed_count: 0, executable_count: 0, representative_gap_count: 0, compilable_action_count: 0 }); mockApi.presentation.mockResolvedValue({ run_id: 'run-current', project_id: 'p1', project_name: '演示应用', run_lifecycle: 'COMPLETED', verdict: 'BLOCK', headline: '发现权限问题', scope_statement: '当前范围已检查。', checked_count: 1, safe_count: 0, problem_count: 1, inconclusive_count: 0, uncovered_count: 0, execution_problem: null, issues: [], limitations: [] }); mockApi.history.mockResolvedValue({ project_id: 'p1', comparisons: [{ run_id: 'run-history', previous_run_id: null, checked_at_us: 1, changes: [{ finding_id: 'finding-1', title: '权限问题', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', status: 'NEW', status_label: '新发现', explanation: '首次确认。', severity: 'high', evidence_refs: [], current_verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }] }] }); mockApi.assistantGuidance.mockRejectedValue(new Error('assistant unavailable')); mockApi.checkPreview.mockResolvedValue({ project_id: 'p1', ready: false, actions: [], gaps: [], next_path: null, next_label: null, case_count: 0, differential_pair_count: 0 }) })
 
   it('显示工作台、任务导航和真实运行状态', async () => {
     render(<ControlShell />)
-    expect(await screen.findByText('还没有选择要检查的应用。')).toBeInTheDocument()
-    expect(screen.getByText('尚未选择应用')).toBeInTheDocument()
-    for (const item of ['工作台', '应用', '应用接入', '业务流程', '权限规则', '检查', '开始检查', '检查结果', '历史变化']) expect(screen.getAllByText(item).length).toBeGreaterThan(0)
-    expect(screen.queryByText('设置', { selector: '.ant-menu-item-group-title' })).not.toBeInTheDocument()
+    expect(await screen.findByText('开始一次安全检查')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '切换应用，当前：尚未选择' })).toBeInTheDocument()
+    for (const item of ['工作台', '应用接入', '测试账号', '业务流程', '权限与检查', '检查结果', '历史变化']) expect(screen.getAllByText(item).length).toBeGreaterThan(0)
+    expect(document.querySelector('.process-navigation')).toBeInTheDocument()
     expect(screen.getByText('AI辅助 · 未开启')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '系统需处理' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '设置与更多' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '设置与更多' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '退出界鉴' })).toBeInTheDocument()
     expect(document.querySelector('.phase-steps')).not.toBeInTheDocument()
   })
@@ -63,6 +87,22 @@ describe('应用壳', () => {
     expect(await screen.findByText('界鉴正在安全退出')).toBeInTheDocument()
   })
 
+  it('移除当前应用前说明保留源码和历史，并在成功后清空当前选择', async () => {
+    const project = { project_id: 'p1', name: '演示应用', status: 'READY' }
+    mockApi.projects.mockResolvedValueOnce([project]).mockResolvedValueOnce([])
+    render(<ControlShell />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '切换应用，当前：尚未选择' }))
+    fireEvent.click(await screen.findByText('演示应用'))
+    fireEvent.click(await screen.findByRole('button', { name: '切换应用，当前：演示应用' }))
+    fireEvent.click(await screen.findByText('移除当前应用'))
+
+    expect(await screen.findByText(/不会删除应用源码、检查结果和历史记录/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确认移除' }))
+    await waitFor(() => expect(mockApi.removeProject).toHaveBeenCalledWith('p1'))
+    await waitFor(() => expect(screen.getByRole('button', { name: '切换应用，当前：尚未选择' })).toBeInTheDocument())
+  })
+
   it('关闭退出确认后把焦点还给触发按钮', async () => {
     render(<ControlShell />)
     const trigger = await screen.findByRole('button', { name: '退出界鉴' })
@@ -74,12 +114,11 @@ describe('应用壳', () => {
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
-  it('工作台菜单项可从其他路由点击返回', async () => {
+  it('旧 route 不再作为兼容入口，未知路径回到工作台', async () => {
     window.location.hash = '#/apps/access'
     render(<ControlShell />)
-    fireEvent.click((await screen.findAllByText('工作台'))[0])
     await waitFor(() => expect(window.location.hash).toBe('#/workspace'))
-    expect(await screen.findByText('还没有选择要检查的应用。')).toBeInTheDocument()
+    expect(await screen.findByText('开始一次安全检查')).toBeInTheDocument()
   })
 
   it('没有应用时模型服务和运行环境仍可访问', async () => {
@@ -100,7 +139,7 @@ describe('应用壳', () => {
       code: 'SELF_TARGET_FORBIDDEN',
       message: '请求失败',
       diagnosis: {
-        route: '/apps/access', headline: '不能检查界鉴自身',
+        route: '/application', headline: '不能检查界鉴自身',
         short_message: '请返回应用接入页确认真正的被测应用地址。', cleanup_warnings: [],
       },
     })
@@ -108,21 +147,22 @@ describe('应用壳', () => {
     expect((await screen.findAllByText('不能检查界鉴自身')).length).toBeGreaterThan(0)
     expect((await screen.findAllByText('请返回应用接入页确认真正的被测应用地址。')).length).toBeGreaterThan(0)
     fireEvent.click(screen.getAllByRole('button', { name: '前往处理页面' })[0])
-    await waitFor(() => expect(window.location.hash).toBe('#/apps/access'))
+    await waitFor(() => expect(window.location.hash).toBe('#/application'))
   })
 
   it('页面操作错误只进入右下角通知，不重复覆盖当前页面', async () => {
     mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
+    mockApi.readiness.mockResolvedValue({ project_id: 'p1', project_status: 'READY', application_connected: true, endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED', discovered_role_count: 1, confirmed_role_count: 1, discovered_action_count: 1, confirmed_action_count: 1, execution_profile_available: true, completed_flow_available: true, active_contract_available: true, permission_actions: [], current_scope_runnable: true, remaining_gap_count: 0, active_tasks: [], latest_verified_run_id: null, next_required_action: 'RUN_CHECK' })
     mockApi.checkPreview.mockRejectedValueOnce({
       code: 'CHECK_NOT_READY',
       message: '请求失败',
       diagnosis: {
-        route: '/apps/rules', headline: '权限检查条件尚未准备好',
+        route: '/check', headline: '权限检查条件尚未准备好',
         short_message: '请返回权限规则页处理当前缺口。', cleanup_warnings: [], intervention: 'USER_ACTION',
       },
     })
     localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
-    window.location.hash = '#/checks/start'
+    window.location.hash = '#/check'
 
     render(<ControlShell />)
 
@@ -147,20 +187,43 @@ describe('应用壳', () => {
     expect(await screen.findByText(/3\.13\.15/)).toBeInTheDocument()
     expect(screen.getByText('未使用')).toBeInTheDocument()
     expect(screen.getByText('已验证并复用')).toBeInTheDocument()
-    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('本次自动恢复任务').closest('tr')).toHaveTextContent('2')
   })
 
   it('陈旧项目不会绕过项目选择边界', async () => {
     localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'stale-project' }))
     render(<ControlShell />)
-    expect(await screen.findByText('还没有选择要检查的应用。')).toBeInTheDocument()
+    expect(await screen.findByText('开始一次安全检查')).toBeInTheDocument()
     expect(localStorage.getItem('jiejian.project')).toBeNull()
   })
 
-  it('串起执行配置、矩阵、已发布结果、证据、报告和历史入口', async () => {
+  it('进入结果与历史页面时发现当前 SPA 之外新形成的 Run', async () => {
+    const run = { run_id: 'run-current', created_at_us: 3, execution_schema_version: '1', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', case_progress: { completed: 1, total: 1 }, observer_health: { required_observations: ['resource_state'], resource_state: { configured: true, required: true } } }
+    mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
+    mockApi.runs.mockResolvedValueOnce([]).mockResolvedValue([run])
+    mockApi.run.mockResolvedValue(run)
+    localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
+    window.location.hash = '#/workspace'
+
+    render(<ControlShell />)
+
+    expect(await screen.findByRole('button', { name: '切换应用，当前：未命名应用' })).toBeInTheDocument()
+    await waitFor(() => expect(mockApi.runs).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getAllByText('检查结果')[0])
+    await waitFor(() => expect(mockApi.runs).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(document.querySelector('#result-headline')).toHaveTextContent('发现权限问题'))
+
+    fireEvent.click(await screen.findByRole('button', { name: '查看历史变化' }))
+    await waitFor(() => expect(mockApi.runs).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(mockApi.history).toHaveBeenCalledWith('p1'))
+    expect((await screen.findAllByText('新发现')).length).toBeGreaterThan(0)
+  })
+
+  it('串起检查预览、已发布结果、证据、报告和历史入口', async () => {
     const contract = { subjects: [{ subject_id: 'member', roles: ['reader'] }], resources: [{ resource_id: 'document', resource_type: '文档' }], relations: [{ relation_id: 'owns-document', relation: '拥有', source: { endpoint_type: 'subject', endpoint_id: 'member' }, target: { endpoint_type: 'resource', endpoint_id: 'document' } }], rules: [{ rule_id: 'read-document', subject_id: 'member', action_id: 'read', resource_id: 'document', expectation: 'DENY', severity: 'high' }], batch_rules: [] }
     const run = { run_id: 'run-current', created_at_us: 3, execution_schema_version: '1', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', case_progress: { completed: 1, total: 1 }, observer_health: { required_observations: ['resource_state'], resource_state: { configured: true, required: true } } }
     mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
+    mockApi.readiness.mockResolvedValue({ project_id: 'p1', project_status: 'READY', application_connected: true, endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED', discovered_role_count: 1, confirmed_role_count: 1, discovered_action_count: 1, confirmed_action_count: 1, execution_profile_available: true, completed_flow_available: true, active_contract_available: true, permission_actions: [], current_scope_runnable: true, remaining_gap_count: 0, active_tasks: [], latest_verified_run_id: 'run-current', next_required_action: 'RUN_CHECK' })
     mockApi.runs.mockResolvedValue([run, { run_id: 'run-history', created_at_us: 1, lifecycle: 'COMPLETED', result_integrity: 'VERIFIED' }])
     mockApi.run.mockResolvedValue(run)
     mockApi.profiles.mockResolvedValue([{ profile_id: 'profile-1', project_id: 'p1', contract_id: 'contract-1', contract_version: 1 }])
@@ -175,25 +238,17 @@ describe('应用壳', () => {
     mockApi.reports.mockResolvedValue([{ report_id: 'report-1', gate_decision: 'PASS' }])
     mockApi.report.mockResolvedValue({ runtime: { verdict: 'BLOCK', findings: [{}] }, gate: { decision: 'PASS' }, limitations: [] })
     localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
-    window.location.hash = '#/apps/rules'
+    window.location.hash = '#/check'
     render(<ControlShell />)
-    await screen.findByText('当前执行配置')
-    expect(screen.getByText('当前应用：未命名应用')).toBeInTheDocument()
-    expect(await screen.findByText('权限矩阵')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /高级：生成配置与规则详情/ }))
-    fireEvent.click(screen.getByRole('tab', { name: '关系图' }))
-    expect(await screen.findByRole('region', { name: '权限关系图' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('menuitem', { name: '开始检查' }))
-    expect(await screen.findByText('检查预览')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '切换应用，当前：未命名应用' })).toBeInTheDocument()
+    expect(await screen.findByText('核对本次检查')).toBeInTheDocument()
     expect(screen.queryByLabelText('选择执行配置')).not.toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: '开始检查' }))
     fireEvent.click(await screen.findByRole('button', { name: '查看检查结果' }))
-    fireEvent.click(await screen.findByText('查看证据'))
     expect(await screen.findByText('检查对象')).toBeInTheDocument()
     fireEvent.click(screen.getByText('完整报告'))
     fireEvent.click(await screen.findByRole('button', { name: /导出/ }))
     expect(await screen.findByRole('link', { name: 'JSON' })).toBeInTheDocument()
-    fireEvent.click(screen.getByText('历史变化'))
+    fireEvent.click(screen.getByRole('button', { name: '查看历史变化' }))
     expect((await screen.findAllByText('新发现')).length).toBeGreaterThan(0)
   })
 })

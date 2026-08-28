@@ -225,16 +225,48 @@ class WebExecutionSnapshot(ProtocolModel):
             )
         ):
             raise ValueError("effect binding references an unknown observation requirement")
+        required_channels: set[str] = set()
+        supporting_channels: set[str] = set()
+        for case in self.plan.cases:
+            action = action_map[case.action_id]
+            action_required: set[str] = set()
+            action_supporting: set[str] = set()
+            for effect_id in action.effect_ids:
+                effect_binding = effect_binding_map[effect_id]
+                action_required.update(effect_binding.required_channels)
+                action_supporting.update(effect_binding.corroborating_channels)
+            if action_required != set(case.required_observations):
+                raise ValueError(
+                    "action required effect channels must match case required observations"
+                )
+            if action_required & action_supporting:
+                raise ValueError(
+                    "action required and corroborating observations must be disjoint"
+                )
+            required_channels.update(action_required)
+            supporting_channels.update(action_supporting)
+        if required_channels & supporting_channels:
+            raise ValueError(
+                "required and corroborating observations must keep a stable role"
+            )
         for binding in self.observer_bindings:
             spec = spec_map.get(binding.observer_id or "")
+            is_effect_channel = binding.requirement_id in (
+                required_channels | supporting_channels
+            )
+            expected_required = binding.requirement_id in required_channels
             if (
                 spec is None
-                or not spec.required
                 or spec.observer_type is not binding.observer_type
                 or not set(binding.phases).issubset(spec.phases)
+                or (
+                    is_effect_channel
+                    and spec.required is not expected_required
+                )
+                or (not is_effect_channel and not spec.required)
             ):
                 raise ValueError(
-                    "observer binding must reference a required spec with matching phases"
+                    "observer binding must reference a matching spec with stable role and phases"
                 )
             if binding.identity_id is not None and binding.identity_id not in identity_ids:
                 raise ValueError("observer binding references an unknown prepared identity")
@@ -429,6 +461,8 @@ def _reject_secret_material(value: Any) -> None:
                 child_path = (*path, key)
                 if (
                     isinstance(key, str)
+                    # 严格协议模型会保留可选敏感元数据字段的 None；空值不携带秘密正文。
+                    and child is not None
                     and not (key == "secret" and isinstance(child, bool))
                     and not key.endswith("_ref")
                     # 这里只放行严格身份模型中的 Cookie 描述集合；集合内部仍递归检查，

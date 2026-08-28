@@ -48,6 +48,24 @@ def _validate_twin_baseline(
     )
 
 
+def _requirements_to_run(case, action, effect_bindings: Mapping[str, object]) -> tuple[str, ...]:
+    """按 Action 效果声明稳定合并关键与佐证观察来源。"""
+
+    requirements: list[str] = []
+    required: list[str] = []
+    supporting: list[str] = []
+    for effect_id in action.effect_ids:
+        binding = effect_bindings[effect_id]
+        for requirement_id in (*binding.required_channels, *binding.corroborating_channels):
+            if requirement_id not in requirements:
+                requirements.append(requirement_id)
+        required.extend(binding.required_channels)
+        supporting.extend(binding.corroborating_channels)
+    if set(required) != set(case.required_observations) or set(required) & set(supporting):
+        raise JiejianError(ErrorCode.EXECUTION_PROFILE_INVALID, "执行快照观察绑定不一致")
+    return tuple(requirements)
+
+
 def _apply_required_observer_guard(
     case,
     bindings,
@@ -121,6 +139,7 @@ class RunnerExecutor:
 
     def run_case(self, case, *, twin=None, twin_role: TwinExecutionRole | None = None, allow_control_valid: bool = False) -> CaseResult:
         action = self.actions[case.action_id]
+        requirements_to_run = _requirements_to_run(case, action, self.effect_bindings)
         session = self.runtime.open_case(case, action)
 
         def baseline_invalid(active_session, baseline, envelopes, outcomes):
@@ -133,6 +152,7 @@ class RunnerExecutor:
                 outcomes,
                 twin=twin,
                 twin_role=twin_role,
+                requirements_to_run=requirements_to_run,
             )
 
         def validate_baseline(baseline: TargetBaselineResult) -> TargetBaselineResult:
@@ -144,8 +164,17 @@ class RunnerExecutor:
             )
 
         def verify(active_session, envelopes: tuple[ObservationEnvelope, ...], outcomes: tuple[ObserverOutcome, ...], execution: ExecutionFact):
-            outcomes = self.observers.complete_required_outcomes(case, outcomes)
-            facts = self.observers.project_facts(case, envelopes)
+            outcomes = self.observers.complete_required_outcomes(
+                case,
+                outcomes,
+                requirements_to_run=requirements_to_run,
+            )
+            facts = self.observers.project_facts(
+                case,
+                envelopes,
+                requirements_to_run=requirements_to_run,
+                required_requirements=case.required_observations,
+            )
             effects = self._security_effects(active_session, case, action, facts, envelopes)
             verdict, reasons = evaluate_permission_case(CaseDecisionInput(case=case, action=action, execution=execution, effects=effects, twin_role=twin_role, allow_control_valid=True if twin_role is TwinExecutionRole.ALLOW_CONTROL else allow_control_valid, baseline_integrity=True))
             verdict, reasons = _apply_required_observer_guard(
@@ -160,15 +189,20 @@ class RunnerExecutor:
                 twin_role is None
                 and all(item is PermissionExpectation.ALLOW for item in case.expectations)
             )
-            return CaseResult(case=case, execution_fact=execution, verdict=verdict, finding_pre_identity=case.finding_pre_identity, baseline_integrity=True, twin_snapshot=twin, twin_role=twin_role, allow_control_valid=(verdict is CaseVerdict.SAFE) if is_allow_control else allow_control_valid, requirement_bindings=tuple(self.bindings[item] for item in case.required_observations), observation_facts=facts, security_effect_facts=effects, observations=envelopes, outcomes=outcomes, reason_codes=tuple(reasons), stage_trace=("PREPARE", "BASELINE", "BEFORE", "TARGET", "AFTER", "EVENTUAL", "RESOLVE", "VERIFICATION", "CLEANUP"))
+            return CaseResult(case=case, execution_fact=execution, verdict=verdict, finding_pre_identity=case.finding_pre_identity, baseline_integrity=True, twin_snapshot=twin, twin_role=twin_role, allow_control_valid=(verdict is CaseVerdict.SAFE) if is_allow_control else allow_control_valid, requirement_bindings=tuple(self.bindings[item] for item in requirements_to_run), observation_facts=facts, security_effect_facts=effects, observations=envelopes, outcomes=outcomes, reason_codes=tuple(reasons), stage_trace=("PREPARE", "BASELINE", "BEFORE", "TARGET", "AFTER", "EVENTUAL", "RESOLVE", "VERIFICATION", "CLEANUP"))
 
-        return CaseOrchestrator(observers=self.observers, bindings=self.bindings, clock=self.clock, cancellation_requested=self.cancellation_requested, progress=self.progress, progress_clock=self.progress_clock).run(session, case, action=action, verify=verify, finding_pre_identity=case.finding_pre_identity, twin=twin, twin_role=twin_role, allow_control_valid=allow_control_valid, baseline_validate=validate_baseline, baseline_invalid=baseline_invalid)
+        return CaseOrchestrator(observers=self.observers, bindings=self.bindings, clock=self.clock, cancellation_requested=self.cancellation_requested, progress=self.progress, progress_clock=self.progress_clock).run(session, case, action=action, verify=verify, finding_pre_identity=case.finding_pre_identity, twin=twin, twin_role=twin_role, allow_control_valid=allow_control_valid, baseline_validate=validate_baseline, baseline_invalid=baseline_invalid, requirements_to_run=requirements_to_run)
 
-    def _baseline_inconclusive(self, session, case, action, baseline, envelopes, outcomes, *, twin, twin_role) -> CaseResult:
+    def _baseline_inconclusive(self, session, case, action, baseline, envelopes, outcomes, *, twin, twin_role, requirements_to_run) -> CaseResult:
         """基线不可比时在 TARGET 前形成 INCONCLUSIVE，并仍由编排器执行 cleanup。"""
 
         reason = baseline.reason_codes[0] if baseline.reason_codes else "BASELINE_INTEGRITY_INVALID"
-        observation_facts = self.observers.project_facts(case, envelopes)
+        observation_facts = self.observers.project_facts(
+            case,
+            envelopes,
+            requirements_to_run=requirements_to_run,
+            required_requirements=case.required_observations,
+        )
         effects = self._security_effects(session, case, action, observation_facts, envelopes, baseline_integrity=False)
         execution = ExecutionFact(
             case_id=case.case_id,
@@ -181,15 +215,17 @@ class RunnerExecutor:
             reason_codes=(reason,),
         )
         failed_outcomes = dict(outcomes)
-        for requirement in case.required_observations:
+        required = set(case.required_observations)
+        for requirement in requirements_to_run:
             binding = self.bindings[requirement]
             spec = self.specs[binding.observer_id]
-            failed_outcomes[binding.observer_id] = ObserverOutcome(
-                observer_id=spec.observer_id,
-                required=True,
-                status=ObserverOutcomeStatus.INCONCLUSIVE,
-                reason_codes=(reason,),
-            )
+            if requirement in required or binding.observer_id not in failed_outcomes:
+                failed_outcomes[binding.observer_id] = ObserverOutcome(
+                    observer_id=spec.observer_id,
+                    required=requirement in required,
+                    status=ObserverOutcomeStatus.INCONCLUSIVE,
+                    reason_codes=(reason,),
+                )
         return CaseResult(
             case=case,
             execution_fact=execution,
@@ -199,7 +235,7 @@ class RunnerExecutor:
             twin_snapshot=twin,
             twin_role=twin_role,
             allow_control_valid=False,
-            requirement_bindings=tuple(self.bindings[item] for item in case.required_observations),
+            requirement_bindings=tuple(self.bindings[item] for item in requirements_to_run),
             observation_facts=observation_facts,
             security_effect_facts=effects,
             observations=envelopes,

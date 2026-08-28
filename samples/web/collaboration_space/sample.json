@@ -1,0 +1,8 @@
+{
+  "schema_version": "1",
+  "sample_id": "collaboration-space",
+  "display_name": "协作空间",
+  "source_root": "source",
+  "entry_module": "server",
+  "health_path": "/health"
+}

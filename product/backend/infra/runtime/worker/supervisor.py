@@ -103,21 +103,7 @@ class LocalWorkerSupervisor:
         stopping_job_id = self._job_id
         stopping_lease_owner = self._lease_owner
         if process is not None and process.poll() is None:
-            try:
-                from product.backend.infra.runtime.jobs.models import RequestCancellation
-
-                if self._job_id is not None:
-                    self._job_queue.request_cancellation(
-                        RequestCancellation(
-                            job_id=self._job_id,
-                            now_us=time.time_ns() // 1_000,
-                        )
-                    )
-            except Exception:
-                logger.exception(
-                    "worker cancellation request failed",
-                    extra={"component": "worker_supervisor", "event_code": "WORKER_CANCEL_REQUEST_FAILED", "job_id": self._job_id},
-                )
+            self._request_worker_cancellation()
             try:
                 process.wait(timeout=timeout)
             except Exception:
@@ -143,6 +129,41 @@ class LocalWorkerSupervisor:
             self._job_id = None
             self._lease_owner = None
         self._thread = None
+
+    def _request_worker_cancellation(self) -> None:
+        """请求取消仍在运行的 Job；终态冲突表示工作已收口，无需记录故障。"""
+
+        if self._job_id is None:
+            return
+        from product.backend.infra.runtime.jobs.models import RequestCancellation
+
+        try:
+            self._job_queue.request_cancellation(
+                RequestCancellation(
+                    job_id=self._job_id,
+                    now_us=time.time_ns() // 1_000,
+                )
+            )
+        except JiejianError as error:
+            if error.code == ErrorCode.JOB_TERMINAL_CONFLICT.value:
+                return
+            logger.exception(
+                "worker cancellation request failed",
+                extra={
+                    "component": "worker_supervisor",
+                    "event_code": "WORKER_CANCEL_REQUEST_FAILED",
+                    "job_id": self._job_id,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "worker cancellation request failed",
+                extra={
+                    "component": "worker_supervisor",
+                    "event_code": "WORKER_CANCEL_REQUEST_FAILED",
+                    "job_id": self._job_id,
+                },
+            )
 
     def _loop(self) -> None:
         """串行监督 Worker；已承担的等待态 Job 在 bootstrap 失败后必须收口。"""

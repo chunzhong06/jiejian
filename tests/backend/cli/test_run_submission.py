@@ -7,9 +7,6 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
-import typer
-
-from product.backend.cli.commands import results as result_commands
 from product.backend.cli.commands import runs as run_commands
 from product.backend.core.lifecycle import RunVerdict
 from product.protocols import RunnerResultType
@@ -60,26 +57,4 @@ def test_run_uses_current_permission_workflow(monkeypatch: pytest.MonkeyPatch, t
         "accept_source_changes": True,
         "idempotency_key": application.execution.calls[0]["idempotency_key"],
     }]
-    assert application.closed is True
-
-
-def test_ci_uses_the_same_current_permission_workflow_and_exit_mapping(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    ) -> None:
-    application = FakeApplication()
-    @contextmanager
-    def scope(*_args, **_kwargs):
-        try:
-            yield application
-        finally:
-            application.close()
-    monkeypatch.setattr(result_commands, "application_scope", scope)
-    source = tmp_path / "profile.json"
-
-    with pytest.raises(typer.Exit) as raised:
-        result_commands.ci_command(None, source)
-
-    assert raised.value.exit_code == 0
-    assert application.execution.calls[0]["source_path"] == source
     assert application.closed is True

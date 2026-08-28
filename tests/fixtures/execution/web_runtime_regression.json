@@ -1,9 +1,9 @@
 {
-  "profile_sha256": "0ad7a29d6d7e808c858b0d285fb5caf928c078df461464cdbd6c0e529e2ce426",
-  "contract_fingerprint": "bc31981fdcacc390994499698b10451d6b37147086c8ba1332789a7f9772e2a6",
-  "plan_fingerprint": "d90255410c051157178b636b0bc3ca7b4c5ee44af29d3f64c9ead3461f236496",
-  "differential_fingerprint": "50c5dce92459ee1ea1629e46ef0d01036c8c40fee16c20acdfd521721e2ab692",
-  "execution_request_sha256": "f643a2e321ce7df141afcc25a6f1a1067d79360fa2d8689d8b7e4a50f506eb96",
+  "profile_sha256": "eb3f396b7ec42de35c70f4c91f37111ada6de9233c14587f84adb22388636b78",
+  "contract_fingerprint": "1a69993f2ff32aa0c7bca09f4ddf4e2f93cf31231a523538a287942ca441e417",
+  "plan_fingerprint": "1e2648fca5c396ac9cb73eec240289d5a21111ed026db95b5b0635eb9e59f9b0",
+  "differential_fingerprint": "0c880024cbb8db3eae83e8ee1927be2f76d3dceda3a0c0d661f7dd134e5c138a",
+  "execution_request_sha256": "412a1a1c6aa4737feaad41f2bdfaacd7cec70fe9d3f73a3fc5f8dd81c58ffbbf",
   "evidence_id": "ev_3547a8ac4b7cafbb1436",
   "evidence_hash": "3547a8ac4b7cafbb143671a77267fb84a9a773ee9e557280ace7235b0b62301f",
   "finding_pre_identity": "e355f7becfb2116f53fb617b68cacc89af9e32bd34d8eee2caab696847dde62c",
@@ -11,10 +11,5 @@
   "base_report_id": "report_5460b99c9e9abbc6fd897e54225ebaef",
   "base_report_sha256": "88a315b4c5a148af88f20454beb31a0f5ee4329966625fa438f9218ccf84b46a",
   "gate_report_id": "report_2a8a35e661daaa4cd5673c3519b7d761",
-  "gate_report_sha256": "47c0a9452a559fc9ed62923b1ad529f10be02f00a4161be0709918b796d812b4",
-  "golden_run_verdicts": {
-    "fixed": "PASS",
-    "vulnerable": "BLOCK",
-    "inconclusive": "INCONCLUSIVE"
-  }
+  "gate_report_sha256": "47c0a9452a559fc9ed62923b1ad529f10be02f00a4161be0709918b796d812b4"
 }

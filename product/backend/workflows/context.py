@@ -30,12 +30,14 @@ from product.backend.workflows.runs.execution import ExecutionWorkflow
 from product.backend.infra.runtime.jobs.targets import JobTargetType, default_run_job_targets
 from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
 from product.backend.workflows.projects.catalog import ProjectCatalog
+from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
 from product.backend.workflows.projects.readiness import ProjectReadinessService
 from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
 from product.backend.workflows.recording.submission import RecordingSubmission
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.runtime.cache import CacheMaintenanceService
+from product.backend.infra.samples import OfficialSampleManager
 from product.backend.infra.runtime.runner.progress import RunnerProgressReader
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.storage import StorageUnitOfWork
@@ -50,12 +52,22 @@ from product.backend.workflows.test_identities import (
 )
 from product.backend.workflows.permission_intents import PermissionIntentService
 from product.backend.workflows.security_setup import CheckWorkflow, SecuritySetupCompiler
+from product.backend.workflows.security_setup.local_observer_registry import (
+    LocalObserverEnvironmentRegistry,
+)
 from product.backend.workflows.onboarding.workflow import FolderSelector, OnboardingWorkflow, SystemFolderSelector
 from product.backend.workflows.recording.credentials import RuntimeSecretVault
 from product.backend.workflows.recording.run_service import RecordingRunService
+from product.backend.workflows.recording.project_submission import ProjectRecordingService
 from product.backend.workflows.recording.credentials import RecordingCredentialProvider
 from product.backend.workflows.recording.safety_setup import ActionSafetySetupService
 from product.backend.workflows.results.services import build_result_services
+from product.backend.workflows.control import (
+    ProductFlowQuery,
+    ProductResultQuery,
+    ProductStatusService,
+)
+from product.backend.workflows.official_sample import OfficialSampleExperience
 
 
 class ApplicationCore:
@@ -73,6 +85,7 @@ class ApplicationCore:
         folder_selector: FolderSelector | None = None,
         endpoint_discovery=None,
         control_origin: str | None = None,
+        official_sample_root: Path | None = None,
     ) -> None:
         from product.backend.infra.storage import create_session_factory, create_sqlite_engine, default_database_path, upgrade_database
 
@@ -84,10 +97,13 @@ class ApplicationCore:
         if control_origin is not None:
             # 该值只来自 Serve 已规范化的实际监听 origin，供 Worker/Runner 拒绝自检。
             self._base_environment["JIEJIAN_CONTROL_ORIGIN"] = control_origin
-        self.cache = CacheMaintenanceService(
+        self.local_observer_environments = LocalObserverEnvironmentRegistry()
+        self.official_samples = OfficialSampleManager(
             self.var_dir,
-            environment=self._base_environment,
+            official_sample_root,
+            self._base_environment,
         )
+        self.cache = CacheMaintenanceService(self.var_dir)
         database_path = default_database_path(self.var_dir)
         upgrade_database(database_path)
         self.engine = create_sqlite_engine(database_path)
@@ -183,6 +199,9 @@ class ApplicationCore:
             execution_credentials=self.test_identity_execution,
             contracts=self.contracts,
             execution=self.execution,
+            local_observer_environment_resolver=(
+                self.local_observer_environments.resolve
+            ),
         )
         self.execution.set_generated_profile_validator(
             self.security_setup.validate_generated_profile
@@ -199,6 +218,35 @@ class ApplicationCore:
             permission_matrix_resolver=self.permission_intents.matrix,
             check_preview_resolver=self.checks.preview,
         )
+        self.product_status = ProductStatusService(
+            self.projects,
+            self.project_readiness.get,
+            self.result_presentation,
+        )
+        self.product_results = ProductResultQuery(
+            self.product_status,
+            self.result_presentation,
+            self.result_history,
+        )
+        self.product_flows = ProductFlowQuery(self.projects, factory)
+        self.official_experience = OfficialSampleExperience(
+            self.official_samples,
+            self.application_understanding,
+            self.test_identities,
+            self.secret_store,
+            self.local_observer_environments,
+            self.product_status,
+            clock_us=clock_us,
+        )
+        self.project_lifecycle = ProjectLifecycleService(
+            factory,
+            self.test_identities,
+            official_sample_active=lambda project_id: (
+                (status := self.official_experience.status()).active
+                and status.project_id == project_id
+            ),
+            clock_us=clock_us,
+        )
         from product.backend.workflows.assistant import GuidanceQueryService
 
         self.assistant_guidance = GuidanceQueryService(
@@ -210,6 +258,14 @@ class ApplicationCore:
             self.recording_request_store,
         )
         self.recording_lifecycle = RecordingLifecycle(factory, var_dir=self.var_dir)
+        self.project_recordings = ProjectRecordingService(
+            self.application_understanding,
+            self.test_identities,
+            self.recording_credentials,
+            self.recording_submission,
+            projects=self.projects,
+            clock_us=clock_us,
+        )
         self.onboarding = OnboardingWorkflow(
             folder_selector
             or SystemFolderSelector(
@@ -256,12 +312,14 @@ class ApplicationCore:
 
     def close(self) -> None:
         self.identity_preparations.close()
+        self.official_experience.close()
         self.secret_vault.clear()
         self.engine.dispose()
 
     def environment_for_secret_names(self, names) -> dict[str, str]:
         environment = dict(self._base_environment)
         environment.update(self.secret_vault.resolve(names))
+        environment.update(self.official_samples.resolve_secret_names(names))
         if hasattr(self, "test_identity_execution"):
             environment.update(self.test_identity_execution.resolve(names))
         return environment

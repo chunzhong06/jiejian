@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
+from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict
 from product.backend.core.verification.facts import (
     ExecutionFact,
@@ -33,8 +36,12 @@ from product.backend.core.verification.permissions import (
 )
 from product.backend.infra.execution.port import TargetBaselineResult, TargetRuntimeContext
 from product.backend.infra.execution.registry import TargetRuntimeRegistry
-from product.backend.infra.runtime.runner.case_orchestrator import CaseOrchestrator, CaseResult
-from product.protocols import ObservationPhase
+from product.backend.infra.runtime.runner.case_orchestrator import (
+    CaseExecutionFailure,
+    CaseOrchestrator,
+    CaseResult,
+)
+from product.protocols import ObservationPhase, RunnerFailurePhase
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +116,27 @@ class _InvalidBaselineSession(_FakeSession):
             valid=False,
             comparison_fingerprints=("b" * 64,),
             reason_codes=("TWIN_BASELINE_MISMATCH",),
+        )
+
+
+class _ValueExtractionFailureSession(_FakeSession):
+    def __init__(self, failure_stage: str) -> None:
+        super().__init__()
+        self.failure_stage = failure_stage
+
+    def prepare(self) -> None:
+        super().prepare()
+        if self.failure_stage == "prepare":
+            raise JiejianError(
+                ErrorCode.VALUE_EXTRACTION_FAILED,
+                "准备步骤的响应值提取失败",
+            )
+
+    def execute_target(self):
+        self.events.append("target")
+        raise JiejianError(
+            ErrorCode.VALUE_EXTRACTION_FAILED,
+            "目标步骤的响应值提取失败",
         )
 
 
@@ -256,3 +284,47 @@ def test_unavailable_baseline_stops_before_target_and_still_cleans_up() -> None:
     assert result.valid is False
     assert result.reason_codes == ("BASELINE_OBSERVATION_INCOMPLETE",)
     assert session.events == ["prepare", "cleanup"]
+
+
+@pytest.mark.parametrize(
+    ("failure_stage", "expected_phase", "expected_events"),
+    (
+        (
+            "prepare",
+            RunnerFailurePhase.SETUP,
+            ["prepare", "cleanup"],
+        ),
+        (
+            "target",
+            RunnerFailurePhase.TARGET,
+            ["prepare", "baseline", "target", "cleanup"],
+        ),
+    ),
+)
+def test_value_extraction_failure_preserves_actual_execution_phase(
+    failure_stage: str,
+    expected_phase: RunnerFailurePhase,
+    expected_events: list[str],
+) -> None:
+    session = _ValueExtractionFailureSession(failure_stage)
+    case = _case()
+    action = ActionDefinition(action_id="view", effect_ids=("document-mutated",))
+
+    with pytest.raises(CaseExecutionFailure) as exc_info:
+        CaseOrchestrator(
+            observers=_NoopObserverCoordinator(),
+            bindings={},
+            clock=lambda: 1,
+            cancellation_requested=lambda: False,
+        ).run(
+            session,
+            case,
+            action=action,
+            finding_pre_identity=case.finding_pre_identity,
+            verify=lambda *_args: (_ for _ in ()).throw(
+                AssertionError("提取失败后不应进入 Verification")
+            ),
+        )
+
+    assert exc_info.value.phase is expected_phase
+    assert session.events == expected_events

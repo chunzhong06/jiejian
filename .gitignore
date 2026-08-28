@@ -1,6 +1,8 @@
 # Python environments and build outputs
 .venv/
 build/
+!scripts/build/
+!scripts/build/hatch_build.py
 dist/
 *.egg-info/
 

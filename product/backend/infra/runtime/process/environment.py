@@ -11,7 +11,7 @@
 #   只传播固定角色白名单与显式业务 secret；调用方不得借附加变量改写受控身份。
 #
 # 调用链
-#   Worker / Runner / Recording / Observer / Artifact / Selector → 本模块 → process tree
+#   Worker / Runner / Recording / Observer / Sample / Artifact / Selector → 本模块 → process tree
 # =============================================================================
 
 from __future__ import annotations
@@ -42,6 +42,7 @@ class ProcessEnvironmentRole(StrEnum):
     RECORDING = "RECORDING"
     IDENTITY_PREPARATION = "IDENTITY_PREPARATION"
     OBSERVER = "OBSERVER"
+    SAMPLE = "SAMPLE"
     ARTIFACT_SCAN = "ARTIFACT_SCAN"
     ONBOARDING_SELECTOR = "ONBOARDING_SELECTOR"
 
@@ -63,6 +64,7 @@ _COMMON_SOURCE_NAMES = frozenset(
         "JIEJIAN_PYTHON_ENVIRONMENT_PATH",
         "JIEJIAN_PYTHON_ENVIRONMENT_TYPE",
         "JIEJIAN_PROJECT_ROOT",
+        "JIEJIAN_RELEASE_ROOT",
         "JIEJIAN_RUNTIME_FINGERPRINT",
         "JIEJIAN_RUNTIME_MODE",
         "JIEJIAN_VAR_DIR",
@@ -91,6 +93,8 @@ _ROLE_POLICIES = MappingProxyType(
                     "JIEJIAN_CONTROL_ORIGIN",
                     "JIEJIAN_SERVE_LOCK_PATH",
                     "JIEJIAN_SERVE_OWNER_TOKEN",
+                    # Worker 是 Recording 的受信启动中介，必须保留非秘密浏览器运行时根路径。
+                    "PLAYWRIGHT_BROWSERS_PATH",
                 }
             ),
             allows_secrets=True,
@@ -118,6 +122,7 @@ _ROLE_POLICIES = MappingProxyType(
             extra_names=frozenset({"JIEJIAN_ATTEMPT_DIR"}),
             allows_secrets=True,
         ),
+        ProcessEnvironmentRole.SAMPLE: _policy(allows_secrets=True),
         ProcessEnvironmentRole.ARTIFACT_SCAN: _policy(allows_secrets=False),
         ProcessEnvironmentRole.ONBOARDING_SELECTOR: _policy(
             extra_names=frozenset(
@@ -142,11 +147,25 @@ _COMMON_IDENTITY_NAMES = frozenset(
         "JIEJIAN_PYTHON_EXECUTABLE",
         "JIEJIAN_PYTHON_ENVIRONMENT_PATH",
         "JIEJIAN_PYTHON_ENVIRONMENT_TYPE",
-        "JIEJIAN_PROJECT_ROOT",
         "JIEJIAN_RUNTIME_FINGERPRINT",
         "JIEJIAN_RUNTIME_MODE",
         "JIEJIAN_VAR_DIR",
     }
+)
+_RUNTIME_IDENTITY_NAMES = MappingProxyType(
+    {
+        "development": frozenset({"JIEJIAN_PROJECT_ROOT"}),
+        "portable": frozenset(
+            {
+                "JIEJIAN_RELEASE_ROOT",
+                "JIEJIAN_PLAYWRIGHT_EXECUTABLE",
+                "PLAYWRIGHT_BROWSERS_PATH",
+            }
+        ),
+    }
+)
+_ALL_IDENTITY_NAMES = _COMMON_IDENTITY_NAMES | frozenset().union(
+    *_RUNTIME_IDENTITY_NAMES.values()
 )
 
 
@@ -157,7 +176,6 @@ _MAIN_PROCESS_ONLY_NAMES = frozenset(
         "JIEJIAN_FRONTEND_DIST",
         "JIEJIAN_NODE_EXECUTABLE",
         "JIEJIAN_NODE_VERSION",
-        "JIEJIAN_PLAYWRIGHT_EXECUTABLE",
         "JIEJIAN_PNPM_EXECUTABLE",
         "JIEJIAN_PNPM_VERSION",
         "JIEJIAN_TOOLCHAIN_MANIFEST",
@@ -194,6 +212,22 @@ _CONTROLLED_NAME_CASEFOLDS = frozenset(
     )
 )
 _ENVIRONMENT_NAME_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+_FAILURE_REASON_BY_MESSAGE = MappingProxyType(
+    {
+        "Python 子进程角色无效": "PROCESS_ROLE_INVALID",
+        "Python 子进程秘密引用无效": "SECRET_REFERENCE_INVALID",
+        "Python 子进程秘密引用与受控环境变量冲突": "SECRET_REFERENCE_INVALID",
+        "当前 Python 子进程角色不允许秘密引用": "SECRET_REFERENCE_INVALID",
+        "Python 子进程环境变量无效": "ENVIRONMENT_VALUE_INVALID",
+        "Python 子进程环境变量名称冲突": "ENVIRONMENT_NAME_CONFLICT",
+        "Python 子进程缺少共同运行身份": "COMMON_IDENTITY_MISSING",
+        "当前 Python 与界鉴启动阶段确认的解释器不一致": "PYTHON_IDENTITY_MISMATCH",
+        "Python 子进程工作目录不存在": "WORKING_DIRECTORY_MISSING",
+        "Python 子进程附加环境变量无效": "EXTRA_ENVIRONMENT_REJECTED",
+        "Python 子进程附加环境变量越界": "EXTRA_ENVIRONMENT_REJECTED",
+        "Python 子进程不得替换启动阶段确认的解释器": "PYTHON_IDENTITY_MISMATCH",
+    }
+)
 
 
 def _coerce_role(role: ProcessEnvironmentRole | str) -> ProcessEnvironmentRole:
@@ -265,6 +299,33 @@ def _casefold_environment(source: Mapping[str, str]) -> dict[str, tuple[str, str
     return by_casefold
 
 
+def process_environment_failure_summary(error: JiejianError) -> dict[str, object]:
+    """把 Popen 前的环境拒绝投影为无值、无路径的稳定诊断。"""
+
+    if error.code != ErrorCode.RUNTIME_ENVIRONMENT_INVALID.value:
+        return {}
+    payload = error.to_dict()
+    message = payload.get("message")
+    reason = _FAILURE_REASON_BY_MESSAGE.get(
+        message if isinstance(message, str) else "",
+        "RUNTIME_ENVIRONMENT_REJECTED",
+    )
+    summary: dict[str, object] = {"reason": reason}
+    if reason != "COMMON_IDENTITY_MISSING":
+        return summary
+    details = payload.get("details")
+    missing = details.get("missing") if isinstance(details, Mapping) else None
+    if isinstance(missing, (list, tuple)):
+        names = sorted(
+            name
+            for name in missing
+            if isinstance(name, str) and name in _ALL_IDENTITY_NAMES
+        )
+        if names:
+            summary["missing_names"] = names
+    return summary
+
+
 def minimal_process_environment(
     source: Mapping[str, str],
     *,
@@ -277,9 +338,14 @@ def minimal_process_environment(
     policy = _role_policy(role)
     names = _validate_secret_names(role, secret_names)
     by_casefold = _casefold_environment(source)
+    runtime_mode_entry = by_casefold.get("JIEJIAN_RUNTIME_MODE".casefold())
+    runtime_mode = runtime_mode_entry[1].strip().lower() if runtime_mode_entry else ""
+    required_identity_names = _COMMON_IDENTITY_NAMES | _RUNTIME_IDENTITY_NAMES.get(
+        runtime_mode, frozenset()
+    )
     missing_identity = sorted(
         name
-        for name in _COMMON_IDENTITY_NAMES
+        for name in required_identity_names
         if not (by_casefold.get(name.casefold()) and by_casefold[name.casefold()][1])
     )
     if missing_identity:
@@ -289,7 +355,9 @@ def minimal_process_environment(
             details={"missing": missing_identity},
         )
     selected_names = tuple(
-        dict.fromkeys((*_COMMON_SOURCE_NAMES, *policy.source_names, *names))
+        dict.fromkeys(
+            (*_COMMON_SOURCE_NAMES, *required_identity_names, *policy.source_names, *names)
+        )
     )
     result: dict[str, str] = {}
     for name in selected_names:

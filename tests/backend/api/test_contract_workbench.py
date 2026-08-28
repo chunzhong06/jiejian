@@ -11,32 +11,25 @@ from tests.fixtures.control_plane import TestClient, create_app
 
 pytestmark = pytest.mark.database
 
-SAMPLE_CONTRACT = Path("samples/web/fixed/contract.json").resolve()
+from tests.fixtures.runner import write_web_test_profile
 
 
-def _contract_snapshot(contract_id: str, version: int = 1) -> dict:
-    snapshot = json.loads(SAMPLE_CONTRACT.read_text(encoding="utf-8"))
+def _contract_snapshot(contract_path: Path, contract_id: str, version: int = 1) -> dict:
+    snapshot = json.loads(contract_path.read_text(encoding="utf-8"))
     snapshot["contract_id"] = contract_id
     snapshot["version"] = version
     return snapshot
 
 
-def _register(client: TestClient, path: Path | None = None) -> str:
-    response = client.post(
-        "/api/projects",
-        json={
-            "schema_version": "1",
-            "profile_path": str((path or Path("samples/web/fixed/profile.json")).resolve()),
-        },
-    )
-    assert response.status_code == 200
-    return response.json()["data"]["project_id"]
+def _register(app, path: Path) -> str:
+    return app.state.context.projects.register(path.resolve())[0].project_id
 
 
 def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
+    profile_path, contract_path = write_web_test_profile(tmp_path / "base")
     with TestClient(app) as client:
-        project_id = _register(client)
+        project_id = _register(app, profile_path)
         malformed = client.post(
             f"/api/projects/{project_id}/contract-governance/requirements",
             json={"schema_version": "1", "text": "任意自然语言", "security_tags": [], "actor": "analyst"},
@@ -85,7 +78,7 @@ def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> 
             json={
                 "schema_version": "1",
                 "contract_id": "ownership-contract",
-                "snapshot": _contract_snapshot("ownership-contract"),
+                "snapshot": _contract_snapshot(contract_path, "ownership-contract"),
                 "candidate_ids": [item["candidate_id"] for item in candidates],
                 "actor": "analyst",
             },
@@ -114,7 +107,7 @@ def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> 
             f"/api/projects/{project_id}/contract-governance/contracts/ownership-contract/revisions",
             json={
                 "schema_version": "1",
-                "snapshot": _contract_snapshot("ownership-contract", 2),
+                "snapshot": _contract_snapshot(contract_path, "ownership-contract", 2),
                 "candidate_ids": [item["candidate_id"] for item in candidates],
                 "actor": "analyst",
             },
@@ -138,9 +131,13 @@ def test_contract_workbench_api_full_offline_governance_loop(tmp_path: Path) -> 
 
 def test_contract_workbench_api_rejects_cross_project_requirement(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
+    first_profile, contract_path = write_web_test_profile(tmp_path / "first")
+    second_profile, _ = write_web_test_profile(
+        tmp_path / "second", project_id="web-test-project-second", profile_id="web-test-profile-second"
+    )
     with TestClient(app) as client:
-        first_project = _register(client)
-        second_project = _register(client, Path("samples/web/vulnerable/profile.json"))
+        first_project = _register(app, first_profile)
+        second_project = _register(app, second_profile)
         requirement = client.post(
             f"/api/projects/{first_project}/contract-governance/requirements",
             json={
@@ -174,7 +171,7 @@ def test_contract_workbench_api_rejects_cross_project_requirement(tmp_path: Path
             json={
                 "schema_version": "1",
                 "contract_id": "cross-project-contract",
-                "snapshot": _contract_snapshot("cross-project-contract"),
+                "snapshot": _contract_snapshot(contract_path, "cross-project-contract"),
                 "candidate_ids": [candidate["candidate_id"]],
                 "actor": "analyst",
             },

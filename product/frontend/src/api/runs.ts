@@ -8,7 +8,7 @@
  *   提交和读取 Run｜列出项目运行｜取消关联 Job
  *
  * 调用链
- *   StartCheckPage / CheckResultsPage → runsApi → api/http
+ *   PermissionCheckPage / CheckResultsPage → runsApi → api/http
  * ============================================================================= */
 
 import { request, type ErrorDiagnosis } from './http'

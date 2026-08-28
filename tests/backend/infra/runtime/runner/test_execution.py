@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ import pytest
 
 from product.backend.core.lifecycle import CaseVerdict
 from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, TargetType
+from product.backend.core.verification.permissions import permission_model_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import (
     CleanupIssue,
@@ -42,6 +44,7 @@ from tests.fixtures.runner import runner_input
 
 class _FakeHttp:
     instances: list[_FakeHttp] = []
+    execute_calls = 0
     outcome = ExecutionOutcome.ACCEPTED
     target_type = TargetType.WEB
 
@@ -54,6 +57,7 @@ class _FakeHttp:
         return HttpResponse(status_code=200, data={"ok": True})
 
     def execute(self, binding, *, case_id: str, action_id: str, **_kwargs) -> ExecutionFact:
+        self.__class__.execute_calls += 1
         return ExecutionFact(case_id=case_id, action_id=action_id, target_type=TargetType.WEB, outcome=self.outcome, execution_marker=case_id, input_hash="a" * 64, output_hash="b" * 64, reason_codes=() if self.outcome in {ExecutionOutcome.ACCEPTED, ExecutionOutcome.DENIED} else ("TRANSPORT_FAILURE",))
 
     def execute_detailed(self, binding, *, case_id: str, action_id: str, **_kwargs):
@@ -67,19 +71,55 @@ class _FakeHttp:
 
 
 def _owner_envelope(spec, correlation, phase, *, changed: bool) -> ObservationEnvelope:
-    state = build_normalized_state({"value": "new" if changed else "old"})
+    value = (
+        "supporting"
+        if spec.observer_id.startswith("support_observer")
+        else "new" if changed else "old"
+    )
+    state = build_normalized_state({"value": value})
     return ObservationEnvelope(observer_id=spec.observer_id, observer_type=spec.observer_type, phase=phase, target_id=spec.target.target_id, window=ObservationWindow(phase=phase, started_at_us=1, finished_at_us=2, timeout_us=spec.budget.timeout_us), correlation=correlation, causality=CausalityStatus.CORRELATED, completeness=ObservationCompleteness.COMPLETE, state=state, provenance=ObservationProvenance(provenance_type=ProvenanceType.OWNER_API, adapter_version="fake-owner", target_id=spec.target.target_id, source_sha256=state.canonical_sha256))
 
 
-def _run(monkeypatch, tmp_path: Path, outcome: ExecutionOutcome, progress=None):
+def _run(
+    monkeypatch,
+    tmp_path: Path,
+    outcome: ExecutionOutcome,
+    progress=None,
+    document=None,
+    supporting_unavailable: bool = False,
+    baseline_inputs=None,
+    return_result: bool = False,
+):
     _FakeHttp.outcome = outcome
 
     def observe(self, executor, *, resource_id, owner_token, case_id, phase, known_secrets=(), identity_runtime=None):
-        return _owner_envelope(self.spec, Correlation(case_id=case_id, resource_id=resource_id, request_marker=case_id), phase, changed=phase is ObservationPhase.AFTER)
+        envelope = _owner_envelope(self.spec, Correlation(case_id=case_id, resource_id=resource_id, request_marker=case_id), phase, changed=phase is ObservationPhase.AFTER)
+        if supporting_unavailable and self.spec.observer_id.startswith("support_observer"):
+            return envelope.model_copy(
+                update={
+                    "causality": CausalityStatus.UNVERIFIED,
+                    "completeness": ObservationCompleteness.MISSING,
+                    "state": None,
+                    "reason_codes": ("SUPPORTING_OBSERVER_INCOMPLETE",),
+                }
+            )
+        return envelope
 
     monkeypatch.setattr(web_runtime, "HttpExecutionAdapter", _FakeHttp)
     monkeypatch.setattr(web_runtime.OwnerApiObserverAdapter, "observe", observe)
-    document = runner_input()
+    if baseline_inputs is not None:
+        original_evaluate_baseline = web_runtime.WebTargetCaseSession.evaluate_baseline
+
+        def capture_baseline(self, envelopes, **kwargs):
+            baseline_inputs.append(tuple(envelopes))
+            return original_evaluate_baseline(self, envelopes, **kwargs)
+
+        monkeypatch.setattr(
+            web_runtime.WebTargetCaseSession,
+            "evaluate_baseline",
+            capture_baseline,
+        )
+    document = document or runner_input()
     runner = RunnerExecutor(
         document,
         runtime_factory=web_runtime.WebTargetRuntimeFactory(),
@@ -90,9 +130,199 @@ def _run(monkeypatch, tmp_path: Path, outcome: ExecutionOutcome, progress=None):
     )
     try:
         result = runner.run_case(document.project_snapshot.plan.cases[0])
-        return evidence_from_case(document, result)
+        return (document, result) if return_result else evidence_from_case(document, result)
     finally:
         runner.close()
+
+
+def _document_with_supporting_observer(
+    supporting_ids: tuple[str, ...] = ("support_state",),
+):
+    document = runner_input()
+    snapshot = document.project_snapshot
+    owner_spec = snapshot.observers[0]
+    owner_binding = snapshot.observer_bindings[0]
+    second_key_spec = owner_spec.model_copy(
+        update={"observer_id": "second_key_observer"}
+    )
+    second_key_binding = owner_binding.model_copy(
+        update={
+            "requirement_id": "secondary_state",
+            "observer_id": "second_key_observer",
+        }
+    )
+    supporting_specs = tuple(
+        owner_spec.model_copy(
+            update={
+                "observer_id": f"support_observer_{index}",
+                "required": False,
+            }
+        )
+        for index, _requirement_id in enumerate(supporting_ids, start=1)
+    )
+    supporting_bindings = tuple(
+        owner_binding.model_copy(
+            update={
+                "requirement_id": requirement_id,
+                "observer_id": f"support_observer_{index}",
+            }
+        )
+        for index, requirement_id in enumerate(supporting_ids, start=1)
+    )
+    effect_binding = snapshot.effect_bindings[0].model_copy(
+        update={
+            "required_channels": ("resource_state", "secondary_state"),
+            "corroborating_channels": supporting_ids,
+        }
+    )
+    original_case = snapshot.plan.cases[0]
+    semantic = {
+        "engine_version": "runner-test",
+        "subject_id": original_case.subject_id,
+        "action_id": original_case.action_id,
+        "resource_ids": original_case.resource_ids,
+        "expectations": original_case.expectations,
+        "relation_paths": original_case.relation_paths,
+        "context": original_case.context,
+        "required_observations": ("resource_state", "secondary_state"),
+        "batch_mode": original_case.batch_mode,
+        "atomic": original_case.atomic,
+    }
+    case_fingerprint = permission_model_sha256(semantic)
+    case = original_case.model_copy(
+        update={
+            "case_id": f"case-{case_fingerprint[:32]}",
+            "fingerprint": case_fingerprint,
+            "required_observations": ("resource_state", "secondary_state"),
+        }
+    )
+    plan = snapshot.plan.model_copy(update={"cases": (case,)})
+    extended = snapshot.model_copy(
+        update={
+            "plan": plan,
+            "observers": (owner_spec, second_key_spec, *supporting_specs),
+            "observer_bindings": (
+                owner_binding,
+                second_key_binding,
+                *supporting_bindings,
+            ),
+            "effect_bindings": (effect_binding,),
+        }
+    )
+    return document.model_copy(update={"project_snapshot": extended})
+
+
+def test_runner_executes_supporting_observer_and_publishes_its_trace(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    document = _document_with_supporting_observer()
+    base = _document_with_supporting_observer(())
+    original_case = base.project_snapshot.plan.cases[0]
+    assert document.project_snapshot.plan.cases[0].case_id == original_case.case_id
+    assert document.project_snapshot.plan.cases[0].fingerprint == original_case.fingerprint
+    reordered = _document_with_supporting_observer(("support_state_2", "support_state"))
+    assert reordered.project_snapshot.plan.cases[0].case_id == original_case.case_id
+    assert reordered.project_snapshot.plan.cases[0].fingerprint == original_case.fingerprint
+    execute_calls = _FakeHttp.execute_calls
+    evidence = _run(
+        monkeypatch,
+        tmp_path,
+        ExecutionOutcome.ACCEPTED,
+        document=document,
+        supporting_unavailable=True,
+    )
+
+    assert evidence.verdict is CaseVerdict.SAFE
+    assert {item.requirement_id for item in evidence.requirement_bindings} == {
+        "resource_state",
+        "secondary_state",
+        "support_state",
+    }
+    assert {item.requirement_id for item in evidence.observation_facts} == {
+        "resource_state",
+        "secondary_state",
+        "support_state",
+    }
+    assert {
+        item.phase for item in evidence.observations
+        if item.observer_id == "support_observer_1"
+    } == {
+        ObservationPhase.BASELINE,
+        ObservationPhase.BEFORE,
+        ObservationPhase.AFTER,
+    }
+    assert _FakeHttp.execute_calls > execute_calls
+    support_outcome = next(
+        item for item in evidence.outcomes if item.observer_id == "support_observer_1"
+    )
+    assert support_outcome.required is False
+    assert support_outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
+    support_fact = next(
+        item for item in evidence.observation_facts if item.requirement_id == "support_state"
+    )
+    assert support_fact.reason_codes == ("SUPPORTING_OBSERVER_INCOMPLETE",)
+
+
+def test_runner_keeps_available_supporting_observer_without_affecting_baseline(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    document = _document_with_supporting_observer()
+    baseline_inputs: list[tuple[ObservationEnvelope, ...]] = []
+    evidence = _run(
+        monkeypatch,
+        tmp_path,
+        ExecutionOutcome.ACCEPTED,
+        document=document,
+        baseline_inputs=baseline_inputs,
+    )
+
+    assert evidence.verdict is CaseVerdict.SAFE
+    assert all(
+        item.status is ObserverOutcomeStatus.AVAILABLE
+        for item in evidence.outcomes
+        if item.observer_id.startswith("support_observer")
+    )
+    assert len(baseline_inputs) == 1
+    assert {item.observer_id for item in baseline_inputs[0]} == {
+        "owner_observer",
+        "second_key_observer",
+    }
+    support_baseline = next(
+        item
+        for item in evidence.observations
+        if item.observer_id == "support_observer_1"
+        and item.phase is ObservationPhase.BASELINE
+    )
+    owner_baseline = next(
+        item
+        for item in evidence.observations
+        if item.observer_id == "owner_observer"
+        and item.phase is ObservationPhase.BASELINE
+    )
+    assert support_baseline.state.canonical_sha256 != owner_baseline.state.canonical_sha256
+
+
+def test_evidence_from_case_rejects_bindings_outside_action_channels(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    document = _document_with_supporting_observer()
+    document, case_result = _run(
+        monkeypatch,
+        tmp_path,
+        ExecutionOutcome.ACCEPTED,
+        document=document,
+        return_result=True,
+    )
+
+    invalid = replace(
+        case_result,
+        requirement_bindings=case_result.requirement_bindings[:-1],
+    )
+    with pytest.raises(ValueError, match="action observation channels"):
+        evidence_from_case(document, invalid)
 
 
 def test_runner_maps_accepted_execution_and_observed_effect(monkeypatch, tmp_path: Path) -> None:

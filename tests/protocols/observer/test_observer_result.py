@@ -113,7 +113,7 @@ def test_observation_completeness_matrix_and_outcome_never_decides_verdict() -> 
     assert evaluate_observer_outcome(complete, required=True).status is ObserverOutcomeStatus.AVAILABLE
     missing = complete.model_copy(update={"completeness": ObservationCompleteness.MISSING, "state": None, "provenance": None, "reason_codes": ("OWNER_API_UNAVAILABLE",)})
     assert evaluate_observer_outcome(missing, required=True).status is ObserverOutcomeStatus.INCONCLUSIVE
-    assert evaluate_observer_outcome(missing, required=False).status is ObserverOutcomeStatus.AVAILABLE
+    assert evaluate_observer_outcome(missing, required=False).status is ObserverOutcomeStatus.INCONCLUSIVE
     assert evaluate_observer_outcome(complete, required=True, adapter_error=True).status is ObserverOutcomeStatus.EXECUTION_ERROR
     with pytest.raises(ValueError):
         ObservationEnvelope(**complete.model_dump(mode="python", exclude={"completeness", "reason_codes"}), completeness=ObservationCompleteness.MISSING, reason_codes=())

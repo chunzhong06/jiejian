@@ -1,11 +1,9 @@
-# Project API Router
+# 项目 API 路由：暴露应用接入、理解候选与当前权限合同的受控 HTTP 边界。
 # 适配 Project 接入和当前 PermissionContract 读取，不在路由层推断治理结论。
 
 from __future__ import annotations
 
 from typing import Literal
-from pathlib import Path
-
 from fastapi import APIRouter
 from pydantic import Field
 
@@ -30,25 +28,33 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
         )
         return data_response(result.model_dump(mode="json"), status_code=201)
 
-    @router.post("/api/projects", response_model=ApiResponse)
-    async def register_project(body: ProjectRegisterRequest):
-        record, _ = context.projects.register(Path(body.profile_path))
-        return data_response(record.model_dump(mode="json"))
-
     @router.get("/api/projects", response_model=ApiResponse)
-    async def list_projects():
+    async def list_projects(include_archived: bool = False):
         return data_response(
-            [record.model_dump(mode="json") for record in context.projects.list()]
+            [
+                record.model_dump(mode="json")
+                for record in context.projects.list(include_archived=include_archived)
+            ]
         )
 
     @router.get("/api/projects/{project_id}", response_model=ApiResponse)
     async def get_project(project_id: str):
         return data_response(context.projects.get(project_id).model_dump(mode="json"))
 
-    @router.get("/api/projects/{project_id}/readiness", response_model=ApiResponse)
-    async def get_project_readiness(project_id: str):
+    @router.delete("/api/projects/{project_id}", response_model=ApiResponse)
+    async def archive_project(project_id: str):
+        """移除普通应用视图，保留 Project 及全部历史结果。"""
+
         return data_response(
-            context.project_readiness.get(project_id).model_dump(mode="json")
+            context.project_lifecycle.archive(project_id).model_dump(mode="json")
+        )
+
+    @router.get("/api/projects/{project_id}/status", response_model=ApiResponse)
+    async def get_product_status(project_id: str):
+        """返回 GUI、CLI 与 Machine 共用的项目工作台只读投影。"""
+
+        return data_response(
+            context.product_status.get(project_id).model_dump(mode="json")
         )
 
     @router.get(
@@ -202,11 +208,6 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
     return router
 
 
-class ProjectRegisterRequest(ApiModel):
-    schema_version: Literal["1"]
-    profile_path: str = Field(min_length=1, max_length=2048)
-
-
 class ApplicationConnectRequest(ApiModel):
     schema_version: Literal["1"]
     source_root: str = Field(min_length=1, max_length=32_768)
@@ -232,7 +233,7 @@ class SourceAnalysisRequest(ApiModel):
 
 class CandidateDecisionRequest(ApiModel):
     schema_version: Literal["1"]
-    decision: Literal["CONFIRMED", "REJECTED"]
+    decision: Literal["PROPOSED", "CONFIRMED", "REJECTED"]
     display_name: str | None = Field(default=None, min_length=1, max_length=256)
     revision: int = Field(ge=0, le=1_000_000)
 

@@ -49,13 +49,28 @@ def application_scope(
     context: typer.Context, *, environ: Mapping[str, str] | None = None
 ) -> Iterator[object]:
     settings = runtime_settings(context)
+    from product.backend.core.errors import ErrorCode
+    from product.backend.infra.runtime.serve_lock import ServeLock
     from product.backend.workflows.context import ApplicationCore
 
-    application = ApplicationCore(settings.var_dir, environ=environ)
+    ownership = ServeLock.acquire(
+        settings.var_dir,
+        conflict_code=ErrorCode.WORKSPACE_ALREADY_CONTROLLED,
+        conflict_message=(
+            "当前运行目录正由图形界面或另一个 CLI 管理；"
+            "请先关闭该控制者，或改用不同的 --var-dir"
+        ),
+    )
+    application = None
     try:
+        application = ApplicationCore(settings.var_dir, environ=environ)
         yield application
     finally:
-        application.close()
+        try:
+            if application is not None:
+                application.close()
+        finally:
+            ownership.release()
 
 
 def default_frontend_dir() -> Path:

@@ -559,7 +559,7 @@
     },
     "ReportPresentation": {
       "additionalProperties": false,
-      "description": "冻结 D-3 确定性结果投影，供所有人类报告格式复用。",
+      "description": "冻结确定性结果投影，供所有人类报告格式复用。",
       "properties": {
         "checked_count": {
           "minimum": 0,

@@ -1,4 +1,4 @@
-/* 当前检查的真实过程状态、事件续读与取消边界。 */
+/* 当前检查的真实过程状态与事件续读；取消等副作用由页面底部统一动作区负责。 */
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { Alert, Button, Card, Collapse, List, Progress, Space, Spin, Tag, Typography } from 'antd'
@@ -81,7 +81,6 @@ export function CheckProgress({ run, actions = [], onRefresh, onError, onNavigat
       <Tag color={run.lifecycle === 'RUNNING' ? 'processing' : undefined}>检查状态：{lifecycleLabel(run.lifecycle)}</Tag>
       {run.result_integrity && <Tag>结果完整性：{integrityLabel(run.result_integrity)}</Tag>}
       {run.verdict && <Tag>安全结论：{verdictLabel(run.verdict)}</Tag>}
-      {!terminal && jobId && <Button danger size="small" onClick={() => runsApi.cancel(jobId).then(onRefresh).catch(onError)}>取消检查</Button>}
     </Space>
     {percent !== undefined
       ? <div className="check-progress-value"><Typography.Text>已完成 {completed}/{total} 个用例</Typography.Text><Progress percent={percent} size="small" aria-label={`检查进度 ${completed}/${total}`} /></div>

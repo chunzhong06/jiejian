@@ -260,6 +260,15 @@ class TestIdentityService:
             work.test_identities.delete(identity_id)
             work.commit()
 
+    def remove_project_credentials(self, project_id: str) -> int:
+        """删除项目当前 SecretStore 凭据，同时保留账号及其历史准备元数据。"""
+
+        with self._uow_factory() as work:
+            records = work.test_identities.list_for_project(project_id)
+        for record in records:
+            self._delete_secrets(record)
+        return len(records)
+
     def _load(self, identity_id: str) -> tuple[TestIdentity, ApplicationUnderstanding]:
         with self._uow_factory() as work:
             record = work.test_identities.get(identity_id)
@@ -335,6 +344,7 @@ class TestIdentityService:
             role.decision is not CandidateDecision.CONFIRMED
             or role.stale
             or role.canonical_key != record.role_canonical_key
+            or role.display_name != record.role_display_name
         ):
             reasons.append("ROLE_NEEDS_REVIEW")
         return tuple(reasons)

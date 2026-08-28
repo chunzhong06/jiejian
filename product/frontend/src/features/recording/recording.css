@@ -1,0 +1,14 @@
+/* 业务流程页：让录制阶段、当前操作和高级技术信息保持清晰层级。 */
+
+.recording-setup-card .ant-card-body { display: grid; gap: var(--space-16); }
+.recording-setup-grid { display: grid; gap: var(--space-16); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.recording-setup-grid > label { display: grid; gap: var(--space-8); min-width: 0; }
+.recording-setup-grid > label .ant-select { width: 100%; }
+.recording-setup-grid > .advanced-details { grid-column: 1 / -1; }
+.recording-summary .ant-card-body { display: grid; gap: var(--space-16); }
+.recording-page .recording-capture-guide { background: #fafbff; border-color: #d8e0ff; }
+
+@media (max-width: 600px) {
+  .recording-setup-grid { grid-template-columns: 1fr; }
+  .recording-setup-grid > .advanced-details { grid-column: auto; }
+}

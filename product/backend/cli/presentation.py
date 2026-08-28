@@ -6,7 +6,9 @@ from __future__ import annotations
 from contextlib import contextmanager
 import json
 import threading
+from collections.abc import Callable, Sequence
 from typing import NoReturn
+from uuid import uuid4
 
 import click
 import typer
@@ -357,6 +359,22 @@ def emit_result_presentation(presentation: ResultPresentation) -> None:
                 for issue in presentation.issues
             ],
         )
+        for issue in presentation.issues:
+            sources = getattr(issue, "evidence_sources", ())
+            if not sources:
+                continue
+            typer.echo("")
+            _emit_section(
+                f"{issue.title} · 证据来源",
+                [
+                    (
+                        _evidence_role_label(source.role),
+                        f"{source.label}：{_evidence_status_label(source.status)}",
+                        source.status,
+                    )
+                    for source in sources
+                ],
+            )
     if presentation.limitations:
         typer.echo("")
         _emit_section(
@@ -377,6 +395,142 @@ def emit_result_presentation(presentation: ResultPresentation) -> None:
                 ),
             ],
         )
+
+
+def _evidence_role_label(value: object) -> str:
+    return {"KEY": "关键来源", "SUPPORTING": "辅助来源"}.get(
+        str(getattr(value, "value", value)),
+        "证据来源",
+    )
+
+
+def _evidence_status_label(value: object) -> str:
+    return {
+        "FOUND": "已取得",
+        "NOT_FOUND": "未观察到",
+        "UNAVAILABLE": "当前不可用",
+    }.get(str(getattr(value, "value", value)), str(value))
+
+
+def emit_status(status: object) -> None:
+    """以与 Web 工作台相同的下一步文案展示统一状态 View。"""
+
+    project = status.project
+    typer.echo("界鉴工作台")
+    typer.echo("")
+    if project is None:
+        _emit_section("当前应用", [("", "尚未接入应用", "")])
+    else:
+        _emit_section("当前应用", [("名称", project.name, "")])
+    typer.echo("")
+    _emit_section(
+        "六步进度",
+        [
+            (step.label, step.status_label, step.status)
+            for step in status.steps
+        ],
+    )
+    typer.echo("")
+    _emit_section(
+        "现在继续",
+        [
+            (status.next_action.label, status.next_action.description, "CURRENT"),
+            ("命令", status.next_action.cli_command, ""),
+        ],
+    )
+    if status.latest_result is not None:
+        typer.echo("")
+        _emit_section(
+            "最近检查",
+            [
+                ("结论", status.latest_result.headline, status.latest_result.verdict or ""),
+                ("范围", status.latest_result.scope_statement, ""),
+            ],
+        )
+    if verbose_enabled() and project is not None:
+        typer.echo("")
+        _emit_section(
+            "高级：技术详情",
+            [
+                ("项目标识", project.project_id, ""),
+                (
+                    "最近运行",
+                    status.latest_result.run_id if status.latest_result is not None else "无",
+                    "",
+                ),
+            ],
+        )
+
+
+def emit_command(
+    kind: str,
+    data: object,
+    *,
+    next_actions: Sequence[object] = (),
+    warnings: Sequence[object] = (),
+    human: Callable[[], None] | None = None,
+) -> None:
+    """一次业务结果在 Human 与稳定 Machine v1 之间选择唯一 renderer。"""
+
+    if presentation_mode() == "human":
+        if human is not None:
+            human()
+        else:
+            payload = data.model_dump(mode="json") if hasattr(data, "model_dump") else data
+            if isinstance(payload, (list, tuple)):
+                typer.echo("界鉴")
+                typer.echo("")
+                rows: list[tuple[str, object, str]] = []
+                for index, item in enumerate(payload, start=1):
+                    if isinstance(item, dict):
+                        label = next(
+                            (
+                                str(item[key])
+                                for key in ("name", "label", "action_display_name", "headline")
+                                if item.get(key)
+                            ),
+                            f"第 {index} 项",
+                        )
+                        state = next(
+                            (str(item[key]) for key in ("status", "state", "verdict") if item.get(key)),
+                            "",
+                        )
+                        rows.append((label, _status_value(state) if state else "已读取", state))
+                    else:
+                        rows.append((f"第 {index} 项", "已读取", ""))
+                _emit_section("结果", rows or [("", "暂无记录", "")])
+                if verbose_enabled():
+                    typer.echo("")
+                    _emit_section(
+                        "高级：技术详情",
+                        [
+                            (
+                                f"第 {index} 项",
+                                _technical_value(item),
+                                "",
+                            )
+                            for index, item in enumerate(payload, start=1)
+                        ],
+                    )
+            else:
+                emit_human(payload)
+        return
+    payload = data.model_dump(mode="json") if hasattr(data, "model_dump") else data
+    typer.echo(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "kind": kind,
+                "status": "ok",
+                "data": payload,
+                "next_actions": list(next_actions),
+                "warnings": list(warnings),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
 def _doctor_value(check: object) -> str:
     details = check.details
     if check.name in {"python", "node", "pnpm"} and details.get("version"):
@@ -436,14 +590,33 @@ def fail(error: JiejianError) -> NoReturn:
         typer.echo("错误代码", err=True)
         typer.secho(f"{branch} {error.code}", fg="red", err=True)
     else:
+        options = _options()
+        payload = error.to_dict()
+        details = payload.get("details")
+        trace_id = getattr(options, "trace_id", None) or (
+            details.get("trace_id") if isinstance(details, dict) else None
+        ) or f"cli-{uuid4().hex}"
         typer.echo(
             json.dumps(
-                {"schema_version": "1", "error": error.to_dict()},
+                {
+                    "schema_version": "1",
+                    "kind": "error",
+                    "status": "error",
+                    "data": None,
+                    "next_actions": [],
+                    "warnings": [],
+                    "error": {
+                        "error_code": error.code,
+                        "message": payload["message"],
+                        "details": details if isinstance(details, dict) else {},
+                        "trace_id": trace_id,
+                        "recovery": _recovery_for(error),
+                    },
+                },
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
             ),
-            err=True,
         )
     input_codes = {
         ErrorCode.CFG_FILE.value,
@@ -514,6 +687,8 @@ def _error_title(error: JiejianError) -> str:
         return "授权或安全范围不符合要求"
     if code == ErrorCode.SERVE_FAILED.value:
         return "本地服务无法启动"
+    if code == ErrorCode.WORKSPACE_ALREADY_CONTROLLED.value:
+        return "当前运行目录正在使用"
     if code.startswith("STORAGE_") or code.startswith("JOB_"):
         return "后台检查未完成"
     if code.startswith("RUNNER_") or code.startswith("RECORD_"):
@@ -547,6 +722,8 @@ def _recovery_for(error: JiejianError) -> str:
         return "确认运行 ID、报告 ID 和 var-dir 指向已发布且完整的结果。"
     if code == ErrorCode.SERVE_FAILED.value:
         return "检查本机回环地址、端口和前端静态资源后重试。"
+    if code == ErrorCode.WORKSPACE_ALREADY_CONTROLLED.value:
+        return "关闭正在使用同一运行目录的界鉴窗口或 CLI，或显式选择其他 --var-dir。"
     if code.startswith("STORAGE_") or code.startswith("JOB_"):
         return "检查 var-dir 数据库、迁移状态和任务日志后重试。"
     if code.startswith("RUNNER_") or code.startswith("RECORD_"):

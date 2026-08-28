@@ -103,8 +103,8 @@ def test_guard_rejects_the_runtime_reserved_origin() -> None:
     assert captured.value.code == ErrorCode.SELF_TARGET_FORBIDDEN.value
 
 
-def test_executor_enforces_request_and_response_budgets(sample_server_factory) -> None:
-    running = sample_server_factory()
+def test_executor_enforces_request_and_response_budgets(web_test_target_factory) -> None:
+    running = web_test_target_factory()
     executor = HttpExecutionAdapter(
         WebTargetDefinition(
             scope=make_scope(

@@ -1,9 +1,11 @@
 /* 全局顶部栏：呈现当前应用、活动任务和结构化系统工具入口。 */
 
-import { Button, Dropdown, Layout, Space, Typography } from 'antd'
-import { DownOutlined, LogoutOutlined, SettingOutlined, RobotOutlined, CloudServerOutlined } from '@ant-design/icons'
+import { Button, Layout, Space, Typography } from 'antd'
+import { LogoutOutlined, RobotOutlined, CloudServerOutlined } from '@ant-design/icons'
 import type { LLMProfile, AIAssistanceSettings } from '../api/llm'
+import type { ProjectDto } from '../api/projects'
 import type { SystemStatus } from '../api/system'
+import { ApplicationSwitcher } from '../components/ApplicationSwitcher'
 
 export function aiStatusLabel(
   profiles: LLMProfile[],
@@ -27,51 +29,49 @@ export function systemStatusLabel(status: SystemStatus) {
 }
 
 type AppHeaderProps = {
-  projectName?: string | null
+  projects: ProjectDto[]
+  selected: ProjectDto | null
   activeTask?: { kind?: string }
   profiles: LLMProfile[]
   aiSettings: AIAssistanceSettings
   profilesFailed: boolean
   settingsFailed: boolean
   systemStatus: SystemStatus
+  onSelectProject: (project: ProjectDto) => void
+  onConnectNew: () => void
+  onRemoveCurrent: () => void
   onNavigate: (path: string) => void
   onOpenAI: () => void
   onRequestShutdown: () => void
 }
 
 export function AppHeader({
-  projectName,
+  projects,
+  selected,
   activeTask,
   profiles,
   aiSettings,
   profilesFailed,
   settingsFailed,
   systemStatus,
+  onSelectProject,
+  onConnectNew,
+  onRemoveCurrent,
   onNavigate,
   onOpenAI,
   onRequestShutdown,
 }: AppHeaderProps) {
-  const applicationLabel = projectName?.trim() ? `当前应用：${projectName.trim()}` : projectName === undefined || projectName === null ? '尚未选择应用' : '当前应用：未命名应用'
-  const settingsMenu = {
-    items: [
-      { key: '/settings/models', icon: <RobotOutlined />, label: '模型服务' },
-      { key: '/settings/system', icon: <CloudServerOutlined />, label: '运行环境' },
-    ],
-    onClick: ({ key }: { key: string }) => onNavigate(key),
-  }
   return <Layout.Header className="topbar">
     <div className="topbar-left">
-      <Typography.Text className="topbar-context" title={applicationLabel}>{applicationLabel}</Typography.Text>
-      {activeTask && <Button type="link" onClick={() => onNavigate(activeTask.kind === 'RUN' ? '/checks/start' : '/apps/flows')}>
+      <Typography.Text className="topbar-context">当前应用</Typography.Text>
+      <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} onRemoveCurrent={onRemoveCurrent} />
+      {activeTask && <Button type="link" onClick={() => onNavigate(activeTask.kind === 'RUN' ? '/check' : '/flows')}>
         {activeTask.kind === 'RUN' ? '正在检查 · 查看' : '正在录制 · 查看'}
       </Button>}
     </div>
     <Space className="topbar-tools" size="small">
       <Button type="text" icon={<RobotOutlined />} aria-label="打开 AI 辅助设置" onClick={onOpenAI}>{aiStatusLabel(profiles, aiSettings, profilesFailed, settingsFailed)}</Button>
       <Button type="text" icon={<CloudServerOutlined />} aria-label={systemStatusLabel(systemStatus)} onClick={() => onNavigate('/settings/system')}>{systemStatusLabel(systemStatus)}</Button>
-      <Dropdown menu={settingsMenu} trigger={['click']}>
-        <Button type="text" aria-label="设置与更多" icon={<SettingOutlined />}>设置与更多 <DownOutlined /></Button>
-      </Dropdown>
       <Button type="text" aria-label="退出界鉴" icon={<LogoutOutlined />} onClick={onRequestShutdown}>退出界鉴</Button>
     </Space>
   </Layout.Header>

@@ -1,36 +1,18 @@
-// 工作台先展示确定性 guidance，再将已白名单化的 AI 排序解释作为辅助信息。
+// 工作台以确定性 Readiness 给出唯一下一步，AI 只在次级区域解释可选建议。
 
+import { Button, Card, Divider, List, Modal, Space, Tag, Typography } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Card, Col, List, Row, Space, Statistic, Tag, Typography } from 'antd'
 import { assistantApi, type AssistantGuidance } from '../../api/assistant'
-import { LLMProfile } from '../../api/llm'
-import { SystemStatus } from '../../api/system'
-import type { ProjectDto, ProjectReadinessDto } from '../../api/projects'
+import type { OfficialExperienceDto, OfficialExperienceMode } from '../../api/experience'
+import type { ProductNextActionDto, ProjectDto, ProjectReadinessDto } from '../../api/projects'
 import type { RunDto } from '../../api/runs'
+import type { SystemStatus } from '../../api/system'
 import { formatTimestamp, integrityLabel, lifecycleLabel, verdictLabel } from '../../app/presentation'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 
-function statusLabel(value: unknown) {
-  const raw = String(value ?? 'unknown')
-  if (raw === 'available' || raw === 'running') return '可用'
-  if (raw === 'configured') return '已配置'
-  if (raw === 'unavailable' || raw === 'stopped') return '不可用'
-  return '未知'
-}
-
-const nextActions: Record<ProjectReadinessDto['next_required_action'], { label: string; path: string }> = {
-  CONNECT_APPLICATION: { label: '接入应用', path: '/apps/access' },
-  CONFIRM_TARGET: { label: '确认本地地址', path: '/apps/access' },
-  AUTHORIZE_SOURCE_ANALYSIS: { label: '授权源码分析', path: '/apps/access' },
-  REVIEW_DISCOVERY: { label: '确认角色与操作', path: '/apps/access' },
-  RECORD_FLOW: { label: '准备测试账号并录制关键业务动作', path: '/apps/identities' },
-  REVIEW_PERMISSION: { label: '确认权限规则', path: '/apps/rules' },
-  RUN_CHECK: { label: '开始检查', path: '/checks/start' },
-  OPEN_RESULT: { label: '查看检查结果', path: '/checks/results' },
-}
-
 function endpointLabel(readiness: ProjectReadinessDto) {
-  if (readiness.endpoint_status === 'CONFIRMED' || readiness.endpoint_status === 'LEGACY_PROFILE') return '已确认'
+  if (readiness.endpoint_status === 'CONFIRMED') return '已确认'
+  if (readiness.endpoint_status === 'LEGACY_PROFILE') return '需要按新流程重新接入'
   if (readiness.endpoint_status === 'UNAVAILABLE') return '暂不可达'
   return '待确认'
 }
@@ -38,21 +20,26 @@ function endpointLabel(readiness: ProjectReadinessDto) {
 export function WorkbenchPage({
   selected,
   readiness,
+  nextAction,
   runs,
   systemStatus,
-  profiles,
-  llmLoadFailed,
+  experience,
+  experienceBusy,
+  onStartExperience,
   onNavigate,
 }: {
   selected: ProjectDto | null
   readiness: ProjectReadinessDto | null
+  nextAction: ProductNextActionDto | null
   runs: RunDto[]
   systemStatus: SystemStatus
-  profiles: LLMProfile[]
-  llmLoadFailed: boolean
+  experience: OfficialExperienceDto | null
+  experienceBusy: boolean
+  onStartExperience: (mode: OfficialExperienceMode) => Promise<boolean>
   onNavigate: (path: string) => void
 }) {
   const [assistant, setAssistant] = useState<AssistantGuidance | null>(null)
+  const [requestedMode, setRequestedMode] = useState<OfficialExperienceMode | null>(null)
   const automaticRefreshKey = useRef<string | null>(null)
   const readinessKey = JSON.stringify(readiness)
   useEffect(() => {
@@ -61,7 +48,7 @@ export function WorkbenchPage({
       return
     }
     let active = true
-    // 页面切换或 readiness 刷新后忽略陈旧响应；同一事实指纹只允许一次自动刷新。
+    // Readiness 变化后忽略陈旧响应；AI 刷新失败不能改变确定性主流程。
     void assistantApi.guidance(selected.project_id).then((value) => {
       if (!active) return
       setAssistant(value)
@@ -81,64 +68,112 @@ export function WorkbenchPage({
     void assistantApi.refresh(selected.project_id, true).then(setAssistant).catch(() => undefined)
   }
   const latest = runs[0]
-  const modelStatus = llmLoadFailed ? 'unknown' : profiles.some((profile) => profile.enabled && profile.secret_configured && profile.connection_status === 'available') ? 'available' : 'unknown'
+  const systemIssue = systemStatus.api === 'unknown' || systemStatus.worker === 'stopped' || systemStatus.browser === 'unavailable'
+    ? '运行环境中有服务暂不可用'
+    : null
   const issues = useMemo(() => {
     const result: string[] = []
     if (!selected) return ['还没有选择要检查的应用']
     if (!readiness) return ['正在读取应用准备状态']
-    if (!['CONFIRMED', 'LEGACY_PROFILE'].includes(readiness.endpoint_status)) result.push('本地应用地址尚未确认')
+    if (readiness.endpoint_status !== 'CONFIRMED') result.push(readiness.endpoint_status === 'LEGACY_PROFILE' ? '旧执行配置不能代替正式应用接入' : '本地应用地址尚未确认')
     if (readiness.source_analysis_status === 'STALE') result.push('源码已变化，需要重新分析并复核候选')
     const pendingPermissionActions = readiness.permission_actions?.filter((action) => !action.compilable) ?? []
     if (pendingPermissionActions.length > 0) result.push(`${pendingPermissionActions.length} 个业务动作仍需完成权限确认`)
-    if (!readiness.active_contract_available) result.push('权限规则尚未确认')
-    if (systemStatus.api === 'unknown' || systemStatus.worker === 'stopped' || systemStatus.browser === 'unavailable') result.push('运行环境中有服务暂不可用')
+    if (systemIssue) result.push(systemIssue)
     if (latest?.result_integrity === 'INVALID') result.push('最近检查的结果完整性无效')
     return result
-  }, [latest?.result_integrity, readiness, selected, systemStatus.api, systemStatus.browser, systemStatus.worker])
+  }, [latest?.result_integrity, readiness, selected, systemIssue])
 
-  if (!selected) return <Space direction="vertical" size="large" className="full-width">
-    <PageTaskHeader title="工作台" description="集中查看当前应用、检查准备情况与最近结果。" status="等待选择应用" next="接入或选择要检查的应用" actionLabel="选择应用" onAction={() => onNavigate('/apps/access')} />
-    <div className="workbench-empty"><Typography.Title level={3}>还没有选择要检查的应用。</Typography.Title><Typography.Paragraph type="secondary">选择应用后，这里会从后端恢复本地地址、角色、业务动作和下一步。</Typography.Paragraph></div>
+  const sampleAvailable = experience?.available === true
+  const sampleActions = <Space wrap size={8}>
+    <Button disabled={!sampleAvailable || experienceBusy} onClick={() => setRequestedMode('GUIDED')}>评委导览</Button>
+    <Button type="link" disabled={!sampleAvailable || experienceBusy} onClick={() => setRequestedMode('FULL')}>完整体验</Button>
   </Space>
+  const consent = <Modal
+    open={requestedMode !== null}
+    title={requestedMode === 'GUIDED' ? '开始评委导览？' : '开始完整体验？'}
+    okText="同意并开始"
+    cancelText="取消"
+    confirmLoading={experienceBusy}
+    onCancel={() => setRequestedMode(null)}
+    onOk={async () => {
+      if (!requestedMode) return
+      if (await onStartExperience(requestedMode)) setRequestedMode(null)
+    }}
+  >
+    <Typography.Paragraph>将启动随界鉴提供的本机协作空间示例，为本次体验创建独立工作区，并访问它的本机回环地址。</Typography.Paragraph>
+    {requestedMode === 'GUIDED' && <Typography.Paragraph>评委导览还会授权界鉴只读分析随产品附带的示例源码。</Typography.Paragraph>}
+    <Typography.Paragraph strong>不会开始真实安全检查，也不会预先生成检查结论。</Typography.Paragraph>
+  </Modal>
 
-  const guidanceOption = assistant?.guidance.options.find((item) => item.priority_tier === 'PRIMARY')
-    ?? assistant?.guidance.options.find((item) => item.priority_tier === 'BLOCKING')
-  const action = guidanceOption
-    ? { label: guidanceOption.title, path: guidanceOption.route }
-    : readiness ? nextActions[readiness.next_required_action] : null
+  if (!selected) return <div className="workbench-page">
+    <PageTaskHeader title="工作台" description="从一个应用开始，界鉴会沿着六个连续步骤完成权限安全验证。" status="等待选择应用" />
+    <section className="workbench-primary-panel workbench-empty" aria-labelledby="workbench-empty-title">
+      <Typography.Title id="workbench-empty-title" level={3}>开始一次安全检查</Typography.Title>
+      <Typography.Paragraph type="secondary">接入自己的应用，界鉴会带你完成应用理解、测试账号、业务流程和权限检查。</Typography.Paragraph>
+      <Button type="primary" onClick={() => onNavigate('/application')}>接入自己的应用</Button>
+    </section>
+    <Divider plain>或者先体验界鉴</Divider>
+    <section className="workbench-sample-entry" aria-labelledby="workbench-sample-entry-title">
+      <Typography.Text className="workbench-eyebrow">官方示例</Typography.Text>
+      <Typography.Title id="workbench-sample-entry-title" level={3}>协作空间</Typography.Title>
+      <Typography.Paragraph>Bob 是项目普通成员，按权限要求不能导出完整项目资料包。</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">看看界鉴能否发现“页面虽然拒绝，但后台仍然生成资料包”的问题。</Typography.Paragraph>
+      {!sampleAvailable && <Typography.Paragraph type="secondary">当前版本未包含官方示例</Typography.Paragraph>}
+      {sampleActions}
+    </section>
+    {consent}
+  </div>
+
+  const action = nextAction
   const recommendedOptions = new Map((assistant?.guidance.options ?? []).map((item) => [item.option_id, item]))
-  return <Space direction="vertical" size="large" className="full-width">
-    <PageTaskHeader title="工作台" description={`当前应用：${String(selected.name ?? selected.project_id)}`} status={issues.length === 0 ? '准备状态完整' : `${issues.length} 项需要处理`} next={action?.label} actionLabel={action?.label} onAction={action ? () => onNavigate(action.path) : undefined} />
-    <Card className="workbench-overview" title="应用准备情况" loading={!readiness}>
-      {readiness && <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}><Statistic title="本地地址" value={endpointLabel(readiness)} /></Col>
-        <Col xs={24} sm={12} lg={6}><Statistic title="已确认角色" value={readiness.confirmed_role_count} suffix={`/ ${readiness.discovered_role_count}`} /></Col>
-        <Col xs={24} sm={12} lg={6}><Statistic title="已确认业务动作" value={readiness.confirmed_action_count} suffix={`/ ${readiness.discovered_action_count}`} /></Col>
-        <Col xs={24} sm={12} lg={6}><Statistic title="权限规则" value={readiness.active_contract_available ? '已确认' : '待确认'} /></Col>
-      </Row>}
-      {issues.length > 0 && <List className="workbench-issues" header="当前需要处理" dataSource={issues} renderItem={(issue) => <List.Item><Typography.Text type="warning">{issue}</Typography.Text></List.Item>} />}
-    </Card>
-    {assistant && <Card className="assistant-assistance-card" title={<Space><span>下一步建议</span>{assistant.status === 'READY' && <span className="assistant-label">[AI辅助]</span>}</Space>}>
-      <Typography.Text strong>界鉴确定</Typography.Text>
-      <List
-        size="small"
-        dataSource={assistant.guidance.options}
-        renderItem={(option) => <List.Item><Typography.Text>{option.title}</Typography.Text></List.Item>}
-      />
-      {assistant.status === 'READY' && assistant.recommendations.length > 0 && <>
-        <Typography.Text strong className="assistant-label">[AI辅助] 推荐优先</Typography.Text>
-        <List
+  return <div className="workbench-page">
+    <PageTaskHeader title="工作台" description="查看当前应用做到哪一步，并继续完成唯一的安全检查主线。" status={issues.length === 0 ? '当前准备状态完整' : `${issues.length} 项需要处理`} />
+
+    <section className="workbench-primary-panel" aria-labelledby="workbench-current-app">
+      <Typography.Text className="workbench-eyebrow">当前应用</Typography.Text>
+      <Typography.Title id="workbench-current-app" level={2}>{selected.name?.trim() || '未命名应用'}</Typography.Title>
+      {readiness && <Typography.Text type="secondary">本地地址：{endpointLabel(readiness)}</Typography.Text>}
+      <div className="workbench-next-task">
+        <Typography.Text className="workbench-eyebrow">现在继续</Typography.Text>
+        <Typography.Title level={3}>{action?.label ?? '正在读取下一步'}</Typography.Title>
+        <Typography.Paragraph>{action?.description ?? '界鉴正在从统一产品状态恢复当前任务。'}</Typography.Paragraph>
+      </div>
+      {issues.length > 0 && <ul className="workbench-issue-list">{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}
+      {systemIssue && <Button type="link" className="workbench-system-link" onClick={() => onNavigate('/settings/system')}>查看运行环境</Button>}
+      <Button className="workbench-primary-action" type="primary" disabled={!action} onClick={() => action && onNavigate(action.route)}>{action?.label ?? '正在读取'}</Button>
+    </section>
+
+    <div className="workbench-secondary-grid">
+      <Card title="最近检查" extra={latest && <Button type="link" onClick={() => onNavigate('/results')}>查看结果</Button>}>
+        {!latest && <Typography.Text type="secondary">尚未开始检查</Typography.Text>}
+        {latest && <Space direction="vertical" size={6}>
+          <Space wrap><Typography.Text strong>{lifecycleLabel(latest.lifecycle)}</Typography.Text><Tag>{integrityLabel(latest.result_integrity)}</Tag></Space>
+          <Typography.Text>{latest.verdict ? verdictLabel(latest.verdict) : '尚无结论'}</Typography.Text>
+          <Typography.Text type="secondary">{formatTimestamp(latest.created_at_us ?? latest.created_at)}</Typography.Text>
+        </Space>}
+      </Card>
+
+      <Card className="assistant-assistance-card" title={<Space><span>AI 辅助</span><Tag color="purple">次级建议</Tag></Space>}>
+        {!assistant && <Typography.Text type="secondary">AI 辅助暂不可用，确定性主流程不受影响。</Typography.Text>}
+        {assistant && <List
           size="small"
+          locale={{ emptyText: '当前没有额外建议' }}
           dataSource={assistant.recommendations.filter((item) => recommendedOptions.has(item.option_id))}
           renderItem={(item) => <List.Item><List.Item.Meta title={recommendedOptions.get(item.option_id)?.title} description={item.explanation} /></List.Item>}
-        />
-      </>}
-      {assistant.status === 'BACKOFF' && <Space direction="vertical"><Typography.Text type="secondary">AI 辅助暂未更新，确定性主流程仍可继续。</Typography.Text><Button size="small" onClick={retryAssistant}>重试 AI 辅助</Button></Space>}
-    </Card>}
-    <Card title="最近检查" extra={<Typography.Text type="secondary">服务：{statusLabel(systemStatus.api)} · 模型服务：{statusLabel(modelStatus)}</Typography.Text>}>
-      <List dataSource={runs.slice(0, 5)} locale={{ emptyText: '尚未开始检查' }} renderItem={(run, index) => <List.Item className={index === 0 ? 'latest-run' : undefined}>
-        <List.Item.Meta title={<Space wrap><Typography.Text strong>{index === 0 ? '最近一次 · ' : ''}{lifecycleLabel(run.lifecycle)}</Typography.Text><Tag>{integrityLabel(run.result_integrity)}</Tag></Space>} description={<Space direction="vertical" size={2}><Typography.Text>{run.verdict ? verdictLabel(run.verdict) : '尚无结论'}</Typography.Text><Typography.Text type="secondary">{formatTimestamp(run.created_at_us ?? run.created_at)}</Typography.Text></Space>} />
-      </List.Item>} />
-    </Card>
-  </Space>
+        />}
+        {assistant?.status === 'BACKOFF' && <Button size="small" onClick={retryAssistant}>重试 AI 辅助</Button>}
+      </Card>
+
+      <Card title="官方示例">
+        <Space direction="vertical" size={8}>
+          <Space wrap><Typography.Text strong>协作空间</Typography.Text>{experience?.active && <Tag color="blue">体验进行中</Tag>}</Space>
+          <Typography.Paragraph>体验一次“页面已经拒绝请求，但后台仍然生成完整项目资料包”的真实权限问题。</Typography.Paragraph>
+          {!sampleAvailable && <Typography.Text type="secondary">当前版本未包含官方示例</Typography.Text>}
+          {sampleActions}
+        </Space>
+      </Card>
+    </div>
+    {consent}
+  </div>
 }

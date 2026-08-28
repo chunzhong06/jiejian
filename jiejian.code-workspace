@@ -6,7 +6,7 @@
     }
   ],
   "settings": {
-    "js/ts.tsdk.path": "var/runtime/build/frontend-workspace/node_modules/typescript/lib",
+    "js/ts.tsdk.path": "var/development/frontend/workspace/node_modules/typescript/lib",
     "js/ts.tsdk.promptToUseWorkspaceVersion": true
   }
 }

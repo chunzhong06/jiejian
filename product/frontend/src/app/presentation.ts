@@ -1,26 +1,32 @@
-// 集中维护用户可见路由、状态标签和时间格式，避免页面直接展示内部枚举。
+// 集中维护用户可见路由、流程状态、状态标签和时间格式，避免页面直接展示内部枚举。
 
 export type AppRoute =
   | '/workspace'
-  | '/apps/access'
-  | '/apps/identities'
-  | '/apps/flows'
-  | '/apps/rules'
-  | '/checks/start'
-  | '/checks/results'
-  | '/checks/history'
+  | '/application'
+  | '/identities'
+  | '/flows'
+  | '/check'
+  | '/results'
+  | '/history'
   | '/settings/models'
   | '/settings/system'
 
-export const navigationGroups = [
-  { key: 'apps', label: '应用', items: [{ key: '/apps/access', label: '应用接入' }, { key: '/apps/identities', label: '测试账号' }, { key: '/apps/flows', label: '业务流程' }, { key: '/apps/rules', label: '权限规则' }] },
-  { key: 'checks', label: '检查', items: [{ key: '/checks/start', label: '开始检查' }, { key: '/checks/results', label: '检查结果' }, { key: '/checks/history', label: '历史变化' }] },
+export type ProcessRoute = Exclude<AppRoute, '/workspace' | '/settings/models' | '/settings/system'>
+export type ProcessStepState = 'complete' | 'current' | 'upcoming'
+
+export const processSteps = [
+  { route: '/application', label: '应用接入', shortLabel: '接入', description: '连接应用并确认权限组和业务动作' },
+  { route: '/identities', label: '测试账号', shortLabel: '账号', description: '准备受控测试身份' },
+  { route: '/flows', label: '业务流程', shortLabel: '流程', description: '录制真实操作并确认恢复方式' },
+  { route: '/check', label: '权限与检查', shortLabel: '检查', description: '确认权限期望并开始受控检查' },
+  { route: '/results', label: '检查结果', shortLabel: '结果', description: '查看真实影响、结论与证据' },
+  { route: '/history', label: '历史变化', shortLabel: '历史', description: '比较问题的出现、持续与消失' },
 ] as const
 
 export function normalizeRoute(pathname: string): AppRoute {
   if (pathname === '/workspace') return pathname
   if (pathname === '/settings/models' || pathname === '/settings/system') return pathname
-  if (navigationGroups.some((group) => group.items.some((item) => item.key === pathname))) return pathname as AppRoute
+  if (processSteps.some((step) => step.route === pathname)) return pathname as ProcessRoute
   return '/workspace'
 }
 
@@ -81,8 +87,8 @@ export const gateDecisionLabels: Record<string, string> = {
 }
 
 const productStatusLabels = {
-  project: { DRAFT: '草稿', READY: '已就绪', REGISTERED: '已登记', ARCHIVED: '已归档' },
-  contract: { DRAFT: '草稿', REVIEW: '待审阅', ACTIVE: '已激活', REJECTED: '已拒绝', RETIRED: '已停用' },
+  project: { DRAFT: '草稿', READY: '已就绪', ARCHIVED: '已归档' },
+  contract: { DRAFT: '草稿', REVIEW: '待审阅', ACTIVE: '已激活', SUPERSEDED: '已被更新版本替代', REJECTED: '已拒绝' },
 } as const
 
 const productTermLabels = {

@@ -216,21 +216,25 @@ export function LLMSettingsDrawer({
   const reasoningOptions = selectedModel?.reasoning_options.map((item) => ({ label: item, value: item })) ?? []
   const currentProfile = editing ? profiles.find((item) => item.profile_name === editing) : undefined
 
-  return <Drawer title="AI 辅助" open={open} onClose={() => { form.setFieldValue('secret', undefined); initializedRef.current = false; resetForm(); onClose() }} width={560} destroyOnClose>
-    <Space direction="vertical" style={{ width: '100%' }}>
-      <Form form={form} layout="vertical" onFinish={save}>
-      <Alert type="info" showIcon message="AI 只在系统确定事实之上提供辅助，不能决定权限要求或检查结论。" />
-      {!advancedOpen && <Card size="small" title="普通设置">
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Space><Switch checked={enabled} onChange={(value) => void toggle(value)} /><span>AI 辅助</span></Space>
-            <Form.Item name="provider" label="供应商" rules={[{ required: true }]}><Select options={providerOptions} onChange={changeProvider} /></Form.Item>
-            <Form.Item name="secret" label="API Key（只写入，不回显）"><Input.Password autoComplete="new-password" /></Form.Item>
-            <Button type="primary" loading={discovering} onClick={() => void discover()}>获取当前账号可用模型</Button>
-            <Form.Item name="model" label="模型" rules={[{ required: true }]}><Select options={modelOptions} disabled={!catalog} placeholder="先获取当前账号可用模型" /></Form.Item>
-            <Form.Item name="reasoning_effort" label="推理强度"><Select allowClear options={[{ label: selectedModel?.reasoning_default_label ?? '跟随模型默认', value: '__default__' }, ...reasoningOptions]} onChange={(value) => { if (value === '__default__') form.setFieldValue('reasoning_effort', null) }} /></Form.Item>
-            <Space style={{ marginTop: 8 }}><Button type="primary" htmlType="submit" loading={saving}>保存并测试</Button><Tag>{statusLabel(currentProfile)}</Tag></Space>
-        </Space>
-      </Card>}
+  return <Drawer className="llm-settings-drawer" title="AI 辅助" open={open} onClose={() => { form.setFieldValue('secret', undefined); initializedRef.current = false; resetForm(); onClose() }} width="min(600px, 100vw)" destroyOnClose>
+    <Form className="llm-settings-form" form={form} layout="vertical" onFinish={save}>
+      <div className="llm-settings-stack">
+        <Alert type="info" showIcon message="AI 只在系统确定事实之上提供辅助，不能决定权限要求或检查结论。" />
+        {!advancedOpen && <Card size="small" title="普通设置">
+          <div className="llm-settings-section">
+            <div className="llm-settings-toggle-row"><Switch checked={enabled} onChange={(value) => void toggle(value)} /><span>AI 辅助</span></div>
+            <div className="llm-settings-fields">
+              <Form.Item name="provider" label="供应商" rules={[{ required: true }]}><Select options={providerOptions} onChange={changeProvider} /></Form.Item>
+              <Form.Item name="secret" label="API Key（只写入，不回显）"><Input.Password autoComplete="new-password" /></Form.Item>
+            </div>
+            <Button className="llm-settings-discover" loading={discovering} onClick={() => void discover()}>获取当前账号可用模型</Button>
+            <div className="llm-settings-fields">
+              <Form.Item name="model" label="模型" rules={[{ required: true }]}><Select options={modelOptions} disabled={!catalog} placeholder="先获取当前账号可用模型" /></Form.Item>
+              <Form.Item name="reasoning_effort" label="推理强度"><Select allowClear options={[{ label: selectedModel?.reasoning_default_label ?? '跟随模型默认', value: '__default__' }, ...reasoningOptions]} onChange={(value) => { if (value === '__default__') form.setFieldValue('reasoning_effort', null) }} /></Form.Item>
+            </div>
+            <div className="llm-settings-actions"><Button type="primary" htmlType="submit" loading={saving}>保存并测试</Button><Tag>{statusLabel(currentProfile)}</Tag></div>
+          </div>
+        </Card>}
       <Collapse destroyOnHidden activeKey={advancedOpen ? ['advanced'] : []} onChange={changeAdvancedMode} items={[{
         key: 'advanced', label: '高级设置', children: advancedOpen ? <Space direction="vertical" style={{ width: '100%' }}>
           <Button onClick={startAdvancedProfile}>新增高级 profile</Button>
@@ -255,8 +259,8 @@ export function LLMSettingsDrawer({
           </Card>
         </Space> : null,
       }]} />
-      </Form>
-    </Space>
+      </div>
+    </Form>
   </Drawer>
 }
 

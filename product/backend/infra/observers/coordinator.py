@@ -34,8 +34,9 @@ from product.protocols import AuditLogStartCursor, CausalityStatus, Correlation,
 _PHASE_ORDER = {ObservationPhase.BASELINE: 0, ObservationPhase.BEFORE: 1, ObservationPhase.AFTER: 2, ObservationPhase.EVENTUAL: 3}
 
 
-def _failure(spec: ObserverSpec, code: str = "REQUIRED_OBSERVER_INCOMPLETE") -> ObserverOutcome:
-    return ObserverOutcome(observer_id=spec.observer_id, required=spec.required, status=ObserverOutcomeStatus.INCONCLUSIVE, reason_codes=(code,))
+def _failure(spec: ObserverSpec, code: str | None = None) -> ObserverOutcome:
+    reason = code or ("REQUIRED_OBSERVER_INCOMPLETE" if spec.required else "SUPPORTING_OBSERVER_INCOMPLETE")
+    return ObserverOutcome(observer_id=spec.observer_id, required=spec.required, status=ObserverOutcomeStatus.INCONCLUSIVE, reason_codes=(reason,))
 
 
 def _aggregate(current: ObserverOutcome | None, incoming: ObserverOutcome) -> ObserverOutcome:
@@ -62,11 +63,11 @@ class ObserverCoordinator:
         if spec.observer_type is ObserverType.OWNER_API:
             result = session.observe_target(spec, binding, correlation, phase)
             if result is None:
-                return None, _failure(spec, "_OBSERVER_UNSUPPORTED"), cursors
+                return None, _failure(spec, "OBSERVER_UNSUPPORTED"), cursors
             return result.envelope, result.outcome, cursors
         executor = self.registry.get(spec.observer_type)
         if executor is None:
-            return None, _failure(spec, "_OBSERVER_UNSUPPORTED"), cursors
+            return None, _failure(spec, "OBSERVER_UNSUPPORTED"), cursors
         kwargs = {"attempt_dir": self.attempt_dir, "parent_environ": self.environ}
         if spec.observer_type is ObserverType.STRUCTURED_AUDIT_LOG:
             result = executor(spec, correlation, phase, start_cursors=cursors, **kwargs)
@@ -78,13 +79,26 @@ class ObserverCoordinator:
             try:
                 next_cursors = tuple(AuditLogStartCursor.model_validate(item) for item in envelope.state.canonical_data.get("next_offsets", ()))
             except (TypeError, ValueError, ValidationError):
-                return envelope, _failure(spec, "_OBSERVER_CURSOR_INVALID"), cursors
+                return envelope, _failure(spec, "OBSERVER_CURSOR_INVALID"), cursors
         return envelope, result.outcome, next_cursors
 
-    def observe_phase(self, session: TargetCaseSession, case: Any, phase: ObservationPhase, envelopes: list[ObservationEnvelope], outcomes: dict[str, ObserverOutcome], cursors: dict[tuple[str, str], tuple[AuditLogStartCursor, ...]]) -> bool:
+    def observe_phase(
+        self,
+        session: TargetCaseSession,
+        case: Any,
+        phase: ObservationPhase,
+        envelopes: list[ObservationEnvelope],
+        outcomes: dict[str, ObserverOutcome],
+        cursors: dict[tuple[str, str], tuple[AuditLogStartCursor, ...]],
+        *,
+        requirements_to_run: tuple[str, ...] | None = None,
+        required_requirements: tuple[str, ...] | None = None,
+    ) -> bool:
+        requirements = requirements_to_run or tuple(case.required_observations)
+        required = set(required_requirements or case.required_observations)
         unavailable = False
         for resource_id in case.resource_ids:
-            for requirement in case.required_observations:
+            for requirement in requirements:
                 binding = self.bindings[requirement]
                 if phase not in binding.phases:
                     continue
@@ -95,7 +109,10 @@ class ObserverCoordinator:
                 cursors[(requirement, resource_id)] = next_cursor
                 if envelope is not None:
                     envelopes.append(envelope)
-                unavailable = unavailable or outcome.status is not ObserverOutcomeStatus.AVAILABLE
+                unavailable = unavailable or (
+                    requirement in required
+                    and outcome.status is not ObserverOutcomeStatus.AVAILABLE
+                )
                 if self.cancellation_requested():
                     raise JiejianError(ErrorCode.EXEC_CANCELLED, "复杂权限执行已取消")
         return unavailable
@@ -104,18 +121,27 @@ class ObserverCoordinator:
         self,
         case: Any,
         outcomes: tuple[ObserverOutcome, ...],
+        *,
+        requirements_to_run: tuple[str, ...] | None = None,
     ) -> tuple[ObserverOutcome, ...]:
-        """补齐当前 Case 从未形成的必需观察结果，防止缺失项绕过降级。"""
+        """补齐本次实际运行集合的观察结果，并保留关键与佐证角色。"""
 
         completed = {item.observer_id: item for item in outcomes}
-        for requirement_id in case.required_observations:
+        requirements = requirements_to_run or tuple(case.required_observations)
+        required = set(case.required_observations)
+        for requirement_id in requirements:
             observer_id = self.bindings[requirement_id].observer_id
             if observer_id not in completed:
+                is_required = requirement_id in required
                 completed[observer_id] = ObserverOutcome(
                     observer_id=observer_id,
-                    required=True,
+                    required=is_required,
                     status=ObserverOutcomeStatus.INCONCLUSIVE,
-                    reason_codes=("REQUIRED_OBSERVER_INCOMPLETE",),
+                    reason_codes=(
+                        "REQUIRED_OBSERVER_INCOMPLETE"
+                        if is_required
+                        else "SUPPORTING_OBSERVER_INCOMPLETE",
+                    ),
                 )
         return tuple(completed.values())
 
@@ -123,11 +149,16 @@ class ObserverCoordinator:
         self,
         case: Any,
         envelopes: tuple[ObservationEnvelope, ...],
+        *,
+        requirements_to_run: tuple[str, ...] | None = None,
+        required_requirements: tuple[str, ...] | None = None,
     ) -> tuple[ObservationFact, ...]:
         """按冻结的 Observer 类型语义把规范化 Envelope 投影为纯事实。"""
 
         facts: list[ObservationFact] = []
-        for requirement_id in case.required_observations:
+        requirements = requirements_to_run or tuple(case.required_observations)
+        required = set(required_requirements or case.required_observations)
+        for requirement_id in requirements:
             binding = self.bindings[requirement_id]
             for resource_id in case.resource_ids:
                 selected = tuple(
@@ -149,6 +180,7 @@ class ObserverCoordinator:
                         resource_id,
                         binding,
                         selected,
+                        required=requirement_id in required,
                     )
                 )
         return tuple(facts)
@@ -159,6 +191,8 @@ class ObserverCoordinator:
         resource_id: str,
         binding: Any,
         selected: tuple[ObservationEnvelope, ...],
+        *,
+        required: bool,
     ) -> ObservationFact:
         trustworthy = bool(selected) and all(
             item.completeness is ObservationCompleteness.COMPLETE
@@ -170,14 +204,24 @@ class ObserverCoordinator:
             return _unknown_fact(
                 requirement_id,
                 resource_id,
-                reason="REQUIRED_OBSERVER_INCOMPLETE",
+                reason=(
+                    "REQUIRED_OBSERVER_INCOMPLETE"
+                    if required
+                    else "SUPPORTING_OBSERVER_INCOMPLETE"
+                ),
             )
 
         phases = {item.phase for item in selected}
-        closed = ObservationPhase.AFTER in phases and (
-            ObservationPhase.EVENTUAL not in binding.phases
-            or ObservationPhase.EVENTUAL in phases
-        )
+        if binding.observer_type in {
+            ObserverType.ASYNC_TASK_STATUS,
+            ObserverType.AZURE_QUEUE_PEEK,
+        } and set(binding.phases) == {ObservationPhase.EVENTUAL}:
+            closed = ObservationPhase.EVENTUAL in phases
+        else:
+            closed = ObservationPhase.AFTER in phases and (
+                ObservationPhase.EVENTUAL not in binding.phases
+                or ObservationPhase.EVENTUAL in phases
+            )
         closure = TemporalClosure.CLOSED if closed else TemporalClosure.OPEN
         states = tuple(item.state for item in selected if item.state is not None)
         observer_type = binding.observer_type
@@ -335,7 +379,11 @@ class ObserverCoordinator:
                 requirement_id,
                 resource_id,
                 reason="OBSERVATION_WINDOW_INCOMPLETE",
-                closure=TemporalClosure.OPEN if not closed else closure,
+                closure=(
+                    TemporalClosure.OPEN
+                    if not closed or data.get("window_complete") is not True
+                    else closure
+                ),
                 correlated=True,
             )
 

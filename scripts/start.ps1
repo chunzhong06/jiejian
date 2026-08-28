@@ -9,7 +9,7 @@
 #   准备 Conda/uv/editable 源码｜按指纹构建前端｜诊断并启动本地控制面
 #
 # 边界
-#   Wheel 不参与普通启动；全部运行产物只进入 var，失败保留稳定退出码并清理子进程。
+#   Wheel 不参与普通启动；固定开发工具复用仓库默认 var，本轮事实只进入 -VarDir。
 #
 # 调用链
 #   start.cmd / user shell → scripts/start.ps1 → scripts/dev.ps1 prepare → editable package CLI
@@ -24,6 +24,7 @@ param(
     [Parameter(DontShow = $true)][switch]$DisplaySpinnerProcess,
     [Parameter(DontShow = $true)][string]$DisplaySpinnerStage = "startup",
     [Parameter(DontShow = $true)][long]$DisplaySpinnerStartedAt = 0,
+    [Parameter(DontShow = $true)][string]$DisplaySpinnerStopEvent = "",
     [Parameter(DontShow = $true)][switch]$DisplaySpinnerAscii
 )
 
@@ -31,6 +32,7 @@ $ErrorActionPreference = "Stop"
 $script:ModeExplicit = $PSBoundParameters.ContainsKey("Mode")
 $script:FinalMode = $Mode
 $script:ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$script:DevelopmentRoot = [IO.Path]::GetFullPath((Join-Path $script:ProjectRoot "var\development"))
 if ([string]::IsNullOrWhiteSpace($VarDir)) {
     $VarDir = Join-Path $script:ProjectRoot "var"
 } elseif (-not [IO.Path]::IsPathRooted($VarDir)) {
@@ -38,7 +40,7 @@ if ([string]::IsNullOrWhiteSpace($VarDir)) {
 }
 $script:VarDir = [IO.Path]::GetFullPath($VarDir)
 $script:LogDir = Join-Path $script:VarDir "logs\startup"
-$script:StartupDir = Join-Path $script:VarDir "cache\startup"
+$script:StartupDir = Join-Path $script:VarDir "runtime\startup"
 $script:StatePath = Join-Path $script:StartupDir "prepare-state.json"
 $script:LogPath = Join-Path $script:LogDir ("{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff"))
 $script:ToolchainPath = Join-Path $script:ProjectRoot "product\config\toolchain.json"
@@ -120,6 +122,8 @@ $script:DisplayInteractive = $false
 $script:DisplayUnicode = $false
 $script:DisplayTrueColor = $false
 $script:WaitIndicatorProcess = $null
+$script:WaitIndicatorStopEvent = $null
+$script:WaitIndicatorFallbackActive = $false
 $script:PrepareStatusOrder = @("toolchain", "python", "browser", "frontend-dependencies", "frontend-build", "database")
 $script:PrepareStatusIndex = 0
 $script:PrepareStatusState = @{}
@@ -161,7 +165,7 @@ foreach ($module in @("presentation.ps1", "runtime.ps1", "source.ps1", "product.
 }
 
 if ($DisplaySpinnerProcess) {
-    try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) $DisplaySpinnerStartedAt } catch { }
+    try { Invoke-WaitIndicatorProcess $DisplaySpinnerStage ([bool]$DisplaySpinnerAscii) $DisplaySpinnerStartedAt $DisplaySpinnerStopEvent } catch { }
     exit 0
 }
 
@@ -189,7 +193,7 @@ try {
     if ($script:DisplayStageIndex -ne 5) { Start-DisplayStage 5 "检查本地数据" }
     Write-Stage "doctor" "运行环境诊断"
     Set-Location -LiteralPath $script:ProjectRoot
-    Invoke-Package @("--var-dir", $script:VarDir, "--json", "doctor") "doctor" 42
+    Invoke-Package @("--var-dir", $script:VarDir, "--json", "system", "doctor") "doctor" 42
     Write-Stage "frontend" "确认 var/runtime/frontend 源码构建"
     Confirm-SourceFrontend
     Write-DisplayResult "环境诊断" "完成" $false
@@ -197,7 +201,6 @@ try {
     Write-DisplayResult "本地数据" "完成" $false "已迁移并校验"
     Write-DisplayResult "构建状态" "完成" $true $frontendStatus
     Complete-DisplayStage
-    Write-RuntimeSummary
 
     Start-DisplayStage 6 "启动界鉴"
     if ($script:FinalMode -eq "Interactive") {
@@ -211,10 +214,10 @@ try {
         exit 0
     }
     if ($script:FinalMode -eq "Cli") {
-        if ($script:CliEntryMode -eq "Guide") {
-            Write-Stage "guide" "进入命令行引导"
+        if ($script:CliEntryMode -eq "Status") {
+            Write-Stage "status" "打开命令行工作台"
             Invoke-CliShell $true
-            Write-DisplayResult "命令行引导" "已退出" $true
+            Write-DisplayResult "命令行工作台" "已退出" $true
         } else {
             Write-Stage "cli" "进入命令行会话"
             Invoke-CliShell
@@ -228,7 +231,8 @@ try {
     Invoke-Package @(
         "--var-dir", $script:VarDir,
         "serve", "--open",
-        "--frontend-dir", $script:FrontendDist
+        "--frontend-dir", $script:FrontendDist,
+        "--official-sample-root", (Join-Path $script:ProjectRoot "samples\web\collaboration_space")
     ) "serve" 50
     Write-DisplayResult "本地服务" "已停止" $true
     Complete-DisplayStage

@@ -1,22 +1,24 @@
 /* 项目工作区状态
- * 以后端 Project、Readiness 和 Run 为权威事实恢复当前应用与活动任务。
+ * 以后端 ProductStatus 和 Run 为权威事实恢复当前应用、Readiness 与活动任务。
  * browserState 只提供上次查看提示，后端不存在的项目不会被本地状态复活。
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError } from '../api/http'
-import { projectsApi, type ProjectDto, type ProjectReadinessDto } from '../api/projects'
+import { projectsApi, type ProductStatusDto, type ProjectDto, type ProjectReadinessDto } from '../api/projects'
 import { runsApi, type RunDto } from '../api/runs'
 import { browserState } from './browserState'
 
 export function useProjectWorkspace(onError: (error: ApiError) => void) {
   const [projects, setProjects] = useState<ProjectDto[]>([])
   const [selected, setSelected] = useState<ProjectDto | null>(null)
+  const [status, setStatus] = useState<ProductStatusDto | null>(null)
   const [readiness, setReadiness] = useState<ProjectReadinessDto | null>(null)
   const [runs, setRuns] = useState<RunDto[]>([])
 
   const selectProject = useCallback((project: ProjectDto | null) => {
     setSelected(project)
+    setStatus(null)
     setReadiness(null)
     setRuns([])
     if (project) browserState.writeProject(project)
@@ -39,16 +41,18 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
 
   const refreshCurrent = useCallback(async () => {
     if (!selected?.project_id) {
+      setStatus(null)
       setReadiness(null)
       setRuns([])
       return
     }
     try {
-      const [nextReadiness, nextRuns] = await Promise.all([
-        projectsApi.readiness(selected.project_id),
+      const [nextStatus, nextRuns] = await Promise.all([
+        projectsApi.status(selected.project_id),
         runsApi.runs(selected.project_id),
       ])
-      setReadiness(nextReadiness)
+      setStatus(nextStatus)
+      setReadiness(nextStatus.readiness)
       setRuns(nextRuns)
     } catch (error) {
       onError(error as ApiError)
@@ -61,6 +65,7 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
   return {
     projects,
     selected,
+    status,
     readiness,
     runs,
     selectProject,

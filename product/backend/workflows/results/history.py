@@ -109,8 +109,8 @@ class HistoryComparisonBuilder:
 
 _STATUS_VIEW = {
     HistoryChangeStatus.NEW: ("新发现", "本次首次确认该权限问题。"),
-    HistoryChangeStatus.FIXED: ("已修复", "本次对同一权限要求取得了充分的安全证据。"),
-    HistoryChangeStatus.PERSISTENT: ("仍然存在", "同一权限问题在本次检查中仍有充分证据。"),
+    HistoryChangeStatus.FIXED: ("已解决", "本次对同一权限要求取得了充分的安全证据。"),
+    HistoryChangeStatus.PERSISTENT: ("仍存在", "同一权限问题在本次检查中仍有充分证据。"),
     HistoryChangeStatus.INCONCLUSIVE: ("证据不足", "本次执行了对应检查，但真实结果证据不足。"),
     HistoryChangeStatus.NOT_COVERED: ("本次未覆盖", "本次没有执行并充分证明这一权限要求，不能显示为已修复。"),
 }

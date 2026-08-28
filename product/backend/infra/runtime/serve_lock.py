@@ -38,7 +38,13 @@ class ServeLock:
     _stream: BinaryIO | None = None
 
     @classmethod
-    def acquire(cls, var_dir: Path) -> ServeLock:
+    def acquire(
+        cls,
+        var_dir: Path,
+        *,
+        conflict_code: ErrorCode = ErrorCode.SERVE_FAILED,
+        conflict_message: str = "var 目录已被本地服务锁定；请先关闭正在运行的界鉴窗口",
+    ) -> ServeLock:
         """非阻塞获取系统锁；遗留诊断文件不会阻止异常退出后的自动恢复。"""
 
         path = RuntimePaths(var_dir).locks / "serve.lock"
@@ -52,8 +58,8 @@ class ServeLock:
                 stream.close()
                 stream = None
                 raise JiejianError(
-                    ErrorCode.SERVE_FAILED,
-                    "var 目录已被本地服务锁定；请先关闭正在运行的界鉴窗口",
+                    conflict_code,
+                    conflict_message,
                 )
             lock.owner_token = token_hex(16)
             payload = json.dumps(

@@ -75,8 +75,8 @@ class Evidence(ProtocolModel):
             raise ValueError("evidence outcomes must have unique observer IDs")
         binding_map = {item.requirement_id: item for item in self.requirement_bindings}
         case_requirements = set(self.case_snapshot.required_observations)
-        if len(binding_map) != len(self.requirement_bindings) or set(binding_map) != case_requirements:
-            raise ValueError("evidence bindings must exactly cover this case requirements")
+        if len(binding_map) != len(self.requirement_bindings) or not case_requirements.issubset(binding_map):
+            raise ValueError("evidence bindings must cover this case requirements")
         if (self.twin_snapshot is None) != (self.twin_role is None):
             raise ValueError("twin snapshot and role must be present together")
         if self.twin_snapshot is not None:
@@ -88,8 +88,18 @@ class Evidence(ProtocolModel):
             for item in self.requirement_bindings
             if item.kind is ObserverRequirementKind.OBSERVER_SPEC
         }
-        if any(item.required is not True for item in outcomes):
-            raise ValueError("evidence outcomes must describe required observers")
+        required_observer_ids = {
+            item.observer_id
+            for requirement, item in observer_bindings.items()
+            if requirement in case_requirements
+        }
+        if any(
+            item.required is not (item.observer_id in required_observer_ids)
+            for item in outcomes
+        ):
+            raise ValueError("evidence outcomes must preserve observer roles")
+        if len(observer_bindings) != len({item.observer_id for item in observer_bindings.values()}):
+            raise ValueError("evidence bindings must have unique observer IDs")
         if {item.observer_id for item in observer_bindings.values()} != {item.observer_id for item in outcomes}:
             raise ValueError("evidence outcomes must exactly cover bound observers")
         bound_observer_ids = {item.observer_id for item in observer_bindings.values()}
@@ -123,7 +133,11 @@ class Evidence(ProtocolModel):
             if envelope.completeness is ObservationCompleteness.COMPLETE and envelope.causality.value != "CORRELATED":
                 raise ValueError("complete evidence observation must be correlated")
         confirmed_effect = any(item.state is ObservedEffect.CONFIRMED for item in self.security_effect_facts)
-        unavailable_required = any(item.status.value != "AVAILABLE" for item in outcomes)
+        unavailable_required = any(
+            item.observer_id in required_observer_ids
+            and item.status.value != "AVAILABLE"
+            for item in outcomes
+        )
         failed_request = self.execution_fact.outcome in {ExecutionOutcome.FAILED, ExecutionOutcome.UNKNOWN}
         if (unavailable_required or failed_request) and self.verdict is not CaseVerdict.INCONCLUSIVE and not (self.verdict is CaseVerdict.VULNERABLE and confirmed_effect):
             raise ValueError("incomplete required observation can only produce INCONCLUSIVE evidence")
@@ -131,7 +145,7 @@ class Evidence(ProtocolModel):
             raise ValueError(" evidence verdict must be SAFE, VULNERABLE, or INCONCLUSIVE")
         expected_fact_keys = {
             (requirement, resource_id)
-            for requirement in case_requirements
+            for requirement in binding_map
             for resource_id in self.case_snapshot.resource_ids
         }
         actual_fact_keys = {
@@ -207,6 +221,11 @@ def build_evidence(**fields: Any) -> Evidence:
         key=lambda item: (item["observer_id"], item["phase"], item["correlation"]["resource_id"]),
     )
     semantic_payload["outcomes"] = sorted(semantic_payload.get("outcomes", ()), key=lambda item: item["observer_id"])
+    semantic_payload["observation_facts"] = sorted(
+        semantic_payload.get("observation_facts", ()),
+        key=lambda item: (item["requirement_id"], item["resource_id"]),
+    )
+    semantic_payload["reason_codes"] = sorted(semantic_payload.get("reason_codes", ()))
     expected = _evidence_semantic_sha256(semantic_payload)
     return Evidence(
         **fields,

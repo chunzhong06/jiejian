@@ -20,17 +20,6 @@ function Write-PythonEnvironment {
     Write-Startup "后续 CLI 用法: <已解析 Python> -B -m product.backend.cli <命令>"
 }
 
-function Write-RuntimeSummary {
-    Write-Host ""
-    Write-Host "当前界鉴运行环境" -ForegroundColor Cyan
-    Write-Host ("  Python    {0}  {1}" -f $script:PythonVersion, $script:PythonExecutable) -ForegroundColor Gray
-    Write-Host ("  环境来源  {0}  {1}" -f $script:PythonEnvironmentType, $script:PythonEnvironmentPath) -ForegroundColor Gray
-    Write-Host ("  用户级包  {0}" -f ($(if ($script:PythonEnvironmentReport.user_site_on_sys_path) { "检测到" } else { "未使用" }))) -ForegroundColor Gray
-    Write-Host ("  Node.js   {0}  {1}  仅构建时需要" -f $script:NodeVersion, $script:NodeExecutable) -ForegroundColor Gray
-    Write-Host ("  pnpm      {0}  {1}  仅构建时需要" -f $script:PnpmVersion, $script:PnpmExecutable) -ForegroundColor Gray
-    Write-Host ("  Chromium  {0}" -f $script:ChromiumExecutable) -ForegroundColor Gray
-}
-
 function Invoke-Python([object[]]$Arguments, [string]$Stage, [int]$Code = 40) {
     Invoke-External $Stage $script:PythonRunner $Arguments $Code
 }
@@ -39,9 +28,9 @@ function Invoke-Package([object[]]$Arguments, [string]$Stage, [int]$Code = 50) {
     Invoke-External $Stage $script:PackageRunner $Arguments $Code
 }
 
-function Invoke-CliShell([bool]$StartGuide = $false) {
+function Invoke-CliShell([bool]$ShowStatus = $false) {
     # 子 shell 只继承本轮已确认的绝对 Python、项目和 VarDir，不写用户配置。
-    if (-not $StartGuide) { Write-CliWelcome }
+    if (-not $ShowStatus) { Write-CliWelcome }
     $shellName = if ($PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
     $shell = Join-Path $PSHOME $shellName
     if (-not (Test-Path -LiteralPath $shell -PathType Leaf)) {
@@ -58,20 +47,18 @@ function Invoke-CliShell([bool]$StartGuide = $false) {
     $pythonLiteral = & $quote $script:PythonExecutable
     $projectLiteral = & $quote $script:ProjectRoot
     $varLiteral = & $quote $script:VarDir
-    $guideLiteral = if ($StartGuide) { '$true' } else { '$false' }
+    $statusLiteral = if ($ShowStatus) { '$true' } else { '$false' }
     $childScript = @"
 `$projectRoot = $projectLiteral
 `$varDir = $varLiteral
-`$startGuide = $guideLiteral
+`$showStatus = $statusLiteral
 function jiejian {
     param([Parameter(ValueFromRemainingArguments=`$true)][object[]]`$CommandArgs)
     & $pythonLiteral -B -m product.backend.cli --var-dir `$varDir @(`$CommandArgs)
 }
 Set-Location -LiteralPath `$projectRoot
-if (`$startGuide) {
-    `$env:JIEJIAN_GUIDE_STARTUP = "1"
-    try { jiejian --human guide } finally { Remove-Item Env:JIEJIAN_GUIDE_STARTUP -ErrorAction SilentlyContinue }
-    if (`$LASTEXITCODE -eq 10) { exit 0 }
+if (`$showStatus) {
+    jiejian --human status
     Write-Host ""
     Write-Host "已进入普通命令行" -ForegroundColor Cyan
     Write-Host "输入 jiejian --help 查看命令。" -ForegroundColor DarkGray

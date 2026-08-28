@@ -202,7 +202,7 @@ def evaluate_observer_outcome(
 ) -> ObserverOutcome:
     if adapter_error:
         status = ObserverOutcomeStatus.EXECUTION_ERROR
-    elif required and envelope.completeness is not ObservationCompleteness.COMPLETE:
+    elif envelope.completeness is not ObservationCompleteness.COMPLETE:
         status = ObserverOutcomeStatus.INCONCLUSIVE
     else:
         status = ObserverOutcomeStatus.AVAILABLE

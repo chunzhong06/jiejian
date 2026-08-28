@@ -44,34 +44,17 @@ from tests.fixtures.control_plane import (
     create_app,
 )
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
-PROFILE_SOURCE = Path("samples/web/fixed/profile.json").resolve()
-CONTRACT_SOURCE = Path("samples/web/fixed/contract.json").resolve()
+from tests.fixtures.runner import write_web_test_profile
 
 def _write_profile(tmp_path: Path, *, port: int | None = None) -> Path:
-    profile = parse_web_execution_profile(PROFILE_SOURCE.read_bytes())
-    if port is not None:
-        scope = profile.target.scope.model_copy(
-            update={
-                "base_url": f"http://127.0.0.1:{port}",
-                "allowed_origins": (f"http://127.0.0.1:{port}",),
-                "allowed_ports": (port,),
-            }
-        )
-        profile = profile.model_copy(update={"target": profile.target.model_copy(update={"scope": scope})})
-    path = tmp_path / "profile.json"
-    path.write_bytes(canonical_web_execution_profile_json_bytes(profile))
+    path, _ = write_web_test_profile(tmp_path, port=port or 8765)
     return path
 
-def _register_project(client: TestClient, profile_path: Path) -> dict[str, object]:
-    response = client.post(
-        "/api/projects",
-        json={"schema_version": "1", "profile_path": str(profile_path)},
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["data"]
+def _register_project(app, profile_path: Path) -> dict[str, object]:
+    return app.state.context.projects.register(profile_path)[0].model_dump(mode="json")
 
-def _activate_contract(app, project_id: str) -> PermissionContract:
-    contract = PermissionContract.model_validate_json(CONTRACT_SOURCE.read_text(encoding="utf-8"), strict=True)
+def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionContract:
+    contract = PermissionContract.model_validate_json(profile_path.with_name("contract.json").read_text(encoding="utf-8"), strict=True)
     draft = app.state.context.contracts.create_draft(
         project_id,
         contract.contract_id,
@@ -87,8 +70,8 @@ def _activate_contract(app, project_id: str) -> PermissionContract:
     return active.snapshot
 
 def _register_active_profile(app, client: TestClient, profile_path: Path) -> tuple[dict[str, object], PermissionContract, dict[str, object]]:
-    project = _register_project(client, profile_path)
-    contract = _activate_contract(app, str(project["project_id"]))
+    project = _register_project(app, profile_path)
+    contract = _activate_contract(app, str(project["project_id"]), profile_path)
     response = client.post(
         "/api/execution-profiles",
         json={"schema_version": "1", "profile_path": str(profile_path)},
@@ -124,11 +107,6 @@ def test_profile_reregistration_preserves_explicit_active_contract(tmp_path: Pat
     profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
         project, active, _ = _register_active_profile(app, client, profile_path)
-        response = client.post(
-            "/api/projects",
-            json={"schema_version": "1", "profile_path": str(profile_path)},
-        )
-        assert response.status_code == 200
-        data = response.json()["data"]
+        data = app.state.context.projects.register(profile_path)[0].model_dump(mode="json")
         assert data["governed_contract_id"] == active.contract_id
         assert data["governed_contract_version"] == active.version

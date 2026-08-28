@@ -33,7 +33,9 @@ describe('LLMSettingsDrawer', () => {
     expect(screen.getByText('AI 只在系统确定事实之上提供辅助，不能决定权限要求或检查结论。')).toBeInTheDocument()
     expect(screen.queryByLabelText('profile_name')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Base URL')).not.toBeInTheDocument()
-    expect(screen.getByText('获取当前账号可用模型')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '获取当前账号可用模型' })).not.toHaveClass('ant-btn-primary')
+    expect(document.querySelector('.llm-settings-fields-pair')).not.toBeInTheDocument()
+    expect(document.querySelectorAll('.llm-settings-section .ant-btn-primary')).toHaveLength(1)
   })
 
   it('discovers dynamic models, saves once, and clears the temporary API Key', async () => {

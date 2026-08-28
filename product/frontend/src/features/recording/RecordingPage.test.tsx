@@ -79,13 +79,13 @@ describe('RecordingPage', () => {
       capture_phase: 'STOPPING',
     })
 
-    render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} />)
+    render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} />)
     const create = await screen.findByRole('button', { name: '打开浏览器并开始准备' })
     await waitFor(() => expect(create).toBeEnabled())
     fireEvent.click(create)
     await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', action.action_candidate_id, identity.test_identity_id, 600))
 
-    fireEvent.click(await screen.findByRole('button', { name: '刷新状态' }))
+    fireEvent.click(await screen.findByRole('button', { name: '刷新流程状态' }))
     expect(await screen.findByText('录制「修改资源」')).toBeInTheDocument()
     expect(await screen.findByText(/现在的浏览和登录不会写进业务流程/)).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '开始记录这个操作' }))
@@ -97,7 +97,7 @@ describe('RecordingPage', () => {
       draft: null,
       capture_phase: 'CAPTURING',
     })
-    fireEvent.click(screen.getByRole('button', { name: '刷新状态' }))
+    fireEvent.click(screen.getByRole('button', { name: '刷新流程状态' }))
     expect(await screen.findByText(/完成后不要关闭浏览器/)).toBeInTheDocument()
     const complete = await screen.findByRole('button', { name: '我已完成这个操作' })
     expect(complete).toHaveClass('ant-btn-primary')
@@ -180,9 +180,9 @@ describe('RecordingPage', () => {
       automatic_execution_allowed: true,
     })
 
-    render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onNext={vi.fn()} />)
+    render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
     expect(await screen.findByText('步骤 1：读取资源')).toBeInTheDocument()
-    expect(await screen.findByText(/界鉴认为下面这一步真正执行了/)).toBeInTheDocument()
+    expect(await screen.findByText(/确认哪一步真正完成了/)).toBeInTheDocument()
     expect(screen.queryByText(/^TARGET$/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '与下一步合并' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: '重命名' })).toHaveLength(2)
@@ -191,7 +191,7 @@ describe('RecordingPage', () => {
     expect(screen.queryByDisplayValue(/RENAME_STEP/)).not.toBeInTheDocument()
     expect(screen.queryByText(/执行配置/)).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '将“修改资源”确认为目标请求' }))
+    fireEvent.click(screen.getByRole('button', { name: '将“修改资源”设为主要步骤' }))
     await waitFor(() => expect(api.reviewRecording).toHaveBeenCalledWith('rec-2', expect.objectContaining({
       schema_version: '1',
       operation: 'CONFIRM_TARGET_STEP',
@@ -209,11 +209,16 @@ describe('RecordingPage', () => {
     await waitFor(() => expect(api.finalizeRecording).toHaveBeenCalledWith('rec-2'))
     expect(await screen.findByText('流程已经保存。请继续确认测试资源、真实观察和安全恢复。')).toBeInTheDocument()
     expect(screen.getAllByText('修改资源')).toHaveLength(2)
+    fireEvent.click(screen.getByText('高级：技术请求'))
     expect(document.body).toHaveTextContent('PATCH /resources/{测试资源}')
     expect(screen.getAllByText('普通成员账号 A（普通成员）')).toHaveLength(2)
     expect(await screen.findByText('当前动作还不能安全自动检查')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '去权限规则' })).not.toBeInTheDocument()
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '选择真实观察方式' }))
+    expect(screen.queryByRole('button', { name: '继续确认权限与检查' })).not.toBeInTheDocument()
+    const observationExplanation = screen.getByText('写、改、删动作不能只看操作页面自己的提示或接口响应。')
+    const observationControl = screen.getByRole('combobox', { name: '选择真实观察方式' })
+    expect(observationExplanation.compareDocumentPosition(observationControl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(document.querySelectorAll('.action-safety-card .ant-card')).toHaveLength(0)
+    fireEvent.mouseDown(observationControl)
     fireEvent.click(await screen.findByTitle(safetySetup.observation_candidates[0].label))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '选择安全恢复方式' }))
     fireEvent.click(await screen.findByTitle(safetySetup.recovery_candidates[0].label))
@@ -227,7 +232,7 @@ describe('RecordingPage', () => {
       security_effect_candidate_id: safetySetup.security_effect_candidates[0].candidate_id,
     })))
     expect(await screen.findByText('资源、独立观察、安全恢复和真实影响已经确认')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '去权限规则' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '继续确认权限与检查' })).toBeInTheDocument()
   })
 
   it('忽略同项目的陈旧浏览器录制定位，只恢复服务端当前 Recording', async () => {
@@ -260,12 +265,27 @@ describe('RecordingPage', () => {
       automatic_execution_allowed: false,
     })
 
-    render(<RecordingPage project={{ project_id: 'p1' }} onError={onError} />)
+    render(<RecordingPage project={{ project_id: 'p1' }} onError={onError} onBack={vi.fn()} />)
 
     await waitFor(() => expect(api.recording).toHaveBeenCalledWith('rec-current'))
     await waitFor(() => expect(api.safetySetup).toHaveBeenCalledWith('rec-current'))
     expect(api.recording).not.toHaveBeenCalledWith('rec-stale')
     expect(api.safetySetup).not.toHaveBeenCalledWith('rec-stale')
     expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('刷新流程状态只读取当前录制事实，不启动或控制浏览器', async () => {
+    render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} />)
+    expect(await screen.findByRole('button', { name: '刷新流程状态' })).toBeInTheDocument()
+    api.setup.mockClear()
+    api.recordings.mockClear()
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新流程状态' }))
+
+    await waitFor(() => expect(api.setup).toHaveBeenCalledOnce())
+    expect(api.recordings).toHaveBeenCalledOnce()
+    expect(api.createRecording).not.toHaveBeenCalled()
+    expect(api.startCapture).not.toHaveBeenCalled()
+    expect(api.stopCapture).not.toHaveBeenCalled()
   })
 })

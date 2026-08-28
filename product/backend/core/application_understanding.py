@@ -71,7 +71,6 @@ class CandidateDecision(StrEnum):
 class CandidateOrigin(StrEnum):
     DETECTED = "DETECTED"
     MANUAL = "MANUAL"
-    LEGACY = "LEGACY"
 
 
 class CandidateConfidence(StrEnum):

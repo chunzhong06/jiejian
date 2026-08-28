@@ -3,6 +3,7 @@
 import { request } from './http'
 
 export type SystemStatus = {
+  version?: string
   api: 'available' | 'unknown'
   worker: 'running' | 'stopped' | 'unknown'
   browser: 'available' | 'unavailable' | 'unknown'
@@ -26,7 +27,7 @@ export type CacheStatus = {
   protected: { data: string; data_unchanged: boolean; current_runtime_unchanged_by_cache: boolean }
   last_successful_operation?: { operation?: string; completed_at?: number } | null
 }
-export type CacheOperation = 'prune' | 'clean' | 'runtime-repair'
+export type CacheOperation = 'clean' | 'runtime-repair'
 export type CacheOperationResult = {
   schema_version: '1'
   operation: string

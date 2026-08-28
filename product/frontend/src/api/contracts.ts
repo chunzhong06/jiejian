@@ -8,7 +8,7 @@
  *   提交治理动作｜读取工作台快照｜请求确定性分析视图
  *
  * 调用链
- *   PermissionRulesPage → contractsApi → api/http
+ *   PermissionAdvancedPanel → contractsApi → api/http
  * ============================================================================= */
 
 import { request } from './http'

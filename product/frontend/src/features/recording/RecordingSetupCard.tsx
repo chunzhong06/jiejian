@@ -1,29 +1,27 @@
 /* 录制准备卡：选择已确认业务动作、已准备测试身份和有界录制时长。 */
 
-import { Alert, Button, Card, InputNumber, Select, Space, Typography } from 'antd'
+import { Alert, Card, InputNumber, Select, Space, Typography } from 'antd'
 import type { RecordingActionDto, RecordingTestIdentityDto } from '../../api/recordings'
+import { AdvancedDetails } from '../../components/AdvancedDetails'
 
-export function RecordingSetupCard({ actions, identities, actionId, testIdentityId, duration, busy, disabled, onActionChange, onIdentityChange, onDurationChange, onCreate }: {
+export function RecordingSetupCard({ actions, identities, actionId, testIdentityId, duration, disabled, onActionChange, onIdentityChange, onDurationChange }: {
   actions: RecordingActionDto[]
   identities: RecordingTestIdentityDto[]
   actionId?: string
   testIdentityId?: string
   duration: number
-  busy: boolean
   disabled: boolean
   onActionChange: (value: string) => void
   onIdentityChange: (value: string) => void
   onDurationChange: (value: number) => void
-  onCreate: () => void
 }) {
-  return <Card title="选择要录制的业务动作">
+  return <Card className="recording-setup-card" title="选择业务动作和测试账号">
     {actions.length === 0 || identities.length === 0
-      ? <Alert type="info" showIcon message="还不能开始录制" description={actions.length === 0 ? '请先在应用理解中确认至少一个业务动作。' : '请先准备一个通常能够成功执行该动作的测试身份。'} />
-      : <Space wrap size="middle">
-        <Select aria-label="选择业务动作" value={actionId} onChange={onActionChange} style={{ minWidth: 260 }} options={actions.map((item) => ({ value: item.action_candidate_id, label: item.display_name }))} />
-        <Select aria-label="选择测试身份" placeholder="选择一个已准备身份" value={testIdentityId} onChange={onIdentityChange} style={{ minWidth: 280 }} options={identities.map((item) => ({ value: item.test_identity_id, label: <Space><Typography.Text strong>{item.label}</Typography.Text><Typography.Text type="secondary">{item.role_display_name}</Typography.Text></Space> }))} />
-        <Space.Compact><InputNumber aria-label="最长录制时间（秒）" min={60} max={3600} value={duration} onChange={(value) => onDurationChange(value ?? 600)} /><Button disabled>秒</Button></Space.Compact>
-        <Button type="primary" loading={busy} disabled={!actionId || !testIdentityId || disabled} onClick={onCreate}>打开浏览器并开始准备</Button>
-      </Space>}
+      ? <Alert type="info" showIcon message="还不能开始录制" description={actions.length === 0 ? '请先在应用接入中确认至少一个业务动作。' : '请先准备一个通常能够成功完成该动作的测试账号。'} />
+      : <div className="recording-setup-grid">
+        <label><Typography.Text strong>要录制的业务动作</Typography.Text><Select aria-label="选择业务动作" value={actionId} disabled={disabled} onChange={onActionChange} options={actions.map((item) => ({ value: item.action_candidate_id, label: item.display_name }))} /></label>
+        <label><Typography.Text strong>用于录制的测试账号</Typography.Text><Select aria-label="选择测试账号" placeholder="选择一个已准备账号" value={testIdentityId} disabled={disabled} onChange={onIdentityChange} options={identities.map((item) => ({ value: item.test_identity_id, label: <Space><Typography.Text strong>{item.label}</Typography.Text><Typography.Text type="secondary">{item.role_display_name}</Typography.Text></Space> }))} /></label>
+        <AdvancedDetails label="高级：录制时间限制"><Space><InputNumber aria-label="最长录制时间（秒）" min={60} max={3600} value={duration} disabled={disabled} onChange={(value) => onDurationChange(value ?? 600)} /><Typography.Text type="secondary">秒，超时后自动安全停止</Typography.Text></Space></AdvancedDetails>
+      </div>}
   </Card>
 }

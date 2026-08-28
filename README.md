@@ -1,10 +1,10 @@
-# 界鉴 JIEJIAN
+# 界鉴 JIEJIAN 1.0.0
 
 > 界鉴是一款面向 AI 快速开发 Web 应用的权限安全检查工具，用来确认不同身份是否真的只能访问和操作自己有权限的数据与业务功能。
 
 应用可能返回“禁止访问”，但真实数据或后台状态仍可能发生变化。界鉴结合接口结果和真实副作用判断权限是否真正生效，而不是只看一个 HTTP 状态码。
 
-## Windows 快速启动提示
+## Windows 源码快速启动
 
 在 Windows 上进入项目根目录运行：
 
@@ -12,7 +12,17 @@
 .\start.cmd
 ```
 
-启动器会准备或复用项目专用 Conda 环境 `jiejian_env`，由仓库受控 uv 按 `uv.lock` 精确同步并 editable 指向当前源码。前端只在 `var/runtime/frontend` 缺失或构建指纹变化时，把源码输入镜像到 `var/runtime/build/frontend-workspace`，在该工作区准备受控 Node/pnpm 并重新构建；后续启动直接复用。全部安装视图、缓存和构建产物都在本地 `var/` 中生成，不进入 Git，也不修改系统 PATH 或全局安装。首次准备需要网络。
+启动器会准备或复用项目专用 Conda 环境 `jiejian_env`，由仓库受控 uv 按 `uv.lock` 精确同步并 editable 指向当前源码。uv、Node、pnpm、Playwright、下载缓存、前端依赖工作区和不可变网页 build 统一复用 `var/development/`；每个实际 `-VarDir` 只接收自己的数据库、Source Receipt 和 `runtime/frontend` 副本。普通源码变化只生成新的 build，不重复安装未变化的依赖。全部开发资产和运行数据都留在本地 `var/`，不进入 Git，也不修改系统 PATH 或全局安装；首次准备需要网络。
+
+## Windows x64 Portable
+
+正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.0、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
+
+- `JieJian-WebV1-1.0.0-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
+- `JieJian-WebV1-1.0.0-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
+- `SHA256SUMS.txt`：两个 ZIP 的固定 SHA256 校验和。
+
+两个 ZIP 除 `samples/` 外的产品文件完全相同。发行目录可以整体移动到中文或带空格路径；版本可在“运行环境”设置页或 `jiejian --version` 查看。开发者构建与仓库外验收见[修改发布与便携版](docs/02_开发指南/任务/修改发布与便携版.md)。
 
 ## 界面预览
 
@@ -35,7 +45,7 @@
 3. 等待界鉴准备源码运行环境、浏览器、数据库和前端资源；Node/pnpm 只会在前端需要重建时出现。
 4. 选择图形界面、命令行或仅完成环境准备。
 
-启动脚本会按“工具链、Python、浏览器、界面、本地数据、启动”六个真实阶段持续显示当前任务和耗时，并自动准备 Conda + uv.lock + editable 当前源码、浏览器、数据库和前端资源；准备完成后，控制台会给出适用于本机的 CLI 调用方式。Wheel 仅可通过 `./scripts/dev.ps1 package` 独立生成，不参与普通启动。
+启动脚本会按“工具链、Python、浏览器、界面、本地数据、启动”六个真实阶段持续显示当前任务和耗时，并自动准备 Conda + uv.lock + editable 当前源码、浏览器、数据库和前端资源；准备完成后，控制台会给出适用于本机的 CLI 调用方式。Portable 只可通过 `./scripts/dev.ps1 package` 独立生成，不参与普通源码启动。
 
 ## 第一次使用
 
@@ -50,13 +60,7 @@
 
 模型服务、运行环境和手工 Profile 注册属于高级能力。应用接入发现的角色与动作始终只是候选，不会自动生成允许/拒绝结论；旧版手工快速检查已经删除，不保留第二套新手入口。
 
-如果暂时没有准备自己的应用，可以使用 `samples/web` 中同一个 Authorization Target 的三个行为变体：
-
-- **安全示例**：接口拒绝未授权修改，真实资源没有变化，结果为 `PASS`。
-- **权限漏洞示例**：接口表面拒绝，但真实资源仍被修改，结果为 `BLOCK`。
-- **证据不足示例**：关键资源状态无法可靠观察，结果为 `INCONCLUSIVE`。
-
-三个变体都通过正常 GUI 或公开 `jiejian run`、Worker/Runner、证据发布和确定性判断得到结果，不使用预先写好的结论代替执行。启动方式见 [`samples/README.md`](samples/README.md)；Sample 不绕过应用接入或 Contract Governance。
+如果暂时没有准备自己的应用，可以从 GUI“评委导览”启动唯一官方 Sample“协作空间”。同一个应用、同一组 Alice/Bob/Eve 身份和同一个“生成完整项目资料包”动作，分别运行在漏洞、修复和关键观察受限三种真实状态中，经正常 Worker/Runner、六面观察和确定性判断形成 `BLOCK`、`PASS`、`INCONCLUSIVE`；Sample 不预制 Verdict，也不绕过应用接入或权限治理。开发入口见 [`samples/README.md`](samples/README.md)。
 
 ## 结果怎么看
 
@@ -80,15 +84,17 @@
 
 ## 命令行与自动化
 
-命令行是面向高级用户、自动化和 CI 的入口。准备完成后，按启动输出给出的本机 CLI 调用方式执行；下面的 `jiejian` 代表产品 CLI：
+命令行是与图形界面共享同一应用状态、检查和结果服务的第二控制入口。准备完成后，按启动输出给出的本机 CLI 调用方式执行；下面的 `jiejian` 代表产品 CLI：
 
 ```powershell
-jiejian run <execution_profile.json>
-jiejian report <run_id> --format json
-jiejian ci <execution_profile.json>
+jiejian status
+jiejian check preview <project_id>
+jiejian result show --project <project_id>
+jiejian --json status
+jiejian --version
 ```
 
-全局 `--human` 用于人类可读输出，`--json` 用于机器输出；`ci` 适合接入持续集成。CLI 不替代工作台，完整命令说明以实际帮助信息和后续 CLI 文档为准。
+全局 `--human` 用于人类可读输出，`--verbose` 只追加技术引用，`--json` 输出版本化 Machine envelope。普通命令围绕 `status / app / account / flow / check / result / history / settings / system` 组织；旧 Profile 与高级治理能力只在 `system advanced` 下保留。GUI 正在管理同一 `var` 时，CLI 会拒绝创建第二个控制者。
 
 ## 高级能力
 
@@ -96,13 +102,17 @@ jiejian ci <execution_profile.json>
 
 ## 官方示例
 
-仓库内只保留一组权限检查 Samples，并用 `fixed`、`vulnerable`、`inconclusive` 表达同一安全意图的三种结果。开发者需要复现 Target、临时凭据和 Golden 检查时，从 [samples/README.md](samples/README.md) 开始。
+仓库内只保留一个官方 Web Sample：“协作空间——项目资料管理应用”。它用同一组 Alice、Bob、Eve 身份和同一个“生成完整项目资料包”动作，真实形成漏洞、修复和关键观察受限三种运行状态；Sample 本身不预制 Verdict。
+
+普通用户可以从 GUI 的“评委导览”启动官方示例并完成接入、Recording、权限准备和检查。开发者需要了解 Sample 的业务撤销、测试重置、六面观察或联调入口时，从 [Samples 说明](samples/README.md) 开始；需要修改 Sample 或唯一自动 L5 时，阅读[修改官方示例与整链验收](docs/02_开发指南/任务/修改官方示例与整链验收.md)。
+
+阶段收口使用 `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 sample-test` 完成唯一自动 L5 技术验收。它从真实 `start.cmd` 启动隔离实例，验证正式 GUI、独立 Worker/Recording/Runner、headed Chromium、三态结果、GUI/CLI 等价、报告历史和安全退出。比赛前另做“展示验收”，只判断视觉、窗口体验、文案和演示节奏，不重复技术 L5。
 
 ## 遇到问题
 
 - **启动失败**：`start.cmd` 会保留错误窗口；先查看屏幕上的失败阶段和恢复建议，再按需查看 `var/logs/startup/` 中最近的启动日志。
 - **浏览器未打开**：只有终端明确提示“界鉴已经启动，但未能自动打开网页”时，才手工打开 [http://127.0.0.1:8765/](http://127.0.0.1:8765/)；“仍在准备”表示服务尚未 ready，需要继续等待或按 `Ctrl+C` 退出。
-- **运行环境不可用**：按启动输出恢复。`cache clean` 只清理 `var/cache`；损坏的前端工作区或其他运行时由 `runtime repair` 清理，前端工作区在源码变化、最终网页缺失或强制准备等确需构建时重建，健康的最终网页仍可直接复用。删除整个 `var/` 表示从零重建仓库本地运行态，也会删除其中的数据库、Job、项目、报告和工件检查等产品事实，但不会删除全局项目 Conda 环境 `jiejian_env`。`product/frontend` 不保存依赖或构建产物，无需单独清理。
+- **运行环境不可用**：按启动输出恢复。`jiejian system cache clean --confirm` 只清理可重建缓存；损坏的运行时由 `jiejian system runtime repair --confirm` 显式修复。删除整个 `var/` 表示从零重建仓库本地运行态，也会删除其中的数据库、Job、项目、报告和工件检查等产品事实，但不会删除全局项目 Conda 环境 `jiejian_env`。`product/frontend` 不保存依赖或构建产物，无需单独清理。
 - **检查无法开始**：确认已经完成应用接入，目标使用授权的回环地址，权限规则已准备好，运行环境状态正常。
 
 `-Mode Prepare` 和 `-ForcePrepare` 仅用于高级恢复，不是正常启动流程。
@@ -113,10 +123,11 @@ jiejian ci <execution_profile.json>
 
 ## 更多文档
 
-- [技术文档总入口](docs/README.md)：按任务路由到当前 Architecture、ADR、Protocol、Schema 和 Migration。
-- [系统总体架构](docs/02_架构设计/系统总体架构.md)：模块化单体、ApplicationCore 和执行边界。
-- [Runner 执行协议](docs/04_协议与数据/Runner执行协议.md)：Worker、Runner、Evidence 和发布边界。
-- [ADR 索引](docs/03_架构决策/README.md)：仍约束当前实现的长期决策。
-- [开发路线图](docs/05_路线与研究/开发路线图.md)：按需查看下一步目标和验收边界。
+- [开发知识库入口](docs/README.md)：按任务路由到系统地图、开发指南、参考手册、工程约束和设计依据。
+- [系统全景](docs/01_系统地图/系统全景.md)：模块化单体、ApplicationCore 和执行边界。
+- [Runner 执行协议](docs/03_参考手册/协议/Runner执行协议.md)：Worker、Runner、Evidence 和发布边界。
+- [ADR 与设计依据](docs/05_设计依据/)：仍约束当前实现的长期决策。
+- [开发指南](docs/02_开发指南/)：按任务进入当前实现、边界与直接验证。
+- [修改官方示例与整链验收](docs/02_开发指南/任务/修改官方示例与整链验收.md)：协作空间、Recording UIA、自动 L5 与失败收口。
 
 深入技术内容以这些现有文档为准；后续文档入口调整时，再同步更新本页链接。

@@ -11,6 +11,7 @@ import time
 from fastapi.testclient import TestClient as RawTestClient
 import pytest
 from typer.testing import CliRunner
+from product.backend import __version__
 from product.backend.infra.runtime.serve_lock import ServeLock
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.cli.app import app as cli_app
@@ -44,8 +45,7 @@ from tests.fixtures.control_plane import (
     create_app,
 )
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
-PROFILE_SOURCE = Path("samples/web/fixed/profile.json").resolve()
-CONTRACT_SOURCE = Path("samples/web/fixed/contract.json").resolve()
+from tests.fixtures.runner import write_web_test_profile
 
 @pytest.mark.essential
 def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) -> None:
@@ -57,6 +57,7 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         status = client.get("/api/system/status")
         assert status.status_code == 200
         assert status.json()["schema_version"] == "1"
+        assert status.json()["data"]["version"] == __version__
         assert status.json()["data"]["api"] == "available"
         assert status.json()["data"]["worker"] == "stopped"
         assert status.json()["data"]["browser"] in {"available", "unavailable", "unknown"}
@@ -66,13 +67,8 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         assert openapi.status_code == 200
         assert "ApiResponse" in openapi.json()["components"]["schemas"]
         assert "202" in openapi.json()["paths"]["/api/projects/{project_id}/runs"]["post"]["responses"]
-        project_path = Path("samples/web/fixed/profile.json").resolve()
-        response = client.post(
-            "/api/projects",
-                json={"schema_version": "1", "profile_path": str(project_path)},
-        )
-        assert response.status_code == 200
-        project_id = response.json()["data"]["project_id"]
+        project_path, _ = write_web_test_profile(tmp_path / "inputs")
+        project_id = app.state.context.projects.register(project_path)[0].project_id
         assert client.get(f"/api/projects/{project_id}").status_code == 200
 
     restarted = create_app(var_dir, start_worker=False)
@@ -83,7 +79,7 @@ def test_system_cache_api_previews_and_preserves_product_data(tmp_path: Path) ->
     var_dir = tmp_path / "var"
     app = create_app(var_dir, start_worker=False)
     data_marker = app.state.context.paths.data / "keep.txt"
-    cache_marker = app.state.context.paths.uv_cache / "rebuild.bin"
+    cache_marker = app.state.context.paths.assistant_cache / "rebuild.bin"
     data_marker.write_text("keep", encoding="utf-8")
     cache_marker.write_bytes(b"cache")
     # 此用例只验证显式 API；后台维护的并发与失败由相邻两项独立覆盖。
@@ -199,18 +195,6 @@ def test_local_control_guard_requires_host_session_and_same_origin_write(
     assert accepted.json()["data"]["status"] == "stopping"
     assert calls == ["shutdown"]
 
-def test_control_plane_rejects_invalid_binding_and_redacts_trace(tmp_path: Path) -> None:
-    app = create_app(tmp_path / "var", start_worker=False)
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/projects",
-            headers={"X-Trace-ID": "trace-safe"},
-                json={"schema_version": "1", "profile_path": "missing.json"},
-        )
-        assert response.status_code == 400
-        assert response.json()["trace_id"] == "trace-safe"
-        assert "schema_version" not in response.json()["error"]
-
 def test_serve_lock_releases_normally_and_diagnoses_existing_lock(tmp_path: Path) -> None:
     lock = ServeLock.acquire(tmp_path / "var")
     try:
@@ -301,7 +285,7 @@ def test_serve_rejects_non_ipv4_control_host_before_frontend_and_releases_lock(
         ],
     )
     assert result.exit_code != 0
-    assert json.loads(result.stderr)["error"]["code"] == "API_BINDING_REJECTED"
+    assert json.loads(result.stdout)["error"]["error_code"] == "API_BINDING_REJECTED"
     assert not (RuntimePaths(tmp_path / "var").locks / "serve.lock").exists()
 
 @pytest.mark.parametrize(

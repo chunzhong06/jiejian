@@ -59,6 +59,6 @@ def test_error_diagnosis_uses_structured_phase_and_keeps_cleanup_additive() -> N
     assert diagnosis.phase is ErrorPhase.TARGET
     assert diagnosis.cause == "HTTP_CONNECTION_RESET"
     assert diagnosis.cleanup_warnings == ("业务检查结束后，测试现场没有完全恢复。",)
-    assert self_target.route == "/apps/access"
+    assert self_target.route == "/application"
     assert expired.recovery_action.value == "RELOGIN"
     assert observer.recovery_action.value == "CONFIRM_REAL_RESULT"

@@ -43,35 +43,19 @@ from tests.fixtures.control_plane import (
     TestClient,
     create_app,
 )
+from tests.fixtures.runner import write_web_test_profile
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
-PROFILE_SOURCE = Path("samples/web/fixed/profile.json").resolve()
-CONTRACT_SOURCE = Path("samples/web/fixed/contract.json").resolve()
 
 def _write_profile(tmp_path: Path, *, port: int | None = None) -> Path:
-    profile = parse_web_execution_profile(PROFILE_SOURCE.read_bytes())
-    if port is not None:
-        scope = profile.target.scope.model_copy(
-            update={
-                "base_url": f"http://127.0.0.1:{port}",
-                "allowed_origins": (f"http://127.0.0.1:{port}",),
-                "allowed_ports": (port,),
-            }
-        )
-        profile = profile.model_copy(update={"target": profile.target.model_copy(update={"scope": scope})})
-    path = tmp_path / "profile.json"
-    path.write_bytes(canonical_web_execution_profile_json_bytes(profile))
+    path, _ = write_web_test_profile(tmp_path, port=port or 8765)
     return path
 
-def _register_project(client: TestClient, profile_path: Path) -> dict[str, object]:
-    response = client.post(
-        "/api/projects",
-        json={"schema_version": "1", "profile_path": str(profile_path)},
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["data"]
+def _register_project(app, profile_path: Path) -> dict[str, object]:
+    record, _ = app.state.context.projects.register(profile_path)
+    return record.model_dump(mode="json")
 
-def _activate_contract(app, project_id: str) -> PermissionContract:
-    contract = PermissionContract.model_validate_json(CONTRACT_SOURCE.read_text(encoding="utf-8"), strict=True)
+def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionContract:
+    contract = PermissionContract.model_validate_json(profile_path.with_name("contract.json").read_text(encoding="utf-8"), strict=True)
     draft = app.state.context.contracts.create_draft(
         project_id,
         contract.contract_id,
@@ -87,8 +71,8 @@ def _activate_contract(app, project_id: str) -> PermissionContract:
     return active.snapshot
 
 def _register_active_profile(app, client: TestClient, profile_path: Path) -> tuple[dict[str, object], PermissionContract, dict[str, object]]:
-    project = _register_project(client, profile_path)
-    contract = _activate_contract(app, str(project["project_id"]))
+    project = _register_project(app, profile_path)
+    contract = _activate_contract(app, str(project["project_id"]), profile_path)
     response = client.post(
         "/api/execution-profiles",
         json={"schema_version": "1", "profile_path": str(profile_path)},
@@ -98,11 +82,11 @@ def _register_active_profile(app, client: TestClient, profile_path: Path) -> tup
 
 @pytest.mark.essential
 def test_api_worker_runner_publication_matches_cli_report(
-    sample_server_factory,
+    web_test_target_factory,
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    sample = sample_server_factory("fixed")
+    sample = web_test_target_factory()
     profile_path = _write_profile(tmp_path, port=sample.port)
     for key, value in sample.environ.items():
         monkeypatch.setenv(key, value)
@@ -218,21 +202,31 @@ def test_api_worker_runner_publication_matches_cli_report(
     assert runner_process_ids and set(runner_process_ids) != {os.getpid()}
     cli_report = CliRunner().invoke(
         cli_app,
-        ["--var-dir", str(var_dir), "report", run_id, "--format", "json"],
+        [
+            "--var-dir",
+            str(var_dir),
+            "--json",
+            "result",
+            "report",
+            run_id,
+            base_report_id,
+        ],
         env=sample.environ,
     )
     assert cli_report.exit_code == 0, cli_report.output
-    cli_payload = json.loads(cli_report.stdout)
-    assert cli_payload["run_id"] == run_id
-    assert cli_payload["report_id"] == base_report_id
+    cli_envelope = json.loads(cli_report.stdout)
+    assert cli_envelope["kind"] == "report"
+    cli_payload = cli_envelope["data"]
     assert cli_payload == api_report
     cli_repair = CliRunner().invoke(
         cli_app,
-        ["--var-dir", str(var_dir), "result-repair", run_id],
+        ["--var-dir", str(var_dir), "--json", "result", "repair", run_id],
         env=sample.environ,
     )
     assert cli_repair.exit_code == 0, cli_repair.output
-    assert json.loads(cli_repair.stdout)["base_report_state"] == "COMPLETE"
+    repair_envelope = json.loads(cli_repair.stdout)
+    assert repair_envelope["kind"] == "result-repair"
+    assert repair_envelope["data"]["base_report_state"] == "COMPLETE"
     assert tuple(sample.server.runner_process_ids) == runner_process_ids
     with TestClient(create_app(var_dir, start_worker=False)) as client:
         available = client.get(f"/api/runs/{run_id}/reports")

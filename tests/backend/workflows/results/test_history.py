@@ -40,6 +40,8 @@ def _issue(verdict: PresentedCaseVerdict, occurrence_status: str) -> ResultPrese
         ),
         conclusion=("符合预期" if verdict is PresentedCaseVerdict.SAFE else "发现权限问题"),
         explanation="测试投影说明。",
+        planned_identity_id="member-account",
+        planned_identity_label="成员测试账号",
         severity="high",
         evidence_refs=("evidence_" + verdict.value.lower(),),
         verdict=verdict,
@@ -138,6 +140,7 @@ def test_uncovered_run_never_looks_fixed_and_later_safe_evidence_can_fix() -> No
     assert result.comparisons[1].changes[0].status_label == "本次未覆盖"
     assert result.comparisons[1].changes[0].current_verdict is None
     assert result.comparisons[2].changes[0].status is HistoryChangeStatus.FIXED
+    assert result.comparisons[2].changes[0].status_label == "已解决"
     assert result.comparisons[2].changes[0].current_verdict is PresentedCaseVerdict.SAFE
 
 
@@ -161,4 +164,4 @@ def test_repeated_vulnerable_evidence_is_still_present() -> None:
     result = builder.build(PROJECT_ID)
 
     assert result.comparisons[-1].changes[0].status is HistoryChangeStatus.PERSISTENT
-    assert result.comparisons[-1].changes[0].status_label == "仍然存在"
+    assert result.comparisons[-1].changes[0].status_label == "仍存在"

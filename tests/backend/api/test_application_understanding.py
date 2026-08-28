@@ -10,6 +10,10 @@ from product.backend.workflows.application_understanding.endpoints import (
     EndpointProbeObservation,
     TargetEndpointDiscovery,
 )
+from product.backend.core.test_identity import TestIdentityAuthMethod, TestIdentityCookie
+from product.backend.infra.secrets import credential_ref
+from product.backend.workflows.test_identities import PreparedLoginState
+from tests.fixtures.collaboration_golden import InMemorySecretStore
 
 
 def _reachable_discovery(endpoint: str) -> TargetEndpointDiscovery:
@@ -97,12 +101,14 @@ def test_application_connection_confirms_endpoint_without_profile(
         assert "schema_version" not in understanding.json()["data"]
         assert understanding.json()["data"]["confirmed_endpoint"] == endpoint
 
-        readiness = client.get(f"/api/projects/{project_id}/readiness")
-        assert readiness.status_code == 200
-        assert "schema_version" not in readiness.json()["data"]
-        assert readiness.json()["data"]["endpoint_status"] == "CONFIRMED"
+        product_status = client.get(f"/api/projects/{project_id}/status")
+        assert product_status.status_code == 200
+        readiness = product_status.json()["data"]["readiness"]
+        assert "schema_version" not in readiness
+        assert readiness["endpoint_status"] == "CONFIRMED"
+        assert readiness["next_required_action"] == "AUTHORIZE_SOURCE_ANALYSIS"
         assert (
-            readiness.json()["data"]["next_required_action"]
+            product_status.json()["data"]["next_action"]["action"]
             == "AUTHORIZE_SOURCE_ANALYSIS"
         )
 
@@ -162,6 +168,53 @@ def test_application_connection_confirms_endpoint_without_profile(
         )
         assert manual_action.status_code == 201
         assert manual_action.json()["data"]["revision"] == 7
+
+        excluded = client.put(
+            f"/api/projects/{project_id}/roles/{role['candidate_id']}",
+            json={
+                "schema_version": "1",
+                "decision": "REJECTED",
+                "display_name": "所有者",
+                "revision": 7,
+            },
+        )
+        assert excluded.status_code == 200
+        proposed = client.put(
+            f"/api/projects/{project_id}/roles/{role['candidate_id']}",
+            json={
+                "schema_version": "1",
+                "decision": "PROPOSED",
+                "display_name": "所有者",
+                "revision": 8,
+            },
+        )
+        assert proposed.status_code == 200
+        detected_after = next(
+            item
+            for item in proposed.json()["data"]["role_candidates"]
+            if item["candidate_id"] == role["candidate_id"]
+        )
+        assert detected_after["decision"] == "PROPOSED"
+
+        manual_candidate = next(
+            item
+            for item in proposed.json()["data"]["role_candidates"]
+            if item["origin"] == "MANUAL"
+        )
+        invalid_manual_history = client.put(
+            f"/api/projects/{project_id}/roles/{manual_candidate['candidate_id']}",
+            json={
+                "schema_version": "1",
+                "decision": "PROPOSED",
+                "display_name": manual_candidate["display_name"],
+                "revision": 9,
+            },
+        )
+        assert invalid_manual_history.status_code == 400
+        assert (
+            invalid_manual_history.json()["error"]["code"]
+            == "ONBOARDING_INPUT_INVALID"
+        )
 
 
 def test_application_endpoint_rejects_non_loopback_address(tmp_path: Path) -> None:
@@ -233,3 +286,112 @@ def test_application_endpoint_rejects_the_active_control_origin_before_probe(
     )
     assert probes == []
     assert understanding.json()["data"]["confirmed_endpoint"] is None
+
+
+def test_remove_application_archives_history_cleans_secrets_and_same_source_restores(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    endpoint = "http://127.0.0.1:4555"
+    (source / "openapi.json").write_text(
+        json.dumps(
+            {
+                "openapi": "3.1.0",
+                "x-roles": ["owner"],
+                "servers": [{"url": endpoint}],
+                "paths": {"/exports": {"post": {"summary": "导出资料"}}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    secrets = InMemorySecretStore()
+    app = create_app(
+        tmp_path / "var",
+        start_worker=False,
+        secret_store=secrets,
+        clock_us=lambda: 10,
+    )
+    app.state.context.application_understanding.endpoint_discovery = (
+        _reachable_discovery(endpoint)
+    )
+
+    with TestClient(app) as client:
+        connected = client.post(
+            "/api/applications/connect",
+            json={"schema_version": "1", "source_root": str(source)},
+        ).json()["data"]
+        project_id = connected["project"]["project_id"]
+        confirmed_endpoint = client.put(
+            f"/api/projects/{project_id}/endpoint",
+            json={"schema_version": "1", "endpoint": endpoint, "revision": 0},
+        ).json()["data"]
+        authorized = client.put(
+            f"/api/projects/{project_id}/source-analysis-authorization",
+            json={"schema_version": "1", "authorized": True, "revision": confirmed_endpoint["revision"]},
+        ).json()["data"]
+        analyzed = client.post(
+            f"/api/projects/{project_id}/source-analysis",
+            json={"schema_version": "1", "revision": authorized["revision"]},
+        ).json()["data"]
+        role = analyzed["role_candidates"][0]
+        confirmed_role = client.put(
+            f"/api/projects/{project_id}/roles/{role['candidate_id']}",
+            json={"schema_version": "1", "decision": "CONFIRMED", "display_name": "负责人", "revision": analyzed["revision"]},
+        ).json()["data"]
+        identity = app.state.context.test_identities.create(
+            project_id,
+            role_candidate_id=confirmed_role["role_candidates"][0]["candidate_id"],
+            label="历史账号",
+        )
+        identity_id = identity.identity_id
+        secret_ref = credential_ref(
+            "test-identity",
+            project_id,
+            identity_id,
+            "cookie-00",
+        )
+        secrets.write(secret_ref, "opaque-test-session")
+        app.state.context.test_identities.save_prepared_state(
+            identity_id,
+            PreparedLoginState(
+                auth_method=TestIdentityAuthMethod.COOKIE_SESSION,
+                cookies=(
+                    TestIdentityCookie(
+                        name="session",
+                        domain="127.0.0.1",
+                        path="/",
+                        secure=False,
+                        http_only=True,
+                        same_site="LAX",
+                        value_secret_ref=secret_ref,
+                    ),
+                ),
+                prepared_at_us=11,
+            ),
+        )
+
+        removed = client.delete(f"/api/projects/{project_id}")
+        normal_list = client.get("/api/projects")
+        historical_list = client.get("/api/projects?include_archived=true")
+
+        assert removed.status_code == 200
+        assert removed.json()["data"]["status"] == "ARCHIVED"
+        assert normal_list.json()["data"] == []
+        assert historical_list.json()["data"][0]["project_id"] == project_id
+        assert historical_list.json()["data"][0]["status"] == "ARCHIVED"
+        assert secrets.configured(secret_ref) is False
+        with app.state.context.uow_factory() as work:
+            retained = work.test_identities.get(identity_id)
+            assert retained is not None
+            assert retained.prepared_at_us == 11
+            assert retained.secret_refs == (secret_ref,)
+
+        restored = client.post(
+            "/api/applications/connect",
+            json={"schema_version": "1", "source_root": str(source)},
+        )
+        assert restored.status_code == 201
+        assert restored.json()["data"]["project"]["project_id"] == project_id
+        assert restored.json()["data"]["project"]["status"] == "DRAFT"
+        assert client.get("/api/projects").json()["data"][0]["project_id"] == project_id

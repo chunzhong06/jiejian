@@ -23,6 +23,9 @@ def test_application_and_worker_containers_are_independent_and_complete(tmp_path
         assert application.result_services.finalizer._reports is application.result_services.reports
         assert application.results is application.result_services.reader
         assert application.findings is application.result_services.queries
+        assert application.product_results._presentation is application.result_presentation
+        assert application.product_results._history is application.result_history
+        assert application.product_status._result_presentation is application.result_presentation
         assert worker.result_services.finalizer._reports is worker.result_services.reports
         assert worker.handler_factory._publication is worker.run_publisher
         assert worker.handler_factory._reconciliation is worker.run_reconciler

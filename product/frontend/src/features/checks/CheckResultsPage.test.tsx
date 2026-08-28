@@ -17,12 +17,31 @@ const basePresentation = (overrides: Record<string, unknown> = {}) => ({
 })
 
 describe('CheckResultsPage', () => {
+  it('只在调用方确认活跃导览结果后显示修复验证，并仍等待用户点击', () => {
+    const run = { run_id: 'run-fix', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED' }
+    runsApi.run.mockResolvedValue(run)
+    resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-fix', verdict: 'BLOCK', headline: '发现权限问题' }))
+    resultsApi.evidence.mockResolvedValue([])
+    const verify = vi.fn()
+    render(<CheckResultsPage run={run} onError={vi.fn()} canVerifyFix onVerifyFix={verify} />)
+    fireEvent.click(screen.getByRole('button', { name: '验证修复后的行为' }))
+    expect(verify).toHaveBeenCalledOnce()
+    expect(screen.queryByText(/预期.*通过/)).not.toBeInTheDocument()
+  })
+
   it('原样展示后端对表面拒绝与真实变化的业务解释', async () => {
     const run = { run_id: 'run-block', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', observer_health: { required_observations: ['resource_state'], resource_state: { configured: true } } }
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(basePresentation({
       run_id: 'run-block', verdict: 'BLOCK', headline: '发现权限问题', problem_count: 1, safe_count: 0,
-      issues: [{ finding_id: 'finding-block', title: '后端确认：禁止操作造成真实变化', subject_group: '成员账号', action: '修改', resource: '文档', relation: '拥有', expectation: '不应允许这次操作，资源也不应发生变化', surface_result: '页面或接口显示已拒绝', actual_result: '真实资源已经发生变化', conclusion: '发现权限问题', explanation: '页面或接口虽然显示已拒绝，但外部可信观察确认真实资源已经变化；权限限制没有真正阻止修改，表面拒绝没有阻止真实副作用。', severity: 'critical', evidence_refs: ['ev-block'], verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }],
+      issues: [{ finding_id: 'finding-block', title: '后端确认：禁止操作造成真实变化', subject_group: '成员账号', action: '修改', resource: '文档', relation: '拥有', expectation: '不应允许这次操作，资源也不应发生变化', surface_result: '页面或接口显示已拒绝', actual_result: '真实资源已经发生变化', conclusion: '发现权限问题', explanation: '页面或接口虽然显示已拒绝，但外部可信观察确认真实资源已经变化；权限限制没有真正阻止修改，表面拒绝没有阻止真实副作用。', planned_identity_id: 'member-a', planned_identity_label: '成员 A', actual_identity_status: 'UNAVAILABLE', actual_identity_label: null, severity: 'critical', evidence_refs: ['ev-block'], evidence_sources: [
+        { observer_type: 'OWNER_API', label: '目标业务状态', role: 'KEY', status: 'FOUND', evidence_refs: ['ev-block'] },
+        { observer_type: 'READ_ONLY_SQLITE', label: '只读数据库', role: 'SUPPORTING', status: 'NOT_FOUND', evidence_refs: ['ev-block'] },
+        { observer_type: 'STRUCTURED_AUDIT_LOG', label: '结构化审计记录', role: 'SUPPORTING', status: 'FOUND', evidence_refs: ['ev-block'] },
+        { observer_type: 'ASYNC_TASK_STATUS', label: '后台任务', role: 'SUPPORTING', status: 'FOUND', evidence_refs: ['ev-block'] },
+        { observer_type: 'AZURE_QUEUE_PEEK', label: '消息通道', role: 'SUPPORTING', status: 'UNAVAILABLE', evidence_refs: ['ev-block'] },
+        { observer_type: 'AZURE_BLOB_OBJECT', label: '最终对象/文件', role: 'KEY', status: 'FOUND', evidence_refs: ['ev-block'] },
+      ], verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }],
     }))
     resultsApi.evidence.mockResolvedValue([{ evidence_id: 'ev-block' }])
     resultsApi.evidenceDetail.mockResolvedValue({ evidence_id: 'ev-block', case_snapshot: { subject_id: 'member', action_id: 'modify', resource_ids: ['owner-document'], expectations: ['DENY'], required_observations: ['resource_state'] }, twin_role: 'DENY_VARIANT', allow_control_valid: true, baseline_integrity: true, execution_fact: { outcome: 'DENIED' }, observation_facts: [{ requirement_id: 'resource_state', resource_id: 'owner-document', effect: 'CONFIRMED', complete: true, reliable: true }], security_effect_facts: [{ kind: 'STATE_MUTATION', state: 'CONFIRMED', temporal_closure: 'CLOSED', baseline_integrity: true, complete: true, reliable: true, correlated: true }], verdict: 'VULNERABLE' })
@@ -30,18 +49,32 @@ describe('CheckResultsPage', () => {
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
 
     expect(await screen.findByRole('heading', { name: '发现权限问题' })).toBeInTheDocument()
-    expect(await screen.findByText('后端确认：禁止操作造成真实变化')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '后端确认：禁止操作造成真实变化' })).toBeInTheDocument()
+    expect(screen.getByText('成员账号 · 修改 · 文档 · 拥有')).toBeInTheDocument()
     expect(screen.getByText('真实资源已经发生变化')).toBeInTheDocument()
     expect(screen.getByText(/权限限制没有真正阻止修改/)).toBeInTheDocument()
+    expect(screen.getByText('计划使用的账号')).toBeInTheDocument()
+    expect(screen.getByText('成员 A')).toBeInTheDocument()
+    expect(screen.getByText('目标实际识别的账号')).toBeInTheDocument()
+    expect(screen.getByText('无法独立确认')).toBeInTheDocument()
+    expect(screen.getByText(/不会把计划账号冒充为实际账号/)).toBeInTheDocument()
+    expect(screen.getByText('真实结果证据来源')).toBeInTheDocument()
+    expect(screen.getByText(/佐证来源补充执行过程/)).toBeInTheDocument()
+    expect(screen.getAllByText('关键来源')).toHaveLength(2)
+    expect(screen.getAllByText('佐证来源')).toHaveLength(4)
+    expect(['目标业务状态', '只读数据库', '结构化审计记录', '后台任务', '消息通道', '最终对象/文件'].map((label) => screen.getByText(label))).toHaveLength(6)
+    expect(screen.getAllByText('已发现')).toHaveLength(4)
+    expect(screen.getByText('未发现')).toBeInTheDocument()
+    expect(screen.getAllByText('无法确认')).toHaveLength(1)
     expect(screen.queryByText('成员账号不应对文档执行修改')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('查看证据'))
-    expect(await screen.findByText('页面或接口显示已拒绝')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('查看对应证据'))
+    expect(await screen.findByText('证据时间线')).toBeInTheDocument()
   })
 
   it('INCONCLUSIVE 使用后端说明且不显示执行失败', async () => {
     const run = { run_id: 'run-inconclusive', lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED', observer_health: { required_observations: ['resource_state'], resource_state: { configured: true } } }
     runsApi.run.mockResolvedValue(run)
-    resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-inconclusive', verdict: 'INCONCLUSIVE', headline: '证据不足', scope_statement: '操作已经执行，但真实资源最终状态无法可靠确认；这不代表安全，也不代表已经确认漏洞。', safe_count: 0, inconclusive_count: 1, issues: [{ finding_id: 'finding-1', title: '读取文档的真实结果暂时无法确认', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', expectation: '按当前权限规则执行', surface_result: '表面结果无法确定', actual_result: '真实资源状态尚不能可靠确认', conclusion: '证据不足', explanation: '必需观察不完整或不可靠，当前证据不足以确认资源是否按权限规则变化。', severity: 'high', evidence_refs: [], verdict: 'INCONCLUSIVE', occurrence_status: 'APPEARED' }], limitations: ['有 1 项因真实状态观察不完整或不可靠而证据不足。'] }))
+    resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-inconclusive', verdict: 'INCONCLUSIVE', headline: '证据不足', scope_statement: '操作已经执行，但真实资源最终状态无法可靠确认；这不代表安全，也不代表已经确认漏洞。', safe_count: 0, inconclusive_count: 1, issues: [{ finding_id: 'finding-1', title: '读取文档的真实结果暂时无法确认', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', expectation: '按当前权限规则执行', surface_result: '表面结果无法确定', actual_result: '真实资源状态尚不能可靠确认', conclusion: '证据不足', explanation: '必需观察不完整或不可靠，当前证据不足以确认资源是否按权限规则变化。', planned_identity_id: 'member-a', planned_identity_label: null, actual_identity_status: 'UNAVAILABLE', actual_identity_label: null, severity: 'high', evidence_refs: [], evidence_sources: [{ observer_type: 'OWNER_API', label: '目标业务状态', role: 'KEY', status: 'UNAVAILABLE', evidence_refs: [] }], verdict: 'INCONCLUSIVE', occurrence_status: 'APPEARED' }], limitations: ['有 1 项因真实状态观察不完整或不可靠而证据不足。'] }))
     resultsApi.evidence.mockResolvedValue([])
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
     expect(await screen.findByRole('heading', { name: '证据不足' })).toBeInTheDocument()
@@ -58,7 +91,7 @@ describe('CheckResultsPage', () => {
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
     expect(await screen.findByRole('heading', { name: '当前范围未发现确认问题' })).toBeInTheDocument()
     expect(screen.getByText(/不代表应用绝对安全/)).toBeInTheDocument()
-    expect(screen.getByText('权限要求未覆盖')).toBeInTheDocument()
+    expect(screen.getByText('未覆盖')).toBeInTheDocument()
     expect(screen.getAllByText('2 项')).toHaveLength(2)
     expect(screen.getByText(/本次结论只适用于实际执行范围/)).toBeInTheDocument()
   })

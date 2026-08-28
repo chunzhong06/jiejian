@@ -21,7 +21,10 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle, RunVerdict
+from product.backend.core.verification.facts import ObservedEffect, TemporalClosure
+from product.protocols.observer import ObserverOutcomeStatus, ObserverType
 
 
 class _PresentationModel(BaseModel):
@@ -39,6 +42,16 @@ class PresentedCaseVerdict(StrEnum):
     INCONCLUSIVE = "INCONCLUSIVE"
 
 
+class ResultEvidenceSource(_PresentationModel):
+    """把单个已发布观察来源投影为只读、可解释状态。"""
+
+    observer_type: ObserverType
+    label: str = Field(min_length=1, max_length=80)
+    role: Literal["KEY", "SUPPORTING"]
+    status: Literal["FOUND", "NOT_FOUND", "UNAVAILABLE"]
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=8192)
+
+
 class ResultPresentationIssue(_PresentationModel):
     finding_id: str = Field(min_length=1, max_length=128)
     title: str = Field(min_length=1, max_length=200)
@@ -51,8 +64,16 @@ class ResultPresentationIssue(_PresentationModel):
     actual_result: str = Field(min_length=1, max_length=240)
     conclusion: str = Field(min_length=1, max_length=160)
     explanation: str = Field(min_length=1, max_length=480)
+    planned_identity_id: str = Field(min_length=1, max_length=64)
+    planned_identity_label: str | None = Field(default=None, min_length=1, max_length=128)
+    actual_identity_status: Literal["UNAVAILABLE"] = "UNAVAILABLE"
+    actual_identity_label: None = None
     severity: Literal["unknown", "low", "medium", "high", "critical"]
     evidence_refs: tuple[str, ...] = Field(default=(), max_length=8192)
+    evidence_sources: tuple[ResultEvidenceSource, ...] = Field(
+        default=(),
+        max_length=256,
+    )
     verdict: PresentedCaseVerdict
     occurrence_status: str | None = Field(default=None, max_length=32)
 
@@ -104,7 +125,7 @@ def build_result_presentation(
     issues = tuple(
         sorted(
             (
-                _issue(item, evidence_by_id)
+                _issue(item, evidence_by_id, snapshot)
                 for item in finding_views
             ),
             key=lambda item: item.finding_id,
@@ -179,6 +200,7 @@ _RELATION_LABELS = {
 def _issue(
     item: dict[str, Any],
     evidence_by_id: dict[str, Any],
+    snapshot: Any,
 ) -> ResultPresentationIssue:
     finding = item.get("finding") or {}
     identity = finding.get("identity") or {}
@@ -187,6 +209,7 @@ def _issue(
     evidence_refs = tuple(str(value) for value in occurrence.get("evidence_refs") or ())
     verdict = PresentedCaseVerdict(str(occurrence.get("verdict")))
     evidence = _representative_evidence(evidence_refs, evidence_by_id, verdict)
+    planned_identity_id, planned_identity_label = _planned_identity(snapshot, evidence)
     expectation = _expectation(evidence)
     subject_group = _subject_group(identity, expectation)
     action = _action(identity)
@@ -204,8 +227,11 @@ def _issue(
         actual_result=_actual_result(evidence),
         conclusion=_case_conclusion(verdict),
         explanation=_explanation(evidence, verdict),
+        planned_identity_id=planned_identity_id,
+        planned_identity_label=planned_identity_label,
         severity=_severity(occurrence.get("severity")),
         evidence_refs=evidence_refs,
+        evidence_sources=_evidence_sources(snapshot, evidence),
         verdict=verdict,
         occurrence_status=(
             str(occurrence["status"])
@@ -213,6 +239,215 @@ def _issue(
             else None
         ),
     )
+
+
+_SOURCE_PRESENTATION = {
+    ObserverType.OWNER_API: (0, "目标业务状态"),
+    ObserverType.READ_ONLY_SQLITE: (1, "只读数据库"),
+    ObserverType.STRUCTURED_AUDIT_LOG: (2, "结构化审计记录"),
+    ObserverType.ASYNC_TASK_STATUS: (3, "后台任务"),
+    ObserverType.AZURE_QUEUE_PEEK: (4, "消息通道"),
+    ObserverType.AZURE_BLOB_OBJECT: (5, "最终对象/文件"),
+}
+
+
+def _evidence_sources(
+    snapshot: Any,
+    evidence: Any | None,
+) -> tuple[ResultEvidenceSource, ...]:
+    """只按冻结 EffectBinding 取角色，并按已发布事实翻译来源状态。"""
+
+    if evidence is None:
+        return ()
+    case = getattr(evidence, "case_snapshot", None)
+    action_id = str(getattr(case, "action_id", "") or "")
+    action = next(
+        (
+            item
+            for item in getattr(getattr(snapshot, "contract", None), "actions", ())
+            if str(getattr(item, "action_id", "")) == action_id
+        ),
+        None,
+    )
+    if action is None:
+        raise JiejianError(
+            ErrorCode.ARTIFACT_FENCE,
+            "结果观察来源与冻结 Action 不一致",
+        )
+    effect_bindings = {
+        str(getattr(item, "effect_id", "")): item
+        for item in getattr(snapshot, "effect_bindings", ())
+    }
+    roles: dict[str, Literal["KEY", "SUPPORTING"]] = {}
+    for effect_id in getattr(action, "effect_ids", ()):
+        effect_binding = effect_bindings.get(str(effect_id))
+        if effect_binding is None:
+            raise JiejianError(
+                ErrorCode.ARTIFACT_FENCE,
+                "结果观察来源缺少冻结 EffectBinding",
+            )
+        for requirement_id in getattr(effect_binding, "required_channels", ()):
+            _assign_source_role(roles, str(requirement_id), "KEY")
+        for requirement_id in getattr(effect_binding, "corroborating_channels", ()):
+            _assign_source_role(roles, str(requirement_id), "SUPPORTING")
+
+    snapshot_bindings = {
+        str(getattr(item, "requirement_id", "")): item
+        for item in getattr(snapshot, "observer_bindings", ())
+    }
+    evidence_bindings = {
+        str(getattr(item, "requirement_id", "")): item
+        for item in getattr(evidence, "requirement_bindings", ())
+    }
+    evidence_id = str(getattr(evidence, "evidence_id", "") or "")
+    sources: list[ResultEvidenceSource] = []
+    for requirement_id, role in roles.items():
+        binding = snapshot_bindings.get(requirement_id)
+        observer_type = getattr(binding, "observer_type", None)
+        if binding is None or observer_type not in _SOURCE_PRESENTATION:
+            raise JiejianError(
+                ErrorCode.ARTIFACT_FENCE,
+                "结果观察来源缺少冻结 ObserverBinding",
+            )
+        _, label = _SOURCE_PRESENTATION[observer_type]
+        published_binding = evidence_bindings.get(requirement_id)
+        binding_published = bool(
+            published_binding is not None
+            and getattr(published_binding, "observer_id", None)
+            == getattr(binding, "observer_id", None)
+            and getattr(published_binding, "observer_type", None) is observer_type
+        )
+        sources.append(
+            ResultEvidenceSource(
+                observer_type=observer_type,
+                label=label,
+                role=role,
+                status=_evidence_source_status(
+                    evidence,
+                    requirement_id=requirement_id,
+                    observer_id=str(getattr(binding, "observer_id", "") or ""),
+                    required=role == "KEY",
+                    binding_published=binding_published,
+                ),
+                evidence_refs=(evidence_id,) if binding_published and evidence_id else (),
+            )
+        )
+    return tuple(
+        sorted(
+            sources,
+            key=lambda item: _SOURCE_PRESENTATION[item.observer_type][0],
+        )
+    )
+
+
+def _assign_source_role(
+    roles: dict[str, Literal["KEY", "SUPPORTING"]],
+    requirement_id: str,
+    role: Literal["KEY", "SUPPORTING"],
+) -> None:
+    current = roles.get(requirement_id)
+    if current is not None and current != role:
+        raise JiejianError(
+            ErrorCode.ARTIFACT_FENCE,
+            "同一观察来源在冻结结果中具有冲突角色",
+        )
+    roles.setdefault(requirement_id, role)
+
+
+def _evidence_source_status(
+    evidence: Any,
+    *,
+    requirement_id: str,
+    observer_id: str,
+    required: bool,
+    binding_published: bool,
+) -> Literal["FOUND", "NOT_FOUND", "UNAVAILABLE"]:
+    if not binding_published:
+        return "UNAVAILABLE"
+    outcome = next(
+        (
+            item
+            for item in getattr(evidence, "outcomes", ())
+            if str(getattr(item, "observer_id", "")) == observer_id
+        ),
+        None,
+    )
+    if (
+        outcome is None
+        or _value(getattr(outcome, "status", None))
+        != ObserverOutcomeStatus.AVAILABLE.value
+        or bool(getattr(outcome, "required", False)) is not required
+    ):
+        return "UNAVAILABLE"
+    resource_ids = {
+        str(value)
+        for value in getattr(getattr(evidence, "case_snapshot", None), "resource_ids", ())
+    }
+    facts = tuple(
+        item
+        for item in getattr(evidence, "observation_facts", ())
+        if str(getattr(item, "requirement_id", "")) == requirement_id
+    )
+    if (
+        not resource_ids
+        or {str(getattr(item, "resource_id", "")) for item in facts}
+        != resource_ids
+    ):
+        return "UNAVAILABLE"
+    trustworthy = tuple(
+        item
+        for item in facts
+        if bool(getattr(item, "complete", False))
+        and bool(getattr(item, "reliable", False))
+        and bool(getattr(item, "correlated", False))
+    )
+    if len(trustworthy) != len(facts):
+        return "UNAVAILABLE"
+    if any(
+        _value(getattr(item, "effect", None)) == ObservedEffect.CONFIRMED.value
+        for item in trustworthy
+    ):
+        return "FOUND"
+    if trustworthy and all(
+        _value(getattr(item, "effect", None)) == ObservedEffect.ABSENT.value
+        and _value(getattr(item, "temporal_closure", None))
+        == TemporalClosure.CLOSED.value
+        for item in trustworthy
+    ):
+        return "NOT_FOUND"
+    return "UNAVAILABLE"
+
+
+def _planned_identity(snapshot: Any, evidence: Any | None) -> tuple[str, str | None]:
+    """只从冻结请求和代表性 Evidence 还原计划身份，不推断服务器实际身份。"""
+
+    subject_id = str(
+        getattr(getattr(evidence, "case_snapshot", None), "subject_id", "") or ""
+    )
+    binding = next(
+        (
+            item
+            for item in getattr(snapshot, "subject_bindings", ())
+            if str(getattr(item, "subject_id", "")) == subject_id
+        ),
+        None,
+    )
+    identity_id = str(getattr(binding, "identity_id", "") or "")
+    identity = next(
+        (
+            item
+            for item in getattr(snapshot, "identities", ())
+            if str(getattr(item, "identity_id", "")) == identity_id
+        ),
+        None,
+    )
+    if not subject_id or binding is None or identity is None:
+        raise JiejianError(
+            ErrorCode.ARTIFACT_FENCE,
+            "结果身份绑定与冻结执行请求不一致",
+        )
+    label = getattr(identity, "label", None)
+    return identity_id, str(label) if label is not None else None
 
 
 def _representative_evidence(
@@ -397,6 +632,7 @@ def _value(value: Any) -> str:
 
 __all__ = [
     "PresentedCaseVerdict",
+    "ResultEvidenceSource",
     "ResultPresentation",
     "ResultPresentationBuilder",
     "ResultPresentationIssue",

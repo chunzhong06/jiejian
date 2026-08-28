@@ -5,13 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.fixtures.control_plane import TestClient, create_app
+from tests.fixtures.runner import write_web_test_profile
 
 
 def test_workbench_service_derivation_is_atomic_and_idempotent(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
+    profile_path, _ = write_web_test_profile(tmp_path / "inputs")
     with TestClient(app):
         context = app.state.context
-        project, _ = context.projects.register(Path("samples/web/fixed/profile.json").resolve())
+        project, _ = context.projects.register(profile_path)
         malformed = context.contract_workbench.create_requirement(
             project.project_id,
             text="uncovered natural language",

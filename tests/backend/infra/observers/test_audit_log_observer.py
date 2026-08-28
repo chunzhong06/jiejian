@@ -169,6 +169,19 @@ def test_audit_observer_offset_and_eventual_are_explicit_and_bounded(tmp_path: P
     assert result.envelope.state is not None
     next_offsets = result.envelope.state.canonical_data["next_offsets"]
     assert next_offsets[0]["file_name"] == "audit.jsonl"
+    next_cursor = AuditLogStartCursor.model_validate(next_offsets[0])
+    assert next_cursor.offset == path.stat().st_size
+    unchanged = _observe(
+        tmp_path,
+        spec=_spec(phases=(ObservationPhase.EVENTUAL,)),
+        phase=ObservationPhase.EVENTUAL,
+        cursors=(next_cursor,),
+    )
+    assert unchanged.envelope is not None and unchanged.envelope.state is not None
+    unchanged_cursor = AuditLogStartCursor.model_validate(
+        unchanged.envelope.state.canonical_data["next_offsets"][0]
+    )
+    assert unchanged_cursor == next_cursor
 
     with pytest.raises(ValueError):
         AuditLogStartCursor(file_name="audit.jsonl", offset=10_000)

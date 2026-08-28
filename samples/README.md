@@ -1,57 +1,110 @@
-# 官方 Samples
+# 官方 Sample
 
-`samples/web` 是界鉴随源码仓库提供的唯一 Web 演示真源，包含同一个 Authorization Target 的三种行为变体、公开 OpenAPI 描述、权限契约、执行配置、外部预期和公开启动脚本。界鉴产品代码不包含被测 Demo 应用，也不会读取 Sample Truth 决定结论。
+`samples/web/collaboration_space` 是界鉴随源码提供的唯一 Web 演示应用：“协作空间——项目资料管理应用”。固定项目为“校园数字展馆”，Alice 是负责人，Bob 是普通成员，Eve 是外部访客；高价值业务动作是生成完整项目资料包。
 
-## 三态权限检查 Golden
+同一个应用通过授权顺序和关键观察可用性形成漏洞、修复、观察受限三种事实。Sample 不包含预设 Verdict，最终 `BLOCK`、`PASS`、`INCONCLUSIVE` 只能由界鉴正式 Verification 和 Evidence 路径产生。
 
-- `fixed`：接口拒绝攻击者修改，真实资源没有变化，正常执行链应形成 PASS。
-- `vulnerable`：接口表面拒绝，但真实资源发生变化，正常执行链应形成 BLOCK。
-- `inconclusive`：必需的资源状态观察不可用，正常执行链应形成 INCONCLUSIVE。
+## 从界鉴 GUI 启动
 
-三个变体属于同一个业务 Target，不是三套应用。Ownership 只是本 Sample 的关系场景；tenant、department、hierarchy、workflow、batch、异步和多观察器能力由 Core、Coverage 与 Observer 定向测试保护。
-
-每个 Bundle 位于 `samples/web/{fixed|vulnerable|inconclusive}/`：
-
-- `contract.json`：描述 attacker 对 owner-resource 执行 modify 时的 DENY 意图。
-- `profile.json`：通过当前 Web Target Runtime 执行的正式配置。
-- `scenario.json`：Target、观察器和验证条件说明。
-- `truth.json`：只供测试在产品完成真实执行和发布后比较的外部预期。
-
-唯一 Target 实现在 `samples/web/target/server.py`。固定端口分别为 `8865`、`8766`、`8767`；界鉴控制面默认使用 `8765`。Target 只绑定 `127.0.0.1`，reset 只接受回环请求和 `X-Jiejian-Test-Mode: 1`。Owner、attacker、peer 与独立 Owner Observer 使用不同临时凭据。
-
-根目录的 `openapi.json` 只描述三个 loopback 变体地址、明确的 `x-roles` 权限组、OAuth scope 和公开业务接口。普通应用接入只从 `x-roles` 提出权限组候选，并从公开路径提出动作候选；仍需用户逐步确认，不能把 OAuth scope 当成权限组，也不能读取 `truth.json` 或据此产生权限结论。
-
-## 图形界面入口
-
-从仓库根目录执行：
+从仓库根运行：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\samples\web\launch\gui.ps1 -Variant vulnerable
+.\start.cmd
 ```
 
-脚本会准备或复用当前源码运行环境，启动唯一 Sample Target，再通过公开 `start.cmd -Mode Gui` 打开界鉴。终端会显示 Target 地址、`profile.json` 和 `contract.json` 路径；请通过正常应用接入、权限治理和检查入口使用这些信息。脚本不写产品数据库、不调用私有 Demo API，也不提供预设 Verdict。
+进入 GUI 后使用“评委导览”。界鉴会通过正式 ApplicationCore 启动官方 Sample、接入应用并引导完成应用理解、Recording、权限准备与检查。不要直接调用 Sample 内部 manager 来伪造导览状态。
 
-## 命令行入口
+Sample Bundle 位于：
 
-在已经通过正常产品流程登记项目并激活对应 Contract 后执行：
+```text
+samples/web/collaboration_space/
+├── sample.json
+└── source/
+    ├── openapi.json
+    └── collaboration_space/
+        ├── __init__.py
+        ├── background.py
+        ├── page.py
+        ├── server.py
+        └── storage.py
+```
+
+运行时数据库、Task、Audit、Queue、Blob、ZIP 和环境描述符由官方示例管理器写入调用方指定的 `var/` 运行边界，不写回 Sample 源码。
+
+## 业务模式和六面观察
+
+同一个导出 API 支持两种授权顺序：
+
+- `AUTHORIZE_BEFORE_ENQUEUE`：先检查权限。Bob 收到 403，且不会产生导出副作用。
+- `ENQUEUE_BEFORE_AUTHORIZE`：先进入后台导出链，再返回 Bob 的权限拒绝。HTTP 仍为 403，但 Task、Queue、Audit 和最终 ZIP 会真实形成。
+
+关键 Blob 读取面可以由正式受控机制设为 `UNAVAILABLE`，用于证明业务已修复但关键事实暂时不可可靠读取的 `INCONCLUSIVE`。它不能扩大成所有 Observer 的通用不可用模式。
+
+界鉴的正式接线把 Owner API 与最终 Blob 对象作为关键来源，把 SQLite、结构化 Audit、后台 Task 和 Queue 作为佐证来源。接线逻辑位于产品的安全准备工作流，不写入 Sample Bundle，也不由 Sample 决定观察角色。
+
+## “撤销本次导出”不是删除历史
+
+Alice 在资料包生成成功后可以执行：
+
+```text
+撤销本次导出
+→ 确认撤销
+→ 当前导出状态：已撤销
+→ 可以重新生成资料包
+```
+
+这是正常业务撤销：
+
+- Project 进入 `REVOKED` 并清空当前 task、artifact、case 指针；
+- export job 和 Task 保留并进入 `REVOKED`；
+- 原 Audit、Queue 历史保留，并追加一次 `EXPORT_REVOKED`；
+- 历史 Blob 文件可以保留，但不再出现在当前有效 Blob namespace；
+- Owner API 与 Blob 都表达当前资源不存在；
+- 重复撤销幂等；Bob 和 Eve 不能撤销 Alice 的资料包；
+- 重新生成会创建新的 marker、job 和 artifact，不复活旧记录。
+
+HTTP `DELETE /api/projects/{project_id}/exports` 表达“撤销当前有效交付物”，不表示这次导出从未发生。
+
+## `/reset` 才负责测试基线重建
+
+`POST /reset` 或 `POST /api/reset` 是官方 Sample 的测试基础设施入口，只接受 loopback 请求和 `X-Jiejian-Test-Mode: 1`。它可以停止后台 Worker、清空测试 runtime，并恢复 `NOT_CREATED`。
+
+业务撤销与测试 reset 不能共用物理清理实现：
+
+```text
+DELETE /api/projects/.../exports
+→ Business Revoke
+→ 保留历史，当前资源 ABSENT
+
+POST /reset
+→ Test Baseline Reset
+→ 清空 Job、Task、Audit、Queue 和 Blob
+```
+
+普通页面和 Recording Recovery 只使用业务撤销。测试 fixture 需要全新基线时才使用 reset。
+
+## 自动 L5 与直接验证
+
+唯一自动 L5 技术入口是：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\samples\web\launch\cli.ps1 -Variant vulnerable
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 sample-test
 ```
 
-脚本只负责启动 Sample Target、注入当前进程临时凭据，并通过通用源码 CLI 入口调用公开的 `jiejian run samples/web/<variant>/profile.json`。它不会新增 `jiejian demo`、`--demo`，也不会绕过 Contract Governance。运行日志进入 `var/logs/samples/`；脚本退出时停止 Target 并恢复调用进程原有环境变量。
+它从真实 `start.cmd` 启动 fresh `var/test/sample-test/<uuid>`，通过正式 Worker 和独立 Recording Process 创建 headed Chromium，再由 Windows UI Automation 的 InvokePattern 操作页面按钮。完整 L5 同时验证 capture 生命周期、真实 FlowDraft、三态 Runner、六面 Evidence、GUI/CLI/JSON 等价、Report、History 和安全退出。
 
-## 直接运行 Target
-
-需要单独调试 Target 时，可显式设置四个不同的临时不透明凭据后运行：
+修改 Sample 后优先运行现有直接测试：
 
 ```powershell
-$env:JIEJIAN_AUTHORIZATION_OWNER_TOKEN = '<temporary owner value>'
-$env:JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN = '<temporary attacker value>'
-$env:JIEJIAN_AUTHORIZATION_PEER_TOKEN = '<temporary peer value>'
-$env:JIEJIAN_AUTHORIZATION_OWNER_OBSERVER = '<temporary observer value>'
-$env:PYTHONDONTWRITEBYTECODE = '1'
-python -B -m samples.web.target.server --variant vulnerable --port 8766
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/samples/web/test_collaboration_space.py
 ```
 
-INCONCLUSIVE 表示证据不足，不表示安全。Sample 不联网、不扫描公网；凭据不得写入 Profile、日志、Evidence 或报告，完成后应停止 Target 并清理不再需要的本地运行数据。
+跨正式接线或三态语义时，再按影响范围运行安全准备和 Golden 测试。`sample-test` 只在阶段收口运行一次，不作为日常 Debugger。具体规则见[修改官方示例与整链验收](../docs/02_开发指南/任务/修改官方示例与整链验收.md)。
+
+## 安全边界
+
+- Sample 只绑定 loopback，不扫描公网，不调用真实付费接口。
+- 密码、Cookie、Token、SAS、owner token、权限契约、Evidence 和 Report 不写入 Sample 源码。
+- 运行环境描述符只保存非秘密 locator 和 `env:` 引用，不保存 secret value。
+- 自动 L5 不使用 controlled runner、伪造 RecordingEvent、预制 FlowDraft、CDP、remote debugging 或测试专用生产 API。
+- 停止官方示例和清理测试身份优先走正式控制面；不能枚举并终止用户已有的 Python、Chromium、Node 或 PowerShell。

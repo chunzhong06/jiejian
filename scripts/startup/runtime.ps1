@@ -40,6 +40,7 @@ function Fail-Start([int]$Code, [string]$Stage, [string]$Diagnostic, [string]$Re
     $script:FailureStage = $Stage
     $script:FailureCode = $Code
     Write-Startup ("失败阶段: {0}`n诊断: {1}`n恢复命令: {2}`n日志: {3}" -f $Stage, $Diagnostic, $Recovery, $script:LogPath)
+    Stop-WaitIndicator
     if ($null -ne $script:DisplayStageTimer) { Complete-DisplayStage "失败" }
     $cross = if ($script:DisplayUnicode) { "×" } else { "FAILED" }
     $branch = if ($script:DisplayUnicode) { "  └─" } else { "  `--" }

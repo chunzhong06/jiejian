@@ -8,7 +8,7 @@
 #   触发 Conda/uv/editable 源码准备｜校验回执绝对路径｜恢复主进程与子进程环境
 #
 # 边界
-#   不安装 Wheel，不从源码目录读取运行产物；前端只能来自 var/runtime/frontend。
+#   不安装 Wheel，不从源码目录读取运行产物；开发工具复用 var/development，前端副本只来自本轮 VarDir。
 # =============================================================================
 
 function Get-SourceReceiptPath {
@@ -107,8 +107,8 @@ function Import-SourceReceipt {
     Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
     Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
     $env:UV_PROJECT_ENVIRONMENT = $script:PythonEnvironmentPath
-    $env:UV_CACHE_DIR = Join-Path $script:VarDir "cache\uv"
-    $env:UV_PYTHON_INSTALL_DIR = Join-Path $script:VarDir "runtime\python\installations"
+    $env:UV_CACHE_DIR = Join-Path $script:DevelopmentRoot "cache\uv"
+    $env:UV_PYTHON_INSTALL_DIR = Join-Path $script:DevelopmentRoot "tools\python\installations"
     $env:PLAYWRIGHT_BROWSERS_PATH = [string]$receipt.playwright.browsers_path
     $env:JIEJIAN_VAR_DIR = $script:VarDir
     $env:JIEJIAN_PROJECT_ROOT = $script:ProjectRoot

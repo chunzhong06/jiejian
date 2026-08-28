@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jiejian"
-version = "0.1.0"
+dynamic = ["version"]
 description = "面向 AI 生成 Web 应用的交付前安全验证与持续回归平台"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
@@ -27,6 +27,8 @@ jiejian = "product.backend.cli:main"
 dev = [
     # 自定义 Wheel 钩子由编辑器和开发检查直接导入，开发环境必须能够解析其公开接口。
     "hatchling>=1.27,<2",
+    # 自动 L5 只在开发职责目录使用 UI Automation，不进入产品运行依赖。
+    "pywinauto==0.6.9",
     "pytest>=8.3,<9",
     # Conda 的 Python 基线保留 distutils-precedence.pth，开发同步必须由 uv 提供其入口。
     "setuptools>=80,<84",
@@ -35,15 +37,18 @@ dev = [
 [tool.hatch.build.targets.wheel]
 only-include = ["product/backend", "product/protocols"]
 
+[tool.hatch.version]
+path = "product/backend/__init__.py"
+
 [tool.hatch.build.targets.wheel.force-include]
 "product/config/default.toml" = "product/config/default.toml"
 "product/config/toolchain.json" = "product/config/toolchain.json"
 
 [tool.hatch.build.hooks.custom]
-path = "scripts/hatch_build.py"
+path = "scripts/build/hatch_build.py"
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra --import-mode=importlib"
 testpaths = ["tests"]
 markers = [
     "essential: 跨模块变更必须通过的必要回归门禁",

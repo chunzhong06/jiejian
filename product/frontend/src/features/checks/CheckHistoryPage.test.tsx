@@ -12,6 +12,7 @@ describe('CheckHistoryPage', () => {
     history.mockResolvedValue({ project_id: 'project-demo', comparisons: [{ run_id: 'run-2', previous_run_id: 'run-1', checked_at_us: 2, changes: [{ finding_id: 'finding-1', title: '普通用户不应修改文档', subject_group: '普通用户账号', action: '修改', resource: '文档', relation: '拥有', status: 'NOT_COVERED', status_label: '本次未覆盖', explanation: '本次没有执行并充分证明这一权限要求，不能显示为已修复。', severity: 'high', evidence_refs: [], current_verdict: null, occurrence_status: 'DISAPPEARED' }] }] })
     render(<CheckHistoryPage projectId="project-demo" onError={vi.fn()} />)
     expect(await screen.findByText('本次未覆盖')).toBeInTheDocument()
+    expect(screen.getByText('普通用户账号 · 修改 · 文档 · 拥有')).toBeInTheDocument()
     expect(screen.getByText(/不能显示为已修复/)).toBeInTheDocument()
     expect(screen.queryByText('已修复')).not.toBeInTheDocument()
     expect(history).toHaveBeenCalledTimes(1)

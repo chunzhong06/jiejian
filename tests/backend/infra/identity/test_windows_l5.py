@@ -38,15 +38,15 @@ pytestmark = [
 ]
 
 
-def test_real_sample_login_persists_only_credential_refs_and_deletes_exact_entry(
+def test_web_test_login_persists_only_credential_refs_and_deletes_exact_entry(
     tmp_path: Path,
-    sample_server_factory,
+    web_test_target_factory,
     request: pytest.FixtureRequest,
 ) -> None:
-    sample = sample_server_factory("fixed")
+    sample = web_test_target_factory()
     endpoint = f"http://127.0.0.1:{sample.port}"
-    project_id = "sample-project"
-    role_id = candidate_id("role", "owner")
+    project_id = "web-test-project"
+    role_id = candidate_id("role", "member")
     var_dir = tmp_path / "var"
     store = WindowsCredentialManagerSecretStore()
     cleanup_refs: set[str] = set()
@@ -67,7 +67,7 @@ def test_real_sample_login_persists_only_credential_refs_and_deletes_exact_entry
             work.projects.add(
                 ProjectRecord(
                     project_id=project_id,
-                    name="权限样例",
+                    name="Web 测试项目",
                     status=ProjectStatus.DRAFT,
                     created_at_us=1,
                     updated_at_us=1,
@@ -76,7 +76,7 @@ def test_real_sample_login_persists_only_credential_refs_and_deletes_exact_entry
             work.application_understanding.add(
                 ApplicationUnderstanding(
                     project_id=project_id,
-                    source_root="D:/sample",
+                    source_root="D:/web-test",
                     confirmed_endpoint=endpoint,
                     endpoint_source_fingerprint="a" * 64,
                     endpoint_confirmed_at_us=2,
@@ -85,8 +85,8 @@ def test_real_sample_login_persists_only_credential_refs_and_deletes_exact_entry
                     role_candidates=(
                         RoleCandidate(
                             candidate_id=role_id,
-                            canonical_key="owner",
-                            display_name="所有者",
+                            canonical_key="member",
+                            display_name="成员",
                             confidence=CandidateConfidence.HIGH,
                             decision=CandidateDecision.CONFIRMED,
                             origin=CandidateOrigin.MANUAL,
@@ -101,7 +101,7 @@ def test_real_sample_login_persists_only_credential_refs_and_deletes_exact_entry
         created = application.test_identities.create(
             project_id,
             role_candidate_id=role_id,
-            label="所有者测试账号",
+            label="成员测试账号",
         )
         identity_id = created.identity_id
         request = IdentityPreparationRequest(
@@ -122,11 +122,11 @@ def test_real_sample_login_persists_only_credential_refs_and_deletes_exact_entry
         )
 
         def login(page) -> None:
-            page.select_option('select[name="role"]', "owner")
-            page.fill('input[name="password"]', "sample-owner-password")
+            page.select_option('select[name="role"]', "member")
+            page.fill('input[name="password"]', sample.passwords["member"])
             page.click('button[type="submit"]')
             page.wait_for_load_state("domcontentloaded")
-            page.goto(f"{endpoint}/resources/owner-resource")
+            page.goto(f"{endpoint}/resources/document")
             page.wait_for_load_state("domcontentloaded")
 
         plans: list[tuple[str, ...]] = []
@@ -152,7 +152,7 @@ def test_real_sample_login_persists_only_credential_refs_and_deletes_exact_entry
         captured_refs = tuple(cookie.value_secret_ref for cookie in result.cookies)
         assert captured_refs == plans[0]
         assert tuple(store.read(ref) for ref in captured_refs) == (
-            sample.tokens["owner"],
+            sample.tokens["member"],
         )
         application.test_identities.save_prepared_state(
             identity_id,
@@ -169,17 +169,15 @@ def test_real_sample_login_persists_only_credential_refs_and_deletes_exact_entry
     finally:
         application.close()
 
-    secret_bytes = sample.tokens["owner"].encode("utf-8")
+    secret_bytes = sample.tokens["member"].encode("utf-8")
     for path in var_dir.rglob("*"):
         if path.is_file():
             try:
                 assert secret_bytes not in path.read_bytes()
             except OSError:
                 continue
-    sample_source = Path(__file__).resolve().parents[4] / "samples" / "web"
-    for path in sample_source.rglob("*"):
-        if path.is_file():
-            assert secret_bytes not in path.read_bytes()
+    fixture_source = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "web_test_target.py"
+    assert secret_bytes not in fixture_source.read_bytes()
 
     restarted = ApplicationCore(var_dir, secret_store=store, environ={})
     try:

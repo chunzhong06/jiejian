@@ -1,0 +1,59 @@
+# 修改 Recording
+
+> 状态：CURRENT。用于修改真实业务流程录制、capture 控制、FlowDraft 审阅、Flow 编译和 Recording 失败收口。
+
+## 这是什么
+
+Recording 把“用户在已登录网页里完成一次真实业务动作”转换为可审阅的 `FlowDraft`。它不是浏览器宏录制器，也不会把登录、导航和偶然请求自动宣布为安全测试流程。普通入口只接受一个已确认 action 和一个已准备 TestIdentity；服务端解析 endpoint、目标范围和非秘密身份元数据，独立 Worker 再启动独立 Recording Process 与有头 Chromium。
+
+持久 Recording 生命周期、Job 生命周期和 capture 控制阶段是三套不同事实。`STARTING/RECORDING/PROCESSING/PENDING_REVIEW` 表达业务对象状态；Job 表达调度与执行；`capture_phase` 从当前 attempt 的 ready/start/started/stop 标记投影。FlowDraft 只在正式 Recording result 经 `RecordingSubmission.consume_result → FlowDraftProcessor` 后形成。
+
+## 快速找到修改位置
+
+| 要改什么 | 先看哪里 | 直接测试 |
+| --- | --- | --- |
+| Recording 提交、状态与 result 消费 | `product/backend/workflows/recording/project_submission.py`、`product/backend/workflows/recording/processing.py` | `tests/backend/workflows/recording/` |
+| capture start/stop 与当前 attempt 控制 | `product/backend/workflows/recording/lifecycle.py`、`product/backend/workflows/recording/run_service.py`、`product/backend/infra/recording/control.py` | `tests/backend/api/test_recordings.py` |
+| 独立 Recording Process | `product/backend/infra/recording/process.py`、`product/backend/infra/recording/browser.py` | `tests/backend/infra/recording/test_process.py`、`tests/backend/infra/recording/test_browser_boundary.py` |
+| 脱敏事件收集 | `product/backend/infra/recording/events.py` | `tests/backend/infra/recording/` |
+| FlowDraft 审阅与 revision | `product/backend/workflows/recording/review.py`、`product/protocols/flow_draft.py` | `tests/backend/workflows/recording/`、`tests/protocols/test_recording.py` |
+| Flow 编译 | `product/backend/workflows/recording/flow_compiler.py`、`product/protocols/recording_flow.py` | `tests/backend/workflows/recording/test_flow_compiler.py` |
+| API/CLI/GUI 控制入口 | `product/backend/api/routers/recordings.py`、`product/backend/cli/commands/control.py`、`product/frontend/src/features/recording/` | 对应 API、CLI 与前端直接测试 |
+
+## 正常修改路线
+
+先画清变化发生在哪一层：浏览器采集边界、Recording application service、FlowDraft 审阅，还是最终 Flow 编译。浏览器层只收集有界脱敏事件和控制标记；workflow 层拥有状态机与幂等；协议层拥有严格根文档；页面只展示权威状态并发出明确开始、停止和审阅命令。
+
+正式 capture 顺序必须保持：Recording Process 发布 `capture.ready`，控制面写入 start，进程确认 `capture.started`，状态进入采集中后才允许业务动作；用户停止后写入 stop，Runner 收口事件与浏览器，Job 成功，Recording 进入 `PENDING_REVIEW`。取消仍走 Job cancel，不得把停止实现为取消。
+
+FlowDraft 的候选来源可以改进，但候选不会自动生效。用户必须确认唯一 TARGET、必要变量和有限资源位置；编译后的 Flow 只保留必要 SETUP 与唯一 TARGET，通过 `CASE_SUBJECT`、`CASE_RESOURCE_ID` 在运行时注入差分事实。安全资源、Observer、Recovery 与权限要求在后续安全准备中确认，不塞回 Flow。
+
+## 不能破坏
+
+- 登录和页面检查阶段不采集事件；秘密正文、Cookie、Bearer、storage state 和浏览器 profile 不进入协议、日志或 Git。
+- 普通 Recording 必须经过正式 API、Worker、独立 Recording Process 和 `BrowserRecordingAdapter`；测试 `controlled_runner` 只服务 L1～L4，不得进入自动 L5。
+- start/stop 标记必须绑定当前 recording/job/attempt，原子写入、严格解析且不携带用户输入或秘密。
+- Recording 失败先保存主错误，再执行 stop/cancel/进程回收；cleanup issue 不能覆盖 primary failure。
+- 不直接构造 RecordingEvent、FlowDraft 或调用 processor 伪造成功；不通过测试专用 API、环境变量或 CDP 暴露浏览器控制面。
+- FlowDraft revision 冲突、目标范围漂移或回放校验失败必须停止，不猜测兼容。
+
+## 怎么验证
+
+先运行修改点的 workflow/protocol/infra 直接测试。涉及 API 控制再补 recordings Router；涉及页面只跑对应前端文件。真实 Worker、Recording Process、headed Chromium、UI Automation 和事件闭环只由唯一自动 L5 `dev.ps1 sample-test` 在阶段收口验证，不为普通修改连续反复运行。
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/workflows/recording tests/backend/infra/recording tests/backend/api/test_recordings.py tests/protocols/test_recording.py
+```
+
+命令只是覆盖面示例；实际选择最小受影响路径。修改 Python 后仍需按项目规则检查中文职责头和 AST。
+
+## 失败先查哪里
+
+停在 `STARTING` 时先区分浏览器未启动、尚未 ready、start 未发布和 started 未确认，不直接改数据库。Job 已终态而 Recording 仍在活动态，检查 result consume 与正式 reconciliation。事件为空时先确认业务动作是否发生在 `capture.started` 之后，再查 collector 预算和脱敏；不要用直接 HTTP 请求补事件。FlowDraft 缺失时沿 `Runner result → submission consume → processor` 顺序查，不从页面重建草稿。
+
+## 相关真源
+
+- [Recording 模块](../模块/recording.md)
+- [录制与 Flow 协议](../../03_参考手册/协议/录制与Flow协议.md)
+- [浏览器录制身份隔离与 FlowDraft 边界](../../05_设计依据/ADR-0037-浏览器录制身份隔离与FlowDraft边界.md)
+- [修改安全准备](修改安全准备.md)

@@ -1,3 +1,5 @@
+// 验证运行环境页对版本、运行身份和受控缓存维护事实的展示与交互。
+
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { systemApi, SystemStatus } from '../../api/system'
@@ -6,8 +8,7 @@ import { RuntimePage } from './RuntimePage'
 const cacheStatus = {
   schema_version: '1' as const,
   entries: {
-    uv: { path: 'D:/jiejian/var/cache/uv', bytes: 1024, files: 1, budget: 2048, over_budget: false },
-    vite: { path: 'D:/jiejian/var/cache/vite', bytes: 0, files: 0, budget: 2048, over_budget: false },
+    assistant: { path: 'D:/jiejian/var/cache/assistant', bytes: 1024, files: 1, budget: null, over_budget: false },
   },
   protected: {
     data: 'D:/jiejian/var/data',
@@ -17,6 +18,7 @@ const cacheStatus = {
 }
 
 const status: SystemStatus = {
+  version: '1.0.0',
   api: 'available',
   worker: 'running',
   browser: 'available',
@@ -35,14 +37,14 @@ const status: SystemStatus = {
 describe('RuntimePage', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('展示源码运行身份并通过同一 API 预览缓存维护', async () => {
+  it('展示源码运行身份并只预览产品 AI 辅助缓存维护', async () => {
     vi.spyOn(systemApi, 'cacheStatus').mockResolvedValue(cacheStatus)
     vi.spyOn(systemApi, 'cacheOperation').mockResolvedValue({
       schema_version: '1',
-      operation: 'prune',
+      operation: 'clean',
       dry_run: true,
       estimated_bytes: 1024,
-      targets: [{ path: 'D:/jiejian/var/cache/uv', estimated_bytes: 1024 }],
+      targets: [{ path: 'D:/jiejian/var/cache/assistant', estimated_bytes: 1024 }],
       removed: [],
       protected: cacheStatus.protected,
       status: cacheStatus,
@@ -50,12 +52,14 @@ describe('RuntimePage', () => {
 
     render(<RuntimePage status={status} profiles={[]} failed={false} />)
 
+    expect(screen.getByText('1.0.0')).toBeInTheDocument()
     expect(screen.getAllByText(/仅构建时需要/)).toHaveLength(2)
     expect(screen.getByText(/源码构建/)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('1.0 KiB')).toBeInTheDocument())
-    expect(screen.getByText('Vite 缓存')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '按预算清理' }))
-    await waitFor(() => expect(systemApi.cacheOperation).toHaveBeenCalledWith('prune', { confirmed: false, dry_run: true }))
+    expect(screen.getByText('AI 辅助缓存')).toBeInTheDocument()
+    expect(screen.getByText(/开发工具与构建缓存不属于产品维护范围/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '清空 AI 辅助缓存' }))
+    await waitFor(() => expect(systemApi.cacheOperation).toHaveBeenCalledWith('clean', { confirmed: false, dry_run: true }))
     expect(await screen.findByText(/预计处理 1 项/)).toBeInTheDocument()
   })
 })

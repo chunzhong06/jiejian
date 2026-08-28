@@ -6,7 +6,7 @@ import type { RunDto } from './runs'
 export type CheckPreviewGapDto = {
   code: string
   message: string
-  next_path: '/apps/access' | '/apps/identities' | '/apps/flows' | '/apps/rules'
+  next_path: '/application' | '/identities' | '/flows' | '/check'
   next_label: string
 }
 

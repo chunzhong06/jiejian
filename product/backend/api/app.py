@@ -14,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from product.backend import __version__
 from product.backend.workflows.context import ApplicationCore
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.core.errors import JiejianError
@@ -33,6 +34,7 @@ from product.backend.api.routers.test_identities import build_test_identities_ro
 from product.backend.api.routers.permission_intents import build_permission_intents_router
 from product.backend.api.routers.checks import build_checks_router
 from product.backend.api.routers.assistant import build_assistant_router
+from product.backend.api.routers.experience import build_experience_router
 from product.backend.api.local_control import LocalControlGuard
 
 
@@ -53,6 +55,7 @@ def create_app(
     clock_us=None,
     folder_selector=None,
     shutdown_callback=None,
+    official_sample_root: Path | None = None,
 ) -> FastAPI:
     local_control_guard = LocalControlGuard(
         control_origin,
@@ -67,6 +70,7 @@ def create_app(
         environ=environ,
         clock_us=clock_us,
         folder_selector=folder_selector,
+        official_sample_root=official_sample_root,
     )
     workers = LocalWorkerSupervisor(
         context.var_dir,
@@ -77,7 +81,7 @@ def create_app(
         clock_us=clock_us,
     )
     results = context.results
-    app = FastAPI(title="界鉴本地控制面", version="0.1.0")
+    app = FastAPI(title="界鉴本地控制面", version=__version__)
     app.state.context = context
     app.state.worker_supervisor = workers
     app.state.results = results
@@ -112,6 +116,7 @@ def create_app(
     app.include_router(build_permission_intents_router(context))
     app.include_router(build_checks_router(context))
     app.include_router(build_assistant_router(context))
+    app.include_router(build_experience_router(context))
     app.include_router(build_execution_profiles_router(context))
     app.include_router(build_contracts_router(context))
     app.include_router(build_recordings_router(context))

@@ -83,6 +83,19 @@ class FlowDraftCompiler:
                 ErrorCode.RECORD_DRAFT_UNCONFIRMED,
                 "Flow 草稿的变量来源尚未确认",
             )
+        step_map = {step.id: step for step in draft.steps}
+        graph = {step.id: set(step.depends_on_step_ids) for step in draft.steps}
+        ancestors: set[str] = set()
+        pending = list(graph[draft.target_step_id])
+        while pending:
+            current = pending.pop()
+            if current in ancestors:
+                continue
+            ancestors.add(current)
+            pending.extend(graph[current])
+        retained_step_ids = ancestors | {draft.target_step_id}
+
+        # 目标后的观察步骤不会进入可执行 Flow，其变量需求也不能反向污染目标响应提取器。
         sources_by_consumer: dict[str, list[FlowVariableSource]] = {}
         for variable in draft.variables:
             source = variable.confirmed_source
@@ -91,8 +104,9 @@ class FlowDraftCompiler:
                     ErrorCode.RECORD_DRAFT_UNCONFIRMED,
                     "Flow 草稿的变量来源尚未确认",
                 )
-            step_map = {step.id: step for step in draft.steps}
             for consumer in variable.consumer_step_ids:
+                if consumer not in retained_step_ids:
+                    continue
                 consumer_step = step_map[consumer]
                 placeholder = "{" + variable.name + "}"
                 parsed_path = urlsplit(consumer_step.path or "/")
@@ -142,16 +156,6 @@ class FlowDraftCompiler:
             return value
         # --- 阶段：投影已确认步骤并验证最终 Flow ---
         try:
-            step_map = {step.id: step for step in draft.steps}
-            graph = {step.id: set(step.depends_on_step_ids) for step in draft.steps}
-            ancestors: set[str] = set()
-            pending = list(graph[draft.target_step_id])
-            while pending:
-                current = pending.pop()
-                if current in ancestors:
-                    continue
-                ancestors.add(current)
-                pending.extend(graph[current])
             target = step_map[draft.target_step_id]
             resource = next(
                 item

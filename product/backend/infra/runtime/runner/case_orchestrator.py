@@ -89,7 +89,7 @@ class CaseOrchestrator:
         self.progress = progress
         self.progress_clock = progress_clock or clock
 
-    def run(self, session: TargetCaseSession, case: PermissionMutationCase, *, action: Any, verify, finding_pre_identity: str, twin: PermissionTwin | None = None, twin_role: TwinExecutionRole | None = None, allow_control_valid: bool = False, baseline_validate=None, baseline_invalid=None) -> Any:
+    def run(self, session: TargetCaseSession, case: PermissionMutationCase, *, action: Any, verify, finding_pre_identity: str, twin: PermissionTwin | None = None, twin_role: TwinExecutionRole | None = None, allow_control_valid: bool = False, baseline_validate=None, baseline_invalid=None, requirements_to_run: tuple[str, ...] | None = None) -> Any:
         """运行固定阶段；verify 在 cleanup 前执行既有事实归约与 Verification。"""
 
         envelopes: list[ObservationEnvelope] = []
@@ -100,6 +100,30 @@ class CaseOrchestrator:
         result: Any = None
         primary: Exception | None = None
         cleanup_issues: tuple[TargetCleanupIssue, ...] = ()
+        actual_requirements = requirements_to_run or tuple(case.required_observations)
+        required_requirements = tuple(case.required_observations)
+        required_observer_ids = {
+            self.bindings[requirement].observer_id
+            for requirement in required_requirements
+            if requirement in self.bindings
+        }
+
+        def observe_phase(phase: ObservationPhase) -> bool:
+            args = (
+                session,
+                case,
+                phase,
+                envelopes,
+                outcomes,
+                cursors,
+            )
+            if actual_requirements == required_requirements:
+                return self.observers.observe_phase(*args)
+            return self.observers.observe_phase(
+                *args,
+                requirements_to_run=actual_requirements,
+                required_requirements=required_requirements,
+            )
 
         def progress_event(phase_name: str, state: str) -> None:
             try:
@@ -127,14 +151,7 @@ class CaseOrchestrator:
             trace.append("BASELINE")
             phase = RunnerFailurePhase.BASELINE
             progress_event("BASELINE", "STARTED")
-            baseline_unavailable = self.observers.observe_phase(
-                session,
-                case,
-                ObservationPhase.BASELINE,
-                envelopes,
-                outcomes,
-                cursors,
-            )
+            baseline_unavailable = observe_phase(ObservationPhase.BASELINE)
             baseline = (
                 TargetBaselineResult(
                     valid=False,
@@ -143,7 +160,12 @@ class CaseOrchestrator:
                 )
                 if baseline_unavailable
                 else session.evaluate_baseline(
-                    tuple(envelopes),
+                    tuple(
+                        item
+                        for item in envelopes
+                        if not required_observer_ids
+                        or item.observer_id in required_observer_ids
+                    ),
                     ignored_case_fields=(
                         twin.mutation.changed_fields if twin is not None else ()
                     ),
@@ -164,7 +186,7 @@ class CaseOrchestrator:
                 raise JiejianError(ErrorCode.BASELINE_INVALID, "目标基线无效")
             trace.append("BEFORE")
             phase = RunnerFailurePhase.BEFORE
-            if self.observers.observe_phase(session, case, ObservationPhase.BEFORE, envelopes, outcomes, cursors):
+            if observe_phase(ObservationPhase.BEFORE):
                 raise JiejianError(ErrorCode.OBSERVER_INCOMPLETE, "BEFORE 观察不完整")
             progress_event("BASELINE", "COMPLETED")
             trace.append("TARGET")
@@ -175,10 +197,10 @@ class CaseOrchestrator:
             trace.append("AFTER")
             phase = RunnerFailurePhase.AFTER
             progress_event("OBSERVE", "STARTED")
-            self.observers.observe_phase(session, case, ObservationPhase.AFTER, envelopes, outcomes, cursors)
+            observe_phase(ObservationPhase.AFTER)
             trace.append("EVENTUAL")
             phase = RunnerFailurePhase.EVENTUAL
-            self.observers.observe_phase(session, case, ObservationPhase.EVENTUAL, envelopes, outcomes, cursors)
+            observe_phase(ObservationPhase.EVENTUAL)
             trace.append("RESOLVE")
             phase = RunnerFailurePhase.VERIFY
             execution = session.resolve_execution(tuple(envelopes))
@@ -223,14 +245,19 @@ def _specific_failure_phase(
     error: Exception,
     fallback: RunnerFailurePhase,
 ) -> RunnerFailurePhase:
-    """把 PREPARE 内可稳定区分的失败映射到有限阶段。"""
+    """细分 PREPARE 内失败，同时保留其他阶段已经确定的现场。"""
 
     if not isinstance(error, JiejianError):
         return fallback
+    if error.code == ErrorCode.VALUE_EXTRACTION_FAILED.value:
+        return (
+            RunnerFailurePhase.SETUP
+            if fallback is RunnerFailurePhase.PREPARE_RECOVERY
+            else fallback
+        )
     return {
         ErrorCode.PREPARE_RECOVERY_FAILED.value: RunnerFailurePhase.PREPARE_RECOVERY,
         ErrorCode.IDENTITY_PREPARATION_FAILED.value: RunnerFailurePhase.IDENTITY_PREPARATION,
         ErrorCode.SETUP_STEP_FAILED.value: RunnerFailurePhase.SETUP,
-        ErrorCode.VALUE_EXTRACTION_FAILED.value: RunnerFailurePhase.SETUP,
         ErrorCode.SELF_TARGET_FORBIDDEN.value: RunnerFailurePhase.TARGET_VALIDATION,
     }.get(error.code, fallback)

@@ -1,0 +1,118 @@
+{
+  "openapi": "3.1.0",
+  "x-roles": [
+    "PROJECT_OWNER",
+    "MEMBER",
+    "EXTERNAL_VISITOR"
+  ],
+  "info": {
+    "title": "协作空间项目资料管理 API",
+    "description": "校园数字展馆的项目成员、资料与完整资料包导出接口。",
+    "version": "1.0.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "sampleSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "jiejian_sample_session",
+        "description": "登录后建立的本地演示会话。"
+      }
+    }
+  },
+  "security": [
+    {
+      "sampleSession": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "readHealth",
+        "summary": "查看应用状态",
+        "security": []
+      }
+    },
+    "/api/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "查看项目目录"
+      }
+    },
+    "/api/projects/{project_id}": {
+      "parameters": [
+        {
+          "name": "project_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readProject",
+        "summary": "查看项目详情、成员与资料",
+        "x-required-roles": [
+          "PROJECT_OWNER",
+          "MEMBER"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/exports": {
+      "parameters": [
+        {
+          "name": "project_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "exportCompleteProjectPackage",
+        "summary": "导出完整项目资料包",
+        "x-required-roles": [
+          "PROJECT_OWNER"
+        ],
+        "responses": {
+          "202": {
+            "description": "导出任务已受理"
+          },
+          "403": {
+            "description": "当前成员没有完整资料导出权限"
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/exports/{request_marker}": {
+      "parameters": [
+        {
+          "name": "project_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "request_marker",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readProjectExport",
+        "summary": "查看资料包导出进度",
+        "x-required-roles": [
+          "PROJECT_OWNER",
+          "MEMBER"
+        ]
+      }
+    }
+  }
+}

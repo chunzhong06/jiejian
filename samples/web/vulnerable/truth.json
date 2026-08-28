@@ -1,1 +1,0 @@
-{"schema_version":"1","variant":"vulnerable","expected":"BLOCK","http_status":403,"resource_state":"CHANGED","owner_observer":"AVAILABLE","formal_profile":{"run_verdict":"BLOCK","coverage_gaps":0}}

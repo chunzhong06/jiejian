@@ -39,7 +39,7 @@ const files = [
     "src",
     "features",
     "checks",
-    "StartCheckPage.test.tsx",
+    "PermissionCheckPage.test.tsx",
   ),
 ];
 

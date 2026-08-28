@@ -23,7 +23,7 @@ function init(modules) {
       projectRoot,
       typeof info.config.workspaceRoot === "string"
         ? info.config.workspaceRoot
-        : "../../var/runtime/build/frontend-workspace",
+        : "../../var/development/frontend/workspace",
     );
     // 在生成工作区内打开文件时优先使用当前目录；在正式源码中才投影到 var。
     const workspaceRoot = ts.sys.directoryExists(path.join(projectRoot, "node_modules"))

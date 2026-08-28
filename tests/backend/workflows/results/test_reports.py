@@ -5,14 +5,23 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.lifecycle import RunLifecycle, RunVerdict
 from product.backend.core.reporting import render_html, render_junit, render_sarif
 from product.backend.infra.artifacts.report_store import ReportStore
 from product.backend.infra.artifacts import report_store as report_store_module
 from product.backend.workflows.results.reporting import ReportBuilder
+from product.backend.workflows.results.presentation import (
+    PresentedCaseVerdict,
+    ResultEvidenceSource,
+    ResultPresentation,
+    ResultPresentationIssue,
+)
+from product.protocols import ObserverType
 from product.protocols.artifacts import (
     ArtifactCheckRequest,
     ArtifactResultFile,
@@ -73,6 +82,67 @@ def _presentation(*, verdict: str | None = None) -> ReportPresentation:
         inconclusive_count=0,
         uncovered_count=0,
     )
+
+
+def test_report_snapshot_omits_result_page_only_evidence_source_projection(
+    tmp_path: Path,
+) -> None:
+    issue = ResultPresentationIssue(
+        finding_id="finding_" + "c" * 32,
+        title="成员账号不应导出项目资料",
+        subject_group="成员账号",
+        action="导出",
+        resource="项目资料",
+        relation="受权限规则约束",
+        expectation="不应允许这次操作，资源也不应发生变化",
+        surface_result="页面或接口显示已拒绝",
+        actual_result="真实资源已经发生变化",
+        conclusion="发现权限问题",
+        explanation="可信观察确认发生了不应出现的真实变化。",
+        planned_identity_id="member-account",
+        planned_identity_label="成员账号",
+        severity="critical",
+        evidence_refs=("ev_" + "d" * 20,),
+        evidence_sources=(
+            ResultEvidenceSource(
+                observer_type=ObserverType.OWNER_API,
+                label="目标业务状态",
+                role="KEY",
+                status="FOUND",
+                evidence_refs=("ev_" + "d" * 20,),
+            ),
+        ),
+        verdict=PresentedCaseVerdict.VULNERABLE,
+        occurrence_status="APPEARED",
+    )
+    result_view = ResultPresentation(
+        run_id=RUN_ID,
+        project_id=PROJECT_ID,
+        project_name="报告测试项目",
+        run_lifecycle=RunLifecycle.COMPLETED,
+        verdict=RunVerdict.BLOCK,
+        headline="发现权限问题",
+        scope_statement="当前检查确认存在权限问题。",
+        checked_count=1,
+        safe_count=0,
+        problem_count=1,
+        inconclusive_count=0,
+        uncovered_count=0,
+        issues=(issue,),
+    )
+    builder = ReportBuilder(
+        tmp_path,
+        None,
+        None,
+        None,
+        presentation=SimpleNamespace(build=lambda _: result_view),
+    )
+
+    snapshot = builder._presentation_snapshot(RUN_ID, PROJECT_ID)
+
+    assert snapshot.issues[0].evidence_refs == issue.evidence_refs
+    assert "evidence_sources" not in snapshot.issues[0].model_dump(mode="json")
+    assert "planned_identity_id" not in snapshot.issues[0].model_dump(mode="json")
 
 
 def _base(

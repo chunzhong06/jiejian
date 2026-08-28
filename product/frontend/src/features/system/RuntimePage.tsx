@@ -20,19 +20,12 @@ function bytes(value: number | undefined) {
 }
 
 const operationLabels: Record<CacheOperation, string> = {
-  prune: '按预算清理',
-  clean: '清空可重建缓存',
+  clean: '清空 AI 辅助缓存',
   'runtime-repair': '修复运行环境',
 }
 
 const cacheLabels: Record<string, string> = {
-  uv: 'uv 缓存',
-  pnpm_store: 'pnpm store',
-  npm: 'npm 缓存',
-  vite: 'Vite 缓存',
-  downloads: '下载缓存',
-  startup: '启动缓存',
-  retired_runtime: '可回收旧运行时',
+  assistant: 'AI 辅助缓存',
 }
 
 export function RuntimePage({ status, profiles, failed }: { status: SystemStatus; profiles: LLMProfile[]; failed: boolean }) {
@@ -82,6 +75,7 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
         <Col xs={24} sm={12} lg={6}><Statistic title="模型" value={model} /></Col>
       </Row>
       <Descriptions style={{ marginTop: 20 }} bordered size="small" column={1}>
+        <Descriptions.Item label="界鉴版本">{status.version ?? '未提供'}</Descriptions.Item>
         <Descriptions.Item label="运行模式">{environment?.runtime_mode === 'development' ? '源码运行' : environment?.runtime_mode ?? '未提供'} · {environment?.runtime_fingerprint ?? '无指纹'}</Descriptions.Item>
         <Descriptions.Item label="Python">{python?.version ?? '未提供'} · {python?.environment_type ?? '来源未知'}</Descriptions.Item>
         <Descriptions.Item label="Python 可执行文件"><Typography.Text copyable>{python?.executable ?? '未提供'}</Typography.Text></Descriptions.Item>
@@ -101,8 +95,8 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       <Tag style={{ marginTop: 16 }} color={python?.ok === false ? 'red' : 'blue'}>{python?.ok === false ? '环境需要处理' : '状态来自当前运行环境'}</Tag>
     </Card>
 
-    <Card title="缓存与运行环境维护" extra={busy ? <Spin size="small" /> : <Button onClick={refreshCache}>刷新状态</Button>}>
-      <Typography.Paragraph type="secondary">所有操作都由后端维护服务执行。预览和结果不会包含数据库、Evidence、报告或凭据。</Typography.Paragraph>
+    <Card title="产品缓存与运行环境维护" extra={busy ? <Spin size="small" /> : <Button onClick={refreshCache}>刷新状态</Button>}>
+      <Typography.Paragraph type="secondary">这里只维护当前产品实例的 AI 辅助缓存和明确损坏的运行时。开发工具与构建缓存不属于产品维护范围。</Typography.Paragraph>
       {maintenanceError && <Alert type="error" showIcon message="维护操作失败" description={maintenanceError} closable onClose={() => setMaintenanceError(null)} />}
       {completed && <Alert style={{ marginBottom: 12 }} type="success" showIcon message="维护操作已完成" description={`已处理 ${completed.removed.length} 项，共 ${bytes(completed.estimated_bytes)}。${completed.requires_restart ? '请重新启动界鉴以重建运行环境。' : ''}`} />}
       <Row gutter={[12, 12]}>
@@ -110,8 +104,7 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       </Row>
       <Alert style={{ marginTop: 12 }} type="info" showIcon message="产品事实始终保留" description={`不受影响：${cache?.protected.data ?? 'var/data'}、当前有效运行环境、数据库、证据、报告和凭据。`} />
       <Space wrap style={{ marginTop: 16 }}>
-        <Button disabled={busy} onClick={() => void showPreview('prune')}>按预算清理</Button>
-        <Button disabled={busy} onClick={() => void showPreview('clean')}>清空可重建缓存</Button>
+        <Button disabled={busy} onClick={() => void showPreview('clean')}>清空 AI 辅助缓存</Button>
         <Button disabled={busy} onClick={() => void showPreview('runtime-repair')}>修复运行环境</Button>
       </Space>
     </Card>

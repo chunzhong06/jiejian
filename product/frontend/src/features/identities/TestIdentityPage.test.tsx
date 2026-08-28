@@ -33,12 +33,13 @@ describe('TestIdentityPage', () => {
   })
 
   it('说明不保存密码并显示每个已确认角色的账号准备情况', async () => {
-    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onNext={vi.fn()} />)
-    expect(await screen.findByText('为已确认权限组准备真实测试账号')).toBeInTheDocument()
-    expect(screen.getByText(/界鉴不会要求你把账号密码长期交给它/)).toBeInTheDocument()
+    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
+    expect(await screen.findByRole('heading', { name: '测试账号' })).toBeInTheDocument()
+    expect(screen.getByText(/独立窗口中自行完成密码/)).toBeInTheDocument()
     expect(screen.getByText('普通用户 · 1 个账号')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('例如：普通用户A / 管理员测试账号')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '打开登录浏览器' })).toBeInTheDocument()
+    expect(screen.queryByText(/Cookie|Bearer|内部标识/)).not.toBeInTheDocument()
   })
 
   it('只有用户明确确认后才请求保存测试状态', async () => {
@@ -52,7 +53,7 @@ describe('TestIdentityPage', () => {
       status: 'PREPARED', message: '测试账号登录状态已安全保存', error_code: null,
       log_path: 'D:/sample/var/logs/identity-preparations/prep.log',
     })
-    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onNext={vi.fn()} />)
+    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: '打开登录浏览器' }))
     expect(await screen.findByText('不要关闭这个窗口')).toBeInTheDocument()
     expect(screen.getByText('在新窗口完成登录')).toBeInTheDocument()
@@ -62,8 +63,9 @@ describe('TestIdentityPage', () => {
     await waitFor(() => expect(testIdentitiesApi.confirmPreparation).toHaveBeenCalledWith(`prep_${'c'.repeat(32)}`))
     expect(await screen.findByText('登录状态已准备；界鉴没有保存你的密码')).toBeInTheDocument()
     const header = screen.getByRole('region', { name: '测试账号' })
-    expect(header).toHaveTextContent('继续准备业务流程')
+    expect(screen.getByRole('button', { name: '继续准备业务流程' })).toBeInTheDocument()
     expect(header).not.toHaveTextContent('完成当前登录准备')
+    expect(header).not.toHaveTextContent('继续准备业务流程')
   })
 
   it('保存中显示固定的安全保存提示', async () => {
@@ -77,9 +79,24 @@ describe('TestIdentityPage', () => {
       status: 'SAVING', message: '正在保存', error_code: null,
       log_path: 'D:/sample/var/logs/identity-preparations/prep.log',
     })
-    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onNext={vi.fn()} />)
+    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: '打开登录浏览器' }))
     fireEvent.click(await screen.findByRole('button', { name: '我已完成登录' }))
     expect(await screen.findByText('正在安全保存这个应用所需的登录状态…')).toBeInTheDocument()
+  })
+
+  it('刷新账号状态只重新读取权限组和账号事实', async () => {
+    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
+    expect(await screen.findByText('普通用户 · 1 个账号')).toBeInTheDocument()
+    vi.mocked(projectsApi.understanding).mockClear()
+    vi.mocked(testIdentitiesApi.list).mockClear()
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新账号状态' }))
+
+    await waitFor(() => expect(testIdentitiesApi.list).toHaveBeenCalledOnce())
+    expect(projectsApi.understanding).toHaveBeenCalledOnce()
+    expect(testIdentitiesApi.create).not.toHaveBeenCalled()
+    expect(testIdentitiesApi.startPreparation).not.toHaveBeenCalled()
+    expect(testIdentitiesApi.reset).not.toHaveBeenCalled()
   })
 })

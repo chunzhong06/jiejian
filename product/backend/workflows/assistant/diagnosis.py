@@ -27,12 +27,11 @@ from product.protocols.runner import CleanupIssueCode, RunnerFailurePhase
 
 
 DiagnosisRoute = Literal[
-    "/apps/access",
-    "/apps/identities",
-    "/apps/flows",
-    "/apps/rules",
-    "/checks/start",
-    "/checks/results",
+    "/application",
+    "/identities",
+    "/flows",
+    "/check",
+    "/results",
     "/settings/models",
     "/settings/system",
 ]
@@ -165,7 +164,7 @@ _SELF_TARGET = _presentation(
     ErrorPhase.APPLICATION_CONNECTION,
     ErrorIntervention.USER_ACTION,
     RecoveryAction.CONFIRM_APPLICATION,
-    "/apps/access",
+    "/application",
     "不能检查界鉴自身",
     "当前应用地址指向了本实例控制面。请返回应用接入页确认真正的被测应用地址。",
 )
@@ -174,7 +173,7 @@ _SESSION_EXPIRED = _presentation(
     ErrorPhase.IDENTITY_PREPARATION,
     ErrorIntervention.USER_ACTION,
     RecoveryAction.RELOGIN,
-    "/apps/identities",
+    "/identities",
     "登录状态已经失效",
     "测试账号会话已过期。请重新登录后再继续录制或检查。",
 )
@@ -183,7 +182,7 @@ _OBSERVER_INCOMPLETE = _presentation(
     ErrorPhase.OBSERVER,
     ErrorIntervention.VERIFY_REAL_STATE,
     RecoveryAction.CONFIRM_REAL_RESULT,
-    "/apps/flows",
+    "/flows",
     "无法确认真实结果",
     "可信观察证据不完整，界鉴不能据此判定安全。请检查观察方式并确认目标的真实状态。",
 )
@@ -198,7 +197,7 @@ _EXACT_PRESENTATIONS: dict[str, _Presentation] = {
         ErrorPhase.IDENTITY_PREPARATION,
         ErrorIntervention.USER_ACTION,
         RecoveryAction.RELOGIN,
-        "/apps/identities",
+        "/identities",
         "测试账号没有准备好",
         "界鉴未能建立可用的测试身份。请检查账号登录状态后重试。",
     ),
@@ -207,7 +206,7 @@ _EXACT_PRESENTATIONS: dict[str, _Presentation] = {
         ErrorPhase.PREPARE_RECOVERY,
         ErrorIntervention.USER_ACTION,
         RecoveryAction.RESTORE_TEST_STATE,
-        "/apps/flows",
+        "/flows",
         "检查前无法恢复测试现场",
         "为避免从不可信起点执行，界鉴已经停止。请核对恢复步骤和测试资源当前状态。",
     ),
@@ -216,7 +215,7 @@ _EXACT_PRESENTATIONS: dict[str, _Presentation] = {
         ErrorPhase.TARGET,
         ErrorIntervention.RETRY,
         RecoveryAction.RETRY_CHECK,
-        "/checks/start",
+        "/check",
         "业务操作执行失败",
         "目标应用没有完成本次业务操作。请先确认应用可用，再重试当前检查。",
     ),
@@ -225,7 +224,7 @@ _EXACT_PRESENTATIONS: dict[str, _Presentation] = {
         ErrorPhase.PERMISSION_PREPARATION,
         ErrorIntervention.REVIEW_CONFIGURATION,
         RecoveryAction.REVIEW_PERMISSION_SETUP,
-        "/apps/flows",
+        "/flows",
         "测试资源准备失败",
         "界鉴未能建立本次权限实验需要的测试资源，请检查业务操作的准备步骤。",
     ),
@@ -234,7 +233,7 @@ _EXACT_PRESENTATIONS: dict[str, _Presentation] = {
         ErrorPhase.RECORDING,
         ErrorIntervention.REVIEW_CONFIGURATION,
         RecoveryAction.REVIEW_RECORDING,
-        "/apps/flows",
+        "/flows",
         "录制数据已不匹配应用",
         "录制流程无法从当前响应提取所需数据，请重新确认或录制这个业务操作。",
     ),
@@ -263,7 +262,7 @@ def diagnose_error(context: ErrorDiagnosisContext) -> ErrorDiagnosis:
             ErrorPhase.RUNNER,
             ErrorIntervention.RETRY,
             RecoveryAction.RETRY_CHECK,
-            "/checks/start",
+            "/check",
             "本次检查已取消",
             "检查没有形成安全结论；确认应用和测试现场可用后，可以重新开始。",
         )
@@ -305,7 +304,7 @@ def _from_phase(phase: RunnerFailurePhase | None) -> _Presentation | None:
             ErrorPhase.POST_CASE_RECOVERY,
             ErrorIntervention.USER_ACTION,
             RecoveryAction.RESTORE_TEST_STATE,
-            "/apps/flows",
+            "/flows",
             "检查后无法恢复测试现场",
             "真实操作已经结束，但测试现场未恢复。请先确认并恢复真实状态，再继续检查。",
         )
@@ -327,7 +326,7 @@ def _from_code_family(code: str) -> _Presentation:
             ErrorPhase.APPLICATION_CONNECTION,
             ErrorIntervention.USER_ACTION,
             RecoveryAction.CONFIRM_APPLICATION,
-            "/apps/access",
+            "/application",
             "无法连接被测应用",
             "请检查应用地址和运行状态，然后重新确认连接。",
         )
@@ -339,7 +338,7 @@ def _from_code_family(code: str) -> _Presentation:
             ErrorPhase.RECORDING,
             ErrorIntervention.USER_ACTION,
             RecoveryAction.REVIEW_RECORDING,
-            "/apps/flows",
+            "/flows",
             "业务操作录制没有完成",
             "请返回业务流程页检查录制状态，并按页面提示重新完成操作。",
         )
@@ -349,7 +348,7 @@ def _from_code_family(code: str) -> _Presentation:
             ErrorPhase.PERMISSION_PREPARATION,
             ErrorIntervention.REVIEW_CONFIGURATION,
             RecoveryAction.REVIEW_PERMISSION_SETUP,
-            "/apps/rules",
+            "/check",
             "权限检查条件尚未准备好",
             "请返回权限规则页处理当前缺口，再开始检查。",
         )
@@ -406,7 +405,7 @@ def _from_readiness_gaps(gaps: tuple[str, ...]) -> _Presentation:
             ErrorPhase.RECORDING,
             ErrorIntervention.REVIEW_CONFIGURATION,
             RecoveryAction.REVIEW_RECORDING,
-            "/apps/flows",
+            "/flows",
             "业务操作准备尚未闭合",
             "请先补齐录制、测试资源、可信观察和安全恢复中的当前缺口。",
         )
@@ -415,7 +414,7 @@ def _from_readiness_gaps(gaps: tuple[str, ...]) -> _Presentation:
         ErrorPhase.PERMISSION_PREPARATION,
         ErrorIntervention.REVIEW_CONFIGURATION,
         RecoveryAction.REVIEW_PERMISSION_SETUP,
-        "/apps/rules",
+        "/check",
         "权限检查条件尚未准备好",
         "请返回权限规则页处理当前覆盖缺口，再开始检查。",
     )

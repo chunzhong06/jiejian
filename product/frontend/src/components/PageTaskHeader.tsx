@@ -1,23 +1,15 @@
-// 产品页面统一任务标题、状态和主操作布局。
+// 产品页面统一展示任务标题、短说明和状态；操作统一放在页面底部。
 
-import { Button, Space, Tag, Typography } from 'antd'
+import { Tag, Typography } from 'antd'
 
 export function PageTaskHeader({
   title,
   description,
   status,
-  next,
-  actionLabel,
-  onAction,
-  disabled,
 }: {
   title: string
   description: string
   status?: string
-  next?: string
-  actionLabel?: string
-  onAction?: () => void
-  disabled?: boolean
 }) {
   return <section className="page-task-header" aria-labelledby={`page-title-${title}`}>
     <div className="page-task-header-main">
@@ -27,9 +19,5 @@ export function PageTaskHeader({
       </div>
       {status && <Tag color="blue">{status}</Tag>}
     </div>
-    {(next || onAction) && <Space className="page-task-header-next" wrap>
-      {next && <Typography.Text type="secondary">下一步：{next}</Typography.Text>}
-      {onAction && actionLabel && <Button type="primary" onClick={onAction} disabled={disabled}>{actionLabel}</Button>}
-    </Space>}
   </section>
 }

@@ -127,6 +127,8 @@ def test_compiler_is_deterministic_and_rejects_profile_after_authority_change(
         assert "peer-secret" not in profile_text
         assert "env:JIEJIAN_TEST_IDENTITY_" in profile_text
         profile = parse_web_execution_profile(Path(first.profile_path).read_bytes())
+        assert len(profile.observers) == 1
+        assert profile.observers[0].observer_type.value == "OWNER_API"
         target_step = profile.workflow_bindings[0].steps[0]
         assert {
             status

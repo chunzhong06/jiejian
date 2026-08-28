@@ -98,12 +98,37 @@ def _job(parts: RuntimeParts, job_id: str):
         return work.jobs.get(job_id)
 
 
+class _TerminalJobQueue:
+    def request_cancellation(self, _command: RequestCancellation) -> None:
+        raise JiejianError(ErrorCode.JOB_TERMINAL_CONFLICT, "终态任务不能取消")
+
+
 class _ExitedWorker:
     def __init__(self, returncode: int = 1) -> None:
         self.returncode = returncode
 
     def poll(self) -> int:
         return self.returncode
+
+
+def test_local_supervisor_accepts_terminal_conflict_during_shutdown(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manager = LocalWorkerSupervisor(
+        tmp_path / "var",
+        lambda: None,
+        job_queue=_TerminalJobQueue(),
+    )
+    manager._job_id = "job_" + "f" * 32
+
+    with caplog.at_level("ERROR", logger="jiejian.runtime.worker_supervisor"):
+        manager._request_worker_cancellation()
+
+    assert not any(
+        getattr(record, "event_code", None) == "WORKER_CANCEL_REQUEST_FAILED"
+        for record in caplog.records
+    )
 
 
 def test_local_supervisor_nonzero_preclaim_exit_launches_once_and_fails_run(

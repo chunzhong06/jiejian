@@ -230,7 +230,7 @@ class ReportPresentationIssue(ReportModel):
 
 
 class ReportPresentation(ReportModel):
-    """冻结 D-3 确定性结果投影，供所有人类报告格式复用。"""
+    """冻结确定性结果投影，供所有人类报告格式复用。"""
 
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
     project_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")

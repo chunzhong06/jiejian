@@ -4,6 +4,8 @@
     "supported_minor": "3.13",
     "development_source": "conda:defaults",
     "release_source": "uv-managed-python",
+    "release_version": "3.13.13",
+    "release_distribution": "cpython-3.13.13-windows-x86_64-none",
     "verification": "absolute-executable-prefix-package-origin-sha256"
   },
   "uv": {

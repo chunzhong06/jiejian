@@ -1,5 +1,5 @@
 /* =============================================================================
- * Project API Client
+ * 应用与项目 API 客户端
  *
  * 定位
  *   接入页面与 Project HTTP 路由之间的前端能力适配器
@@ -49,6 +49,33 @@ export type ProjectReadinessDto = {
   next_required_action: 'CONNECT_APPLICATION' | 'CONFIRM_TARGET' | 'AUTHORIZE_SOURCE_ANALYSIS' | 'REVIEW_DISCOVERY' | 'RECORD_FLOW' | 'REVIEW_PERMISSION' | 'RUN_CHECK' | 'OPEN_RESULT'
 }
 
+export type ProductNextActionDto = {
+  action: ProjectReadinessDto['next_required_action']
+  label: string
+  description: string
+  route: '/application' | '/identities' | '/flows' | '/check' | '/results'
+  cli_command: string
+}
+
+export type ProductStatusDto = {
+  project: (ProjectDto & { target_type: 'WEB' }) | null
+  readiness: ProjectReadinessDto | null
+  steps: Array<{
+    key: 'application' | 'account' | 'flow' | 'check' | 'result' | 'history'
+    label: string
+    route: '/application' | '/identities' | '/flows' | '/check' | '/results' | '/history'
+    status: 'COMPLETE' | 'CURRENT' | 'UPCOMING' | 'AVAILABLE' | 'EMPTY'
+    status_label: string
+  }>
+  next_action: ProductNextActionDto
+  latest_result: {
+    run_id: string
+    verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE' | null
+    headline: string
+    scope_statement: string
+  } | null
+}
+
 export type ApplicationUnderstandingDto = {
   project_id: string
   source_root: string
@@ -83,7 +110,7 @@ export type RoleCandidateDto = {
   display_name: string
   confidence: 'HIGH' | 'MEDIUM' | 'LOW'
   decision: 'PROPOSED' | 'CONFIRMED' | 'REJECTED' | 'REVIEW_REQUIRED'
-  origin: 'DETECTED' | 'MANUAL' | 'LEGACY'
+  origin: 'DETECTED' | 'MANUAL'
   stale: boolean
   evidence: CandidateEvidenceDto[]
 }
@@ -119,18 +146,15 @@ export type ApplicationConnectionDto = {
 
 export const projectsApi = {
   projects: () => request<ProjectDto[]>('/api/projects'),
+  archivedProjects: () => request<ProjectDto[]>('/api/projects?include_archived=true'),
   connectApplication: (sourceRoot: string, projectName?: string) =>
     request<ApplicationConnectionDto>('/api/applications/connect', {
       method: 'POST',
       body: JSON.stringify({ schema_version: '1', source_root: sourceRoot, project_name: projectName }),
     }),
-  registerProject: (path: string) =>
-    request<ProjectDto>('/api/projects', {
-      method: 'POST',
-      body: JSON.stringify({ schema_version: '1', profile_path: path }),
-    }),
   project: (id: string) => request<ProjectDto>(`/api/projects/${id}`),
-  readiness: (id: string) => request<ProjectReadinessDto>(`/api/projects/${id}/readiness`),
+  remove: (id: string) => request<ProjectDto>(`/api/projects/${id}`, { method: 'DELETE' }),
+  status: (id: string) => request<ProductStatusDto>(`/api/projects/${id}/status`),
   understanding: (id: string) => request<ApplicationUnderstandingDto>(`/api/projects/${id}/application-understanding`),
   discoverEndpoints: (id: string) => request<EndpointDiscoveryDto>(`/api/projects/${id}/endpoint-candidates`, { method: 'POST' }),
   confirmEndpoint: (id: string, endpoint: string, revision: number) =>
@@ -148,7 +172,7 @@ export const projectsApi = {
       method: 'POST',
       body: JSON.stringify({ schema_version: '1', revision }),
     }),
-  decideRole: (id: string, candidateId: string, decision: 'CONFIRMED' | 'REJECTED', displayName: string, revision: number) =>
+  decideRole: (id: string, candidateId: string, decision: 'PROPOSED' | 'CONFIRMED' | 'REJECTED', displayName: string, revision: number) =>
     request<ApplicationUnderstandingDto>(`/api/projects/${id}/roles/${candidateId}`, {
       method: 'PUT',
       body: JSON.stringify({ schema_version: '1', decision, display_name: displayName, revision }),
@@ -158,7 +182,7 @@ export const projectsApi = {
       method: 'POST',
       body: JSON.stringify({ schema_version: '1', display_name: displayName, revision }),
     }),
-  decideAction: (id: string, candidateId: string, decision: 'CONFIRMED' | 'REJECTED', displayName: string, revision: number) =>
+  decideAction: (id: string, candidateId: string, decision: 'PROPOSED' | 'CONFIRMED' | 'REJECTED', displayName: string, revision: number) =>
     request<ApplicationUnderstandingDto>(`/api/projects/${id}/actions/${candidateId}`, {
       method: 'PUT',
       body: JSON.stringify({ schema_version: '1', decision, display_name: displayName, revision }),

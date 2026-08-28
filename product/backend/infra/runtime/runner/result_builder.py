@@ -23,6 +23,29 @@ from product.protocols import Evidence, RunnerResultType, build_evidence
 def evidence_from_case(document, case_result) -> Evidence:
     """按 CaseResult 的已冻结事实构造内容寻址 Evidence。"""
 
+    action = next(
+        action
+        for action in document.project_snapshot.contract.actions
+        if action.action_id == case_result.case.action_id
+    )
+    effect_bindings = {
+        item.effect_id: item for item in document.project_snapshot.effect_bindings
+    }
+    expected_requirements: list[str] = []
+    for effect_id in action.effect_ids:
+        effect_binding = effect_bindings[effect_id]
+        for requirement_id in (
+            *effect_binding.required_channels,
+            *effect_binding.corroborating_channels,
+        ):
+            if requirement_id not in expected_requirements:
+                expected_requirements.append(requirement_id)
+    actual_requirements = tuple(
+        item.requirement_id for item in case_result.requirement_bindings
+    )
+    if actual_requirements != tuple(expected_requirements):
+        raise ValueError("case result bindings do not match the action observation channels")
+
     return build_evidence(
         schema_version="1",
         run_id=document.run_id,

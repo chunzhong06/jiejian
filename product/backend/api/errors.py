@@ -30,6 +30,7 @@ def _status_for(code: str) -> int:
     if code in {
         ErrorCode.PROJECT_SOURCE_DRIFT.value,
         ErrorCode.PROJECT_NOT_REVALIDATED.value,
+        ErrorCode.PROJECT_ARCHIVE_CONFLICT.value,
         ErrorCode.APPLICATION_REVISION_CONFLICT.value,
         ErrorCode.APPLICATION_CANDIDATE_CONFLICT.value,
         ErrorCode.CONTRACT_NOT_ACTIVE.value,

@@ -44,34 +44,17 @@ from tests.fixtures.control_plane import (
     create_app,
 )
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
-PROFILE_SOURCE = Path("samples/web/fixed/profile.json").resolve()
-CONTRACT_SOURCE = Path("samples/web/fixed/contract.json").resolve()
+from tests.fixtures.runner import write_web_test_profile
 
 def _write_profile(tmp_path: Path, *, port: int | None = None) -> Path:
-    profile = parse_web_execution_profile(PROFILE_SOURCE.read_bytes())
-    if port is not None:
-        scope = profile.target.scope.model_copy(
-            update={
-                "base_url": f"http://127.0.0.1:{port}",
-                "allowed_origins": (f"http://127.0.0.1:{port}",),
-                "allowed_ports": (port,),
-            }
-        )
-        profile = profile.model_copy(update={"target": profile.target.model_copy(update={"scope": scope})})
-    path = tmp_path / "profile.json"
-    path.write_bytes(canonical_web_execution_profile_json_bytes(profile))
+    path, _ = write_web_test_profile(tmp_path, port=port or 8765)
     return path
 
-def _register_project(client: TestClient, profile_path: Path) -> dict[str, object]:
-    response = client.post(
-        "/api/projects",
-        json={"schema_version": "1", "profile_path": str(profile_path)},
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["data"]
+def _register_project(app, profile_path: Path) -> dict[str, object]:
+    return app.state.context.projects.register(profile_path)[0].model_dump(mode="json")
 
-def _activate_contract(app, project_id: str) -> PermissionContract:
-    contract = PermissionContract.model_validate_json(CONTRACT_SOURCE.read_text(encoding="utf-8"), strict=True)
+def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionContract:
+    contract = PermissionContract.model_validate_json(profile_path.with_name("contract.json").read_text(encoding="utf-8"), strict=True)
     draft = app.state.context.contracts.create_draft(
         project_id,
         contract.contract_id,
@@ -87,8 +70,8 @@ def _activate_contract(app, project_id: str) -> PermissionContract:
     return active.snapshot
 
 def _register_active_profile(app, client: TestClient, profile_path: Path) -> tuple[dict[str, object], PermissionContract, dict[str, object]]:
-    project = _register_project(client, profile_path)
-    contract = _activate_contract(app, str(project["project_id"]))
+    project = _register_project(app, profile_path)
+    contract = _activate_contract(app, str(project["project_id"]), profile_path)
     response = client.post(
         "/api/execution-profiles",
         json={"schema_version": "1", "profile_path": str(profile_path)},
@@ -110,11 +93,11 @@ def _set_governed_binding(app, project_id: str, contract_id: str | None, version
         work.commit()
 
 def test_failed_worker_run_returns_copyable_user_diagnostic(
-    sample_server_factory,
+    web_test_target_factory,
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    sample = sample_server_factory("fixed")
+    sample = web_test_target_factory()
     profile_path = _write_profile(tmp_path, port=sample.port)
     for key, value in sample.environ.items():
         monkeypatch.setenv(key, value)
@@ -167,7 +150,7 @@ def test_failed_worker_run_returns_copyable_user_diagnostic(
     assert error["cleanup_issues"] == ["POST_CASE_RECOVERY_FAILED"]
     assert error["diagnosis"]["headline"] == "检查前无法恢复测试现场"
     assert "恢复步骤和测试资源当前状态" in error["diagnosis"]["short_message"]
-    assert error["diagnosis"]["route"] == "/apps/flows"
+    assert error["diagnosis"]["route"] == "/flows"
     assert error["diagnosis"]["cleanup_warnings"] == [
         "业务检查结束后，测试现场没有完全恢复。"
     ]
@@ -176,10 +159,9 @@ def test_failed_worker_run_returns_copyable_user_diagnostic(
     assert error["log_path"].endswith(f"{job_id}.log")
 
 def test_run_idempotency_cancel_and_sse_cursor(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_PEER_TOKEN", "peer-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_OBSERVER", "owner-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_MEMBER_TOKEN", "member-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_READER_TOKEN", "reader-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_OBSERVER_TOKEN", "observer-test")
     app = create_app(tmp_path / "var", start_worker=False)
     profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
@@ -205,10 +187,9 @@ def test_run_idempotency_cancel_and_sse_cursor(tmp_path: Path, monkeypatch) -> N
         assert "id: 1" not in query_precedence.text
 
 def test_api_run_uses_explicit_governed_active_snapshot(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_PEER_TOKEN", "peer-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_OBSERVER", "owner-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_MEMBER_TOKEN", "member-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_READER_TOKEN", "reader-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_OBSERVER_TOKEN", "observer-test")
     var_dir = tmp_path / "var"
     app = create_app(var_dir, start_worker=False)
     profile_path = _write_profile(tmp_path)
@@ -228,10 +209,9 @@ def test_api_run_uses_explicit_governed_active_snapshot(tmp_path: Path, monkeypa
         assert version.status is ContractStatus.ACTIVE
 
 def test_api_run_rejects_missing_governed_binding(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_PEER_TOKEN", "peer-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_OBSERVER", "owner-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_MEMBER_TOKEN", "member-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_READER_TOKEN", "reader-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_OBSERVER_TOKEN", "observer-test")
     app = create_app(tmp_path / "var", start_worker=False)
     profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:
@@ -246,10 +226,9 @@ def test_api_run_rejects_missing_governed_binding(tmp_path: Path, monkeypatch) -
         assert client.get(f"/api/projects/{project['project_id']}/runs").json()["data"] == []
 
 def test_api_run_rejects_non_active_governed_binding(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_TOKEN", "owner-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_ATTACKER_TOKEN", "attacker-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_PEER_TOKEN", "peer-test")
-    monkeypatch.setenv("JIEJIAN_AUTHORIZATION_OWNER_OBSERVER", "owner-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_MEMBER_TOKEN", "member-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_READER_TOKEN", "reader-test")
+    monkeypatch.setenv("JIEJIAN_WEB_TEST_OBSERVER_TOKEN", "observer-test")
     app = create_app(tmp_path / "var", start_worker=False)
     profile_path = _write_profile(tmp_path)
     with TestClient(app) as client:

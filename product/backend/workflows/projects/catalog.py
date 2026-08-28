@@ -18,9 +18,12 @@ class ProjectCatalog:
     def __init__(self, uow_factory: Callable[..., StorageUnitOfWork]) -> None:
         self._uow_factory = uow_factory
 
-    def list(self) -> tuple[ProjectRecord, ...]:
+    def list(self, *, include_archived: bool = False) -> tuple[ProjectRecord, ...]:
         with self._uow_factory() as work:
-            return work.projects.list_all()
+            records = work.projects.list_all()
+        if include_archived:
+            return records
+        return tuple(item for item in records if item.status is not ProjectStatus.ARCHIVED)
 
     def get(self, project_id: str) -> ProjectRecord:
         with self._uow_factory() as work:

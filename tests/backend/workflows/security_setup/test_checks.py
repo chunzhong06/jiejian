@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from product.backend.core.application_understanding import CandidateDecision
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.core.permission_intent import PermissionIntentRelation
@@ -13,6 +14,8 @@ from product.backend.core.test_identity import (
 )
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.workflows.context import ApplicationCore
+from product.backend.workflows.recording.lifecycle import RecordingLifecycle
+from product.backend.workflows.test_identities import TestIdentityStatus as IdentityStatus
 from tests.backend.workflows.recording.test_action_safety_setup import (
     ACTION_ID,
     ENDPOINT_FINGERPRINT,
@@ -38,7 +41,7 @@ def test_check_preview_and_submit_reuse_current_frozen_execution_plan(
     try:
         before = core.checks.preview(PROJECT_ID)
         assert before.ready is False
-        assert before.next_path == "/apps/rules"
+        assert before.next_path == "/check"
         assert {item.code for item in before.gaps} == {"GENERATED_PROFILE_MISSING"}
 
         compiled = core.security_setup.compile(PROJECT_ID, actor="测试用户")
@@ -152,14 +155,105 @@ def test_check_submit_rejects_stale_preparation_and_returns_earliest_gap(
 
         preview = core.checks.preview(PROJECT_ID)
         assert preview.ready is False
-        assert preview.next_path == "/apps/flows"
+        assert preview.next_path == "/flows"
         assert "TEST_RESOURCE_UNCONFIRMED" in {
             item.code for item in preview.gaps
         }
         with pytest.raises(JiejianError) as error:
             core.checks.submit(PROJECT_ID, idempotency_key="stale-check")
         assert error.value.code == ErrorCode.STATE_PRECONDITION.value
-        assert error.value.to_dict()["details"]["next_path"] == "/apps/flows"
+        assert error.value.to_dict()["details"]["next_path"] == "/flows"
+    finally:
+        core.close()
+
+
+def test_candidate_changes_recompute_current_preparation_without_mutating_history(
+    tmp_path: Path,
+) -> None:
+    """候选决定只让当前准备重新判定，既有流程、Run 和结果索引保持不可变。"""
+
+    core = _prepared_core(tmp_path)
+    try:
+        compiled = core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        submission, _, _ = core.checks.submit(
+            PROJECT_ID,
+            idempotency_key="candidate-revision-history",
+        )
+        run_id = submission.run.run_id
+        with core.uow_factory() as work:
+            recording = work.recordings.get(RECORDING_ID)
+            run_before = work.runs.get(run_id)
+            intents_before = work.permission_intents.list_for_project(PROJECT_ID)
+            evidence_before = work.evidence.list_for_run(run_id)
+            findings_before = work.findings.list_for_project(PROJECT_ID)
+        assert recording is not None
+        flow_path = RecordingLifecycle.flow_path(core.var_dir, recording)
+        flow_before = flow_path.read_bytes()
+        profile_path = Path(compiled.profile_path)
+        profile_before = profile_path.read_bytes()
+        reports_before = core.reports.list(run_id)
+
+        current = core.application_understanding.get(PROJECT_ID)
+        excluded_action = core.application_understanding.decide_action(
+            PROJECT_ID,
+            ACTION_ID,
+            revision=current.revision,
+            decision=CandidateDecision.REJECTED,
+        )
+
+        assert excluded_action.revision == current.revision + 1
+        with pytest.raises(JiejianError) as action_changed:
+            core.action_safety_setup.preview(RECORDING_ID)
+        assert action_changed.value.code == ErrorCode.APPLICATION_CANDIDATE_CONFLICT.value
+        matrix = core.permission_intents.matrix(PROJECT_ID)
+        assert matrix.actions == ()
+        assert matrix.review_required_count == len(intents_before)
+        assert core.security_setup.current_generated_profile_id(PROJECT_ID) is None
+        preview = core.checks.preview(PROJECT_ID)
+        assert preview.ready is False
+        assert {item.code for item in preview.gaps} == {
+            "ACTION_MISSING",
+            "GENERATED_PROFILE_MISSING",
+        }
+        readiness = core.project_readiness.get(PROJECT_ID)
+        assert readiness.confirmed_action_count == 0
+        assert readiness.current_scope_runnable is False
+        # endpoint 是更早的门禁；候选变化仍必须反映为当前范围不可运行和确认计数归零。
+        assert readiness.next_required_action == "CONFIRM_TARGET"
+
+        restored_action = core.application_understanding.decide_action(
+            PROJECT_ID,
+            ACTION_ID,
+            revision=excluded_action.revision,
+            decision=CandidateDecision.CONFIRMED,
+        )
+        restored_setup = core.action_safety_setup.preview(RECORDING_ID)
+        assert restored_setup.automatic_execution_allowed is False
+        assert "TEST_RESOURCE_UNCONFIRMED" in restored_setup.gaps
+        restored_matrix = core.permission_intents.matrix(PROJECT_ID)
+        assert len(restored_matrix.actions) == 1
+        assert restored_matrix.actions[0].compilable is False
+        assert core.security_setup.current_generated_profile_id(PROJECT_ID) is None
+
+        excluded_role = core.application_understanding.decide_role(
+            PROJECT_ID,
+            ROLE_ID,
+            revision=restored_action.revision,
+            decision=CandidateDecision.REJECTED,
+        )
+        assert excluded_role.revision == restored_action.revision + 1
+        assert {
+            item.status for item in core.test_identities.list(PROJECT_ID)
+        } == {IdentityStatus.NEEDS_REVIEW}
+
+        with core.uow_factory() as work:
+            assert work.runs.get(run_id) == run_before
+            assert work.permission_intents.list_for_project(PROJECT_ID) == intents_before
+            assert work.evidence.list_for_run(run_id) == evidence_before
+            assert work.findings.list_for_project(PROJECT_ID) == findings_before
+        assert core.reports.list(run_id) == reports_before
+        assert flow_path.read_bytes() == flow_before
+        assert profile_path.read_bytes() == profile_before
     finally:
         core.close()
 

@@ -34,12 +34,11 @@ from product.backend.workflows.security_setup.checks import CheckPreview, CheckP
 
 
 GuidanceRoute = Literal[
-    "/apps/access",
-    "/apps/identities",
-    "/apps/flows",
-    "/apps/rules",
-    "/checks/start",
-    "/checks/results",
+    "/application",
+    "/identities",
+    "/flows",
+    "/check",
+    "/results",
 ]
 
 
@@ -132,17 +131,17 @@ class GuidanceQueryService:
 
 
 _ROUTE_RANK: dict[str, int] = {
-    "/apps/access": 0,
-    "/apps/identities": 1,
-    "/apps/flows": 2,
-    "/apps/rules": 3,
+    "/application": 0,
+    "/identities": 1,
+    "/flows": 2,
+    "/check": 3,
 }
 
 _ROUTE_PRESENTATION: dict[str, tuple[GuidanceOptionKind, str]] = {
-    "/apps/access": (GuidanceOptionKind.REVIEW_DISCOVERY, "完善应用与权限组信息"),
-    "/apps/identities": (GuidanceOptionKind.PREPARE_IDENTITY, "准备测试账号"),
-    "/apps/flows": (GuidanceOptionKind.RECORD_ACTION, "完善业务操作、观察与恢复"),
-    "/apps/rules": (GuidanceOptionKind.REVIEW_PERMISSION, "确认权限规则与覆盖"),
+    "/application": (GuidanceOptionKind.REVIEW_DISCOVERY, "完善应用与权限组信息"),
+    "/identities": (GuidanceOptionKind.PREPARE_IDENTITY, "准备测试账号"),
+    "/flows": (GuidanceOptionKind.RECORD_ACTION, "完善业务操作、观察与恢复"),
+    "/check": (GuidanceOptionKind.REVIEW_PERMISSION, "确认权限规则与覆盖"),
 }
 
 _NEXT_ACTION: dict[
@@ -153,49 +152,49 @@ _NEXT_ACTION: dict[
         GuidancePhase.APPLICATION_CONNECTION,
         GuidanceOptionKind.CONNECT_APPLICATION,
         "接入要验证的本地应用",
-        "/apps/access",
+        "/application",
     ),
     "CONFIRM_TARGET": (
         GuidancePhase.APPLICATION_CONNECTION,
         GuidanceOptionKind.CONFIRM_TARGET,
         "确认应用地址",
-        "/apps/access",
+        "/application",
     ),
     "AUTHORIZE_SOURCE_ANALYSIS": (
         GuidancePhase.APPLICATION_UNDERSTANDING,
         GuidanceOptionKind.AUTHORIZE_SOURCE_ANALYSIS,
         "授权只读源码分析",
-        "/apps/access",
+        "/application",
     ),
     "REVIEW_DISCOVERY": (
         GuidancePhase.APPLICATION_UNDERSTANDING,
         GuidanceOptionKind.REVIEW_DISCOVERY,
         "确认权限组与业务操作",
-        "/apps/access",
+        "/application",
     ),
     "RECORD_FLOW": (
         GuidancePhase.RECORDING,
         GuidanceOptionKind.RECORD_ACTION,
         "准备测试账号并录制业务操作",
-        "/apps/identities",
+        "/identities",
     ),
     "REVIEW_PERMISSION": (
         GuidancePhase.PERMISSION_REVIEW,
         GuidanceOptionKind.REVIEW_PERMISSION,
         "确认权限规则",
-        "/apps/rules",
+        "/check",
     ),
     "RUN_CHECK": (
         GuidancePhase.CHECK_READY,
         GuidanceOptionKind.START_CURRENT_CHECK,
         "开始检查当前可运行范围",
-        "/checks/start",
+        "/check",
     ),
     "OPEN_RESULT": (
         GuidancePhase.RESULT_AVAILABLE,
         GuidanceOptionKind.OPEN_LATEST_RESULT,
         "查看最近一次可信检查结果",
-        "/checks/results",
+        "/results",
     ),
 }
 
@@ -215,7 +214,7 @@ def build_guidance_snapshot(
                 "查看正在进行的检查或录制",
                 tuple(f"ACTIVE_{kind}" for kind in task_kinds),
                 GuidancePriorityTier.PRIMARY,
-                "/checks/start",
+                "/check",
             )
         )
 
@@ -226,7 +225,7 @@ def build_guidance_snapshot(
                 "开始检查当前可运行范围",
                 ("CURRENT_SCOPE_RUNNABLE",),
                 GuidancePriorityTier.PRIMARY,
-                "/checks/start",
+                "/check",
             )
         )
         options.extend(_gap_options(preview, tier=GuidancePriorityTier.OPTIONAL))
@@ -237,7 +236,7 @@ def build_guidance_snapshot(
                     "查看最近一次可信检查结果",
                     ("LATEST_VERIFIED_RESULT_AVAILABLE",),
                     GuidancePriorityTier.OPTIONAL,
-                    "/checks/results",
+                    "/results",
                 )
             )
         phase = GuidancePhase.CHECK_READY

@@ -11,7 +11,7 @@
 #   候选不构成事实；本模块不执行目标请求、不生成权限结论，也不保存秘密正文。
 #
 # 调用链
-#   Recording safety setup workflow → Core facts → Storage / B-4 compiler
+#   Recording safety setup workflow → Core facts → Storage / deterministic compiler
 # =============================================================================
 
 from __future__ import annotations

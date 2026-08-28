@@ -380,6 +380,17 @@ class JobRepository:
         job_id = _scalar(self._session, select(JobRow.job_id).where(JobRow.recording_id == recording_id))
         return self.get(job_id) if job_id is not None else None
 
+    def list_for_project(self, project_id: str) -> tuple[JobRecord, ...]:
+        """返回项目全部 Job，供生命周期门禁从持久化真源判断活动任务。"""
+
+        rows = _scalars(
+            self._session,
+            select(JobRow)
+            .where(JobRow.project_id == project_id)
+            .order_by(JobRow.created_at_us.desc(), JobRow.job_id),
+        )
+        return tuple(self._record(row) for row in rows)
+
     def next_pending(self, now_us: int | None = None) -> JobRecord | None:
         current = time.time_ns() // 1_000 if now_us is None else now_us
         row = _scalar(

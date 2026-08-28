@@ -1,40 +1,40 @@
+// 验证应用接入页只保留正式接入向导，不再暴露旧 Profile 注册或项目管理面板。
+
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AccessPage } from './AccessPage'
 
+const setupProps = vi.hoisted(() => ({ current: undefined as Record<string, unknown> | undefined }))
+
+vi.mock('./ApplicationSetup', () => ({
+  ApplicationSetup: (props: Record<string, unknown>) => {
+    setupProps.current = props
+    return <div data-testid="application-setup">正式应用接入向导</div>
+  },
+}))
+
 describe('AccessPage', () => {
-  it('按真实更新时间排序，并只展示真实当前项目概览', () => {
-    render(
-      <AccessPage
-        projects={[
-          { project_id: 'old', name: '旧项目', status: 'REGISTERED', updated_at_us: 1 },
-          { project_id: 'new', name: '新项目', status: 'READY', updated_at_us: 2, governed_contract_id: 'contract-1', governed_contract_version: 3 },
-        ]}
-        selected={{ project_id: 'new', name: '新项目', status: 'READY', governed_contract_id: 'contract-1', governed_contract_version: 3 }}
-        runs={[{ run_id: 'run-1', lifecycle: 'COMPLETED', verdict: 'PASS' }]}
-        onSelect={vi.fn()}
-        onConnected={vi.fn()}
-        onUnderstandingChanged={vi.fn()}
-        onContinue={vi.fn()}
-        onRegister={vi.fn()}
-        loading={false}
-      />,
-    )
+  it('只展示正式应用接入任务并把导航交给连续向导', () => {
+    const onBack = vi.fn()
+    const onContinue = vi.fn()
+    render(<AccessPage
+      selected={{ project_id: 'app-1', name: '示例应用', status: 'DRAFT' }}
+      endpointStatus="NEEDS_CONFIRMATION"
+      onConnected={vi.fn()}
+      onUnderstandingChanged={vi.fn()}
+      onBack={onBack}
+      onContinue={onContinue}
+    />)
 
-    expect(screen.queryByText('4. 确认角色与关键操作')).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('D:\\profiles\\profile.json')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('高级配置（已有 Profile 项目）'))
+    expect(screen.getByRole('heading', { name: '应用接入' })).toBeInTheDocument()
+    expect(screen.getByTestId('application-setup')).toHaveTextContent('正式应用接入向导')
+    expect(screen.queryByText(/Profile|注册并校验|当前工作概览|项目列表/i)).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/profiles\\profile\.json/i)).not.toBeInTheDocument()
+    expect(setupProps.current?.endpointStatus).toBe('NEEDS_CONFIRMATION')
 
-    const newest = screen.getAllByText('新项目')[0]
-    const oldest = screen.getByText('旧项目')
-    expect(newest.compareDocumentPosition(oldest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(newest).toBeInTheDocument()
-    expect(screen.getAllByText('已就绪').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('1')).toBeInTheDocument()
-    expect(screen.getByText('已绑定')).toBeInTheDocument()
-    expect(screen.getByText('已完成 · 当前规则覆盖范围内未发现越权')).toBeInTheDocument()
-    expect(screen.getByText('高级配置（已有 Profile 项目）')).toBeInTheDocument()
-    expect(screen.queryByText('旧版手工快速检查（高级）')).not.toBeInTheDocument()
-    expect(screen.queryByText(/YAML\s+项目/)).not.toBeInTheDocument()
+    ;(setupProps.current?.onBack as () => void)()
+    ;(setupProps.current?.onContinue as () => void)()
+    expect(onBack).toHaveBeenCalledOnce()
+    expect(onContinue).toHaveBeenCalledOnce()
   })
 })

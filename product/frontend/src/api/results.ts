@@ -1,5 +1,5 @@
 /* =============================================================================
- * Results API Client
+ * 检查结果 API 客户端
  *
  * 定位
  *   验证、报告页面与已发布结果 HTTP 路由之间的只读适配器
@@ -95,6 +95,14 @@ export type EvidenceDto = {
   [key: string]: unknown
 }
 
+export type ResultEvidenceSourceDto = {
+  observer_type: 'OWNER_API' | 'READ_ONLY_SQLITE' | 'STRUCTURED_AUDIT_LOG' | 'ASYNC_TASK_STATUS' | 'AZURE_QUEUE_PEEK' | 'AZURE_BLOB_OBJECT'
+  label: string
+  role: 'KEY' | 'SUPPORTING'
+  status: 'FOUND' | 'NOT_FOUND' | 'UNAVAILABLE'
+  evidence_refs: string[]
+}
+
 export type ResultPresentationIssueDto = {
   finding_id: string
   title: string
@@ -107,8 +115,13 @@ export type ResultPresentationIssueDto = {
   actual_result: string
   conclusion: string
   explanation: string
+  planned_identity_id: string
+  planned_identity_label: string | null
+  actual_identity_status: 'UNAVAILABLE'
+  actual_identity_label: null
   severity: 'unknown' | 'low' | 'medium' | 'high' | 'critical'
   evidence_refs: string[]
+  evidence_sources: ResultEvidenceSourceDto[]
   verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'
   occurrence_status: string | null
 }

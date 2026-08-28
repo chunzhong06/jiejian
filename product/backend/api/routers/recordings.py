@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import json
 import time
-from uuid import uuid4
-
 from fastapi import APIRouter
 
 from product.backend.workflows.context import ApplicationCore
@@ -14,8 +12,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.application_understanding import CandidateDecision
 from product.backend.core.lifecycle import JobState
 from product.backend.workflows.test_identities import TestIdentityStatus
-from product.protocols import RecordingBudget, RecordingRunnerRequest, parse_flow_draft_review_command
-from product.backend.workflows.recording.submission import SubmitRecording, recording_target_scope
+from product.protocols import parse_flow_draft_review_command
 from product.backend.workflows.recording.safety_setup import ConfirmActionSafetySetup
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
@@ -30,68 +27,20 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         status_code=202,
     )
     async def create_recording(project_id: str, body: RecordingCreateRequest):
-        understanding = context.application_understanding.get(project_id)
-        action = next(
-            (
-                item
-                for item in understanding.action_candidates
-                if item.candidate_id == body.action_candidate_id
-                and item.decision is CandidateDecision.CONFIRMED
-                and not item.stale
-            ),
-            None,
-        )
-        if action is None:
-            raise JiejianError(ErrorCode.INPUT_INVALID, "录制动作尚未确认或已经失效")
-        if understanding.confirmed_endpoint is None:
-            raise JiejianError(ErrorCode.APPLICATION_ENDPOINT_INVALID, "请先确认应用运行地址")
-        now_us = time.time_ns() // 1_000
-        recording_id = f"rec_{uuid4().hex}"
-        expires_at_us = now_us + body.duration_seconds * 1_000_000
-        session = context.recording_credentials.prepare(
-            project_id=project_id,
+        started = context.project_recordings.submit(
+            project_id,
+            action_candidate_id=body.action_candidate_id,
             test_identity_id=body.test_identity_id,
-            recording_id=recording_id,
-            session_ref=f"session_{uuid4().hex}",
-            now_us=now_us,
-            expires_at_us=expires_at_us,
-        )
-        request = RecordingRunnerRequest(
-            schema_version="1",
-            recording_id=recording_id,
-            project_id=project_id,
-            action_candidate_id=action.candidate_id,
-            created_at_us=now_us,
-            target_scope=recording_target_scope(understanding.confirmed_endpoint),
-            sessions=(session,),
-            budget=RecordingBudget(
-                max_duration_us=body.duration_seconds * 1_000_000,
-                max_contexts=1,
-            ),
+            duration_seconds=body.duration_seconds,
+            idempotency_key=body.idempotency_key,
             headless=False,
-            trace_enabled=False,
         )
-        try:
-            result = context.recording_submission.submit(
-                SubmitRecording(
-                    request=request,
-                    flow_id=f"flow-{action.candidate_id.removeprefix('action_')}",
-                    idempotency_key=body.idempotency_key,
-                    now_us=now_us,
-                    available_at_us=now_us,
-                )
-            )
-        except Exception:
-            context.recording_credentials.clear(recording_id)
-            raise
         return data_response(
             {
-                "job": result.job.model_dump(mode="json"),
-                "recording": result.recording.model_dump(mode="json"),
-                "action": _action_option(action),
-                "test_identity": _identity_option(
-                    context.test_identities.get(body.test_identity_id)
-                ),
+                "job": started.result.job.model_dump(mode="json"),
+                "recording": started.result.recording.model_dump(mode="json"),
+                "action": _action_option(started.action),
+                "test_identity": _identity_option(started.test_identity),
             },
             status_code=202,
         )
@@ -148,21 +97,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         "/api/projects/{project_id}/recordings", response_model=ApiResponse
     )
     async def list_recordings(project_id: str):
-        context.projects.get(project_id)
-        with context.uow_factory() as work:
-            return data_response(
-                [
-                    {
-                        **item.model_dump(mode="json"),
-                        "job": (
-                            job.model_dump(mode="json")
-                            if (job := work.jobs.get_by_recording(item.recording_id))
-                            else None
-                        ),
-                    }
-                    for item in work.recordings.list_for_project(project_id)
-                ]
-            )
+        return data_response(list(context.product_flows.list(project_id)))
 
     @router.post(
         "/api/recordings/{recording_id}/review", response_model=ApiResponse

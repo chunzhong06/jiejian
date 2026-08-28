@@ -59,12 +59,26 @@ def test_new_cli_gate_mode_returns_gate_decision_exit_code(monkeypatch) -> None:
         yield fake_context
 
     monkeypatch.setattr("product.backend.cli.commands.gating.application_scope", fake_scope)
-    result = CliRunner().invoke(cli_app, ["gate", "evaluate", BASELINE_ID, RUN_ID])
+    result = CliRunner().invoke(
+        cli_app,
+        ["system", "advanced", "gate", "evaluate", BASELINE_ID, RUN_ID],
+    )
     assert result.exit_code == 0
     assert '"decision":"PASS"' in result.stdout
 
 
 def test_baseline_cli_requires_explicit_actor() -> None:
-    result = CliRunner().invoke(cli_app, ["baseline", "accept", RUN_ID, "--reason", "fixed run"])
+    result = CliRunner().invoke(
+        cli_app,
+        [
+            "system",
+            "advanced",
+            "baseline",
+            "accept",
+            RUN_ID,
+            "--reason",
+            "fixed run",
+        ],
+    )
     assert result.exit_code != 0
     assert "--actor" in result.output

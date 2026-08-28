@@ -7,6 +7,7 @@ from product.backend.core.verification.facts import ExecutionOutcome, ObservedEf
 from product.backend.core.verification.permissions.coverage import build_permission_coverage_plan
 from product.backend.core.verification.permissions import (
     ActionDefinition,
+    BatchAuthorizationMode,
     CoverageDimension,
     PermissionContract,
     PermissionContext,
@@ -19,6 +20,7 @@ from product.backend.core.verification.permissions import (
     SecurityEffectDefinition,
     SecurityEffectKind,
     SubjectDefinition,
+    canonical_json_bytes,
     permission_model_sha256,
 )
 from product.protocols import (
@@ -67,7 +69,9 @@ from product.protocols import (
     WebTargetScope,
     build_evidence,
     build_normalized_state,
+    canonical_web_execution_profile_json_bytes,
 )
+from product.protocols.web.workflow import CASE_SUBJECT_IDENTITY
 
 
 def contract_and_plan() -> tuple[PermissionContract, object]:
@@ -213,7 +217,11 @@ def evidence(
                 "resource_ids": resources,
                 "expectations": tuple(PermissionExpectation.ALLOW for _ in resources),
                 "relation_paths": tuple(("owns-document",) for _ in resources),
-                "batch_mode": None,
+                "batch_mode": (
+                    BatchAuthorizationMode.ALL_ALLOW
+                    if len(resources) > 1
+                    else None
+                ),
             }
         )
     phases = (ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER)
@@ -330,3 +338,151 @@ def rehash_evidence(raw: dict) -> dict:
     raw.pop("evidence_id", None)
     raw.pop("evidence_hash", None)
     return build_evidence(**raw).model_dump(mode="python")
+
+
+def write_web_test_profile(
+    directory: Path,
+    *,
+    port: int = 8765,
+    project_id: str = "web-test-project",
+    profile_id: str = "web-test-profile",
+    project_name: str = "Web 测试项目",
+    include_comparison_subject: bool = False,
+) -> tuple[Path, Path]:
+    """在用例临时目录生成中性 Web Profile 与权限 Contract。"""
+
+    contract, _ = contract_and_plan()
+    contract = contract.model_copy(update={"contract_id": "web-test-contract"})
+    if include_comparison_subject:
+        contract = contract.model_copy(
+            update={
+                "role_ids": ("member", "reader"),
+                "subjects": contract.subjects
+                + (
+                    SubjectDefinition(
+                        subject_id="guest",
+                        roles=("reader",),
+                        tenant_id="tenant-a",
+                        department_id="dept-a",
+                    ),
+                ),
+            }
+        )
+    scope = WebTargetScope(
+        base_url=f"http://127.0.0.1:{port}",
+        allowed_origins=(f"http://127.0.0.1:{port}",),
+        allowed_hosts=("127.0.0.1",),
+        allowed_ports=(port,),
+        allow_private_network=True,
+        timeout_seconds=5,
+        max_requests=64,
+        max_response_bytes=262_144,
+    )
+    target = WebTargetDefinition(scope=scope, reset_path="/reset")
+    identity = WebExecutionIdentity(
+        identity_id="test-member",
+        role="member",
+        binding=BearerIdentityBinding(secret_ref="env:JIEJIAN_WEB_TEST_MEMBER_TOKEN"),
+    )
+    identities = [identity]
+    subject_bindings = [
+        SubjectExecutionBinding(subject_id="member", identity_id=identity.identity_id)
+    ]
+    if include_comparison_subject:
+        identities.append(
+            WebExecutionIdentity(
+                identity_id="test-reader",
+                role="reader",
+                binding=BearerIdentityBinding(
+                    secret_ref="env:JIEJIAN_WEB_TEST_READER_TOKEN"
+                ),
+            )
+        )
+        subject_bindings.append(
+            SubjectExecutionBinding(subject_id="guest", identity_id="test-reader")
+        )
+    observer = ObserverSpec(
+        observer_id="state-observer",
+        observer_type=ObserverType.OWNER_API,
+        target=ObserverTarget(
+            target_id="state-target",
+            locator=OwnerApiLocator(relative_path_template="/observations/{resource_id}"),
+            normalization_id="resource-state",
+            normalization_version="1",
+        ),
+        phases=(ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
+        required=True,
+        budget=ObserverBudget(timeout_us=5_000_000, max_rows=1, max_bytes=262_144),
+    )
+    step = HttpWorkflowStep(
+        id="target-step",
+        purpose=WorkflowStepPurpose.TARGET,
+        identity_id=CASE_SUBJECT_IDENTITY,
+        request_template=HttpRequestTemplate(
+            method="PATCH",
+            path="/resources/{resource_id}",
+            body={"kind": "JSON", "value": {"value": "bounded"}},
+            input_slots=(ValueSlot(
+                slot_id="resource_id",
+                source=ValueSlotSource.CASE_RESOURCE_ID,
+                consumer=ValueSlotConsumer.PATH,
+                consumer_step_id="target-step",
+            ),),
+        ),
+        classifier=HttpOutcomeClassifier(
+            accepted=(HttpPredicate(kind=HttpPredicateKind.STATUS_IN, statuses=(200,)),),
+            denied=(HttpPredicate(kind=HttpPredicateKind.STATUS_IN, statuses=(401, 403, 404)),),
+        ),
+    )
+    workflow = HttpWorkflowBinding(
+        workflow_id="modify-workflow",
+        source_flow_id="web-test-flow",
+        action_id="modify",
+        steps=(step,),
+        target_step_id=step.id,
+        baseline_projections=(BaselineProjection(
+            projection_id="resource-state",
+            logical_resource_handle="case-resource",
+            normalization_version="1",
+            projection_version="1",
+            integrity_mode=BaselineIntegrityMode.EXACT_RESTORE,
+        ),),
+    )
+    binding = ObserverRequirementBinding(
+        requirement_id="resource_state",
+        kind=ObserverRequirementKind.OBSERVER_SPEC,
+        observer_id="state-observer",
+        observer_type=ObserverType.OWNER_API,
+        credential_ref="env:JIEJIAN_WEB_TEST_OBSERVER_TOKEN",
+        phases=(ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
+    )
+    case_budget = 2 if include_comparison_subject else 1
+    profile = WebExecutionProfile(
+        profile_id=profile_id,
+        project_id=project_id,
+        project_name=project_name,
+        target=target,
+        identities=tuple(identities),
+        contract_id=contract.contract_id,
+        contract_version=contract.version,
+        observers=(observer,),
+        subject_bindings=tuple(subject_bindings),
+        workflow_bindings=(workflow,),
+        effect_bindings=(EffectBinding(
+            effect_id="document-mutated",
+            required_channels=("resource_state",),
+            closure_policy=EffectClosurePolicy.IMMEDIATE,
+            projection_version="v1",
+        ),),
+        observer_bindings=(binding,),
+        seed=4,
+        case_budget=case_budget,
+        max_relation_depth=8,
+        max_duration_us=20_000_000,
+    )
+    directory.mkdir(parents=True, exist_ok=True)
+    profile_path = directory / "profile.json"
+    contract_path = directory / "contract.json"
+    profile_path.write_bytes(canonical_web_execution_profile_json_bytes(profile))
+    contract_path.write_bytes(canonical_json_bytes(contract))
+    return profile_path, contract_path

@@ -46,3 +46,19 @@ def test_evidence_rejects_missing_observation_fact_coverage() -> None:
     raw["observation_facts"] = ()
     with pytest.raises(ValueError, match="exactly cover"):
         build_evidence(**raw)
+
+
+def test_evidence_builder_hashes_normalized_fact_and_reason_order() -> None:
+    raw = evidence(resource_ids=("resource-a", "resource-z")).model_dump(mode="python")
+    raw.pop("evidence_id")
+    raw.pop("evidence_hash")
+    raw["observation_facts"] = tuple(reversed(raw["observation_facts"]))
+    raw["reason_codes"] = ("Z_REASON", "A_REASON")
+
+    rebuilt = build_evidence(**raw)
+
+    assert [item.resource_id for item in rebuilt.observation_facts] == [
+        "resource-a",
+        "resource-z",
+    ]
+    assert rebuilt.reason_codes == ("A_REASON", "Z_REASON")

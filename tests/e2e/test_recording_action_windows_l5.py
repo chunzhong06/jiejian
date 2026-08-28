@@ -62,17 +62,17 @@ pytestmark = [
 ]
 
 
-def test_prepared_identity_records_sample_modify_observe_and_restore_without_profile(
+def test_prepared_identity_records_web_action_observe_and_restore_without_profile(
     tmp_path: Path,
-    sample_server_factory,
+    web_test_target_factory,
     request: pytest.FixtureRequest,
 ) -> None:
     """闭合准备身份、TARGET、所有者读取、恢复读取与 Flow v5 编译。"""
 
-    sample = sample_server_factory("fixed")
+    sample = web_test_target_factory()
     endpoint = f"http://127.0.0.1:{sample.port}"
-    project_id = "sample-project"
-    role_id = candidate_id("role", "owner")
+    project_id = "web-test-project"
+    role_id = candidate_id("role", "member")
     action_id = candidate_id("action", "modify-resource")
     var_dir = tmp_path / "var"
     store = WindowsCredentialManagerSecretStore()
@@ -103,7 +103,7 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
             work.application_understanding.add(
                 ApplicationUnderstanding(
                     project_id=project_id,
-                    source_root="D:/sample",
+                    source_root="D:/web-test",
                     confirmed_endpoint=endpoint,
                     endpoint_source_fingerprint="a" * 64,
                     endpoint_confirmed_at_us=2,
@@ -112,8 +112,8 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
                     role_candidates=(
                         RoleCandidate(
                             candidate_id=role_id,
-                            canonical_key="owner",
-                            display_name="所有者",
+                            canonical_key="member",
+                            display_name="成员",
                             confidence=CandidateConfidence.HIGH,
                             decision=CandidateDecision.CONFIRMED,
                             origin=CandidateOrigin.MANUAL,
@@ -151,11 +151,11 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
         )
 
         def login(page) -> None:
-            page.select_option('select[name="role"]', "owner")
-            page.fill('input[name="password"]', "sample-owner-password")
+            page.select_option('select[name="role"]', "member")
+            page.fill('input[name="password"]', sample.passwords["member"])
             page.click('button[type="submit"]')
             page.wait_for_load_state("domcontentloaded")
-            page.goto(f"{endpoint}/resources/owner-resource")
+            page.goto(f"{endpoint}/resources/document")
             page.wait_for_load_state("domcontentloaded")
 
         preparation_result = IdentityPreparationBrowserAdapter().run(
@@ -212,7 +212,7 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
 
         def record_modify(session: RecordingBrowserSession) -> None:
             page = session.new_page(identity_id)
-            page.goto(f"{endpoint}/resources/owner-resource")
+            page.goto(f"{endpoint}/resources/document")
             signals["start"] = True
             assert session.wait_for_capture_start(page, identity_id)
             observed.update(
@@ -222,7 +222,7 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
                         method: 'PATCH',
                         credentials: 'include',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({value: 'recorded-owner-value'})
+                        body: JSON.stringify({value: 'recorded-member-value'})
                     });
                     const changed = await fetch(url, {credentials: 'include'});
                     const changedBody = await changed.json();
@@ -230,7 +230,7 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
                         method: 'PATCH',
                         credentials: 'include',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({value: 'initial-owner-value'})
+                        body: JSON.stringify({value: 'initial-document-value'})
                     });
                     const restored = await fetch(url, {credentials: 'include'});
                     const restoredBody = await restored.json();
@@ -243,7 +243,7 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
                         restored_value: restoredBody.value,
                     };
                     }""",
-                    f"{endpoint}/resources/owner-resource",
+                    f"{endpoint}/resources/document",
                 )
             )
             page.wait_for_timeout(200)
@@ -263,21 +263,21 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
         assert observed == {
             "target_status": 200,
             "observation_status": 200,
-            "observed_value": "recorded-owner-value",
+            "observed_value": "recorded-member-value",
             "recovery_status": 200,
             "restored_status": 200,
-            "restored_value": "initial-owner-value",
+            "restored_value": "initial-document-value",
         }
         assert [
             event.method
             for event in recording_result.events
-            if event.url == f"{endpoint}/resources/owner-resource"
+            if event.url == f"{endpoint}/resources/document"
             and event.method is not None
         ] == ["PATCH", "GET", "PATCH", "GET"]
 
         draft = FlowDraftProcessor().build(
             recording_id=recording_id,
-            flow_id="sample-modify-resource",
+            flow_id="web-test-modify-resource",
             action_candidate_id=action_id,
             events=recording_result.events,
             known_secrets=tuple(secret_values.values()),
@@ -288,7 +288,7 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
             for event in recording_result.events
             if event.method == "PATCH"
             and event.body is not None
-            and "recorded-owner-value" in event.body
+            and "recorded-member-value" in event.body
         )
         target_step_id = next(
             step.id for step in draft.steps if step.request_id == target_request_id
@@ -349,8 +349,8 @@ def test_prepared_identity_records_sample_modify_observe_and_restore_without_pro
         assert "profile" not in flow.model_dump_json().casefold()
         with sample.server.lock:
             assert (
-                sample.server.resources["owner-resource"]["value"]
-                == "initial-owner-value"
+                sample.server.documents["document"]["value"]
+                == "initial-document-value"
             )
     finally:
         application.recording_credentials.clear(recording_id)

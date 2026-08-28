@@ -14,7 +14,7 @@ import typer
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.diagnostics import run_doctor
 from product.backend.cli.bootstrap import application_scope, default_frontend_dir, runtime_settings
-from product.backend.cli.presentation import emit_doctor, emit_json, fail
+from product.backend.cli.presentation import emit_command, emit_doctor, fail
 
 logger = logging.getLogger("jiejian.cli.system")
 
@@ -115,6 +115,11 @@ def serve_command(
     frontend_dir: Path | None = typer.Option(
         None, "--frontend-dir", help="前端 dist 静态资源目录"
     ),
+    official_sample_root: Path | None = typer.Option(
+        None,
+        "--official-sample-root",
+        help="显式官方示例安装目录；无效时不影响控制面启动",
+    ),
 ) -> None:
     """启动本地回环 API、Worker 和前端静态资源。"""
 
@@ -157,6 +162,7 @@ def serve_command(
                 control_origin=f"http://127.0.0.1:{port}",
                 frontend_dir=frontend_dir,
                 shutdown_callback=request_shutdown,
+                official_sample_root=official_sample_root,
             )
             config = uvicorn.Config(
                 api, host=host, port=port, log_level=settings.log_level.lower()
@@ -221,40 +227,36 @@ def doctor_command(
         "trace_id": options.trace_id,
     }
     report = run_doctor(config_path=options.config, cli_overrides=overrides)
-    emit_doctor(report)
+    emit_command("system-doctor", report, human=lambda: emit_doctor(report))
     raise typer.Exit(code=0 if report.ok else 1)
 
 
 def cache_status_command(context: typer.Context) -> None:
     """查看缓存体积、预算与不会受影响的产品事实。"""
 
-    with application_scope(context, environ=os.environ) as application:
-        emit_json(application.cache.status())
-
-
-def cache_prune_command(
-    context: typer.Context,
-    apply: bool = typer.Option(False, "--apply", help="执行预览中的按预算清理"),
-) -> None:
-    """预览或执行仅针对超预算缓存的安全清理。"""
-
-    with application_scope(context, environ=os.environ) as application:
-        emit_json(application.cache.prune(dry_run=not apply))
+    try:
+        with application_scope(context, environ=os.environ) as application:
+            result = application.cache.status()
+        emit_command("system-cache", result)
+    except JiejianError as exc:
+        fail(exc)
 
 
 def cache_clean_command(
     context: typer.Context,
     confirm: bool = typer.Option(False, "--confirm", help="确认清空全部可重建缓存"),
 ) -> None:
-    """预览或确认清空可重建缓存，不删除运行时和产品数据。"""
+    """预览或确认清空当前实例的 Assistant cache。"""
 
-    with application_scope(context, environ=os.environ) as application:
-        emit_json(
-            application.cache.clean(
+    try:
+        with application_scope(context, environ=os.environ) as application:
+            result = application.cache.clean(
                 confirmed=confirm,
                 dry_run=not confirm,
             )
-        )
+        emit_command("system-cache", result)
+    except JiejianError as exc:
+        fail(exc)
 
 
 def runtime_repair_command(
@@ -263,10 +265,12 @@ def runtime_repair_command(
 ) -> None:
     """预览或确认修复运行环境，不处理数据库和业务结果。"""
 
-    with application_scope(context, environ=os.environ) as application:
-        emit_json(
-            application.cache.repair_runtime(
+    try:
+        with application_scope(context, environ=os.environ) as application:
+            result = application.cache.repair_runtime(
                 confirmed=confirm,
                 dry_run=not confirm,
             )
-        )
+        emit_command("system-runtime", result)
+    except JiejianError as exc:
+        fail(exc)

@@ -2,13 +2,13 @@
 # 运行目录唯一物理路径
 #
 # 定位
-#   为开发、发布、Worker、Storage 和控制面提供同一套 VarDir 分区。
+#   为产品实例、Worker、Storage 和控制面提供同一套 VarDir 分区。
 #
 # 职责
 #   规范 data/runtime/cache/logs/temp/test 路径｜拒绝旧布局回退｜集中创建安全目录
 #
 # 边界
-#   只定位和创建目录，不决定缓存回收、数据库迁移或业务状态。
+#   只定位和创建当前实例目录；共享开发资产固定在仓库 var/development，不进入本对象。
 #
 # 调用链
 #   Settings / ApplicationCore / Worker / CLI → RuntimePaths → 各基础设施
@@ -62,10 +62,6 @@ class RuntimePaths:
         return self.runtime / "build"
 
     @property
-    def frontend_workspace(self) -> Path:
-        return self.build_runtime / "frontend-workspace"
-
-    @property
     def frontend_dist(self) -> Path:
         return self.runtime / "frontend"
 
@@ -78,20 +74,16 @@ class RuntimePaths:
         return self.runtime / "identity-preparations"
 
     @property
+    def official_sample_runtime(self) -> Path:
+        return self.runtime / "official-samples"
+
+    @property
+    def official_sample_data(self) -> Path:
+        return self.data / "official-samples"
+
+    @property
     def python_runtime(self) -> Path:
         return self.runtime / "python"
-
-    @property
-    def uv_runtime(self) -> Path:
-        return self.runtime / "uv"
-
-    @property
-    def playwright_runtime(self) -> Path:
-        return self.runtime / "playwright"
-
-    @property
-    def release_artifacts(self) -> Path:
-        return self.runtime / "release-artifacts"
 
     @property
     def locks(self) -> Path:
@@ -102,28 +94,8 @@ class RuntimePaths:
         return self.root / "cache"
 
     @property
-    def uv_cache(self) -> Path:
-        return self.cache / "uv"
-
-    @property
-    def pnpm_store(self) -> Path:
-        return self.cache / "pnpm-store"
-
-    @property
-    def npm_cache(self) -> Path:
-        return self.cache / "npm"
-
-    @property
-    def vite_cache(self) -> Path:
-        return self.cache / "vite"
-
-    @property
-    def downloads(self) -> Path:
-        return self.cache / "downloads"
-
-    @property
-    def startup_cache(self) -> Path:
-        return self.cache / "startup"
+    def assistant_cache(self) -> Path:
+        return self.cache / "assistant"
 
     @property
     def logs(self) -> Path:
@@ -154,6 +126,10 @@ class RuntimePaths:
         return self.logs / "app"
 
     @property
+    def official_sample_logs(self) -> Path:
+        return self.logs / "official-samples"
+
+    @property
     def temp(self) -> Path:
         return self.root / "temp"
 
@@ -173,19 +149,13 @@ class RuntimePaths:
             self.runtime,
             self.build_runtime,
             self.python_runtime,
-            self.uv_runtime,
-            self.playwright_runtime,
-            self.release_artifacts,
             self.worker_runtime,
             self.identity_preparations,
+            self.official_sample_runtime,
+            self.official_sample_data,
             self.locks,
             self.cache,
-            self.uv_cache,
-            self.pnpm_store,
-            self.npm_cache,
-            self.vite_cache,
-            self.downloads,
-            self.startup_cache,
+            self.assistant_cache,
             self.logs,
             self.startup_logs,
             self.worker_logs,
@@ -193,6 +163,7 @@ class RuntimePaths:
             self.recording_logs,
             self.identity_preparation_logs,
             self.app_logs,
+            self.official_sample_logs,
             self.temp,
             self.test,
         ):

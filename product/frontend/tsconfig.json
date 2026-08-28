@@ -19,7 +19,7 @@
       {
         "name": "jiejian-controlled-workspace-resolver",
         "sourceRoot": ".",
-        "workspaceRoot": "../../var/runtime/build/frontend-workspace"
+        "workspaceRoot": "../../var/development/frontend/workspace"
       }
     ]
   },

@@ -13,6 +13,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.process.environment import (
     ProcessEnvironmentRole,
     minimal_process_environment,
+    process_environment_failure_summary,
     spawn_python_module,
 )
 from tests.fixtures.runtime_environment import runtime_identity_environment
@@ -21,7 +22,6 @@ from tests.fixtures.runtime_environment import runtime_identity_environment
 _MAIN_PROCESS_ONLY = {
     "JIEJIAN_FRONTEND_DIST",
     "JIEJIAN_NODE_EXECUTABLE",
-    "JIEJIAN_PLAYWRIGHT_EXECUTABLE",
     "JIEJIAN_PNPM_EXECUTABLE",
     "JIEJIAN_TOOLCHAIN_MANIFEST",
     "JIEJIAN_UV_EXECUTABLE",
@@ -47,6 +47,7 @@ def _source(var_dir: Path) -> dict[str, str]:
             "RUNNER_SECRET": "runner-secret",
             "RECORDING_SECRET": "recording-secret",
             "OBSERVER_SECRET": "observer-secret",
+            "SAMPLE_SECRET": "sample-secret",
             "UNRELATED_PARENT_VALUE": "must-not-cross",
             "PYTHONPATH": "must-be-removed",
         },
@@ -113,6 +114,11 @@ def test_minimal_environment_is_scoped_by_fixed_role(tmp_path: Path) -> None:
         role=ProcessEnvironmentRole.OBSERVER,
         secret_names=("OBSERVER_SECRET",),
     )
+    sample = minimal_process_environment(
+        source,
+        role=ProcessEnvironmentRole.SAMPLE,
+        secret_names=("SAMPLE_SECRET",),
+    )
     artifact = minimal_process_environment(
         source,
         role=ProcessEnvironmentRole.ARTIFACT_SCAN,
@@ -120,6 +126,9 @@ def test_minimal_environment_is_scoped_by_fixed_role(tmp_path: Path) -> None:
     assert worker["JIEJIAN_SERVE_OWNER_TOKEN"] == "serve-owner"
     assert worker["JIEJIAN_CONTROL_ORIGIN"] == "http://127.0.0.1:9000"
     assert worker["WORKER_SECRET"] == "worker-secret"
+    assert worker["PLAYWRIGHT_BROWSERS_PATH"] == str(
+        tmp_path / "var" / "browsers"
+    )
     assert runner["RUNNER_SECRET"] == "runner-secret"
     assert runner["JIEJIAN_CONTROL_ORIGIN"] == "http://127.0.0.1:9000"
     assert "JIEJIAN_SERVE_OWNER_TOKEN" not in runner
@@ -128,23 +137,73 @@ def test_minimal_environment_is_scoped_by_fixed_role(tmp_path: Path) -> None:
     )
     assert recording["RECORDING_SECRET"] == "recording-secret"
     assert observer["OBSERVER_SECRET"] == "observer-secret"
-    for environment in (worker, runner, recording, observer, artifact):
+    assert sample["SAMPLE_SECRET"] == "sample-secret"
+    for environment in (worker, runner, recording, observer, sample, artifact):
         assert _MAIN_PROCESS_ONLY.isdisjoint(environment)
         assert "UNRELATED_PARENT_VALUE" not in environment
         assert "PYTHONPATH" not in environment
         assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
         assert environment["PYTHONNOUSERSITE"] == "1"
         assert environment["PYTHONUTF8"] == "1"
-    assert "PLAYWRIGHT_BROWSERS_PATH" not in worker
     assert "PLAYWRIGHT_BROWSERS_PATH" not in runner
     assert "PLAYWRIGHT_BROWSERS_PATH" not in observer
     assert "PLAYWRIGHT_BROWSERS_PATH" not in artifact
     assert "JIEJIAN_CONTROL_ORIGIN" not in recording
     assert "JIEJIAN_CONTROL_ORIGIN" not in observer
+    assert "JIEJIAN_CONTROL_ORIGIN" not in sample
     assert "JIEJIAN_CONTROL_ORIGIN" not in artifact
     assert "WORKER_SECRET" not in runner
     assert "RUNNER_SECRET" not in recording
     assert "RECORDING_SECRET" not in observer
+    assert "OBSERVER_SECRET" not in sample
+
+
+def test_worker_can_forward_recording_browser_runtime(tmp_path: Path) -> None:
+    source = _source(tmp_path / "var")
+
+    worker_environment = minimal_process_environment(
+        source,
+        role=ProcessEnvironmentRole.WORKER,
+    )
+    recording_environment = minimal_process_environment(
+        worker_environment,
+        role=ProcessEnvironmentRole.RECORDING,
+    )
+
+    assert recording_environment["PLAYWRIGHT_BROWSERS_PATH"] == source[
+        "PLAYWRIGHT_BROWSERS_PATH"
+    ]
+    assert "JIEJIAN_PLAYWRIGHT_EXECUTABLE" not in worker_environment
+    assert "JIEJIAN_PLAYWRIGHT_EXECUTABLE" not in recording_environment
+
+
+def test_portable_children_receive_release_root_without_project_root(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path / "var")
+    source["JIEJIAN_RUNTIME_MODE"] = "portable"
+    source["JIEJIAN_RELEASE_ROOT"] = str(tmp_path / "release")
+    source["JIEJIAN_PLAYWRIGHT_EXECUTABLE"] = str(
+        tmp_path / "release" / "runtime" / "playwright" / "chrome.exe"
+    )
+    source["PLAYWRIGHT_BROWSERS_PATH"] = str(
+        tmp_path / "release" / "runtime" / "playwright"
+    )
+    source.pop("JIEJIAN_PROJECT_ROOT")
+
+    child = minimal_process_environment(
+        source,
+        role=ProcessEnvironmentRole.WORKER,
+    )
+
+    assert child["JIEJIAN_RELEASE_ROOT"] == str(tmp_path / "release")
+    assert child["JIEJIAN_PLAYWRIGHT_EXECUTABLE"] == source[
+        "JIEJIAN_PLAYWRIGHT_EXECUTABLE"
+    ]
+    assert child["PLAYWRIGHT_BROWSERS_PATH"] == source[
+        "PLAYWRIGHT_BROWSERS_PATH"
+    ]
+    assert "JIEJIAN_PROJECT_ROOT" not in child
 
 
 def test_role_extras_are_fixed_and_cannot_override_controlled_values(
@@ -221,6 +280,10 @@ def test_roles_reject_missing_identity_secrets_and_invalid_names(tmp_path: Path)
     assert "JIEJIAN_RUNTIME_FINGERPRINT" in missing_identity.value.to_dict()[
         "details"
     ]["missing"]
+    assert process_environment_failure_summary(missing_identity.value) == {
+        "reason": "COMMON_IDENTITY_MISSING",
+        "missing_names": ["JIEJIAN_RUNTIME_FINGERPRINT"],
+    }
 
     with pytest.raises(JiejianError) as artifact_secret:
         minimal_process_environment(
@@ -259,6 +322,9 @@ def test_roles_reject_missing_identity_secrets_and_invalid_names(tmp_path: Path)
             cwd=tmp_path,
         )
     assert replaced_python.value.code == ErrorCode.RUNTIME_ENVIRONMENT_INVALID.value
+    assert process_environment_failure_summary(replaced_python.value) == {
+        "reason": "PYTHON_IDENTITY_MISMATCH"
+    }
 
 
 def test_product_python_child_calls_always_declare_a_fixed_role() -> None:

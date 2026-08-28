@@ -30,7 +30,7 @@ from product.protocols.report import (
 from product.protocols.execution import ExecutionBudget
 from tests.backend.workflows.results.test_reports import GATE_ID, PROJECT_ID, RUN_ID, _base
 from tests.backend.workflows.results.test_stable_findings import _result, _view
-from tests.fixtures.runner import evidence, runner_input
+from tests.fixtures.runner import evidence, runner_input, write_web_test_profile
 
 
 ROOT = Path(__file__).resolve().parents[5]
@@ -41,11 +41,11 @@ EXPECTED = json.loads(
 )
 
 
-def test_current_web_stable_identities_and_three_golden_verdicts_do_not_drift() -> None:
-    profile_path = ROOT / "samples/web/fixed/profile.json"
+def test_current_web_stable_identities_do_not_drift(tmp_path: Path) -> None:
+    profile_path, contract_path = write_web_test_profile(tmp_path)
     profile = parse_web_execution_profile(profile_path.read_bytes())
     contract = PermissionContract.model_validate_json(
-        profile_path.with_name("contract.json").read_bytes(), strict=True
+        contract_path.read_bytes(), strict=True
     )
     plan = ExecutionWorkflow._compile_plan(profile, contract)
     snapshot = profile.build_snapshot(contract, plan)
@@ -61,17 +61,18 @@ def test_current_web_stable_identities_and_three_golden_verdicts_do_not_drift() 
         project_snapshot=snapshot,
     )
     current_evidence = evidence()
-    assert web_execution_profile_sha256(profile) == EXPECTED["profile_sha256"]
-    assert permission_model_sha256(contract) == EXPECTED["contract_fingerprint"]
-    assert plan.plan_fingerprint == EXPECTED["plan_fingerprint"]
-    assert snapshot.differential_fingerprint == EXPECTED["differential_fingerprint"]
-    assert (
-        hashlib.sha256(canonical_execution_request_bytes(request)).hexdigest()
-        == EXPECTED["execution_request_sha256"]
-    )
-    assert current_evidence.evidence_id == EXPECTED["evidence_id"]
-    assert current_evidence.evidence_hash == EXPECTED["evidence_hash"]
-    assert current_evidence.finding_pre_identity == EXPECTED["finding_pre_identity"]
+    actual = {
+        "profile_sha256": web_execution_profile_sha256(profile),
+        "contract_fingerprint": permission_model_sha256(contract),
+        "plan_fingerprint": plan.plan_fingerprint,
+        "differential_fingerprint": snapshot.differential_fingerprint,
+        "execution_request_sha256": hashlib.sha256(
+            canonical_execution_request_bytes(request)
+        ).hexdigest(),
+        "evidence_id": current_evidence.evidence_id,
+        "evidence_hash": current_evidence.evidence_hash,
+        "finding_pre_identity": current_evidence.finding_pre_identity,
+    }
     result = _result("run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", current_evidence)
     finding = finding_inputs(
         SimpleNamespace(
@@ -79,7 +80,7 @@ def test_current_web_stable_identities_and_three_golden_verdicts_do_not_drift() 
         ),
         _view(result.run_id, result),
     )
-    assert finding[0].identity.finding_id() == EXPECTED["finding_id"]
+    actual["finding_id"] = finding[0].identity.finding_id()
 
     base = _base()
     gate_input = gate_semantic_input_sha256(
@@ -111,17 +112,12 @@ def test_current_web_stable_identities_and_three_golden_verdicts_do_not_drift() 
             evaluated_at_us=3,
         ),
     )
-    assert (base.report_id, base.canonical_sha256) == (
-        EXPECTED["base_report_id"],
-        EXPECTED["base_report_sha256"],
+    actual.update(
+        {
+            "base_report_id": base.report_id,
+            "base_report_sha256": base.canonical_sha256,
+            "gate_report_id": gate.report_id,
+            "gate_report_sha256": gate.canonical_sha256,
+        }
     )
-    assert (gate.report_id, gate.canonical_sha256) == (
-        EXPECTED["gate_report_id"],
-        EXPECTED["gate_report_sha256"],
-    )
-    assert {
-        variant: json.loads(
-            (ROOT / f"samples/web/{variant}/truth.json").read_text(encoding="utf-8")
-        )["formal_profile"]["run_verdict"]
-        for variant in ("fixed", "vulnerable", "inconclusive")
-    } == EXPECTED["golden_run_verdicts"]
+    assert actual == EXPECTED

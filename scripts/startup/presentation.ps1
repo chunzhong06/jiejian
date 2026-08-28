@@ -131,7 +131,7 @@ function Select-StartupMode {
         [pscustomobject]@{ value = "Prepare"; label = "仅完成环境准备" }
     )
     $cliItems = @(
-        [pscustomobject]@{ value = "Guide"; label = "引导模式（推荐）" },
+        [pscustomobject]@{ value = "Status"; label = "工作台模式（推荐）" },
         [pscustomobject]@{ value = "Shell"; label = "普通命令行" },
         [pscustomobject]@{ value = "Back"; label = "返回" }
     )
@@ -153,12 +153,12 @@ function Write-CliWelcome {
     Write-Host ("VarDir  {0}" -f $script:VarDir) -ForegroundColor Gray
     Write-Host ""
     Write-Host "第一次使用？" -ForegroundColor Gray
-    Write-Host "  jiejian guide" -ForegroundColor DarkGray
+    Write-Host "  jiejian status" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "常用命令" -ForegroundColor Gray
-    Write-Host "  jiejian doctor" -ForegroundColor DarkGray
-    Write-Host "  jiejian run --help" -ForegroundColor DarkGray
-    Write-Host "  jiejian report --help" -ForegroundColor DarkGray
+    Write-Host "  jiejian system doctor" -ForegroundColor DarkGray
+    Write-Host "  jiejian check --help" -ForegroundColor DarkGray
+    Write-Host "  jiejian result --help" -ForegroundColor DarkGray
     Write-Host "  jiejian --help" -ForegroundColor DarkGray
     Write-Host ""
 }
@@ -173,6 +173,7 @@ function Start-DisplayStage([int]$Index, [string]$Name) {
 }
 
 function Complete-DisplayStage([string]$Status = "") {
+    Stop-WaitIndicator
     if ($null -eq $script:DisplayStageTimer) { return }
     $script:DisplayStageTimer.Stop()
     if ($Status -eq "失败") {
@@ -216,6 +217,7 @@ function Write-DisplayResult(
     [bool]$Last = $false,
     [string]$Detail = ""
 ) {
+    Stop-WaitIndicator
     if ($null -eq $script:DisplayStageTimer) { return }
     $script:DisplayStageSkipped = $false
     $branch = if ($script:DisplayUnicode) { if ($Last) { "      └─" } else { "      ├─" } } else { if ($Last) { "      `--" } else { "      |--" } }
@@ -266,27 +268,30 @@ function Start-WaitIndicator([string]$Stage) {
         $spinnerScript = Join-Path $script:ProjectRoot "scripts\start.ps1"
         $quotedScript = '"' + $spinnerScript.Replace('"', '""') + '"'
         $startedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File $quotedScript -DisplaySpinnerProcess -DisplaySpinnerStage $Stage -DisplaySpinnerStartedAt $startedAt"
+        $eventName = "Local\JiejianWait-{0}-{1}" -f $PID, [guid]::NewGuid().ToString("N")
+        $createdNew = $false
+        $script:WaitIndicatorStopEvent = [Threading.EventWaitHandle]::new(
+            $false,
+            [Threading.EventResetMode]::ManualReset,
+            $eventName,
+            [ref]$createdNew
+        )
+        if (-not $createdNew) { throw "等待动画停止事件名称发生冲突" }
+        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File $quotedScript -DisplaySpinnerProcess -DisplaySpinnerStage $Stage -DisplaySpinnerStartedAt $startedAt -DisplaySpinnerStopEvent $eventName"
         if (-not $script:DisplayUnicode) { $arguments += " -DisplaySpinnerAscii" }
         $script:WaitIndicatorProcess = Start-Process -FilePath $shell -ArgumentList $arguments -NoNewWindow -PassThru -ErrorAction Stop
     } catch {
+        if ($null -ne $script:WaitIndicatorStopEvent) {
+            try { $script:WaitIndicatorStopEvent.Dispose() } catch { }
+        }
+        $script:WaitIndicatorStopEvent = $null
         $script:WaitIndicatorProcess = $null
+        $script:WaitIndicatorFallbackActive = $true
         try { [Console]::Write(("`r{0}..." -f (Get-WaitIndicatorLabel $Stage))) } catch { }
     }
 }
 
-function Stop-WaitIndicator {
-    if ($null -ne $script:WaitIndicatorProcess) {
-        # 主流程任何出口都回收动画进程，避免控制台关闭后残留后台 PowerShell。
-        try {
-            if (-not $script:WaitIndicatorProcess.HasExited) {
-                Stop-Process -Id $script:WaitIndicatorProcess.Id -Force -ErrorAction SilentlyContinue
-                $null = $script:WaitIndicatorProcess.WaitForExit(500)
-            }
-            $script:WaitIndicatorProcess.Dispose()
-        } catch { }
-        $script:WaitIndicatorProcess = $null
-    }
+function Clear-WaitIndicatorLine {
     if ($script:DisplayInteractive -and -not [Console]::IsOutputRedirected) {
         try {
             $width = [Math]::Max(40, [Math]::Min(160, $Host.UI.RawUI.WindowSize.Width - 1))
@@ -295,17 +300,56 @@ function Stop-WaitIndicator {
     }
 }
 
-function Invoke-WaitIndicatorProcess([string]$Stage, [bool]$Ascii, [long]$StartedAt = 0) {
-    $frames = if ($Ascii) { @("|", "/", "-", "\") } else { @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏") }
-    $label = Get-WaitIndicatorLabel $Stage
-    $index = 0
-    # 快速探针在首帧出现前结束，避免终端闪烁。
-    Start-Sleep -Milliseconds 130
-    while ($true) {
-        $elapsed = if ($StartedAt -gt 0) { [Math]::Max(0, [int][Math]::Floor(([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $StartedAt) / 1000)) } else { 0 }
-        [Console]::Write(("`r{0} {1} {2}s" -f $frames[$index % $frames.Count], $label, $elapsed))
-        $index += 1
-        Start-Sleep -Milliseconds 90
+function Stop-WaitIndicator {
+    $process = $script:WaitIndicatorProcess
+    $stopEvent = $script:WaitIndicatorStopEvent
+    $hadVisibleOutput = $null -ne $process -or $script:WaitIndicatorFallbackActive
+    $exited = $null -eq $process
+    if ($null -ne $process) {
+        # 先协商停止；只有子进程在期限内未退出时才强杀，且清行前必须确认退出。
+        try {
+            if (-not $process.HasExited) {
+                if ($null -ne $stopEvent) { try { $null = $stopEvent.Set() } catch { } }
+                $exited = $process.WaitForExit(2000)
+                if (-not $exited) {
+                    Stop-Process -Id $process.Id -Force -ErrorAction Stop
+                    $process.WaitForExit()
+                    $exited = $process.HasExited
+                }
+            } else {
+                $process.WaitForExit()
+                $exited = $true
+            }
+        } catch {
+            $exited = $process.HasExited
+        }
+    }
+    if ($exited -and $hadVisibleOutput) { Clear-WaitIndicatorLine }
+    if ($null -ne $process) { try { $process.Dispose() } catch { } }
+    if ($null -ne $stopEvent) { try { $stopEvent.Dispose() } catch { } }
+    $script:WaitIndicatorProcess = $null
+    $script:WaitIndicatorStopEvent = $null
+    $script:WaitIndicatorFallbackActive = $false
+}
+
+function Invoke-WaitIndicatorProcess([string]$Stage, [bool]$Ascii, [long]$StartedAt = 0, [string]$StopEventName = "") {
+    if ([string]::IsNullOrWhiteSpace($StopEventName)) { return }
+    try { $stopEvent = [Threading.EventWaitHandle]::OpenExisting($StopEventName) }
+    catch { return }
+    try {
+        $frames = if ($Ascii) { @("|", "/", "-", "\") } else { @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏") }
+        $label = Get-WaitIndicatorLabel $Stage
+        $index = 0
+        # 快速探针在首帧出现前结束；收到停止信号后不再写任何一帧。
+        if ($stopEvent.WaitOne(130)) { return }
+        while ($true) {
+            $elapsed = if ($StartedAt -gt 0) { [Math]::Max(0, [int][Math]::Floor(([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $StartedAt) / 1000)) } else { 0 }
+            [Console]::Write(("`r{0} {1} {2}s" -f $frames[$index % $frames.Count], $label, $elapsed))
+            $index += 1
+            if ($stopEvent.WaitOne(90)) { break }
+        }
+    } finally {
+        $stopEvent.Dispose()
     }
 }
 

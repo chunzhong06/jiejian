@@ -83,6 +83,17 @@ def test_profile_accepts_only_typed_prepared_cookie_descriptors() -> None:
         )
 
 
+def test_profile_secret_scan_ignores_empty_optional_metadata() -> None:
+    _reject_secret_material(
+        {"workflow_bindings": [{"response_extractors": [{"cookie_name": None}]}]}
+    )
+
+    with pytest.raises(ValueError, match="sensitive field"):
+        _reject_secret_material(
+            {"workflow_bindings": [{"response_extractors": [{"cookie_name": "session"}]}]}
+        )
+
+
 def test_checked_in_web_execution_profile_schema_has_no_drift() -> None:
     schema_path = (
         Path(__file__).parents[3]
@@ -102,6 +113,43 @@ def test_snapshot_rejects_missing_or_non_async_completion_binding(
     payload["workflow_bindings"][0]["workflow_fingerprint"] = None
 
     with pytest.raises(ValueError, match="EVENTUAL async task observer"):
+        WebExecutionSnapshot.model_validate(payload)
+
+
+def test_snapshot_accepts_corroborating_observer_with_matching_optional_spec() -> None:
+    source = execution_snapshot()
+    payload = source.model_dump(mode="python")
+    supporting_spec = source.observers[0].model_dump(mode="python")
+    supporting_spec.update({"observer_id": "support_observer", "required": False})
+    supporting_binding = source.observer_bindings[0].model_dump(mode="python")
+    supporting_binding.update(
+        {"requirement_id": "support_state", "observer_id": "support_observer"}
+    )
+    effect_binding = payload["effect_bindings"][0]
+    effect_binding["corroborating_channels"] = ("support_state",)
+    payload["observers"] = (*payload["observers"], supporting_spec)
+    payload["observer_bindings"] = (*payload["observer_bindings"], supporting_binding)
+
+    snapshot = WebExecutionSnapshot.model_validate(payload)
+
+    assert snapshot.observers[-1].required is False
+    assert snapshot.effect_bindings[0].corroborating_channels == ("support_state",)
+
+
+def test_snapshot_rejects_corroborating_observer_with_required_spec() -> None:
+    source = execution_snapshot()
+    payload = source.model_dump(mode="python")
+    supporting_spec = source.observers[0].model_dump(mode="python")
+    supporting_spec["observer_id"] = "support_observer"
+    supporting_binding = source.observer_bindings[0].model_dump(mode="python")
+    supporting_binding.update(
+        {"requirement_id": "support_state", "observer_id": "support_observer"}
+    )
+    payload["effect_bindings"][0]["corroborating_channels"] = ("support_state",)
+    payload["observers"] = (*payload["observers"], supporting_spec)
+    payload["observer_bindings"] = (*payload["observer_bindings"], supporting_binding)
+
+    with pytest.raises(ValueError, match="stable role"):
         WebExecutionSnapshot.model_validate(payload)
 
 

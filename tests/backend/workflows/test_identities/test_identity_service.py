@@ -205,6 +205,26 @@ def test_endpoint_change_marks_prepared_identity_for_review(tmp_path: Path) -> N
     assert reset.review_reasons == ()
 
 
+def test_role_name_change_marks_bound_identity_for_review(tmp_path: Path) -> None:
+    service, store, factory = _service(tmp_path)
+    identity_id, _ = _prepare(service, store)
+    changed_understanding = _understanding(revision=4)
+    changed_role = changed_understanding.role_candidates[0].model_copy(
+        update={"display_name": "项目所有者"}
+    )
+    with StorageUnitOfWork(factory) as work:
+        work.application_understanding.replace(
+            changed_understanding.model_copy(
+                update={"role_candidates": (changed_role,)}
+            )
+        )
+        work.commit()
+
+    changed = service.get(identity_id)
+    assert changed.status is IdentityStatus.NEEDS_REVIEW
+    assert changed.review_reasons == ("ROLE_NEEDS_REVIEW",)
+
+
 def test_delete_failure_keeps_metadata_then_success_removes_exact_secret(
     tmp_path: Path,
 ) -> None:

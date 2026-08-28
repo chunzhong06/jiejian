@@ -52,6 +52,7 @@ from product.backend.workflows.security_setup.models import (
     _role_id,
     _sha256,
 )
+from product.backend.workflows.security_setup.local_observer_wiring import LocalObserverWiring
 from product.backend.workflows.permission_intents import (
     PermissionIntentMatrixView,
     PermissionIntentService,
@@ -111,6 +112,7 @@ class ContractBuilderMixin:
         *,
         contract_id: str,
         actor: str,
+        local_wiring: LocalObserverWiring | None = None,
     ) -> tuple[PermissionContract, bool]:
         with self._uow_factory() as work:
             project = work.projects.get(facts.project.project_id)
@@ -130,13 +132,13 @@ class ContractBuilderMixin:
                 "当前项目正在使用高级权限契约；请先明确切换后再生成普通配置",
             )
         if active is not None:
-            candidate = self._contract(facts, contract_id, active.version)
+            candidate = self._contract(facts, contract_id, active.version, local_wiring=local_wiring)
             if candidate == active.snapshot:
                 return active.snapshot, True
             draft = self._contracts.revise_active(
                 facts.project.project_id,
                 contract_id,
-                snapshot=self._contract(facts, contract_id, active.version + 1),
+                snapshot=self._contract(facts, contract_id, active.version + 1, local_wiring=local_wiring),
                 sources=(self._source(facts),),
                 actor=actor,
             )
@@ -149,12 +151,14 @@ class ContractBuilderMixin:
             draft = self._contracts.create_draft(
                 facts.project.project_id,
                 contract_id,
-                snapshot=self._contract(facts, contract_id, 1),
+                snapshot=self._contract(facts, contract_id, 1, local_wiring=local_wiring),
                 sources=(self._source(facts),),
                 actor=actor,
             )
-        observations = tuple(
-            _observation_requirement(item.action_id) for item in facts.actions
+        observations = (
+            local_wiring.required_channels
+            if local_wiring is not None
+            else tuple(_observation_requirement(item.action_id) for item in facts.actions)
         )
         reviewed = self._contracts.submit_review(
             facts.project.project_id,
@@ -180,6 +184,8 @@ class ContractBuilderMixin:
         facts: _CompilationFacts,
         contract_id: str,
         version: int,
+        *,
+        local_wiring: LocalObserverWiring | None = None,
     ) -> PermissionContract:
         identity_by_id = {item.identity_id: item for item in facts.identities}
         subject_ids = {
@@ -302,6 +308,11 @@ class ContractBuilderMixin:
                 )
                 relations[scope.relation_id] = scope
                 relation_path = (scope.relation_id, owns.relation_id)
+            required_observations = (
+                local_wiring.required_channels
+                if local_wiring is not None
+                else (_observation_requirement(action.action_id),)
+            )
             rules.append(
                 PermissionRule(
                     rule_id=f"rule-{control.fingerprint[:24]}",
@@ -311,9 +322,7 @@ class ContractBuilderMixin:
                     relation_path=relation_path,
                     context=PermissionContext(resource_ids=(actual_resource_id,)),
                     expectation=PermissionExpectation.ALLOW,
-                    required_observations=(
-                        _observation_requirement(action.action_id),
-                    ),
+                    required_observations=required_observations,
                     coverage_dimensions=(CoverageDimension.RELATION,),
                     severity="critical",
                 )
@@ -337,8 +346,10 @@ class ContractBuilderMixin:
     @staticmethod
     def _permission_target_classifier(
         classifier: HttpOutcomeClassifier,
+        *,
+        completion_binding: str | None = None,
     ) -> HttpOutcomeClassifier:
-        """补齐普通权限检查的请求拒绝结果，真实安全结论仍依赖 required Observer。"""
+        """补齐权限拒绝结果，并让 202 只在既有异步完成事实闭合后被接受。"""
 
         accepted_statuses = {
             status
@@ -357,19 +368,24 @@ class ContractBuilderMixin:
             for status in (401, 403, 404)
             if status not in accepted_statuses and status not in denied_statuses
         )
-        if not additional:
+        updates: dict[str, object] = {}
+        if additional:
+            updates["denied"] = (
+                *classifier.denied,
+                HttpPredicate(
+                    kind=HttpPredicateKind.STATUS_IN,
+                    statuses=additional,
+                ),
+            )
+        if (
+            202 in accepted_statuses
+            and classifier.completion_binding is None
+            and completion_binding is not None
+        ):
+            updates["completion_binding"] = completion_binding
+        if not updates:
             return classifier
-        return classifier.model_copy(
-            update={
-                "denied": (
-                    *classifier.denied,
-                    HttpPredicate(
-                        kind=HttpPredicateKind.STATUS_IN,
-                        statuses=additional,
-                    ),
-                )
-            }
-        )
+        return classifier.model_copy(update=updates)
 
     @staticmethod
     def _source(facts: _CompilationFacts) -> SourceReference:

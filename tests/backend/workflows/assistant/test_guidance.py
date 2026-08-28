@@ -72,7 +72,7 @@ def _guidance_gap(code: str, path: str, label: str) -> CheckPreviewGap:
 def test_guidance_keeps_runnable_scope_primary_and_gaps_optional() -> None:
     flow_gap = _guidance_gap(
         "OBSERVATION_UNCONFIRMED",
-        "/apps/flows",
+        "/flows",
         "去确认观察方式",
     )
     preview = CheckPreview(
@@ -87,7 +87,7 @@ def test_guidance_keeps_runnable_scope_primary_and_gaps_optional() -> None:
             ),
         ),
         gaps=(flow_gap,),
-        next_path="/apps/flows",
+        next_path="/flows",
         next_label="去确认观察方式",
         case_count=2,
         differential_pair_count=1,
@@ -108,12 +108,12 @@ def test_guidance_keeps_runnable_scope_primary_and_gaps_optional() -> None:
 def test_guidance_only_exposes_highest_blocking_tier_and_has_semantic_fingerprint() -> None:
     identity_gap = _guidance_gap(
         "TEST_IDENTITY_MISSING",
-        "/apps/identities",
+        "/identities",
         "去准备测试账号",
     )
     flow_gap = _guidance_gap(
         "RECOVERY_UNCONFIRMED",
-        "/apps/flows",
+        "/flows",
         "去确认恢复方式",
     )
     preview = CheckPreview(
@@ -121,7 +121,7 @@ def test_guidance_only_exposes_highest_blocking_tier_and_has_semantic_fingerprin
         ready=False,
         actions=(),
         gaps=(flow_gap, identity_gap),
-        next_path="/apps/identities",
+        next_path="/identities",
         next_label="去准备测试账号",
         case_count=0,
         differential_pair_count=0,
@@ -131,5 +131,5 @@ def test_guidance_only_exposes_highest_blocking_tier_and_has_semantic_fingerprin
     first = build_guidance_snapshot(readiness, preview)
     second = build_guidance_snapshot(readiness.model_copy(), preview.model_copy())
 
-    assert {item.route for item in first.options} == {"/apps/identities"}
+    assert {item.route for item in first.options} == {"/identities"}
     assert first.state_fingerprint == second.state_fingerprint

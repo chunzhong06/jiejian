@@ -243,6 +243,70 @@ def test_async_task_requires_interpretable_closed_terminal_state() -> None:
     assert unknown.reason_codes == ("OBSERVATION_UNINTERPRETED",)
 
 
+def test_eventual_only_async_observation_closes_when_terminal_envelope_is_complete() -> None:
+    phases = (ObservationPhase.EVENTUAL,)
+    case, binding = _case_and_binding(ObserverType.ASYNC_TASK_STATUS, phases)
+    envelope = _envelope(
+        case,
+        ObserverType.ASYNC_TASK_STATUS,
+        ObservationPhase.EVENTUAL,
+        {"task_state": "SUCCESS", "final_result": {"effect": "APPLIED"}},
+    )
+
+    fact = _coordinator(binding).project_facts(case, (envelope,))[0]
+
+    assert fact.effect is ObservedEffect.CONFIRMED
+    assert fact.temporal_closure is TemporalClosure.CLOSED
+
+
+def test_eventual_only_async_missing_envelope_stays_unknown() -> None:
+    case, binding = _case_and_binding(
+        ObserverType.ASYNC_TASK_STATUS,
+        (ObservationPhase.EVENTUAL,),
+    )
+
+    fact = _coordinator(binding).project_facts(case, ())[0]
+
+    assert fact.effect is ObservedEffect.UNKNOWN
+    assert fact.temporal_closure is TemporalClosure.UNKNOWN
+    assert fact.reason_codes == ("REQUIRED_OBSERVER_INCOMPLETE",)
+
+
+def test_eventual_only_queue_observation_closes_when_window_is_complete() -> None:
+    phases = (ObservationPhase.EVENTUAL,)
+    case, binding = _case_and_binding(ObserverType.AZURE_QUEUE_PEEK, phases)
+    envelope = _envelope(
+        case,
+        ObserverType.AZURE_QUEUE_PEEK,
+        ObservationPhase.EVENTUAL,
+        {"window_complete": True, "matched_count": 0, "messages": []},
+    )
+
+    fact = _coordinator(binding).project_facts(case, (envelope,))[0]
+
+    assert fact.effect is ObservedEffect.ABSENT
+    assert fact.temporal_closure is TemporalClosure.CLOSED
+
+
+def test_eventual_only_queue_incomplete_window_stays_unknown_and_open() -> None:
+    case, binding = _case_and_binding(
+        ObserverType.AZURE_QUEUE_PEEK,
+        (ObservationPhase.EVENTUAL,),
+    )
+    envelope = _envelope(
+        case,
+        ObserverType.AZURE_QUEUE_PEEK,
+        ObservationPhase.EVENTUAL,
+        {"window_complete": False, "matched_count": 0, "messages": []},
+    )
+
+    fact = _coordinator(binding).project_facts(case, (envelope,))[0]
+
+    assert fact.effect is ObservedEffect.UNKNOWN
+    assert fact.temporal_closure is TemporalClosure.OPEN
+    assert fact.reason_codes == ("OBSERVATION_WINDOW_INCOMPLETE",)
+
+
 def test_queue_requires_a_closed_and_explicit_window_for_absence() -> None:
     phases = (ObservationPhase.AFTER, ObservationPhase.EVENTUAL)
     absent = _project(

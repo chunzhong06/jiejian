@@ -1,3 +1,5 @@
+// 验证证据时间线只展示后端已发布事实，并保留三态观察语义。
+
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EvidenceTimeline } from './EvidenceTimeline'
@@ -9,9 +11,9 @@ describe('EvidenceTimeline', () => {
   afterEach(() => cleanup())
 
   it.each([
-    { name: 'fixed', verdict: 'SAFE', verdictText: '当前规则覆盖范围内未发现越权', outcome: 'DENIED', effect: 'ABSENT', complete: true, reliable: true, outcomeText: '执行已拒绝', effectText: '资源状态未变化', impactText: '已确认未发生', closure: 'CLOSED', closureText: '证据窗口已闭合', baseline: true, control: true, completeness: '完整', reliability: '可靠', reasonCodes: [] },
-    { name: 'vulnerable', verdict: 'VULNERABLE', verdictText: '发现可能的权限越界，需要处理', outcome: 'DENIED', effect: 'CONFIRMED', complete: true, reliable: true, outcomeText: '执行已拒绝', effectText: '资源状态发生变化', impactText: '已确认发生', closure: 'CLOSED', closureText: '证据窗口已闭合', baseline: true, control: true, completeness: '完整', reliability: '可靠', reasonCodes: [] },
-    { name: 'inconclusive', verdict: 'INCONCLUSIVE', verdictText: '证据不足，暂时不能下结论', outcome: 'UNKNOWN', effect: 'UNKNOWN', complete: false, reliable: false, outcomeText: '执行结果无法确定', effectText: '无法可靠获取资源状态', impactText: '尚无法确定', closure: 'UNKNOWN', closureText: '闭合状态未知', baseline: false, control: false, completeness: '未完成', reliability: '不可靠', reasonCodes: ['OBSERVATION_INCOMPLETE'] },
+    { name: 'fixed', verdict: 'SAFE', verdictText: '当前规则覆盖范围内未发现越权', outcome: 'DENIED', effect: 'ABSENT', complete: true, reliable: true, outcomeText: '执行已拒绝', effectText: '未发现资源变化', impactText: '未发现真实影响', closure: 'CLOSED', closureText: '证据窗口已闭合', baseline: true, control: true, completeness: '完整', reliability: '可靠', reasonCodes: [] },
+    { name: 'vulnerable', verdict: 'VULNERABLE', verdictText: '发现可能的权限越界，需要处理', outcome: 'DENIED', effect: 'CONFIRMED', complete: true, reliable: true, outcomeText: '执行已拒绝', effectText: '已发现资源变化', impactText: '已发现真实影响', closure: 'CLOSED', closureText: '证据窗口已闭合', baseline: true, control: true, completeness: '完整', reliability: '可靠', reasonCodes: [] },
+    { name: 'inconclusive', verdict: 'INCONCLUSIVE', verdictText: '证据不足，暂时不能下结论', outcome: 'UNKNOWN', effect: 'UNKNOWN', complete: false, reliable: false, outcomeText: '执行结果无法确定', effectText: '无法确认资源变化', impactText: '无法确认真实影响', closure: 'UNKNOWN', closureText: '闭合状态未知', baseline: false, control: false, completeness: '未完成', reliability: '不可靠', reasonCodes: ['OBSERVATION_INCOMPLETE'] },
   ])('按三态当前事实展示检查对象、执行事实和真实观察：$name', async ({ verdict, verdictText, outcome, effect, complete, reliable, outcomeText, effectText, impactText, closure, closureText, baseline, control, completeness, reliability, reasonCodes }) => {
     resultsApi.evidenceDetail.mockResolvedValue({
       evidence_id: 'ev-current',

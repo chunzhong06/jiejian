@@ -28,7 +28,7 @@ from urllib.parse import unquote, urlparse
 from product.backend.core.errors import ErrorCode, JiejianError
 
 SUPPORTED_PYTHON = (3, 13)
-_RUNTIME_MODES = {"development"}
+_RUNTIME_MODES = {"development", "portable"}
 _IDENTITY_KEYS = (
     "JIEJIAN_PYTHON_EXECUTABLE",
     "JIEJIAN_PYTHON_ENVIRONMENT_PATH",
@@ -62,7 +62,19 @@ def python_environment_report(
     expected_executable = _resolved_path(environ.get(_IDENTITY_KEYS[0]))
     expected_prefix = _resolved_path(environ.get(_IDENTITY_KEYS[1]))
     project_root = _resolved_path(environ.get("JIEJIAN_PROJECT_ROOT"))
+    release_root = _resolved_path(environ.get("JIEJIAN_RELEASE_ROOT"))
     runtime_mode = (environ.get("JIEJIAN_RUNTIME_MODE") or "").strip().lower()
+    # 开发态浏览器路径按 Worker/Recording 角色传播，不能进入全部子进程共享的包来源指纹。
+    playwright_executable = (
+        _resolved_path(environ.get("JIEJIAN_PLAYWRIGHT_EXECUTABLE"))
+        if runtime_mode == "portable"
+        else None
+    )
+    playwright_browsers_path = (
+        _resolved_path(environ.get("PLAYWRIGHT_BROWSERS_PATH"))
+        if runtime_mode == "portable"
+        else None
+    )
     environment_type = (environ.get(_IDENTITY_KEYS[2]) or "").strip().lower()
     user_site = _resolved_path(_user_site_path())
     sys_paths = tuple(_resolved_path(value) for value in sys.path if value)
@@ -123,6 +135,37 @@ def python_environment_report(
             issues.append("editable 安装指向了其他源码目录")
         if project_root and product_path and not _is_within(product_path, project_root):
             issues.append("开发模式导入的 product 不属于当前仓库")
+    elif runtime_mode == "portable":
+        if environment_type != "uv-managed":
+            issues.append("Portable 模式必须使用包内 uv-managed Python")
+        if release_root is None:
+            issues.append("Portable 模式缺少发行根目录身份")
+        if project_root is not None:
+            issues.append("Portable 模式不得声明开发仓库根目录")
+        if editable:
+            issues.append("Portable 模式不得使用 editable 安装")
+        if release_root is not None:
+            for label, path in (
+                ("Python 解释器", executable),
+                ("Python Prefix", prefix),
+                ("Python Base Prefix", base_prefix),
+                ("product", product_path),
+                ("项目发行包", distribution_root),
+            ):
+                if path is None or not _is_within(path, release_root):
+                    issues.append(f"Portable {label} 不属于发行根目录")
+            for name, origin in package_origins.items():
+                if origin and not _is_within(Path(origin), release_root):
+                    issues.append(f"Portable 依赖 {name} 不属于发行根目录")
+            expected_browsers_path = release_root / "runtime" / "playwright"
+            if playwright_browsers_path != expected_browsers_path:
+                issues.append("Portable Playwright 浏览器根与发行布局不一致")
+            if (
+                playwright_executable is None
+                or not playwright_executable.is_file()
+                or not _is_within(playwright_executable, expected_browsers_path)
+            ):
+                issues.append("Portable Chromium 不属于发行浏览器根")
 
     fingerprint_payload = {
         "python": str(executable),
@@ -130,6 +173,13 @@ def python_environment_report(
         "prefix": str(prefix),
         "mode": runtime_mode,
         "environment_type": environment_type,
+        "release_root": str(release_root) if release_root else None,
+        "playwright_executable": (
+            str(playwright_executable) if playwright_executable else None
+        ),
+        "playwright_browsers_path": (
+            str(playwright_browsers_path) if playwright_browsers_path else None
+        ),
         "product_origin": product_origin,
         "distribution": distribution,
         "package_origins": package_origins,
@@ -160,6 +210,15 @@ def python_environment_report(
         "expected_executable": str(expected_executable) if expected_executable else None,
         "expected_prefix": str(expected_prefix) if expected_prefix else None,
         "project_root": str(project_root) if project_root else None,
+        "release_root": str(release_root) if release_root else None,
+        "playwright": {
+            "executable": (
+                str(playwright_executable) if playwright_executable else None
+            ),
+            "browsers_path": (
+                str(playwright_browsers_path) if playwright_browsers_path else None
+            ),
+        },
         "user_site_enabled": bool(site.ENABLE_USER_SITE),
         "user_site_path": str(user_site) if user_site else None,
         "user_site_on_sys_path": user_site_in_path,

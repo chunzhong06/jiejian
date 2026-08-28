@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import json
 import re
 import tomllib
 from pathlib import Path
@@ -158,6 +159,26 @@ def test_application_and_worker_containers_are_independent_complete_roots() -> N
     assert "_minimal" not in container_text
 
 
+def test_f0_flattened_workflow_modules_have_no_legacy_package_paths() -> None:
+    workflows = BACKEND / "workflows"
+    for path in (
+        workflows / "control.py",
+        workflows / "official_sample.py",
+        workflows / "permission_intents.py",
+    ):
+        assert path.is_file(), path
+    for path in (
+        workflows / "control",
+        workflows / "experience",
+        workflows / "permission_intents",
+    ):
+        assert not path.exists(), path
+    context_imports = _imports(workflows / "context.py")
+    assert "product.backend.workflows.control" in context_imports
+    assert "product.backend.workflows.official_sample" in context_imports
+    assert "product.backend.workflows.permission_intents" in context_imports
+
+
 def test_removed_execution_abstractions_have_no_definition_alias_or_export() -> None:
     old_names = {
         "ExecutionRouter",
@@ -205,6 +226,32 @@ def test_worker_runner_and_recording_process_boundaries_are_explicit() -> None:
     assert (BACKEND / "infra" / "runtime" / "runner" / "__main__.py").is_file()
     assert (BACKEND / "infra" / "runtime" / "worker" / "process.py").is_file()
     assert (BACKEND / "infra" / "recording" / "process.py").is_file()
+
+
+def test_automated_l5_dependencies_and_controls_do_not_enter_product_runtime() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert "pywinauto==0.6.9" in project["dependency-groups"]["dev"]
+    assert not any("pywinauto" in item.casefold() for item in project["project"]["dependencies"])
+    for path in _python_files(ROOT / "product"):
+        assert not _forbidden_imports(path, ("pywinauto",)), path
+    factory = (BACKEND / "infra" / "runtime" / "jobs" / "factory.py").read_text(encoding="utf-8")
+    assert "controlled_runner" not in factory
+    l5_source = "\n".join(
+        path.read_text(encoding="utf-8-sig")
+        for path in sorted((ROOT / "scripts" / "dev").glob("sample_test*"))
+    )
+    for forbidden in (
+        "--remote-debugging-port",
+        "JIEJIAN_SAMPLE_TEST",
+        "JIEJIAN_L5_RUNNER",
+        "--controlled-runner",
+        "--test-browser",
+        "SetForegroundWindow",
+        "SendInput",
+        "keybd_event",
+        "click_input",
+    ):
+        assert forbidden not in l5_source
 
 
 def test_product_names_do_not_encode_development_generations() -> None:
@@ -266,17 +313,30 @@ def test_no_compatibility_import_mechanisms_or_old_python_root() -> None:
 def test_samples_are_one_way_test_data_not_product_dependencies() -> None:
     samples = ROOT / "samples"
     sample_web = samples / "web"
+    collaboration = sample_web / "collaboration_space"
+    source = collaboration / "source"
     assert not (samples / "http").exists()
-    assert (sample_web / "target" / "server.py").is_file()
-    assert (sample_web / "launch" / "gui.ps1").is_file()
-    assert (sample_web / "launch" / "cli.ps1").is_file()
-    for variant in ("fixed", "vulnerable", "inconclusive"):
-        assert {path.name for path in (sample_web / variant).iterdir()} == {
-            "contract.json",
-            "profile.json",
-            "scenario.json",
-            "truth.json",
-        }
+    assert (collaboration / "sample.json").is_file()
+    assert (source / "openapi.json").is_file()
+    assert {path.name for path in source.iterdir() if path.is_file()} == {
+        "server.py",
+        "page.py",
+        "storage.py",
+        "background.py",
+        "openapi.json",
+    }
+    assert not (source / "collaboration_space").exists()
+    assert not (sample_web / "target").exists()
+    assert not (sample_web / "launch").exists()
+    assert not (sample_web / "openapi.json").exists()
+    assert not any((sample_web / variant).exists() for variant in ("fixed", "vulnerable", "inconclusive"))
+    legacy_fixture_dir = ROOT / "tests" / "fixtures" / "execution" / ("legacy_" + "authorization_web")
+    assert not legacy_fixture_dir.exists()
+    assert not any(
+        path.name == "truth" + ".json"
+        for path in (ROOT / "tests" / "fixtures").rglob("*")
+        if path.is_file()
+    )
     for path in _python_files(ROOT / "product"):
         assert not any(item == "samples" or item.startswith("samples.") for item in _imports(path)), path
     for path in _python_files(samples):
@@ -320,10 +380,20 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
     wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
     assert wheel["only-include"] == ["product/backend", "product/protocols"]
     assert "var/runtime/frontend" not in wheel["force-include"]
-    assert project["tool"]["hatch"]["build"]["hooks"]["custom"]["path"] == "scripts/hatch_build.py"
+    hook_path = project["tool"]["hatch"]["build"]["hooks"]["custom"]["path"]
+    assert hook_path == "scripts/build/hatch_build.py"
+    assert (ROOT / hook_path).is_file()
+    assert not (ROOT / "scripts" / "hatch_build.py").exists()
     assert "product/frontend/src" not in str(wheel)
     assert project["project"]["scripts"]["jiejian"] == "product.backend.cli:main"
-    assert project["project"]["version"] == __version__
+    assert project["project"]["dynamic"] == ["version"]
+    assert "version" not in project["project"]
+    assert project["tool"]["hatch"]["version"]["path"] == "product/backend/__init__.py"
+    frontend_manifest = json.loads(
+        (frontend / "package.json").read_text(encoding="utf-8")
+    )
+    assert "version" not in frontend_manifest
+    assert __version__ == "1.0.0"
 
 
 def test_frontend_source_tree_contains_no_generated_install_or_build_artifacts() -> None:
