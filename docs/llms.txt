@@ -23,6 +23,11 @@
 → docs/02_开发指南/任务/修改权限判断.md
 → docs/01_系统地图/权限验证与结果.md
 
+权限血缘、Breakpoint、权限断裂定位与诊断展示
+→ docs/02_开发指南/任务/修改权限断裂诊断.md
+→ docs/01_系统地图/权限验证与结果.md
+→ docs/01_系统地图/执行与观察.md
+
 Worker、Runner、Job、子进程
 → docs/02_开发指南/任务/修改Worker与Runner.md
 → docs/02_开发指南/模块/runtime.md

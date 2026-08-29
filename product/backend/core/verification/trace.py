@@ -41,6 +41,45 @@ class TraceAuthorizationDecision(StrEnum):
     DENY = "DENY"
 
 
+class TraceEventKind(StrEnum):
+    ENTRY = "ENTRY"
+    IDENTITY = "IDENTITY"
+    AUTHORIZATION = "AUTHORIZATION"
+    PERSISTENT_EFFECT = "PERSISTENT_EFFECT"
+    MESSAGE = "MESSAGE"
+    DELEGATION = "DELEGATION"
+    FINAL_EFFECT = "FINAL_EFFECT"
+    RECOVERY = "RECOVERY"
+
+
+# 权限范围只保存可机械比较的公开 ID；秘密、令牌正文与通用 OAuth scope 不进入 Trace。
+class TraceAuthorityScope(_TraceModel):
+    allowed_action_ids: tuple[str, ...] = Field(default=(), max_length=64)
+    allowed_resource_ids: tuple[str, ...] = Field(default=(), max_length=64)
+    origin_authorization_event_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
+    delegated_from_event_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> TraceAuthorityScope:
+        if len(set(self.allowed_action_ids)) != len(self.allowed_action_ids):
+            raise ValueError("trace authority action IDs must be unique")
+        if len(set(self.allowed_resource_ids)) != len(self.allowed_resource_ids):
+            raise ValueError("trace authority resource IDs must be unique")
+        for value in (
+            *self.allowed_action_ids,
+            *self.allowed_resource_ids,
+            self.origin_authorization_event_id,
+            self.delegated_from_event_id,
+        ):
+            if value is not None and (
+                re.fullmatch(_PUBLIC_ID, value) is None or _INLINE_SECRET.search(value)
+            ):
+                raise ValueError("invalid or secret trace authority scope")
+        object.__setattr__(self, "allowed_action_ids", tuple(sorted(self.allowed_action_ids)))
+        object.__setattr__(self, "allowed_resource_ids", tuple(sorted(self.allowed_resource_ids)))
+        return self
+
+
 # 单个节点只承载有界事实引用；原始正文、秘密和安全结论都不进入该模型。
 class TraceEvent(_TraceModel):
     event_id: str = Field(pattern=_PUBLIC_ID)
@@ -48,12 +87,12 @@ class TraceEvent(_TraceModel):
     case_id: str = Field(pattern=_PUBLIC_ID)
     action_id: str = Field(pattern=_PUBLIC_ID)
     resource_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
-    kind: str = Field(pattern=_SEMANTIC_KEY)
+    kind: TraceEventKind
     semantic_key: str = Field(pattern=_SEMANTIC_KEY)
     subject_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
     actor_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
     credential_source: str | None = Field(default=None, pattern=_PUBLIC_ID)
-    authority_scope: tuple[str, ...] = Field(default=(), max_length=32)
+    authority_scope: TraceAuthorityScope = Field(default_factory=TraceAuthorityScope)
     authorization_decision: TraceAuthorizationDecision | None = None
     effect_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
     source_component: str = Field(pattern=_PUBLIC_ID)
@@ -70,8 +109,6 @@ class TraceEvent(_TraceModel):
             raise ValueError("trace event parent references must be unique")
         if len(set(self.resource_ids)) != len(self.resource_ids):
             raise ValueError("trace event resource IDs must be unique")
-        if len(set(self.authority_scope)) != len(self.authority_scope):
-            raise ValueError("trace event authority scope must be unique")
         if len(set(self.evidence_refs)) != len(self.evidence_refs):
             raise ValueError("trace event evidence refs must be unique")
         for value in (
@@ -85,7 +122,10 @@ class TraceEvent(_TraceModel):
             self.subject_id,
             self.actor_id,
             self.credential_source,
-            *self.authority_scope,
+            *self.authority_scope.allowed_action_ids,
+            *self.authority_scope.allowed_resource_ids,
+            self.authority_scope.origin_authorization_event_id,
+            self.authority_scope.delegated_from_event_id,
             self.effect_id,
             self.source_component,
             self.source_location,
@@ -95,7 +135,6 @@ class TraceEvent(_TraceModel):
                 raise ValueError("secret material must not enter a trace event")
         object.__setattr__(self, "parent_event_ids", tuple(sorted(self.parent_event_ids)))
         object.__setattr__(self, "resource_ids", tuple(sorted(self.resource_ids)))
-        object.__setattr__(self, "authority_scope", tuple(sorted(self.authority_scope)))
         object.__setattr__(self, "evidence_refs", tuple(sorted(self.evidence_refs)))
         return self
 
@@ -133,6 +172,12 @@ class ExecutionTrace(_TraceModel):
                 raise ValueError("trace event does not match trace case and action")
             if any(parent not in by_id for parent in event.parent_event_ids):
                 raise ValueError("trace event references a missing parent")
+            scope_references = (
+                event.authority_scope.origin_authorization_event_id,
+                event.authority_scope.delegated_from_event_id,
+            )
+            if any(reference is not None and reference not in by_id for reference in scope_references):
+                raise ValueError("trace authority scope references a missing event")
         ordered = _stable_topological_order(by_id)
         object.__setattr__(self, "events", ordered)
         return self
@@ -167,7 +212,9 @@ def _stable_topological_order(events: dict[str, TraceEvent]) -> tuple[TraceEvent
 
 __all__ = [
     "ExecutionTrace",
+    "TraceAuthorityScope",
     "TraceAuthorizationDecision",
     "TraceCorrelationKind",
     "TraceEvent",
+    "TraceEventKind",
 ]

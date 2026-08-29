@@ -20,9 +20,11 @@ def _observation(
     state: ObservedEffect,
     *,
     closed: bool = True,
+    effect_id: str = "document-mutated",
 ) -> ObservationFact:
     complete = state is not ObservedEffect.UNKNOWN
     return ObservationFact(
+        effect_id=effect_id,
         requirement_id=requirement_id,
         resource_id="document",
         effect=state,
@@ -101,7 +103,13 @@ def test_disclosure_fact_persists_only_digest_proof() -> None:
         resource_id="document",
         required_requirement_ids=("http_response",),
         corroborating_requirement_ids=(),
-        observations=(_observation("http_response", ObservedEffect.CONFIRMED),),
+        observations=(
+            _observation(
+                "http_response",
+                ObservedEffect.CONFIRMED,
+                effect_id="document-disclosed",
+            ),
+        ),
         baseline_integrity=True,
         disclosure_proof=proof,
     )

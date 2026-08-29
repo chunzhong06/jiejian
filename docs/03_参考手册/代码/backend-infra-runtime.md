@@ -223,7 +223,7 @@
 ### `product/backend/infra/runtime/runner/executor.py`
 - `class RunnerExecutor`
 - `execute_runner_attempt(input_path, staging_dir, environ, finished_at_us) -> int`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `pathlib`, `product.backend.core.lifecycle`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.evaluation`, `product.backend.infra.execution.port`, `product.backend.infra.observers.coordinator`, `product.backend.infra.runtime.runner.case_orchestrator`, `product.protocols`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `pathlib`, `product.backend.core.lifecycle`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.evaluation`, `product.backend.infra.execution.port`, `product.backend.infra.observers.coordinator`, `product.backend.infra.observers.effect_projector`, `product.backend.infra.runtime.runner.case_orchestrator`, `product.protocols`
 
 ### `product/backend/infra/runtime/runner/progress.py`
 - `PROGRESS_MAX_EVENTS`

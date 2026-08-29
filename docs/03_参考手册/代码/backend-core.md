@@ -218,6 +218,15 @@
 - `compare_behavior_snapshots(before, after) -> BehaviorDifferentialResult`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.lifecycle`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.protocols.runner`, `pydantic`, `typing`
 
+### `product/backend/core/verification/breakpoints.py`
+- `_PUBLIC_ID`
+- `_REASON_CODE`
+- `class BreakpointType`
+- `class BreakpointPrecision`
+- `class BreakpointResult`
+- `class BreakpointLocator`
+主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.trace`, `pydantic`, `re`
+
 ### `product/backend/core/verification/collision.py`
 - `class CollisionModel`
 - `class CollisionAnomaly`
@@ -368,6 +377,8 @@
 - `_INLINE_SECRET`
 - `class TraceCorrelationKind`
 - `class TraceAuthorizationDecision`
+- `class TraceEventKind`
+- `class TraceAuthorityScope`
 - `class TraceEvent`
 - `class ExecutionTrace`
 主要 import / dot-source：`__future__`, `enum`, `heapq`, `pydantic`, `re`, `typing`

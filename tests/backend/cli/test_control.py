@@ -71,7 +71,7 @@ def test_status_machine_output_is_one_stable_stdout_object(monkeypatch) -> None:
     assert payload["data"]["next_action"]["action"] == "CONNECT_APPLICATION"
 
 
-def test_result_machine_output_keeps_presentation_evidence_sources(monkeypatch) -> None:
+def test_result_machine_output_keeps_shared_presentation_diagnosis(monkeypatch) -> None:
     sources = [
         {"observer_type": "DATABASE", "label": "数据库状态", "role": "KEY", "status": "FOUND", "evidence_refs": ["evidence-db"]},
         {"observer_type": "AUDIT_LOG", "label": "审计日志", "role": "SUPPORTING", "status": "UNAVAILABLE", "evidence_refs": []},
@@ -80,7 +80,21 @@ def test_result_machine_output_keeps_presentation_evidence_sources(monkeypatch) 
     class Presentation:
         def model_dump(self, *, mode: str):
             assert mode == "json"
-            return {"run_id": "run_demo", "verdict": "BLOCK", "issues": [{"evidence_sources": sources}]}
+            return {
+                "run_id": "run_demo",
+                "verdict": "BLOCK",
+                "issues": [
+                    {
+                        "evidence_sources": sources,
+                        "diagnosis": {
+                            "breakpoint_type": "AUTHORIZATION_LATE",
+                            "precision": "EXACT",
+                            "minimal_witness": [],
+                            "confirmed_impacts": [],
+                        },
+                    }
+                ],
+            }
 
     application = SimpleNamespace(
         product_results=SimpleNamespace(presentation=lambda **_kwargs: Presentation())
@@ -98,6 +112,8 @@ def test_result_machine_output_keeps_presentation_evidence_sources(monkeypatch) 
     payload = json.loads(result.stdout)
     assert payload["kind"] == "result"
     assert payload["data"]["issues"][0]["evidence_sources"] == sources
+    assert payload["data"]["issues"][0]["diagnosis"]["breakpoint_type"] == "AUTHORIZATION_LATE"
+    assert payload["data"]["issues"][0]["diagnosis"]["precision"] == "EXACT"
 
 
 def test_check_prepare_only_compiles_then_reads_preview(monkeypatch) -> None:

@@ -65,6 +65,22 @@ def test_result_presentation_uses_surface_and_real_effect_language(capsys) -> No
                 SimpleNamespace(role="KEY", status="FOUND", label="数据库状态"),
                 SimpleNamespace(role="SUPPORTING", status="UNAVAILABLE", label="审计日志"),
             ),
+            diagnosis=SimpleNamespace(
+                breakpoint_type=SimpleNamespace(value="AUTHORIZATION_LATE"),
+                minimal_witness=(
+                    SimpleNamespace(kind="PERMISSION_REQUIREMENT", label="权限要求", detail="成员不应导出"),
+                    SimpleNamespace(kind="ACTUAL_IDENTITY", label="实际身份", detail="成员账号"),
+                    SimpleNamespace(kind="AUTHORIZATION_DECISION", label="权限决定", detail="拒绝"),
+                    SimpleNamespace(kind="BREAKPOINT", label="首个可证明断裂", detail="权限决定发生过晚"),
+                    SimpleNamespace(kind="CONFIRMED_EFFECT", label="已确认最终后果", detail="归档已经生成"),
+                ),
+                confirmed_impacts=(
+                    SimpleNamespace(
+                        kind=SimpleNamespace(value="FINAL_EFFECT"),
+                        summary="已确认：最终后果",
+                    ),
+                ),
+            ),
         ),),
         limitations=(),
         run_id="run_demo",
@@ -80,6 +96,10 @@ def test_result_presentation_uses_surface_and_real_effect_language(capsys) -> No
     assert "权限限制没有真正阻止修改" in output
     assert "关键来源：数据库状态：已取得" in output
     assert "辅助来源：审计日志：当前不可用" in output
+    assert "权限断裂诊断" in output
+    assert "首个可证明断裂：权限决定发生过晚" in output
+    assert "已确认影响" in output
+    assert "FINAL_EFFECT：已确认：最终后果" in output
     assert "run_demo" not in output
 
 

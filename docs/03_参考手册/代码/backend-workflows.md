@@ -372,6 +372,9 @@
 ### `product/backend/workflows/results/presentation.py`
 - `class PresentedCaseVerdict`
 - `class ResultEvidenceSource`
+- `class ResultWitnessItem`
+- `class ResultConfirmedImpact`
+- `class ResultDiagnosis`
 - `class ResultPresentationIssue`
 - `class ResultPresentation`
 - `class ResultPresentationBuilder`
@@ -381,7 +384,10 @@
 - `_RESOURCE_LABELS`
 - `_RELATION_LABELS`
 - `_SOURCE_PRESENTATION`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.backend.workflows.results.trace`, `product.protocols.observer`, `pydantic`, `typing`
+- `_WITNESS_LABELS`
+- `_BREAKPOINT_LABELS`
+- `_TRACE_KIND_LABELS`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.backend.workflows.results.trace`, `product.protocols.observer`, `pydantic`, `typing`
 
 ### `product/backend/workflows/results/published.py`
 - `class PublishedRunView`
@@ -398,9 +404,6 @@
 主要 import / dot-source：`__future__`, `dataclasses`, `pathlib`, `product.backend.infra.storage`, `product.backend.workflows.results.finalizer`, `product.backend.workflows.results.findings`, `product.backend.workflows.results.gating`, `product.backend.workflows.results.history`, `product.backend.workflows.results.presentation`, `product.backend.workflows.results.published`, `product.backend.workflows.results.reporting`, `typing`
 
 ### `product/backend/workflows/results/trace.py`
-- `_SEMANTIC_KEYS`
-- `_FIXED_DENY_KEYS`
-- `_DOWNSTREAM_KEYS`
 - `build_execution_traces(snapshot, evidence_items) -> tuple[ExecutionTrace, ...]`
 - `build_execution_trace(snapshot, evidence) -> ExecutionTrace`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.verification.trace`, `product.protocols.observer`, `pydantic`, `typing`

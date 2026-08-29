@@ -17,11 +17,12 @@ from pathlib import Path
 
 from product.backend.core.lifecycle import CaseVerdict
 from product.backend.core.verification.differential import PermissionTwin, TwinExecutionRole
-from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, ObservedEffect, TemporalClosure, aggregate_security_effect
+from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, ObservedEffect, TemporalClosure
 from product.backend.core.verification.permissions.evaluation import CaseDecisionInput, evaluate_permission_case
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.infra.execution.port import TargetBaselineResult, TargetRuntime, TargetRuntimeContext, TargetRuntimeFactory
 from product.backend.infra.observers.coordinator import ObserverCoordinator, default_observer_registry
+from product.backend.infra.observers.effect_projector import EffectProjector
 from product.backend.infra.runtime.runner.case_orchestrator import CaseOrchestrator, CaseResult
 from product.protocols import ObservationEnvelope, ObserverOutcome, ObserverOutcomeStatus, RunnerInput
 
@@ -130,6 +131,7 @@ class RunnerExecutor:
         self.bindings = {item.requirement_id: item for item in self.snapshot.observer_bindings}
         self.specs = {item.observer_id: item for item in self.snapshot.observers}
         self.observers = ObserverCoordinator(registry=default_observer_registry(), specs=self.specs, bindings=self.bindings, environ=environ, attempt_dir=staging.parent, clock=clock, cancellation_requested=self.cancellation_requested)
+        self.effect_projector = EffectProjector(observer_bindings=self.bindings)
         self.twin_baselines: dict[str, tuple[str, ...]] = {}
 
     def close(self) -> None:
@@ -169,13 +171,12 @@ class RunnerExecutor:
                 outcomes,
                 requirements_to_run=requirements_to_run,
             )
-            facts = self.observers.project_facts(
+            facts, effects = self._security_effects(
+                active_session,
                 case,
+                action,
                 envelopes,
-                requirements_to_run=requirements_to_run,
-                required_requirements=case.required_observations,
             )
-            effects = self._security_effects(active_session, case, action, facts, envelopes)
             verdict, reasons = evaluate_permission_case(CaseDecisionInput(case=case, action=action, execution=execution, effects=effects, twin_role=twin_role, allow_control_valid=True if twin_role is TwinExecutionRole.ALLOW_CONTROL else allow_control_valid, baseline_integrity=True))
             verdict, reasons = _apply_required_observer_guard(
                 case,
@@ -197,13 +198,13 @@ class RunnerExecutor:
         """基线不可比时在 TARGET 前形成 INCONCLUSIVE，并仍由编排器执行 cleanup。"""
 
         reason = baseline.reason_codes[0] if baseline.reason_codes else "BASELINE_INTEGRITY_INVALID"
-        observation_facts = self.observers.project_facts(
+        observation_facts, effects = self._security_effects(
+            session,
             case,
+            action,
             envelopes,
-            requirements_to_run=requirements_to_run,
-            required_requirements=case.required_observations,
+            baseline_integrity=False,
         )
-        effects = self._security_effects(session, case, action, observation_facts, envelopes, baseline_integrity=False)
         execution = ExecutionFact(
             case_id=case.case_id,
             action_id=case.action_id,
@@ -244,15 +245,26 @@ class RunnerExecutor:
             stage_trace=("PREPARE", "BASELINE", "VERIFICATION", "CLEANUP"),
         )
 
-    def _security_effects(self, session, case, action, observations, envelopes, *, baseline_integrity: bool = True):
-        facts = []
+    def _security_effects(self, session, case, action, envelopes, *, baseline_integrity: bool = True):
+        observations = []
+        effects = []
         for effect_id in action.effect_ids:
             effect = self.effects[effect_id]
             binding = self.effect_bindings[effect_id]
             for resource_id in case.resource_ids:
                 proof = session.build_disclosure_proof(effect, resource_id, envelopes)
-                facts.append(aggregate_security_effect(effect, resource_id=resource_id, required_requirement_ids=binding.required_channels, corroborating_requirement_ids=binding.corroborating_channels, observations=observations, baseline_integrity=baseline_integrity, disclosure_proof=proof))
-        return tuple(facts)
+                projection = self.effect_projector.project(
+                    case_id=case.case_id,
+                    resource_id=resource_id,
+                    effect=effect,
+                    effect_binding=binding,
+                    envelopes=envelopes,
+                    baseline_integrity=baseline_integrity,
+                    disclosure_proof=proof,
+                )
+                observations.extend(projection.observation_facts)
+                effects.append(projection.security_effect_fact)
+        return tuple(observations), tuple(effects)
 
 
 def execute_runner_attempt(input_path: Path, staging_dir: Path, *, environ: Mapping[str, str] | None = None, finished_at_us: Callable[[], int] | None = None) -> int:

@@ -318,7 +318,9 @@ class CollaborationStorage:
         subject_id: str | None = None,
         actor_id: str | None = None,
         credential_source: str | None = None,
-        authority_scope: str | None = None,
+        effect_id: str | None = None,
+        origin_authorization_event_id: str | None = None,
+        delegated_from_event_id: str | None = None,
         authorization_decision: str | None = None,
         source_component: str | None = None,
         source_location: str | None = None,
@@ -351,7 +353,9 @@ class CollaborationStorage:
                 ("subject_id", subject_id),
                 ("actor_id", actor_id),
                 ("credential_source", credential_source),
-                ("authority_scope", authority_scope),
+                ("effect_id", effect_id),
+                ("origin_authorization_event_id", origin_authorization_event_id),
+                ("delegated_from_event_id", delegated_from_event_id),
                 ("authorization_decision", authorization_decision),
             ):
                 if value is not None:

@@ -6,7 +6,7 @@
 #   GateResult 组成不可变 Report；report.json 是唯一语义真源。
 #
 # 职责
-#   约束 Base/Gate 判别联合｜计算语义输入与稳定身份｜约束 package manifest。
+#   约束 Base/Gate 判别联合与有界断裂诊断｜计算语义输入与稳定身份｜约束 package manifest。
 #
 # 边界
 #   协议只消费已验证事实，不执行 Target、不写 Finding、不决定 Verdict。
@@ -24,8 +24,9 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from product.backend.core.redaction import redact
 
-REPORT_SCHEMA_VERSION = "1"
-REPORT_RULESET_VERSION = "report-local-2026.08.18"
+REPORT_SCHEMA_VERSION = "2"
+REPORT_PACKAGE_SCHEMA_VERSION = "1"
+REPORT_RULESET_VERSION = "report-local-2026.08.29"
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/@+\-]{0,255}$")
 _SHA256 = r"^[0-9a-f]{64}$"
 
@@ -167,7 +168,7 @@ class ReportVersions(ReportModel):
     evidence_schema_version: Literal["1"]
     observer_schema_version: Literal["1"]
     artifact_schema_version: Literal["1"]
-    report_schema_version: Literal["1"] = REPORT_SCHEMA_VERSION
+    report_schema_version: Literal["2"] = REPORT_SCHEMA_VERSION
     ruleset_versions: tuple[str, ...] = Field(default=(), max_length=16)
 
     @model_validator(mode="after")
@@ -197,6 +198,82 @@ class ReportGate(ReportModel):
     evaluated_at_us: int = Field(ge=0)
 
 
+class ReportWitnessItem(ReportModel):
+    kind: Literal[
+        "PERMISSION_REQUIREMENT",
+        "ACTUAL_IDENTITY",
+        "AUTHORIZATION_DECISION",
+        "BREAKPOINT",
+        "CONFIRMED_EFFECT",
+    ]
+    label: str = Field(min_length=1, max_length=80)
+    detail: str = Field(min_length=1, max_length=240)
+    event_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$")
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=128)
+
+
+class ReportConfirmedImpact(ReportModel):
+    event_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$")
+    parent_event_ids: tuple[str, ...] = Field(default=(), max_length=16)
+    kind: Literal[
+        "ENTRY",
+        "IDENTITY",
+        "AUTHORIZATION",
+        "PERSISTENT_EFFECT",
+        "MESSAGE",
+        "DELEGATION",
+        "FINAL_EFFECT",
+        "RECOVERY",
+    ]
+    semantic_key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    effect_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$")
+    summary: str = Field(min_length=1, max_length=240)
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=128)
+
+
+class ReportDiagnosis(ReportModel):
+    case_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$")
+    action_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$")
+    breakpoint_type: Literal[
+        "AUTHORIZATION_MISSING",
+        "AUTHORIZATION_LATE",
+        "AUTHORIZATION_BYPASS",
+        "IDENTITY_SUBSTITUTION",
+        "AUTHORITY_EXPANSION",
+        "COMPENSATION_MASKING",
+    ]
+    precision: Literal["EXACT", "RANGE", "VIOLATION_ONLY"]
+    summary: str = Field(min_length=1, max_length=320)
+    minimal_witness: tuple[ReportWitnessItem, ...] = Field(min_length=5, max_length=5)
+    confirmed_impacts: tuple[ReportConfirmedImpact, ...] = Field(default=(), max_length=512)
+    evidence_refs: tuple[str, ...] = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_diagnosis(self) -> ReportDiagnosis:
+        expected = (
+            "PERMISSION_REQUIREMENT",
+            "ACTUAL_IDENTITY",
+            "AUTHORIZATION_DECISION",
+            "BREAKPOINT",
+            "CONFIRMED_EFFECT",
+        )
+        if tuple(item.kind for item in self.minimal_witness) != expected:
+            raise ValueError("report minimal witness order is fixed")
+        if len({item.event_id for item in self.confirmed_impacts}) != len(self.confirmed_impacts):
+            raise ValueError("report confirmed impacts must have unique event IDs")
+        evidence_refs = (
+            *self.evidence_refs,
+            *(value for item in self.minimal_witness for value in item.evidence_refs),
+            *(value for item in self.confirmed_impacts for value in item.evidence_refs),
+        )
+        if any(
+            re.fullmatch(r"^ev_[0-9a-f]{20}$", value) is None
+            for value in evidence_refs
+        ):
+            raise ValueError("report diagnosis evidence reference is invalid")
+        return self
+
+
 class ReportPresentationIssue(ReportModel):
     """冻结单个权限问题的人类可读表达，不承载新的安全判断。"""
 
@@ -213,6 +290,7 @@ class ReportPresentationIssue(ReportModel):
     explanation: str = Field(min_length=1, max_length=480)
     severity: Literal["unknown", "low", "medium", "high", "critical"]
     evidence_refs: tuple[str, ...] = Field(default=(), max_length=8192)
+    diagnosis: ReportDiagnosis | None = None
     verdict: Literal["SAFE", "VULNERABLE", "INCONCLUSIVE"]
     occurrence_status: str | None = Field(
         default=None,
@@ -263,7 +341,7 @@ class ReportPresentation(ReportModel):
 
 
 class BaseRunReport(ReportModel):
-    schema_version: Literal["1"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["2"] = REPORT_SCHEMA_VERSION
     report_type: Literal["BASE"]
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
@@ -300,7 +378,7 @@ class BaseRunReport(ReportModel):
 
 
 class GateRunReport(ReportModel):
-    schema_version: Literal["1"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["2"] = REPORT_SCHEMA_VERSION
     report_type: Literal["GATE"]
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
@@ -356,7 +434,7 @@ class ReportPackageFile(ReportModel):
 
 
 class ReportPackageManifest(ReportModel):
-    schema_version: Literal["1"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["1"] = REPORT_PACKAGE_SCHEMA_VERSION
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
     report_type: Literal["BASE", "GATE"]
@@ -437,7 +515,7 @@ def parse_report_package_manifest(raw: bytes | str) -> ReportPackageManifest:
         object_pairs_hook=_reject_duplicate_keys,
         parse_constant=_reject_nonfinite,
     )
-    if not isinstance(value, dict) or value.get("schema_version") != REPORT_SCHEMA_VERSION:
+    if not isinstance(value, dict) or value.get("schema_version") != REPORT_PACKAGE_SCHEMA_VERSION:
         raise ValueError("report manifest root version is invalid")
     return ReportPackageManifest.model_validate_json(
         json.dumps(value, ensure_ascii=False), strict=True

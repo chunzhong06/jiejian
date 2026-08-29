@@ -174,6 +174,18 @@ def _resolver() -> AssistantSurfaceResolver:
         conclusion="发现权限问题",
         verdict=PresentedCaseVerdict.VULNERABLE,
         evidence_sources=(SimpleNamespace(role="KEY", status="FOUND", label="后台任务"),),
+        diagnosis=SimpleNamespace(
+            breakpoint_type=SimpleNamespace(value="AUTHORIZATION_LATE"),
+            precision=SimpleNamespace(value="EXACT"),
+            minimal_witness=(
+                SimpleNamespace(label="权限要求", detail="成员不应导出"),
+                SimpleNamespace(label="实际身份", detail="成员账号"),
+                SimpleNamespace(label="权限决定", detail="拒绝"),
+                SimpleNamespace(label="首个可证明断裂", detail="权限决定发生过晚"),
+                SimpleNamespace(label="已确认最终后果", detail="归档已经生成"),
+            ),
+            confirmed_impacts=(SimpleNamespace(summary="已确认：最终后果"),),
+        ),
     )
     presentation = SimpleNamespace(
         run_id="run_demo",
@@ -234,3 +246,15 @@ def test_resolver_builds_all_nine_surfaces_with_stable_fingerprints() -> None:
         for item in resolved
         for entity in item.surface_input.entities
     )
+    result_surface = next(
+        item
+        for item in resolved
+        if item.surface_input.template_id is AssistantTemplateId.RESULT_EXPLANATION
+    )
+    result_facts = {
+        fact.field: fact.value for fact in result_surface.surface_input.entities[0].facts
+    }
+    assert result_facts["breakpoint_type"] == "AUTHORIZATION_LATE"
+    assert result_facts["precision"] == "EXACT"
+    assert result_facts["minimal_witness"][3] == "首个可证明断裂:权限决定发生过晚"
+    assert result_facts["confirmed_impacts"] == ("已确认：最终后果",)

@@ -172,8 +172,7 @@ class ReportBuilder:
         if self._presentation is None:
             raise JiejianError(ErrorCode.REPORT_INPUT_INVALID, "报告展示投影未装配")
         presentation = self._presentation.build(run_id).model_dump(mode="json")
-        # Report 继续冻结既有机器协议字段；结果页新增的人类解释字段不升级为
-        # report.json 的新事实，也不触发公共 Schema 变化。
+        # diagnosis 是 v2 机器事实；身份标签与 Evidence 来源角色仍只属于即时结果页。
         report_fields = set(ReportPresentation.model_fields)
         issue_fields = set(ReportPresentationIssue.model_fields)
         presentation = {

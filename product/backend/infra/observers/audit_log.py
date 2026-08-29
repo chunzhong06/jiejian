@@ -58,7 +58,9 @@ _TRACE_AUDIT_FIELDS = frozenset(
         "subject_id",
         "actor_id",
         "credential_source",
-        "authority_scope",
+        "effect_id",
+        "origin_authorization_event_id",
+        "delegated_from_event_id",
         "authorization_decision",
         "source_component",
         "source_location",
@@ -71,6 +73,18 @@ _TRACE_AUDIT_REQUIRED_FIELDS = frozenset(
 _TRACE_AUDIT_STRING_FIELDS = _TRACE_AUDIT_FIELDS - {"recorded_at_us"}
 _TRACE_AUDIT_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$")
 _TRACE_SEMANTIC_KEY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_TRACE_KINDS = frozenset(
+    {
+        "ENTRY",
+        "IDENTITY",
+        "AUTHORIZATION",
+        "PERSISTENT_EFFECT",
+        "MESSAGE",
+        "DELEGATION",
+        "FINAL_EFFECT",
+        "RECOVERY",
+    }
+)
 _TRACE_INLINE_SECRET = re.compile(
     r"(?:\bBearer\s+\S+|\b(?:authorization|cookie|credential|password|passwd|"
     r"secret|token|api[_-]?key)\s*[:=]\s*\S+)",
@@ -330,6 +344,8 @@ def _trace_fields_are_safe(record: Mapping[str, Any]) -> bool:
             return False
     semantic_key = record["semantic_key"]
     if not _TRACE_SEMANTIC_KEY.fullmatch(semantic_key) or semantic_key != record["event_type"]:
+        return False
+    if record["kind"] not in _TRACE_KINDS:
         return False
     decision = record.get("authorization_decision")
     if decision is not None and decision not in {"ALLOW", "DENY"}:

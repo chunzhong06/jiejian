@@ -12,8 +12,12 @@ from product.backend.core.verification.facts import (
     SecurityEffectFact,
     TemporalClosure,
 )
-from product.backend.core.verification.permissions import SecurityEffectKind
+from product.backend.core.verification.permissions import (
+    SecurityEffectDefinition,
+    SecurityEffectKind,
+)
 from product.backend.infra.observers.coordinator import ObserverCoordinator
+from product.backend.infra.observers.effect_projector import EffectProjector
 from product.backend.infra.observers.registry import ObserverRegistry
 from product.backend.infra.runtime.runner.executor import (
     _apply_required_observer_guard,
@@ -54,7 +58,7 @@ def _case_and_binding(
     binding = document.project_snapshot.observer_bindings[0].model_copy(
         update={"observer_type": observer_type, "phases": phases}
     )
-    return case, binding
+    return document, case, binding
 
 
 def _coordinator(binding) -> ObserverCoordinator:
@@ -114,14 +118,60 @@ def _project(
     observer_type: ObserverType,
     phases: tuple[ObservationPhase, ...],
     payloads: tuple[tuple[ObservationPhase, dict[str, object]], ...],
+    *,
+    effect_kind: SecurityEffectKind = SecurityEffectKind.STATE_MUTATION,
 ):
-    case, binding = _case_and_binding(observer_type, phases)
+    document, case, binding = _case_and_binding(observer_type, phases)
     envelopes = tuple(
         _envelope(case, observer_type, phase, payload)
         for phase, payload in payloads
     )
-    fact = _coordinator(binding).project_facts(case, envelopes)[0]
-    return fact
+    effect = SecurityEffectDefinition(
+        effect_id="document-mutated",
+        kind=effect_kind,
+        resource_type="document",
+    )
+    projection = EffectProjector(
+        observer_bindings={binding.requirement_id: binding}
+    ).project(
+        case_id=case.case_id,
+        resource_id=case.resource_ids[0],
+        effect=effect,
+        effect_binding=document.project_snapshot.effect_bindings[0],
+        envelopes=envelopes,
+        baseline_integrity=True,
+    )
+    return projection.observation_facts[0]
+
+
+def _target_payload(
+    observer_type: ObserverType,
+    *,
+    state: str,
+    value: str,
+    unrelated: object | None = None,
+) -> dict[str, object]:
+    resource = {
+        "resource_id": "document",
+        "workflow_state": state,
+        "value": value,
+    }
+    if unrelated is not None:
+        resource["updated_at"] = unrelated
+    if observer_type is ObserverType.OWNER_API:
+        return resource
+    if observer_type is ObserverType.READ_ONLY_SQLITE:
+        return {"row_count": 1, "rows": [resource], "truncated": False}
+    if observer_type is ObserverType.AZURE_BLOB_OBJECT:
+        objects = [] if state == "ABSENT" else [
+            {
+                "name": value,
+                "metadata": {"resource_id": "document"},
+                "unrelated": unrelated,
+            }
+        ]
+        return {"objects": objects, "scanned_count": len(objects), "window_complete": True}
+    raise AssertionError("unsupported target observer")
 
 
 @pytest.mark.parametrize(
@@ -132,7 +182,7 @@ def _project(
         ObserverType.AZURE_BLOB_OBJECT,
     ),
 )
-def test_state_observers_compare_closed_before_and_after(
+def test_state_mutation_compares_only_target_business_projection(
     observer_type: ObserverType,
 ) -> None:
     phases = (ObservationPhase.BEFORE, ObservationPhase.AFTER)
@@ -140,22 +190,44 @@ def test_state_observers_compare_closed_before_and_after(
         observer_type,
         phases,
         (
-            (ObservationPhase.BEFORE, {"value": "old"}),
-            (ObservationPhase.AFTER, {"value": "new"}),
+            (ObservationPhase.BEFORE, _target_payload(observer_type, state="READY", value="old")),
+            (ObservationPhase.AFTER, _target_payload(observer_type, state="READY", value="new")),
         ),
     )
     unchanged = _project(
         observer_type,
         phases,
         (
-            (ObservationPhase.BEFORE, {"value": "same"}),
-            (ObservationPhase.AFTER, {"value": "same"}),
+            (ObservationPhase.BEFORE, _target_payload(observer_type, state="READY", value="same", unrelated=1)),
+            (ObservationPhase.AFTER, _target_payload(observer_type, state="READY", value="same", unrelated=2)),
         ),
     )
 
     assert changed.effect is ObservedEffect.CONFIRMED
     assert unchanged.effect is ObservedEffect.ABSENT
     assert changed.temporal_closure is unchanged.temporal_closure is TemporalClosure.CLOSED
+
+
+@pytest.mark.parametrize(
+    "observer_type",
+    (
+        ObserverType.OWNER_API,
+        ObserverType.READ_ONLY_SQLITE,
+        ObserverType.AZURE_BLOB_OBJECT,
+    ),
+)
+def test_object_creation_requires_real_target_object(observer_type: ObserverType) -> None:
+    fact = _project(
+        observer_type,
+        (ObservationPhase.BEFORE, ObservationPhase.AFTER),
+        (
+            (ObservationPhase.BEFORE, _target_payload(observer_type, state="ABSENT", value="")),
+            (ObservationPhase.AFTER, _target_payload(observer_type, state="READY", value="artifact.zip")),
+        ),
+        effect_kind=SecurityEffectKind.OBJECT_CREATION,
+    )
+
+    assert fact.effect is ObservedEffect.CONFIRMED
 
 
 def test_open_or_missing_state_observation_cannot_prove_absence() -> None:
@@ -168,12 +240,25 @@ def test_open_or_missing_state_observation_cannot_prove_absence() -> None:
         ObserverType.OWNER_API,
         phases,
         (
-            (ObservationPhase.BEFORE, {"value": "same"}),
-            (ObservationPhase.EVENTUAL, {"value": "same"}),
+            (ObservationPhase.BEFORE, _target_payload(ObserverType.OWNER_API, state="READY", value="same")),
+            (ObservationPhase.EVENTUAL, _target_payload(ObserverType.OWNER_API, state="READY", value="same")),
         ),
     )
-    case, binding = _case_and_binding(ObserverType.OWNER_API, phases)
-    missing_fact = _coordinator(binding).project_facts(case, ())[0]
+    _, case, binding = _case_and_binding(ObserverType.OWNER_API, phases)
+    missing_fact = EffectProjector(
+        observer_bindings={binding.requirement_id: binding}
+    ).project(
+        case_id=case.case_id,
+        resource_id=case.resource_ids[0],
+        effect=SecurityEffectDefinition(
+            effect_id="document-mutated",
+            kind=SecurityEffectKind.STATE_MUTATION,
+            resource_type="document",
+        ),
+        effect_binding=runner_input().project_snapshot.effect_bindings[0],
+        envelopes=(),
+        baseline_integrity=True,
+    ).observation_facts[0]
 
     assert open_fact.effect is ObservedEffect.UNKNOWN
     assert open_fact.temporal_closure is TemporalClosure.OPEN
@@ -181,7 +266,7 @@ def test_open_or_missing_state_observation_cannot_prove_absence() -> None:
     assert missing_fact.reason_codes == ("REQUIRED_OBSERVER_INCOMPLETE",)
 
 
-def test_audit_log_uses_side_effect_semantics_instead_of_state_hash() -> None:
+def test_audit_log_requires_explicit_effect_identity() -> None:
     phases = (ObservationPhase.BEFORE, ObservationPhase.AFTER)
     confirmed = _project(
         ObserverType.STRUCTURED_AUDIT_LOG,
@@ -190,9 +275,10 @@ def test_audit_log_uses_side_effect_semantics_instead_of_state_hash() -> None:
             (ObservationPhase.BEFORE, {"records": []}),
             (
                 ObservationPhase.AFTER,
-                {"records": [{"event_type": "SIDE_EFFECT", "effect": "APPLIED"}]},
+                {"records": [{"event_type": "SIDE_EFFECT", "effect": "APPLIED", "effect_id": "document-mutated"}]},
             ),
         ),
+        effect_kind=SecurityEffectKind.RESTRICTED_FUNCTION_INVOCATION,
     )
     absent = _project(
         ObserverType.STRUCTURED_AUDIT_LOG,
@@ -201,6 +287,7 @@ def test_audit_log_uses_side_effect_semantics_instead_of_state_hash() -> None:
             (ObservationPhase.BEFORE, {"records": [{"event_type": "REQUEST"}]}),
             (ObservationPhase.AFTER, {"records": [{"event_type": "REQUEST"}]}),
         ),
+        effect_kind=SecurityEffectKind.RESTRICTED_FUNCTION_INVOCATION,
     )
 
     assert confirmed.effect is ObservedEffect.CONFIRMED
@@ -219,6 +306,7 @@ def test_async_task_requires_interpretable_closed_terminal_state() -> None:
                 {"task_state": "SUCCESS", "final_result": {"effect": "APPLIED"}},
             ),
         ),
+        effect_kind=SecurityEffectKind.RESTRICTED_FUNCTION_INVOCATION,
     )
     absent = _project(
         ObserverType.ASYNC_TASK_STATUS,
@@ -227,6 +315,7 @@ def test_async_task_requires_interpretable_closed_terminal_state() -> None:
             (ObservationPhase.AFTER, {"task_state": "RUNNING"}),
             (ObservationPhase.EVENTUAL, {"task_state": "NOT_CREATED"}),
         ),
+        effect_kind=SecurityEffectKind.RESTRICTED_FUNCTION_INVOCATION,
     )
     unknown = _project(
         ObserverType.ASYNC_TASK_STATUS,
@@ -235,6 +324,7 @@ def test_async_task_requires_interpretable_closed_terminal_state() -> None:
             (ObservationPhase.AFTER, {"task_state": "RUNNING"}),
             (ObservationPhase.EVENTUAL, {"task_state": "FAILED"}),
         ),
+        effect_kind=SecurityEffectKind.RESTRICTED_FUNCTION_INVOCATION,
     )
 
     assert confirmed.effect is ObservedEffect.CONFIRMED
@@ -245,7 +335,7 @@ def test_async_task_requires_interpretable_closed_terminal_state() -> None:
 
 def test_eventual_only_async_observation_closes_when_terminal_envelope_is_complete() -> None:
     phases = (ObservationPhase.EVENTUAL,)
-    case, binding = _case_and_binding(ObserverType.ASYNC_TASK_STATUS, phases)
+    document, case, binding = _case_and_binding(ObserverType.ASYNC_TASK_STATUS, phases)
     envelope = _envelope(
         case,
         ObserverType.ASYNC_TASK_STATUS,
@@ -253,19 +343,33 @@ def test_eventual_only_async_observation_closes_when_terminal_envelope_is_comple
         {"task_state": "SUCCESS", "final_result": {"effect": "APPLIED"}},
     )
 
-    fact = _coordinator(binding).project_facts(case, (envelope,))[0]
+    fact = EffectProjector(observer_bindings={binding.requirement_id: binding}).project(
+        case_id=case.case_id,
+        resource_id=case.resource_ids[0],
+        effect=SecurityEffectDefinition(effect_id="document-mutated", kind=SecurityEffectKind.RESTRICTED_FUNCTION_INVOCATION, resource_type="document"),
+        effect_binding=document.project_snapshot.effect_bindings[0],
+        envelopes=(envelope,),
+        baseline_integrity=True,
+    ).observation_facts[0]
 
     assert fact.effect is ObservedEffect.CONFIRMED
     assert fact.temporal_closure is TemporalClosure.CLOSED
 
 
 def test_eventual_only_async_missing_envelope_stays_unknown() -> None:
-    case, binding = _case_and_binding(
+    document, case, binding = _case_and_binding(
         ObserverType.ASYNC_TASK_STATUS,
         (ObservationPhase.EVENTUAL,),
     )
 
-    fact = _coordinator(binding).project_facts(case, ())[0]
+    fact = EffectProjector(observer_bindings={binding.requirement_id: binding}).project(
+        case_id=case.case_id,
+        resource_id=case.resource_ids[0],
+        effect=SecurityEffectDefinition(effect_id="document-mutated", kind=SecurityEffectKind.RESTRICTED_FUNCTION_INVOCATION, resource_type="document"),
+        effect_binding=document.project_snapshot.effect_bindings[0],
+        envelopes=(),
+        baseline_integrity=True,
+    ).observation_facts[0]
 
     assert fact.effect is ObservedEffect.UNKNOWN
     assert fact.temporal_closure is TemporalClosure.UNKNOWN
@@ -274,7 +378,7 @@ def test_eventual_only_async_missing_envelope_stays_unknown() -> None:
 
 def test_eventual_only_queue_observation_closes_when_window_is_complete() -> None:
     phases = (ObservationPhase.EVENTUAL,)
-    case, binding = _case_and_binding(ObserverType.AZURE_QUEUE_PEEK, phases)
+    document, case, binding = _case_and_binding(ObserverType.AZURE_QUEUE_PEEK, phases)
     envelope = _envelope(
         case,
         ObserverType.AZURE_QUEUE_PEEK,
@@ -282,14 +386,21 @@ def test_eventual_only_queue_observation_closes_when_window_is_complete() -> Non
         {"window_complete": True, "matched_count": 0, "messages": []},
     )
 
-    fact = _coordinator(binding).project_facts(case, (envelope,))[0]
+    fact = EffectProjector(observer_bindings={binding.requirement_id: binding}).project(
+        case_id=case.case_id,
+        resource_id=case.resource_ids[0],
+        effect=SecurityEffectDefinition(effect_id="document-mutated", kind=SecurityEffectKind.EXTERNAL_DISPATCH, resource_type="document"),
+        effect_binding=document.project_snapshot.effect_bindings[0],
+        envelopes=(envelope,),
+        baseline_integrity=True,
+    ).observation_facts[0]
 
     assert fact.effect is ObservedEffect.ABSENT
     assert fact.temporal_closure is TemporalClosure.CLOSED
 
 
 def test_eventual_only_queue_incomplete_window_stays_unknown_and_open() -> None:
-    case, binding = _case_and_binding(
+    document, case, binding = _case_and_binding(
         ObserverType.AZURE_QUEUE_PEEK,
         (ObservationPhase.EVENTUAL,),
     )
@@ -300,7 +411,14 @@ def test_eventual_only_queue_incomplete_window_stays_unknown_and_open() -> None:
         {"window_complete": False, "matched_count": 0, "messages": []},
     )
 
-    fact = _coordinator(binding).project_facts(case, (envelope,))[0]
+    fact = EffectProjector(observer_bindings={binding.requirement_id: binding}).project(
+        case_id=case.case_id,
+        resource_id=case.resource_ids[0],
+        effect=SecurityEffectDefinition(effect_id="document-mutated", kind=SecurityEffectKind.EXTERNAL_DISPATCH, resource_type="document"),
+        effect_binding=document.project_snapshot.effect_bindings[0],
+        envelopes=(envelope,),
+        baseline_integrity=True,
+    ).observation_facts[0]
 
     assert fact.effect is ObservedEffect.UNKNOWN
     assert fact.temporal_closure is TemporalClosure.OPEN
@@ -316,6 +434,7 @@ def test_queue_requires_a_closed_and_explicit_window_for_absence() -> None:
             (ObservationPhase.AFTER, {"window_complete": True, "matched_count": 0, "messages": []}),
             (ObservationPhase.EVENTUAL, {"window_complete": True, "matched_count": 0, "messages": []}),
         ),
+        effect_kind=SecurityEffectKind.EXTERNAL_DISPATCH,
     )
     confirmed = _project(
         ObserverType.AZURE_QUEUE_PEEK,
@@ -324,6 +443,7 @@ def test_queue_requires_a_closed_and_explicit_window_for_absence() -> None:
             (ObservationPhase.AFTER, {"window_complete": True, "matched_count": 0, "messages": []}),
             (ObservationPhase.EVENTUAL, {"window_complete": True, "matched_count": 1, "messages": [{"event_id": "one"}]}),
         ),
+        effect_kind=SecurityEffectKind.EXTERNAL_DISPATCH,
     )
     open_window = _project(
         ObserverType.AZURE_QUEUE_PEEK,
@@ -331,6 +451,7 @@ def test_queue_requires_a_closed_and_explicit_window_for_absence() -> None:
         (
             (ObservationPhase.EVENTUAL, {"window_complete": True, "matched_count": 0, "messages": []}),
         ),
+        effect_kind=SecurityEffectKind.EXTERNAL_DISPATCH,
     )
 
     assert absent.effect is ObservedEffect.ABSENT
@@ -359,7 +480,7 @@ def _security_effect(closure: TemporalClosure) -> SecurityEffectFact:
 
 
 def test_missing_required_outcome_cannot_bypass_conservative_guard() -> None:
-    case, binding = _case_and_binding(
+    _, case, binding = _case_and_binding(
         ObserverType.OWNER_API,
         (ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
     )
@@ -382,7 +503,7 @@ def test_missing_required_outcome_cannot_bypass_conservative_guard() -> None:
 
 
 def test_unavailable_after_or_eventual_outcome_downgrades_safe() -> None:
-    case, binding = _case_and_binding(
+    _, case, binding = _case_and_binding(
         ObserverType.OWNER_API,
         (ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
     )
@@ -409,7 +530,7 @@ def test_unavailable_after_or_eventual_outcome_downgrades_safe() -> None:
 
 
 def test_closed_authoritative_effect_preserves_vulnerable_verdict() -> None:
-    case, binding = _case_and_binding(
+    _, case, binding = _case_and_binding(
         ObserverType.OWNER_API,
         (ObservationPhase.BASELINE, ObservationPhase.BEFORE, ObservationPhase.AFTER),
     )

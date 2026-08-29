@@ -9,32 +9,13 @@ from pydantic import ValidationError
 
 from product.backend.core.verification.trace import (
     ExecutionTrace,
+    TraceAuthorityScope,
     TraceAuthorizationDecision,
     TraceCorrelationKind,
     TraceEvent,
+    TraceEventKind,
 )
 from product.protocols.observer import ObservationCompleteness, ObserverType
-
-
-_SEMANTIC_KEYS = frozenset(
-    {
-        "request_received",
-        "server_identity_resolved",
-        "export_request_created",
-        "authorization_decided",
-        "export_message_sent",
-        "export_job_started",
-        "export_job_completed",
-        "archive_generated",
-    }
-)
-_FIXED_DENY_KEYS = frozenset(
-    {"request_received", "server_identity_resolved", "authorization_decided"}
-)
-_DOWNSTREAM_KEYS = frozenset(
-    {"export_message_sent", "export_job_started", "archive_generated", "export_job_completed"}
-)
-
 
 def build_execution_traces(snapshot: Any, evidence_items: Iterable[Any]) -> tuple[ExecutionTrace, ...]:
     """为每份已发布 Case Evidence 构建一条确定性只读 Trace。"""
@@ -100,35 +81,48 @@ def build_execution_trace(snapshot: Any, evidence: Any) -> ExecutionTrace:
     events: list[TraceEvent] = []
     for record in records_by_id.values():
         semantic_key = record.get("semantic_key")
-        if semantic_key not in _SEMANTIC_KEYS:
+        if semantic_key is None:
             continue
         if record.get("event_type") != semantic_key:
             reasons.add("TRACE_EVENT_INVALID")
             continue
         parent_event_id = record.get("parent_event_id")
         try:
+            kind = TraceEventKind(str(record["kind"]))
+            resource_id = str(record["resource_id"])
             event = TraceEvent(
                 event_id=str(record["event_id"]),
                 parent_event_ids=(str(parent_event_id),) if parent_event_id else (),
                 case_id=case_id,
                 action_id=action_id,
-                resource_ids=(str(record["resource_id"]),),
-                kind=str(record["kind"]),
+                resource_ids=(resource_id,),
+                kind=kind,
                 semantic_key=str(semantic_key),
                 subject_id=_optional_string(record.get("subject_id")),
                 actor_id=_optional_string(record.get("actor_id")),
                 credential_source=_optional_string(record.get("credential_source")),
-                authority_scope=(str(record["authority_scope"]),) if record.get("authority_scope") else (),
+                authority_scope=TraceAuthorityScope(
+                    allowed_action_ids=(action_id,),
+                    allowed_resource_ids=(resource_id,),
+                    origin_authorization_event_id=_optional_string(
+                        record.get("origin_authorization_event_id")
+                    ),
+                    delegated_from_event_id=_optional_string(
+                        record.get("delegated_from_event_id")
+                    ),
+                ),
                 authorization_decision=(
                     TraceAuthorizationDecision(str(record["authorization_decision"]))
                     if record.get("authorization_decision") is not None
                     else None
                 ),
                 effect_id=(
-                    single_effect_id
-                    if semantic_key
-                    in {"authorization_decided", "archive_generated", "export_job_completed"}
-                    else None
+                    _optional_string(record.get("effect_id"))
+                    or (
+                        single_effect_id
+                        if kind in {TraceEventKind.PERSISTENT_EFFECT, TraceEventKind.FINAL_EFFECT}
+                        else None
+                    )
                 ),
                 source_component=str(record["source_component"]),
                 source_location=str(record["source_location"]),
@@ -145,30 +139,28 @@ def build_execution_trace(snapshot: Any, evidence: Any) -> ExecutionTrace:
             continue
         events.append(event)
 
-    # 缺 parent 时删除该节点及其后继，不插入未知占位节点。
+    # 缺父节点或权限来源节点时删除该节点及其后继，不插入未知占位节点。
     while True:
         event_ids = {event.event_id for event in events}
         invalid_ids = {
             event.event_id
             for event in events
-            if any(parent not in event_ids for parent in event.parent_event_ids)
+            if any(
+                reference is not None and reference not in event_ids
+                for reference in (
+                    *event.parent_event_ids,
+                    event.authority_scope.origin_authorization_event_id,
+                    event.authority_scope.delegated_from_event_id,
+                )
+            )
         }
         if not invalid_ids:
             break
         reasons.add("TRACE_PARENT_MISSING")
         events = [event for event in events if event.event_id not in invalid_ids]
 
-    semantic_keys = {event.semantic_key for event in events}
-    decisions = [
-        event.authorization_decision
-        for event in events
-        if event.semantic_key == "authorization_decided"
-    ]
-    expected_keys = _SEMANTIC_KEYS
-    if decisions == [TraceAuthorizationDecision.DENY] and not (semantic_keys & _DOWNSTREAM_KEYS):
-        expected_keys = _FIXED_DENY_KEYS
-    if len(decisions) != 1 or semantic_keys != expected_keys:
-        reasons.add("TRACE_EVENTS_MISSING")
+    if not events:
+        reasons.add("TRACE_EVENTS_UNAVAILABLE")
 
     complete = not reasons
     return ExecutionTrace(

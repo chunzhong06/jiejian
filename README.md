@@ -1,4 +1,4 @@
-# 界鉴 JIEJIAN 1.0.2
+# 界鉴 JIEJIAN 1.0.3
 
 > 界鉴是一款面向 AI 快速开发 Web 应用的权限安全检查工具，用来确认不同身份是否真的只能访问和操作自己有权限的数据与业务功能。
 
@@ -16,10 +16,10 @@
 
 ## Windows x64 Portable
 
-正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.2、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
+正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.3、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
 
-- `JieJian-WebV1-1.0.2-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
-- `JieJian-WebV1-1.0.2-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
+- `JieJian-WebV1-1.0.3-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
+- `JieJian-WebV1-1.0.3-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
 - `SHA256SUMS.txt`：两个 ZIP 的固定 SHA256 校验和。
 
 两个 ZIP 除 `samples/` 外的产品文件完全相同。发行目录可以整体移动到中文或带空格路径；版本可在“运行环境”设置页或 `jiejian --version` 查看。开发者构建与仓库外验收见[修改发布与便携版](docs/02_开发指南/任务/修改发布与便携版.md)。

@@ -8,13 +8,23 @@ import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
+from product.backend.core.verification.breakpoints import (
+    BreakpointPrecision,
+    BreakpointResult,
+    BreakpointType,
+)
 from product.backend.core.verification.facts import (
     ExecutionOutcome,
     ObservedEffect,
     TemporalClosure,
 )
 from product.backend.core.verification.permissions import PermissionExpectation
-from product.backend.workflows.results.presentation import build_result_presentation
+from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
+from product.backend.workflows.results.presentation import (
+    _actual_identity,
+    _breakpoint_detail,
+    build_result_presentation,
+)
 from product.protocols import ObservationCompleteness, ObserverOutcomeStatus, ObserverType
 
 
@@ -395,7 +405,9 @@ def test_source_availability_translation_never_recomputes_verdict() -> None:
     assert result.issues[0].verdict.value == CaseVerdict.VULNERABLE.value
 
 
-def test_published_audit_trace_exposes_actual_actor_without_changing_verdict() -> None:
+def test_published_audit_trace_exposes_unified_identity_and_diagnosis(
+    monkeypatch,
+) -> None:
     semantic_keys = (
         "request_received",
         "server_identity_resolved",
@@ -405,6 +417,16 @@ def test_published_audit_trace_exposes_actual_actor_without_changing_verdict() -
         "export_job_started",
         "archive_generated",
         "export_job_completed",
+    )
+    kinds = (
+        "ENTRY",
+        "IDENTITY",
+        "PERSISTENT_EFFECT",
+        "AUTHORIZATION",
+        "MESSAGE",
+        "DELEGATION",
+        "FINAL_EFFECT",
+        "FINAL_EFFECT",
     )
     records = [
         {
@@ -416,10 +438,9 @@ def test_published_audit_trace_exposes_actual_actor_without_changing_verdict() -
             "semantic_key": semantic_key,
             "sequence": index,
             "resource_id": RESOURCE_ID,
-            "kind": "authorization" if semantic_key == "authorization_decided" else "event",
+            "kind": kinds[index - 1],
             "subject_id": "bob",
             "actor_id": "export-worker" if index >= 6 else "bob",
-            "authority_scope": "project:export",
             "authorization_decision": "DENY" if semantic_key == "authorization_decided" else None,
             "source_component": "export-worker" if index >= 6 else "collaboration-server",
             "source_location": "worker:export" if index >= 6 else "api:/projects/export",
@@ -427,6 +448,11 @@ def test_published_audit_trace_exposes_actual_actor_without_changing_verdict() -
         }
         for index, semantic_key in enumerate(semantic_keys, start=1)
     ]
+    for index, record in enumerate(records, start=1):
+        if index >= 5:
+            record["origin_authorization_event_id"] = "trace-4"
+        if index >= 6:
+            record["delegated_from_event_id"] = f"trace-{index - 1}"
     view = _view(
         RunVerdict.BLOCK,
         CaseVerdict.VULNERABLE,
@@ -441,9 +467,31 @@ def test_published_audit_trace_exposes_actual_actor_without_changing_verdict() -
     )
     original_verdict = view.publication.result.verdict
 
+    snapshot = _snapshot()
+    case = view.publication.result.evidence[0].case_snapshot
+    snapshot.differential_plan = SimpleNamespace(
+        twins=(SimpleNamespace(allow_case=case, deny_case=case),)
+    )
+    breakpoint = BreakpointResult(
+        case_id=CASE_ID,
+        action_id=ACTION_ID,
+        breakpoint_type=BreakpointType.AUTHORIZATION_LATE,
+        precision=BreakpointPrecision.EXACT,
+        last_known_good_event_id="trace-2",
+        first_violation_event_id="trace-3",
+        orphan_effect_ids=(EFFECT_ID,),
+        downstream_event_ids=tuple(f"trace-{index}" for index in range(4, 9)),
+        evidence_refs=(EVIDENCE_ID,),
+        reason_codes=("BREAKPOINT_AUTHORIZATION_LATE",),
+    )
+    monkeypatch.setattr(
+        "product.backend.workflows.results.presentation.BreakpointLocator.locate",
+        lambda *_args, **_kwargs: breakpoint,
+    )
+
     result = build_result_presentation(
         view,
-        _snapshot(),
+        snapshot,
         _finding(CaseVerdict.VULNERABLE),
     )
 
@@ -452,5 +500,95 @@ def test_published_audit_trace_exposes_actual_actor_without_changing_verdict() -
     assert trace.events[0].subject_id == trace.events[0].actor_id == "bob"
     assert trace.events[-1].subject_id == "bob"
     assert trace.events[-1].actor_id == "export-worker"
+    assert result.issues[0].actual_identity_status == "CONFIRMED"
+    assert result.issues[0].actual_identity_id == "bob"
+    assert result.issues[0].actual_identity_label == "bob"
+    diagnosis = result.issues[0].diagnosis
+    assert diagnosis is not None
+    assert diagnosis.breakpoint_type is BreakpointType.AUTHORIZATION_LATE
+    assert diagnosis.precision is BreakpointPrecision.EXACT
+    assert tuple(item.kind for item in diagnosis.minimal_witness) == (
+        "PERMISSION_REQUIREMENT",
+        "ACTUAL_IDENTITY",
+        "AUTHORIZATION_DECISION",
+        "BREAKPOINT",
+        "CONFIRMED_EFFECT",
+    )
+    assert diagnosis.minimal_witness[1].detail == result.issues[0].actual_identity_label
+    assert diagnosis.minimal_witness[2].detail == "拒绝"
+    assert diagnosis.minimal_witness[3].event_id == "trace-3"
+    assert diagnosis.minimal_witness[4].event_id == "trace-8"
+    assert {item.event_id for item in diagnosis.confirmed_impacts} == {
+        f"trace-{index}" for index in range(4, 9)
+    }
+    assert all(
+        item.event_id in {event.event_id for event in trace.events}
+        for item in diagnosis.confirmed_impacts
+    )
     assert result.verdict is original_verdict is RunVerdict.BLOCK
     assert view.publication.result.verdict is RunVerdict.BLOCK
+
+    evidence = view.publication.result.evidence[0]
+    partial_trace = trace.model_copy(
+        update={"complete": False, "reason_codes": ("TRACE_AUDIT_INCOMPLETE",)}
+    )
+    assert _actual_identity(
+        evidence,
+        {(trace.case_id, trace.action_id): partial_trace},
+    ) == ("UNAVAILABLE", None, None)
+
+    second_identity = trace.events[1].model_copy(
+        update={
+            "event_id": "trace-conflicting-identity",
+            "parent_event_ids": ("trace-2",),
+            "subject_id": "alice",
+            "recorded_at_us": 1_020,
+        }
+    )
+    conflict_trace = ExecutionTrace(
+        case_id=trace.case_id,
+        action_id=trace.action_id,
+        planned_subject_id=trace.planned_subject_id,
+        events=(*trace.events, second_identity),
+        complete=True,
+    )
+    assert _actual_identity(
+        evidence,
+        {(trace.case_id, trace.action_id): conflict_trace},
+    ) == ("UNAVAILABLE", None, None)
+
+
+def test_breakpoint_precision_copy_is_explicit_in_user_text() -> None:
+    by_id = {
+        "trace-start": SimpleNamespace(kind=TraceEventKind.IDENTITY),
+        "trace-end": SimpleNamespace(kind=TraceEventKind.PERSISTENT_EFFECT),
+    }
+    ranged = BreakpointResult(
+        case_id=CASE_ID,
+        action_id=ACTION_ID,
+        breakpoint_type=BreakpointType.AUTHORIZATION_LATE,
+        precision=BreakpointPrecision.RANGE,
+        last_known_good_event_id="trace-start",
+        range_start_event_id="trace-start",
+        range_end_event_id="trace-end",
+        orphan_effect_ids=(EFFECT_ID,),
+        evidence_refs=(EVIDENCE_ID,),
+        reason_codes=("BREAKPOINT_RANGE_ONLY",),
+    )
+    violation = BreakpointResult(
+        case_id=CASE_ID,
+        action_id=ACTION_ID,
+        breakpoint_type=BreakpointType.AUTHORIZATION_LATE,
+        precision=BreakpointPrecision.VIOLATION_ONLY,
+        first_violation_event_id="trace-violation",
+        orphan_effect_ids=(EFFECT_ID,),
+        evidence_refs=(EVIDENCE_ID,),
+        reason_codes=("VIOLATION_ONLY",),
+    )
+
+    assert _breakpoint_detail(ranged, by_id) == (
+        "断裂发生在 身份确认 与 持久化后果 之间"
+    )
+    assert _breakpoint_detail(violation, by_id) == (
+        "违规已确认，但当前证据不足以进一步定位"
+    )

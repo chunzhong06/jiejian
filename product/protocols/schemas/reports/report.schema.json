@@ -96,8 +96,8 @@
           "$ref": "#/$defs/ReportRuntime"
         },
         "schema_version": {
-          "const": "1",
-          "default": "1",
+          "const": "2",
+          "default": "2",
           "title": "Schema Version",
           "type": "string"
         },
@@ -194,8 +194,8 @@
           "$ref": "#/$defs/ReportRuntime"
         },
         "schema_version": {
-          "const": "1",
-          "default": "1",
+          "const": "2",
+          "default": "2",
           "title": "Schema Version",
           "type": "string"
         },
@@ -304,6 +304,160 @@
         "findings"
       ],
       "title": "ReportArtifact",
+      "type": "object"
+    },
+    "ReportConfirmedImpact": {
+      "additionalProperties": false,
+      "properties": {
+        "effect_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Id"
+        },
+        "event_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "ENTRY",
+            "IDENTITY",
+            "AUTHORIZATION",
+            "PERSISTENT_EFFECT",
+            "MESSAGE",
+            "DELEGATION",
+            "FINAL_EFFECT",
+            "RECOVERY"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "parent_event_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Parent Event Ids",
+          "type": "array"
+        },
+        "semantic_key": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Semantic Key",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "kind",
+        "semantic_key",
+        "summary"
+      ],
+      "title": "ReportConfirmedImpact",
+      "type": "object"
+    },
+    "ReportDiagnosis": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "breakpoint_type": {
+          "enum": [
+            "AUTHORIZATION_MISSING",
+            "AUTHORIZATION_LATE",
+            "AUTHORIZATION_BYPASS",
+            "IDENTITY_SUBSTITUTION",
+            "AUTHORITY_EXPANSION",
+            "COMPENSATION_MASKING"
+          ],
+          "title": "Breakpoint Type",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "confirmed_impacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ReportConfirmedImpact"
+          },
+          "maxItems": 512,
+          "title": "Confirmed Impacts",
+          "type": "array"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "minimal_witness": {
+          "items": {
+            "$ref": "#/$defs/ReportWitnessItem"
+          },
+          "maxItems": 5,
+          "minItems": 5,
+          "title": "Minimal Witness",
+          "type": "array"
+        },
+        "precision": {
+          "enum": [
+            "EXACT",
+            "RANGE",
+            "VIOLATION_ONLY"
+          ],
+          "title": "Precision",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "action_id",
+        "breakpoint_type",
+        "precision",
+        "summary",
+        "minimal_witness",
+        "evidence_refs"
+      ],
+      "title": "ReportDiagnosis",
       "type": "object"
     },
     "ReportEvidenceRef": {
@@ -713,6 +867,17 @@
           "title": "Conclusion",
           "type": "string"
         },
+        "diagnosis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportDiagnosis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "evidence_refs": {
           "default": [],
           "items": {
@@ -980,8 +1145,8 @@
           "type": "string"
         },
         "report_schema_version": {
-          "const": "1",
-          "default": "1",
+          "const": "2",
+          "default": "2",
           "title": "Report Schema Version",
           "type": "string"
         },
@@ -1010,6 +1175,63 @@
         "artifact_schema_version"
       ],
       "title": "ReportVersions",
+      "type": "object"
+    },
+    "ReportWitnessItem": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "event_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Event Id"
+        },
+        "evidence_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "PERMISSION_REQUIREMENT",
+            "ACTUAL_IDENTITY",
+            "AUTHORIZATION_DECISION",
+            "BREAKPOINT",
+            "CONFIRMED_EFFECT"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "label",
+        "detail"
+      ],
+      "title": "ReportWitnessItem",
       "type": "object"
     }
   },

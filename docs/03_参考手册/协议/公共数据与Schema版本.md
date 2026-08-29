@@ -19,7 +19,8 @@
 | `Flow` | `recording_flow.py` | `schemas/recording/flow.schema.json` | 1 |
 | `IdentityPreparationRequest`、`IdentityPreparationResult` | `test_identity_preparation.py` | `schemas/identity/` | 1 |
 | `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest`、`PublicationManifest` | `artifacts.py`、`run_packages.py` | `schemas/artifacts/` | 1 |
-| `BaseRunReport`、`GateRunReport`、`ReportPackageManifest` | `report.py` | `schemas/reports/` | 1 |
+| `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 2 |
+| `ReportPackageManifest` | `report.py` | `schemas/reports/report-package-manifest.schema.json` | 1 |
 | `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
 | `HttpBindingCandidateBatch` | `product/protocols/http_binding_candidate.py` | `schemas/execution/http-binding-candidate.schema.json` | 1 |
 | `RunnerProgressEvent` | `product/backend/infra/runtime/runner/progress.py` | 无；内部有界 JSONL reader | 1 |

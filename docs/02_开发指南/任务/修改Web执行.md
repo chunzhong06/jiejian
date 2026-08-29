@@ -141,7 +141,7 @@ Sample 是可执行参考，不是生产 adapter 的特例。为 Golden 增加�
 - 202 completion binding 只引用同一动作的实际 AsyncTask requirement；
 - 编译失败给稳定 gap/error，不偷偷回退成单来源 Profile。
 
-这一层只实现当前冻结模型。不要顺手引入 ApplicationTopology、BusinessAction、AuthorityFact、MeasurementFact、EffectProjector、ExperimentCase 或下一代权限编译模型。
+这一层只编译当前冻结模型。EffectProjector 已是 Runner 内按 effect identity/version 解释观察的唯一边界；本地 wiring 只提供 EffectBinding 和 ObserverBinding，不得在这里重新实现投影规则，也不要顺手引入 ApplicationTopology、BusinessAction、AuthorityFact、MeasurementFact、ExperimentCase 或下一代权限编译模型。
 
 ## 测试、Sample 与 L5
 

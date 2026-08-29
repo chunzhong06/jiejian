@@ -4,7 +4,7 @@
 
 ## Observer 解决什么问题
 
-目标接口返回的 HTTP 状态只能说明一次请求怎样回应，不能单独证明真实资源是否发生变化。Observer 在执行前后或最终观察窗口内，从受信任的业务来源形成 `ObservationFact`，再由 Runner 把事实写入 Evidence。它负责回答“真实世界里观察到了什么”，不负责决定安全结论。
+目标接口返回的 HTTP 状态只能说明一次请求怎样回应，不能单独证明真实资源是否发生变化。Observer Adapter 在执行前后或最终观察窗口内形成规范化 `ObservationEnvelope`，`EffectProjector` 再按冻结业务效果形成带 `effect_id` 的 `ObservationFact` 与 `SecurityEffectFact`，由 Runner 写入 Evidence。Observer 负责回答“真实世界里观察到了什么”，Projector 负责回答“该观察是否证明这个具体业务效果”，二者都不决定安全结论。
 
 当前本地协作空间接入六类来源：
 
@@ -41,7 +41,7 @@ Azure Blob
 | --- | --- | --- | --- |
 | 哪些来源要运行 | 冻结 Profile 中的 effect/observer bindings | 按绑定组成实际运行集合 | 根据当前响应或适配器可用性临时删减来源 |
 | 来源是关键还是佐证 | `required_channels` 与 `corroborating_channels` | 保留角色并随结果发布 | 按 Observer 类型硬编码角色 |
-| 来源看到了什么 | Adapter 形成的 Outcome 与 `ObservationFact` | 记录相关、受预算约束的事实 | 把 HTTP 403、任务名称或模型文本当成资源事实 |
+| 来源看到了什么 | Adapter 的 Outcome/Envelope 与 EffectProjector 的 `ObservationFact` | 记录相关、受预算约束且绑定具体 effect 的事实 | 把 HTTP 403、任务名称、whole-state hash 或模型文本当成资源事实 |
 | 事实是否足以闭合 | Observation completeness、causality、phase 和 closure policy | 明确 `CONFIRMED`、`ABSENT` 或不完整 | 在观察不足时补推断或给 PASS |
 | 最终 Verdict | Verification | 提供既有事实 | 决定 PASS、BLOCK、INCONCLUSIVE |
 | 页面来源状态 | ResultPresentation | 提供 Evidence ref 和冻结角色 | 输出面向页面的另一套安全结论 |
@@ -118,9 +118,11 @@ Windows 上日志和 Sample 状态可能由原子替换写入。读路径必须�
 
 ## 修改调度、Evidence 与展示映射
 
-Coordinator 负责按 Case 阶段调用 Adapter，并校验返回的 observer id、requirement id、phase 和目标绑定。Runner 负责把全部实际运行来源放入 CaseResult 与 Evidence。Evidence 的 semantic hash 必须基于模型规范化后的稳定顺序；如果模型会排序 `observation_facts` 或 `reason_codes`，哈希输入也必须先做同样规范化，否则跨进程发布会出现摘要漂移。
+Coordinator 负责按 Case 阶段调用 Adapter，并校验返回的 observer id、requirement id、phase 和目标绑定；它不得比较状态摘要或解释业务效果。EffectProjector 只消费冻结 Effect/Binding 和本 Case 的 Envelope：`OBJECT_CREATION` 要有真实目标对象，`STATE_MUTATION` 只比较目标业务字段/状态，`DATA_DISCLOSURE` 使用受保护投影与摘要证明，dispatch/task 使用显式当前 Case 事实；未支持组合保持 UNKNOWN。Runner 负责把全部实际运行来源放入 CaseResult 与 Evidence。Evidence 的 semantic hash 必须基于模型规范化后的稳定顺序；如果模型会排序 `observation_facts` 或 `reason_codes`，哈希输入也必须先做同样规范化，否则跨进程发布会出现摘要漂移。
 
-结构化 Audit 可额外发布有界 `semantic_key`、显式 parent、subject/actor、credential source 摘要、authority scope、authorization decision、source component/location 和时间。字段必须是标量且不含秘密正文；Observer 拒绝不完整 Trace 字段、非法 decision、自引用和内联 Bearer/Token。`ExecutionTrace` 只在结果读取阶段消费冻结快照与这些已发布 Evidence，缺失来源时标为 partial，不回读 live 现场。
+结构化 Audit 可额外发布有限通用 `kind`、有界 `semantic_key`、显式 parent、subject/actor、credential source 摘要、`effect_id`、权限来源/委托来源事件 ID、authorization decision、source component/location 和时间。字段必须是标量且不含秘密正文；Observer 拒绝不完整 Trace 字段、非法 kind/decision、自引用和内联 Bearer/Token。`ExecutionTrace` 把权限范围收敛为允许动作、允许资源、权限来源与委托来源的结构，只在结果读取阶段消费冻结快照与这些已发布 Evidence；缺失来源时标为 partial，不回读 live 现场。
+
+权限断裂影响锥不是新的 Observer 输出。它由结果读取阶段沿当前 `ExecutionTrace` 的显式 child edge 确定性投影，只保留 Locator 已确认的下游事件；Observer、Coordinator 和前端都不能按时间相邻、列表顺序、HTTP 状态或 `semantic_key` 相似性补因果边。需要修改这条诊断链时先读[修改权限断裂诊断](修改权限断裂诊断.md)。
 
 结果页来源状态只按已发布事实映射：
 
@@ -179,6 +181,7 @@ EVENTUAL 专用闭合没有扩大到 AsyncTask/Queue 之外
 游标、预算、相关性、完整性和因果性仍严格
 秘密、目标正文和安全结论没有进入公共观察协议
 Evidence canonical/hash 与模型规范化顺序一致
+Trace 父子边只来自已发布结构化事实，影响锥没有回读 live 现场或推测节点
 直接适配器、调度、协议和必要 Golden 通过
 正式测试没有保留私有 progress/attempt 诊断依赖
 运行数据、缓存和生成物只进入 var/

@@ -241,8 +241,26 @@ def _issue_cards(issues: tuple[ReportPresentationIssue, ...]) -> str:
         f'<div class="result-box actual"><span>可信观察到的真实结果</span><p>{_esc(issue.actual_result)}</p></div>'
         '</div><div class="conclusion-box"><span>安全结论</span>'
         f'<strong>{_esc(issue.conclusion)}</strong><p>{_esc(issue.explanation)}</p></div>'
+        f'{_diagnosis_card(issue.diagnosis)}'
         '</div></article>'
         for issue in issues
+    )
+
+
+def _diagnosis_card(diagnosis) -> str:
+    if diagnosis is None:
+        return ""
+    witness = "".join(
+        f"<li><strong>{_esc(item.label)}</strong><span>{_esc(item.detail)}</span></li>"
+        for item in diagnosis.minimal_witness
+    )
+    impacts = "".join(
+        f"<li>{_esc(item.summary)}</li>" for item in diagnosis.confirmed_impacts
+    ) or "<li>没有发布更多下游影响。</li>"
+    return (
+        '<div class="conclusion-box"><span>权限断裂诊断</span>'
+        f"<strong>{_esc(diagnosis.summary)}</strong>"
+        f"<ol>{witness}</ol><p>已确认影响</p><ul>{impacts}</ul></div>"
     )
 
 

@@ -282,6 +282,7 @@ def evidence(
     )
     observation_facts = tuple(
         ObservationFact(
+            effect_id=snapshot.contract.effects[0].effect_id,
             requirement_id="resource_state",
             resource_id=resource_id,
             effect=ObservedEffect.CONFIRMED if available else ObservedEffect.UNKNOWN,

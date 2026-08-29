@@ -63,11 +63,16 @@ class ExportWorker:
             result="running",
             effect="PROCESSING",
             parent_event_id=self.storage.audit_event_id(marker, "export_message_sent", 5),
-            kind="background_job",
+            kind="DELEGATION",
             semantic_key="export_job_started",
             subject_id=str(job["actor_id"]),
             actor_id="export-worker",
-            authority_scope="project:export",
+            origin_authorization_event_id=self.storage.audit_event_id(
+                marker, "authorization_decided", 4
+            ),
+            delegated_from_event_id=self.storage.audit_event_id(
+                marker, "export_message_sent", 5
+            ),
             source_component="export-worker",
             source_location="worker:export",
         )
@@ -93,11 +98,14 @@ class ExportWorker:
                 result="ready",
                 effect="READY",
                 parent_event_id=started_event_id,
-                kind="artifact",
+                kind="FINAL_EFFECT",
                 semantic_key="archive_generated",
                 subject_id=str(job["actor_id"]),
                 actor_id="export-worker",
-                authority_scope="project:export",
+                origin_authorization_event_id=self.storage.audit_event_id(
+                    marker, "authorization_decided", 4
+                ),
+                delegated_from_event_id=started_event_id,
                 source_component="export-worker",
                 source_location="blob:project-export",
             )
@@ -109,11 +117,14 @@ class ExportWorker:
                 result="ready",
                 effect="READY",
                 parent_event_id=archive_event_id,
-                kind="background_job",
+                kind="FINAL_EFFECT",
                 semantic_key="export_job_completed",
                 subject_id=str(job["actor_id"]),
                 actor_id="export-worker",
-                authority_scope="project:export",
+                origin_authorization_event_id=self.storage.audit_event_id(
+                    marker, "authorization_decided", 4
+                ),
+                delegated_from_event_id=archive_event_id,
                 source_component="export-worker",
                 source_location="worker:export",
             )

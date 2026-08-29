@@ -85,6 +85,7 @@ class ExecutionFact(FactModel):
 
 
 class ObservationFact(FactModel):
+    effect_id: str = Field(pattern=_ID)
     requirement_id: str = Field(pattern=_ID)
     resource_id: str = Field(pattern=_ID)
     effect: ObservedEffect
@@ -170,7 +171,13 @@ def aggregate_security_effect(
     """按存在性 BLOCK、全称性 PASS 规则聚合一个资源上的安全效果。"""
 
     relevant_ids = set(required_requirement_ids + corroborating_requirement_ids)
-    selected = tuple(item for item in observations if item.resource_id == resource_id and item.requirement_id in relevant_ids)
+    selected = tuple(
+        item
+        for item in observations
+        if item.effect_id == effect.effect_id
+        and item.resource_id == resource_id
+        and item.requirement_id in relevant_ids
+    )
     authoritative = tuple(item for item in selected if item.requirement_id in required_requirement_ids)
     confirmed = tuple(item for item in authoritative if item.effect is ObservedEffect.CONFIRMED and item.complete and item.reliable and item.correlated)
     if disclosure_proof is not None and disclosure_proof.projection_complete and disclosure_proof.matched:

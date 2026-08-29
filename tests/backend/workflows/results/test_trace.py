@@ -6,7 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.core.verification.trace import TraceAuthorizationDecision
+from product.backend.core.verification.trace import (
+    TraceAuthorizationDecision,
+    TraceEventKind,
+)
 from product.backend.workflows.results.trace import build_execution_trace
 from product.protocols import ObservationCompleteness, ObserverType
 
@@ -21,6 +24,16 @@ SEMANTIC_KEYS = (
     "archive_generated",
     "export_job_completed",
 )
+KINDS = {
+    "request_received": TraceEventKind.ENTRY,
+    "server_identity_resolved": TraceEventKind.IDENTITY,
+    "export_request_created": TraceEventKind.PERSISTENT_EFFECT,
+    "authorization_decided": TraceEventKind.AUTHORIZATION,
+    "export_message_sent": TraceEventKind.MESSAGE,
+    "export_job_started": TraceEventKind.DELEGATION,
+    "archive_generated": TraceEventKind.FINAL_EFFECT,
+    "export_job_completed": TraceEventKind.FINAL_EFFECT,
+}
 
 
 def _record(key: str, sequence: int, subject: str, decision: str | None = None) -> dict:
@@ -34,11 +47,10 @@ def _record(key: str, sequence: int, subject: str, decision: str | None = None) 
         "semantic_key": key,
         "sequence": sequence,
         "resource_id": "project-package",
-        "kind": "authorization" if key == "authorization_decided" else "event",
+        "kind": KINDS.get(key, TraceEventKind.ENTRY).value,
         "subject_id": subject,
         "actor_id": "export-worker" if sequence >= 6 else subject,
         "credential_source": "session-cookie" if sequence <= 2 else None,
-        "authority_scope": "project-export",
         "authorization_decision": decision,
         "source_component": "export-worker" if sequence >= 6 else "collaboration-server",
         "source_location": "export-background" if sequence >= 6 else "export-endpoint",
@@ -57,6 +69,26 @@ def _trace(
         _record(key, index, subject, decision if key == "authorization_decided" else None)
         for index, key in enumerate(keys, start=1)
     ]
+    authorization_id = next(
+        (
+            str(record["event_id"])
+            for record in records
+            if record["kind"] == TraceEventKind.AUTHORIZATION.value
+        ),
+        None,
+    )
+    for record in records:
+        if authorization_id and record["kind"] in {
+            TraceEventKind.MESSAGE.value,
+            TraceEventKind.DELEGATION.value,
+            TraceEventKind.FINAL_EFFECT.value,
+        }:
+            record["origin_authorization_event_id"] = authorization_id
+        if record["kind"] in {
+            TraceEventKind.DELEGATION.value,
+            TraceEventKind.FINAL_EFFECT.value,
+        }:
+            record["delegated_from_event_id"] = record["parent_event_id"]
     evidence = SimpleNamespace(
         evidence_id="ev_" + "b" * 20,
         case_snapshot=SimpleNamespace(
@@ -89,6 +121,11 @@ def test_builder_forms_complete_allow_and_vulnerable_paths(subject: str, decisio
 
     assert trace.complete is True
     assert tuple(event.semantic_key for event in trace.events) == SEMANTIC_KEYS
+    assert tuple(event.kind for event in trace.events) == tuple(
+        KINDS[key] for key in SEMANTIC_KEYS
+    )
+    assert trace.events[4].authority_scope.origin_authorization_event_id == "event-4"
+    assert trace.events[5].authority_scope.delegated_from_event_id == "event-5"
     assert next(
         event for event in trace.events if event.semantic_key == "authorization_decided"
     ).authorization_decision is TraceAuthorizationDecision(decision)
@@ -117,5 +154,15 @@ def test_builder_marks_incomplete_publication_partial() -> None:
     )
 
     assert trace.complete is False
-    assert set(trace.reason_codes) == {"TRACE_AUDIT_INCOMPLETE", "TRACE_EVENTS_MISSING"}
+    assert trace.reason_codes == ("TRACE_AUDIT_INCOMPLETE",)
     assert all(event.semantic_key != "export_message_sent" for event in trace.events)
+
+
+def test_builder_accepts_generic_semantic_keys_without_sample_completeness_table() -> None:
+    trace = _trace("alice", ("custom_entry", "custom_followup"), "ALLOW")
+
+    assert trace.complete is True
+    assert tuple(event.semantic_key for event in trace.events) == (
+        "custom_entry",
+        "custom_followup",
+    )

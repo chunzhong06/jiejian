@@ -11,15 +11,23 @@ import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle, RunVerdict
+from product.backend.core.verification.breakpoints import (
+    BreakpointPrecision,
+    BreakpointType,
+)
+from product.backend.core.verification.trace import TraceEventKind
 from product.backend.core.reporting import render_html, render_junit, render_sarif
 from product.backend.infra.artifacts.report_store import ReportStore
 from product.backend.infra.artifacts import report_store as report_store_module
 from product.backend.workflows.results.reporting import ReportBuilder
 from product.backend.workflows.results.presentation import (
     PresentedCaseVerdict,
+    ResultConfirmedImpact,
+    ResultDiagnosis,
     ResultEvidenceSource,
     ResultPresentation,
     ResultPresentationIssue,
+    ResultWitnessItem,
 )
 from product.protocols import ObserverType
 from product.protocols.artifacts import (
@@ -36,12 +44,15 @@ from product.protocols.report import (
     BaseRunReport,
     GateRunReport,
     ReportGate,
+    ReportConfirmedImpact,
+    ReportDiagnosis,
     ReportPackageManifest,
     ReportPresentation,
     ReportPresentationIssue,
     ReportRun,
     ReportRuntime,
     ReportVersions,
+    ReportWitnessItem,
     base_semantic_input_sha256,
     gate_semantic_input_sha256,
     parse_report_document,
@@ -53,6 +64,57 @@ from product.protocols.report import (
 RUN_ID = "run_" + "a" * 32
 PROJECT_ID = "report-project"
 GATE_ID = "gate_" + "b" * 32
+EVIDENCE_ID = "ev_" + "d" * 20
+
+
+def _result_diagnosis() -> ResultDiagnosis:
+    witness = tuple(
+        ResultWitnessItem(
+            kind=kind,
+            label=label,
+            detail=detail,
+            event_id=(f"event-{index}" if index > 1 else None),
+            evidence_refs=(EVIDENCE_ID,),
+        )
+        for index, (kind, label, detail) in enumerate(
+            (
+                ("PERMISSION_REQUIREMENT", "权限要求", "不应允许导出"),
+                ("ACTUAL_IDENTITY", "实际身份", "普通成员"),
+                ("AUTHORIZATION_DECISION", "权限决定", "拒绝"),
+                ("BREAKPOINT", "首个可证明断裂", "权限决定发生过晚"),
+                ("CONFIRMED_EFFECT", "已确认最终后果", "归档已经生成"),
+            ),
+            start=1,
+        )
+    )
+    return ResultDiagnosis(
+        case_id="case-diagnosis",
+        action_id="export-package",
+        breakpoint_type=BreakpointType.AUTHORIZATION_LATE,
+        precision=BreakpointPrecision.EXACT,
+        summary="首个可证明断裂：权限决定发生过晚",
+        minimal_witness=witness,
+        confirmed_impacts=(
+            ResultConfirmedImpact(
+                event_id="event-impact",
+                parent_event_ids=("event-4",),
+                kind=TraceEventKind.FINAL_EFFECT,
+                semantic_key="archive_generated",
+                effect_id="archive-created",
+                summary="已确认：最终后果",
+                evidence_refs=(EVIDENCE_ID,),
+            ),
+        ),
+        evidence_refs=(EVIDENCE_ID,),
+    )
+
+
+def _report_diagnosis() -> ReportDiagnosis:
+    value = _result_diagnosis().model_dump(mode="json")
+    return ReportDiagnosis.model_validate_json(
+        json.dumps(value, ensure_ascii=False),
+        strict=True,
+    )
 
 
 def _versions() -> ReportVersions:
@@ -114,6 +176,7 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
         ),
         verdict=PresentedCaseVerdict.VULNERABLE,
         occurrence_status="APPEARED",
+        diagnosis=_result_diagnosis(),
     )
     result_view = ResultPresentation(
         run_id=RUN_ID,
@@ -143,6 +206,9 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
     assert snapshot.issues[0].evidence_refs == issue.evidence_refs
     assert "evidence_sources" not in snapshot.issues[0].model_dump(mode="json")
     assert "planned_identity_id" not in snapshot.issues[0].model_dump(mode="json")
+    assert snapshot.issues[0].diagnosis is not None
+    assert snapshot.issues[0].diagnosis.breakpoint_type == "AUTHORIZATION_LATE"
+    assert snapshot.issues[0].diagnosis.minimal_witness[3].kind == "BREAKPOINT"
 
 
 def _base(
@@ -243,7 +309,7 @@ def test_current_report_discriminator_and_versions_fail_closed() -> None:
     encoded = base.model_dump(mode="json")
     assert parse_report_document(encoded).report_type == "BASE"
     for invalid in (
-        {**encoded, "schema_version": "2"},
+        {**encoded, "schema_version": "1"},
         {key: value for key, value in encoded.items() if key != "schema_version"},
         {**encoded, "unexpected": True},
         {**encoded, "gate_result_id": GATE_ID},
@@ -324,6 +390,7 @@ def test_html_uses_presentation_snapshot_and_escapes_dynamic_content() -> None:
         severity="high",
         evidence_refs=("ev_" + "d" * 20,),
         verdict="VULNERABLE",
+        diagnosis=_report_diagnosis(),
     )
     presentation = ReportPresentation(
         run_id=RUN_ID,
@@ -348,6 +415,9 @@ def test_html_uses_presentation_snapshot_and_escapes_dynamic_content() -> None:
     assert '<div class="summary-item"><span>未覆盖</span><strong>2</strong>' in document
     assert '<article class="issue-card">' in document
     assert "可信观察到的真实结果" in document
+    assert "权限断裂诊断" in document
+    assert "权限决定发生过晚" in document
+    assert "已确认：最终后果" in document
     assert 'severity-high">高风险' in document
     assert "<th>标题</th>" not in document
     assert "本次只覆盖已确认范围 &amp; &lt;限制&gt;" in document
@@ -358,9 +428,41 @@ def test_html_uses_presentation_snapshot_and_escapes_dynamic_content() -> None:
 
 
 def test_presentation_is_canonical_and_gate_copies_base_safety_facts() -> None:
-    base = _base(verdict="BLOCK")
+    issue = ReportPresentationIssue(
+        finding_id="finding_" + "c" * 32,
+        title="权限问题",
+        subject_group="普通用户",
+        action="导出",
+        resource="项目资料",
+        relation="受权限规则约束",
+        expectation="不应允许",
+        surface_result="页面返回拒绝",
+        actual_result="归档已经生成",
+        conclusion="发现权限问题",
+        explanation="已发布事实确认越权后果。",
+        severity="high",
+        evidence_refs=(EVIDENCE_ID,),
+        verdict="VULNERABLE",
+        diagnosis=_report_diagnosis(),
+    )
+    presentation = ReportPresentation(
+        run_id=RUN_ID,
+        project_id=PROJECT_ID,
+        project_name="报告测试项目",
+        run_lifecycle="COMPLETED",
+        verdict="BLOCK",
+        headline="发现权限问题",
+        scope_statement="本次确认权限断裂。",
+        checked_count=1,
+        safe_count=0,
+        problem_count=1,
+        inconclusive_count=0,
+        uncovered_count=0,
+        issues=(issue,),
+    )
+    base = _base(verdict="BLOCK", presentation=presentation)
     tampered = base.model_dump(mode="json")
-    tampered["presentation"]["project_name"] = "后来改名的项目"
+    tampered["presentation"]["issues"][0]["diagnosis"]["precision"] = "RANGE"
     with pytest.raises(ValueError, match="canonical hash"):
         parse_report_document(tampered)
 

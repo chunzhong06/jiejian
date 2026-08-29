@@ -151,6 +151,10 @@ def test_result_explanation_cannot_return_a_new_verdict() -> None:
                     AssistantFact(field="conclusion", value="发现权限问题"),
                     AssistantFact(field="verdict", value="VULNERABLE"),
                     AssistantFact(field="evidence_sources", value=("KEY:FOUND:后台任务",)),
+                    AssistantFact(field="breakpoint_type", value="AUTHORIZATION_LATE"),
+                    AssistantFact(field="precision", value="EXACT"),
+                    AssistantFact(field="minimal_witness", value=("权限要求:不应允许", "首个可证明断裂:权限决定发生过晚")),
+                    AssistantFact(field="confirmed_impacts", value=("已确认：最终后果",)),
                 ),
             ),
         ),
@@ -171,3 +175,21 @@ def test_result_explanation_cannot_return_a_new_verdict() -> None:
             surface_input=surface_input,
         )
     assert captured.value.code == ErrorCode.LLM_INVALID_RESPONSE.value
+
+    with pytest.raises(JiejianError) as captured_breakpoint:
+        parse_assistant_result(
+            {
+                "schema_version": "1",
+                "template_id": AssistantTemplateId.RESULT_EXPLANATION.value,
+                "template_version": "1",
+                "breakpoint_type": "AUTHORIZATION_BYPASS",
+                "precision": "EXACT",
+                "suggestions": [{
+                    "kind": "EXPLANATION",
+                    "entity_ids": ["finding_demo"],
+                    "explanation": "模型试图改写断裂类型和精度。",
+                }],
+            },
+            surface_input=surface_input,
+        )
+    assert captured_breakpoint.value.code == ErrorCode.LLM_INVALID_RESPONSE.value

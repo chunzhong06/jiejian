@@ -5,7 +5,7 @@
 #   已验证 Run、Finding 与 Evidence 之上的唯一人类结果表达。
 #
 # 职责
-#   汇总本次范围与三态结论｜解释权限问题的表面结果和真实影响｜提供 GUI/CLI 共用只读 View
+#   汇总本次范围与三态结论｜投影权限断裂最小见证与确认影响｜提供 GUI/CLI/MCP 共用只读 View
 #
 # 边界
 #   只翻译已发布事实，不重新执行 Verification，不修改 Finding、Evidence 或 Report。
@@ -19,12 +19,18 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle, RunVerdict
+from product.backend.core.verification.breakpoints import (
+    BreakpointLocator,
+    BreakpointPrecision,
+    BreakpointResult,
+    BreakpointType,
+)
 from product.backend.core.verification.facts import ObservedEffect, TemporalClosure
-from product.backend.core.verification.trace import ExecutionTrace
+from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
 from product.backend.workflows.results.trace import build_execution_traces
 from product.protocols.observer import ObserverOutcomeStatus, ObserverType
 
@@ -54,6 +60,61 @@ class ResultEvidenceSource(_PresentationModel):
     evidence_refs: tuple[str, ...] = Field(default=(), max_length=8192)
 
 
+class ResultWitnessItem(_PresentationModel):
+    kind: Literal[
+        "PERMISSION_REQUIREMENT",
+        "ACTUAL_IDENTITY",
+        "AUTHORIZATION_DECISION",
+        "BREAKPOINT",
+        "CONFIRMED_EFFECT",
+    ]
+    label: str = Field(min_length=1, max_length=80)
+    detail: str = Field(min_length=1, max_length=240)
+    event_id: str | None = Field(default=None, min_length=1, max_length=160)
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=128)
+
+
+class ResultConfirmedImpact(_PresentationModel):
+    event_id: str = Field(min_length=1, max_length=160)
+    parent_event_ids: tuple[str, ...] = Field(default=(), max_length=16)
+    kind: TraceEventKind
+    semantic_key: str = Field(min_length=1, max_length=64)
+    effect_id: str | None = Field(default=None, min_length=1, max_length=160)
+    summary: str = Field(min_length=1, max_length=240)
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=128)
+
+
+class ResultDiagnosis(_PresentationModel):
+    case_id: str = Field(min_length=1, max_length=160)
+    action_id: str = Field(min_length=1, max_length=160)
+    breakpoint_type: BreakpointType
+    precision: BreakpointPrecision
+    summary: str = Field(min_length=1, max_length=320)
+    minimal_witness: tuple[ResultWitnessItem, ...] = Field(min_length=5, max_length=5)
+    confirmed_impacts: tuple[ResultConfirmedImpact, ...] = Field(
+        default=(),
+        max_length=512,
+    )
+    evidence_refs: tuple[str, ...] = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_witness_order(self) -> ResultDiagnosis:
+        expected = (
+            "PERMISSION_REQUIREMENT",
+            "ACTUAL_IDENTITY",
+            "AUTHORIZATION_DECISION",
+            "BREAKPOINT",
+            "CONFIRMED_EFFECT",
+        )
+        if tuple(item.kind for item in self.minimal_witness) != expected:
+            raise ValueError("minimal witness order is fixed")
+        if len({item.event_id for item in self.confirmed_impacts}) != len(
+            self.confirmed_impacts
+        ):
+            raise ValueError("confirmed impacts must have unique event IDs")
+        return self
+
+
 class ResultPresentationIssue(_PresentationModel):
     finding_id: str = Field(min_length=1, max_length=128)
     title: str = Field(min_length=1, max_length=200)
@@ -68,14 +129,16 @@ class ResultPresentationIssue(_PresentationModel):
     explanation: str = Field(min_length=1, max_length=480)
     planned_identity_id: str = Field(min_length=1, max_length=64)
     planned_identity_label: str | None = Field(default=None, min_length=1, max_length=128)
-    actual_identity_status: Literal["UNAVAILABLE"] = "UNAVAILABLE"
-    actual_identity_label: None = None
+    actual_identity_status: Literal["CONFIRMED", "UNAVAILABLE"] = "UNAVAILABLE"
+    actual_identity_id: str | None = Field(default=None, min_length=1, max_length=160)
+    actual_identity_label: str | None = Field(default=None, min_length=1, max_length=160)
     severity: Literal["unknown", "low", "medium", "high", "critical"]
     evidence_refs: tuple[str, ...] = Field(default=(), max_length=8192)
     evidence_sources: tuple[ResultEvidenceSource, ...] = Field(
         default=(),
         max_length=256,
     )
+    diagnosis: ResultDiagnosis | None = None
     verdict: PresentedCaseVerdict
     occurrence_status: str | None = Field(default=None, max_length=32)
 
@@ -125,10 +188,25 @@ def build_result_presentation(
     result = view.publication.result
     evidence_items = tuple(result.evidence)
     evidence_by_id = {item.evidence_id: item for item in evidence_items}
+    execution_traces = build_execution_traces(snapshot, evidence_items)
+    traces_by_case = {
+        (item.case_id, item.action_id): item for item in execution_traces
+    }
+    breakpoints_by_case = _locate_breakpoints(
+        snapshot,
+        evidence_items,
+        traces_by_case,
+    )
     issues = tuple(
         sorted(
             (
-                _issue(item, evidence_by_id, snapshot)
+                _issue(
+                    item,
+                    evidence_by_id,
+                    traces_by_case,
+                    breakpoints_by_case,
+                    snapshot,
+                )
                 for item in finding_views
             ),
             key=lambda item: item.finding_id,
@@ -153,7 +231,6 @@ def build_result_presentation(
     if lifecycle is RunLifecycle.SAFETY_STOPPED:
         limitations.append("检查为保护目标现场而安全停止；未完成范围不形成安全结论。")
     execution_problem = _execution_problem(lifecycle)
-    execution_traces = build_execution_traces(snapshot, evidence_items)
     return ResultPresentation(
         run_id=view.run.run_id,
         project_id=view.run.project_id,
@@ -205,6 +282,8 @@ _RELATION_LABELS = {
 def _issue(
     item: dict[str, Any],
     evidence_by_id: dict[str, Any],
+    traces_by_case: dict[tuple[str, str], ExecutionTrace],
+    breakpoints_by_case: dict[tuple[str, str], BreakpointResult],
     snapshot: Any,
 ) -> ResultPresentationIssue:
     finding = item.get("finding") or {}
@@ -215,6 +294,17 @@ def _issue(
     verdict = PresentedCaseVerdict(str(occurrence.get("verdict")))
     evidence = _representative_evidence(evidence_refs, evidence_by_id, verdict)
     planned_identity_id, planned_identity_label = _planned_identity(snapshot, evidence)
+    actual_identity_status, actual_identity_id, actual_identity_label = _actual_identity(
+        evidence,
+        traces_by_case,
+    )
+    case = getattr(evidence, "case_snapshot", None)
+    trace = traces_by_case.get(
+        (str(getattr(case, "case_id", "")), str(getattr(case, "action_id", "")))
+    )
+    breakpoint = breakpoints_by_case.get(
+        (str(getattr(case, "case_id", "")), str(getattr(case, "action_id", "")))
+    )
     expectation = _expectation(evidence)
     subject_group = _subject_group(identity, expectation)
     action = _action(identity)
@@ -234,9 +324,24 @@ def _issue(
         explanation=_explanation(evidence, verdict),
         planned_identity_id=planned_identity_id,
         planned_identity_label=planned_identity_label,
+        actual_identity_status=actual_identity_status,
+        actual_identity_id=actual_identity_id,
+        actual_identity_label=actual_identity_label,
         severity=_severity(occurrence.get("severity")),
         evidence_refs=evidence_refs,
         evidence_sources=_evidence_sources(snapshot, evidence),
+        diagnosis=(
+            _diagnosis(
+                breakpoint,
+                trace,
+                evidence,
+                actual_identity_status=actual_identity_status,
+                actual_identity_id=actual_identity_id,
+                actual_identity_label=actual_identity_label,
+            )
+            if breakpoint is not None and trace is not None and evidence is not None
+            else None
+        ),
         verdict=verdict,
         occurrence_status=(
             str(occurrence["status"])
@@ -455,6 +560,267 @@ def _planned_identity(snapshot: Any, evidence: Any | None) -> tuple[str, str | N
     return identity_id, str(label) if label is not None else None
 
 
+def _actual_identity(
+    evidence: Any | None,
+    traces_by_case: dict[tuple[str, str], ExecutionTrace],
+) -> tuple[Literal["CONFIRMED", "UNAVAILABLE"], str | None, str | None]:
+    """实际身份只接受完整 Trace 中可靠且一致的 IDENTITY 节点。"""
+
+    case = getattr(evidence, "case_snapshot", None)
+    trace = traces_by_case.get(
+        (str(getattr(case, "case_id", "")), str(getattr(case, "action_id", "")))
+    )
+    if trace is None or not trace.complete:
+        return "UNAVAILABLE", None, None
+    identity_events = tuple(
+        event
+        for event in trace.events
+        if event.kind is TraceEventKind.IDENTITY
+        and event.subject_id is not None
+        and event.evidence_refs
+        and event.correlation_kind.value != "TEMPORAL"
+    )
+    identities = {event.subject_id for event in identity_events}
+    if not identity_events or len(identities) != 1:
+        return "UNAVAILABLE", None, None
+    identity_id = next(iter(identities))
+    return "CONFIRMED", identity_id, identity_id
+
+
+def _locate_breakpoints(
+    snapshot: Any,
+    evidence_items: tuple[Any, ...],
+    traces_by_case: dict[tuple[str, str], ExecutionTrace],
+) -> dict[tuple[str, str], BreakpointResult]:
+    """只对冻结差分 twin 的已发布 ALLOW/DENY 事实调用被动 Locator。"""
+
+    contract = getattr(snapshot, "contract", None)
+    plan = getattr(snapshot, "differential_plan", None)
+    if contract is None or plan is None:
+        return {}
+    evidence_by_case = {
+        str(getattr(getattr(item, "case_snapshot", None), "case_id", "")): item
+        for item in evidence_items
+    }
+    results: dict[tuple[str, str], BreakpointResult] = {}
+    locator = BreakpointLocator()
+    for twin in getattr(plan, "twins", ()):
+        allow_evidence = evidence_by_case.get(str(twin.allow_case.case_id))
+        deny_evidence = evidence_by_case.get(str(twin.deny_case.case_id))
+        allow_trace = traces_by_case.get(
+            (str(twin.allow_case.case_id), str(twin.allow_case.action_id))
+        )
+        deny_trace = traces_by_case.get(
+            (str(twin.deny_case.case_id), str(twin.deny_case.action_id))
+        )
+        if (
+            allow_evidence is None
+            or deny_evidence is None
+            or allow_trace is None
+            or deny_trace is None
+        ):
+            continue
+        breakpoint = locator.locate(
+            contract=contract,
+            differential_plan=plan,
+            allow_trace=allow_trace,
+            deny_trace=deny_trace,
+            allow_effect_facts=tuple(allow_evidence.security_effect_facts),
+            deny_effect_facts=tuple(deny_evidence.security_effect_facts),
+            evidence_refs=tuple(
+                sorted((str(allow_evidence.evidence_id), str(deny_evidence.evidence_id)))
+            ),
+        )
+        if breakpoint is not None:
+            results[(breakpoint.case_id, breakpoint.action_id)] = breakpoint
+    return results
+
+
+_WITNESS_LABELS = {
+    "PERMISSION_REQUIREMENT": "权限要求",
+    "ACTUAL_IDENTITY": "实际身份",
+    "AUTHORIZATION_DECISION": "权限决定",
+    "BREAKPOINT": "首个可证明断裂",
+    "CONFIRMED_EFFECT": "已确认最终后果",
+}
+_BREAKPOINT_LABELS = {
+    BreakpointType.AUTHORIZATION_MISSING: "缺少权限决定",
+    BreakpointType.AUTHORIZATION_LATE: "权限决定发生过晚",
+    BreakpointType.AUTHORIZATION_BYPASS: "执行路径绕过权限决定",
+    BreakpointType.IDENTITY_SUBSTITUTION: "实际身份与计划身份不一致",
+    BreakpointType.AUTHORITY_EXPANSION: "后台权限范围扩大",
+    BreakpointType.COMPENSATION_MASKING: "后续恢复掩盖了已发生的违规",
+}
+_TRACE_KIND_LABELS = {
+    TraceEventKind.ENTRY: "请求进入",
+    TraceEventKind.IDENTITY: "身份确认",
+    TraceEventKind.AUTHORIZATION: "权限决定",
+    TraceEventKind.PERSISTENT_EFFECT: "持久化后果",
+    TraceEventKind.MESSAGE: "消息发送",
+    TraceEventKind.DELEGATION: "后台委托",
+    TraceEventKind.FINAL_EFFECT: "最终后果",
+    TraceEventKind.RECOVERY: "恢复或补偿",
+}
+
+
+def _diagnosis(
+    breakpoint: BreakpointResult,
+    trace: ExecutionTrace,
+    evidence: Any,
+    *,
+    actual_identity_status: Literal["CONFIRMED", "UNAVAILABLE"],
+    actual_identity_id: str | None,
+    actual_identity_label: str | None,
+) -> ResultDiagnosis:
+    by_id = {event.event_id: event for event in trace.events}
+    authorization = next(
+        (event for event in trace.events if event.kind is TraceEventKind.AUTHORIZATION),
+        None,
+    )
+    effect_events = tuple(
+        event
+        for event in trace.events
+        if event.effect_id in breakpoint.orphan_effect_ids
+    )
+    final_effect = next(
+        (
+            event
+            for event in reversed(effect_events)
+            if event.kind is TraceEventKind.FINAL_EFFECT
+        ),
+        effect_events[-1] if effect_events else None,
+    )
+    identity_event = next(
+        (
+            event
+            for event in trace.events
+            if event.kind is TraceEventKind.IDENTITY
+            and event.subject_id == actual_identity_id
+        ),
+        None,
+    )
+    witness = (
+        _witness(
+            "PERMISSION_REQUIREMENT",
+            _expectation(evidence),
+            evidence_refs=(str(evidence.evidence_id),),
+        ),
+        _witness(
+            "ACTUAL_IDENTITY",
+            (
+                actual_identity_label or actual_identity_id or "无法确认实际身份"
+                if actual_identity_status == "CONFIRMED"
+                else "无法确认实际身份"
+            ),
+            event=identity_event,
+            evidence_refs=(str(evidence.evidence_id),),
+        ),
+        _witness(
+            "AUTHORIZATION_DECISION",
+            _authorization_detail(authorization),
+            event=authorization,
+            evidence_refs=(str(evidence.evidence_id),),
+        ),
+        _witness(
+            "BREAKPOINT",
+            _breakpoint_detail(breakpoint, by_id),
+            event=(
+                by_id.get(breakpoint.first_violation_event_id)
+                if breakpoint.first_violation_event_id is not None
+                else None
+            ),
+            evidence_refs=breakpoint.evidence_refs,
+        ),
+        _witness(
+            "CONFIRMED_EFFECT",
+            _actual_result(evidence),
+            event=final_effect,
+            evidence_refs=breakpoint.evidence_refs,
+        ),
+    )
+    confirmed_impacts = tuple(
+        ResultConfirmedImpact(
+            event_id=event.event_id,
+            parent_event_ids=event.parent_event_ids,
+            kind=event.kind,
+            semantic_key=event.semantic_key,
+            effect_id=event.effect_id,
+            summary=_impact_summary(event),
+            evidence_refs=event.evidence_refs,
+        )
+        for event in trace.events
+        if event.event_id in breakpoint.downstream_event_ids
+    )
+    return ResultDiagnosis(
+        case_id=breakpoint.case_id,
+        action_id=breakpoint.action_id,
+        breakpoint_type=breakpoint.breakpoint_type,
+        precision=breakpoint.precision,
+        summary=_breakpoint_detail(breakpoint, by_id),
+        minimal_witness=witness,
+        confirmed_impacts=confirmed_impacts,
+        evidence_refs=breakpoint.evidence_refs,
+    )
+
+
+def _witness(
+    kind: Literal[
+        "PERMISSION_REQUIREMENT",
+        "ACTUAL_IDENTITY",
+        "AUTHORIZATION_DECISION",
+        "BREAKPOINT",
+        "CONFIRMED_EFFECT",
+    ],
+    detail: str,
+    *,
+    event=None,
+    evidence_refs: tuple[str, ...] = (),
+) -> ResultWitnessItem:
+    return ResultWitnessItem(
+        kind=kind,
+        label=_WITNESS_LABELS[kind],
+        detail=detail,
+        event_id=getattr(event, "event_id", None),
+        evidence_refs=tuple(
+            sorted({*evidence_refs, *getattr(event, "evidence_refs", ())})
+        ),
+    )
+
+
+def _authorization_detail(event) -> str:
+    decision = getattr(event, "authorization_decision", None)
+    if decision is None:
+        return "未发布有效权限决定"
+    return "允许" if decision.value == "ALLOW" else "拒绝"
+
+
+def _breakpoint_detail(
+    breakpoint: BreakpointResult,
+    by_id: dict[str, Any],
+) -> str:
+    if breakpoint.precision is BreakpointPrecision.RANGE:
+        start = by_id.get(breakpoint.range_start_event_id)
+        end = by_id.get(breakpoint.range_end_event_id)
+        return (
+            f"断裂发生在 {_event_label(start)} 与 {_event_label(end)} 之间"
+        )
+    if breakpoint.precision is BreakpointPrecision.VIOLATION_ONLY:
+        return "违规已确认，但当前证据不足以进一步定位"
+    return f"首个可证明断裂：{_BREAKPOINT_LABELS[breakpoint.breakpoint_type]}"
+
+
+def _event_label(event) -> str:
+    return _TRACE_KIND_LABELS.get(
+        getattr(event, "kind", None),
+        "已发布事件",
+    )
+
+
+def _impact_summary(event) -> str:
+    label = _TRACE_KIND_LABELS[event.kind]
+    return f"已确认：{label}"
+
+
 def _representative_evidence(
     evidence_refs: tuple[str, ...],
     evidence_by_id: dict[str, Any],
@@ -637,9 +1003,12 @@ def _value(value: Any) -> str:
 
 __all__ = [
     "PresentedCaseVerdict",
+    "ResultConfirmedImpact",
+    "ResultDiagnosis",
     "ResultEvidenceSource",
     "ResultPresentation",
     "ResultPresentationBuilder",
     "ResultPresentationIssue",
+    "ResultWitnessItem",
     "build_result_presentation",
 ]

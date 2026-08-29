@@ -32,6 +32,16 @@ TRACE_SEMANTIC_KEYS = (
     "archive_generated",
     "export_job_completed",
 )
+TRACE_KINDS = (
+    "ENTRY",
+    "IDENTITY",
+    "PERSISTENT_EFFECT",
+    "AUTHORIZATION",
+    "MESSAGE",
+    "DELEGATION",
+    "FINAL_EFFECT",
+    "FINAL_EFFECT",
+)
 
 
 def _login(client: httpx.Client, account: str, password: str) -> None:
@@ -182,6 +192,7 @@ def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory
         assert "password" not in audit.casefold()
         records = _audit_records(sample.server.runtime_root, marker)
         assert tuple(record["semantic_key"] for record in records) == TRACE_SEMANTIC_KEYS
+        assert tuple(record["kind"] for record in records) == TRACE_KINDS
         assert [record["sequence"] for record in records] == list(range(1, 9))
         assert records[0]["subject_id"] == records[0]["actor_id"] == "alice"
         assert records[3]["authorization_decision"] == "ALLOW"
@@ -192,6 +203,13 @@ def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory
             for index, record in enumerate(records)
             if index > 0
         )
+        assert all(
+            record.get("origin_authorization_event_id") == records[3]["event_id"]
+            for record in records[4:]
+        )
+        assert records[5]["delegated_from_event_id"] == records[4]["event_id"]
+        assert records[6]["delegated_from_event_id"] == records[5]["event_id"]
+        assert records[7]["delegated_from_event_id"] == records[6]["event_id"]
         assert all(secret not in audit for secret in sample.passwords.values())
 
         descriptor = json.loads(
@@ -301,6 +319,12 @@ def test_bob_order_boundary_preserves_surface_denial_and_real_effect(collaborati
             else TRACE_SEMANTIC_KEYS[:2] + ("authorization_decided",)
         )
         assert tuple(record["semantic_key"] for record in records) == expected_keys
+        expected_kinds = (
+            TRACE_KINDS
+            if order == "ENQUEUE_BEFORE_AUTHORIZE"
+            else TRACE_KINDS[:2] + ("AUTHORIZATION",)
+        )
+        assert tuple(record["kind"] for record in records) == expected_kinds
         assert records[0]["subject_id"] == records[0]["actor_id"] == "bob"
         assert next(
             record for record in records if record["semantic_key"] == "authorization_decided"

@@ -363,6 +363,7 @@ def test_web_runtime_vertical_case_has_one_target_and_no_response_on_port(
             assert len(server.events) == before_resolve  # type: ignore[attr-defined]
 
             observation_fact = ObservationFact(
+                effect_id=snapshot.contract.effects[0].effect_id,
                 requirement_id="resource_state",
                 resource_id=case.resource_ids[0],
                 effect=ObservedEffect.CONFIRMED,

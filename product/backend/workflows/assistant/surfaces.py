@@ -109,6 +109,32 @@ class AssistantSurfaceResolver:
                     "evidence_sources": tuple(
                         f"{source.role}:{source.status}:{source.label}" for source in item.evidence_sources[:16]
                     ),
+                    "breakpoint_type": (
+                        item.diagnosis.breakpoint_type.value
+                        if item.diagnosis is not None
+                        else "UNAVAILABLE"
+                    ),
+                    "precision": (
+                        item.diagnosis.precision.value
+                        if item.diagnosis is not None
+                        else "UNAVAILABLE"
+                    ),
+                    "minimal_witness": (
+                        tuple(
+                            f"{witness.label}:{witness.detail}"
+                            for witness in item.diagnosis.minimal_witness
+                        )
+                        if item.diagnosis is not None
+                        else ()
+                    ),
+                    "confirmed_impacts": (
+                        tuple(
+                            impact.summary
+                            for impact in item.diagnosis.confirmed_impacts[:32]
+                        )
+                        if item.diagnosis is not None
+                        else ()
+                    ),
                 },
             )
             for item in presentation.issues[:128]
@@ -124,6 +150,10 @@ class AssistantSurfaceResolver:
                     "conclusion": presentation.headline,
                     "verdict": _enum_value(presentation.verdict) if presentation.verdict is not None else "UNAVAILABLE",
                     "evidence_sources": (),
+                    "breakpoint_type": "UNAVAILABLE",
+                    "precision": "UNAVAILABLE",
+                    "minimal_witness": (),
+                    "confirmed_impacts": (),
                 },
             ),
         )

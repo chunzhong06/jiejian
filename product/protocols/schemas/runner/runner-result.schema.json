@@ -552,6 +552,11 @@
         "effect": {
           "$ref": "#/$defs/ObservedEffect"
         },
+        "effect_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
         "reason_codes": {
           "default": [],
           "items": {
@@ -580,6 +585,7 @@
         }
       },
       "required": [
+        "effect_id",
         "requirement_id",
         "resource_id",
         "effect",

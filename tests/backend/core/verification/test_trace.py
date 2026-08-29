@@ -7,8 +7,10 @@ from pydantic import ValidationError
 
 from product.backend.core.verification.trace import (
     ExecutionTrace,
+    TraceAuthorityScope,
     TraceCorrelationKind,
     TraceEvent,
+    TraceEventKind,
 )
 
 
@@ -30,12 +32,15 @@ def _event(
         case_id=CASE_ID,
         action_id=ACTION_ID,
         resource_ids=("project-package",),
-        kind="request",
+        kind=TraceEventKind.ENTRY,
         semantic_key="request_received",
         subject_id="bob",
         actor_id="bob",
         credential_source="session-cookie",
-        authority_scope=("project-export",),
+        authority_scope=TraceAuthorityScope(
+            allowed_action_ids=(ACTION_ID,),
+            allowed_resource_ids=("project-package",),
+        ),
         source_component="collaboration-server",
         source_location=source_location,
         correlation_kind=(
@@ -60,6 +65,8 @@ def test_trace_stably_sorts_events_without_breaking_parent_order() -> None:
     )
 
     assert [event.event_id for event in trace.events] == ["root-a", "root-b", "child"]
+    assert trace.events[0].kind is TraceEventKind.ENTRY
+    assert trace.events[0].authority_scope.allowed_action_ids == (ACTION_ID,)
 
 
 @pytest.mark.parametrize(
@@ -90,4 +97,27 @@ def test_trace_rejects_inline_secret_material() -> None:
             "secret-event",
             recorded_at_us=1,
             source_location="token=private-value",
+        )
+
+
+def test_trace_rejects_secret_or_missing_authority_references() -> None:
+    with pytest.raises(ValidationError):
+        TraceAuthorityScope(allowed_action_ids=("token=private-value",))
+
+    event = _event("scoped-event", recorded_at_us=1).model_copy(
+        update={
+            "authority_scope": TraceAuthorityScope(
+                allowed_action_ids=(ACTION_ID,),
+                allowed_resource_ids=("project-package",),
+                origin_authorization_event_id="missing-authorization",
+            )
+        }
+    )
+    with pytest.raises(ValidationError):
+        ExecutionTrace(
+            case_id=CASE_ID,
+            action_id=ACTION_ID,
+            planned_subject_id="member-subject",
+            events=(event,),
+            complete=True,
         )

@@ -58,7 +58,7 @@ Owner API 与 Blob 是当前 OBJECT_CREATION 的关键来源，因为一个代�
 
 Queue 使用只读 Peek、固定 scope 和有界消息数，不改变 dequeue count；超出预算或无法唯一关联时返回不完整。Blob 使用固定 container/prefix、list/head/get 与有界分页；物理历史文件存在不等于当前业务对象存在，Sample compatibility 层只暴露仍有效的对象。Observer 不扩大凭据权限、不枚举无关资源、不保存 SAS、Cookie、Token 或响应秘密。
 
-原始读取先形成有界规范化状态和 provenance，再投影为 ObservationFact/SecurityEffectFact。Observer 自己不写 Verdict、Finding 或 Gate，也不直接修改目标。
+原始读取先形成有界 `ObservationEnvelope` 和 provenance；独立 `EffectProjector` 再按 `effect_id + projection_version` 投影 ObservationFact/SecurityEffectFact。Coordinator 不解释业务效果，Projector 不回读目标、不使用 whole-state hash。Observer 与 Projector 都不写 Verdict、Finding 或 Gate，也不直接修改目标。
 
 ## 失败为什么只能 INCONCLUSIVE
 
@@ -74,6 +74,7 @@ Execution Case
   → BASELINE / BEFORE / AFTER / EVENTUAL invocation
   → source read within scope and budget
   → ObservationEnvelope / ObserverOutcome
+  → EffectProjector(effect_id + projection_version)
   → ObservationFact / SecurityEffectFact
   → Evidence
   → Verification
@@ -97,7 +98,7 @@ Execution Case
 
 ## 版本与 Schema
 
-`ObserverInvocation` 与 `ObservationEnvelope` 是独立根文档，当前 `schema_version` 均为字符串 `"1"`；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复根版本。结构化 Audit 的可选 Trace 字段仍属于现有根文档，不另建 Schema 版本。Schema 版本描述机器格式，不表示产品 1.0.2。字段、required、枚举、大小和 canonical 以代码与已签入 Schema 为准，旧开发格式不猜测读取。
+`ObserverInvocation` 与 `ObservationEnvelope` 是独立根文档，当前 `schema_version` 均为字符串 `"1"`；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复根版本。结构化 Audit 的可选 Trace 字段仍属于现有根文档，不另建 Schema 版本。Schema 版本描述机器格式，不表示产品 1.0.3。字段、required、枚举、大小和 canonical 以代码与已签入 Schema 为准，旧开发格式不猜测读取。
 
 ## 相关真源
 

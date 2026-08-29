@@ -184,6 +184,7 @@ def test_test_fake_runtime_uses_common_case_orchestration_without_web() -> None:
 
     def verify(_session, observations, outcomes, execution):
         observation_fact = ObservationFact(
+            effect_id="document-mutated",
             requirement_id="resource_state",
             resource_id="document",
             effect=ObservedEffect.CONFIRMED,

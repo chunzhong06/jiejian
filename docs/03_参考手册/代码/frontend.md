@@ -152,6 +152,9 @@
 - `HistoryViewDto`
 - `ObservationFactDto`
 - `ReportDto`
+- `ResultDiagnosisDto`
+- `ResultDiagnosisImpactDto`
+- `ResultDiagnosisWitnessDto`
 - `ResultEvidenceSourceDto`
 - `ResultPresentationDto`
 - `ResultPresentationIssueDto`

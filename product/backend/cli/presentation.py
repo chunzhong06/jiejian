@@ -360,6 +360,33 @@ def emit_result_presentation(presentation: ResultPresentation) -> None:
             ],
         )
         for issue in presentation.issues:
+            diagnosis = getattr(issue, "diagnosis", None)
+            if diagnosis is not None:
+                typer.echo("")
+                _emit_section(
+                    f"{issue.title} · 权限断裂诊断",
+                    [
+                        (
+                            item.label,
+                            item.detail,
+                            (
+                                diagnosis.breakpoint_type.value
+                                if item.kind == "BREAKPOINT"
+                                else ""
+                            ),
+                        )
+                        for item in diagnosis.minimal_witness
+                    ],
+                )
+                if diagnosis.confirmed_impacts:
+                    typer.echo("")
+                    _emit_section(
+                        f"{issue.title} · 已确认影响",
+                        [
+                            (impact.kind.value, impact.summary, "CONFIRMED")
+                            for impact in diagnosis.confirmed_impacts
+                        ],
+                    )
             sources = getattr(issue, "evidence_sources", ())
             if not sources:
                 continue

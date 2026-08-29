@@ -5,7 +5,7 @@
  *   验证、报告页面与已发布结果 HTTP 路由之间的只读适配器
  *
  * 职责
- *   读取报告、ExecutionTrace、Evidence 和 Finding｜保持后端发布视图为真源
+ *   读取报告、ExecutionTrace、断裂诊断、Evidence 和 Finding｜保持后端发布视图为真源
  *
  * 调用链
  *   CheckResultsPage / EvidenceTimeline / ReportPanel → resultsApi → api/http
@@ -61,7 +61,7 @@ export type EvidenceCaseSnapshotDto = {
   required_observations?: string[]
 }
 export type ExecutionFactDto = { target_type?: string; action_id?: string; outcome?: string; reason_codes?: string[] }
-export type ObservationFactDto = { requirement_id?: string; resource_id?: string; effect?: string; complete?: boolean; reliable?: boolean; reason_codes?: string[] }
+export type ObservationFactDto = { effect_id?: string; requirement_id?: string; resource_id?: string; effect?: string; complete?: boolean; reliable?: boolean; reason_codes?: string[] }
 export type SecurityEffectFactDto = {
   effect_id?: string
   kind?: string
@@ -109,12 +109,17 @@ export type TraceEventDto = {
   case_id: string
   action_id: string
   resource_ids: string[]
-  kind: string
+  kind: 'ENTRY' | 'IDENTITY' | 'AUTHORIZATION' | 'PERSISTENT_EFFECT' | 'MESSAGE' | 'DELEGATION' | 'FINAL_EFFECT' | 'RECOVERY'
   semantic_key: string
   subject_id: string | null
   actor_id: string | null
   credential_source: string | null
-  authority_scope: string[]
+  authority_scope: {
+    allowed_action_ids: string[]
+    allowed_resource_ids: string[]
+    origin_authorization_event_id: string | null
+    delegated_from_event_id: string | null
+  }
   authorization_decision: 'ALLOW' | 'DENY' | null
   effect_id: string | null
   source_component: string
@@ -134,6 +139,41 @@ export type ExecutionTraceDto = {
   reason_codes: string[]
 }
 
+export type ResultDiagnosisWitnessDto = {
+  kind: 'PERMISSION_REQUIREMENT' | 'ACTUAL_IDENTITY' | 'AUTHORIZATION_DECISION' | 'BREAKPOINT' | 'CONFIRMED_EFFECT'
+  label: string
+  detail: string
+  event_id: string | null
+  evidence_refs: string[]
+}
+
+export type ResultDiagnosisImpactDto = {
+  event_id: string
+  parent_event_ids: string[]
+  kind: 'ENTRY' | 'IDENTITY' | 'AUTHORIZATION' | 'PERSISTENT_EFFECT' | 'MESSAGE' | 'DELEGATION' | 'FINAL_EFFECT' | 'RECOVERY'
+  semantic_key: string
+  effect_id: string | null
+  summary: string
+  evidence_refs: string[]
+}
+
+export type ResultDiagnosisDto = {
+  case_id: string
+  action_id: string
+  breakpoint_type: 'AUTHORIZATION_MISSING' | 'AUTHORIZATION_LATE' | 'AUTHORIZATION_BYPASS' | 'IDENTITY_SUBSTITUTION' | 'AUTHORITY_EXPANSION' | 'COMPENSATION_MASKING'
+  precision: 'EXACT' | 'RANGE' | 'VIOLATION_ONLY'
+  summary: string
+  minimal_witness: [
+    ResultDiagnosisWitnessDto,
+    ResultDiagnosisWitnessDto,
+    ResultDiagnosisWitnessDto,
+    ResultDiagnosisWitnessDto,
+    ResultDiagnosisWitnessDto,
+  ]
+  confirmed_impacts: ResultDiagnosisImpactDto[]
+  evidence_refs: string[]
+}
+
 export type ResultPresentationIssueDto = {
   finding_id: string
   title: string
@@ -148,11 +188,13 @@ export type ResultPresentationIssueDto = {
   explanation: string
   planned_identity_id: string
   planned_identity_label: string | null
-  actual_identity_status: 'UNAVAILABLE'
-  actual_identity_label: null
+  actual_identity_status: 'CONFIRMED' | 'UNAVAILABLE'
+  actual_identity_id: string | null
+  actual_identity_label: string | null
   severity: 'unknown' | 'low' | 'medium' | 'high' | 'critical'
   evidence_refs: string[]
   evidence_sources: ResultEvidenceSourceDto[]
+  diagnosis: ResultDiagnosisDto | null
   verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'
   occurrence_status: string | null
 }

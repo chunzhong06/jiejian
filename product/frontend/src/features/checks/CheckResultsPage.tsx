@@ -5,14 +5,14 @@
  *   把后端 ResultPresentation、ExecutionTrace 与已发布 Evidence 组织成单一可信结果故事。
  *
  * 职责
- *   依次说明权限预期、计划身份、实际身份边界、表面响应、真实影响与最终结论
- *   ｜按证据顺序展示只读执行路径｜按需展开证据和完整报告｜不在前端推断或重算安全结论
+ *   依次说明权限预期、实际身份、表面响应、断裂见证、确认影响与最终结论
+ *   ｜默认折叠完整执行路径｜按需展开证据和报告｜不在前端推断或重算安全结论
  * ============================================================================= */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Descriptions, Segmented, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Collapse, Descriptions, Segmented, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import { resultsApi, type EvidenceDto, type ExecutionTraceDto, type ResultEvidenceSourceDto, type ResultPresentationDto, type ResultPresentationIssueDto, type TraceEventDto } from '../../api/results'
+import { resultsApi, type EvidenceDto, type ExecutionTraceDto, type ResultDiagnosisDto, type ResultEvidenceSourceDto, type ResultPresentationDto, type ResultPresentationIssueDto } from '../../api/results'
 import { runsApi, type RunDto } from '../../api/runs'
 import { integrityLabel, lifecycleLabel, occurrenceStatusLabel, severityLabel } from '../../app/presentation'
 import { AdvancedDetails } from '../../components/AdvancedDetails'
@@ -70,36 +70,6 @@ function sourceStatusLabel(status: ResultEvidenceSourceDto['status']) {
 
 function sourceStatusColor(status: ResultEvidenceSourceDto['status']) {
   return status === 'FOUND' ? 'green' : status === 'UNAVAILABLE' ? 'gold' : 'blue'
-}
-
-const visibleTraceSemantics = new Set([
-  'request_received',
-  'server_identity_resolved',
-  'export_request_created',
-  'authorization_decided',
-  'export_message_sent',
-  'export_job_started',
-  'archive_generated',
-])
-
-function traceIdentityLabel(value: string | null) {
-  if (!value) return '用户'
-  return ({ alice: 'Alice', bob: 'Bob', 'export-worker': 'export-worker' } as Record<string, string>)[value] ?? value
-}
-
-function traceEventLabel(event: TraceEventDto) {
-  const subject = traceIdentityLabel(event.subject_id)
-  const actor = traceIdentityLabel(event.actor_id)
-  switch (event.semantic_key) {
-    case 'request_received': return `${subject} 发起业务操作`
-    case 'server_identity_resolved': return `服务器识别 ${subject}`
-    case 'export_request_created': return '导出请求已创建'
-    case 'authorization_decided': return event.authorization_decision === 'DENY' ? '权限检查：拒绝' : event.authorization_decision === 'ALLOW' ? '权限检查：允许' : '权限检查已记录'
-    case 'export_message_sent': return '导出消息已发送'
-    case 'export_job_started': return `${actor} 代表 ${subject} 执行`
-    case 'archive_generated': return '完整资料包已生成'
-    default: return null
-  }
 }
 
 export function CheckResultsPage({
@@ -202,19 +172,16 @@ export function CheckResultsPage({
 function ExecutionPaths({ traces }: { traces: ExecutionTraceDto[] }) {
   return <section className="result-section" aria-labelledby="execution-path-title">
     <div className="result-section-heading"><div><Typography.Title id="execution-path-title" level={3}>执行路径</Typography.Title><Typography.Paragraph type="secondary">界鉴只从已发布证据还原实际发生的节点；这里的顺序不会改变后端安全结论。</Typography.Paragraph></div></div>
-    <div className="execution-paths">{traces.map((trace, traceIndex) => {
-      const visibleEvents = trace.events.filter((event) => visibleTraceSemantics.has(event.semantic_key))
-      return <article className="execution-path" key={`${trace.case_id}-${trace.action_id}`} aria-label={traces.length > 1 ? `执行路径 ${traceIndex + 1}` : '执行路径详情'}>
-        {!trace.complete && <Alert type="warning" showIcon message="当前只能确认部分执行路径" />}
-        {visibleEvents.length > 0
-          ? <ol className="execution-path-list">{visibleEvents.map((event) => <li key={event.event_id}><span className="execution-path-dot" aria-hidden="true" /><Typography.Text strong>{traceEventLabel(event)}</Typography.Text></li>)}</ol>
-          : <Typography.Text type="secondary">已发布证据暂时没有可展示的路径节点。</Typography.Text>}
-        <AdvancedDetails label="高级：执行路径技术信息">
-          <Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="case_id">{trace.case_id}</Descriptions.Item><Descriptions.Item label="action_id">{trace.action_id}</Descriptions.Item><Descriptions.Item label="planned_subject_id">{trace.planned_subject_id}</Descriptions.Item><Descriptions.Item label="complete">{String(trace.complete)}</Descriptions.Item><Descriptions.Item label="reason_codes" span={2}>{trace.reason_codes.join('、') || '无'}</Descriptions.Item></Descriptions>
-          <div className="execution-path-technical-events">{trace.events.map((event) => <Descriptions key={event.event_id} size="small" column={{ xs: 1, sm: 2 }} title={event.semantic_key}><Descriptions.Item label="event_id">{event.event_id}</Descriptions.Item><Descriptions.Item label="parent_event_ids">{event.parent_event_ids.join('、') || '无'}</Descriptions.Item><Descriptions.Item label="source_component">{event.source_component}</Descriptions.Item><Descriptions.Item label="source_location">{event.source_location}</Descriptions.Item><Descriptions.Item label="correlation_kind">{event.correlation_kind}</Descriptions.Item><Descriptions.Item label="evidence_refs">{event.evidence_refs.join('、') || '无'}</Descriptions.Item></Descriptions>)}</div>
-        </AdvancedDetails>
-      </article>
-    })}</div>
+    <Collapse destroyOnHidden items={[{ key: 'execution-paths', label: '查看完整执行路径', children: <div className="execution-paths">{traces.map((trace, traceIndex) => <article className="execution-path" key={`${trace.case_id}-${trace.action_id}`} aria-label={traces.length > 1 ? `执行路径 ${traceIndex + 1}` : '执行路径详情'}>
+      {!trace.complete && <Alert type="warning" showIcon message="当前只能确认部分执行路径" />}
+      {trace.events.length > 0
+        ? <ol className="execution-path-list">{trace.events.map((event) => <li key={event.event_id}><span className="execution-path-dot" aria-hidden="true" /><Typography.Text strong>{event.kind}</Typography.Text><Typography.Text code>{event.semantic_key}</Typography.Text></li>)}</ol>
+        : <Typography.Text type="secondary">已发布证据暂时没有可展示的路径节点。</Typography.Text>}
+      <AdvancedDetails label="高级：执行路径技术信息">
+        <Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="case_id">{trace.case_id}</Descriptions.Item><Descriptions.Item label="action_id">{trace.action_id}</Descriptions.Item><Descriptions.Item label="planned_subject_id">{trace.planned_subject_id}</Descriptions.Item><Descriptions.Item label="complete">{String(trace.complete)}</Descriptions.Item><Descriptions.Item label="reason_codes" span={2}>{trace.reason_codes.join('、') || '无'}</Descriptions.Item></Descriptions>
+        <div className="execution-path-technical-events">{trace.events.map((event) => <Descriptions key={event.event_id} size="small" column={{ xs: 1, sm: 2 }} title={event.semantic_key}><Descriptions.Item label="event_id">{event.event_id}</Descriptions.Item><Descriptions.Item label="kind">{event.kind}</Descriptions.Item><Descriptions.Item label="parent_event_ids">{event.parent_event_ids.join('、') || '无'}</Descriptions.Item><Descriptions.Item label="source_component">{event.source_component}</Descriptions.Item><Descriptions.Item label="source_location">{event.source_location}</Descriptions.Item><Descriptions.Item label="correlation_kind">{event.correlation_kind}</Descriptions.Item><Descriptions.Item label="evidence_refs">{event.evidence_refs.join('、') || '无'}</Descriptions.Item></Descriptions>)}</div>
+      </AdvancedDetails>
+    </article>)}</div> }]} />
   </section>
 }
 
@@ -236,8 +203,18 @@ function ResultStory({ issue, index, onEvidence, onNavigate }: { issue: ResultPr
         ? <ul className="result-source-list">{issue.evidence_sources.map((source) => <li key={`${source.observer_type}-${source.label}`}><div><Typography.Text strong>{source.label}</Typography.Text><Typography.Text type="secondary">{sourceRoleLabel(source.role)}</Typography.Text></div><Tag color={sourceStatusColor(source.status)}>{sourceStatusLabel(source.status)}</Tag></li>)}</ul>
         : <Typography.Text type="secondary">本次发布结果没有可展示的观察来源。</Typography.Text>}
     </section>
+    {issue.diagnosis && <ResultDiagnosis diagnosis={issue.diagnosis} />}
     {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message={issue.conclusion} description={<Space direction="vertical"><Typography.Text>{issue.explanation}</Typography.Text><Button onClick={() => onNavigate?.('/flows')}>完善真实结果确认方式</Button></Space>} />}
     <div className="result-story-actions"><Button type="link" onClick={onEvidence} aria-controls="published-evidence">查看对应证据</Button><Tag>{occurrenceStatusLabel(issue.occurrence_status)}</Tag></div>
     <AdvancedDetails label="高级：问题与证据标识"><Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="finding_id">{issue.finding_id}</Descriptions.Item><Descriptions.Item label="planned_identity_id">{issue.planned_identity_id}</Descriptions.Item><Descriptions.Item label="occurrence_status">{issue.occurrence_status ?? '未提供'}</Descriptions.Item><Descriptions.Item label="evidence_refs">{issue.evidence_refs.join('、') || '无'}</Descriptions.Item></Descriptions></AdvancedDetails>
   </article>
+}
+
+function ResultDiagnosis({ diagnosis }: { diagnosis: ResultDiagnosisDto }) {
+  return <section className="result-diagnosis" aria-label="诊断">
+    <div className="result-diagnosis-summary"><Typography.Text strong>确定性诊断</Typography.Text><Typography.Paragraph>{diagnosis.summary}</Typography.Paragraph></div>
+    <div><Typography.Text strong>最小见证</Typography.Text><ol className="result-diagnosis-witness">{diagnosis.minimal_witness.map((witness, index) => <li key={`${witness.kind}-${index}`}><span className="result-story-step-index" aria-hidden="true">{index + 1}</span><div className="result-diagnosis-witness-copy"><Typography.Text type="secondary">{witness.label}</Typography.Text><Typography.Text strong>{witness.detail}</Typography.Text></div></li>)}</ol></div>
+    {diagnosis.confirmed_impacts.length > 0 && <div><Typography.Text strong>已确认影响</Typography.Text><ul className="result-diagnosis-impact-list">{diagnosis.confirmed_impacts.map((impact) => <li key={impact.event_id}><Typography.Text strong>{impact.summary}</Typography.Text><AdvancedDetails label="高级：影响证据"><Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="event_id">{impact.event_id}</Descriptions.Item><Descriptions.Item label="kind">{impact.kind}</Descriptions.Item><Descriptions.Item label="semantic_key">{impact.semantic_key}</Descriptions.Item><Descriptions.Item label="parent_event_ids">{impact.parent_event_ids.join('、') || '无'}</Descriptions.Item><Descriptions.Item label="effect_id">{impact.effect_id ?? '无'}</Descriptions.Item><Descriptions.Item label="evidence_refs">{impact.evidence_refs.join('、') || '无'}</Descriptions.Item></Descriptions></AdvancedDetails></li>)}</ul></div>}
+    <AdvancedDetails label="高级：诊断标识"><Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="case_id">{diagnosis.case_id}</Descriptions.Item><Descriptions.Item label="action_id">{diagnosis.action_id}</Descriptions.Item><Descriptions.Item label="breakpoint_type">{diagnosis.breakpoint_type}</Descriptions.Item><Descriptions.Item label="precision">{diagnosis.precision}</Descriptions.Item><Descriptions.Item label="evidence_refs" span={2}>{diagnosis.evidence_refs.join('、') || '无'}</Descriptions.Item></Descriptions></AdvancedDetails>
+  </section>
 }

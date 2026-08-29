@@ -233,11 +233,11 @@ ASSISTANT_TEMPLATES: dict[AssistantTemplateId, AssistantTemplateSpec] = {
         template_id=AssistantTemplateId.RESULT_EXPLANATION,
         allowed_fact_fields=frozenset({"run_lifecycle", "verdict", "headline", "scope_statement", "checked_count", "safe_count", "problem_count", "inconclusive_count", "uncovered_count", "limitations"}),
         allowed_entity_types=frozenset({AssistantEntityType.RESULT_ITEM}),
-        allowed_entity_fact_fields=frozenset({"expectation", "surface_result", "actual_result", "conclusion", "verdict", "evidence_sources"}),
+        allowed_entity_fact_fields=frozenset({"expectation", "surface_result", "actual_result", "conclusion", "verdict", "evidence_sources", "breakpoint_type", "precision", "minimal_witness", "confirmed_impacts"}),
         allowed_suggestion_kinds=frozenset({AssistantSuggestionKind.EXPLANATION}),
         max_entities=128,
         max_explanation_chars=220,
-        instruction="只解释已经发布的 PASS、BLOCK 或 INCONCLUSIVE 及其因果；不能返回新 Verdict 或根据说明重算结论。",
+        instruction="只解释已经发布的 PASS、BLOCK 或 INCONCLUSIVE 及确定性断裂见证；不能返回新 Verdict、断裂类型、位置或 precision，也不能根据说明重算结论。",
     ),
     AssistantTemplateId.ERROR_EXPLANATION: AssistantTemplateSpec(
         template_id=AssistantTemplateId.ERROR_EXPLANATION,
