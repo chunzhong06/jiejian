@@ -20,6 +20,7 @@ from typing import Any, Literal, TypeVar
 
 from mcp import MCPError
 from mcp.server import MCPServer
+from mcp.server.context import HandlerResult, ServerRequestContext
 from mcp.server.mcpserver import Context
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
@@ -242,10 +243,25 @@ def build_mcp_control(
 ) -> MCPControl:
     """注册冻结白名单，并把 SDK ASGI 子应用绑定到当前本地控制 origin。"""
 
+    async def record_client_activity(
+        request: ServerRequestContext[Any, Any],
+        call_next: Callable[[ServerRequestContext[Any, Any]], Any],
+    ) -> HandlerResult:
+        result = await call_next(request)
+        # initialize 成功后的下一条 SDK 消息会携带已经验证的 client_params。
+        params = request.session.client_params
+        if params is not None:
+            access.note_activity(
+                params.client_info.name,
+                params.client_info.version,
+            )
+        return result
+
     server = MCPServer(
         "界鉴 JIEJIAN",
         description="界鉴本地 Web 产品控制入口；结论仍由确定性 Verification 形成。",
         version=__version__,
+        middleware=[record_client_activity],
     )
 
     @server.tool(name="jiejian_product_status", structured_output=True)

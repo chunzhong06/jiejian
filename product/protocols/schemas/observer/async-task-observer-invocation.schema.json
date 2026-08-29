@@ -609,7 +609,7 @@
           "items": {
             "type": "string"
           },
-          "maxItems": 16,
+          "maxItems": 24,
           "minItems": 6,
           "title": "Allowed Fields",
           "type": "array"

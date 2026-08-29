@@ -12,6 +12,7 @@ from product.backend.infra.secrets import (
 
 def test_shared_secret_refs_keep_llm_and_test_identity_namespaces_isolated() -> None:
     assert credential_ref("llm", "primary") == "cred:jiejian/llm/primary"
+    assert credential_ref("mcp-control", "pairing") == "cred:jiejian/mcp-control/pairing"
     identity_ref = credential_ref(
         "test-identity",
         "sample-project",
@@ -23,6 +24,7 @@ def test_shared_secret_refs_keep_llm_and_test_identity_namespaces_isolated() -> 
     for invalid in (
         "cred:jiejian/unknown/value",
         "cred:jiejian/llm/primary/extra",
+        "cred:jiejian/mcp-control/pairing/extra",
         "cred:jiejian/test-identity/sample-project/tid_x",
         "cred:jiejian/test-identity/sample-project/../secret",
     ):

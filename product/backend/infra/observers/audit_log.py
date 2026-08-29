@@ -50,6 +50,32 @@ AUDIT_TIMEOUT = "AUDIT_TIMEOUT"
 _PROCESS_REAP_TIMEOUT_SECONDS = 1.0
 _ROTATED_FILE = re.compile(r"^(?P<prefix>[a-z][a-z0-9_-]{0,48})\.(?P<index>[1-9][0-9]{0,8})\.jsonl$")
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+_TRACE_AUDIT_FIELDS = frozenset(
+    {
+        "parent_event_id",
+        "kind",
+        "semantic_key",
+        "subject_id",
+        "actor_id",
+        "credential_source",
+        "authority_scope",
+        "authorization_decision",
+        "source_component",
+        "source_location",
+        "recorded_at_us",
+    }
+)
+_TRACE_AUDIT_REQUIRED_FIELDS = frozenset(
+    {"kind", "semantic_key", "source_component", "source_location", "recorded_at_us"}
+)
+_TRACE_AUDIT_STRING_FIELDS = _TRACE_AUDIT_FIELDS - {"recorded_at_us"}
+_TRACE_AUDIT_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$")
+_TRACE_SEMANTIC_KEY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_TRACE_INLINE_SECRET = re.compile(
+    r"(?:\bBearer\s+\S+|\b(?:authorization|cookie|credential|password|passwd|"
+    r"secret|token|api[_-]?key)\s*[:=]\s*\S+)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -288,6 +314,34 @@ def _strict_json_line(line: bytes) -> dict[str, Any]:
     return parsed
 
 
+def _trace_fields_are_safe(record: Mapping[str, Any]) -> bool:
+    """只接受完整、有界且不含内联秘密的可选 Trace 审计字段。"""
+
+    present = set(record) & _TRACE_AUDIT_FIELDS
+    if not present:
+        return True
+    if not _TRACE_AUDIT_REQUIRED_FIELDS.issubset(present):
+        return False
+    for field in present & _TRACE_AUDIT_STRING_FIELDS:
+        value = record[field]
+        if not isinstance(value, str) or not _TRACE_AUDIT_TOKEN.fullmatch(value):
+            return False
+        if _TRACE_INLINE_SECRET.search(value):
+            return False
+    semantic_key = record["semantic_key"]
+    if not _TRACE_SEMANTIC_KEY.fullmatch(semantic_key) or semantic_key != record["event_type"]:
+        return False
+    decision = record.get("authorization_decision")
+    if decision is not None and decision not in {"ALLOW", "DENY"}:
+        return False
+    recorded_at_us = record["recorded_at_us"]
+    if not isinstance(recorded_at_us, int) or isinstance(recorded_at_us, bool) or recorded_at_us < 0:
+        return False
+    if record.get("parent_event_id") == record.get("event_id"):
+        return False
+    return True
+
+
 def _audit_state(
     records: list[dict[str, Any]],
     next_offsets: list[dict[str, Any]],
@@ -462,6 +516,9 @@ def _run_child(invocation: AuditLogObserverInvocation, *, utc_now_us: Callable[[
                 isinstance(record[field], str)
                 for field in ("event_id", "case_tag", "task_id", "event_type", "resource_id")
             ) or not isinstance(record["sequence"], int) or isinstance(record["sequence"], bool):
+                reasons.add(AUDIT_EVENT_INVALID)
+                continue
+            if not _trace_fields_are_safe(record):
                 reasons.add(AUDIT_EVENT_INVALID)
                 continue
             event_id = record["event_id"]

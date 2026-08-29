@@ -22,6 +22,16 @@ from samples.web.collaboration_space.source.server import (
 
 PROJECT_ID = "campus-digital-museum"
 RESOURCE_ID = "campus-digital-museum-package"
+TRACE_SEMANTIC_KEYS = (
+    "request_received",
+    "server_identity_resolved",
+    "export_request_created",
+    "authorization_decided",
+    "export_message_sent",
+    "export_job_started",
+    "archive_generated",
+    "export_job_completed",
+)
 
 
 def _login(client: httpx.Client, account: str, password: str) -> None:
@@ -40,6 +50,15 @@ def _wait_task(client: httpx.Client, base_url: str, marker: str, bearer: str) ->
             return payload
         time.sleep(0.01)
     raise AssertionError("sample export task did not reach a terminal state")
+
+
+def _audit_records(runtime_root: Path, marker: str) -> list[dict]:
+    path = runtime_root / "audit" / "events.jsonl"
+    return [
+        record
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if (record := json.loads(line))["case_tag"] == marker
+    ]
 
 
 def test_product_page_supports_two_real_demo_sessions(
@@ -161,6 +180,19 @@ def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory
         assert marker in audit
         assert '"effect":"READY"' in audit
         assert "password" not in audit.casefold()
+        records = _audit_records(sample.server.runtime_root, marker)
+        assert tuple(record["semantic_key"] for record in records) == TRACE_SEMANTIC_KEYS
+        assert [record["sequence"] for record in records] == list(range(1, 9))
+        assert records[0]["subject_id"] == records[0]["actor_id"] == "alice"
+        assert records[3]["authorization_decision"] == "ALLOW"
+        assert records[5]["subject_id"] == "alice"
+        assert records[5]["actor_id"] == "export-worker"
+        assert all(
+            record.get("parent_event_id") == records[index - 1]["event_id"]
+            for index, record in enumerate(records)
+            if index > 0
+        )
+        assert all(secret not in audit for secret in sample.passwords.values())
 
         descriptor = json.loads(
             (sample.server.runtime_root / "environment.json").read_text(encoding="utf-8")
@@ -262,6 +294,22 @@ def test_bob_order_boundary_preserves_surface_denial_and_real_effect(collaborati
         else:
             assert task["state"] == "NOT_CREATED"
             assert not (sample.server.runtime_root / "blob" / bob_marker).exists()
+        records = _audit_records(sample.server.runtime_root, bob_marker)
+        expected_keys = (
+            TRACE_SEMANTIC_KEYS
+            if order == "ENQUEUE_BEFORE_AUTHORIZE"
+            else TRACE_SEMANTIC_KEYS[:2] + ("authorization_decided",)
+        )
+        assert tuple(record["semantic_key"] for record in records) == expected_keys
+        assert records[0]["subject_id"] == records[0]["actor_id"] == "bob"
+        assert next(
+            record for record in records if record["semantic_key"] == "authorization_decided"
+        )["authorization_decision"] == "DENY"
+        if order == "ENQUEUE_BEFORE_AUTHORIZE":
+            assert records[-1]["subject_id"] == "bob"
+            assert records[-1]["actor_id"] == "export-worker"
+        else:
+            assert all(record["sequence"] <= 3 for record in records)
 
 def test_unavailable_blob_does_not_change_fixed_bob_business_result(
     collaboration_space_factory,
@@ -388,9 +436,7 @@ def test_owner_revoke_preserves_history_hides_current_resource_and_allows_regene
         audit = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
         queued = [json.loads(line) for line in queue_path.read_text(encoding="utf-8").splitlines()]
         assert [item["event_type"] for item in audit if item["case_tag"] == marker] == [
-            "EXPORT_ENQUEUED",
-            "TASK_RUNNING",
-            "EXPORT_READY",
+            *TRACE_SEMANTIC_KEYS,
             "EXPORT_REVOKED",
         ]
         assert [item["event_type"] for item in queued if item["case_tag"] == marker] == [
@@ -399,7 +445,7 @@ def test_owner_revoke_preserves_history_hides_current_resource_and_allows_regene
             "EXPORT_READY",
             "EXPORT_REVOKED",
         ]
-        assert [item["sequence"] for item in audit if item["case_tag"] == marker] == [1, 2, 3, 4]
+        assert [item["sequence"] for item in audit if item["case_tag"] == marker] == list(range(1, 10))
         assert [item["sequence"] for item in queued if item["case_tag"] == marker] == [1, 2, 3, 4]
         assert next(item for item in audit if item["event_type"] == "EXPORT_REVOKED")["effect"] == "REVOKED"
         assert next(item for item in queued if item["event_type"] == "EXPORT_REVOKED")["result"] == "revoked"

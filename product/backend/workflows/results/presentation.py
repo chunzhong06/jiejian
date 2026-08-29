@@ -24,6 +24,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle, RunVerdict
 from product.backend.core.verification.facts import ObservedEffect, TemporalClosure
+from product.backend.core.verification.trace import ExecutionTrace
+from product.backend.workflows.results.trace import build_execution_traces
 from product.protocols.observer import ObserverOutcomeStatus, ObserverType
 
 
@@ -92,6 +94,7 @@ class ResultPresentation(_PresentationModel):
     inconclusive_count: int = Field(ge=0)
     uncovered_count: int = Field(ge=0)
     execution_problem: str | None = Field(default=None, max_length=320)
+    execution_traces: tuple[ExecutionTrace, ...] = ()
     issues: tuple[ResultPresentationIssue, ...] = ()
     limitations: tuple[str, ...] = Field(default=(), max_length=128)
 
@@ -150,6 +153,7 @@ def build_result_presentation(
     if lifecycle is RunLifecycle.SAFETY_STOPPED:
         limitations.append("检查为保护目标现场而安全停止；未完成范围不形成安全结论。")
     execution_problem = _execution_problem(lifecycle)
+    execution_traces = build_execution_traces(snapshot, evidence_items)
     return ResultPresentation(
         run_id=view.run.run_id,
         project_id=view.run.project_id,
@@ -164,6 +168,7 @@ def build_result_presentation(
         inconclusive_count=inconclusive_count,
         uncovered_count=uncovered_count,
         execution_problem=execution_problem,
+        execution_traces=execution_traces,
         issues=issues,
         limitations=tuple(limitations),
     )

@@ -1,19 +1,21 @@
 # =============================================================================
-# MCP 进程内访问控制
+# MCP 本机配对与会话访问控制
 #
 # 定位
-#   GUI 管理面与 MCP Streamable HTTP 入口之间的短期令牌和逐 Project 权限边界。
+#   SecretStore、GUI 管理面与 MCP Streamable HTTP 入口之间的凭据和权限边界。
 #
 # 职责
-#   生成随机 Bearer 令牌｜维护 READ/PREPARE/EXECUTE 层级｜即时撤销令牌和授权。
+#   持久化长期配对令牌｜维护当前 serve 的 READ/PREPARE/EXECUTE｜投影连接活动。
 #
 # 边界
-#   令牌与授权只驻留当前进程内存，不持久化、不写日志，也不复用浏览器控制 Cookie。
+#   Token 只进入 SecretStore 和显式凭据响应；提升授权与活动永远只驻留当前进程。
 # =============================================================================
 
 from __future__ import annotations
 
 import secrets
+import time
+from collections.abc import Callable
 from enum import StrEnum
 from hmac import compare_digest
 from threading import RLock
@@ -22,6 +24,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.secrets import SecretStore, credential_ref
+
+
+MCP_PAIRING_SECRET_REF = credential_ref("mcp-control", "pairing")
 
 
 class MCPAccessLevel(StrEnum):
@@ -53,57 +59,105 @@ class MCPProjectGrant(_MCPAccessModel):
 
 class MCPAccessView(_MCPAccessModel):
     schema_version: Literal["1"] = "1"
-    enabled: bool
+    paired: bool
+    accepting_connections: bool
     endpoint: str = Field(min_length=1, max_length=2048)
-    access_token: str | None = Field(default=None, min_length=32, max_length=256)
     default_level: Literal[MCPAccessLevel.READ] = MCPAccessLevel.READ
     project_grants: tuple[MCPProjectGrant, ...] = ()
+    client_connected: bool = False
+    client_name: str | None = Field(default=None, max_length=128)
+    client_version: str | None = Field(default=None, max_length=128)
+    last_seen_at_us: int | None = Field(default=None, ge=0)
+
+
+class MCPAccessCredentialView(MCPAccessView):
+    access_token: str = Field(min_length=32, max_length=256)
 
 
 class MCPAccessController:
-    """以单锁保证令牌轮换、关闭和权限检查对并发请求立即生效。"""
+    """以单锁保证长期配对和当前 serve 授权对并发请求立即生效。"""
 
-    def __init__(self, endpoint: str) -> None:
+    def __init__(
+        self,
+        endpoint: str,
+        secret_store: SecretStore,
+        *,
+        clock_us: Callable[[], int] | None = None,
+    ) -> None:
         self._endpoint = endpoint
-        self._token: str | None = None
+        self._secret_store = secret_store
+        self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
+        try:
+            self._token = secret_store.read(MCP_PAIRING_SECRET_REF)
+        except JiejianError as exc:
+            if exc.code != ErrorCode.SECRET_STORE_UNAVAILABLE.value:
+                raise
+            self._token = None
+        self._accepting_connections = self._token is not None
         self._grants: dict[str, MCPAccessLevel] = {}
+        self._client_name: str | None = None
+        self._client_version: str | None = None
+        self._last_seen_at_us: int | None = None
         self._lock = RLock()
 
     def view(self) -> MCPAccessView:
         with self._lock:
             return self._view_locked()
 
-    def enable(self) -> MCPAccessView:
+    def pair(self) -> MCPAccessCredentialView:
         with self._lock:
             if self._token is None:
                 # token_urlsafe(32) 的原始随机输入为 32 字节，即 256 bit。
-                self._token = secrets.token_urlsafe(32)
+                token = secrets.token_urlsafe(32)
+                self._secret_store.write(MCP_PAIRING_SECRET_REF, token)
+                self._token = token
                 self._grants.clear()
-            return self._view_locked()
+            self._accepting_connections = True
+            return self._credential_view_locked()
 
-    def regenerate(self) -> MCPAccessView:
+    def rotate(self) -> MCPAccessCredentialView:
         with self._lock:
             if self._token is None:
                 raise JiejianError(
                     ErrorCode.MCP_DISABLED,
-                    "MCP 控制入口尚未启用，请先在 AI 工具连接面板中启用。",
+                    "尚未建立 MCP 配对，请先在 AI 工具连接面板中完成首次配对。",
                 )
-            self._token = secrets.token_urlsafe(32)
-            self._grants.clear()
+            token = secrets.token_urlsafe(32)
+            self._secret_store.write(MCP_PAIRING_SECRET_REF, token)
+            self._token = token
+            self._accepting_connections = True
+            self._clear_session_locked()
+            return self._credential_view_locked()
+
+    def reveal(self) -> MCPAccessCredentialView:
+        with self._lock:
+            if self._token is None:
+                raise JiejianError(
+                    ErrorCode.MCP_DISABLED,
+                    "尚未建立 MCP 配对，请先在 AI 工具连接面板中完成首次配对。",
+                )
+            return self._credential_view_locked()
+
+    def pause(self) -> MCPAccessView:
+        with self._lock:
+            self._accepting_connections = False
+            self._clear_session_locked()
             return self._view_locked()
 
-    def disable(self) -> MCPAccessView:
+    def forget(self) -> MCPAccessView:
         with self._lock:
+            self._secret_store.delete(MCP_PAIRING_SECRET_REF)
             self._token = None
-            self._grants.clear()
+            self._accepting_connections = False
+            self._clear_session_locked()
             return self._view_locked()
 
     def set_level(self, project_id: str, level: MCPAccessLevel) -> MCPAccessView:
         with self._lock:
-            if self._token is None:
+            if self._token is None or not self._accepting_connections:
                 raise JiejianError(
                     ErrorCode.MCP_DISABLED,
-                    "MCP 控制入口尚未启用，请先在 AI 工具连接面板中启用。",
+                    "当前 serve 未接受 MCP 连接，请回到 AI 工具连接面板查看状态。",
                 )
             if level is MCPAccessLevel.READ:
                 self._grants.pop(project_id, None)
@@ -144,13 +198,31 @@ class MCPAccessController:
                 )
 
     def close(self) -> None:
-        self.disable()
+        with self._lock:
+            # 进程退出只清理本次 serve；长期配对仍由 SecretStore 保存。
+            self._token = None
+            self._accepting_connections = False
+            self._clear_session_locked()
+
+    def note_activity(
+        self,
+        client_name: str | None,
+        client_version: str | None,
+    ) -> None:
+        """记录 SDK 已验证连接的有界身份和最近活动，不保存请求正文。"""
+
+        with self._lock:
+            if self._token is None or not self._accepting_connections:
+                return
+            self._client_name = self._bounded_client_value(client_name)
+            self._client_version = self._bounded_client_value(client_version)
+            self._last_seen_at_us = self._clock_us()
 
     def _authorize_locked(self, authorization: str | None) -> None:
-        if self._token is None:
+        if self._token is None or not self._accepting_connections:
             raise JiejianError(
                 ErrorCode.MCP_DISABLED,
-                "MCP 控制入口尚未启用，请在界鉴中启用后重试。",
+                "当前 serve 未接受 MCP 连接，请回到界鉴查看连接状态。",
             )
         scheme, separator, presented = (authorization or "").partition(" ")
         if (
@@ -166,19 +238,45 @@ class MCPAccessController:
 
     def _view_locked(self) -> MCPAccessView:
         return MCPAccessView(
-            enabled=self._token is not None,
+            paired=self._token is not None,
+            accepting_connections=self._accepting_connections,
             endpoint=self._endpoint,
-            access_token=self._token,
             project_grants=tuple(
                 MCPProjectGrant(project_id=project_id, level=level)
                 for project_id, level in sorted(self._grants.items())
             ),
+            client_connected=self._last_seen_at_us is not None,
+            client_name=self._client_name,
+            client_version=self._client_version,
+            last_seen_at_us=self._last_seen_at_us,
         )
+
+    def _credential_view_locked(self) -> MCPAccessCredentialView:
+        assert self._token is not None
+        return MCPAccessCredentialView(
+            **self._view_locked().model_dump(),
+            access_token=self._token,
+        )
+
+    def _clear_session_locked(self) -> None:
+        self._grants.clear()
+        self._client_name = None
+        self._client_version = None
+        self._last_seen_at_us = None
+
+    @staticmethod
+    def _bounded_client_value(value: str | None) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()[:128]
+        return normalized or None
 
 
 __all__ = [
     "MCPAccessController",
+    "MCPAccessCredentialView",
     "MCPAccessLevel",
     "MCPAccessView",
+    "MCP_PAIRING_SECRET_REF",
     "MCPProjectGrant",
 ]

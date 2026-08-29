@@ -55,13 +55,21 @@ class ExportWorker:
         self.storage.update_job(task_id, "RUNNING")
         running = {**job, "state": "RUNNING"}
         self.storage.write_task(running)
-        self.storage.append_audit(
+        started_event_id = self.storage.append_audit(
             marker=marker,
             task_id=task_id,
-            event_type="TASK_RUNNING",
-            sequence=2,
+            event_type="export_job_started",
+            sequence=6,
             result="running",
             effect="PROCESSING",
+            parent_event_id=self.storage.audit_event_id(marker, "export_message_sent", 5),
+            kind="background_job",
+            semantic_key="export_job_started",
+            subject_id=str(job["actor_id"]),
+            actor_id="export-worker",
+            authority_scope="project:export",
+            source_component="export-worker",
+            source_location="worker:export",
         )
         self.storage.append_queue_message(
             marker=marker,
@@ -77,14 +85,37 @@ class ExportWorker:
                 raise OSError("archive was not created")
             completed = self.storage.update_job(task_id, "SUCCESS", artifact_id=artifact_id)
             completed["artifact_id"] = artifact_id
-            self.storage.write_task(completed, final_result={"artifact_id": artifact_id, "state": "READY"})
+            archive_event_id = self.storage.append_audit(
+                marker=marker,
+                task_id=task_id,
+                event_type="archive_generated",
+                sequence=7,
+                result="ready",
+                effect="READY",
+                parent_event_id=started_event_id,
+                kind="artifact",
+                semantic_key="archive_generated",
+                subject_id=str(job["actor_id"]),
+                actor_id="export-worker",
+                authority_scope="project:export",
+                source_component="export-worker",
+                source_location="blob:project-export",
+            )
             self.storage.append_audit(
                 marker=marker,
                 task_id=task_id,
-                event_type="EXPORT_READY",
-                sequence=3,
+                event_type="export_job_completed",
+                sequence=8,
                 result="ready",
                 effect="READY",
+                parent_event_id=archive_event_id,
+                kind="background_job",
+                semantic_key="export_job_completed",
+                subject_id=str(job["actor_id"]),
+                actor_id="export-worker",
+                authority_scope="project:export",
+                source_component="export-worker",
+                source_location="worker:export",
             )
             self.storage.append_queue_message(
                 marker=marker,
@@ -93,6 +124,11 @@ class ExportWorker:
                 sequence=3,
                 result="ready",
                 effect="READY",
+            )
+            # 终态任务文件最后发布，避免读取方在过程事实尚未完整时看到 SUCCESS。
+            self.storage.write_task(
+                completed,
+                final_result={"artifact_id": artifact_id, "state": "READY"},
             )
         except Exception as error:
             # 只发布有界失败码，避免把路径、异常正文或运行凭据带入任务接口。
@@ -110,7 +146,7 @@ class ExportWorker:
                 marker=marker,
                 task_id=task_id,
                 event_type="EXPORT_FAILED",
-                sequence=3,
+                sequence=7,
                 result="failed",
                 effect="FAILED",
             )

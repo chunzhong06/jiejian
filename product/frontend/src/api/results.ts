@@ -5,7 +5,7 @@
  *   验证、报告页面与已发布结果 HTTP 路由之间的只读适配器
  *
  * 职责
- *   读取报告｜读取 Evidence 和 Finding｜保持后端发布视图为真源
+ *   读取报告、ExecutionTrace、Evidence 和 Finding｜保持后端发布视图为真源
  *
  * 调用链
  *   CheckResultsPage / EvidenceTimeline / ReportPanel → resultsApi → api/http
@@ -103,6 +103,37 @@ export type ResultEvidenceSourceDto = {
   evidence_refs: string[]
 }
 
+export type TraceEventDto = {
+  event_id: string
+  parent_event_ids: string[]
+  case_id: string
+  action_id: string
+  resource_ids: string[]
+  kind: string
+  semantic_key: string
+  subject_id: string | null
+  actor_id: string | null
+  credential_source: string | null
+  authority_scope: string[]
+  authorization_decision: 'ALLOW' | 'DENY' | null
+  effect_id: string | null
+  source_component: string
+  source_location: string
+  correlation_kind: 'EXPLICIT_PARENT' | 'CASE_MARKER' | 'RESOURCE_LINK' | 'TEMPORAL'
+  evidence_refs: string[]
+  recorded_at_us: number
+}
+
+export type ExecutionTraceDto = {
+  schema_version: '1'
+  case_id: string
+  action_id: string
+  planned_subject_id: string
+  events: TraceEventDto[]
+  complete: boolean
+  reason_codes: string[]
+}
+
 export type ResultPresentationIssueDto = {
   finding_id: string
   title: string
@@ -140,6 +171,7 @@ export type ResultPresentationDto = {
   inconclusive_count: number
   uncovered_count: number
   execution_problem: string | null
+  execution_traces: ExecutionTraceDto[]
   issues: ResultPresentationIssueDto[]
   limitations: string[]
 }

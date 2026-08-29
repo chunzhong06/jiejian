@@ -38,7 +38,7 @@
 - `class MCPPathAdapter`
 - `class MCPControl`
 - `build_mcp_control(context, workers, access, control_origin, control_host) -> MCPControl`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `product.backend.workflows.official_sample`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `product.backend.workflows.official_sample`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `time`, `typing`
 
 ### `product/backend/api/routers/assistant.py`
 - `class ProjectAssistantSurface`

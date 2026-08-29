@@ -154,9 +154,20 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
                     "effect",
                     "event_id",
                     "event_type",
+                    "kind",
+                    "parent_event_id",
+                    "actor_id",
+                    "authorization_decision",
+                    "authority_scope",
+                    "credential_source",
+                    "recorded_at_us",
                     "resource_id",
                     "result",
+                    "semantic_key",
                     "sequence",
+                    "source_component",
+                    "source_location",
+                    "subject_id",
                     "task_id",
                 ],
             },
@@ -424,7 +435,57 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.BAD_REQUEST, {"code": "REQUEST_MARKER_INVALID"})
             return
         self.server.record_case_actor(marker, account)
+        request_event_id = self.server.storage.append_audit(
+            marker=marker,
+            task_id=marker,
+            event_type="request_received",
+            sequence=1,
+            result="received",
+            effect="REQUESTED",
+            kind="http_request",
+            semantic_key="request_received",
+            subject_id=account,
+            actor_id=account,
+            credential_source="session-cookie",
+            authority_scope="project:export",
+            source_component="collaboration-server",
+            source_location="api:/projects/export",
+        )
+        identity_event_id = self.server.storage.append_audit(
+            marker=marker,
+            task_id=marker,
+            event_type="server_identity_resolved",
+            sequence=2,
+            result="resolved",
+            effect="IDENTIFIED",
+            parent_event_id=request_event_id,
+            kind="identity_resolution",
+            semantic_key="server_identity_resolved",
+            subject_id=account,
+            actor_id="collaboration-server",
+            credential_source="session-cookie",
+            authority_scope="project:export",
+            source_component="collaboration-server",
+            source_location="session:account",
+        )
         if account == "bob" and self.server.authorization_order == "AUTHORIZE_BEFORE_ENQUEUE":
+            self.server.storage.append_audit(
+                marker=marker,
+                task_id=marker,
+                event_type="authorization_decided",
+                sequence=3,
+                result="denied",
+                effect="DENY",
+                parent_event_id=identity_event_id,
+                kind="authorization",
+                semantic_key="authorization_decided",
+                subject_id=account,
+                actor_id="authorization-policy",
+                authority_scope="project:export",
+                authorization_decision="DENY",
+                source_component="collaboration-server",
+                source_location="policy:project-owner",
+            )
             self._forbidden("EXPORT_PERMISSION_REQUIRED")
             return
         job = self.server.storage.create_job(marker, account)
@@ -444,13 +505,55 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             )
             return
         self.server.storage.write_task(job)
+        created_event_id = self.server.storage.append_audit(
+            marker=marker,
+            task_id=str(job["task_id"]),
+            event_type="export_request_created",
+            sequence=3,
+            result="created",
+            effect="PENDING",
+            parent_event_id=identity_event_id,
+            kind="domain_request",
+            semantic_key="export_request_created",
+            subject_id=account,
+            actor_id="collaboration-server",
+            authority_scope="project:export",
+            source_component="collaboration-server",
+            source_location="storage:export-job",
+        )
+        decision = "DENY" if account == "bob" else "ALLOW"
+        decision_event_id = self.server.storage.append_audit(
+            marker=marker,
+            task_id=str(job["task_id"]),
+            event_type="authorization_decided",
+            sequence=4,
+            result=decision.casefold(),
+            effect=decision,
+            parent_event_id=created_event_id,
+            kind="authorization",
+            semantic_key="authorization_decided",
+            subject_id=account,
+            actor_id="authorization-policy",
+            authority_scope="project:export",
+            authorization_decision=decision,
+            source_component="collaboration-server",
+            source_location="policy:project-owner",
+        )
         self.server.storage.append_audit(
             marker=marker,
             task_id=str(job["task_id"]),
-            event_type="EXPORT_ENQUEUED",
-            sequence=1,
+            event_type="export_message_sent",
+            sequence=5,
             result="queued",
             effect="PENDING",
+            parent_event_id=decision_event_id,
+            kind="message_publish",
+            semantic_key="export_message_sent",
+            subject_id=account,
+            actor_id="collaboration-server",
+            authority_scope="project:export",
+            source_component="collaboration-server",
+            source_location="queue:export-events",
         )
         self.server.storage.append_queue_message(
             marker=marker,

@@ -1,4 +1,4 @@
-// MCP 设置 API：只在当前页面会话中接收进程内令牌，不写入浏览器持久化存储。
+// MCP 设置 API：读取当前连接状态，并让 GUI 显式管理长期配对与本次会话。
 
 import { request } from './http'
 
@@ -11,18 +11,26 @@ export type MCPProjectGrant = {
 
 export type MCPAccessView = {
   schema_version: '1'
-  enabled: boolean
+  paired: boolean
+  accepting_connections: boolean
   endpoint: string
-  access_token: string | null
   default_level: 'READ'
   project_grants: MCPProjectGrant[]
+  client_connected: boolean
+  client_name: string | null
+  client_version: string | null
+  last_seen_at_us: number | null
 }
+
+export type MCPAccessCredentialView = MCPAccessView & { access_token: string }
 
 export const mcpAccessApi = {
   status: () => request<MCPAccessView>('/api/mcp/access'),
-  enable: () => request<MCPAccessView>('/api/mcp/access/enable', { method: 'POST' }),
-  regenerate: () => request<MCPAccessView>('/api/mcp/access/regenerate', { method: 'POST' }),
-  disable: () => request<MCPAccessView>('/api/mcp/access/disable', { method: 'POST' }),
+  pair: () => request<MCPAccessCredentialView>('/api/mcp/access/pair', { method: 'POST' }),
+  reveal: () => request<MCPAccessCredentialView>('/api/mcp/access/reveal', { method: 'POST' }),
+  rotate: () => request<MCPAccessCredentialView>('/api/mcp/access/rotate', { method: 'POST' }),
+  pause: () => request<MCPAccessView>('/api/mcp/access/pause', { method: 'POST' }),
+  forget: () => request<MCPAccessView>('/api/mcp/access/forget', { method: 'POST' }),
   setProjectAccess: (projectId: string, level: MCPAccessLevel) =>
     request<MCPAccessView>(`/api/mcp/access/projects/${encodeURIComponent(projectId)}`, {
       method: 'PUT',

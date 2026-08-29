@@ -77,7 +77,7 @@ Execution Case
   → ObservationFact / SecurityEffectFact
   → Evidence
   → Verification
-  → ResultPresentation（KEY/SUPPORTING 展示）
+  → ExecutionTrace（只读路径）/ ResultPresentation（KEY/SUPPORTING 展示）
 ```
 
 修改或查询时按职责进入：
@@ -90,13 +90,14 @@ Execution Case
 - 当前协作空间绑定：`product/backend/workflows/security_setup/local_observer_wiring.py`
 - Observer outcome：`product/protocols/observer/result.py`；权限三态消费：`product/backend/core/verification/permissions/evaluation.py`
 - 结果展示：`product/backend/workflows/results/presentation.py`
+- 路径构建：`product/backend/workflows/results/trace.py`；只消费冻结 request snapshot 与已发布 Evidence
 - Adapter 直接测试：`tests/backend/infra/observers/`
 - outcome/INCONCLUSIVE 直接测试：`tests/protocols/observer/test_observer_result.py`、`tests/backend/core/verification/permissions/test_evaluation.py`
 - 协作空间六面 Golden：`tests/fixtures/collaboration_golden.py`
 
 ## 版本与 Schema
 
-`ObserverInvocation` 与 `ObservationEnvelope` 是独立根文档，当前 `schema_version` 均为字符串 `"1"`；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复根版本。Schema 版本描述机器格式，不表示产品 1.0.1。字段、required、枚举、大小和 canonical 以代码与已签入 Schema 为准，旧开发格式不猜测读取。
+`ObserverInvocation` 与 `ObservationEnvelope` 是独立根文档，当前 `schema_version` 均为字符串 `"1"`；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复根版本。结构化 Audit 的可选 Trace 字段仍属于现有根文档，不另建 Schema 版本。Schema 版本描述机器格式，不表示产品 1.0.2。字段、required、枚举、大小和 canonical 以代码与已签入 Schema 为准，旧开发格式不猜测读取。
 
 ## 相关真源
 

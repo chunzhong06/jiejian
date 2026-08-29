@@ -31,6 +31,7 @@ Azure Blob
 | 本地应用的六面观察接线 | `product/backend/workflows/security_setup/local_observer_wiring.py` | `profile_builder.py`、生成 Profile、Sample 配置 |
 | Runner 调用和 Evidence 组装 | `product/backend/infra/runtime/runner/case_orchestrator.py`、`result_builder.py` | `executor.py`、`product/protocols/runner/evidence.py` |
 | 人类结果中的来源角色和状态 | `product/backend/workflows/results/presentation.py` | Effect binding、已发布 Evidence、前端结果组件 |
+| 已发布执行路径 | `product/backend/workflows/results/trace.py`、`product/backend/core/verification/trace.py` | 结构化 Audit、Evidence、ResultPresentation |
 
 精确类名和导出清单由对应自动代码参考生成。本文维护修改路线和不能从符号表得出的语义边界。
 
@@ -118,6 +119,8 @@ Windows 上日志和 Sample 状态可能由原子替换写入。读路径必须�
 ## 修改调度、Evidence 与展示映射
 
 Coordinator 负责按 Case 阶段调用 Adapter，并校验返回的 observer id、requirement id、phase 和目标绑定。Runner 负责把全部实际运行来源放入 CaseResult 与 Evidence。Evidence 的 semantic hash 必须基于模型规范化后的稳定顺序；如果模型会排序 `observation_facts` 或 `reason_codes`，哈希输入也必须先做同样规范化，否则跨进程发布会出现摘要漂移。
+
+结构化 Audit 可额外发布有界 `semantic_key`、显式 parent、subject/actor、credential source 摘要、authority scope、authorization decision、source component/location 和时间。字段必须是标量且不含秘密正文；Observer 拒绝不完整 Trace 字段、非法 decision、自引用和内联 Bearer/Token。`ExecutionTrace` 只在结果读取阶段消费冻结快照与这些已发布 Evidence，缺失来源时标为 partial，不回读 live 现场。
 
 结果页来源状态只按已发布事实映射：
 

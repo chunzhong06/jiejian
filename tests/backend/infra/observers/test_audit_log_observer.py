@@ -53,9 +53,22 @@ FIELDS = (
     "effect",
     "value",
 )
+TRACE_FIELDS = FIELDS + (
+    "parent_event_id",
+    "kind",
+    "semantic_key",
+    "subject_id",
+    "actor_id",
+    "credential_source",
+    "authority_scope",
+    "authorization_decision",
+    "source_component",
+    "source_location",
+    "recorded_at_us",
+)
 
 
-def _spec(*, phases: tuple[ObservationPhase, ...] = (ObservationPhase.AFTER,), max_files: int = 4, max_lines: int = 100, max_line_bytes: int = 4096, max_rows: int = 100, timeout_us: int = 5_000_000) -> ObserverSpec:
+def _spec(*, phases: tuple[ObservationPhase, ...] = (ObservationPhase.AFTER,), max_files: int = 4, max_lines: int = 100, max_line_bytes: int = 4096, max_rows: int = 100, timeout_us: int = 5_000_000, fields: tuple[str, ...] = FIELDS) -> ObserverSpec:
     return ObserverSpec(
         observer_id="audit_observer",
         observer_type=ObserverType.STRUCTURED_AUDIT_LOG,
@@ -64,7 +77,7 @@ def _spec(*, phases: tuple[ObservationPhase, ...] = (ObservationPhase.AFTER,), m
             locator=StructuredAuditLogLocator(
                 authorized_root_ref="env:AUDIT_ROOT",
                 relative_file_pattern="audit.jsonl",
-                allowed_fields=FIELDS,
+                allowed_fields=fields,
                 scan_budget=AuditLogScanBudget(max_files=max_files, max_lines=max_lines, max_line_bytes=max_line_bytes),
             ),
             normalization_id="audit-window",
@@ -261,6 +274,49 @@ def test_audit_observer_rejects_nested_unallowed_and_invalid_utf8(tmp_path: Path
     assert result.envelope is not None
     assert "AUDIT_EVENT_INVALID" in result.envelope.reason_codes
     assert AUDIT_INVALID_UTF8 in result.envelope.reason_codes
+
+
+def test_audit_observer_publishes_safe_trace_fields_and_rejects_inline_secret(tmp_path: Path) -> None:
+    safe = _record(
+        "case-1",
+        "task-case-1",
+        "trace-request",
+        "request_received",
+        1,
+        kind="http_request",
+        semantic_key="request_received",
+        subject_id="alice",
+        actor_id="alice",
+        credential_source="session-cookie",
+        authority_scope="export:project",
+        source_component="collaboration-server",
+        source_location="api:/projects/export",
+        recorded_at_us=100,
+    )
+    unsafe = _record(
+        "case-1",
+        "task-case-1",
+        "trace-secret",
+        "server_identity_resolved",
+        2,
+        parent_event_id="trace-request",
+        kind="identity_resolution",
+        semantic_key="server_identity_resolved",
+        subject_id="alice",
+        actor_id="collaboration-server",
+        credential_source="token=private-value",
+        source_component="collaboration-server",
+        source_location="api:/projects/export",
+        recorded_at_us=101,
+    )
+    _write(tmp_path / "audit.jsonl", [safe, unsafe])
+
+    result = _observe(tmp_path, spec=_spec(fields=TRACE_FIELDS))
+
+    assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
+    assert result.envelope is not None
+    assert result.envelope.state.canonical_data["records"] == [safe]
+    assert "AUDIT_EVENT_INVALID" in result.envelope.reason_codes
 
 
 def test_audit_observer_budget_and_secret_environment_boundary(tmp_path: Path) -> None:

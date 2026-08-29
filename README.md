@@ -1,4 +1,4 @@
-# 界鉴 JIEJIAN 1.0.1
+# 界鉴 JIEJIAN 1.0.2
 
 > 界鉴是一款面向 AI 快速开发 Web 应用的权限安全检查工具，用来确认不同身份是否真的只能访问和操作自己有权限的数据与业务功能。
 
@@ -16,10 +16,10 @@
 
 ## Windows x64 Portable
 
-正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.1、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
+正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.2、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
 
-- `JieJian-WebV1-1.0.1-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
-- `JieJian-WebV1-1.0.1-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
+- `JieJian-WebV1-1.0.2-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
+- `JieJian-WebV1-1.0.2-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
 - `SHA256SUMS.txt`：两个 ZIP 的固定 SHA256 校验和。
 
 两个 ZIP 除 `samples/` 外的产品文件完全相同。发行目录可以整体移动到中文或带空格路径；版本可在“运行环境”设置页或 `jiejian --version` 查看。开发者构建与仓库外验收见[修改发布与便携版](docs/02_开发指南/任务/修改发布与便携版.md)。
@@ -80,7 +80,7 @@
 | `BLOCK`        | 发现可能的权限越界，需要处理 |
 | `INCONCLUSIVE` | 证据不足，暂时不能下结论     |
 
-在检查结果中，可以继续查看真实证据和完整报告。`INCONCLUSIVE` 不表示安全，也不表示未发现问题；执行失败或结果完整性无效会作为独立失败状态展示，不冒充第四种安全结论。
+在检查结果中，可以继续查看执行路径、真实证据和完整报告。执行路径只从冻结请求与已发布 Evidence 还原实际发生的身份、权限检查、后台任务和最终产物；证据不完整时只展示已经确认的节点，不补画未知步骤，也不改变后端 Verdict。`INCONCLUSIVE` 不表示安全，也不表示未发现问题；执行失败或结果完整性无效会作为独立失败状态展示，不冒充第四种安全结论。
 
 ## 命令行与自动化
 
@@ -102,9 +102,19 @@ jiejian --version
 
 ### AI 工具连接（MCP）
 
-界鉴可以通过同一个本地 Web 进程提供 MCP Streamable HTTP 控制入口。先打开模型与 AI 设置中的“AI 工具连接（MCP）”，显式启用后复制页面显示的连接 URL 和 Bearer 令牌；该令牌与模型供应商 API Key、浏览器控制 Cookie 相互独立，只保存在当前进程内存中。
+界鉴可以通过同一个本地 Web 进程提供 MCP Streamable HTTP 控制入口。打开模型与 AI 设置中的“AI 工具连接（MCP）”完成一次首次配对后，长期 Token 会进入 Windows Credential Manager；以后启动界鉴会自动恢复只读连接。该 Token 与模型供应商 API Key、浏览器控制 Cookie 相互独立，普通状态、日志和报告都不会返回正文。
 
-连接默认只有 `READ` 权限，可读取产品状态、项目、应用理解、身份、业务流程、检查预览、结果、证据索引、历史和系统状态。需要修改已有候选或准备检查时，必须在页面中按应用确认 `PREPARE`；需要启动或停止受控任务时，再按应用确认 `EXECUTE`。权限按层级包含下级能力，确认后不会逐工具重复弹窗，也不会永久保存。关闭连接、重新生成令牌或退出界鉴会立即撤销旧令牌和全部提升权限。
+长期 Token 只恢复连接和默认 `READ`，可读取产品状态、项目、应用理解、身份、业务流程、检查预览、结果、证据索引、历史和系统状态。需要修改已有候选或准备检查时，必须在页面中按应用确认 `PREPARE`；需要启动或停止受控任务时，再按应用确认 `EXECUTE`。这些提升只属于当前 serve，每次启动都要重新授权。
+
+Codex 固定使用 server name `jiejian`、endpoint `http://127.0.0.1:8765/mcp` 和环境变量 `JIEJIAN_MCP_TOKEN`：
+
+```powershell
+codex mcp add jiejian `
+  --url "http://127.0.0.1:8765/mcp" `
+  --bearer-token-env-var JIEJIAN_MCP_TOKEN
+```
+
+DSH 固定使用 `@deepseek-ai/dsh-mcp-client` 的 `streamable-http`，并从 `process.env.JIEJIAN_MCP_TOKEN` 形成 Authorization Bearer；完整可复制 composition 在 GUI 的 DSH 页签。轮换 Token 后只需更新该环境变量并让新客户端进程重新读取，不必重新添加 server；“暂停本次连接”保留长期配对，“忘记此连接”才会从 Credential Manager 彻底撤销配对。
 
 MCP 只复用现有 ApplicationCore、Worker 和确定性结果投影，不建立第二套业务状态，也不把秘密、源码、请求正文、完整日志或完整 Evidence 暴露给工具。它是 Web 产品的本地控制入口，不是受检的 MCP/Agent Target。
 

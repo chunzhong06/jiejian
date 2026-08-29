@@ -1,4 +1,4 @@
-// 验证普通 AI 辅助设置的动态目录、秘密清理与高级字段折叠边界。
+// 验证普通 AI 辅助设置、MCP 配对装配、秘密清理与高级字段折叠边界。
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,8 +8,8 @@ const mockApi = vi.hoisted(() => ({
   discoverModels: vi.fn(), refreshModels: vi.fn(), saveDefault: vi.fn(), create: vi.fn(), settings: vi.fn(), patchSettings: vi.fn(), update: vi.fn(), profile: vi.fn(), test: vi.fn(),
 }))
 const mockMcpApi = vi.hoisted(() => ({
-  status: vi.fn().mockResolvedValue({ schema_version: '1', enabled: false, endpoint: 'http://127.0.0.1:8765/mcp', access_token: null, default_level: 'READ', project_grants: [] }),
-  enable: vi.fn(), regenerate: vi.fn(), disable: vi.fn(), setProjectAccess: vi.fn(),
+  status: vi.fn().mockResolvedValue({ schema_version: '1', paired: false, accepting_connections: false, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null }),
+  pair: vi.fn(), reveal: vi.fn(), rotate: vi.fn(), pause: vi.fn(), forget: vi.fn(), setProjectAccess: vi.fn(),
 }))
 
 vi.mock('../../api/llm', async () => {
@@ -47,24 +47,26 @@ describe('LLMSettingsDrawer', () => {
     expect(screen.getByText('AI 工具连接（MCP）')).toBeInTheDocument()
   })
 
-  it('enables a separate MCP connection and confirms one project grant', async () => {
+  it('pairs a separate MCP connection and confirms one project grant', async () => {
     const enabled = {
-      schema_version: '1' as const, enabled: true, endpoint: 'http://127.0.0.1:8765/mcp',
-      access_token: 'mcp-token', default_level: 'READ' as const, project_grants: [],
+      schema_version: '1' as const, paired: true, accepting_connections: true, endpoint: 'http://127.0.0.1:8765/mcp',
+      default_level: 'READ' as const, project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null,
+      access_token: 'mcp-token',
     }
-    mockMcpApi.enable.mockResolvedValue(enabled)
+    mockMcpApi.pair.mockResolvedValue(enabled)
     mockMcpApi.setProjectAccess.mockResolvedValue({
-      ...enabled, project_grants: [{ project_id: 'proj-1', level: 'PREPARE' }],
+      ...enabled, project_grants: [{ project_id: 'proj-1', level: 'PREPARE' }], access_token: undefined,
     })
     render(<LLMSettingsDrawer open profiles={[]} projects={[{ project_id: 'proj-1', name: '示例应用' }]} onClose={vi.fn()} onChanged={vi.fn()} onError={vi.fn()} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '允许本机 AI 工具连接本次界鉴会话' }))
-    await waitFor(() => expect(screen.getByLabelText('MCP Bearer 令牌')).toHaveValue('mcp-token'))
+    fireEvent.click(await screen.findByRole('button', { name: '首次配对 AI 工具' }))
+    await waitFor(() => expect(screen.getByLabelText('MCP 连接凭据')).toHaveValue('mcp-token'))
     expect(screen.getByLabelText('API Key（只写入，不回显）')).toHaveValue('')
     fireEvent.click(screen.getByRole('button', { name: '调整权限' }))
     expect(screen.getByText('本次确认不会永久保存，也不会逐工具重复弹窗。', { exact: false })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '确认临时权限' }))
     await waitFor(() => expect(mockMcpApi.setProjectAccess).toHaveBeenCalledWith('proj-1', 'PREPARE'))
+    expect(mockMcpApi.status).toHaveBeenCalled()
   })
 
   it('discovers dynamic models, saves once, and clears the temporary API Key', async () => {

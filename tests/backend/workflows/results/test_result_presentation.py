@@ -15,7 +15,7 @@ from product.backend.core.verification.facts import (
 )
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.workflows.results.presentation import build_result_presentation
-from product.protocols import ObserverOutcomeStatus, ObserverType
+from product.protocols import ObservationCompleteness, ObserverOutcomeStatus, ObserverType
 
 
 RUN_ID = "run_" + "1" * 32
@@ -27,6 +27,7 @@ EFFECT_ID = "effect-document"
 RESOURCE_ID = "owner-document"
 REQUIREMENT_ID = "resource_state"
 OBSERVER_ID = "owner-observer"
+CASE_ID = "case-presentation"
 
 
 def _view(
@@ -42,6 +43,7 @@ def _view(
         evidence_id=EVIDENCE_ID,
         verdict=case_verdict,
         case_snapshot=SimpleNamespace(
+            case_id=CASE_ID,
             subject_id="member-subject",
             action_id=ACTION_ID,
             resource_ids=(RESOURCE_ID,),
@@ -82,6 +84,7 @@ def _view(
                 ),
             ),
         ),
+        observations=(),
     )
     result = SimpleNamespace(
         verdict=verdict,
@@ -390,3 +393,64 @@ def test_source_availability_translation_never_recomputes_verdict() -> None:
     }
     assert result.verdict is RunVerdict.BLOCK
     assert result.issues[0].verdict.value == CaseVerdict.VULNERABLE.value
+
+
+def test_published_audit_trace_exposes_actual_actor_without_changing_verdict() -> None:
+    semantic_keys = (
+        "request_received",
+        "server_identity_resolved",
+        "export_request_created",
+        "authorization_decided",
+        "export_message_sent",
+        "export_job_started",
+        "archive_generated",
+        "export_job_completed",
+    )
+    records = [
+        {
+            "event_id": f"trace-{index}",
+            "parent_event_id": f"trace-{index - 1}" if index > 1 else None,
+            "case_tag": CASE_ID,
+            "task_id": "task-export",
+            "event_type": semantic_key,
+            "semantic_key": semantic_key,
+            "sequence": index,
+            "resource_id": RESOURCE_ID,
+            "kind": "authorization" if semantic_key == "authorization_decided" else "event",
+            "subject_id": "bob",
+            "actor_id": "export-worker" if index >= 6 else "bob",
+            "authority_scope": "project:export",
+            "authorization_decision": "DENY" if semantic_key == "authorization_decided" else None,
+            "source_component": "export-worker" if index >= 6 else "collaboration-server",
+            "source_location": "worker:export" if index >= 6 else "api:/projects/export",
+            "recorded_at_us": 1_000 + index,
+        }
+        for index, semantic_key in enumerate(semantic_keys, start=1)
+    ]
+    view = _view(
+        RunVerdict.BLOCK,
+        CaseVerdict.VULNERABLE,
+        effect=ObservedEffect.CONFIRMED,
+    )
+    view.publication.result.evidence[0].observations = (
+        SimpleNamespace(
+            observer_type=ObserverType.STRUCTURED_AUDIT_LOG,
+            completeness=ObservationCompleteness.COMPLETE,
+            state=SimpleNamespace(canonical_data={"records": records}),
+        ),
+    )
+    original_verdict = view.publication.result.verdict
+
+    result = build_result_presentation(
+        view,
+        _snapshot(),
+        _finding(CaseVerdict.VULNERABLE),
+    )
+
+    trace = result.execution_traces[0]
+    assert trace.complete is True
+    assert trace.events[0].subject_id == trace.events[0].actor_id == "bob"
+    assert trace.events[-1].subject_id == "bob"
+    assert trace.events[-1].actor_id == "export-worker"
+    assert result.verdict is original_verdict is RunVerdict.BLOCK
+    assert view.publication.result.verdict is RunVerdict.BLOCK

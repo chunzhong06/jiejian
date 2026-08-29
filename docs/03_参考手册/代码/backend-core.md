@@ -361,4 +361,15 @@
 - `class SqlTraceAdvisory`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.verification.permissions`, `pydantic`, `typing`
 
+### `product/backend/core/verification/trace.py`
+- `_PUBLIC_ID`
+- `_SEMANTIC_KEY`
+- `_REASON_CODE`
+- `_INLINE_SECRET`
+- `class TraceCorrelationKind`
+- `class TraceAuthorizationDecision`
+- `class TraceEvent`
+- `class ExecutionTrace`
+主要 import / dot-source：`__future__`, `enum`, `heapq`, `pydantic`, `re`, `typing`
+
 <!-- GENERATED:END -->

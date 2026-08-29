@@ -1,4 +1,4 @@
-# MCP 访问设置 API：由本地 GUI 显式启停、轮换令牌并管理逐 Project 临时权限。
+# MCP 访问设置 API：由本地 GUI 显式配对、管理凭据并控制逐 Project 临时权限。
 
 from __future__ import annotations
 
@@ -26,17 +26,25 @@ def build_mcp_access_router(
     async def get_mcp_access():
         return data_response(access.view().model_dump(mode="json"))
 
-    @router.post("/api/mcp/access/enable", response_model=ApiResponse)
-    async def enable_mcp_access():
-        return data_response(access.enable().model_dump(mode="json"))
+    @router.post("/api/mcp/access/pair", response_model=ApiResponse)
+    async def pair_mcp_access():
+        return data_response(access.pair().model_dump(mode="json"))
 
-    @router.post("/api/mcp/access/regenerate", response_model=ApiResponse)
-    async def regenerate_mcp_access():
-        return data_response(access.regenerate().model_dump(mode="json"))
+    @router.post("/api/mcp/access/reveal", response_model=ApiResponse)
+    async def reveal_mcp_access():
+        return data_response(access.reveal().model_dump(mode="json"))
 
-    @router.post("/api/mcp/access/disable", response_model=ApiResponse)
-    async def disable_mcp_access():
-        return data_response(access.disable().model_dump(mode="json"))
+    @router.post("/api/mcp/access/rotate", response_model=ApiResponse)
+    async def rotate_mcp_access():
+        return data_response(access.rotate().model_dump(mode="json"))
+
+    @router.post("/api/mcp/access/pause", response_model=ApiResponse)
+    async def pause_mcp_access():
+        return data_response(access.pause().model_dump(mode="json"))
+
+    @router.post("/api/mcp/access/forget", response_model=ApiResponse)
+    async def forget_mcp_access():
+        return data_response(access.forget().model_dump(mode="json"))
 
     @router.put(
         "/api/mcp/access/projects/{project_id}",

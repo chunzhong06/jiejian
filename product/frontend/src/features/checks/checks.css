@@ -1,4 +1,4 @@
-/* 检查过程、结果证据和历史变化。 */
+/* 检查过程、执行路径、结果证据和历史变化。 */
 .permission-check-page { display: grid; gap: var(--space-24); }
 .permission-check-sequence { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .permission-check-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; display: grid; gap: var(--space-20, 20px); padding: var(--space-24); }
@@ -40,6 +40,15 @@
 .result-count-grid dt { color: var(--color-secondary); font-size: 13px; }
 .result-count-grid dd { color: var(--color-text); font-size: 20px; font-weight: 700; margin: 0; }
 .result-view-switch { align-self: flex-start; }
+.execution-paths,
+.execution-path { display: grid; gap: var(--space-16); }
+.execution-path { background: #f8fafc; border: 1px solid var(--color-border); border-radius: 12px; padding: var(--space-20, 20px); }
+.execution-path-list { list-style: none; margin: 0; padding: 0 0 0 32px; position: relative; }
+.execution-path-list::before { background: var(--color-border); bottom: 18px; content: ''; left: 11px; position: absolute; top: 18px; width: 2px; }
+.execution-path-list li { align-items: center; min-height: 52px; padding: var(--space-12) 0; position: relative; }
+.execution-path-dot { background: var(--color-surface); border: 3px solid var(--color-primary); border-radius: 50%; height: 14px; left: -27px; position: absolute; top: 31px; transform: translateY(-50%); width: 14px; z-index: 1; }
+.execution-path-technical-events { display: grid; gap: var(--space-16); margin-top: var(--space-16); }
+.execution-path-technical-events .ant-descriptions { border-top: 1px solid var(--color-border); padding-top: var(--space-12); }
 .result-section,
 .history-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; display: grid; gap: var(--space-20, 20px); padding: var(--space-24); }
 .result-section-heading,
@@ -126,6 +135,7 @@
   .result-section,
   .history-section,
   .result-story,
+  .execution-path,
   .history-group { padding: var(--space-16); }
   .result-story-header,
   .history-group-header { align-items: flex-start; flex-direction: column; }

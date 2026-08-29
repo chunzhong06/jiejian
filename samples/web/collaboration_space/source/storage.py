@@ -312,9 +312,20 @@ class CollaborationStorage:
         sequence: int,
         result: str,
         effect: str,
-    ) -> None:
-        record = {
-            "event_id": hashlib.sha256(f"{marker}:{event_type}:{sequence}".encode("utf-8")).hexdigest()[:24],
+        parent_event_id: str | None = None,
+        kind: str | None = None,
+        semantic_key: str | None = None,
+        subject_id: str | None = None,
+        actor_id: str | None = None,
+        credential_source: str | None = None,
+        authority_scope: str | None = None,
+        authorization_decision: str | None = None,
+        source_component: str | None = None,
+        source_location: str | None = None,
+    ) -> str:
+        event_id = self.audit_event_id(marker, event_type, sequence)
+        record: dict[str, Any] = {
+            "event_id": event_id,
             "case_tag": marker,
             "task_id": task_id,
             "event_type": event_type,
@@ -323,7 +334,38 @@ class CollaborationStorage:
             "result": result,
             "effect": effect,
         }
+        if semantic_key is not None:
+            if kind is None or source_component is None or source_location is None:
+                raise ValueError("trace audit fields require kind, component, and location")
+            record.update(
+                {
+                    "kind": kind,
+                    "semantic_key": semantic_key,
+                    "source_component": source_component,
+                    "source_location": source_location,
+                    "recorded_at_us": _now_us(),
+                }
+            )
+            for field, value in (
+                ("parent_event_id", parent_event_id),
+                ("subject_id", subject_id),
+                ("actor_id", actor_id),
+                ("credential_source", credential_source),
+                ("authority_scope", authority_scope),
+                ("authorization_decision", authorization_decision),
+            ):
+                if value is not None:
+                    record[field] = value
         self._append_record_once(self.audit_dir / "events.jsonl", record)
+        return event_id
+
+    @staticmethod
+    def audit_event_id(marker: str, event_type: str, sequence: int) -> str:
+        """按 Case、语义与序号生成可供跨线程显式引用的稳定事件 ID。"""
+
+        return hashlib.sha256(
+            f"{marker}:{event_type}:{sequence}".encode("utf-8")
+        ).hexdigest()[:24]
 
     def append_queue_message(
         self,
@@ -496,7 +538,7 @@ class CollaborationStorage:
                 marker=marker,
                 task_id=str(job["task_id"]),
                 event_type="EXPORT_REVOKED",
-                sequence=4,
+                sequence=9,
                 result="revoked",
                 effect="REVOKED",
             )

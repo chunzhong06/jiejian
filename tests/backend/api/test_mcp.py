@@ -1,4 +1,4 @@
-# 验证 MCP 入口使用官方 SDK、进程内 Bearer、逐 Project 分级和现有 ApplicationCore 事实。
+# 验证 MCP 入口使用官方 SDK、长期 Bearer 配对、逐 Project 临时分级和现有 ApplicationCore 事实。
 
 from __future__ import annotations
 
@@ -17,7 +17,11 @@ from mcp.client.streamable_http import streamable_http_client
 from pydantic import BaseModel
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.workflows.mcp_access import MCPAccessController, MCPAccessLevel
+from product.backend.workflows.mcp_access import (
+    MCP_PAIRING_SECRET_REF,
+    MCPAccessController,
+    MCPAccessLevel,
+)
 from tests.fixtures.control_plane import TEST_CONTROL_ORIGIN, TestClient, create_app
 
 
@@ -62,6 +66,25 @@ EXPECTED_MCP_TOOLS = {
 }
 
 
+class _MemorySecretStore:
+    """在 MCP 直接测试内模拟跨 controller 共享的精确秘密引用。"""
+
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    def write(self, secret_ref: str, secret: str) -> None:
+        self.values[secret_ref] = secret
+
+    def read(self, secret_ref: str) -> str | None:
+        return self.values.get(secret_ref)
+
+    def delete(self, secret_ref: str) -> None:
+        self.values.pop(secret_ref, None)
+
+    def configured(self, secret_ref: str | None) -> bool:
+        return secret_ref is not None and secret_ref in self.values
+
+
 def _source(root: Path) -> Path:
     source = root / "source"
     source.mkdir()
@@ -82,46 +105,64 @@ def _token_bytes(token: str) -> bytes:
     return base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
 
 
-def test_mcp_access_controller_revokes_tokens_and_uses_read_default() -> None:
-    access = MCPAccessController("http://127.0.0.1:8765/mcp")
-    assert access.view().enabled is False
-    first = access.enable()
+def test_mcp_access_controller_restores_pairing_without_restoring_grants() -> None:
+    store = _MemorySecretStore()
+    access = MCPAccessController("http://127.0.0.1:8765/mcp", store)
+    assert access.view().paired is False
+    first = access.pair()
     assert first.access_token is not None
     assert len(_token_bytes(first.access_token)) == 32
+    assert "access_token" not in access.view().model_dump()
     access.authorize(f"Bearer {first.access_token}")
     assert access.level_for("proj_a") is MCPAccessLevel.READ
 
     access.set_level("proj_a", MCPAccessLevel.EXECUTE)
-    second = access.regenerate()
+    restarted = MCPAccessController("http://127.0.0.1:8765/mcp", store)
+    assert restarted.view().paired is True
+    assert restarted.view().accepting_connections is True
+    assert restarted.view().project_grants == ()
+    restarted.authorize(f"Bearer {first.access_token}")
+    assert restarted.level_for("proj_a") is MCPAccessLevel.READ
+
+    second = restarted.rotate()
     assert second.access_token is not None and second.access_token != first.access_token
     assert second.project_grants == ()
     with pytest.raises(JiejianError) as old_token:
-        access.authorize(f"Bearer {first.access_token}")
+        restarted.authorize(f"Bearer {first.access_token}")
     assert old_token.value.code == ErrorCode.MCP_AUTH_REQUIRED.value
 
-    access.disable()
+    restarted.pause()
     with pytest.raises(JiejianError) as disabled:
-        access.authorize(f"Bearer {second.access_token}")
+        restarted.authorize(f"Bearer {second.access_token}")
     assert disabled.value.code == ErrorCode.MCP_DISABLED.value
+    assert store.values[MCP_PAIRING_SECRET_REF] == second.access_token
 
 
-def test_mcp_gui_access_api_clears_grants_on_regenerate_and_shutdown(
+def test_mcp_gui_access_api_controls_credentials_and_restores_after_shutdown(
     tmp_path: Path,
 ) -> None:
-    app = create_app(tmp_path / "var", start_worker=False)
+    store = _MemorySecretStore()
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=store)
     with TestClient(app) as client:
         initial = client.get("/api/mcp/access").json()["data"]
         assert initial == {
             "schema_version": "1",
-            "enabled": False,
+            "paired": False,
+            "accepting_connections": False,
             "endpoint": f"{TEST_CONTROL_ORIGIN}/mcp",
-            "access_token": None,
             "default_level": "READ",
             "project_grants": [],
+            "client_connected": False,
+            "client_name": None,
+            "client_version": None,
+            "last_seen_at_us": None,
         }
-        enabled = client.post("/api/mcp/access/enable").json()["data"]
-        token = enabled["access_token"]
+        paired = client.post("/api/mcp/access/pair").json()["data"]
+        token = paired["access_token"]
         assert len(_token_bytes(token)) == 32
+        status = client.get("/api/mcp/access")
+        assert "access_token" not in status.json()["data"]
+        assert token not in status.text
 
         connected = client.post(
             "/api/applications/connect",
@@ -136,19 +177,34 @@ def test_mcp_gui_access_api_clears_grants_on_regenerate_and_shutdown(
             {"project_id": project_id, "level": "PREPARE"}
         ]
 
-        regenerated = client.post("/api/mcp/access/regenerate").json()["data"]
-        assert regenerated["access_token"] != token
-        assert regenerated["project_grants"] == []
-        current_token = regenerated["access_token"]
+        rotated = client.post("/api/mcp/access/rotate").json()["data"]
+        assert rotated["access_token"] != token
+        assert rotated["project_grants"] == []
+        current_token = rotated["access_token"]
+        assert client.post("/api/mcp/access/reveal").json()["data"]["access_token"] == current_token
 
-    assert app.state.mcp_access.view().enabled is False
+    assert app.state.mcp_access.view().paired is False
     with pytest.raises(JiejianError) as stopped:
         app.state.mcp_access.authorize(f"Bearer {current_token}")
     assert stopped.value.code == ErrorCode.MCP_DISABLED.value
+    restarted = create_app(tmp_path / "restart-var", start_worker=False, secret_store=store)
+    with TestClient(restarted) as client:
+        restored = restarted.state.mcp_access.view()
+        assert restored.paired is True
+        assert restored.accepting_connections is True
+        assert restored.project_grants == ()
+        restarted.state.mcp_access.authorize(f"Bearer {current_token}")
+        forgotten = client.post("/api/mcp/access/forget").json()["data"]
+        assert forgotten["paired"] is False
+        assert forgotten["accepting_connections"] is False
+        assert MCP_PAIRING_SECRET_REF not in store.values
+        with pytest.raises(JiejianError) as forgotten_token:
+            restarted.state.mcp_access.authorize(f"Bearer {current_token}")
+        assert forgotten_token.value.code == ErrorCode.MCP_DISABLED.value
     token_bytes = current_token.encode("ascii")
     assert all(
         token_bytes not in path.read_bytes()
-        for path in (tmp_path / "var").rglob("*")
+        for path in tmp_path.rglob("*")
         if path.is_file()
     )
 
@@ -156,7 +212,11 @@ def test_mcp_gui_access_api_clears_grants_on_regenerate_and_shutdown(
 def test_mcp_transport_rejects_disabled_wrong_token_and_wrong_origin(
     tmp_path: Path,
 ) -> None:
-    app = create_app(tmp_path / "var", start_worker=False)
+    app = create_app(
+        tmp_path / "var",
+        start_worker=False,
+        secret_store=_MemorySecretStore(),
+    )
 
     async def scenario() -> None:
         async with app.router.lifespan_context(app):
@@ -174,7 +234,7 @@ def test_mcp_transport_rejects_disabled_wrong_token_and_wrong_origin(
                 assert disabled.status_code == 403
                 assert disabled.json()["error"]["code"] == "MCP_DISABLED"
 
-                token = app.state.mcp_access.enable().access_token
+                token = app.state.mcp_access.pair().access_token
                 assert token is not None
                 wrong = await client.post(
                     "/mcp",
@@ -229,12 +289,16 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    app = create_app(tmp_path / "var", start_worker=False)
+    app = create_app(
+        tmp_path / "var",
+        start_worker=False,
+        secret_store=_MemorySecretStore(),
+    )
     source = _source(tmp_path)
     connection = app.state.context.application_understanding.connect(source)
     project_id = connection.project.project_id
     expected = app.state.context.product_status.get(project_id).model_dump(mode="json")
-    token = app.state.mcp_access.enable().access_token
+    token = app.state.mcp_access.pair().access_token
     assert token is not None
 
     async def scenario() -> None:
@@ -256,6 +320,11 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                 async with Client(transport) as client:
                     tools = await client.list_tools()
                     assert {item.name for item in tools.tools} == EXPECTED_MCP_TOOLS
+                    activity = app.state.mcp_access.view()
+                    assert activity.client_connected is True
+                    assert activity.client_name
+                    assert activity.client_version
+                    assert activity.last_seen_at_us is not None
                     status = await client.call_tool(
                         "jiejian_product_status",
                         {"project_id": project_id},
@@ -369,7 +438,7 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                         mode="json"
                     )
 
-                    app.state.mcp_access.disable()
+                    app.state.mcp_access.pause()
                     with pytest.raises(MCPError):
                         await client.call_tool(
                             "jiejian_product_status",
@@ -383,10 +452,14 @@ def test_mcp_application_projection_omits_source_and_log_or_body_fields(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    app = create_app(tmp_path / "var", start_worker=False)
+    app = create_app(
+        tmp_path / "var",
+        start_worker=False,
+        secret_store=_MemorySecretStore(),
+    )
     connection = app.state.context.application_understanding.connect(_source(tmp_path))
     project_id = connection.project.project_id
-    token = app.state.mcp_access.enable().access_token
+    token = app.state.mcp_access.pair().access_token
     assert token is not None
 
     async def scenario() -> None:

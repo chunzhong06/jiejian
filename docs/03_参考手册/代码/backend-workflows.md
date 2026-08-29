@@ -187,12 +187,14 @@
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.readiness`, `product.protocols`, `pydantic`, `typing`
 
 ### `product/backend/workflows/mcp_access.py`
+- `MCP_PAIRING_SECRET_REF`
 - `class MCPAccessLevel`
 - `_LEVEL_ORDER`
 - `class MCPProjectGrant`
 - `class MCPAccessView`
+- `class MCPAccessCredentialView`
 - `class MCPAccessController`
-主要 import / dot-source：`__future__`, `enum`, `hmac`, `product.backend.core.errors`, `pydantic`, `secrets`, `threading`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `hmac`, `product.backend.core.errors`, `product.backend.infra.secrets`, `pydantic`, `secrets`, `threading`, `time`, `typing`
 
 ### `product/backend/workflows/official_sample.py`
 - `class OfficialExperienceMode`
@@ -379,7 +381,7 @@
 - `_RESOURCE_LABELS`
 - `_RELATION_LABELS`
 - `_SOURCE_PRESENTATION`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.facts`, `product.protocols.observer`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.backend.workflows.results.trace`, `product.protocols.observer`, `pydantic`, `typing`
 
 ### `product/backend/workflows/results/published.py`
 - `class PublishedRunView`
@@ -394,6 +396,14 @@
 - `class ResultServices`
 - `build_result_services(var_dir, uow_factory, clock_us) -> ResultServices`
 主要 import / dot-source：`__future__`, `dataclasses`, `pathlib`, `product.backend.infra.storage`, `product.backend.workflows.results.finalizer`, `product.backend.workflows.results.findings`, `product.backend.workflows.results.gating`, `product.backend.workflows.results.history`, `product.backend.workflows.results.presentation`, `product.backend.workflows.results.published`, `product.backend.workflows.results.reporting`, `typing`
+
+### `product/backend/workflows/results/trace.py`
+- `_SEMANTIC_KEYS`
+- `_FIXED_DENY_KEYS`
+- `_DOWNSTREAM_KEYS`
+- `build_execution_traces(snapshot, evidence_items) -> tuple[ExecutionTrace, ...]`
+- `build_execution_trace(snapshot, evidence) -> ExecutionTrace`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.verification.trace`, `product.protocols.observer`, `pydantic`, `typing`
 
 ### `product/backend/workflows/runs/execution.py`
 - `class ExecutionWorkflow`

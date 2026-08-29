@@ -83,7 +83,11 @@ def create_app(
         environment_provider=context.environment_for_secret_names,
         clock_us=clock_us,
     )
-    mcp_access = MCPAccessController(f"{local_control_guard.origin}/mcp")
+    mcp_access = MCPAccessController(
+        f"{local_control_guard.origin}/mcp",
+        context.secret_store,
+        clock_us=clock_us,
+    )
     mcp_control = build_mcp_control(
         context,
         workers,

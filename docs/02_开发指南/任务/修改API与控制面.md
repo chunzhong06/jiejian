@@ -17,7 +17,7 @@
 | API envelope、异常与 trace | `product/backend/api/envelope.py`、`product/backend/api/errors.py` | `tests/backend/api/test_control_plane.py` |
 | Host、session、Origin 控制 | `product/backend/api/local_control.py` | `tests/backend/api/test_control_plane.py` |
 | MCP Streamable HTTP、固定工具白名单 | `product/backend/api/mcp.py` | `tests/backend/api/test_mcp.py` |
-| MCP 进程内令牌与逐 Project 权限 | `product/backend/workflows/mcp_access.py`、`product/backend/api/routers/mcp_access.py` | `tests/backend/api/test_mcp.py` |
+| MCP 长期配对与逐 Project 临时权限 | `product/backend/workflows/mcp_access.py`、`product/backend/api/routers/mcp_access.py` | `tests/backend/api/test_mcp.py` |
 | ApplicationCore 组合 | `product/backend/workflows/context.py` | `tests/backend/workflows/` |
 | ProductStatus 与唯一下一步 | `product/backend/workflows/control.py` | `tests/backend/workflows/control/test_status.py` |
 | 普通 CLI 命令与 Machine 输出 | `product/backend/cli/app.py`、`product/backend/cli/commands/control.py`、`product/backend/cli/presentation.py` | `tests/backend/cli/test_control.py` |
@@ -29,7 +29,9 @@
 
 本地 API 固定绑定 IPv4 loopback。GUI 根页面取得当前服务进程的 HttpOnly、SameSite=Strict control session；所有 `/api` 请求验证 Host 与 session，写请求再验证精确 Origin。`X-Forwarded-*` 等代理头不能扩大授权。错误必须通过稳定 `ErrorCode`、有界 details 和 trace 映射；异常正文、环境变量和秘密值不能进入响应。
 
-MCP 使用官方 Python SDK v2 的 Streamable HTTP，精确挂载在同一 FastAPI 服务的 `/mcp`，不提供 SSE 兼容入口，不创建第二个服务或 ApplicationCore。SDK 自身启用 Host/Origin 与 DNS rebinding 防护；transport 只接受当前进程的 Bearer，不能使用 GUI control session Cookie。入口默认关闭，启用或轮换生成至少 256-bit 随机令牌；令牌和逐 Project `READ/PREPARE/EXECUTE` 权限只驻留内存，关闭、轮换和 shutdown 都立即清除。
+MCP 使用官方 Python SDK v2 的 Streamable HTTP，精确挂载在同一 FastAPI 服务的 `/mcp`，不提供 SSE 兼容入口，不创建第二个服务或 ApplicationCore。SDK 自身启用 Host/Origin 与 DNS rebinding 防护；transport 只接受当前配对 Bearer，不能使用 GUI control session Cookie。首次配对或轮换生成至少 256-bit 随机令牌，并只通过 `cred:jiejian/mcp-control/pairing` 的精确 SecretStore 操作保存；普通 status 永不返回正文。启动存在配对时自动恢复 READ，PREPARE/EXECUTE 只驻留当前 serve。暂停或 shutdown 清除活动会话与提升但保留配对，轮换替换旧令牌并清除提升，忘记连接才删除长期配对。
+
+唯一连接向导位于 GUI“AI 工具连接（MCP）”：Codex 使用 server name `jiejian`、`http://127.0.0.1:8765/mcp` 和 `JIEJIAN_MCP_TOKEN`；DSH 使用 `@deepseek-ai/dsh-mcp-client` 的 `streamable-http`，Authorization 从 `process.env.JIEJIAN_MCP_TOKEN` 取得。首次配置后客户端可随界鉴自动重连；轮换只更新该环境变量并重启客户端进程，不重复添加 server。
 
 每个工具必须经过统一 `require_mcp_level`。`READ` 只返回现有 Pydantic View 或有界轻量投影；`PREPARE` 只能调整已有候选、已有授权分析和检查准备，不能新选目录或首次授权；`EXECUTE` 只启动、停止或取消已经冻结的受控操作。白名单不得扩展为 shell、任意 HTTP、任意路径、秘密、请求正文、完整日志或完整 Evidence。访问失败稳定映射为 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED`，权限不足 details 只包含 `required_level/project_id`。
 
@@ -55,7 +57,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps
 
 只改一个资源 Router 时不要机械运行整组控制面。改 Machine envelope、ServeLock、启动/关闭或 ApplicationCore 组合时，必须覆盖 CLI/API 同事实、错误通道与单控制者。改 OpenAPI DTO 后再运行 schema/docs 检查；只有入口跨进程行为变化才增加少量 E2E。
 
-MCP 变化使用官方 SDK 客户端直接验证禁用、错误令牌、Host/Origin、精确工具白名单、READ 同一 ProductStatus/ResultPresentation、逐 Project 提权、即时撤销、shutdown 失效、非秘密投影和唯一 ApplicationCore。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
+MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、精确工具白名单、READ 同一 ProductStatus/ResultPresentation、逐 Project 临时提权、暂停/轮换/忘记、跨启动配对恢复、shutdown 后提升清空、非秘密投影和唯一 ApplicationCore。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
 
 ## 失败先查哪里
 

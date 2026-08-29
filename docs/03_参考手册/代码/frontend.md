@@ -79,6 +79,7 @@
 主要 import / dot-source：`./http`
 
 ### `product/frontend/src/api/mcp.ts`
+- `MCPAccessCredentialView`
 - `MCPAccessLevel`
 - `MCPAccessView`
 - `MCPProjectGrant`
@@ -142,6 +143,7 @@
 - `EvidenceCaseSnapshotDto`
 - `EvidenceDto`
 - `ExecutionFactDto`
+- `ExecutionTraceDto`
 - `FindingDto`
 - `FindingIdentityDto`
 - `FindingOccurrenceDto`
@@ -154,6 +156,7 @@
 - `ResultPresentationDto`
 - `ResultPresentationIssueDto`
 - `SecurityEffectFactDto`
+- `TraceEventDto`
 - `resultsApi`
 主要 import / dot-source：`./http`
 
@@ -436,6 +439,9 @@
 ### `product/frontend/src/features/settings/LLMSettingsDrawer.tsx`
 - `LLMSettingsDrawer`
 主要 import / dot-source：`../../api/http`, `../../api/llm`, `./MCPAccessCard`, `antd`, `react`
+
+### `product/frontend/src/features/settings/MCPAccessCard.test.tsx`
+主要 import / dot-source：`./MCPAccessCard`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/settings/MCPAccessCard.tsx`
 - `MCPAccessCard`
