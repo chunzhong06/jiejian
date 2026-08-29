@@ -28,7 +28,7 @@ Web V1 需要一个可以清楚解释、严格验证且便于未来演进的起�
 
 `product/backend/migrations/versions/0001_web_v1.py` 是 Web V1 唯一数据库发布基线，从空库显式创建当前全部表、列、约束、索引和触发器，不在 migration 中调用当前 ORM metadata 代建结构。
 
-缺失或空数据库可以建立该基线；非空数据库必须已经具有精确 `0001_web_v1` revision 和当前结构签名。旧开发 revision、未知 revision，以及缺失、额外或错误的表、列、索引、约束或触发器都在写入前拒绝。
+缺失或空数据库可以从该基线建立到当前 head；非空数据库必须具有当前 head 的精确结构签名，或具有签入代码明确允许升级的已发布 revision 及其精确结构签名。旧开发 revision、未知 revision，以及缺失、额外或错误的表、列、索引、约束或触发器都在写入前拒绝。
 
 ### 4. 旧开发 var 不自动迁移
 
@@ -46,7 +46,7 @@ Web V1 发布后的数据库结构变化新增 `0002_*`，其 `down_revision` �
 
 ## 影响
 
-协议根、API envelope、前端客户端、Sample、ReportVersions 和 checked-in Schema 统一到格式 1；内部伪版本字段删除。migration 目录只保留 Web V1 基线，Storage 启动门禁对旧 revision 和结构漂移 fail closed。Permission、Verification、Evidence、Finding、Gate 和报告真源语义不因本决策改变。
+协议根、API envelope、前端客户端、Sample、ReportVersions 和 checked-in Schema 统一到格式 1；内部伪版本字段删除。`0001_web_v1` 永久保留为正式基线，后续结构变化只追加显式 migration；Storage 启动门禁对未知 revision 和结构漂移 fail closed。Permission、Verification、Evidence、Finding、Gate 和报告真源语义不因本决策改变。
 
 ## 相关真源
 
@@ -57,4 +57,5 @@ Web V1 发布后的数据库结构变化新增 `0002_*`，其 `down_revision` �
 - `product/protocols/schema.py`
 - `product/protocols/schemas/`
 - `product/backend/migrations/versions/0001_web_v1.py`
+- `product/backend/migrations/versions/0002_remove_contract_workbench.py`
 - `product/backend/infra/storage/db.py`

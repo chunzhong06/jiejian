@@ -26,6 +26,10 @@ from product.backend.workflows.results.presentation import (
     build_result_presentation,
 )
 from product.protocols import ObservationCompleteness, ObserverOutcomeStatus, ObserverType
+from product.protocols.execution_request import (
+    PermissionPolicySnapshotEntry,
+    build_permission_policy_snapshot,
+)
 
 
 RUN_ID = "run_" + "1" * 32
@@ -237,6 +241,18 @@ def _six_source_facts(*, unavailable: bool = False):
 
 
 def test_block_presentation_preserves_403_with_real_change_as_permission_problem() -> None:
+    policy = build_permission_policy_snapshot(
+        PROJECT_ID,
+        7,
+        (
+            PermissionPolicySnapshotEntry(
+                intent_id="pin_" + "4" * 32,
+                revision=3,
+                intent_hash="5" * 64,
+                binding_fingerprint="6" * 64,
+            ),
+        ),
+    )
     result = build_result_presentation(
         _view(
             RunVerdict.BLOCK,
@@ -247,9 +263,17 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
         ),
         _snapshot(),
         _finding(CaseVerdict.VULNERABLE),
+        permission_policy=policy,
     )
 
     assert result.headline == "发现权限问题"
+    assert result.policy_epoch == 7
+    assert result.policy_fingerprint == policy.policy_fingerprint
+    assert result.relevant_intents[0].model_dump(mode="json") == {
+        "intent_id": "pin_" + "4" * 32,
+        "revision": 3,
+        "intent_hash": "5" * 64,
+    }
     assert result.checked_count == 1
     assert result.problem_count == 1
     assert result.uncovered_count == 2

@@ -184,27 +184,6 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
             status_code=201,
         )
 
-    @router.get(
-        "/api/projects/{project_id}/contracts", response_model=ApiResponse
-    )
-    async def list_contracts(project_id: str):
-        record = context.projects.get(project_id)
-        if record.governed_contract_id is None or record.governed_contract_version is None:
-            return data_response([])
-        version = context.projects.current_contract(project_id)
-        contract = version.snapshot
-        return data_response(
-            [
-                {
-                    "schema_version": "1",
-                    "status": version.status.value,
-                    "id": contract.contract_id,
-                    "version": contract.version,
-                    "rules": [item.model_dump(mode="json") for item in contract.rules],
-                }
-            ]
-        )
-
     return router
 
 

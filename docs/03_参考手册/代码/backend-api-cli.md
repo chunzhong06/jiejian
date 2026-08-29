@@ -11,7 +11,7 @@
 
 ### `product/backend/api/app.py`
 - `create_app(var_dir, control_origin, control_session_token, frontend_dir, start_worker, llm_transport, llm_secret_store, secret_store, environ, clock_us, folder_selector, shutdown_callback, official_sample_root) -> FastAPI`
-主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.checks`, `product.backend.api.routers.contracts`, `product.backend.api.routers.execution_profiles`, `product.backend.api.routers.experience`, `product.backend.api.routers.gating`, `product.backend.api.routers.jobs`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_intents`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.core.errors`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.checks`, `product.backend.api.routers.experience`, `product.backend.api.routers.gating`, `product.backend.api.routers.jobs`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_intents`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.core.errors`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/api/envelope.py`
 - `class ApiModel`
@@ -33,12 +33,14 @@
 ### `product/backend/api/mcp.py`
 - `_T`
 - `_ACCESS_ERROR_CODES`
+- `class MCPProtectedEffectInput`
+- `class MCPPermissionIntentSemanticInput`
 - `require_mcp_level(access, ctx, required_level, project_id) -> None`
 - `class MCPBearerGuard`
 - `class MCPPathAdapter`
 - `class MCPControl`
 - `build_mcp_control(context, workers, access, control_origin, control_host) -> MCPControl`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `product.backend.workflows.official_sample`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `product.backend.workflows.official_sample`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `time`, `typing`
 
 ### `product/backend/api/routers/assistant.py`
 - `class ProjectAssistantSurface`
@@ -52,19 +54,6 @@
 - `class CheckSubmitRequest`
 - `build_checks_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`, `pydantic`, `typing`
-
-### `product/backend/api/routers/contracts.py`
-- `build_contracts_router(context) -> APIRouter`
-- `class RequirementCreateRequest`
-- `class CandidateDeriveRequest`
-- `class ContractDraftRequest`
-- `class ContractRevisionRequest`
-- `class GovernanceActorRequest`
-主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.core.verification.permissions`, `product.backend.workflows.context`, `pydantic`, `typing`
-
-### `product/backend/api/routers/execution_profiles.py`
-- `build_execution_profiles_router(context) -> APIRouter`
-主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`
 
 ### `product/backend/api/routers/experience.py`
 - `build_experience_router(context) -> APIRouter`
@@ -104,7 +93,10 @@
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`, `pydantic`, `typing`
 
 ### `product/backend/api/routers/permission_intents.py`
-- `class PermissionIntentConfirmRequest`
+- `class PermissionIntentCellTarget`
+- `class PermissionIntentApprovalRequest`
+- `class PermissionIntentProposalApprovalRequest`
+- `class PermissionIntentProposalDecisionRequest`
 - `class SecuritySetupCompileRequest`
 - `build_permission_intents_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.workflows.context`, `pydantic`, `typing`
@@ -179,10 +171,6 @@
 - `app_confirm_endpoint_command(context, project_id, endpoint, revision) -> None`
 - `app_authorize_source_command(context, project_id, revision) -> None`
 - `app_analyze_command(context, project_id, revision) -> None`
-- `app_decide_role_command(context, project_id, candidate_id, decision, revision, display_name) -> None`
-- `app_decide_action_command(context, project_id, candidate_id, decision, revision, display_name) -> None`
-- `app_add_role_command(context, project_id, display_name, revision) -> None`
-- `app_add_action_command(context, project_id, display_name, revision, risk_hint) -> None`
 - `account_list_command(context, project_id) -> None`
 - `account_show_command(context, identity_id) -> None`
 - `account_create_command(context, project_id, role_candidate_id, label) -> None`
@@ -200,9 +188,8 @@
 - `flow_finalize_command(context, recording_id) -> None`
 - `flow_safety_command(context, recording_id) -> None`
 - `check_permissions_command(context, project_id) -> None`
-- `check_set_permission_command(context, project_id, action_candidate_id, subject_role_candidate_id, resource_owner_role_candidate_id, relation, expectation, actor) -> None`
 - `check_preview_command(context, project_id) -> None`
-- `check_prepare_command(context, project_id, actor) -> None`
+- `check_prepare_command(context, project_id) -> None`
 - `check_cancel_command(context, project_id) -> None`
 - `check_run_command(context, project_id, idempotency_key) -> None`
 - `result_show_command(context, run_id, project_id) -> None`
@@ -213,7 +200,7 @@
 - `history_show_command(context, project_id) -> None`
 - `settings_show_command(context) -> None`
 - `settings_test_command(context, profile_name) -> None`
-主要 import / dot-source：`__future__`, `os`, `pathlib`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.jobs.models`, `sys`, `time`, `typer`, `uuid`
+主要 import / dot-source：`__future__`, `os`, `pathlib`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.runtime.jobs.models`, `sys`, `time`, `typer`, `uuid`
 
 ### `product/backend/cli/commands/system.py`
 - `class ServeReadinessStatus`

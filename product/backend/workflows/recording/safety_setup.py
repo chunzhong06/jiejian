@@ -195,6 +195,15 @@ class ActionSafetySetupService:
         self._request_store = request_store
         self._test_identities = test_identities
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
+        self._permission_binding_refresher: Callable[[str], None] | None = None
+
+    def set_permission_binding_refresher(
+        self,
+        refresher: Callable[[str], None],
+    ) -> None:
+        """安装安全准备变化后的权限实现绑定失效器。"""
+
+        self._permission_binding_refresher = refresher
 
     def preview(self, recording_id: str) -> ActionSafetySetupView:
         context = self._load_context(recording_id)
@@ -278,6 +287,8 @@ class ActionSafetySetupService:
         with self._uow_factory() as work:
             work.action_safety_setups.replace(setup)
             work.commit()
+        if self._permission_binding_refresher is not None:
+            self._permission_binding_refresher(context.recording.project_id)
         return self._view(self._load_context(recording_id))
 
     def _load_context(self, recording_id: str) -> _SetupContext:

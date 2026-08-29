@@ -33,14 +33,10 @@ from product.backend.cli.commands.control import (
     account_reset_command,
     account_show_command,
     app_analyze_command,
-    app_add_action_command,
-    app_add_role_command,
     app_authorize_source_command,
     app_confirm_endpoint_command,
     app_connect_command,
     app_discover_command,
-    app_decide_action_command,
-    app_decide_role_command,
     app_list_command,
     app_remove_command,
     app_show_command,
@@ -49,7 +45,6 @@ from product.backend.cli.commands.control import (
     check_prepare_command,
     check_preview_command,
     check_run_command,
-    check_set_permission_command,
     flow_capture_start_command,
     flow_capture_stop_command,
     flow_finalize_command,
@@ -189,10 +184,6 @@ app_group.command("discover-endpoints")(app_discover_command)
 app_group.command("confirm-endpoint")(app_confirm_endpoint_command)
 app_group.command("authorize-source")(app_authorize_source_command)
 app_group.command("analyze")(app_analyze_command)
-app_group.command("decide-role")(app_decide_role_command)
-app_group.command("decide-action")(app_decide_action_command)
-app_group.command("add-role")(app_add_role_command)
-app_group.command("add-action")(app_add_action_command)
 
 account_group.command("list")(account_list_command)
 account_group.command("show")(account_show_command)
@@ -213,7 +204,6 @@ flow_group.command("finalize")(flow_finalize_command)
 flow_group.command("safety")(flow_safety_command)
 
 check_group.command("permissions")(check_permissions_command)
-check_group.command("set-permission")(check_set_permission_command)
 check_group.command("prepare")(check_prepare_command)
 check_group.command("preview")(check_preview_command)
 check_group.command("run")(check_run_command)

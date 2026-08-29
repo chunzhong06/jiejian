@@ -42,6 +42,30 @@ def test_top_level_help_only_exposes_web_v1_tasks_and_serve() -> None:
         assert legacy not in result.stdout
 
 
+def test_oracle_mutators_are_absent_from_cli_command_tree() -> None:
+    forbidden = {
+        "app": ("decide-role", "decide-action", "add-role", "add-action"),
+        "check": ("set-permission",),
+    }
+    for group, commands in forbidden.items():
+        help_result = CliRunner().invoke(app, [group, "--help"])
+        assert help_result.exit_code == 0
+        for command in commands:
+            assert command not in help_result.stdout
+            result = CliRunner().invoke(app, [group, command])
+            assert result.exit_code != 0
+            assert "错误" in result.output
+
+    for command_function in (
+        "app_decide_role_command",
+        "app_decide_action_command",
+        "app_add_role_command",
+        "app_add_action_command",
+        "check_set_permission_command",
+    ):
+        assert not hasattr(control_commands, command_function)
+
+
 def test_version_uses_the_single_product_version_source() -> None:
     result = CliRunner().invoke(app, ["--version"])
 

@@ -5,10 +5,10 @@
 #   已验证 Run、Finding 与 Evidence 之上的唯一人类结果表达。
 #
 # 职责
-#   汇总本次范围与三态结论｜投影权限断裂最小见证与确认影响｜提供 GUI/CLI/MCP 共用只读 View
+#   汇总本次范围与三态结论｜投影冻结权限版本与断裂见证｜提供 GUI/CLI/MCP 共用只读 View
 #
 # 边界
-#   只翻译已发布事实，不重新执行 Verification，不修改 Finding、Evidence 或 Report。
+#   只翻译已发布事实和 Run 权限快照，不读取 live Ledger，不修改 Finding、Evidence 或 Report。
 #
 # 调用链
 #   API / CLI / Report → ResultPresentationBuilder → PublishedResultReader / FindingQueries
@@ -32,6 +32,10 @@ from product.backend.core.verification.breakpoints import (
 from product.backend.core.verification.facts import ObservedEffect, TemporalClosure
 from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
 from product.backend.workflows.results.trace import build_execution_traces
+from product.protocols.execution_request import (
+    PermissionPolicySnapshot,
+    build_permission_policy_snapshot,
+)
 from product.protocols.observer import ObserverOutcomeStatus, ObserverType
 
 
@@ -143,12 +147,24 @@ class ResultPresentationIssue(_PresentationModel):
     occurrence_status: str | None = Field(default=None, max_length=32)
 
 
+class ResultRelevantIntent(_PresentationModel):
+    intent_id: str = Field(pattern=r"^pin_[0-9a-f]{32}$")
+    revision: int = Field(ge=1)
+    intent_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class ResultPresentation(_PresentationModel):
     run_id: str = Field(min_length=1, max_length=128)
     project_id: str = Field(min_length=1, max_length=64)
     project_name: str = Field(min_length=1, max_length=128)
     run_lifecycle: RunLifecycle
     verdict: RunVerdict | None
+    policy_epoch: int = Field(ge=0)
+    policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    relevant_intents: tuple[ResultRelevantIntent, ...] = Field(
+        default=(),
+        max_length=4096,
+    )
     headline: str = Field(min_length=1, max_length=160)
     scope_statement: str = Field(min_length=1, max_length=320)
     checked_count: int = Field(ge=0)
@@ -173,19 +189,31 @@ class ResultPresentationBuilder:
         """生成同一 Run 的唯一业务投影；读取失败由既有稳定错误表达。"""
 
         view = self._reader.read(run_id)
-        snapshot = self._reader.request_snapshot(view)
+        request = self._reader.execution_request(view)
         finding_views = self._findings.findings_for_run(run_id)
-        return build_result_presentation(view, snapshot, finding_views)
+        return build_result_presentation(
+            view,
+            request.project_snapshot,
+            finding_views,
+            permission_policy=request.permission_policy,
+        )
 
 
 def build_result_presentation(
     view: Any,
     snapshot: Any,
     finding_views: list[dict[str, Any]],
+    *,
+    permission_policy: PermissionPolicySnapshot | None = None,
 ) -> ResultPresentation:
     """纯翻译可信结果事实；不会根据文本、状态码或 Occurrence 重算安全结论。"""
 
     result = view.publication.result
+    policy = permission_policy or build_permission_policy_snapshot(
+        view.run.project_id,
+        0,
+        (),
+    )
     evidence_items = tuple(result.evidence)
     evidence_by_id = {item.evidence_id: item for item in evidence_items}
     execution_traces = build_execution_traces(snapshot, evidence_items)
@@ -237,6 +265,16 @@ def build_result_presentation(
         project_name=snapshot.project_name,
         run_lifecycle=lifecycle,
         verdict=verdict,
+        policy_epoch=policy.policy_epoch,
+        policy_fingerprint=policy.policy_fingerprint,
+        relevant_intents=tuple(
+            ResultRelevantIntent(
+                intent_id=item.intent_id,
+                revision=item.revision,
+                intent_hash=item.intent_hash,
+            )
+            for item in policy.entries
+        ),
         headline=_headline(verdict, lifecycle),
         scope_statement=_scope_statement(verdict, lifecycle),
         checked_count=len(evidence_items),
@@ -1009,6 +1047,7 @@ __all__ = [
     "ResultPresentation",
     "ResultPresentationBuilder",
     "ResultPresentationIssue",
+    "ResultRelevantIntent",
     "ResultWitnessItem",
     "build_result_presentation",
 ]

@@ -81,19 +81,13 @@ def test_control_plane_and_verification_do_not_reach_target_adapters() -> None:
         assert not _forbidden_imports(path, verification_forbidden), path
 
 
-def test_application_understanding_uses_only_public_contract_analysis_symbols() -> None:
-    analyzer = BACKEND / "workflows" / "application_understanding" / "analysis" / "analyzer.py"
-    tree = ast.parse(analyzer.read_text(encoding="utf-8"))
-    private_imports = {
-        alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and node.module is not None
-        and node.module.startswith("product.backend.core.contracts.analysis.sources")
-        for alias in node.names
-        if alias.name.startswith("_")
-    }
-    assert private_imports == set()
+def test_application_understanding_does_not_depend_on_removed_contract_analysis() -> None:
+    analysis_root = BACKEND / "workflows" / "application_understanding" / "analysis"
+    for path in _python_files(analysis_root):
+        assert not _forbidden_imports(
+            path,
+            ("product.backend.core.contracts.analysis",),
+        ), path
 
 
 def test_target_runtime_dependencies_have_one_web_composition_point() -> None:
@@ -393,7 +387,7 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
         (frontend / "package.json").read_text(encoding="utf-8")
     )
     assert "version" not in frontend_manifest
-    assert __version__ == "1.0.3"
+    assert __version__ == "1.0.4"
 
 
 def test_frontend_source_tree_contains_no_generated_install_or_build_artifacts() -> None:

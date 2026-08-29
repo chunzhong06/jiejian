@@ -1,17 +1,15 @@
 /* =============================================================================
- * Contract API Client
+ * PermissionContract DTO
  *
  * 定位
- *   建约页面与 Contract 治理、Diff、Drift HTTP 路由之间的适配器
+ *   权限关系只读投影使用的 Contract 类型边界
  *
  * 职责
- *   提交治理动作｜读取工作台快照｜请求确定性分析视图
+ *   约束前端只读关系图需要的有限字段
  *
  * 调用链
- *   PermissionAdvancedPanel → contractsApi → api/http
+ *   PermissionExplorer → Contract DTO
  * ============================================================================= */
-
-import { request } from './http'
 
 export type PermissionSubjectDto = { subject_id: string; roles?: string[] }
 export type PermissionActionDto = { action_id: string; effect_ids?: string[] }
@@ -64,64 +62,4 @@ export type PermissionContractDto = {
   relations?: PermissionRelationDto[]
   rules?: PermissionRuleDto[]
   batch_rules?: PermissionBatchRuleDto[]
-}
-
-export type ContractSummaryDto = {
-  schema_version: '1'
-  status: string
-  id: string
-  version: number
-  rules: PermissionRuleDto[]
-}
-
-export type GovernanceRequirementDto = { requirement_id: string; text: string; security_tags?: string[] }
-export type GovernanceCandidateDto = { candidate_id: string; rule?: { id?: string; rule_id?: string } }
-export type GovernanceIssueDto = { severity?: string; code?: string; reason_code?: string; detail?: string }
-export type GovernanceVersionDto = {
-  contract_id: string
-  version: number
-  status: string
-  snapshot?: PermissionContractDto
-}
-export type GovernanceWorkspaceDto = {
-  project?: { governed_contract_id?: string | null; governed_contract_version?: number | null }
-  requirements?: GovernanceRequirementDto[]
-  candidates?: GovernanceCandidateDto[]
-  versions?: GovernanceVersionDto[]
-}
-export type CandidateDerivationDto = {
-  batches?: Array<{ issues?: GovernanceIssueDto[] }>
-  merge?: { issues?: GovernanceIssueDto[] }
-  persisted_candidates?: GovernanceCandidateDto[]
-}
-export type GovernanceAnalysisDto = Record<string, unknown>
-
-export const contractsApi = {
-  contracts: (id: string) => request<ContractSummaryDto[]>(`/api/projects/${id}/contracts`),
-  contractGovernance: (id: string) => request<GovernanceWorkspaceDto>(`/api/projects/${id}/contract-governance`),
-  createRequirement: (id: string, text: string, securityTags: string[], actor: string) =>
-    request<GovernanceRequirementDto>(`/api/projects/${id}/contract-governance/requirements`, {
-      method: 'POST', body: JSON.stringify({ schema_version: '1', text, security_tags: securityTags, actor }),
-    }),
-  deriveCandidates: (id: string, requirementIds: string[], actor: string) =>
-    request<CandidateDerivationDto>(`/api/projects/${id}/contract-governance/candidates/derive`, {
-      method: 'POST', body: JSON.stringify({ schema_version: '1', requirement_ids: requirementIds, actor }),
-    }),
-  createGovernanceContract: (id: string, snapshot: PermissionContractDto, candidateIds: string[], actor: string) =>
-    request<GovernanceVersionDto>(`/api/projects/${id}/contract-governance/contracts`, {
-      method: 'POST', body: JSON.stringify({ schema_version: '1', contract_id: snapshot.contract_id, snapshot, candidate_ids: candidateIds, actor }),
-    }),
-  reviseGovernanceContract: (id: string, snapshot: PermissionContractDto, candidateIds: string[], actor: string) =>
-    request<GovernanceVersionDto>(`/api/projects/${id}/contract-governance/contracts/${snapshot.contract_id}/revisions`, {
-      method: 'POST', body: JSON.stringify({ schema_version: '1', snapshot, candidate_ids: candidateIds, actor }),
-    }),
-  transitionGovernanceVersion: (id: string, contractId: string, version: number, action: 'submit' | 'reject' | 'activate', actor: string) =>
-    request<GovernanceVersionDto>(`/api/projects/${id}/contract-governance/contracts/${contractId}/versions/${version}/${action}`, {
-      method: 'POST', body: JSON.stringify({ schema_version: '1', actor }),
-    }),
-  contractVersions: (id: string, contractId: string) => request<GovernanceVersionDto[]>(`/api/projects/${id}/contract-governance/contracts/${contractId}/versions`),
-  assessment: (id: string, contractId: string, version: number) => request<GovernanceAnalysisDto>(`/api/projects/${id}/contract-governance/contracts/${contractId}/versions/${version}/assessment`),
-  diff: (id: string, contractId: string, version: number, fromVersion: number) => request<GovernanceAnalysisDto>(`/api/projects/${id}/contract-governance/contracts/${contractId}/versions/${version}/diff?from_version=${fromVersion}`),
-  drift: (id: string, contractId: string, version: number) => request<GovernanceAnalysisDto>(`/api/projects/${id}/contract-governance/contracts/${contractId}/versions/${version}/drift`),
-  runContract: (runId: string) => request<PermissionContractDto>(`/api/runs/${runId}/contract`),
 }

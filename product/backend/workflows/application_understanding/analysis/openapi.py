@@ -23,10 +23,6 @@ import yaml
 from product.backend.core.application_understanding import (
     CandidateConfidence,
 )
-from product.backend.core.contracts.analysis.sources.openapi import (
-    build_openapi_candidates,
-)
-from product.backend.core.contracts.analysis.models import AnalysisSeverity
 from product.backend.core.http_routes import HTTP_METHODS, safe_route_path
 from product.backend.workflows.onboarding.discovery import (
     canonical_folder,
@@ -72,13 +68,7 @@ class OpenApiAnalysisMixin:
             return
         if not isinstance(document, Mapping):
             return
-        validated = build_openapi_candidates(
-            project_id,
-            document,
-            source_locator=relative,
-            max_bytes=self.limits.max_file_bytes,
-        )
-        if any(item.severity is AnalysisSeverity.BLOCKING for item in validated.issues):
+        if not _valid_openapi_document(document, max_bytes=self.limits.max_file_bytes):
             return
         for canonical_name, display_name in self._openapi_roles(document):
             self._add_role(
@@ -142,3 +132,40 @@ class OpenApiAnalysisMixin:
             elif isinstance(value, (list, tuple)):
                 pending.extend(value)
         return tuple(sorted(roles.items()))
+
+
+def _valid_openapi_document(document: Mapping[str, object], *, max_bytes: int) -> bool:
+    """只接受可在当前文件内完整解释的有界 OpenAPI 结构。"""
+
+    try:
+        if len(json.dumps(document, ensure_ascii=False, sort_keys=True).encode("utf-8")) > max_bytes:
+            return False
+    except (TypeError, ValueError):
+        return False
+    paths = document.get("paths")
+    if not (document.get("openapi") or document.get("swagger")) or not isinstance(paths, Mapping):
+        return False
+    if _contains_external_ref(document):
+        return False
+    for path, path_item in paths.items():
+        if not isinstance(path, str) or not safe_route_path(path) or not isinstance(path_item, Mapping):
+            return False
+        for method, operation in path_item.items():
+            upper = str(method).upper()
+            if upper in {"PARAMETERS", "SUMMARY", "DESCRIPTION", "SERVERS"}:
+                continue
+            if upper in HTTP_METHODS and not isinstance(operation, Mapping):
+                return False
+    return True
+
+
+def _contains_external_ref(value: object) -> bool:
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if key == "$ref" and (not isinstance(nested, str) or not nested.startswith("#/")):
+                return True
+            if _contains_external_ref(nested):
+                return True
+    elif isinstance(value, (list, tuple)):
+        return any(_contains_external_ref(item) for item in value)
+    return False

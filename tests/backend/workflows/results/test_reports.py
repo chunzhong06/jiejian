@@ -27,6 +27,7 @@ from product.backend.workflows.results.presentation import (
     ResultEvidenceSource,
     ResultPresentation,
     ResultPresentationIssue,
+    ResultRelevantIntent,
     ResultWitnessItem,
 )
 from product.protocols import ObserverType
@@ -136,6 +137,8 @@ def _presentation(*, verdict: str | None = None) -> ReportPresentation:
         project_name="报告测试项目",
         run_lifecycle="COMPLETED",
         verdict=verdict,
+        policy_epoch=4,
+        policy_fingerprint="e" * 64,
         headline="结果不可用" if verdict is None else "发现权限问题",
         scope_statement="当前运行没有形成可用安全结论。",
         checked_count=0,
@@ -184,6 +187,15 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
         project_name="报告测试项目",
         run_lifecycle=RunLifecycle.COMPLETED,
         verdict=RunVerdict.BLOCK,
+        policy_epoch=4,
+        policy_fingerprint="e" * 64,
+        relevant_intents=(
+            ResultRelevantIntent(
+                intent_id="pin_" + "f" * 32,
+                revision=2,
+                intent_hash="a" * 64,
+            ),
+        ),
         headline="发现权限问题",
         scope_statement="当前检查确认存在权限问题。",
         checked_count=1,
@@ -204,6 +216,9 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
     snapshot = builder._presentation_snapshot(RUN_ID, PROJECT_ID)
 
     assert snapshot.issues[0].evidence_refs == issue.evidence_refs
+    assert snapshot.policy_epoch == 4
+    assert snapshot.policy_fingerprint == "e" * 64
+    assert snapshot.relevant_intents[0].intent_id == "pin_" + "f" * 32
     assert "evidence_sources" not in snapshot.issues[0].model_dump(mode="json")
     assert "planned_identity_id" not in snapshot.issues[0].model_dump(mode="json")
     assert snapshot.issues[0].diagnosis is not None
@@ -398,6 +413,8 @@ def test_html_uses_presentation_snapshot_and_escapes_dynamic_content() -> None:
         project_name=injected,
         run_lifecycle="COMPLETED",
         verdict="BLOCK",
+        policy_epoch=4,
+        policy_fingerprint="e" * 64,
         headline="发现权限问题",
         scope_statement="本次只覆盖已确认范围 & <限制>",
         checked_count=1,
@@ -413,6 +430,8 @@ def test_html_uses_presentation_snapshot_and_escapes_dynamic_content() -> None:
     assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &quot;quoted&quot;" in document
     assert '<div class="summary-item"><span>检查项</span><strong>1</strong>' in document
     assert '<div class="summary-item"><span>未覆盖</span><strong>2</strong>' in document
+    assert "权限版本 <strong>4</strong>" in document
+    assert "权限策略指纹" in document
     assert '<article class="issue-card">' in document
     assert "可信观察到的真实结果" in document
     assert "权限断裂诊断" in document
@@ -451,6 +470,8 @@ def test_presentation_is_canonical_and_gate_copies_base_safety_facts() -> None:
         project_name="报告测试项目",
         run_lifecycle="COMPLETED",
         verdict="BLOCK",
+        policy_epoch=4,
+        policy_fingerprint="e" * 64,
         headline="发现权限问题",
         scope_statement="本次确认权限断裂。",
         checked_count=1,

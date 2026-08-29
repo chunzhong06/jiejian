@@ -24,14 +24,6 @@
 主要 import / dot-source：`./http`, `./runs`
 
 ### `product/frontend/src/api/contracts.ts`
-- `CandidateDerivationDto`
-- `ContractSummaryDto`
-- `GovernanceAnalysisDto`
-- `GovernanceCandidateDto`
-- `GovernanceIssueDto`
-- `GovernanceRequirementDto`
-- `GovernanceVersionDto`
-- `GovernanceWorkspaceDto`
 - `PermissionActionDto`
 - `PermissionBatchExpectationDto`
 - `PermissionBatchRuleDto`
@@ -42,15 +34,6 @@
 - `PermissionRuleDto`
 - `PermissionSubjectDto`
 - `SecurityEffectDto`
-- `contractsApi`
-主要 import / dot-source：`./http`
-
-### `product/frontend/src/api/executionProfiles.ts`
-- `ExecutionProfileDto`
-- `ExecutionProfileSummaryDto`
-- `SubmittedRunDto`
-- `executionProfilesApi`
-主要 import / dot-source：`./contracts`, `./http`
 
 ### `product/frontend/src/api/experience.ts`
 - `OfficialExperienceDto`
@@ -97,7 +80,12 @@
 - `PermissionIntentActionDto`
 - `PermissionIntentCellDto`
 - `PermissionIntentExpectation`
+- `PermissionIntentImplementationRebindDto`
 - `PermissionIntentMatrixDto`
+- `PermissionIntentProposalDto`
+- `PermissionIntentProposalListDto`
+- `PermissionIntentSemanticChangeDto`
+- `ProtectedEffectDto`
 - `SecuritySetupCompileResultDto`
 - `permissionIntentsApi`
 主要 import / dot-source：`./http`
@@ -158,6 +146,7 @@
 - `ResultEvidenceSourceDto`
 - `ResultPresentationDto`
 - `ResultPresentationIssueDto`
+- `ResultRelevantIntentDto`
 - `SecurityEffectFactDto`
 - `TraceEventDto`
 - `resultsApi`
@@ -352,7 +341,7 @@
 
 ### `product/frontend/src/features/checks/PermissionCheckPage.tsx`
 - `PermissionCheckPage`
-主要 import / dot-source：`../../api/checks`, `../../api/http`, `../../api/permissionIntents`, `../../api/projects`, `../../api/runs`, `../../app/presentation`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `../permissions/PermissionAdvancedPanel`, `./CheckProgress`, `antd`, `react`
+主要 import / dot-source：`../../api/checks`, `../../api/http`, `../../api/permissionIntents`, `../../api/projects`, `../../api/runs`, `../../app/presentation`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./CheckProgress`, `antd`, `react`
 
 ### `product/frontend/src/features/checks/ReportPanel.test.tsx`
 主要 import / dot-source：`./ReportPanel`, `@testing-library/react`, `vitest`
@@ -400,17 +389,6 @@
 - `RelationshipGraphModel`
 - `RelationshipNode`
 主要 import / dot-source：`../../../api/contracts`
-
-### `product/frontend/src/features/permissions/governance/PermissionGovernancePanel.tsx`
-- `PermissionGovernancePanel`
-主要 import / dot-source：`../../../api/contracts`, `../../../api/http`, `../../../api/projects`, `../../../app/presentation`, `antd`, `react`
-
-### `product/frontend/src/features/permissions/PermissionAdvancedPanel.test.tsx`
-主要 import / dot-source：`./PermissionAdvancedPanel`, `@testing-library/react`, `vitest`
-
-### `product/frontend/src/features/permissions/PermissionAdvancedPanel.tsx`
-- `PermissionAdvancedPanel`
-主要 import / dot-source：`../../api/contracts`, `../../api/executionProfiles`, `../../api/http`, `../../api/projects`, `../../app/presentation`, `../../components/AdvancedDetails`, `./explorer/PermissionExplorer`, `./governance/PermissionGovernancePanel`, `antd`, `react`
 
 ### `product/frontend/src/features/recording/ActionSafetySetupCard.tsx`
 - `ActionSafetySetupCard`

@@ -35,10 +35,6 @@ from product.backend.core.application_understanding import (
     candidate_id,
     canonical_role_key,
 )
-from product.backend.core.contracts.analysis.sources.openapi import (
-    build_openapi_candidates,
-)
-from product.backend.core.contracts.analysis.models import AnalysisSeverity
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.http_routes import HTTP_METHODS, safe_route_path
 from product.backend.workflows.onboarding.discovery import (

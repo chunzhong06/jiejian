@@ -57,6 +57,8 @@ def _presentation(run_id: str, issue: ResultPresentationIssue | None) -> ResultP
         project_name="文档系统",
         run_lifecycle=RunLifecycle.COMPLETED,
         verdict=verdict,
+        policy_epoch=int(run_id[-1]),
+        policy_fingerprint=run_id[-1] * 64,
         headline="测试标题",
         scope_statement="测试范围说明。",
         checked_count=1,
@@ -139,6 +141,8 @@ def test_uncovered_run_never_looks_fixed_and_later_safe_evidence_can_fix() -> No
     assert result.comparisons[1].changes[0].status is HistoryChangeStatus.NOT_COVERED
     assert result.comparisons[1].changes[0].status_label == "本次未覆盖"
     assert result.comparisons[1].changes[0].current_verdict is None
+    assert result.comparisons[1].policy_epoch == 2
+    assert result.comparisons[1].policy_fingerprint == "2" * 64
     assert result.comparisons[2].changes[0].status is HistoryChangeStatus.FIXED
     assert result.comparisons[2].changes[0].status_label == "已解决"
     assert result.comparisons[2].changes[0].current_verdict is PresentedCaseVerdict.SAFE

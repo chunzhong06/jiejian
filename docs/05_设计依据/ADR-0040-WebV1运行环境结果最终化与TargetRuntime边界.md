@@ -48,7 +48,7 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ### 9. 当前开发基线不保留历史兼容
 
-旧数据库、旧 Profile、旧 Runner/Evidence/Report、旧路由 alias、旧参数位置、旧类名 re-export、旧 Demo Target 和旧 Schema reader 一次删除。当前 parser 每个根文档只接受一个明确版本；最终数据库只保留显式的 `0001_web_v1` 发布基线。Repository-owned Sample、fixture、Schema、客户端和 CURRENT 文档同步迁移，不提供 fallback 或 wrapper。
+旧数据库、旧 Profile、旧 Runner/Evidence/Report、旧路由 alias、旧参数位置、旧类名 re-export、旧 Demo Target 和旧 Schema reader 一次删除。当前 parser 每个根文档只接受一个明确版本；数据库以显式 `0001_web_v1` 为不可改写发布基线，后续只通过签入 migration 演进。Repository-owned Sample、fixture、Schema、客户端和 CURRENT 文档同步迁移，不提供 fallback 或 wrapper。
 
 ## 理由与取舍
 
@@ -60,7 +60,7 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ## 迁移与兼容
 
-当前单代基线不读取或迁移旧运行目录和旧数据库。仓库自身调用方、Sample、fixture、Schema、前端客户端和文档已一次迁移；数据库只保留唯一显式 `0001_web_v1`。Windows 验收从全新本地运行态双击仓库根 `start.cmd`，证明 editable 当前源码、受控依赖和 `var/runtime/frontend` 可以完整再生；旧兼容入口直接删除。
+当前单代基线不读取或迁移旧运行目录和旧开发数据库。仓库自身调用方、Sample、fixture、Schema、前端客户端和文档已一次迁移；数据库从唯一显式 `0001_web_v1` 基线沿签入 migration 演进。Windows 验收从全新本地运行态双击仓库根 `start.cmd`，证明 editable 当前源码、受控依赖和 `var/runtime/frontend` 可以完整再生；旧兼容入口直接删除。
 
 ## 相关真源
 

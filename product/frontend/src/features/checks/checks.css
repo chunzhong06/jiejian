@@ -1,6 +1,5 @@
 /* 检查过程、执行路径、结果证据和历史变化。 */
 .permission-check-page { display: grid; gap: var(--space-24); }
-.permission-check-sequence { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .permission-check-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; display: grid; gap: var(--space-20, 20px); padding: var(--space-24); }
 .permission-check-heading { align-items: flex-start; display: flex; gap: var(--space-16); justify-content: space-between; }
 .permission-check-heading h3,
@@ -19,6 +18,10 @@
 .permission-requirement-row { align-items: center; border-top: 1px solid #eef0f4; display: grid; gap: var(--space-16); grid-template-columns: minmax(220px, 1fr) auto minmax(180px, .8fr); padding: var(--space-16) 0; }
 .permission-requirement-row > div:first-child,
 .permission-requirement-note { display: grid; gap: 3px; }
+.permission-requirement-control { align-items: start; display: grid; gap: var(--space-4, 4px); }
+.permission-proposal-list { display: grid; gap: var(--space-16); }
+.permission-proposal-card { border: 1px solid var(--color-border); border-radius: 12px; display: grid; gap: var(--space-12); padding: var(--space-20, 20px); }
+.permission-proposal-card .ant-descriptions { margin: 0; }
 .permission-requirement-gaps { margin: var(--space-8) 0 0 !important; }
 .check-preview-summary { background: #f8fafc; border-radius: 10px; padding: 16px; }
 .check-preview-action .ant-alert { margin-bottom: var(--space-8); }
@@ -120,7 +123,6 @@
 .history-event > p { margin-bottom: 0; }
 
 @media (max-width: 768px) {
-  .permission-check-sequence { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .permission-requirement-row { align-items: start; grid-template-columns: 1fr; }
   .permission-requirement-row .ant-segmented { justify-self: start; max-width: 100%; }
   .permission-check-section { padding: var(--space-16); }
@@ -133,7 +135,6 @@
 }
 
 @media (max-width: 600px) {
-  .permission-check-sequence { grid-template-columns: 1fr; }
   .permission-check-heading,
   .permission-requirement-title,
   .check-preview-action-title { align-items: flex-start; flex-direction: column; }

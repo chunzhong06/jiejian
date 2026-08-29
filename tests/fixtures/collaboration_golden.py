@@ -69,8 +69,8 @@ class InMemorySecretStore:
     def configured(self, secret_ref: str) -> bool:
         return secret_ref in self.values
 
-    def read(self, secret_ref: str) -> str:
-        return self.values[secret_ref]
+    def read(self, secret_ref: str) -> str | None:
+        return self.values.get(secret_ref)
 
     def write(self, secret_ref: str, value: str) -> None:
         self.values[secret_ref] = value
@@ -294,13 +294,17 @@ def prepare_formal_project(
         (role_ids["project_owner"], "OWNS", "ALLOW"),
         (role_ids["member"], "OTHER_ROLE", "DENY"),
     ):
-        response = client.put(
-            f"/api/projects/{project_id}/permission-intents/{action_id}/"
-            f"{subject_role}/{role_ids['project_owner']}/{relation}",
+        response = client.post(
+            f"/api/projects/{project_id}/permission-intents/approvals",
             json={
                 "schema_version": "1",
+                "target": {
+                    "action_candidate_id": action_id,
+                    "subject_role_candidate_id": subject_role,
+                    "resource_owner_role_candidate_id": role_ids["project_owner"],
+                    "relation": relation,
+                },
                 "expectation": expectation,
-                "actor": "协作空间 Golden 验收",
             },
         )
         assert response.status_code == 200, response.text

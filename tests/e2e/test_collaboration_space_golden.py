@@ -122,7 +122,7 @@ def test_three_state_golden_uses_real_sample_observers_and_published_results(
                 sample._write_control(authorization_order, blob_observation)
                 compiled = client.post(
                     f"/api/projects/{setup['project_id']}/security-setup/compile",
-                    json={"schema_version": "1", "actor": "协作空间 Golden 验收"},
+                    json={"schema_version": "1"},
                 )
                 assert compiled.status_code == 200, compiled.text
                 preview = client.get(

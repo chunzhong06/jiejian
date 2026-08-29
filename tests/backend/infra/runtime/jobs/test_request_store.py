@@ -16,6 +16,7 @@ from product.backend.infra.runtime.jobs.requests import (
     parse_execution_request,
     required_secret_names,
 )
+from product.protocols.execution_request import build_permission_policy_snapshot
 from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, minimal_process_environment
 from tests.fixtures.runtime_environment import runtime_identity_environment
 from tests.fixtures.runner import runner_input as make_runner_input
@@ -99,6 +100,11 @@ def test_current_request_store_dispatches_canonical_and_uses_minimal_secret_refs
     request = PersistedExecutionRequest(
         schema_version="1",
         budget=runner_input.budget,
+        permission_policy=build_permission_policy_snapshot(
+            runner_input.project_snapshot.project_id,
+            0,
+            (),
+        ),
         project_snapshot=runner_input.project_snapshot,
     )
     store = ExecutionRequestStore(tmp_path / "var")

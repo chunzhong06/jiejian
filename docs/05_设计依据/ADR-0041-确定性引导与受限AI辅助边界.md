@@ -11,7 +11,7 @@
 
 ## 决策
 
-删除模型生成 Contract Candidate 的当前产品入口；Requirement parser、确定性 Candidate、Assessment、Drift、Diff、人工治理和 Contract 状态机继续保留。历史 LLM 来源字段只服务既有记录读取，不允许当前入口据此新建 Candidate。
+模型不进入 PermissionIntent、内部 ContractVersion、ExecutionProfile 或执行计划的形成过程。旧 Requirement/Candidate/Assessment/Drift/Diff 平行治理链和历史 LLM 来源字段已从当前生产代码与数据库结构删除；内部 Contract 状态机只承接 SecuritySetupCompiler 的确定性输出。
 
 `GuidanceSnapshot` 每次从 ProjectReadiness、CheckPreview、活动任务和可信结果等权威事实确定性计算下一步选项、服务端路由和稳定事实指纹；`ErrorDiagnosis` 只根据稳定错误码、Runner 阶段、原因、生命周期与 cleanup issue 形成恢复入口。二者都不调用模型、不持久化、不创建 CheckPlan，也不改变权限预期、安全结论或运行事实。
 
@@ -27,11 +27,11 @@ GET 只重算确定性事实并读取缓存，不连接供应商。只有用户�
 
 ## 影响
 
-模型 Provider、Profile、动态模型发现、推理强度、连接测试和共享 SecretStore 继续作为全局可选控制面。模型不再是 Contract Candidate 来源；Verification、Finding、Gate、Report、Observer、Runner 和 WebExecutionProfile 均不消费 AI 推荐。九类入口共用 `AssistantPanel` 的紫色次级展示，确定性按钮和主流程不依赖面板状态。错误恢复页面读取服务端确定性诊断，不再按错误字符串或错误码正则猜测页面。
+模型 Provider、Profile、动态模型发现、推理强度、连接测试和共享 SecretStore 继续作为全局可选控制面。PermissionIntent、ContractVersion、Verification、Finding、Gate、Report、Observer、Runner 和 WebExecutionProfile 均不消费 AI 推荐。九类入口共用 `AssistantPanel` 的紫色次级展示，确定性按钮和主流程不依赖面板状态。错误恢复页面读取服务端确定性诊断，不再按错误字符串或错误码正则猜测页面。
 
 ## 迁移与兼容
 
-不新增数据库表或 migration。历史 Contract Candidate 元数据可按当前严格模型读取，但不能经当前服务/API 新建 LLM Candidate。AI 辅助缓存是可删除运行缓存，格式不兼容时直接视为未命中并重建；它不是产品数据或历史 Run 真源。模板、请求体和缓存根文档各自只接受版本 1，嵌套 API 读模型不重复携带 `schema_version`。
+AI 辅助缓存是可删除运行缓存，格式不兼容时直接视为未命中并重建；它不是产品数据或历史 Run 真源。模板、请求体和缓存根文档各自只接受版本 1，嵌套 API 读模型不重复携带 `schema_version`。旧 Candidate 持久表由后续签入 migration 删除，不提供双读或恢复入口。
 
 ## 相关真源
 

@@ -17,6 +17,7 @@
 | API envelope、异常与 trace | `product/backend/api/envelope.py`、`product/backend/api/errors.py` | `tests/backend/api/test_control_plane.py` |
 | Host、session、Origin 控制 | `product/backend/api/local_control.py` | `tests/backend/api/test_control_plane.py` |
 | MCP Streamable HTTP、固定工具白名单 | `product/backend/api/mcp.py` | `tests/backend/api/test_mcp.py` |
+| Human GUI 权限审批与 Agent proposal 路由 | `product/backend/api/routers/permission_intents.py` | `tests/backend/api/test_permission_intent_human_approval.py` |
 | MCP 长期配对与逐 Project 临时权限 | `product/backend/workflows/mcp_access.py`、`product/backend/api/routers/mcp_access.py` | `tests/backend/api/test_mcp.py` |
 | ApplicationCore 组合 | `product/backend/workflows/context.py` | `tests/backend/workflows/` |
 | ProductStatus 与唯一下一步 | `product/backend/workflows/control.py` | `tests/backend/workflows/control/test_status.py` |
@@ -29,11 +30,13 @@
 
 本地 API 固定绑定 IPv4 loopback。GUI 根页面取得当前服务进程的 HttpOnly、SameSite=Strict control session；所有 `/api` 请求验证 Host 与 session，写请求再验证精确 Origin。`X-Forwarded-*` 等代理头不能扩大授权。错误必须通过稳定 `ErrorCode`、有界 details 和 trace 映射；异常正文、环境变量和秘密值不能进入响应。
 
+权限意图写入只走 `POST /api/projects/{project_id}/permission-intents/approvals` 和 proposal approve/reject。审批 body 不接受自由 actor，Router 只做严格 DTO 映射，正式 revision/binding/epoch 事务由 `PermissionIntentService` 拥有。对已有 cell 选择未确认必须追加 RETIRED revision，不能删除历史。对应交互和 Oracle 边界见[修改权限意图与 Agent 授权](修改权限意图与Agent授权.md)。
+
 MCP 使用官方 Python SDK v2 的 Streamable HTTP，精确挂载在同一 FastAPI 服务的 `/mcp`，不提供 SSE 兼容入口，不创建第二个服务或 ApplicationCore。SDK 自身启用 Host/Origin 与 DNS rebinding 防护；transport 只接受当前配对 Bearer，不能使用 GUI control session Cookie。首次配对或轮换生成至少 256-bit 随机令牌，并只通过 `cred:jiejian/mcp-control/pairing` 的精确 SecretStore 操作保存；普通 status 永不返回正文。启动存在配对时自动恢复 READ，PREPARE/EXECUTE 只驻留当前 serve。暂停或 shutdown 清除活动会话与提升但保留配对，轮换替换旧令牌并清除提升，忘记连接才删除长期配对。
 
 唯一连接向导位于 GUI“AI 工具连接（MCP）”：Codex 使用 server name `jiejian`、`http://127.0.0.1:8765/mcp` 和 `JIEJIAN_MCP_TOKEN`；DSH 使用 `@deepseek-ai/dsh-mcp-client` 的 `streamable-http`，Authorization 从 `process.env.JIEJIAN_MCP_TOKEN` 取得。首次配置后客户端可随界鉴自动重连；轮换只更新该环境变量并重启客户端进程，不重复添加 server。
 
-每个工具必须经过统一 `require_mcp_level`。`READ` 只返回现有 Pydantic View 或有界轻量投影；`PREPARE` 只能调整已有候选、已有授权分析和检查准备，不能新选目录或首次授权；`EXECUTE` 只启动、停止或取消已经冻结的受控操作。白名单不得扩展为 shell、任意 HTTP、任意路径、秘密、请求正文、完整日志或完整 Evidence。访问失败稳定映射为 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED`，权限不足 details 只包含 `required_level/project_id`。
+每个工具必须经过统一 `require_mcp_level`。`READ` 只返回现有 Pydantic View 或有界轻量投影；`PREPARE` 只能重分析已授权应用、准备身份或检查条件，不能新选目录、首次授权、修改 PermissionIntent 或决定角色/动作候选；`EXECUTE` 只启动、停止或取消已经冻结的受控操作。权限意图白名单固定为 READ 的 `jiejian_intent_list/show` 和 PREPARE 的 `jiejian_intent_propose/rebind_propose`，proposal 不修改 revision、hash 或 epoch。任何 level 都不能提供 permission_set、candidate_decide、approve 或 reject。白名单不得扩展为 shell、任意 HTTP、任意路径、秘密、请求正文、完整日志或完整 Evidence。访问失败稳定映射为 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED`，权限不足 details 只包含 `required_level/project_id`。
 
 Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `schema_version/kind/status/data/next_actions/warnings`，失败增加有界 `error`。Human 只给结论与下一步，Verbose 才给技术引用；三种输出都来自同一产品事实。更完整的关系见[控制面与 Machine 输出协议](../../03_参考手册/协议/控制面与Machine输出协议.md)。
 
@@ -46,6 +49,7 @@ Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `sche
 - GET 不产生供应商调用、目标请求或隐式写入；需要副作用的操作使用明确写端点和幂等/确认边界。
 - `/health`、`/ready`、系统状态和业务状态各司其职；浏览器自动打开失败不能被解释为服务未 ready。
 - MCP 是 Web 产品的控制入口，不是 `MCP_AGENT` Target；高风险动作仍通过共享 Worker/Runner，工具不能旁路检查主链。
+- CLI、Machine 与 MCP 都不是权限审批人；不得增加直接修改 ALLOW/DENY、确认/拒绝正式实现映射或降低受保护效果的入口。
 
 ## 怎么验证
 

@@ -30,11 +30,8 @@ from product.backend.cli.presentation import (
     presentation_mode,
     verbose_enabled,
 )
-from product.backend.core.application_understanding import ActionRiskHint, CandidateDecision
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import JobState
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.infra.runtime.jobs.models import RequestCancellation
 
 
@@ -209,92 +206,6 @@ def app_analyze_command(
             result = application.application_understanding.analyze_source(
                 project_id,
                 revision=revision,
-            )
-        emit_command("app", result)
-    except JiejianError as exc:
-        fail(exc)
-
-
-def app_decide_role_command(
-    context: typer.Context,
-    project_id: str,
-    candidate_id: str,
-    decision: CandidateDecision,
-    revision: int = typer.Option(..., "--revision", min=0),
-    display_name: str | None = typer.Option(None, "--display-name"),
-) -> None:
-    """确认或拒绝角色候选；候选决定不生成权限规则。"""
-
-    try:
-        with application_scope(context) as application:
-            result = application.application_understanding.decide_role(
-                project_id,
-                candidate_id,
-                revision=revision,
-                decision=decision,
-                display_name=display_name,
-            )
-        emit_command("app", result)
-    except JiejianError as exc:
-        fail(exc)
-
-
-def app_decide_action_command(
-    context: typer.Context,
-    project_id: str,
-    candidate_id: str,
-    decision: CandidateDecision,
-    revision: int = typer.Option(..., "--revision", min=0),
-    display_name: str | None = typer.Option(None, "--display-name"),
-) -> None:
-    """确认或拒绝业务动作候选；risk hint 不作为漏洞结论。"""
-
-    try:
-        with application_scope(context) as application:
-            result = application.application_understanding.decide_action(
-                project_id,
-                candidate_id,
-                revision=revision,
-                decision=decision,
-                display_name=display_name,
-            )
-        emit_command("app", result)
-    except JiejianError as exc:
-        fail(exc)
-
-
-def app_add_role_command(
-    context: typer.Context,
-    project_id: str,
-    display_name: str,
-    revision: int = typer.Option(..., "--revision", min=0),
-) -> None:
-    try:
-        with application_scope(context) as application:
-            result = application.application_understanding.add_manual_role(
-                project_id,
-                revision=revision,
-                display_name=display_name,
-            )
-        emit_command("app", result)
-    except JiejianError as exc:
-        fail(exc)
-
-
-def app_add_action_command(
-    context: typer.Context,
-    project_id: str,
-    display_name: str,
-    revision: int = typer.Option(..., "--revision", min=0),
-    risk_hint: ActionRiskHint = typer.Option(ActionRiskHint.UNKNOWN, "--risk-hint"),
-) -> None:
-    try:
-        with application_scope(context) as application:
-            result = application.application_understanding.add_manual_action(
-                project_id,
-                revision=revision,
-                display_name=display_name,
-                risk_hint=risk_hint,
             )
         emit_command("app", result)
     except JiejianError as exc:
@@ -552,34 +463,6 @@ def check_permissions_command(context: typer.Context, project_id: str) -> None:
         fail(exc)
 
 
-def check_set_permission_command(
-    context: typer.Context,
-    project_id: str,
-    action_candidate_id: str,
-    subject_role_candidate_id: str,
-    resource_owner_role_candidate_id: str,
-    relation: PermissionIntentRelation,
-    expectation: PermissionExpectation | None = typer.Option(None, "--expectation"),
-    actor: str = typer.Option(..., "--actor"),
-) -> None:
-    """确认或清除一个权限组关系单元。"""
-
-    try:
-        with application_scope(context) as application:
-            result = application.permission_intents.confirm(
-                project_id,
-                action_candidate_id,
-                subject_role_candidate_id,
-                resource_owner_role_candidate_id,
-                relation,
-                expectation=expectation,
-                actor=actor,
-            )
-        emit_command("check-permissions", result)
-    except JiejianError as exc:
-        fail(exc)
-
-
 def check_preview_command(context: typer.Context, project_id: str) -> None:
     try:
         with application_scope(context) as application:
@@ -592,13 +475,12 @@ def check_preview_command(context: typer.Context, project_id: str) -> None:
 def check_prepare_command(
     context: typer.Context,
     project_id: str,
-    actor: str = typer.Option(..., "--actor"),
 ) -> None:
     """调用正式编译器准备当前检查条件，并回读最新预览。"""
 
     try:
         with application_scope(context) as application:
-            compiled = application.security_setup.compile(project_id, actor=actor)
+            compiled = application.security_setup.compile(project_id)
             preview = application.checks.preview(project_id)
         emit_command(
             "check-prepared",

@@ -3,21 +3,15 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from product.backend.core.identifiers import CANDIDATE_ID_PATTERN, LONG_SLUG_ID_PATTERN, PROJECT_ID_PATTERN, REQUIREMENT_ID_PATTERN, SHA256_PATTERN
+from product.backend.core.identifiers import LONG_SLUG_ID_PATTERN, PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.lifecycle import ContractStatus
 from product.backend.core.verification.permissions import PermissionContract
 
 
 class ContractSourceType(StrEnum):
-    REQUIREMENT_TEXT = "requirement_text"
     PROJECT_CONFIG = "project_config"
-    RECORDED_WEB = "recording" + "_" + "flow"
-    STATIC_ANALYSIS = "static_analysis"
-    LLM = "llm"
 
 
 class ContractAuditAction(StrEnum):
@@ -50,144 +44,11 @@ class SourceReference(GovernanceModel):
         return value
 
 
-class Requirement(GovernanceModel):
-    requirement_id: str = Field(pattern=REQUIREMENT_ID_PATTERN)
-    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    source: SourceReference
-    text: str = Field(min_length=1, max_length=16_384)
-    security_tags: tuple[str, ...] = Field(default=(), max_length=64)
-    created_by: str = Field(min_length=1, max_length=128)
-    created_at_us: int = Field(ge=0)
-
-    @field_validator("text", "created_by")
-    @classmethod
-    def validate_trimmed_text(cls, value: str) -> str:
-        if value != value.strip():
-            raise ValueError("audit text must be trimmed")
-        return value
-
-    @field_validator("security_tags")
-    @classmethod
-    def validate_security_tags(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        if len(set(values)) != len(values) or any(
-            not value
-            or len(value) > 64
-            or not value[0].islower()
-            or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for char in value)
-            for value in values
-        ):
-            raise ValueError("security tags must be unique lowercase slugs")
-        return values
-
-
-class LLMGenerationMetadata(GovernanceModel):
-    provider_id: str = Field(min_length=1, max_length=128)
-    model_id: str = Field(min_length=1, max_length=128)
-    adapter_version: str = Field(min_length=1, max_length=32)
-    prompt_template_id: str = Field(min_length=1, max_length=128)
-    prompt_template_version: str = Field(min_length=1, max_length=32)
-    prompt_template_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    input_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    provenance_schema_version: Literal["2"] | None = None
-    provider: str | None = Field(default=None, min_length=1, max_length=32)
-    profile_name: str | None = Field(default=None, min_length=1, max_length=128)
-    model: str | None = Field(default=None, min_length=1, max_length=256)
-    prompt_version: str | None = Field(default=None, min_length=1, max_length=32)
-    started_at_us: int | None = Field(default=None, ge=0)
-    duration_us: int | None = Field(default=None, ge=0)
-    budget_limit_microusd: int | None = Field(default=None, ge=0, le=1_000_000_000)
-    estimated_cost_microusd: int | None = Field(default=None, ge=0, le=1_000_000_000)
-
-    @field_validator(
-        "provider_id",
-        "model_id",
-        "adapter_version",
-        "prompt_template_id",
-        "prompt_template_version",
-        "provider",
-        "profile_name",
-        "model",
-        "prompt_version",
-    )
-    @classmethod
-    def validate_text(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        if value != value.strip() or any(ord(char) < 32 for char in value):
-            raise ValueError("LLM generation metadata text must be trimmed and printable")
-        return value
-
-
-class CandidateRiskKind(StrEnum):
-    FOREIGN_READ = "FOREIGN_READ"
-    UNAUTHORIZED_SIDE_EFFECT = "UNAUTHORIZED_SIDE_EFFECT"
-    PRIVILEGED_FIELD = "PRIVILEGED_FIELD"
-
-
-class CandidateSuggestion(GovernanceModel):
-    """候选建议的非权威风险摘要；不得直接进入执行快照。"""
-
-    id: str = Field(pattern=LONG_SLUG_ID_PATTERN)
-    kind: CandidateRiskKind
-    required_observations: tuple[str, ...] = Field(min_length=1, max_length=16)
-    severity: Literal["low", "medium", "high", "critical"] = "high"
-
-
-class ContractCandidate(GovernanceModel):
-    candidate_id: str = Field(pattern=CANDIDATE_ID_PATTERN)
-    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    source: SourceReference
-    suggestion: CandidateSuggestion
-    requirement_ids: tuple[str, ...] = Field(default=(), max_length=256)
-    created_by: str = Field(min_length=1, max_length=128)
-    created_at_us: int = Field(ge=0)
-    llm_metadata: LLMGenerationMetadata | None = None
-
-    @field_validator("requirement_ids")
-    @classmethod
-    def validate_requirement_ids(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        import re
-
-        if len(set(values)) != len(values) or any(
-            re.fullmatch(REQUIREMENT_ID_PATTERN, value) is None for value in values
-        ):
-            raise ValueError("candidate requirement references are invalid")
-        return values
-
-    @field_validator("created_by")
-    @classmethod
-    def validate_actor(cls, value: str) -> str:
-        if value != value.strip():
-            raise ValueError("audit actor must be trimmed")
-        return value
-
-    @model_validator(mode="after")
-    def validate_llm_metadata(self) -> ContractCandidate:
-        if self.source.source_type is ContractSourceType.LLM and self.llm_metadata is None:
-            raise ValueError("LLM candidates require generation metadata")
-        if self.source.source_type is not ContractSourceType.LLM and self.llm_metadata is not None:
-            raise ValueError("non-LLM candidates cannot carry LLM metadata")
-        return self
 class ContractProvenance(GovernanceModel):
-    requirement_ids: tuple[str, ...] = Field(default=(), max_length=512)
-    candidate_ids: tuple[str, ...] = Field(default=(), max_length=512)
     sources: tuple[SourceReference, ...] = Field(default=(), max_length=512)
 
     @model_validator(mode="after")
     def validate_references(self) -> ContractProvenance:
-        import re
-
-        if len(set(self.requirement_ids)) != len(self.requirement_ids) or any(
-            re.fullmatch(REQUIREMENT_ID_PATTERN, value) is None
-            for value in self.requirement_ids
-        ):
-            raise ValueError("contract requirement references are invalid")
-        if len(set(self.candidate_ids)) != len(self.candidate_ids) or any(
-            re.fullmatch(CANDIDATE_ID_PATTERN, value) is None
-            for value in self.candidate_ids
-        ):
-            raise ValueError("contract candidate references are invalid")
         if len(set(self.sources)) != len(self.sources):
             raise ValueError("contract sources must be unique")
         return self

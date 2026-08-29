@@ -19,6 +19,7 @@ from product.protocols.web.profile import (
 )
 from product.protocols.execution_request import (
     PersistedExecutionRequest,
+    build_permission_policy_snapshot,
     canonical_execution_request_bytes,
 )
 from product.protocols.report import (
@@ -58,6 +59,7 @@ def test_current_web_stable_identities_do_not_drift(tmp_path: Path) -> None:
             max_cases=profile.case_budget,
             max_parallel_cases=1,
         ),
+        permission_policy=build_permission_policy_snapshot(snapshot.project_id, 0, ()),
         project_snapshot=snapshot,
     )
     current_evidence = evidence()

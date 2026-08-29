@@ -21,7 +21,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from product.backend.core.contracts.models import ContractSourceType, SourceReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ContractStatus, ProjectStatus
-from product.backend.core.permission_intent import PermissionIntent
 from product.backend.core.test_identity import TestIdentity
 from product.backend.core.test_setup import (
     ActionSafetySetup,

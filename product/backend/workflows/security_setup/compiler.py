@@ -33,7 +33,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from product.backend.core.contracts.models import ContractSourceType, SourceReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ContractStatus, ProjectStatus
-from product.backend.core.permission_intent import PermissionIntent
 from product.backend.core.test_identity import TestIdentity
 from product.backend.core.test_setup import (
     ActionSafetySetup,
@@ -149,19 +148,17 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         )
 
 
-    def compile(self, project_id: str, *, actor: str) -> SecuritySetupCompileResult:
+    def compile(self, project_id: str) -> SecuritySetupCompileResult:
         """生成或复用当前权限意图对应的治理契约和内容寻址 Profile。"""
 
-        clean_actor = actor.strip()
-        if not clean_actor or any(ord(char) < 32 for char in clean_actor):
-            raise JiejianError(ErrorCode.INPUT_INVALID, "确认人名称无效")
+        self._permission_intents.refresh_bindings(project_id)
         facts = self._collect(project_id, require_compilable=True)
         facts, local_wiring = self._with_local_observer_wiring(facts)
         contract_id = _contract_id(project_id)
         contract, reused = self._govern_contract(
             facts,
             contract_id=contract_id,
-            actor=clean_actor,
+            actor=_ACTOR,
             local_wiring=local_wiring,
         )
         profile = self._profile(facts, contract, local_wiring=local_wiring)
@@ -192,7 +189,7 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         record: ExecutionProfileRecord,
         profile: WebExecutionProfile,
     ) -> None:
-        """只约束 generated 目录中的内部配置；高级模式手工 Profile 不受影响。"""
+        """只约束 generated 目录中的内部配置；历史外部配置不属于普通检查真源。"""
 
         generated = self._generated_dir(record.project_id)
         try:
@@ -225,7 +222,7 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
 
 
     def current_generated_profile_id(self, project_id: str) -> str | None:
-        """返回唯一当前 Generated Profile；高级手工配置不能冒充普通模式就绪。"""
+        """返回唯一当前 Generated Profile；历史外部配置不能冒充普通模式就绪。"""
 
         try:
             facts = self._collect(project_id, require_compilable=False)
@@ -287,11 +284,12 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
     ) -> _CompilationFacts:
         matrix = self._permission_intents.matrix(project_id)
         current_executions = self._permission_intents.execution_intents(project_id)
+        active_revisions = self._permission_intents.current_intents(project_id)
+        policy_snapshot = self._permission_intents.policy_snapshot(project_id)
         with self._uow_factory() as work:
             project = work.projects.get(project_id)
             understanding = work.application_understanding.get(project_id)
             identities = work.test_identities.list_for_project(project_id)
-            stored_intents = work.permission_intents.list_for_project(project_id)
             setups = {
                 action.action_candidate_id: work.action_safety_setups.get_for_action(
                     project_id,
@@ -336,7 +334,7 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
                 },
                 "understanding": understanding,
                 "identities": identities,
-                "permission_intents": stored_intents,
+                "permission_policy": policy_snapshot,
                 "action_setups": tuple(
                     (action_id, setups[action_id], flows.get(action_id))
                     for action_id in sorted(setups)
@@ -352,11 +350,12 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
                 sorted(
                     (
                         _ResolvedIntent(
-                            intent=item.intent,
+                            revision=item.revision,
+                            binding=item.binding,
                             subject_test_identity_id=item.subject_test_identity_id,
                         )
                         for item in current_executions
-                        if item.intent.action_candidate_id == action_id
+                        if item.binding.action_candidate_id == action_id
                         and item.gap is None
                         and item.subject_test_identity_id is not None
                     ),
@@ -378,6 +377,11 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
                     flow=flow,
                     intents=intents,
                 )
+            )
+        if require_compilable and len(current_executions) != len(active_revisions):
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "存在需要重新映射的权限要求，不能生成检查配置",
             )
         if require_compilable and not actions:
             raise JiejianError(

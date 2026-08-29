@@ -1,12 +1,5 @@
-/* 权限矩阵、只读关系图与高级治理。 */
+/* 权限矩阵与只读关系图。 */
 .permission-intent-summary { margin-bottom: 16px; }
-.governance-panel { gap: 24px; }
-.governance-form-card > .ant-card-body { display: grid; gap: 18px; padding: 24px; }
-.governance-form-card .ant-typography { margin-bottom: 0; }
-.governance-requirement-form { display: grid !important; gap: 16px; grid-template-columns: minmax(320px, 2fr) minmax(220px, .8fr) minmax(130px, .4fr) auto; }
-.governance-requirement-form .ant-form-item { margin: 0; min-width: 0; }
-.governance-requirement-form .ant-form-item-control-input-content,
-.governance-requirement-form .ant-input { width: 100%; }
 .permission-matrix .ant-table-cell { vertical-align: middle; }
 .permission-matrix .ant-table-cell-fix-left { background: #f8fafc; }
 .permission-cell { min-width: 96px; }
@@ -37,22 +30,10 @@ button.permission-entity-card:focus-visible { background: #172033; border-color:
 .permission-relation-relation .permission-relation-line { background: #a78bfa; }
 .permission-board-hint { border-top: 1px dashed #334155; padding-top: 12px; }
 .permission-board-hint .ant-typography { color: #94a3b8; }
-.governance-version-list { min-width: 0; width: 100%; }
-.governance-version-item { align-items: center !important; gap: 16px; min-width: 0; }
-.governance-version-item .ant-list-item-meta { flex: 1 1 320px; min-width: 0; }
-.governance-version-item .ant-list-item-meta-title,
-.governance-version-item .ant-list-item-meta-description { overflow-wrap: anywhere; }
-.governance-version-item .ant-list-item-action { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: 8px; margin-inline-start: 0; }
-.governance-version-item .ant-list-item-action > li { padding: 0; }
-
 @media (max-width: 768px) {
-  .governance-form-card > .ant-card-body { padding: 16px; }
-  .governance-requirement-form { grid-template-columns: 1fr; }
   .permission-relationship-board { padding: 12px; }
   .permission-relation-row { grid-template-columns: 1fr; }
   .permission-relation-connector { min-height: 44px; }
   .permission-relation-line { bottom: 0; height: auto; left: 50%; right: auto; top: 0; width: 1px; }
   .permission-relation-arrow { bottom: -2px; left: 50%; margin: 0; right: auto; transform: translateX(-50%) rotate(90deg); }
-  .governance-version-item { align-items: stretch !important; flex-direction: column; }
-  .governance-version-item .ant-list-item-action { justify-content: flex-start; }
 }

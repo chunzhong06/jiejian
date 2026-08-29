@@ -5,7 +5,7 @@
 #   多次已验证 Run 之间的稳定问题变化只读投影。
 #
 # 职责
-#   维护稳定问题身份｜区分新发现、已修复、仍存在、证据不足与本次未覆盖｜有界读取近期结果
+#   维护稳定问题身份｜保留各 Run 冻结权限版本｜区分新发现、已修复、证据不足与本次未覆盖
 #
 # 边界
 #   不新建历史表，不修改 Finding，不以 DISAPPEARED 或缺失记录单独推断已修复。
@@ -27,6 +27,7 @@ from product.backend.workflows.results.presentation import (
     ResultPresentation,
     ResultPresentationBuilder,
     ResultPresentationIssue,
+    ResultRelevantIntent,
 )
 
 
@@ -67,6 +68,12 @@ class HistoryComparison(_HistoryModel):
     run_id: str = Field(min_length=1, max_length=128)
     previous_run_id: str | None = Field(default=None, max_length=128)
     checked_at_us: int = Field(ge=0)
+    policy_epoch: int = Field(ge=0)
+    policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    relevant_intents: tuple[ResultRelevantIntent, ...] = Field(
+        default=(),
+        max_length=4096,
+    )
     changes: tuple[HistoryChange, ...] = ()
 
 
@@ -145,6 +152,9 @@ def _comparisons(
                 run_id=run.run_id,
                 previous_run_id=previous_run_id,
                 checked_at_us=run.finished_at_us or run.updated_at_us,
+                policy_epoch=presentation.policy_epoch,
+                policy_fingerprint=presentation.policy_fingerprint,
+                relevant_intents=presentation.relevant_intents,
                 changes=tuple(changes),
             )
         )

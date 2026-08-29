@@ -83,6 +83,15 @@ class ApplicationUnderstandingService:
         self.analyzer = analyzer or ApplicationUnderstandingAnalyzer()
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
         self._reserved_control_origin = reserved_control_origin
+        self._permission_binding_refresher: Callable[[str], None] | None = None
+
+    def set_permission_binding_refresher(
+        self,
+        refresher: Callable[[str], None],
+    ) -> None:
+        """安装源码理解变化后的权限实现绑定失效器。"""
+
+        self._permission_binding_refresher = refresher
 
     def connect(
         self,
@@ -222,6 +231,7 @@ class ApplicationUnderstandingService:
             )
             work.application_understanding.replace(updated)
             work.commit()
+        self._refresh_permission_bindings(project_id)
         return updated
 
     def endpoint_status(
@@ -331,6 +341,7 @@ class ApplicationUnderstandingService:
             )
             work.application_understanding.replace(updated)
             work.commit()
+        self._refresh_permission_bindings(project_id)
         return updated
 
     def decide_role(
@@ -415,6 +426,7 @@ class ApplicationUnderstandingService:
                     )
                 ),
             )
+        self._refresh_permission_bindings(project_id)
         return updated
 
     def add_manual_action(
@@ -456,6 +468,7 @@ class ApplicationUnderstandingService:
                     )
                 ),
             )
+        self._refresh_permission_bindings(project_id)
         return updated
 
     def _decide_candidate(
@@ -529,7 +542,12 @@ class ApplicationUnderstandingService:
                 else {"action_candidates": next_candidates}
             )
             updated = self._save_candidate_update(work, current, **updates)
+        self._refresh_permission_bindings(project_id)
         return updated
+
+    def _refresh_permission_bindings(self, project_id: str) -> None:
+        if self._permission_binding_refresher is not None:
+            self._permission_binding_refresher(project_id)
 
     def _current_for_update(
         self,

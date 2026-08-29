@@ -1,4 +1,4 @@
-# 界鉴 JIEJIAN 1.0.3
+# 界鉴 JIEJIAN 1.0.4
 
 > 界鉴是一款面向 AI 快速开发 Web 应用的权限安全检查工具，用来确认不同身份是否真的只能访问和操作自己有权限的数据与业务功能。
 
@@ -16,10 +16,10 @@
 
 ## Windows x64 Portable
 
-正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.3、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
+正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.4、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
 
-- `JieJian-WebV1-1.0.3-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
-- `JieJian-WebV1-1.0.3-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
+- `JieJian-WebV1-1.0.4-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
+- `JieJian-WebV1-1.0.4-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
 - `SHA256SUMS.txt`：两个 ZIP 的固定 SHA256 校验和。
 
 两个 ZIP 除 `samples/` 外的产品文件完全相同。发行目录可以整体移动到中文或带空格路径；版本可在“运行环境”设置页或 `jiejian --version` 查看。开发者构建与仓库外验收见[修改发布与便携版](docs/02_开发指南/任务/修改发布与便携版.md)。
@@ -54,7 +54,7 @@
 1. **应用接入**：选择应用目录；界鉴先寻找本地回环地址，由你确认后再单独授权只读源码分析，并审阅带来源的角色与关键操作候选。
 2. **测试账号**：为已确认角色登记可读账号，并在独立浏览器中自行登录；界鉴不保存密码，只在你明确确认后保存当前目标所需的有限 Cookie 或 Bearer 状态。
 3. **业务流程**：录制需要检查的关键业务动作。
-4. **权限规则**：说明不同身份允许执行的操作，以及哪些操作必须被阻止。
+4. **权限规则**：说明不同身份允许执行的操作，以及哪些操作必须被阻止；每次变更先预览，再由你明确确认。Agent 只能提出待审建议，不能直接改变权限真源。
 5. **开始检查**：查看当前将检查的业务动作、身份差分和覆盖缺口，确认后执行真实权限安全检查并收集证据；普通流程不要求选择内部执行配置。
 6. **检查结果**：查看结论、问题、证据和报告。
 
@@ -116,7 +116,7 @@ codex mcp add jiejian `
 
 DSH 固定使用 `@deepseek-ai/dsh-mcp-client` 的 `streamable-http`，并从 `process.env.JIEJIAN_MCP_TOKEN` 形成 Authorization Bearer；完整可复制 composition 在 GUI 的 DSH 页签。轮换 Token 后只需更新该环境变量并让新客户端进程重新读取，不必重新添加 server；“暂停本次连接”保留长期配对，“忘记此连接”才会从 Credential Manager 彻底撤销配对。
 
-MCP 只复用现有 ApplicationCore、Worker 和确定性结果投影，不建立第二套业务状态，也不把秘密、源码、请求正文、完整日志或完整 Evidence 暴露给工具。它是 Web 产品的本地控制入口，不是受检的 MCP/Agent Target。
+MCP 只复用现有 ApplicationCore、Worker 和确定性结果投影，不建立第二套业务状态，也不把秘密、源码、请求正文、完整日志或完整 Evidence 暴露给工具。它可以只读查看权限意图，也可以提交不生效的语义或实现映射建议；批准、拒绝、ALLOW/DENY 变更和规则退休仍只由本机 GUI 完成。它是 Web 产品的本地控制入口，不是受检的 MCP/Agent Target。
 
 ## 官方示例
 

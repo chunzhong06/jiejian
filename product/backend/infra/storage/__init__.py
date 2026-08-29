@@ -2,7 +2,7 @@
 
 from .base import Base, MetadataValue, NAMING_CONVENTION, StorageRecord, ensure_storage_payload_safe
 from .application_understanding import ApplicationUnderstandingRepository, ApplicationUnderstandingRow
-from .contracts import ContractCandidateRepository, ContractVersionRepository, RequirementRepository, ContractCandidateRow, ContractVersionRow, RequirementRow
+from .contracts import ContractVersionRepository, ContractVersionRow
 from .results.evidence import EvidenceIndexRecord, EvidenceIndexRepository, EvidenceIndexRow
 from .results.findings import FindingOccurrenceRecord, FindingRecord, FindingRepository, FindingOccurrenceRow, FindingRow
 from .results.finalizations import BaseReportFinalizationState, FindingFinalizationState, RunFinalizationRecord, RunFinalizationRepository, RunFinalizationRow
@@ -15,9 +15,12 @@ from .recordings import FlowDraftRevisionRecord, FlowDraftRevisionRepository, Re
 from .execution.runs import RunRecord, RunRepository, RunRow
 from .setup import (
     ActionSafetySetupRepository,
+    IntentImplementationBindingRow,
+    IntentProposalRow,
     ObservationBindingRow,
     PermissionIntentRepository,
-    PermissionIntentRow,
+    PermissionIntentRevisionRow,
+    ProjectPolicyStateRow,
     RecoveryBindingRow,
     SecurityEffectConfirmationRow,
     TestIdentityCookieRow,
@@ -31,12 +34,13 @@ from .unit_of_work import StorageUnitOfWork
 __all__ = [
     "Base", "MetadataValue", "NAMING_CONVENTION", "StorageRecord", "ensure_storage_payload_safe",
     "ApplicationUnderstandingRow", "ApplicationUnderstandingRepository",
-    "RequirementRow", "ContractCandidateRow", "ContractVersionRow", "EvidenceIndexRow",
+    "ContractVersionRow", "EvidenceIndexRow",
     "FindingOccurrenceRow", "FindingRow", "RunFinalizationRow", "GateResultRow", "RegressionBaselineRow",
     "JobEventRow", "JobRow", "LLMProfileRow", "AIAssistanceSettingsRow", "ExecutionProfileRow", "ProjectRow",
     "FlowDraftRevisionRow", "RecordingRow", "RunRow", "TestIdentityCookieRow", "TestIdentityRow",
-    "TestResourceRow", "ObservationBindingRow", "RecoveryBindingRow", "SecurityEffectConfirmationRow", "PermissionIntentRow",
-    "RequirementRepository", "ContractCandidateRepository", "ContractVersionRepository",
+    "TestResourceRow", "ObservationBindingRow", "RecoveryBindingRow", "SecurityEffectConfirmationRow",
+    "PermissionIntentRevisionRow", "ProjectPolicyStateRow", "IntentImplementationBindingRow", "IntentProposalRow",
+    "ContractVersionRepository",
     "EvidenceIndexRecord", "EvidenceIndexRepository", "FindingRecord", "FindingOccurrenceRecord", "FindingRepository",
     "FindingFinalizationState", "BaseReportFinalizationState", "RunFinalizationRecord", "RunFinalizationRepository",
     "GateResultRecord", "GatingRepository", "RegressionBaselineRecord",

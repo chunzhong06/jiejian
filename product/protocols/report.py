@@ -6,7 +6,7 @@
 #   GateResult 组成不可变 Report；report.json 是唯一语义真源。
 #
 # 职责
-#   约束 Base/Gate 判别联合与有界断裂诊断｜计算语义输入与稳定身份｜约束 package manifest。
+#   约束 Base/Gate 判别联合、冻结权限摘要与有界断裂诊断｜计算稳定身份｜约束 package manifest。
 #
 # 边界
 #   协议只消费已验证事实，不执行 Target、不写 Finding、不决定 Verdict。
@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from product.backend.core.redaction import redact
 
-REPORT_SCHEMA_VERSION = "2"
+REPORT_SCHEMA_VERSION = "3"
 REPORT_PACKAGE_SCHEMA_VERSION = "1"
 REPORT_RULESET_VERSION = "report-local-2026.08.29"
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/@+\-]{0,255}$")
@@ -168,7 +168,7 @@ class ReportVersions(ReportModel):
     evidence_schema_version: Literal["1"]
     observer_schema_version: Literal["1"]
     artifact_schema_version: Literal["1"]
-    report_schema_version: Literal["2"] = REPORT_SCHEMA_VERSION
+    report_schema_version: Literal["3"] = REPORT_SCHEMA_VERSION
     ruleset_versions: tuple[str, ...] = Field(default=(), max_length=16)
 
     @model_validator(mode="after")
@@ -307,6 +307,14 @@ class ReportPresentationIssue(ReportModel):
         return self
 
 
+class ReportRelevantIntent(ReportModel):
+    """报告冻结的单条人类权限 revision 身份。"""
+
+    intent_id: str = Field(pattern=r"^pin_[0-9a-f]{32}$")
+    revision: int = Field(ge=1)
+    intent_hash: str = Field(pattern=_SHA256)
+
+
 class ReportPresentation(ReportModel):
     """冻结确定性结果投影，供所有人类报告格式复用。"""
 
@@ -322,6 +330,12 @@ class ReportPresentation(ReportModel):
         "SAFETY_STOPPED",
     ]
     verdict: Literal["PASS", "BLOCK", "INCONCLUSIVE"] | None
+    policy_epoch: int = Field(ge=0)
+    policy_fingerprint: str = Field(pattern=_SHA256)
+    relevant_intents: tuple[ReportRelevantIntent, ...] = Field(
+        default=(),
+        max_length=4096,
+    )
     headline: str = Field(min_length=1, max_length=160)
     scope_statement: str = Field(min_length=1, max_length=320)
     checked_count: int = Field(ge=0)
@@ -341,7 +355,7 @@ class ReportPresentation(ReportModel):
 
 
 class BaseRunReport(ReportModel):
-    schema_version: Literal["2"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["3"] = REPORT_SCHEMA_VERSION
     report_type: Literal["BASE"]
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
@@ -378,7 +392,7 @@ class BaseRunReport(ReportModel):
 
 
 class GateRunReport(ReportModel):
-    schema_version: Literal["2"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["3"] = REPORT_SCHEMA_VERSION
     report_type: Literal["GATE"]
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")

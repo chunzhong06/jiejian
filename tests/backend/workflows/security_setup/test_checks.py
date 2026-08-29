@@ -44,7 +44,7 @@ def test_check_preview_and_submit_reuse_current_frozen_execution_plan(
         assert before.next_path == "/check"
         assert {item.code for item in before.gaps} == {"GENERATED_PROFILE_MISSING"}
 
-        compiled = core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        compiled = core.security_setup.compile(PROJECT_ID)
         preview = core.checks.preview(PROJECT_ID)
 
         assert preview.ready is True
@@ -109,7 +109,7 @@ def test_check_preview_runs_complete_subset_and_keeps_other_action_gap(
     )
     core = _prepared_core(tmp_path)
     try:
-        core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        core.security_setup.compile(PROJECT_ID)
 
         preview = core.checks.preview(PROJECT_ID)
 
@@ -138,7 +138,7 @@ def test_check_submit_rejects_stale_preparation_and_returns_earliest_gap(
 ) -> None:
     core = _prepared_core(tmp_path)
     try:
-        core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        core.security_setup.compile(PROJECT_ID)
         with core.uow_factory() as work:
             understanding = work.application_understanding.get(PROJECT_ID)
             assert understanding is not None
@@ -174,7 +174,7 @@ def test_candidate_changes_recompute_current_preparation_without_mutating_histor
 
     core = _prepared_core(tmp_path)
     try:
-        compiled = core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        compiled = core.security_setup.compile(PROJECT_ID)
         submission, _, _ = core.checks.submit(
             PROJECT_ID,
             idempotency_key="candidate-revision-history",
@@ -183,7 +183,7 @@ def test_candidate_changes_recompute_current_preparation_without_mutating_histor
         with core.uow_factory() as work:
             recording = work.recordings.get(RECORDING_ID)
             run_before = work.runs.get(run_id)
-            intents_before = work.permission_intents.list_for_project(PROJECT_ID)
+            intents_before = work.permission_intents.list_revisions(PROJECT_ID)
             evidence_before = work.evidence.list_for_run(run_id)
             findings_before = work.findings.list_for_project(PROJECT_ID)
         assert recording is not None
@@ -206,13 +206,14 @@ def test_candidate_changes_recompute_current_preparation_without_mutating_histor
             core.action_safety_setup.preview(RECORDING_ID)
         assert action_changed.value.code == ErrorCode.APPLICATION_CANDIDATE_CONFLICT.value
         matrix = core.permission_intents.matrix(PROJECT_ID)
-        assert matrix.actions == ()
+        assert len(matrix.actions) == 1
+        assert matrix.actions[0].compilable is False
         assert matrix.review_required_count == len(intents_before)
         assert core.security_setup.current_generated_profile_id(PROJECT_ID) is None
         preview = core.checks.preview(PROJECT_ID)
         assert preview.ready is False
         assert {item.code for item in preview.gaps} == {
-            "ACTION_MISSING",
+            "ACTION_CANDIDATE_STALE",
             "GENERATED_PROFILE_MISSING",
         }
         readiness = core.project_readiness.get(PROJECT_ID)
@@ -248,7 +249,7 @@ def test_candidate_changes_recompute_current_preparation_without_mutating_histor
 
         with core.uow_factory() as work:
             assert work.runs.get(run_id) == run_before
-            assert work.permission_intents.list_for_project(PROJECT_ID) == intents_before
+            assert work.permission_intents.list_revisions(PROJECT_ID) == intents_before
             assert work.evidence.list_for_run(run_id) == evidence_before
             assert work.findings.list_for_project(PROJECT_ID) == findings_before
         assert core.reports.list(run_id) == reports_before
@@ -303,7 +304,6 @@ def _prepared_core(tmp_path: Path) -> ApplicationCore:
         ROLE_ID,
         PermissionIntentRelation.OWNS,
         expectation=PermissionExpectation.ALLOW,
-        actor="测试用户",
     )
     core.permission_intents.confirm(
         PROJECT_ID,
@@ -312,6 +312,5 @@ def _prepared_core(tmp_path: Path) -> ApplicationCore:
         ROLE_ID,
         PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT,
         expectation=PermissionExpectation.DENY,
-        actor="测试用户",
     )
     return core

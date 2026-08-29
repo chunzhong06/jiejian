@@ -102,14 +102,18 @@ class PublishedResultReader:
             raise JiejianError(ErrorCode.ARTIFACT_HASH_MISMATCH, "发布工件 JSON 结构无效")
         return redact(document)
 
-    def request_snapshot(self, view: PublishedRunView):
-        """读取与已发布 Job hash 绑定的不可变执行快照，供结果投影使用。"""
+    def execution_request(self, view: PublishedRunView) -> PersistedExecutionRequest:
+        """读取与已发布 Job hash 绑定的完整不可变执行请求。"""
 
-        request = ExecutionRequestStore(self._var_dir).load(
+        return ExecutionRequestStore(self._var_dir).load(
             view.job.job_id,
             expected_hash=view.job.request_hash,
         )
-        return request.project_snapshot
+
+    def request_snapshot(self, view: PublishedRunView):
+        """保留项目执行快照只读接口，调用方不能借此回读 live Ledger。"""
+
+        return self.execution_request(view).project_snapshot
 
     def overview(self, run_id: str, *, published: PublishedRunView | None = None) -> dict[str, Any]:
         """从当前执行快照和可信发布结果生成 GUI 只读运行概览。"""

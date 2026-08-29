@@ -19,12 +19,10 @@ from product.backend.workflows.context import ApplicationCore
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.core.errors import JiejianError
 from product.backend.api.errors import jiejian_error_handler, request_validation_error_handler, validation_error_handler
-from product.backend.api.routers.contracts import build_contracts_router
 from product.backend.api.routers.jobs import build_jobs_router
 from product.backend.api.routers.llm import build_llm_router
 from product.backend.api.routers.onboarding import build_onboarding_router
 from product.backend.api.routers.projects import build_projects_router
-from product.backend.api.routers.execution_profiles import build_execution_profiles_router
 from product.backend.api.routers.recordings import build_recordings_router
 from product.backend.api.routers.results import build_results_router
 from product.backend.api.routers.gating import build_gating_router
@@ -136,8 +134,6 @@ def create_app(
     app.include_router(build_assistant_router(context))
     app.include_router(build_experience_router(context))
     app.include_router(build_mcp_access_router(context, mcp_access))
-    app.include_router(build_execution_profiles_router(context))
-    app.include_router(build_contracts_router(context))
     app.include_router(build_recordings_router(context))
     app.include_router(build_runs_router(context, results))
     app.include_router(build_jobs_router(context))

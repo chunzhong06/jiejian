@@ -95,15 +95,12 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from product.backend.core.identifiers import EVIDENCE_ID_PATTERN, JOB_ID_PATTERN, PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, RUN_ID_PATTERN, SHA256_PATTERN
-from product.backend.core.contracts.models import ContractAuditEntry, ContractCandidate, ContractProvenance, ContractSourceType, ContractVersion, LLMGenerationMetadata, Requirement, SourceReference
 from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
 from product.backend.core.lifecycle import ContractStatus
-from product.backend.core.contracts.models import CandidateSuggestion
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.core.recording import Recording, RecordingState, RecordingStateEvent, RecordingTerminalState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import STAGED_ARTIFACT_MAX_BYTES, FlowDraft, RecordingEventKind, RecordingEvent, RecordingHeader, StagedArtifact, canonical_flow_draft_json_bytes
-from product.backend.infra.storage.contracts import ContractCandidateRow, ContractVersionRow, RequirementRow
 from product.backend.infra.storage.results.evidence import EvidenceIndexRow
 from product.backend.infra.storage.recordings import FlowDraftRevisionRow, RecordingRow
 from product.backend.infra.storage.execution.jobs import JobEventRow, JobRow

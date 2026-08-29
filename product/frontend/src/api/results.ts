@@ -5,7 +5,7 @@
  *   验证、报告页面与已发布结果 HTTP 路由之间的只读适配器
  *
  * 职责
- *   读取报告、ExecutionTrace、断裂诊断、Evidence 和 Finding｜保持后端发布视图为真源
+ *   读取冻结权限版本、报告、ExecutionTrace、断裂诊断、Evidence 和 Finding｜保持后端发布视图为真源
  *
  * 调用链
  *   CheckResultsPage / EvidenceTimeline / ReportPanel → resultsApi → api/http
@@ -198,6 +198,11 @@ export type ResultPresentationIssueDto = {
   verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'
   occurrence_status: string | null
 }
+export type ResultRelevantIntentDto = {
+  intent_id: string
+  revision: number
+  intent_hash: string
+}
 
 export type ResultPresentationDto = {
   run_id: string
@@ -205,6 +210,9 @@ export type ResultPresentationDto = {
   project_name: string
   run_lifecycle: string
   verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE' | null
+  policy_epoch: number
+  policy_fingerprint: string
+  relevant_intents: ResultRelevantIntentDto[]
   headline: string
   scope_statement: string
   checked_count: number
@@ -238,6 +246,9 @@ export type HistoryComparisonDto = {
   run_id: string
   previous_run_id: string | null
   checked_at_us: number
+  policy_epoch: number
+  policy_fingerprint: string
+  relevant_intents: ResultRelevantIntentDto[]
   changes: HistoryChangeDto[]
 }
 

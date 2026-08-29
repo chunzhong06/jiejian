@@ -4,11 +4,11 @@
 
 ## 目的与消费者
 
-`WebExecutionProfile` 是 Web 执行配置根文档：高级路径可以由用户管理，普通路径由 SecuritySetupCompiler 内容寻址生成；两者都只经 ApplicationCore/ExecutionWorkflow 登记与提交。`WebExecutionSnapshot` 和 `PersistedExecutionRequest` 是提交后不可变的执行输入，供 Worker/Runner 消费。
+`WebExecutionProfile` 是内部 Web 执行配置根文档，由 SecuritySetupCompiler 从当前权威事实内容寻址生成，并只经 ApplicationCore/ExecutionWorkflow 登记与提交；产品控制面不接受用户上传、选择或改写 Profile。`WebExecutionSnapshot` 和 `PersistedExecutionRequest` 是提交后不可变的执行输入，供 Worker/Runner 消费。
 
 ## 先理解：Profile 是当前配置，Snapshot 是历史执行事实
 
-普通用户完成 Flow、安全准备与权限要求后，确定性编译器生成当前唯一 Profile。点击开始检查时，ApplicationCore 重新验证当前 Contract、身份代表、target scope、workflow/effect/Observer bindings 与所有指纹，然后冻结 Snapshot 和持久执行请求。之后即使用户修改 Profile、账号或权限规则，已经提交的 Run 仍读取自己的不可变快照。
+普通用户完成 Flow、安全准备与权限要求后，确定性编译器生成当前唯一 Profile。点击开始检查时，ApplicationCore 重新验证当前 Contract、身份代表、target scope、workflow/effect/Observer bindings 与所有指纹，然后冻结 Snapshot 和持久执行请求。之后即使账号或权限规则变化，已经提交的 Run 仍读取自己的不可变快照。
 
 Profile 可以含受控 secret ref，但不含秘密值；Snapshot 固定“当时准备执行什么”，不在 Runner 中重新查询当前 GUI 状态。这个区分保证历史 Evidence 可以解释，也避免运行中配置漂移。
 
@@ -24,14 +24,14 @@ Profile 包含 project、Business/Auth/Observer scope、`WebExecutionIdentity`�
 
 登记时必须确认 ACTIVE Contract、项目绑定、target scope、bindings、Observer 和 fingerprint。普通生成配置还必须匹配当前 ApplicationUnderstanding、编译时选定的 TestIdentity 代表、Flow、测试安全事实与组级 PermissionIntent 的 authority fingerprint；代表补充或替换不会改变 PermissionIntent，但会产生新的生成配置身份。任一配置输入变化后，即使旧文件仍存在也拒绝构造或提交请求。Profile 变化、Contract 漂移、plan/binding hash 不一致或未知结构默认拒绝。
 
-提交时冻结完整 Contract、Coverage/PermissionMutationPlan、DifferentialExperimentPlan、workflow/effect bindings、目标范围、预算、身份和 fingerprint，形成 `WebExecutionSnapshot`，再写入 `PersistedExecutionRequest`。执行期间不重新读取当前 Profile 或治理表。
+提交时冻结完整 Contract、Coverage/PermissionMutationPlan、DifferentialExperimentPlan、workflow/effect bindings、目标范围、预算和身份，形成 `WebExecutionSnapshot`；同时把当前项目 `policy_epoch`、策略 fingerprint 以及每条 ACTIVE revision 的 `intent_id/revision/intent_hash/binding_fingerprint` 固定为 `PermissionPolicySnapshot`，共同写入 `PersistedExecutionRequest`。执行期间不重新读取当前 Profile、Ledger 或治理表。
 
 ## 生命周期与数据流
 
 ```text
 WebExecutionProfile 校验/登记
   → Contract/plan/binding fingerprint
-  → WebExecutionSnapshot
+  → WebExecutionSnapshot + PermissionPolicySnapshot
   → PersistedExecutionRequest
   → Worker/Runner → Web Target Runtime
 ```

@@ -35,11 +35,11 @@
 - `class AnalysisModel`
 - `class SourceAnalysisLimits`
 - `class ApplicationAnalysisResult`
-主要 import / dot-source：`__future__`, `ast`, `collections.abc`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.application_understanding`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.analysis.sources.openapi`, `product.backend.core.errors`, `product.backend.core.http_routes`, `product.backend.workflows.onboarding.discovery`, `pydantic`, `re`, `yaml`
+主要 import / dot-source：`__future__`, `ast`, `collections.abc`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.http_routes`, `product.backend.workflows.onboarding.discovery`, `pydantic`, `re`, `yaml`
 
 ### `product/backend/workflows/application_understanding/analysis/openapi.py`
 - `class OpenApiAnalysisMixin`
-主要 import / dot-source：`.models`, `__future__`, `collections.abc`, `json`, `product.backend.core.application_understanding`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.analysis.sources.openapi`, `product.backend.core.http_routes`, `product.backend.workflows.onboarding.discovery`, `yaml`
+主要 import / dot-source：`.models`, `__future__`, `collections.abc`, `json`, `product.backend.core.application_understanding`, `product.backend.core.http_routes`, `product.backend.workflows.onboarding.discovery`, `yaml`
 
 ### `product/backend/workflows/application_understanding/analysis/python.py`
 - `class PythonAnalysisMixin`
@@ -136,21 +136,9 @@
 - `class ApplicationCore`
 主要 import / dot-source：`__future__`, `collections.abc`, `functools`, `os`, `pathlib`, `product.backend.infra.llm.adapters.httpx_transport`, `product.backend.infra.llm.profiles`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.queue`, `product.backend.infra.runtime.jobs.recording`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.maintenance`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.runner.progress`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.infra.storage`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.control`, `product.backend.workflows.official_sample`, `product.backend.workflows.onboarding.workflow`, `product.backend.workflows.permission_intents`, `product.backend.workflows.projects.catalog`, `product.backend.workflows.projects.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.recording.credentials`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.recording.project_submission`, `product.backend.workflows.recording.run_service`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.recording.submission`, `product.backend.workflows.results.services`, `product.backend.workflows.runs.execution`, `product.backend.workflows.runs.submission`, `product.backend.workflows.security_setup`, `product.backend.workflows.security_setup.local_observer_registry`, `product.backend.workflows.test_identities`, `typing`
 
-### `product/backend/workflows/contracts/analysis.py`
-- `_SOURCE_FILE_MAX_BYTES`
-- `_DENIED_PATH_MARKERS`
-- `class ContractAnalysis`
-- `class ContractHistorySource`
-- `class ContractHistoryResolution`
-主要 import / dot-source：`__future__`, `enum`, `hashlib`, `pathlib`, `product.backend.core.contracts.analysis.assessment`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.diff`, `product.backend.core.contracts.analysis.drift`, `product.backend.core.contracts.analysis.merge`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.analysis.sources.fastapi_ast`, `product.backend.core.contracts.analysis.sources.openapi`, `product.backend.core.contracts.analysis.sources.requirement`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.storage`, `product.backend.workflows.contracts.flow_candidates`, `product.backend.workflows.recording.flow_compiler`, `product.protocols.flow_draft`, `product.protocols.recording_flow`, `pydantic`, `typing`
-
-### `product/backend/workflows/contracts/flow_candidates.py`
-- `build_flow_candidates(project_id, flow) -> CandidateBatch`
-主要 import / dot-source：`__future__`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`, `product.protocols.recording_flow`
-
 ### `product/backend/workflows/contracts/governance.py`
 - `class ContractGovernance`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.contracts.analysis.assessment`, `product.backend.core.contracts.lifecycle`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.contracts.lifecycle`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `time`
 
 ### `product/backend/workflows/contracts/http_binding_candidates.py`
 - `_HTTP_METHODS`
@@ -166,13 +154,6 @@
 - `class SetupMinimizationResult`
 - `minimize_failure_setup(workflow, case, security_effect_fingerprint, reproduces) -> SetupMinimizationResult`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.coverage`, `product.protocols.web.workflow`, `pydantic`, `typing`
-
-### `product/backend/workflows/contracts/workbench.py`
-- `class WorkbenchModel`
-- `class CandidateDerivationResult`
-- `class ContractWorkbenchSnapshot`
-- `class ContractWorkbench`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.drift`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.contracts.analysis`, `product.backend.workflows.contracts.governance`, `product.backend.workflows.projects.catalog`, `pydantic`, `typing`
 
 ### `product/backend/workflows/control.py`
 - `class ProductFlowQuery`
@@ -237,14 +218,17 @@
 主要 import / dot-source：`__future__`, `collections.abc`, `json`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.environment`, `product.backend.workflows.onboarding.discovery`, `product.backend.workflows.onboarding.models`, `subprocess`, `threading`, `typing`
 
 ### `product/backend/workflows/permission_intents.py`
+- `_LOCAL_GUI_APPROVER`
 - `class PermissionIntentViewModel`
 - `class PermissionIntentCellStatus`
 - `class PermissionIntentCellView`
 - `class PermissionIntentActionView`
 - `class PermissionIntentMatrixView`
 - `class PermissionIntentExecution`
+- `class PermissionIntentHistoryView`
+- `class PermissionIntentProposalListView`
 - `class PermissionIntentService`
-主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.test_identities`, `pydantic`, `time`
+主要 import / dot-source：`__future__`, `collections`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.test_identities`, `product.protocols.execution_request`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/workflows/projects/catalog.py`
 - `class ProjectCatalog`
@@ -376,9 +360,10 @@
 - `class ResultConfirmedImpact`
 - `class ResultDiagnosis`
 - `class ResultPresentationIssue`
+- `class ResultRelevantIntent`
 - `class ResultPresentation`
 - `class ResultPresentationBuilder`
-- `build_result_presentation(view, snapshot, finding_views) -> ResultPresentation`
+- `build_result_presentation(view, snapshot, finding_views, permission_policy) -> ResultPresentation`
 - `_ROLE_LABELS`
 - `_ACTION_LABELS`
 - `_RESOURCE_LABELS`
@@ -387,7 +372,7 @@
 - `_WITNESS_LABELS`
 - `_BREAKPOINT_LABELS`
 - `_TRACE_KIND_LABELS`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.backend.workflows.results.trace`, `product.protocols.observer`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.backend.workflows.results.trace`, `product.protocols.execution_request`, `product.protocols.observer`, `pydantic`, `typing`
 
 ### `product/backend/workflows/results/published.py`
 - `class PublishedRunView`
@@ -410,7 +395,7 @@
 
 ### `product/backend/workflows/runs/execution.py`
 - `class ExecutionWorkflow`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `pathlib`, `product.backend`, `product.backend.core.contracts.execution_binding`, `product.backend.core.errors`, `product.backend.core.verification.permissions.coverage`, `product.backend.infra.runtime.jobs.dispatch`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.storage`, `product.backend.workflows.runs.submission`, `product.protocols`, `product.protocols.web.profile`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `pathlib`, `product.backend`, `product.backend.core.contracts.execution_binding`, `product.backend.core.errors`, `product.backend.core.verification.permissions.coverage`, `product.backend.infra.runtime.jobs.dispatch`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.storage`, `product.backend.workflows.runs.submission`, `product.protocols`, `product.protocols.execution_request`, `product.protocols.web.profile`, `time`, `typing`
 
 ### `product/backend/workflows/runs/submission.py`
 - `class SubmitExecution`
@@ -434,14 +419,14 @@
 - `_ACTOR`
 - `_WORKFLOW_STATE`
 - `class SecuritySetupCompiler`
-主要 import / dot-source：`.contract_builder`, `.profile_builder`, `__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `pathlib`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.core.test_identity`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.contracts.governance`, `product.backend.workflows.permission_intents`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.runs.execution`, `product.backend.workflows.security_setup.local_observer_wiring`, `product.backend.workflows.security_setup.models`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording_flow`, `product.protocols.web.workflow`, `pydantic`, `re`, `time`, `typing`, `urllib.parse`
+主要 import / dot-source：`.contract_builder`, `.profile_builder`, `__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `pathlib`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.test_identity`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.contracts.governance`, `product.backend.workflows.permission_intents`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.runs.execution`, `product.backend.workflows.security_setup.local_observer_wiring`, `product.backend.workflows.security_setup.models`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording_flow`, `product.protocols.web.workflow`, `pydantic`, `re`, `time`, `typing`, `urllib.parse`
 
 ### `product/backend/workflows/security_setup/contract_builder.py`
 - `_CONTRACT_RESOURCE_ID`
 - `_ACTOR`
 - `_WORKFLOW_STATE`
 - `class ContractBuilderMixin`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.core.test_identity`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.contracts.governance`, `product.backend.workflows.permission_intents`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.runs.execution`, `product.backend.workflows.security_setup.local_observer_wiring`, `product.backend.workflows.security_setup.models`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording_flow`, `product.protocols.web.workflow`, `pydantic`, `re`, `time`, `typing`, `urllib.parse`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.test_identity`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.contracts.governance`, `product.backend.workflows.permission_intents`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.runs.execution`, `product.backend.workflows.security_setup.local_observer_wiring`, `product.backend.workflows.security_setup.models`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording_flow`, `product.protocols.web.workflow`, `pydantic`, `re`, `time`, `typing`, `urllib.parse`
 
 ### `product/backend/workflows/security_setup/local_observer_registry.py`
 - `_EXPERIENCE_ID`
@@ -470,7 +455,7 @@
 - `_ACTOR`
 - `_WORKFLOW_STATE`
 - `class ProfileBuilderMixin`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.core.test_identity`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.contracts.governance`, `product.backend.workflows.permission_intents`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.runs.execution`, `product.backend.workflows.security_setup.local_observer_wiring`, `product.backend.workflows.security_setup.models`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording_flow`, `product.protocols.web.workflow`, `pydantic`, `re`, `time`, `typing`, `urllib.parse`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.test_identity`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.contracts.governance`, `product.backend.workflows.permission_intents`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.runs.execution`, `product.backend.workflows.security_setup.local_observer_wiring`, `product.backend.workflows.security_setup.models`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording_flow`, `product.protocols.web.workflow`, `pydantic`, `re`, `time`, `typing`, `urllib.parse`
 
 ### `product/backend/workflows/test_identities/__init__.py`
 主要 import / dot-source：`product.backend.workflows.test_identities.execution`, `product.backend.workflows.test_identities.preparation`, `product.backend.workflows.test_identities.service`

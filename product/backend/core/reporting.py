@@ -149,6 +149,10 @@ def render_html(report: ReportDocument) -> bytes:
     }))
     verdict_class = _verdict_class(presentation.verdict)
     verdict_label = _verdict_label(presentation.verdict)
+    relevant_intents = ",".join(
+        f"{item.intent_id}@{item.revision}:{item.intent_hash}"
+        for item in presentation.relevant_intents
+    )
     gate_text = ""
     if isinstance(report, GateRunReport):
         gate_reasons = _list_items(
@@ -184,6 +188,7 @@ def render_html(report: ReportDocument) -> bytes:
         '<div class="header-meta">'
         f'<span>项目 <strong>{_esc(presentation.project_name)}</strong></span>'
         f'<span>检查时间（UTC） <strong>{_esc(_utc_time(report.run.finished_at_us if report.run.finished_at_us is not None else report.run.created_at_us))}</strong></span>'
+        f'<span>权限版本 <strong>{_esc(presentation.policy_epoch)}</strong></span>'
         f'<span>Run <strong>{_esc(report.run_id)}</strong></span></div></header>'
         f'<section class="verdict-panel verdict-{verdict_class}"><div class="verdict-topline">'
         f'<span class="verdict-pill">{_esc(verdict_label)}</span><h2>总体结论</h2></div>'
@@ -208,6 +213,8 @@ def render_html(report: ReportDocument) -> bytes:
         f'<div class="technical-item"><span>Run ID</span><code>{_esc(report.run_id)}</code></div>'
         f'<div class="technical-item"><span>Lifecycle</span>{_esc(report.run.lifecycle)}</div>'
         f'<div class="technical-item"><span>安全结论</span>安全结论：{_esc(report.runtime.verdict or "未形成")}</div>'
+        f'<div class="technical-item"><span>权限策略指纹</span><code>{_esc(presentation.policy_fingerprint)}</code></div>'
+        f'<div class="technical-item"><span>相关权限意图</span><code>{_esc(relevant_intents or "无")}</code></div>'
         f'<div class="technical-item"><span>Evidence refs</span><code>{_esc(",".join(evidence_refs) or "无")}</code></div>'
         f'<div class="technical-item"><span>Schema</span><code>report={_esc(report.versions.report_schema_version)}；runner={_esc(report.versions.runner_schema_version)}；evidence={_esc(report.versions.evidence_schema_version)}；observer={_esc(report.versions.observer_schema_version)}；artifact={_esc(report.versions.artifact_schema_version)}</code></div>'
         f'<div class="technical-item"><span>Ruleset</span><code>{_esc(",".join(report.versions.ruleset_versions) or "无")}</code></div>'

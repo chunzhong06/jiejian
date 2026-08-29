@@ -34,7 +34,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from product.backend.core.contracts.models import ContractSourceType, SourceReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ContractStatus, ProjectStatus
-from product.backend.core.permission_intent import PermissionIntent
+from product.backend.core.permission_intent import (
+    IntentImplementationBinding,
+    PermissionIntentRevision,
+)
 from product.backend.core.test_identity import TestIdentity
 from product.backend.core.test_setup import (
     ActionSafetySetup,
@@ -133,16 +136,24 @@ class SecuritySetupCompileResult(_CompileModel):
 class _ResolvedIntent:
     """编译瞬间为组级要求选择的临时账号代表。"""
 
-    intent: PermissionIntent
+    revision: PermissionIntentRevision
+    binding: IntentImplementationBinding
     subject_test_identity_id: str
 
     @property
     def expectation(self) -> PermissionExpectation:
-        return self.intent.expectation
+        return self.revision.expectation
 
     @property
     def fingerprint(self) -> str:
-        return self.intent.fingerprint
+        return _sha256(
+            (
+                self.revision.intent_id,
+                self.revision.revision,
+                self.revision.intent_hash,
+                self.binding.binding_fingerprint,
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)

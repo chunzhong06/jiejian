@@ -86,7 +86,6 @@ def test_compiler_is_deterministic_and_rejects_profile_after_authority_change(
             ROLE_ID,
             PermissionIntentRelation.OWNS,
             expectation=PermissionExpectation.ALLOW,
-            actor="测试用户",
         )
         core.permission_intents.confirm(
             PROJECT_ID,
@@ -95,15 +94,14 @@ def test_compiler_is_deterministic_and_rejects_profile_after_authority_change(
             ROLE_ID,
             PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT,
             expectation=PermissionExpectation.DENY,
-            actor="测试用户",
         )
 
         before_compile = core.project_readiness.get(PROJECT_ID)
         assert before_compile.permission_actions[0].compilable is True
         assert before_compile.current_scope_runnable is False
 
-        first = core.security_setup.compile(PROJECT_ID, actor="测试用户")
-        second = core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        first = core.security_setup.compile(PROJECT_ID)
+        second = core.security_setup.compile(PROJECT_ID)
 
         assert second.reused is True
         assert second.authority_fingerprint == first.authority_fingerprint

@@ -11,6 +11,7 @@ vi.mock('../../api/runs', () => ({ runsApi }))
 
 const basePresentation = (overrides: Record<string, unknown> = {}) => ({
   run_id: 'run-demo', project_id: 'project-demo', project_name: '演示应用', run_lifecycle: 'COMPLETED', verdict: 'PASS',
+  policy_epoch: 7, policy_fingerprint: 'f'.repeat(64), relevant_intents: [{ intent_id: `pin_${'a'.repeat(32)}`, revision: 3, intent_hash: 'a'.repeat(64) }],
   headline: '当前范围未发现确认问题', scope_statement: '当前实际检查范围内未发现已确认权限问题；这不代表应用绝对安全。',
   checked_count: 1, safe_count: 1, problem_count: 0, inconclusive_count: 0, uncovered_count: 0,
   execution_problem: null, execution_traces: [], issues: [], limitations: [], ...overrides,
@@ -172,5 +173,18 @@ describe('CheckResultsPage', () => {
     expect(screen.getByText('未覆盖')).toBeInTheDocument()
     expect(screen.getAllByText('2 项')).toHaveLength(2)
     expect(screen.getByText(/本次结论只适用于实际执行范围/)).toBeInTheDocument()
+  })
+
+  it('普通区显示冻结权限版本，高级详情显示 fingerprint 和相关意图', async () => {
+    const run = { run_id: 'run-policy', lifecycle: 'COMPLETED', verdict: 'PASS', result_integrity: 'VERIFIED' }
+    runsApi.run.mockResolvedValue(run)
+    resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-policy', policy_epoch: 9, policy_fingerprint: 'b'.repeat(64), relevant_intents: [{ intent_id: `pin_${'c'.repeat(32)}`, revision: 4, intent_hash: 'c'.repeat(64) }] }))
+    resultsApi.evidence.mockResolvedValue([])
+    render(<CheckResultsPage run={run} onError={vi.fn()} />)
+    expect(await screen.findByText('本次检查依据权限版本 9')).toBeInTheDocument()
+    expect(screen.queryByText(`pin_${'c'.repeat(32)}`)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('高级：运行与完整性信息'))
+    expect(screen.getByText('b'.repeat(64))).toBeInTheDocument()
+    expect(screen.getByText(`pin_${'c'.repeat(32)}@4:${'c'.repeat(64)}`)).toBeInTheDocument()
   })
 })

@@ -44,6 +44,7 @@ from product.protocols.web.profile import (
     WEB_EXECUTION_PROFILE_MAX_BYTES,
     parse_web_execution_profile,
 )
+from product.protocols.execution_request import PermissionPolicySnapshot
 
 
 class ExecutionWorkflow:
@@ -68,6 +69,9 @@ class ExecutionWorkflow:
         self._generated_profile_validator: (
             Callable[[ExecutionProfileRecord, WebExecutionProfile], None] | None
         ) = None
+        self._permission_policy_snapshot_resolver: (
+            Callable[[str], PermissionPolicySnapshot] | None
+        ) = None
 
     def set_generated_profile_validator(
         self,
@@ -76,6 +80,14 @@ class ExecutionWorkflow:
         """安装普通模式生成资产的实时权威输入校验器。"""
 
         self._generated_profile_validator = validator
+
+    def set_permission_policy_snapshot_resolver(
+        self,
+        resolver: Callable[[str], PermissionPolicySnapshot],
+    ) -> None:
+        """安装执行请求所需的长期权限策略冻结器。"""
+
+        self._permission_policy_snapshot_resolver = resolver
 
     def register(self, source_path: Path, *, accept_source_changes: bool = False) -> ExecutionProfileRecord:
         """校验并登记 Profile；任何源漂移都必须由调用者显式接受。"""
@@ -171,7 +183,14 @@ class ExecutionWorkflow:
             max_cases=max(profile.case_budget, execution_case_count),
             max_parallel_cases=1,
         )
-        return PersistedExecutionRequest(budget=budget, project_snapshot=snapshot)
+        if self._permission_policy_snapshot_resolver is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "权限策略冻结器尚未装配")
+        permission_policy = self._permission_policy_snapshot_resolver(profile.project_id)
+        return PersistedExecutionRequest(
+            budget=budget,
+            permission_policy=permission_policy,
+            project_snapshot=snapshot,
+        )
 
     def submit(
         self,

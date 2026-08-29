@@ -96,8 +96,8 @@
           "$ref": "#/$defs/ReportRuntime"
         },
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -194,8 +194,8 @@
           "$ref": "#/$defs/ReportRuntime"
         },
         "schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Schema Version",
           "type": "string"
         },
@@ -762,6 +762,16 @@
           "title": "Limitations",
           "type": "array"
         },
+        "policy_epoch": {
+          "minimum": 0,
+          "title": "Policy Epoch",
+          "type": "integer"
+        },
+        "policy_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Policy Fingerprint",
+          "type": "string"
+        },
         "problem_count": {
           "minimum": 0,
           "title": "Problem Count",
@@ -777,6 +787,15 @@
           "minLength": 1,
           "title": "Project Name",
           "type": "string"
+        },
+        "relevant_intents": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ReportRelevantIntent"
+          },
+          "maxItems": 4096,
+          "title": "Relevant Intents",
+          "type": "array"
         },
         "run_id": {
           "pattern": "^run_[0-9a-f]{32}$",
@@ -834,6 +853,8 @@
         "project_name",
         "run_lifecycle",
         "verdict",
+        "policy_epoch",
+        "policy_fingerprint",
         "headline",
         "scope_statement",
         "checked_count",
@@ -984,6 +1005,34 @@
         "verdict"
       ],
       "title": "ReportPresentationIssue",
+      "type": "object"
+    },
+    "ReportRelevantIntent": {
+      "additionalProperties": false,
+      "description": "报告冻结的单条人类权限 revision 身份。",
+      "properties": {
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash"
+      ],
+      "title": "ReportRelevantIntent",
       "type": "object"
     },
     "ReportRun": {
@@ -1145,8 +1194,8 @@
           "type": "string"
         },
         "report_schema_version": {
-          "const": "2",
-          "default": "2",
+          "const": "3",
+          "default": "3",
           "title": "Report Schema Version",
           "type": "string"
         },

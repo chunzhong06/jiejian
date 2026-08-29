@@ -250,7 +250,7 @@ def test_compiler_publishes_local_observer_contract_and_profile_snapshot(tmp_pat
             confirmed_endpoint=endpoint,
             descriptor_path=descriptor_path,
         )
-        compiled = core.security_setup.compile(setup["project_id"], actor="测试用户")
+        compiled = core.security_setup.compile(setup["project_id"])
         contract = core.contracts.list_versions(
             setup["project_id"], compiled.contract_id
         )[0].snapshot

@@ -21,7 +21,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from product.backend.core.contracts.models import ContractSourceType, SourceReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ContractStatus, ProjectStatus
-from product.backend.core.permission_intent import PermissionIntent
 from product.backend.core.test_identity import TestIdentity
 from product.backend.core.test_setup import (
     ActionSafetySetup,
@@ -129,7 +128,7 @@ class ContractBuilderMixin:
         if project.governed_contract_id not in {None, contract_id}:
             raise JiejianError(
                 ErrorCode.STATE_PRECONDITION,
-                "当前项目正在使用高级权限契约；请先明确切换后再生成普通配置",
+                "当前项目绑定的内部契约与权限要求不一致，请重新准备检查",
             )
         if active is not None:
             candidate = self._contract(facts, contract_id, active.version, local_wiring=local_wiring)

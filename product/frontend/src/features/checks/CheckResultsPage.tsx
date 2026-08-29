@@ -5,7 +5,7 @@
  *   把后端 ResultPresentation、ExecutionTrace 与已发布 Evidence 组织成单一可信结果故事。
  *
  * 职责
- *   依次说明权限预期、实际身份、表面响应、断裂见证、确认影响与最终结论
+ *   依次说明冻结权限版本、权限预期、实际身份、表面响应、断裂见证、确认影响与最终结论
  *   ｜默认折叠完整执行路径｜按需展开证据和报告｜不在前端推断或重算安全结论
  * ============================================================================= */
 
@@ -134,8 +134,9 @@ export function CheckResultsPage({
     {current && <section className={`result-overview result-overview-${presentation?.verdict?.toLowerCase() ?? 'pending'}`} aria-labelledby="result-headline">
       <div className="result-overview-copy">
         <Typography.Text className="result-eyebrow">本次检查结论</Typography.Text>
-        <Typography.Title id="result-headline" level={2}>{headline}</Typography.Title>
-        <Typography.Paragraph type="secondary">{presentation?.scope_statement ?? (verified ? '结果正在加载。' : '结果尚未通过完整性校验，暂不提供安全结论。')}</Typography.Paragraph>
+      <Typography.Title id="result-headline" level={2}>{headline}</Typography.Title>
+      <Typography.Paragraph type="secondary">{presentation?.scope_statement ?? (verified ? '结果正在加载。' : '结果尚未通过完整性校验，暂不提供安全结论。')}</Typography.Paragraph>
+      {presentation && <Typography.Text>本次检查依据权限版本 {presentation.policy_epoch}</Typography.Text>}
       </div>
       {presentation && <dl className="result-count-grid">
         <div><dt>实际检查</dt><dd>{presentation.checked_count} 项</dd></div>
@@ -146,7 +147,7 @@ export function CheckResultsPage({
       </dl>}
       {presentation?.execution_problem && <Alert type="error" showIcon message="检查执行未完整结束" description={presentation.execution_problem} />}
       {String(current.result_integrity) === 'INVALID' && <Alert type="warning" showIcon message="结果完整性校验未通过，不能形成安全结论。" />}
-      <AdvancedDetails label="高级：运行与完整性信息"><Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="检查状态">{lifecycleLabel(current.lifecycle)}</Descriptions.Item><Descriptions.Item label="结果完整性">{integrityLabel(current.result_integrity)}</Descriptions.Item><Descriptions.Item label="必需观察状态">{observerSummary(current.observer_health)}</Descriptions.Item><Descriptions.Item label="执行 Schema">{String(current.execution_schema_version ?? '未提供')}</Descriptions.Item><Descriptions.Item label="原因代码">{Array.isArray(current.reason_codes) && current.reason_codes.length > 0 ? current.reason_codes.join('、') : '无'}</Descriptions.Item></Descriptions></AdvancedDetails>
+      <AdvancedDetails label="高级：运行与完整性信息"><Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="检查状态">{lifecycleLabel(current.lifecycle)}</Descriptions.Item><Descriptions.Item label="结果完整性">{integrityLabel(current.result_integrity)}</Descriptions.Item><Descriptions.Item label="必需观察状态">{observerSummary(current.observer_health)}</Descriptions.Item><Descriptions.Item label="执行 Schema">{String(current.execution_schema_version ?? '未提供')}</Descriptions.Item><Descriptions.Item label="原因代码">{Array.isArray(current.reason_codes) && current.reason_codes.length > 0 ? current.reason_codes.join('、') : '无'}</Descriptions.Item>{presentation && <><Descriptions.Item label="policy_fingerprint">{presentation.policy_fingerprint}</Descriptions.Item><Descriptions.Item label="relevant_intents" span={2}>{presentation.relevant_intents.map((item) => `${item.intent_id}@${item.revision}:${item.intent_hash}`).join('、') || '无'}</Descriptions.Item></>}</Descriptions></AdvancedDetails>
     </section>}
     {current && presentation && <AssistantPanel runId={String(current.run_id)} title="这个结果的因果说明" actionLabel="AI 解读这个结果" />}
     {current && <Segmented className="result-view-switch" value={view} onChange={(value) => setView(value as 'results' | 'report')} options={[{ label: '结论与证据', value: 'results' }, { label: '完整报告', value: 'report' }]} />}

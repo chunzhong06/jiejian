@@ -20,58 +20,6 @@
 - `class ApplicationUnderstanding`
 主要 import / dot-source：`__future__`, `enum`, `hashlib`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
 
-### `product/backend/core/contracts/analysis/assessment.py`
-- `assess_contract(contract, candidates, source_issues, available_observations, unexecutable_rule_ids) -> ContractReviewAssessment`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.merge`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`
-
-### `product/backend/core/contracts/analysis/canonical.py`
-- `contract_analysis_sha256(value) -> str`
-主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `hashlib`, `json`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`, `pydantic`, `re`, `typing`
-
-### `product/backend/core/contracts/analysis/diff.py`
-- `diff_contract_versions(before, after) -> ContractVersionDiff`
-主要 import / dot-source：`__future__`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`, `product.backend.core.errors`
-
-### `product/backend/core/contracts/analysis/drift.py`
-- `class DriftType`
-- `class VerifiedBehaviorFingerprint`
-- `class DriftEntry`
-- `class DriftReport`
-- `build_drift_report(contract, requirements, requirement_candidates, available_rule_ids, capability_candidates, unexecutable_rule_ids, available_observations, accepted_behavior, current_behavior, analysis_issues) -> DriftReport`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `pydantic`, `typing`
-
-### `product/backend/core/contracts/analysis/merge.py`
-- `merge_candidates(candidates) -> CandidateMergeResult`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`
-
-### `product/backend/core/contracts/analysis/models.py`
-- `class AnalysisModel`
-- `class AnalysisSeverity`
-- `class AnalysisReasonCode`
-- `class AnalysisIssue`
-- `class CandidateBatch`
-- `class MergedCandidate`
-- `class CandidateMergeResult`
-- `class ContractReviewAssessment`
-- `class RuleDiff`
-- `class ProvenanceDelta`
-- `class ContractVersionDiff`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.contracts.models`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `pydantic`, `typing`
-
-### `product/backend/core/contracts/analysis/sources/fastapi_ast.py`
-- `parse_fastapi_source_candidates(project_id, source, source_locator, content_sha256) -> CandidateBatch`
-主要 import / dot-source：`__future__`, `ast`, `hashlib`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.analysis.sources.openapi`, `product.backend.core.contracts.models`, `product.backend.core.http_routes`
-
-### `product/backend/core/contracts/analysis/sources/openapi.py`
-- `_SENSITIVE_FIELD`
-- `_OPENAPI_MAX_BYTES`
-- `build_openapi_candidates(project_id, document, source_locator, max_bytes) -> CandidateBatch`
-主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`, `product.backend.core.http_routes`, `re`, `typing`
-
-### `product/backend/core/contracts/analysis/sources/requirement.py`
-- `parse_requirement(requirement) -> CandidateBatch`
-主要 import / dot-source：`__future__`, `product.backend.core.contracts.analysis.canonical`, `product.backend.core.contracts.analysis.models`, `product.backend.core.contracts.models`, `pydantic`, `shlex`
-
 ### `product/backend/core/contracts/execution_binding.py`
 - `resolve_execution_contract(record, governed) -> PermissionContract`
 主要 import / dot-source：`__future__`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `typing`
@@ -87,15 +35,10 @@
 - `class ContractAuditAction`
 - `class GovernanceModel`
 - `class SourceReference`
-- `class Requirement`
-- `class LLMGenerationMetadata`
-- `class CandidateRiskKind`
-- `class CandidateSuggestion`
-- `class ContractCandidate`
 - `class ContractProvenance`
 - `class ContractAuditEntry`
 - `class ContractVersion`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `pydantic`
 
 ### `product/backend/core/errors.py`
 - `class ErrorCode`
@@ -136,11 +79,26 @@
 - `_ACTION_ID_PATTERN`
 - `_ROLE_ID_PATTERN`
 - `_INTENT_ID_PATTERN`
+- `_PROPOSAL_ID_PATTERN`
+- `_PROJECTION_PATH`
 - `class PermissionIntentModel`
 - `class PermissionIntentRelation`
+- `class PermissionIntentEffectiveState`
+- `class HumanApprovalChannel`
+- `class IntentImplementationBindingStatus`
+- `class IntentProposalKind`
+- `class IntentProposalStatus`
 - `permission_intent_sha256(payload) -> str`
-- `class PermissionIntent`
-主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `pydantic`, `typing`
+- `class ProtectedEffect`
+- `class HumanApproval`
+- `class PermissionIntentSemantic`
+- `class PermissionIntentRevision`
+- `class ProjectPolicyState`
+- `implementation_binding_sha256(payload) -> str`
+- `class IntentImplementationBinding`
+- `class ProposedImplementationBinding`
+- `class IntentProposal`
+主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/recording.py`
 - `_REASON_CODE`

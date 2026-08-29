@@ -36,7 +36,6 @@ class _StubToolView(BaseModel):
 EXPECTED_MCP_TOOLS = {
     "jiejian_application_reanalyze",
     "jiejian_application_understanding",
-    "jiejian_candidate_decide",
     "jiejian_check_cancel",
     "jiejian_check_prepare",
     "jiejian_check_preview",
@@ -50,10 +49,13 @@ EXPECTED_MCP_TOOLS = {
     "jiejian_identity_prepare_start",
     "jiejian_identity_preparation_status",
     "jiejian_identity_status",
+    "jiejian_intent_list",
+    "jiejian_intent_propose",
+    "jiejian_intent_rebind_propose",
+    "jiejian_intent_show",
     "jiejian_official_sample_start",
     "jiejian_official_sample_stop",
     "jiejian_official_sample_verify_fixed",
-    "jiejian_permission_set",
     "jiejian_product_status",
     "jiejian_project_list",
     "jiejian_project_show",
@@ -319,7 +321,13 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                 )
                 async with Client(transport) as client:
                     tools = await client.list_tools()
-                    assert {item.name for item in tools.tools} == EXPECTED_MCP_TOOLS
+                    tool_names = {item.name for item in tools.tools}
+                    assert tool_names == EXPECTED_MCP_TOOLS
+                    assert not any(
+                        forbidden in name
+                        for name in tool_names
+                        for forbidden in ("permission_set", "candidate_decide", "approve", "reject")
+                    )
                     activity = app.state.mcp_access.view()
                     assert activity.client_connected is True
                     assert activity.client_name
@@ -361,21 +369,21 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                         project_id,
                         MCPAccessLevel.PREPARE,
                     )
-                    compile_calls: list[tuple[str, str]] = []
+                    compile_calls: list[str] = []
                     monkeypatch.setattr(
                         app.state.context.security_setup,
                         "compile",
-                        lambda selected_project_id, *, actor: compile_calls.append(
-                            (selected_project_id, actor)
+                        lambda selected_project_id: compile_calls.append(
+                            selected_project_id
                         ),
                     )
                     source_entries = tuple(sorted(path.name for path in source.iterdir()))
                     prepared = await client.call_tool(
                         "jiejian_check_prepare",
-                        {"project_id": project_id, "actor": "mcp-test"},
+                        {"project_id": project_id},
                     )
                     assert prepared.is_error is False
-                    assert compile_calls == [(project_id, "mcp-test")]
+                    assert compile_calls == [project_id]
                     assert tuple(sorted(path.name for path in source.iterdir())) == source_entries
 
                     with pytest.raises(MCPError) as authorization_required:

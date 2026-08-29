@@ -23,16 +23,23 @@ from mcp.server import MCPServer
 from mcp.server.context import HandlerResult, ServerRequestContext
 from mcp.server.mcpserver import Context
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from product.backend import __version__
-from product.backend.core.application_understanding import CandidateDecision
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.verification.permissions import PermissionExpectation
+from product.backend.core.permission_intent import (
+    PermissionIntentEffectiveState,
+    PermissionIntentRelation,
+    PermissionIntentSemantic,
+    ProtectedEffect,
+)
+from product.backend.core.verification.permissions import (
+    PermissionExpectation,
+    SecurityEffectKind,
+)
 from product.backend.infra.runtime.diagnostics import runtime_environment_details
 from product.backend.infra.runtime.jobs.models import RequestCancellation
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
@@ -47,6 +54,60 @@ _ACCESS_ERROR_CODES = {
     ErrorCode.MCP_AUTH_REQUIRED.value: -32042,
     ErrorCode.MCP_PERMISSION_REQUIRED.value: -32043,
 }
+
+
+class MCPProtectedEffectInput(BaseModel):
+    """MCP 建议中的业务效果，不接受 Observer、HTTP 或任意扩展字段。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal[
+        "STATE_MUTATION",
+        "DATA_DISCLOSURE",
+        "OBJECT_CREATION",
+        "EXTERNAL_DISPATCH",
+        "RESTRICTED_FUNCTION_INVOCATION",
+        "CREDENTIAL_ACCESS",
+    ]
+    resource_type: str = Field(min_length=1, max_length=128)
+    business_label: str = Field(min_length=1, max_length=256)
+    protected_fields: tuple[str, ...] = Field(default=(), max_length=64)
+
+    def to_domain(self) -> ProtectedEffect:
+        return ProtectedEffect(
+            kind=SecurityEffectKind(self.kind),
+            resource_type=self.resource_type,
+            business_label=self.business_label,
+            protected_fields=self.protected_fields,
+        )
+
+
+class MCPPermissionIntentSemanticInput(BaseModel):
+    """把 Agent 的有界业务建议显式转换为严格 Ledger 语义。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    effective_state: Literal["ACTIVE", "RETIRED"]
+    subject_display_name: str = Field(min_length=1, max_length=128)
+    action_display_name: str = Field(min_length=1, max_length=256)
+    resource_owner_display_name: str = Field(min_length=1, max_length=128)
+    relation: Literal["OWNS", "SAME_ROLE_OTHER_ACCOUNT", "OTHER_ROLE"]
+    expectation: Literal["ALLOW", "DENY"]
+    protected_effects: tuple[MCPProtectedEffectInput, ...] = Field(
+        default=(),
+        max_length=16,
+    )
+
+    def to_domain(self) -> PermissionIntentSemantic:
+        return PermissionIntentSemantic(
+            effective_state=PermissionIntentEffectiveState(self.effective_state),
+            subject_display_name=self.subject_display_name,
+            action_display_name=self.action_display_name,
+            resource_owner_display_name=self.resource_owner_display_name,
+            relation=PermissionIntentRelation(self.relation),
+            expectation=PermissionExpectation(self.expectation),
+            protected_effects=tuple(item.to_domain() for item in self.protected_effects),
+        )
 
 
 def _recovery_for(code: str) -> str:
@@ -293,6 +354,22 @@ def build_mcp_control(
         value = _invoke(lambda: context.application_understanding.get(project_id))
         return _understanding_view(value)
 
+    @server.tool(name="jiejian_intent_list", structured_output=True)
+    def intent_list(ctx: Context, project_id: str) -> dict[str, Any]:
+        """读取人类批准的权限矩阵与实现映射状态。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        return _json(_invoke(lambda: context.permission_intents.matrix(project_id)))
+
+    @server.tool(name="jiejian_intent_show", structured_output=True)
+    def intent_show(ctx: Context, project_id: str, intent_id: str) -> dict[str, Any]:
+        """读取单一权限意图的不可变 revision 历史。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        return _json(
+            _invoke(lambda: context.permission_intents.history(project_id, intent_id))
+        )
+
     @server.tool(name="jiejian_identity_list", structured_output=True)
     def identity_list(ctx: Context, project_id: str) -> list[dict[str, Any]]:
         """列出不含秘密引用的测试身份。"""
@@ -387,6 +464,56 @@ def build_mcp_control(
             "recovered_jobs": workers.recovered_jobs,
         }
 
+    @server.tool(name="jiejian_intent_propose", structured_output=True)
+    def intent_propose(
+        ctx: Context,
+        project_id: str,
+        semantic: MCPPermissionIntentSemanticInput,
+        reason: str,
+        intent_id: str | None = None,
+    ) -> dict[str, Any]:
+        """创建待 Human GUI 审阅的语义建议，不修改 revision、hash 或 epoch。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
+        return _json(
+            _invoke(
+                lambda: context.permission_intents.propose_semantic_change(
+                    project_id,
+                    semantic.to_domain(),
+                    proposed_by="MCP Agent",
+                    reason=reason,
+                    intent_id=intent_id,
+                )
+            )
+        )
+
+    @server.tool(name="jiejian_intent_rebind_propose", structured_output=True)
+    def intent_rebind_propose(
+        ctx: Context,
+        project_id: str,
+        intent_id: str,
+        action_candidate_id: str,
+        subject_role_candidate_id: str,
+        resource_owner_role_candidate_id: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        """按当前生产事实创建实现重绑建议，不能提交 revision 或改变 epoch。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
+        return _json(
+            _invoke(
+                lambda: context.permission_intents.propose_rebind_target(
+                    project_id,
+                    intent_id,
+                    action_candidate_id=action_candidate_id,
+                    subject_role_candidate_id=subject_role_candidate_id,
+                    resource_owner_role_candidate_id=resource_owner_role_candidate_id,
+                    proposed_by="MCP Agent",
+                    reason=reason,
+                )
+            )
+        )
+
     @server.tool(name="jiejian_application_reanalyze", structured_output=True)
     def application_reanalyze(
         ctx: Context,
@@ -413,79 +540,15 @@ def build_mcp_control(
             )
         )
 
-    @server.tool(name="jiejian_candidate_decide", structured_output=True)
-    def candidate_decide(
-        ctx: Context,
-        project_id: str,
-        candidate_kind: Literal["ROLE", "ACTION"],
-        candidate_id: str,
-        revision: int,
-        decision: Literal["PROPOSED", "CONFIRMED", "REJECTED"],
-        display_name: str | None = None,
-    ) -> dict[str, Any]:
-        """决定既有角色或动作候选，不新增手工候选。"""
-
-        require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
-        if candidate_kind == "ROLE":
-            operation = lambda: context.application_understanding.decide_role(
-                project_id,
-                candidate_id,
-                revision=revision,
-                decision=CandidateDecision(decision),
-                display_name=display_name,
-            )
-        else:
-            operation = lambda: context.application_understanding.decide_action(
-                project_id,
-                candidate_id,
-                revision=revision,
-                decision=CandidateDecision(decision),
-                display_name=display_name,
-            )
-        return _understanding_view(_invoke(operation))
-
-    @server.tool(name="jiejian_permission_set", structured_output=True)
-    def permission_set(
-        ctx: Context,
-        project_id: str,
-        action_id: str,
-        subject_role_id: str,
-        owner_role_id: str,
-        relation: Literal["OWNS", "SAME_ROLE_OTHER_ACCOUNT", "OTHER_ROLE"],
-        expectation: Literal["ALLOW", "DENY"] | None,
-        actor: str = "mcp",
-    ) -> dict[str, Any]:
-        """确认既有权限矩阵单元，不创建新合同语义。"""
-
-        require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
-        return _json(
-            _invoke(
-                lambda: context.permission_intents.confirm(
-                    project_id,
-                    action_id,
-                    subject_role_id,
-                    owner_role_id,
-                    PermissionIntentRelation(relation),
-                    expectation=(
-                        None
-                        if expectation is None
-                        else PermissionExpectation(expectation)
-                    ),
-                    actor=actor,
-                )
-            )
-        )
-
     @server.tool(name="jiejian_check_prepare", structured_output=True)
     def check_prepare(
         ctx: Context,
         project_id: str,
-        actor: str = "mcp",
     ) -> dict[str, Any]:
         """编译已有准备事实，并返回同一检查预览。"""
 
         require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
-        _invoke(lambda: context.security_setup.compile(project_id, actor=actor))
+        _invoke(lambda: context.security_setup.compile(project_id))
         return _json(_invoke(lambda: context.checks.preview(project_id)))
 
     @server.tool(name="jiejian_identity_prepare_start", structured_output=True)
@@ -725,6 +788,8 @@ __all__ = [
     "MCPBearerGuard",
     "MCPControl",
     "MCPPathAdapter",
+    "MCPPermissionIntentSemanticInput",
+    "MCPProtectedEffectInput",
     "build_mcp_control",
     "require_mcp_level",
 ]

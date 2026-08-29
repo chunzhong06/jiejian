@@ -198,6 +198,15 @@ class ApplicationCore:
             action_safety_setup=self.action_safety_setup,
             clock_us=clock_us,
         )
+        self.application_understanding.set_permission_binding_refresher(
+            self.permission_intents.refresh_bindings
+        )
+        self.action_safety_setup.set_permission_binding_refresher(
+            self.permission_intents.refresh_bindings
+        )
+        self.execution.set_permission_policy_snapshot_resolver(
+            self.permission_intents.policy_snapshot
+        )
         self.test_identity_execution = TestIdentityExecutionCredentials(
             self.test_identities,
             self.secret_store,
@@ -286,13 +295,6 @@ class ApplicationCore:
             self.recording_submission,
             self.environment_for_secret_names,
         )
-        from product.backend.workflows.contracts.analysis import ContractAnalysis
-
-        self.contract_analysis = ContractAnalysis(
-            factory,
-            var_dir=self.var_dir,
-            observer_resolver=self.projects.current_observations,
-        )
         self.llm_profiles = LLMProfileRegistry(
             factory,
             transport=llm_transport or HttpxLLMTransport(),
@@ -319,15 +321,6 @@ class ApplicationCore:
             llm_profiles=self.llm_profiles,
             clock_us=clock_us,
         )
-        from product.backend.workflows.contracts.workbench import ContractWorkbench
-
-        self.contract_workbench = ContractWorkbench(
-            factory,
-            self.projects,
-            self.contracts,
-            self.contract_analysis,
-        )
-
     def close(self) -> None:
         self.identity_preparations.close()
         self.official_experience.close()

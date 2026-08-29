@@ -33,6 +33,7 @@ from product.backend.infra.runtime.runner.supervisor import RunnerSupervisor
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock
 from product.backend.infra.runtime.jobs.requests import PersistedExecutionRequest
+from product.protocols.execution_request import build_permission_policy_snapshot
 from product.protocols import (
     CleanupIssue,
     CleanupIssueCode,
@@ -354,6 +355,11 @@ def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_
     request = PersistedExecutionRequest(
         schema_version="1",
         budget=runner_input.budget,
+        permission_policy=build_permission_policy_snapshot(
+            runner_input.project_snapshot.project_id,
+            0,
+            (),
+        ),
         project_snapshot=runner_input.project_snapshot,
     )
     command = SubmitExecution(

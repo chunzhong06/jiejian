@@ -19,7 +19,7 @@
 | `Flow` | `recording_flow.py` | `schemas/recording/flow.schema.json` | 1 |
 | `IdentityPreparationRequest`、`IdentityPreparationResult` | `test_identity_preparation.py` | `schemas/identity/` | 1 |
 | `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest`、`PublicationManifest` | `artifacts.py`、`run_packages.py` | `schemas/artifacts/` | 1 |
-| `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 2 |
+| `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 3 |
 | `ReportPackageManifest` | `report.py` | `schemas/reports/report-package-manifest.schema.json` | 1 |
 | `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
 | `HttpBindingCandidateBatch` | `product/protocols/http_binding_candidate.py` | `schemas/execution/http-binding-candidate.schema.json` | 1 |
@@ -41,7 +41,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 ## 兼容规则
 
-当前不兼容旧开发数据库、Profile、Run、Evidence、Artifact、Report 或旧 wire format。每个根只接受上表当前格式，不提供旧 reader、fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库只接受签入的单一 `0001_web_v1` Alembic 基线，数据库 revision 与根文档版本不能互相替代。
+当前不兼容旧开发数据库、Profile、Run、Evidence、Artifact、Report 或旧 wire format。每个根只接受上表当前格式，不提供旧 reader、fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库从签入的 `0001_web_v1` 正式基线经显式 migration 升级到当前 head；数据库 revision 与根文档版本不能互相替代。
 
 ## 版本规则与 Schema 真源
 

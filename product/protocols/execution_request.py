@@ -16,20 +16,91 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.protocols.execution import ExecutionBudget
 from product.protocols.runner import RUNNER_INPUT_MAX_BYTES
 from product.protocols.web.profile import (
     WebExecutionSnapshot,
     required_web_secret_refs,
 )
+
+
+class PermissionPolicySnapshotEntry(BaseModel):
+    """一次运行冻结的单条人类权限 revision 与实现绑定身份。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+
+    intent_id: str = Field(pattern=r"^pin_[0-9a-f]{32}$")
+    revision: int = Field(ge=1)
+    intent_hash: str = Field(pattern=SHA256_PATTERN)
+    binding_fingerprint: str = Field(pattern=SHA256_PATTERN)
+
+
+class PermissionPolicySnapshot(BaseModel):
+    """Run 只读取的项目权限版本；live Ledger 变化不能改写它。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+
+    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    policy_epoch: int = Field(ge=0)
+    policy_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    entries: tuple[PermissionPolicySnapshotEntry, ...] = Field(default=(), max_length=4096)
+
+    @model_validator(mode="after")
+    def validate_snapshot(self) -> PermissionPolicySnapshot:
+        ordered = tuple(sorted(self.entries, key=lambda item: item.intent_id))
+        if ordered != self.entries or len({item.intent_id for item in ordered}) != len(ordered):
+            raise ValueError("permission policy entries must be unique and sorted")
+        payload = {
+            "project_id": self.project_id,
+            "policy_epoch": self.policy_epoch,
+            "entries": [item.model_dump(mode="json") for item in ordered],
+        }
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        if self.policy_fingerprint != hashlib.sha256(encoded).hexdigest():
+            raise ValueError("permission policy fingerprint is inconsistent")
+        return self
+
+
+def build_permission_policy_snapshot(
+    project_id: str,
+    policy_epoch: int,
+    entries: Sequence[PermissionPolicySnapshotEntry],
+) -> PermissionPolicySnapshot:
+    ordered = tuple(sorted(entries, key=lambda item: item.intent_id))
+    payload = {
+        "project_id": project_id,
+        "policy_epoch": policy_epoch,
+        "entries": [item.model_dump(mode="json") for item in ordered],
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return PermissionPolicySnapshot(
+        project_id=project_id,
+        policy_epoch=policy_epoch,
+        policy_fingerprint=hashlib.sha256(encoded).hexdigest(),
+        entries=ordered,
+    )
 
 
 class PersistedExecutionRequest(BaseModel):
@@ -39,10 +110,13 @@ class PersistedExecutionRequest(BaseModel):
 
     schema_version: Literal["1"] = "1"
     budget: ExecutionBudget
+    permission_policy: PermissionPolicySnapshot
     project_snapshot: WebExecutionSnapshot
 
     @model_validator(mode="after")
     def validate_budget_snapshot(self) -> PersistedExecutionRequest:
+        if self.permission_policy.project_id != self.project_snapshot.project_id:
+            raise ValueError("permission policy project does not match snapshot")
         target = self.project_snapshot.target.scope
         if self.budget.max_requests != target.max_requests:
             raise ValueError("request budget max_requests does not match snapshot")

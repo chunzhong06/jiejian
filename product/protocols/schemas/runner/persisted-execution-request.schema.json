@@ -2489,6 +2489,77 @@
       "title": "PermissionMutationPlan",
       "type": "object"
     },
+    "PermissionPolicySnapshot": {
+      "additionalProperties": false,
+      "description": "Run 只读取的项目权限版本；live Ledger 变化不能改写它。",
+      "properties": {
+        "entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PermissionPolicySnapshotEntry"
+          },
+          "maxItems": 4096,
+          "title": "Entries",
+          "type": "array"
+        },
+        "policy_epoch": {
+          "minimum": 0,
+          "title": "Policy Epoch",
+          "type": "integer"
+        },
+        "policy_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Policy Fingerprint",
+          "type": "string"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "policy_epoch",
+        "policy_fingerprint"
+      ],
+      "title": "PermissionPolicySnapshot",
+      "type": "object"
+    },
+    "PermissionPolicySnapshotEntry": {
+      "additionalProperties": false,
+      "description": "一次运行冻结的单条人类权限 revision 与实现绑定身份。",
+      "properties": {
+        "binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binding Fingerprint",
+          "type": "string"
+        },
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash",
+        "binding_fingerprint"
+      ],
+      "title": "PermissionPolicySnapshotEntry",
+      "type": "object"
+    },
     "PermissionRule": {
       "additionalProperties": false,
       "properties": {
@@ -3934,6 +4005,9 @@
     "budget": {
       "$ref": "#/$defs/ExecutionBudget"
     },
+    "permission_policy": {
+      "$ref": "#/$defs/PermissionPolicySnapshot"
+    },
     "project_snapshot": {
       "$ref": "#/$defs/WebExecutionSnapshot"
     },
@@ -3946,6 +4020,7 @@
   },
   "required": [
     "budget",
+    "permission_policy",
     "project_snapshot"
   ],
   "title": "PersistedExecutionRequest",

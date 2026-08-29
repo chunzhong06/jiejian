@@ -57,6 +57,7 @@ from product.backend.infra.artifacts.run_packages import (
     attempt_paths_for,
 )
 from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, PersistedExecutionRequest
+from product.protocols.execution_request import build_permission_policy_snapshot
 from tests.fixtures.runner import (
     evidence as make_evidence,
     execution_snapshot,
@@ -339,6 +340,11 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
     request = PersistedExecutionRequest(
         schema_version="1",
         budget=runner_input.budget,
+        permission_policy=build_permission_policy_snapshot(
+            runner_input.project_snapshot.project_id,
+            0,
+            (),
+        ),
         project_snapshot=runner_input.project_snapshot,
     )
     request_hash, _ = ExecutionRequestStore(var_dir).write(

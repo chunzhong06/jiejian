@@ -1,17 +1,16 @@
-/* 权限与检查连续页：在同一状态链中完成权限确认、准备、预览、提交、进度与结果入口。 */
+/* 权限与检查连续页：先预览 Human Approval、审阅 Agent proposal，再完成准备、提交与结果入口。 */
 
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Descriptions, List, Segmented, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Descriptions, List, Modal, Segmented, Space, Tag, Typography } from 'antd'
 import { checksApi, type CheckPreviewDto } from '../../api/checks'
 import { ApiError } from '../../api/http'
-import { permissionIntentsApi, type PermissionIntentMatrixDto, type PermissionIntentExpectation, type SecuritySetupCompileResultDto } from '../../api/permissionIntents'
+import { permissionIntentsApi, type PermissionIntentCellDto, type PermissionIntentExpectation, type PermissionIntentMatrixDto, type PermissionIntentProposalDto, type SecuritySetupCompileResultDto } from '../../api/permissionIntents'
 import type { ProjectDto } from '../../api/projects'
 import { runsApi, type RunDto } from '../../api/runs'
 import { lifecycleLabel } from '../../app/presentation'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
-import { PermissionAdvancedPanel } from '../permissions/PermissionAdvancedPanel'
 import { CheckProgress } from './CheckProgress'
 import './checks.css'
 
@@ -30,6 +29,7 @@ const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOP
 
 export function PermissionCheckPage({ project, runs, onRefresh, onError, onResolved, onNavigate, onBack, onNext }: PermissionCheckPageProps) {
   const [matrix, setMatrix] = useState<PermissionIntentMatrixDto | null>(null)
+  const [proposals, setProposals] = useState<PermissionIntentProposalDto[]>([])
   const [preview, setPreview] = useState<CheckPreviewDto | null>(null)
   const [previewFresh, setPreviewFresh] = useState(false)
   const [requiresCompile, setRequiresCompile] = useState(false)
@@ -41,6 +41,8 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
   const [compiling, setCompiling] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [pendingChange, setPendingChange] = useState<PendingPermissionChange | null>(null)
+  const [savingProposalId, setSavingProposalId] = useState<string>()
   const reconciledTerminalRun = useRef<string | null>(null)
 
   const latest = currentRun ?? runs[0]
@@ -56,6 +58,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
   useEffect(() => {
     let active = true
     setMatrix(null)
+    setProposals([])
     setPreview(null)
     setPreviewFresh(false)
     setRequiresCompile(false)
@@ -64,10 +67,12 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     setRefreshing(true)
     void Promise.all([
       permissionIntentsApi.matrix(project.project_id),
+      permissionIntentsApi.proposals(project.project_id),
       checksApi.preview(project.project_id),
-    ]).then(([nextMatrix, nextPreview]) => {
+    ]).then(([nextMatrix, proposalView, nextPreview]) => {
       if (!active) return
       setMatrix(nextMatrix)
+      setProposals(proposalView.proposals)
       setPreview(nextPreview)
       setPreviewFresh(true)
       onResolved?.()
@@ -100,22 +105,48 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     setCompileResult(null)
   }
 
-  const confirm = async (actionId: string, subjectRoleId: string, ownerRoleId: string, relation: 'OWNS' | 'SAME_ROLE_OTHER_ACCOUNT' | 'OTHER_ROLE', value: string | number) => {
-    const key = `${actionId}:${subjectRoleId}:${ownerRoleId}:${relation}`
+  const refreshPermissionFacts = async () => {
+    const [nextMatrix, proposalView] = await Promise.all([
+      permissionIntentsApi.matrix(project.project_id),
+      permissionIntentsApi.proposals(project.project_id),
+    ])
+    setMatrix(nextMatrix)
+    setProposals(proposalView.proposals)
+  }
+
+  const approveChange = async () => {
+    if (!pendingChange) return
+    const { actionId, cell, expectation } = pendingChange
+    const key = permissionCellKey(actionId, cell)
     invalidatePreview()
     setSavingCell(key)
     try {
-      const expectation = value === 'ALLOW' || value === 'DENY' ? value as PermissionIntentExpectation : null
-      setMatrix(await permissionIntentsApi.confirm(project.project_id, actionId, subjectRoleId, ownerRoleId, relation, expectation, 'local-user'))
+      await permissionIntentsApi.approve(project.project_id, {
+        action_candidate_id: actionId,
+        subject_role_candidate_id: cell.subject_role_candidate_id,
+        resource_owner_role_candidate_id: cell.resource_owner_role_candidate_id,
+        relation: cell.relation,
+      }, expectation)
+      await refreshPermissionFacts()
       await onRefresh()
+      setPendingChange(null)
     } catch (error) { onError(error as ApiError) }
     finally { setSavingCell(undefined) }
   }
 
-  const authorityChanged = () => {
-    invalidatePreview()
-    void permissionIntentsApi.matrix(project.project_id).then(setMatrix).catch((error) => onError(error as ApiError))
-    void onRefresh()
+  const decideProposal = async (proposal: PermissionIntentProposalDto, decision: 'approve' | 'reject') => {
+    setSavingProposalId(proposal.proposal_id)
+    try {
+      if (decision === 'approve') {
+        invalidatePreview()
+        await permissionIntentsApi.approveProposal(project.project_id, proposal.proposal_id)
+      } else {
+        await permissionIntentsApi.rejectProposal(project.project_id, proposal.proposal_id)
+      }
+      await refreshPermissionFacts()
+      await onRefresh()
+    } catch (error) { onError(error as ApiError) }
+    finally { setSavingProposalId(undefined) }
   }
 
   const compile = async () => {
@@ -125,13 +156,15 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     setPreviewFresh(false)
     setRequiresCompile(true)
     try {
-      const result = await permissionIntentsApi.compile(project.project_id, 'local-user')
+      const result = await permissionIntentsApi.compile(project.project_id)
       setCompileResult(result)
-      const [nextMatrix, nextPreview] = await Promise.all([
+      const [nextMatrix, proposalView, nextPreview] = await Promise.all([
         permissionIntentsApi.matrix(project.project_id),
+        permissionIntentsApi.proposals(project.project_id),
         checksApi.preview(project.project_id),
       ])
       setMatrix(nextMatrix)
+      setProposals(proposalView.proposals)
       setPreview(nextPreview)
       setPreviewFresh(true)
       setRequiresCompile(false)
@@ -144,11 +177,13 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
   const refreshFacts = async () => {
     setRefreshing(true)
     try {
-      const [nextMatrix, nextPreview] = await Promise.all([
+      const [nextMatrix, proposalView, nextPreview] = await Promise.all([
         permissionIntentsApi.matrix(project.project_id),
+        permissionIntentsApi.proposals(project.project_id),
         checksApi.preview(project.project_id),
       ])
       setMatrix(nextMatrix)
+      setProposals(proposalView.proposals)
       setPreview(nextPreview)
       setPreviewFresh(true)
       if (latest?.run_id) setCurrentRun(await runsApi.run(String(latest.run_id)))
@@ -187,19 +222,13 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     finally { setCancelling(false) }
   }
 
-  const currentStage = activeRun
-    ? 5
-    : canViewResult && !needsNewRun
-      ? 6
-      : canSubmit
-        ? 4
-        : previewFresh && preview
-          ? 3
-          : matrix?.compilable_action_count
-            ? 2
-            : 1
-  const sequence = ['确认权限要求', '准备检查条件', '核对本次范围', '开始检查', '查看当前进度', '完成并查看结果']
   const titleStatus = activeRun ? lifecycleLabel(latest?.lifecycle) : canViewResult && !needsNewRun ? '检查已完成' : canSubmit ? '可以开始检查' : requiresCompile ? '权限要求已更新' : '正在准备检查'
+
+  const assistantPanel = matrix && (matrix.unconfirmed_count > 0 || matrix.review_required_count > 0 || proposals.length > 0)
+    ? { surface: 'permission-review' as const, title: '权限要求复核', actionLabel: 'AI 帮我复核权限' }
+    : hasObservationGap(matrix, preview)
+      ? { surface: 'observation-recovery' as const, title: '观察与恢复说明', actionLabel: 'AI 解释为什么还不能可靠检查' }
+      : { surface: 'check-preview-explanation' as const, title: '本次检查范围', actionLabel: 'AI 解读本次检查' }
 
   const primary = activeRun
     ? undefined
@@ -229,19 +258,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
 
   return <div className="permission-check-page">
     <PageTaskHeader title="权限与检查" description="先确认谁应该允许或拒绝，再核对测试账号和对照范围，最后由界鉴在受控环境中检查真实结果。" status={titleStatus} />
-    <div className="assistant-panel-grid">
-      <AssistantPanel projectId={project.project_id} surface="permission-review" title="权限要求复核" actionLabel="AI 帮我复核权限" />
-      <AssistantPanel projectId={project.project_id} surface="observation-recovery" title="观察与恢复说明" actionLabel="AI 解释为什么还不能可靠检查" />
-      <AssistantPanel projectId={project.project_id} surface="check-preview-explanation" title="本次检查范围" actionLabel="AI 解读本次检查" />
-    </div>
-    <ol className="task-sequence permission-check-sequence" aria-label="权限与检查进度">
-      {sequence.map((label, index) => {
-        const step = index + 1
-        const state = step < currentStage ? 'complete' : step === currentStage ? 'current' : 'upcoming'
-        return <li key={label} className={`task-sequence-step is-${state}`}><span>{step < currentStage ? '✓' : step}</span><div><strong>{label}</strong><small>{state === 'complete' ? '已完成' : state === 'current' ? '当前任务' : '随后进行'}</small></div></li>
-      })}
-    </ol>
-
+    <AssistantPanel projectId={project.project_id} surface={assistantPanel.surface} title={assistantPanel.title} actionLabel={assistantPanel.actionLabel} />
     <section className="permission-check-section" aria-labelledby="permission-requirements-title">
       <div className="permission-check-heading"><div><Typography.Title level={3} id="permission-requirements-title">确认权限要求</Typography.Title><Typography.Paragraph type="secondary">为每个权限组和资源关系选择“允许”或“拒绝”。这里表达的是你的安全要求，不是界鉴自动作出的漏洞结论。</Typography.Paragraph></div><Tag>{matrix ? `已确认 ${matrix.confirmed_count} 项` : '正在读取'}</Tag></div>
       {matrix?.actions.length === 0 && <Alert type="info" showIcon message="还没有可确认的业务动作" description="请先完成业务流程录制，并确认测试资源、真实结果观察和恢复方式。" />}
@@ -249,18 +266,30 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
         {matrix?.actions.map((action) => <article className="permission-requirement-action" key={action.action_candidate_id}>
           <div className="permission-requirement-title"><div><Typography.Title level={4}>{action.action_display_name}</Typography.Title><Typography.Text type="secondary">测试资源：{action.resource_logical_name ?? '尚未准备'}</Typography.Text></div><Tag color={action.compilable ? 'success' : 'warning'}>{action.compilable ? '允许与拒绝已齐全' : '仍需确认'}</Tag></div>
           {action.cells.map((cell) => {
-            const key = `${action.action_candidate_id}:${cell.subject_role_candidate_id}:${cell.resource_owner_role_candidate_id}:${cell.relation}`
+            const key = permissionCellKey(action.action_candidate_id, cell)
             const blocking = cell.review_reasons.some((reason) => !['PERMISSION_INTENT_UNCONFIRMED', 'PERMISSION_INTENT_STALE'].includes(reason))
             return <div className="permission-requirement-row" key={key}>
               <div><Typography.Text strong>{cell.subject_role_display_name} · {relationLabels[cell.relation]}</Typography.Text><Typography.Text type="secondary">资源属于 {cell.resource_owner_role_display_name} 权限组</Typography.Text></div>
-              <Segmented aria-label={`${cell.subject_role_display_name}权限组以${relationLabels[cell.relation]}关系对${action.action_display_name}的权限`} value={cell.expectation ?? 'UNCONFIRMED'} disabled={blocking || savingCell === key || activeRun} options={[{ label: '未确认', value: 'UNCONFIRMED' }, { label: '允许', value: 'ALLOW' }, { label: '拒绝', value: 'DENY' }]} onChange={(value) => void confirm(action.action_candidate_id, cell.subject_role_candidate_id, cell.resource_owner_role_candidate_id, cell.relation, value)} />
-              <div className="permission-requirement-note">{cell.status === 'NEEDS_REVIEW' && <Typography.Text type="warning">依赖事实已变化，请重新确认</Typography.Text>}{blocking && <Typography.Text type="danger">{cell.review_reasons.map((reason) => gapLabels[reason] ?? reason).join('、')}</Typography.Text>}{cell.execution_gap && <Typography.Text type="secondary">{executionGapLabel(cell.execution_gap, cell)}</Typography.Text>}</div>
+              <div className="permission-requirement-control"><Segmented aria-label={`${cell.subject_role_display_name}权限组以${relationLabels[cell.relation]}关系对${action.action_display_name}的权限`} value={cell.expectation ?? 'UNCONFIRMED'} disabled={blocking || savingCell === key || activeRun} options={[{ label: '未确认', value: 'UNCONFIRMED' }, { label: '允许', value: 'ALLOW' }, { label: '拒绝', value: 'DENY' }]} onChange={(value) => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: value === 'ALLOW' || value === 'DENY' ? value : null })} />{cell.status === 'NEEDS_REVIEW' && cell.expectation !== null && <Button type="link" size="small" disabled={savingCell === key || activeRun} onClick={() => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: cell.expectation })}>重新确认当前要求</Button>}<div className="permission-requirement-note"><Typography.Text type="secondary">{cell.expectation === null ? '尚未确认' : `权限版本 ${cell.policy_epoch ?? matrix.policy_epoch}`}{cell.intent_revision !== null && ` · 修订 ${cell.intent_revision}`} · {bindingLabel(cell.status)}</Typography.Text>{cell.status === 'NEEDS_REVIEW' && <Typography.Text type="warning">依赖事实已变化，请重新确认</Typography.Text>}{blocking && <Typography.Text type="danger">{cell.review_reasons.map((reason) => gapLabels[reason] ?? reason).join('、')}</Typography.Text>}{cell.execution_gap && <Typography.Text type="secondary">{executionGapLabel(cell.execution_gap, cell)}</Typography.Text>}</div></div>
             </div>
           })}
           {action.gaps.length > 0 && <Typography.Paragraph type="secondary" className="permission-requirement-gaps">尚缺：{action.gaps.map((gap) => gapLabels[gap] ?? gap).join('、')}</Typography.Paragraph>}
         </article>)}
       </div>
     </section>
+
+    {proposals.length > 0 && <section className="permission-check-section" aria-labelledby="permission-proposals-title">
+      <div className="permission-check-heading"><div><Typography.Title level={3} id="permission-proposals-title">Agent 建议等待确认</Typography.Title><Typography.Paragraph type="secondary">Agent 只能提出建议；权限语义和实现映射仍由你确认。</Typography.Paragraph></div></div>
+      <div className="permission-proposal-list">{proposals.map((proposal) => <article className="permission-proposal-card" key={proposal.proposal_id}>
+        <Typography.Text strong>{proposal.kind === 'SEMANTIC_CHANGE' ? '权限语义建议' : '实现映射建议'}</Typography.Text>
+        <Descriptions size="small" column={1}>
+          <Descriptions.Item label="当前值">{proposalCurrentValue(proposal, matrix)}</Descriptions.Item>
+          <Descriptions.Item label="Agent 建议">{proposalSuggestedValue(proposal)}</Descriptions.Item>
+          <Descriptions.Item label="原因">{proposal.reason}</Descriptions.Item>
+        </Descriptions>
+        <Space><Button disabled={proposal.status !== 'PENDING' || Boolean(savingProposalId)} loading={savingProposalId === proposal.proposal_id && proposal.status === 'PENDING'} onClick={() => void decideProposal(proposal, 'approve')}>批准</Button><Button danger disabled={proposal.status !== 'PENDING' || Boolean(savingProposalId)} loading={savingProposalId === proposal.proposal_id && proposal.status === 'PENDING'} onClick={() => void decideProposal(proposal, 'reject')}>拒绝</Button></Space>
+      </article>)}</div>
+    </section>}
 
     <section className="permission-check-section" aria-labelledby="check-preparation-title">
       <div className="permission-check-heading"><div><Typography.Title level={3} id="check-preparation-title">准备检查条件</Typography.Title><Typography.Paragraph type="secondary">界鉴会把已确认权限要求与业务流程、测试账号、观察和恢复方式编译成一次受控检查。</Typography.Paragraph></div></div>
@@ -299,9 +328,57 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
       {canViewResult && !needsNewRun && <Alert type="success" showIcon message="本次检查已经完成" description="可信结果已经发布，可以继续查看检查结果和证据。" />}
     </section>
 
-    <PermissionAdvancedPanel project={project} onError={onError} onAuthorityChanged={authorityChanged} />
     <TaskActionBar back={{ label: '返回业务流程', onClick: onBack }} refresh={{ label: '刷新当前状态', onClick: () => void refreshFacts(), loading: refreshing }} restart={restart} primary={primary} />
+    <Modal open={Boolean(pendingChange)} title="确认权限变更" okText="确认权限变更" cancelText="暂不变更" confirmLoading={Boolean(savingCell)} onOk={() => void approveChange()} onCancel={() => { if (!savingCell) setPendingChange(null) }}>
+      {pendingChange && <Space direction="vertical" size="small">
+        <Typography.Text>当前要求：{expectationLabel(pendingChange.cell.expectation)}</Typography.Text>
+        <Typography.Text>准备变成：{expectationLabel(pendingChange.expectation)}</Typography.Text>
+        <div><Typography.Text strong>受保护业务后果：</Typography.Text><ul>{(pendingChange.cell.protected_effects ?? []).map((effect, index) => <li key={`${effect.business_label}-${index}`}>{effect.business_label || effect.resource_type}</li>)}</ul></div>
+        {pendingChange.cell.expectation !== pendingChange.expectation && <Typography.Text>确认后将从版本 {matrix?.policy_epoch ?? 0} 推进到 { (matrix?.policy_epoch ?? 0) + 1 }</Typography.Text>}
+        {pendingChange.cell.status === 'NEEDS_REVIEW' && pendingChange.cell.expectation === pendingChange.expectation && <Typography.Text>权限语义不变，不推进版本；仅重新确认当前实现映射</Typography.Text>}
+      </Space>}
+    </Modal>
   </div>
+}
+
+type PendingPermissionChange = { actionId: string; cell: PermissionIntentCellDto; expectation: PermissionIntentExpectation | null }
+
+function permissionCellKey(actionId: string, cell: PermissionIntentCellDto) {
+  return `${actionId}:${cell.subject_role_candidate_id}:${cell.resource_owner_role_candidate_id}:${cell.relation}`
+}
+
+function expectationLabel(value: PermissionIntentExpectation | null) {
+  return value === 'ALLOW' ? '允许' : value === 'DENY' ? '拒绝' : '未确认'
+}
+
+function bindingLabel(status: PermissionIntentCellDto['status']) {
+  return ({ CURRENT: '实现映射可用', NEEDS_REVIEW: '实现映射待复核', UNRESOLVED: '实现映射未解决', UNCONFIRMED: '尚未确认' } as const)[status]
+}
+
+function hasObservationGap(matrix: PermissionIntentMatrixDto | null, preview: CheckPreviewDto | null) {
+  const gapCodes = [
+    ...(matrix?.actions.flatMap((action) => action.gaps) ?? []),
+    ...(preview?.gaps.map((gap) => gap.code) ?? []),
+    ...(preview?.actions.flatMap((action) => action.gaps.map((gap) => gap.code)) ?? []),
+  ]
+  return gapCodes.some((gap) => ['OBSERVATION_UNCONFIRMED', 'RECOVERY_UNCONFIRMED', 'ACTION_SAFETY_SETUP_STALE', 'SECURITY_EFFECT_UNCONFIRMED'].includes(gap))
+}
+
+function findProposalCell(proposal: PermissionIntentProposalDto, matrix: PermissionIntentMatrixDto | null) {
+  if (!matrix || !proposal.intent_id) return undefined
+  return matrix.actions.flatMap((action) => action.cells).find((cell) => cell.intent_id === proposal.intent_id)
+}
+
+function proposalCurrentValue(proposal: PermissionIntentProposalDto, matrix: PermissionIntentMatrixDto | null) {
+  const cell = findProposalCell(proposal, matrix)
+  if (proposal.kind === 'IMPLEMENTATION_REBIND') return cell ? bindingLabel(cell.status) : '尚未确认'
+  return expectationLabel(cell?.expectation ?? null)
+}
+
+function proposalSuggestedValue(proposal: PermissionIntentProposalDto) {
+  if (proposal.kind === 'IMPLEMENTATION_REBIND') return '重新确认当前实现映射'
+  if (proposal.semantic_change?.effective_state === 'RETIRED') return '退役为未确认'
+  return expectationLabel(proposal.semantic_change?.expectation ?? null)
 }
 
 const relationLabels: Record<string, string> = {

@@ -62,7 +62,6 @@ def test_group_intent_survives_missing_added_and_replaced_representative(
             ROLE_ID,
             PermissionIntentRelation.OWNS,
             expectation=PermissionExpectation.ALLOW,
-            actor="测试用户",
         )
         initial = core.permission_intents.confirm(
             PROJECT_ID,
@@ -71,14 +70,13 @@ def test_group_intent_survives_missing_added_and_replaced_representative(
             ROLE_ID,
             PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT,
             expectation=PermissionExpectation.DENY,
-            actor="测试用户",
         )
         same_role = next(
             cell
             for cell in initial.actions[0].cells
             if cell.relation is PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT
         )
-        intent_fingerprint = same_role.intent_fingerprint
+        intent_hash = same_role.intent_hash
         initial_intent = next(
             item
             for item in core.permission_intents.current_intents(PROJECT_ID)
@@ -102,10 +100,10 @@ def test_group_intent_survives_missing_added_and_replaced_representative(
             for cell in with_peer.actions[0].cells
             if cell.relation is PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT
         )
-        assert selected.intent_fingerprint == intent_fingerprint
+        assert selected.intent_hash == intent_hash
         assert selected.representative_test_identity_id == PEER_IDENTITY_ID
         assert selected.execution_gap is None
-        first = core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        first = core.security_setup.compile(PROJECT_ID)
 
         replacement_ref = (
             f"cred:jiejian/test-identity/{PROJECT_ID}/{REPLACEMENT_IDENTITY_ID}/bearer"
@@ -129,16 +127,16 @@ def test_group_intent_survives_missing_added_and_replaced_representative(
             for cell in replaced.actions[0].cells
             if cell.relation is PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT
         )
-        assert replacement.intent_fingerprint == intent_fingerprint
+        assert replacement.intent_hash == intent_hash
         assert replacement.representative_test_identity_id == REPLACEMENT_IDENTITY_ID
         replacement_intent = next(
             item
             for item in core.permission_intents.current_intents(PROJECT_ID)
             if item.relation is PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT
         )
-        assert replacement_intent.confirmed_at_us == initial_intent.confirmed_at_us
-        assert replacement_intent.updated_at_us == initial_intent.updated_at_us
-        second = core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        assert replacement_intent.approval == initial_intent.approval
+        assert replacement_intent.created_at_us == initial_intent.created_at_us
+        second = core.security_setup.compile(PROJECT_ID)
         assert second.profile_id != first.profile_id
         assert peer_ref not in Path(second.profile_path).read_text(encoding="utf-8")
 
@@ -179,7 +177,10 @@ def test_group_intent_survives_missing_added_and_replaced_representative(
                 )
             )
             work.commit()
-        assert core.permission_intents.current_intents(PROJECT_ID) == ()
+        active = core.permission_intents.current_intents(PROJECT_ID)
+        assert len(active) == 2
+        core.permission_intents.refresh_bindings(PROJECT_ID)
+        assert core.permission_intents.execution_intents(PROJECT_ID) == ()
     finally:
         core.close()
 

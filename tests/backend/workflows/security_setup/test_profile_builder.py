@@ -90,7 +90,6 @@ def test_other_role_uses_stable_prepared_representative_and_keeps_partial_scope_
             ROLE_ID,
             PermissionIntentRelation.OWNS,
             expectation=PermissionExpectation.ALLOW,
-            actor="测试用户",
         )
         core.permission_intents.confirm(
             PROJECT_ID,
@@ -99,11 +98,12 @@ def test_other_role_uses_stable_prepared_representative_and_keeps_partial_scope_
             ROLE_ID,
             PermissionIntentRelation.OTHER_ROLE,
             expectation=PermissionExpectation.DENY,
-            actor="测试用户",
         )
         first = core.permission_intents.execution_intents(PROJECT_ID)
         other = next(
-            item for item in first if item.intent.relation is PermissionIntentRelation.OTHER_ROLE
+            item
+            for item in first
+            if item.revision.relation is PermissionIntentRelation.OTHER_ROLE
         )
         assert other.subject_test_identity_id == OTHER_IDENTITY_ID
 
@@ -117,11 +117,13 @@ def test_other_role_uses_stable_prepared_representative_and_keeps_partial_scope_
         )
         second = core.permission_intents.execution_intents(PROJECT_ID)
         stable = next(
-            item for item in second if item.intent.relation is PermissionIntentRelation.OTHER_ROLE
+            item
+            for item in second
+            if item.revision.relation is PermissionIntentRelation.OTHER_ROLE
         )
         assert stable.subject_test_identity_id == OTHER_IDENTITY_ID
 
-        core.security_setup.compile(PROJECT_ID, actor="测试用户")
+        core.security_setup.compile(PROJECT_ID)
         preview = core.checks.preview(PROJECT_ID)
         assert preview.ready is True
         assert preview.gaps
