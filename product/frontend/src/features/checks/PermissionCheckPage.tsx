@@ -9,6 +9,7 @@ import type { ProjectDto } from '../../api/projects'
 import { runsApi, type RunDto } from '../../api/runs'
 import { lifecycleLabel } from '../../app/presentation'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
+import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { PermissionAdvancedPanel } from '../permissions/PermissionAdvancedPanel'
 import { CheckProgress } from './CheckProgress'
@@ -228,6 +229,11 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
 
   return <div className="permission-check-page">
     <PageTaskHeader title="权限与检查" description="先确认谁应该允许或拒绝，再核对测试账号和对照范围，最后由界鉴在受控环境中检查真实结果。" status={titleStatus} />
+    <div className="assistant-panel-grid">
+      <AssistantPanel projectId={project.project_id} surface="permission-review" title="权限要求复核" actionLabel="AI 帮我复核权限" />
+      <AssistantPanel projectId={project.project_id} surface="observation-recovery" title="观察与恢复说明" actionLabel="AI 解释为什么还不能可靠检查" />
+      <AssistantPanel projectId={project.project_id} surface="check-preview-explanation" title="本次检查范围" actionLabel="AI 解读本次检查" />
+    </div>
     <ol className="task-sequence permission-check-sequence" aria-label="权限与检查进度">
       {sequence.map((label, index) => {
         const step = index + 1

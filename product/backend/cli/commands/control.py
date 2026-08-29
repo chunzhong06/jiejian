@@ -8,7 +8,7 @@
 #   提供任务式命令｜选择统一产品状态｜投影 Human 与 Machine 结果
 #
 # 边界
-#   不执行目标请求，不重算 Verdict/Evidence，不接受秘密正文或旧 Profile 路径。
+#   不执行目标请求，不重算 Verdict/Evidence，不接受秘密正文或内部执行配置路径。
 # =============================================================================
 
 from __future__ import annotations
@@ -616,9 +616,9 @@ def _emit_check_prepared(preview, compiled) -> None:
     typer.echo("检查条件已经准备好" if preview.ready else "检查条件仍有缺项")
     if verbose_enabled():
         typer.echo("")
-        typer.echo(f"Contract：{compiled.contract_id}@{compiled.contract_version}")
-        typer.echo(f"Profile：{compiled.profile_id}")
-        typer.echo(f"Hash：{compiled.profile_sha256}")
+        typer.echo(f"权限配置：{compiled.contract_id}@{compiled.contract_version}")
+        typer.echo(f"执行配置：{compiled.profile_id}")
+        typer.echo(f"配置指纹：{compiled.profile_sha256}")
 
 
 def check_cancel_command(
@@ -662,7 +662,7 @@ def check_run_command(
     project_id: str,
     idempotency_key: str | None = typer.Option(None, "--idempotency-key"),
 ) -> None:
-    """按当前已确认事实提交检查，不接收旧 Profile 路径。"""
+    """按当前已确认事实提交检查，不接收内部执行配置路径。"""
 
     try:
         with application_scope(context) as application:

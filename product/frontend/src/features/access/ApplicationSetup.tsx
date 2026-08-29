@@ -16,6 +16,7 @@ import { Alert, Button, Card, Checkbox, Collapse, Input, List, Radio, Space, Tag
 import { ApiError } from '../../api/http'
 import { onboardingApi, type DiscoveryResult } from '../../api/onboarding'
 import { AdvancedDetails } from '../../components/AdvancedDetails'
+import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import {
   projectsApi,
@@ -305,6 +306,7 @@ export function ApplicationSetup({ selected, endpointStatus, onConnected, onChan
 
   const candidateReview = endpointReady && understanding?.source_fingerprint ? <Card className="application-step" title="确认权限组与业务动作">
     <Alert type="info" showIcon message="这些是系统发现的权限组和业务动作候选，不是权限结论" description="确认候选只表示应用中存在这个权限组或业务动作；界鉴不会据此自动判断谁应该允许或拒绝什么操作。" />
+    <AssistantPanel projectId={understanding.project_id} surface="candidate-review" title="候选整理建议" actionLabel="AI 帮我整理" />
     <section className="candidate-review-block" aria-labelledby="permission-group-review-title">
       <div className="candidate-review-heading">
         <Typography.Title level={4} id="permission-group-review-title">权限组</Typography.Title>

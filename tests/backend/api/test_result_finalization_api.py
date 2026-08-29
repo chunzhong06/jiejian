@@ -236,9 +236,9 @@ def test_startup_reconciliation_order_places_finalizer_before_worker(tmp_path, m
     order: list[str] = []
     app = create_app(tmp_path / "var", start_worker=True)
     monkeypatch.setattr(
-        app.state.context.cache,
+        app.state.context.maintenance,
         "startup_maintenance",
-        lambda: order.append("cache") or {},
+        lambda: order.append("maintenance") or {},
     )
 
     class _RunReconciler:
@@ -265,4 +265,4 @@ def test_startup_reconciliation_order_places_finalizer_before_worker(tmp_path, m
     )
     with TestClient(app):
         pass
-    assert order == ["publication", "finalization", "worker", "cache"]
+    assert order == ["publication", "finalization", "worker", "maintenance"]

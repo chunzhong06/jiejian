@@ -62,3 +62,42 @@ def test_openapi_role_extension_is_exact_and_does_not_read_official_samples(
         roles[key].evidence[0].detector == "openapi-role-extension"
         for key in ("member", "manager")
     )
+
+
+def test_openapi_role_labels_merge_other_sources_by_canonical_key(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "openapi.json").write_text(
+        json.dumps(
+            {
+                "openapi": "3.1.0",
+                "x-roles": {
+                    "PROJECT_OWNER": "项目负责人",
+                    "MEMBER": "普通成员",
+                },
+                "paths": {},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "roles.py").write_text(
+        "from enum import StrEnum\n"
+        "class AccountRole(StrEnum):\n"
+        "    OWNER = 'PROJECT_OWNER'\n"
+        "    MEMBER = 'MEMBER'\n",
+        encoding="utf-8",
+    )
+
+    result = ApplicationUnderstandingAnalyzer().analyze("project-a", tmp_path)
+
+    roles = {item.canonical_key: item for item in result.role_candidates}
+    assert {key: item.display_name for key, item in roles.items()} == {
+        "member": "普通成员",
+        "project_owner": "项目负责人",
+    }
+    assert {
+        evidence.detector
+        for evidence in roles["project_owner"].evidence
+    } == {"openapi-role-extension", "python-role-enum"}
+    assert roles["project_owner"].confidence is CandidateConfidence.HIGH

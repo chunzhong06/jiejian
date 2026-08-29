@@ -33,6 +33,7 @@
 - `function Invoke-FrontendTest`
 - `function Invoke-Schema`
 - `function jiejian`
+- `function quit`
 
 ### `scripts/dev/common.ps1`
 - `function Enter-PrepareLock`

@@ -74,10 +74,8 @@ _MAX_MANIFEST_BYTES = 16_384
 _SECRET_NAMES = (
     "JIEJIAN_SAMPLE_ALICE_PASSWORD",
     "JIEJIAN_SAMPLE_BOB_PASSWORD",
-    "JIEJIAN_SAMPLE_EVE_PASSWORD",
     "JIEJIAN_SAMPLE_ALICE_SESSION",
     "JIEJIAN_SAMPLE_BOB_SESSION",
-    "JIEJIAN_SAMPLE_EVE_SESSION",
     "JIEJIAN_SAMPLE_QUEUE_SAS",
     "JIEJIAN_SAMPLE_BLOB_SAS",
     "JIEJIAN_SAMPLE_TASK_BEARER",
@@ -111,13 +109,14 @@ class OfficialSampleRuntime:
     sample_id: str
     display_name: str
     origin: str
+    experience_root: Path
     source_root: Path
     runtime_root: Path
     descriptor_path: Path
     control_path: Path
     log_path: Path
     process: subprocess.Popen[Any] = field(repr=False, compare=False)
-    secrets: Mapping[str, str] = field(repr=False, compare=False)
+    secrets: dict[str, str] = field(repr=False, compare=False)
 
 
 ProcessLauncher = Callable[..., subprocess.Popen[Any]]
@@ -185,10 +184,11 @@ class OfficialSampleManager:
                     ErrorCode.STATE_PRECONDITION,
                     "官方示例体验标识无效",
                 )
-            source_root = self._paths.data / "official-samples" / clean_id / "source"
-            runtime_root = self._paths.runtime / "official-samples" / clean_id
+            experience_root = self._paths.official_sample_runtime / clean_id
+            source_root = experience_root / "source"
+            runtime_root = experience_root / "state"
             log_path = self._paths.logs / "official-samples" / f"{clean_id}.log"
-            if source_root.exists() or runtime_root.exists() or log_path.exists():
+            if experience_root.exists() or log_path.exists():
                 raise JiejianError(
                     ErrorCode.OFFICIAL_SAMPLE_CONFLICT,
                     "官方示例体验目录已经存在",
@@ -231,6 +231,7 @@ class OfficialSampleManager:
                     sample_id=installation.sample_id,
                     display_name=installation.display_name,
                     origin=origin,
+                    experience_root=experience_root,
                     source_root=source_root,
                     runtime_root=runtime_root,
                     descriptor_path=descriptor_path,
@@ -254,6 +255,8 @@ class OfficialSampleManager:
                         terminate_process_tree(process, 3.0)
                     except Exception:
                         pass
+                secret_values.clear()
+                shutil.rmtree(experience_root, ignore_errors=True)
                 _append_event(
                     log_path,
                     "OFFICIAL_SAMPLE_START_FAILED",
@@ -329,7 +332,7 @@ class OfficialSampleManager:
         }
 
     def stop(self, experience_id: str | None = None) -> None:
-        """回收当前 Sample 进程树；保留源码、运行事实与安全日志以供审计。"""
+        """回收当前 Sample 进程树和会话目录；只保留独立历史日志。"""
 
         with self._lock:
             runtime = self._active
@@ -341,10 +344,22 @@ class OfficialSampleManager:
                     "指定的官方示例体验不是当前活跃体验",
                 )
             self._active = None
+            termination_error: Exception | None = None
             try:
                 terminate_process_tree(runtime.process, 3.0)
-            finally:
-                _append_event(runtime.log_path, "OFFICIAL_SAMPLE_STOPPED")
+            except Exception as exc:  # pragma: no cover - 由平台进程树测试覆盖
+                termination_error = exc
+            runtime.secrets.clear()
+            _append_event(runtime.log_path, "OFFICIAL_SAMPLE_STOPPED")
+            try:
+                shutil.rmtree(runtime.experience_root)
+            except OSError as exc:
+                raise JiejianError(
+                    ErrorCode.OFFICIAL_SAMPLE_START_FAILED,
+                    "官方示例运行目录清理失败",
+                ) from exc
+            if termination_error is not None:
+                raise termination_error
 
     def _require_active(self, experience_id: str) -> OfficialSampleRuntime:
         runtime = self.active

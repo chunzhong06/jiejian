@@ -1,6 +1,6 @@
 # 控制面与 Machine 输出协议
 
-> 状态：CURRENT。本文解释 GUI、CLI Human/Verbose、Machine v1、API envelope 与同一产品事实的关系；字段以当前代码和直接测试为准。
+> 状态：CURRENT。本文解释 GUI、CLI Human/Verbose、Machine v1、API envelope、MCP 工具与同一产品事实的关系；字段以当前代码和直接测试为准。
 
 ## 先理解：多个入口只有一套产品状态
 
@@ -11,6 +11,7 @@ ApplicationCore / Published facts
   → ProductStatus / ProjectReadiness / ResultPresentation / HistoryView
   → loopback API envelope → GUI
   → CLI Human / Verbose / Machine v1
+  → MCP Streamable HTTP → 固定工具白名单
   → Report publication（独立不可变交付物）
 ```
 
@@ -20,7 +21,7 @@ ApplicationCore / Published facts
 
 `ProductStatus` 只读汇总当前项目、六步准备状态、唯一下一步、活动任务和最近可信结果，不保存独立“向导进度”。浏览器本地状态只记当前选择和页面；刷新后由 API 恢复权威事实。Workbench 不常驻显示产品版本，产品版本在 `/settings/system` 等明确诊断位置展示。
 
-GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.0。
+GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.1。
 
 ## CLI Human、Verbose 与 Machine
 
@@ -41,6 +42,14 @@ warnings
 
 CLI `--version` 直接输出 `product.backend.__version__` 并退出，它是产品版本查询，不使用 Machine envelope，也不创建 ApplicationCore。
 
+## MCP Streamable HTTP 与工具输出
+
+MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。连接默认关闭，只接受当前进程签发的 Authorization Bearer。GUI control session Cookie、模型 Provider Key 和 SecretStore 引用都不能替代该令牌；SDK 继续独立校验 Host 与 Origin。
+
+MCP 工具不套用 API envelope 或 CLI Machine envelope，而按 SDK 协议返回现有 Pydantic View 的 structured content 或有界轻量投影。根 View 自身已有 `schema_version` 时保持原值；不能为每个嵌套 DTO重复制造版本，也不能把 MCP 协议版本当作产品版本。ProductStatus 与 ResultPresentation 必须和 GUI/CLI 读取同一应用服务，Evidence 只返回已发布索引而非完整文档。
+
+权限固定为逐 Project 层级：默认 `READ`，显式确认后可临时提升为 `PREPARE` 或 `EXECUTE`。关闭连接、轮换令牌和服务 shutdown 同时撤销旧令牌与全部提升。访问边界只使用 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED` 三个稳定错误；权限不足 details 只允许 `required_level` 和 `project_id`，恢复建议使用中文且不泄漏令牌、环境或内部异常。
+
 ## ResultPresentation 与 Evidence
 
 `ResultPresentation` 回答“谁对什么执行了什么、预期是什么、表面请求怎样、真实对象怎样、为何形成结论”。它可以把冻结 EffectBinding 与实际 Observation 投影为 KEY/SUPPORTING、FOUND/NOT_FOUND/UNAVAILABLE，但不能重算 Verification。
@@ -49,7 +58,7 @@ CLI JSON evidence 命令与 API evidence index 比较的是已发布索引；完
 
 ## LocalControl 与 ServeLock
 
-loopback 不等于自动可信。API 先校验实际 Host；GUI 根页面取得当前服务进程签发的 HttpOnly、SameSite=Strict control session；全部 `/api` 请求要求该会话，写请求再要求 Origin 与控制面 origin 完全一致。代理头不能改变授权 Host，测试 header 不能变成生产旁路。
+loopback 不等于自动可信。API 先校验实际 Host；GUI 根页面取得当前服务进程签发的 HttpOnly、SameSite=Strict control session；全部 `/api` 请求要求该会话，写请求再要求 Origin 与控制面 origin 完全一致。MCP 使用独立 Bearer 与 SDK Host/Origin 防护。代理头不能改变授权 Host，测试 header 不能变成生产旁路。
 
 GUI serve 与会创建 ApplicationCore 的 CLI 命令共享 `ServeLock`。同一 VarDir 已有控制者时，第二入口在创建 ApplicationCore 前返回 `WORKSPACE_ALREADY_CONTROLLED`。锁文件是所有权记录，不是 daemon 或 IPC；持有者仍存活时不能靠删除文件绕过，进程正常/异常退出后必须可重新获取。
 
@@ -65,11 +74,12 @@ GUI serve 与会创建 ApplicationCore 的 CLI 命令共享 `ServeLock`。同一
 | --- | --- |
 | ProductStatus | `product/backend/workflows/control.py` |
 | API envelope 与 LocalControl | `product/backend/api/envelope.py`、`product/backend/api/local_control.py` |
+| MCP transport、工具与授权 | `product/backend/api/mcp.py`、`product/backend/workflows/mcp_access.py` |
 | CLI 命令与 Machine renderer | `product/backend/cli/app.py`、`product/backend/cli/presentation.py`、`product/backend/cli/commands/control.py` |
 | ResultPresentation/History | `product/backend/workflows/results/presentation.py`、`product/backend/workflows/results/history.py` |
 | ServeLock 与 CLI bootstrap | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` |
 | GUI API/控制壳 | `product/frontend/src/api/`、`product/frontend/src/app/` |
-| 直接测试 | `tests/backend/cli/test_control.py`、`tests/backend/api/test_control_plane.py`、对应前端测试 |
+| 直接测试 | `tests/backend/cli/test_control.py`、`tests/backend/api/test_control_plane.py`、`tests/backend/api/test_mcp.py`、对应前端测试 |
 
 ## 版本边界
 

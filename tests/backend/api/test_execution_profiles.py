@@ -1,4 +1,4 @@
-# 验证 Execution Profile API 的摘要、绑定与重新注册边界。
+# 验证执行配置 API 只保留自动生成配置的只读摘要与绑定查询。
 
 from __future__ import annotations
 import json
@@ -72,12 +72,19 @@ def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionCo
 def _register_active_profile(app, client: TestClient, profile_path: Path) -> tuple[dict[str, object], PermissionContract, dict[str, object]]:
     project = _register_project(app, profile_path)
     contract = _activate_contract(app, str(project["project_id"]), profile_path)
-    response = client.post(
-        "/api/execution-profiles",
-        json={"schema_version": "1", "profile_path": str(profile_path)},
-    )
-    assert response.status_code == 201, response.text
-    return project, contract, response.json()["data"]
+    profile = app.state.context.execution.register(profile_path)
+    return project, contract, profile.model_dump(mode="json")
+
+
+def test_manual_execution_profile_registration_api_is_removed(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "var", start_worker=False)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/execution-profiles",
+            json={"schema_version": "1", "profile_path": "manual-profile.json"},
+        )
+
+    assert response.status_code == 404
 
 def test_execution_profile_summary_exposes_only_user_confirmable_workflow_and_effect_facts(
     tmp_path: Path,

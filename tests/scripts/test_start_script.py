@@ -62,6 +62,17 @@ def test_source_receipt_requires_editable_repository_shared_build_and_instance_f
     assert runtime.index("Prepare-Database") < runtime.index("Write-SourceReceipt")
 
 
+def test_development_shell_explains_commands_and_supports_quit_alias() -> None:
+    source = _text(ROOT / "scripts" / "dev" / "commands.ps1")
+    shell = source[source.index("function Invoke-DevelopmentShell") :]
+
+    assert "function quit { exit }" in shell
+    assert "界鉴命令以 jiejian 开头" in shell
+    assert "输入 jiejian --help 查看命令" in shell
+    assert "输入 exit 退出命令行" in shell
+    assert "Write-Host '已进入界鉴开发环境" not in shell
+
+
 def test_source_receipt_follows_current_relocated_repository(tmp_path: Path) -> None:
     project_root = (tmp_path / "relocated-repository").resolve()
     var_dir = (tmp_path / "runtime-var").resolve()

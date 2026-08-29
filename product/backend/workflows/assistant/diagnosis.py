@@ -53,6 +53,7 @@ class ErrorArea(StrEnum):
 
 class ErrorPhase(StrEnum):
     APPLICATION_CONNECTION = "APPLICATION_CONNECTION"
+    APPLICATION_MAINTENANCE = "APPLICATION_MAINTENANCE"
     IDENTITY_PREPARATION = "IDENTITY_PREPARATION"
     RECORDING = "RECORDING"
     PERMISSION_PREPARATION = "PERMISSION_PREPARATION"
@@ -78,6 +79,7 @@ class ErrorIntervention(StrEnum):
 
 class RecoveryAction(StrEnum):
     CONFIRM_APPLICATION = "CONFIRM_APPLICATION"
+    FINISH_ACTIVE_TASKS = "FINISH_ACTIVE_TASKS"
     RELOGIN = "RELOGIN"
     REVIEW_RECORDING = "REVIEW_RECORDING"
     REVIEW_PERMISSION_SETUP = "REVIEW_PERMISSION_SETUP"
@@ -192,6 +194,15 @@ _EXACT_PRESENTATIONS: dict[str, _Presentation] = {
     ErrorCode.RECORD_SESSION_EXPIRED.value: _SESSION_EXPIRED,
     ErrorCode.OBSERVER_INCOMPLETE.value: _OBSERVER_INCOMPLETE,
     "REQUIRED_OBSERVER_INCOMPLETE": _OBSERVER_INCOMPLETE,
+    ErrorCode.PROJECT_ARCHIVE_CONFLICT.value: _presentation(
+        ErrorArea.APPLICATION,
+        ErrorPhase.APPLICATION_MAINTENANCE,
+        ErrorIntervention.USER_ACTION,
+        RecoveryAction.FINISH_ACTIVE_TASKS,
+        "/check",
+        "当前应用仍有任务在进行",
+        "请先结束当前检查、录制或后台任务，确认它们停止后再移除应用。",
+    ),
     ErrorCode.IDENTITY_PREPARATION_FAILED.value: _presentation(
         ErrorArea.IDENTITY,
         ErrorPhase.IDENTITY_PREPARATION,

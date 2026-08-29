@@ -70,7 +70,7 @@ Storage 不重算权限、安全效果、Verdict、Finding 身份或 Report 语�
 - publication 只接受当前 attempt/fencing 的 staging；过期租约、重复完成和孤儿文件不能覆盖已发布事实。
 - Evidence/Report 发布后不可变；修复派生结果要形成幂等重算或新 publication，不原地修改语义文件。
 - 运行数据只进 `var/`，源码树不出现数据库、日志、Evidence、Report、缓存或生成 artifact。
-- 删除/清理先区分可重建缓存、测试 runtime 与产品数据；普通 cache clean 不触碰 `var/data`。
+- 删除/清理先区分 AI 辅助缓存、历史日志、临时 runtime 与产品数据；LocalMaintenance 不触碰 `var/data`。
 
 ## 直接验证
 

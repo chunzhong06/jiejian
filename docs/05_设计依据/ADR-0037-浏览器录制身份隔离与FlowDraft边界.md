@@ -12,7 +12,7 @@
 
 Recording Runner 每次只执行一次录制或回放；每个 identity 使用独立的非持久 BrowserContext，不跨身份共享 Cookie、localStorage 或 sessionStorage。请求、响应、WebSocket、错误和事件在写盘前限长、脱敏并形成有界摘要；原始 trace、storage state 和秘密不发布。
 
-普通录制入口只接受当前项目的 `action_candidate_id`、一个已准备 `test_identity_id` 和时长。后端通过 ApplicationCore 读取已确认 action、endpoint 与 TestIdentity 非秘密元数据，不接受 GUI 提供 Profile 路径、目标范围或 headless 开关。产品录制固定使用有头 Chromium；TestIdentity 的精确 SecretStore 引用只在主进程内解析为本次短期环境引用，Recording Runner 在独立 BrowserContext 中恢复 Cookie 或 Bearer。高级 Profile 录制若保留，也必须调用同一应用服务和编译链。
+普通录制入口只接受当前项目的 `action_candidate_id`、一个已准备 `test_identity_id` 和时长。后端通过 ApplicationCore 读取已确认 action、endpoint 与 TestIdentity 非秘密元数据，不接受 GUI 提供执行配置路径、目标范围或 headless 开关。产品录制固定使用有头 Chromium；TestIdentity 的精确 SecretStore 引用只在主进程内解析为本次短期环境引用，Recording Runner 在独立 BrowserContext 中恢复 Cookie 或 Bearer。所有录制入口调用同一应用服务和编译链。
 
 录制分为“准备浏览器、等待明确开始、采集中、停止并生成”四个用户阶段。现有持久状态 `STARTING` 覆盖准备与等待，用户明确开始后才进入 `RECORDING`；更细阶段由当前 attempt 的 ready/start/stop 控制事实确定性投影，不新增持久生命周期枚举。开始采集和停止生成是独立控制动作：停止保留已经采集的事件并进入 `PROCESSING`、`PENDING_REVIEW` 与 `FlowDraft`；取消走既有 Job 取消边界、丢弃本次录制并进入 `CANCELLED`。
 

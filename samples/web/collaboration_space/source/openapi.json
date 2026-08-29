@@ -1,10 +1,9 @@
 {
   "openapi": "3.1.0",
-  "x-roles": [
-    "PROJECT_OWNER",
-    "MEMBER",
-    "EXTERNAL_VISITOR"
-  ],
+  "x-roles": {
+    "PROJECT_OWNER": "项目负责人",
+    "MEMBER": "普通成员"
+  },
   "info": {
     "title": "协作空间项目资料管理 API",
     "description": "校园数字展馆的项目成员、资料与完整资料包导出接口。",

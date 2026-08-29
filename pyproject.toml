@@ -12,6 +12,7 @@ dependencies = [
     "alembic>=1.14,<2",
     "fastapi>=0.115,<1",
     "httpx>=0.27,<1",
+    "mcp>=2,<3",
     "playwright>=1.61,<1.62",
     "pydantic>=2.10,<3",
     "pyyaml>=6.0,<7",

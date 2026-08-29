@@ -71,7 +71,7 @@ Portable 第一次启动在 release root 内创建自己的 `var/`，其中 data
 [6/6] 文件等价与 SHA256
 ```
 
-每个阶段立即刷新；依赖安装使用 build 下任务拥有的 TEMP/TMP，失败保留所属阶段。正式验收把两个 ZIP 分别解压到仓库外中文空格路径，最好断网启动到 Workbench，检查 full/nosamples Sample 差异、1.0.0、正式 shutdown 和端口/进程/锁收口。
+每个阶段立即刷新；依赖安装使用 build 下任务拥有的 TEMP/TMP，失败保留所属阶段。正式验收把两个 ZIP 分别解压到仓库外中文空格路径，最好断网启动到 Workbench，检查 full/nosamples Sample 差异、1.0.1、正式 shutdown 和端口/进程/锁收口。
 
 ## 查询入口
 

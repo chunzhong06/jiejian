@@ -7,18 +7,12 @@ import time
 from pathlib import Path
 from threading import Thread
 
-import httpx
 import pytest
 
 from samples.web.collaboration_space.source.server import (
     create_collaboration_space_server,
 )
-from samples.web.collaboration_space.source.storage import (
-    PROJECT_ID as SAMPLE_PROJECT_ID,
-    RESOURCE_ID,
-)
 from tests.fixtures.collaboration_golden import (
-    COOKIE_NAME,
     InMemorySecretStore,
     prepare_formal_project,
     reachable_discovery,
@@ -126,12 +120,6 @@ def test_three_state_golden_uses_real_sample_observers_and_published_results(
                 # 再原子切换只读行为控制文件，不给业务属性增加测试 setter。
                 sample.reset()
                 sample._write_control(authorization_order, blob_observation)
-                _assert_eve_boundary(
-                    endpoint,
-                    credentials["session_material"]["eve"],
-                    credentials["task_bearer"],
-                    marker=f"collaboration-eve-{variant}",
-                )
                 compiled = client.post(
                     f"/api/projects/{setup['project_id']}/security-setup/compile",
                     json={"schema_version": "1", "actor": "协作空间 Golden 验收"},
@@ -383,36 +371,6 @@ def _load_evidence(client: TestClient, run_id: str) -> list[dict[str, object]]:
         assert detail.status_code == 200, detail.text
         documents.append(detail.json()["data"])
     return documents
-
-
-def _assert_eve_boundary(
-    endpoint: str,
-    session: str,
-    task_bearer: str,
-    *,
-    marker: str,
-) -> None:
-    """以 Eve 真实会话触发拒绝，再用受控只读凭据确认未创建后台任务。"""
-
-    with httpx.Client(
-        base_url=endpoint,
-        cookies={COOKIE_NAME: session},
-        follow_redirects=False,
-        trust_env=False,
-    ) as client:
-        assert client.get(f"/api/projects/{SAMPLE_PROJECT_ID}").status_code == 403
-        denied = client.post(
-            f"/api/projects/{SAMPLE_PROJECT_ID}/exports",
-            headers={"X-Jiejian-Case-ID": marker},
-            json={"resource_id": RESOURCE_ID},
-        )
-        assert denied.status_code == 403
-        task = client.get(
-            f"/api/tasks/{marker}",
-            headers={"Authorization": f"Bearer {task_bearer}"},
-        )
-        assert task.status_code == 200
-        assert task.json()["state"] == "NOT_CREATED"
 
 
 def _assert_sample_recovered(sample, case_ids: set[str]) -> None:

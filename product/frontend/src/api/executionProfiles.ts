@@ -42,11 +42,6 @@ export type ExecutionProfileSummaryDto = {
 }
 
 export const executionProfilesApi = {
-  register: (path: string) =>
-    request<ExecutionProfileDto>('/api/execution-profiles', {
-      method: 'POST',
-      body: JSON.stringify({ schema_version: '1', profile_path: path }),
-    }),
   profiles: (projectId: string) =>
     request<ExecutionProfileDto[]>(`/api/projects/${encodeURIComponent(projectId)}/execution-profiles`),
   contract: (projectId: string, profileId: string) =>

@@ -21,6 +21,7 @@ import {
   type TestIdentityDto,
 } from '../../api/testIdentities'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
+import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { AdvancedDetails } from '../../components/AdvancedDetails'
 import './identities.css'
@@ -157,6 +158,7 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
 
   return <div className="identity-page">
     <PageTaskHeader title="测试账号" description="为已确认的权限组准备真实测试账号；登录在独立窗口中完成，界鉴不会保存密码。" status={preparation ? preparationStatus(preparation) : `${preparedCount} 个账号已准备`} />
+    <AssistantPanel projectId={project.project_id} surface="identity-preparation" title="测试账号准备顺序" actionLabel="AI 帮我安排准备顺序" />
     <Card className="identity-overview" title="准备测试账号">
       <Typography.Paragraph>点击“打开登录浏览器”后，请在独立窗口中自行完成密码、单点登录或多因素认证。只有你明确确认后，界鉴才保存当前应用需要的有限登录状态。</Typography.Paragraph>
       <Alert type="info" showIcon message="建议每个权限组至少准备一个账号" description="缺少账号的权限组不会被自动检查，也不会被当作检查通过；检查同一权限组内不同用户的资源时，可能还需要第二个账号。" />

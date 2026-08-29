@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Checkbox, Collapse, Drawer, Form, Input, InputNumber, List, Select, Space, Switch, Tag } from 'antd'
 import { llmApi, type AIAssistanceSettings, type LLMModelCatalog, type LLMProfile, type LLMProfileWrite, type LLMProvider } from '../../api/llm'
 import { ApiError } from '../../api/http'
+import MCPAccessCard from './MCPAccessCard'
 
 const providerOptions: { label: string; value: LLMProvider }[] = [
   { label: 'OpenAI', value: 'openai' },
@@ -25,10 +26,11 @@ function statusLabel(profile: LLMProfile | undefined): string {
 }
 
 export function LLMSettingsDrawer({
-  open, profiles, aiSettings, onClose, onChanged, onSettingsChanged, onError,
+  open, profiles, projects = [], aiSettings, onClose, onChanged, onSettingsChanged, onError,
 }: {
   open: boolean
   profiles: LLMProfile[]
+  projects?: { project_id: string; name?: string }[]
   aiSettings?: AIAssistanceSettings
   onClose: () => void
   onChanged: (profiles: LLMProfile[]) => void
@@ -220,6 +222,7 @@ export function LLMSettingsDrawer({
     <Form className="llm-settings-form" form={form} layout="vertical" onFinish={save}>
       <div className="llm-settings-stack">
         <Alert type="info" showIcon message="AI 只在系统确定事实之上提供辅助，不能决定权限要求或检查结论。" />
+        <MCPAccessCard open={open} projects={projects} onError={onError} />
         {!advancedOpen && <Card size="small" title="普通设置">
           <div className="llm-settings-section">
             <div className="llm-settings-toggle-row"><Switch checked={enabled} onChange={(value) => void toggle(value)} /><span>AI 辅助</span></div>

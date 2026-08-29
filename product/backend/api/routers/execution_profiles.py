@@ -1,8 +1,6 @@
-# Permission Execution Profile API；只适配请求并调用共享 execution 应用服务。
+# 执行配置只读 API；只适配请求并调用共享 execution 应用服务。
 
 from __future__ import annotations
-
-from pathlib import Path
 
 from fastapi import APIRouter
 
@@ -13,18 +11,6 @@ from product.backend.api.envelope import ApiResponse
 
 def build_execution_profiles_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
-
-    @router.post(
-        "/api/execution-profiles",
-        response_model=ApiResponse,
-        status_code=201,
-    )
-    async def register_profile(body: ExecutionProfileCreateRequest):
-        record = context.execution.register(
-            Path(body.profile_path),
-            accept_source_changes=body.accept_source_changes,
-        )
-        return data_response(record.model_dump(mode="json"), status_code=201)
 
     @router.get(
         "/api/projects/{project_id}/execution-profiles",
@@ -94,18 +80,3 @@ def build_execution_profiles_router(context: ApplicationCore) -> APIRouter:
         )
 
     return router
-
-"""Permission Execution Profile 控制面请求 DTO。"""
-
-from pathlib import Path
-from typing import Literal
-
-from pydantic import Field
-
-from product.backend.api.envelope import ApiModel
-
-
-class ExecutionProfileCreateRequest(ApiModel):
-    schema_version: Literal["1"]
-    profile_path: str = Field(min_length=1, max_length=2048)
-    accept_source_changes: bool = False

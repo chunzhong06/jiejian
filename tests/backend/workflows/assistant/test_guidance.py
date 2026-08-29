@@ -1,40 +1,19 @@
 # 验证确定性 Guidance 的 runnable 范围、阻断层级与 fingerprint。
 
 from __future__ import annotations
-import json
-import threading
-from concurrent.futures import ThreadPoolExecutor
-import pytest
-from product.backend.core.errors import ErrorCode, JiejianError
+
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.infra.llm.adapters.base import LLMInvokeResult, LLMTransportError
-from product.backend.infra.llm.config import AIAssistanceSettings, LLMProviderType
-from product.backend.infra.storage import ExecutionProfileRecord, ProjectRecord
 from product.backend.workflows.assistant import (
-    ASSISTANT_TEMPLATES,
-    AssistantFactField,
-    AssistantTemplateId,
-    ErrorArea,
-    ErrorDiagnosisContext,
-    ErrorPhase,
     GuidanceOptionKind,
     GuidancePriorityTier,
     build_guidance_snapshot,
-    build_template_input,
-    diagnose_error,
-    parse_assistant_result,
-    render_assistant_prompt,
 )
-from product.backend.workflows.assistant.service import AssistantService, AssistantStatus
-from product.backend.workflows.context import ApplicationCore
-from product.backend.workflows.projects.readiness import ProjectReadinessService, ProjectReadinessView
+from product.backend.workflows.projects.readiness import ProjectReadinessView
 from product.backend.workflows.security_setup.checks import (
     CheckPreview,
     CheckPreviewAction,
     CheckPreviewGap,
 )
-from product.protocols import TargetType
-from product.protocols.runner import CleanupIssueCode, RunnerFailurePhase
 
 def _guidance_readiness(
     *,

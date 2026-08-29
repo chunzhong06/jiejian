@@ -33,10 +33,8 @@ def test_generated_observer_sas_matches_blob_and_queue_contracts(
     opaque_names = {
         "JIEJIAN_SAMPLE_ALICE_PASSWORD",
         "JIEJIAN_SAMPLE_BOB_PASSWORD",
-        "JIEJIAN_SAMPLE_EVE_PASSWORD",
         "JIEJIAN_SAMPLE_ALICE_SESSION",
         "JIEJIAN_SAMPLE_BOB_SESSION",
-        "JIEJIAN_SAMPLE_EVE_SESSION",
         "JIEJIAN_SAMPLE_TASK_BEARER",
         "JIEJIAN_SAMPLE_OWNER_OBSERVER",
     }
@@ -153,10 +151,10 @@ def test_official_sample_runs_from_copied_source_with_dynamic_port_and_no_secret
     try:
         assert runtime.experience_id.startswith("exp_")
         assert runtime.source_root == (
-            var_dir / "data" / "official-samples" / runtime.experience_id / "source"
+            var_dir / "runtime" / "official-samples" / runtime.experience_id / "source"
         ).resolve()
         assert runtime.runtime_root == (
-            var_dir / "runtime" / "official-samples" / runtime.experience_id
+            var_dir / "runtime" / "official-samples" / runtime.experience_id / "state"
         ).resolve()
         assert runtime.origin.startswith("http://127.0.0.1:")
         assert not runtime.origin.endswith(":8865")
@@ -191,6 +189,9 @@ def test_official_sample_runs_from_copied_source_with_dynamic_port_and_no_secret
     finally:
         manager.stop(runtime.experience_id)
     assert manager.active is None
+    assert not runtime.experience_root.exists()
+    assert runtime.log_path.is_file()
+    assert runtime.secrets == {}
 
 
 def test_behavior_switch_keeps_origin_and_source_but_resets_sample_state(

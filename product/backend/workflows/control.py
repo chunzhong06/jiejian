@@ -217,11 +217,7 @@ class ProductStatusService:
 
 
 def _readiness_route(readiness: ProjectReadinessView | None) -> str:
-    if (
-        readiness is None
-        or readiness.endpoint_status == "LEGACY_PROFILE"
-        or readiness.source_analysis_status == "LEGACY_PROFILE"
-    ):
+    if readiness is None:
         return "/application"
     if readiness.next_required_action in {
         "CONNECT_APPLICATION",

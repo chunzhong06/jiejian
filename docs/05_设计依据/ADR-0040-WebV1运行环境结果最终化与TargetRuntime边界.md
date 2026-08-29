@@ -28,9 +28,9 @@
 
 `RuntimePaths` 只生成当前产品 `VarDir` 的路径：`data` 保存数据库、Job、项目、报告和其他不可重建事实，`runtime` 保存当前实例的前端副本、Worker 与锁，`cache/assistant` 保存可删除的产品 AI 辅助缓存，`logs`、`temp`、`test` 分别保存诊断、短期运行物和测试物。跨实例复用的 uv、Node、pnpm、Playwright、uv-managed Python、前端依赖/build、开发缓存、prepare lock 与 release 工作区全部从仓库唯一 `var/development` 派生，不属于 `RuntimePaths`，也不进入普通产品缓存维护。
 
-### 5. 缓存维护与数据重置分离
+### 5. 本地运行数据维护与数据重置分离
 
-自动回收和 `cache status/prune/clean` 只能处理 `var/cache` 中的可重建内容；`runtime repair` 负责可证明损坏的前端工作区和其他运行时。它们都不得触碰 `var/data`、健康运行时、活锁、Evidence、报告或凭据。删除整个 `var` 表示从零重建仓库本地运行态，不删除全局项目 Conda 环境。GUI、CLI 和 API 复用 ApplicationCore 下同一缓存维护服务，破坏性操作先预览并确认；`data reset` 不进入缓存入口。
+`LocalMaintenanceService` 只处理 AI 辅助缓存、历史运行日志、临时运行文件和可证明损坏的运行时。自动日志保留按每类最近 20 份且最长 14 天执行；手工日志清理保护当前 serve 会话，临时清理保护当前 Worker、Recording、Identity、Sample 与 ServeLock 路径。`clear-all` 不触发运行时修复，也不得触碰 `var/data`、`var/development`、Evidence、报告或凭据。GUI、CLI 和 API 复用 ApplicationCore 下同一服务，写操作先预览再确认；数据重置不进入该入口。
 
 完整缓存统计和预算 prune 只在用户查看状态或显式维护时执行，不属于普通启动。应用完成必要恢复、结果最终化和 Worker 启动后即可对外 ready，再由生命周期持有的后台任务清理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留。按需维护用一个目录快照同时得到字节数、文件数、预算和递归 partial 候选；只有外部 prune 实际改变目录后才再扫描一次。无安全、并发或身份消费者的 cache digest 不计算。启动维护失败只记录诊断，不反向改变服务可用状态。
 
@@ -56,7 +56,7 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ## 影响
 
-新增源码准备入口、可选打包边界、RuntimePaths、缓存维护服务、进程树控制器、ResultFinalizer、派生持久状态、Target Runtime Port/Registry、独立应用与 Worker 容器。RunLifecycle、Report、Artifact 状态和 Web wire 类型收敛到当前唯一格式。现有 PermissionContract、Coverage、差分孪生、Baseline Integrity、Temporal Closure、SecurityEffectFact 与 PASS/BLOCK/INCONCLUSIVE 规则保持不变。
+新增源码准备入口、可选打包边界、RuntimePaths、本地运行数据维护服务、进程树控制器、ResultFinalizer、派生持久状态、Target Runtime Port/Registry、独立应用与 Worker 容器。RunLifecycle、Report、Artifact 状态和 Web wire 类型收敛到当前唯一格式。现有 PermissionContract、Coverage、差分孪生、Baseline Integrity、Temporal Closure、SecurityEffectFact 与 PASS/BLOCK/INCONCLUSIVE 规则保持不变。
 
 ## 迁移与兼容
 

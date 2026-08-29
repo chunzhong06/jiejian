@@ -2,10 +2,10 @@
 # Web V1 CLI 组合入口
 #
 # 定位
-#   装配与 GUI 同步的普通任务命令树，并隔离仍有真实消费者的高级维护入口。
+#   装配与 GUI 同步的普通任务命令树和本地维护入口。
 #
 # 职责
-#   解析全局展示参数｜注册普通/高级命令｜统一运行环境失败出口
+#   解析全局展示参数｜注册产品命令｜统一运行环境失败出口
 #
 # 边界
 #   命令入口不承载业务实现，不建立第二个 ApplicationCore 或后台 daemon。
@@ -21,19 +21,7 @@ import typer
 
 from product.backend import __version__
 from product.backend.cli.bootstrap import CliOptions
-from product.backend.cli.commands.contracts import (
-    contract_assessment_command,
-    contract_derive_command,
-    contract_diff_command,
-    contract_draft_command,
-    contract_drift_command,
-    contract_history_command,
-    contract_requirement_add_command,
-    contract_revise_command,
-    contract_transition_command,
-    contract_validate_command,
-    contract_workspace_command,
-)
+from product.backend.cli.localization import configure_cli_localization
 from product.backend.cli.commands.control import (
     account_cancel_command,
     account_confirm_command,
@@ -79,31 +67,21 @@ from product.backend.cli.commands.control import (
     settings_test_command,
     status_command,
 )
-from product.backend.cli.commands.gating import (
-    baseline_accept_command,
-    gate_evaluate_command,
-    gate_result_command,
-)
-from product.backend.cli.commands.projects import project_validate_command
-from product.backend.cli.commands.recordings import (
-    recording_finalize_command,
-    recording_replay_command,
-    recording_review_command,
-    recording_start_command,
-    recording_status_command,
-)
-from product.backend.cli.commands.runs import run_command
 from product.backend.cli.commands.system import (
-    cache_clean_command,
-    cache_status_command,
     doctor_command,
-    runtime_repair_command,
+    maintenance_clean_all_command,
+    maintenance_clean_assistant_command,
+    maintenance_clean_logs_command,
+    maintenance_clean_temporary_command,
+    maintenance_repair_command,
     serve_command,
 )
 from product.backend.cli.presentation import configure_presentation
 from product.backend.core.errors import JiejianError
 from product.backend.infra.runtime.process.identity import require_python_environment
 
+
+configure_cli_localization()
 
 app = typer.Typer(
     name="jiejian",
@@ -122,14 +100,7 @@ history_group = typer.Typer(help="查看同一应用的历史变化", invoke_wit
 settings_group = typer.Typer(help="查看和测试模型辅助设置", invoke_without_command=True)
 system_group = typer.Typer(help="检查运行环境和执行显式维护", invoke_without_command=True)
 
-cache_group = typer.Typer(help="查看和清理可重建缓存", invoke_without_command=True)
-runtime_group = typer.Typer(help="查看和修复运行时", invoke_without_command=True)
-advanced_group = typer.Typer(help="旧配置与高级治理维护", invoke_without_command=True)
-advanced_project_group = typer.Typer(help="离线校验旧执行配置", invoke_without_command=True)
-advanced_contract_group = typer.Typer(help="治理高级权限契约", invoke_without_command=True)
-advanced_recording_group = typer.Typer(help="运行旧 Profile 录制入口", invoke_without_command=True)
-advanced_baseline_group = typer.Typer(help="管理回归基线", invoke_without_command=True)
-advanced_gate_group = typer.Typer(help="评估交付门禁", invoke_without_command=True)
+clean_group = typer.Typer(help="清理本地可删除内容", invoke_without_command=True)
 
 
 def _version_callback(value: bool) -> None:
@@ -195,14 +166,7 @@ for group in (
     history_group,
     settings_group,
     system_group,
-    cache_group,
-    runtime_group,
-    advanced_group,
-    advanced_project_group,
-    advanced_contract_group,
-    advanced_recording_group,
-    advanced_baseline_group,
-    advanced_gate_group,
+    clean_group,
 ):
     group.callback()(_group_help)
 
@@ -264,41 +228,13 @@ history_group.command("show")(history_show_command)
 settings_group.command("show")(settings_show_command)
 settings_group.command("test")(settings_test_command)
 
-system_group.add_typer(cache_group, name="cache")
-system_group.add_typer(runtime_group, name="runtime")
-system_group.add_typer(advanced_group, name="advanced", rich_help_panel="高级")
+system_group.add_typer(clean_group, name="clean")
 system_group.command("doctor")(doctor_command)
-cache_group.command("status")(cache_status_command)
-cache_group.command("clean")(cache_clean_command)
-runtime_group.command("repair")(runtime_repair_command)
-
-advanced_group.add_typer(advanced_project_group, name="project")
-advanced_group.add_typer(advanced_contract_group, name="contract")
-advanced_group.add_typer(advanced_recording_group, name="recording")
-advanced_group.add_typer(advanced_baseline_group, name="baseline")
-advanced_group.add_typer(advanced_gate_group, name="gate")
-advanced_group.command("run-profile")(run_command)
-advanced_project_group.command("validate")(project_validate_command)
-advanced_contract_group.command("validate")(contract_validate_command)
-advanced_contract_group.command("workspace")(contract_workspace_command)
-advanced_contract_group.command("requirement-add")(contract_requirement_add_command)
-advanced_contract_group.command("derive")(contract_derive_command)
-advanced_contract_group.command("draft")(contract_draft_command)
-advanced_contract_group.command("revise")(contract_revise_command)
-advanced_contract_group.command("transition")(contract_transition_command)
-advanced_contract_group.command("assessment")(contract_assessment_command)
-advanced_contract_group.command("diff")(contract_diff_command)
-advanced_contract_group.command("drift")(contract_drift_command)
-advanced_contract_group.command("history")(contract_history_command)
-advanced_recording_group.command("start")(recording_start_command)
-advanced_recording_group.command("status")(recording_status_command)
-advanced_recording_group.command("review")(recording_review_command)
-advanced_recording_group.command("finalize")(recording_finalize_command)
-advanced_recording_group.command("replay")(recording_replay_command)
-advanced_baseline_group.command("accept")(baseline_accept_command)
-advanced_gate_group.command("evaluate")(gate_evaluate_command)
-advanced_gate_group.command("result")(gate_result_command)
-
+system_group.command("repair")(maintenance_repair_command)
+clean_group.command("assistant")(maintenance_clean_assistant_command)
+clean_group.command("logs")(maintenance_clean_logs_command)
+clean_group.command("temporary")(maintenance_clean_temporary_command)
+clean_group.command("all")(maintenance_clean_all_command)
 
 def main() -> None:
     if "doctor" not in sys.argv[1:] and "--version" not in sys.argv[1:]:

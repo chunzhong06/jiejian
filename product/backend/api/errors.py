@@ -62,7 +62,10 @@ def _status_for(code: str) -> int:
         ErrorCode.APPLICATION_ANALYSIS_BUDGET.value,
     }:
         return 413
-    if code == ErrorCode.LLM_AUTH_FAILED.value:
+    if code in {
+        ErrorCode.LLM_AUTH_FAILED.value,
+        ErrorCode.MCP_AUTH_REQUIRED.value,
+    }:
         return 401
     if code == ErrorCode.LLM_RATE_LIMITED.value:
         return 429
@@ -70,8 +73,13 @@ def _status_for(code: str) -> int:
         return 504
     if code == ErrorCode.LLM_INVALID_RESPONSE.value:
         return 502
-    if code == ErrorCode.API_CONTROL_REJECTED.value:
+    if code in {
+        ErrorCode.API_CONTROL_REJECTED.value,
+        ErrorCode.MCP_PERMISSION_REQUIRED.value,
+    }:
         return 403
+    if code == ErrorCode.MCP_DISABLED.value:
+        return 409
     return 400
 
 

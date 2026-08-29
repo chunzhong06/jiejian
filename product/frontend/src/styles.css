@@ -96,6 +96,9 @@ body { color: var(--color-text); background: var(--color-bg); overflow-x: hidden
 .workbench-sample-entry h3 { margin: 4px 0 8px; }
 .workbench-system-link { margin-left: -15px; }
 .assistant-assistance-card { border-top: 3px solid var(--color-ai); }
+.assistant-panel { border: 1px solid color-mix(in srgb, var(--color-ai) 32%, var(--color-border)); border-top: 3px solid var(--color-ai); border-radius: 8px; background: var(--color-surface); padding: 16px; }
+.assistant-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.assistant-panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
 .assistant-label { color: var(--color-ai); }
 .llm-settings-stack, .llm-settings-section, .llm-settings-fields { display: grid; gap: var(--space-16); }
 .llm-settings-form .ant-form-item { margin-bottom: 0; min-width: 0; }

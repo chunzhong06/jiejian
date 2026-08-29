@@ -75,8 +75,8 @@ class ProjectReadinessView(ReadinessModel):
     project_id: str = Field(min_length=1, max_length=64)
     project_status: ProjectStatus
     application_connected: bool
-    endpoint_status: Literal["NEEDS_CONNECTION", "NEEDS_CONFIRMATION", "CONFIRMED", "UNAVAILABLE", "LEGACY_PROFILE"]
-    source_analysis_status: Literal["NOT_AVAILABLE", "NOT_AUTHORIZED", "PENDING", "COMPLETED", "STALE", "LEGACY_PROFILE"]
+    endpoint_status: Literal["NEEDS_CONNECTION", "NEEDS_CONFIRMATION", "CONFIRMED", "UNAVAILABLE"]
+    source_analysis_status: Literal["NOT_AVAILABLE", "NOT_AUTHORIZED", "PENDING", "COMPLETED", "STALE"]
     discovered_role_count: int = Field(ge=0)
     confirmed_role_count: int = Field(ge=0)
     discovered_action_count: int = Field(ge=0)
@@ -245,13 +245,12 @@ class ProjectReadinessService:
                 next_required_action=next_action,
             )
 
-        legacy_connected = project.status is ProjectStatus.READY
         return ProjectReadinessView(
             project_id=project.project_id,
             project_status=project.status,
-            application_connected=legacy_connected,
-            endpoint_status=("LEGACY_PROFILE" if legacy_connected else "NEEDS_CONNECTION"),
-            source_analysis_status=("LEGACY_PROFILE" if execution_profile_available else "NOT_AVAILABLE"),
+            application_connected=False,
+            endpoint_status="NEEDS_CONNECTION",
+            source_analysis_status="NOT_AVAILABLE",
             discovered_role_count=0,
             confirmed_role_count=0,
             discovered_action_count=0,
@@ -259,23 +258,11 @@ class ProjectReadinessService:
             execution_profile_available=execution_profile_available,
             completed_flow_available=completed_flow_available,
             active_contract_available=active_contract_available,
-            current_scope_runnable=(
-                active_contract_available and execution_profile_available
-            ),
-            remaining_gap_count=(
-                0
-                if active_contract_available and execution_profile_available
-                else 1
-            ),
+            current_scope_runnable=False,
+            remaining_gap_count=1,
             active_tasks=active_tasks,
             latest_verified_run_id=latest_verified_run_id,
-            next_required_action=self._next_action(
-                project.status,
-                execution_profile_available=execution_profile_available,
-                completed_flow_available=completed_flow_available,
-                active_contract_available=active_contract_available,
-                latest_verified_run_id=latest_verified_run_id,
-            ),
+            next_required_action="CONNECT_APPLICATION",
         )
 
     def _permission_actions(

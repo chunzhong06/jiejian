@@ -1,39 +1,14 @@
 # 验证 Assistant diagnosis 的结构化阶段与 cleanup 附加语义。
 
 from __future__ import annotations
-import json
-import threading
-from concurrent.futures import ThreadPoolExecutor
-import pytest
-from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.lifecycle import ProjectStatus
-from product.backend.infra.llm.adapters.base import LLMInvokeResult, LLMTransportError
-from product.backend.infra.llm.config import AIAssistanceSettings, LLMProviderType
-from product.backend.infra.storage import ExecutionProfileRecord, ProjectRecord
+
+from product.backend.core.errors import ErrorCode
 from product.backend.workflows.assistant import (
-    ASSISTANT_TEMPLATES,
-    AssistantFactField,
-    AssistantTemplateId,
     ErrorArea,
     ErrorDiagnosisContext,
     ErrorPhase,
-    GuidanceOptionKind,
-    GuidancePriorityTier,
-    build_guidance_snapshot,
-    build_template_input,
     diagnose_error,
-    parse_assistant_result,
-    render_assistant_prompt,
 )
-from product.backend.workflows.assistant.service import AssistantService, AssistantStatus
-from product.backend.workflows.context import ApplicationCore
-from product.backend.workflows.projects.readiness import ProjectReadinessService, ProjectReadinessView
-from product.backend.workflows.security_setup.checks import (
-    CheckPreview,
-    CheckPreviewAction,
-    CheckPreviewGap,
-)
-from product.protocols import TargetType
 from product.protocols.runner import CleanupIssueCode, RunnerFailurePhase
 
 def test_error_diagnosis_uses_structured_phase_and_keeps_cleanup_additive() -> None:
@@ -62,3 +37,16 @@ def test_error_diagnosis_uses_structured_phase_and_keeps_cleanup_additive() -> N
     assert self_target.route == "/application"
     assert expired.recovery_action.value == "RELOGIN"
     assert observer.recovery_action.value == "CONFIRM_REAL_RESULT"
+
+
+def test_project_archive_conflict_has_specific_chinese_recovery() -> None:
+    diagnosis = diagnose_error(
+        ErrorDiagnosisContext(error_code=ErrorCode.PROJECT_ARCHIVE_CONFLICT.value)
+    )
+
+    assert diagnosis.area is ErrorArea.APPLICATION
+    assert diagnosis.phase is ErrorPhase.APPLICATION_MAINTENANCE
+    assert diagnosis.recovery_action.value == "FINISH_ACTIVE_TASKS"
+    assert diagnosis.route == "/check"
+    assert diagnosis.headline == "当前应用仍有任务在进行"
+    assert "结束当前检查、录制或后台任务" in diagnosis.short_message

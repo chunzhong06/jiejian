@@ -231,46 +231,63 @@ def doctor_command(
     raise typer.Exit(code=0 if report.ok else 1)
 
 
-def cache_status_command(context: typer.Context) -> None:
-    """查看缓存体积、预算与不会受影响的产品事实。"""
-
-    try:
-        with application_scope(context, environ=os.environ) as application:
-            result = application.cache.status()
-        emit_command("system-cache", result)
-    except JiejianError as exc:
-        fail(exc)
-
-
-def cache_clean_command(
+def _maintenance_operation(
     context: typer.Context,
-    confirm: bool = typer.Option(False, "--confirm", help="确认清空全部可重建缓存"),
+    operation: str,
+    confirm: bool,
 ) -> None:
-    """预览或确认清空当前实例的 Assistant cache。"""
-
     try:
         with application_scope(context, environ=os.environ) as application:
-            result = application.cache.clean(
+            result = application.maintenance.operate(
+                operation,
                 confirmed=confirm,
                 dry_run=not confirm,
             )
-        emit_command("system-cache", result)
+        emit_command("system-maintenance", result)
     except JiejianError as exc:
         fail(exc)
 
 
-def runtime_repair_command(
+def maintenance_clean_assistant_command(
     context: typer.Context,
-    confirm: bool = typer.Option(False, "--confirm", help="确认重建已标记损坏的运行时"),
+    confirm: bool = typer.Option(False, "--confirm", help="确认清空 AI 辅助缓存"),
 ) -> None:
-    """预览或确认修复运行环境，不处理数据库和业务结果。"""
+    """预览或清空 AI 辅助缓存。"""
 
-    try:
-        with application_scope(context, environ=os.environ) as application:
-            result = application.cache.repair_runtime(
-                confirmed=confirm,
-                dry_run=not confirm,
-            )
-        emit_command("system-runtime", result)
-    except JiejianError as exc:
-        fail(exc)
+    _maintenance_operation(context, "clear-assistant-cache", confirm)
+
+
+def maintenance_clean_logs_command(
+    context: typer.Context,
+    confirm: bool = typer.Option(False, "--confirm", help="确认清理历史运行日志"),
+) -> None:
+    """预览或清理当前会话开始前的历史运行日志。"""
+
+    _maintenance_operation(context, "clear-logs", confirm)
+
+
+def maintenance_clean_temporary_command(
+    context: typer.Context,
+    confirm: bool = typer.Option(False, "--confirm", help="确认清理临时运行文件"),
+) -> None:
+    """预览或清理无活跃所有者的临时运行文件。"""
+
+    _maintenance_operation(context, "clear-temporary", confirm)
+
+
+def maintenance_clean_all_command(
+    context: typer.Context,
+    confirm: bool = typer.Option(False, "--confirm", help="确认清理全部可删除内容"),
+) -> None:
+    """预览或清理缓存、历史日志和临时文件，不修复运行环境。"""
+
+    _maintenance_operation(context, "clear-all", confirm)
+
+
+def maintenance_repair_command(
+    context: typer.Context,
+    confirm: bool = typer.Option(False, "--confirm", help="确认修复已标记损坏的运行环境"),
+) -> None:
+    """预览或修复损坏运行环境，不清理其他本地运行数据。"""
+
+    _maintenance_operation(context, "repair-runtime", confirm)

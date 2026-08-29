@@ -75,7 +75,7 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
     with TestClient(restarted) as client:
         assert client.get(f"/api/projects/{project_id}").status_code == 200
 
-def test_system_cache_api_previews_and_preserves_product_data(tmp_path: Path) -> None:
+def test_system_maintenance_api_previews_and_preserves_product_data(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     app = create_app(var_dir, start_worker=False)
     data_marker = app.state.context.paths.data / "keep.txt"
@@ -83,16 +83,16 @@ def test_system_cache_api_previews_and_preserves_product_data(tmp_path: Path) ->
     data_marker.write_text("keep", encoding="utf-8")
     cache_marker.write_bytes(b"cache")
     # 此用例只验证显式 API；后台维护的并发与失败由相邻两项独立覆盖。
-    app.state.context.cache.startup_maintenance = lambda: {"status": "completed"}
+    app.state.context.maintenance.startup_maintenance = lambda: {"status": "completed"}
 
     with TestClient(app) as client:
-        status = client.get("/api/system/cache")
+        status = client.get("/api/system/maintenance")
         preview = client.post(
-            "/api/system/cache/clean",
+            "/api/system/maintenance/clear-assistant-cache",
             json={"schema_version": "1", "confirmed": False, "dry_run": True},
         )
         applied = client.post(
-            "/api/system/cache/clean",
+            "/api/system/maintenance/clear-assistant-cache",
             json={"schema_version": "1", "confirmed": True, "dry_run": False},
         )
 
@@ -105,7 +105,7 @@ def test_system_cache_api_previews_and_preserves_product_data(tmp_path: Path) ->
     assert data_marker.read_text(encoding="utf-8") == "keep"
     assert not cache_marker.exists()
 
-def test_ready_does_not_wait_for_blocked_cache_maintenance(tmp_path: Path) -> None:
+def test_ready_does_not_wait_for_blocked_local_maintenance(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
     started = threading.Event()
     release = threading.Event()
@@ -117,7 +117,7 @@ def test_ready_does_not_wait_for_blocked_cache_maintenance(tmp_path: Path) -> No
         assert release.wait(timeout=5)
         return {"status": "completed"}
 
-    app.state.context.cache.startup_maintenance = blocked_maintenance
+    app.state.context.maintenance.startup_maintenance = blocked_maintenance
     with TestClient(app) as client:
         assert started.wait(timeout=2)
         response = client.get("/ready")
@@ -127,18 +127,18 @@ def test_ready_does_not_wait_for_blocked_cache_maintenance(tmp_path: Path) -> No
             "status": "ready",
             "worker": "stopped",
         }
-        assert app.state.cache_maintenance_task.done() is False
+        assert app.state.local_maintenance_task.done() is False
         release.set()
 
     assert data.read_text(encoding="utf-8") == "unchanged"
 
-def test_cache_maintenance_failure_does_not_revoke_ready(tmp_path: Path) -> None:
+def test_local_maintenance_failure_does_not_revoke_ready(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
 
     def failed_maintenance():
         raise RuntimeError("expected maintenance failure")
 
-    app.state.context.cache.startup_maintenance = failed_maintenance
+    app.state.context.maintenance.startup_maintenance = failed_maintenance
     with TestClient(app) as client:
         response = client.get("/ready")
         assert response.status_code == 200

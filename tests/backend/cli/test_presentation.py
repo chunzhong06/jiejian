@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -13,59 +11,6 @@ from typer.testing import CliRunner
 from product.backend.cli.app import app
 from product.backend.cli.presentation import configure_presentation, emit_human, emit_result_presentation, fail
 from product.backend.core.errors import ErrorCode, JiejianError
-from tests.fixtures.runner import write_web_test_profile
-
-def test_non_tty_auto_mode_keeps_project_result_as_json(tmp_path: Path) -> None:
-    profile, _ = write_web_test_profile(tmp_path / "inputs")
-    result = CliRunner().invoke(app, ["system", "advanced", "project", "validate", str(profile)])
-
-    assert result.exit_code == 0
-    payload = json.loads(result.stdout)
-    assert payload["kind"] == "project"
-    assert "项目检查" not in result.stdout
-
-
-def test_human_mode_projects_a_result_without_json_or_logo(tmp_path: Path) -> None:
-    profile, _ = write_web_test_profile(tmp_path / "inputs")
-    result = CliRunner().invoke(
-        app, ["--human", "system", "advanced", "project", "validate", str(profile)]
-    )
-
-    assert result.exit_code == 0
-    assert result.stdout.startswith("界鉴项目检查\n")
-    assert "名称：web-test-project" in result.stdout
-    assert not result.stdout.lstrip().startswith("{")
-    assert "JIEJIAN" not in result.stdout
-
-
-def test_json_mode_is_explicit_and_stable(tmp_path: Path) -> None:
-    profile, _ = write_web_test_profile(tmp_path / "inputs")
-    result = CliRunner().invoke(
-        app, ["--json", "system", "advanced", "project", "validate", str(profile)]
-    )
-
-    assert result.exit_code == 0
-    assert json.loads(result.stdout)["valid"] is True
-    assert "项目检查" not in result.stdout
-
-
-def test_human_error_is_separate_from_machine_error() -> None:
-    human = CliRunner().invoke(app, ["--human", "system", "advanced", "project", "validate", "missing.yaml"])
-    machine = CliRunner().invoke(app, ["--json", "system", "advanced", "project", "validate", "missing.yaml"])
-
-    assert human.exit_code == machine.exit_code == 3
-    assert "输入信息不可用" in human.stderr
-    assert "原因" in human.stderr
-    assert "如何解决" in human.stderr
-    assert "错误代码" in human.stderr
-    assert "INPUT_FILE" in human.stderr
-    assert human.stdout == ""
-    assert machine.stderr == ""
-    machine_error = json.loads(machine.stdout)["error"]
-    assert machine_error["error_code"] == "INPUT_FILE"
-    assert machine_error["message"] == "Web 执行配置（WebExecutionProfile）文件不可读取"
-
-
 def test_human_result_hides_technical_details_until_verbose(capsys) -> None:
     payload = {
         "schema_version": "1",

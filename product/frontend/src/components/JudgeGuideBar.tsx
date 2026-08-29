@@ -6,8 +6,8 @@ import type { ProductStatusDto } from '../api/projects'
 
 const decisions = [
   '开始官方示例并确认本机运行',
-  '确认三个权限组与“导出完整项目资料包”',
-  '准备 Alice、Bob、Eve 官方测试账号；Eve 只用于确认外部访客边界，主演示比较 Alice 与 Bob',
+  '确认两个权限组与“导出完整项目资料包”',
+  '准备 Alice、Bob 官方测试账号；主演示比较负责人 Alice 与成员 Bob',
   '用正常有权限的 Alice 作为控制组真实录制，并告诉界鉴怎样确认结果和恢复现场',
   '明确确认 Alice 应允许、Bob 应拒绝',
   '核对真实检查范围并明确开始检查',

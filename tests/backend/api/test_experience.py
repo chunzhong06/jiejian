@@ -94,6 +94,7 @@ def test_full_experience_creates_formal_project_and_keeps_behavior_mechanical(
             understanding.source_root,
             understanding.confirmed_endpoint,
         ) == str(core.official_samples.active.descriptor_path)
+        experience_root = core.official_samples.active.experience_root
 
         changed = client.post(
             "/api/experience/official-sample/behavior",
@@ -118,6 +119,7 @@ def test_full_experience_creates_formal_project_and_keeps_behavior_mechanical(
             understanding.source_root,
             understanding.confirmed_endpoint,
         ) is None
+        assert not experience_root.exists()
 
 
 def test_guided_experience_analyzes_without_deciding_then_prepares_real_identities(
@@ -132,7 +134,13 @@ def test_guided_experience_analyzes_without_deciding_then_prepares_real_identiti
         understanding = app.state.context.application_understanding.get(project_id)
         assert understanding.source_analysis_authorized is True
         assert understanding.analysis_completed_at_us is not None
-        assert understanding.role_candidates
+        assert {
+            candidate.canonical_key: candidate.display_name
+            for candidate in understanding.role_candidates
+        } == {
+            "member": "普通成员",
+            "project_owner": "项目负责人",
+        }
         assert understanding.action_candidates
         assert all(
             candidate.decision.value == "PROPOSED"
@@ -147,12 +155,6 @@ def test_guided_experience_analyzes_without_deciding_then_prepares_real_identiti
 
         revision = understanding.revision
         for candidate in understanding.role_candidates:
-            if candidate.canonical_key not in {
-                "project_owner",
-                "member",
-                "external_visitor",
-            }:
-                continue
             decided = client.put(
                 f"/api/projects/{project_id}/roles/{candidate.candidate_id}",
                 json={
@@ -173,15 +175,14 @@ def test_guided_experience_analyzes_without_deciding_then_prepares_real_identiti
         assert {item.label for item in identities} == {
             "Alice · 项目负责人",
             "Bob · 普通成员",
-            "Eve · 外部访客",
         }
         assert all(
             item.auth_method is IdentityAuthMethod.COOKIE_SESSION
             for item in identities
         )
-        assert len(store.values) == 3
+        assert len(store.values) == 2
 
         repeated = client.post("/api/experience/official-sample/identities")
         assert repeated.status_code == 200
-        assert len(app.state.context.test_identities.list(project_id)) == 3
-        assert len(store.values) == 3
+        assert len(app.state.context.test_identities.list(project_id)) == 2
+        assert len(store.values) == 2

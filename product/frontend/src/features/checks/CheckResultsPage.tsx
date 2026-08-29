@@ -16,6 +16,7 @@ import { resultsApi, type EvidenceDto, type ResultEvidenceSourceDto, type Result
 import { runsApi, type RunDto } from '../../api/runs'
 import { integrityLabel, lifecycleLabel, occurrenceStatusLabel, severityLabel } from '../../app/presentation'
 import { AdvancedDetails } from '../../components/AdvancedDetails'
+import { AssistantPanel } from '../../components/AssistantPanel'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { EvidenceTimeline } from './EvidenceTimeline'
@@ -147,6 +148,7 @@ export function CheckResultsPage({
       {String(current.result_integrity) === 'INVALID' && <Alert type="warning" showIcon message="结果完整性校验未通过，不能形成安全结论。" />}
       <AdvancedDetails label="高级：运行与完整性信息"><Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="检查状态">{lifecycleLabel(current.lifecycle)}</Descriptions.Item><Descriptions.Item label="结果完整性">{integrityLabel(current.result_integrity)}</Descriptions.Item><Descriptions.Item label="必需观察状态">{observerSummary(current.observer_health)}</Descriptions.Item><Descriptions.Item label="执行 Schema">{String(current.execution_schema_version ?? '未提供')}</Descriptions.Item><Descriptions.Item label="原因代码">{Array.isArray(current.reason_codes) && current.reason_codes.length > 0 ? current.reason_codes.join('、') : '无'}</Descriptions.Item></Descriptions></AdvancedDetails>
     </section>}
+    {current && presentation && <AssistantPanel runId={String(current.run_id)} title="这个结果的因果说明" actionLabel="AI 解读这个结果" />}
     {current && <Segmented className="result-view-switch" value={view} onChange={(value) => setView(value as 'results' | 'report')} options={[{ label: '结论与证据', value: 'results' }, { label: '完整报告', value: 'report' }]} />}
     {view === 'results' && current && <>
       <section className="result-section" aria-labelledby="result-stories-title">

@@ -28,8 +28,8 @@ export type ProjectReadinessDto = {
   project_id: string
   project_status: string
   application_connected: boolean
-  endpoint_status: 'NEEDS_CONNECTION' | 'NEEDS_CONFIRMATION' | 'CONFIRMED' | 'UNAVAILABLE' | 'LEGACY_PROFILE'
-  source_analysis_status: 'NOT_AVAILABLE' | 'NOT_AUTHORIZED' | 'PENDING' | 'COMPLETED' | 'STALE' | 'LEGACY_PROFILE'
+  endpoint_status: 'NEEDS_CONNECTION' | 'NEEDS_CONFIRMATION' | 'CONFIRMED' | 'UNAVAILABLE'
+  source_analysis_status: 'NOT_AVAILABLE' | 'NOT_AUTHORIZED' | 'PENDING' | 'COMPLETED' | 'STALE'
   discovered_role_count: number
   confirmed_role_count: number
   discovered_action_count: number

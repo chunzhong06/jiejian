@@ -35,15 +35,13 @@ _MARKER_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0
 _SECRET_ENV = {
     "alice": "JIEJIAN_SAMPLE_ALICE_PASSWORD",
     "bob": "JIEJIAN_SAMPLE_BOB_PASSWORD",
-    "eve": "JIEJIAN_SAMPLE_EVE_PASSWORD",
 }
 _SESSION_ENV = {
     "alice": "JIEJIAN_SAMPLE_ALICE_SESSION",
     "bob": "JIEJIAN_SAMPLE_BOB_SESSION",
-    "eve": "JIEJIAN_SAMPLE_EVE_SESSION",
 }
 _OWNER_OBSERVER_ENV = "JIEJIAN_SAMPLE_OWNER_OBSERVER"
-_ROLE_LABELS = {"alice": "项目负责人", "bob": "普通成员", "eve": "外部访客"}
+_ACCOUNT_DISPLAY_NAMES = {"alice": "项目负责人", "bob": "普通成员"}
 
 
 def _read_secret_map(
@@ -408,7 +406,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Set-Cookie", f"jiejian_sample_session={self.server.sessions[account]}; Path=/; HttpOnly; SameSite=Lax")
         self.send_header("Cache-Control", "no-store")
-        self._finish_json({"code": "SESSION_CREATED", "account": account, "role": _ROLE_LABELS[account]})
+        self._finish_json({"code": "SESSION_CREATED", "account": account, "role": _ACCOUNT_DISPLAY_NAMES[account]})
 
     def _create_export(self) -> None:
         account = self._session_account()
@@ -610,7 +608,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
     def _get_session(self) -> None:
         account = self._session_account()
         if account is not None:
-            self._json(HTTPStatus.OK, {"code": "SESSION_ACTIVE", "account": account, "role": _ROLE_LABELS[account]})
+            self._json(HTTPStatus.OK, {"code": "SESSION_ACTIVE", "account": account, "role": _ACCOUNT_DISPLAY_NAMES[account]})
 
     def _authorized_bearer(self, expected: str | None, *, code: str) -> bool:
         value = self.headers.get("Authorization", "")

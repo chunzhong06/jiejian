@@ -41,13 +41,16 @@ from .models import _Finding
 
 class OpenApiAnalysisMixin:
     @staticmethod
-    def _extension_strings(value: object) -> tuple[str, ...]:
+    def _extension_roles(value: object) -> tuple[tuple[str, str], ...]:
         if isinstance(value, str):
-            return (value,)
+            return ((value, value),)
         if isinstance(value, Mapping):
-            return tuple(str(item) for item in value.keys())
+            return tuple(
+                (str(key), display if isinstance(display, str) else str(key))
+                for key, display in value.items()
+            )
         if isinstance(value, (list, tuple)):
-            return tuple(item for item in value if isinstance(item, str))
+            return tuple((item, item) for item in value if isinstance(item, str))
         return ()
 
     def _analyze_openapi(
@@ -77,12 +80,13 @@ class OpenApiAnalysisMixin:
         )
         if any(item.severity is AnalysisSeverity.BLOCKING for item in validated.issues):
             return
-        for scheme in self._openapi_roles(document):
+        for canonical_name, display_name in self._openapi_roles(document):
             self._add_role(
                 roles,
-                scheme,
+                display_name,
                 CandidateConfidence.HIGH,
                 self._evidence(relative, 1, None, "openapi-role-extension", content_hash),
+                canonical_name=canonical_name,
             )
         paths = document.get("paths")
         if not isinstance(paths, Mapping):
@@ -114,10 +118,10 @@ class OpenApiAnalysisMixin:
 
 
     @staticmethod
-    def _openapi_roles(document: Mapping[str, object]) -> tuple[str, ...]:
+    def _openapi_roles(document: Mapping[str, object]) -> tuple[tuple[str, str], ...]:
         """只读取显式供应商角色扩展，OAuth scopes 不等同于应用权限组。"""
 
-        roles: set[str] = set()
+        roles: dict[str, str] = {}
         pending: list[object] = [document]
         seen = 0
         while pending and seen < 512:
@@ -132,9 +136,9 @@ class OpenApiAnalysisMixin:
                         "x-groups",
                         "x-access-levels",
                     }:
-                        roles.update(OpenApiAnalysisMixin._extension_strings(nested))
+                        roles.update(OpenApiAnalysisMixin._extension_roles(nested))
                     else:
                         pending.append(nested)
             elif isinstance(value, (list, tuple)):
                 pending.extend(value)
-        return tuple(sorted(roles))
+        return tuple(sorted(roles.items()))

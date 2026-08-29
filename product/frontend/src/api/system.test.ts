@@ -8,17 +8,17 @@ import { systemApi } from './system'
 describe('系统维护 API', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('为缓存操作注入请求根版本', async () => {
+  it('为本地维护操作注入请求根版本', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ schema_version: '1', data: {} }),
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await systemApi.cacheOperation('clean', { confirmed: false, dry_run: true })
+    await systemApi.maintenanceOperation('clear-logs', { confirmed: false, dry_run: true })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/system/cache/clean',
+      '/api/system/maintenance/clear-logs',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({

@@ -6,7 +6,7 @@
 
 `README.md → docs/README.md → 当前任务指南 → 模块/系统地图 → 代码与直接测试`
 
-Codex 先遵守根 [AGENTS.md](../AGENTS.md)，再走 [llms.txt](llms.txt) 的最小路由。阶段提示词、账本和未来规划不进入当前知识库。
+Codex 先遵守根 [AGENTS.md](../AGENTS.md)，再走 [llms.txt](llms.txt) 的最小路由。版本任务提示词、账本和未来规划不进入当前知识库。
 
 ## 五层结构
 
@@ -29,6 +29,8 @@ Codex 先遵守根 [AGENTS.md](../AGENTS.md)，再走 [llms.txt](llms.txt) 的�
 
 [backend](02_开发指南/模块/backend.md) · [runtime](02_开发指南/模块/runtime.md) · [storage](02_开发指南/模块/storage.md) · [recording](02_开发指南/模块/recording.md) · [frontend](02_开发指南/模块/frontend.md) · [protocols](02_开发指南/模块/protocols.md) · [scripts](02_开发指南/模块/scripts.md)
 
+普通产品任务流从[应用接入与检查主流程](01_系统地图/应用接入与检查主流程.md)进入；Windows 启动、GUI/CLI/API 和本地维护从[产品入口与控制面](01_系统地图/产品入口与控制面.md)进入。
+
 ## 机器真源与维护
 
 - 协议字段由 `product/protocols/schemas/` 和 `product/protocols/schema.py` 治理；协议语义见 [协议参考](03_参考手册/协议/)。
@@ -37,7 +39,7 @@ Codex 先遵守根 [AGENTS.md](../AGENTS.md)，再走 [llms.txt](llms.txt) 的�
 - 使用 `./scripts/dev.ps1 docs` 检查漂移、目标链接和内部 Markdown 链接；只有 `./scripts/dev.ps1 docs -Update` 才更新机器代码参考和协议生成区域。
 - 测试入口、L1～L5、自动 L5 和展示验收规则见 [验证与测试](04_工程约束/验证与测试.md)。
 
-当前正式产品版本是 `1.0.0`，唯一代码真源为 `product/backend/__init__.py::__version__`。产品版本只描述用户交付，不替代协议 `schema_version`、数据库 revision 或运行布局版本；后续版本治理见[协作与阶段执行](04_工程约束/协作与阶段执行.md)。
+当前产品版本的唯一代码真源为 `product/backend/__init__.py::__version__`。产品版本只描述竞赛作品的连续功能交付，不替代协议 `schema_version`、数据库 revision 或运行布局版本；版本治理见[任务执行与恢复](04_工程约束/任务执行与恢复.md)。
 
 ## 当前设计依据
 

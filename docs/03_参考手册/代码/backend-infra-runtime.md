@@ -9,13 +9,6 @@
 ### `product/backend/infra/runtime/__init__.py`
 主要 import / dot-source：`.paths`
 
-### `product/backend/infra/runtime/cache.py`
-- `_ORPHAN_MIN_AGE_SECONDS`
-- `_STARTUP_LOG_MAX_AGE_SECONDS`
-- `_WORKER_LOG_MAX_AGE_SECONDS`
-- `class CacheMaintenanceService`
-主要 import / dot-source：`__future__`, `collections.abc`, `contextlib`, `json`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.lock`, `shutil`, `time`
-
 ### `product/backend/infra/runtime/diagnostics.py`
 - `class DoctorCheck`
 - `class DoctorReport`
@@ -128,6 +121,15 @@
 - `class JsonFormatter`
 - `configure_logging(level, stream, trace_id, var_dir, console, known_secrets) -> stdlib_logging.Logger`
 主要 import / dot-source：`__future__`, `collections.abc`, `datetime`, `json`, `logging`, `logging.handlers`, `pathlib`, `product.backend.core.redaction`, `product.backend.infra.runtime.paths`, `sys`, `typing`
+
+### `product/backend/infra/runtime/maintenance.py`
+- `_ORPHAN_MIN_AGE_SECONDS`
+- `_LOG_MAX_AGE_SECONDS`
+- `_LOG_KEEP_PER_CATEGORY`
+- `_SESSION_MTIME_TOLERANCE_SECONDS`
+- `_OPERATIONS`
+- `class LocalMaintenanceService`
+主要 import / dot-source：`__future__`, `collections.abc`, `contextlib`, `json`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.lock`, `shutil`, `time`
 
 ### `product/backend/infra/runtime/paths.py`
 - `class RuntimePaths`

@@ -52,7 +52,6 @@ PHASE_TITLES = {
 ROLE_LABELS = {
     "project_owner": "项目负责人",
     "member": "普通成员",
-    "external_visitor": "外部访客",
 }
 SOURCE_LABELS = (
     ("OWNER_API", "目标业务状态", "KEY"),
@@ -477,7 +476,7 @@ def _confirm_understanding(client: ApiClient, project_id: str) -> tuple[dict[str
         revision = int(understanding["revision"])
         role_ids[key] = role["candidate_id"]
     if set(role_ids) != set(ROLE_LABELS):
-        raise SampleTestError("官方示例未发现精确的三个权限组候选")
+        raise SampleTestError("官方示例未发现精确的两个权限组候选")
     action_id = ""
     for action in understanding["action_candidates"]:
         selected = action["canonical_key"] == EXPORT_ACTION_KEY

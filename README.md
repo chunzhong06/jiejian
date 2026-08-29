@@ -1,4 +1,4 @@
-# 界鉴 JIEJIAN 1.0.0
+# 界鉴 JIEJIAN 1.0.1
 
 > 界鉴是一款面向 AI 快速开发 Web 应用的权限安全检查工具，用来确认不同身份是否真的只能访问和操作自己有权限的数据与业务功能。
 
@@ -16,10 +16,10 @@
 
 ## Windows x64 Portable
 
-正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.0、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
+正式便携版解压后直接运行包根 `start.cmd`。Portable 已包含固定 CPython、界鉴 1.0.1、前端和 Playwright Chromium；启动时不需要 Conda、uv、pip、Node、pnpm、源码仓库或网络，运行数据只写入发行目录自己的 `var/`。
 
-- `JieJian-WebV1-1.0.0-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
-- `JieJian-WebV1-1.0.0-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
+- `JieJian-WebV1-1.0.1-Windows-x64.zip`：完整产品，包含官方“协作空间” Sample。
+- `JieJian-WebV1-1.0.1-Windows-x64-nosamples.zip`：完整产品，不包含官方 Sample。
 - `SHA256SUMS.txt`：两个 ZIP 的固定 SHA256 校验和。
 
 两个 ZIP 除 `samples/` 外的产品文件完全相同。发行目录可以整体移动到中文或带空格路径；版本可在“运行环境”设置页或 `jiejian --version` 查看。开发者构建与仓库外验收见[修改发布与便携版](docs/02_开发指南/任务/修改发布与便携版.md)。
@@ -58,9 +58,9 @@
 5. **开始检查**：查看当前将检查的业务动作、身份差分和覆盖缺口，确认后执行真实权限安全检查并收集证据；普通流程不要求选择内部执行配置。
 6. **检查结果**：查看结论、问题、证据和报告。
 
-模型服务、运行环境和手工 Profile 注册属于高级能力。应用接入发现的角色与动作始终只是候选，不会自动生成允许/拒绝结论；旧版手工快速检查已经删除，不保留第二套新手入口。
+模型服务和运行环境维护属于高级能力。应用接入发现的角色与动作始终只是候选，不会自动生成允许/拒绝结论；旧版手工快速检查和 Profile 注册入口已经删除，不保留第二套新手或内部配置入口。
 
-如果暂时没有准备自己的应用，可以从 GUI“评委导览”启动唯一官方 Sample“协作空间”。同一个应用、同一组 Alice/Bob/Eve 身份和同一个“生成完整项目资料包”动作，分别运行在漏洞、修复和关键观察受限三种真实状态中，经正常 Worker/Runner、六面观察和确定性判断形成 `BLOCK`、`PASS`、`INCONCLUSIVE`；Sample 不预制 Verdict，也不绕过应用接入或权限治理。开发入口见 [`samples/README.md`](samples/README.md)。
+如果暂时没有准备自己的应用，可以从 GUI“评委导览”启动唯一官方 Sample“协作空间”。同一个应用、项目负责人 Alice、普通成员 Bob 和同一个“生成完整项目资料包”动作，分别运行在漏洞、修复和关键观察受限三种真实状态中，经正常 Worker/Runner、六面观察和确定性判断形成 `BLOCK`、`PASS`、`INCONCLUSIVE`；Sample 不预制 Verdict，也不绕过应用接入或权限治理。开发入口见 [`samples/README.md`](samples/README.md)。
 
 ## 结果怎么看
 
@@ -94,15 +94,23 @@ jiejian --json status
 jiejian --version
 ```
 
-全局 `--human` 用于人类可读输出，`--verbose` 只追加技术引用，`--json` 输出版本化 Machine envelope。普通命令围绕 `status / app / account / flow / check / result / history / settings / system` 组织；旧 Profile 与高级治理能力只在 `system advanced` 下保留。GUI 正在管理同一 `var` 时，CLI 会拒绝创建第二个控制者。
+全局 `--human` 用于人类可读输出，`--verbose` 只追加技术引用，`--json` 输出版本化 Machine envelope。普通命令围绕 `status / app / account / flow / check / result / history / settings / system` 组织，不保留旧 Profile、Contract、Recording、Baseline、Gate 或 run-profile 命令树。GUI 正在管理同一 `var` 时，CLI 会拒绝创建第二个控制者。
 
 ## 高级能力
 
 需要更细控制时，可以使用模型服务、运行环境、原始证据查看和自动化/CI。它们服务于已经明确检查范围的用户，不改变第一次使用的主路径；业务流程仍是普通检查主路径的一部分。
 
+### AI 工具连接（MCP）
+
+界鉴可以通过同一个本地 Web 进程提供 MCP Streamable HTTP 控制入口。先打开模型与 AI 设置中的“AI 工具连接（MCP）”，显式启用后复制页面显示的连接 URL 和 Bearer 令牌；该令牌与模型供应商 API Key、浏览器控制 Cookie 相互独立，只保存在当前进程内存中。
+
+连接默认只有 `READ` 权限，可读取产品状态、项目、应用理解、身份、业务流程、检查预览、结果、证据索引、历史和系统状态。需要修改已有候选或准备检查时，必须在页面中按应用确认 `PREPARE`；需要启动或停止受控任务时，再按应用确认 `EXECUTE`。权限按层级包含下级能力，确认后不会逐工具重复弹窗，也不会永久保存。关闭连接、重新生成令牌或退出界鉴会立即撤销旧令牌和全部提升权限。
+
+MCP 只复用现有 ApplicationCore、Worker 和确定性结果投影，不建立第二套业务状态，也不把秘密、源码、请求正文、完整日志或完整 Evidence 暴露给工具。它是 Web 产品的本地控制入口，不是受检的 MCP/Agent Target。
+
 ## 官方示例
 
-仓库内只保留一个官方 Web Sample：“协作空间——项目资料管理应用”。它用同一组 Alice、Bob、Eve 身份和同一个“生成完整项目资料包”动作，真实形成漏洞、修复和关键观察受限三种运行状态；Sample 本身不预制 Verdict。
+仓库内只保留一个官方 Web Sample：“协作空间——项目资料管理应用”。它用项目负责人 Alice、普通成员 Bob 和同一个“生成完整项目资料包”动作，真实形成漏洞、修复和关键观察受限三种运行状态；Sample 本身不预制 Verdict。
 
 普通用户可以从 GUI 的“评委导览”启动官方示例并完成接入、Recording、权限准备和检查。开发者需要了解 Sample 的业务撤销、测试重置、六面观察或联调入口时，从 [Samples 说明](samples/README.md) 开始；需要修改 Sample 或唯一自动 L5 时，阅读[修改官方示例与整链验收](docs/02_开发指南/任务/修改官方示例与整链验收.md)。
 
@@ -112,14 +120,14 @@ jiejian --version
 
 - **启动失败**：`start.cmd` 会保留错误窗口；先查看屏幕上的失败阶段和恢复建议，再按需查看 `var/logs/startup/` 中最近的启动日志。
 - **浏览器未打开**：只有终端明确提示“界鉴已经启动，但未能自动打开网页”时，才手工打开 [http://127.0.0.1:8765/](http://127.0.0.1:8765/)；“仍在准备”表示服务尚未 ready，需要继续等待或按 `Ctrl+C` 退出。
-- **运行环境不可用**：按启动输出恢复。`jiejian system cache clean --confirm` 只清理可重建缓存；损坏的运行时由 `jiejian system runtime repair --confirm` 显式修复。删除整个 `var/` 表示从零重建仓库本地运行态，也会删除其中的数据库、Job、项目、报告和工件检查等产品事实，但不会删除全局项目 Conda 环境 `jiejian_env`。`product/frontend` 不保存依赖或构建产物，无需单独清理。
+- **运行环境不可用**：按启动输出恢复。`jiejian system clean assistant|logs|temporary|all` 先预览再确认清理对应可删除内容，`jiejian system repair` 独立修复损坏运行时；这些操作不会删除应用、权限配置、数据库、证据、报告或凭据。删除整个 `var/` 表示从零重建仓库本地运行态，也会删除其中的产品事实，但不会删除全局项目 Conda 环境 `jiejian_env`。
 - **检查无法开始**：确认已经完成应用接入，目标使用授权的回环地址，权限规则已准备好，运行环境状态正常。
 
 `-Mode Prepare` 和 `-ForcePrepare` 仅用于高级恢复，不是正常启动流程。
 
 ## 适用范围
 
-当前界鉴只检查 Web 应用，并要求目标处于用户明确授权的范围内。它不把本地命令行应用或 MCP/Agent 目标作为当前支持范围。
+当前界鉴只检查 Web 应用，并要求目标处于用户明确授权的范围内。它不把本地命令行应用或 MCP/Agent 目标作为当前支持范围；本地 MCP 只用于控制现有 Web 产品能力。
 
 ## 更多文档
 

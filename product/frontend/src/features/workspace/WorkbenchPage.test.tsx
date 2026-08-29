@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkbenchPage } from './WorkbenchPage'
 
-const mockAssistant = vi.hoisted(() => ({ guidance: vi.fn(), refresh: vi.fn() }))
+const mockAssistant = vi.hoisted(() => ({ project: vi.fn(), generateProject: vi.fn(), result: vi.fn(), generateResult: vi.fn(), generateError: vi.fn() }))
 vi.mock('../../api/assistant', () => ({ assistantApi: mockAssistant }))
 
 const readiness = {
@@ -33,7 +33,7 @@ const accountAction = { action: 'RECORD_FLOW' as const, label: '准备测试账�
 const officialExperience = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null }
 
 describe('WorkbenchPage', () => {
-  beforeEach(() => { vi.clearAllMocks(); mockAssistant.guidance.mockRejectedValue(new Error('assistant unavailable')) })
+  beforeEach(() => { vi.clearAllMocks(); mockAssistant.project.mockRejectedValue(new Error('assistant unavailable')) })
 
   it('只展示唯一下一步主卡与三个固定辅助卡', () => {
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[{ lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED' }]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
@@ -41,7 +41,7 @@ describe('WorkbenchPage', () => {
     expect(screen.getByText('当前应用')).toBeInTheDocument()
     expect(screen.getByText('现在继续')).toBeInTheDocument()
     expect(screen.getByText('最近检查')).toBeInTheDocument()
-    expect(screen.getByText('AI 辅助')).toBeInTheDocument()
+    expect(screen.getByText('[AI辅助]')).toBeInTheDocument()
     expect(screen.queryByText('系统状态')).not.toBeInTheDocument()
     expect(screen.getByText('官方示例')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看检查结果' })).toBeInTheDocument()
@@ -65,22 +65,21 @@ describe('WorkbenchPage', () => {
   })
 
   it('先按服务端确定性主动作展示，再显示 READY 的 AI 排序解释', async () => {
-    const option = { option_id: 'opt_111111111111111111111111', kind: 'START_CURRENT_CHECK', title: '开始检查当前可运行范围', reason_codes: ['CURRENT_SCOPE_RUNNABLE'], priority_tier: 'PRIMARY' as const, route: '/check' }
-    mockAssistant.guidance.mockResolvedValue({ status: 'READY', template_id: 'jiejian.next_step', template_version: '1', guidance: { project_id: 'p1', state_fingerprint: 'a'.repeat(64), phase: 'CHECK_READY', current_scope_runnable: true, remaining_gap_count: 1, options: [option] }, recommendations: [{ option_id: option.option_id, explanation: '先开始当前可运行范围。' }], retry_after_us: null })
+    mockAssistant.project.mockResolvedValue({ status: 'READY', template_id: 'jiejian.next_step', template_version: '1', subject_id: 'p1', state_fingerprint: 'a'.repeat(64), entities: [{ entity_id: 'task:check', entity_type: 'TASK', display_name: '开始检查当前可运行范围', facts: [] }], suggestions: [{ kind: 'PRIORITIZE', entity_ids: ['task:check'], explanation: '先开始当前可运行范围。' }], retry_after_us: null })
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
     expect(await screen.findByText('开始检查当前可运行范围')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看检查结果' })).toBeInTheDocument()
-    expect(await screen.findByText('次级建议')).toBeInTheDocument()
+    expect(await screen.findByText('先开始当前可运行范围。')).toBeInTheDocument()
   })
 
-  it('REFRESH_NEEDED 的同一指纹只自动刷新一次，失败时不改变确定性主流程', async () => {
-    const guidance = { project_id: 'p1', state_fingerprint: 'b'.repeat(64), phase: 'CHECK_READY', current_scope_runnable: true, remaining_gap_count: 0, options: [] }
-    mockAssistant.guidance.mockResolvedValue({ status: 'REFRESH_NEEDED', template_id: 'jiejian.next_step', template_version: '1', guidance, recommendations: [], retry_after_us: null })
-    mockAssistant.refresh.mockRejectedValue(new Error('provider unavailable'))
-    const view = render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
-    await waitFor(() => expect(mockAssistant.refresh).toHaveBeenCalledOnce())
-    view.rerender(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={{ ...readiness }} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
-    await waitFor(() => expect(mockAssistant.refresh).toHaveBeenCalledOnce())
+  it('REFRESH_NEEDED 只冷读取，用户点击后才请求模型且失败不改变确定性主流程', async () => {
+    mockAssistant.project.mockResolvedValue({ status: 'REFRESH_NEEDED', template_id: 'jiejian.next_step', template_version: '1', subject_id: 'p1', state_fingerprint: 'b'.repeat(64), entities: [], suggestions: [], retry_after_us: null })
+    mockAssistant.generateProject.mockRejectedValue(new Error('provider unavailable'))
+    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
+    expect(await screen.findByText('尚未生成建议，点击按钮后才会连接模型服务。')).toBeInTheDocument()
+    expect(mockAssistant.generateProject).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '生成 AI 建议' }))
+    await waitFor(() => expect(mockAssistant.generateProject).toHaveBeenCalledOnce())
     expect(screen.getByRole('button', { name: '查看检查结果' })).toBeInTheDocument()
   })
 
@@ -92,5 +91,14 @@ describe('WorkbenchPage', () => {
     expect(screen.getByText('不会开始真实安全检查，也不会预先生成检查结论。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '同意并开始' }))
     await waitFor(() => expect(onStart).toHaveBeenCalledWith('GUIDED'))
+  })
+
+  it('官方体验进行中时只提供明确的结束体验动作', () => {
+    const onStop = vi.fn().mockResolvedValue(undefined)
+    render(<WorkbenchPage selected={{ project_id: 'p1', name: '协作空间', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={{ ...officialExperience, active: true, experience_id: 'exp-1', experience_mode: 'GUIDED', project_id: 'p1' }} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onStopExperience={onStop} onNavigate={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '结束体验' }))
+    expect(onStop).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: '评委导览' })).not.toBeInTheDocument()
   })
 })

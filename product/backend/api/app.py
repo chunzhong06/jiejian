@@ -35,7 +35,10 @@ from product.backend.api.routers.permission_intents import build_permission_inte
 from product.backend.api.routers.checks import build_checks_router
 from product.backend.api.routers.assistant import build_assistant_router
 from product.backend.api.routers.experience import build_experience_router
+from product.backend.api.routers.mcp_access import build_mcp_access_router
 from product.backend.api.local_control import LocalControlGuard
+from product.backend.api.mcp import build_mcp_control
+from product.backend.workflows.mcp_access import MCPAccessController
 
 
 logger = logging.getLogger("jiejian.api.startup")
@@ -80,6 +83,14 @@ def create_app(
         environment_provider=context.environment_for_secret_names,
         clock_us=clock_us,
     )
+    mcp_access = MCPAccessController(f"{local_control_guard.origin}/mcp")
+    mcp_control = build_mcp_control(
+        context,
+        workers,
+        mcp_access,
+        control_origin=local_control_guard.origin,
+        control_host=local_control_guard.host,
+    )
     results = context.results
     app = FastAPI(title="界鉴本地控制面", version=__version__)
     app.state.context = context
@@ -87,6 +98,9 @@ def create_app(
     app.state.results = results
     app.state.frontend_dir = frontend_dir.resolve() if frontend_dir else None
     app.state.local_control_guard = local_control_guard
+    app.state.mcp_access = mcp_access
+    app.state.mcp_server = mcp_control.server
+    app.state.mcp_app = mcp_control.app
 
     @app.middleware("http")
     async def local_control_middleware(request: Request, call_next):
@@ -117,6 +131,7 @@ def create_app(
     app.include_router(build_checks_router(context))
     app.include_router(build_assistant_router(context))
     app.include_router(build_experience_router(context))
+    app.include_router(build_mcp_access_router(context, mcp_access))
     app.include_router(build_execution_profiles_router(context))
     app.include_router(build_contracts_router(context))
     app.include_router(build_recordings_router(context))
@@ -133,6 +148,8 @@ def create_app(
         from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
 
         ready_started = perf_counter()
+        app.state.mcp_lifespan = mcp_control.server.session_manager.run()
+        await app.state.mcp_lifespan.__aenter__()
         stage_started = perf_counter()
         reconciliation = RunReconciler(
             context.var_dir,
@@ -150,18 +167,29 @@ def create_app(
             workers.start()
             _log_startup_timing("worker_start", stage_started)
         _log_startup_timing("ready_total", ready_started)
-        # 大型可重建缓存不属于产品可用性的前置条件，放到 ready 后的受控后台线程。
-        app.state.cache_maintenance_task = asyncio.create_task(
-            _run_cache_maintenance(context, app)
+        # 可重建运行数据维护不属于产品可用性的前置条件，放到 ready 后的受控后台线程。
+        app.state.local_maintenance_task = asyncio.create_task(
+            _run_local_maintenance(context, app)
         )
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
+        mcp_access.close()
         workers.stop()
-        maintenance = getattr(app.state, "cache_maintenance_task", None)
+        mcp_lifespan = getattr(app.state, "mcp_lifespan", None)
+        if mcp_lifespan is not None:
+            await mcp_lifespan.__aexit__(None, None, None)
+        maintenance = getattr(app.state, "local_maintenance_task", None)
         if maintenance is not None:
             await maintenance
         context.close()
+
+    app.add_route(
+        "/mcp",
+        mcp_control.app,
+        methods=["GET", "POST", "DELETE"],
+        name="mcp",
+    )
 
     if app.state.frontend_dir is not None and app.state.frontend_dir.is_dir():
         app.mount(
@@ -185,19 +213,19 @@ def _log_startup_timing(stage: str, started: float) -> None:
     )
 
 
-async def _run_cache_maintenance(context: ApplicationCore, app: FastAPI) -> None:
+async def _run_local_maintenance(context: ApplicationCore, app: FastAPI) -> None:
     """维护失败只写诊断事实，不反向撤销已经成立的服务 readiness。"""
 
     started = perf_counter()
     try:
         app.state.startup_maintenance = await asyncio.to_thread(
-            context.cache.startup_maintenance
+            context.maintenance.startup_maintenance
         )
         _log_startup_timing("startup_maintenance", started)
     except Exception:
         app.state.startup_maintenance = {"status": "failed"}
         logger.exception(
-            "startup cache maintenance failed",
+            "startup local maintenance failed",
             extra={
                 "component": "api_startup",
                 "event_code": "STARTUP_MAINTENANCE_FAILED",

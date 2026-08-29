@@ -1,9 +1,9 @@
-// 运行环境页：展示当前实际运行时，并通过后端同一维护服务预览、确认和执行缓存操作。
+// 运行环境页：展示当前实际运行时，并通过后端同一服务维护三类本地可删除数据。
 
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Col, Descriptions, Modal, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Col, Collapse, Descriptions, Modal, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
 import { LLMProfile } from '../../api/llm'
-import { CacheOperation, CacheOperationResult, CacheStatus, systemApi, SystemStatus } from '../../api/system'
+import { MaintenanceOperation, MaintenanceOperationResult, MaintenanceStatus, systemApi, SystemStatus } from '../../api/system'
 
 function label(value: unknown) {
   const raw = String(value ?? 'unknown')
@@ -19,13 +19,17 @@ function bytes(value: number | undefined) {
   return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
 }
 
-const operationLabels: Record<CacheOperation, string> = {
-  clean: '清空 AI 辅助缓存',
-  'runtime-repair': '修复运行环境',
+const operationLabels: Record<MaintenanceOperation, string> = {
+  'clear-assistant-cache': '清空 AI 辅助缓存',
+  'clear-logs': '清理历史运行日志',
+  'clear-temporary': '清理临时运行文件',
+  'clear-all': '清理全部可删除内容',
+  'repair-runtime': '修复运行环境',
 }
 
-const cacheLabels: Record<string, string> = {
-  assistant: 'AI 辅助缓存',
+const logCategoryLabels: Record<string, string> = {
+  startup: '启动', app: '应用', workers: '执行器', runner: '检查运行', recording: '录制',
+  'identity-preparations': '账号准备', 'official-samples': '官方示例',
 }
 
 export function RuntimePage({ status, profiles, failed }: { status: SystemStatus; profiles: LLMProfile[]; failed: boolean }) {
@@ -33,22 +37,22 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
   const environment = status.environment
   const python = environment?.python
   const issues = Array.isArray(python?.issues) ? python.issues : []
-  const [cache, setCache] = useState<CacheStatus | null>(null)
-  const [preview, setPreview] = useState<CacheOperationResult | null>(null)
-  const [selectedOperation, setSelectedOperation] = useState<CacheOperation | null>(null)
+  const [maintenance, setMaintenance] = useState<MaintenanceStatus | null>(null)
+  const [preview, setPreview] = useState<MaintenanceOperationResult | null>(null)
+  const [selectedOperation, setSelectedOperation] = useState<MaintenanceOperation | null>(null)
   const [busy, setBusy] = useState(false)
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
-  const [completed, setCompleted] = useState<CacheOperationResult | null>(null)
+  const [completed, setCompleted] = useState<MaintenanceOperationResult | null>(null)
 
-  const refreshCache = () => {
-    void systemApi.cacheStatus().then(setCache).catch((error: Error) => setMaintenanceError(error.message))
+  const refreshMaintenance = () => {
+    void systemApi.maintenanceStatus().then(setMaintenance).catch((error: Error) => setMaintenanceError(error.message))
   }
-  useEffect(refreshCache, [])
+  useEffect(refreshMaintenance, [])
 
-  const showPreview = async (operation: CacheOperation) => {
+  const showPreview = async (operation: MaintenanceOperation) => {
     setBusy(true); setMaintenanceError(null); setCompleted(null)
     try {
-      const result = await systemApi.cacheOperation(operation, { confirmed: false, dry_run: true })
+      const result = await systemApi.maintenanceOperation(operation, { confirmed: false, dry_run: true })
       setSelectedOperation(operation); setPreview(result)
     } catch (error) { setMaintenanceError((error as Error).message) }
     finally { setBusy(false) }
@@ -57,8 +61,8 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
     if (!selectedOperation) return
     setBusy(true); setMaintenanceError(null)
     try {
-      const result = await systemApi.cacheOperation(selectedOperation, { confirmed: true, dry_run: false })
-      setCompleted(result); setCache(result.status); setPreview(null); setSelectedOperation(null)
+      const result = await systemApi.maintenanceOperation(selectedOperation, { confirmed: true, dry_run: false })
+      setCompleted(result); setMaintenance(result.status); setPreview(null); setSelectedOperation(null)
     } catch (error) { setMaintenanceError((error as Error).message) }
     finally { setBusy(false) }
   }
@@ -95,17 +99,20 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       <Tag style={{ marginTop: 16 }} color={python?.ok === false ? 'red' : 'blue'}>{python?.ok === false ? '环境需要处理' : '状态来自当前运行环境'}</Tag>
     </Card>
 
-    <Card title="产品缓存与运行环境维护" extra={busy ? <Spin size="small" /> : <Button onClick={refreshCache}>刷新状态</Button>}>
-      <Typography.Paragraph type="secondary">这里只维护当前产品实例的 AI 辅助缓存和明确损坏的运行时。开发工具与构建缓存不属于产品维护范围。</Typography.Paragraph>
+    <Card title="本地运行数据维护" extra={busy ? <Spin size="small" /> : <Button onClick={refreshMaintenance}>刷新状态</Button>}>
+      <Typography.Paragraph type="secondary">这里只维护当前实例可安全删除的缓存、历史日志和临时文件；开发工具与构建缓存不在范围内。</Typography.Paragraph>
       {maintenanceError && <Alert type="error" showIcon message="维护操作失败" description={maintenanceError} closable onClose={() => setMaintenanceError(null)} />}
       {completed && <Alert style={{ marginBottom: 12 }} type="success" showIcon message="维护操作已完成" description={`已处理 ${completed.removed.length} 项，共 ${bytes(completed.estimated_bytes)}。${completed.requires_restart ? '请重新启动界鉴以重建运行环境。' : ''}`} />}
       <Row gutter={[12, 12]}>
-        {Object.entries(cache?.entries ?? {}).map(([name, entry]) => <Col xs={24} md={8} key={name}><Card size="small"><Statistic title={cacheLabels[name] ?? name} value={bytes(entry.bytes)} /><Tag color={entry.over_budget ? 'orange' : 'green'}>{entry.over_budget ? '超过软预算' : '预算内'}</Tag></Card></Col>)}
+        <Col xs={24} md={8}><Card size="small"><Statistic title="AI 辅助缓存" value={bytes(maintenance?.entries.assistant.bytes)} /><Typography.Text type="secondary">{maintenance?.entries.assistant.files ?? 0} 个文件</Typography.Text><div><Button style={{ marginTop: 12 }} disabled={busy} onClick={() => void showPreview('clear-assistant-cache')}>清空 AI 辅助缓存</Button></div></Card></Col>
+        <Col xs={24} md={8}><Card size="small"><Statistic title="历史运行日志" value={bytes(maintenance?.entries.logs.bytes)} /><Typography.Text type="secondary">{maintenance?.entries.logs.files ?? 0} 个文件</Typography.Text><div><Button style={{ marginTop: 12 }} disabled={busy} onClick={() => void showPreview('clear-logs')}>清理历史运行日志</Button></div></Card></Col>
+        <Col xs={24} md={8}><Card size="small"><Statistic title="临时运行文件" value={bytes(maintenance?.entries.temporary.bytes)} /><Typography.Text type="secondary">{maintenance?.entries.temporary.files ?? 0} 个文件</Typography.Text><div><Button style={{ marginTop: 12 }} disabled={busy} onClick={() => void showPreview('clear-temporary')}>清理临时运行文件</Button></div></Card></Col>
       </Row>
-      <Alert style={{ marginTop: 12 }} type="info" showIcon message="产品事实始终保留" description={`不受影响：${cache?.protected.data ?? 'var/data'}、当前有效运行环境、数据库、证据、报告和凭据。`} />
+      {maintenance?.entries.logs.categories && <Collapse style={{ marginTop: 12 }} items={[{ key: 'logs', label: '查看日志分类占用', children: <Descriptions size="small" column={1}>{Object.entries(maintenance.entries.logs.categories).map(([name, entry]) => <Descriptions.Item key={name} label={logCategoryLabels[name] ?? name}>{bytes(entry.bytes)} · {entry.files} 个文件</Descriptions.Item>)}</Descriptions> }]} />}
+      <Alert style={{ marginTop: 12 }} type="info" showIcon message="产品事实始终保留" description={`不受影响：${maintenance?.protected.data ?? 'var/data'}；应用、权限配置、数据库、证据、报告和凭据不会进入普通清理。`} />
       <Space wrap style={{ marginTop: 16 }}>
-        <Button disabled={busy} onClick={() => void showPreview('clean')}>清空 AI 辅助缓存</Button>
-        <Button disabled={busy} onClick={() => void showPreview('runtime-repair')}>修复运行环境</Button>
+        <Button disabled={busy} onClick={() => void showPreview('clear-all')}>清理全部可删除内容</Button>
+        <Button disabled={busy} onClick={() => void showPreview('repair-runtime')}>修复运行环境</Button>
       </Space>
     </Card>
 
@@ -120,7 +127,7 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
     >
       <Typography.Paragraph>预计处理 {preview?.targets.length ?? 0} 项，共 {bytes(preview?.estimated_bytes)}。</Typography.Paragraph>
       {(preview?.targets ?? []).slice(0, 8).map((target) => <Typography.Paragraph key={target.path}><Typography.Text copyable>{target.path}</Typography.Text> · {bytes(target.estimated_bytes)}</Typography.Paragraph>)}
-      <Alert type="warning" showIcon message="确认范围" description="只处理以上可重建内容；var/data、当前有效运行时、数据库、Evidence、报告和凭据不会被删除。" />
+      <Alert type="warning" showIcon message="确认范围" description="只处理以上可删除内容；不会删除应用、权限配置、数据库、证据、报告和凭据。" />
     </Modal>
   </Space>
 }

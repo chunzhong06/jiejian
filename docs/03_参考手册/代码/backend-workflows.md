@@ -104,30 +104,37 @@
 
 ### `product/backend/workflows/assistant/service.py`
 - `class AssistantStatus`
-- `class AssistantGuidanceView`
+- `class AssistantSurfaceView`
 - `class AssistantService`
-主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.errors`, `product.backend.infra.llm.adapters.base`, `product.backend.infra.llm.profiles`, `product.backend.workflows.assistant.cache`, `product.backend.workflows.assistant.guidance`, `product.backend.workflows.assistant.templates`, `pydantic`, `re`, `threading`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.errors`, `product.backend.infra.llm.adapters.base`, `product.backend.infra.llm.profiles`, `product.backend.workflows.assistant.cache`, `product.backend.workflows.assistant.diagnosis`, `product.backend.workflows.assistant.surfaces`, `product.backend.workflows.assistant.templates`, `pydantic`, `re`, `threading`, `time`
+
+### `product/backend/workflows/assistant/surfaces.py`
+- `PROJECT_ASSISTANT_TEMPLATES`
+- `class ResolvedAssistantSurface`
+- `class AssistantSurfaceResolver`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.workflows.assistant.diagnosis`, `product.backend.workflows.assistant.templates`
 
 ### `product/backend/workflows/assistant/templates.py`
 - `class AssistantTemplateId`
-- `class AssistantFactField`
+- `class AssistantEntityType`
+- `class AssistantSuggestionKind`
 - `class AssistantTemplateSpec`
 - `class AssistantFact`
-- `class AssistantAllowedOption`
-- `class AssistantTemplateInput`
-- `class AssistantRecommendation`
+- `class AssistantEntity`
+- `class AssistantSurfaceInput`
+- `class AssistantSuggestion`
 - `class AssistantResult`
 - `ASSISTANT_SAFETY_INSTRUCTIONS`
-- `_COMMON_GUIDANCE_FACTS`
 - `ASSISTANT_TEMPLATES`
-- `build_template_input(template_id, facts, options) -> AssistantTemplateInput`
+- `build_surface_input(template_id, subject_id, facts, entities) -> AssistantSurfaceInput`
 - `render_assistant_prompt(value) -> str`
-- `parse_assistant_result(raw, template_id, allowed_option_ids) -> AssistantResult`
-主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `json`, `product.backend.core.errors`, `product.backend.workflows.assistant.guidance`, `pydantic`, `typing`
+- `assistant_result_json_schema(value) -> dict[str, object]`
+- `parse_assistant_result(raw, surface_input) -> AssistantResult`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `json`, `product.backend.core.errors`, `pydantic`, `re`, `typing`
 
 ### `product/backend/workflows/context.py`
 - `class ApplicationCore`
-主要 import / dot-source：`__future__`, `collections.abc`, `functools`, `os`, `pathlib`, `product.backend.infra.llm.adapters.httpx_transport`, `product.backend.infra.llm.profiles`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.cache`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.queue`, `product.backend.infra.runtime.jobs.recording`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.runner.progress`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.infra.storage`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.control`, `product.backend.workflows.official_sample`, `product.backend.workflows.onboarding.workflow`, `product.backend.workflows.permission_intents`, `product.backend.workflows.projects.catalog`, `product.backend.workflows.projects.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.recording.credentials`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.recording.project_submission`, `product.backend.workflows.recording.run_service`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.recording.submission`, `product.backend.workflows.results.services`, `product.backend.workflows.runs.execution`, `product.backend.workflows.runs.submission`, `product.backend.workflows.security_setup`, `product.backend.workflows.security_setup.local_observer_registry`, `product.backend.workflows.test_identities`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `functools`, `os`, `pathlib`, `product.backend.infra.llm.adapters.httpx_transport`, `product.backend.infra.llm.profiles`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.queue`, `product.backend.infra.runtime.jobs.recording`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.maintenance`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.runner.progress`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.infra.storage`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.control`, `product.backend.workflows.official_sample`, `product.backend.workflows.onboarding.workflow`, `product.backend.workflows.permission_intents`, `product.backend.workflows.projects.catalog`, `product.backend.workflows.projects.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.recording.credentials`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.recording.project_submission`, `product.backend.workflows.recording.run_service`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.recording.submission`, `product.backend.workflows.results.services`, `product.backend.workflows.runs.execution`, `product.backend.workflows.runs.submission`, `product.backend.workflows.security_setup`, `product.backend.workflows.security_setup.local_observer_registry`, `product.backend.workflows.test_identities`, `typing`
 
 ### `product/backend/workflows/contracts/analysis.py`
 - `_SOURCE_FILE_MAX_BYTES`
@@ -178,6 +185,14 @@
 - `_STEP_DEFINITIONS`
 - `class ProductStatusService`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.readiness`, `product.protocols`, `pydantic`, `typing`
+
+### `product/backend/workflows/mcp_access.py`
+- `class MCPAccessLevel`
+- `_LEVEL_ORDER`
+- `class MCPProjectGrant`
+- `class MCPAccessView`
+- `class MCPAccessController`
+主要 import / dot-source：`__future__`, `enum`, `hmac`, `product.backend.core.errors`, `pydantic`, `secrets`, `threading`, `typing`
 
 ### `product/backend/workflows/official_sample.py`
 - `class OfficialExperienceMode`

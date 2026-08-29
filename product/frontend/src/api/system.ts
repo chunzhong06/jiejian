@@ -20,15 +20,15 @@ export type SystemStatus = {
   }
 }
 
-export type CacheEntry = { path: string; bytes: number; files: number; budget: number | null; over_budget: boolean }
-export type CacheStatus = {
+export type MaintenanceEntry = { path: string; bytes: number; files: number; categories?: Record<string, MaintenanceEntry> }
+export type MaintenanceStatus = {
   schema_version: '1'
-  entries: Record<string, CacheEntry>
-  protected: { data: string; data_unchanged: boolean; current_runtime_unchanged_by_cache: boolean }
+  entries: { assistant: MaintenanceEntry; logs: MaintenanceEntry; temporary: MaintenanceEntry }
+  protected: { data: string; applications: boolean; permissions: boolean; database: boolean; evidence: boolean; reports: boolean; credentials: boolean; active_runtime: boolean; current_session_logs: boolean; development_root_included: boolean }
   last_successful_operation?: { operation?: string; completed_at?: number } | null
 }
-export type CacheOperation = 'clean' | 'runtime-repair'
-export type CacheOperationResult = {
+export type MaintenanceOperation = 'clear-assistant-cache' | 'clear-logs' | 'clear-temporary' | 'clear-all' | 'repair-runtime'
+export type MaintenanceOperationResult = {
   schema_version: '1'
   operation: string
   dry_run: boolean
@@ -37,13 +37,13 @@ export type CacheOperationResult = {
   targets: Array<{ path: string; estimated_bytes: number }>
   removed: string[]
   requires_restart?: boolean
-  protected: CacheStatus['protected']
-  status: CacheStatus
+  protected: MaintenanceStatus['protected']
+  status: MaintenanceStatus
 }
 
 export const systemApi = {
   status: () => request<SystemStatus>('/api/system/status'),
-  cacheStatus: () => request<CacheStatus>('/api/system/cache'),
-  cacheOperation: (operation: CacheOperation, body: { confirmed: boolean; dry_run: boolean }) => request<CacheOperationResult>(`/api/system/cache/${operation}`, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) }),
+  maintenanceStatus: () => request<MaintenanceStatus>('/api/system/maintenance'),
+  maintenanceOperation: (operation: MaintenanceOperation, body: { confirmed: boolean; dry_run: boolean }) => request<MaintenanceOperationResult>(`/api/system/maintenance/${operation}`, { method: 'POST', body: JSON.stringify({ schema_version: '1', ...body }) }),
   shutdown: () => request<{ status: 'stopping'; message: string }>('/api/system/shutdown', { method: 'POST' }),
 }

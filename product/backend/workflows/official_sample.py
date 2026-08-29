@@ -91,11 +91,6 @@ _IDENTITY_MAPPING = {
         "JIEJIAN_SAMPLE_ALICE_SESSION",
     ),
     "member": ("bob", "Bob · 普通成员", "JIEJIAN_SAMPLE_BOB_SESSION"),
-    "external_visitor": (
-        "eve",
-        "Eve · 外部访客",
-        "JIEJIAN_SAMPLE_EVE_SESSION",
-    ),
 }
 
 
@@ -205,7 +200,7 @@ class OfficialSampleExperience:
                 raise
 
     def prepare_identities(self) -> OfficialExperienceView:
-        """只为三个已由用户确认的角色创建正常 TestIdentity 与 Cookie 引用。"""
+        """只为两个已由用户确认的角色创建正常 TestIdentity 与 Cookie 引用。"""
 
         with self._lock:
             current = self._require_active()
@@ -218,7 +213,7 @@ class OfficialSampleExperience:
             if set(_IDENTITY_MAPPING) - set(roles):
                 raise JiejianError(
                     ErrorCode.STATE_PRECONDITION,
-                    "请先确认协作空间的三个权限组候选",
+                    "请先确认协作空间的两个权限组候选",
                 )
             existing = {
                 item.role_canonical_key.casefold(): item
@@ -331,6 +326,17 @@ class OfficialSampleExperience:
                 self._require_idle(current.project_id)
                 self._stop_current(current)
             return self.status()
+
+    def stop_project(self, project_id: str) -> bool:
+        """结束属于指定 Project 的空闲体验；不匹配时保持幂等。"""
+
+        with self._lock:
+            current = self._current
+            if current is None or not current.active or current.project_id != project_id:
+                return False
+            self._require_idle(project_id)
+            self._stop_current(current)
+            return True
 
     def close(self) -> None:
         """应用关闭已先停止 Worker/Recording；此处强制回收其拥有的 Sample。"""

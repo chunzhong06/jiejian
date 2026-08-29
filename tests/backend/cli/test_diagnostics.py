@@ -65,17 +65,46 @@ def test_root_help_is_task_oriented() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for text in ("status", "app", "account", "flow", "check", "result", "history", "settings", "system"):
+    for text in ("status", "serve", "app", "account", "flow", "check", "result", "history", "settings", "system"):
         assert text in result.stdout
     for section in ("普通任务", "图形界面", "运行与维护"):
         assert section in result.stdout
+    for removed in ("advanced", "Profile", "Baseline", "Gate", "LEGACY_PROFILE", "VarDir"):
+        assert removed not in result.stdout
 
 
 def test_command_groups_without_leaf_show_help_and_succeed() -> None:
-    for group in ("app", "account", "flow", "check", "result", "history", "settings", "system"):
-        result = CliRunner().invoke(app, [group])
+    groups = (
+        ("app",),
+        ("account",),
+        ("flow",),
+        ("check",),
+        ("result",),
+        ("history",),
+        ("settings",),
+        ("system",),
+        ("system", "clean"),
+    )
+    for group in groups:
+        result = CliRunner().invoke(app, list(group))
         assert result.exit_code == 0, (group, result.stdout, result.stderr)
-        assert "Usage:" in result.stdout
+        assert "用法：" in result.stdout
+        for framework_title in ("Usage:", "Options", "Commands", "Arguments"):
+            assert framework_title not in result.stdout
+        for removed in ("Profile", "Baseline", "Gate", "LEGACY_PROFILE", "VarDir"):
+            assert removed not in result.stdout
+
+
+def test_invalid_command_and_missing_argument_use_chinese_framework_messages() -> None:
+    unknown = CliRunner().invoke(app, ["app", "unknown"])
+    missing = CliRunner().invoke(app, ["app", "show"])
+
+    assert unknown.exit_code != 0
+    assert "没有名为“unknown”的命令" in unknown.output
+    assert "No such command" not in unknown.output
+    assert missing.exit_code != 0
+    assert "缺少必需参数“project_id”" in missing.output
+    assert "Missing argument" not in missing.output
 
 
 def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
@@ -283,7 +312,7 @@ def test_status_human_mode_does_not_require_an_interactive_terminal(tmp_path: Pa
     assert "接入应用" in result.stdout
 
 
-def test_cache_cli_uses_application_service_and_preserves_data(tmp_path: Path) -> None:
+def test_maintenance_cli_uses_application_service_and_preserves_data(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     data = var_dir / "data" / "keep.txt"
     cached = var_dir / "cache" / "assistant" / "rebuild.bin"
@@ -292,13 +321,10 @@ def test_cache_cli_uses_application_service_and_preserves_data(tmp_path: Path) -
     data.write_text("keep", encoding="utf-8")
     cached.write_bytes(b"cache")
 
-    status = CliRunner().invoke(app, ["--var-dir", str(var_dir), "system", "cache", "status"])
     cleaned = CliRunner().invoke(
-        app, ["--var-dir", str(var_dir), "system", "cache", "clean", "--confirm"]
+        app, ["--var-dir", str(var_dir), "system", "clean", "assistant", "--confirm"]
     )
 
-    assert status.exit_code == 0, status.stdout + status.stderr
-    assert json.loads(status.stdout)["data"]["protected"]["data"] == str(var_dir / "data")
     assert cleaned.exit_code == 0, cleaned.stdout + cleaned.stderr
     assert data.read_text(encoding="utf-8") == "keep"
     assert not cached.exists()

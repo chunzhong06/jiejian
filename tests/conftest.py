@@ -97,11 +97,10 @@ def collaboration_space_factory(request: pytest.FixtureRequest, tmp_path: Path) 
             "passwords": {
                 "alice": f"test-alice-{token_urlsafe(18)}",
                 "bob": f"test-bob-{token_urlsafe(18)}",
-                "eve": f"test-eve-{token_urlsafe(18)}",
             },
             "session_material": {
                 account: f"session-{account}-{token_urlsafe(18)}"
-                for account in ("alice", "bob", "eve")
+                for account in ("alice", "bob")
             },
             "queue_sas": "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=r&sr=q&sig=test-queue-signature",
             "blob_sas": "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=rl&sr=c&sig=test-blob-signature",

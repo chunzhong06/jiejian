@@ -70,8 +70,11 @@ function jiejian {
     param([Parameter(ValueFromRemainingArguments=`$true)][object[]]`$Arguments)
     & '$python' -B -m product.backend.cli --var-dir '$var' @Arguments
 }
+function quit { exit }
 Set-Location -LiteralPath '$project'
-Write-Host '已进入界鉴开发环境。输入 jiejian --help 查看命令。' -ForegroundColor Cyan
+Write-Host '界鉴命令以 jiejian 开头。' -ForegroundColor Cyan
+Write-Host '输入 jiejian --help 查看命令。' -ForegroundColor Cyan
+Write-Host '输入 exit 退出命令行；也可以输入 quit。' -ForegroundColor Cyan
 "@
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
     & $shell -NoLogo -NoProfile -NoExit -EncodedCommand $encoded

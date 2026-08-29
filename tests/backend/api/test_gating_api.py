@@ -1,16 +1,11 @@
 # 验证后端 API中的结果闸门接口。
-
 from __future__ import annotations
 
-from contextlib import contextmanager
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from typer.testing import CliRunner
-
 from product.backend.api.routers.gating import build_gating_router
-from product.backend.cli.app import app as cli_app
 
 
 BASELINE_ID = "baseline_" + "a" * 32
@@ -50,35 +45,3 @@ def test_api_uses_explicit_baseline_and_gate_paths() -> None:
         read = client.get(f"/api/gates/{GATE_ID}")
     assert accepted.status_code == evaluated.status_code == read.status_code == 200
     assert evaluated.json()["data"]["decision"] == read.json()["data"]["decision"] == "PASS"
-
-
-def test_new_cli_gate_mode_returns_gate_decision_exit_code(monkeypatch) -> None:
-    fake_context = SimpleNamespace(gating=_FakeGating(), close=lambda: None)
-    @contextmanager
-    def fake_scope(_context):
-        yield fake_context
-
-    monkeypatch.setattr("product.backend.cli.commands.gating.application_scope", fake_scope)
-    result = CliRunner().invoke(
-        cli_app,
-        ["system", "advanced", "gate", "evaluate", BASELINE_ID, RUN_ID],
-    )
-    assert result.exit_code == 0
-    assert '"decision":"PASS"' in result.stdout
-
-
-def test_baseline_cli_requires_explicit_actor() -> None:
-    result = CliRunner().invoke(
-        cli_app,
-        [
-            "system",
-            "advanced",
-            "baseline",
-            "accept",
-            RUN_ID,
-            "--reason",
-            "fixed run",
-        ],
-    )
-    assert result.exit_code != 0
-    assert "--actor" in result.output

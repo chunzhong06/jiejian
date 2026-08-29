@@ -11,7 +11,7 @@
 
 ### `product/backend/api/app.py`
 - `create_app(var_dir, control_origin, control_session_token, frontend_dir, start_worker, llm_transport, llm_secret_store, secret_store, environ, clock_us, folder_selector, shutdown_callback, official_sample_root) -> FastAPI`
-主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.routers.assistant`, `product.backend.api.routers.checks`, `product.backend.api.routers.contracts`, `product.backend.api.routers.execution_profiles`, `product.backend.api.routers.experience`, `product.backend.api.routers.gating`, `product.backend.api.routers.jobs`, `product.backend.api.routers.llm`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_intents`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.core.errors`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `pydantic`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.checks`, `product.backend.api.routers.contracts`, `product.backend.api.routers.execution_profiles`, `product.backend.api.routers.experience`, `product.backend.api.routers.gating`, `product.backend.api.routers.jobs`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_intents`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.core.errors`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/api/envelope.py`
 - `class ApiModel`
@@ -30,10 +30,23 @@
 - `class LocalControlGuard`
 主要 import / dot-source：`__future__`, `dataclasses`, `fastapi`, `fastapi.responses`, `hmac`, `product.backend.core.errors`, `secrets`, `urllib.parse`
 
+### `product/backend/api/mcp.py`
+- `_T`
+- `_ACCESS_ERROR_CODES`
+- `require_mcp_level(access, ctx, required_level, project_id) -> None`
+- `class MCPBearerGuard`
+- `class MCPPathAdapter`
+- `class MCPControl`
+- `build_mcp_control(context, workers, access, control_origin, control_host) -> MCPControl`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `product.backend.workflows.official_sample`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `time`, `typing`
+
 ### `product/backend/api/routers/assistant.py`
-- `class AssistantRefreshRequest`
+- `class ProjectAssistantSurface`
+- `_PROJECT_TEMPLATE`
+- `class AssistantGenerateRequest`
+- `class ErrorAssistantRequest`
 - `build_assistant_router(context) -> APIRouter`
-主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.assistant.diagnosis`, `product.backend.workflows.assistant.templates`, `product.backend.workflows.context`, `pydantic`, `typing`
 
 ### `product/backend/api/routers/checks.py`
 - `class CheckSubmitRequest`
@@ -51,8 +64,7 @@
 
 ### `product/backend/api/routers/execution_profiles.py`
 - `build_execution_profiles_router(context) -> APIRouter`
-- `class ExecutionProfileCreateRequest`
-主要 import / dot-source：`__future__`, `fastapi`, `pathlib`, `product.backend.api.envelope`, `product.backend.workflows.context`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`
 
 ### `product/backend/api/routers/experience.py`
 - `build_experience_router(context) -> APIRouter`
@@ -80,6 +92,11 @@
 - `class LLMProfileResponse`
 - `class LLMDefaultProfileRequest`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.infra.llm.catalog`, `product.backend.infra.llm.config`, `product.backend.workflows.context`, `pydantic`, `typing`
+
+### `product/backend/api/routers/mcp_access.py`
+- `class MCPProjectGrantRequest`
+- `build_mcp_access_router(context, access) -> APIRouter`
+主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `typing`
 
 ### `product/backend/api/routers/onboarding.py`
 - `class OnboardingInspectRequest`
@@ -125,7 +142,7 @@
 - `build_system_router(context, workers, shutdown_callback) -> APIRouter`
 - `class HealthResponse`
 - `class ReadyResponse`
-- `class CacheOperationRequest`
+- `class MaintenanceOperationRequest`
 主要 import / dot-source：`__future__`, `fastapi`, `fastapi.responses`, `product.backend`, `product.backend.api.envelope`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.infra.storage`, `product.backend.workflows.context`, `typing`
 
 ### `product/backend/api/routers/test_identities.py`
@@ -143,7 +160,7 @@
 ### `product/backend/cli/app.py`
 - `root(context, config, var_dir, log_level, trace_id, json_output, human_output, verbose, version) -> None`
 - `main() -> None`
-主要 import / dot-source：`__future__`, `pathlib`, `product.backend`, `product.backend.cli.bootstrap`, `product.backend.cli.commands.contracts`, `product.backend.cli.commands.control`, `product.backend.cli.commands.gating`, `product.backend.cli.commands.projects`, `product.backend.cli.commands.recordings`, `product.backend.cli.commands.runs`, `product.backend.cli.commands.system`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.infra.runtime.process.identity`, `sys`, `typer`, `uuid`
+主要 import / dot-source：`__future__`, `pathlib`, `product.backend`, `product.backend.cli.bootstrap`, `product.backend.cli.commands.control`, `product.backend.cli.commands.system`, `product.backend.cli.localization`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.infra.runtime.process.identity`, `sys`, `typer`, `uuid`
 
 ### `product/backend/cli/bootstrap.py`
 - `class CliOptions`
@@ -151,20 +168,6 @@
 - `application_scope(context, environ) -> Iterator[object]`
 - `default_frontend_dir() -> Path`
 主要 import / dot-source：`__future__`, `collections.abc`, `contextlib`, `dataclasses`, `pathlib`, `product.backend.infra.runtime.logging`, `product.backend.infra.runtime.settings`, `typer`
-
-### `product/backend/cli/commands/contracts.py`
-- `contract_validate_command(path) -> None`
-- `contract_workspace_command(context, profile_path) -> None`
-- `contract_requirement_add_command(context, profile_path, text, tag, actor) -> None`
-- `contract_derive_command(context, profile_path, requirement, actor) -> None`
-- `contract_draft_command(context, profile_path, contract_id, snapshot_path, actor) -> None`
-- `contract_revise_command(context, profile_path, contract_id, snapshot_path, actor) -> None`
-- `contract_transition_command(context, profile_path, contract_id, version, action, actor) -> None`
-- `contract_assessment_command(context, profile_path, contract_id, version) -> None`
-- `contract_diff_command(context, profile_path, contract_id, version, from_version) -> None`
-- `contract_drift_command(context, profile_path, contract_id, version) -> None`
-- `contract_history_command(context, run_id) -> None`
-主要 import / dot-source：`__future__`, `contextlib`, `pathlib`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.core.verification.permissions`, `typer`, `typing`
 
 ### `product/backend/cli/commands/control.py`
 - `status_command(context, project_id) -> None`
@@ -212,36 +215,21 @@
 - `settings_test_command(context, profile_name) -> None`
 主要 import / dot-source：`__future__`, `os`, `pathlib`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.jobs.models`, `sys`, `time`, `typer`, `uuid`
 
-### `product/backend/cli/commands/gating.py`
-- `baseline_accept_command(context, run_id, actor, reason) -> None`
-- `gate_evaluate_command(context, baseline_id, run_id, minimum_severity) -> None`
-- `gate_result_command(context, gate_result_id) -> None`
-主要 import / dot-source：`__future__`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.core.verification.gating`, `typer`
-
-### `product/backend/cli/commands/projects.py`
-- `project_validate_command(path) -> None`
-主要 import / dot-source：`__future__`, `pathlib`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.protocols`, `typer`
-
-### `product/backend/cli/commands/recordings.py`
-- `recording_start_command(context, profile_path, action_candidate_id, test_identity_id, duration_seconds, headless) -> None`
-- `recording_status_command(context, recording_id) -> None`
-- `recording_review_command(context, recording_id, command_path) -> None`
-- `recording_finalize_command(context, recording_id) -> None`
-- `recording_replay_command(context, recording_id, profile_path, runs) -> None`
-主要 import / dot-source：`__future__`, `os`, `pathlib`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.workflows.recording.flow_compiler`, `product.backend.workflows.recording.submission`, `product.protocols`, `time`, `typer`, `uuid`
-
-### `product/backend/cli/commands/runs.py`
-- `run_command(context, profile_path, accept_source_changes) -> None`
-主要 import / dot-source：`__future__`, `os`, `pathlib`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.protocols`, `typer`, `uuid`
-
 ### `product/backend/cli/commands/system.py`
 - `class ServeReadinessStatus`
 - `serve_command(context, host, port, open_browser, frontend_dir, official_sample_root) -> None`
 - `doctor_command(context) -> None`
-- `cache_status_command(context) -> None`
-- `cache_clean_command(context, confirm) -> None`
-- `runtime_repair_command(context, confirm) -> None`
+- `maintenance_clean_assistant_command(context, confirm) -> None`
+- `maintenance_clean_logs_command(context, confirm) -> None`
+- `maintenance_clean_temporary_command(context, confirm) -> None`
+- `maintenance_clean_all_command(context, confirm) -> None`
+- `maintenance_repair_command(context, confirm) -> None`
 主要 import / dot-source：`__future__`, `enum`, `logging`, `os`, `pathlib`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `time`, `typer`
+
+### `product/backend/cli/localization.py`
+- `class ChineseHelpFormatter`
+- `configure_cli_localization() -> None`
+主要 import / dot-source：`__future__`, `collections.abc`, `re`, `typer`
 
 ### `product/backend/cli/presentation.py`
 - `configure_presentation(mode, machine_only, verbose) -> None`

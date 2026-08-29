@@ -7,10 +7,10 @@
 <!-- 此区域由 scripts/docs/generate.py 从 product/frontend/src/ 读取。 -->
 
 ### `product/frontend/src/api/assistant.ts`
-- `AssistantGuidance`
-- `AssistantRecommendation`
-- `GuidanceOption`
-- `GuidanceSnapshot`
+- `AssistantEntity`
+- `AssistantSuggestion`
+- `AssistantSurfaceView`
+- `ProjectAssistantSurface`
 - `assistantApi`
 主要 import / dot-source：`./http`
 
@@ -76,6 +76,13 @@
 - `LLMProfileWrite`
 - `LLMProvider`
 - `llmApi`
+主要 import / dot-source：`./http`
+
+### `product/frontend/src/api/mcp.ts`
+- `MCPAccessLevel`
+- `MCPAccessView`
+- `MCPProjectGrant`
+- `mcpAccessApi`
 主要 import / dot-source：`./http`
 
 ### `product/frontend/src/api/onboarding.ts`
@@ -163,10 +170,10 @@
 主要 import / dot-source：`./system`, `vitest`
 
 ### `product/frontend/src/api/system.ts`
-- `CacheEntry`
-- `CacheOperation`
-- `CacheOperationResult`
-- `CacheStatus`
+- `MaintenanceEntry`
+- `MaintenanceOperation`
+- `MaintenanceOperationResult`
+- `MaintenanceStatus`
 - `SystemStatus`
 - `systemApi`
 主要 import / dot-source：`./http`
@@ -255,9 +262,16 @@
 - `ApplicationSwitcher`
 主要 import / dot-source：`../api/projects`, `@ant-design/icons`, `antd`
 
+### `product/frontend/src/components/AssistantPanel.test.tsx`
+主要 import / dot-source：`./AssistantPanel`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/components/AssistantPanel.tsx`
+- `AssistantPanel`
+主要 import / dot-source：`../api/assistant`, `../api/http`, `antd`, `react`
+
 ### `product/frontend/src/components/ErrorRecovery.tsx`
 - `ErrorRecovery`
-主要 import / dot-source：`../api/http`, `antd`
+主要 import / dot-source：`../api/http`, `./AssistantPanel`, `antd`
 
 ### `product/frontend/src/components/JudgeGuideBar.test.tsx`
 主要 import / dot-source：`./JudgeGuideBar`, `@testing-library/react`, `vitest`
@@ -297,7 +311,7 @@
 
 ### `product/frontend/src/features/access/ApplicationSetup.tsx`
 - `ApplicationSetup`
-主要 import / dot-source：`../../api/http`, `../../api/onboarding`, `../../api/projects`, `../../components/AdvancedDetails`, `../../components/TaskActionBar`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/onboarding`, `../../api/projects`, `../../components/AdvancedDetails`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `antd`, `react`
 
 ### `product/frontend/src/features/checks/CheckHistoryPage.test.tsx`
 主要 import / dot-source：`./CheckHistoryPage`, `@testing-library/react`, `vitest`
@@ -318,7 +332,7 @@
 
 ### `product/frontend/src/features/checks/CheckResultsPage.tsx`
 - `CheckResultsPage`
-主要 import / dot-source：`../../api/http`, `../../api/results`, `../../api/runs`, `../../app/presentation`, `../../components/AdvancedDetails`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./EvidenceTimeline`, `./ReportPanel`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/results`, `../../api/runs`, `../../app/presentation`, `../../components/AdvancedDetails`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./EvidenceTimeline`, `./ReportPanel`, `antd`, `react`
 
 ### `product/frontend/src/features/checks/EvidenceTimeline.test.tsx`
 主要 import / dot-source：`./EvidenceTimeline`, `@testing-library/react`, `vitest`
@@ -332,7 +346,7 @@
 
 ### `product/frontend/src/features/checks/PermissionCheckPage.tsx`
 - `PermissionCheckPage`
-主要 import / dot-source：`../../api/checks`, `../../api/http`, `../../api/permissionIntents`, `../../api/projects`, `../../api/runs`, `../../app/presentation`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `../permissions/PermissionAdvancedPanel`, `./CheckProgress`, `antd`, `react`
+主要 import / dot-source：`../../api/checks`, `../../api/http`, `../../api/permissionIntents`, `../../api/projects`, `../../api/runs`, `../../app/presentation`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `../permissions/PermissionAdvancedPanel`, `./CheckProgress`, `antd`, `react`
 
 ### `product/frontend/src/features/checks/ReportPanel.test.tsx`
 主要 import / dot-source：`./ReportPanel`, `@testing-library/react`, `vitest`
@@ -346,7 +360,7 @@
 
 ### `product/frontend/src/features/identities/TestIdentityPage.tsx`
 - `TestIdentityPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/testIdentities`, `../../components/AdvancedDetails`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/testIdentities`, `../../components/AdvancedDetails`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `antd`, `react`
 
 ### `product/frontend/src/features/permissions/explorer/PermissionExplorer.tsx`
 - `PermissionExplorer`
@@ -383,7 +397,7 @@
 
 ### `product/frontend/src/features/permissions/governance/PermissionGovernancePanel.tsx`
 - `PermissionGovernancePanel`
-主要 import / dot-source：`../../../api/contracts`, `../../../api/executionProfiles`, `../../../api/http`, `../../../api/projects`, `../../../app/presentation`, `antd`, `react`
+主要 import / dot-source：`../../../api/contracts`, `../../../api/http`, `../../../api/projects`, `../../../app/presentation`, `antd`, `react`
 
 ### `product/frontend/src/features/permissions/PermissionAdvancedPanel.test.tsx`
 主要 import / dot-source：`./PermissionAdvancedPanel`, `@testing-library/react`, `vitest`
@@ -410,7 +424,7 @@
 
 ### `product/frontend/src/features/recording/RecordingPage.tsx`
 - `RecordingPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/recordings`, `../../api/runs`, `../../app/browserState`, `../../components/AdvancedDetails`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./ActionSafetySetupCard`, `./FlowDraftReview`, `./RecordingCaptureCard`, `./RecordingSetupCard`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/recordings`, `../../api/runs`, `../../app/browserState`, `../../components/AdvancedDetails`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./ActionSafetySetupCard`, `./FlowDraftReview`, `./RecordingCaptureCard`, `./RecordingSetupCard`, `antd`, `react`
 
 ### `product/frontend/src/features/recording/RecordingSetupCard.tsx`
 - `RecordingSetupCard`
@@ -421,7 +435,11 @@
 
 ### `product/frontend/src/features/settings/LLMSettingsDrawer.tsx`
 - `LLMSettingsDrawer`
-主要 import / dot-source：`../../api/http`, `../../api/llm`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/llm`, `./MCPAccessCard`, `antd`, `react`
+
+### `product/frontend/src/features/settings/MCPAccessCard.tsx`
+- `MCPAccessCard`
+主要 import / dot-source：`../../api/http`, `../../api/mcp`, `antd`, `react`
 
 ### `product/frontend/src/features/settings/ModelServicePage.tsx`
 - `ModelServicePage`
@@ -439,7 +457,7 @@
 
 ### `product/frontend/src/features/workspace/WorkbenchPage.tsx`
 - `WorkbenchPage`
-主要 import / dot-source：`../../api/assistant`, `../../api/experience`, `../../api/projects`, `../../api/runs`, `../../api/system`, `../../app/presentation`, `../../components/PageTaskHeader`, `antd`, `react`
+主要 import / dot-source：`../../api/experience`, `../../api/projects`, `../../api/runs`, `../../api/system`, `../../app/presentation`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `antd`, `react`
 
 ### `product/frontend/src/main.tsx`
 主要 import / dot-source：`./app/ControlShell`, `./app/theme`, `antd`, `antd/locale/zh_CN`, `react`, `react-dom/client`

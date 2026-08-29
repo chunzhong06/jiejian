@@ -54,30 +54,32 @@ def build_system_router(
             }
         )
 
-    @router.get("/api/system/cache", response_model=ApiResponse)
-    def cache_status() -> JSONResponse:
-        """只读取同一缓存服务的状态，不遍历或删除 data。"""
+    @router.get("/api/system/maintenance", response_model=ApiResponse)
+    def maintenance_status() -> JSONResponse:
+        """读取三类可清理统计与永不进入普通清理的受保护摘要。"""
 
-        return data_response(context.cache.status())
+        return data_response(context.maintenance.status())
 
-    @router.post("/api/system/cache/{operation}", response_model=ApiResponse)
-    def cache_operation(
-        operation: Literal["clean", "runtime-repair"],
-        body: CacheOperationRequest,
+    @router.post("/api/system/maintenance/{operation}", response_model=ApiResponse)
+    def maintenance_operation(
+        operation: Literal[
+            "clear-assistant-cache",
+            "clear-logs",
+            "clear-temporary",
+            "clear-all",
+            "repair-runtime",
+        ],
+        body: MaintenanceOperationRequest,
     ) -> JSONResponse:
         """统一执行 GUI/CLI 同语义的预览、确认和维护操作。"""
 
-        if operation == "clean":
-            result = context.cache.clean(
+        return data_response(
+            context.maintenance.operate(
+                operation,
                 confirmed=body.confirmed,
                 dry_run=body.dry_run,
             )
-        else:
-            result = context.cache.repair_runtime(
-                confirmed=body.confirmed,
-                dry_run=body.dry_run,
-            )
-        return data_response(result)
+        )
 
     @router.post("/api/system/shutdown", response_model=ApiResponse, status_code=202)
     def shutdown() -> JSONResponse:
@@ -114,7 +116,7 @@ class ReadyResponse(ApiModel):
     worker: Literal["running", "stopped"]
 
 
-class CacheOperationRequest(ApiModel):
+class MaintenanceOperationRequest(ApiModel):
     schema_version: Literal["1"]
     confirmed: bool = False
     dry_run: bool = True

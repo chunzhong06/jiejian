@@ -44,12 +44,12 @@ class ProjectLifecycleService:
         uow_factory: Callable[..., StorageUnitOfWork],
         test_identities: TestIdentityService,
         *,
-        official_sample_active: Callable[[str], bool],
+        stop_official_sample: Callable[[str], bool],
         clock_us: Callable[[], int] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._test_identities = test_identities
-        self._official_sample_active = official_sample_active
+        self._stop_official_sample = stop_official_sample
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
 
     def archive(self, project_id: str) -> ProjectRecord:
@@ -59,6 +59,8 @@ class ProjectLifecycleService:
         if project.status is ProjectStatus.ARCHIVED:
             return project
 
+        # 空闲官方体验属于 Project 的会话资源，移除应用时先走正式体验收口。
+        self._stop_official_sample(project_id)
         # 先删除安全存储中的当前凭据；失败时不得推进 Project 状态。
         self._test_identities.remove_project_credentials(project_id)
         project = self._require_archivable(project_id)
@@ -101,21 +103,14 @@ class ProjectLifecycleService:
                 for item in work.jobs.list_for_project(project_id)
                 if item.state in _ACTIVE_JOB_STATES
             )
-        official_sample_active = self._official_sample_active(project_id)
-        if (
-            active_runs
-            or active_recordings
-            or active_jobs
-            or official_sample_active
-        ):
+        if active_runs or active_recordings or active_jobs:
             raise JiejianError(
                 ErrorCode.PROJECT_ARCHIVE_CONFLICT,
-                "应用仍有活动任务或官方示例，请先结束后再移除",
+                "应用仍有活动检查、录制或后台任务，请先结束后再移除",
                 details={
                     "active_run_count": len(active_runs),
                     "active_recording_count": len(active_recordings),
                     "active_job_count": len(active_jobs),
-                    "official_sample_active": official_sample_active,
                 },
             )
         return project

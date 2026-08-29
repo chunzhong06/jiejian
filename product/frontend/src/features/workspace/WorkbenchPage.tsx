@@ -1,18 +1,17 @@
 // 工作台以确定性 Readiness 给出唯一下一步，AI 只在次级区域解释可选建议。
 
-import { Button, Card, Divider, List, Modal, Space, Tag, Typography } from 'antd'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { assistantApi, type AssistantGuidance } from '../../api/assistant'
+import { Button, Card, Divider, Modal, Space, Tag, Typography } from 'antd'
+import { useMemo, useState } from 'react'
 import type { OfficialExperienceDto, OfficialExperienceMode } from '../../api/experience'
 import type { ProductNextActionDto, ProjectDto, ProjectReadinessDto } from '../../api/projects'
 import type { RunDto } from '../../api/runs'
 import type { SystemStatus } from '../../api/system'
 import { formatTimestamp, integrityLabel, lifecycleLabel, verdictLabel } from '../../app/presentation'
+import { AssistantPanel } from '../../components/AssistantPanel'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 
 function endpointLabel(readiness: ProjectReadinessDto) {
   if (readiness.endpoint_status === 'CONFIRMED') return '已确认'
-  if (readiness.endpoint_status === 'LEGACY_PROFILE') return '需要按新流程重新接入'
   if (readiness.endpoint_status === 'UNAVAILABLE') return '暂不可达'
   return '待确认'
 }
@@ -26,6 +25,7 @@ export function WorkbenchPage({
   experience,
   experienceBusy,
   onStartExperience,
+  onStopExperience,
   onNavigate,
 }: {
   selected: ProjectDto | null
@@ -36,37 +36,10 @@ export function WorkbenchPage({
   experience: OfficialExperienceDto | null
   experienceBusy: boolean
   onStartExperience: (mode: OfficialExperienceMode) => Promise<boolean>
+  onStopExperience?: () => Promise<void>
   onNavigate: (path: string) => void
 }) {
-  const [assistant, setAssistant] = useState<AssistantGuidance | null>(null)
   const [requestedMode, setRequestedMode] = useState<OfficialExperienceMode | null>(null)
-  const automaticRefreshKey = useRef<string | null>(null)
-  const readinessKey = JSON.stringify(readiness)
-  useEffect(() => {
-    if (!selected) {
-      setAssistant(null)
-      return
-    }
-    let active = true
-    // Readiness 变化后忽略陈旧响应；AI 刷新失败不能改变确定性主流程。
-    void assistantApi.guidance(selected.project_id).then((value) => {
-      if (!active) return
-      setAssistant(value)
-      if (value.status !== 'REFRESH_NEEDED') return
-      const key = `${selected.project_id}:jiejian.next_step:${value.guidance.state_fingerprint}`
-      if (automaticRefreshKey.current === key) return
-      automaticRefreshKey.current = key
-      return assistantApi.refresh(selected.project_id).then((refreshed) => {
-        if (active) setAssistant(refreshed)
-      }).catch(() => undefined)
-    }).catch(() => undefined)
-    return () => { active = false }
-  }, [readinessKey, selected?.project_id])
-
-  const retryAssistant = () => {
-    if (!selected) return
-    void assistantApi.refresh(selected.project_id, true).then(setAssistant).catch(() => undefined)
-  }
   const latest = runs[0]
   const systemIssue = systemStatus.api === 'unknown' || systemStatus.worker === 'stopped' || systemStatus.browser === 'unavailable'
     ? '运行环境中有服务暂不可用'
@@ -75,7 +48,7 @@ export function WorkbenchPage({
     const result: string[] = []
     if (!selected) return ['还没有选择要检查的应用']
     if (!readiness) return ['正在读取应用准备状态']
-    if (readiness.endpoint_status !== 'CONFIRMED') result.push(readiness.endpoint_status === 'LEGACY_PROFILE' ? '旧执行配置不能代替正式应用接入' : '本地应用地址尚未确认')
+    if (readiness.endpoint_status !== 'CONFIRMED') result.push('本地应用地址尚未确认')
     if (readiness.source_analysis_status === 'STALE') result.push('源码已变化，需要重新分析并复核候选')
     const pendingPermissionActions = readiness.permission_actions?.filter((action) => !action.compilable) ?? []
     if (pendingPermissionActions.length > 0) result.push(`${pendingPermissionActions.length} 个业务动作仍需完成权限确认`)
@@ -85,10 +58,12 @@ export function WorkbenchPage({
   }, [latest?.result_integrity, readiness, selected, systemIssue])
 
   const sampleAvailable = experience?.available === true
-  const sampleActions = <Space wrap size={8}>
-    <Button disabled={!sampleAvailable || experienceBusy} onClick={() => setRequestedMode('GUIDED')}>评委导览</Button>
-    <Button type="link" disabled={!sampleAvailable || experienceBusy} onClick={() => setRequestedMode('FULL')}>完整体验</Button>
-  </Space>
+  const sampleActions = experience?.active
+    ? <Button disabled={experienceBusy} onClick={() => { void onStopExperience?.() }}>结束体验</Button>
+    : <Space wrap size={8}>
+      <Button disabled={!sampleAvailable || experienceBusy} onClick={() => setRequestedMode('GUIDED')}>评委导览</Button>
+      <Button type="link" disabled={!sampleAvailable || experienceBusy} onClick={() => setRequestedMode('FULL')}>完整体验</Button>
+    </Space>
   const consent = <Modal
     open={requestedMode !== null}
     title={requestedMode === 'GUIDED' ? '开始评委导览？' : '开始完整体验？'}
@@ -126,7 +101,6 @@ export function WorkbenchPage({
   </div>
 
   const action = nextAction
-  const recommendedOptions = new Map((assistant?.guidance.options ?? []).map((item) => [item.option_id, item]))
   return <div className="workbench-page">
     <PageTaskHeader title="工作台" description="查看当前应用做到哪一步，并继续完成唯一的安全检查主线。" status={issues.length === 0 ? '当前准备状态完整' : `${issues.length} 项需要处理`} />
 
@@ -154,16 +128,7 @@ export function WorkbenchPage({
         </Space>}
       </Card>
 
-      <Card className="assistant-assistance-card" title={<Space><span>AI 辅助</span><Tag color="purple">次级建议</Tag></Space>}>
-        {!assistant && <Typography.Text type="secondary">AI 辅助暂不可用，确定性主流程不受影响。</Typography.Text>}
-        {assistant && <List
-          size="small"
-          locale={{ emptyText: '当前没有额外建议' }}
-          dataSource={assistant.recommendations.filter((item) => recommendedOptions.has(item.option_id))}
-          renderItem={(item) => <List.Item><List.Item.Meta title={recommendedOptions.get(item.option_id)?.title} description={item.explanation} /></List.Item>}
-        />}
-        {assistant?.status === 'BACKOFF' && <Button size="small" onClick={retryAssistant}>重试 AI 辅助</Button>}
-      </Card>
+      <AssistantPanel projectId={selected.project_id} surface="next-step" title="下一步建议" actionLabel="生成 AI 建议" />
 
       <Card title="官方示例">
         <Space direction="vertical" size={8}>

@@ -42,7 +42,7 @@ def _wait_task(client: httpx.Client, base_url: str, marker: str, bearer: str) ->
     raise AssertionError("sample export task did not reach a terminal state")
 
 
-def test_product_page_supports_real_demo_sessions_and_member_gate(
+def test_product_page_supports_two_real_demo_sessions(
     collaboration_space_factory,
 ) -> None:
     sample = collaboration_space_factory("AUTHORIZE_BEFORE_ENQUEUE")
@@ -55,6 +55,8 @@ def test_product_page_supports_real_demo_sessions_and_member_gate(
         assert "撤销当前资料包？" in page.text
         assert "确认撤销" in page.text
         assert "重新生成资料包" in page.text
+        assert 'data-account="eve"' not in page.text
+        assert "外部访客" not in page.text
         assert "Observer" not in page.text
         assert "Verdict" not in page.text
         create_export_script = page.text.split("async function createExport()", 1)[1].split(
@@ -64,13 +66,13 @@ def test_product_page_supports_real_demo_sessions_and_member_gate(
         assert "headers: { 'Content-Type': 'application/json' }" in create_export_script
         assert "body: JSON.stringify({ resource_id: 'campus-digital-museum-package' })" in create_export_script
 
-        session = client.post("/api/demo-session", json={"account": "eve"})
+        session = client.post("/api/demo-session", json={"account": "bob"})
         assert session.status_code == 200
-        assert session.json()["role"] == "外部访客"
+        assert session.json()["role"] == "普通成员"
         catalog = client.get("/api/projects")
         assert catalog.status_code == 200
         assert set(catalog.json()["projects"][0]) == {"project_id", "name", "summary"}
-        assert client.get(f"/api/projects/{PROJECT_ID}").status_code == 403
+        assert client.get(f"/api/projects/{PROJECT_ID}").status_code == 200
 
 
 def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory) -> None:
@@ -242,7 +244,7 @@ def test_owner_api_requires_its_independent_read_only_credential(
 
 
 @pytest.mark.parametrize("order", ["ENQUEUE_BEFORE_AUTHORIZE", "AUTHORIZE_BEFORE_ENQUEUE"])
-def test_bob_and_eve_have_distinct_member_and_order_boundaries(collaboration_space_factory, order: str) -> None:
+def test_bob_order_boundary_preserves_surface_denial_and_real_effect(collaboration_space_factory, order: str) -> None:
     sample = collaboration_space_factory(order)
     with httpx.Client(base_url=sample.base_url, follow_redirects=False, trust_env=False) as bob:
         _login(bob, "bob", sample.passwords["bob"])
@@ -260,15 +262,6 @@ def test_bob_and_eve_have_distinct_member_and_order_boundaries(collaboration_spa
         else:
             assert task["state"] == "NOT_CREATED"
             assert not (sample.server.runtime_root / "blob" / bob_marker).exists()
-
-    with httpx.Client(base_url=sample.base_url, follow_redirects=False, trust_env=False) as eve:
-        _login(eve, "eve", sample.passwords["eve"])
-        assert eve.get(f"/api/projects/{PROJECT_ID}").status_code == 403
-        eve_marker = f"case-eve-{order.lower()}"
-        assert eve.post(f"/api/projects/{PROJECT_ID}/exports", headers={"X-Jiejian-Case-ID": eve_marker}).status_code == 403
-        task = _wait_task(eve, sample.base_url, eve_marker, sample.task_bearer)
-        assert task["state"] == "NOT_CREATED"
-
 
 def test_unavailable_blob_does_not_change_fixed_bob_business_result(
     collaboration_space_factory,
@@ -321,7 +314,7 @@ def test_owner_revoke_preserves_history_hides_current_resource_and_allows_regene
             f"/collaboration/exports?{sample.blob_sas}&restype=container&comp=list&prefix={marker}/"
         ).text
 
-        for account in ("bob", "eve"):
+        for account in ("bob",):
             with httpx.Client(base_url=sample.base_url, follow_redirects=False, trust_env=False) as denied:
                 _login(denied, account, sample.passwords[account])
                 response = denied.request(
@@ -505,12 +498,12 @@ def test_server_requires_loopback_and_runtime_root_is_not_source_tree(tmp_path: 
     with pytest.raises(ValueError):
         CollaborationSpaceServer(
             ("0.0.0.0", 0),
-            passwords={"alice": "a", "bob": "b", "eve": "e"},
+            passwords={"alice": "a", "bob": "b"},
             runtime_root=tmp_path,
         )
     sample = create_collaboration_space_server(
         port=0,
-        passwords={"alice": "a", "bob": "b", "eve": "e"},
+        passwords={"alice": "a", "bob": "b"},
         runtime_root=tmp_path / "runtime",
     )
     try:
@@ -528,6 +521,6 @@ def test_port_binding_failure_preserves_original_socket_error(tmp_path: Path) ->
         with pytest.raises(OSError):
             CollaborationSpaceServer(
                 ("127.0.0.1", port),
-                passwords={"alice": "a", "bob": "b", "eve": "e"},
+                passwords={"alice": "a", "bob": "b"},
                 runtime_root=tmp_path / "uninitialized-server",
             )

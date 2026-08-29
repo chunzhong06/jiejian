@@ -1,4 +1,4 @@
-# 验证 Project ARCHIVED 对 Run、Recording、Job 与官方 Sample 活动态统一 fail-closed。
+# 验证 Project 移除能结束空闲官方体验，并对真实活动任务保持 fail-closed。
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ class _Identities:
         return 1
 
 
-@pytest.mark.parametrize("active", ["run", "recording", "job", "official-sample"])
+@pytest.mark.parametrize("active", ["run", "recording", "job"])
 def test_archive_rejects_every_active_execution_boundary(active: str) -> None:
     work = _Work(
         ProjectRecord(
@@ -82,10 +82,11 @@ def test_archive_rejects_every_active_execution_boundary(active: str) -> None:
         active,
     )
     identities = _Identities()
+    stopped_samples: list[str] = []
     service = ProjectLifecycleService(
         lambda: work,
         identities,  # type: ignore[arg-type]
-        official_sample_active=lambda _project_id: active == "official-sample",
+        stop_official_sample=lambda project_id: stopped_samples.append(project_id) is None,
         clock_us=lambda: 2,
     )
 
@@ -94,6 +95,7 @@ def test_archive_rejects_every_active_execution_boundary(active: str) -> None:
 
     assert error.value.code == ErrorCode.PROJECT_ARCHIVE_CONFLICT.value
     assert identities.cleaned == []
+    assert stopped_samples == []
     assert work.projects.project.status is ProjectStatus.DRAFT
 
 
@@ -109,10 +111,11 @@ def test_archive_cleans_credentials_and_only_changes_project_status() -> None:
     )
     work = _Work(project, None)
     identities = _Identities()
+    stopped_samples: list[str] = []
     service = ProjectLifecycleService(
         lambda: work,
         identities,  # type: ignore[arg-type]
-        official_sample_active=lambda _project_id: False,
+        stop_official_sample=lambda project_id: stopped_samples.append(project_id) is None,
         clock_us=lambda: 2,
     )
 
@@ -120,6 +123,7 @@ def test_archive_cleans_credentials_and_only_changes_project_status() -> None:
 
     assert archived.status is ProjectStatus.ARCHIVED
     assert archived.governed_contract_id == "contract"
+    assert stopped_samples == ["sample-project"]
     assert identities.cleaned == ["sample-project"]
     assert work.projects.project == archived
     assert work.committed is True

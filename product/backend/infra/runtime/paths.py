@@ -78,10 +78,6 @@ class RuntimePaths:
         return self.runtime / "official-samples"
 
     @property
-    def official_sample_data(self) -> Path:
-        return self.data / "official-samples"
-
-    @property
     def python_runtime(self) -> Path:
         return self.runtime / "python"
 
@@ -152,7 +148,6 @@ class RuntimePaths:
             self.worker_runtime,
             self.identity_preparations,
             self.official_sample_runtime,
-            self.official_sample_data,
             self.locks,
             self.cache,
             self.assistant_cache,

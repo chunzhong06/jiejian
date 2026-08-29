@@ -73,12 +73,8 @@ def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionCo
 def _register_active_profile(app, client: TestClient, profile_path: Path) -> tuple[dict[str, object], PermissionContract, dict[str, object]]:
     project = _register_project(app, profile_path)
     contract = _activate_contract(app, str(project["project_id"]), profile_path)
-    response = client.post(
-        "/api/execution-profiles",
-        json={"schema_version": "1", "profile_path": str(profile_path)},
-    )
-    assert response.status_code == 201, response.text
-    return project, contract, response.json()["data"]
+    profile = app.state.context.execution.register(profile_path)
+    return project, contract, profile.model_dump(mode="json")
 
 @pytest.mark.essential
 def test_api_worker_runner_publication_matches_cli_report(

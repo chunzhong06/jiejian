@@ -32,13 +32,13 @@ describe('JudgeGuideBar', () => {
   it('候选待确认时显示七步中的第二个用户决定', () => {
     render(<JudgeGuideBar status={status('REVIEW_DISCOVERY', '/application') as never} experience={experience} preparingIdentities={false} onPrepareIdentities={vi.fn()} />)
     expect(screen.getByText('评委导览 · 2/7')).toBeInTheDocument()
-    expect(screen.getByText(/确认三个权限组/)).toBeInTheDocument()
+    expect(screen.getByText(/确认两个权限组/)).toBeInTheDocument()
   })
 
   it('身份步骤提供明确准备动作，完成后由新的产品状态推进', () => {
     const prepare = vi.fn()
     render(<JudgeGuideBar status={status('RECORD_FLOW', '/identities') as never} experience={experience} preparingIdentities={false} onPrepareIdentities={prepare} />)
-    expect(screen.getByText(/Eve 只用于确认外部访客边界，主演示比较 Alice 与 Bob/)).toBeInTheDocument()
+    expect(screen.getByText(/主演示比较负责人 Alice 与成员 Bob/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '准备官方测试账号' }))
     expect(prepare).toHaveBeenCalledOnce()
   })

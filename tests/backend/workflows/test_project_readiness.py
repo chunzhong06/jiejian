@@ -1,40 +1,12 @@
 # 验证项目就绪状态的确定性事实投影。
 
 from __future__ import annotations
-import json
-import threading
-from concurrent.futures import ThreadPoolExecutor
-import pytest
-from product.backend.core.errors import ErrorCode, JiejianError
+
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.infra.llm.adapters.base import LLMInvokeResult, LLMTransportError
-from product.backend.infra.llm.config import AIAssistanceSettings, LLMProviderType
 from product.backend.infra.storage import ExecutionProfileRecord, ProjectRecord
-from product.backend.workflows.assistant import (
-    ASSISTANT_TEMPLATES,
-    AssistantFactField,
-    AssistantTemplateId,
-    ErrorArea,
-    ErrorDiagnosisContext,
-    ErrorPhase,
-    GuidanceOptionKind,
-    GuidancePriorityTier,
-    build_guidance_snapshot,
-    build_template_input,
-    diagnose_error,
-    parse_assistant_result,
-    render_assistant_prompt,
-)
-from product.backend.workflows.assistant.service import AssistantService, AssistantStatus
 from product.backend.workflows.context import ApplicationCore
-from product.backend.workflows.projects.readiness import ProjectReadinessService, ProjectReadinessView
-from product.backend.workflows.security_setup.checks import (
-    CheckPreview,
-    CheckPreviewAction,
-    CheckPreviewGap,
-)
+from product.backend.workflows.projects.readiness import ProjectReadinessService
 from product.protocols import TargetType
-from product.protocols.runner import CleanupIssueCode, RunnerFailurePhase
 
 def _project(project_id: str, *, status: ProjectStatus) -> ProjectRecord:
     return ProjectRecord(
@@ -61,15 +33,15 @@ def test_draft_project_requires_application_connection(tmp_path) -> None:
     finally:
         application.close()
 
-def test_legacy_profile_project_recovers_without_reconnecting(tmp_path) -> None:
+def test_generated_profile_cannot_replace_application_connection(tmp_path) -> None:
     application = ApplicationCore(tmp_path / "var", environ={})
     try:
         with application.uow_factory() as work:
-            work.projects.add(_project("legacy-app", status=ProjectStatus.READY))
+            work.projects.add(_project("profile-only-app", status=ProjectStatus.READY))
             work.execution_profiles.add(
                 ExecutionProfileRecord(
                     profile_id="legacy-profile",
-                    project_id="legacy-app",
+                    project_id="profile-only-app",
                     source_path=str(tmp_path / "profile.json"),
                     source_hash="a" * 64,
                     contract_id="legacy-contract",
@@ -83,11 +55,13 @@ def test_legacy_profile_project_recovers_without_reconnecting(tmp_path) -> None:
             )
             work.commit()
 
-        view = ProjectReadinessService(application.uow_factory).get("legacy-app")
+        view = ProjectReadinessService(application.uow_factory).get("profile-only-app")
 
-        assert view.application_connected is True
-        assert view.endpoint_status == "LEGACY_PROFILE"
+        assert view.application_connected is False
+        assert view.endpoint_status == "NEEDS_CONNECTION"
+        assert view.source_analysis_status == "NOT_AVAILABLE"
         assert view.execution_profile_available is True
-        assert view.next_required_action == "RECORD_FLOW"
+        assert view.current_scope_runnable is False
+        assert view.next_required_action == "CONNECT_APPLICATION"
     finally:
         application.close()

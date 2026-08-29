@@ -24,6 +24,7 @@ from product.backend.core.test_identity import (
     TestIdentityCookie as IdentityCookie,
 )
 from product.backend.infra.secrets import credential_ref
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.storage import (
     ProjectRecord,
     StorageUnitOfWork,
@@ -262,6 +263,10 @@ def test_preparation_manager_commits_only_non_secret_child_result(tmp_path: Path
         process_launcher=launch,
     )
     started = manager.start(created.identity_id)
+    active_paths = manager.active_runtime_paths()
+    assert active_paths == (
+        RuntimePaths(tmp_path / "var").identity_preparations / started.preparation_id,
+    )
     request = parse_identity_preparation_request(fake_process.stdin.getvalue())
     secret_ref = credential_ref(
         "test-identity", PROJECT_ID, created.identity_id, "cookie-00"
@@ -297,6 +302,7 @@ def test_preparation_manager_commits_only_non_secret_child_result(tmp_path: Path
     assert service.get(created.identity_id).status is IdentityStatus.PREPARED
     assert "session-secret-value" not in finished.model_dump_json()
     assert finished.log_path.endswith(f"{started.preparation_id}.log")
+    assert manager.active_runtime_paths() == ()
 
 
 def test_preparation_manager_retries_orphaned_secret_cleanup_on_next_start(

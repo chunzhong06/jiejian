@@ -1,6 +1,6 @@
 # 官方 Sample
 
-`samples/web/collaboration_space` 是界鉴随源码提供的唯一 Web 演示应用：“协作空间——项目资料管理应用”。固定项目为“校园数字展馆”，Alice 是负责人，Bob 是普通成员，Eve 是外部访客；高价值业务动作是生成完整项目资料包。
+`samples/web/collaboration_space` 是界鉴随源码提供的唯一 Web 演示应用：“协作空间——项目资料管理应用”。固定项目为“校园数字展馆”，Alice 是项目负责人，Bob 是普通成员；高价值业务动作是生成完整项目资料包。
 
 同一个应用通过授权顺序和关键观察可用性形成漏洞、修复、观察受限三种事实。Sample 不包含预设 Verdict，最终 `BLOCK`、`PASS`、`INCONCLUSIVE` 只能由界鉴正式 Verification 和 Evidence 路径产生。
 
@@ -29,7 +29,7 @@ samples/web/collaboration_space/
         └── storage.py
 ```
 
-运行时数据库、Task、Audit、Queue、Blob、ZIP 和环境描述符由官方示例管理器写入调用方指定的 `var/` 运行边界，不写回 Sample 源码。
+每次体验把独立源码副本和状态写入当前实例 `var/runtime/official-samples/<experience-id>/source|state`；数据库、Task、Audit、Queue、Blob、ZIP 和环境描述符都位于 `state`，日志进入 `var/logs/official-samples`，不写回 Sample Bundle 或 `var/data`。结束体验、移除应用和 ApplicationCore 安全退出都会回收本次 source/state。
 
 ## 业务模式和六面观察
 
@@ -60,7 +60,7 @@ Alice 在资料包生成成功后可以执行：
 - 原 Audit、Queue 历史保留，并追加一次 `EXPORT_REVOKED`；
 - 历史 Blob 文件可以保留，但不再出现在当前有效 Blob namespace；
 - Owner API 与 Blob 都表达当前资源不存在；
-- 重复撤销幂等；Bob 和 Eve 不能撤销 Alice 的资料包；
+- 重复撤销幂等；Bob 不能撤销 Alice 的资料包；
 - 重新生成会创建新的 marker、job 和 artifact，不复活旧记录。
 
 HTTP `DELETE /api/projects/{project_id}/exports` 表达“撤销当前有效交付物”，不表示这次导出从未发生。

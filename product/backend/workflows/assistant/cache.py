@@ -25,27 +25,28 @@ from typing import Any
 
 from product.backend.core.errors import JiejianError
 from product.backend.workflows.assistant.templates import (
-    AssistantRecommendation,
+    AssistantSuggestion,
+    AssistantSurfaceInput,
     AssistantTemplateId,
     parse_assistant_result,
 )
 
 
 class AssistantCache:
-    """为同一项目、模板和事实指纹提供可删除的有界文件缓存。"""
+    """为同一 subject、模板和事实指纹提供可删除的有界文件缓存。"""
 
     def __init__(self, root: Path) -> None:
         self._root = root / "cache" / "assistant"
 
     def read(
         self,
-        project_id: str,
+        subject_id: str,
         template_id: AssistantTemplateId,
         fingerprint: str,
         *,
-        allowed_option_ids: tuple[str, ...],
+        surface_input: AssistantSurfaceInput,
     ) -> dict[str, Any] | None:
-        path = self._path(project_id, template_id, fingerprint)
+        path = self._path(subject_id, template_id, fingerprint)
         try:
             if not path.is_file() or path.stat().st_size > 64 * 1024:
                 return None
@@ -55,11 +56,11 @@ class AssistantCache:
         if not isinstance(value, dict) or value.get("state_fingerprint") != fingerprint:
             return None
         if value.get("entry_type") == "success":
-            # 文件缓存不是信任边界；即使文件被外部改写，未知 option 也只能退化为未命中。
+            # 文件缓存不是信任边界；即使文件被外部改写，未知实体也只能退化为未命中。
             return self._read_success(
                 value,
                 template_id,
-                allowed_option_ids=allowed_option_ids,
+                surface_input=surface_input,
             )
         if value.get("entry_type") == "failure":
             return self._read_failure(value, template_id)
@@ -67,7 +68,7 @@ class AssistantCache:
 
     def write_success(
         self,
-        project_id: str,
+        subject_id: str,
         template_id: AssistantTemplateId,
         fingerprint: str,
         *,
@@ -75,7 +76,7 @@ class AssistantCache:
         profile: str,
         model: str,
         reasoning_setting: str | None,
-        recommendations: tuple[AssistantRecommendation, ...],
+        suggestions: tuple[AssistantSuggestion, ...],
         generated_at_us: int,
     ) -> None:
         payload = {
@@ -88,14 +89,14 @@ class AssistantCache:
             "template_id": template_id.value,
             "template_version": "1",
             "state_fingerprint": fingerprint,
-            "recommendations": [item.model_dump(mode="json") for item in recommendations],
+            "suggestions": [item.model_dump(mode="json") for item in suggestions],
             "generated_at_us": generated_at_us,
         }
-        self._write(project_id, template_id, fingerprint, payload)
+        self._write(subject_id, template_id, fingerprint, payload)
 
     def write_failure(
         self,
-        project_id: str,
+        subject_id: str,
         template_id: AssistantTemplateId,
         fingerprint: str,
         *,
@@ -103,7 +104,7 @@ class AssistantCache:
         retry_after_us: int,
     ) -> None:
         self._write(
-            project_id,
+            subject_id,
             template_id,
             fingerprint,
             {
@@ -117,11 +118,11 @@ class AssistantCache:
             },
         )
 
-    def _write(self, project_id: str, template_id: AssistantTemplateId, fingerprint: str, payload: dict[str, Any]) -> None:
+    def _write(self, subject_id: str, template_id: AssistantTemplateId, fingerprint: str, payload: dict[str, Any]) -> None:
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         if len(encoded) > 64 * 1024:
             return
-        path = self._path(project_id, template_id, fingerprint)
+        path = self._path(subject_id, template_id, fingerprint)
         try:
             self._root.mkdir(parents=True, exist_ok=True)
             temporary: Path | None = None
@@ -139,8 +140,8 @@ class AssistantCache:
                 except OSError:
                     pass
 
-    def _path(self, project_id: str, template_id: AssistantTemplateId, fingerprint: str) -> Path:
-        key = f"{project_id}\x00{template_id.value}\x00{fingerprint}".encode("utf-8")
+    def _path(self, subject_id: str, template_id: AssistantTemplateId, fingerprint: str) -> Path:
+        key = f"{subject_id}\x00{template_id.value}\x00{fingerprint}".encode("utf-8")
         return self._root / f"{hashlib.sha256(key).hexdigest()}.json"
 
     @staticmethod
@@ -148,11 +149,11 @@ class AssistantCache:
         value: dict[str, Any],
         template_id: AssistantTemplateId,
         *,
-        allowed_option_ids: tuple[str, ...],
+        surface_input: AssistantSurfaceInput,
     ) -> dict[str, Any] | None:
         required = {
             "schema_version", "entry_type", "provider", "profile", "model", "reasoning_setting",
-            "template_id", "template_version", "state_fingerprint", "recommendations", "generated_at_us",
+            "template_id", "template_version", "state_fingerprint", "suggestions", "generated_at_us",
         }
         if set(value) != required or value["schema_version"] != "1" or value["entry_type"] != "success":
             return None
@@ -170,14 +171,13 @@ class AssistantCache:
                     "schema_version": value["schema_version"],
                     "template_id": value["template_id"],
                     "template_version": value["template_version"],
-                    "recommendations": value["recommendations"],
+                    "suggestions": value["suggestions"],
                 },
-                template_id=template_id,
-                allowed_option_ids=allowed_option_ids,
+                surface_input=surface_input,
             )
         except JiejianError:
             return None
-        return {**value, "recommendations": result.recommendations}
+        return {**value, "suggestions": result.suggestions}
 
     @staticmethod
     def _read_failure(value: dict[str, Any], template_id: AssistantTemplateId) -> dict[str, Any] | None:

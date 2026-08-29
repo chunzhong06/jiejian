@@ -120,6 +120,16 @@ class IdentityPreparationManager:
         self._lock = threading.RLock()
         self._reconcile_orphaned_attempts()
 
+    def active_runtime_paths(self) -> tuple[Path, ...]:
+        """返回当前受监督准备会话目录，供本地维护保护真实活跃路径。"""
+
+        with self._lock:
+            return tuple(
+                active.controls.root
+                for active in self._active.values()
+                if active.process.poll() is None
+            )
+
     def start(self, identity_id: str) -> IdentityPreparationView:
         with self._lock:
             view = self._identities.get(identity_id)

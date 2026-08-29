@@ -36,7 +36,7 @@ from product.backend.workflows.application_understanding.service import Applicat
 from product.backend.workflows.recording.submission import RecordingSubmission
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.cache import CacheMaintenanceService
+from product.backend.infra.runtime.maintenance import LocalMaintenanceService
 from product.backend.infra.samples import OfficialSampleManager
 from product.backend.infra.runtime.runner.progress import RunnerProgressReader
 from product.backend.infra.recording.request_store import RecordingRequestStore
@@ -103,7 +103,6 @@ class ApplicationCore:
             official_sample_root,
             self._base_environment,
         )
-        self.cache = CacheMaintenanceService(self.var_dir)
         database_path = default_database_path(self.var_dir)
         upgrade_database(database_path)
         self.engine = create_sqlite_engine(database_path)
@@ -167,6 +166,17 @@ class ApplicationCore:
             self.test_identities,
             self.secret_store,
             self._base_environment,
+        )
+        self.maintenance = LocalMaintenanceService(
+            self.var_dir,
+            active_runtime_paths=lambda: (
+                *self.identity_preparations.active_runtime_paths(),
+                *(
+                    (active.experience_root,)
+                    if (active := self.official_samples.active) is not None
+                    else ()
+                ),
+            ),
         )
         from product.backend.workflows.contracts.governance import ContractGovernance
 
@@ -241,10 +251,7 @@ class ApplicationCore:
         self.project_lifecycle = ProjectLifecycleService(
             factory,
             self.test_identities,
-            official_sample_active=lambda project_id: (
-                (status := self.official_experience.status()).active
-                and status.project_id == project_id
-            ),
+            stop_official_sample=self.official_experience.stop_project,
             clock_us=clock_us,
         )
         from product.backend.workflows.assistant import GuidanceQueryService
@@ -294,10 +301,21 @@ class ApplicationCore:
             clock_us=clock_us,
         )
         from product.backend.workflows.assistant.service import AssistantService
+        from product.backend.workflows.assistant.surfaces import AssistantSurfaceResolver
 
         self.assistant_service = AssistantService(
             self.var_dir,
-            guidance=self.assistant_guidance,
+            surfaces=AssistantSurfaceResolver(
+                guidance=self.assistant_guidance,
+                application_understanding=self.application_understanding,
+                test_identities=self.test_identities,
+                project_readiness=self.project_readiness,
+                product_flows=self.product_flows,
+                recording_lifecycle=self.recording_lifecycle,
+                permission_intents=self.permission_intents,
+                check_preview=self.checks.preview,
+                result_presentation=self.result_presentation,
+            ),
             llm_profiles=self.llm_profiles,
             clock_us=clock_us,
         )

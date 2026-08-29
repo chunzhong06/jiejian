@@ -82,12 +82,16 @@ function ControlShellContent() {
   const requestShutdown = () => setShutdownConfirmOpen(true)
   const removeCurrentProject = async () => {
     if (!selected) return
+    const removedActiveExperience = experience?.active === true && experience.project_id === selected.project_id
     setRemoveBusy(true)
     try {
       await projectsApi.remove(selected.project_id)
       setRemoveConfirmOpen(false)
       await workspace.refreshProjects()
-      navigate('/application')
+      if (removedActiveExperience) {
+        experienceApi.status().then(setExperience).catch((statusError) => notifyError(statusError as ApiError))
+      }
+      navigate('/workspace')
     } catch (removeError) {
       notifyError(removeError as ApiError)
     } finally {
@@ -108,6 +112,17 @@ function ControlShellContent() {
     } catch (experienceError) {
       notifyError(experienceError as ApiError)
       return false
+    } finally {
+      setExperienceBusy(false)
+    }
+  }
+  const stopOfficialExperience = async () => {
+    setExperienceBusy(true)
+    try {
+      setExperience(await experienceApi.stop())
+      await workspace.refreshCurrent()
+    } catch (experienceError) {
+      notifyError(experienceError as ApiError)
     } finally {
       setExperienceBusy(false)
     }
@@ -147,7 +162,7 @@ function ControlShellContent() {
 
   const navigateTo = (path: AppRoute) => navigate(path)
   const content = () => {
-    if (route === '/workspace') return <WorkbenchPage selected={selected} readiness={readiness} nextAction={status?.next_action ?? null} runs={runs} systemStatus={systemStatus} experience={experience} experienceBusy={experienceBusy} onStartExperience={startOfficialExperience} onNavigate={(path) => navigate(path)} />
+    if (route === '/workspace') return <WorkbenchPage selected={selected} readiness={readiness} nextAction={status?.next_action ?? null} runs={runs} systemStatus={systemStatus} experience={experience} experienceBusy={experienceBusy} onStartExperience={startOfficialExperience} onStopExperience={stopOfficialExperience} onNavigate={(path) => navigate(path)} />
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={readiness?.endpoint_status} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspace.refreshCurrent() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/identities')} />
     if (route === '/settings/models') return <ModelServicePage profiles={llmProfiles} onManage={() => setSettingsOpen(true)} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
@@ -199,6 +214,6 @@ function ControlShellContent() {
     >
       界鉴会先停止服务、Worker 和受控浏览器，并保留可恢复的任务记录。
     </Modal>
-    <LLMSettingsDrawer open={settingsOpen} profiles={llmProfiles} aiSettings={aiSettings} onClose={() => setSettingsOpen(false)} onChanged={systemState.setProfiles} onSettingsChanged={setAiSettings} onError={notifyError} />
+    <LLMSettingsDrawer open={settingsOpen} profiles={llmProfiles} projects={projects} aiSettings={aiSettings} onClose={() => setSettingsOpen(false)} onChanged={systemState.setProfiles} onSettingsChanged={setAiSettings} onError={notifyError} />
   </Layout>
 }

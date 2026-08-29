@@ -191,9 +191,11 @@ class ApplicationUnderstandingAnalyzer(OpenApiAnalysisMixin, PythonAnalysisMixin
         raw: str,
         confidence: CandidateConfidence,
         evidence: CandidateEvidence,
+        *,
+        canonical_name: str | None = None,
     ) -> None:
         try:
-            key = canonical_role_key(raw)
+            key = canonical_role_key(canonical_name or raw)
         except ValueError:
             return
         finding = values.setdefault(

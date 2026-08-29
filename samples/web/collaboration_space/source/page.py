@@ -197,9 +197,6 @@ APPLICATION_PAGE = r"""<!doctype html>
           <button class="identity-card" type="button" data-account="bob">
             <span class="avatar">B</span><span><span class="identity-name">Bob</span><span class="identity-description">普通成员 · 查看项目协作内容</span></span><span class="identity-arrow">→</span>
           </button>
-          <button class="identity-card" type="button" data-account="eve">
-            <span class="avatar">E</span><span><span class="identity-name">Eve</span><span class="identity-description">外部访客 · 尚未加入项目</span></span><span class="identity-arrow">→</span>
-          </button>
         </div>
       </div>
     </section>
@@ -246,11 +243,6 @@ APPLICATION_PAGE = r"""<!doctype html>
             <div class="notice" id="export-notice" role="status" aria-live="polite"></div>
           </aside>
         </div>
-        <article id="visitor-workspace" class="card empty-state" hidden>
-          <span class="role-chip">外部访客</span><h2>你还不是该项目成员</h2>
-          <p>“校园数字展馆”的资料只对项目成员开放。请由项目负责人添加成员后再进入项目工作台。</p>
-          <button class="button button-secondary" id="visitor-retry" type="button">重新检查访问权限</button>
-        </article>
         <p class="footer-note">本地演示应用 · 所有业务数据仅保存在当前运行目录</p>
       </div>
     </section>
@@ -359,10 +351,10 @@ APPLICATION_PAGE = r"""<!doctype html>
         setError(''); exportNotice.textContent = '';
         var result = await request('/api/projects/' + projectId);
         if (result.status === 403) {
-          show(memberWorkspace, false); show(visitorWorkspace, true); setError(''); return;
+          show(memberWorkspace, false); setError(messageFor(result.data.code)); return;
         }
-        if (!result.ok) { show(memberWorkspace, false); show(visitorWorkspace, false); setError(messageFor(result.data.code)); return; }
-        show(memberWorkspace, true); show(visitorWorkspace, false);
+        if (!result.ok) { show(memberWorkspace, false); setError(messageFor(result.data.code)); return; }
+        show(memberWorkspace, true);
         var activeExport = result.data.active_export;
         exportMarker = activeExport && typeof activeExport.request_marker === 'string' ? activeExport.request_marker : null;
         renderMembers(result.data.members || []); renderMaterials(result.data.materials || []); renderExportState(result.data.export_state);
@@ -450,7 +442,6 @@ APPLICATION_PAGE = r"""<!doctype html>
       document.getElementById('logout-button').addEventListener('click', async function () {
         await request('/api/session', { method: 'DELETE' }); renderLogin();
       });
-      document.getElementById('visitor-retry').addEventListener('click', loadProject);
       document.getElementById('open-project-button').addEventListener('click', loadProject);
       document.getElementById('back-button').addEventListener('click', loadCatalog);
       exportButton.addEventListener('click', createExport);

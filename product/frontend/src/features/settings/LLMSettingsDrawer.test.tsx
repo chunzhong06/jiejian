@@ -7,10 +7,18 @@ import LLMSettingsDrawer from './LLMSettingsDrawer'
 const mockApi = vi.hoisted(() => ({
   discoverModels: vi.fn(), refreshModels: vi.fn(), saveDefault: vi.fn(), create: vi.fn(), settings: vi.fn(), patchSettings: vi.fn(), update: vi.fn(), profile: vi.fn(), test: vi.fn(),
 }))
+const mockMcpApi = vi.hoisted(() => ({
+  status: vi.fn().mockResolvedValue({ schema_version: '1', enabled: false, endpoint: 'http://127.0.0.1:8765/mcp', access_token: null, default_level: 'READ', project_grants: [] }),
+  enable: vi.fn(), regenerate: vi.fn(), disable: vi.fn(), setProjectAccess: vi.fn(),
+}))
 
 vi.mock('../../api/llm', async () => {
   const actual = await vi.importActual<typeof import('../../api/llm')>('../../api/llm')
   return { ...actual, llmApi: mockApi }
+})
+vi.mock('../../api/mcp', async () => {
+  const actual = await vi.importActual<typeof import('../../api/mcp')>('../../api/mcp')
+  return { ...actual, mcpAccessApi: mockMcpApi }
 })
 
 const profile = {
@@ -36,6 +44,27 @@ describe('LLMSettingsDrawer', () => {
     expect(screen.getByRole('button', { name: '获取当前账号可用模型' })).not.toHaveClass('ant-btn-primary')
     expect(document.querySelector('.llm-settings-fields-pair')).not.toBeInTheDocument()
     expect(document.querySelectorAll('.llm-settings-section .ant-btn-primary')).toHaveLength(1)
+    expect(screen.getByText('AI 工具连接（MCP）')).toBeInTheDocument()
+  })
+
+  it('enables a separate MCP connection and confirms one project grant', async () => {
+    const enabled = {
+      schema_version: '1' as const, enabled: true, endpoint: 'http://127.0.0.1:8765/mcp',
+      access_token: 'mcp-token', default_level: 'READ' as const, project_grants: [],
+    }
+    mockMcpApi.enable.mockResolvedValue(enabled)
+    mockMcpApi.setProjectAccess.mockResolvedValue({
+      ...enabled, project_grants: [{ project_id: 'proj-1', level: 'PREPARE' }],
+    })
+    render(<LLMSettingsDrawer open profiles={[]} projects={[{ project_id: 'proj-1', name: '示例应用' }]} onClose={vi.fn()} onChanged={vi.fn()} onError={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '允许本机 AI 工具连接本次界鉴会话' }))
+    await waitFor(() => expect(screen.getByLabelText('MCP Bearer 令牌')).toHaveValue('mcp-token'))
+    expect(screen.getByLabelText('API Key（只写入，不回显）')).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: '调整权限' }))
+    expect(screen.getByText('本次确认不会永久保存，也不会逐工具重复弹窗。', { exact: false })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确认临时权限' }))
+    await waitFor(() => expect(mockMcpApi.setProjectAccess).toHaveBeenCalledWith('proj-1', 'PREPARE'))
   })
 
   it('discovers dynamic models, saves once, and clears the temporary API Key', async () => {
@@ -79,8 +108,9 @@ describe('LLMSettingsDrawer', () => {
     const password = screen.getByLabelText('API Key（只写入，不回显）')
     fireEvent.change(password, { target: { value: 'temporary-key' } })
     fireEvent.click(screen.getByRole('button', { name: '获取当前账号可用模型' }))
-    await waitFor(() => expect(onError).toHaveBeenCalled())
-    expect(password).toHaveValue('')
+    await waitFor(() => expect(mockApi.discoverModels).toHaveBeenCalled())
+    await waitFor(() => expect(password).toHaveValue(''))
+    expect(onError).toHaveBeenCalled()
   })
 
   it('clears API Key after save failure and drawer close', async () => {

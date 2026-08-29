@@ -13,6 +13,7 @@ import { runsApi } from '../../api/runs'
 import type { ProjectDto } from '../../api/projects'
 import { browserState } from '../../app/browserState'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
+import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { AdvancedDetails } from '../../components/AdvancedDetails'
 import { FlowDraftReview } from './FlowDraftReview'
@@ -257,6 +258,7 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
     </ol>
     <RecordingSetupCard actions={actionOptions} identities={identityOptions} actionId={actionId} testIdentityId={testIdentityId} duration={duration} disabled={setupDisabled} onActionChange={setActionId} onIdentityChange={setTestIdentityId} onDurationChange={setDuration} />
     {recording && <RecordingCaptureCard recording={recording} onRefresh={() => void refresh()} />}
+    {draft && <AssistantPanel projectId={project.project_id} surface="recording-review" title="这次录制的步骤用途" actionLabel="AI 解读这次录制" />}
     {reviewable && draft && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.action_candidate_id === draft.action_candidate_id)?.display_name ?? '这个业务动作'} sources={sources} renamingStep={renamingStep} renameValue={renameValue} busy={busy} canFinalize={canFinalize} hasLooseActions={hasLooseActions} onSourcesChange={setSources} onRenameStart={(stepId, value) => { setRenamingStep(stepId); setRenameValue(value) }} onRenameValueChange={setRenameValue} onRenameCancel={() => setRenamingStep(undefined)} onReview={(command) => void review(command)} />}
     {message && <Alert type={safetySetup && !safetySetup.automatic_execution_allowed ? 'info' : 'success'} showIcon message={message} />}
     {recording?.state === 'COMPLETED' && draft && <Card className="recording-summary" title="已保存的业务流程"><Descriptions size="small" column={1}><Descriptions.Item label="业务动作">{recording.action?.display_name ?? actionOptions.find((item) => item.action_candidate_id === draft.action_candidate_id)?.display_name ?? '已确认动作'}</Descriptions.Item><Descriptions.Item label="用于录制的账号">{recording.test_identity?.label ?? '已准备测试账号'}{recording.test_identity?.role_display_name ? `（${recording.test_identity.role_display_name}）` : ''}</Descriptions.Item><Descriptions.Item label="状态">录制内容已保存</Descriptions.Item></Descriptions><AdvancedDetails label="高级：技术请求"><Typography.Text code>{recordedTargetLabel(draft)}</Typography.Text></AdvancedDetails></Card>}

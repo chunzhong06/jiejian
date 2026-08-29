@@ -85,11 +85,11 @@ def sample_credentials() -> dict[str, object]:
     return {
         "passwords": {
             account: f"collaboration-{account}-{token_urlsafe(18)}"
-            for account in ("alice", "bob", "eve")
+            for account in ("alice", "bob")
         },
         "session_material": {
             account: f"session-{account}-{token_urlsafe(18)}"
-            for account in ("alice", "bob", "eve")
+            for account in ("alice", "bob")
         },
         "queue_sas": (
             "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=r&sr=q&sig="
@@ -167,7 +167,6 @@ def prepare_formal_project(
     role_labels = {
         "project_owner": "项目负责人",
         "member": "普通成员",
-        "external_visitor": "外部访客",
     }
     role_ids: dict[str, str] = {}
     for role in understanding["role_candidates"]:
@@ -212,7 +211,6 @@ def prepare_formal_project(
     for account, role_key in (
         ("alice", "project_owner"),
         ("bob", "member"),
-        ("eve", "external_visitor"),
     ):
         response = client.post(
             f"/api/projects/{project_id}/test-identities",
@@ -311,7 +309,6 @@ def prepare_formal_project(
         "action_id": action_id,
         "alice_id": identity_ids["alice"],
         "bob_id": identity_ids["bob"],
-        "eve_id": identity_ids["eve"],
     }
 
 
