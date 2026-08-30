@@ -387,7 +387,7 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
         (frontend / "package.json").read_text(encoding="utf-8")
     )
     assert "version" not in frontend_manifest
-    assert __version__ == "1.0.6"
+    assert __version__ == "1.0.7"
 
 
 def test_frontend_source_tree_contains_no_generated_install_or_build_artifacts() -> None:

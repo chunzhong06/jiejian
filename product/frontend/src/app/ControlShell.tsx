@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Layout, Modal, Result } from 'antd'
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/http'
+import { checksApi } from '../api/checks'
 import { experienceApi, type OfficialExperienceDto, type OfficialExperienceMode } from '../api/experience'
 import { mcpAccessApi, type MCPAccessView } from '../api/mcp'
 import { projectsApi, type ProjectDto } from '../api/projects'
@@ -17,6 +18,7 @@ import { TestIdentityPage } from '../features/identities/TestIdentityPage'
 import { CheckHistoryPage } from '../features/checks/CheckHistoryPage'
 import { PermissionCheckPage } from '../features/checks/PermissionCheckPage'
 import { CheckResultsPage } from '../features/checks/CheckResultsPage'
+import { VerificationPage } from '../features/checks/VerificationPage'
 import { RecordingPage } from '../features/recording/RecordingPage'
 import { ModelServicePage } from '../features/settings/ModelServicePage'
 import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
@@ -131,6 +133,13 @@ function ControlShellContent() {
     }
   }
   const activeRun = useMemo(() => runs[0], [runs])
+  const canVerifyOfficialFix = Boolean(
+    experience?.active
+    && experience.experience_mode === 'GUIDED'
+    && experience.project_id === selected?.project_id
+    && status?.latest_result?.run_id === activeRun?.run_id
+    && activeRun?.verdict === 'BLOCK',
+  )
   const startOfficialExperience = async (mode: OfficialExperienceMode) => {
     setExperienceBusy(true)
     try {
@@ -183,11 +192,30 @@ function ControlShellContent() {
       setExperienceBusy(false)
     }
   }
+  const runOfficialObservationGap = async () => {
+    if (!selected?.project_id || !experience?.active || experience.project_id !== selected.project_id) return
+    setExperienceBusy(true)
+    try {
+      const switched = await experienceApi.useUnavailableObservation(
+        experience.authorization_order ?? 'ENQUEUE_BEFORE_AUTHORIZE',
+      )
+      setExperience(switched)
+      const preview = await checksApi.preview(selected.project_id)
+      if (!preview.ready) throw new ApiError('CHECK_NOT_READY', '当前官方示例尚未准备好重新检查')
+      await checksApi.submit(selected.project_id)
+      await workspace.refreshCurrent()
+      navigate('/check')
+    } catch (experienceError) {
+      notifyError(experienceError as ApiError)
+    } finally {
+      setExperienceBusy(false)
+    }
+  }
   useEffect(() => {
     if (location.pathname !== route) navigate(route, { replace: true })
   }, [location.pathname, navigate, route])
   useEffect(() => {
-    if (!selected?.project_id || (route !== '/results' && route !== '/history')) return
+    if (!selected?.project_id || !['/results', '/verification', '/history'].includes(route)) return
     // Run 可能由 Worker、CLI 或其他会话形成，进入结果相关页面时必须重新读取权威工作区状态。
     void refreshRuns()
   }, [refreshRuns, route, selected?.project_id])
@@ -204,7 +232,8 @@ function ControlShellContent() {
     if (route === '/flows') return <RecordingPage key={`recording-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/identities')} onNext={() => navigate('/check')} />
     if (route === '/check') return <PermissionCheckPage key={`check-${retryEpoch}-${experience?.repair_change_id ?? 'ordinary'}`} project={selected} runs={runs} changeId={experience?.repair_change_id ?? undefined} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/check'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/flows')} onNext={() => navigate('/results')} />
     if (route === '/history') return <CheckHistoryPage projectId={selected.project_id} onError={notifyError} onBack={() => navigate('/results')} />
-    return <CheckResultsPage key={`results-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/check')} onHistory={() => navigate('/history')} onNavigate={(path) => navigate(normalizeRoute(path))} canVerifyFix={Boolean(experience?.active && experience.experience_mode === 'GUIDED' && experience.project_id === selected.project_id && status?.latest_result?.run_id === activeRun?.run_id)} verifyingFix={experienceBusy} onVerifyFix={verifyOfficialFix} />
+    if (route === '/verification') return <VerificationPage key={`verification-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/results')} onHistory={() => navigate('/history')} onRetest={canVerifyOfficialFix ? verifyOfficialFix : undefined} retestBusy={experienceBusy} onObservationGap={experience?.active && experience.experience_mode === 'GUIDED' && experience.project_id === selected.project_id ? runOfficialObservationGap : undefined} observationGapBusy={experienceBusy} />
+    return <CheckResultsPage key={`results-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/check')} onHistory={() => navigate('/history')} onVerification={() => navigate('/verification')} onNavigate={(path) => navigate(normalizeRoute(path))} canVerifyFix={canVerifyOfficialFix} verifyingFix={experienceBusy} onVerifyFix={verifyOfficialFix} />
   }
   if (shutdownRequested) return <Result status="success" title="界鉴正在安全退出" subTitle="服务、Worker 和受控浏览器清理完成后，可以关闭此页面；下次启动会自动检查异常中断记录。" />
   return <Layout className="app-shell">
@@ -212,7 +241,7 @@ function ControlShellContent() {
     <Layout className="product-main">
       <MobileProcessNavigation route={route} steps={status?.steps ?? null} onNavigate={navigateTo} />
       <AppHeader projects={projects} selected={selected} activeTask={readiness?.active_tasks[0]} profiles={llmProfiles} aiSettings={aiSettings} profilesFailed={llmLoadFailed} settingsFailed={aiSettingsFailed} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onRemoveCurrent={() => setRemoveConfirmOpen(true)} onNavigate={navigate} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={requestShutdown} />
-      <Layout.Content className="content"><div className="content-frame"><JudgeGuideBar status={status} experience={experience} preparingIdentities={experienceBusy} onPrepareIdentities={() => { void prepareOfficialIdentities() }} />{error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigate(normalizeRoute(path)) }} onClose={clearError} />}{content()}</div></Layout.Content>
+      <Layout.Content className="content"><div className="content-frame"><JudgeGuideBar status={status} experience={experience} preparingIdentities={experienceBusy} onPrepareIdentities={() => { void prepareOfficialIdentities() }} onOpenVerification={() => navigate('/verification')} />{error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigate(normalizeRoute(path)) }} onClose={clearError} />}{content()}</div></Layout.Content>
     </Layout>
     <NotificationCenter items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigate(path) }} />
     <Modal

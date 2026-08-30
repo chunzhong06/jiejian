@@ -68,13 +68,22 @@ function resetState() {
   writeFileSync(eventPath, "", "utf8");
 }
 
-function recordEvent(caseId, kind, semanticKey, identity, decision = null) {
+// actorId 只表示显式委派后的权限执行主体，普通事件默认沿用当前业务身份。
+function recordEvent(
+  caseId,
+  kind,
+  semanticKey,
+  identity,
+  decision = null,
+  actorId = identity,
+) {
   const event = {
     sequence: events.length + 1,
     case_id: caseId,
     kind,
     semantic_key: semanticKey,
     identity,
+    actor_id: actorId,
     authorization_decision: decision,
   };
   events.push(event);
@@ -195,7 +204,14 @@ const server = createServer(async (request, response) => {
     recordEvent(caseId, "FEATURE", "feature_route_bypassed", identity);
     applyEffect(action, payload, caseId, identity, targetRecord);
   } else if (breakMode === "delegation_authority_expansion") {
-    recordEvent(caseId, "DELEGATION", "service_authority_expanded", identity);
+    recordEvent(
+      caseId,
+      "DELEGATION",
+      "service_authority_expanded",
+      identity,
+      null,
+      "validation-service",
+    );
     applyEffect(action, payload, caseId, "validation-service", targetRecord);
   } else if (breakMode === "deny_async_consequence") {
     recordEvent(caseId, "MESSAGE", "denied_work_dispatched", identity);

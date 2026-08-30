@@ -291,10 +291,83 @@ def test_private_oracle_is_outside_every_authorized_source_root_and_product_inpu
     assert "expected_verdict" not in json.dumps(public_payload, ensure_ascii=False)
 
 
+def test_validation_adapter_only_translates_public_trace_structure() -> None:
+    registry = _load_registry()
+    _load_validation()
+    adapter = sys.modules["sample_test_validation_adapter"]
+    case = registry.load_public_registry(ROOT)[0]
+    identity_event = "validation-identity"
+    delegation_event = "validation-delegation"
+    trace = adapter._trace(
+        case,
+        records=(
+            {
+                "event_id": identity_event,
+                "semantic_key": "server_identity_resolved",
+                "sequence": 1,
+                "kind": "IDENTITY",
+                "subject_id": case.identity,
+                "actor_id": "target-server",
+            },
+            {
+                "event_id": delegation_event,
+                "parent_event_id": identity_event,
+                "semantic_key": "background_job_started",
+                "sequence": 2,
+                "kind": "DELEGATION",
+                "subject_id": case.identity,
+                "actor_id": "validation-worker",
+            },
+            {
+                "event_id": "validation-effect",
+                "parent_event_id": delegation_event,
+                "delegated_from_event_id": delegation_event,
+                "semantic_key": case.observation_config["trace_effect_key"],
+                "sequence": 3,
+                "kind": "FINAL_EFFECT",
+                "subject_id": case.identity,
+                "actor_id": "validation-worker",
+            },
+        ),
+        case_id="case-validation-adapter",
+        planned_subject_id=case.identity,
+        role="deny",
+        complete=True,
+        evidence_ref="validation-adapter-evidence",
+    )
+
+    assert trace.events[0].actor_id == case.identity
+    assert trace.events[1].actor_id == "validation-worker"
+    assert trace.events[2].actor_id == "validation-worker"
+    assert trace.events[2].effect_id == case.protected_effects[0]
+    source = Path(adapter.__file__).read_text(encoding="utf-8")
+    assert "core.verification.continuity" not in source
+    assert "core.verification.breakpoints" not in source
+
+
 def test_validation_representatives_run_both_real_apps_without_public_oracle_leak(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     validation = _load_validation()
+    continuity_calls = 0
+    breakpoint_calls = 0
+    real_assess = validation.assess_authorization_continuity
+    real_locator = validation.BreakpointLocator
+
+    def tracked_assess(*args, **kwargs):
+        nonlocal continuity_calls
+        continuity_calls += 1
+        return real_assess(*args, **kwargs)
+
+    class TrackedBreakpointLocator:
+        def locate(self, *args, **kwargs):
+            nonlocal breakpoint_calls
+            breakpoint_calls += 1
+            return real_locator().locate(*args, **kwargs)
+
+    monkeypatch.setattr(validation, "assess_authorization_continuity", tracked_assess)
+    monkeypatch.setattr(validation, "BreakpointLocator", TrackedBreakpointLocator)
     summary = validation.run_validation_suite(
         ROOT,
         tmp_path,
@@ -305,6 +378,22 @@ def test_validation_representatives_run_both_real_apps_without_public_oracle_lea
 
     assert summary["status"] == "accepted"
     assert summary["case_count"] == 6
+    assert continuity_calls == 6
+    assert breakpoint_calls == 6
+    assert summary["full_method_sources"] == {
+        "case_verdict": (
+            "product.backend.core.verification.permissions.evaluation."
+            "evaluate_permission_case"
+        ),
+        "authorization_continuity": (
+            "product.backend.core.verification.continuity."
+            "assess_authorization_continuity"
+        ),
+        "breakpoint": (
+            "product.backend.core.verification.breakpoints."
+            "BreakpointLocator.locate"
+        ),
+    }
     assert summary["applications"] == ["collaboration-space", "tenant-records"]
     results = summary["results"]
     assert len(results) == 6

@@ -8,7 +8,8 @@ import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
-from product.backend.core.permission_intent import PermissionIntentRelation
+from product.backend.core.permission_intent import PermissionIntentRelation, ProtectedEffect
+from product.backend.core.repair import RepairVerificationStatus
 from product.backend.core.verification.breakpoints import (
     BreakpointPrecision,
     BreakpointResult,
@@ -24,11 +25,15 @@ from product.backend.core.verification.facts import (
     ObservedEffect,
     TemporalClosure,
 )
-from product.backend.core.verification.permissions import PermissionExpectation
+from product.backend.core.verification.permissions import (
+    PermissionExpectation,
+    SecurityEffectKind,
+)
 from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
 from product.backend.workflows.results.presentation import (
     _actual_identity,
     _breakpoint_detail,
+    _claim_boundary_with_repair,
     build_result_presentation,
 )
 from product.protocols import ObservationCompleteness, ObserverOutcomeStatus, ObserverType
@@ -140,6 +145,13 @@ def _snapshot(*, include_binding: bool = True):
         project_name="文档系统",
         contract=SimpleNamespace(
             actions=(SimpleNamespace(action_id=ACTION_ID, effect_ids=(EFFECT_ID,)),),
+            effects=(
+                SimpleNamespace(
+                    effect_id=EFFECT_ID,
+                    kind=SecurityEffectKind.STATE_MUTATION,
+                    resource_type="document",
+                ),
+            ),
         ),
         effect_bindings=(
             SimpleNamespace(
@@ -200,7 +212,7 @@ def _six_source_facts(*, unavailable: bool = False):
         ObservedEffect.ABSENT,
         ObservedEffect.UNKNOWN,
         ObservedEffect.CONFIRMED,
-        ObservedEffect.ABSENT,
+        ObservedEffect.CONFIRMED,
         ObservedEffect.UNKNOWN,
     )
     if unavailable:
@@ -275,7 +287,13 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
                 subject_display_name="普通成员",
                 action_display_name="创建任务",
                 resource_owner_display_name="项目负责人",
-                protected_effects=(),
+                protected_effects=(
+                    ProtectedEffect(
+                        kind=SecurityEffectKind.STATE_MUTATION,
+                        resource_type="document",
+                        business_label="负责人文档已被修改",
+                    ),
+                ),
                 action_candidate_id="action_" + "7" * 32,
                 subject_test_identity_id="tid_" + "8" * 32,
             ),
@@ -308,6 +326,11 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
         "revision": 3,
         "intent_hash": "5" * 64,
         "display_label": "P-001",
+        "expectation": "DENY",
+        "business_statement": (
+            "普通成员不可以对项目负责人的资源执行“创建任务”（资源属于其他权限组）。"
+            "受保护业务后果“负责人文档已被修改”不得发生。"
+        ),
     }
     assert result.change_verification is not None
     assert result.change_verification.change_id == "chg_" + "7" * 32
@@ -327,6 +350,61 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
     assert result.issues[0].planned_identity_label == "成员测试账号"
     assert result.issues[0].actual_identity_status == "UNAVAILABLE"
     assert result.issues[0].actual_identity_label is None
+    assert result.issues[0].claim_boundary.model_dump(mode="json") == {
+        "surface_response_status": "DENIED",
+        "business_effect_status": "CONFIRMED",
+        "actual_identity_status": "UNAVAILABLE",
+        "breakpoint_precision": None,
+        "repair_status": None,
+        "supported_statement": (
+            "计划使用成员测试账号凭据的实验中，负责人文档已被修改。"
+        ),
+        "unsupported_statements": [
+            "不能把表面拒绝直接解释为后台副作用或最终业务后果未发生。",
+            "不能宣称服务器已经独立确认实际执行主体。",
+            "不能宣称已经定位到具体权限断裂环节。",
+            "当前没有已发布的修复复验结论，不能宣称修复已经通过。",
+        ],
+    }
+    surface = result.issues[0].evidence_explanations[0]
+    assert surface.source == "执行表面响应"
+    assert "不能单独证明后台副作用" in surface.does_not_prove
+    assert "当前 Run" in surface.relevance
+    owner = next(
+        item
+        for item in result.issues[0].evidence_explanations
+        if item.source == ObserverType.OWNER_API.value
+    )
+    assert "负责人文档已被修改" in owner.proves
+    assert owner.component is owner.observed_at_us is None
+
+
+def test_repair_status_only_strengthens_claim_boundary_after_formal_verification() -> None:
+    result = build_result_presentation(
+        _view(
+            RunVerdict.BLOCK,
+            CaseVerdict.VULNERABLE,
+            outcome=ExecutionOutcome.DENIED,
+            effect=ObservedEffect.CONFIRMED,
+        ),
+        _snapshot(),
+        _finding(CaseVerdict.VULNERABLE),
+    )
+    boundary = result.issues[0].claim_boundary
+
+    verified = _claim_boundary_with_repair(
+        boundary,
+        RepairVerificationStatus.VERIFIED,
+    )
+    inconclusive = _claim_boundary_with_repair(
+        boundary,
+        RepairVerificationStatus.INCONCLUSIVE,
+    )
+
+    assert verified.repair_status is RepairVerificationStatus.VERIFIED
+    assert all("修复" not in item for item in verified.unsupported_statements)
+    assert inconclusive.repair_status is RepairVerificationStatus.INCONCLUSIVE
+    assert "修复复验证据不足" in inconclusive.unsupported_statements[-1]
 
 
 @pytest.mark.parametrize(
@@ -436,10 +514,19 @@ def test_six_sources_use_frozen_roles_stable_order_and_published_fact_status() -
         "NOT_FOUND",
         "UNAVAILABLE",
         "FOUND",
-        "NOT_FOUND",
+        "FOUND",
         "UNAVAILABLE",
     ]
     assert all(item.evidence_refs == (EVIDENCE_ID,) for item in sources)
+    queue = next(
+        item
+        for item in result.issues[0].evidence_explanations
+        if item.source == ObserverType.AZURE_QUEUE_PEEK.value
+    )
+    assert "与本轮关联的队列消息" in queue.proves
+    assert "负责人文档已被修改" not in queue.proves
+    assert "不能单独证明 Worker 已执行" in queue.does_not_prove
+    assert "最终对象已经生成" in queue.does_not_prove
     assert result.verdict is RunVerdict.BLOCK
     assert result.issues[0].verdict.value == CaseVerdict.VULNERABLE.value
     assert result.issues[0].actual_identity_status == "UNAVAILABLE"
@@ -573,6 +660,9 @@ def test_published_audit_trace_exposes_unified_identity_and_diagnosis(
     assert diagnosis is not None
     assert diagnosis.breakpoint_type is BreakpointType.AUTHORIZATION_LATE
     assert diagnosis.precision is BreakpointPrecision.EXACT
+    assert diagnosis.first_violation_event_id == "trace-3"
+    assert diagnosis.range_start_event_id is None
+    assert diagnosis.range_end_event_id is None
     assert tuple(item.kind for item in diagnosis.minimal_witness) == (
         "PERMISSION_REQUIREMENT",
         "ACTUAL_IDENTITY",
@@ -596,6 +686,23 @@ def test_published_audit_trace_exposes_unified_identity_and_diagnosis(
     )
     assert result.verdict is original_verdict is RunVerdict.BLOCK
     assert view.publication.result.verdict is RunVerdict.BLOCK
+    boundary = result.issues[0].claim_boundary
+    assert boundary.actual_identity_status == "CONFIRMED"
+    assert boundary.breakpoint_precision is BreakpointPrecision.EXACT
+    identity_explanation = next(
+        item
+        for item in result.issues[0].evidence_explanations
+        if item.source == "ExecutionTrace"
+    )
+    assert identity_explanation.component == "collaboration-server"
+    assert identity_explanation.observed_at_us == 1_002
+    breakpoint_explanation = next(
+        item
+        for item in result.issues[0].evidence_explanations
+        if item.source == "BreakpointLocator"
+    )
+    assert breakpoint_explanation.component == "collaboration-server"
+    assert breakpoint_explanation.observed_at_us == 1_003
 
     evidence = view.publication.result.evidence[0]
     partial_trace = trace.model_copy(
@@ -708,6 +815,9 @@ def test_non_audit_confirmed_effect_keeps_orphan_story_and_original_verdict(
     assert result.execution_traces[0].complete is False
     assert diagnosis.continuity_state is AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED
     assert diagnosis.precision is BreakpointPrecision.VIOLATION_ONLY
+    assert diagnosis.first_violation_event_id is None
+    assert diagnosis.range_start_event_id is None
+    assert diagnosis.range_end_event_id is None
     assert "找不到符合原权限要求的合法授权来源" in diagnosis.summary
     assert "当前证据不足以进一步定位" in diagnosis.summary
     assert result.verdict is view.publication.result.verdict is RunVerdict.BLOCK

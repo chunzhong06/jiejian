@@ -104,6 +104,8 @@ MCP 控制入口、Streamable HTTP、Bearer、工具权限
 
 官方示例、协作空间、Recording UIA、sample-test、自动 L5
 → docs/02_开发指南/任务/修改官方示例与整链验收.md
+→ docs/02_开发指南/任务/竞赛验证主张与证据.md
+→ docs/02_开发指南/任务/竞赛追问账.md
 → docs/02_开发指南/任务/修改开发环境.md
 → docs/04_工程约束/验证与测试.md
 

@@ -4,6 +4,19 @@
 .identity-overview .ant-card-body { display: grid; gap: var(--space-16); }
 .identity-overview .ant-typography { margin-bottom: 0; }
 .identity-create { align-items: center; display: grid; gap: var(--space-12); grid-template-columns: minmax(160px, .7fr) minmax(260px, 1.3fr) max-content; max-width: 860px; }
+.identity-role-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-large); display: grid; gap: var(--space-20); padding: var(--space-24); }
+.identity-role-heading { align-items: flex-start; display: flex; gap: var(--space-16); justify-content: space-between; }
+.identity-role-heading h3, .identity-role-heading p { margin-bottom: 0; }
+.identity-role-grid { display: grid; gap: var(--space-16); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.identity-role-card { background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-medium); display: grid; gap: var(--space-16); min-width: 0; padding: var(--space-20); }
+.identity-role-card h4, .identity-role-card p { margin: 0; }
+.identity-role-card-header { align-items: flex-start; display: flex; gap: var(--space-12); justify-content: space-between; }
+.identity-role-card-header > div { display: grid; gap: var(--space-4); }
+.identity-role-kicker { color: var(--color-primary); font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+.identity-role-accounts { border-top: 1px solid var(--color-border); display: grid; gap: var(--space-12); padding-top: var(--space-16); }
+.identity-account-row { display: grid; gap: var(--space-12); }
+.identity-account-row + .identity-account-row { border-top: 1px solid var(--color-border); padding-top: var(--space-12); }
+.identity-account-row > div:first-child { display: grid; gap: var(--space-4); }
 .identity-login-steps { border-color: #d8e0ff; }
 .identity-login-step-list { display: grid; gap: 16px; list-style: none; margin: 0; padding: 0; }
 .identity-login-step-list li { align-items: start; display: grid; gap: 10px; grid-template-columns: auto 1fr; }
@@ -13,6 +26,9 @@
 .identity-list .ant-list-item-meta-description { padding-top: var(--space-4); }
 
 @media (max-width: 600px) {
+  .identity-role-section { padding: var(--space-16); }
+  .identity-role-heading, .identity-role-card-header { align-items: flex-start; flex-direction: column; }
+  .identity-role-grid { grid-template-columns: 1fr; }
   .identity-create { align-items: stretch; grid-template-columns: 1fr; }
   .identity-create .ant-select, .identity-create .ant-input, .identity-create .ant-btn { width: 100%; }
   .identity-list .ant-list-item { align-items: stretch; display: grid; }

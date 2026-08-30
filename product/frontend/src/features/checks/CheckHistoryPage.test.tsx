@@ -1,6 +1,6 @@
 // 验证历史页只读取项目级 HistoryView，并使用后端状态文案。
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { CheckHistoryPage } from './CheckHistoryPage'
 
@@ -25,5 +25,33 @@ describe('CheckHistoryPage', () => {
     expect(screen.queryByText(`pin_${'e'.repeat(32)}@2:${'e'.repeat(64)}`)).not.toBeInTheDocument()
     expect(history).toHaveBeenCalledTimes(1)
     expect(history).toHaveBeenCalledWith('project-demo')
+  })
+
+  it('默认按权限要求区分可靠关联与策略成员关系', async () => {
+    const hash = 'a'.repeat(64)
+    history.mockResolvedValue({
+      project_id: 'project-demo',
+      intents: [{
+        intent_id: `pin_${'1'.repeat(32)}`,
+        display_label: 'P-001',
+        revisions: [{ revision: 2, intent_hash: hash, policy_epoch: 4, effective_state: 'ACTIVE', business_statement: '成员账号不可以修改负责人的文档。', approved_by: '本机用户', approved_at_us: 2 }],
+        runs: [
+          { run_id: 'run-exact', checked_at_us: 3, revision: 2, intent_hash: hash, policy_epoch: 4, association_status: 'EXACT', association_note: '本轮只依据这一条权限要求，可以可靠关联结果与诊断。', verdict: 'BLOCK', diagnosis_summary: '权限判断发生过晚。', change_revalidation: true, repair_status: null },
+          { run_id: 'run-policy', checked_at_us: 4, revision: 2, intent_hash: hash, policy_epoch: 4, association_status: 'POLICY_ONLY', association_note: '本轮权限快照包含这条要求，但聚合结果无法可靠归到单条要求。', verdict: null, diagnosis_summary: null, change_revalidation: false, repair_status: null },
+        ],
+      }],
+      comparisons: [],
+    })
+    render(<CheckHistoryPage projectId="project-demo" onError={vi.fn()} />)
+
+    expect(await screen.findByText('P-001')).toBeInTheDocument()
+    expect(screen.getByText('成员账号不可以修改负责人的文档。')).toBeInTheDocument()
+    expect(screen.getByText('可可靠关联')).toBeInTheDocument()
+    expect(screen.getByText('仅确认属于本轮策略')).toBeInTheDocument()
+    expect(screen.getByText('发现可能的权限越界，需要处理')).toBeInTheDocument()
+    expect(screen.getByText(/无法可靠归到单条要求/)).toBeInTheDocument()
+    expect(screen.queryByText(hash)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /查看 1 个权限版本/ }))
+    expect(screen.getByText(/由 本机用户 确认/)).toBeInTheDocument()
   })
 })

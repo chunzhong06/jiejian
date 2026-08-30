@@ -159,7 +159,7 @@ def _target_payload(
     if unrelated is not None:
         resource["updated_at"] = unrelated
     if observer_type is ObserverType.OWNER_API:
-        return resource
+        return {"status_code": 200, "data": resource}
     if observer_type is ObserverType.READ_ONLY_SQLITE:
         return {"row_count": 1, "rows": [resource], "truncated": False}
     if observer_type is ObserverType.AZURE_BLOB_OBJECT:
@@ -228,6 +228,21 @@ def test_object_creation_requires_real_target_object(observer_type: ObserverType
     )
 
     assert fact.effect is ObservedEffect.CONFIRMED
+
+
+def test_owner_api_wrapped_absent_state_proves_object_was_not_created() -> None:
+    fact = _project(
+        ObserverType.OWNER_API,
+        (ObservationPhase.BEFORE, ObservationPhase.AFTER),
+        (
+            (ObservationPhase.BEFORE, _target_payload(ObserverType.OWNER_API, state="ABSENT", value="")),
+            (ObservationPhase.AFTER, _target_payload(ObserverType.OWNER_API, state="ABSENT", value="")),
+        ),
+        effect_kind=SecurityEffectKind.OBJECT_CREATION,
+    )
+
+    assert fact.effect is ObservedEffect.ABSENT
+    assert fact.reason_codes == ()
 
 
 def test_open_or_missing_state_observation_cannot_prove_absence() -> None:

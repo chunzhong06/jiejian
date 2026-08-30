@@ -104,3 +104,18 @@ def test_runner_input_accepts_only_snapshot_cookie_descriptors() -> None:
                 }
             }
         )
+
+
+def test_runner_secret_boundary_allows_only_public_authorization_metadata() -> None:
+    _reject_secret_material(
+        {
+            "credential_source": "session-cookie",
+            "authorization_decision": "DENY",
+            "origin_authorization_event_id": "authorization-event",
+        }
+    )
+
+    with pytest.raises(ValueError, match="inline secret field"):
+        _reject_secret_material({"credential": "session-cookie"})
+    with pytest.raises(ValueError, match="inline secret material"):
+        _reject_secret_material({"credential_source": "token=private-value"})

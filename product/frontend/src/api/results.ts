@@ -163,6 +163,9 @@ export type ResultDiagnosisDto = {
   breakpoint_type: 'AUTHORIZATION_MISSING' | 'AUTHORIZATION_LATE' | 'AUTHORIZATION_BYPASS' | 'IDENTITY_SUBSTITUTION' | 'AUTHORITY_EXPANSION' | 'COMPENSATION_MASKING' | null
   precision: 'EXACT' | 'RANGE' | 'VIOLATION_ONLY'
   continuity_state: 'INTACT' | 'ORPHAN_EFFECT_CONFIRMED' | 'UNKNOWN'
+  first_violation_event_id: string | null
+  range_start_event_id: string | null
+  range_end_event_id: string | null
   amplifier_types: Array<'AUTHORIZATION_MISSING' | 'AUTHORIZATION_LATE' | 'AUTHORIZATION_BYPASS' | 'IDENTITY_SUBSTITUTION' | 'AUTHORITY_EXPANSION' | 'COMPENSATION_MASKING'>
   summary: string
   minimal_witness: [
@@ -176,6 +179,28 @@ export type ResultDiagnosisDto = {
   ]
   confirmed_impacts: ResultDiagnosisImpactDto[]
   evidence_refs: string[]
+}
+
+export type ResultClaimBoundaryDto = {
+  surface_response_status: 'ACCEPTED' | 'DENIED' | 'FAILED' | 'UNKNOWN'
+  business_effect_status: 'CONFIRMED' | 'ABSENT' | 'UNKNOWN'
+  actual_identity_status: 'CONFIRMED' | 'UNAVAILABLE'
+  breakpoint_precision: 'EXACT' | 'RANGE' | 'VIOLATION_ONLY' | null
+  repair_status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | null
+  supported_statement: string
+  unsupported_statements: string[]
+}
+
+export type ResultEvidenceExplanationDto = {
+  label: string
+  source: string
+  step: string
+  proves: string
+  does_not_prove: string
+  relevance: string
+  evidence_refs: string[]
+  component: string | null
+  observed_at_us: number | null
 }
 
 export type ResultPresentationIssueDto = {
@@ -199,6 +224,8 @@ export type ResultPresentationIssueDto = {
   evidence_refs: string[]
   evidence_sources: ResultEvidenceSourceDto[]
   diagnosis: ResultDiagnosisDto | null
+  claim_boundary: ResultClaimBoundaryDto
+  evidence_explanations: ResultEvidenceExplanationDto[]
   verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'
   occurrence_status: string | null
   repair_requirement: RepairRequirementDto | null
@@ -228,6 +255,8 @@ export type ResultRelevantIntentDto = {
   revision: number
   intent_hash: string
   display_label: string | null
+  expectation: 'ALLOW' | 'DENY' | null
+  business_statement: string | null
 }
 
 export type ResultChangeVerificationDto = {
@@ -289,7 +318,39 @@ export type HistoryComparisonDto = {
 
 export type HistoryViewDto = {
   project_id: string
+  intents: ResultIntentHistoryDto[]
   comparisons: HistoryComparisonDto[]
+}
+
+export type IntentRevisionHistoryDto = {
+  revision: number
+  intent_hash: string
+  policy_epoch: number
+  effective_state: 'ACTIVE' | 'RETIRED'
+  business_statement: string
+  approved_by: string
+  approved_at_us: number
+}
+
+export type IntentRunHistoryDto = {
+  run_id: string
+  checked_at_us: number
+  revision: number
+  intent_hash: string
+  policy_epoch: number
+  association_status: 'EXACT' | 'POLICY_ONLY'
+  association_note: string
+  verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE' | null
+  diagnosis_summary: string | null
+  change_revalidation: boolean
+  repair_status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | null
+}
+
+export type ResultIntentHistoryDto = {
+  intent_id: string
+  display_label: string
+  revisions: IntentRevisionHistoryDto[]
+  runs: IntentRunHistoryDto[]
 }
 
 export const resultsApi = {

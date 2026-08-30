@@ -101,8 +101,9 @@ describe('ApplicationSetup', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: /只读分析当前应用源码/ }))
     fireEvent.click(screen.getByRole('button', { name: '授权并开始分析' }))
-    expect(await screen.findByText('确认权限组与业务动作', { selector: '.ant-card-head-title' })).toBeInTheDocument()
-    expect(screen.getByText(/候选，不是权限结论/)).toBeInTheDocument()
+    expect(await screen.findByText('界鉴已经理解', { selector: '.ant-card-head-title' })).toBeInTheDocument()
+    expect(screen.getByText('还有 2 项应用理解需要你确认')).toBeInTheDocument()
+    expect(screen.getByText(/这里只确认应用中存在哪些用户类别和操作/)).toBeInTheDocument()
     expect(screen.getByDisplayValue('owner')).toBeInTheDocument()
     expect(screen.getByDisplayValue('修改文档')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '确认权限组和业务动作后继续' })).toBeDisabled()
@@ -120,9 +121,9 @@ describe('ApplicationSetup', () => {
 
     expect(await screen.findByDisplayValue('owner')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('权限组显示名称'), { target: { value: '所有者' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /确\s*认/ })[0])
+    fireEvent.click(screen.getByRole('button', { name: '确认这个权限组' }))
     await waitFor(() => expect(mockProjects.decideRole).toHaveBeenCalledWith('app-demo', role.candidate_id, 'CONFIRMED', '所有者', 3))
-    expect(await screen.findByText('所有者')).toBeInTheDocument()
+    expect((await screen.findAllByText('所有者')).length).toBeGreaterThan(0)
     expect(screen.queryByLabelText('权限组显示名称')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '排除这个权限组' }))
     await waitFor(() => expect(mockProjects.decideRole).toHaveBeenCalledWith('app-demo', role.candidate_id, 'REJECTED', '所有者', 4))

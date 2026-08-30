@@ -15,11 +15,14 @@ export function CheckProgress({ run, actions = [], onRefresh, onError, onNavigat
   const terminal = terminalStates.has(String(run?.lifecycle)) || ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(String(run?.job?.state))
   const running = String(run?.lifecycle) === 'RUNNING' && String(run?.job?.state) === 'RUNNING'
   const [progressEvents, setProgressEvents] = useState<RunnerProgressEventDto[]>([])
+  const [streamDisconnected, setStreamDisconnected] = useState(false)
   useEffect(() => {
+    setStreamDisconnected(false)
     if (!jobId || terminal || typeof EventSource === 'undefined') return
     const cursor = browserState.readJobCursor(jobId)
     const source = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events?after=${encodeURIComponent(cursor)}`)
     source.onmessage = (event) => {
+      setStreamDisconnected(false)
       try {
         const payload = JSON.parse(event.data) as JobEventDto
         const nextCursor = payload.sequence || Number(event.lastEventId)
@@ -27,7 +30,7 @@ export function CheckProgress({ run, actions = [], onRefresh, onError, onNavigat
       } catch { /* 事件正文不是页面判断依据，权威状态仍由刷新接口读取。 */ }
       onRefresh()
     }
-    source.onerror = () => undefined
+    source.onerror = () => setStreamDisconnected(true)
     return () => source.close()
   }, [jobId, terminal])
   useEffect(() => {
@@ -60,6 +63,22 @@ export function CheckProgress({ run, actions = [], onRefresh, onError, onNavigat
     if (item.phase === 'RECOVERY') return '恢复测试数据'
     return '准备检查环境'
   }
+  const stageDefinitions = [
+    { label: '准备检查环境', detail: '等待隔离任务和测试资源就绪' },
+    { label: '验证合法路径', detail: '等待应当允许的业务操作完成' },
+    { label: '尝试禁止路径', detail: '等待不应允许的业务操作结束' },
+    { label: '确认真实业务后果', detail: '等待独立观察资源最终状态' },
+    { label: '恢复测试现场', detail: '等待恢复完成并进入正式终态' },
+  ]
+  const stageIndex = (item: RunnerProgressEventDto | undefined) => {
+    if (!item || item.phase === 'PREPARE' || item.phase === 'BASELINE') return 0
+    if (item.phase === 'TARGET' && item.twin_role === 'ALLOW_CONTROL') return 1
+    if (item.phase === 'TARGET' && item.twin_role === 'DENY_VARIANT') return 2
+    if (item.phase === 'OBSERVE' || item.phase === 'VERIFY') return 3
+    if (item.phase === 'RECOVERY') return 4
+    return 0
+  }
+  const currentStage = stageIndex(progressEvents.at(-1))
   const actionRows = actions.filter((item) => item.ready).map((action) => {
     const events = progressEvents.filter((item) => item.action_id === action.action_candidate_id)
     const completedCases = new Set(events.filter((item) => item.phase === 'RECOVERY' && item.state === 'COMPLETED').map((item) => item.case_id)).size
@@ -83,6 +102,13 @@ export function CheckProgress({ run, actions = [], onRefresh, onError, onNavigat
     {percent !== undefined
       ? <div className="check-progress-value"><Typography.Text>已完成 {completed}/{total} 个用例</Typography.Text><Progress percent={percent} size="small" aria-label={`检查进度 ${completed}/${total}`} /></div>
       : !terminal && <Space><Spin size="small" /><Typography.Text type="secondary">正在执行，暂时没有可确认的用例总量</Typography.Text></Space>}
+    {streamDisconnected && <Alert type="warning" showIcon message="实时视图暂时断开，正式检查仍在后台运行" description="界鉴会继续尝试恢复事件视图；请以服务端运行状态和最终发布结果为准。" />}
+    {running && <ol className="check-stage-track" aria-label="真实检查阶段">
+      {stageDefinitions.map((stage, index) => {
+        const state = index < currentStage ? 'complete' : index === currentStage ? 'current' : 'waiting'
+        return <li className={`is-${state}`} key={stage.label}><span className="check-stage-marker" aria-hidden="true">{state === 'complete' ? '✓' : index + 1}</span><div><Typography.Text strong>{stage.label}</Typography.Text><Typography.Text type="secondary">{state === 'current' ? stage.detail : state === 'complete' ? '已形成运行事实' : '等待前一阶段完成'}</Typography.Text></div></li>
+      })}
+    </ol>}
     {running && actionRows.length > 0 && <Card size="small" title="真实检查步骤" className="check-progress-steps">
       <List size="small" dataSource={actionRows} renderItem={(item) => <List.Item>
         <Space><Tag color={item.state === 'COMPLETED' ? 'green' : item.state === 'RUNNING' ? 'processing' : undefined}>{item.state === 'COMPLETED' ? '已完成' : item.state === 'RUNNING' ? '进行中' : '等待中'}</Tag><Typography.Text>{item.name} · {item.latest ? progressLabel(item.latest) : '等待开始'}</Typography.Text></Space>

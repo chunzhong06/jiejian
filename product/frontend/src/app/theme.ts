@@ -1,28 +1,41 @@
-// Web V1 主题：集中维护产品语义色和基础控件尺度，不承载页面业务状态。
+// 产品主题：把统一设计 token 投影到 Ant Design，不承载页面业务状态。
 
 import type { ThemeConfig } from 'antd'
 
+export const designTokens = {
+  primary: '#3659D9',
+  safe: '#188765',
+  warning: '#A8660C',
+  danger: '#C83C3C',
+  text: '#172033',
+  secondary: '#667085',
+  surface: '#FFFFFF',
+  background: '#F4F6F9',
+  border: '#DFE4EC',
+} as const
+
 export const productTheme: ThemeConfig = {
   token: {
-    colorPrimary: '#3659D9',
-    colorInfo: '#3659D9',
-    colorSuccess: '#188765',
-    colorWarning: '#B87512',
-    colorError: '#C83C3C',
-    colorText: '#172033',
-    colorTextSecondary: '#667085',
-    colorBgBase: '#FFFFFF',
-    colorBgLayout: '#F6F8FB',
-    colorBorder: '#E4E7EC',
-    colorLink: '#3659D9',
-    borderRadius: 10,
+    colorPrimary: designTokens.primary,
+    colorInfo: designTokens.primary,
+    colorSuccess: designTokens.safe,
+    colorWarning: designTokens.warning,
+    colorError: designTokens.danger,
+    colorText: designTokens.text,
+    colorTextSecondary: designTokens.secondary,
+    colorBgBase: designTokens.surface,
+    colorBgLayout: designTokens.background,
+    colorBorder: designTokens.border,
+    colorLink: designTokens.primary,
+    borderRadius: 12,
     fontSize: 14,
+    fontFamily: '"Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "Segoe UI", sans-serif',
     controlHeight: 40,
   },
   components: {
     Button: { primaryShadow: 'none' },
-    Card: { headerBg: '#FFFFFF' },
-    Layout: { bodyBg: '#F6F8FB', headerBg: '#FFFFFF', siderBg: '#FFFFFF' },
-    Menu: { itemBg: '#FFFFFF', itemSelectedBg: '#EEF2FF', itemSelectedColor: '#3659D9' },
+    Card: { headerBg: designTokens.surface },
+    Layout: { bodyBg: designTokens.background, headerBg: designTokens.surface, siderBg: designTokens.surface },
+    Menu: { itemBg: designTokens.surface, itemSelectedBg: '#EEF2FF', itemSelectedColor: designTokens.primary },
   },
 }

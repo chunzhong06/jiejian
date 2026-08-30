@@ -659,26 +659,87 @@ def _confirm_safety(
 
 
 def _confirm_permissions(
+    page: Page,
     client: ApiClient,
     project_id: str,
     action_id: str,
     role_ids: dict[str, str],
 ) -> None:
+    """只通过普通权限页面确认考题，并核对生成后的正式检查预览。"""
+
     owner_id = role_ids["project_owner"]
+    page.goto(client.origin + "/#/check", wait_until="networkidle")
+    page.get_by_role("heading", name="权限与检查", exact=True).wait_for(timeout=30_000)
+    matrix = client.call("GET", f"/api/projects/{project_id}/permission-intents")
+    action = next(
+        (
+            item
+            for item in matrix["actions"]
+            if item["action_candidate_id"] == action_id
+        ),
+        None,
+    )
+    if action is None:
+        raise SampleTestError("权限页面没有形成官方示例的业务动作")
+    relation_labels = {
+        "OWNS": "自己的资源",
+        "SAME_ROLE_OTHER_ACCOUNT": "同权限组其他用户的资源",
+        "OTHER_ROLE": "其他权限组的资源",
+    }
     for subject, relation, expectation in (
         (owner_id, "OWNS", "ALLOW"),
         (role_ids["member"], "OTHER_ROLE", "DENY"),
     ):
-        client.call(
-            "PUT",
-            f"/api/projects/{project_id}/permission-intents/{action_id}/{subject}/{owner_id}/{relation}",
-            {"schema_version": "1", "expectation": expectation, "actor": "官方示例验收"},
+        cell = next(
+            (
+                item
+                for item in action["cells"]
+                if item["subject_role_candidate_id"] == subject
+                and item["resource_owner_role_candidate_id"] == owner_id
+                and item["relation"] == relation
+            ),
+            None,
         )
-    client.call(
-        "POST",
-        f"/api/projects/{project_id}/security-setup/compile",
-        {"schema_version": "1", "actor": "官方示例验收"},
-    )
+        if cell is None:
+            raise SampleTestError(f"权限页面缺少官方示例的 {relation} 权限单元格")
+        label = (
+            f"{cell['subject_role_display_name']}权限组以"
+            f"{relation_labels[relation]}关系对{action['action_display_name']}的权限"
+        )
+        page.get_by_label(label).get_by_text(
+            "允许" if expectation == "ALLOW" else "拒绝",
+            exact=True,
+        ).click()
+        with page.expect_response(
+            lambda response: response.request.method == "POST"
+            and response.url.endswith(
+                f"/api/projects/{project_id}/permission-intents/approvals"
+            ),
+            timeout=30_000,
+        ) as pending:
+            page.get_by_role(
+                "button", name="确认权限变更", exact=True
+            ).click()
+        if pending.value.status != 200:
+            raise SampleTestError(
+                f"权限页面审批 {relation} 返回非预期状态 {pending.value.status}"
+            )
+
+    with page.expect_response(
+        lambda response: response.request.method == "POST"
+        and response.url.endswith(
+            f"/api/projects/{project_id}/security-setup/compile"
+        ),
+        timeout=30_000,
+    ) as pending_compile:
+        page.get_by_role("button", name="准备本次检查", exact=True).click()
+    if pending_compile.value.status != 200:
+        raise SampleTestError(
+            f"权限页面准备检查返回非预期状态 {pending_compile.value.status}"
+        )
+    page.get_by_text(
+        re.compile(r"^(?:检查条件已经准备好|当前检查条件已经重新确认)$")
+    ).wait_for(timeout=30_000)
     preview = client.call("GET", f"/api/projects/{project_id}/check-preview")
     if preview.get("ready") is not True or preview.get("case_count") != 2:
         raise SampleTestError("检查预览未形成同一动作的两个正式权限用例")
@@ -747,6 +808,7 @@ def _run_case(
     expected_verdict: str,
     expected_issue: str,
     verification_run_id: str | None = None,
+    configure_behavior: bool = True,
 ) -> dict[str, object]:
     behavior: dict[str, object] = {
         "schema_version": "1",
@@ -754,11 +816,12 @@ def _run_case(
         "blob_observation": blob_observation,
         "verification_run_id": verification_run_id,
     }
-    client.call("POST", "/api/experience/official-sample/behavior", behavior)
+    if configure_behavior:
+        client.call("POST", "/api/experience/official-sample/behavior", behavior)
     client.call(
         "POST",
         f"/api/projects/{project_id}/security-setup/compile",
-        {"schema_version": "1", "actor": "官方示例验收"},
+        {"schema_version": "1"},
     )
     submitted = client.call(
         "POST",
@@ -822,6 +885,137 @@ def _assert_history(client: ApiClient, project_id: str, runs: list[dict[str, obj
     if "FIXED" in statuses[2]:
         raise SampleTestError("后续证据不足被错误显示为已解决")
     return history
+
+
+def _assert_history_view(
+    page: Page,
+    origin: str,
+    history: Mapping[str, object],
+    audit_dir: Path,
+) -> None:
+    """按后端 History 的长期权限视图核对默认页面，不依赖次级 Finding 聚合。"""
+
+    page.goto(origin + "/#/history", wait_until="networkidle")
+    page.get_by_role("heading", name="历史变化", exact=True).wait_for(timeout=30_000)
+    intents = history.get("intents")
+    if not isinstance(intents, list) or not intents:
+        raise SampleTestError("History 没有形成可展示的长期权限要求")
+    expected_markers: set[str] = set()
+    for intent in intents:
+        if not isinstance(intent, dict):
+            raise SampleTestError("History 权限要求不是公共对象")
+        display_label = intent.get("display_label")
+        if not isinstance(display_label, str) or not display_label:
+            raise SampleTestError("History 权限要求缺少展示标签")
+        page.get_by_text(display_label, exact=True).first.wait_for(timeout=30_000)
+        runs = intent.get("runs")
+        if not isinstance(runs, list):
+            raise SampleTestError("History 权限要求缺少关联 Run")
+        for run in runs:
+            if not isinstance(run, dict):
+                continue
+            if run.get("association_status") == "EXACT":
+                expected_markers.add("可可靠关联")
+                if run.get("verdict") == "INCONCLUSIVE":
+                    expected_markers.add("证据不足")
+            elif run.get("association_status") == "POLICY_ONLY":
+                expected_markers.add("仅确认属于本轮策略")
+            if run.get("repair_status") == "VERIFIED":
+                expected_markers.add("修复已验证")
+    for marker in expected_markers:
+        page.get_by_text(marker, exact=True).first.wait_for(timeout=30_000)
+    page.screenshot(path=str(audit_dir / "history.png"), full_page=True)
+
+
+def _assert_verification_view(
+    page: Page,
+    origin: str,
+    result: dict[str, object],
+    audit_dir: Path,
+    *,
+    name: str,
+    click_retest: bool = False,
+    verify_interactions: bool = False,
+) -> None:
+    """在 1920×1080 首屏核对现场验证，并只使用公开可见交互。"""
+
+    presentation = result["presentation"]
+    if not isinstance(presentation, dict):
+        raise SampleTestError(f"{name} 缺少正式 ResultPresentation")
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    # 每个真实 Run 都重新挂载应用，避免同一 hash 路由沿用上一次 Run 的内存态。
+    page.goto(
+        origin + f"/?sample_state={name}#/verification",
+        wait_until="networkidle",
+    )
+    page.get_by_role("heading", name="现场验证", exact=True).wait_for(timeout=30_000)
+    board = page.locator(".verification-board")
+    board.wait_for(timeout=30_000)
+    if board.locator(":scope > .verification-column").count() != 3:
+        raise SampleTestError(f"{name} 的现场验证不是固定三栏")
+
+    page.screenshot(path=str(audit_dir / f"verification-{name}-1920x1080.png"))
+    required = [
+        ("权限考题", page.get_by_role("heading", name="权限考题已锁定", exact=True)),
+        ("业务路径", page.get_by_role("heading", name="预期与实际业务路径", exact=True)),
+        ("主张边界", page.get_by_role("heading", name="可支持的主张", exact=True)),
+    ]
+    verdict = str(presentation.get("verdict"))
+    if verdict == "BLOCK":
+        issue = (presentation.get("issues") or [{}])[0]
+        diagnosis = issue.get("diagnosis") or {}
+        precision = str(diagnosis.get("precision"))
+        if precision == "EXACT":
+            required.append(("精确断裂", page.get_by_text("红色边表示首个可证明断裂。", exact=True)))
+        elif precision == "RANGE":
+            required.append(("断裂区间", page.get_by_text("只能确认断裂发生在两个边界之间，不能声称唯一断点。", exact=True)))
+        else:
+            required.append(("违规定位边界", page.get_by_text("违规已确认，但当前证据不足以定位具体断裂点", exact=True)))
+    elif verdict == "INCONCLUSIVE":
+        required.append(("证据不足", page.get_by_text("证据不足，现场不标记红色断裂点", exact=True)))
+    if (presentation.get("repair_verification") or {}).get("status") == "VERIFIED":
+        required.append(("修复复验", page.get_by_text("修复要求已验证", exact=True).first))
+    for label, locator in required:
+        locator.wait_for(timeout=30_000)
+        bounds = locator.bounding_box()
+        if bounds is None or bounds["y"] < 0 or bounds["y"] + bounds["height"] > 1080:
+            raise SampleTestError(f"{name} 的{label}没有出现在 1920×1080 首屏")
+
+    if verify_interactions or click_retest:
+        interaction_step = "打开证据说明"
+        try:
+            node = page.locator("button.verification-path-node").first
+            node.wait_for(timeout=30_000)
+            node.click()
+            page.get_by_text("为什么属于本轮", exact=True).first.wait_for(timeout=30_000)
+
+            interaction_step = "关闭证据说明"
+            drawer = page.locator(".ant-drawer-content-wrapper")
+            page.locator(".ant-drawer-close").click()
+            drawer.wait_for(state="hidden", timeout=30_000)
+
+            interaction_step = "查看证据限制"
+            page.get_by_role("button", name="查看限制", exact=True).click()
+            if page.evaluate("document.activeElement?.id") != "verification-limitations":
+                raise SampleTestError(f"{name} 的查看限制没有聚焦证据边界")
+
+            if click_retest:
+                interaction_step = "使用原考题复验"
+                with page.expect_response(
+                    lambda response: response.request.method == "POST"
+                    and response.url.endswith("/api/experience/official-sample/behavior"),
+                    timeout=30_000,
+                ) as pending_retest:
+                    page.get_by_role(
+                        "button", name="使用原考题复验", exact=True
+                    ).click()
+                if pending_retest.value.status != 200:
+                    raise SampleTestError(
+                        f"{name} 的原考题复验返回非预期状态 {pending_retest.value.status}"
+                    )
+                page.wait_for_url(re.compile(r"#/check$"), timeout=30_000)
+        except PlaywrightError as error:
+            raise SampleTestError(f"{name} 的{interaction_step}交互失败") from error
 
 
 def _run_cli(
@@ -1240,7 +1434,7 @@ def run(
             return
 
         _phase(state, 5)
-        _confirm_permissions(client, project_id, action_id, role_ids)
+        _confirm_permissions(page, client, project_id, action_id, role_ids)
 
         _phase(state, 6)
         vulnerable = _run_case(
@@ -1253,6 +1447,15 @@ def run(
             blob_observation="AVAILABLE",
             expected_verdict="BLOCK",
             expected_issue="VULNERABLE",
+        )
+        _assert_verification_view(
+            page,
+            client.origin,
+            vulnerable,
+            audit_dir,
+            name="block",
+            click_retest=True,
+            verify_interactions=True,
         )
 
         _phase(state, 7)
@@ -1267,6 +1470,14 @@ def run(
             expected_verdict="PASS",
             expected_issue="SAFE",
             verification_run_id=str(vulnerable["run_id"]),
+            configure_behavior=False,
+        )
+        _assert_verification_view(
+            page,
+            client.origin,
+            fixed,
+            audit_dir,
+            name="repair-verified",
         )
 
         _phase(state, 8)
@@ -1280,6 +1491,13 @@ def run(
             blob_observation="UNAVAILABLE",
             expected_verdict="INCONCLUSIVE",
             expected_issue="INCONCLUSIVE",
+        )
+        _assert_verification_view(
+            page,
+            client.origin,
+            inconclusive,
+            audit_dir,
+            name="inconclusive",
         )
         runs = [vulnerable, fixed, inconclusive]
         history = _assert_history(client, project_id, runs)
@@ -1307,10 +1525,7 @@ def run(
         issue_title = str(expected_presentation["issues"][0]["title"])
         page.get_by_role("heading", name=issue_title, exact=True).wait_for(timeout=30_000)
         page.screenshot(path=str(audit_dir / "latest-result.png"), full_page=True)
-        page.goto(client.origin + "/#/history", wait_until="networkidle")
-        page.get_by_text("已解决", exact=True).first.wait_for(timeout=30_000)
-        page.get_by_text("证据不足", exact=True).first.wait_for(timeout=30_000)
-        page.screenshot(path=str(audit_dir / "history.png"), full_page=True)
+        _assert_history_view(page, client.origin, history, audit_dir)
 
         _phase(state, 10)
         _shutdown_owned_runtime(

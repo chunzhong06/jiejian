@@ -53,7 +53,16 @@ _TEXT = r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$"
 _SECRET_KEY = re.compile(r"(?:authorization|cookie|credential|password|passwd|secret|token|api[_-]?key)", re.I)
 
 
-_SAFE_SECRET_KEY_NAMES = frozenset({"fencing_token", "secret"})
+# 这些键只描述公开授权事实或协议控制位；其值仍须经过已知秘密扫描。
+_SAFE_SECRET_KEY_NAMES = frozenset(
+    {
+        "authorization_decision",
+        "credential_source",
+        "fencing_token",
+        "origin_authorization_event_id",
+        "secret",
+    }
+)
 
 
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")

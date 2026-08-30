@@ -294,6 +294,11 @@ export function ApplicationSetup({ selected, endpointStatus, onConnected, onChan
   const currentStep = !understanding ? 1 : !endpointReady ? 2 : !understanding.source_fingerprint ? 3 : 4
   const reviewComplete = Boolean(understanding?.role_candidates.some((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale)
     && understanding.action_candidates.some((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale))
+  const confirmedRoles = understanding?.role_candidates.filter((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale) ?? []
+  const confirmedActions = understanding?.action_candidates.filter((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale) ?? []
+  const pendingRoles = understanding?.role_candidates.filter((candidate) => candidate.decision !== 'REJECTED' && (candidate.decision !== 'CONFIRMED' || candidate.stale)) ?? []
+  const pendingActions = understanding?.action_candidates.filter((candidate) => candidate.decision !== 'REJECTED' && (candidate.decision !== 'CONFIRMED' || candidate.stale)) ?? []
+  const pendingUnderstandingCount = pendingRoles.length + pendingActions.length
   const sequence = ['选择应用目录', '确认本地地址', '授权只读分析', '审阅权限组和业务动作']
   const primaryAction = currentStep === 1
     ? { label: '选择应用文件夹', onClick: () => void chooseFolder(), loading }
@@ -303,29 +308,33 @@ export function ApplicationSetup({ selected, endpointStatus, onConnected, onChan
         ? { label: understanding?.source_analysis_authorized ? '重新开始分析' : '授权并开始分析', onClick: () => void authorizeAndAnalyze(), loading, disabled: !analysisAuthorized }
         : { label: reviewComplete ? '继续准备测试账号' : '确认权限组和业务动作后继续', onClick: onContinue, disabled: !reviewComplete }
 
-  const candidateReview = endpointReady && understanding?.source_fingerprint ? <Card className="application-step" title="确认权限组与业务动作">
-    <Alert type="info" showIcon message="这些是系统发现的权限组和业务动作候选，不是权限结论" description="确认候选只表示应用中存在这个权限组或业务动作；界鉴不会据此自动判断谁应该允许或拒绝什么操作。" />
+  const candidateReview = endpointReady && understanding?.source_fingerprint ? <Card className="application-step application-understanding" title="界鉴已经理解">
+    <div className="application-understanding-grid">
+      <section aria-labelledby="understood-role-title"><Typography.Text className="application-understanding-kicker">权限组</Typography.Text><Typography.Title id="understood-role-title" level={4}>{confirmedRoles.length ? `${confirmedRoles.length} 个已确认` : '尚未确认'}</Typography.Title><div className="application-understanding-tags">{confirmedRoles.map((candidate) => <Tag key={candidate.candidate_id}>{candidate.display_name}</Tag>)}</div><Typography.Text type={pendingRoles.length ? 'warning' : 'secondary'}>{pendingRoles.length ? `还有 ${pendingRoles.length} 个需要确认` : '当前没有待确认项'}</Typography.Text></section>
+      <section aria-labelledby="understood-action-title"><Typography.Text className="application-understanding-kicker">关键业务动作</Typography.Text><Typography.Title id="understood-action-title" level={4}>{confirmedActions.length ? `${confirmedActions.length} 个已确认` : '尚未确认'}</Typography.Title><div className="application-understanding-tags">{confirmedActions.map((candidate) => <Tag key={candidate.candidate_id}>{candidate.display_name}</Tag>)}</div><Typography.Text type={pendingActions.length ? 'warning' : 'secondary'}>{pendingActions.length ? `还有 ${pendingActions.length} 个需要确认` : '当前没有待确认项'}</Typography.Text></section>
+    </div>
+    <Alert type={pendingUnderstandingCount ? 'warning' : 'success'} showIcon message={pendingUnderstandingCount ? `还有 ${pendingUnderstandingCount} 项应用理解需要你确认` : '权限组和业务动作已经确认'} description="这里只确认应用中存在哪些用户类别和操作，不会自动决定谁应该允许或拒绝。" />
+    <Collapse className="application-understanding-details" activeKey={pendingUnderstandingCount ? ['review-details'] : []} items={[{
+      key: 'review-details',
+      label: pendingUnderstandingCount ? '查看并确认系统识别结果' : '查看识别结果与依据',
+      children: <div className="application-review-details">
+        <section className="candidate-review-block" aria-labelledby="permission-group-review-title">
+          <div className="candidate-review-heading"><Typography.Title level={4} id="permission-group-review-title">权限组</Typography.Title><Typography.Text type="secondary">确认应用中真实存在的用户类别；这里不设置允许或拒绝规则。</Typography.Text></div>
+          <CandidateSection title="已确认的权限组" candidates={confirmedRoles} kind="role" variant="confirmed" loading={loading} onDecide={(candidate, decision, name) => void decide('role', candidate, decision, name)} emptyText="还没有已确认的权限组。" />
+          <CandidateSection title="系统发现，等待确认" candidates={pendingRoles} kind="role" variant="pending" loading={loading} onDecide={(candidate, decision, name) => void decide('role', candidate, decision, name)} emptyText="没有待确认的系统权限组。" />
+          <section className="application-manual-section"><Typography.Title level={5}>没有找到？手工补充</Typography.Title><div className="application-manual"><Input aria-label="手工补充权限组" value={manualRole} onChange={(event) => setManualRole(event.target.value)} placeholder="例如：审核员" /><Button onClick={() => void addRole()} disabled={!manualRole.trim()} loading={loading}>补充并确认权限组</Button></div></section>
+          {understanding.role_candidates.some((candidate) => candidate.decision === 'REJECTED') && <Collapse ghost items={[{ key: 'excluded-roles', label: `已排除的候选（${understanding.role_candidates.filter((candidate) => candidate.decision === 'REJECTED').length}）`, children: <List dataSource={understanding.role_candidates.filter((candidate) => candidate.decision === 'REJECTED')} renderItem={(candidate) => <ExcludedCandidateRow key={candidate.candidate_id} candidate={candidate} kind="role" loading={loading} onDecide={(decision, name) => void decide('role', candidate, decision, name)} />} /> }]} />}
+        </section>
+        <section className="candidate-review-block" aria-labelledby="business-action-review-title">
+          <div className="candidate-review-heading"><Typography.Title level={4} id="business-action-review-title">业务动作</Typography.Title><Typography.Text type="secondary">确认需要测试的真实操作；录制与权限预期会在后续步骤单独完成。</Typography.Text></div>
+          <CandidateSection title="已确认的业务动作" candidates={confirmedActions} kind="action" variant="confirmed" loading={loading} onDecide={(candidate, decision, name) => void decide('action', candidate, decision, name)} emptyText="还没有已确认的业务动作。" />
+          <CandidateSection title="系统发现，等待确认" candidates={pendingActions} kind="action" variant="pending" loading={loading} onDecide={(candidate, decision, name) => void decide('action', candidate, decision, name)} emptyText="没有待确认的系统业务动作。" />
+          <section className="application-manual-section"><Typography.Title level={5}>没有找到？手工补充</Typography.Title><div className="application-manual"><Input aria-label="手工补充业务动作" value={manualAction} onChange={(event) => setManualAction(event.target.value)} placeholder="例如：批准退款" /><Button onClick={() => void addAction()} disabled={!manualAction.trim()} loading={loading}>补充并确认业务动作</Button></div></section>
+          {understanding.action_candidates.some((candidate) => candidate.decision === 'REJECTED') && <Collapse ghost items={[{ key: 'excluded-actions', label: `已排除的候选（${understanding.action_candidates.filter((candidate) => candidate.decision === 'REJECTED').length}）`, children: <List dataSource={understanding.action_candidates.filter((candidate) => candidate.decision === 'REJECTED')} renderItem={(candidate) => <ExcludedCandidateRow key={candidate.candidate_id} candidate={candidate} kind="action" loading={loading} onDecide={(decision, name) => void decide('action', candidate, decision, name)} />} /> }]} />}
+        </section>
+      </div>,
+    }]} />
     <AssistantPanel projectId={understanding.project_id} surface="candidate-review" title="候选整理建议" actionLabel="AI 帮我整理" />
-    <section className="candidate-review-block" aria-labelledby="permission-group-review-title">
-      <div className="candidate-review-heading">
-        <Typography.Title level={4} id="permission-group-review-title">权限组</Typography.Title>
-        <Typography.Text type="secondary">确认应用中真实存在的用户类别；这里不设置允许或拒绝规则。</Typography.Text>
-      </div>
-      <CandidateSection title="已确认的权限组" candidates={understanding.role_candidates.filter((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale)} kind="role" variant="confirmed" loading={loading} onDecide={(candidate, decision, name) => void decide('role', candidate, decision, name)} emptyText="还没有已确认的权限组。" />
-      <CandidateSection title="系统发现，等待确认" candidates={understanding.role_candidates.filter((candidate) => candidate.decision !== 'REJECTED' && (candidate.decision !== 'CONFIRMED' || candidate.stale))} kind="role" variant="pending" loading={loading} onDecide={(candidate, decision, name) => void decide('role', candidate, decision, name)} emptyText="没有待确认的系统权限组。" />
-      <section className="application-manual-section"><Typography.Title level={5}>没有找到？手工补充</Typography.Title><div className="application-manual"><Input aria-label="手工补充权限组" value={manualRole} onChange={(event) => setManualRole(event.target.value)} placeholder="例如：审核员" /><Button onClick={() => void addRole()} disabled={!manualRole.trim()} loading={loading}>补充并确认权限组</Button></div></section>
-      {understanding.role_candidates.some((candidate) => candidate.decision === 'REJECTED') && <Collapse ghost items={[{ key: 'excluded-roles', label: `已排除的候选（${understanding.role_candidates.filter((candidate) => candidate.decision === 'REJECTED').length}）`, children: <List dataSource={understanding.role_candidates.filter((candidate) => candidate.decision === 'REJECTED')} renderItem={(candidate) => <ExcludedCandidateRow key={candidate.candidate_id} candidate={candidate} kind="role" loading={loading} onDecide={(decision, name) => void decide('role', candidate, decision, name)} />} /> }]} />}
-    </section>
-    <section className="candidate-review-block" aria-labelledby="business-action-review-title">
-      <div className="candidate-review-heading">
-        <Typography.Title level={4} id="business-action-review-title">业务动作</Typography.Title>
-        <Typography.Text type="secondary">确认需要测试的真实操作；录制与权限预期会在后续步骤单独完成。</Typography.Text>
-      </div>
-      <CandidateSection title="已确认的业务动作" candidates={understanding.action_candidates.filter((candidate) => candidate.decision === 'CONFIRMED' && !candidate.stale)} kind="action" variant="confirmed" loading={loading} onDecide={(candidate, decision, name) => void decide('action', candidate, decision, name)} emptyText="还没有已确认的业务动作。" />
-      <CandidateSection title="系统发现，等待确认" candidates={understanding.action_candidates.filter((candidate) => candidate.decision !== 'REJECTED' && (candidate.decision !== 'CONFIRMED' || candidate.stale))} kind="action" variant="pending" loading={loading} onDecide={(candidate, decision, name) => void decide('action', candidate, decision, name)} emptyText="没有待确认的系统业务动作。" />
-      <section className="application-manual-section"><Typography.Title level={5}>没有找到？手工补充</Typography.Title><div className="application-manual"><Input aria-label="手工补充业务动作" value={manualAction} onChange={(event) => setManualAction(event.target.value)} placeholder="例如：批准退款" /><Button onClick={() => void addAction()} disabled={!manualAction.trim()} loading={loading}>补充并确认业务动作</Button></div></section>
-      {understanding.action_candidates.some((candidate) => candidate.decision === 'REJECTED') && <Collapse ghost items={[{ key: 'excluded-actions', label: `已排除的候选（${understanding.action_candidates.filter((candidate) => candidate.decision === 'REJECTED').length}）`, children: <List dataSource={understanding.action_candidates.filter((candidate) => candidate.decision === 'REJECTED')} renderItem={(candidate) => <ExcludedCandidateRow key={candidate.candidate_id} candidate={candidate} kind="action" loading={loading} onDecide={(decision, name) => void decide('action', candidate, decision, name)} />} /> }]} />}
-    </section>
   </Card> : null
 
   return <div className="application-setup">

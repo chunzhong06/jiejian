@@ -152,7 +152,13 @@
 - `OFFICIAL_RESOURCE_ID`
 - `class ValidationSuiteError`
 - `run_validation_suite(root, var_dir, repetitions, representative_only) -> dict[str, object]`
-主要 import / dot-source：`__future__`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.lifecycle`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.coverage`, `product.backend.core.verification.permissions.evaluation`, `sample_test_oracle`, `sample_test_registry`, `secrets`, `shutil`, `subprocess`, `sys`, `threading`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
+主要 import / dot-source：`__future__`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.continuity`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.coverage`, `product.backend.core.verification.permissions.evaluation`, `sample_test_oracle`, `sample_test_registry`, `sample_test_validation_adapter`, `secrets`, `shutil`, `subprocess`, `sys`, `threading`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
+
+### `scripts/dev/sample_test_validation_adapter.py`
+- `_TRACE_KIND_ALIASES`
+- `class ValidationDomainBundle`
+- `build_validation_domain_bundle(case, allow_trace_records, deny_trace_records, allow_trace_complete, deny_trace_complete, allow_effect_fact, deny_effect_fact) -> ValidationDomainBundle`
+主要 import / dot-source：`__future__`, `dataclasses`, `hashlib`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.coverage`, `product.backend.core.verification.trace`, `sample_test_registry`, `typing`
 
 ### `scripts/dev/sample_test_windows.py`
 - `_PROCESS_QUERY_LIMITED_INFORMATION`

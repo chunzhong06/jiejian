@@ -19,6 +19,11 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from product.backend.core.lifecycle import CaseVerdict
+from product.backend.core.verification.breakpoints import BreakpointLocator, BreakpointResult
+from product.backend.core.verification.continuity import (
+    AuthorizationContinuityState,
+    assess_authorization_continuity,
+)
 from product.backend.core.verification.differential import TwinExecutionRole
 from product.backend.core.verification.facts import (
     DisclosureProof,
@@ -51,6 +56,7 @@ from sample_test_registry import (
     load_public_registry,
     public_registry_payload,
 )
+from sample_test_validation_adapter import build_validation_domain_bundle
 
 
 _VERDICT = {
@@ -70,10 +76,12 @@ class ValidationSuiteError(RuntimeError):
 class _ExecutionObservation:
     allow_status: int
     allow_effect: ObservedEffect
+    allow_trace: tuple[Mapping[str, object], ...]
+    allow_trace_complete: bool
     deny_status: int
     deny_effect: ObservedEffect
     deny_trace: tuple[Mapping[str, object], ...]
-    trace_complete: bool
+    deny_trace_complete: bool
     actual_identity_attributed: bool
     recovery_success: bool
 
@@ -241,7 +249,7 @@ def _run_tenant_case(
                 identity=case.allow_control_identity,
                 marker=allow_marker,
             )
-            allow_effect, _allow_trace, _ = _tenant_observation(
+            allow_effect, allow_trace, allow_trace_complete = _tenant_observation(
                 origin,
                 allow_marker,
                 case.protected_effects,
@@ -263,10 +271,12 @@ def _run_tenant_case(
             observation = _ExecutionObservation(
                 allow_status=allow_status,
                 allow_effect=allow_effect,
+                allow_trace=allow_trace,
+                allow_trace_complete=allow_trace_complete,
                 deny_status=deny_status,
                 deny_effect=deny_effect,
                 deny_trace=deny_trace,
-                trace_complete=trace_complete,
+                deny_trace_complete=trace_complete,
                 actual_identity_attributed=True,
                 recovery_success=False,
             )
@@ -324,6 +334,7 @@ def _run_official_case(
             allow_marker,
         )
         allow_effect = _official_effect(selector, allow_task, allow_control=True)
+        allow_trace = _official_trace(server.runtime_root, allow_marker)
         server.reset()
         deny_marker = f"{case.case_id}-deny"
         deny_status, deny_task = _official_action(
@@ -337,10 +348,12 @@ def _run_official_case(
         observation = _ExecutionObservation(
             allow_status=allow_status,
             allow_effect=allow_effect,
+            allow_trace=allow_trace,
+            allow_trace_complete=True,
             deny_status=deny_status,
             deny_effect=deny_effect,
             deny_trace=trace,
-            trace_complete=selector.get("observation") == "AVAILABLE",
+            deny_trace_complete=True,
             actual_identity_attributed=True,
             recovery_success=False,
         )
@@ -381,28 +394,54 @@ def _evaluate_case(
     )
     verdict, _ = evaluate_permission_case(deny_input)
     public_verdict = _VERDICT[verdict]
-    breakpoint = _classify_breakpoint(
+    bundle = build_validation_domain_bundle(
         case,
-        observation.deny_trace,
-        trace_complete=observation.trace_complete,
-        verdict=public_verdict,
+        allow_trace_records=observation.allow_trace,
+        deny_trace_records=observation.deny_trace,
+        allow_trace_complete=observation.allow_trace_complete,
+        deny_trace_complete=observation.deny_trace_complete,
+        allow_effect_fact=_effect_fact(case, observation.allow_effect),
+        deny_effect_fact=_effect_fact(case, observation.deny_effect),
     )
-    continuity, orphan_effect = _continuity_result(
-        observation.deny_effect,
-        breakpoint_type=breakpoint[0],
+    continuity = assess_authorization_continuity(
+        bundle.contract,
+        bundle.twin,
+        bundle.deny_effect_facts,
     )
+    breakpoint = BreakpointLocator().locate(
+        contract=bundle.contract,
+        differential_plan=bundle.plan,
+        allow_trace=bundle.allow_trace,
+        deny_trace=bundle.deny_trace,
+        allow_effect_facts=bundle.allow_effect_facts,
+        deny_effect_facts=bundle.deny_effect_facts,
+        evidence_refs=bundle.evidence_refs,
+    )
+    breakpoint_type, breakpoint_location, breakpoint_range, precision = (
+        _breakpoint_projection(breakpoint, bundle.deny_trace)
+    )
+    continuity_label = {
+        AuthorizationContinuityState.INTACT: "INTACT",
+        AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED: "BROKEN",
+        AuthorizationContinuityState.UNKNOWN: "UNKNOWN",
+    }[continuity.state]
+    orphan_effect = {
+        AuthorizationContinuityState.INTACT: False,
+        AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED: True,
+        AuthorizationContinuityState.UNKNOWN: None,
+    }[continuity.state]
     return ValidationCaseResult(
         case_id=case.case_id,
         application_id=case.application_id,
         mode=case.mode,
         verdict=public_verdict,
         allow_control_valid=allow_valid,
-        breakpoint_type=breakpoint[0],
-        breakpoint_location=breakpoint[1],
-        breakpoint_range=breakpoint[2],
-        precision=breakpoint[3],
+        breakpoint_type=breakpoint_type,
+        breakpoint_location=breakpoint_location,
+        breakpoint_range=breakpoint_range,
+        precision=precision,
         effect_state=observation.deny_effect.value,
-        authorization_continuity=continuity,
+        authorization_continuity=continuity_label,
         orphan_effect_detected=orphan_effect,
         actual_identity_attributed=observation.actual_identity_attributed,
         recovery_success=observation.recovery_success,
@@ -410,24 +449,34 @@ def _evaluate_case(
     )
 
 
-def _continuity_result(
-    effect: ObservedEffect,
-    *,
-    breakpoint_type: str | None,
-) -> tuple[str, bool | None]:
-    """把效果与授权断点归并为连续性/孤儿后果事实，不读取 oracle。"""
+def _breakpoint_projection(
+    breakpoint: BreakpointResult | None,
+    deny_trace,
+) -> tuple[str | None, str | None, tuple[str, ...], str | None]:
+    """把生产 Locator 的事件引用投影成既有公开 validation 摘要。"""
 
-    if effect is ObservedEffect.UNKNOWN:
-        return "UNKNOWN", None
-    if effect is ObservedEffect.ABSENT:
-        return "INTACT", False
-    broken = breakpoint_type in {
-        "AUTHORIZATION_MISSING",
-        "AUTHORIZATION_LATE",
-        "AUTHORIZATION_BYPASS",
-        "AUTHORITY_EXPANSION",
-    }
-    return ("BROKEN", True) if broken else ("UNKNOWN", None)
+    if breakpoint is None:
+        return None, None, (), None
+    events = {item.event_id: item for item in deny_trace.events}
+    location = (
+        events[breakpoint.first_violation_event_id].semantic_key
+        if breakpoint.first_violation_event_id is not None
+        else None
+    )
+    range_keys = tuple(
+        events[event_id].semantic_key
+        for event_id in (
+            breakpoint.range_start_event_id,
+            breakpoint.range_end_event_id,
+        )
+        if event_id is not None
+    )
+    return (
+        breakpoint.breakpoint_type.value if breakpoint.breakpoint_type is not None else None,
+        location,
+        range_keys,
+        breakpoint.precision.value,
+    )
 
 
 def _baseline_verdicts(
@@ -545,53 +594,6 @@ def _effect_fact(
         disclosure_proof=disclosure,
         reason_codes=() if complete else ("VALIDATION_OBSERVATION_UNAVAILABLE",),
     )
-
-
-def _classify_breakpoint(
-    case: PublicValidationCase,
-    trace: tuple[Mapping[str, object], ...],
-    *,
-    trace_complete: bool,
-    verdict: str,
-) -> tuple[str | None, str | None, tuple[str, ...], str | None]:
-    """只按公开 Trace 因果顺序归类，不读取 case_id 或 oracle。"""
-
-    if verdict != "BLOCK":
-        return None, None, (), None
-    effect_key = str(case.observation_config.get("trace_effect_key"))
-    effect_index = next(
-        (
-            index
-            for index, item in enumerate(trace)
-            if item.get("semantic_key") == effect_key
-        ),
-        None,
-    )
-    authorization_index = next(
-        (
-            index
-            for index, item in enumerate(trace)
-            if item.get("semantic_key") == "authorization_decided"
-            and item.get("authorization_decision") == "DENY"
-        ),
-        None,
-    )
-    if effect_index is None:
-        return None, None, (), "VIOLATION_ONLY" if not trace_complete else None
-    if any(
-        item.get("semantic_key") == "service_authority_expanded"
-        for item in trace
-    ):
-        return "AUTHORITY_EXPANSION", "service_authority_expanded", (), (
-            "EXACT" if trace_complete else "RANGE"
-        )
-    if authorization_index is None:
-        return "AUTHORIZATION_MISSING", effect_key, (), (
-            "EXACT" if trace_complete else "VIOLATION_ONLY"
-        )
-    if effect_index < authorization_index:
-        return "AUTHORIZATION_LATE", effect_key, (), "EXACT" if trace_complete else "RANGE"
-    return "AUTHORIZATION_BYPASS", effect_key, (), "EXACT" if trace_complete else "RANGE"
 
 
 def _tenant_action(
@@ -868,6 +870,20 @@ def _write_public_summary(
         "case_count": len(cases),
         "case_run_count": len(results),
         "applications": sorted({item.application_id for item in cases}),
+        "full_method_sources": {
+            "case_verdict": (
+                "product.backend.core.verification.permissions.evaluation."
+                "evaluate_permission_case"
+            ),
+            "authorization_continuity": (
+                "product.backend.core.verification.continuity."
+                "assess_authorization_continuity"
+            ),
+            "breakpoint": (
+                "product.backend.core.verification.breakpoints."
+                "BreakpointLocator.locate"
+            ),
+        },
         "method_metrics": _aggregate_method_metrics(evaluations),
         "repeat_consistency": _repeat_consistency(results),
         "results": results,

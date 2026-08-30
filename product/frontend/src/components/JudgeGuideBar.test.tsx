@@ -56,4 +56,12 @@ describe('JudgeGuideBar', () => {
     rerender(<JudgeGuideBar status={{ ...status('RECORD_FLOW', '/identities'), project: { project_id: 'p2', name: '其他应用', status: 'DRAFT', target_type: 'WEB' } } as never} experience={experience} preparingIdentities={false} onPrepareIdentities={vi.fn()} />)
     expect(screen.queryByLabelText('评委导览')).not.toBeInTheDocument()
   })
+
+  it('最后一步提供现场验证入口', () => {
+    const openVerification = vi.fn()
+    render(<JudgeGuideBar status={status('OPEN_RESULT', '/results') as never} experience={{ ...experience, identities_ready: true }} preparingIdentities={false} onPrepareIdentities={vi.fn()} onOpenVerification={openVerification} />)
+    expect(screen.getByText('评委导览 · 7/7')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '进入现场验证' }))
+    expect(openVerification).toHaveBeenCalledOnce()
+  })
 })

@@ -38,5 +38,15 @@ export const experienceApi = {
         verification_run_id: runId,
       }),
     }),
+  useUnavailableObservation: (authorizationOrder: 'ENQUEUE_BEFORE_AUTHORIZE' | 'AUTHORIZE_BEFORE_ENQUEUE') =>
+    request<OfficialExperienceDto>('/api/experience/official-sample/behavior', {
+      method: 'POST',
+      body: JSON.stringify({
+        schema_version: '1',
+        authorization_order: authorizationOrder,
+        blob_observation: 'UNAVAILABLE',
+        verification_run_id: null,
+      }),
+    }),
   stop: () => request<OfficialExperienceDto>('/api/experience/official-sample/stop', { method: 'POST' }),
 }

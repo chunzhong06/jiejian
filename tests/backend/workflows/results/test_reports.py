@@ -22,6 +22,7 @@ from product.backend.core.verification.breakpoints import (
     BreakpointType,
 )
 from product.backend.core.verification.continuity import AuthorizationContinuityState
+from product.backend.core.verification.facts import ExecutionOutcome, ObservedEffect
 from product.backend.core.verification.trace import TraceEventKind
 from product.backend.core.reporting import render_html, render_junit, render_sarif
 from product.backend.infra.artifacts.report_store import ReportStore
@@ -29,6 +30,7 @@ from product.backend.infra.artifacts import report_store as report_store_module
 from product.backend.workflows.results.reporting import ReportBuilder
 from product.backend.workflows.results.presentation import (
     PresentedCaseVerdict,
+    ResultClaimBoundary,
     ResultConfirmedImpact,
     ResultDiagnosis,
     ResultEvidenceSource,
@@ -103,6 +105,7 @@ def _result_diagnosis() -> ResultDiagnosis:
         breakpoint_type=BreakpointType.AUTHORIZATION_LATE,
         precision=BreakpointPrecision.EXACT,
         continuity_state=AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED,
+        first_violation_event_id="event-5",
         amplifier_types=(BreakpointType.AUTHORITY_EXPANSION,),
         summary="首个可证明断裂：权限决定发生过晚",
         minimal_witness=witness,
@@ -123,6 +126,11 @@ def _result_diagnosis() -> ResultDiagnosis:
 
 def _report_diagnosis() -> ReportDiagnosis:
     value = _result_diagnosis().model_dump(mode="json")
+    value = {
+        key: item
+        for key, item in value.items()
+        if key in ReportDiagnosis.model_fields
+    }
     return ReportDiagnosis.model_validate_json(
         json.dumps(value, ensure_ascii=False),
         strict=True,
@@ -196,6 +204,14 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
         verdict=PresentedCaseVerdict.VULNERABLE,
         occurrence_status="APPEARED",
         diagnosis=_result_diagnosis(),
+        claim_boundary=ResultClaimBoundary(
+            surface_response_status=ExecutionOutcome.DENIED,
+            business_effect_status=ObservedEffect.CONFIRMED,
+            actual_identity_status="UNAVAILABLE",
+            breakpoint_precision=BreakpointPrecision.EXACT,
+            supported_statement="计划使用成员账号凭据的实验中，项目资料已经导出。",
+            unsupported_statements=("不能宣称服务器已经独立确认实际执行主体。",),
+        ),
         repair_requirement=RepairRequirementView(
             reference=repair_reference,
             must_disappear="普通成员修改后，受保护文档变化必须消失。",

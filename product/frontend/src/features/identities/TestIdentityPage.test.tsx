@@ -36,7 +36,10 @@ describe('TestIdentityPage', () => {
     render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
     expect(await screen.findByRole('heading', { name: '测试账号' })).toBeInTheDocument()
     expect(screen.getByText(/独立窗口中自行完成密码/)).toBeInTheDocument()
-    expect(screen.getByText('普通用户 · 1 个账号')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '按权限组准备' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '普通用户' })).toBeInTheDocument()
+    expect(screen.getByText('普通用户A')).toBeInTheDocument()
+    expect(screen.getByText(/用于验证“普通用户”在合法路径和禁止路径中的真实权限边界/)).toBeInTheDocument()
     expect(screen.getByPlaceholderText('例如：普通用户A / 管理员测试账号')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '打开登录浏览器' })).toBeInTheDocument()
     expect(screen.queryByText(/Cookie|Bearer|内部标识/)).not.toBeInTheDocument()
@@ -87,7 +90,7 @@ describe('TestIdentityPage', () => {
 
   it('刷新账号状态只重新读取权限组和账号事实', async () => {
     render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
-    expect(await screen.findByText('普通用户 · 1 个账号')).toBeInTheDocument()
+    expect(await screen.findByText('普通用户A')).toBeInTheDocument()
     vi.mocked(projectsApi.understanding).mockClear()
     vi.mocked(testIdentitiesApi.list).mockClear()
 

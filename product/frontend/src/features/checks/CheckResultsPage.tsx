@@ -19,6 +19,7 @@ import { AssistantPanel } from '../../components/AssistantPanel'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { EvidenceTimeline } from './EvidenceTimeline'
+import { EvidenceExplanationDrawer } from './EvidenceExplanationDrawer'
 import { ReportPanel } from './ReportPanel'
 import './checks.css'
 
@@ -62,6 +63,7 @@ export function CheckResultsPage({
   onError,
   onBack,
   onHistory,
+  onVerification,
   onNavigate,
   canVerifyFix = false,
   verifyingFix = false,
@@ -71,6 +73,7 @@ export function CheckResultsPage({
   onError: (error: ApiError) => void
   onBack?: () => void
   onHistory?: () => void
+  onVerification?: () => void
   onNavigate?: (path: string) => void
   canVerifyFix?: boolean
   verifyingFix?: boolean
@@ -83,6 +86,7 @@ export function CheckResultsPage({
   const [selectedIssue, setSelectedIssue] = useState<ResultPresentationIssueDto | undefined>()
   const [refreshEpoch, setRefreshEpoch] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false)
 
   useEffect(() => {
     setCurrent(run)
@@ -144,14 +148,13 @@ export function CheckResultsPage({
       />}
       {String(current.result_integrity) === 'INVALID' && <Alert type="warning" showIcon message="结果完整性校验未通过，不能形成安全结论。" />}
     </section>}
-    {current && presentation && <AssistantPanel runId={String(current.run_id)} title="这个结果的因果说明" actionLabel="AI 解读这个结果" />}
     {current && <Segmented className="result-view-switch" value={view} onChange={(value) => setView(value as 'results' | 'report')} options={[{ label: '结论与证据', value: 'results' }, { label: '完整报告', value: 'report' }]} />}
     {view === 'results' && current && <>
       {presentation && presentation.execution_traces.length > 0 && <ExecutionPaths traces={presentation.execution_traces} />}
       <section className="result-section" aria-labelledby="result-stories-title">
         <div className="result-section-heading"><div><Typography.Title id="result-stories-title" level={3}>{presentation?.issues.some((issue) => issue.verdict !== 'SAFE') ? '需要处理的检查项' : '检查项说明'}</Typography.Title><Typography.Paragraph type="secondary">每一项都按照同一顺序展示权限预期、执行表象、真实影响和后端结论。</Typography.Paragraph></div></div>
         {presentation?.issues.length
-          ? <div className="result-story-list">{presentation.issues.map((issue, index) => <ResultStory key={issue.finding_id} issue={issue} index={index} onEvidence={() => setSelectedIssue(issue)} onNavigate={onNavigate} />)}</div>
+          ? <div className="result-story-list">{presentation.issues.map((issue, index) => <ResultStory key={issue.finding_id} issue={issue} index={index} onEvidence={() => { setSelectedIssue(issue); setEvidenceDrawerOpen(true) }} onNavigate={onNavigate} />)}</div>
           : <div className="result-empty">{verified ? '当前结果没有需要单独说明的检查项。' : '结果尚未可用。'}</div>}
       </section>
       {presentation && presentation.limitations.length > 0 && <section className="result-section result-limitations" aria-labelledby="result-limitations-title"><Typography.Title id="result-limitations-title" level={3}>本次范围与限制</Typography.Title><ul>{presentation.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>}
@@ -159,9 +162,12 @@ export function CheckResultsPage({
         <div className="result-section-heading"><div><Typography.Title id="result-evidence-title" level={3}>证据怎样支持结论</Typography.Title><Typography.Paragraph type="secondary">这里只展开已经发布的执行与观察事实；“已发现、未发现、无法确认”不会改变后端形成的结论。</Typography.Paragraph></div>{selectedIssue && <Tag>{selectedIssue.title}</Tag>}</div>
         <EvidenceTimeline runId={String(current.run_id)} evidence={evidence} preferredIds={preferredEvidence} onError={onError} />
       </section>
+      {presentation && <section className="verification-ai-boundary"><Typography.Text type="secondary">仅辅助解释，不参与安全判定</Typography.Text><AssistantPanel runId={String(current.run_id)} title="这个结果的因果说明" actionLabel="AI 解读这个结果" /></section>}
     </>}
     {view === 'report' && <ReportPanel run={current} onError={onError} />}
-    <TaskActionBar back={onBack ? { label: '返回权限与检查', onClick: onBack } : undefined} refresh={current ? { label: '刷新已发布结果', onClick: () => setRefreshEpoch((value) => value + 1), loading } : undefined} restart={canVerifyFix && onVerifyFix ? { label: '验证修复后的行为', onClick: onVerifyFix, loading: verifyingFix } : undefined} primary={presentation && onHistory ? { label: '查看历史变化', onClick: onHistory } : undefined} />
+    {presentation && onHistory && <Button className="result-history-link" onClick={onHistory}>查看历史变化</Button>}
+    <TaskActionBar back={onBack ? { label: '返回权限与检查', onClick: onBack } : undefined} refresh={current ? { label: '刷新已发布结果', onClick: () => setRefreshEpoch((value) => value + 1), loading } : undefined} restart={canVerifyFix && onVerifyFix ? { label: '验证修复后的行为', onClick: onVerifyFix, loading: verifyingFix } : undefined} primary={presentation && onVerification ? { label: '进入现场验证', onClick: onVerification } : undefined} />
+    <EvidenceExplanationDrawer open={evidenceDrawerOpen} title={selectedIssue?.title} explanations={selectedIssue?.evidence_explanations ?? []} onClose={() => setEvidenceDrawerOpen(false)} />
   </Space>
 }
 
@@ -206,7 +212,7 @@ function ResultStory({ issue, index, onEvidence, onNavigate }: { issue: ResultPr
       </ul>
     </section>}
     {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message={issue.conclusion} description={<Space direction="vertical"><Typography.Text>{issue.explanation}</Typography.Text><Button onClick={() => onNavigate?.('/flows')}>完善真实结果确认方式</Button></Space>} />}
-    <div className="result-story-actions"><Button type="link" onClick={onEvidence} aria-controls="published-evidence">查看对应证据</Button><Tag>{occurrenceStatusLabel(issue.occurrence_status)}</Tag></div>
+    <div className="result-story-actions"><Button type="link" onClick={onEvidence}>查看对应证据</Button><Tag>{occurrenceStatusLabel(issue.occurrence_status)}</Tag></div>
   </article>
 }
 

@@ -61,4 +61,22 @@ describe('CheckProgress', () => {
     expect(localStorage.getItem('jiejian.cursor.job-1')).toBe('5')
     expect(onRefresh).toHaveBeenCalledOnce()
   })
+
+  it('事件流断开时明确保留后台运行语义', async () => {
+    let source: { onerror?: () => void } | undefined
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void
+      onerror?: () => void
+      close = vi.fn()
+      constructor() { source = this }
+    }
+    ;(globalThis as any).EventSource = FakeEventSource
+    render(<CheckProgress run={{ run_id: 'run-1', lifecycle: 'RUNNING', job: { job_id: 'job-1', state: 'RUNNING' } } as any} onRefresh={vi.fn()} onError={vi.fn()} />)
+
+    await waitFor(() => expect(source).toBeDefined())
+    source?.onerror?.()
+
+    expect(await screen.findByText('实时视图暂时断开，正式检查仍在后台运行')).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: '真实检查阶段' })).toBeInTheDocument()
+  })
 })

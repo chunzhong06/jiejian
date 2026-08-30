@@ -22,7 +22,7 @@ const mockApi = vi.hoisted(() => ({
   maintenanceOperation: vi.fn(),
   assistantProject: vi.fn(), assistantGenerateProject: vi.fn(), assistantResult: vi.fn(), assistantGenerateResult: vi.fn(), assistantGenerateError: vi.fn(),
   experienceStatus: vi.fn().mockResolvedValue({ available: false, display_name: '协作空间', unavailable_reason: '未配置官方示例目录', active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null }),
-  experienceStart: vi.fn(), experienceIdentities: vi.fn(), experienceFix: vi.fn(), experienceStop: vi.fn(),
+  experienceStart: vi.fn(), experienceIdentities: vi.fn(), experienceFix: vi.fn(), experienceGap: vi.fn(), experienceStop: vi.fn(),
   latestChange: vi.fn().mockResolvedValue(null),
   checkPreview: vi.fn(), checkSubmit: vi.fn(), permissionMatrix: vi.fn(), permissionProposals: vi.fn(), permissionConfirm: vi.fn(), permissionCompile: vi.fn(),
   cancel: vi.fn().mockResolvedValue({}), progress: vi.fn().mockResolvedValue({ job_id: 'job', attempt: 1, events: [] }), findings: vi.fn().mockResolvedValue([]), evidence: vi.fn().mockResolvedValue([]), evidenceDetail: vi.fn().mockResolvedValue({}), presentation: vi.fn(), history: vi.fn(), reports: vi.fn().mockResolvedValue([]), report: vi.fn().mockResolvedValue({}), reportView: vi.fn((runId: string, reportId: string) => `/api/runs/${runId}/reports/${reportId}/view`),
@@ -58,7 +58,7 @@ vi.mock('../api/assistant', () => ({ assistantApi: {
   generateResult: mockApi.assistantGenerateResult,
   generateError: mockApi.assistantGenerateError,
 } }))
-vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus, start: mockApi.experienceStart, prepareIdentities: mockApi.experienceIdentities, verifyFixedBehavior: mockApi.experienceFix, stop: mockApi.experienceStop } }))
+vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus, start: mockApi.experienceStart, prepareIdentities: mockApi.experienceIdentities, verifyFixedBehavior: mockApi.experienceFix, useUnavailableObservation: mockApi.experienceGap, stop: mockApi.experienceStop } }))
 vi.mock('../api/system', () => ({ systemApi: { status: mockApi.systemStatus, maintenanceStatus: mockApi.maintenanceStatus, maintenanceOperation: mockApi.maintenanceOperation, shutdown: mockApi.shutdown } }))
 vi.mock('../api/sourceChanges', () => ({ sourceChangesApi: { latest: mockApi.latestChange } }))
 vi.mock('../api/checks', () => ({ checksApi: { preview: mockApi.checkPreview, submit: mockApi.checkSubmit } }))
@@ -268,5 +268,32 @@ describe('应用壳', () => {
     expect(await screen.findByRole('link', { name: 'JSON' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '查看历史变化' }))
     expect((await screen.findAllByText('新发现')).length).toBeGreaterThan(0)
+  })
+
+  it('官方证据缺口动作切换真实观察后经正式检查接口创建新 Run', async () => {
+    const run = { run_id: 'run-current', created_at_us: 3, lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED' }
+    const experience = { available: true, display_name: '协作空间', unavailable_reason: null, active: true, experience_id: 'exp-1', experience_mode: 'GUIDED', project_id: 'p1', origin: 'http://127.0.0.1:1', identities_ready: true, authorization_order: 'ENQUEUE_BEFORE_AUTHORIZE', blob_observation: 'AVAILABLE', repair_change_id: null }
+    mockApi.experienceStatus.mockResolvedValue(experience)
+    mockApi.experienceGap.mockResolvedValue({ ...experience, blob_observation: 'UNAVAILABLE' })
+    mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
+    mockApi.runs.mockResolvedValue([run])
+    mockApi.run.mockResolvedValue(run)
+    mockApi.checkPreview.mockResolvedValue({ project_id: 'p1', ready: true, actions: [], gaps: [], next_path: null, next_label: null, case_count: 1, differential_pair_count: 1, change_id: null, required_intent_count: 1 })
+    mockApi.checkSubmit.mockResolvedValue({ schema_version: '1', run: { ...run, run_id: 'run-new', lifecycle: 'QUEUED' }, job: { job_id: 'job-new', state: 'QUEUED' } })
+    mockApi.presentation.mockResolvedValue({
+      run_id: 'run-current', project_id: 'p1', project_name: '协作空间', run_lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', policy_epoch: 1, policy_fingerprint: 'a'.repeat(64),
+      relevant_intents: [{ intent_id: `pin_${'1'.repeat(32)}`, revision: 1, intent_hash: 'b'.repeat(64), display_label: 'P-001', expectation: 'DENY', business_statement: '成员不可以导出资料包。' }], change_verification: null, repair_verification: null,
+      headline: '证据不足', scope_statement: '真实状态无法确认。', checked_count: 1, safe_count: 0, problem_count: 0, inconclusive_count: 1, uncovered_count: 0, execution_problem: null, execution_traces: [], limitations: [],
+      issues: [{ finding_id: 'finding-1', title: '导出结果无法确认', subject_group: '成员', action: '导出', resource: '资料包', relation: '其他权限组', expectation: '不应导出', surface_result: '页面已拒绝', actual_result: '真实结果无法确认', conclusion: '证据不足', explanation: '必需观察不可用。', planned_identity_id: 'member', planned_identity_label: 'Bob', actual_identity_status: 'UNAVAILABLE', actual_identity_id: null, actual_identity_label: null, severity: 'high', evidence_refs: [], evidence_sources: [], diagnosis: null, claim_boundary: { surface_response_status: 'DENIED', business_effect_status: 'UNKNOWN', actual_identity_status: 'UNAVAILABLE', breakpoint_precision: null, repair_status: null, supported_statement: '只能确认页面拒绝。', unsupported_statements: ['不能确认真实结果。'] }, evidence_explanations: [], verdict: 'INCONCLUSIVE', occurrence_status: 'APPEARED', repair_requirement: null }],
+    })
+    localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
+    window.location.hash = '#/verification'
+    render(<ControlShell />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '验证关键结果不可读取时会怎样' }))
+    await waitFor(() => expect(mockApi.experienceGap).toHaveBeenCalledWith('ENQUEUE_BEFORE_AUTHORIZE'))
+    expect(mockApi.checkPreview).toHaveBeenCalledWith('p1')
+    expect(mockApi.checkSubmit).toHaveBeenCalledWith('p1')
+    await waitFor(() => expect(window.location.hash).toBe('#/check'))
   })
 })

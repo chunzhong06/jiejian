@@ -56,6 +56,7 @@ describe('WorkbenchPage', () => {
     expect(screen.queryByText('系统状态')).not.toBeInTheDocument()
     expect(screen.getByText('官方示例')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看检查结果' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '现场验证' })).toBeInTheDocument()
     expect(screen.queryByText('INTERNAL_STATE')).not.toBeInTheDocument()
     expect(screen.getByText('证据不足，暂时不能下结论')).toBeInTheDocument()
     expect(screen.getByText('结果完整')).toBeInTheDocument()

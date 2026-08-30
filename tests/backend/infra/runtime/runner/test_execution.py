@@ -1,4 +1,4 @@
-# 验证隔离 Runner 运行时中的Runner 执行。
+# 验证隔离 Runner 运行时中的 Runner 执行。
 
 from __future__ import annotations
 
@@ -78,9 +78,12 @@ def _owner_envelope(spec, correlation, phase, *, changed: bool) -> ObservationEn
     )
     state = build_normalized_state(
         {
-            "resource_id": correlation.resource_id,
-            "workflow_state": "DRAFT",
-            "value": value,
+            "status_code": 200,
+            "data": {
+                "resource_id": correlation.resource_id,
+                "workflow_state": "DRAFT",
+                "value": value,
+            },
         }
     )
     return ObservationEnvelope(observer_id=spec.observer_id, observer_type=spec.observer_type, phase=phase, target_id=spec.target.target_id, window=ObservationWindow(phase=phase, started_at_us=1, finished_at_us=2, timeout_us=spec.budget.timeout_us), correlation=correlation, causality=CausalityStatus.CORRELATED, completeness=ObservationCompleteness.COMPLETE, state=state, provenance=ObservationProvenance(provenance_type=ProvenanceType.OWNER_API, adapter_version="fake-owner", target_id=spec.target.target_id, source_sha256=state.canonical_sha256))

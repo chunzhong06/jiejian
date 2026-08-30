@@ -17,12 +17,19 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import JiejianError
 from product.backend.core.lifecycle import RunLifecycle
+from product.backend.core.permission_intent import (
+    PermissionIntentEffectiveState,
+    PermissionIntentRelation,
+    PermissionIntentRevision,
+)
 from product.backend.core.repair import RepairVerification
+from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.workflows.results.presentation import (
     PresentedCaseVerdict,
     ResultPresentation,
@@ -81,8 +88,40 @@ class HistoryComparison(_HistoryModel):
     changes: tuple[HistoryChange, ...] = ()
 
 
+class IntentRevisionHistory(_HistoryModel):
+    revision: int = Field(ge=1)
+    intent_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    policy_epoch: int = Field(ge=1)
+    effective_state: PermissionIntentEffectiveState
+    business_statement: str = Field(min_length=1, max_length=640)
+    approved_by: str = Field(min_length=1, max_length=128)
+    approved_at_us: int = Field(ge=0)
+
+
+class IntentRunHistory(_HistoryModel):
+    run_id: str = Field(min_length=1, max_length=128)
+    checked_at_us: int = Field(ge=0)
+    revision: int = Field(ge=1)
+    intent_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    policy_epoch: int = Field(ge=0)
+    association_status: Literal["EXACT", "POLICY_ONLY"]
+    association_note: str = Field(min_length=1, max_length=320)
+    verdict: str | None = Field(default=None, max_length=32)
+    diagnosis_summary: str | None = Field(default=None, min_length=1, max_length=320)
+    change_revalidation: bool = False
+    repair_status: str | None = Field(default=None, max_length=32)
+
+
+class ResultIntentHistory(_HistoryModel):
+    intent_id: str = Field(pattern=r"^pin_[0-9a-f]{32}$")
+    display_label: str = Field(pattern=r"^P-[0-9]{3,4}$")
+    revisions: tuple[IntentRevisionHistory, ...] = Field(default=(), max_length=4096)
+    runs: tuple[IntentRunHistory, ...] = Field(default=(), max_length=20)
+
+
 class HistoryView(_HistoryModel):
     project_id: str = Field(min_length=1, max_length=64)
+    intents: tuple[ResultIntentHistory, ...] = Field(default=(), max_length=4096)
     comparisons: tuple[HistoryComparison, ...] = Field(default=(), max_length=20)
 
 
@@ -100,6 +139,12 @@ class HistoryComparisonBuilder:
             raise ValueError("history limit must be between 1 and 20")
         with self._uow_factory() as work:
             runs = tuple(work.runs.list_for_project(project_id))
+            intent_repository = getattr(work, "permission_intents", None)
+            revisions = (
+                ()
+                if intent_repository is None
+                else tuple(intent_repository.list_revisions(project_id))
+            )
         verified: list[tuple[object, ResultPresentation]] = []
         for run in runs:
             if run.lifecycle not in {RunLifecycle.COMPLETED, RunLifecycle.SAFETY_STOPPED}:
@@ -114,8 +159,128 @@ class HistoryComparisonBuilder:
         verified.reverse()
         return HistoryView(
             project_id=project_id,
+            intents=_intent_histories(revisions, tuple(verified)),
             comparisons=_comparisons(tuple(verified)),
         )
+
+
+_RELATION_TEXT = {
+    PermissionIntentRelation.OWNS: "资源属于该账号自己",
+    PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT: "资源属于同权限组的其他账号",
+    PermissionIntentRelation.OTHER_ROLE: "资源属于其他权限组",
+}
+
+
+def _intent_histories(
+    revisions: tuple[PermissionIntentRevision, ...],
+    verified: tuple[tuple[object, ResultPresentation], ...],
+) -> tuple[ResultIntentHistory, ...]:
+    by_intent: dict[str, list[PermissionIntentRevision]] = {}
+    labels: dict[str, str] = {}
+    for revision in revisions:
+        by_intent.setdefault(revision.intent_id, []).append(revision)
+    for _, presentation in verified:
+        for relevant in presentation.relevant_intents:
+            if relevant.display_label is not None:
+                labels[relevant.intent_id] = relevant.display_label
+    for index, intent_id in enumerate(sorted(by_intent), start=1):
+        labels.setdefault(intent_id, f"P-{index:03d}")
+
+    outputs: list[ResultIntentHistory] = []
+    for intent_id in sorted(by_intent):
+        ordered_revisions = tuple(
+            sorted(by_intent[intent_id], key=lambda item: item.revision)
+        )
+        known_revisions = {
+            (item.revision, item.intent_hash) for item in ordered_revisions
+        }
+        revision_views = tuple(
+            IntentRevisionHistory(
+                revision=item.revision,
+                intent_hash=item.intent_hash,
+                policy_epoch=item.policy_epoch,
+                effective_state=item.effective_state,
+                business_statement=_intent_statement(item),
+                approved_by=item.approval.approved_by,
+                approved_at_us=item.approval.approved_at_us,
+            )
+            for item in ordered_revisions
+        )
+        run_views: list[IntentRunHistory] = []
+        for run, presentation in verified:
+            relevant = next(
+                (item for item in presentation.relevant_intents if item.intent_id == intent_id),
+                None,
+            )
+            if relevant is None:
+                continue
+            exact = (
+                len(presentation.relevant_intents) == 1
+                and (relevant.revision, relevant.intent_hash) in known_revisions
+            )
+            issue = presentation.issues[0] if exact and len(presentation.issues) == 1 else None
+            change_related = bool(
+                presentation.change_verification
+                and any(
+                    item.intent_id == intent_id
+                    and item.revision == relevant.revision
+                    and item.intent_hash == relevant.intent_hash
+                    for item in presentation.change_verification.required_intents
+                )
+            )
+            run_views.append(
+                IntentRunHistory(
+                    run_id=run.run_id,
+                    checked_at_us=run.finished_at_us or run.updated_at_us,
+                    revision=relevant.revision,
+                    intent_hash=relevant.intent_hash,
+                    policy_epoch=presentation.policy_epoch,
+                    association_status="EXACT" if exact else "POLICY_ONLY",
+                    association_note=(
+                        "本轮只依据这一条权限要求，可以可靠关联结果与诊断。"
+                        if exact
+                        else "本轮权限快照包含这条要求，但聚合结果无法可靠归到单条要求。"
+                    ),
+                    verdict=(
+                        None
+                        if not exact or presentation.verdict is None
+                        else presentation.verdict.value
+                    ),
+                    diagnosis_summary=(
+                        issue.diagnosis.summary
+                        if issue is not None and issue.diagnosis is not None
+                        else None
+                    ),
+                    change_revalidation=change_related,
+                    repair_status=(
+                        presentation.repair_verification.status.value
+                        if exact and presentation.repair_verification is not None
+                        else None
+                    ),
+                )
+            )
+        outputs.append(
+            ResultIntentHistory(
+                intent_id=intent_id,
+                display_label=labels[intent_id],
+                revisions=revision_views,
+                runs=tuple(run_views),
+            )
+        )
+    return tuple(outputs)
+
+
+def _intent_statement(revision: PermissionIntentRevision) -> str:
+    permission = "可以" if revision.expectation is PermissionExpectation.ALLOW else "不可以"
+    statement = (
+        f"{revision.subject_display_name}{permission}对"
+        f"{revision.resource_owner_display_name}的资源执行“{revision.action_display_name}”"
+        f"（{_RELATION_TEXT[revision.relation]}）。"
+    )
+    if revision.expectation is PermissionExpectation.DENY and revision.protected_effects:
+        effects = "、".join(item.business_label for item in revision.protected_effects)
+        statement += f"受保护业务后果“{effects}”不得发生。"
+    return statement
 
 
 _STATUS_VIEW = {
@@ -216,4 +381,7 @@ __all__ = [
     "HistoryComparison",
     "HistoryComparisonBuilder",
     "HistoryView",
+    "IntentRevisionHistory",
+    "IntentRunHistory",
+    "ResultIntentHistory",
 ]

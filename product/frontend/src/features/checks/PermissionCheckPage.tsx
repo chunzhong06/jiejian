@@ -57,6 +57,9 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
   const uncoveredActionCount = preview?.actions.filter((action) => !action.ready).length ?? 0
   const allowCount = preview?.actions.flatMap((action) => action.checks).filter((item) => item.expectation === 'ALLOW').length ?? 0
   const denyCount = preview?.actions.flatMap((action) => action.checks).filter((item) => item.expectation === 'DENY').length ?? 0
+  const allowChecks = preview?.actions.flatMap((action) => action.checks.filter((item) => item.expectation === 'ALLOW').map((item) => ({ ...item, action: action.action_display_name }))) ?? []
+  const denyChecks = preview?.actions.flatMap((action) => action.checks.filter((item) => item.expectation === 'DENY').map((item) => ({ ...item, action: action.action_display_name }))) ?? []
+  const protectedEffects = Array.from(new Set(matrix?.actions.flatMap((action) => action.cells.flatMap((cell) => cell.protected_effects.map((effect) => effect.business_label || effect.resource_type))) ?? []))
 
   useEffect(() => { setCurrentRun(runs[0]) }, [runs])
   useEffect(() => {
@@ -241,7 +244,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     : canViewResult && !needsNewRun
       ? { label: '查看检查结果', onClick: onNext }
       : canSubmit
-        ? { label: latest && terminalStates.has(String(latest.lifecycle)) ? '重新开始检查' : '开始检查', onClick: () => void submit(), loading: submitting }
+        ? { label: latest && terminalStates.has(String(latest.lifecycle)) ? '重新开始真实检查' : '开始真实检查', onClick: () => void submit(), loading: submitting }
         : savingCell
           ? { label: '正在保存权限要求', disabled: true, loading: true }
         : previewFresh && !requiresCompile && preview?.next_path && preview.next_path !== '/check'
@@ -264,7 +267,6 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
 
   return <div className="permission-check-page">
     <PageTaskHeader title="权限与检查" description="先确认谁应该允许或拒绝，再核对测试账号和对照范围，最后由界鉴在受控环境中检查真实结果。" status={titleStatus} />
-    <AssistantPanel projectId={project.project_id} surface={assistantPanel.surface} title={assistantPanel.title} actionLabel={assistantPanel.actionLabel} />
     <section className="permission-check-section" aria-labelledby="permission-requirements-title">
       <div className="permission-check-heading"><div><Typography.Title level={3} id="permission-requirements-title">确认权限要求</Typography.Title><Typography.Paragraph type="secondary">为每个权限组和资源关系选择“允许”或“拒绝”。这里表达的是你的安全要求，不是界鉴自动作出的漏洞结论。</Typography.Paragraph></div><Tag>{matrix ? `已确认 ${matrix.confirmed_count} 项` : '正在读取'}</Tag></div>
       {matrix?.actions.length === 0 && <Alert type="info" showIcon message="还没有可确认的业务动作" description="请先完成业务流程录制，并确认测试资源、真实结果观察和恢复方式。" />}
@@ -275,8 +277,14 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
             const key = permissionCellKey(action.action_candidate_id, cell)
             const blocking = cell.review_reasons.some((reason) => !['PERMISSION_INTENT_UNCONFIRMED', 'PERMISSION_INTENT_STALE'].includes(reason))
             return <div className="permission-requirement-row" key={key}>
-              <div><Typography.Text strong>{cell.subject_role_display_name} · {relationLabels[cell.relation]}</Typography.Text><Typography.Text type="secondary">资源属于 {cell.resource_owner_role_display_name} 权限组</Typography.Text></div>
-              <div className="permission-requirement-control"><Segmented aria-label={`${cell.subject_role_display_name}权限组以${relationLabels[cell.relation]}关系对${action.action_display_name}的权限`} value={cell.expectation ?? 'UNCONFIRMED'} disabled={blocking || savingCell === key || activeRun} options={[{ label: '未确认', value: 'UNCONFIRMED' }, { label: '允许', value: 'ALLOW' }, { label: '拒绝', value: 'DENY' }]} onChange={(value) => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: value === 'ALLOW' || value === 'DENY' ? value : null })} />{cell.status === 'NEEDS_REVIEW' && cell.expectation !== null && <Button type="link" size="small" disabled={savingCell === key || activeRun} onClick={() => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: cell.expectation })}>重新确认当前要求</Button>}<div className="permission-requirement-note"><Typography.Text type="secondary">{cell.expectation === null ? '尚未确认' : `权限版本 ${cell.policy_epoch ?? matrix.policy_epoch}`}{cell.intent_revision !== null && ` · 修订 ${cell.intent_revision}`} · {bindingLabel(cell.status)}</Typography.Text>{cell.status === 'NEEDS_REVIEW' && <Typography.Text type="warning">依赖事实已变化，请重新确认</Typography.Text>}{blocking && <Typography.Text type="danger">{cell.review_reasons.map((reason) => gapLabels[reason] ?? reason).join('、')}</Typography.Text>}{cell.execution_gap && <Typography.Text type="secondary">{executionGapLabel(cell.execution_gap, cell)}</Typography.Text>}</div></div>
+              <div className="permission-sentence">
+                <Typography.Text className="permission-sentence-role">{cell.subject_role_display_name}</Typography.Text>
+                <Typography.Text className={`permission-sentence-expectation is-${String(cell.expectation ?? 'UNCONFIRMED').toLowerCase()}`}>{cell.expectation === 'ALLOW' ? '允许' : cell.expectation === 'DENY' ? '不允许' : '尚未确认是否允许'}</Typography.Text>
+                <Typography.Text>对{resourceRelationLabel(cell)}的“{action.resource_logical_name ?? '受保护业务对象'}”</Typography.Text>
+                <Typography.Text>执行“{action.action_display_name}”</Typography.Text>
+                <div className={`permission-effect-summary is-${String(cell.expectation ?? 'UNCONFIRMED').toLowerCase()}`}><Typography.Text strong>{cell.expectation === 'ALLOW' ? '合法功能必须保持：' : cell.expectation === 'DENY' ? '禁止发生：' : '需要确认的真实业务后果：'}</Typography.Text>{cell.protected_effects.length > 0 ? <ul>{cell.protected_effects.map((effect, index) => <li key={`${effect.business_label}-${index}`}>{effect.business_label || effect.resource_type}</li>)}</ul> : <Typography.Text type="secondary">尚未确认受保护业务后果</Typography.Text>}</div>
+              </div>
+              <div className="permission-requirement-control"><Segmented aria-label={`${cell.subject_role_display_name}权限组以${relationLabels[cell.relation]}关系对${action.action_display_name}的权限`} value={cell.expectation ?? 'UNCONFIRMED'} disabled={blocking || savingCell === key || activeRun} options={[{ label: '未确认', value: 'UNCONFIRMED' }, { label: '允许', value: 'ALLOW' }, { label: '拒绝', value: 'DENY' }]} onChange={(value) => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: value === 'ALLOW' || value === 'DENY' ? value : null })} />{cell.status === 'NEEDS_REVIEW' && cell.expectation !== null && <Button type="link" size="small" disabled={savingCell === key || activeRun} onClick={() => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: cell.expectation })}>重新确认当前要求</Button>}{cell.status === 'NEEDS_REVIEW' && <Typography.Text type="warning">依赖事实已变化，请重新确认</Typography.Text>}{blocking && <Typography.Text type="danger">{cell.review_reasons.map((reason) => gapLabels[reason] ?? reason).join('、')}</Typography.Text>}{cell.execution_gap && <Typography.Text type="secondary">{executionGapLabel(cell.execution_gap, cell)}</Typography.Text>}<details className="permission-technical-details"><summary>查看版本与实现状态</summary><Typography.Text type="secondary">{cell.expectation === null ? '尚未确认' : `权限版本 ${cell.policy_epoch ?? matrix.policy_epoch}`}{cell.intent_revision !== null && ` · 修订 ${cell.intent_revision}`} · {bindingLabel(cell.status)}</Typography.Text></details></div>
             </div>
           })}
           {action.gaps.length > 0 && <Typography.Paragraph type="secondary" className="permission-requirement-gaps">尚缺：{action.gaps.map((gap) => gapLabels[gap] ?? gap).join('、')}</Typography.Paragraph>}
@@ -315,6 +323,11 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
           <Descriptions.Item label="应该允许 / 应该拒绝">{allowCount} / {denyCount}</Descriptions.Item>
           <Descriptions.Item label="暂未覆盖业务动作">{uncoveredActionCount}</Descriptions.Item>
         </Descriptions>
+        <div className="check-scenario-grid" aria-label="真实检查范围">
+          <article className="check-scenario-card is-allow"><Typography.Text className="check-scenario-kicker">合法对照</Typography.Text><Typography.Title level={4}>确认应当成功的正常路径</Typography.Title>{allowChecks.length > 0 ? <ul>{allowChecks.map((item, index) => <li key={`allow-${item.action}-${item.subject_label}-${index}`}><strong>{item.subject_label}</strong> 应能完成“{item.action}”</li>)}</ul> : <Typography.Text type="secondary">尚未形成可执行的允许对照。</Typography.Text>}</article>
+          <article className="check-scenario-card is-deny"><Typography.Text className="check-scenario-kicker">禁止实验</Typography.Text><Typography.Title level={4}>尝试不应被允许的真实操作</Typography.Title>{denyChecks.length > 0 ? <ul>{denyChecks.map((item, index) => <li key={`deny-${item.action}-${item.subject_label}-${index}`}><strong>{item.subject_label}</strong> 不应完成“{item.action}”</li>)}</ul> : <Typography.Text type="secondary">尚未形成可执行的拒绝实验。</Typography.Text>}</article>
+          <article className="check-scenario-card is-effect"><Typography.Text className="check-scenario-kicker">真实业务后果</Typography.Text><Typography.Title level={4}>最终观察资源是否真的改变</Typography.Title>{protectedEffects.length > 0 ? <ul>{protectedEffects.map((effect) => <li key={effect}>{effect}</li>)}</ul> : <Typography.Text type="secondary">尚未确认要独立观察的受保护业务后果。</Typography.Text>}</article>
+        </div>
         <div className="check-preview-actions">
           {preview.actions.map((action) => <article className="check-preview-action" key={action.action_candidate_id}>
             <div className="check-preview-action-title"><div><Typography.Title level={4}>{action.action_display_name}</Typography.Title>{action.resource_logical_name && <Typography.Text type="secondary">测试资源：{action.resource_logical_name}</Typography.Text>}</div><Tag color={action.ready ? 'success' : 'warning'}>{action.ready ? '纳入本次检查' : '暂未覆盖'}</Tag></div>
@@ -322,10 +335,12 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
             <List className="check-preview-list" dataSource={action.checks} locale={{ emptyText: '尚无账号检查项' }} renderItem={(item) => <List.Item extra={<Tag color={item.expectation === 'ALLOW' ? 'green' : item.expectation === 'DENY' ? 'red' : 'default'}>{item.expectation === 'ALLOW' ? '应该允许' : item.expectation === 'DENY' ? '应该拒绝' : '尚未确认'}</Tag>}><List.Item.Meta title={item.subject_label} description={`${item.subject_role_display_name} · ${relationLabels[item.relation] ?? '当前资源关系'}${item.gaps.length ? ` · ${item.gaps.map((gap) => gap.message).join('、')}` : ''}`} /></List.Item>} />
           </article>)}
         </div>
-        {preview.ready && <Alert type="success" showIcon message={`将执行 ${preview.case_count} 个检查用例，形成 ${preview.differential_pair_count} 组允许/拒绝对照${uncoveredActionCount > 0 ? `；另有 ${uncoveredActionCount} 个动作暂未覆盖` : ''}。`} />}
+        {preview.ready && <Alert type="success" showIcon message={`将执行 ${preview.case_count} 个检查用例，形成 ${preview.differential_pair_count} 组允许/拒绝对照${uncoveredActionCount > 0 ? `；另有 ${uncoveredActionCount} 个动作暂未覆盖` : ''}。`} description="开始后只根据正式运行事实形成结论；页面不会把 HTTP 拒绝或事件流状态当作安全结果。" />}
         {!preview.ready && preview.gaps.length > 0 && <Alert type="warning" showIcon message="当前还不能开始检查" description={preview.gaps.map((gap) => gap.message).join('；')} />}
       </>}
     </section>
+
+    <AssistantPanel projectId={project.project_id} surface={assistantPanel.surface} title={assistantPanel.title} actionLabel={assistantPanel.actionLabel} />
 
     <section className="permission-check-section" aria-labelledby="current-check-title">
       <div className="permission-check-heading"><div><Typography.Title level={3} id="current-check-title">开始检查并查看进度</Typography.Title><Typography.Paragraph type="secondary">开始后，界鉴会先验证正常允许的操作，再尝试不应允许的操作，并通过可信观察确认真实资源结果和恢复测试数据。</Typography.Paragraph></div>{latest?.run_id && <Tag>{lifecycleLabel(latest.lifecycle)}</Tag>}</div>
@@ -389,6 +404,11 @@ function proposalSuggestedValue(proposal: PermissionIntentProposalDto) {
 
 const relationLabels: Record<string, string> = {
   OWNS: '自己的资源', SAME_ROLE_OTHER_ACCOUNT: '同权限组其他用户的资源', OTHER_ROLE: '其他权限组的资源',
+}
+function resourceRelationLabel(cell: PermissionIntentCellDto) {
+  if (cell.relation === 'OWNS') return '自己管理'
+  if (cell.relation === 'SAME_ROLE_OTHER_ACCOUNT') return `另一位${cell.resource_owner_role_display_name}管理`
+  return `${cell.resource_owner_role_display_name}管理`
 }
 function executionGapLabel(gap: string, cell: PermissionIntentMatrixDto['actions'][number]['cells'][number]) {
   if (gap === 'TEST_IDENTITY_MISSING' && cell.relation === 'SAME_ROLE_OTHER_ACCOUNT') return `还需要第二个${cell.subject_role_display_name}测试账号才能检查这一项`

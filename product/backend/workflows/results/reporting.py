@@ -34,6 +34,7 @@ from product.protocols.report import (
     ReportEvidenceRef,
     ReportFinding,
     ReportGate,
+    ReportDiagnosis,
     ReportObserverStatus,
     ReportPresentation,
     ReportPresentationIssue,
@@ -186,6 +187,16 @@ class ReportBuilder:
             {key: value for key, value in issue.items() if key in issue_fields}
             for issue in presentation.get("issues", [])
         ]
+        # ResultPresentation 为现场验证保留路径边界；机器报告继续只冻结当前
+        # ReportDiagnosis 合同中的字段，避免展示扩展静默改变 report.json v5。
+        for issue in presentation["issues"]:
+            diagnosis = issue.get("diagnosis")
+            if diagnosis is not None:
+                issue["diagnosis"] = {
+                    key: value
+                    for key, value in diagnosis.items()
+                    if key in ReportDiagnosis.model_fields
+                }
         presentation["relevant_intents"] = [
             {key: value for key, value in intent.items() if key in intent_fields}
             for intent in presentation.get("relevant_intents", [])

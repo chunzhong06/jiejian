@@ -1,6 +1,6 @@
 // 工作台以确定性 Readiness 给出唯一下一步，AI 只在次级区域解释可选建议。
 
-import { Button, Card, Divider, Modal, Space, Tag, Typography } from 'antd'
+import { Button, Divider, Modal, Space, Tag, Typography } from 'antd'
 import { useMemo, useState } from 'react'
 import type { OfficialExperienceDto, OfficialExperienceMode } from '../../api/experience'
 import type { MCPAccessView } from '../../api/mcp'
@@ -127,57 +127,31 @@ export function WorkbenchPage({
       <Button className="workbench-primary-action" type="primary" disabled={!action} onClick={() => action && onNavigate(action.route)}>{action?.label ?? '正在读取'}</Button>
     </section>
 
-    <div className="workbench-secondary-grid">
-      <Card title="AI 工具" extra={<Button type="link" onClick={() => onNavigate('/tools')}>连接与授权</Button>}>
-        <Typography.Paragraph>让 Codex、DSH 或其他 MCP 客户端读取状态、准备检查或启动已批准任务。</Typography.Paragraph>
-        <Typography.Paragraph strong>
-          {mcpStatusFailed
-            ? '当前连接状态读取失败'
-            : !mcpStatus
-              ? '正在读取连接状态'
-              : !mcpStatus.paired
-                ? '尚未连接 AI 工具'
-                : mcpStatus.client_connected
-                  ? `${mcpStatus.client_name?.trim() || 'AI 工具'} 已连接`
-                  : mcpStatus.accepting_connections
-                    ? '已配对，正在等待客户端连接'
-                    : '连接已暂停'}
-        </Typography.Paragraph>
-        <Typography.Text type="secondary">AI 工具不能批准或改写人的权限要求。</Typography.Text>
-      </Card>
-      <Card title="最近检查" extra={latest && <Button type="link" onClick={() => onNavigate('/results')}>查看结果</Button>}>
-        {!latest && <Typography.Text type="secondary">尚未开始检查</Typography.Text>}
-        {latest && <Space direction="vertical" size={6}>
-          <Space wrap><Typography.Text strong>{lifecycleLabel(latest.lifecycle)}</Typography.Text><Tag>{integrityLabel(latest.result_integrity)}</Tag></Space>
-          <Typography.Text>{latest.verdict ? verdictLabel(latest.verdict) : '尚无结论'}</Typography.Text>
-          <Typography.Text type="secondary">{formatTimestamp(latest.created_at_us ?? latest.created_at)}</Typography.Text>
-        </Space>}
-      </Card>
-
-      <Card title="最近代码变化" extra={latestChange?.next_path && <Button type="link" onClick={() => onNavigate(latestChange.next_path!)}>确认权限要求</Button>}>
-        {!latestChange && <Typography.Text type="secondary">尚未收到 Agent 提交的代码变化</Typography.Text>}
-        {latestChange && <Space direction="vertical" size={6}>
-          <Typography.Text strong>{latestChange.reason}</Typography.Text>
-          <Typography.Text>{latestChange.summary}</Typography.Text>
-          <Typography.Text type="secondary">界鉴确认 {latestChange.actual_changed_path_count} 个文件发生变化</Typography.Text>
-          <Typography.Text type="secondary">直接影响 {latestChange.directly_affected_count} 条权限要求</Typography.Text>
-          <Typography.Text type={latestChange.mapping_review_required_count > 0 ? 'warning' : 'secondary'}>{latestChange.mapping_review_required_count > 0 ? `有 ${latestChange.mapping_review_required_count} 条权限要求无法自动对应到修改后的代码，需要你确认` : '已确认的权限要求都能继续对应到当前代码'}</Typography.Text>
-          <Button type="link" onClick={() => setShowChangeDetails((value) => !value)}>{showChangeDetails ? '收起变化明细' : '查看变化明细'}</Button>
-          {showChangeDetails && <ChangeDetails change={latestChange} />}
-        </Space>}
-      </Card>
-
-      <AssistantPanel projectId={selected.project_id} surface="next-step" title="下一步建议" actionLabel="生成 AI 建议" />
-
-      <Card title="官方示例">
-        <Space direction="vertical" size={8}>
-          <Space wrap><Typography.Text strong>协作空间</Typography.Text>{experience?.active && <Tag color="blue">体验进行中</Tag>}</Space>
-          <Typography.Paragraph>体验一次“页面已经拒绝请求，但后台仍然生成完整项目资料包”的真实权限问题。</Typography.Paragraph>
-          {!sampleAvailable && <Typography.Text type="secondary">当前版本未包含官方示例</Typography.Text>}
+    <section className="workbench-secondary-panel" aria-labelledby="workbench-secondary-title">
+      <div className="workbench-secondary-heading">
+        <Typography.Title id="workbench-secondary-title" level={3}>其他动态</Typography.Title>
+        <Typography.Text type="secondary">需要时再展开，不影响上方唯一下一步。</Typography.Text>
+      </div>
+      <div className="workbench-secondary-list">
+        <article className="workbench-secondary-item">
+          <div><Typography.Text className="workbench-secondary-label">最近检查</Typography.Text>{!latest && <Typography.Text type="secondary">尚未开始检查</Typography.Text>}{latest && <><Space wrap><Typography.Text strong>{lifecycleLabel(latest.lifecycle)}</Typography.Text><Tag>{integrityLabel(latest.result_integrity)}</Tag></Space><Typography.Text>{latest.verdict ? verdictLabel(latest.verdict) : '尚无结论'}</Typography.Text><Typography.Text type="secondary">{formatTimestamp(latest.created_at_us ?? latest.created_at)}</Typography.Text></>}</div>
+          {latest && <Space direction="vertical" align="end"><Button type="link" onClick={() => onNavigate('/results')}>查看结果</Button>{latest.result_integrity === 'VERIFIED' && <Button type="link" onClick={() => onNavigate('/verification')}>现场验证</Button>}</Space>}
+        </article>
+        <article className="workbench-secondary-item">
+          <div><Typography.Text className="workbench-secondary-label">最近代码变化</Typography.Text>{!latestChange && <Typography.Text type="secondary">尚未收到 Agent 提交的代码变化</Typography.Text>}{latestChange && <><Typography.Text strong>{latestChange.reason}</Typography.Text><Typography.Text>{latestChange.summary}</Typography.Text><Typography.Text type="secondary">界鉴确认 {latestChange.actual_changed_path_count} 个文件发生变化</Typography.Text><Typography.Text type="secondary">直接影响 {latestChange.directly_affected_count} 条权限要求</Typography.Text><Typography.Text type={latestChange.mapping_review_required_count > 0 ? 'warning' : 'secondary'}>{latestChange.mapping_review_required_count > 0 ? `有 ${latestChange.mapping_review_required_count} 条权限要求无法自动对应到修改后的代码，需要你确认` : '已确认的权限要求都能继续对应到当前代码'}</Typography.Text>{showChangeDetails && <ChangeDetails change={latestChange} />}</>}</div>
+          {latestChange && <Space direction="vertical" align="end"><Button type="link" onClick={() => setShowChangeDetails((value) => !value)}>{showChangeDetails ? '收起变化明细' : '查看变化明细'}</Button>{latestChange.next_path && <Button type="link" onClick={() => onNavigate(latestChange.next_path!)}>确认权限要求</Button>}</Space>}
+        </article>
+        <article className="workbench-secondary-item">
+          <div><Typography.Text className="workbench-secondary-label">官方示例</Typography.Text><Space wrap><Typography.Text strong>协作空间</Typography.Text>{experience?.active && <Tag color="blue">体验进行中</Tag>}</Space><Typography.Text type="secondary">体验一次页面拒绝后后台仍产生受保护资料的真实权限问题。</Typography.Text>{!sampleAvailable && <Typography.Text type="secondary">当前版本未包含官方示例</Typography.Text>}</div>
           {sampleActions}
-        </Space>
-      </Card>
-    </div>
+        </article>
+        <article className="workbench-secondary-item workbench-ai-item">
+          <div><Typography.Text className="workbench-secondary-label">AI 工具</Typography.Text><Typography.Text strong>{mcpStatusFailed ? '当前连接状态读取失败' : !mcpStatus ? '正在读取连接状态' : !mcpStatus.paired ? '尚未连接 AI 工具' : mcpStatus.client_connected ? `${mcpStatus.client_name?.trim() || 'AI 工具'} 已连接` : mcpStatus.accepting_connections ? '已配对，正在等待客户端连接' : '连接已暂停'}</Typography.Text><Typography.Text type="secondary">AI 工具不能批准或改写人的权限要求。</Typography.Text></div>
+          <Button type="link" onClick={() => onNavigate('/tools')}>连接与授权</Button>
+        </article>
+      </div>
+      <div className="workbench-assistant-row"><AssistantPanel projectId={selected.project_id} surface="next-step" title="下一步建议" actionLabel="生成 AI 建议" /></div>
+    </section>
     {consent}
   </div>
 }

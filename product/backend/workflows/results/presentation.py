@@ -23,7 +23,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle, RunVerdict
-from product.backend.core.repair import RepairRequirementView, RepairVerification
+from product.backend.core.repair import (
+    RepairRequirementView,
+    RepairVerification,
+    RepairVerificationStatus,
+)
 from product.backend.core.verification.breakpoints import (
     BreakpointLocator,
     BreakpointPrecision,
@@ -31,7 +35,11 @@ from product.backend.core.verification.breakpoints import (
     BreakpointType,
 )
 from product.backend.core.verification.continuity import AuthorizationContinuityState
-from product.backend.core.verification.facts import ObservedEffect, TemporalClosure
+from product.backend.core.verification.facts import (
+    ExecutionOutcome,
+    ObservedEffect,
+    TemporalClosure,
+)
 from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
 from product.backend.workflows.results.trace import build_execution_traces
 from product.protocols.execution_request import (
@@ -99,6 +107,9 @@ class ResultDiagnosis(_PresentationModel):
     breakpoint_type: BreakpointType | None
     precision: BreakpointPrecision
     continuity_state: AuthorizationContinuityState
+    first_violation_event_id: str | None = Field(default=None, min_length=1, max_length=160)
+    range_start_event_id: str | None = Field(default=None, min_length=1, max_length=160)
+    range_end_event_id: str | None = Field(default=None, min_length=1, max_length=160)
     amplifier_types: tuple[BreakpointType, ...] = Field(default=(), max_length=5)
     summary: str = Field(min_length=1, max_length=320)
     minimal_witness: tuple[ResultWitnessItem, ...] = Field(min_length=7, max_length=7)
@@ -115,6 +126,27 @@ class ResultDiagnosis(_PresentationModel):
             and self.precision is not BreakpointPrecision.VIOLATION_ONLY
         ):
             raise ValueError("unlocated diagnosis must use VIOLATION_ONLY precision")
+        if self.precision is BreakpointPrecision.EXACT and (
+            self.first_violation_event_id is None
+            or self.range_start_event_id is not None
+            or self.range_end_event_id is not None
+        ):
+            raise ValueError("exact diagnosis requires one violation event")
+        if self.precision is BreakpointPrecision.RANGE and (
+            self.first_violation_event_id is not None
+            or self.range_start_event_id is None
+            or self.range_end_event_id is None
+        ):
+            raise ValueError("range diagnosis requires only published boundaries")
+        if self.precision is BreakpointPrecision.VIOLATION_ONLY and any(
+            value is not None
+            for value in (
+                self.first_violation_event_id,
+                self.range_start_event_id,
+                self.range_end_event_id,
+            )
+        ):
+            raise ValueError("violation-only diagnosis cannot claim a path location")
         if len(set(self.amplifier_types)) != len(self.amplifier_types) or (
             self.breakpoint_type is not None
             and self.breakpoint_type in self.amplifier_types
@@ -136,6 +168,32 @@ class ResultDiagnosis(_PresentationModel):
         ):
             raise ValueError("confirmed impacts must have unique event IDs")
         return self
+
+
+class ResultClaimBoundary(_PresentationModel):
+    """逐维陈述当前已发布事实能够支持的最强业务主张。"""
+
+    surface_response_status: ExecutionOutcome
+    business_effect_status: ObservedEffect
+    actual_identity_status: Literal["CONFIRMED", "UNAVAILABLE"]
+    breakpoint_precision: BreakpointPrecision | None = None
+    repair_status: RepairVerificationStatus | None = None
+    supported_statement: str = Field(min_length=1, max_length=480)
+    unsupported_statements: tuple[str, ...] = Field(default=(), max_length=16)
+
+
+class ResultEvidenceExplanation(_PresentationModel):
+    """解释一条已发布事实能证明什么，并保留不能越过的证据边界。"""
+
+    label: str = Field(min_length=1, max_length=160)
+    source: str = Field(min_length=1, max_length=160)
+    step: str = Field(min_length=1, max_length=160)
+    proves: str = Field(min_length=1, max_length=480)
+    does_not_prove: str = Field(min_length=1, max_length=480)
+    relevance: str = Field(min_length=1, max_length=320)
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=128)
+    component: str | None = Field(default=None, min_length=1, max_length=160)
+    observed_at_us: int | None = Field(default=None, ge=0)
 
 
 class ResultPresentationIssue(_PresentationModel):
@@ -162,6 +220,11 @@ class ResultPresentationIssue(_PresentationModel):
         max_length=256,
     )
     diagnosis: ResultDiagnosis | None = None
+    claim_boundary: ResultClaimBoundary
+    evidence_explanations: tuple[ResultEvidenceExplanation, ...] = Field(
+        default=(),
+        max_length=256,
+    )
     verdict: PresentedCaseVerdict
     occurrence_status: str | None = Field(default=None, max_length=32)
     repair_requirement: RepairRequirementView | None = None
@@ -172,6 +235,8 @@ class ResultRelevantIntent(_PresentationModel):
     revision: int = Field(ge=1)
     intent_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     display_label: str | None = Field(default=None, pattern=r"^P-[0-9]{3,4}$")
+    expectation: Literal["ALLOW", "DENY"] | None = None
+    business_statement: str | None = Field(default=None, min_length=1, max_length=640)
 
 
 class ResultChangeVerification(_PresentationModel):
@@ -244,13 +309,18 @@ class ResultPresentationBuilder:
             and item.subject_test_identity_id is not None
             for item in request.permission_policy.entries
         )
+        repair_verification = self._repairs.verify_run(run_id)
         issues = tuple(
             issue.model_copy(
                 update={
                     "repair_requirement": self._repairs.requirement(
                         run_id,
                         issue.finding_id,
-                    )
+                    ),
+                    "claim_boundary": _claim_boundary_with_repair(
+                        issue.claim_boundary,
+                        repair_verification.status if repair_verification is not None else None,
+                    ),
                 }
             )
             if repair_capable and issue.verdict is PresentedCaseVerdict.VULNERABLE
@@ -260,7 +330,7 @@ class ResultPresentationBuilder:
         return presentation.model_copy(
             update={
                 "issues": issues,
-                "repair_verification": self._repairs.verify_run(run_id),
+                "repair_verification": repair_verification,
             }
         )
 
@@ -301,6 +371,7 @@ def build_result_presentation(
                     traces_by_case,
                     breakpoints_by_case,
                     snapshot,
+                    policy,
                 )
                 for item in finding_views
             ),
@@ -342,6 +413,14 @@ def build_result_presentation(
                     revision=policy_entries[intent_id].revision,
                     intent_hash=policy_entries[intent_id].intent_hash,
                     display_label=display_labels[intent_id],
+                    expectation=(
+                        None
+                        if policy_entries[intent_id].expectation is None
+                        else policy_entries[intent_id].expectation.value
+                    ),
+                    business_statement=_policy_business_statement(
+                        policy_entries[intent_id]
+                    ),
                 )
                 for intent_id in change_context.required_intent_ids
             ),
@@ -361,6 +440,8 @@ def build_result_presentation(
                 revision=item.revision,
                 intent_hash=item.intent_hash,
                 display_label=display_labels[item.intent_id],
+                expectation=(None if item.expectation is None else item.expectation.value),
+                business_statement=_policy_business_statement(item),
             )
             for item in policy.entries
         ),
@@ -377,6 +458,39 @@ def build_result_presentation(
         issues=issues,
         limitations=tuple(limitations),
     )
+
+
+_POLICY_RELATION_TEXT = {
+    "OWNS": "资源属于该账号自己",
+    "SAME_ROLE_OTHER_ACCOUNT": "资源属于同权限组的其他账号",
+    "OTHER_ROLE": "资源属于其他权限组",
+}
+
+
+def _policy_business_statement(item) -> str | None:
+    """只从 Run 冻结的权限语义生成业务句；旧快照缺字段时不补猜。"""
+
+    if any(
+        value is None
+        for value in (
+            item.expectation,
+            item.relation,
+            item.subject_display_name,
+            item.action_display_name,
+            item.resource_owner_display_name,
+        )
+    ):
+        return None
+    permission = "可以" if item.expectation.value == "ALLOW" else "不可以"
+    statement = (
+        f"{item.subject_display_name}{permission}对"
+        f"{item.resource_owner_display_name}的资源执行“{item.action_display_name}”"
+        f"（{_POLICY_RELATION_TEXT[item.relation.value]}）。"
+    )
+    if item.expectation.value == "DENY" and item.protected_effects:
+        effects = "、".join(effect.business_label for effect in item.protected_effects)
+        statement += f"受保护业务后果“{effects}”不得发生。"
+    return statement
 
 
 _ROLE_LABELS = {
@@ -413,6 +527,7 @@ def _issue(
     traces_by_case: dict[tuple[str, str], ExecutionTrace],
     breakpoints_by_case: dict[tuple[str, str], BreakpointResult],
     snapshot: Any,
+    policy: PermissionPolicySnapshot,
 ) -> ResultPresentationIssue:
     finding = item.get("finding") or {}
     identity = finding.get("identity") or {}
@@ -438,6 +553,28 @@ def _issue(
     action = _action(identity)
     resource = _resource(identity)
     relation = _relation(identity)
+    evidence_sources = _evidence_sources(snapshot, evidence)
+    diagnosis = (
+        _diagnosis(
+            breakpoint,
+            trace,
+            evidence,
+            actual_identity_status=actual_identity_status,
+            actual_identity_id=actual_identity_id,
+            actual_identity_label=actual_identity_label,
+        )
+        if breakpoint is not None and trace is not None and evidence is not None
+        else None
+    )
+    business_effect_label = _business_effect_label(snapshot, policy, evidence)
+    claim_boundary = _claim_boundary(
+        evidence,
+        business_effect_label=business_effect_label,
+        planned_identity_label=planned_identity_label or planned_identity_id,
+        actual_identity_status=actual_identity_status,
+        actual_identity_label=actual_identity_label or actual_identity_id,
+        diagnosis=diagnosis,
+    )
     return ResultPresentationIssue(
         finding_id=finding_id,
         title=_title(subject_group, action, resource, verdict),
@@ -457,18 +594,15 @@ def _issue(
         actual_identity_label=actual_identity_label,
         severity=_severity(occurrence.get("severity")),
         evidence_refs=evidence_refs,
-        evidence_sources=_evidence_sources(snapshot, evidence),
-        diagnosis=(
-            _diagnosis(
-                breakpoint,
-                trace,
-                evidence,
-                actual_identity_status=actual_identity_status,
-                actual_identity_id=actual_identity_id,
-                actual_identity_label=actual_identity_label,
-            )
-            if breakpoint is not None and trace is not None and evidence is not None
-            else None
+        evidence_sources=evidence_sources,
+        diagnosis=diagnosis,
+        claim_boundary=claim_boundary,
+        evidence_explanations=_evidence_explanations(
+            evidence,
+            sources=evidence_sources,
+            trace=trace,
+            diagnosis=diagnosis,
+            business_effect_label=business_effect_label,
         ),
         verdict=verdict,
         occurrence_status=(
@@ -486,6 +620,34 @@ _SOURCE_PRESENTATION = {
     ObserverType.ASYNC_TASK_STATUS: (3, "后台任务"),
     ObserverType.AZURE_QUEUE_PEEK: (4, "消息通道"),
     ObserverType.AZURE_BLOB_OBJECT: (5, "最终对象/文件"),
+}
+_SOURCE_STEPS = {
+    ObserverType.OWNER_API: "确认目标业务状态",
+    ObserverType.READ_ONLY_SQLITE: "核对持久化状态",
+    ObserverType.STRUCTURED_AUDIT_LOG: "核对结构化过程记录",
+    ObserverType.ASYNC_TASK_STATUS: "核对后台任务状态",
+    ObserverType.AZURE_QUEUE_PEEK: "核对消息通道",
+    ObserverType.AZURE_BLOB_OBJECT: "确认最终对象或文件",
+}
+_SOURCE_LIMITS = {
+    ObserverType.OWNER_API: "不能单独证明实际执行身份或最早权限断裂位置。",
+    ObserverType.READ_ONLY_SQLITE: "不能单独证明请求主体、完整异步过程或外部最终对象。",
+    ObserverType.STRUCTURED_AUDIT_LOG: "不能单独证明日志之外的最终业务对象已经形成。",
+    ObserverType.ASYNC_TASK_STATUS: "不能单独证明后台任务已经产生最终业务后果。",
+    ObserverType.AZURE_QUEUE_PEEK: "不能单独证明 Worker 已执行或最终对象已经生成。",
+    ObserverType.AZURE_BLOB_OBJECT: "不能单独证明执行主体或权限断裂发生在哪个环节。",
+}
+_SOURCE_FOUND_FACTS = {
+    ObserverType.OWNER_API: "目标业务状态来源观察到相关状态：{business_effect_label}。",
+    ObserverType.READ_ONLY_SQLITE: "只读数据库观察到本轮相关持久化记录。",
+    ObserverType.STRUCTURED_AUDIT_LOG: (
+        "结构化审计来源观察到本轮相关过程记录。"
+    ),
+    ObserverType.ASYNC_TASK_STATUS: "后台任务来源观察到本轮相关任务状态。",
+    ObserverType.AZURE_QUEUE_PEEK: "消息通道来源观察到与本轮关联的队列消息。",
+    ObserverType.AZURE_BLOB_OBJECT: (
+        "最终对象或文件来源观察到相关对象：{business_effect_label}。"
+    ),
 }
 
 
@@ -654,6 +816,246 @@ def _evidence_source_status(
     ):
         return "NOT_FOUND"
     return "UNAVAILABLE"
+
+
+def _business_effect_label(
+    snapshot: Any,
+    policy: PermissionPolicySnapshot,
+    evidence: Any | None,
+) -> str:
+    """只在冻结 Contract 与权限快照唯一匹配时使用人的业务后果标签。"""
+
+    case = getattr(evidence, "case_snapshot", None)
+    action_id = str(getattr(case, "action_id", "") or "")
+    contract = getattr(snapshot, "contract", None)
+    action = next(
+        (
+            item
+            for item in getattr(contract, "actions", ())
+            if str(getattr(item, "action_id", "")) == action_id
+        ),
+        None,
+    )
+    effect_ids = set(getattr(action, "effect_ids", ()))
+    effect_keys = {
+        (
+            _value(getattr(effect, "kind", None)),
+            str(getattr(effect, "resource_type", "") or ""),
+        )
+        for effect in getattr(contract, "effects", ())
+        if getattr(effect, "effect_id", None) in effect_ids
+    }
+    labels = {
+        protected.business_label
+        for entry in policy.entries
+        for protected in entry.protected_effects
+        if (protected.kind.value, protected.resource_type) in effect_keys
+    }
+    if len(labels) == 1:
+        return next(iter(labels))
+    return _actual_result(evidence)
+
+
+def _claim_boundary(
+    evidence: Any | None,
+    *,
+    business_effect_label: str,
+    planned_identity_label: str,
+    actual_identity_status: Literal["CONFIRMED", "UNAVAILABLE"],
+    actual_identity_label: str | None,
+    diagnosis: ResultDiagnosis | None,
+) -> ResultClaimBoundary:
+    outcome = _execution_outcome(evidence)
+    effect = _business_effect_status(evidence)
+    if effect is ObservedEffect.CONFIRMED:
+        if actual_identity_status == "CONFIRMED" and actual_identity_label:
+            supported = f"服务器已确认实际主体为{actual_identity_label}；{business_effect_label}。"
+        else:
+            supported = f"计划使用{planned_identity_label}凭据的实验中，{business_effect_label}。"
+    elif effect is ObservedEffect.ABSENT:
+        supported = "本轮关键来源已完整闭合，受保护业务后果被可靠确认为未发生。"
+    else:
+        supported = (
+            f"{_surface_result(evidence)}；受保护业务后果当前仍无法可靠确认。"
+        )
+
+    unsupported: list[str] = []
+    if effect is ObservedEffect.UNKNOWN:
+        unsupported.append("不能宣称受保护业务后果没有发生，也不能据此宣称当前实现安全。")
+    if outcome is ExecutionOutcome.DENIED and effect is not ObservedEffect.ABSENT:
+        unsupported.append("不能把表面拒绝直接解释为后台副作用或最终业务后果未发生。")
+    if actual_identity_status == "UNAVAILABLE":
+        unsupported.append("不能宣称服务器已经独立确认实际执行主体。")
+    if diagnosis is None:
+        unsupported.append("不能宣称已经定位到具体权限断裂环节。")
+    elif diagnosis.precision is BreakpointPrecision.VIOLATION_ONLY:
+        unsupported.append("只能确认违规后果，不能宣称具体断裂位置。")
+    elif diagnosis.precision is BreakpointPrecision.RANGE:
+        unsupported.append("只能宣称断裂区间，不能宣称唯一精确断点。")
+    unsupported.append("当前没有已发布的修复复验结论，不能宣称修复已经通过。")
+    return ResultClaimBoundary(
+        surface_response_status=outcome,
+        business_effect_status=effect,
+        actual_identity_status=actual_identity_status,
+        breakpoint_precision=diagnosis.precision if diagnosis is not None else None,
+        repair_status=None,
+        supported_statement=supported,
+        unsupported_statements=tuple(unsupported),
+    )
+
+
+def _claim_boundary_with_repair(
+    boundary: ResultClaimBoundary,
+    repair_status: RepairVerificationStatus | None,
+) -> ResultClaimBoundary:
+    statements = tuple(
+        item
+        for item in boundary.unsupported_statements
+        if "修复" not in item
+    )
+    if repair_status is RepairVerificationStatus.NOT_VERIFIED:
+        statements += ("正式复验尚未通过，不能宣称修复已经成立。",)
+    elif repair_status is RepairVerificationStatus.INCONCLUSIVE:
+        statements += ("修复复验证据不足，不能宣称修复已经成立。",)
+    elif repair_status is None:
+        statements += ("当前没有已发布的修复复验结论，不能宣称修复已经通过。",)
+    return boundary.model_copy(
+        update={
+            "repair_status": repair_status,
+            "unsupported_statements": statements,
+        }
+    )
+
+
+def _evidence_explanations(
+    evidence: Any | None,
+    *,
+    sources: tuple[ResultEvidenceSource, ...],
+    trace: ExecutionTrace | None,
+    diagnosis: ResultDiagnosis | None,
+    business_effect_label: str,
+) -> tuple[ResultEvidenceExplanation, ...]:
+    if evidence is None:
+        return ()
+    evidence_id = str(getattr(evidence, "evidence_id", "") or "")
+    outcome = _execution_outcome(evidence)
+    explanations = [
+        ResultEvidenceExplanation(
+            label=_surface_result(evidence),
+            source="执行表面响应",
+            step="目标响应",
+            proves={
+                ExecutionOutcome.ACCEPTED: "目标在本轮返回了接受响应。",
+                ExecutionOutcome.DENIED: "目标在本轮返回了拒绝响应。",
+                ExecutionOutcome.FAILED: "本轮目标操作执行失败。",
+                ExecutionOutcome.UNKNOWN: "本轮没有形成可确认的目标响应。",
+            }[outcome],
+            does_not_prove="不能单独证明后台副作用或最终业务后果是否发生。",
+            relevance="来自当前 Run 的已发布 Evidence，并关联到本次检查项。",
+            evidence_refs=(evidence_id,) if evidence_id else (),
+        )
+    ]
+    for source in sources:
+        state_detail = {
+            "FOUND": _SOURCE_FOUND_FACTS[source.observer_type].format(
+                business_effect_label=business_effect_label
+            ),
+            "NOT_FOUND": "该已发布来源在完整、可靠、相关且闭合的范围内未观察到相关业务变化。",
+            "UNAVAILABLE": "该来源未形成足以支持业务结论的完整可靠事实。",
+        }[source.status]
+        explanations.append(
+            ResultEvidenceExplanation(
+                label=source.label,
+                source=source.observer_type.value,
+                step=_SOURCE_STEPS[source.observer_type],
+                proves=state_detail,
+                does_not_prove=_SOURCE_LIMITS[source.observer_type],
+                relevance="该观察来源由当前 ResultPresentation 的已发布 Evidence 引用。",
+                evidence_refs=source.evidence_refs,
+            )
+        )
+    identity_event = _identity_trace_event(trace)
+    if identity_event is not None:
+        explanations.append(
+            ResultEvidenceExplanation(
+                label="实际身份",
+                source="ExecutionTrace",
+                step="确认目标服务器实际主体",
+                proves=f"本轮已发布 Trace 确认实际主体为 {identity_event.subject_id}。",
+                does_not_prove="不能单独证明最终业务后果已经发生或权限检查位置。",
+                relevance="来自当前 Run 同一检查项的已发布 ExecutionTrace。",
+                evidence_refs=identity_event.evidence_refs,
+                component=identity_event.source_component,
+                observed_at_us=identity_event.recorded_at_us,
+            )
+        )
+    if diagnosis is not None:
+        breakpoint_event = _diagnosis_trace_event(trace, diagnosis)
+        explanations.append(
+            ResultEvidenceExplanation(
+                label="权限断裂",
+                source="BreakpointLocator",
+                step="定位权限断裂",
+                proves=diagnosis.summary,
+                does_not_prove={
+                    BreakpointPrecision.EXACT: "不能脱离当前已发布 Trace 扩大到其他路径或其他运行。",
+                    BreakpointPrecision.RANGE: "不能证明区间内唯一的精确断裂节点。",
+                    BreakpointPrecision.VIOLATION_ONLY: "不能证明具体断裂类型或位置。",
+                }[diagnosis.precision],
+                relevance="由当前 Run 同一检查项的已发布 ResultDiagnosis 形成。",
+                evidence_refs=diagnosis.evidence_refs,
+                component=(breakpoint_event.source_component if breakpoint_event is not None else None),
+                observed_at_us=(breakpoint_event.recorded_at_us if breakpoint_event is not None else None),
+            )
+        )
+    return tuple(explanations)
+
+
+def _execution_outcome(evidence: Any | None) -> ExecutionOutcome:
+    value = _value(getattr(getattr(evidence, "execution_fact", None), "outcome", None))
+    try:
+        return ExecutionOutcome(value)
+    except ValueError:
+        return ExecutionOutcome.UNKNOWN
+
+
+def _business_effect_status(evidence: Any | None) -> ObservedEffect:
+    states = {
+        ObservedEffect(_value(item.state))
+        for item in getattr(evidence, "security_effect_facts", ())
+    }
+    if ObservedEffect.CONFIRMED in states:
+        return ObservedEffect.CONFIRMED
+    if states and states == {ObservedEffect.ABSENT}:
+        return ObservedEffect.ABSENT
+    return ObservedEffect.UNKNOWN
+
+
+def _identity_trace_event(trace: ExecutionTrace | None):
+    if trace is None or not trace.complete:
+        return None
+    events = tuple(
+        item
+        for item in trace.events
+        if item.kind is TraceEventKind.IDENTITY
+        and item.subject_id is not None
+        and item.evidence_refs
+        and item.correlation_kind.value != "TEMPORAL"
+    )
+    subjects = {item.subject_id for item in events}
+    return events[0] if events and len(subjects) == 1 else None
+
+
+def _diagnosis_trace_event(
+    trace: ExecutionTrace | None,
+    diagnosis: ResultDiagnosis,
+):
+    if trace is None or diagnosis.precision is BreakpointPrecision.VIOLATION_ONLY:
+        return None
+    witness = diagnosis.minimal_witness[4]
+    if witness.event_id is None:
+        return None
+    return next((item for item in trace.events if item.event_id == witness.event_id), None)
 
 
 def _planned_identity(snapshot: Any, evidence: Any | None) -> tuple[str, str | None]:
@@ -893,6 +1295,23 @@ def _diagnosis(
         breakpoint_type=breakpoint.breakpoint_type,
         precision=breakpoint.precision,
         continuity_state=breakpoint.continuity.state,
+        # 底层定位器可以为 VIOLATION_ONLY 保留内部候选事件；发布视图按精度
+        # 收紧位置主张，避免前端把候选点误画成已证明的精确断点。
+        first_violation_event_id=(
+            breakpoint.first_violation_event_id
+            if breakpoint.precision is BreakpointPrecision.EXACT
+            else None
+        ),
+        range_start_event_id=(
+            breakpoint.range_start_event_id
+            if breakpoint.precision is BreakpointPrecision.RANGE
+            else None
+        ),
+        range_end_event_id=(
+            breakpoint.range_end_event_id
+            if breakpoint.precision is BreakpointPrecision.RANGE
+            else None
+        ),
         amplifier_types=breakpoint.amplifier_types,
         summary=(
             f"{_continuity_detail(breakpoint.continuity.state)} "
@@ -1155,9 +1574,11 @@ def _value(value: Any) -> str:
 __all__ = [
     "locate_published_breakpoints",
     "PresentedCaseVerdict",
+    "ResultClaimBoundary",
     "ResultConfirmedImpact",
     "ResultChangeVerification",
     "ResultDiagnosis",
+    "ResultEvidenceExplanation",
     "ResultEvidenceSource",
     "ResultPresentation",
     "ResultPresentationBuilder",

@@ -1,6 +1,6 @@
 // 连续流程导航：直接展示后端统一产品状态中的六步事实，route 只表示当前焦点。
 
-import { CheckCircleFilled, HomeOutlined, MenuOutlined } from '@ant-design/icons'
+import { ApiOutlined, CheckCircleFilled, CloudServerOutlined, HomeOutlined, MenuOutlined } from '@ant-design/icons'
 import { Button, Drawer, Typography } from 'antd'
 import { useRef, useState } from 'react'
 import type { ProductStatusDto } from '../api/projects'
@@ -38,6 +38,11 @@ function ProcessList({ route, steps, onNavigate }: {
           </li>
         })}
       </ol>
+    </div>
+    <div className="process-utility-group">
+      <Typography.Text className="process-group-title">辅助工具</Typography.Text>
+      <Button className={`process-utility-link${route === '/tools' ? ' is-selected' : ''}`} type="text" icon={<ApiOutlined />} aria-current={route === '/tools' ? 'page' : undefined} onClick={() => onNavigate('/tools')}>AI 工具</Button>
+      <Button className={`process-utility-link${route === '/settings/system' ? ' is-selected' : ''}`} type="text" icon={<CloudServerOutlined />} aria-current={route === '/settings/system' ? 'page' : undefined} onClick={() => onNavigate('/settings/system')}>运行环境</Button>
     </div>
   </>
 }

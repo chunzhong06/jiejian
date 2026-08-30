@@ -6,6 +6,13 @@
 .application-step .ant-card-body { display: grid; gap: 20px; }
 .endpoint-list { width: 100%; }
 .application-discovery { display: grid; gap: var(--space-8); }
+.application-understanding-grid { display: grid; gap: var(--space-16); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.application-understanding-grid > section { background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-medium); display: grid; gap: var(--space-8); min-width: 0; padding: var(--space-20); }
+.application-understanding-grid h4 { margin: 0; }
+.application-understanding-kicker { color: var(--color-primary); font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+.application-understanding-tags { display: flex; flex-wrap: wrap; gap: var(--space-8); min-height: 24px; }
+.application-understanding-details { border: 1px solid var(--color-border); border-radius: var(--radius-medium); }
+.application-review-details { display: grid; gap: var(--space-24); }
 
 .candidate-row { align-items: stretch !important; padding-block: var(--space-16) !important; }
 .candidate-main { display: grid; gap: var(--space-12); width: 100%; }
@@ -26,6 +33,7 @@
 .application-manual-path { max-width: 680px; width: 100%; }
 
 @media (max-width: 600px) {
+  .application-understanding-grid { grid-template-columns: 1fr; }
   .candidate-section, .application-manual-section { padding: var(--space-16); }
   .application-manual, .application-manual-path { align-items: stretch; display: flex; flex-direction: column; }
   .application-manual .ant-btn, .application-manual .ant-input,

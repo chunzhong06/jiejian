@@ -11,8 +11,8 @@
  *   页面不收集密码；登录只发生在独立浏览器，API 只返回非秘密状态
  * ============================================================================= */
 
-import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, List, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
+import { useEffect, useState } from 'react'
+import { Alert, Button, Card, Empty, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { projectsApi, type ProjectDto, type RoleCandidateDto } from '../../api/projects'
 import {
@@ -82,10 +82,6 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
     return () => window.clearTimeout(timer)
   }, [preparation, project.project_id])
 
-  const counts = useMemo(() => Object.fromEntries(roles.map((role) => [
-    role.candidate_id,
-    identities.filter((identity) => identity.role_candidate_id === role.candidate_id).length,
-  ])), [roles, identities])
   const preparationIdentity = preparation ? identities.find((identity) => identity.identity_id === preparation.identity_id) : undefined
   const preparedCount = identities.filter((identity) => identity.status === 'PREPARED').length
   const canContinue = preparedCount > 0 || preparation?.status === 'PREPARED'
@@ -151,21 +147,31 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
 
   return <div className="identity-page">
     <PageTaskHeader title="测试账号" description="为已确认的权限组准备真实测试账号；登录在独立窗口中完成，界鉴不会保存密码。" status={preparation ? preparationStatus(preparation) : `${preparedCount} 个账号已准备`} />
-    <AssistantPanel projectId={project.project_id} surface="identity-preparation" title="测试账号准备顺序" actionLabel="AI 帮我安排准备顺序" />
     <Card className="identity-overview" title="准备测试账号">
       <Typography.Paragraph>点击“打开登录浏览器”后，请在独立窗口中自行完成密码、单点登录或多因素认证。只有你明确确认后，界鉴才保存当前应用需要的有限登录状态。</Typography.Paragraph>
       <Alert type="info" showIcon message="建议每个权限组至少准备一个账号" description="缺少账号的权限组不会被自动检查，也不会被当作检查通过；检查同一权限组内不同用户的资源时，可能还需要第二个账号。" />
-      <Typography.Title level={5}>权限组与账号</Typography.Title>
-      <Space wrap>
-        {roles.map((role) => <Tag key={role.candidate_id} color={counts[role.candidate_id] ? 'green' : 'orange'}>{role.display_name} · {counts[role.candidate_id] || 0} 个账号</Tag>)}
-      </Space>
-      {roles.length === 0 && <Empty description="请先在应用接入中确认至少一个权限组" />}
       {roles.length > 0 && <div className="identity-create">
         <Select aria-label="选择已确认权限组" value={selectedRole} onChange={setSelectedRole} options={roles.map((role) => ({ value: role.candidate_id, label: role.display_name }))} />
         <Input aria-label="测试账号名称" value={label} maxLength={128} onChange={(event) => setLabel(event.target.value)} placeholder="例如：普通用户A / 管理员测试账号" />
-        <Button type="primary" loading={busy} disabled={!selectedRole || !label.trim()} onClick={() => void createIdentity()}>添加测试账号</Button>
+        <Button loading={busy} disabled={!selectedRole || !label.trim()} onClick={() => void createIdentity()}>添加测试账号</Button>
       </div>}
     </Card>
+
+    <section className="identity-role-section" aria-labelledby="identity-role-section-title">
+      <div className="identity-role-heading"><div><Typography.Title id="identity-role-section-title" level={3}>按权限组准备</Typography.Title><Typography.Paragraph type="secondary">每张角色卡说明它要验证什么、当前使用哪个账号，以及下一步需要你做什么。</Typography.Paragraph></div><Tag>{preparedCount} 个账号已准备</Tag></div>
+      {roles.length === 0 && <Empty description="请先在应用接入中确认至少一个权限组" />}
+      <div className="identity-role-grid">{roles.map((role) => {
+        const roleIdentities = identities.filter((identity) => identity.role_candidate_id === role.candidate_id)
+        const rolePrepared = roleIdentities.filter((identity) => identity.status === 'PREPARED').length
+        return <article className="identity-role-card" key={role.candidate_id}>
+          <div className="identity-role-card-header"><div><Typography.Text className="identity-role-kicker">权限组角色</Typography.Text><Typography.Title level={4}>{role.display_name}</Typography.Title></div><Tag color={rolePrepared ? 'green' : 'orange'}>{rolePrepared ? `${rolePrepared} 个已准备` : '需要账号'}</Tag></div>
+          <Typography.Paragraph>用于验证“{role.display_name}”在合法路径和禁止路径中的真实权限边界。</Typography.Paragraph>
+          <div className="identity-role-accounts">{roleIdentities.length === 0
+            ? <Typography.Text type="secondary">当前测试账号：尚未添加。请在上方为这个权限组添加账号。</Typography.Text>
+            : roleIdentities.map((identity) => <div className="identity-account-row" key={identity.identity_id}><div><Space wrap><Typography.Text strong>{identity.label}</Typography.Text>{statusTag(identity)}</Space><Typography.Text type="secondary">{identity.status === 'PREPARED' ? '可以用于受控检查' : identity.status === 'NEEDS_REVIEW' ? '需要清除旧状态后重新登录' : '需要在独立浏览器完成登录'}</Typography.Text></div><Space wrap>{identity.status === 'NOT_PREPARED' && <Button loading={busy} onClick={() => void start(identity.identity_id)}>打开登录浏览器</Button>}{identity.status === 'PREPARED' && <Button onClick={() => reset(identity)}>清除登录状态</Button>}{identity.status === 'NEEDS_REVIEW' && <Button onClick={() => reset(identity)}>清除旧状态</Button>}<Button danger onClick={() => remove(identity)}>删除</Button></Space></div>)}</div>
+        </article>
+      })}</div>
+    </section>
 
     {preparation?.status === 'WAITING_FOR_LOGIN' && <Card className="identity-login-steps" title={`准备“${preparationIdentity?.label ?? '普通用户测试账号'}”`}>
       <ol className="identity-login-step-list">
@@ -186,16 +192,7 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
       </Space>}
     />}
 
-    <Card className="identity-list" title="已添加的测试账号">
-      <List dataSource={identities} locale={{ emptyText: '还没有测试账号。' }} renderItem={(identity) => <List.Item actions={[
-        identity.status === 'NOT_PREPARED' ? <Button key="prepare" type="primary" loading={busy} onClick={() => void start(identity.identity_id)}>打开登录浏览器</Button> : null,
-        identity.status === 'PREPARED' ? <Button key="reset" onClick={() => reset(identity)}>清除登录状态</Button> : null,
-        identity.status === 'NEEDS_REVIEW' ? <Button key="rebind" onClick={() => reset(identity)}>清除旧状态</Button> : null,
-        <Button key="delete" danger onClick={() => remove(identity)}>删除</Button>,
-      ].filter(Boolean)}>
-        <List.Item.Meta title={<Space wrap>{identity.label}{statusTag(identity)}</Space>} description={<span>权限组：{identity.role_display_name}</span>} />
-      </List.Item>} />
-    </Card>
+    <AssistantPanel projectId={project.project_id} surface="identity-preparation" title="测试账号准备顺序" actionLabel="AI 帮我安排准备顺序" />
     <TaskActionBar
       back={{ label: '返回应用接入', onClick: onBack }}
       refresh={{ label: '刷新账号状态', onClick: () => void refresh(), loading: busy }}

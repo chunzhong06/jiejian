@@ -69,11 +69,16 @@ describe('PermissionCheckPage', () => {
     for (const label of ['确认权限要求', '准备检查条件', '核对本次检查', '开始检查并查看进度']) expect((await screen.findAllByText(label)).length).toBeGreaterThan(0)
     expect(screen.queryByRole('list', { name: '权限与检查进度' })).not.toBeInTheDocument()
     expect(screen.getAllByText('修改测试文档')).toHaveLength(2)
-    expect(screen.getByText('所有者账号')).toBeInTheDocument()
-    expect(screen.getByText('普通成员账号')).toBeInTheDocument()
+    expect(screen.getAllByText('所有者账号').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('普通成员账号').length).toBeGreaterThan(0)
     expect(screen.getByText('应该允许')).toBeInTheDocument()
     expect(screen.getByText('应该拒绝')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '开始检查' })).toBeEnabled()
+    expect(screen.getByText('合法对照')).toBeInTheDocument()
+    expect(screen.getByText('禁止实验')).toBeInTheDocument()
+    expect(screen.getByText('真实业务后果')).toBeInTheDocument()
+    expect(screen.getAllByText('普通成员').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('不允许').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '开始真实检查' })).toBeEnabled()
     expect(screen.queryByText(/Profile|Contract|Observer|profile_id|contract_id/)).not.toBeInTheDocument()
   })
 
@@ -81,9 +86,9 @@ describe('PermissionCheckPage', () => {
     const changeId = `chg_${'9'.repeat(32)}`
     renderPage({ changeId })
 
-    expect(await screen.findByRole('button', { name: '开始检查' })).toBeEnabled()
+    expect(await screen.findByRole('button', { name: '开始真实检查' })).toBeEnabled()
     expect(api.preview).toHaveBeenCalledWith('p1', changeId)
-    fireEvent.click(screen.getByRole('button', { name: '开始检查' }))
+    fireEvent.click(screen.getByRole('button', { name: '开始真实检查' }))
     await waitFor(() => expect(api.submit).toHaveBeenCalledWith('p1', changeId))
   })
 
@@ -93,7 +98,7 @@ describe('PermissionCheckPage', () => {
     api.preview.mockResolvedValueOnce(readyPreview).mockImplementationOnce(() => new Promise((resolve) => { resolvePreview = resolve }))
     renderPage()
 
-    expect(await screen.findByRole('button', { name: '开始检查' })).toBeEnabled()
+    expect(await screen.findByRole('button', { name: '开始真实检查' })).toBeEnabled()
     const ownerPermission = screen.getByLabelText('所有者权限组以自己的资源关系对修改测试文档的权限')
     fireEvent.click(within(ownerPermission).getByText('拒绝'))
 
@@ -101,11 +106,11 @@ describe('PermissionCheckPage', () => {
     expect(screen.getByText('当前要求：允许')).toBeInTheDocument()
     expect(screen.getByText('准备变成：拒绝')).toBeInTheDocument()
     expect(screen.getByText('受保护业务后果：')).toBeInTheDocument()
-    expect(screen.getByText('测试文档内容')).toBeInTheDocument()
+    expect(screen.getAllByText('测试文档内容').length).toBeGreaterThan(0)
     expect(screen.getByText('确认后将从版本 2 推进到 3')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '确认权限变更' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '暂不变更' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '开始检查' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '开始真实检查' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: '暂不变更' }))
     expect(api.approve).not.toHaveBeenCalled()
@@ -124,11 +129,11 @@ describe('PermissionCheckPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '准备本次检查' }))
     await waitFor(() => expect(api.compile).toHaveBeenCalledWith('p1'))
     expect(api.preview).toHaveBeenCalledTimes(2)
-    expect(screen.queryByRole('button', { name: '开始检查' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '开始真实检查' })).not.toBeInTheDocument()
     expect(api.submit).not.toHaveBeenCalled()
 
     resolvePreview(newPreview)
-    fireEvent.click(await screen.findByRole('button', { name: '开始检查' }))
+    fireEvent.click(await screen.findByRole('button', { name: '开始真实检查' }))
     await waitFor(() => expect(api.submit).toHaveBeenCalledWith('p1'))
   })
 

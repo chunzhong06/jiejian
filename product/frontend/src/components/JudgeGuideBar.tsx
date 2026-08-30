@@ -29,11 +29,13 @@ export function JudgeGuideBar({
   experience,
   preparingIdentities,
   onPrepareIdentities,
+  onOpenVerification,
 }: {
   status: ProductStatusDto | null
   experience: OfficialExperienceDto | null
   preparingIdentities: boolean
   onPrepareIdentities: () => void
+  onOpenVerification?: () => void
 }) {
   if (
     !status?.project
@@ -49,5 +51,6 @@ export function JudgeGuideBar({
       <Typography.Text type="secondary">当前提示来自应用真实准备状态；导览不会代替确认、录制或开始检查。</Typography.Text>
     </div>
     {step === 3 && <Button loading={preparingIdentities} onClick={onPrepareIdentities}>准备官方测试账号</Button>}
+    {step === 7 && onOpenVerification && <Button type="primary" onClick={onOpenVerification}>进入现场验证</Button>}
   </aside>
 }

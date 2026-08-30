@@ -348,10 +348,14 @@
 - `class HistoryChangeStatus`
 - `class HistoryChange`
 - `class HistoryComparison`
+- `class IntentRevisionHistory`
+- `class IntentRunHistory`
+- `class ResultIntentHistory`
 - `class HistoryView`
 - `class HistoryComparisonBuilder`
+- `_RELATION_TEXT`
 - `_STATUS_VIEW`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.repair`, `product.backend.workflows.results.presentation`, `pydantic`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.verification.permissions`, `product.backend.workflows.results.presentation`, `pydantic`, `typing`
 
 ### `product/backend/workflows/results/presentation.py`
 - `class PresentedCaseVerdict`
@@ -359,17 +363,23 @@
 - `class ResultWitnessItem`
 - `class ResultConfirmedImpact`
 - `class ResultDiagnosis`
+- `class ResultClaimBoundary`
+- `class ResultEvidenceExplanation`
 - `class ResultPresentationIssue`
 - `class ResultRelevantIntent`
 - `class ResultChangeVerification`
 - `class ResultPresentation`
 - `class ResultPresentationBuilder`
 - `build_result_presentation(view, snapshot, finding_views, permission_policy, change_context) -> ResultPresentation`
+- `_POLICY_RELATION_TEXT`
 - `_ROLE_LABELS`
 - `_ACTION_LABELS`
 - `_RESOURCE_LABELS`
 - `_RELATION_LABELS`
 - `_SOURCE_PRESENTATION`
+- `_SOURCE_STEPS`
+- `_SOURCE_LIMITS`
+- `_SOURCE_FOUND_FACTS`
 - `locate_published_breakpoints(snapshot, evidence_items, traces_by_case) -> dict[tuple[str, str], BreakpointResult]`
 - `_WITNESS_LABELS`
 - `_BREAKPOINT_LABELS`

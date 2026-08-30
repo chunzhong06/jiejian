@@ -68,6 +68,43 @@ def test_result_status_is_read_only_and_repair_is_explicit_write() -> None:
 
 def test_presentation_and_history_are_read_only_v2_views() -> None:
     calls: list[tuple[str, str]] = []
+    presentation_payload = {
+        "run_id": RUN_ID,
+        "headline": "发现权限问题",
+        "issues": [
+            {
+                "expected_result": "成员不能导出完整资料包",
+                "evidence_explanations": [
+                    {
+                        "label": "完整资料包已经生成",
+                        "source": "浏览器现场记录",
+                        "step": "成员发起导出",
+                        "proves": "受保护资料包已生成",
+                        "does_not_prove": "没有证明其他角色也能导出",
+                        "relevance": "来自当前 Run 的已发布观察事实",
+                    }
+                ],
+                "claim_boundary": {
+                    "protected_effect": "完整资料包",
+                    "business_effect_status": "OBSERVED",
+                    "breakpoint_precision": "EXACT",
+                },
+            }
+        ],
+    }
+    history_payload = {
+        "project_id": "project_demo",
+        "intents": [
+            {
+                "intent_id": "intent_demo",
+                "business_statement": "成员不能导出完整资料包",
+                "runs": [{"association": "EXACT", "verdict": "BLOCK"}],
+            }
+        ],
+        "comparisons": [
+            {"changes": [{"status": "NOT_COVERED", "status_label": "本次未覆盖"}]}
+        ],
+    }
 
     class ViewBuilder:
         def __init__(self, name: str, payload: dict[str, object]) -> None:
@@ -79,8 +116,8 @@ def test_presentation_and_history_are_read_only_v2_views() -> None:
             return SimpleNamespace(model_dump=lambda **_: self.payload)
 
     context = SimpleNamespace(
-        result_presentation=ViewBuilder("presentation", {"run_id": RUN_ID, "headline": "发现权限问题"}),
-        result_history=ViewBuilder("history", {"project_id": "project_demo", "comparisons": [{"changes": [{"status": "NOT_COVERED", "status_label": "本次未覆盖"}]}]}),
+        result_presentation=ViewBuilder("presentation", presentation_payload),
+        result_history=ViewBuilder("history", history_payload),
         projects=SimpleNamespace(get=lambda project_id: calls.append(("project", project_id)) or object()),
     )
     app = FastAPI()
@@ -91,9 +128,24 @@ def test_presentation_and_history_are_read_only_v2_views() -> None:
 
     assert presentation.status_code == history.status_code == 200
     assert presentation.json()["schema_version"] == "1"
-    assert presentation.json()["data"] == {"run_id": RUN_ID, "headline": "发现权限问题"}
+    assert presentation.json()["data"] == presentation_payload
+    assert presentation.json()["data"]["issues"][0]["claim_boundary"] == {
+        "protected_effect": "完整资料包",
+        "business_effect_status": "OBSERVED",
+        "breakpoint_precision": "EXACT",
+    }
+    assert presentation.json()["data"]["issues"][0]["evidence_explanations"][0][
+        "does_not_prove"
+    ] == "没有证明其他角色也能导出"
+    assert presentation.json()["data"]["issues"][0]["evidence_explanations"][0][
+        "relevance"
+    ] == "来自当前 Run 的已发布观察事实"
     assert "schema_version" not in presentation.json()["data"]
     assert history.json()["data"]["project_id"] == "project_demo"
+    assert history.json()["data"]["intents"][0]["business_statement"] == (
+        "成员不能导出完整资料包"
+    )
+    assert history.json()["data"]["intents"][0]["runs"][0]["association"] == "EXACT"
     assert history.json()["data"]["comparisons"][0]["changes"][0]["status_label"] == "本次未覆盖"
     assert "schema_version" not in history.json()["data"]
     assert calls == [

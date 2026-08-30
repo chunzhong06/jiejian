@@ -315,7 +315,17 @@ def _target_projection(
     resource_id: str,
 ) -> tuple[bool, str | None, str | None] | None:
     if observer_type is ObserverType.OWNER_API:
-        candidate: Mapping[str, Any] | None = data
+        # Owner API 的规范化状态保留 HTTP 状态与脱敏响应体；效果投影只读取成功响应中的业务对象。
+        status_code = data.get("status_code")
+        response_data = data.get("data")
+        candidate = (
+            response_data
+            if isinstance(status_code, int)
+            and not isinstance(status_code, bool)
+            and 200 <= status_code < 300
+            and isinstance(response_data, Mapping)
+            else None
+        )
     elif observer_type is ObserverType.READ_ONLY_SQLITE:
         rows = data.get("rows")
         candidate = next(
