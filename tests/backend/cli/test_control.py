@@ -36,9 +36,9 @@ def test_top_level_help_only_exposes_web_v1_tasks_and_serve() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for command in ("status", "app", "account", "flow", "check", "result", "history", "settings", "system", "serve"):
+    for command in ("status", "app", "check", "result", "history", "system", "serve"):
         assert command in result.stdout
-    for legacy in ("guide", "project ", "contract ", "recording ", "baseline ", "gate ", "cache ", "runtime ", "ci "):
+    for legacy in ("account ", "flow ", "settings ", "guide", "project ", "contract ", "recording ", "baseline ", "gate ", "cache ", "runtime ", "ci "):
         assert legacy not in result.stdout
 
 
@@ -151,8 +151,8 @@ def test_check_prepare_only_compiles_then_reads_preview(monkeypatch) -> None:
     preview = _Model(ready=True, project_id="project_demo")
     application = SimpleNamespace(
         security_setup=SimpleNamespace(
-            compile=lambda project_id, actor: (
-                calls.append(("compile", (project_id, actor))) or compiled
+            compile=lambda project_id: (
+                calls.append(("compile", project_id)) or compiled
             )
         ),
         checks=SimpleNamespace(
@@ -169,42 +169,17 @@ def test_check_prepare_only_compiles_then_reads_preview(monkeypatch) -> None:
     monkeypatch.setattr(control_commands, "application_scope", fake_scope)
     result = CliRunner().invoke(
         app,
-        ["--json", "check", "prepare", "project_demo", "--actor", "测试用户"],
+        ["--json", "check", "prepare", "project_demo"],
     )
 
     assert result.exit_code == 0
     assert calls == [
-        ("compile", ("project_demo", "测试用户")),
+        ("compile", "project_demo"),
         ("preview", "project_demo"),
     ]
     payload = json.loads(result.stdout)
     assert payload["kind"] == "check-prepared"
     assert payload["data"]["preview"]["ready"] is True
-
-
-def test_authorize_source_passes_only_current_service_contract(monkeypatch) -> None:
-    calls = []
-    application = SimpleNamespace(
-        application_understanding=SimpleNamespace(
-            authorize_source_analysis=lambda project_id, revision: (
-                calls.append((project_id, revision))
-                or _Model(project_id=project_id, revision=revision + 1)
-            )
-        )
-    )
-
-    @contextmanager
-    def fake_scope(_context):
-        yield application
-
-    monkeypatch.setattr(control_commands, "application_scope", fake_scope)
-    result = CliRunner().invoke(
-        app,
-        ["--json", "app", "authorize-source", "project_demo", "--revision", "3"],
-    )
-
-    assert result.exit_code == 0
-    assert calls == [("project_demo", 3)]
 
 
 def test_app_list_hides_archived_by_default_and_supports_explicit_history(monkeypatch) -> None:
@@ -315,97 +290,6 @@ def test_check_cancel_resolves_latest_nonterminal_run_job(monkeypatch) -> None:
     assert result.exit_code == 0
     assert [item.job_id for item in cancellations] == [f"job_{'2' * 32}"]
     assert json.loads(result.stdout)["kind"] == "check-cancelled"
-
-
-def test_result_evidence_reads_only_published_index(monkeypatch) -> None:
-    evidence = (
-        _Model(
-            evidence_id="evidence_demo",
-            run_id="run_demo",
-            case_id="case_demo",
-            artifact_path="evidence/case_demo.json",
-        ),
-    )
-    reads: list[str] = []
-    application = SimpleNamespace(
-        results=SimpleNamespace(
-            read=lambda run_id: (
-                reads.append(run_id) or SimpleNamespace(evidence=evidence)
-            )
-        )
-    )
-
-    @contextmanager
-    def fake_scope(_context):
-        yield application
-
-    monkeypatch.setattr(control_commands, "application_scope", fake_scope)
-    result = CliRunner().invoke(
-        app,
-        ["--json", "result", "evidence", "--run", "run_demo"],
-    )
-
-    assert result.exit_code == 0
-    assert reads == ["run_demo"]
-    payload = json.loads(result.stdout)
-    assert payload["kind"] == "result-evidence"
-    assert payload["data"]["evidence"][0]["evidence_id"] == "evidence_demo"
-
-
-def test_flow_record_keeps_one_application_scope_and_clears_session(monkeypatch) -> None:
-    scopes = 0
-    cleared: list[str] = []
-    capture_calls = []
-    started = SimpleNamespace(
-        request=SimpleNamespace(recording_id="rec_demo"),
-        result=SimpleNamespace(job=SimpleNamespace(job_id="job_demo")),
-    )
-    view = SimpleNamespace(
-        recording=SimpleNamespace(state=RecordingState.PENDING_REVIEW),
-        capture_phase="FINISHED",
-        draft=SimpleNamespace(revision=1),
-    )
-    application = SimpleNamespace(
-        project_recordings=SimpleNamespace(submit=lambda *_args, **_kwargs: started),
-        recording_runs=SimpleNamespace(
-            capture=lambda *args, **kwargs: (
-                capture_calls.append((args, kwargs)) or view
-            )
-        ),
-        recording_lifecycle=object(),
-        recording_credentials=SimpleNamespace(clear=cleared.append),
-    )
-
-    @contextmanager
-    def fake_scope(_context, **_kwargs):
-        nonlocal scopes
-        scopes += 1
-        yield application
-
-    monkeypatch.setattr(control_commands, "application_scope", fake_scope)
-    result = CliRunner().invoke(
-        app,
-        [
-            "--json",
-            "flow",
-            "record",
-            "project_demo",
-            "--action",
-            "action_demo",
-            "--account",
-            "tid_demo",
-            "--duration-seconds",
-            "1",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert scopes == 1
-    assert cleared == ["rec_demo"]
-    assert len(capture_calls) == 1
-    payload = json.loads(result.stdout)
-    assert payload["kind"] == "flow-recorded"
-    assert payload["data"]["recording_id"] == "rec_demo"
 
 
 def test_gui_lock_rejects_cli_before_application_core_is_created(tmp_path, monkeypatch) -> None:

@@ -7,7 +7,7 @@
 <!-- 此区域由 scripts/docs/generate.py 从 product/backend/infra/storage/ 读取。 -->
 
 ### `product/backend/infra/storage/__init__.py`
-主要 import / dot-source：`.application_understanding`, `.base`, `.contracts`, `.db`, `.execution.jobs`, `.execution.runs`, `.execution_profiles`, `.llm`, `.projects`, `.recordings`, `.results.evidence`, `.results.finalizations`, `.results.findings`, `.results.gating`, `.setup`, `.unit_of_work`
+主要 import / dot-source：`.application_understanding`, `.base`, `.contracts`, `.db`, `.execution.jobs`, `.execution.runs`, `.execution_profiles`, `.llm`, `.projects`, `.recordings`, `.results.evidence`, `.results.finalizations`, `.results.findings`, `.results.gating`, `.setup`, `.source_changes`, `.unit_of_work`
 
 ### `product/backend/infra/storage/application_understanding.py`
 - `class ApplicationUnderstandingRow`
@@ -145,8 +145,16 @@
 - `class ActionSafetySetupRepository`
 主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
 
+### `product/backend/infra/storage/source_changes.py`
+- `class SourceRevisionSnapshotRow`
+- `class ChangeManifestRow`
+- `class SourceChangeSetRow`
+- `class ChangeImpactAssessmentRow`
+- `class SourceChangeRepository`
+主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.errors`, `product.backend.core.source_changes`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
+
 ### `product/backend/infra/storage/unit_of_work.py`
 - `class StorageUnitOfWork`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.storage.application_understanding`, `product.backend.infra.storage.contracts`, `product.backend.infra.storage.execution.job_control`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.execution_profiles`, `product.backend.infra.storage.llm`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.evidence`, `product.backend.infra.storage.results.finalizations`, `product.backend.infra.storage.results.findings`, `product.backend.infra.storage.results.gating`, `product.backend.infra.storage.setup`, `sqlalchemy.exc`, `sqlalchemy.orm`, `types`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.storage.application_understanding`, `product.backend.infra.storage.contracts`, `product.backend.infra.storage.execution.job_control`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.execution_profiles`, `product.backend.infra.storage.llm`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.evidence`, `product.backend.infra.storage.results.finalizations`, `product.backend.infra.storage.results.findings`, `product.backend.infra.storage.results.gating`, `product.backend.infra.storage.setup`, `product.backend.infra.storage.source_changes`, `sqlalchemy.exc`, `sqlalchemy.orm`, `types`
 
 <!-- GENERATED:END -->

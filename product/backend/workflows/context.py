@@ -51,6 +51,7 @@ from product.backend.workflows.test_identities import (
     TestIdentityService,
 )
 from product.backend.workflows.permission_intents import PermissionIntentService
+from product.backend.workflows.source_changes import SourceChangeService
 from product.backend.workflows.security_setup import CheckWorkflow, SecuritySetupCompiler
 from product.backend.workflows.security_setup.local_observer_registry import (
     LocalObserverEnvironmentRegistry,
@@ -141,7 +142,6 @@ class ApplicationCore:
             self.execution_request_store,
             self.execution_submission,
             environment_provider=self.environment_for_secret_names,
-            var_dir=self.var_dir,
             clock_us=clock_us,
         )
         self.projects = ProjectCatalog(factory)
@@ -201,6 +201,12 @@ class ApplicationCore:
         self.application_understanding.set_permission_binding_refresher(
             self.permission_intents.refresh_bindings
         )
+        self.source_changes = SourceChangeService(
+            factory,
+            application_understanding=self.application_understanding,
+            permission_intents=self.permission_intents,
+            clock_us=clock_us,
+        )
         self.action_safety_setup.set_permission_binding_refresher(
             self.permission_intents.refresh_bindings
         )
@@ -229,6 +235,7 @@ class ApplicationCore:
             permission_intents=self.permission_intents,
             security_setup=self.security_setup,
             execution=self.execution,
+            source_changes=self.source_changes,
         )
         self.project_readiness = ProjectReadinessService(
             factory,
@@ -279,6 +286,8 @@ class ApplicationCore:
             self.test_identities,
             self.recording_credentials,
             self.recording_submission,
+            uow_factory=factory,
+            request_store=self.recording_request_store,
             projects=self.projects,
             clock_us=clock_us,
         )

@@ -35,6 +35,7 @@ from product.backend.infra.storage.results.gating import GatingRepository
 from product.backend.infra.storage.execution.jobs import JobEventRepository, JobRepository
 from product.backend.infra.storage.projects import ProjectRepository
 from product.backend.infra.storage.recordings import FlowDraftRevisionRepository, RecordingRepository
+from product.backend.infra.storage.source_changes import SourceChangeRepository
 from product.backend.infra.storage.execution.runs import RunRepository
 from product.backend.infra.storage.setup import (
     ActionSafetySetupRepository,
@@ -65,6 +66,7 @@ class StorageUnitOfWork:
     test_identities: TestIdentityRepository
     action_safety_setups: ActionSafetySetupRepository
     permission_intents: PermissionIntentRepository
+    source_changes: SourceChangeRepository
 
     def __init__(
         self,
@@ -121,6 +123,7 @@ class StorageUnitOfWork:
             session,
             self._known_secrets,
         )
+        self.source_changes = SourceChangeRepository(session, self._known_secrets)
         return self
 
     def commit(self) -> None:

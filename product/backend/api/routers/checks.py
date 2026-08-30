@@ -14,6 +14,7 @@ from product.backend.workflows.context import ApplicationCore
 class CheckSubmitRequest(ApiModel):
     schema_version: Literal["1"]
     idempotency_key: str = Field(min_length=1, max_length=128)
+    change_id: str | None = Field(default=None, pattern=r"^chg_[0-9a-f]{32}$")
 
 
 def build_checks_router(context: ApplicationCore) -> APIRouter:
@@ -23,8 +24,10 @@ def build_checks_router(context: ApplicationCore) -> APIRouter:
         "/api/projects/{project_id}/check-preview",
         response_model=ApiResponse,
     )
-    async def check_preview(project_id: str):
-        return data_response(context.checks.preview(project_id).model_dump(mode="json"))
+    async def check_preview(project_id: str, change_id: str | None = None):
+        return data_response(
+            context.checks.preview(project_id, change_id=change_id).model_dump(mode="json")
+        )
 
     @router.post(
         "/api/projects/{project_id}/checks",
@@ -35,6 +38,7 @@ def build_checks_router(context: ApplicationCore) -> APIRouter:
         result, request, _ = context.checks.submit(
             project_id,
             idempotency_key=body.idempotency_key,
+            change_id=body.change_id,
         )
         return data_response(
             {

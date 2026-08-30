@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Mapping, Sequence
@@ -277,32 +278,11 @@ class FlowDraft(FlowDraftProtocolModel):
         return self
 
 
-class DeleteFlowDraftStep(FlowDraftProtocolModel):
+class ConfirmFlowDraftVariableChoice(FlowDraftProtocolModel):
     schema_version: Literal["1"] = "1"
-    operation: Literal["DELETE_STEP"]
-    step_id: str = Field(pattern=PROJECT_ID_PATTERN)
-
-
-class MergeFlowDraftSteps(FlowDraftProtocolModel):
-    schema_version: Literal["1"] = "1"
-    operation: Literal["MERGE_ADJACENT_STEPS"]
-    left_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    right_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
-
-
-class RenameFlowDraftStep(FlowDraftProtocolModel):
-    schema_version: Literal["1"] = "1"
-    operation: Literal["RENAME_STEP"]
-    step_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    name: str = Field(min_length=1, max_length=128)
-
-
-class ConfirmFlowDraftVariable(FlowDraftProtocolModel):
-    schema_version: Literal["1"] = "1"
-    operation: Literal["CONFIRM_VARIABLE_SOURCE"]
+    operation: Literal["CONFIRM_VARIABLE_CHOICE"]
     variable_name: str = Field(pattern=PROJECT_ID_PATTERN)
-    source_event_sequence: int = Field(ge=1)
-    source_json_path: str = Field(pattern=_JSON_PATH, max_length=512)
+    choice_id: str = Field(pattern=r"^choice-[0-9a-f]{16}$")
 
 
 class ConfirmFlowDraftTarget(FlowDraftProtocolModel):
@@ -318,23 +298,24 @@ class ConfirmFlowDraftResource(FlowDraftProtocolModel):
 
 
 FlowDraftReviewCommand: TypeAlias = Annotated[
-    DeleteFlowDraftStep
-    | MergeFlowDraftSteps
-    | RenameFlowDraftStep
-    | ConfirmFlowDraftVariable
+    ConfirmFlowDraftVariableChoice
     | ConfirmFlowDraftTarget
     | ConfirmFlowDraftResource,
     Field(discriminator="operation"),
 ]
 _COMMAND_ADAPTER = TypeAdapter(FlowDraftReviewCommand)
 _COMMAND_TYPES = (
-    DeleteFlowDraftStep,
-    MergeFlowDraftSteps,
-    RenameFlowDraftStep,
-    ConfirmFlowDraftVariable,
+    ConfirmFlowDraftVariableChoice,
     ConfirmFlowDraftTarget,
     ConfirmFlowDraftResource,
 )
+
+
+def flow_draft_source_choice_id(source: FlowDraftVariableSource) -> str:
+    """为技术来源生成稳定且不泄漏 JSONPath 的业务选择身份。"""
+
+    payload = f"{source.source_step_id}\0{source.source_event_sequence}\0{source.json_path}"
+    return "choice-" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def canonical_flow_draft_json_bytes(

@@ -17,6 +17,7 @@ from product.backend.core.permission_intent import (
     permission_intent_sha256,
 )
 from product.backend.core.verification.permissions import PermissionExpectation
+from product.backend.core.source_changes import SourceFileFingerprint, source_fingerprint
 from product.backend.workflows.application_understanding.analysis.models import (
     ApplicationAnalysisResult,
 )
@@ -193,7 +194,7 @@ def test_safety_fact_change_requires_rebind_without_advancing_epoch(
         core.close()
 
 
-def test_reanalysis_downgrades_binding_without_deleting_revision_or_epoch(
+def test_reanalysis_preserves_current_mapping_without_deleting_revision_or_epoch(
     tmp_path: Path,
 ) -> None:
     core = _prepared_core(tmp_path)
@@ -201,9 +202,16 @@ def test_reanalysis_downgrades_binding_without_deleting_revision_or_epoch(
         current = core.application_understanding.get(PROJECT_ID)
         revisions_before = _revisions(core)
         epoch_before = core.permission_intents.matrix(PROJECT_ID).policy_epoch
+        files = (
+            SourceFileFingerprint(
+                relative_path="app.py",
+                content_sha256="e" * 64,
+            ),
+        )
         core.application_understanding.analyzer = _StaticAnalyzer(
             ApplicationAnalysisResult(
-                source_fingerprint="e" * 64,
+                source_fingerprint=source_fingerprint(files),
+                files=files,
                 role_candidates=current.role_candidates,
                 action_candidates=current.action_candidates,
                 files_read=1,
@@ -222,12 +230,10 @@ def test_reanalysis_downgrades_binding_without_deleting_revision_or_epoch(
         owns = _latest_for(core, PermissionIntentRelation.OWNS)
         assert (
             _binding(core, owns.intent_id, owns.revision).status
-            is IntentImplementationBindingStatus.NEEDS_REVIEW
+            is IntentImplementationBindingStatus.CURRENT
         )
-        assert core.permission_intents.execution_intents(PROJECT_ID) == ()
-        with pytest.raises(JiejianError) as blocked:
-            core.security_setup.compile(PROJECT_ID)
-        assert blocked.value.code == ErrorCode.STATE_PRECONDITION.value
+        assert len(core.permission_intents.execution_intents(PROJECT_ID)) == 2
+        assert core.security_setup.compile(PROJECT_ID).project_id == PROJECT_ID
     finally:
         core.close()
 

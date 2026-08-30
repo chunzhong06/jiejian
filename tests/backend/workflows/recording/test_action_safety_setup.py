@@ -100,26 +100,9 @@ def test_state_change_requires_confirmed_recovery_before_automatic_execution(
             key=_observation_key,
         )) == 1
 
-        with pytest.raises(JiejianError) as unsafe:
-            core.action_safety_setup.confirm(
-                RECORDING_ID,
-                _confirmation(preview, confirm_recovery_not_required=True),
-            )
-        assert unsafe.value.code == ErrorCode.INPUT_INVALID.value
-
-        without_recovery = core.action_safety_setup.confirm(
-            RECORDING_ID,
-            _confirmation(preview),
-        )
-        assert without_recovery.gaps == ("RECOVERY_UNCONFIRMED",)
-        assert without_recovery.automatic_execution_allowed is False
-        assert without_recovery.confirmed_setup is not None
-        assert without_recovery.confirmed_setup.observation is not None
-        assert without_recovery.confirmed_setup.recovery is None
-
         complete = core.action_safety_setup.confirm(
             RECORDING_ID,
-            _confirmation(preview, include_recovery=True),
+            _confirmation(preview),
         )
         assert complete.gaps == ()
         assert complete.automatic_execution_allowed is True
@@ -140,20 +123,14 @@ def _confirmation(
     preview,
     *,
     include_recovery: bool = False,
-    confirm_recovery_not_required: bool = False,
 ) -> ConfirmActionSafetySetup:
     return ConfirmActionSafetySetup(
         resource_candidate_id=preview.resource_candidates[0].candidate_id,
         logical_name="所有者的测试文档",
         resource_type="文档",
-        owner_test_identity_id=IDENTITY_ID,
         observation_candidate_id=preview.observation_candidates[0].candidate_id,
         recovery_candidate_id=(
             preview.recovery_candidates[0].candidate_id if include_recovery else None
-        ),
-        confirm_recovery_not_required=confirm_recovery_not_required,
-        security_effect_candidate_id=(
-            preview.security_effect_candidates[0].candidate_id
         ),
     )
 

@@ -10,11 +10,10 @@
  * ============================================================================= */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Descriptions, Select, Space, Tag, Typography } from 'antd'
+import { Alert, Select, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { resultsApi, type HistoryChangeDto, type HistoryViewDto } from '../../api/results'
-import { formatTimestamp, severityLabel } from '../../app/presentation'
-import { AdvancedDetails } from '../../components/AdvancedDetails'
+import { formatTimestamp } from '../../app/presentation'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import './checks.css'
@@ -48,7 +47,7 @@ export function CheckHistoryPage({ projectId, onError, onBack }: { projectId?: s
     return () => { active = false }
   }, [projectId, refreshEpoch])
 
-  const changes = useMemo(() => (history?.comparisons ?? []).flatMap((comparison) => comparison.changes.map((change) => ({ ...change, run_id: comparison.run_id, previous_run_id: comparison.previous_run_id, checked_at_us: comparison.checked_at_us, policy_epoch: comparison.policy_epoch, policy_fingerprint: comparison.policy_fingerprint, relevant_intents: comparison.relevant_intents }))), [history])
+  const changes = useMemo(() => (history?.comparisons ?? []).flatMap((comparison) => comparison.changes.map((change) => ({ ...change, run_id: comparison.run_id, previous_run_id: comparison.previous_run_id, checked_at_us: comparison.checked_at_us, policy_epoch: comparison.policy_epoch, policy_fingerprint: comparison.policy_fingerprint, relevant_intents: comparison.relevant_intents, change_verification: comparison.change_verification }))), [history])
   const statuses = [...new Map(changes.map((change) => [change.status, change.status_label])).entries()]
   const findingIds = [...new Set(changes.map((change) => change.finding_id))]
   const filtered = changes.filter((change) => (!status || change.status === status) && (!findingId || change.finding_id === findingId))
@@ -63,7 +62,7 @@ export function CheckHistoryPage({ projectId, onError, onBack }: { projectId?: s
       {grouped.length === 0 && <Alert type="info" showIcon message="还没有可比较的历史变化。" />}
       <div className="history-group-list">{grouped.map(([key, items]) => <article className="history-group" key={key}>
         <header className="history-group-header"><div><Typography.Title level={4}>{items[0].title}</Typography.Title><Typography.Text className="result-context" type="secondary">{items[0].subject_group} · {items[0].action} · {items[0].resource} · {items[0].relation}</Typography.Text></div><Typography.Text type="secondary">{items.length} 次记录</Typography.Text></header>
-        <ol className="history-timeline">{items.map((item) => <li key={`${item.run_id}-${item.finding_id}-${item.status}`}><div className={`history-marker history-marker-${item.status.toLowerCase()}`} aria-hidden="true" /><div className="history-event"><Typography.Text type="secondary">{formatTimestamp(item.checked_at_us)}</Typography.Text><Typography.Text>本次检查依据权限版本 {item.policy_epoch}</Typography.Text><div><Tag color={statusColor(item.status)}>{item.status_label}</Tag></div><Typography.Paragraph>{item.explanation}</Typography.Paragraph><AdvancedDetails label="高级：本次检查标识"><Descriptions size="small" column={{ xs: 1, sm: 2 }}><Descriptions.Item label="运行标识">{item.run_id}</Descriptions.Item><Descriptions.Item label="前次运行">{item.previous_run_id ?? '无'}</Descriptions.Item><Descriptions.Item label="问题标识">{item.finding_id}</Descriptions.Item><Descriptions.Item label="严重程度">{severityLabel(item.severity)}</Descriptions.Item><Descriptions.Item label="Occurrence">{item.occurrence_status ?? '未提供'}</Descriptions.Item><Descriptions.Item label="Evidence">{item.evidence_refs.join('、') || '无'}</Descriptions.Item><Descriptions.Item label="policy_fingerprint">{item.policy_fingerprint}</Descriptions.Item><Descriptions.Item label="relevant_intents" span={2}>{item.relevant_intents.map((intent) => `${intent.intent_id}@${intent.revision}:${intent.intent_hash}`).join('、') || '无'}</Descriptions.Item></Descriptions></AdvancedDetails></div></li>)}</ol>
+        <ol className="history-timeline">{items.map((item) => <li key={`${item.run_id}-${item.finding_id}-${item.status}`}><div className={`history-marker history-marker-${item.status.toLowerCase()}`} aria-hidden="true" /><div className="history-event"><Typography.Text type="secondary">{formatTimestamp(item.checked_at_us)}</Typography.Text><Typography.Text>本次检查依据权限版本 {item.policy_epoch}</Typography.Text>{item.change_verification && <Typography.Text>代码变化重验 {item.change_verification.change_id} · 需要重验的权限：{item.change_verification.required_intents.map((intent) => intent.display_label).filter(Boolean).join('、') || `${item.change_verification.required_intents.length} 条`}</Typography.Text>}<div><Tag color={statusColor(item.status)}>{item.status_label}</Tag></div><Typography.Paragraph>{item.explanation}</Typography.Paragraph></div></li>)}</ol>
       </article>)}</div>
     </section>}
     <TaskActionBar back={onBack ? { label: '返回检查结果', onClick: onBack } : undefined} refresh={projectId ? { label: '刷新历史变化', onClick: () => setRefreshEpoch((value) => value + 1), loading } : undefined} />

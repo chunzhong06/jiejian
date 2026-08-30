@@ -495,48 +495,6 @@ def test_recording_driver_failure_remains_the_primary_error(
     assert state.recording_job_id == "job_0123456789abcdef0123456789abcdef"
 
 
-def test_recording_review_merges_ui_action_with_following_network_step() -> None:
-    driver = _load_driver()
-    calls: list[tuple[str, str, dict[str, object]]] = []
-    merged_draft = {
-        "steps": [
-            {"id": "step-000001", "method": "POST"},
-            {"id": "step-000002", "method": "DELETE"},
-        ]
-    }
-
-    class Client:
-        def call(self, method: str, path: str, body: dict[str, object]):
-            calls.append((method, path, body))
-            return {"draft": merged_draft}
-
-    draft = {
-        "steps": [
-            {"id": "step-000001", "method": "POST"},
-            {"id": "step-000002", "method": None},
-            {"id": "step-000003", "method": "DELETE"},
-        ]
-    }
-    result = driver._merge_recording_ui_steps(Client(), "recording-public", draft)
-
-    assert result is merged_draft
-    assert calls == [
-        (
-            "POST",
-            "/api/recordings/recording-public/review",
-            {
-                "schema_version": "1",
-                "command": {
-                    "schema_version": "1",
-                    "operation": "MERGE_ADJACENT_STEPS",
-                    "left_step_id": "step-000002",
-                    "right_step_id": "step-000003",
-                },
-            },
-        )
-    ]
-
-
 def test_runtime_lock_receipts_do_not_count_as_active_locks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

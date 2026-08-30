@@ -11,7 +11,7 @@
 
 ### `product/backend/api/app.py`
 - `create_app(var_dir, control_origin, control_session_token, frontend_dir, start_worker, llm_transport, llm_secret_store, secret_store, environ, clock_us, folder_selector, shutdown_callback, official_sample_root) -> FastAPI`
-主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.checks`, `product.backend.api.routers.experience`, `product.backend.api.routers.gating`, `product.backend.api.routers.jobs`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_intents`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.core.errors`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.checks`, `product.backend.api.routers.experience`, `product.backend.api.routers.gating`, `product.backend.api.routers.jobs`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_intents`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.source_changes`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.core.errors`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/api/envelope.py`
 - `class ApiModel`
@@ -118,7 +118,7 @@
 - `class ReviewRequest`
 - `class FinalizeRequest`
 - `class ActionSafetySetupConfirmRequest`
-主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.context`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.test_identities`, `product.protocols`, `pydantic`, `time`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.workflows.context`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.test_identities`, `product.protocols`, `pydantic`, `time`, `typing`
 
 ### `product/backend/api/routers/results.py`
 - `class GateReportRequest`
@@ -129,6 +129,10 @@
 - `build_runs_router(context, results) -> APIRouter`
 - `class RunCreateRequest`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.storage`, `product.backend.workflows.context`, `product.backend.workflows.results.published`, `pydantic`, `typing`
+
+### `product/backend/api/routers/source_changes.py`
+- `build_source_changes_router(context) -> APIRouter`
+主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`
 
 ### `product/backend/api/routers/system.py`
 - `build_system_router(context, workers, shutdown_callback) -> APIRouter`
@@ -150,7 +154,7 @@
 主要 import / dot-source：`product.backend.cli`
 
 ### `product/backend/cli/app.py`
-- `root(context, config, var_dir, log_level, trace_id, json_output, human_output, verbose, version) -> None`
+- `root(context, config, var_dir, log_level, trace_id, json_output, human_output, version) -> None`
 - `main() -> None`
 主要 import / dot-source：`__future__`, `pathlib`, `product.backend`, `product.backend.cli.bootstrap`, `product.backend.cli.commands.control`, `product.backend.cli.commands.system`, `product.backend.cli.localization`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.infra.runtime.process.identity`, `sys`, `typer`, `uuid`
 
@@ -165,42 +169,16 @@
 - `status_command(context, project_id) -> None`
 - `app_list_command(context, include_archived) -> None`
 - `app_show_command(context, project_id) -> None`
-- `app_connect_command(context, source_root, name) -> None`
 - `app_remove_command(context, project_id, confirmed) -> None`
-- `app_discover_command(context, project_id) -> None`
-- `app_confirm_endpoint_command(context, project_id, endpoint, revision) -> None`
-- `app_authorize_source_command(context, project_id, revision) -> None`
-- `app_analyze_command(context, project_id, revision) -> None`
-- `account_list_command(context, project_id) -> None`
-- `account_show_command(context, identity_id) -> None`
-- `account_create_command(context, project_id, role_candidate_id, label) -> None`
-- `account_prepare_command(context, identity_id) -> None`
-- `account_preparation_command(context, preparation_id) -> None`
-- `account_confirm_command(context, preparation_id) -> None`
-- `account_cancel_command(context, preparation_id) -> None`
-- `account_reset_command(context, identity_id) -> None`
-- `account_delete_command(context, identity_id, confirm) -> None`
-- `flow_list_command(context, project_id) -> None`
-- `flow_show_command(context, recording_id) -> None`
-- `flow_record_command(context, project_id, action_candidate_id, test_identity_id, duration_seconds) -> None`
-- `flow_capture_start_command(context, recording_id) -> None`
-- `flow_capture_stop_command(context, recording_id) -> None`
-- `flow_finalize_command(context, recording_id) -> None`
-- `flow_safety_command(context, recording_id) -> None`
-- `check_permissions_command(context, project_id) -> None`
 - `check_preview_command(context, project_id) -> None`
 - `check_prepare_command(context, project_id) -> None`
 - `check_cancel_command(context, project_id) -> None`
 - `check_run_command(context, project_id, idempotency_key) -> None`
 - `result_show_command(context, run_id, project_id) -> None`
 - `result_reports_command(context, run_id) -> None`
-- `result_evidence_command(context, run_id, project_id) -> None`
 - `result_report_command(context, run_id, report_id) -> None`
-- `result_repair_command(context, run_id) -> None`
 - `history_show_command(context, project_id) -> None`
-- `settings_show_command(context) -> None`
-- `settings_test_command(context, profile_name) -> None`
-主要 import / dot-source：`__future__`, `os`, `pathlib`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.runtime.jobs.models`, `sys`, `time`, `typer`, `uuid`
+主要 import / dot-source：`__future__`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.runtime.jobs.models`, `time`, `typer`, `uuid`
 
 ### `product/backend/cli/commands/system.py`
 - `class ServeReadinessStatus`
@@ -219,11 +197,10 @@
 主要 import / dot-source：`__future__`, `collections.abc`, `re`, `typer`
 
 ### `product/backend/cli/presentation.py`
-- `configure_presentation(mode, machine_only, verbose) -> None`
+- `configure_presentation(mode, machine_only) -> None`
 - `set_command_mode(mode) -> None`
 - `force_machine_mode() -> None`
 - `presentation_mode(context) -> str`
-- `verbose_enabled() -> bool`
 - `_FIELD_LABELS`
 - `_DOCTOR_LABELS`
 - `emit_human(payload) -> None`

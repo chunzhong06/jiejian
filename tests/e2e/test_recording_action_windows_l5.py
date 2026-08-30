@@ -35,13 +35,14 @@ from product.backend.workflows.test_identities import PreparedLoginState
 from product.protocols import (
     ConfirmFlowDraftResource,
     ConfirmFlowDraftTarget,
-    ConfirmFlowDraftVariable,
+    ConfirmFlowDraftVariableChoice,
     IdentityPreparationRequest,
     IdentityPreparationResultType,
     RecordingBudget,
     RecordingRunnerRequest,
     RecordingRunnerResultType,
     required_recording_secret_names,
+    flow_draft_source_choice_id,
 )
 from product.protocols.web.target import WebTargetScope
 from product.protocols.web.workflow import (
@@ -301,12 +302,11 @@ def test_prepared_identity_records_web_action_observe_and_restore_without_profil
             source = variable.candidate_sources[0]
             reviewed = reviewer.apply(
                 reviewed,
-                ConfirmFlowDraftVariable(
+                ConfirmFlowDraftVariableChoice(
                     schema_version="1",
-                    operation="CONFIRM_VARIABLE_SOURCE",
+                    operation="CONFIRM_VARIABLE_CHOICE",
                     variable_name=variable.name,
-                    source_event_sequence=source.source_event_sequence,
-                    source_json_path=source.json_path,
+                    choice_id=flow_draft_source_choice_id(source),
                 ),
             )
         reviewed = reviewer.apply(

@@ -31,6 +31,8 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 `RunnerProgressEvent` 每行独立持久化并由专用 reader 读取，因此携带自己的格式 1；`GET /api/jobs/{job_id}/progress` 的 `data` 只是 `ApiResponse` 内部视图，不再重复版本。该事件是 staging 外的非权威运行中旁路，不进入 RunnerResult、Evidence、publication、Finding、Report、Gate 或恢复语义。
 
+`ChangeVerificationContext` 只嵌入 `PersistedExecutionRequest`，不是独立交换根，因此不重复 `schema_version`。它冻结一次变化重验的身份、影响指纹、必需权限集合和源码指纹；文件清单、diff 与源码内容不进入执行请求。
+
 ## 生命周期与数据流
 
 根文档先由严格 Python 模型或明确 reader 解析和校验，再通过 canonical 序列化生成稳定 hash；跨进程边界消费 Schema 约束，持久化边界另由 migration 和 Storage 管理。协议版本不等于数据库 revision，也不等于产品代际。关系型拆列记录、API `data` 内部视图、预算、binding、locator、Plan、Fact、Finding 和 Gate 组成对象均不是独立 JSON 根。

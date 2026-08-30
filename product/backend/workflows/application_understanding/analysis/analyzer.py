@@ -32,6 +32,7 @@ from product.backend.core.application_understanding import (
     canonical_role_key,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.source_changes import SourceFileFingerprint
 from product.backend.workflows.onboarding.discovery import (
     canonical_folder,
     is_reparse_point,
@@ -117,6 +118,13 @@ class ApplicationUnderstandingAnalyzer(OpenApiAnalysisMixin, PythonAnalysisMixin
             digest.update(hashlib.sha256(raw).digest())
         return ApplicationAnalysisResult(
             source_fingerprint=digest.hexdigest(),
+            files=tuple(
+                SourceFileFingerprint(
+                    relative_path=relative,
+                    content_sha256=hashlib.sha256(raw).hexdigest(),
+                )
+                for relative, raw in files
+            ),
             role_candidates=role_candidates,
             action_candidates=action_candidates,
             files_read=len(files),

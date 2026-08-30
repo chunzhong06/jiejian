@@ -49,7 +49,7 @@ describe('EvidenceTimeline', () => {
     expect(screen.getByText(completeness)).toBeInTheDocument()
     expect(screen.getByText(reliability)).toBeInTheDocument()
     expect(screen.getByText(verdictText)).toBeInTheDocument()
-    expect(screen.getByText('高级：技术详情')).toBeInTheDocument()
+    expect(screen.getByText('查看原始证据')).toBeInTheDocument()
   })
 
   it('在高级技术详情中将 EVENTUAL 显示为最终状态', async () => {
@@ -63,7 +63,7 @@ describe('EvidenceTimeline', () => {
       verdict: 'PASS',
     })
     render(<EvidenceTimeline runId="run-eventual" evidence={[{ evidence_id: 'ev-eventual' }]} onError={vi.fn()} />)
-    fireEvent.click(await screen.findByText('高级：技术详情'))
+    fireEvent.click(await screen.findByText('查看原始证据'))
     expect(await screen.findByText('最终状态')).toBeInTheDocument()
   })
 })

@@ -30,7 +30,7 @@ from product.backend.core.application_understanding import (
     CandidateDecision,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording import RecordingState
+from product.backend.core.recording import RecordingPurpose, RecordingState
 from product.backend.core.test_setup import (
     ActionSafetySetup,
     ObservationBinding,
@@ -80,6 +80,7 @@ class TestResourceCandidateView(SafetySetupModel):
 class ObservationCandidateView(SafetySetupModel):
     candidate_id: str = Field(pattern=r"^obc_[0-9a-f]{32}$")
     label: str = Field(min_length=1, max_length=256)
+    source_recording_id: str
     source_step_id: str
     method: str
     path_template: str
@@ -89,6 +90,7 @@ class ObservationCandidateView(SafetySetupModel):
 class RecoveryCandidateView(SafetySetupModel):
     candidate_id: str = Field(pattern=r"^rcc_[0-9a-f]{32}$")
     label: str = Field(min_length=1, max_length=256)
+    source_recording_id: str
     source_step_id: str
     method: str
     path_template: str
@@ -104,10 +106,9 @@ class SecurityEffectCandidateView(SafetySetupModel):
 
 
 class ConfirmActionSafetySetup(SafetySetupModel):
-    resource_candidate_id: str = Field(pattern=r"^trc_[0-9a-f]{32}$")
-    logical_name: str = Field(min_length=1, max_length=128)
-    resource_type: str = Field(min_length=1, max_length=128)
-    owner_test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")
+    resource_candidate_id: str | None = Field(default=None, pattern=r"^trc_[0-9a-f]{32}$")
+    logical_name: str | None = Field(default=None, min_length=1, max_length=128)
+    resource_type: str | None = Field(default=None, min_length=1, max_length=128)
     observation_candidate_id: str | None = Field(
         default=None,
         pattern=r"^obc_[0-9a-f]{32}$",
@@ -115,11 +116,6 @@ class ConfirmActionSafetySetup(SafetySetupModel):
     recovery_candidate_id: str | None = Field(
         default=None,
         pattern=r"^rcc_[0-9a-f]{32}$",
-    )
-    confirm_recovery_not_required: bool = False
-    security_effect_candidate_id: str | None = Field(
-        default=None,
-        pattern=r"^sfc_[0-9a-f]{32}$",
     )
 
 
@@ -134,6 +130,10 @@ class ActionSafetySetupView(SafetySetupModel):
     observation_candidates: tuple[ObservationCandidateView, ...]
     recovery_candidates: tuple[RecoveryCandidateView, ...]
     security_effect_candidates: tuple[SecurityEffectCandidateView, ...]
+    business_result: str | None = None
+    observation_status: str
+    recovery_status: str
+    ready: bool
     confirmed_setup: ActionSafetySetup | None = None
     gaps: tuple[str, ...] = ()
     automatic_execution_allowed: bool = False
@@ -153,6 +153,7 @@ class _SetupContext:
     resource_candidate: FlowDraftResourceCandidate
     resource_value: str
     existing: ActionSafetySetup | None
+    supplements: tuple[tuple[RecordingRecord, FlowDraft], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,47 +219,35 @@ class ActionSafetySetupService:
 
         context = self._load_context(recording_id)
         view = self._view(context)
-        resource_candidate = _pick(
-            view.resource_candidates,
-            command.resource_candidate_id,
-            "测试资源候选已经失效",
+        resource_candidate_id = command.resource_candidate_id or (
+            view.resource_candidates[0].candidate_id if len(view.resource_candidates) == 1 else None
         )
-        if command.owner_test_identity_id != context.recording_identity.identity_id:
-            raise JiejianError(
-                ErrorCode.INPUT_INVALID,
-                "测试资源所有者必须是本次录制使用的已准备账号",
-            )
+        if resource_candidate_id is None:
+            raise JiejianError(ErrorCode.INPUT_INVALID, "需要确认这次操作影响的业务对象")
+        resource_candidate = _pick(view.resource_candidates, resource_candidate_id, "测试资源候选已经失效")
+        observation_candidate_id = command.observation_candidate_id or (
+            view.observation_candidates[0].candidate_id if len(view.observation_candidates) == 1 else None
+        )
+        recovery_candidate_id = command.recovery_candidate_id or (
+            view.recovery_candidates[0].candidate_id if len(view.recovery_candidates) == 1 else None
+        )
         observation_candidate = _pick_optional(
             view.observation_candidates,
-            command.observation_candidate_id,
+            observation_candidate_id,
             "观察候选已经失效",
         )
         recovery_candidate = _pick_optional(
             view.recovery_candidates,
-            command.recovery_candidate_id,
+            recovery_candidate_id,
             "恢复候选已经失效",
         )
-        effect_candidate = _pick_optional(
-            view.security_effect_candidates,
-            command.security_effect_candidate_id,
-            "安全效果候选已经失效",
-        )
-        if command.confirm_recovery_not_required and recovery_candidate is not None:
-            raise JiejianError(
-                ErrorCode.INPUT_INVALID,
-                "恢复请求与不需要恢复不能同时确认",
-            )
-        if command.confirm_recovery_not_required and view.state_changing:
-            raise JiejianError(
-                ErrorCode.INPUT_INVALID,
-                "会改变状态的动作不能确认不需要恢复",
-            )
+        effect_candidate = view.security_effect_candidates[0] if len(view.security_effect_candidates) == 1 else None
         now_us = self._clock_us()
         resource = self._resource_fact(
             context,
             resource_candidate,
-            logical_name=command.logical_name,
-            resource_type=command.resource_type,
+            logical_name=command.logical_name or f"{context.action.display_name}测试对象",
+            resource_type=command.resource_type or resource_candidate.suggested_resource_type,
             now_us=now_us,
         )
         setup = ActionSafetySetup(
@@ -275,7 +264,7 @@ class ActionSafetySetupService:
             recovery=self._recovery_fact(
                 resource,
                 recovery_candidate,
-                confirm_not_required=command.confirm_recovery_not_required,
+                confirm_not_required=not view.state_changing,
                 now_us=now_us,
             ),
             effect=(
@@ -316,6 +305,14 @@ class ActionSafetySetupService:
             existing = work.action_safety_setups.get_for_action(
                 recording.project_id,
                 draft_record.draft.action_candidate_id,
+            )
+            supplements = tuple(
+                (item, supplement_draft.draft)
+                for item in work.recordings.list_for_project(recording.project_id)
+                if item.parent_recording_id == recording.recording_id
+                and item.purpose in {RecordingPurpose.OBSERVATION, RecordingPurpose.RECOVERY}
+                and item.state is RecordingState.COMPLETED
+                and (supplement_draft := work.flow_drafts.latest(item.recording_id)) is not None
             )
         request = self._request_store.load(
             job.job_id,
@@ -404,6 +401,7 @@ class ActionSafetySetupService:
             resource_candidate=resource_candidate,
             resource_value=resource_value,
             existing=existing,
+            supplements=supplements,
         )
 
     def _view(self, context: _SetupContext) -> ActionSafetySetupView:
@@ -431,6 +429,16 @@ class ActionSafetySetupService:
             observation_candidates=observations,
             recovery_candidates=recoveries,
             security_effect_candidates=effects,
+            business_result=(effects[0].label if len(effects) == 1 else None),
+            observation_status=("READY" if current is not None and current.observation is not None else "MISSING"),
+            recovery_status=(
+                "NOT_REQUIRED"
+                if not _state_changing(context)
+                else "READY"
+                if current is not None and current.recovery is not None
+                else "MISSING"
+            ),
+            ready=not gaps,
             confirmed_setup=context.existing,
             gaps=tuple(gaps),
             automatic_execution_allowed=not gaps,
@@ -490,7 +498,7 @@ class ActionSafetySetupService:
             "resource_id": resource.resource_id,
             "trusted_test_identity_id": candidate.trusted_test_identity_id,
             "kind": "OWNER_READ",
-            "recording_id": resource.recording_id,
+            "recording_id": candidate.source_recording_id,
             "source_step_id": candidate.source_step_id,
             "method": "GET",
             "path_template": candidate.path_template,
@@ -522,7 +530,7 @@ class ActionSafetySetupService:
                 if confirm_not_required
                 else RecoveryBindingKind.RECORDED_REQUEST
             ),
-            "recording_id": resource.recording_id,
+            "recording_id": resource.recording_id if candidate is None else candidate.source_recording_id,
             "source_step_id": None if candidate is None else candidate.source_step_id,
             "method": None if candidate is None else candidate.method,
             "path_template": None if candidate is None else candidate.path_template,

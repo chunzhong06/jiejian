@@ -11,8 +11,10 @@ from product.backend.workflows.results.history import (
 )
 from product.backend.workflows.results.presentation import (
     PresentedCaseVerdict,
+    ResultChangeVerification,
     ResultPresentation,
     ResultPresentationIssue,
+    ResultRelevantIntent,
 )
 
 
@@ -59,6 +61,20 @@ def _presentation(run_id: str, issue: ResultPresentationIssue | None) -> ResultP
         verdict=verdict,
         policy_epoch=int(run_id[-1]),
         policy_fingerprint=run_id[-1] * 64,
+        change_verification=(
+            ResultChangeVerification(
+                change_id="chg_" + "6" * 32,
+                required_intents=(
+                    ResultRelevantIntent(
+                        intent_id="pin_" + "7" * 32,
+                        revision=2,
+                        intent_hash="8" * 64,
+                    ),
+                ),
+            )
+            if run_id == RUN_FIXED
+            else None
+        ),
         headline="测试标题",
         scope_statement="测试范围说明。",
         checked_count=1,
@@ -146,6 +162,8 @@ def test_uncovered_run_never_looks_fixed_and_later_safe_evidence_can_fix() -> No
     assert result.comparisons[2].changes[0].status is HistoryChangeStatus.FIXED
     assert result.comparisons[2].changes[0].status_label == "已解决"
     assert result.comparisons[2].changes[0].current_verdict is PresentedCaseVerdict.SAFE
+    assert result.comparisons[2].change_verification is not None
+    assert len(result.comparisons[2].change_verification.required_intents) == 1
 
 
 def test_repeated_vulnerable_evidence_is_still_present() -> None:

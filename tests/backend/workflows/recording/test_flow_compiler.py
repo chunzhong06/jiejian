@@ -11,21 +11,20 @@ from product.backend.workflows.recording.review import FlowDraftReviewer
 from product.protocols import (
     ConfirmFlowDraftResource,
     ConfirmFlowDraftTarget,
-    DeleteFlowDraftStep,
+    ConfirmFlowDraftVariableChoice,
     FlowDraft,
     FlowDraftResourceCandidate,
     FlowDraftStep,
     FlowDraftVariable,
     FlowDraftVariableSource,
     FlowDraftVariableStatus,
-    MergeFlowDraftSteps,
     RecordingEvent,
     RecordingEventKind,
     RecordingHeader,
-    RenameFlowDraftStep,
     canonical_flow_draft_json_bytes,
     flow_draft_review_command_schema,
     parse_flow_draft,
+    flow_draft_source_choice_id,
 )
 from product.protocols.web.workflow import ValueSlotConsumer, ValueSlotSource, WorkflowStepPurpose
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -139,66 +138,57 @@ def test_review_requires_explicit_target_and_recorded_resource_confirmation() ->
     with pytest.raises(JiejianError):
         compiler.compile(draft)
 
-    renamed = reviewer.apply(
-        draft,
-        RenameFlowDraftStep(
-            schema_version="1",
-            operation="RENAME_STEP",
-            step_id="step-000001",
-            name="准备资源",
-        ),
-    )
-    merged = reviewer.apply(
-        renamed,
-        MergeFlowDraftSteps(
-            schema_version="1",
-            operation="MERGE_ADJACENT_STEPS",
-            left_step_id="step-000001",
-            right_step_id="step-000002",
-        ),
-    )
-    reviewed = reviewer.apply(
-        merged,
-        DeleteFlowDraftStep(
-            schema_version="1",
-            operation="DELETE_STEP",
-            step_id="step-000004",
-        ),
-    )
-    reviewed = reviewer.apply(
-        reviewed,
-        ConfirmFlowDraftTarget(
-            schema_version="1",
-            operation="CONFIRM_TARGET_STEP",
-            step_id="step-000003",
-        ),
-    )
+    reviewed = draft
+    if reviewed.target_step_id is None:
+        reviewed = reviewer.apply(
+            reviewed,
+            ConfirmFlowDraftTarget(
+                schema_version="1",
+                operation="CONFIRM_TARGET_STEP",
+                step_id=reviewed.recommended_target_step_id,
+            ),
+        )
     resource = next(
         item
-        for item in reviewed.steps[1].resource_candidates
+        for step in reviewed.steps
+        if step.id == reviewed.target_step_id
+        for item in step.resource_candidates
         if item.location == "path[1]"
     )
-    ready = reviewer.apply(
-        reviewed,
-        ConfirmFlowDraftResource(
-            schema_version="1",
-            operation="CONFIRM_RESOURCE_SLOT",
-            candidate_id=resource.candidate_id,
-        ),
-    )
+    if reviewed.resource_candidate_id is None:
+        reviewed = reviewer.apply(
+            reviewed,
+            ConfirmFlowDraftResource(
+                schema_version="1",
+                operation="CONFIRM_RESOURCE_SLOT",
+                candidate_id=resource.candidate_id,
+            ),
+        )
+    ready = reviewed
+    for variable in ready.variables:
+        if variable.status is FlowDraftVariableStatus.CONFIRMED:
+            continue
+        ready = reviewer.apply(
+            ready,
+            ConfirmFlowDraftVariableChoice(
+                operation="CONFIRM_VARIABLE_CHOICE",
+                variable_name=variable.name,
+                choice_id=flow_draft_source_choice_id(variable.candidate_sources[0]),
+            ),
+        )
 
     assert draft.revision == 1
-    assert ready.revision == 6
-    assert ready.variables == ()
+    assert ready.revision >= draft.revision
+    assert all(item.status is FlowDraftVariableStatus.CONFIRMED for item in ready.variables)
     flow = compiler.compile(ready)
     assert flow.schema_version == "1"
     assert flow.action_candidate_id == ACTION_CANDIDATE_ID
-    assert flow.target_step_id == "step-000003"
-    assert tuple(step.purpose for step in flow.steps) == (WorkflowStepPurpose.TARGET,)
-    assert flow.steps[0].request_template.path == "/resources/{case_resource_id}"
+    assert flow.target_step_id == reviewed.target_step_id
+    assert flow.steps[-1].purpose is WorkflowStepPurpose.TARGET
+    assert flow.steps[-1].request_template.path == "/resources/{case_resource_id}"
     resource_slots = tuple(
         slot
-        for slot in flow.steps[0].request_template.input_slots
+        for slot in flow.steps[-1].request_template.input_slots
         if slot.source is ValueSlotSource.CASE_RESOURCE_ID
     )
     assert len(resource_slots) == 1

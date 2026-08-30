@@ -26,6 +26,7 @@ from product.backend.workflows.results.presentation import (
     PresentedCaseVerdict,
     ResultPresentation,
     ResultPresentationBuilder,
+    ResultChangeVerification,
     ResultPresentationIssue,
     ResultRelevantIntent,
 )
@@ -74,6 +75,7 @@ class HistoryComparison(_HistoryModel):
         default=(),
         max_length=4096,
     )
+    change_verification: ResultChangeVerification | None = None
     changes: tuple[HistoryChange, ...] = ()
 
 
@@ -155,6 +157,7 @@ def _comparisons(
                 policy_epoch=presentation.policy_epoch,
                 policy_fingerprint=presentation.policy_fingerprint,
                 relevant_intents=presentation.relevant_intents,
+                change_verification=presentation.change_verification,
                 changes=tuple(changes),
             )
         )

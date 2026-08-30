@@ -8,10 +8,11 @@ export type AppRoute =
   | '/check'
   | '/results'
   | '/history'
+  | '/tools'
   | '/settings/models'
   | '/settings/system'
 
-export type ProcessRoute = Exclude<AppRoute, '/workspace' | '/settings/models' | '/settings/system'>
+export type ProcessRoute = Exclude<AppRoute, '/workspace' | '/tools' | '/settings/models' | '/settings/system'>
 export type ProcessStepState = 'complete' | 'current' | 'upcoming'
 
 export const processSteps = [
@@ -25,7 +26,7 @@ export const processSteps = [
 
 export function normalizeRoute(pathname: string): AppRoute {
   if (pathname === '/workspace') return pathname
-  if (pathname === '/settings/models' || pathname === '/settings/system') return pathname
+  if (pathname === '/tools' || pathname === '/settings/models' || pathname === '/settings/system') return pathname
   if (processSteps.some((step) => step.route === pathname)) return pathname as ProcessRoute
   return '/workspace'
 }

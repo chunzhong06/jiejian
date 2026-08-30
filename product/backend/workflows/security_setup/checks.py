@@ -29,6 +29,9 @@ from product.backend.workflows.permission_intents import (
 )
 from product.backend.workflows.runs.execution import ExecutionWorkflow
 from product.backend.workflows.security_setup.compiler import SecuritySetupCompiler
+from product.backend.workflows.source_changes import SourceChangeService
+from product.backend.core.source_changes import RevalidationPlan
+from product.protocols.execution_request import ChangeVerificationContext
 
 
 class _CheckModel(BaseModel):
@@ -74,6 +77,8 @@ class CheckPreview(_CheckModel):
     next_label: str | None = None
     case_count: int = Field(ge=0)
     differential_pair_count: int = Field(ge=0)
+    change_id: str | None = Field(default=None, pattern=r"^chg_[0-9a-f]{32}$")
+    required_intent_count: int = Field(default=0, ge=0)
 
 
 class CheckWorkflow:
@@ -85,14 +90,30 @@ class CheckWorkflow:
         permission_intents: PermissionIntentService,
         security_setup: SecuritySetupCompiler,
         execution: ExecutionWorkflow,
+        source_changes: SourceChangeService,
     ) -> None:
         self._permission_intents = permission_intents
         self._security_setup = security_setup
         self._execution = execution
+        self._source_changes = source_changes
 
-    def preview(self, project_id: str) -> CheckPreview:
+    def prepare(self, project_id: str, *, change_id: str | None = None) -> CheckPreview:
+        """先关闭变化重验前置缺口，再编译同一份完整当前检查计划。"""
+
+        revalidation = self._revalidation(project_id, change_id)
+        self._security_setup.compile(project_id)
+        return self._preview(project_id, revalidation)
+
+    def preview(self, project_id: str, *, change_id: str | None = None) -> CheckPreview:
         """投影当前矩阵、Coverage 和 DifferentialPlan；不持久化派生状态。"""
 
+        return self._preview(project_id, self._revalidation(project_id, change_id))
+
+    def _preview(
+        self,
+        project_id: str,
+        revalidation: RevalidationPlan | None,
+    ) -> CheckPreview:
         matrix = self._permission_intents.matrix(project_id)
         profile_id = self._security_setup.current_generated_profile_id(project_id)
         snapshot = None
@@ -104,6 +125,7 @@ class CheckWorkflow:
                 snapshot = self._execution.build_request(
                     profile_id,
                     project_id=project_id,
+                    change_context=self._change_context(revalidation),
                 ).project_snapshot
             except JiejianError:
                 profile_gap = _gap("GENERATED_PROFILE_STALE")
@@ -249,12 +271,23 @@ class CheckWorkflow:
             differential_pair_count=(
                 0 if snapshot is None else len(snapshot.differential_plan.twins)
             ),
+            change_id=None if revalidation is None else revalidation.change_id,
+            required_intent_count=(
+                0 if revalidation is None else len(revalidation.required_intent_ids)
+            ),
         )
 
-    def submit(self, project_id: str, *, idempotency_key: str):
+    def submit(
+        self,
+        project_id: str,
+        *,
+        idempotency_key: str,
+        change_id: str | None = None,
+    ):
         """至少一个动作完整时解析当前 Generated Profile，并复用现有执行提交链。"""
 
-        preview = self.preview(project_id)
+        revalidation = self._revalidation(project_id, change_id)
+        preview = self._preview(project_id, revalidation)
         if not preview.ready:
             raise JiejianError(
                 ErrorCode.STATE_PRECONDITION,
@@ -273,7 +306,32 @@ class CheckWorkflow:
         return self._execution.submit(
             profile_id,
             project_id=project_id,
+            change_context=self._change_context(revalidation),
             idempotency_key=idempotency_key,
+        )
+
+    def _revalidation(
+        self,
+        project_id: str,
+        change_id: str | None,
+    ) -> RevalidationPlan | None:
+        return (
+            None
+            if change_id is None
+            else self._source_changes.revalidation_plan(project_id, change_id)
+        )
+
+    @staticmethod
+    def _change_context(
+        revalidation: RevalidationPlan | None,
+    ) -> ChangeVerificationContext | None:
+        if revalidation is None:
+            return None
+        return ChangeVerificationContext(
+            change_id=revalidation.change_id,
+            impact_fingerprint=revalidation.impact_fingerprint,
+            required_intent_ids=revalidation.required_intent_ids,
+            source_fingerprint=revalidation.source_fingerprint,
         )
 
 

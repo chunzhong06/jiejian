@@ -23,7 +23,6 @@ from product.protocols import (
     RecordingRunnerResultType,
     RecordingRunnerResult,
     RecordingSessionRef,
-    ConfirmFlowDraftVariable,
     canonical_recording_json_bytes,
     parse_recording_result,
 )

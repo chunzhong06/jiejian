@@ -6,7 +6,7 @@
  * ============================================================================= */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Card, Descriptions, Space, Typography } from 'antd'
+import { Alert, Card, Descriptions, Space } from 'antd'
 import { ApiError } from '../../api/http'
 import { recordingsApi, type ActionSafetySetupViewDto, type ConfirmActionSafetySetupInput, type FlowDraftDto, type RecordingActionDto, type RecordingDto, type RecordingReviewCommand, type RecordingTestIdentityDto, type RecordingViewDto } from '../../api/recordings'
 import { runsApi } from '../../api/runs'
@@ -15,7 +15,6 @@ import { browserState } from '../../app/browserState'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
-import { AdvancedDetails } from '../../components/AdvancedDetails'
 import { FlowDraftReview } from './FlowDraftReview'
 import { RecordingCaptureCard, captureLabel } from './RecordingCaptureCard'
 import { RecordingSetupCard } from './RecordingSetupCard'
@@ -24,28 +23,11 @@ import './recording.css'
 
 const finishedStates = new Set(['PENDING_REVIEW', 'COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'])
 
-function recordedTargetLabel(draft: FlowDraftDto) {
-  const step = draft.steps.find((item) => item.id === draft.target_step_id)
-  if (!step?.method || !step.path) return '尚未确认'
-  const candidate = step.resource_candidates.find((item) => item.candidate_id === draft.resource_candidate_id)
-  let path = step.path
-  if (candidate?.consumer === 'PATH') {
-    const index = Number(candidate.location.replace(/^path\[/, '').replace(/\]$/, ''))
-    const parts = path.split('/')
-    const positions = parts.flatMap((value, position) => value ? [position] : [])
-    const position = positions[index]
-    if (Number.isInteger(index) && position !== undefined) parts[position] = '{测试资源}'
-    path = parts.join('/')
-  } else if (candidate?.consumer === 'QUERY') {
-    const name = candidate.location.replace(/^query\./, '')
-    const [pathname, query = ''] = path.split('?', 2)
-    const items = query.split('&').filter(Boolean).map((item) => {
-      const [key, ...rest] = item.split('=')
-      return decodeURIComponent(key) === name ? `${key}={测试资源}` : [key, ...rest].join('=')
-    })
-    path = pathname + (items.length ? `?${items.join('&')}` : '')
-  }
-  return `${step.method} ${path}`
+async function sourceChoiceId(value: string) {
+  const [stepId, sequence, ...path] = value.split('|')
+  const payload = `${stepId}\0${sequence}\0${path.join('|')}`
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload))
+  return `choice-${Array.from(new Uint8Array(digest)).map((item) => item.toString(16).padStart(2, '0')).join('').slice(0, 16)}`
 }
 
 export function RecordingPage({ project, onError, onBack, onNext }: { project: ProjectDto; onError: (error: ApiError) => void; onBack: () => void; onNext?: () => void }) {
@@ -56,8 +38,6 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
   const [testIdentityId, setTestIdentityId] = useState<string>()
   const [duration, setDuration] = useState(600)
   const [sources, setSources] = useState<Record<string, string>>({})
-  const [renamingStep, setRenamingStep] = useState<string>()
-  const [renameValue, setRenameValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string>()
   const [safetySetup, setSafetySetup] = useState<ActionSafetySetupViewDto>()
@@ -127,6 +107,24 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
     void refreshSafetySetup(recording.recording_id)
   }, [recording?.recording_id, recording?.state])
 
+  useEffect(() => {
+    if (
+      recording?.state !== 'COMPLETED'
+      || !recording.recording_id
+      || !safetySetup
+      || safetySetup.confirmed_setup
+      || safetySetup.resource_candidates.length !== 1
+      || safetySetup.observation_candidates.length !== 1
+      || safetySetup.security_effect_candidates.length !== 1
+      || (safetySetup.state_changing && safetySetup.recovery_candidates.length !== 1)
+    ) return
+    setBusy(true)
+    void recordingsApi.confirmSafetySetup(recording.recording_id, {}).then((confirmed) => {
+      setSafetySetup(confirmed)
+      setMessage(confirmed.ready ? '业务事实已经自动整理完成。' : '仍有业务事实需要补充。')
+    }).catch((error) => onError(error as ApiError)).finally(() => setBusy(false))
+  }, [recording?.recording_id, recording?.state, safetySetup?.confirmed_setup])
+
   const draft = recording?.draft ?? undefined
   const steps = useMemo(() => draft?.steps ?? [], [draft?.revision])
   const variables = useMemo(() => draft?.variables ?? [], [draft?.revision])
@@ -143,6 +141,19 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
     setBusy(true); setMessage(undefined)
     try { setSafetySetup(undefined); updateView({ ...(await recordingsApi.createRecording(project.project_id, actionId, testIdentityId, duration)), draft: null, capture_phase: 'PREPARING_BROWSER' }) }
     catch (error) { onError(error as ApiError) }
+    finally { setBusy(false) }
+  }
+  const createSupplement = async (purpose: 'OBSERVATION' | 'RECOVERY') => {
+    if (!recording?.recording_id || !recording.action || !recording.test_identity) return
+    setBusy(true); setMessage(undefined)
+    try {
+      setSafetySetup(undefined)
+      updateView({
+        ...(await recordingsApi.createRecording(project.project_id, recording.action.action_candidate_id, recording.test_identity.test_identity_id, duration, purpose, recording.recording_id)),
+        draft: null,
+        capture_phase: 'PREPARING_BROWSER',
+      })
+    } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
   const refreshPage = async () => {
@@ -178,28 +189,33 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
   const review = async (command: RecordingReviewCommand) => {
     if (!recording?.recording_id) return
     setBusy(true); setMessage(undefined)
-    try { updateView(await recordingsApi.reviewRecording(recording.recording_id, command)); setRenamingStep(undefined) }
+    try { updateView(await recordingsApi.reviewRecording(recording.recording_id, command)) }
     catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
 
   const sourcesReady = variables.every((variable) => Boolean(sources[variable.name]))
-  const hasLooseActions = steps.some((step) => !step.method)
-  const canFinalize = Boolean(draft && steps.length && draft.target_step_id && draft.resource_candidate_id && sourcesReady && !hasLooseActions)
+  const recordingPurpose = recording?.purpose ?? 'TARGET'
+  const canFinalize = Boolean(draft && (recordingPurpose !== 'TARGET' || (steps.length && draft.target_step_id && draft.resource_candidate_id && sourcesReady)))
   const finalize = async () => {
     if (!recording?.recording_id || !draft || !canFinalize) return
     setBusy(true); setMessage(undefined)
     try {
-      for (const variable of variables) {
+      if ((recording.purpose ?? 'TARGET') === 'TARGET') for (const variable of variables) {
         if (variable.status === 'CONFIRMED') continue
-        const selected = sources[variable.name]
-        const separator = selected.indexOf('|')
-        updateView(await recordingsApi.reviewRecording(recording.recording_id, { schema_version: '1', operation: 'CONFIRM_VARIABLE_SOURCE', variable_name: variable.name, source_event_sequence: Number(selected.slice(0, separator)), source_json_path: selected.slice(separator + 1) }))
+        updateView(await recordingsApi.reviewRecording(recording.recording_id, { schema_version: '1', operation: 'CONFIRM_VARIABLE_CHOICE', variable_name: variable.name, choice_id: await sourceChoiceId(sources[variable.name]) }))
       }
       const finalized = await recordingsApi.finalizeRecording(recording.recording_id)
-      updateView(finalized)
-      setSafetySetup(await recordingsApi.safetySetup(recording.recording_id))
-      setMessage('流程已经保存。请继续确认测试资源、真实观察和安全恢复。')
+      if ((recording.purpose ?? 'TARGET') !== 'TARGET' && recording.parent_recording_id) {
+        const parent = await recordingsApi.recording(recording.parent_recording_id)
+        updateView(parent)
+        setSafetySetup(await recordingsApi.safetySetup(recording.parent_recording_id))
+        setMessage(recording.purpose === 'OBSERVATION' ? '验证操作已经补录。' : '恢复操作已经补录。')
+      } else {
+        updateView(finalized)
+        setSafetySetup(await recordingsApi.safetySetup(recording.recording_id))
+        setMessage('业务流程已经保存。界鉴正在确认真实结果与恢复方式。')
+      }
     } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
@@ -218,7 +234,11 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
   const reviewable = recording?.state === 'PENDING_REVIEW' && Boolean(draft)
   const phase = String(recording?.capture_phase ?? '')
   const currentStage = !recording ? 1 : reviewable ? 3 : recording.state === 'COMPLETED' ? 4 : 2
-  const sequence = ['选择动作和账号', '在浏览器完成操作', '确认录制步骤', '确认真实结果与恢复']
+  const sequence = recording?.purpose === 'OBSERVATION'
+    ? ['沿用原业务动作', '演示独立验证', '保存验证方式', '返回业务流程']
+    : recording?.purpose === 'RECOVERY'
+      ? ['沿用原业务动作', '演示恢复现场', '保存恢复方法', '返回业务流程']
+      : ['选择动作和账号', '在浏览器完成操作', '确认业务含义', '确认真实结果与恢复']
   const setupDisabled = Boolean(recording && !['COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].includes(recording.state))
   const primaryAction = !recording
     ? { label: '打开浏览器并开始准备', onClick: () => void createRecording(), loading: busy, disabled: !actionId || !testIdentityId }
@@ -227,12 +247,12 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
       : phase === 'CAPTURING'
         ? { label: '我已完成这个操作', onClick: () => void controlCapture('stop'), loading: busy }
         : reviewable
-          ? { label: canFinalize ? '确认并保存流程' : '完成步骤确认后保存', onClick: () => void finalize(), loading: busy, disabled: !canFinalize }
+          ? { label: canFinalize ? (recordingPurpose === 'TARGET' ? '保存业务流程' : '保存本次补录') : '完成业务选择后保存', onClick: () => void finalize(), loading: busy, disabled: !canFinalize }
           : recording.state === 'COMPLETED' && !safetySetup
             ? { label: '正在读取真实结果与恢复选项', disabled: true }
-            : recording.state === 'COMPLETED' && safetySetup && !safetySetup.automatic_execution_allowed
-              ? { label: '确认测试资源、观察与恢复', submitForm: 'recording-safety-setup', loading: busy, disabled: safetySetup.resource_candidates.length === 0 }
-              : recording.state === 'COMPLETED' && safetySetup?.automatic_execution_allowed && onNext
+            : recording.state === 'COMPLETED' && safetySetup && !safetySetup.ready
+              ? { label: '采用已识别的业务事实', submitForm: 'recording-safety-setup', loading: busy, disabled: safetySetup.resource_candidates.length === 0 || safetySetup.observation_candidates.length === 0 || (safetySetup.state_changing && safetySetup.recovery_candidates.length === 0) }
+              : recording.state === 'COMPLETED' && safetySetup?.ready && onNext
                 ? { label: '继续确认权限与检查', onClick: onNext }
                 : undefined
   const restartAction = recording && !finishedStates.has(recording.state)
@@ -259,11 +279,11 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
     <RecordingSetupCard actions={actionOptions} identities={identityOptions} actionId={actionId} testIdentityId={testIdentityId} duration={duration} disabled={setupDisabled} onActionChange={setActionId} onIdentityChange={setTestIdentityId} onDurationChange={setDuration} />
     {recording && <RecordingCaptureCard recording={recording} onRefresh={() => void refresh()} />}
     {draft && <AssistantPanel projectId={project.project_id} surface="recording-review" title="这次录制的步骤用途" actionLabel="AI 解读这次录制" />}
-    {reviewable && draft && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.action_candidate_id === draft.action_candidate_id)?.display_name ?? '这个业务动作'} sources={sources} renamingStep={renamingStep} renameValue={renameValue} busy={busy} canFinalize={canFinalize} hasLooseActions={hasLooseActions} onSourcesChange={setSources} onRenameStart={(stepId, value) => { setRenamingStep(stepId); setRenameValue(value) }} onRenameValueChange={setRenameValue} onRenameCancel={() => setRenamingStep(undefined)} onReview={(command) => void review(command)} />}
+    {reviewable && draft && recordingPurpose === 'TARGET' && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.action_candidate_id === draft.action_candidate_id)?.display_name ?? '这个业务动作'} sources={sources} canFinalize={canFinalize} onSourcesChange={setSources} onReview={(command) => void review(command)} />}
+    {reviewable && draft && recordingPurpose !== 'TARGET' && <Alert type="success" showIcon message={recordingPurpose === 'OBSERVATION' ? '已经识别这次验证操作' : '已经识别这次恢复操作'} description="保存后会回到原业务流程，不会创建新的业务动作或权限要求。" />}
     {message && <Alert type={safetySetup && !safetySetup.automatic_execution_allowed ? 'info' : 'success'} showIcon message={message} />}
-    {recording?.state === 'COMPLETED' && draft && <Card className="recording-summary" title="已保存的业务流程"><Descriptions size="small" column={1}><Descriptions.Item label="业务动作">{recording.action?.display_name ?? actionOptions.find((item) => item.action_candidate_id === draft.action_candidate_id)?.display_name ?? '已确认动作'}</Descriptions.Item><Descriptions.Item label="用于录制的账号">{recording.test_identity?.label ?? '已准备测试账号'}{recording.test_identity?.role_display_name ? `（${recording.test_identity.role_display_name}）` : ''}</Descriptions.Item><Descriptions.Item label="状态">录制内容已保存</Descriptions.Item></Descriptions><AdvancedDetails label="高级：技术请求"><Typography.Text code>{recordedTargetLabel(draft)}</Typography.Text></AdvancedDetails></Card>}
-    {recording?.state === 'COMPLETED' && safetySetup && <ActionSafetySetupCard setup={safetySetup} busy={busy} onConfirm={(input) => void confirmSafetySetup(input)} />}
-    {recording && <AdvancedDetails label="高级信息"><Descriptions size="small" column={1}><Descriptions.Item label="录制标识"><Typography.Text code>{recording.recording_id}</Typography.Text></Descriptions.Item><Descriptions.Item label="内部状态">{recording.state} / {recording.capture_phase ?? 'UNKNOWN'}</Descriptions.Item>{recording.flow_path && <Descriptions.Item label="流程文件">{recording.flow_path}</Descriptions.Item>}</Descriptions></AdvancedDetails>}
+    {recording?.state === 'COMPLETED' && draft && <Card className="recording-summary" title="已保存的业务流程"><Descriptions size="small" column={1}><Descriptions.Item label="业务动作">{recording.action?.display_name ?? actionOptions.find((item) => item.action_candidate_id === draft.action_candidate_id)?.display_name ?? '已确认动作'}</Descriptions.Item><Descriptions.Item label="用于录制的账号">{recording.test_identity?.label ?? '已准备测试账号'}{recording.test_identity?.role_display_name ? `（${recording.test_identity.role_display_name}）` : ''}</Descriptions.Item><Descriptions.Item label="状态">录制内容已保存</Descriptions.Item></Descriptions></Card>}
+    {recording?.state === 'COMPLETED' && safetySetup && <ActionSafetySetupCard setup={safetySetup} busy={busy} onConfirm={(input) => void confirmSafetySetup(input)} onSupplement={(purpose) => void createSupplement(purpose)} />}
     <TaskActionBar back={{ label: '返回测试账号', onClick: onBack }} refresh={{ label: '刷新流程状态', onClick: () => void refreshPage(), loading: busy }} restart={restartAction} primary={primaryAction} />
   </Space>
 }

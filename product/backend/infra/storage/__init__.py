@@ -12,6 +12,13 @@ from .llm import AIAssistanceSettingsRepository, AIAssistanceSettingsRow, LLMPro
 from .execution_profiles import ExecutionProfileRecord, ExecutionProfileRepository, ExecutionProfileRow
 from .projects import ProjectRecord, ProjectRepository, ProjectRow
 from .recordings import FlowDraftRevisionRecord, FlowDraftRevisionRepository, RecordingRecord, RecordingRepository, FlowDraftRevisionRow, RecordingRow
+from .source_changes import (
+    ChangeImpactAssessmentRow,
+    ChangeManifestRow,
+    SourceChangeRepository,
+    SourceChangeSetRow,
+    SourceRevisionSnapshotRow,
+)
 from .execution.runs import RunRecord, RunRepository, RunRow
 from .setup import (
     ActionSafetySetupRepository,
@@ -40,6 +47,7 @@ __all__ = [
     "FlowDraftRevisionRow", "RecordingRow", "RunRow", "TestIdentityCookieRow", "TestIdentityRow",
     "TestResourceRow", "ObservationBindingRow", "RecoveryBindingRow", "SecurityEffectConfirmationRow",
     "PermissionIntentRevisionRow", "ProjectPolicyStateRow", "IntentImplementationBindingRow", "IntentProposalRow",
+    "SourceRevisionSnapshotRow", "ChangeManifestRow", "SourceChangeSetRow", "ChangeImpactAssessmentRow",
     "ContractVersionRepository",
     "EvidenceIndexRecord", "EvidenceIndexRepository", "FindingRecord", "FindingOccurrenceRecord", "FindingRepository",
     "FindingFinalizationState", "BaseReportFinalizationState", "RunFinalizationRecord", "RunFinalizationRepository",
@@ -50,4 +58,5 @@ __all__ = [
     "RunRecord", "RunRepository", "SQLITE_BUSY_TIMEOUT_MS", "create_session_factory",
     "create_sqlite_engine", "default_database_path", "upgrade_database", "StorageUnitOfWork",
     "TestIdentityRepository", "ActionSafetySetupRepository", "PermissionIntentRepository",
+    "SourceChangeRepository",
 ]

@@ -101,9 +101,8 @@ def test_candidates_are_deterministic_before_confirmation(
         }
         assert preview.automatic_execution_allowed is False
         assert preview.resource_candidates[0].candidate_id.startswith("trc_")
-        assert preview.observation_candidates[0].label == (
-            "由资源所有者读取并核对：/resources/{case_resource_id}"
-        )
+        assert preview.observation_candidates[0].label == "独立读取并核对业务结果"
+        assert preview.observation_candidates[0].source_recording_id == RECORDING_ID
         assert preview.recovery_candidates[0].candidate_id.startswith("rcc_")
     finally:
         core.close()

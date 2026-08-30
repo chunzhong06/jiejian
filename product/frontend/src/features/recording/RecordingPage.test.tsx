@@ -1,291 +1,97 @@
-/* 业务流程录制页测试：保护动作与测试身份入口、显式 TARGET/资源确认及普通用户展示。 */
+// 业务流程页面测试：保护业务选择、自动事实采用与同动作补录边界。
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RecordingPage } from './RecordingPage'
 
 const api = vi.hoisted(() => ({
-  setup: vi.fn(),
-  recordings: vi.fn(),
-  recording: vi.fn(),
-  createRecording: vi.fn(),
-  startCapture: vi.fn(),
-  stopCapture: vi.fn(),
-  reviewRecording: vi.fn(),
-  finalizeRecording: vi.fn(),
-  safetySetup: vi.fn(),
-  confirmSafetySetup: vi.fn(),
-  cancel: vi.fn(),
+  setup: vi.fn(), recordings: vi.fn(), recording: vi.fn(), createRecording: vi.fn(), startCapture: vi.fn(), stopCapture: vi.fn(),
+  reviewRecording: vi.fn(), finalizeRecording: vi.fn(), safetySetup: vi.fn(), confirmSafetySetup: vi.fn(), cancel: vi.fn(),
 }))
 
 vi.mock('../../api/recordings', () => ({ recordingsApi: {
-  setup: api.setup,
-  recordings: api.recordings,
-  recording: api.recording,
-  createRecording: api.createRecording,
-  startCapture: api.startCapture,
-  stopCapture: api.stopCapture,
-  reviewRecording: api.reviewRecording,
-  finalizeRecording: api.finalizeRecording,
-  safetySetup: api.safetySetup,
-  confirmSafetySetup: api.confirmSafetySetup,
+  setup: api.setup, recordings: api.recordings, recording: api.recording, createRecording: api.createRecording,
+  startCapture: api.startCapture, stopCapture: api.stopCapture, reviewRecording: api.reviewRecording,
+  finalizeRecording: api.finalizeRecording, safetySetup: api.safetySetup, confirmSafetySetup: api.confirmSafetySetup,
 } }))
 vi.mock('../../api/runs', () => ({ runsApi: { cancel: api.cancel } }))
 
-class EventSourceStub {
-  onmessage: ((message: MessageEvent) => void) | null = null
-  onerror: (() => void) | null = null
-  close() { return undefined }
-}
+const action = { action_candidate_id: `action_${'1'.repeat(32)}`, display_name: '修改资源', risk_hint: 'WRITE' }
+const identity = { test_identity_id: `tid_${'2'.repeat(32)}`, label: '普通成员账号 A', role_display_name: '普通成员' }
+const target = { recording_id: `rec_${'3'.repeat(32)}`, project_id: 'p1', flow_id: 'flow-1', purpose: 'TARGET' as const, parent_recording_id: null, state: 'COMPLETED', action, test_identity: identity }
+const originalEventSource = globalThis.EventSource
 
-const action = { action_candidate_id: 'action_0123456789abcdef0123456789abcdef', display_name: '修改资源', risk_hint: 'WRITE' }
-const identity = { test_identity_id: 'test_identity_0123456789abcdef0123456789abcdef', label: '普通成员账号 A', role_display_name: '普通成员' }
+function safety(overrides: Record<string, unknown> = {}) {
+  return {
+    recording_id: target.recording_id, action_candidate_id: action.action_candidate_id, action_display_name: action.display_name,
+    target_method: 'PATCH', recording_identity: { identity_id: identity.test_identity_id, label: identity.label, role_display_name: identity.role_display_name, status: 'PREPARED' },
+    state_changing: true,
+    resource_candidates: [{ candidate_id: `trc_${'4'.repeat(32)}`, label: '当前项目', suggested_resource_type: '项目', actual_resource_id: 'project-1', consumer: 'PATH', location: 'path[1]' }],
+    observation_candidates: [], recovery_candidates: [], security_effect_candidates: [{ candidate_id: `sfc_${'5'.repeat(32)}`, kind: 'STATE_MUTATION', label: '更新项目内容', protected_fields: [] }],
+    business_result: '更新项目内容', observation_status: 'MISSING', recovery_status: 'MISSING', ready: false,
+    confirmed_setup: null, gaps: ['OBSERVATION_UNCONFIRMED', 'RECOVERY_UNCONFIRMED'], automatic_execution_allowed: false,
+    ...overrides,
+  }
+}
 
 describe('RecordingPage', () => {
   beforeEach(() => {
-    localStorage.clear()
-    vi.clearAllMocks()
-    vi.stubGlobal('EventSource', EventSourceStub)
-    api.setup.mockResolvedValue({ schema_version: '1', project_id: 'p1', action_options: [action], test_identity_options: [identity] })
+    localStorage.clear(); vi.clearAllMocks()
+    ;(globalThis as unknown as { EventSource: unknown }).EventSource = class {
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onerror: (() => void) | null = null
+      close() {}
+    }
+    api.setup.mockResolvedValue({ action_options: [action], test_identity_options: [identity] })
     api.recordings.mockResolvedValue([])
   })
-
   afterEach(() => {
     cleanup()
-    vi.unstubAllGlobals()
+    ;(globalThis as unknown as { EventSource: unknown }).EventSource = originalEventSource
   })
 
-  it('以已确认动作、测试身份和明确开始停止动作驱动录制状态', async () => {
-    api.createRecording.mockResolvedValue({
-      recording: { recording_id: 'rec-1', project_id: 'p1', state: 'CREATED' },
-      job: { job_id: 'job-1', state: 'QUEUED' },
-      action,
-      test_identity: identity,
-    })
-    api.recording.mockResolvedValue({
-      recording: { recording_id: 'rec-1', project_id: 'p1', state: 'STARTING' },
-      job: { job_id: 'job-1', state: 'RUNNING' },
-      draft: null,
-      capture_phase: 'AWAITING_CAPTURE',
-    })
-    api.startCapture.mockResolvedValue({
-      recording: { recording_id: 'rec-1', project_id: 'p1', state: 'STARTING' },
-      draft: null,
-      capture_phase: 'CAPTURE_STARTING',
-    })
-    api.stopCapture.mockResolvedValue({
-      recording: { recording_id: 'rec-1', project_id: 'p1', state: 'RECORDING' },
-      draft: null,
-      capture_phase: 'STOPPING',
-    })
-
+  it('用业务动作与已准备账号创建受控录制', async () => {
+    api.createRecording.mockResolvedValue({ recording: { ...target, state: 'CREATED' }, job: { job_id: 'job-1', state: 'QUEUED' }, action, test_identity: identity })
     render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} />)
-    const create = await screen.findByRole('button', { name: '打开浏览器并开始准备' })
-    await waitFor(() => expect(create).toBeEnabled())
-    fireEvent.click(create)
+    fireEvent.click(await screen.findByRole('button', { name: '打开浏览器并开始准备' }))
     await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', action.action_candidate_id, identity.test_identity_id, 600))
-
-    fireEvent.click(await screen.findByRole('button', { name: '刷新流程状态' }))
-    expect(await screen.findByText('录制「修改资源」')).toBeInTheDocument()
-    expect(await screen.findByText(/现在的浏览和登录不会写进业务流程/)).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: '开始记录这个操作' }))
-    await waitFor(() => expect(api.startCapture).toHaveBeenCalledWith('rec-1'))
-
-    api.recording.mockResolvedValue({
-      recording: { recording_id: 'rec-1', project_id: 'p1', state: 'RECORDING' },
-      job: { job_id: 'job-1', state: 'RUNNING' },
-      draft: null,
-      capture_phase: 'CAPTURING',
-    })
-    fireEvent.click(screen.getByRole('button', { name: '刷新流程状态' }))
-    expect(await screen.findByText(/完成后不要关闭浏览器/)).toBeInTheDocument()
-    const complete = await screen.findByRole('button', { name: '我已完成这个操作' })
-    expect(complete).toHaveClass('ant-btn-primary')
-    expect(complete).not.toHaveClass('ant-btn-dangerous')
-    fireEvent.click(complete)
-    await waitFor(() => expect(api.stopCapture).toHaveBeenCalledWith('rec-1'))
-    expect(await screen.findByText(/正在整理刚才的操作并寻找真正执行/)).toBeInTheDocument()
-    expect(api.cancel).not.toHaveBeenCalled()
-    expect(screen.getAllByText('正在整理流程')).toHaveLength(2)
+    expect(screen.queryByText(/Profile|JSONPath|TARGET|高级/)).not.toBeInTheDocument()
   })
 
-  it('用步骤卡片确认唯一目标和录制内资源位置，普通流程不出现 Profile 或 JSON 编辑器', async () => {
-    const draft = {
-      schema_version: '1',
-      recording_id: 'rec-2',
-      revision: 3,
-      flow_id: 'recorded-flow',
-      action_candidate_id: action.action_candidate_id,
-      recommended_target_step_id: 'step-2',
-      target_step_id: null,
-      resource_candidate_id: null,
-      steps: [
-        { id: 'step-1', name: '读取资源', method: 'GET', path: '/resources/resource-42', resource_candidates: [] },
-        { id: 'step-2', name: '修改资源', method: 'PATCH', path: '/resources/resource-42', resource_candidates: [{ candidate_id: 'resource-path-1', consumer: 'PATH', location: 'path[1]', label: '路径中的 resource-42' }] },
-      ],
-      variables: [],
-    }
-    const targetConfirmed = { ...draft, revision: 4, target_step_id: 'step-2' }
-    const resourceConfirmed = { ...targetConfirmed, revision: 5, resource_candidate_id: 'resource-path-1' }
-    localStorage.setItem('jiejian.resource', JSON.stringify({ recording_id: 'rec-2', project_id: 'p1', state: 'PENDING_REVIEW', capture_phase: 'FINISHED', draft, action, test_identity: identity, job: { job_id: 'job-2', state: 'SUCCEEDED' } }))
-    api.reviewRecording
-      .mockResolvedValueOnce({
-        recording: { recording_id: 'rec-2', project_id: 'p1', state: 'PENDING_REVIEW' },
-        draft: targetConfirmed,
-        capture_phase: 'FINISHED',
-      })
-      .mockResolvedValueOnce({
-        recording: { recording_id: 'rec-2', project_id: 'p1', state: 'PENDING_REVIEW' },
-        draft: resourceConfirmed,
-        capture_phase: 'FINISHED',
-      })
-    api.finalizeRecording.mockResolvedValue({
-      recording: { recording_id: 'rec-2', project_id: 'p1', state: 'COMPLETED' },
-      draft: resourceConfirmed,
-      action,
-      test_identity: identity,
-      flow_path: 'var/recordings/flow.json',
-    })
-    const safetySetup = {
-      recording_id: 'rec-2',
-      action_candidate_id: action.action_candidate_id,
-      action_display_name: '修改资源',
-      target_method: 'PATCH',
-      recording_identity: { identity_id: 'tid_0123456789abcdef0123456789abcdef', label: '普通成员账号 A', role_display_name: '普通成员', status: 'PREPARED' },
-      state_changing: true,
-      resource_candidates: [{ candidate_id: 'trc_0123456789abcdef0123456789abcdef', label: '录制中已确认的业务资源', suggested_resource_type: '文档', actual_resource_id: 'resource-42', consumer: 'PATH', location: 'path[1]' }],
-      observation_candidates: [
-        { candidate_id: 'obc_0123456789abcdef0123456789abcdef', label: '由资源所有者读取并核对', source_step_id: 'step-3', method: 'GET', path_template: '/resources/{case_resource_id}', trusted_test_identity_id: 'tid_0123456789abcdef0123456789abcdef' },
-      ],
-      recovery_candidates: [{ candidate_id: 'rcc_0123456789abcdef0123456789abcdef', label: '使用录制中的 PATCH 恢复同一资源', source_step_id: 'step-4', method: 'PATCH', path_template: '/resources/{case_resource_id}', json_body_template: { value: 'original' }, test_identity_id: 'tid_0123456789abcdef0123456789abcdef' }],
-      security_effect_candidates: [{ candidate_id: 'sfc_0123456789abcdef0123456789abcdef', kind: 'STATE_MUTATION', label: '修改受保护资源状态', protected_fields: [] }],
-      confirmed_setup: { resource: { resource_id: 'trs_0123456789abcdef0123456789abcdef', logical_name: '普通用户A 的测试资源', resource_type: '文档', actual_resource_id: 'resource-42', owner_test_identity_id: 'tid_0123456789abcdef0123456789abcdef' }, observation: null, recovery: null, effect: null },
-      gaps: ['TEST_RESOURCE_UNCONFIRMED', 'OBSERVATION_UNCONFIRMED', 'RECOVERY_UNCONFIRMED', 'SECURITY_EFFECT_UNCONFIRMED'],
-      automatic_execution_allowed: false,
-    }
-    api.recordings.mockResolvedValue([{ recording_id: 'rec-2', project_id: 'p1', state: 'PENDING_REVIEW' }])
-    api.recording.mockResolvedValue({
-      recording: { recording_id: 'rec-2', project_id: 'p1', state: 'PENDING_REVIEW' },
-      draft,
-      capture_phase: 'FINISHED',
-      action,
-      test_identity: identity,
-      job: { job_id: 'job-2', state: 'SUCCEEDED' },
-    })
-    api.safetySetup.mockResolvedValue(safetySetup)
-    api.confirmSafetySetup.mockResolvedValue({
-      ...safetySetup,
-      confirmed_setup: { resource: { resource_id: 'trs_0123456789abcdef0123456789abcdef', logical_name: '普通成员账号 A 的测试资源', resource_type: '文档', actual_resource_id: 'resource-42', owner_test_identity_id: 'tid_0123456789abcdef0123456789abcdef' }, observation: { source_step_id: 'step-3', path_template: '/resources/{case_resource_id}' }, recovery: { kind: 'RECORDED_REQUEST', source_step_id: 'step-4', path_template: '/resources/{case_resource_id}' }, effect: { kind: 'STATE_MUTATION' } },
-      gaps: [],
-      automatic_execution_allowed: true,
-    })
-
-    render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
-    expect(await screen.findByText('步骤 1：读取资源')).toBeInTheDocument()
-    expect(await screen.findByText(/确认哪一步真正完成了/)).toBeInTheDocument()
-    expect(screen.queryByText(/^TARGET$/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '与下一步合并' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: '重命名' })).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: /删除步骤/ })).toHaveLength(2)
-    expect(screen.queryByText('审阅命令 JSON')).not.toBeInTheDocument()
-    expect(screen.queryByDisplayValue(/RENAME_STEP/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/执行配置/)).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '将“修改资源”设为主要步骤' }))
-    await waitFor(() => expect(api.reviewRecording).toHaveBeenCalledWith('rec-2', expect.objectContaining({
-      schema_version: '1',
-      operation: 'CONFIRM_TARGET_STEP',
-      step_id: 'step-2',
-    })))
-    fireEvent.click(await screen.findByRole('radio', { name: '路径中的 resource-42' }))
-    await waitFor(() => expect(api.reviewRecording).toHaveBeenCalledWith('rec-2', expect.objectContaining({
-      schema_version: '1',
-      operation: 'CONFIRM_RESOURCE_SLOT',
-      candidate_id: 'resource-path-1',
-    })))
-    const finalize = await screen.findByRole('button', { name: '确认并保存流程' })
-    expect(finalize).toBeEnabled()
-    fireEvent.click(finalize)
-    await waitFor(() => expect(api.finalizeRecording).toHaveBeenCalledWith('rec-2'))
-    expect(await screen.findByText('流程已经保存。请继续确认测试资源、真实观察和安全恢复。')).toBeInTheDocument()
-    expect(screen.getAllByText('修改资源')).toHaveLength(2)
-    fireEvent.click(screen.getByText('高级：技术请求'))
-    expect(document.body).toHaveTextContent('PATCH /resources/{测试资源}')
-    expect(screen.getAllByText('普通成员账号 A（普通成员）')).toHaveLength(2)
-    expect(await screen.findByText('当前动作还不能安全自动检查')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '继续确认权限与检查' })).not.toBeInTheDocument()
-    const observationExplanation = screen.getByText('写、改、删动作不能只看操作页面自己的提示或接口响应。')
-    const observationControl = screen.getByRole('combobox', { name: '选择真实观察方式' })
-    expect(observationExplanation.compareDocumentPosition(observationControl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(document.querySelectorAll('.action-safety-card .ant-card')).toHaveLength(0)
-    fireEvent.mouseDown(observationControl)
-    fireEvent.click(await screen.findByTitle(safetySetup.observation_candidates[0].label))
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '选择安全恢复方式' }))
-    fireEvent.click(await screen.findByTitle(safetySetup.recovery_candidates[0].label))
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '选择安全影响' }))
-    fireEvent.click(await screen.findByTitle(safetySetup.security_effect_candidates[0].label))
-    fireEvent.click(screen.getByRole('button', { name: '确认测试资源、观察与恢复' }))
-    await waitFor(() => expect(api.confirmSafetySetup).toHaveBeenCalledWith('rec-2', expect.objectContaining({
-      owner_test_identity_id: 'tid_0123456789abcdef0123456789abcdef',
-      observation_candidate_id: safetySetup.observation_candidates[0].candidate_id,
-      recovery_candidate_id: safetySetup.recovery_candidates[0].candidate_id,
-      security_effect_candidate_id: safetySetup.security_effect_candidates[0].candidate_id,
-    })))
-    expect(await screen.findByText('资源、独立观察、安全恢复和真实影响已经确认')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '继续确认权限与检查' })).toBeInTheDocument()
-  })
-
-  it('忽略同项目的陈旧浏览器录制定位，只恢复服务端当前 Recording', async () => {
-    const onError = vi.fn()
-    localStorage.setItem('jiejian.resource', JSON.stringify({
-      recording_id: 'rec-stale',
-      project_id: 'p1',
-      state: 'COMPLETED',
-    }))
-    const current = {
-      recording_id: 'rec-current',
-      project_id: 'p1',
-      state: 'COMPLETED',
-    }
-    api.recordings.mockResolvedValue([current])
-    api.recording.mockResolvedValue({ recording: current, draft: null, capture_phase: 'FINISHED' })
-    api.safetySetup.mockResolvedValue({
-      recording_id: 'rec-current',
-      action_candidate_id: action.action_candidate_id,
-      action_display_name: action.display_name,
-      target_method: 'PATCH',
-      recording_identity: { identity_id: identity.test_identity_id, label: identity.label, role_display_name: identity.role_display_name, status: 'PREPARED' },
-      state_changing: true,
-      resource_candidates: [],
-      observation_candidates: [],
-      recovery_candidates: [],
-      security_effect_candidates: [],
-      confirmed_setup: null,
-      gaps: [],
-      automatic_execution_allowed: false,
-    })
-
-    render(<RecordingPage project={{ project_id: 'p1' }} onError={onError} onBack={vi.fn()} />)
-
-    await waitFor(() => expect(api.recording).toHaveBeenCalledWith('rec-current'))
-    await waitFor(() => expect(api.safetySetup).toHaveBeenCalledWith('rec-current'))
-    expect(api.recording).not.toHaveBeenCalledWith('rec-stale')
-    expect(api.safetySetup).not.toHaveBeenCalledWith('rec-stale')
-    expect(onError).not.toHaveBeenCalled()
-  })
-
-  it('刷新流程状态只读取当前录制事实，不启动或控制浏览器', async () => {
+  it('只展示业务歧义选择，不提供重命名、删除、合并或技术路径编辑', async () => {
+    const draft = { recording_id: target.recording_id, flow_id: 'flow-1', action_candidate_id: action.action_candidate_id, revision: 1, recommended_target_step_id: 'step-2', target_step_id: null, resource_candidate_id: null, variables: [], steps: [
+      { id: 'step-1', name: '提交修改', method: 'PATCH', path: '/projects/project-1', resource_candidates: [{ candidate_id: 'resource-1111111111111111', consumer: 'PATH', location: 'path[1]', label: 'project-1，看起来是当前项目' }] },
+      { id: 'step-2', name: '确认更新', method: 'POST', path: '/projects/project-1/confirm', resource_candidates: [] },
+    ] }
+    api.recordings.mockResolvedValue([{ ...target, state: 'PENDING_REVIEW' }])
+    api.recording.mockResolvedValue({ recording: { ...target, state: 'PENDING_REVIEW' }, draft, capture_phase: 'FINISHED', action, test_identity: identity })
     render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} />)
-    expect(await screen.findByRole('button', { name: '刷新流程状态' })).toBeInTheDocument()
-    api.setup.mockClear()
-    api.recordings.mockClear()
+    expect(await screen.findByText(/哪一步真正完成了/)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '提交修改' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /重命名|删除|合并/ })).not.toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('/projects/project-1')
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: '刷新流程状态' }))
+  it('缺少观察和恢复时创建同动作、同账号的补录', async () => {
+    const draft = { recording_id: target.recording_id, flow_id: 'flow-1', action_candidate_id: action.action_candidate_id, revision: 1, target_step_id: 'step-1', resource_candidate_id: 'resource-1111111111111111', steps: [], variables: [] }
+    api.recordings.mockResolvedValue([target])
+    api.recording.mockResolvedValue({ recording: target, draft, capture_phase: 'FINISHED', action, test_identity: identity })
+    api.safetySetup.mockResolvedValue(safety())
+    api.createRecording.mockResolvedValue({ recording: { ...target, recording_id: `rec_${'6'.repeat(32)}`, purpose: 'OBSERVATION', parent_recording_id: target.recording_id, state: 'CREATED' }, action, test_identity: identity, job: { job_id: 'job-2', state: 'QUEUED' } })
+    render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: '补录验证操作' }))
+    await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', action.action_candidate_id, identity.test_identity_id, 600, 'OBSERVATION', target.recording_id))
+  })
 
-    await waitFor(() => expect(api.setup).toHaveBeenCalledOnce())
-    expect(api.recordings).toHaveBeenCalledOnce()
-    expect(api.createRecording).not.toHaveBeenCalled()
-    expect(api.startCapture).not.toHaveBeenCalled()
-    expect(api.stopCapture).not.toHaveBeenCalled()
+  it('唯一业务事实由后端自动采用', async () => {
+    const draft = { recording_id: target.recording_id, flow_id: 'flow-1', action_candidate_id: action.action_candidate_id, revision: 1, target_step_id: 'step-1', resource_candidate_id: 'resource-1111111111111111', steps: [], variables: [] }
+    const complete = safety({
+      observation_candidates: [{ candidate_id: `obc_${'7'.repeat(32)}`, label: '独立读取并核对业务结果' }],
+      recovery_candidates: [{ candidate_id: `rcc_${'8'.repeat(32)}`, label: '恢复测试现场' }],
+    })
+    api.recordings.mockResolvedValue([target]); api.recording.mockResolvedValue({ recording: target, draft, action, test_identity: identity }); api.safetySetup.mockResolvedValue(complete)
+    api.confirmSafetySetup.mockResolvedValue({ ...complete, ready: true, automatic_execution_allowed: true, confirmed_setup: { resource: { resource_id: 'r', logical_name: '项目', resource_type: '项目', actual_resource_id: 'project-1', owner_test_identity_id: identity.test_identity_id } } })
+    render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} />)
+    await waitFor(() => expect(api.confirmSafetySetup).toHaveBeenCalledWith(target.recording_id, {}))
   })
 })

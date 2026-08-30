@@ -27,7 +27,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict
 
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingState, transition_recording_state
+from product.backend.core.recording import RecordingPurpose, RecordingState, transition_recording_state
 from product.protocols.recording_flow import Flow
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import FlowDraftReviewCommand, FlowDraft, canonical_flow_draft_json_bytes
@@ -67,8 +67,8 @@ class RecordingFinalizationView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     recording: RecordingRecord
-    flow: Flow
-    flow_path: str
+    flow: Flow | None = None
+    flow_path: str | None = None
 
 
 class RecordingLifecycle:
@@ -223,7 +223,7 @@ class RecordingLifecycle:
         var_dir: Path,
         now_us: int,
     ) -> RecordingFinalizationView:
-        """编译已明确确认的最新 revision，并在状态提交前原子发布 Flow。"""
+        """目标录制发布 Flow；补录只完成来源事实，不创建第二条业务 Flow。"""
 
         # --- 阶段：读取并编译明确记录的最新草稿 revision ---
         with self._uow_factory() as work:
@@ -242,6 +242,23 @@ class RecordingLifecycle:
                     "录制当前状态不允许最终化",
                 )
             draft = draft_record.draft
+            if recording.purpose is not RecordingPurpose.TARGET:
+                if recording.state is RecordingState.PENDING_REVIEW:
+                    completed = transition_recording_state(
+                        recording.to_domain(),
+                        RecordingState.COMPLETED,
+                        operator="LOCAL_GUI",
+                        occurred_at_us=now_us,
+                        reason_code="REVIEW_COMPLETED",
+                    )
+                    recording = RecordingRecord.from_domain(
+                        completed,
+                        flow_id=recording.flow_id,
+                        browser_events=recording.browser_events,
+                    )
+                    work.recordings.replace(recording)
+                    work.commit()
+                return RecordingFinalizationView(recording=recording)
             flow = self._compiler.compile(draft)
             path = self.flow_path(var_dir, recording)
             encoded = _canonical_flow_bytes(flow)

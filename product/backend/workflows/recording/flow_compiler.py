@@ -2,16 +2,16 @@
 # Recording Flow 编译
 #
 # 定位
-#   已确认 FlowDraft 到可执行 Flow 与 Web 执行绑定的结构化编译边界
+#   已确认 FlowDraft 到可执行 Flow 的结构化编译边界
 #
 # 职责
-#   编译完整 Flow｜投影已确认资源与变量｜生成 Web 执行绑定
+#   编译完整 Flow｜投影已确认资源与变量
 #
 # 边界
 #   不修改传入草稿、不执行 Flow，也不编译未确认值或具体差分身份/资源。
 #
 # 调用链
-#   RecordingLifecycle / recording contracts → FlowDraftCompiler → Web execution binding
+#   RecordingLifecycle → FlowDraftCompiler → SecuritySetupCompiler
 # =============================================================================
 
 from __future__ import annotations
@@ -26,18 +26,13 @@ from pydantic import ValidationError
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.recording_flow import Flow, FlowStep, FlowVariableSource
 from product.protocols.flow_draft import FlowDraft, FlowDraftResourceCandidate, FlowDraftVariableStatus
-from product.protocols.web.profile import WebExecutionProfile
-from product.protocols.web.target import WebTargetDefinition
 from product.protocols.web.workflow import (
-    CASE_SUBJECT_IDENTITY,
     EmptyBody,
     HttpOutcomeClassifier,
     HttpParameter,
     HttpPredicate,
     HttpPredicateKind,
     HttpRequestTemplate,
-    HttpWorkflowBinding,
-    HttpWorkflowStep,
     JsonBody,
     ResponseExtractor,
     ResponseExtractorKind,
@@ -322,45 +317,3 @@ class FlowDraftCompiler:
         if isinstance(value, list):
             return [FlowDraftCompiler._drop_sensitive_json(item) for item in value]
         return value
-
-
-
-def compile_flow_bindings(
-    flow: Flow,
-    profile: WebExecutionProfile,
-) -> tuple[WebTargetDefinition, tuple[HttpWorkflowBinding, ...]]:
-    """把已确认 Flow 投影为当前 Profile 可接受的 Web 执行绑定。"""
-
-    matches = tuple(
-        binding
-        for binding in profile.workflow_bindings
-        if binding.action_id == flow.action_candidate_id
-    )
-    if len(matches) != 1:
-        raise JiejianError(
-            ErrorCode.RECORD_DRAFT_INVALID,
-            "Profile 必须为当前动作提供且只提供一个执行绑定",
-        )
-    base = matches[0]
-    steps = tuple(
-        HttpWorkflowStep(
-            id=step.id,
-            purpose=step.purpose,
-            identity_id=CASE_SUBJECT_IDENTITY,
-            request_template=step.request_template,
-            classifier=step.classifier,
-            depends_on_step_ids=step.depends_on_step_ids,
-        )
-        for step in flow.steps
-    )
-    compiled = HttpWorkflowBinding.model_validate(
-        {
-            **base.model_dump(mode="python"),
-            "source_flow_id": flow.id,
-            "steps": steps,
-            "target_step_id": flow.target_step_id,
-            "workflow_fingerprint": None,
-        },
-        strict=True,
-    )
-    return profile.target, (compiled,)

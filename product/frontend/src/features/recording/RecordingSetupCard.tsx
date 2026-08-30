@@ -1,8 +1,7 @@
 /* 录制准备卡：选择已确认业务动作、已准备测试身份和有界录制时长。 */
 
-import { Alert, Card, InputNumber, Select, Space, Typography } from 'antd'
+import { Alert, Card, Select, Space, Typography } from 'antd'
 import type { RecordingActionDto, RecordingTestIdentityDto } from '../../api/recordings'
-import { AdvancedDetails } from '../../components/AdvancedDetails'
 
 export function RecordingSetupCard({ actions, identities, actionId, testIdentityId, duration, disabled, onActionChange, onIdentityChange, onDurationChange }: {
   actions: RecordingActionDto[]
@@ -21,7 +20,6 @@ export function RecordingSetupCard({ actions, identities, actionId, testIdentity
       : <div className="recording-setup-grid">
         <label><Typography.Text strong>要录制的业务动作</Typography.Text><Select aria-label="选择业务动作" value={actionId} disabled={disabled} onChange={onActionChange} options={actions.map((item) => ({ value: item.action_candidate_id, label: item.display_name }))} /></label>
         <label><Typography.Text strong>用于录制的测试账号</Typography.Text><Select aria-label="选择测试账号" placeholder="选择一个已准备账号" value={testIdentityId} disabled={disabled} onChange={onIdentityChange} options={identities.map((item) => ({ value: item.test_identity_id, label: <Space><Typography.Text strong>{item.label}</Typography.Text><Typography.Text type="secondary">{item.role_display_name}</Typography.Text></Space> }))} /></label>
-        <AdvancedDetails label="高级：录制时间限制"><Space><InputNumber aria-label="最长录制时间（秒）" min={60} max={3600} value={duration} disabled={disabled} onChange={(value) => onDurationChange(value ?? 600)} /><Typography.Text type="secondary">秒，超时后自动安全停止</Typography.Text></Space></AdvancedDetails>
       </div>}
   </Card>
 }

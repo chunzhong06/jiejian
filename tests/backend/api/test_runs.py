@@ -44,14 +44,18 @@ from tests.fixtures.control_plane import (
     create_app,
 )
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
-from tests.fixtures.runner import write_web_test_profile
+from tests.fixtures.runner import (
+    register_test_generated_profile,
+    seed_project_from_generated_profile,
+    write_web_test_profile,
+)
 
 def _write_profile(tmp_path: Path, *, port: int | None = None) -> Path:
     path, _ = write_web_test_profile(tmp_path, port=port or 8765)
     return path
 
 def _register_project(app, profile_path: Path) -> dict[str, object]:
-    return app.state.context.projects.register(profile_path)[0].model_dump(mode="json")
+    return seed_project_from_generated_profile(app, profile_path)
 
 def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionContract:
     contract = PermissionContract.model_validate_json(profile_path.with_name("contract.json").read_text(encoding="utf-8"), strict=True)
@@ -72,7 +76,7 @@ def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionCo
 def _register_active_profile(app, client: TestClient, profile_path: Path) -> tuple[dict[str, object], PermissionContract, dict[str, object]]:
     project = _register_project(app, profile_path)
     contract = _activate_contract(app, str(project["project_id"]), profile_path)
-    profile = app.state.context.execution.register(profile_path)
+    profile = register_test_generated_profile(app, profile_path)
     return project, contract, profile.model_dump(mode="json")
 
 def _set_governed_binding(app, project_id: str, contract_id: str | None, version: int | None) -> None:

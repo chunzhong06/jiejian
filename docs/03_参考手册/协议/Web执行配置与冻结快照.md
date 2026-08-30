@@ -24,7 +24,7 @@ Profile 包含 project、Business/Auth/Observer scope、`WebExecutionIdentity`�
 
 登记时必须确认 ACTIVE Contract、项目绑定、target scope、bindings、Observer 和 fingerprint。普通生成配置还必须匹配当前 ApplicationUnderstanding、编译时选定的 TestIdentity 代表、Flow、测试安全事实与组级 PermissionIntent 的 authority fingerprint；代表补充或替换不会改变 PermissionIntent，但会产生新的生成配置身份。任一配置输入变化后，即使旧文件仍存在也拒绝构造或提交请求。Profile 变化、Contract 漂移、plan/binding hash 不一致或未知结构默认拒绝。
 
-提交时冻结完整 Contract、Coverage/PermissionMutationPlan、DifferentialExperimentPlan、workflow/effect bindings、目标范围、预算和身份，形成 `WebExecutionSnapshot`；同时把当前项目 `policy_epoch`、策略 fingerprint 以及每条 ACTIVE revision 的 `intent_id/revision/intent_hash/binding_fingerprint` 固定为 `PermissionPolicySnapshot`，共同写入 `PersistedExecutionRequest`。执行期间不重新读取当前 Profile、Ledger 或治理表。
+提交时冻结完整 Contract、Coverage/PermissionMutationPlan、DifferentialExperimentPlan、workflow/effect bindings、目标范围、预算和身份，形成 `WebExecutionSnapshot`；同时把当前项目 `policy_epoch`、策略 fingerprint 以及每条 ACTIVE revision 的 `intent_id/revision/intent_hash/binding_fingerprint` 固定为 `PermissionPolicySnapshot`，共同写入 `PersistedExecutionRequest`。代码变化重验再加入可选 `ChangeVerificationContext`，只保存 `change_id`、影响指纹、排序后的必需权限 ID 与源码指纹，不保存文件清单或 diff。执行期间不重新读取当前 Profile、Ledger、变化聚合或治理表。
 
 ## 生命周期与数据流
 
@@ -32,11 +32,12 @@ Profile 包含 project、Business/Auth/Observer scope、`WebExecutionIdentity`�
 WebExecutionProfile 校验/登记
   → Contract/plan/binding fingerprint
   → WebExecutionSnapshot + PermissionPolicySnapshot
+  → 可选 ChangeVerificationContext
   → PersistedExecutionRequest
   → Worker/Runner → Web Target Runtime
 ```
 
-Profile 是配置事实，快照是执行事实；更新 Profile 不改变历史 Run 或已发布 Evidence。
+Profile 是配置事实，快照是执行事实；更新 Profile、代码变化记录或 live 权限映射不改变历史 Run 或已发布 Evidence。变化评估给出的必需权限集合不能裁剪 Snapshot 中已经编译的完整 Coverage。
 
 GUI 读取执行配置时只使用专用摘要投影：返回动作对应的目标步骤、SETUP/CLEANUP 数量、基线完整性模式，以及效果绑定的必需/佐证通道与闭合策略。该投影不返回身份凭据、Cookie、Authorization、secret ref 或完整请求模板，也不替代 Profile 和冻结快照本身。
 

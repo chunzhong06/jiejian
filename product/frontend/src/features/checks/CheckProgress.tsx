@@ -1,7 +1,7 @@
 /* 当前检查的真实过程状态与事件续读；取消等副作用由页面底部统一动作区负责。 */
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { Alert, Button, Card, Collapse, List, Progress, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Card, List, Progress, Space, Spin, Tag, Typography } from 'antd'
 import { runsApi, type JobEventDto, type RunDto, type RunnerProgressEventDto } from '../../api/runs'
 import type { CheckPreviewActionDto } from '../../api/checks'
 import { ApiError } from '../../api/http'
@@ -14,7 +14,6 @@ export function CheckProgress({ run, actions = [], onRefresh, onError, onNavigat
   const jobId = run?.job?.job_id ? String(run.job.job_id) : undefined
   const terminal = terminalStates.has(String(run?.lifecycle)) || ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(String(run?.job?.state))
   const running = String(run?.lifecycle) === 'RUNNING' && String(run?.job?.state) === 'RUNNING'
-  const [event, setEvent] = useState<JobEventDto | null>(null)
   const [progressEvents, setProgressEvents] = useState<RunnerProgressEventDto[]>([])
   useEffect(() => {
     if (!jobId || terminal || typeof EventSource === 'undefined') return
@@ -23,7 +22,6 @@ export function CheckProgress({ run, actions = [], onRefresh, onError, onNavigat
     source.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data) as JobEventDto
-        setEvent(payload)
         const nextCursor = payload.sequence || Number(event.lastEventId)
         if (nextCursor) browserState.writeJobCursor(jobId, nextCursor)
       } catch { /* 事件正文不是页面判断依据，权威状态仍由刷新接口读取。 */ }
@@ -95,15 +93,8 @@ export function CheckProgress({ run, actions = [], onRefresh, onError, onNavigat
           <Typography.Text>{item.diagnosis?.short_message ?? item.message ?? '任务未能完整结束。'}</Typography.Text>
           {item.diagnosis?.cleanup_warnings.map((warning) => <Typography.Text key={warning} type="warning">{warning}</Typography.Text>)}
           {item.diagnosis?.route && onNavigate && <Button onClick={() => onNavigate(item.diagnosis!.route)}>前往处理页面</Button>}
-          <Collapse ghost items={[{ key: 'execution-error-details', label: '高级：执行错误详情', children: <Space direction="vertical">
-            {item.message && <Typography.Text>{item.message}</Typography.Text>}
-            {item.log_path && <Typography.Text>日志：<Typography.Text copyable>{item.log_path}</Typography.Text></Typography.Text>}
-            {item.recovery && <Typography.Text>下一步：{item.recovery}</Typography.Text>}
-            {item.copy_text && <Typography.Paragraph copyable={{ text: item.copy_text }} code>复制诊断信息</Typography.Paragraph>}
-          </Space> }]} />
         </Space>} />
       : <Alert key={`error-${index}`} type="error" showIcon message="检查执行失败" description={String(item)} />)}
-    <Collapse ghost items={[{ key: 'progress-details', label: '高级：运行详情', children: <Space direction="vertical"><Typography.Text>事件序列：{String(event?.sequence ?? run.job?.event_sequence ?? run.event_sequence ?? '未提供')}</Typography.Text><Typography.Text>事件类型：{String(event?.event_type ?? '未提供')}</Typography.Text><Typography.Text>任务类型：{String(run.job?.job_type ?? '未提供')}</Typography.Text><Typography.Text>任务标识：{jobId ?? '未提供'}</Typography.Text></Space> }]} />
   </Cardless>
 }
 

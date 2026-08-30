@@ -62,6 +62,7 @@ class RecordingRow(Base):
             name="json_size_bounds",
         ),
         Index("ix_recordings_project_created", "project_id", "created_at_us"),
+        Index("ix_recordings_parent_purpose", "parent_recording_id", "purpose"),
         Index("ix_recordings_state_updated", "state", "updated_at_us"),
     )
 
@@ -70,6 +71,8 @@ class RecordingRow(Base):
         ForeignKey("projects.project_id", ondelete="RESTRICT"),
         nullable=False,
     )
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    parent_recording_id: Mapped[str | None] = mapped_column(String(36))
     flow_id: Mapped[str] = mapped_column(String(64), nullable=False)
     state: Mapped[str] = mapped_column(String(32), nullable=False)
     created_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -152,7 +155,7 @@ from product.backend.core.identifiers import EVIDENCE_ID_PATTERN, JOB_ID_PATTERN
 from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
 from product.backend.core.lifecycle import ContractStatus
 from product.backend.core.verification.permissions import PermissionContract
-from product.backend.core.recording import Recording, RecordingState, RecordingStateEvent, RecordingTerminalState
+from product.backend.core.recording import Recording, RecordingPurpose, RecordingState, RecordingStateEvent, RecordingTerminalState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import STAGED_ARTIFACT_MAX_BYTES, FlowDraft, RecordingEventKind, RecordingEvent, RecordingHeader, StagedArtifact, canonical_flow_draft_json_bytes
 from product.backend.infra.storage.results.evidence import EvidenceIndexRow
@@ -164,6 +167,8 @@ from product.backend.infra.storage.base import MetadataValue, StorageRecord, _ME
 class RecordingRecord(StorageRecord):
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    purpose: RecordingPurpose = RecordingPurpose.TARGET
+    parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
     state: RecordingState
     created_at_us: int = Field(ge=0)
@@ -189,6 +194,8 @@ class RecordingRecord(StorageRecord):
         return Recording(
             recording_id=self.recording_id,
             project_id=self.project_id,
+            purpose=self.purpose,
+            parent_recording_id=self.parent_recording_id,
             state=self.state,
             created_at_us=self.created_at_us,
             updated_at_us=self.updated_at_us,
@@ -210,6 +217,8 @@ class RecordingRecord(StorageRecord):
         return cls(
             recording_id=recording.recording_id,
             project_id=recording.project_id,
+            purpose=recording.purpose,
+            parent_recording_id=recording.parent_recording_id,
             flow_id=flow_id,
             state=recording.state,
             created_at_us=recording.created_at_us,
@@ -292,6 +301,8 @@ class RecordingRepository:
             recording_id=record.recording_id,
             project_id=record.project_id,
             flow_id=record.flow_id,
+            purpose=record.purpose.value,
+            parent_recording_id=record.parent_recording_id,
             **self._row_values(record),
         )
     @staticmethod
@@ -322,6 +333,8 @@ class RecordingRepository:
         return RecordingRecord(
             recording_id=row.recording_id,
             project_id=row.project_id,
+            purpose=RecordingPurpose(row.purpose),
+            parent_recording_id=row.parent_recording_id,
             flow_id=row.flow_id,
             state=RecordingState(row.state),
             created_at_us=row.created_at_us,

@@ -544,12 +544,50 @@ def build_mcp_control(
     def check_prepare(
         ctx: Context,
         project_id: str,
+        change_id: str | None = None,
     ) -> dict[str, Any]:
-        """编译已有准备事实，并返回同一检查预览。"""
+        """编译已有准备事实；可按服务端变化评估形成重验计划。"""
 
         require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
-        _invoke(lambda: context.security_setup.compile(project_id))
-        return _json(_invoke(lambda: context.checks.preview(project_id)))
+        return _json(
+            _invoke(lambda: context.checks.prepare(project_id, change_id=change_id))
+        )
+
+    @server.tool(name="jiejian_change_submit", structured_output=True)
+    def change_submit(
+        ctx: Context,
+        project_id: str,
+        reason: str,
+        claimed_paths: tuple[str, ...] = (),
+    ) -> dict[str, Any]:
+        """声明 Agent 已完成变更；真实文件变化和权限影响由服务端重算。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
+        manifest, _, _ = _invoke(
+            lambda: context.source_changes.submit(
+                project_id,
+                reason=reason,
+                claimed_paths=claimed_paths,
+                submitted_by="MCP Agent",
+            )
+        )
+        return _json(_invoke(lambda: context.source_changes.view(manifest.change_id)))
+
+    @server.tool(name="jiejian_change_show", structured_output=True)
+    def change_show(
+        ctx: Context,
+        project_id: str,
+        change_id: str,
+    ) -> dict[str, Any]:
+        """读取代码变化的有界影响摘要，不返回文件清单或源码。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        view = _invoke(lambda: context.source_changes.view(change_id))
+        if view.project_id != project_id:
+            raise _as_mcp_error(
+                JiejianError(ErrorCode.PROJECT_NOT_FOUND, "代码变化不属于当前应用")
+            )
+        return _json(view)
 
     @server.tool(name="jiejian_identity_prepare_start", structured_output=True)
     def identity_prepare_start(
@@ -667,6 +705,7 @@ def build_mcp_control(
         ctx: Context,
         project_id: str,
         idempotency_key: str,
+        change_id: str | None = None,
     ) -> dict[str, Any]:
         """提交当前已准备的检查，不允许指定任意 Profile。"""
 
@@ -675,6 +714,7 @@ def build_mcp_control(
             lambda: context.checks.submit(
                 project_id,
                 idempotency_key=idempotency_key,
+                change_id=change_id,
             )
         )
         return {

@@ -47,7 +47,7 @@ MCP 没有 approve/reject，也没有 permission_set 或 candidate_decide。无�
 
 ## Run 权限策略快照
 
-提交 Run 前把 `project_id`、`policy_epoch`、`policy_fingerprint` 以及每条 ACTIVE revision 的 `intent_id/revision/intent_hash/binding_fingerprint` 冻结进 `PermissionPolicySnapshot` 和持久执行请求。ResultPresentation、History 和 report.json 只从该冻结请求复制摘要，不读取 live Ledger 改写旧结果。普通页面显示“本次检查依据权限版本 X”，内部指纹和 intent 标识只进入高级信息。
+提交 Run 前把 `project_id`、`policy_epoch`、`policy_fingerprint` 以及每条 ACTIVE revision 的 `intent_id/revision/intent_hash/binding_fingerprint` 冻结进 `PermissionPolicySnapshot` 和持久执行请求。代码变化重验还冻结独立 `ChangeVerificationContext`，但不能用它裁剪完整 Coverage。ResultPresentation、History 和 report.json 只从该冻结请求复制摘要，不读取 live Ledger 改写旧结果。普通页面显示“本次检查依据权限版本 X”和可选重验数量，不显示内部指纹或 intent 标识。
 
 ## 怎么验证
 
@@ -64,6 +64,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps
 
 - [安全意图与验证架构](../../01_系统地图/权限验证与结果.md)
 - [应用接入与检查主流程](../../01_系统地图/应用接入与检查主流程.md)
+- [修改 Agent 变更影响](修改Agent变更影响.md)
 - [权限契约与执行计划](../../03_参考手册/协议/权限契约与执行计划.md)
 - [控制面与 Machine 输出协议](../../03_参考手册/协议/控制面与Machine输出协议.md)
 - [验证与测试](../../04_工程约束/验证与测试.md)

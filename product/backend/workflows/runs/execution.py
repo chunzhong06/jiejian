@@ -1,17 +1,17 @@
 # =============================================================================
-# Execution Profile 工作流
+# 内部生成执行输入工作流
 #
 # 定位
-# 项目治理配置、冻结执行请求与 Job 提交之间的唯一应用服务。
+# SecuritySetupCompiler 生成资产、冻结执行请求与 Job 提交之间的唯一应用服务。
 #
 # 职责
-# 校验 Profile 漂移｜解析 ACTIVE Contract｜编译覆盖计划｜冻结并提交执行请求
+# 登记 generated-only 执行输入｜解析 ACTIVE Contract｜编译覆盖计划｜冻结并提交执行请求
 #
 # 边界
 # 不在入口进程执行目标；秘密只用于提交前完整性检查，并通过受控环境交给 Worker。
 #
 # 调用链
-# CLI / API / Onboarding → ExecutionWorkflow → RunSubmission / WorkerDispatcher
+# SecuritySetupCompiler / API → ExecutionWorkflow → RunSubmission
 # =============================================================================
 
 from __future__ import annotations
@@ -27,24 +27,23 @@ from product.backend.core.contracts.execution_binding import resolve_execution_c
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.verification.permissions.coverage import build_permission_coverage_plan
 from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, PersistedExecutionRequest, required_secret_names
-from product.backend.infra.runtime.jobs.dispatch import WorkerDispatcher
 from product.backend.infra.runtime.jobs.models import JobSubmissionResult
 from product.backend.infra.storage import ExecutionProfileRecord, StorageUnitOfWork
 from product.backend.workflows.runs.submission import RunSubmission, SubmitExecution
 from product.protocols import (
     ExecutionBudget,
-    HttpWorkflowBinding,
     ObserverRequirementKind,
-    RunnerResult,
     WebExecutionProfile,
-    WebTargetDefinition,
     required_web_secret_refs,
 )
 from product.protocols.web.profile import (
     WEB_EXECUTION_PROFILE_MAX_BYTES,
     parse_web_execution_profile,
 )
-from product.protocols.execution_request import PermissionPolicySnapshot
+from product.protocols.execution_request import (
+    ChangeVerificationContext,
+    PermissionPolicySnapshot,
+)
 
 
 class ExecutionWorkflow:
@@ -57,14 +56,12 @@ class ExecutionWorkflow:
         submission: RunSubmission,
         *,
         environment_provider: Callable[[tuple[str, ...]], Mapping[str, str]],
-        var_dir: Path | None = None,
         clock_us: Callable[[], int] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._request_store = request_store
         self._submission = submission
         self._environment_provider = environment_provider
-        self._var_dir = var_dir.resolve() if var_dir is not None else None
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
         self._generated_profile_validator: (
             Callable[[ExecutionProfileRecord, WebExecutionProfile], None] | None
@@ -89,8 +86,8 @@ class ExecutionWorkflow:
 
         self._permission_policy_snapshot_resolver = resolver
 
-    def register(self, source_path: Path, *, accept_source_changes: bool = False) -> ExecutionProfileRecord:
-        """校验并登记 Profile；任何源漂移都必须由调用者显式接受。"""
+    def register_generated(self, source_path: Path) -> ExecutionProfileRecord:
+        """校验并登记编译器生成的执行输入；外部 Profile 一律拒绝。"""
 
         # --- 阶段：读取并规范化声明源 ---
         profile, raw, source_hash = self._read_source(source_path)
@@ -109,8 +106,6 @@ class ExecutionWorkflow:
             existing = work.execution_profiles.get(profile.profile_id)
             if existing is not None and existing.project_id != profile.project_id:
                 raise JiejianError(ErrorCode.EXECUTION_PROFILE_PROJECT_CONFLICT, "Profile 已绑定其他项目")
-            if existing is not None and not accept_source_changes and not _metadata_matches(existing, metadata):
-                raise JiejianError(ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, "Profile 发生漂移，请显式重新校验")
             record = ExecutionProfileRecord(
                 **metadata,
                 created_at_us=existing.created_at_us if existing else now_us,
@@ -124,48 +119,25 @@ class ExecutionWorkflow:
             work.commit()
         return record
 
-    def list(self, project_id: str) -> tuple[ExecutionProfileRecord, ...]:
-        with self._uow_factory() as work:
-            if work.projects.get(project_id) is None:
-                raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
-            return work.execution_profiles.list_for_project(project_id)
-
     def current(self, profile_id: str, *, project_id: str | None = None) -> WebExecutionProfile:
         record, profile, _, _, metadata = self._validated(profile_id, project_id=project_id)
         if not _metadata_matches(record, metadata):
             raise JiejianError(ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, "Profile 发生漂移，请显式重新校验")
         return profile
 
-    def current_contract(self, profile_id: str, *, project_id: str | None = None):
-        record, _profile, contract, _plan, metadata = self._validated(
-            profile_id, project_id=project_id
-        )
-        if not _metadata_matches(record, metadata):
-            raise JiejianError(
-                ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT,
-                "Profile 发生漂移，请显式重新校验",
-            )
-        return contract
-
     def build_request(
         self,
         profile_id: str,
         *,
         project_id: str | None = None,
-        target_override: WebTargetDefinition | None = None,
-        workflow_bindings_override: tuple[HttpWorkflowBinding, ...] | None = None,
+        change_context: ChangeVerificationContext | None = None,
     ) -> PersistedExecutionRequest:
         """从已登记 Profile 和 ACTIVE Contract 构造带预算的不可变执行快照。"""
 
         record, profile, contract, plan, metadata = self._validated(profile_id, project_id=project_id)
         if not _metadata_matches(record, metadata):
             raise JiejianError(ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, "Profile 发生漂移，请显式重新校验")
-        snapshot = profile.build_snapshot(
-            contract,
-            plan,
-            target_override=target_override,
-            workflow_bindings_override=workflow_bindings_override,
-        )
+        snapshot = profile.build_snapshot(contract, plan)
         paired_case_ids = {
             case.case_id
             for twin in snapshot.differential_plan.twins
@@ -190,6 +162,7 @@ class ExecutionWorkflow:
             budget=budget,
             permission_policy=permission_policy,
             project_snapshot=snapshot,
+            change_context=change_context,
         )
 
     def submit(
@@ -197,8 +170,7 @@ class ExecutionWorkflow:
         profile_id: str,
         *,
         project_id: str | None = None,
-        target_override: WebTargetDefinition | None = None,
-        workflow_bindings_override: tuple[HttpWorkflowBinding, ...] | None = None,
+        change_context: ChangeVerificationContext | None = None,
         idempotency_key: str,
         max_attempts: int = 3,
         now_us: int | None = None,
@@ -211,8 +183,7 @@ class ExecutionWorkflow:
         request = self.build_request(
             profile_id,
             project_id=project_id,
-            target_override=target_override,
-            workflow_bindings_override=workflow_bindings_override,
+            change_context=change_context,
         )
         names = required_secret_names(request)
         environment = self._environment_provider(names)
@@ -235,50 +206,6 @@ class ExecutionWorkflow:
             known_secrets=tuple(value for name in names if (value := environment.get(name))),
         )
         return result, request, names
-
-    def run_profile(
-        self,
-        source_path: Path,
-        *,
-        accept_source_changes: bool = False,
-        target_override: WebTargetDefinition | None = None,
-        workflow_bindings_override: tuple[HttpWorkflowBinding, ...] | None = None,
-        idempotency_key: str,
-        max_attempts: int = 3,
-    ) -> RunnerResult:
-        """为 CLI 同步模式监督一个独立 Worker；目标请求仍不在调用进程执行。"""
-
-        if self._var_dir is None:
-            raise JiejianError(ErrorCode.RUNNER_START_FAILED, "同步执行服务尚未完成装配")
-        # --- 阶段：冻结并提交请求 ---
-        record = self.register(source_path, accept_source_changes=accept_source_changes)
-        submission, request, secret_names = self.submit(
-            record.profile_id,
-            project_id=record.project_id,
-            target_override=target_override,
-            workflow_bindings_override=workflow_bindings_override,
-            idempotency_key=idempotency_key,
-            max_attempts=max_attempts,
-        )
-        environment = self._environment_provider(secret_names)
-        known_secrets = tuple(value for name in secret_names if (value := environment.get(name)))
-        # --- 阶段：监督独立 Worker 并读取可信 staged 结果 ---
-        dispatcher = WorkerDispatcher(var_dir=self._var_dir, uow_factory=self._uow_factory, environ=environment)
-        process = dispatcher.start(
-            job_id=submission.job.job_id,
-            lease_owner=f"worker-{self._clock_us()}",
-            secret_names=secret_names,
-        )
-        try:
-            staged = dispatcher.wait(
-                submission.job.job_id,
-                process,
-                known_secrets=known_secrets,
-                timeout_seconds=(request.budget.max_duration_us * 3) / 1_000_000 + 60,
-            )
-        finally:
-            dispatcher.close_process(process)
-        return staged.result
 
     def _record(self, profile_id: str) -> ExecutionProfileRecord:
         with self._uow_factory() as work:

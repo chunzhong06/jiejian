@@ -23,6 +23,7 @@ from product.backend.core.test_setup import (
 )
 from product.backend.core.verification.permissions import SecurityEffectKind
 from product.backend.infra.storage import RecordingRecord
+from product.backend.core.recording import RecordingPurpose
 from product.protocols import FlowDraftResourceCandidate, FlowDraftStep
 from product.protocols.recording import RecordingEvent, RecordingEventKind
 from product.protocols.web.workflow import ValueSlotConsumer
@@ -62,63 +63,77 @@ def _binding_candidates(
         for index, step in enumerate(context.draft.steps)
         if step.id == context.target_step.id
     )
-    responses = {
-        event.request_id: event
-        for event in context.recording.browser_events
-        if event.kind is RecordingEventKind.RESPONSE and event.request_id is not None
-    }
     observations: list[ObservationCandidateView] = []
     recoveries: list[RecoveryCandidateView] = []
-    for step in context.draft.steps[target_index + 1 :]:
-        if step.method is None or step.request_id is None:
-            continue
-        request = _request_event(context.recording, step)
-        response = responses.get(request.request_id)
-        if (
-            response is None
-            or response.status_code is None
-            or not _SUCCESS_MIN <= response.status_code <= _SUCCESS_MAX
-            or response.truncated
-        ):
-            continue
-        template = _template_for_resource(request, context.resource_value)
-        if template is None:
-            continue
-        base = {
-            "recording_id": context.recording.recording_id,
-            "source_step_id": step.id,
-            "path_template": template.path,
-            "json_body_template": template.json_body,
-            "test_identity_id": context.recording_identity.identity_id,
+    sources = (
+        (context.recording, context.draft, context.draft.steps[target_index + 1 :]),
+        *(
+            (recording, draft, draft.steps)
+            for recording, draft in context.supplements
+        ),
+    )
+    for recording, _draft, steps in sources:
+        responses = {
+            event.request_id: event
+            for event in recording.browser_events
+            if event.kind is RecordingEventKind.RESPONSE and event.request_id is not None
         }
-        if step.method == "GET" and response.body:
-            digest = test_setup_sha256("observation_candidate", base)
-            observations.append(
-                ObservationCandidateView(
-                    candidate_id=f"obc_{digest[:32]}",
-                    label=f"由资源所有者读取并核对：{template.path}",
-                    source_step_id=step.id,
-                    method="GET",
-                    path_template=template.path,
-                    trusted_test_identity_id=context.recording_identity.identity_id,
+        for step in steps:
+            if step.method is None or step.request_id is None:
+                continue
+            if recording.purpose is RecordingPurpose.OBSERVATION and step.method != "GET":
+                continue
+            if recording.purpose is RecordingPurpose.RECOVERY and step.method not in _MUTATING_METHODS:
+                continue
+            request = _request_event(recording, step)
+            response = responses.get(request.request_id)
+            if (
+                response is None
+                or response.status_code is None
+                or not _SUCCESS_MIN <= response.status_code <= _SUCCESS_MAX
+                or response.truncated
+            ):
+                continue
+            template = _template_for_resource(request, context.resource_value)
+            if template is None:
+                continue
+            base = {
+                "recording_id": recording.recording_id,
+                "source_step_id": step.id,
+                "path_template": template.path,
+                "json_body_template": template.json_body,
+                "test_identity_id": context.recording_identity.identity_id,
+            }
+            if step.method == "GET" and response.body:
+                digest = test_setup_sha256("observation_candidate", base)
+                observations.append(
+                    ObservationCandidateView(
+                        candidate_id=f"obc_{digest[:32]}",
+                        label="独立读取并核对业务结果",
+                        source_recording_id=recording.recording_id,
+                        source_step_id=step.id,
+                        method="GET",
+                        path_template=template.path,
+                        trusted_test_identity_id=context.recording_identity.identity_id,
+                    )
                 )
-            )
-        elif step.method in _MUTATING_METHODS:
-            digest = test_setup_sha256(
-                "recovery_candidate",
-                {**base, "method": step.method},
-            )
-            recoveries.append(
-                RecoveryCandidateView(
-                    candidate_id=f"rcc_{digest[:32]}",
-                    label=f"使用录制中的 {step.method} 恢复同一资源",
-                    source_step_id=step.id,
-                    method=step.method,
-                    path_template=template.path,
-                    json_body_template=template.json_body,
-                    test_identity_id=context.recording_identity.identity_id,
+            elif step.method in _MUTATING_METHODS:
+                digest = test_setup_sha256(
+                    "recovery_candidate",
+                    {**base, "method": step.method},
                 )
-            )
+                recoveries.append(
+                    RecoveryCandidateView(
+                        candidate_id=f"rcc_{digest[:32]}",
+                        label="恢复测试现场",
+                        source_recording_id=recording.recording_id,
+                        source_step_id=step.id,
+                        method=step.method,
+                        path_template=template.path,
+                        json_body_template=template.json_body,
+                        test_identity_id=context.recording_identity.identity_id,
+                    )
+                )
     return (
         _disambiguate_labels(
             _dedupe_candidates(tuple(observations), key=_observation_key),
@@ -173,26 +188,20 @@ def _dedupe_candidates(
 
 
 def _disambiguate_labels(candidates: tuple[Any, ...], context: _SetupContext) -> tuple[Any, ...]:
+    del context
     counts = Counter(candidate.label for candidate in candidates)
+    offsets: Counter[str] = Counter()
     result: list[Any] = []
     for candidate in candidates:
         if counts[candidate.label] == 1:
             result.append(candidate)
             continue
-        step_number = next(
-            (
-                index + 1
-                for index, step in enumerate(context.draft.steps)
-                if step.id == candidate.source_step_id
-            ),
-            None,
+        offsets[candidate.label] += 1
+        result.append(
+            candidate.model_copy(
+                update={"label": f"{candidate.label}（方案 {offsets[candidate.label]}）"},
+            )
         )
-        suffix = (
-            f"（录制步骤 {step_number}）"
-            if step_number is not None
-            else f"（来源 {candidate.source_step_id}）"
-        )
-        result.append(candidate.model_copy(update={"label": f"{candidate.label}{suffix}"}))
     return tuple(result)
 
 def _effect_candidates(
@@ -243,10 +252,8 @@ def _setup_is_current(context: _SetupContext) -> bool:
         resource.recording_id == context.recording.recording_id
         and resource.flow_id == context.flow.id
         and resource.flow_sha256 == context.flow_sha256
-        and resource.source_fingerprint == context.understanding.source_fingerprint
         and resource.endpoint_source_fingerprint
         == context.understanding.endpoint_source_fingerprint
-        and resource.understanding_revision == context.understanding.revision
         and resource.actual_resource_id == context.resource_value
     )
 

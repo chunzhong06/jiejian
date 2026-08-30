@@ -14,7 +14,7 @@
 
 ## 协议边界
 
-- `PersistedExecutionRequest` 是执行真源，保存项目、Contract/plan/孪生快照、workflow/effect bindings、身份、目标范围、预算、Observer 引用和指纹。
+- `PersistedExecutionRequest` 是执行真源，保存项目、Contract/plan/孪生快照、workflow/effect bindings、身份、目标范围、预算、Observer 引用和指纹。代码变化重验可以额外冻结最小 `ChangeVerificationContext`；Runner 不读取变化数据库，也不接收文件列表、diff 或源码正文。
 - `RunnerInput` 绑定 run、job、attempt、lease owner、fencing token、创建时间、预算和项目快照。
 - `Evidence` 绑定不可变 case/twin snapshot、ExecutionFact、ObservationFact、SecurityEffectFact、基线/闭合状态、verdict 和 evidence hash。
 - `RunnerResult` 返回结果类型、生命周期状态、Job 状态、Verdict、清理结果、错误和覆盖计数。失败时 `RunnerError` 分别保存主错误 `code`、有限 `phase`、可选稳定 `cause_code` 和可重试性；`CleanupResult.issues` 另存现场恢复、身份关闭、Runtime 关闭或进程树清理问题，不覆盖主错误。

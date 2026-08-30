@@ -1,7 +1,7 @@
 /* 权限矩阵视图：只负责筛选、单元格展示和规则详情，不解释原始契约。 */
 
 import { useMemo, useState } from 'react'
-import { Alert, Button, Collapse, Descriptions, Drawer, List, Select, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Descriptions, Drawer, List, Select, Space, Table, Tag, Typography } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { expectationLabel, productTermLabel, severityLabel } from '../../../app/presentation'
 import type { ExpandedPermissionRule, PermissionCellState, PermissionMatrixModel, PermissionMatrixRow } from './types'
@@ -85,7 +85,7 @@ export function PermissionMatrix({ model }: { model: PermissionMatrixModel }) {
           <Descriptions.Item label="动作">{productTermLabel('action', selected.actionId, false)}（{selected.actionId}）</Descriptions.Item>
           <Descriptions.Item label="资源">{productTermLabel('resource', selected.resourceId, false)}（{selected.resourceId}）；类型：{productTermLabel('resourceType', selected.resourceType, false)}</Descriptions.Item>
         </Descriptions>
-        <List size="small" header={<Typography.Text strong>命中的规则</Typography.Text>} dataSource={selected.rules} locale={{ emptyText: '没有命中规则' }} renderItem={(rule) => <List.Item><Space direction="vertical" className="full-width"><Space wrap><Tag color={rule.expectation === 'ALLOW' ? 'green' : 'red'}>{expectationLabel(rule.expectation)}</Tag><Tag>{severityLabel(rule.severity)}</Tag></Space><Typography.Text>关系：{(rule.relation_path ?? []).map((item) => productTermLabel('relation', item, false)).join(' → ') || '无关系限制'}</Typography.Text><Typography.Text>条件：{contextSummary(rule.context)}</Typography.Text><Typography.Text>核验：{(rule.required_observations ?? []).join('、') || '未声明必需观察'}</Typography.Text><Collapse ghost items={[{ key: 'rule-tech', label: '高级：规则标识', children: <Typography.Text code>{rule.rule_id ?? rule.id ?? '未提供'}</Typography.Text> }]} /></Space></List.Item>} />
+        <List size="small" header={<Typography.Text strong>命中的规则</Typography.Text>} dataSource={selected.rules} locale={{ emptyText: '没有命中规则' }} renderItem={(rule) => <List.Item><Space direction="vertical" className="full-width"><Space wrap><Tag color={rule.expectation === 'ALLOW' ? 'green' : 'red'}>{expectationLabel(rule.expectation)}</Tag><Tag>{severityLabel(rule.severity)}</Tag></Space><Typography.Text>关系：{(rule.relation_path ?? []).map((item) => productTermLabel('relation', item, false)).join(' → ') || '无关系限制'}</Typography.Text><Typography.Text>条件：{contextSummary(rule.context)}</Typography.Text><Typography.Text>核验：{(rule.required_observations ?? []).join('、') || '未声明必需观察'}</Typography.Text></Space></List.Item>} />
       </Space>}
     </Drawer>
   </Space>

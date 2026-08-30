@@ -45,7 +45,7 @@ from tests.fixtures.control_plane import (
     create_app,
 )
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
-from tests.fixtures.runner import write_web_test_profile
+from tests.fixtures.runner import seed_project_from_generated_profile, write_web_test_profile
 
 @pytest.mark.essential
 def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) -> None:
@@ -68,7 +68,7 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         assert "ApiResponse" in openapi.json()["components"]["schemas"]
         assert "202" in openapi.json()["paths"]["/api/projects/{project_id}/runs"]["post"]["responses"]
         project_path, _ = write_web_test_profile(tmp_path / "inputs")
-        project_id = app.state.context.projects.register(project_path)[0].project_id
+        project_id = str(seed_project_from_generated_profile(app, project_path)["project_id"])
         assert client.get(f"/api/projects/{project_id}").status_code == 200
 
     restarted = create_app(var_dir, start_worker=False)

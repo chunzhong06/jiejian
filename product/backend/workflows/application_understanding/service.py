@@ -39,6 +39,7 @@ from product.backend.core.application_understanding import (
 )
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
+from product.backend.core.source_changes import SourceRevisionSnapshot, source_snapshot_id
 from product.backend.infra.storage import ProjectRecord, StorageUnitOfWork
 from product.backend.workflows.application_understanding.endpoints import (
     EndpointDiscoveryResult,
@@ -296,6 +297,35 @@ class ApplicationUnderstandingService:
     ) -> ApplicationUnderstanding:
         """离线分析授权目录，并以 revision 防止长扫描覆盖并发修改。"""
 
+        return self._analyze_source(
+            project_id,
+            revision=revision,
+            refresh_permission_bindings=True,
+        )
+
+    def analyze_source_for_change(
+        self,
+        project_id: str,
+        *,
+        revision: int,
+    ) -> ApplicationUnderstanding:
+        """供变化编排先形成真实 diff，再按冻结顺序刷新权限绑定。"""
+
+        return self._analyze_source(
+            project_id,
+            revision=revision,
+            refresh_permission_bindings=False,
+        )
+
+    def _analyze_source(
+        self,
+        project_id: str,
+        *,
+        revision: int,
+        refresh_permission_bindings: bool,
+    ) -> ApplicationUnderstanding:
+        """执行同一受控扫描；调用者不能改变扫描根、忽略规则或预算。"""
+
         before = self.get(project_id)
         self._require_revision(before, revision)
         if not before.source_analysis_authorized:
@@ -340,8 +370,27 @@ class ApplicationUnderstandingService:
                 updated_at_us=max(now_us, current.updated_at_us),
             )
             work.application_understanding.replace(updated)
+            existing_snapshot = work.source_changes.snapshot_for_fingerprint(
+                project_id,
+                result.source_fingerprint,
+            )
+            if existing_snapshot is None:
+                work.source_changes.add_snapshot(
+                    SourceRevisionSnapshot(
+                        snapshot_id=source_snapshot_id(
+                            project_id,
+                            result.source_fingerprint,
+                        ),
+                        project_id=project_id,
+                        source_fingerprint=result.source_fingerprint,
+                        understanding_revision=updated.revision,
+                        files=result.files,
+                        created_at_us=now_us,
+                    )
+                )
             work.commit()
-        self._refresh_permission_bindings(project_id)
+        if refresh_permission_bindings:
+            self._refresh_permission_bindings(project_id)
         return updated
 
     def decide_role(

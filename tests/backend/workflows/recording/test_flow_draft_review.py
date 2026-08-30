@@ -6,24 +6,16 @@ from pathlib import Path
 import pytest
 from product.backend.core.errors import JiejianError
 from product.backend.workflows.recording.processing import FlowDraftProcessor
-from product.backend.workflows.recording.flow_compiler import FlowDraftCompiler
-from product.backend.workflows.recording.review import FlowDraftReviewer
 from product.protocols import (
-    ConfirmFlowDraftResource,
-    ConfirmFlowDraftTarget,
-    DeleteFlowDraftStep,
     FlowDraft,
     FlowDraftVariableStatus,
-    MergeFlowDraftSteps,
     RecordingEvent,
     RecordingEventKind,
     RecordingHeader,
-    RenameFlowDraftStep,
     canonical_flow_draft_json_bytes,
     flow_draft_review_command_schema,
     parse_flow_draft,
 )
-from product.protocols.web.workflow import ValueSlotSource, WorkflowStepPurpose
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 ACTION_CANDIDATE_ID = "action_0123456789abcdef0123456789abcdef"
 
@@ -135,13 +127,18 @@ def test_events_build_action_centered_draft_and_current_schemas() -> None:
     assert first == second
     assert first.schema_version == "1"
     assert first.action_candidate_id == ACTION_CANDIDATE_ID
-    assert first.recommended_target_step_id == "step-000003"
+    assert first.recommended_target_step_id == "step-000002"
     assert first.target_step_id is None
-    assert first.steps[2].path == "/resources/{resource_id}"
-    assert any(item.location == "path[1]" for item in first.steps[2].resource_candidates)
+    assert first.steps[1].path == "/resources/{resource_id}"
+    assert any(item.location == "path[1]" for item in first.steps[1].resource_candidates)
+    assert any(item.label.startswith("updated ·") for item in first.steps[1].resource_candidates)
+    assert all(
+        "path[" not in item.label and "$." not in item.label
+        for item in first.steps[1].resource_candidates
+    )
     assert first.variables[0].status is FlowDraftVariableStatus.UNCONFIRMED
-    assert "$.password" in first.steps[1].sensitive_fields
-    assert "headers.authorization" in first.steps[1].sensitive_fields
+    assert "$.password" in first.steps[0].sensitive_fields
+    assert "headers.authorization" in first.steps[0].sensitive_fields
     encoded = canonical_flow_draft_json_bytes(first)
     assert b"resource-42" not in encoded
     assert parse_flow_draft(encoded) == first

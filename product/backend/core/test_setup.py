@@ -271,14 +271,7 @@ class ActionSafetySetup(TestSetupModel):
         )
         if any(item.resource_id != self.resource.resource_id for item in facts):
             raise ValueError("action safety facts must reference one test resource")
-        if (
-            self.observation is not None
-            and self.observation.recording_id != self.resource.recording_id
-        ) or (
-            self.recovery is not None
-            and self.recovery.recording_id != self.resource.recording_id
-        ):
-            raise ValueError("action safety bindings must come from the same recording")
+        # Observation/Recovery 可以来自关联补录；应用服务负责校验其与目标 Recording 的父子关系。
         if (
             self.effect is not None
             and self.effect.action_candidate_id != self.resource.action_candidate_id

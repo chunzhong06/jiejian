@@ -202,6 +202,12 @@ export type ResultRelevantIntentDto = {
   intent_id: string
   revision: number
   intent_hash: string
+  display_label: string | null
+}
+
+export type ResultChangeVerificationDto = {
+  change_id: string
+  required_intents: ResultRelevantIntentDto[]
 }
 
 export type ResultPresentationDto = {
@@ -213,6 +219,7 @@ export type ResultPresentationDto = {
   policy_epoch: number
   policy_fingerprint: string
   relevant_intents: ResultRelevantIntentDto[]
+  change_verification: ResultChangeVerificationDto | null
   headline: string
   scope_statement: string
   checked_count: number
@@ -249,6 +256,7 @@ export type HistoryComparisonDto = {
   policy_epoch: number
   policy_fingerprint: string
   relevant_intents: ResultRelevantIntentDto[]
+  change_verification: ResultChangeVerificationDto | null
   changes: HistoryChangeDto[]
 }
 

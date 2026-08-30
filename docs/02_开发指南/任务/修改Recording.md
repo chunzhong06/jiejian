@@ -26,7 +26,7 @@ Recording 把“用户在已登录网页里完成一次真实业务动作”转�
 
 正式 capture 顺序必须保持：Recording Process 发布 `capture.ready`，控制面写入 start，进程确认 `capture.started`，状态进入采集中后才允许业务动作；用户停止后写入 stop，Runner 收口事件与浏览器，Job 成功，Recording 进入 `PENDING_REVIEW`。取消仍走 Job cancel，不得把停止实现为取消。
 
-FlowDraft 的候选来源可以改进，但候选不会自动生效。用户必须确认唯一 TARGET、必要变量和有限资源位置；编译后的 Flow 只保留必要 SETUP 与唯一 TARGET，通过 `CASE_SUBJECT`、`CASE_RESOURCE_ID` 在运行时注入差分事实。安全资源、Observer、Recovery 与权限要求在后续安全准备中确认，不塞回 Flow。
+Recording 应根据录制顺序自动采用唯一且可执行的业务解释；只有多个同级业务解释并存时，页面才让用户在业务动作、有限资源值或来源步骤之间选择。编译后的 Flow 仍保留必要 SETUP 与唯一 TARGET，通过 `CASE_SUBJECT`、`CASE_RESOURCE_ID` 在运行时注入差分事实，但 HTTP method、path 位置、JSONPath、step ID 和 candidate ID 不进入普通审阅。业务资源、真实结果、独立观察和恢复方式在安全准备中形成；权限要求只能由 Human Approval 改变，不能塞回 Recording 或 Flow。
 
 ## 不能破坏
 

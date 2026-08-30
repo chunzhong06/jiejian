@@ -211,6 +211,8 @@ def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path
             "test_identity_id",
             "duration_seconds",
             "idempotency_key",
+            "purpose",
+            "parent_recording_id",
         }
         valid = client.post(
             f"/api/projects/{project_id}/recordings",

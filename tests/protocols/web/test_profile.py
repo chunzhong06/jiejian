@@ -1,4 +1,4 @@
-# 验证协议与 Schema中的执行配置协议。
+# 验证内部生成 Web 执行输入的协议约束。
 
 from __future__ import annotations
 
@@ -151,34 +151,3 @@ def test_snapshot_rejects_corroborating_observer_with_required_spec() -> None:
 
     with pytest.raises(ValueError, match="stable role"):
         WebExecutionSnapshot.model_validate(payload)
-
-
-def test_profile_registration_requires_active_governed_version_and_rejects_drift(tmp_path: Path) -> None:
-    source = tmp_path / "profile.json"
-    profile = _profile()
-    _write_profile(source, profile)
-    application = ApplicationCore(tmp_path / "var", environ={})
-    try:
-        application.projects.register(source)
-        project = application.projects.get(profile.project_id)
-        assert project.governed_contract_id is None
-        assert project.governed_contract_version is None
-        draft = application.contracts.create_draft(
-            profile.project_id, profile.contract_id, snapshot=profile_contract(profile), actor="test"
-        )
-        reviewed = application.contracts.submit_review(profile.project_id, profile.contract_id, draft.version, actor="test")
-        application.contracts.activate_review(profile.project_id, profile.contract_id, reviewed.version, actor="test")
-        record = application.execution.register(source)
-        assert application.execution.current(record.profile_id).contract_id == profile.contract_id
-        changed = profile.model_copy(update={"seed": 5})
-        _write_profile(source, changed)
-        with pytest.raises(JiejianError, match="漂移"):
-            application.execution.register(source)
-        updated = application.execution.register(source, accept_source_changes=True)
-        assert updated.source_hash != record.source_hash
-    finally:
-        application.close()
-
-
-def profile_contract(profile: WebExecutionProfile) -> PermissionContract:
-    return execution_snapshot().contract

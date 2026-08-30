@@ -1,4 +1,4 @@
-/* 只按事实顺序展示已发布 Evidence；Verdict 由后端确定，原始 JSON 仅供高级查看。 */
+/* 只按事实顺序展示已发布 Evidence；Verdict 由后端确定，原始 JSON 只从明确证据入口查看。 */
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { Alert, Card, Collapse, Descriptions, List, Select, Space, Tag, Typography } from 'antd'
@@ -69,7 +69,7 @@ export function EvidenceTimeline({ runId, evidence, preferredIds = [], onError }
       <TimelineStep title="真实影响"><SecurityEffectFacts values={securityEffectFacts} /></TimelineStep>
       <TimelineStep title="真实观察"><ObservationFacts values={observationFacts} /></TimelineStep>
       <TimelineStep title="确定性结论"><Tag>{verdictLabel(detail.verdict)}</Tag></TimelineStep>
-      <Collapse ghost items={[{ key: 'technical', label: '高级：技术详情', children: <TechnicalDetails detail={detail} /> }]} />
+      <Collapse ghost items={[{ key: 'technical', label: '查看原始证据', children: <TechnicalDetails detail={detail} /> }]} />
     </div>}
   </Card>
 }

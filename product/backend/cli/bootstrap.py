@@ -22,7 +22,6 @@ class CliOptions:
     trace_id: str | None
     presentation: str = "auto"
     machine_only: bool = False
-    verbose: bool = False
 
 
 def runtime_settings(context: typer.Context) -> Settings:

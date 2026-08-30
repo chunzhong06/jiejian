@@ -1,4 +1,4 @@
-// 验证检查进度只投影权威 Run 与旁路事件，不自行计算安全结论或执行取消。
+// 验证检查进度只投影权威业务状态，不自行计算结论，也不向普通页面暴露内部运行标识。
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -40,6 +40,7 @@ describe('CheckProgress', () => {
     screen.getByRole('button', { name: '前往处理页面' }).click()
     expect(onNavigate).toHaveBeenCalledWith('/check')
     expect(screen.queryByText('发现权限问题')).not.toBeInTheDocument()
+    expect(screen.queryByText(/job-failed|workers\/job-failed|事件序列|任务标识|高级/)).not.toBeInTheDocument()
   })
 
   it('从保存游标续读事件，并只请求父页面刷新权威状态', async () => {

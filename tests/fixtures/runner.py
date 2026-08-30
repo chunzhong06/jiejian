@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from product.backend.core.lifecycle import CaseVerdict
+import time
+from pathlib import Path
+from typing import Any
+
+from product.backend.core.lifecycle import CaseVerdict, ProjectStatus
+from product.backend.infra.storage import ProjectRecord
 from product.backend.core.verification.facts import ExecutionOutcome, ObservedEffect, TargetType, TemporalClosure, aggregate_security_effect
 from product.backend.core.verification.permissions.coverage import build_permission_coverage_plan
 from product.backend.core.verification.permissions import (
@@ -70,8 +75,53 @@ from product.protocols import (
     build_evidence,
     build_normalized_state,
     canonical_web_execution_profile_json_bytes,
+    parse_web_execution_profile,
 )
 from product.protocols.web.workflow import CASE_SUBJECT_IDENTITY
+
+
+def seed_project_from_generated_profile(app: Any, profile_path: Path) -> dict[str, object]:
+    """为执行测试写入已由正式编译链生成的项目身份，不恢复生产注册入口。"""
+
+    profile = parse_web_execution_profile(profile_path.read_bytes())
+    now_us = time.time_ns() // 1_000
+    record = ProjectRecord(
+        project_id=profile.project_id,
+        name=profile.project_name,
+        status=ProjectStatus.READY,
+        target_type=profile.target_type,
+        governed_contract_id=None,
+        governed_contract_version=None,
+        created_at_us=now_us,
+        updated_at_us=now_us,
+    )
+    with app.state.context.uow_factory() as work:
+        work.projects.add(record)
+        work.commit()
+    return record.model_dump(mode="json")
+
+
+def register_test_generated_profile(app: Any, profile_path: Path):
+    """把测试输入放进正式 generated 边界，再走内部登记服务。"""
+
+    profile = parse_web_execution_profile(profile_path.read_bytes())
+    generated = (
+        app.state.context.paths.data
+        / "projects"
+        / profile.project_id
+        / "execution"
+        / "generated"
+    ).resolve()
+    generated.mkdir(parents=True, exist_ok=True)
+    generated_path = generated / f"{profile.profile_id}.json"
+    generated_path.write_bytes(profile_path.read_bytes())
+
+    def validate_generated(record: Any, current: WebExecutionProfile) -> None:
+        Path(record.source_path).resolve().relative_to(generated)
+        assert current.profile_id == profile.profile_id
+
+    app.state.context.execution.set_generated_profile_validator(validate_generated)
+    return app.state.context.execution.register_generated(generated_path)
 
 
 def contract_and_plan() -> tuple[PermissionContract, object]:

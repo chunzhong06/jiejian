@@ -15,7 +15,6 @@ import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Checkbox, Collapse, Input, List, Radio, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { onboardingApi, type DiscoveryResult } from '../../api/onboarding'
-import { AdvancedDetails } from '../../components/AdvancedDetails'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import {
@@ -73,7 +72,7 @@ function CandidateRow({ candidate, kind, loading, onDecide }: {
         <Button type="primary" size="small" loading={loading} disabled={!displayName.trim()} onClick={() => onDecide('CONFIRMED', displayName)}>确认这个{noun}</Button>
         <Button size="small" loading={loading} onClick={() => onDecide('REJECTED', displayName)}>不是{noun}</Button>
       </Space>
-      <AdvancedDetails label="查看发现依据"><Space direction="vertical" size={2}><Typography.Text>来源位置：{evidenceLabel(candidate)}</Typography.Text><Typography.Text>内部标识：<Typography.Text code>{candidate.candidate_id}</Typography.Text></Typography.Text>{candidate.evidence[0] && <><Typography.Text>检测方式：<Typography.Text code>{candidate.evidence[0].detector}</Typography.Text></Typography.Text><Typography.Text>代码符号：{candidate.evidence[0].symbol ?? '未提供'}</Typography.Text><Typography.Text>内容指纹：<Typography.Text code>{candidate.evidence[0].content_sha256}</Typography.Text></Typography.Text></>}</Space></AdvancedDetails>
+      <Typography.Text type="secondary">识别依据：{evidenceLabel(candidate)}{candidate.evidence[0]?.symbol ? ` · ${candidate.evidence[0].symbol}` : ''}</Typography.Text>
     </div>
   </List.Item>
 }
@@ -109,7 +108,7 @@ function ExcludedCandidateRow({ candidate, kind, loading, onDecide }: {
         <Button size="small" loading={loading} onClick={() => onDecide('CONFIRMED', candidate.display_name)}>恢复为已确认</Button>
         {candidate.origin === 'DETECTED' && <Button type="text" size="small" loading={loading} onClick={() => onDecide('PROPOSED', candidate.display_name)}>移回待确认</Button>}
       </Space>
-      <AdvancedDetails label="查看发现依据"><Typography.Text>{evidenceLabel(candidate)}</Typography.Text></AdvancedDetails>
+      <Typography.Text type="secondary">识别依据：{evidenceLabel(candidate)}</Typography.Text>
     </div>
   </List.Item>
 }
@@ -338,17 +337,17 @@ export function ApplicationSetup({ selected, endpointStatus, onConnected, onChan
       })}
     </ol>
     {message && <Alert showIcon type="info" message={message} closable onClose={() => setMessage('')} />}
-    {error && <Alert showIcon type="error" message={error.message} description={error.code ? <AdvancedDetails label="高级：诊断信息"><Typography.Text code>{error.code}</Typography.Text></AdvancedDetails> : undefined} closable onClose={() => setError(null)} />}
+    {error && <Alert showIcon type="error" message={error.message} closable onClose={() => setError(null)} />}
     {!understanding && <Card className="application-step" title="选择应用文件夹">
       <Typography.Paragraph>界鉴先读取少量配置识别应用；不会启动项目、安装依赖或读取秘密。</Typography.Paragraph>
       <Collapse ghost items={[{ key: 'manual-path', label: '目录选择器不可用？', children: <Space.Compact className="application-manual-path"><Input aria-label="应用文件夹绝对路径" value={manualPath} onChange={(event) => setManualPath(event.target.value)} placeholder="输入应用文件夹绝对路径" /><Button loading={loading} onClick={() => void connectPath(manualPath)}>连接这个目录</Button></Space.Compact> }]} />
     </Card>}
     {understanding && !endpointReady && <Card className="application-step" title="确认本地访问地址">
-      {discovery && <AdvancedDetails label="高级：目录识别信息"><div className="application-discovery">
+      {discovery && <div className="application-discovery">
         <Typography.Text strong>识别结果</Typography.Text>
         <Space wrap>{discovery.detected_types.length > 0 ? discovery.detected_types.map((item) => <Tag key={item}>{item}</Tag>) : <Typography.Text type="secondary">未识别到明确技术栈</Typography.Text>}</Space>
         {discovery.start_candidates.length > 0 && <Typography.Text type="secondary">可能启动方式：{discovery.start_candidates.map((item) => item.label).join('、')}（只作提示，不会执行）</Typography.Text>}
-      </div></AdvancedDetails>}
+      </div>}
       <Typography.Paragraph>界鉴只探测 127.0.0.1 的少量配置候选，不扫描任意端口。自动发现不等于授权。</Typography.Paragraph>
       <Radio.Group className="endpoint-list" value={endpoint} onChange={(event) => setEndpoint(event.target.value)}>
         <Space direction="vertical">

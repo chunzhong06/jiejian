@@ -33,9 +33,18 @@ class _StubToolView(BaseModel):
     object_id: str
 
 
+class _StubSourceChangeView(BaseModel):
+    change_id: str
+    project_id: str
+    actual_changed_path_count: int
+    summary: str
+
+
 EXPECTED_MCP_TOOLS = {
     "jiejian_application_reanalyze",
     "jiejian_application_understanding",
+    "jiejian_change_show",
+    "jiejian_change_submit",
     "jiejian_check_cancel",
     "jiejian_check_prepare",
     "jiejian_check_preview",
@@ -369,6 +378,49 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                         project_id,
                         MCPAccessLevel.PREPARE,
                     )
+                    change_id = "chg_" + "a" * 32
+                    change_view = _StubSourceChangeView(
+                        change_id=change_id,
+                        project_id=project_id,
+                        actual_changed_path_count=2,
+                        summary="发现 1 条权限要求与本次变化直接相关。",
+                    )
+                    change_calls: list[tuple[str, str, tuple[str, ...], str]] = []
+                    monkeypatch.setattr(
+                        app.state.context.source_changes,
+                        "submit",
+                        lambda selected_project_id, *, reason, claimed_paths, submitted_by: (
+                            change_calls.append(
+                                (selected_project_id, reason, claimed_paths, submitted_by)
+                            )
+                            or (SimpleNamespace(change_id=change_id), None, None)
+                        ),
+                    )
+                    monkeypatch.setattr(
+                        app.state.context.source_changes,
+                        "view",
+                        lambda selected_change_id: change_view,
+                    )
+                    submitted_change = await client.call_tool(
+                        "jiejian_change_submit",
+                        {
+                            "project_id": project_id,
+                            "reason": "完成实现修复",
+                            "claimed_paths": ["app.py"],
+                        },
+                    )
+                    assert submitted_change.structured_content == change_view.model_dump(mode="json")
+                    assert change_calls == [
+                        (project_id, "完成实现修复", ("app.py",), "MCP Agent")
+                    ]
+                    shown_change = await client.call_tool(
+                        "jiejian_change_show",
+                        {"project_id": project_id, "change_id": change_id},
+                    )
+                    assert shown_change.structured_content == change_view.model_dump(mode="json")
+                    assert "source_fingerprint" not in shown_change.structured_content
+                    assert "changed_paths" not in shown_change.structured_content
+
                     compile_calls: list[str] = []
                     monkeypatch.setattr(
                         app.state.context.security_setup,
@@ -396,12 +448,12 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                         == "APPLICATION_ANALYSIS_NOT_AUTHORIZED"
                     )
 
-                    run_calls: list[tuple[str, str]] = []
+                    run_calls: list[tuple[str, str, str | None]] = []
                     monkeypatch.setattr(
                         app.state.context.checks,
                         "submit",
-                        lambda selected_project_id, *, idempotency_key: (
-                            run_calls.append((selected_project_id, idempotency_key))
+                        lambda selected_project_id, *, idempotency_key, change_id=None: (
+                            run_calls.append((selected_project_id, idempotency_key, change_id))
                             or (
                                 SimpleNamespace(
                                     job=_StubToolView(object_id="job-test"),
@@ -421,6 +473,7 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                         {
                             "project_id": project_id,
                             "idempotency_key": "mcp-test-run",
+                            "change_id": change_id,
                         },
                     )
                     assert executed.is_error is False
@@ -429,7 +482,7 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                         "job": {"schema_version": "1", "object_id": "job-test"},
                         "run": {"schema_version": "1", "object_id": "run-test"},
                     }
-                    assert run_calls == [(project_id, "mcp-test-run")]
+                    assert run_calls == [(project_id, "mcp-test-run", change_id)]
 
                     direct_presentation = _StubToolView(object_id="result-test")
                     monkeypatch.setattr(

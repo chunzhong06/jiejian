@@ -623,6 +623,43 @@
       "title": "BlobObjectScanBudget",
       "type": "object"
     },
+    "ChangeVerificationContext": {
+      "additionalProperties": false,
+      "description": "一次代码变化重验随 Run 冻结的最小事实，不携带文件清单或源码内容。",
+      "properties": {
+        "change_id": {
+          "pattern": "^chg_[0-9a-f]{32}$",
+          "title": "Change Id",
+          "type": "string"
+        },
+        "impact_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Impact Fingerprint",
+          "type": "string"
+        },
+        "required_intent_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "title": "Required Intent Ids",
+          "type": "array"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "change_id",
+        "impact_fingerprint",
+        "source_fingerprint"
+      ],
+      "title": "ChangeVerificationContext",
+      "type": "object"
+    },
     "CookieSessionIdentityBinding": {
       "additionalProperties": false,
       "properties": {
@@ -4004,6 +4041,17 @@
   "properties": {
     "budget": {
       "$ref": "#/$defs/ExecutionBudget"
+    },
+    "change_context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ChangeVerificationContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "permission_policy": {
       "$ref": "#/$defs/PermissionPolicySnapshot"

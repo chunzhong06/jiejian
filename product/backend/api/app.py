@@ -34,6 +34,7 @@ from product.backend.api.routers.checks import build_checks_router
 from product.backend.api.routers.assistant import build_assistant_router
 from product.backend.api.routers.experience import build_experience_router
 from product.backend.api.routers.mcp_access import build_mcp_access_router
+from product.backend.api.routers.source_changes import build_source_changes_router
 from product.backend.api.local_control import LocalControlGuard
 from product.backend.api.mcp import build_mcp_control
 from product.backend.workflows.mcp_access import MCPAccessController
@@ -130,6 +131,7 @@ def create_app(
     app.include_router(build_projects_router(context))
     app.include_router(build_test_identities_router(context))
     app.include_router(build_permission_intents_router(context))
+    app.include_router(build_source_changes_router(context))
     app.include_router(build_checks_router(context))
     app.include_router(build_assistant_router(context))
     app.include_router(build_experience_router(context))

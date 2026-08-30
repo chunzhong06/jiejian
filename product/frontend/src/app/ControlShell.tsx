@@ -5,8 +5,10 @@ import { Button, Layout, Modal, Result } from 'antd'
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/http'
 import { experienceApi, type OfficialExperienceDto, type OfficialExperienceMode } from '../api/experience'
+import { mcpAccessApi, type MCPAccessView } from '../api/mcp'
 import { projectsApi, type ProjectDto } from '../api/projects'
 import { systemApi } from '../api/system'
+import { sourceChangesApi, type SourceChangeViewDto } from '../api/sourceChanges'
 import { ErrorRecovery } from '../components/ErrorRecovery'
 import { JudgeGuideBar } from '../components/JudgeGuideBar'
 import { DesktopProcessNavigation, MobileProcessNavigation } from '../components/ProcessNavigation'
@@ -19,6 +21,7 @@ import { RecordingPage } from '../features/recording/RecordingPage'
 import { ModelServicePage } from '../features/settings/ModelServicePage'
 import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
 import { RuntimePage } from '../features/system/RuntimePage'
+import { ToolsPage } from '../features/tools/ToolsPage'
 import { WorkbenchPage } from '../features/workspace/WorkbenchPage'
 import { AppHeader } from './AppHeader'
 import { NotificationCenter, enqueueNotification, useNotificationExpiry, type NotificationItem } from './NotificationCenter'
@@ -47,11 +50,18 @@ function ControlShellContent() {
   const [removeBusy, setRemoveBusy] = useState(false)
   const [experience, setExperience] = useState<OfficialExperienceDto | null>(null)
   const [experienceBusy, setExperienceBusy] = useState(false)
+  const [mcpStatus, setMcpStatus] = useState<MCPAccessView | null>(null)
+  const [mcpStatusFailed, setMcpStatusFailed] = useState(false)
+  const [latestChange, setLatestChange] = useState<SourceChangeViewDto | null>(null)
   const updateNotifications = useCallback((updater: (items: NotificationItem[]) => NotificationItem[]) => setNotifications(updater), [])
   // 工作区加载失败会阻断整个控制面；页面内操作失败只进入通知，避免同一错误重复覆盖页面。
   const showBlockingError = useCallback((nextError: ApiError) => setError(nextError), [])
   const notifyError = useCallback((nextError: ApiError) => {
     setNotifications((items) => enqueueNotification(items, nextError, Date.now()))
+  }, [])
+  const updateMcpStatus = useCallback((next: MCPAccessView) => {
+    setMcpStatus(next)
+    setMcpStatusFailed(false)
   }, [])
   const clearError = useCallback(() => setError(null), [])
   const resolveRouteErrors = useCallback((routes: string[]) => {
@@ -74,6 +84,28 @@ function ControlShellContent() {
     })
     return () => { active = false }
   }, [notifyError])
+
+  useEffect(() => {
+    let active = true
+    void mcpAccessApi.status().then((value) => {
+      if (active) updateMcpStatus(value)
+    }).catch(() => {
+      if (active) setMcpStatusFailed(true)
+    })
+    return () => { active = false }
+  }, [updateMcpStatus])
+
+  useEffect(() => {
+    setLatestChange(null)
+    if (!selected?.project_id) return
+    let active = true
+    void sourceChangesApi.latest(selected.project_id).then((value) => {
+      if (active) setLatestChange(value)
+    }).catch(() => {
+      if (active) setLatestChange(null)
+    })
+    return () => { active = false }
+  }, [selected?.project_id, readiness])
 
   const choose = (project: ProjectDto) => { workspace.selectProject(project); navigate('/workspace') }
   const connectForAccess = (project: ProjectDto) => { workspace.selectProject(project); clearError() }
@@ -162,7 +194,8 @@ function ControlShellContent() {
 
   const navigateTo = (path: AppRoute) => navigate(path)
   const content = () => {
-    if (route === '/workspace') return <WorkbenchPage selected={selected} readiness={readiness} nextAction={status?.next_action ?? null} runs={runs} systemStatus={systemStatus} experience={experience} experienceBusy={experienceBusy} onStartExperience={startOfficialExperience} onStopExperience={stopOfficialExperience} onNavigate={(path) => navigate(path)} />
+    if (route === '/workspace') return <WorkbenchPage selected={selected} readiness={readiness} nextAction={status?.next_action ?? null} runs={runs} systemStatus={systemStatus} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} latestChange={latestChange} experience={experience} experienceBusy={experienceBusy} onStartExperience={startOfficialExperience} onStopExperience={stopOfficialExperience} onNavigate={(path) => navigate(path)} />
+    if (route === '/tools') return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={readiness?.endpoint_status} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspace.refreshCurrent() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/identities')} />
     if (route === '/settings/models') return <ModelServicePage profiles={llmProfiles} onManage={() => setSettingsOpen(true)} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
@@ -178,7 +211,7 @@ function ControlShellContent() {
     <DesktopProcessNavigation route={route} steps={status?.steps ?? null} onNavigate={navigateTo} />
     <Layout className="product-main">
       <MobileProcessNavigation route={route} steps={status?.steps ?? null} onNavigate={navigateTo} />
-      <AppHeader projects={projects} selected={selected} activeTask={readiness?.active_tasks[0]} profiles={llmProfiles} aiSettings={aiSettings} profilesFailed={llmLoadFailed} settingsFailed={aiSettingsFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onRemoveCurrent={() => setRemoveConfirmOpen(true)} onNavigate={navigate} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={requestShutdown} />
+      <AppHeader projects={projects} selected={selected} activeTask={readiness?.active_tasks[0]} profiles={llmProfiles} aiSettings={aiSettings} profilesFailed={llmLoadFailed} settingsFailed={aiSettingsFailed} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onRemoveCurrent={() => setRemoveConfirmOpen(true)} onNavigate={navigate} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={requestShutdown} />
       <Layout.Content className="content"><div className="content-frame"><JudgeGuideBar status={status} experience={experience} preparingIdentities={experienceBusy} onPrepareIdentities={() => { void prepareOfficialIdentities() }} />{error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigate(normalizeRoute(path)) }} onClose={clearError} />}{content()}</div></Layout.Content>
     </Layout>
     <NotificationCenter items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigate(path) }} />

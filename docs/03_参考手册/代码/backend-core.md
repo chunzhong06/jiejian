@@ -103,6 +103,7 @@
 ### `product/backend/core/recording.py`
 - `_REASON_CODE`
 - `class RecordingState`
+- `class RecordingPurpose`
 - `class RecordingTerminalState`
 - `class RecordingReasonCode`
 - `class RecordingModel`
@@ -129,6 +130,27 @@
 - `render_junit(report) -> bytes`
 - `render_format(report, output_format) -> bytes`
 主要 import / dot-source：`__future__`, `datetime`, `html`, `json`, `product.protocols.report`, `xml.sax.saxutils`
+
+### `product/backend/core/source_changes.py`
+- `_SNAPSHOT_ID_PATTERN`
+- `_CHANGE_ID_PATTERN`
+- `_INTENT_ID_PATTERN`
+- `_DRIVE_PATH`
+- `_REASON_CODE`
+- `class SourceChangeModel`
+- `normalize_relative_source_path(value) -> str`
+- `class SourceFileFingerprint`
+- `source_fingerprint(files) -> str`
+- `source_snapshot_id(project_id, fingerprint) -> str`
+- `class SourceRevisionSnapshot`
+- `class ChangeManifest`
+- `class SourceChangeSet`
+- `class IntentChangeImpact`
+- `class ChangeImpactAssessment`
+- `class RevalidationPlan`
+- `source_change_fingerprint(payload) -> str`
+- `change_impact_fingerprint(payload) -> str`
+主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/test_identity.py`
 - `_ROLE_CANDIDATE_ID_PATTERN`

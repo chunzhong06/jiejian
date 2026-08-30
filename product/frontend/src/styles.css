@@ -110,7 +110,6 @@ body { color: var(--color-text); background: var(--color-bg); overflow-x: hidden
 .task-action-group { justify-content: flex-end; min-width: 0; pointer-events: auto; }
 .judge-guide-bar { align-items: center; background: #eef4ff; border: 1px solid #cbd9ff; border-radius: 12px; display: flex; gap: var(--space-16); justify-content: space-between; margin-bottom: var(--space-16); padding: var(--space-12) var(--space-16); }
 .judge-guide-copy { display: grid; gap: var(--space-4); min-width: 0; }
-.advanced-details { background: var(--color-surface); }
 .assistant-scope-table { border-collapse: collapse; margin-bottom: 16px; width: 100%; }
 .assistant-scope-table th, .assistant-scope-table td { border-bottom: 1px solid #f0f0f0; padding: 10px 12px; text-align: left; }
 .assistant-scope-table th { background: #fafafa; color: #172033; font-weight: 600; }
@@ -124,10 +123,10 @@ body { color: var(--color-text); background: var(--color-bg); overflow-x: hidden
 .notification-overflow { align-self: flex-end; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(15, 23, 42, .12); padding: var(--space-4) var(--space-8); }
 .sr-only { height: 1px; margin: -1px; overflow: hidden; position: absolute; width: 1px; clip: rect(0, 0, 0, 0); }
 .full-width { width: 100%; }
-.recording-merge-action { padding: 12px 0 0; text-align: center; }
+.mcp-client-guides { display: grid; gap: var(--space-16); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mcp-client-guides .ant-card, .mcp-access-levels .ant-card { height: 100%; }
+.mcp-access-levels { display: grid; gap: 10px; width: 100%; }
 .recording-review-warning { margin-top: 16px; }
-.recording-finalize-action { margin-top: 20px; }
-.recording-raw-draft { overflow-wrap: anywhere; white-space: pre-wrap; }
 .recording-capture-guide { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px; }
 .recording-capture-guide ol { display: grid; gap: 16px; list-style: none; margin: 0; padding: 0; }
 .recording-capture-guide li { align-items: start; display: grid; gap: 10px; grid-template-columns: auto 1fr; }
@@ -150,6 +149,7 @@ body { color: var(--color-text); background: var(--color-bg); overflow-x: hidden
   .page-task-header { padding-bottom: var(--space-12); }
   .workbench-primary-panel { padding: var(--space-24); }
   .workbench-secondary-grid { grid-template-columns: 1fr; }
+  .mcp-client-guides { grid-template-columns: 1fr; }
   .task-action-group { max-width: 100%; }
   .ant-descriptions-view { overflow-x: auto; }
   .content-frame > .ant-space-vertical { gap: var(--space-16) !important; }

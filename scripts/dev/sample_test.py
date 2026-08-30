@@ -30,6 +30,7 @@ from product.backend.infra.runtime.process.tree import (
     terminate_process_tree,
 )
 from product.backend.infra.runtime.process.identity import require_python_environment
+from product.protocols import FlowDraftVariableSource, flow_draft_source_choice_id
 from sample_test_windows import RecordingWindowDriver, WindowsL5Error, window_snapshot
 
 
@@ -516,38 +517,6 @@ def _prepare_identities(
     return {key: str(by_role[key]["identity_id"]) for key in ROLE_LABELS}
 
 
-def _merge_recording_ui_steps(
-    client: ApiClient,
-    recording_id: str,
-    draft: dict[str, Any],
-) -> dict[str, Any]:
-    # UIA 的确认按钮可能形成独立 UI 事件；必须经正式 Review 与随后请求归并。
-    while True:
-        steps = list(draft.get("steps") or [])
-        ui_index = next(
-            (index for index, step in enumerate(steps) if step.get("method") is None),
-            None,
-        )
-        if ui_index is None:
-            return draft
-        if ui_index + 1 >= len(steps) or steps[ui_index + 1].get("method") is None:
-            raise SampleTestError("真实 Recording UI 动作无法与相邻网络请求归并")
-        view = client.call(
-            "POST",
-            f"/api/recordings/{recording_id}/review",
-            {
-                "schema_version": "1",
-                "command": {
-                    "schema_version": "1",
-                    "operation": "MERGE_ADJACENT_STEPS",
-                    "left_step_id": steps[ui_index]["id"],
-                    "right_step_id": steps[ui_index + 1]["id"],
-                },
-            },
-        )
-        draft = view["draft"]
-
-
 def _record_flow(
     client: ApiClient,
     project_id: str,
@@ -600,6 +569,8 @@ def _record_flow(
         raise SampleTestError(f"真实 Recording 未进入审阅成功状态: {recording_state}")
     draft = view.get("draft") or {}
     for variable in draft.get("variables") or []:
+        if variable.get("status") == "CONFIRMED":
+            continue
         source = variable["candidate_sources"][0]
         view = client.call(
             "POST",
@@ -608,15 +579,15 @@ def _record_flow(
                 "schema_version": "1",
                 "command": {
                     "schema_version": "1",
-                    "operation": "CONFIRM_VARIABLE_SOURCE",
+                    "operation": "CONFIRM_VARIABLE_CHOICE",
                     "variable_name": variable["name"],
-                    "source_event_sequence": source["source_event_sequence"],
-                    "source_json_path": source["json_path"],
+                    "choice_id": flow_draft_source_choice_id(
+                        FlowDraftVariableSource.model_validate(source)
+                    ),
                 },
             },
         )
         draft = view["draft"]
-    draft = _merge_recording_ui_steps(client, recording_id, draft)
     target = next(
         (step for step in draft["steps"] if step.get("method") == "POST" and str(step.get("path") or "").split("?", 1)[0].endswith("/exports")),
         None,
@@ -659,7 +630,6 @@ def _record_flow(
 def _confirm_safety(
     client: ApiClient,
     recording_id: str,
-    alice_id: str,
 ) -> None:
     view = client.call("GET", f"/api/recordings/{recording_id}/safety-setup")
     resource = next(
@@ -679,11 +649,8 @@ def _confirm_safety(
             "resource_candidate_id": resource["candidate_id"],
             "logical_name": "校园数字展馆完整项目资料包",
             "resource_type": "项目资料包",
-            "owner_test_identity_id": alice_id,
             "observation_candidate_id": observation["candidate_id"],
             "recovery_candidate_id": recovery["candidate_id"],
-            "confirm_recovery_not_required": False,
-            "security_effect_candidate_id": effect["candidate_id"],
         },
     )
     if confirmed.get("automatic_execution_allowed") is not True:
@@ -1251,7 +1218,7 @@ def run(
             source_runtime.playwright_executable,
             state,
         )
-        _confirm_safety(client, recording_id, identities["project_owner"])
+        _confirm_safety(client, recording_id)
         if stop_after_recording:
             _shutdown_owned_runtime(
                 client,

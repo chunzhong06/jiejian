@@ -37,6 +37,7 @@ from product.backend.core.application_understanding import (
 )
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.http_routes import HTTP_METHODS, safe_route_path
+from product.backend.core.source_changes import SourceFileFingerprint
 from product.backend.workflows.onboarding.discovery import (
     canonical_folder,
     is_reparse_point,
@@ -133,6 +134,7 @@ class SourceAnalysisLimits(AnalysisModel):
 
 class ApplicationAnalysisResult(AnalysisModel):
     source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    files: tuple[SourceFileFingerprint, ...] = Field(default=(), max_length=512)
     role_candidates: tuple[RoleCandidate, ...] = Field(default=(), max_length=256)
     action_candidates: tuple[ActionCandidate, ...] = Field(default=(), max_length=512)
     files_read: int = Field(ge=0, le=512)

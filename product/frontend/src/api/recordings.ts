@@ -67,6 +67,8 @@ export type RecordingDto = {
   flow_path?: string
   action?: RecordingActionDto
   test_identity?: RecordingTestIdentityDto
+  purpose?: 'TARGET' | 'OBSERVATION' | 'RECOVERY'
+  parent_recording_id?: string | null
 }
 export type RecordingViewDto = {
   schema_version?: '1'
@@ -91,6 +93,7 @@ export type TestResourceCandidateDto = {
 export type ObservationCandidateDto = {
   candidate_id: string
   label: string
+  source_recording_id: string
   source_step_id: string
   method: 'GET'
   path_template: string
@@ -99,6 +102,7 @@ export type ObservationCandidateDto = {
 export type RecoveryCandidateDto = {
   candidate_id: string
   label: string
+  source_recording_id: string
   source_step_id: string
   method: 'PATCH' | 'POST' | 'PUT' | 'DELETE'
   path_template: string
@@ -134,25 +138,33 @@ export type ActionSafetySetupViewDto = {
   observation_candidates: ObservationCandidateDto[]
   recovery_candidates: RecoveryCandidateDto[]
   security_effect_candidates: SecurityEffectCandidateDto[]
+  business_result?: string | null
+  observation_status: 'READY' | 'MISSING'
+  recovery_status: 'READY' | 'MISSING' | 'NOT_REQUIRED'
+  ready: boolean
   confirmed_setup?: ActionSafetySetupDto | null
   gaps: string[]
   automatic_execution_allowed: boolean
 }
 export type ConfirmActionSafetySetupInput = {
-  resource_candidate_id: string
-  logical_name: string
-  resource_type: string
-  owner_test_identity_id: string
+  resource_candidate_id?: string | null
+  logical_name?: string | null
+  resource_type?: string | null
   observation_candidate_id?: string | null
   recovery_candidate_id?: string | null
-  confirm_recovery_not_required: boolean
-  security_effect_candidate_id?: string | null
 }
 
 export const recordingsApi = {
   setup: (projectId: string) =>
     request<RecordingSetupDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings/setup`),
-  createRecording: (projectId: string, actionCandidateId: string, testIdentityId: string, durationSeconds: number) =>
+  createRecording: (
+    projectId: string,
+    actionCandidateId: string,
+    testIdentityId: string,
+    durationSeconds: number,
+    purpose: 'TARGET' | 'OBSERVATION' | 'RECOVERY' = 'TARGET',
+    parentRecordingId?: string,
+  ) =>
     request<RecordingViewDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings`, {
       method: 'POST',
       body: JSON.stringify({
@@ -160,6 +172,8 @@ export const recordingsApi = {
         action_candidate_id: actionCandidateId,
         test_identity_id: testIdentityId,
         duration_seconds: durationSeconds,
+        purpose,
+        parent_recording_id: parentRecordingId ?? null,
         idempotency_key: `gui-recording-${crypto.randomUUID()}`,
       }),
     }),

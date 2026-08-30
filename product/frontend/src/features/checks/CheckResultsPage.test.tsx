@@ -102,18 +102,13 @@ describe('CheckResultsPage', () => {
     expect(screen.queryByText('request_received')).not.toBeInTheDocument()
     fireEvent.click(traceToggle)
     expect(traceToggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('request_received')).toBeInTheDocument()
-    expect(screen.getByText('server_identity_resolved')).toBeInTheDocument()
-    expect(screen.getByText('export_request_created')).toBeInTheDocument()
-    expect(screen.getByText('authorization_decided')).toBeInTheDocument()
-    expect(screen.getByText('export_message_sent')).toBeInTheDocument()
-    expect(screen.getByText('export_job_started')).toBeInTheDocument()
-    expect(screen.getByText('archive_generated')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('高级：执行路径技术信息'))
-    expect(screen.getByText('case-bob')).toBeInTheDocument()
-    expect(screen.getAllByText('export_job_completed').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('collaboration-server').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('EXPLICIT_PARENT').length).toBeGreaterThan(0)
+    expect(screen.getByText('请求进入目标应用')).toBeInTheDocument()
+    expect(screen.getByText('服务器识别实际账号')).toBeInTheDocument()
+    expect(screen.getByText('应用作出权限判断')).toBeInTheDocument()
+    expect(screen.getByText('任务进入消息链路')).toBeInTheDocument()
+    expect(screen.getAllByText('最终业务结果形成').length).toBeGreaterThan(0)
+    expect(screen.queryByText('case-bob')).not.toBeInTheDocument()
+    expect(screen.queryByText('EXPLICIT_PARENT')).not.toBeInTheDocument()
     expect(screen.queryByText('成员账号不应对文档执行修改')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('查看对应证据'))
     expect(await screen.findByText('证据时间线')).toBeInTheDocument()
@@ -175,7 +170,7 @@ describe('CheckResultsPage', () => {
     expect(screen.getByText(/本次结论只适用于实际执行范围/)).toBeInTheDocument()
   })
 
-  it('普通区显示冻结权限版本，高级详情显示 fingerprint 和相关意图', async () => {
+  it('普通区显示冻结权限版本且不泄露 fingerprint 和相关意图标识', async () => {
     const run = { run_id: 'run-policy', lifecycle: 'COMPLETED', verdict: 'PASS', result_integrity: 'VERIFIED' }
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-policy', policy_epoch: 9, policy_fingerprint: 'b'.repeat(64), relevant_intents: [{ intent_id: `pin_${'c'.repeat(32)}`, revision: 4, intent_hash: 'c'.repeat(64) }] }))
@@ -183,8 +178,20 @@ describe('CheckResultsPage', () => {
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
     expect(await screen.findByText('本次检查依据权限版本 9')).toBeInTheDocument()
     expect(screen.queryByText(`pin_${'c'.repeat(32)}`)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('高级：运行与完整性信息'))
-    expect(screen.getByText('b'.repeat(64))).toBeInTheDocument()
-    expect(screen.getByText(`pin_${'c'.repeat(32)}@4:${'c'.repeat(64)}`)).toBeInTheDocument()
+    expect(screen.queryByText('b'.repeat(64))).not.toBeInTheDocument()
+    expect(screen.queryByText(`pin_${'c'.repeat(32)}@4:${'c'.repeat(64)}`)).not.toBeInTheDocument()
+  })
+
+  it('代码变化重验只显示有界权限数量，不泄露内部标识或源码指纹', async () => {
+    const intentId = `pin_${'d'.repeat(32)}`
+    const run = { run_id: 'run-change', lifecycle: 'COMPLETED', verdict: 'PASS', result_integrity: 'VERIFIED' }
+    runsApi.run.mockResolvedValue(run)
+    resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-change', change_verification: { change_id: `chg_${'e'.repeat(32)}`, required_intents: [{ intent_id: intentId, revision: 2, intent_hash: 'f'.repeat(64), display_label: 'P-001' }] } }))
+    resultsApi.evidence.mockResolvedValue([])
+    render(<CheckResultsPage run={run} onError={vi.fn()} />)
+    expect(await screen.findByText(`本次为代码变化 chg_${'e'.repeat(32)} 的重新验证`)).toBeInTheDocument()
+    expect(screen.getByText('需要重验的权限：P-001')).toBeInTheDocument()
+    expect(screen.queryByText(intentId)).not.toBeInTheDocument()
+    expect(screen.queryByText('f'.repeat(64))).not.toBeInTheDocument()
   })
 })

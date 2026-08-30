@@ -24,9 +24,9 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN
+from product.backend.core.identifiers import JOB_ID_PATTERN, PROJECT_ID_PATTERN, RECORDING_ID_PATTERN
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import Recording, RecordingState, transition_recording_state
+from product.backend.core.recording import Recording, RecordingPurpose, RecordingState, transition_recording_state
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import FlowDraft, RecordingRunnerRequest, RecordingRunnerResultType, RecordingRunnerResult, canonical_flow_draft_json_bytes, canonical_recording_json_bytes
 from product.protocols.web.target import WebTargetScope
@@ -50,6 +50,8 @@ class RecordingApplicationModel(BaseModel):
 class SubmitRecording(RecordingApplicationModel):
     request: RecordingRunnerRequest
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    purpose: RecordingPurpose = RecordingPurpose.TARGET
+    parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
     idempotency_key: str = Field(min_length=1, max_length=128)
     max_attempts: int = Field(default=3, ge=1, le=1_000)
     available_at_us: int = Field(ge=0)
@@ -236,6 +238,8 @@ class RecordingSubmission:
             domain = Recording(
                 recording_id=command.request.recording_id,
                 project_id=command.request.project_id,
+                purpose=command.purpose,
+                parent_recording_id=command.parent_recording_id,
                 created_at_us=command.now_us,
                 updated_at_us=command.now_us,
             )
@@ -455,6 +459,8 @@ class RecordingSubmission:
         domain = Recording(
             recording_id=existing.recording_id,
             project_id=existing.project_id,
+            purpose=existing.purpose,
+            parent_recording_id=existing.parent_recording_id,
             state=result.recording_state,
             created_at_us=existing.created_at_us,
             updated_at_us=last_event_at,

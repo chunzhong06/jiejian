@@ -155,14 +155,14 @@ def test_check_submit_rejects_stale_preparation_and_returns_earliest_gap(
 
         preview = core.checks.preview(PROJECT_ID)
         assert preview.ready is False
-        assert preview.next_path == "/flows"
-        assert "TEST_RESOURCE_UNCONFIRMED" in {
+        assert preview.next_path == "/check"
+        assert "GENERATED_PROFILE_MISSING" in {
             item.code for item in preview.gaps
         }
         with pytest.raises(JiejianError) as error:
             core.checks.submit(PROJECT_ID, idempotency_key="stale-check")
         assert error.value.code == ErrorCode.STATE_PRECONDITION.value
-        assert error.value.to_dict()["details"]["next_path"] == "/flows"
+        assert error.value.to_dict()["details"]["next_path"] == "/check"
     finally:
         core.close()
 
@@ -229,10 +229,12 @@ def test_candidate_changes_recompute_current_preparation_without_mutating_histor
             decision=CandidateDecision.CONFIRMED,
         )
         restored_setup = core.action_safety_setup.preview(RECORDING_ID)
-        assert restored_setup.automatic_execution_allowed is False
-        assert "TEST_RESOURCE_UNCONFIRMED" in restored_setup.gaps
+        # 恢复为同一候选不会让已确认业务事实仅因分析 revision 变化而失效。
+        assert restored_setup.automatic_execution_allowed is True
+        assert restored_setup.gaps == ()
         restored_matrix = core.permission_intents.matrix(PROJECT_ID)
         assert len(restored_matrix.actions) == 1
+        # 曾经失效的长期实现映射仍需 Human Approval，不能随候选恢复自动批准。
         assert restored_matrix.actions[0].compilable is False
         assert core.security_setup.current_generated_profile_id(PROJECT_ID) is None
 

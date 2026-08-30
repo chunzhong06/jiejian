@@ -1,5 +1,5 @@
 # =============================================================================
-# Recording FlowDraft 审阅
+# Recording 业务歧义确认
 #
 # 定位
 #   不可信 FlowDraft 与人工确认的可执行 Flow 之间的信任转换边界
@@ -27,17 +27,14 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.flow_draft import (
     ConfirmFlowDraftResource,
     ConfirmFlowDraftTarget,
-    ConfirmFlowDraftVariable,
-    DeleteFlowDraftStep,
+    ConfirmFlowDraftVariableChoice,
     FlowDraft,
     FlowDraftResourceCandidate,
     FlowDraftReviewCommand,
     FlowDraftStep,
     FlowDraftVariable,
-    FlowDraftVariableSource,
     FlowDraftVariableStatus,
-    MergeFlowDraftSteps,
-    RenameFlowDraftStep,
+    flow_draft_source_choice_id,
 )
 from product.protocols.web.workflow import ValueSlotConsumer
 
@@ -56,35 +53,7 @@ class FlowDraftReviewer:
             return self._confirm_target(draft, command.step_id)
         if isinstance(command, ConfirmFlowDraftResource):
             return self._confirm_resource(draft, command.candidate_id)
-        if isinstance(command, DeleteFlowDraftStep):
-            steps, variables = self._delete_step(draft, command.step_id)
-        elif isinstance(command, MergeFlowDraftSteps):
-            steps, variables = self._merge_steps(
-                draft,
-                command.left_step_id,
-                command.right_step_id,
-            )
-            self._ensure_acyclic(steps)
-            return self._new_revision(
-                draft,
-                steps,
-                variables,
-                updates={
-                    "recommended_target_step_id": (
-                        command.left_step_id
-                        if draft.recommended_target_step_id == command.right_step_id
-                        else draft.recommended_target_step_id
-                    ),
-                    "target_step_id": (
-                        command.left_step_id
-                        if draft.target_step_id == command.right_step_id
-                        else draft.target_step_id
-                    ),
-                },
-            )
-        elif isinstance(command, RenameFlowDraftStep):
-            steps, variables = self._rename_step(draft, command.step_id, command.name)
-        elif isinstance(command, ConfirmFlowDraftVariable):
+        if isinstance(command, ConfirmFlowDraftVariableChoice):
             steps, variables = self._confirm_variable(draft, command)
         else:
             raise TypeError("unsupported Flow draft review command")
@@ -238,141 +207,10 @@ class FlowDraftReviewer:
         return current
 
 
-    def _delete_step(
-        self,
-        draft: FlowDraft,
-        step_id: str,
-    ) -> tuple[tuple[FlowDraftStep, ...], tuple[FlowDraftVariable, ...]]:
-        if step_id not in {step.id for step in draft.steps}:
-            raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "Flow 草稿步骤引用不存在")
-        if len(draft.steps) == 1:
-            raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "Flow 草稿不得删除最后一步")
-        if any(step_id in step.depends_on_step_ids for step in draft.steps) or any(
-            step_id in variable.consumer_step_ids
-            or any(source.source_step_id == step_id for source in variable.candidate_sources)
-            for variable in draft.variables
-        ):
-            raise JiejianError(
-                ErrorCode.RECORD_DRAFT_REFERENCE,
-                "Flow 草稿步骤仍被依赖或变量引用",
-            )
-        return (
-            tuple(step for step in draft.steps if step.id != step_id),
-            draft.variables,
-        )
-
-    def _merge_steps(
-        self,
-        draft: FlowDraft,
-        left_id: str,
-        right_id: str,
-    ) -> tuple[tuple[FlowDraftStep, ...], tuple[FlowDraftVariable, ...]]:
-        positions = {step.id: index for index, step in enumerate(draft.steps)}
-        if left_id not in positions or right_id not in positions:
-            raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "Flow 草稿步骤引用不存在")
-        left_index = positions[left_id]
-        right_index = positions[right_id]
-        if right_index != left_index + 1:
-            raise JiejianError(
-                ErrorCode.RECORD_DRAFT_NOT_ADJACENT,
-                "Flow 草稿只允许合并相邻步骤",
-            )
-        left = draft.steps[left_index]
-        right = draft.steps[right_index]
-        if left.method is not None and right.method is not None:
-            raise JiejianError(
-                ErrorCode.RECORD_DRAFT_MERGE,
-                "Flow 草稿的两个请求步骤不能合并",
-            )
-        network = right if right.method is not None else left
-        dependencies = {
-            right_id if dependency == left_id else dependency
-            for dependency in (*left.depends_on_step_ids, *right.depends_on_step_ids)
-            if dependency not in {left_id, right_id}
-        }
-        merged = network.model_copy(
-            update={
-                "id": left_id,
-                "name": left.name,
-                "source_event_sequences": tuple(
-                    sorted(
-                        set(
-                            (*left.source_event_sequences, *right.source_event_sequences)
-                        )
-                    )
-                ),
-                "depends_on_step_ids": tuple(sorted(dependencies)),
-                "sensitive_fields": tuple(
-                    sorted(set((*left.sensitive_fields, *right.sensitive_fields)))
-                ),
-            }
-        )
-        steps = []
-        for index, step in enumerate(draft.steps):
-            if index == left_index:
-                steps.append(merged)
-            elif index == right_index:
-                continue
-            else:
-                rewritten = tuple(
-                    sorted(
-                        {
-                            left_id if dependency == right_id else dependency
-                            for dependency in step.depends_on_step_ids
-                        }
-                    )
-                )
-                steps.append(step.model_copy(update={"depends_on_step_ids": rewritten}))
-        variables = tuple(
-            variable.model_copy(
-                update={
-                    "candidate_sources": tuple(
-                        self._replace_source_step(source, right_id, left_id)
-                        for source in variable.candidate_sources
-                    ),
-                    "confirmed_source": (
-                        self._replace_source_step(
-                            variable.confirmed_source,
-                            right_id,
-                            left_id,
-                        )
-                        if variable.confirmed_source is not None
-                        else None
-                    ),
-                    "consumer_step_ids": tuple(
-                        sorted(
-                            {
-                                left_id if consumer == right_id else consumer
-                                for consumer in variable.consumer_step_ids
-                            }
-                        )
-                    ),
-                }
-            )
-            for variable in draft.variables
-        )
-        return tuple(steps), variables
-
-    def _rename_step(
-        self,
-        draft: FlowDraft,
-        step_id: str,
-        name: str,
-    ) -> tuple[tuple[FlowDraftStep, ...], tuple[FlowDraftVariable, ...]]:
-        if step_id not in {step.id for step in draft.steps}:
-            raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "Flow 草稿步骤引用不存在")
-        return (
-            tuple(
-                step.model_copy(update={"name": name}) if step.id == step_id else step
-                for step in draft.steps
-            ),
-            draft.variables,
-        )
-
     def _confirm_variable(
         self,
         draft: FlowDraft,
-        command: ConfirmFlowDraftVariable,
+        command: ConfirmFlowDraftVariableChoice,
     ) -> tuple[tuple[FlowDraftStep, ...], tuple[FlowDraftVariable, ...]]:
         variable = next(
             (
@@ -388,8 +226,7 @@ class FlowDraftReviewer:
             (
                 item
                 for item in variable.candidate_sources
-                if item.source_event_sequence == command.source_event_sequence
-                and item.json_path == command.source_json_path
+                if flow_draft_source_choice_id(item) == command.choice_id
             ),
             None,
         )
@@ -433,18 +270,6 @@ class FlowDraftReviewer:
         )
         self._ensure_acyclic(steps)
         return steps, variables
-
-    @staticmethod
-    def _replace_source_step(
-        source: FlowDraftVariableSource,
-        old_id: str,
-        new_id: str,
-    ) -> FlowDraftVariableSource:
-        return (
-            source.model_copy(update={"source_step_id": new_id})
-            if source.source_step_id == old_id
-            else source
-        )
 
     @staticmethod
     def _ensure_acyclic(steps: tuple[FlowDraftStep, ...] | list[FlowDraftStep]) -> None:

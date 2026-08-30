@@ -35,9 +35,14 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.paths import RuntimePaths
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-_CURRENT_MIGRATION_REVISION = "0003_permission_intent_ledger"
+_CURRENT_MIGRATION_REVISION = "0005_source_change_impacts"
 _UPGRADEABLE_MIGRATION_REVISIONS = frozenset(
-    {"0001_web_v1", "0002_remove_contract_workbench"}
+    {
+        "0001_web_v1",
+        "0002_remove_contract_workbench",
+        "0003_permission_intent_ledger",
+        "0004_recording_supplements",
+    }
 )
 _INCOMPATIBLE_DATABASE_MESSAGE = (
     "旧开发数据库或当前数据库结构与 Web V1 基线不兼容，请备份后重新初始化 var"

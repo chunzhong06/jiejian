@@ -23,19 +23,12 @@ import {
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
-import { AdvancedDetails } from '../../components/AdvancedDetails'
 import './identities.css'
 
 function statusTag(identity: TestIdentityDto) {
   if (identity.status === 'PREPARED') return <Tag color="green">登录状态已准备</Tag>
   if (identity.status === 'NEEDS_REVIEW') return <Tag color="orange">需要重新确认</Tag>
   return <Tag>尚未准备登录状态</Tag>
-}
-
-function methodLabel(identity: TestIdentityDto) {
-  if (identity.auth_method === 'COOKIE_SESSION') return `当前主机 Cookie（${identity.cookie_count} 项）`
-  if (identity.auth_method === 'BEARER') return '当前地址 Bearer 登录状态'
-  return '尚未保存'
 }
 
 function preparationStatus(preparation: IdentityPreparationDto | null) {
@@ -187,7 +180,6 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
       type={preparation.status === 'FAILED' ? 'error' : preparation.status === 'UNSUPPORTED' ? 'warning' : preparation.status === 'PREPARED' ? 'success' : 'info'}
       showIcon
       message={preparation.status === 'SAVING' ? '正在安全保存这个应用所需的登录状态…' : preparation.status === 'PREPARED' ? '登录状态已准备；界鉴没有保存你的密码' : preparation.message}
-      description={preparation.error_code ? <AdvancedDetails label="高级：诊断信息"><Space direction="vertical" size={2}><span>错误代码：{preparation.error_code}</span><span>诊断日志：{preparation.log_path}</span></Space></AdvancedDetails> : undefined}
       action={<Space>
         {preparation.status === 'STARTING' && <Button loading={busy} onClick={() => void cancel()}>取消准备</Button>}
         {['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status) && <Button onClick={() => setPreparation(null)}>关闭提示</Button>}
@@ -201,7 +193,7 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
         identity.status === 'NEEDS_REVIEW' ? <Button key="rebind" onClick={() => reset(identity)}>清除旧状态</Button> : null,
         <Button key="delete" danger onClick={() => remove(identity)}>删除</Button>,
       ].filter(Boolean)}>
-        <List.Item.Meta title={<Space wrap>{identity.label}{statusTag(identity)}</Space>} description={<Space direction="vertical" size={2}><span>权限组：{identity.role_display_name}</span><AdvancedDetails label="高级：保存范围"><Space direction="vertical" size={2}><span>保存方式：{methodLabel(identity)}</span><span>绑定地址：{identity.confirmed_endpoint}</span><span>内部标识：<Typography.Text code>{identity.identity_id}</Typography.Text></span></Space></AdvancedDetails></Space>} />
+        <List.Item.Meta title={<Space wrap>{identity.label}{statusTag(identity)}</Space>} description={<span>权限组：{identity.role_display_name}</span>} />
       </List.Item>} />
     </Card>
     <TaskActionBar

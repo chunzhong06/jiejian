@@ -471,7 +471,7 @@ class PermissionIntentService:
         return tuple(sorted(output, key=lambda item: item.revision.intent_id))
 
     def refresh_bindings(self, project_id: str) -> None:
-        """源码或安全准备变化只把当前 binding 降级，不修改 revision 或 epoch。"""
+        """候选失效或安全准备变化才降级 binding，不修改 revision 或 epoch。"""
 
         with self._uow_factory() as work:
             understanding = work.application_understanding.get(project_id)
@@ -528,6 +528,11 @@ class PermissionIntentService:
             revision = work.permission_intents.latest(intent_id)
             understanding = work.application_understanding.get(project_id)
             setup = work.action_safety_setups.get_for_action(project_id, action_candidate_id)
+            previous_binding = (
+                None
+                if revision is None
+                else work.permission_intents.binding(intent_id, revision.revision)
+            )
         if (
             revision is None
             or revision.project_id != project_id
@@ -536,6 +541,10 @@ class PermissionIntentService:
             or setup is None
         ):
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "当前权限意图不能重新绑定")
+        now_us = max(
+            self._clock_us(),
+            0 if previous_binding is None else previous_binding.updated_at_us + 1,
+        )
         binding = _current_binding(
             revision,
             understanding,
@@ -543,7 +552,7 @@ class PermissionIntentService:
             action_candidate_id=action_candidate_id,
             subject_role_candidate_id=subject_role_candidate_id,
             resource_owner_role_candidate_id=resource_owner_role_candidate_id,
-            now_us=self._clock_us(),
+            now_us=now_us,
         )
         status, reasons = _live_binding_status(
             understanding,
@@ -1228,15 +1237,6 @@ def _live_binding_status(
         return IntentImplementationBindingStatus.UNRESOLVED, tuple(unresolved)
     review: list[str] = []
     assert setup is not None
-    if (
-        setup.resource.understanding_revision != understanding.revision
-        or setup.resource.source_fingerprint != understanding.source_fingerprint
-        or setup.resource.endpoint_source_fingerprint
-        != understanding.endpoint_source_fingerprint
-    ):
-        review.append("ACTION_SAFETY_SETUP_STALE")
-    if understanding.revision != binding.understanding_revision:
-        review.append("UNDERSTANDING_REVISION_CHANGED")
     if _setup_fingerprint(setup) != binding.action_safety_setup_fingerprint:
         review.append("ACTION_SAFETY_SETUP_CHANGED")
     if setup.resource.owner_role_candidate_id != binding.resource_owner_role_candidate_id:

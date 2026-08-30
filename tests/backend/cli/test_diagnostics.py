@@ -65,23 +65,20 @@ def test_root_help_is_task_oriented() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for text in ("status", "serve", "app", "account", "flow", "check", "result", "history", "settings", "system"):
+    for text in ("status", "serve", "app", "check", "result", "history", "system"):
         assert text in result.stdout
     for section in ("普通任务", "图形界面", "运行与维护"):
         assert section in result.stdout
-    for removed in ("advanced", "Profile", "Baseline", "Gate", "LEGACY_PROFILE", "VarDir"):
+    for removed in ("account", "flow", "settings", "advanced", "Profile", "Baseline", "Gate", "LEGACY_PROFILE", "VarDir"):
         assert removed not in result.stdout
 
 
 def test_command_groups_without_leaf_show_help_and_succeed() -> None:
     groups = (
         ("app",),
-        ("account",),
-        ("flow",),
         ("check",),
         ("result",),
         ("history",),
-        ("settings",),
         ("system",),
         ("system", "clean"),
     )

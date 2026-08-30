@@ -33,6 +33,7 @@ from product.backend.core.verification.facts import ObservedEffect, TemporalClos
 from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
 from product.backend.workflows.results.trace import build_execution_traces
 from product.protocols.execution_request import (
+    ChangeVerificationContext,
     PermissionPolicySnapshot,
     build_permission_policy_snapshot,
 )
@@ -151,6 +152,17 @@ class ResultRelevantIntent(_PresentationModel):
     intent_id: str = Field(pattern=r"^pin_[0-9a-f]{32}$")
     revision: int = Field(ge=1)
     intent_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    display_label: str | None = Field(default=None, pattern=r"^P-[0-9]{3,4}$")
+
+
+class ResultChangeVerification(_PresentationModel):
+    """结果页需要的变化重验身份与权限范围，不暴露源码指纹。"""
+
+    change_id: str = Field(pattern=r"^chg_[0-9a-f]{32}$")
+    required_intents: tuple[ResultRelevantIntent, ...] = Field(
+        default=(),
+        max_length=4096,
+    )
 
 
 class ResultPresentation(_PresentationModel):
@@ -165,6 +177,7 @@ class ResultPresentation(_PresentationModel):
         default=(),
         max_length=4096,
     )
+    change_verification: ResultChangeVerification | None = None
     headline: str = Field(min_length=1, max_length=160)
     scope_statement: str = Field(min_length=1, max_length=320)
     checked_count: int = Field(ge=0)
@@ -196,6 +209,7 @@ class ResultPresentationBuilder:
             request.project_snapshot,
             finding_views,
             permission_policy=request.permission_policy,
+            change_context=request.change_context,
         )
 
 
@@ -205,6 +219,7 @@ def build_result_presentation(
     finding_views: list[dict[str, Any]],
     *,
     permission_policy: PermissionPolicySnapshot | None = None,
+    change_context: ChangeVerificationContext | None = None,
 ) -> ResultPresentation:
     """纯翻译可信结果事实；不会根据文本、状态码或 Occurrence 重算安全结论。"""
 
@@ -259,6 +274,27 @@ def build_result_presentation(
     if lifecycle is RunLifecycle.SAFETY_STOPPED:
         limitations.append("检查为保护目标现场而安全停止；未完成范围不形成安全结论。")
     execution_problem = _execution_problem(lifecycle)
+    policy_entries = {item.intent_id: item for item in policy.entries}
+    display_labels = {
+        item.intent_id: f"P-{index:03d}"
+        for index, item in enumerate(policy.entries, start=1)
+    }
+    change_verification = (
+        None
+        if change_context is None
+        else ResultChangeVerification(
+            change_id=change_context.change_id,
+            required_intents=tuple(
+                ResultRelevantIntent(
+                    intent_id=policy_entries[intent_id].intent_id,
+                    revision=policy_entries[intent_id].revision,
+                    intent_hash=policy_entries[intent_id].intent_hash,
+                    display_label=display_labels[intent_id],
+                )
+                for intent_id in change_context.required_intent_ids
+            ),
+        )
+    )
     return ResultPresentation(
         run_id=view.run.run_id,
         project_id=view.run.project_id,
@@ -272,9 +308,11 @@ def build_result_presentation(
                 intent_id=item.intent_id,
                 revision=item.revision,
                 intent_hash=item.intent_hash,
+                display_label=display_labels[item.intent_id],
             )
             for item in policy.entries
         ),
+        change_verification=change_verification,
         headline=_headline(verdict, lifecycle),
         scope_statement=_scope_statement(verdict, lifecycle),
         checked_count=len(evidence_items),
@@ -1042,6 +1080,7 @@ def _value(value: Any) -> str:
 __all__ = [
     "PresentedCaseVerdict",
     "ResultConfirmedImpact",
+    "ResultChangeVerification",
     "ResultDiagnosis",
     "ResultEvidenceSource",
     "ResultPresentation",

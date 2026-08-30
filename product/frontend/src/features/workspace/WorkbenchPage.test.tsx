@@ -35,12 +35,18 @@ const officialExperience = { available: true, display_name: '协作空间', unav
 describe('WorkbenchPage', () => {
   beforeEach(() => { vi.clearAllMocks(); mockAssistant.project.mockRejectedValue(new Error('assistant unavailable')) })
 
-  it('只展示唯一下一步主卡与三个固定辅助卡', () => {
-    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[{ lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED' }]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
+  it('只展示唯一下一步主卡与固定辅助卡', () => {
+    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[{ lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED' }]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} mcpStatus={{ schema_version: '1', paired: true, accepting_connections: true, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: true, client_name: 'Codex', client_version: null, last_seen_at_us: 1 }} latestChange={{ change_id: `chg_${'1'.repeat(32)}`, project_id: 'p1', reason: '完成权限修复', created_at_us: 1, status: 'COMPARABLE', complete: true, actual_changed_path_count: 2, added_count: 0, modified_count: 2, removed_count: 0, directly_affected_count: 0, mapping_review_required_count: 0, no_direct_evidence_count: 2, review_intent_ids: [], summary: '当前没有发现与已知权限实现直接相交的变化；这不代表其他未建模影响一定不存在。', next_path: null }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
     expect(screen.queryByText('六步检查进度')).not.toBeInTheDocument()
     expect(screen.getByText('当前应用')).toBeInTheDocument()
     expect(screen.getByText('现在继续')).toBeInTheDocument()
     expect(screen.getByText('最近检查')).toBeInTheDocument()
+    expect(screen.getByText('最近代码变化')).toBeInTheDocument()
+    expect(screen.getByText('当前没有发现与已知权限实现直接相交的变化；这不代表其他未建模影响一定不存在。')).toBeInTheDocument()
+    expect(screen.getByText('服务端确认 2 个文件发生变化')).toBeInTheDocument()
+    expect(screen.getByText('直接影响 0 条权限要求')).toBeInTheDocument()
+    expect(screen.getByText('0 条实现映射需要确认')).toBeInTheDocument()
+    expect(screen.getByText('Codex 已连接')).toBeInTheDocument()
     expect(screen.getByText('[AI辅助]')).toBeInTheDocument()
     expect(screen.queryByText('系统状态')).not.toBeInTheDocument()
     expect(screen.getByText('官方示例')).toBeInTheDocument()
@@ -56,6 +62,14 @@ describe('WorkbenchPage', () => {
     expect(screen.getByText('开始一次安全检查')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '接入自己的应用' })).toBeInTheDocument()
     expect(screen.getByText('或者先体验界鉴')).toBeInTheDocument()
+  })
+
+  it('实现映射待审时只把用户带回权限页', () => {
+    const onNavigate = vi.fn()
+    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} latestChange={{ change_id: `chg_${'2'.repeat(32)}`, project_id: 'p1', reason: '重构动作实现', created_at_us: 2, status: 'COMPARABLE', complete: true, actual_changed_path_count: 3, added_count: 1, modified_count: 2, removed_count: 0, directly_affected_count: 1, mapping_review_required_count: 1, no_direct_evidence_count: 0, review_intent_ids: [`pin_${'3'.repeat(32)}`], summary: '1 条权限实现映射需要用户复核。', next_path: '/check' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={onNavigate} />)
+    fireEvent.click(screen.getByRole('button', { name: '复核权限映射' }))
+    expect(onNavigate).toHaveBeenCalledWith('/check')
+    expect(screen.queryByText(`pin_${'3'.repeat(32)}`)).not.toBeInTheDocument()
   })
 
   it('角色与动作确认完成后指向业务流程', () => {

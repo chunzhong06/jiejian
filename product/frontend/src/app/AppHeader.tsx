@@ -1,8 +1,9 @@
 /* 全局顶部栏：呈现当前应用、活动任务和结构化系统工具入口。 */
 
 import { Button, Layout, Space, Typography } from 'antd'
-import { LogoutOutlined, RobotOutlined, CloudServerOutlined } from '@ant-design/icons'
+import { ApiOutlined, LogoutOutlined, RobotOutlined, CloudServerOutlined } from '@ant-design/icons'
 import type { LLMProfile, AIAssistanceSettings } from '../api/llm'
+import type { MCPAccessView } from '../api/mcp'
 import type { ProjectDto } from '../api/projects'
 import type { SystemStatus } from '../api/system'
 import { ApplicationSwitcher } from '../components/ApplicationSwitcher'
@@ -28,6 +29,15 @@ export function systemStatusLabel(status: SystemStatus) {
     : '系统需处理'
 }
 
+export function mcpStatusLabel(status: MCPAccessView | null, failed: boolean) {
+  if (failed) return 'AI 工具 · 状态未知'
+  if (!status) return 'AI 工具 · 正在读取'
+  if (!status.paired) return 'AI 工具 · 未连接'
+  if (status.client_connected) return `AI 工具 · ${status.client_name?.trim() || '已连接'}`
+  if (status.accepting_connections) return 'AI 工具 · 等待连接'
+  return 'AI 工具 · 已暂停'
+}
+
 type AppHeaderProps = {
   projects: ProjectDto[]
   selected: ProjectDto | null
@@ -36,6 +46,8 @@ type AppHeaderProps = {
   aiSettings: AIAssistanceSettings
   profilesFailed: boolean
   settingsFailed: boolean
+  mcpStatus: MCPAccessView | null
+  mcpStatusFailed: boolean
   systemStatus: SystemStatus
   onSelectProject: (project: ProjectDto) => void
   onConnectNew: () => void
@@ -53,6 +65,8 @@ export function AppHeader({
   aiSettings,
   profilesFailed,
   settingsFailed,
+  mcpStatus,
+  mcpStatusFailed,
   systemStatus,
   onSelectProject,
   onConnectNew,
@@ -70,6 +84,7 @@ export function AppHeader({
       </Button>}
     </div>
     <Space className="topbar-tools" size="small">
+      <Button type="text" icon={<ApiOutlined />} aria-label="打开 AI 工具" onClick={() => onNavigate('/tools')}>{mcpStatusLabel(mcpStatus, mcpStatusFailed)}</Button>
       <Button type="text" icon={<RobotOutlined />} aria-label="打开 AI 辅助设置" onClick={onOpenAI}>{aiStatusLabel(profiles, aiSettings, profilesFailed, settingsFailed)}</Button>
       <Button type="text" icon={<CloudServerOutlined />} aria-label={systemStatusLabel(systemStatus)} onClick={() => onNavigate('/settings/system')}>{systemStatusLabel(systemStatus)}</Button>
       <Button type="text" aria-label="退出界鉴" icon={<LogoutOutlined />} onClick={onRequestShutdown}>退出界鉴</Button>

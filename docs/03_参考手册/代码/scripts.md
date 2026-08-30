@@ -121,7 +121,7 @@
 - `class ApiClient`
 - `run(root, var_dir, stop_after_recording) -> None`
 - `main() -> int`
-主要 import / dot-source：`__future__`, `argparse`, `collections.abc`, `dataclasses`, `json`, `os`, `pathlib`, `playwright.sync_api`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.identity`, `product.backend.infra.runtime.process.lock`, `product.backend.infra.runtime.process.tree`, `re`, `sample_test_windows`, `socket`, `subprocess`, `sys`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
+主要 import / dot-source：`__future__`, `argparse`, `collections.abc`, `dataclasses`, `json`, `os`, `pathlib`, `playwright.sync_api`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.identity`, `product.backend.infra.runtime.process.lock`, `product.backend.infra.runtime.process.tree`, `product.protocols`, `re`, `sample_test_windows`, `socket`, `subprocess`, `sys`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
 
 ### `scripts/dev/sample_test_windows.py`
 - `_PROCESS_QUERY_LIMITED_INFORMATION`

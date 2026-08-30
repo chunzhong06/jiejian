@@ -1,14 +1,14 @@
 # =============================================================================
-# Recording FlowDraft 编译
+# Recording 业务解释构造
 #
 # 定位
 #   已脱敏事件序列与待审阅 FlowDraft 之间的确定性转换
 #
 # 职责
-#   关联逻辑动作｜提取变量与有限资源候选｜推荐 TARGET 并生成规范草稿
+#   关联逻辑动作｜自动整理变量与有限资源候选｜只保留真实业务歧义
 #
 # 边界
-#   只消费已脱敏事件，不访问浏览器或目标，也不让任何推荐自动生效。
+#   只消费已脱敏事件，不访问浏览器或目标；唯一确定结果可以自动生效。
 #
 # 调用链
 #   RecordingSubmission → FlowDraftProcessor → FlowDraft
@@ -47,6 +47,10 @@ _HTTP_METHODS = {"GET", "PATCH", "POST", "PUT", "DELETE"}
 _SENSITIVE_FIELD = re.compile(
     r"(?:authorization|cookie|credential|password|passwd|secret|token|"
     r"api[_-]?key|id[_-]?card|ssn|email|phone|address|full[_-]?name)",
+    re.IGNORECASE,
+)
+_OPAQUE_BUSINESS_VALUE = re.compile(
+    r"^(?:[a-z][a-z0-9_]*[-_])?(?:[0-9]+|[0-9a-f]{8,})$|^[0-9a-f-]{16,}$",
     re.IGNORECASE,
 )
 
@@ -98,7 +102,7 @@ class FlowDraftProcessor:
         events: Sequence[RecordingEvent],
         known_secrets: Sequence[str] = (),
     ) -> FlowDraft:
-        """把连续、已脱敏事件确定性编译为仍需人工确认的首个 FlowDraft revision。"""
+        """把连续、已脱敏事件确定性整理为只保留业务歧义的首个 revision。"""
 
         # --- 阶段：验证事件序列并关联逻辑动作 ---
         ordered = tuple(events)
@@ -136,16 +140,25 @@ class FlowDraftProcessor:
                 name=variable.name,
                 placeholder="{" + variable.name + "}",
                 status=(
-                    FlowDraftVariableStatus.INFERRED
+                    FlowDraftVariableStatus.CONFIRMED
                     if len(variable.candidates) == 1
                     else FlowDraftVariableStatus.UNCONFIRMED
                 ),
                 candidate_sources=variable.candidates,
+                confirmed_source=(variable.candidates[0] if len(variable.candidates) == 1 else None),
                 consumer_step_ids=tuple(sorted(variable.consumers)),
             )
             for variable in variables
         )
         # --- 阶段：构造草稿并执行 canonical 安全校验 ---
+        recommended_target = self._recommend_target(draft_steps, directly_triggered_requests)
+        target_step_id = self._automatic_target(draft_steps, directly_triggered_requests)
+        target = next((step for step in draft_steps if step.id == target_step_id), None)
+        resource_candidate_id = (
+            target.resource_candidates[0].candidate_id
+            if target is not None and len(target.resource_candidates) == 1
+            else None
+        )
         draft = FlowDraft(
             schema_version="1",
             recording_id=recording_id,
@@ -154,10 +167,9 @@ class FlowDraftProcessor:
             revision=1,
             steps=draft_steps,
             variables=draft_variables,
-            recommended_target_step_id=self._recommend_target(
-                draft_steps,
-                directly_triggered_requests,
-            ),
+            recommended_target_step_id=recommended_target,
+            target_step_id=target_step_id,
+            resource_candidate_id=resource_candidate_id,
         )
         canonical_flow_draft_json_bytes(draft, known_secrets=known_secrets)
         return draft
@@ -229,8 +241,22 @@ class FlowDraftProcessor:
                 and event.request_id in by_request
             ):
                 by_request[str(event.request_id)].response = event
-        steps.sort(key=lambda item: item.first_sequence)
-        return steps
+        network = [step for step in steps if step.request is not None]
+        if not network:
+            raise JiejianError(ErrorCode.RECORD_DRAFT_INVALID, "本次演示没有形成可执行的业务请求，请重新演示")
+        for ui_only in (step for step in steps if step.request is None):
+            distances = tuple(abs(item.first_sequence - ui_only.first_sequence) for item in network)
+            nearest_distance = min(distances)
+            nearest = [item for item, distance in zip(network, distances, strict=True) if distance == nearest_distance]
+            if len(nearest) != 1:
+                raise JiejianError(
+                    ErrorCode.RECORD_DRAFT_INVALID,
+                    "演示中的界面操作无法唯一归属业务请求，请减少无关操作后重新演示",
+                )
+            nearest[0].actions.extend(ui_only.actions)
+            nearest[0].first_sequence = min(nearest[0].first_sequence, ui_only.first_sequence)
+        network.sort(key=lambda item: item.first_sequence)
+        return network
 
     def _response_sources(self, steps: Sequence[_StepData]) -> tuple[_ValueSource, ...]:
         sources: list[_ValueSource] = []
@@ -393,36 +419,52 @@ class FlowDraftProcessor:
             return ()
         candidates: list[FlowDraftResourceCandidate] = []
         parsed = urlsplit(step.path or "/")
+        recorded = urlsplit(step.request.url or "/")
         path_segments = [segment for segment in parsed.path.split("/") if segment]
+        recorded_segments = [unquote(segment) for segment in recorded.path.split("/") if segment]
         for index, segment in enumerate(path_segments):
-            value = unquote(segment)
-            if self._candidate_value(value):
+            value = recorded_segments[index] if index < len(recorded_segments) else unquote(segment)
+            if (
+                value != unquote(segment) or index == len(path_segments) - 1
+            ) and self._candidate_value(value):
                 candidates.append(
                     self._resource_candidate(
                         step.step_id,
                         ValueSlotConsumer.PATH,
                         f"path[{index}]",
-                        f"路径第 {index + 1} 段",
+                        self._business_candidate_label(value, "看起来是当前业务对象"),
                     )
                 )
-        for name, value in parse_qsl(parsed.query, keep_blank_values=True):
+        recorded_query = dict(parse_qsl(recorded.query, keep_blank_values=True))
+        for name, current_value in parse_qsl(parsed.query, keep_blank_values=True):
+            value = recorded_query.get(name, current_value)
             if self._candidate_value(value) and not _SENSITIVE_FIELD.search(name):
                 candidates.append(
                     self._resource_candidate(
                         step.step_id,
                         ValueSlotConsumer.QUERY,
                         f"query.{name}",
-                        f"查询参数 {name}",
+                        self._business_candidate_label(
+                            value,
+                            f"看起来是当前 {self._business_field(name)}",
+                        ),
                     )
                 )
-        for path, value in self._walk_scalars(step.json_body):
+        recorded_body = self._request_json(step.request)
+        for path, current_value in self._walk_scalars(step.json_body):
+            value = self._json_location(recorded_body, path)
+            if value is None:
+                value = current_value
             if self._candidate_value(value) and not self._path_sensitive(path):
                 candidates.append(
                     self._resource_candidate(
                         step.step_id,
                         ValueSlotConsumer.JSON_BODY,
                         path,
-                        f"请求正文 {path}",
+                        self._business_candidate_label(
+                            value,
+                            f"看起来是当前 {self._business_field(path)}",
+                        ),
                     )
                 )
         return tuple(candidates[:128])
@@ -445,6 +487,14 @@ class FlowDraftProcessor:
         )
 
     @staticmethod
+    def _business_candidate_label(value: Any, meaning: str) -> str:
+        """只把可读业务值放进标签，内部编号仍留在确定性候选结构。"""
+
+        if isinstance(value, str) and not _OPAQUE_BUSINESS_VALUE.fullmatch(value):
+            return f"{value} · {meaning}"
+        return meaning
+
+    @staticmethod
     def _recommend_target(
         steps: tuple[FlowDraftStep, ...],
         directly_triggered_requests: frozenset[str],
@@ -464,6 +514,26 @@ class FlowDraftProcessor:
             ),
         )
         return ranked[-1].id
+
+    @staticmethod
+    def _automatic_target(
+        steps: tuple[FlowDraftStep, ...],
+        directly_triggered_requests: frozenset[str],
+    ) -> str | None:
+        network = tuple(step for step in steps if step.method is not None)
+        if not network:
+            return None
+        scores = {
+            step.id: (
+                step.request_id in directly_triggered_requests,
+                step.method in {"PATCH", "POST", "PUT", "DELETE"},
+                bool(step.resource_candidates),
+            )
+            for step in network
+        }
+        best = max(scores.values())
+        winners = tuple(step.id for step in network if scores[step.id] == best)
+        return winners[0] if len(winners) == 1 else None
 
     @staticmethod
     def _relative_path(url: str | None) -> str:
@@ -550,6 +620,22 @@ class FlowDraftProcessor:
         elif isinstance(value, (str, int)) and not isinstance(value, bool):
             found.append((path, value))
         return found
+
+    @staticmethod
+    def _json_location(value: Any, path: str) -> Any:
+        current = value
+        for field, offset in re.findall(r"\.([A-Za-z_][A-Za-z0-9_-]*)|\[([0-9]+)\]", path):
+            key: str | int = field if field else int(offset)
+            try:
+                current = current[key]
+            except (KeyError, IndexError, TypeError):
+                return None
+        return current
+
+    @staticmethod
+    def _business_field(value: str) -> str:
+        tail = re.split(r"[.\[\]_-]+", value)[-1].strip()
+        return {"id": "业务对象", "project": "项目", "resource": "资源"}.get(tail.casefold(), tail or "业务对象")
 
     @staticmethod
     def _candidate_value(value: Any) -> bool:
@@ -640,7 +726,13 @@ class FlowDraftProcessor:
     @staticmethod
     def _step_name(step: _StepData) -> str:
         if step.request is not None:
-            return f"{step.request.method} request"
+            return {
+                "GET": "读取业务状态",
+                "POST": "提交业务操作",
+                "PUT": "更新业务对象",
+                "PATCH": "更新业务对象",
+                "DELETE": "删除业务对象",
+            }.get(str(step.request.method), "完成业务操作")
         if step.actions:
             labels = {
                 RecordingEventKind.UI_CLICK: "click",

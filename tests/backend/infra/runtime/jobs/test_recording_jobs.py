@@ -23,8 +23,9 @@ from product.protocols import (
     RecordingRunnerResultType,
     RecordingRunnerResult,
     RecordingSessionRef,
-    ConfirmFlowDraftVariable,
+    ConfirmFlowDraftVariableChoice,
     canonical_recording_json_bytes,
+    flow_draft_source_choice_id,
     parse_recording_result,
 )
 from product.backend.workflows.recording.submission import (
@@ -113,12 +114,11 @@ def test_recording_job_reaches_pending_review_with_atomic_draft(tmp_path: Path) 
         lifecycle = RecordingLifecycle(context.uow_factory, var_dir=context.var_dir)
         reviewed = lifecycle.review(
             request.recording_id,
-            ConfirmFlowDraftVariable(
+            ConfirmFlowDraftVariableChoice(
                 schema_version="1",
-                operation="CONFIRM_VARIABLE_SOURCE",
+                operation="CONFIRM_VARIABLE_CHOICE",
                 variable_name=variable.name,
-                source_event_sequence=source.source_event_sequence,
-                source_json_path=source.json_path,
+                choice_id=flow_draft_source_choice_id(source),
             ),
         )
         assert reviewed.draft is not None

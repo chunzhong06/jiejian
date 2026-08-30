@@ -91,7 +91,6 @@ describe('ApplicationSetup', () => {
     expect(await screen.findByText('确认本地访问地址', { selector: '.ant-card-head-title' })).toBeInTheDocument()
     expect(screen.getByText(/只探测 127\.0\.0\.1/)).toBeInTheDocument()
     expect(screen.queryByText(/::1/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('高级：目录识别信息'))
     expect(await screen.findByText('Vite')).toBeInTheDocument()
     expect(screen.getByText(/可能启动方式：Vite 开发服务候选/)).toBeInTheDocument()
     expect(screen.getByText(/vite.config.ts/)).toBeInTheDocument()
@@ -235,8 +234,8 @@ describe('ApplicationSetup', () => {
     expect(screen.queryByText('python-role-enum')).not.toBeInTheDocument()
     expect(screen.queryByText('已忽略')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByText('查看发现依据')[0])
-    expect(await screen.findByText('python-role-enum')).toBeInTheDocument()
+    expect(screen.getAllByText(/识别依据：app.py:3 · AccountRole/).length).toBeGreaterThan(0)
+    expect(screen.queryByText('python-role-enum')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('已排除的候选（2）'))
     expect(await screen.findByText('排除组')).toBeInTheDocument()
     expect(screen.getByText('手工排除组')).toBeInTheDocument()

@@ -38,7 +38,7 @@ GUI 退出请求复用由根页面取得的当前 control session，并由统一
 
 CLI 引导只调用 ApplicationCore 和现有 onboarding、Project、Contract、Execution、Recording 与 Result 能力，不保存第二套进度。首页固定使用“开始第一次权限检查 / 检查运行环境 / 录制业务流程 / 查看最近检查结果 / 打开图形界面 / 进入普通命令行 / 退出”。仓库 Sample 的 fixed、vulnerable、inconclusive 三种变体从 `samples/web` 通过普通 Contract、Profile、Job、Worker、Runner 和已发布结果链运行；产品不根据变体或 truth 特判结论。真实应用需要复杂权限矩阵或流程编辑时，引导用户进入现有 `serve --open`，不要求普通用户手写 JSON 或内部标识。
 
-CLI 的人类结果、机器结果和运行日志分开：Human 只在终端展示任务结果与恢复建议；`--json` 的 stdout 只有一个稳定 JSON 对象；CI 保持机器模式和既有退出码；脱敏结构化日志写入 `VarDir/logs/jiejian.log`。普通 CLI 命令不把 INFO 日志写到 stderr，Worker、Runner 和 serve 仍保留所需日志。Human 默认隐藏内部标识和复杂技术字段，只有 `--verbose` 展示有界技术详情，`--verbose` 不得与 `--json` 或 CI 混用。
+CLI 的人类结果、机器结果和运行日志分开：Human 只在终端展示任务结果与恢复建议；`--json` 的 stdout 只有一个稳定 JSON 对象；CI 保持机器模式和既有退出码；脱敏结构化日志写入 `VarDir/logs/jiejian.log`。普通 CLI 命令不把 INFO 日志写到 stderr，Worker、Runner 和 serve 仍保留所需日志。Human 不显示内部标识和复杂技术字段；完整结构使用 `--json`，运行环境诊断使用 `system doctor`。
 
 失败输出固定包含失败阶段、稳定错误码、主要错误、日志位置和恢复建议。`scripts/start.ps1` 直接调用及显式非交互模式保持原始退出码且不等待；根 `start.cmd` 在 PowerShell 返回任意非零退出码后统一等待用户关闭窗口，并在等待结束后返回原始退出码。等待由最外层入口负责，因此参数绑定、模块加载或 PowerShell 内部展示失效也不会让双击窗口直接消失；自动化需要立即获得退出码时直接调用 `scripts/start.ps1`。
 

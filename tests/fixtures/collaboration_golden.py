@@ -39,13 +39,14 @@ from product.backend.workflows.test_identities import PreparedLoginState
 from product.protocols import (
     ConfirmFlowDraftResource,
     ConfirmFlowDraftTarget,
-    ConfirmFlowDraftVariable,
+    ConfirmFlowDraftVariableChoice,
     RecordingBudget,
     RecordingEvent,
     RecordingEventKind,
     RecordingRunnerRequest,
     ValueSlotConsumer,
     canonical_flow_draft_json_bytes,
+    flow_draft_source_choice_id,
 )
 from product.protocols.web.target import WebTargetScope
 from samples.web.collaboration_space.source.storage import (
@@ -343,12 +344,11 @@ def _persist_export_recording(
         source = variable.candidate_sources[0]
         reviewed = reviewer.apply(
             reviewed,
-            ConfirmFlowDraftVariable(
+            ConfirmFlowDraftVariableChoice(
                 schema_version="1",
-                operation="CONFIRM_VARIABLE_SOURCE",
+                operation="CONFIRM_VARIABLE_CHOICE",
                 variable_name=variable.name,
-                source_event_sequence=source.source_event_sequence,
-                source_json_path=source.json_path,
+                choice_id=flow_draft_source_choice_id(source),
             ),
         )
     targeted = reviewer.apply(

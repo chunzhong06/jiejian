@@ -2,13 +2,14 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { aiStatusLabel, systemStatusLabel } from './AppHeader'
+import { aiStatusLabel, mcpStatusLabel, systemStatusLabel } from './AppHeader'
 import ControlShell from './ControlShell'
 
 const mockApi = vi.hoisted(() => ({
   projects: vi.fn().mockResolvedValue([]), readiness: vi.fn(), runs: vi.fn().mockResolvedValue([]), run: vi.fn(),
   removeProject: vi.fn().mockResolvedValue({ project_id: 'p1', status: 'ARCHIVED' }),
   llmProfiles: vi.fn().mockResolvedValue([]), settings: vi.fn().mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }), systemStatus: vi.fn().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }), shutdown: vi.fn().mockResolvedValue({ status: 'stopping' }),
+  mcpStatus: vi.fn().mockResolvedValue({ schema_version: '1', paired: false, accepting_connections: false, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null }),
   maintenanceStatus: vi.fn().mockResolvedValue({
     schema_version: '1',
     entries: {
@@ -22,7 +23,8 @@ const mockApi = vi.hoisted(() => ({
   assistantProject: vi.fn(), assistantGenerateProject: vi.fn(), assistantResult: vi.fn(), assistantGenerateResult: vi.fn(), assistantGenerateError: vi.fn(),
   experienceStatus: vi.fn().mockResolvedValue({ available: false, display_name: '协作空间', unavailable_reason: '未配置官方示例目录', active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null }),
   experienceStart: vi.fn(), experienceIdentities: vi.fn(), experienceFix: vi.fn(), experienceStop: vi.fn(),
-  checkPreview: vi.fn(), checkSubmit: vi.fn(), permissionMatrix: vi.fn(), permissionConfirm: vi.fn(), permissionCompile: vi.fn(),
+  latestChange: vi.fn().mockResolvedValue(null),
+  checkPreview: vi.fn(), checkSubmit: vi.fn(), permissionMatrix: vi.fn(), permissionProposals: vi.fn(), permissionConfirm: vi.fn(), permissionCompile: vi.fn(),
   cancel: vi.fn().mockResolvedValue({}), progress: vi.fn().mockResolvedValue({ job_id: 'job', attempt: 1, events: [] }), findings: vi.fn().mockResolvedValue([]), evidence: vi.fn().mockResolvedValue([]), evidenceDetail: vi.fn().mockResolvedValue({}), presentation: vi.fn(), history: vi.fn(), reports: vi.fn().mockResolvedValue([]), report: vi.fn().mockResolvedValue({}), reportView: vi.fn((runId: string, reportId: string) => `/api/runs/${runId}/reports/${reportId}/view`),
 }))
 
@@ -48,6 +50,7 @@ vi.mock('../api/projects', () => ({ projectsApi: {
 } }))
 vi.mock('../api/runs', () => ({ runsApi: { runs: mockApi.runs, run: mockApi.run, cancel: mockApi.cancel, progress: mockApi.progress, createRun: vi.fn() } }))
 vi.mock('../api/llm', () => ({ llmApi: { profiles: mockApi.llmProfiles, settings: mockApi.settings } }))
+vi.mock('../api/mcp', () => ({ mcpAccessApi: { status: mockApi.mcpStatus } }))
 vi.mock('../api/assistant', () => ({ assistantApi: {
   project: mockApi.assistantProject,
   generateProject: mockApi.assistantGenerateProject,
@@ -57,14 +60,16 @@ vi.mock('../api/assistant', () => ({ assistantApi: {
 } }))
 vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus, start: mockApi.experienceStart, prepareIdentities: mockApi.experienceIdentities, verifyFixedBehavior: mockApi.experienceFix, stop: mockApi.experienceStop } }))
 vi.mock('../api/system', () => ({ systemApi: { status: mockApi.systemStatus, maintenanceStatus: mockApi.maintenanceStatus, maintenanceOperation: mockApi.maintenanceOperation, shutdown: mockApi.shutdown } }))
+vi.mock('../api/sourceChanges', () => ({ sourceChangesApi: { latest: mockApi.latestChange } }))
 vi.mock('../api/checks', () => ({ checksApi: { preview: mockApi.checkPreview, submit: mockApi.checkSubmit } }))
-vi.mock('../api/permissionIntents', () => ({ permissionIntentsApi: { matrix: mockApi.permissionMatrix, confirm: mockApi.permissionConfirm, compile: mockApi.permissionCompile } }))
+vi.mock('../api/permissionIntents', () => ({ permissionIntentsApi: { matrix: mockApi.permissionMatrix, proposals: mockApi.permissionProposals, confirm: mockApi.permissionConfirm, compile: mockApi.permissionCompile } }))
 vi.mock('../api/results', () => ({ resultsApi: { findings: mockApi.findings, evidence: mockApi.evidence, evidenceDetail: mockApi.evidenceDetail, presentation: mockApi.presentation, history: mockApi.history, reports: mockApi.reports, report: mockApi.report, reportView: mockApi.reportView, reportFormat: (runId: string, reportId: string, format: string) => `/api/runs/${runId}/reports/${reportId}/formats/${format}` } }))
 vi.mock('../api/http', () => ({ ApiError: class extends Error {}, request: vi.fn() }))
 
 describe('应用壳', () => {
   afterEach(() => cleanup())
-  beforeEach(() => { localStorage.clear(); window.location.hash = ''; vi.clearAllMocks(); mockApi.projects.mockResolvedValue([]); mockApi.readiness.mockResolvedValue({ project_id: 'p1', project_status: 'READY', application_connected: true, endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED', discovered_role_count: 1, confirmed_role_count: 1, discovered_action_count: 1, confirmed_action_count: 1, execution_profile_available: false, completed_flow_available: false, active_contract_available: false, permission_actions: [], current_scope_runnable: false, remaining_gap_count: 1, active_tasks: [], latest_verified_run_id: null, next_required_action: 'RECORD_FLOW' }); mockApi.runs.mockResolvedValue([]); mockApi.llmProfiles.mockResolvedValue([]); mockApi.settings.mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }); mockApi.systemStatus.mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.permissionMatrix.mockResolvedValue({ project_id: 'p1', actions: [], confirmed_count: 0, review_required_count: 0, unconfirmed_count: 0, executable_count: 0, representative_gap_count: 0, compilable_action_count: 0 }); mockApi.presentation.mockResolvedValue({ run_id: 'run-current', project_id: 'p1', project_name: '演示应用', run_lifecycle: 'COMPLETED', verdict: 'BLOCK', headline: '发现权限问题', scope_statement: '当前范围已检查。', checked_count: 1, safe_count: 0, problem_count: 1, inconclusive_count: 0, uncovered_count: 0, execution_problem: null, issues: [], limitations: [], execution_traces: [] }); mockApi.history.mockResolvedValue({ project_id: 'p1', comparisons: [{ run_id: 'run-history', previous_run_id: null, checked_at_us: 1, changes: [{ finding_id: 'finding-1', title: '权限问题', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', status: 'NEW', status_label: '新发现', explanation: '首次确认。', severity: 'high', evidence_refs: [], current_verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }] }] }); mockApi.assistantProject.mockRejectedValue(new Error('assistant unavailable')); mockApi.assistantResult.mockRejectedValue(new Error('assistant unavailable')); mockApi.checkPreview.mockResolvedValue({ project_id: 'p1', ready: false, actions: [], gaps: [], next_path: null, next_label: null, case_count: 0, differential_pair_count: 0 }) })
+  beforeEach(() => { localStorage.clear(); window.location.hash = ''; vi.clearAllMocks(); mockApi.latestChange.mockResolvedValue(null); mockApi.projects.mockResolvedValue([]); mockApi.readiness.mockResolvedValue({ project_id: 'p1', project_status: 'READY', application_connected: true, endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED', discovered_role_count: 1, confirmed_role_count: 1, discovered_action_count: 1, confirmed_action_count: 1, execution_profile_available: false, completed_flow_available: false, active_contract_available: false, permission_actions: [], current_scope_runnable: false, remaining_gap_count: 1, active_tasks: [], latest_verified_run_id: null, next_required_action: 'RECORD_FLOW' }); mockApi.runs.mockResolvedValue([]); mockApi.llmProfiles.mockResolvedValue([]); mockApi.settings.mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }); mockApi.mcpStatus.mockResolvedValue({ schema_version: '1', paired: false, accepting_connections: false, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null }); mockApi.systemStatus.mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.permissionMatrix.mockResolvedValue({ project_id: 'p1', actions: [], confirmed_count: 0, review_required_count: 0, unconfirmed_count: 0, executable_count: 0, representative_gap_count: 0, compilable_action_count: 0 }); mockApi.presentation.mockResolvedValue({ run_id: 'run-current', project_id: 'p1', project_name: '演示应用', run_lifecycle: 'COMPLETED', verdict: 'BLOCK', headline: '发现权限问题', scope_statement: '当前范围已检查。', checked_count: 1, safe_count: 0, problem_count: 1, inconclusive_count: 0, uncovered_count: 0, execution_problem: null, issues: [], limitations: [], execution_traces: [] }); mockApi.history.mockResolvedValue({ project_id: 'p1', comparisons: [{ run_id: 'run-history', previous_run_id: null, checked_at_us: 1, changes: [{ finding_id: 'finding-1', title: '权限问题', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', status: 'NEW', status_label: '新发现', explanation: '首次确认。', severity: 'high', evidence_refs: [], current_verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }] }] }); mockApi.assistantProject.mockRejectedValue(new Error('assistant unavailable')); mockApi.assistantResult.mockRejectedValue(new Error('assistant unavailable')); mockApi.checkPreview.mockResolvedValue({ project_id: 'p1', ready: false, actions: [], gaps: [], next_path: null, next_label: null, case_count: 0, differential_pair_count: 0 }) })
+  beforeEach(() => mockApi.permissionProposals.mockResolvedValue({ project_id: 'p1', proposals: [] }))
 
   it('显示工作台、任务导航和真实运行状态', async () => {
     render(<ControlShell />)
@@ -73,6 +78,7 @@ describe('应用壳', () => {
     for (const item of ['工作台', '应用接入', '测试账号', '业务流程', '权限与检查', '检查结果', '历史变化']) expect(screen.getAllByText(item).length).toBeGreaterThan(0)
     expect(document.querySelector('.process-navigation')).toBeInTheDocument()
     expect(screen.getByText('AI辅助 · 未开启')).toBeInTheDocument()
+    expect(screen.getByText('AI 工具 · 未连接')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '系统需处理' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '设置与更多' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '退出界鉴' })).toBeInTheDocument()
@@ -85,6 +91,11 @@ describe('应用壳', () => {
     expect(aiStatusLabel([], disabled, false, false)).toBe('AI辅助 · 未开启')
     expect(aiStatusLabel([], enabled, false, false)).toBe('AI辅助 · 待配置')
     expect(aiStatusLabel([], enabled, true, false)).toBe('AI辅助 · 状态未知')
+    const mcp = { schema_version: '1' as const, paired: true, accepting_connections: true, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ' as const, project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null }
+    expect(mcpStatusLabel({ ...mcp, paired: false }, false)).toBe('AI 工具 · 未连接')
+    expect(mcpStatusLabel(mcp, false)).toBe('AI 工具 · 等待连接')
+    expect(mcpStatusLabel({ ...mcp, client_connected: true, client_name: 'Codex' }, false)).toBe('AI 工具 · Codex')
+    expect(mcpStatusLabel(mcp, true)).toBe('AI 工具 · 状态未知')
     expect(systemStatusLabel({ api: 'available', worker: 'running', browser: 'available' })).toBe('系统正常')
     expect(systemStatusLabel({ api: 'available', worker: 'stopped', browser: 'available' })).toBe('系统需处理')
   })

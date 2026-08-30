@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 from product.backend.cli.app import app
 from product.backend.cli.presentation import configure_presentation, emit_human, emit_result_presentation, fail
 from product.backend.core.errors import ErrorCode, JiejianError
-def test_human_result_hides_technical_details_until_verbose(capsys) -> None:
+def test_human_result_never_prints_internal_details(capsys) -> None:
     payload = {
         "schema_version": "1",
         "run_id": "run_demo",
@@ -22,25 +22,19 @@ def test_human_result_hides_technical_details_until_verbose(capsys) -> None:
     configure_presentation("human")
     emit_human(payload)
     ordinary = capsys.readouterr().out
-    configure_presentation("human", verbose=True)
-    emit_human(payload)
-    verbose = capsys.readouterr().out
     configure_presentation("auto")
 
     assert ordinary.startswith("界鉴检查\n")
     assert "高级：技术详情" not in ordinary
     assert "run_demo" not in ordinary
-    assert "高级：技术详情" in verbose
-    assert "运行标识：run_demo" in verbose
-    assert "internal_marker：kept=one、two" in verbose
-    assert "{" not in verbose and "}" not in verbose
+    assert "internal_marker" not in ordinary
 
 
-def test_verbose_and_json_are_rejected_as_ambiguous() -> None:
+def test_verbose_is_not_a_public_option() -> None:
     result = CliRunner().invoke(app, ["--json", "--verbose", "system", "doctor"])
 
     assert result.exit_code != 0
-    assert "--verbose 只能用于普通人类可读输出" in result.stderr
+    assert "--verbose" in result.stderr
 
 
 def test_result_presentation_uses_surface_and_real_effect_language(capsys) -> None:

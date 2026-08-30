@@ -41,6 +41,7 @@ describe('MCPAccessCard', () => {
     renderCard()
 
     fireEvent.click(await screen.findByRole('button', { name: '首次配对 AI 工具' }))
+    fireEvent.click(await screen.findByRole('button', { name: '管理连接' }))
     const token = await screen.findByLabelText('MCP 连接凭据')
     expect(token).toHaveValue('mcp-secret-token')
     expect(token).toHaveAttribute('type', 'password')
@@ -56,12 +57,22 @@ describe('MCPAccessCard', () => {
     expect(screen.queryByText('mcp-secret-token')).not.toBeInTheDocument()
   })
 
+  it('keeps all client guides available before the first pairing', async () => {
+    renderCard()
+
+    expect(await screen.findByText('Codex', { selector: '.ant-card-head-title' })).toBeInTheDocument()
+    expect(screen.getByText('DSH', { selector: '.ant-card-head-title' })).toBeInTheDocument()
+    expect(screen.getByText('其他 MCP 客户端', { selector: '.ant-card-head-title' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看 Codex 三步连接' })).toBeInTheDocument()
+  })
+
   it('reveals only after the explicit action while keeping the input masked', async () => {
     mockApi.status.mockResolvedValue(waiting)
     mockApi.reveal.mockResolvedValue(credential)
     renderCard()
 
-    fireEvent.click(await screen.findByRole('button', { name: '显示连接凭据' }))
+    fireEvent.click(await screen.findByRole('button', { name: '管理连接' }))
+    fireEvent.click(screen.getByRole('button', { name: '显示连接凭据' }))
     const token = await screen.findByLabelText('MCP 连接凭据')
     expect(mockApi.reveal).toHaveBeenCalledOnce()
     expect(token).toHaveValue('mcp-secret-token')
@@ -72,13 +83,19 @@ describe('MCPAccessCard', () => {
     mockApi.status.mockResolvedValue(waiting)
     renderCard()
 
-    await screen.findByRole('tab', { name: 'Codex' })
+    await screen.findByText('Codex', { selector: '.ant-card-head-title' })
+    fireEvent.click(screen.getByRole('button', { name: '查看 Codex 三步连接' }))
+    expect(screen.getByText('1. 准备长期凭据')).toBeInTheDocument()
+    expect(screen.getByText('2. 一次性配置客户端')).toBeInTheDocument()
+    expect(screen.getByText('3. 等待 initialize 成功')).toBeInTheDocument()
     expect(screen.getByText(/codex mcp add jiejian/)).toBeInTheDocument()
-    expect(screen.getByText('token env：JIEJIAN_MCP_TOKEN')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: 'DSH' }))
+    expect(screen.getByText(/SetEnvironmentVariable/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('button', { name: '查看 DSH 三步连接' }))
     expect(screen.getAllByText(/@deepseek-ai\/dsh-mcp-client/).length).toBeGreaterThan(0)
     expect(screen.getByText(/!!js/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: '其他 MCP' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('button', { name: '查看其他 MCP 客户端连接说明' }))
     expect(screen.getByText(/Streamable HTTP endpoint/)).toBeInTheDocument()
     expect(screen.getByText(/PREPARE\/EXECUTE 必须回界鉴当前会话授权/)).toBeInTheDocument()
     expect(screen.getByText(/以后启动界鉴会自动恢复只读连接/)).toBeInTheDocument()
@@ -108,7 +125,8 @@ describe('MCPAccessCard', () => {
     mockApi.forget.mockResolvedValue(unpaired)
     renderCard()
 
-    fireEvent.click(await screen.findByRole('button', { name: '显示连接凭据' }))
+    fireEvent.click(await screen.findByRole('button', { name: '管理连接' }))
+    fireEvent.click(screen.getByRole('button', { name: '显示连接凭据' }))
     await screen.findByLabelText('MCP 连接凭据')
     fireEvent.click(screen.getByRole('button', { name: '暂停本次连接' }))
     await waitFor(() => expect(mockApi.pause).toHaveBeenCalledOnce())
@@ -155,7 +173,8 @@ describe('MCPAccessCard', () => {
     const onError = vi.fn()
     const view = render(<MCPAccessCard open projects={[]} onError={onError} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '显示连接凭据' }))
+    fireEvent.click(await screen.findByRole('button', { name: '管理连接' }))
+    fireEvent.click(screen.getByRole('button', { name: '显示连接凭据' }))
     view.rerender(<MCPAccessCard open={false} projects={[]} onError={onError} />)
     view.rerender(<MCPAccessCard open projects={[]} onError={onError} />)
     await screen.findByText('已配对，正在等待客户端完成 initialize。默认权限为只读。')
@@ -163,6 +182,6 @@ describe('MCPAccessCard', () => {
     await Promise.resolve()
 
     expect(screen.queryByLabelText('MCP 连接凭据')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '显示连接凭据' })).not.toHaveClass('ant-btn-loading')
+    expect(screen.queryByLabelText('MCP 连接凭据')).not.toBeInTheDocument()
   })
 })

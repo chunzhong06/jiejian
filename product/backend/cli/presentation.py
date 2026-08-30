@@ -19,16 +19,12 @@ from product.backend.workflows.results.presentation import ResultPresentation
 
 _configured_presentation = "auto"
 _configured_machine_only = False
-_configured_verbose = False
 
 
-def configure_presentation(
-    mode: str, *, machine_only: bool = False, verbose: bool = False
-) -> None:
-    global _configured_presentation, _configured_machine_only, _configured_verbose
+def configure_presentation(mode: str, *, machine_only: bool = False) -> None:
+    global _configured_presentation, _configured_machine_only
     _configured_presentation = mode
     _configured_machine_only = machine_only
-    _configured_verbose = verbose
 
 
 def _root_context() -> click.Context | None:
@@ -79,11 +75,6 @@ def presentation_mode(context: click.Context | None = None) -> str:
     if explicit != "auto":
         return explicit
     return "human" if click.get_text_stream("stdout").isatty() else "json"
-
-
-def verbose_enabled() -> bool:
-    options = _options()
-    return _configured_verbose or bool(getattr(options, "verbose", False))
 
 
 _FIELD_LABELS = {
@@ -138,16 +129,6 @@ def _outcome(value: object) -> str:
         "INCONCLUSIVE": "证据不足，暂时不能下结论",
         "ERROR": "错误",
     }.get(str(value), _human_value(value))
-
-
-def _technical_value(value: object) -> str:
-    if isinstance(value, dict):
-        items = [f"{key}={_technical_value(item)}" for key, item in value.items()]
-        return "；".join(items[:12]) + ("；…" if len(items) > 12 else "")
-    if isinstance(value, (list, tuple)):
-        items = [_technical_value(item) for item in value]
-        return "、".join(items[:12]) + ("、…" if len(items) > 12 else "")
-    return _human_value(value)
 
 
 def _status_value(value: object) -> str:
@@ -258,21 +239,6 @@ def _result_sections(payload: dict[str, object]) -> list[tuple[str, list[tuple[s
         result_rows.append((_FIELD_LABELS[key], rendered, str(value) if key in {"verdict", "decision"} else ""))
     if result_rows:
         sections.append(("检查结果", result_rows))
-    technical_order = (
-        "flow_id", "contract_id", "run_id", "job_id", "recording_id",
-        "report_id", "gate_result_id", "baseline_id", "draft_revision", "reason_codes",
-    )
-    technical_rows: list[tuple[str, object, str]] = []
-    for key in technical_order:
-        if key not in payload:
-            continue
-        shown.add(key)
-        technical_rows.append((_FIELD_LABELS[key], _technical_value(payload[key]), ""))
-    for key, value in payload.items():
-        if key not in shown:
-            technical_rows.append((str(key), _technical_value(value), ""))
-    if technical_rows and verbose_enabled():
-        sections.append(("高级：技术详情", technical_rows))
     return sections
 
 
@@ -408,20 +374,6 @@ def emit_result_presentation(presentation: ResultPresentation) -> None:
             "限制与下一步",
             [("", item, "") for item in presentation.limitations],
         )
-    if verbose_enabled():
-        typer.echo("")
-        _emit_section(
-            "高级：技术详情",
-            [
-                ("运行标识", presentation.run_id, ""),
-                ("项目标识", presentation.project_id, ""),
-                (
-                    "问题标识",
-                    "、".join(item.finding_id for item in presentation.issues) or "无",
-                    "",
-                ),
-            ],
-        )
 
 
 def _evidence_role_label(value: object) -> str:
@@ -474,19 +426,6 @@ def emit_status(status: object) -> None:
                 ("范围", status.latest_result.scope_statement, ""),
             ],
         )
-    if verbose_enabled() and project is not None:
-        typer.echo("")
-        _emit_section(
-            "高级：技术详情",
-            [
-                ("项目标识", project.project_id, ""),
-                (
-                    "最近运行",
-                    status.latest_result.run_id if status.latest_result is not None else "无",
-                    "",
-                ),
-            ],
-        )
 
 
 def emit_command(
@@ -526,19 +465,6 @@ def emit_command(
                     else:
                         rows.append((f"第 {index} 项", "已读取", ""))
                 _emit_section("结果", rows or [("", "暂无记录", "")])
-                if verbose_enabled():
-                    typer.echo("")
-                    _emit_section(
-                        "高级：技术详情",
-                        [
-                            (
-                                f"第 {index} 项",
-                                _technical_value(item),
-                                "",
-                            )
-                            for index, item in enumerate(payload, start=1)
-                        ],
-                    )
             else:
                 emit_human(payload)
         return

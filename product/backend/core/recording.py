@@ -41,6 +41,12 @@ class RecordingState(StrEnum):
     SAFETY_STOPPED = "SAFETY_STOPPED"
 
 
+class RecordingPurpose(StrEnum):
+    TARGET = "TARGET"
+    OBSERVATION = "OBSERVATION"
+    RECOVERY = "RECOVERY"
+
+
 class RecordingTerminalState(StrEnum):
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -82,6 +88,8 @@ class RecordingStateEvent(RecordingModel):
 class Recording(RecordingModel):
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    purpose: RecordingPurpose = RecordingPurpose.TARGET
+    parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
     state: RecordingState = RecordingState.CREATED
     created_at_us: int = Field(ge=0)
     updated_at_us: int = Field(ge=0)
@@ -94,6 +102,10 @@ class Recording(RecordingModel):
 
     @model_validator(mode="after")
     def validate_lifecycle_times(self) -> Recording:
+        if (self.purpose is RecordingPurpose.TARGET) != (self.parent_recording_id is None):
+            raise ValueError("only supplemental recordings reference a parent recording")
+        if self.parent_recording_id == self.recording_id:
+            raise ValueError("recording cannot reference itself as parent")
         if self.updated_at_us < self.created_at_us:
             raise ValueError("recording update time precedes creation")
         if self.started_at_us is not None and self.started_at_us < self.created_at_us:

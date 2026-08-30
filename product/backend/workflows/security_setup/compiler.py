@@ -165,10 +165,7 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         raw = canonical_web_execution_profile_json_bytes(profile)
         profile_sha256 = hashlib.sha256(raw).hexdigest()
         profile_path = self._write_profile(project_id, profile_sha256, raw)
-        record = self._execution.register(
-            profile_path,
-            accept_source_changes=True,
-        )
+        record = self._execution.register_generated(profile_path)
         self._mark_project_ready(project_id)
         return SecuritySetupCompileResult(
             project_id=project_id,
@@ -195,7 +192,10 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         try:
             Path(record.source_path).resolve().relative_to(generated)
         except ValueError:
-            return
+            raise JiejianError(
+                ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT,
+                "检查配置不是由当前项目安全准备生成",
+            ) from None
         try:
             authority_facts = self._collect(
                 record.project_id,

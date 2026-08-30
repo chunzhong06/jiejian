@@ -1,5 +1,5 @@
 # =============================================================================
-# Web 执行 Profile 协议
+# 内部生成的 Web 执行输入协议
 #
 # 定位
 # 用户治理源文件进入冻结执行快照前的无秘密高级配置真源。
@@ -379,14 +379,11 @@ class WebExecutionProfile(BaseModel):
         self,
         contract: PermissionContract,
         plan: PermissionMutationPlan,
-        *,
-        target_override: WebTargetDefinition | None = None,
-        workflow_bindings_override: tuple[HttpWorkflowBinding, ...] | None = None,
     ) -> WebExecutionSnapshot:
         """让 Runner 唯一快照校验器执行全部跨引用检查。"""
 
-        bindings = self.workflow_bindings if workflow_bindings_override is None else workflow_bindings_override
-        target = self.target if target_override is None else target_override
+        bindings = self.workflow_bindings
+        target = self.target
         if self.target_type is not TargetType.WEB:
             raise ValueError("only WEB execution profiles are supported")
         if contract.contract_id != self.contract_id or contract.version != self.contract_version:

@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
@@ -103,6 +104,30 @@ def build_permission_policy_snapshot(
     )
 
 
+class ChangeVerificationContext(BaseModel):
+    """一次代码变化重验随 Run 冻结的最小事实，不携带文件清单或源码内容。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+
+    change_id: str = Field(pattern=r"^chg_[0-9a-f]{32}$")
+    impact_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    required_intent_ids: tuple[str, ...] = Field(default=(), max_length=4096)
+    source_fingerprint: str = Field(pattern=SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_required_intents(self) -> ChangeVerificationContext:
+        if (
+            self.required_intent_ids != tuple(sorted(self.required_intent_ids))
+            or len(set(self.required_intent_ids)) != len(self.required_intent_ids)
+            or any(
+                re.fullmatch(r"pin_[0-9a-f]{32}", intent_id) is None
+                for intent_id in self.required_intent_ids
+            )
+        ):
+            raise ValueError("change verification intent IDs must be unique and sorted")
+        return self
+
+
 class PersistedExecutionRequest(BaseModel):
     """Worker 使用的不可变、无路径执行快照。"""
 
@@ -112,11 +137,16 @@ class PersistedExecutionRequest(BaseModel):
     budget: ExecutionBudget
     permission_policy: PermissionPolicySnapshot
     project_snapshot: WebExecutionSnapshot
+    change_context: ChangeVerificationContext | None = None
 
     @model_validator(mode="after")
     def validate_budget_snapshot(self) -> PersistedExecutionRequest:
         if self.permission_policy.project_id != self.project_snapshot.project_id:
             raise ValueError("permission policy project does not match snapshot")
+        if self.change_context is not None and not set(
+            self.change_context.required_intent_ids
+        ).issubset({item.intent_id for item in self.permission_policy.entries}):
+            raise ValueError("change verification intents must belong to the frozen policy")
         target = self.project_snapshot.target.scope
         if self.budget.max_requests != target.max_requests:
             raise ValueError("request budget max_requests does not match snapshot")

@@ -3,8 +3,10 @@
 import { Button, Card, Divider, Modal, Space, Tag, Typography } from 'antd'
 import { useMemo, useState } from 'react'
 import type { OfficialExperienceDto, OfficialExperienceMode } from '../../api/experience'
+import type { MCPAccessView } from '../../api/mcp'
 import type { ProductNextActionDto, ProjectDto, ProjectReadinessDto } from '../../api/projects'
 import type { RunDto } from '../../api/runs'
+import type { SourceChangeViewDto } from '../../api/sourceChanges'
 import type { SystemStatus } from '../../api/system'
 import { formatTimestamp, integrityLabel, lifecycleLabel, verdictLabel } from '../../app/presentation'
 import { AssistantPanel } from '../../components/AssistantPanel'
@@ -22,6 +24,9 @@ export function WorkbenchPage({
   nextAction,
   runs,
   systemStatus,
+  mcpStatus,
+  mcpStatusFailed = false,
+  latestChange,
   experience,
   experienceBusy,
   onStartExperience,
@@ -33,6 +38,9 @@ export function WorkbenchPage({
   nextAction: ProductNextActionDto | null
   runs: RunDto[]
   systemStatus: SystemStatus
+  mcpStatus?: MCPAccessView | null
+  mcpStatusFailed?: boolean
+  latestChange?: SourceChangeViewDto | null
   experience: OfficialExperienceDto | null
   experienceBusy: boolean
   onStartExperience: (mode: OfficialExperienceMode) => Promise<boolean>
@@ -119,12 +127,40 @@ export function WorkbenchPage({
     </section>
 
     <div className="workbench-secondary-grid">
+      <Card title="AI 工具" extra={<Button type="link" onClick={() => onNavigate('/tools')}>连接与授权</Button>}>
+        <Typography.Paragraph>让 Codex、DSH 或其他 MCP 客户端读取状态、准备检查或启动已批准任务。</Typography.Paragraph>
+        <Typography.Paragraph strong>
+          {mcpStatusFailed
+            ? '当前连接状态读取失败'
+            : !mcpStatus
+              ? '正在读取连接状态'
+              : !mcpStatus.paired
+                ? '尚未连接 AI 工具'
+                : mcpStatus.client_connected
+                  ? `${mcpStatus.client_name?.trim() || 'AI 工具'} 已连接`
+                  : mcpStatus.accepting_connections
+                    ? '已配对，正在等待客户端连接'
+                    : '连接已暂停'}
+        </Typography.Paragraph>
+        <Typography.Text type="secondary">AI 工具不能批准或改写人的权限要求。</Typography.Text>
+      </Card>
       <Card title="最近检查" extra={latest && <Button type="link" onClick={() => onNavigate('/results')}>查看结果</Button>}>
         {!latest && <Typography.Text type="secondary">尚未开始检查</Typography.Text>}
         {latest && <Space direction="vertical" size={6}>
           <Space wrap><Typography.Text strong>{lifecycleLabel(latest.lifecycle)}</Typography.Text><Tag>{integrityLabel(latest.result_integrity)}</Tag></Space>
           <Typography.Text>{latest.verdict ? verdictLabel(latest.verdict) : '尚无结论'}</Typography.Text>
           <Typography.Text type="secondary">{formatTimestamp(latest.created_at_us ?? latest.created_at)}</Typography.Text>
+        </Space>}
+      </Card>
+
+      <Card title="最近代码变化" extra={latestChange?.next_path && <Button type="link" onClick={() => onNavigate(latestChange.next_path!)}>复核权限映射</Button>}>
+        {!latestChange && <Typography.Text type="secondary">尚未收到 Agent 提交的代码变化</Typography.Text>}
+        {latestChange && <Space direction="vertical" size={6}>
+          <Typography.Text strong>{latestChange.reason}</Typography.Text>
+          <Typography.Text>{latestChange.summary}</Typography.Text>
+          <Typography.Text type="secondary">服务端确认 {latestChange.actual_changed_path_count} 个文件发生变化</Typography.Text>
+          <Typography.Text type="secondary">直接影响 {latestChange.directly_affected_count} 条权限要求</Typography.Text>
+          <Typography.Text type={latestChange.mapping_review_required_count > 0 ? 'warning' : 'secondary'}>{latestChange.mapping_review_required_count} 条实现映射需要确认</Typography.Text>
         </Space>}
       </Card>
 

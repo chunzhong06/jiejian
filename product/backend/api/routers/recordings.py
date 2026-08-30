@@ -11,6 +11,7 @@ from product.backend.workflows.context import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.application_understanding import CandidateDecision
 from product.backend.core.lifecycle import JobState
+from product.backend.core.recording import RecordingPurpose
 from product.backend.workflows.test_identities import TestIdentityStatus
 from product.protocols import parse_flow_draft_review_command
 from product.backend.workflows.recording.safety_setup import ConfirmActionSafetySetup
@@ -33,6 +34,8 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             test_identity_id=body.test_identity_id,
             duration_seconds=body.duration_seconds,
             idempotency_key=body.idempotency_key,
+            purpose=RecordingPurpose(body.purpose),
+            parent_recording_id=body.parent_recording_id,
             headless=False,
         )
         return data_response(
@@ -171,6 +174,11 @@ class RecordingCreateRequest(ApiModel):
     test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")
     duration_seconds: int = Field(default=60, ge=1, le=3_600)
     idempotency_key: str = Field(min_length=1, max_length=128)
+    purpose: Literal["TARGET", "OBSERVATION", "RECOVERY"] = "TARGET"
+    parent_recording_id: str | None = Field(
+        default=None,
+        pattern=r"^rec_[0-9a-f]{32}$",
+    )
 
 
 class ReviewRequest(ApiModel):
@@ -184,10 +192,12 @@ class FinalizeRequest(ApiModel):
 
 class ActionSafetySetupConfirmRequest(ApiModel):
     schema_version: Literal["1"]
-    resource_candidate_id: str = Field(pattern=r"^trc_[0-9a-f]{32}$")
-    logical_name: str = Field(min_length=1, max_length=128)
-    resource_type: str = Field(min_length=1, max_length=128)
-    owner_test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")
+    resource_candidate_id: str | None = Field(
+        default=None,
+        pattern=r"^trc_[0-9a-f]{32}$",
+    )
+    logical_name: str | None = Field(default=None, min_length=1, max_length=128)
+    resource_type: str | None = Field(default=None, min_length=1, max_length=128)
     observation_candidate_id: str | None = Field(
         default=None,
         pattern=r"^obc_[0-9a-f]{32}$",
@@ -195,11 +205,6 @@ class ActionSafetySetupConfirmRequest(ApiModel):
     recovery_candidate_id: str | None = Field(
         default=None,
         pattern=r"^rcc_[0-9a-f]{32}$",
-    )
-    confirm_recovery_not_required: bool = False
-    security_effect_candidate_id: str | None = Field(
-        default=None,
-        pattern=r"^sfc_[0-9a-f]{32}$",
     )
 
 

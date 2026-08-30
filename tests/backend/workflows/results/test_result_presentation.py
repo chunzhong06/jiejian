@@ -27,6 +27,7 @@ from product.backend.workflows.results.presentation import (
 )
 from product.protocols import ObservationCompleteness, ObserverOutcomeStatus, ObserverType
 from product.protocols.execution_request import (
+    ChangeVerificationContext,
     PermissionPolicySnapshotEntry,
     build_permission_policy_snapshot,
 )
@@ -264,6 +265,12 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
         _snapshot(),
         _finding(CaseVerdict.VULNERABLE),
         permission_policy=policy,
+        change_context=ChangeVerificationContext(
+            change_id="chg_" + "7" * 32,
+            impact_fingerprint="8" * 64,
+            required_intent_ids=("pin_" + "4" * 32,),
+            source_fingerprint="9" * 64,
+        ),
     )
 
     assert result.headline == "发现权限问题"
@@ -273,7 +280,14 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
         "intent_id": "pin_" + "4" * 32,
         "revision": 3,
         "intent_hash": "5" * 64,
+        "display_label": "P-001",
     }
+    assert result.change_verification is not None
+    assert result.change_verification.change_id == "chg_" + "7" * 32
+    assert result.change_verification.required_intents == result.relevant_intents
+    assert "source_fingerprint" not in result.model_dump(mode="json")[
+        "change_verification"
+    ]
     assert result.checked_count == 1
     assert result.problem_count == 1
     assert result.uncovered_count == 2

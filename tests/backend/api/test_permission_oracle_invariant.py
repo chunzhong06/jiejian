@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from product.backend.api.mcp import build_mcp_control
 from product.backend.core.errors import JiejianError
 from product.backend.core.permission_intent import IntentImplementationBindingStatus
+from product.backend.core.source_changes import SourceFileFingerprint, source_fingerprint
 from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
 from product.backend.workflows.application_understanding.analysis.models import (
     ApplicationAnalysisResult,
@@ -145,9 +146,16 @@ def test_official_mcp_execute_cannot_change_permission_oracle(
     )
 
     current_understanding = core.application_understanding.get(PROJECT_ID)
+    source_files = (
+        SourceFileFingerprint(
+            relative_path="app.py",
+            content_sha256="e" * 64,
+        ),
+    )
     core.application_understanding.analyzer = _StaticAnalyzer(
         ApplicationAnalysisResult(
-            source_fingerprint="e" * 64,
+            source_fingerprint=source_fingerprint(source_files),
+            files=source_files,
             role_candidates=current_understanding.role_candidates,
             action_candidates=current_understanding.action_candidates,
             files_read=1,
@@ -295,6 +303,25 @@ def test_official_mcp_execute_cannot_change_permission_oracle(
                         },
                     )
                     assert reanalyzed.structured_content["revision"] == current_understanding.revision + 1
+                    change = await client.call_tool(
+                        "jiejian_change_submit",
+                        {
+                            "project_id": PROJECT_ID,
+                            "reason": "Agent 完成实现调整",
+                            "claimed_paths": ["untrusted-claim.py"],
+                        },
+                    )
+                    captured["change_id"] = change.structured_content["change_id"]
+                    shown_change = await client.call_tool(
+                        "jiejian_change_show",
+                        {
+                            "project_id": PROJECT_ID,
+                            "change_id": captured["change_id"],
+                        },
+                    )
+                    assert shown_change.structured_content == change.structured_content
+                    assert "source_fingerprint" not in shown_change.structured_content
+                    assert "changed_paths" not in shown_change.structured_content
 
     try:
         anyio.run(scenario)
@@ -305,7 +332,7 @@ def test_official_mcp_execute_cannot_change_permission_oracle(
             binding = work.permission_intents.binding(owns.intent_id, owns.revision)
         assert job is not None
         assert binding is not None
-        assert binding.status is IntentImplementationBindingStatus.NEEDS_REVIEW
+        assert binding.status is IntentImplementationBindingStatus.CURRENT
         assert core.permission_intents.matrix(PROJECT_ID).policy_epoch == before_matrix.policy_epoch
         frozen = ExecutionRequestStore(tmp_path / "var").load(
             job.job_id,
