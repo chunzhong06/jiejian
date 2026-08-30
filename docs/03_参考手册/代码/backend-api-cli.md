@@ -35,12 +35,13 @@
 - `_ACCESS_ERROR_CODES`
 - `class MCPProtectedEffectInput`
 - `class MCPPermissionIntentSemanticInput`
+- `class MCPRepairContractReferenceInput`
 - `require_mcp_level(access, ctx, required_level, project_id) -> None`
 - `class MCPBearerGuard`
 - `class MCPPathAdapter`
 - `class MCPControl`
 - `build_mcp_control(context, workers, access, control_origin, control_host) -> MCPControl`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `product.backend.workflows.official_sample`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.context`, `product.backend.workflows.mcp_access`, `product.backend.workflows.official_sample`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `time`, `typing`
 
 ### `product/backend/api/routers/assistant.py`
 - `class ProjectAssistantSurface`
@@ -132,7 +133,7 @@
 
 ### `product/backend/api/routers/source_changes.py`
 - `build_source_changes_router(context) -> APIRouter`
-主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`
+主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.core.errors`, `product.backend.workflows.context`
 
 ### `product/backend/api/routers/system.py`
 - `build_system_router(context, workers, shutdown_callback) -> APIRouter`
@@ -154,7 +155,7 @@
 主要 import / dot-source：`product.backend.cli`
 
 ### `product/backend/cli/app.py`
-- `root(context, config, var_dir, log_level, trace_id, json_output, human_output, version) -> None`
+- `root(context, var_dir, json_output, version) -> None`
 - `main() -> None`
 主要 import / dot-source：`__future__`, `pathlib`, `product.backend`, `product.backend.cli.bootstrap`, `product.backend.cli.commands.control`, `product.backend.cli.commands.system`, `product.backend.cli.localization`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.infra.runtime.process.identity`, `sys`, `typer`, `uuid`
 
@@ -167,17 +168,16 @@
 
 ### `product/backend/cli/commands/control.py`
 - `status_command(context, project_id) -> None`
-- `app_list_command(context, include_archived) -> None`
-- `app_show_command(context, project_id) -> None`
-- `app_remove_command(context, project_id, confirmed) -> None`
+- `application_list_command(context) -> None`
+- `application_show_command(context, project_id) -> None`
+- `application_remove_command(context, project_id, confirmed) -> None`
 - `check_preview_command(context, project_id) -> None`
 - `check_prepare_command(context, project_id) -> None`
 - `check_cancel_command(context, project_id) -> None`
-- `check_run_command(context, project_id, idempotency_key) -> None`
+- `check_run_command(context, project_id) -> None`
 - `result_show_command(context, run_id, project_id) -> None`
-- `result_reports_command(context, run_id) -> None`
 - `result_report_command(context, run_id, report_id) -> None`
-- `history_show_command(context, project_id) -> None`
+- `history_command(context, project_id) -> None`
 主要 import / dot-source：`__future__`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.runtime.jobs.models`, `time`, `typer`, `uuid`
 
 ### `product/backend/cli/commands/system.py`

@@ -5,10 +5,10 @@
 #   官方 MCP Python SDK 与界鉴唯一 ApplicationCore 之间的本地 ASGI 适配层。
 #
 # 职责
-#   挂载固定工具白名单｜统一校验 Bearer 与逐 Project 等级｜输出非秘密结构化投影。
+#   挂载固定工具白名单｜统一校验 Bearer 与逐 Project 等级｜只读投影修复要求与其他非秘密事实。
 #
 # 边界
-#   不创建第二个 Core、Worker 或服务进程；不返回源码、请求正文、环境变量、完整日志或完整 Evidence。
+#   不创建第二个 Core、Worker 或服务进程；不返回源码、补丁建议、请求正文、环境变量、完整日志或完整 Evidence。
 # =============================================================================
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ from product.backend.core.permission_intent import (
     PermissionIntentSemantic,
     ProtectedEffect,
 )
+from product.backend.core.repair import RepairContractReference
 from product.backend.core.verification.permissions import (
     PermissionExpectation,
     SecurityEffectKind,
@@ -108,6 +109,19 @@ class MCPPermissionIntentSemanticInput(BaseModel):
             expectation=PermissionExpectation(self.expectation),
             protected_effects=tuple(item.to_domain() for item in self.protected_effects),
         )
+
+
+class MCPRepairContractReferenceInput(BaseModel):
+    """Agent 只能回传服务端签发的修复来源身份与指纹。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
+    source_finding_id: str = Field(pattern=r"^finding_[0-9a-f]{32}$")
+    repair_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    def to_domain(self) -> RepairContractReference:
+        return RepairContractReference.model_validate(self.model_dump(), strict=True)
 
 
 def _recovery_for(code: str) -> str:
@@ -435,6 +449,25 @@ def build_mcp_control(
         require_mcp_level(access, ctx, MCPAccessLevel.READ)
         return _json(_invoke(lambda: context.result_presentation.build(run_id)))
 
+    @server.tool(name="jiejian_repair_contract_get", structured_output=True)
+    def repair_contract_get(
+        ctx: Context,
+        project_id: str,
+        source_run_id: str,
+        source_finding_id: str,
+    ) -> dict[str, Any]:
+        """只读重建已发布 BLOCK 的权威修复要求，不提供补丁或审批能力。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        contract = _invoke(
+            lambda: context.repair_contracts.get(source_run_id, source_finding_id)
+        )
+        if contract.project_id != project_id:
+            raise _as_mcp_error(
+                JiejianError(ErrorCode.PROJECT_NOT_FOUND, "修复要求不属于当前应用")
+            )
+        return _json(contract)
+
     @server.tool(name="jiejian_evidence_index", structured_output=True)
     def evidence_index(ctx: Context, run_id: str) -> list[dict[str, Any]]:
         """读取发布证据索引，不返回完整 Evidence 文档。"""
@@ -559,6 +592,7 @@ def build_mcp_control(
         project_id: str,
         reason: str,
         claimed_paths: tuple[str, ...] = (),
+        repair_reference: MCPRepairContractReferenceInput | None = None,
     ) -> dict[str, Any]:
         """声明 Agent 已完成变更；真实文件变化和权限影响由服务端重算。"""
 
@@ -569,6 +603,11 @@ def build_mcp_control(
                 reason=reason,
                 claimed_paths=claimed_paths,
                 submitted_by="MCP Agent",
+                **(
+                    {}
+                    if repair_reference is None
+                    else {"repair_reference": repair_reference.to_domain()}
+                ),
             )
         )
         return _json(_invoke(lambda: context.source_changes.view(manifest.change_id)))
@@ -830,6 +869,7 @@ __all__ = [
     "MCPPathAdapter",
     "MCPPermissionIntentSemanticInput",
     "MCPProtectedEffectInput",
+    "MCPRepairContractReferenceInput",
     "build_mcp_control",
     "require_mcp_level",
 ]

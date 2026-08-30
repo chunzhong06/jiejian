@@ -5,7 +5,7 @@
 #   PermissionIntent 准备事实与唯一 ExecutionWorkflow 之间的普通控制面应用服务。
 #
 # 职责
-#   投影人话 CheckPreview｜定位最早缺口｜无 Profile 参数提交当前 Generated Profile
+#   投影人话 CheckPreview｜定位最早缺口｜冻结可选变化/修复上下文｜无 Profile 参数提交当前 Generated Profile
 #
 # 边界
 #   不生成 Case、不决定 Verdict、不执行目标；Coverage 与差分事实只读取冻结请求。
@@ -28,10 +28,14 @@ from product.backend.workflows.permission_intents import (
     PermissionIntentService,
 )
 from product.backend.workflows.runs.execution import ExecutionWorkflow
+from product.backend.workflows.results.repair import RepairContractService
 from product.backend.workflows.security_setup.compiler import SecuritySetupCompiler
 from product.backend.workflows.source_changes import SourceChangeService
 from product.backend.core.source_changes import RevalidationPlan
-from product.protocols.execution_request import ChangeVerificationContext
+from product.protocols.execution_request import (
+    ChangeVerificationContext,
+    RepairVerificationContext,
+)
 
 
 class _CheckModel(BaseModel):
@@ -91,11 +95,13 @@ class CheckWorkflow:
         security_setup: SecuritySetupCompiler,
         execution: ExecutionWorkflow,
         source_changes: SourceChangeService,
+        repair_contracts: RepairContractService,
     ) -> None:
         self._permission_intents = permission_intents
         self._security_setup = security_setup
         self._execution = execution
         self._source_changes = source_changes
+        self._repair_contracts = repair_contracts
 
     def prepare(self, project_id: str, *, change_id: str | None = None) -> CheckPreview:
         """先关闭变化重验前置缺口，再编译同一份完整当前检查计划。"""
@@ -115,6 +121,7 @@ class CheckWorkflow:
         revalidation: RevalidationPlan | None,
     ) -> CheckPreview:
         matrix = self._permission_intents.matrix(project_id)
+        repair_context = self._repair_context(project_id, revalidation)
         profile_id = self._security_setup.current_generated_profile_id(project_id)
         snapshot = None
         profile_gap: CheckPreviewGap | None = None
@@ -126,6 +133,7 @@ class CheckWorkflow:
                     profile_id,
                     project_id=project_id,
                     change_context=self._change_context(revalidation),
+                    repair_context=repair_context,
                 ).project_snapshot
             except JiejianError:
                 profile_gap = _gap("GENERATED_PROFILE_STALE")
@@ -307,6 +315,7 @@ class CheckWorkflow:
             profile_id,
             project_id=project_id,
             change_context=self._change_context(revalidation),
+            repair_context=self._repair_context(project_id, revalidation),
             idempotency_key=idempotency_key,
         )
 
@@ -332,6 +341,19 @@ class CheckWorkflow:
             impact_fingerprint=revalidation.impact_fingerprint,
             required_intent_ids=revalidation.required_intent_ids,
             source_fingerprint=revalidation.source_fingerprint,
+        )
+
+    def _repair_context(
+        self,
+        project_id: str,
+        revalidation: RevalidationPlan | None,
+    ) -> RepairVerificationContext | None:
+        if revalidation is None or revalidation.repair_reference is None:
+            return None
+        return self._repair_contracts.context(
+            project_id,
+            revalidation.repair_reference,
+            self._permission_intents.policy_snapshot(project_id),
         )
 
 

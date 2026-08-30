@@ -64,9 +64,11 @@ def test_result_presentation_uses_surface_and_real_effect_language(capsys) -> No
                 minimal_witness=(
                     SimpleNamespace(kind="PERMISSION_REQUIREMENT", label="权限要求", detail="成员不应导出"),
                     SimpleNamespace(kind="ACTUAL_IDENTITY", label="实际身份", detail="成员账号"),
-                    SimpleNamespace(kind="AUTHORIZATION_DECISION", label="权限决定", detail="拒绝"),
+                    SimpleNamespace(kind="PROTECTED_EFFECT", label="本不该发生的业务后果", detail="归档已经生成"),
+                    SimpleNamespace(kind="AUTHORIZATION_CONTINUITY", label="合法授权来源", detail="找不到符合原权限要求的合法授权来源"),
                     SimpleNamespace(kind="BREAKPOINT", label="首个可证明断裂", detail="权限决定发生过晚"),
-                    SimpleNamespace(kind="CONFIRMED_EFFECT", label="已确认最终后果", detail="归档已经生成"),
+                    SimpleNamespace(kind="AMPLIFIERS", label="后续扩大影响的行为", detail="后台任务继续执行"),
+                    SimpleNamespace(kind="CONFIRMED_IMPACT", label="最终业务影响", detail="归档已经生成"),
                 ),
                 confirmed_impacts=(
                     SimpleNamespace(

@@ -275,6 +275,7 @@ def test_serve_rejects_non_ipv4_control_host_before_frontend_and_releases_lock(
     result = CliRunner().invoke(
         cli_app,
         [
+            "--json",
             "--var-dir",
             str(tmp_path / "var"),
             "serve",

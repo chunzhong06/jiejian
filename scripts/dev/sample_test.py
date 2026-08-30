@@ -38,6 +38,7 @@ PROJECT_KEY = "campus-digital-museum"
 RESOURCE_ID = "campus-digital-museum-package"
 EXPORT_ACTION_KEY = "POST /api/projects/{project_id}/exports"
 CONTROL_PORT = 8765
+SUITES = ("official", "validation", "competition", "all")
 PHASE_TITLES = {
     1: "界鉴真实启动",
     2: "官方示例与应用理解",
@@ -854,23 +855,14 @@ def _assert_cli_equivalence(
     environment: Mapping[str, str],
 ) -> None:
     run_id = str(run["run_id"])
-    human_result = _run_cli(root, var_dir, environment, "--human", "result", "show", "--run", run_id)
-    human_evidence = _run_cli(root, var_dir, environment, "--human", "result", "evidence", "--run", run_id)
-    human_history = _run_cli(root, var_dir, environment, "--human", "history", "show", "--project", project_id)
-    if not human_result or "已发布证据：2 项" not in human_evidence or not human_history:
-        raise SampleTestError("CLI Human 结果、证据或历史输出不完整")
+    human_result = _run_cli(root, var_dir, environment, "result", "show", "--run", run_id)
+    human_history = _run_cli(root, var_dir, environment, "history", "--project", project_id)
+    if not human_result or not human_history:
+        raise SampleTestError("CLI Human 结果或历史输出不完整")
     json_result = json.loads(_run_cli(root, var_dir, environment, "--json", "result", "show", "--run", run_id))["data"]
-    json_evidence = json.loads(_run_cli(root, var_dir, environment, "--json", "result", "evidence", "--run", run_id))["data"]
-    json_history = json.loads(_run_cli(root, var_dir, environment, "--json", "history", "show", "--project", project_id))["data"]
+    json_history = json.loads(_run_cli(root, var_dir, environment, "--json", "history", "--project", project_id))["data"]
     if json_result != run["presentation"]:
         raise SampleTestError("CLI JSON 结果与服务关闭前的 API 结果不一致")
-    if (
-        json_evidence.get("run_id") != run_id
-        or json_evidence.get("evidence") != run["evidence_index"]
-    ):
-        raise SampleTestError(
-            f"L5_CLI_EVIDENCE_INDEX_MISMATCH: run_id={run_id}"
-        )
     if json_history != history:
         raise SampleTestError("CLI JSON History 与服务关闭前的 API History 不一致")
 
@@ -1414,13 +1406,39 @@ def run(
         raise primary_failure
 
 
+def run_suite(root: Path, var_dir: Path, suite: str) -> None:
+    """保留 official 原链，并把 validation/competition 纳入同一公共入口。"""
+
+    if suite == "official":
+        run(root, var_dir)
+        return
+    from sample_test_validation import run_validation_suite
+
+    if suite == "validation":
+        run_validation_suite(root, var_dir, repetitions=1)
+        return
+    if suite == "competition":
+        run_validation_suite(root, var_dir, repetitions=3)
+        return
+    if suite == "all":
+        official_dir = var_dir / "official"
+        validation_dir = var_dir / "validation"
+        official_dir.mkdir(parents=True)
+        validation_dir.mkdir(parents=True)
+        run(root, official_dir)
+        run_validation_suite(root, validation_dir, repetitions=1)
+        return
+    raise SampleTestError("SAMPLE_TEST_SUITE_INVALID")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the official sample delivery validation.")
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--var-dir", required=True, type=Path)
+    parser.add_argument("--suite", choices=SUITES, default="official")
     arguments = parser.parse_args()
     try:
-        run(arguments.root, arguments.var_dir)
+        run_suite(arguments.root, arguments.var_dir, arguments.suite)
     except Exception as exc:
         code, summary = _failure_identity(exc)
         print(f"sample-test failed: {code}: {summary}", file=sys.stderr, flush=True)

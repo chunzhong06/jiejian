@@ -16,6 +16,7 @@ export type OfficialExperienceDto = {
   identities_ready: boolean
   authorization_order: 'ENQUEUE_BEFORE_AUTHORIZE' | 'AUTHORIZE_BEFORE_ENQUEUE' | null
   blob_observation: 'AVAILABLE' | 'UNAVAILABLE' | null
+  repair_change_id: string | null
 }
 
 export const experienceApi = {

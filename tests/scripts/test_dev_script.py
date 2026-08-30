@@ -65,7 +65,7 @@ def test_command_contract_rejects_unused_options_before_lock() -> None:
     contract = dev[dev.index("function Test-CommandContract") : dev.index("try {")]
     assert '$Command -notin @("schema", "docs")' in contract
     assert '$Command -notin @("prepare", "start", "package")' in contract
-    assert '$Command -notin @("update", "cli", "test", "frontend-test")' in contract
+    assert '$Command -notin @("update", "cli", "test", "frontend-test", "sample-test")' in contract
     preflight = dev[dev.index("try {") : dev.index("Read-State")]
     assert preflight.index("Test-CommandContract") < preflight.index("Enter-PrepareLock")
 
@@ -252,11 +252,14 @@ def test_sample_test_routes_to_real_start_cmd_with_a_fresh_var_directory() -> No
     function = _text(MODULE_ROOT / "sample-test.ps1")
     driver_path = MODULE_ROOT / "sample_test.py"
     driver = _text(driver_path)
-    assert '"sample-test" { Invoke-SampleTest }' in dev
+    assert '"sample-test" { Invoke-SampleTest $toolchain }' in dev
     assert "Prepare-SourceRuntime" not in function
     assert "Exit-PrepareLock" in function
     assert '"test\\sample-test\\{0}"' in function
     assert '"scripts\\dev\\sample_test.py"' in function
+    assert '"official", "validation", "competition", "all"' in function
+    assert '"--suite"' in function
+    assert "Resolve-DevelopmentNode $Toolchain $true" in function
     assert '"--source-receipt"' not in function
     assert '"--frontend-dir"' not in function
     assert "_start_product(root, var_dir)" in driver

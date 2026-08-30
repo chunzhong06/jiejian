@@ -21,11 +21,11 @@ ApplicationCore / Published facts
 
 `ProductStatus` 只读汇总当前项目、六步准备状态、唯一下一步、活动任务和最近可信结果，不保存独立“向导进度”。浏览器本地状态只记当前选择和页面；刷新后由 API 恢复权威事实。Workbench 不常驻显示产品版本，产品版本在 `/settings/system` 等明确诊断位置展示。
 
-GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.5。
+GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.6。
 
 ## CLI Human 与 Machine
 
-CLI 默认按 TTY 选择人类输出；`--human` 强制人类可读，`--json` 强制 Machine 输出。两种模式不会在同一个 stdout 中混写。
+CLI 默认输出人类可读结果；`--json` 是唯一显式 Machine 模式。两种模式不会在同一个 stdout 中混写。`--var-dir` 只保留给源码启动、开发脚本和 Portable 的内部运行时接线，不出现在普通 help 或 README 中。
 
 Human 先给结论、关键事实与下一步，隐藏内部 ID、reason code 和复杂结构。需要完整稳定结构时使用 Machine v1；诊断环境问题时使用 `system doctor`。Machine v1 成功对象固定包含：
 
@@ -44,13 +44,15 @@ CLI `--version` 直接输出 `product.backend.__version__` 并退出，它是产
 
 CLI 与 Machine 输出是控制和投影通道，不是审批人。公开命令树不提供 PermissionIntent ALLOW/DENY 写入，也不提供角色/动作候选的确认、拒绝或手工创建；自动化只能准备既有事实、执行已冻结操作或读取结果。
 
+普通命令只围绕 `status / serve`、`application list/show/remove`、`check preview/prepare/run/cancel`、`result show/report`、`history` 与 `system doctor/repair/clean` 组织。首次目录接入、账号与登录、业务流程录制、MCP 配对、模型密钥和各类人工审批只在 GUI 中完成；Agent 自动化使用 MCP。
+
 ## MCP Streamable HTTP 与工具输出
 
 MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。首次配对签发的 Authorization Bearer 只经精确 SecretStore 引用长期保存，后续启动自动恢复 READ。GUI control session Cookie、模型 Provider Key 和其他 SecretStore 引用都不能替代该令牌；SDK 继续独立校验 Host 与 Origin。
 
 MCP 工具不套用 API envelope 或 CLI Machine envelope，而按 SDK 协议返回现有 Pydantic View 的 structured content 或有界轻量投影。根 View 自身已有 `schema_version` 时保持原值；不能为每个嵌套 DTO重复制造版本，也不能把 MCP 协议版本当作产品版本。ProductStatus 与 ResultPresentation 必须和 GUI/CLI 读取同一应用服务，Evidence 只返回已发布索引而非完整文档。
 
-权限固定为逐 Project 层级：长期配对只恢复 `READ`，显式确认后才可在当前 serve 临时提升为 `PREPARE` 或 `EXECUTE`。这些 level 只约束控制动作风险，不授予权限真源审批权；工具清单不含 permission_set、candidate_decide、approve 或 reject。代码变化由 PREPARE 的 `jiejian_change_submit` 触发受控重分析，READ 的 `jiejian_change_show` 只返回有界摘要；变化感知的 check prepare/run 只接受 `change_id`。MCP 不接收源码正文、diff、Git 命令或客户端自报权限范围。暂停和 shutdown 撤销活动会话与全部提升但保留配对；轮换立即废止旧令牌并保存新令牌；忘记连接删除配对。普通状态不返回明文令牌，访问边界只使用 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED` 三个稳定错误；权限不足 details 只允许 `required_level` 和 `project_id`。
+权限固定为逐 Project 层级：长期配对只恢复 `READ`，显式确认后才可在当前 serve 临时提升为 `PREPARE` 或 `EXECUTE`。这些 level 只约束控制动作风险，不授予权限真源审批权；工具清单不含 permission_set、candidate_decide、approve 或 reject。修复能力只新增 READ 的 `jiejian_repair_contract_get`，从已发布事实重建权威合同；没有修复 mutator、approve、override、pass 或专用 run 工具，CLI 也不增加修复命令。代码变化由 PREPARE 的 `jiejian_change_submit` 触发受控重分析，可选修复引用必须由服务端重建核验；READ 的 `jiejian_change_show` 只返回有界摘要；变化感知和修复感知的 check prepare/run 都只接受同一 `change_id`。MCP 不接收源码正文、diff、Git 命令、补丁建议或客户端自报权限范围。暂停和 shutdown 撤销活动会话与全部提升但保留配对；轮换立即废止旧令牌并保存新令牌；忘记连接删除配对。普通状态不返回明文令牌，访问边界只使用 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED` 三个稳定错误；权限不足 details 只允许 `required_level` 和 `project_id`。
 
 ## ResultPresentation 与 Evidence
 
@@ -58,7 +60,7 @@ MCP 工具不套用 API envelope 或 CLI Machine envelope，而按 SDK 协议返
 
 `ResultPresentation.execution_traces` 从冻结 request snapshot 与已发布 Evidence 还原每个 Case/Action 的实际事件 DAG。它可以表达入口 subject、实际 actor、权限 decision、后台代表关系和最终产物；缺少关键来源时只发布已有节点并标记 partial。GUI、CLI 或 MCP 只能投影这些节点，不能借事件顺序产生新的安全结论。
 
-CLI JSON evidence 命令与 API evidence index 比较的是已发布索引；完整 Evidence detail 是另一资源。索引与文档不能逐字比较，Human/Machine 也不应为方便展示复制整份 Evidence。报告投影关系见[报告与格式投影协议](报告与格式投影协议.md)。
+API evidence index 只返回已发布索引；完整 Evidence detail 是另一资源。索引与文档不能逐字比较，CLI 也不为方便展示复制整份 Evidence。报告投影关系见[报告与格式投影协议](报告与格式投影协议.md)。
 
 ## LocalControl 与 ServeLock
 

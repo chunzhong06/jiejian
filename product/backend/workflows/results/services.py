@@ -5,7 +5,7 @@
 #   ApplicationCore 与 WorkerContainer 共用的结果派生服务组合根。
 #
 # 职责
-#   按固定依赖顺序创建 publication reader、Finding、Gate、Report 和 Finalizer。
+#   按固定依赖顺序创建 publication reader、Finding、Repair、Gate、Report 和 Finalizer。
 #
 # 边界
 #   只组合既有结果服务，不新增结果语义、持久化表或第二套 Finalizer。
@@ -24,6 +24,7 @@ from product.backend.workflows.results.gating import RegressionGate
 from product.backend.workflows.results.history import HistoryComparisonBuilder
 from product.backend.workflows.results.presentation import ResultPresentationBuilder
 from product.backend.workflows.results.published import PublishedResultReader
+from product.backend.workflows.results.repair import RepairContractService
 from product.backend.workflows.results.reporting import ReportBuilder
 
 
@@ -35,6 +36,7 @@ class ResultServices:
     materializer: FindingMaterializer
     queries: FindingQueries
     gate: RegressionGate
+    repair: RepairContractService
     presentation: ResultPresentationBuilder
     history: HistoryComparisonBuilder
     reports: ReportBuilder
@@ -46,13 +48,14 @@ def build_result_services(
     uow_factory: Callable[..., StorageUnitOfWork],
     clock_us: Callable[[], int] | None = None,
 ) -> ResultServices:
-    """按 reader→materializer→queries→gate→reports→finalizer 顺序完成装配。"""
+    """按 reader→materializer→queries→repair→presentation→report→finalizer 顺序装配。"""
 
     reader = PublishedResultReader(var_dir, uow_factory)
     materializer = FindingMaterializer(uow_factory, reader, utc_now_us=clock_us)
     queries = FindingQueries(uow_factory)
     gate = RegressionGate(uow_factory, reader, queries, clock_us=clock_us)
-    presentation = ResultPresentationBuilder(reader, queries)
+    repair = RepairContractService(reader, queries)
+    presentation = ResultPresentationBuilder(reader, queries, repair)
     history = HistoryComparisonBuilder(uow_factory, presentation)
     reports = ReportBuilder(
         var_dir,
@@ -75,6 +78,7 @@ def build_result_services(
         materializer=materializer,
         queries=queries,
         gate=gate,
+        repair=repair,
         presentation=presentation,
         history=history,
         reports=reports,

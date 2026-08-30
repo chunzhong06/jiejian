@@ -5,7 +5,7 @@
 #   受控源码重分析、Agent 变更声明和长期权限实现映射之间的确定性事实边界。
 #
 # 职责
-#   冻结文件指纹快照｜约束真实增删改｜表达逐 Intent 的直接实现影响或映射待审。
+#   冻结文件指纹快照｜约束真实增删改｜表达逐 Intent 影响｜保存可选权威修复引用。
 #
 # 边界
 #   不保存源码正文、diff、Git 凭据或命令；不修改 PermissionIntent revision、hash 或 policy epoch。
@@ -24,6 +24,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
+from product.backend.core.repair import RepairContractReference
 
 
 _SNAPSHOT_ID_PATTERN = r"^snp_[0-9a-f]{32}$"
@@ -122,6 +123,7 @@ class ChangeManifest(SourceChangeModel):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     reason: str = Field(min_length=1, max_length=512)
     claimed_paths: tuple[str, ...] = Field(default=(), max_length=128)
+    repair_reference: RepairContractReference | None = None
     submitted_by: str = Field(min_length=1, max_length=128)
     created_at_us: int = Field(ge=0)
 
@@ -285,6 +287,7 @@ class RevalidationPlan(SourceChangeModel):
     impact_fingerprint: str = Field(pattern=SHA256_PATTERN)
     required_intent_ids: tuple[str, ...] = Field(default=(), max_length=4096)
     source_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    repair_reference: RepairContractReference | None = None
     full_active_scope: Literal[True] = True
 
     @field_validator("required_intent_ids")

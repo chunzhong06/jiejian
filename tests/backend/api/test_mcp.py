@@ -17,6 +17,7 @@ from mcp.client.streamable_http import streamable_http_client
 from pydantic import BaseModel
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.repair import RepairContractReference
 from product.backend.workflows.mcp_access import (
     MCP_PAIRING_SECRET_REF,
     MCPAccessController,
@@ -37,7 +38,18 @@ class _StubSourceChangeView(BaseModel):
     change_id: str
     project_id: str
     actual_changed_path_count: int
+    claimed_paths: tuple[str, ...]
+    added_paths: tuple[str, ...]
+    modified_paths: tuple[str, ...]
+    removed_paths: tuple[str, ...]
     summary: str
+
+
+class _StubRepairContract(BaseModel):
+    project_id: str
+    source_run_id: str
+    source_finding_id: str
+    repair_fingerprint: str
 
 
 EXPECTED_MCP_TOOLS = {
@@ -73,6 +85,7 @@ EXPECTED_MCP_TOOLS = {
     "jiejian_recording_stop",
     "jiejian_result_history",
     "jiejian_result_presentation",
+    "jiejian_repair_contract_get",
     "jiejian_system_status",
 }
 
@@ -349,6 +362,31 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                     assert status.is_error is False
                     assert status.structured_content == expected
 
+                    repair_reference = RepairContractReference(
+                        source_run_id="run_" + "6" * 32,
+                        source_finding_id="finding_" + "7" * 32,
+                        repair_fingerprint="8" * 64,
+                    )
+                    repair_contract = _StubRepairContract(
+                        project_id=project_id,
+                        **repair_reference.model_dump(),
+                    )
+                    monkeypatch.setattr(
+                        app.state.context.repair_contracts,
+                        "get",
+                        lambda source_run_id, source_finding_id: repair_contract,
+                    )
+                    repair_view = await client.call_tool(
+                        "jiejian_repair_contract_get",
+                        {
+                            "project_id": project_id,
+                            "source_run_id": repair_reference.source_run_id,
+                            "source_finding_id": repair_reference.source_finding_id,
+                        },
+                    )
+                    assert repair_view.is_error is False
+                    assert repair_view.structured_content == repair_contract.model_dump(mode="json")
+
                     with pytest.raises(MCPError) as blocked:
                         await client.call_tool(
                             "jiejian_application_reanalyze",
@@ -383,18 +421,45 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                         change_id=change_id,
                         project_id=project_id,
                         actual_changed_path_count=2,
+                        claimed_paths=("app.py",),
+                        added_paths=("new.py",),
+                        modified_paths=("app.py",),
+                        removed_paths=(),
                         summary="发现 1 条权限要求与本次变化直接相关。",
                     )
-                    change_calls: list[tuple[str, str, tuple[str, ...], str]] = []
+                    change_calls: list[
+                        tuple[
+                            str,
+                            str,
+                            tuple[str, ...],
+                            str,
+                            RepairContractReference | None,
+                        ]
+                    ] = []
+
+                    def submit_change(
+                        selected_project_id,
+                        *,
+                        reason,
+                        claimed_paths,
+                        submitted_by,
+                        repair_reference=None,
+                    ):
+                        change_calls.append(
+                            (
+                                selected_project_id,
+                                reason,
+                                claimed_paths,
+                                submitted_by,
+                                repair_reference,
+                            )
+                        )
+                        return SimpleNamespace(change_id=change_id), None, None
+
                     monkeypatch.setattr(
                         app.state.context.source_changes,
                         "submit",
-                        lambda selected_project_id, *, reason, claimed_paths, submitted_by: (
-                            change_calls.append(
-                                (selected_project_id, reason, claimed_paths, submitted_by)
-                            )
-                            or (SimpleNamespace(change_id=change_id), None, None)
-                        ),
+                        submit_change,
                     )
                     monkeypatch.setattr(
                         app.state.context.source_changes,
@@ -407,19 +472,30 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                             "project_id": project_id,
                             "reason": "完成实现修复",
                             "claimed_paths": ["app.py"],
+                            "repair_reference": repair_reference.model_dump(mode="json"),
                         },
                     )
                     assert submitted_change.structured_content == change_view.model_dump(mode="json")
                     assert change_calls == [
-                        (project_id, "完成实现修复", ("app.py",), "MCP Agent")
+                        (
+                            project_id,
+                            "完成实现修复",
+                            ("app.py",),
+                            "MCP Agent",
+                            repair_reference,
+                        )
                     ]
                     shown_change = await client.call_tool(
                         "jiejian_change_show",
                         {"project_id": project_id, "change_id": change_id},
                     )
                     assert shown_change.structured_content == change_view.model_dump(mode="json")
+                    assert shown_change.structured_content["claimed_paths"] == ["app.py"]
+                    assert shown_change.structured_content["added_paths"] == ["new.py"]
+                    assert shown_change.structured_content["modified_paths"] == ["app.py"]
                     assert "source_fingerprint" not in shown_change.structured_content
                     assert "changed_paths" not in shown_change.structured_content
+                    assert "content_sha256" not in shown_change.structured_content
 
                     compile_calls: list[str] = []
                     monkeypatch.setattr(

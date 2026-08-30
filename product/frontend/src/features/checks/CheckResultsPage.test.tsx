@@ -29,13 +29,15 @@ const vulnerableTrace = {
 }
 
 const exactDiagnosis = (overrides: Record<string, unknown> = {}) => ({
-  case_id: 'case-bob', action_id: 'export-package', breakpoint_type: 'AUTHORIZATION_LATE', precision: 'EXACT', summary: '首个可证明断裂：权限决定发生过晚',
+  case_id: 'case-bob', action_id: 'export-package', breakpoint_type: 'AUTHORIZATION_LATE', precision: 'EXACT', continuity_state: 'ORPHAN_EFFECT_CONFIRMED', amplifier_types: ['AUTHORITY_EXPANSION'], summary: '这个本不应该发生的业务结果已经发生，但找不到符合原权限要求的合法授权来源。 首个可证明断裂：权限决定发生过晚',
   minimal_witness: [
     { kind: 'PERMISSION_REQUIREMENT', label: '权限要求', detail: '成员不应导出资料包', event_id: null, evidence_refs: ['ev-block'] },
     { kind: 'ACTUAL_IDENTITY', label: '实际身份', detail: 'Bob', event_id: 'trace-2', evidence_refs: ['ev-block'] },
-    { kind: 'AUTHORIZATION_DECISION', label: '权限决定', detail: '拒绝', event_id: 'trace-4', evidence_refs: ['ev-block'] },
+    { kind: 'PROTECTED_EFFECT', label: '本不该发生的业务后果', detail: '真实资料包已经生成', event_id: 'trace-7', evidence_refs: ['ev-block'] },
+    { kind: 'AUTHORIZATION_CONTINUITY', label: '合法授权来源', detail: '这个本不应该发生的业务结果已经发生，但找不到符合原权限要求的合法授权来源。', event_id: null, evidence_refs: ['ev-block'] },
     { kind: 'BREAKPOINT', label: '首个可证明断裂', detail: '权限决定发生过晚', event_id: 'trace-5', evidence_refs: ['ev-block'] },
-    { kind: 'CONFIRMED_EFFECT', label: '已确认最终后果', detail: '真实资料包已经生成', event_id: 'trace-7', evidence_refs: ['ev-block'] },
+    { kind: 'AMPLIFIERS', label: '后续扩大影响的行为', detail: '已确认后续扩大影响：后台权限范围扩大', event_id: null, evidence_refs: ['ev-block'] },
+    { kind: 'CONFIRMED_IMPACT', label: '最终业务影响', detail: '真实资料包已经生成', event_id: 'trace-7', evidence_refs: ['ev-block'] },
   ],
   confirmed_impacts: [{ event_id: 'trace-7', parent_event_ids: ['trace-6'], kind: 'FINAL_EFFECT', semantic_key: 'archive_generated', effect_id: 'effect-1', summary: '已确认：最终后果', evidence_refs: ['ev-block'] }],
   evidence_refs: ['ev-block'],
@@ -86,9 +88,10 @@ describe('CheckResultsPage', () => {
     expect(screen.queryByText(/不会把计划账号冒充为实际账号/)).not.toBeInTheDocument()
     expect(screen.getByText('真实结果证据来源')).toBeInTheDocument()
     expect(screen.getByText(/佐证来源补充执行过程/)).toBeInTheDocument()
-    expect(screen.getByText('确定性诊断')).toBeInTheDocument()
-    expect(screen.getByText('首个可证明断裂：权限决定发生过晚')).toBeInTheDocument()
-    expect(['权限要求', '实际身份', '权限决定', '首个可证明断裂', '已确认最终后果'].map((label) => screen.getByText(label))).toHaveLength(5)
+    expect(screen.getByText('问题出在哪里')).toBeInTheDocument()
+    expect(screen.getByText('为什么这样判断')).toBeInTheDocument()
+    expect(screen.getByText(/首个可证明断裂：权限决定发生过晚/)).toBeInTheDocument()
+    expect(['权限要求', '实际身份', '本不该发生的业务后果', '合法授权来源', '首个可证明断裂', '后续扩大影响的行为', '最终业务影响'].map((label) => screen.getByText(label))).toHaveLength(7)
     expect(screen.getByText('已确认：最终后果')).toBeInTheDocument()
     expect(screen.getAllByText('关键来源')).toHaveLength(2)
     expect(screen.getAllByText('佐证来源')).toHaveLength(4)
@@ -154,7 +157,7 @@ describe('CheckResultsPage', () => {
     resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-legacy', verdict: 'BLOCK', problem_count: 1, safe_count: 0, issues: [{ finding_id: 'finding-legacy', title: '缺少诊断的旧结果', subject_group: '成员账号', action: '读取', resource: '文档', relation: '拥有', expectation: '不应读取', surface_result: '已拒绝', actual_result: '无法确认', conclusion: '证据不足', explanation: '后端未提供诊断。', planned_identity_id: 'member-a', planned_identity_label: null, actual_identity_status: 'UNAVAILABLE', actual_identity_id: null, actual_identity_label: null, severity: 'high', evidence_refs: [], evidence_sources: [], verdict: 'INCONCLUSIVE', occurrence_status: 'APPEARED' }] }))
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
     expect(await screen.findByRole('heading', { name: '缺少诊断的旧结果' })).toBeInTheDocument()
-    expect(screen.queryByText('确定性诊断')).not.toBeInTheDocument()
+    expect(screen.queryByText('问题出在哪里')).not.toBeInTheDocument()
   })
 
   it('PASS 首屏展示后端范围限制与五项计数', async () => {
@@ -170,13 +173,14 @@ describe('CheckResultsPage', () => {
     expect(screen.getByText(/本次结论只适用于实际执行范围/)).toBeInTheDocument()
   })
 
-  it('普通区显示冻结权限版本且不泄露 fingerprint 和相关意图标识', async () => {
+  it('普通区不显示内部权限版本、fingerprint 和相关意图标识', async () => {
     const run = { run_id: 'run-policy', lifecycle: 'COMPLETED', verdict: 'PASS', result_integrity: 'VERIFIED' }
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-policy', policy_epoch: 9, policy_fingerprint: 'b'.repeat(64), relevant_intents: [{ intent_id: `pin_${'c'.repeat(32)}`, revision: 4, intent_hash: 'c'.repeat(64) }] }))
     resultsApi.evidence.mockResolvedValue([])
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
-    expect(await screen.findByText('本次检查依据权限版本 9')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '当前范围未发现确认问题' })).toBeInTheDocument()
+    expect(screen.queryByText(/权限版本 9/)).not.toBeInTheDocument()
     expect(screen.queryByText(`pin_${'c'.repeat(32)}`)).not.toBeInTheDocument()
     expect(screen.queryByText('b'.repeat(64))).not.toBeInTheDocument()
     expect(screen.queryByText(`pin_${'c'.repeat(32)}@4:${'c'.repeat(64)}`)).not.toBeInTheDocument()
@@ -189,9 +193,30 @@ describe('CheckResultsPage', () => {
     resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-change', change_verification: { change_id: `chg_${'e'.repeat(32)}`, required_intents: [{ intent_id: intentId, revision: 2, intent_hash: 'f'.repeat(64), display_label: 'P-001' }] } }))
     resultsApi.evidence.mockResolvedValue([])
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
-    expect(await screen.findByText(`本次为代码变化 chg_${'e'.repeat(32)} 的重新验证`)).toBeInTheDocument()
-    expect(screen.getByText('需要重验的权限：P-001')).toBeInTheDocument()
+    expect(await screen.findByText('本次检查由最近一次代码修改触发')).toBeInTheDocument()
+    expect(screen.getByText('使用你之前确认的 1 条权限要求重新检查')).toBeInTheDocument()
+    expect(screen.queryByText(`chg_${'e'.repeat(32)}`)).not.toBeInTheDocument()
+    expect(screen.queryByText('P-001')).not.toBeInTheDocument()
     expect(screen.queryByText(intentId)).not.toBeInTheDocument()
     expect(screen.queryByText('f'.repeat(64))).not.toBeInTheDocument()
+  })
+
+  it('用自然语言展示修复要求与独立复验三态，不暴露修复指纹', async () => {
+    const reference = { source_run_id: `run_${'1'.repeat(32)}`, source_finding_id: `finding_${'2'.repeat(32)}`, repair_fingerprint: '3'.repeat(64) }
+    const run = { run_id: 'run-repair', lifecycle: 'COMPLETED', verdict: 'PASS', result_integrity: 'VERIFIED' }
+    runsApi.run.mockResolvedValue(run)
+    resultsApi.evidence.mockResolvedValue([])
+    resultsApi.presentation.mockResolvedValue(basePresentation({
+      run_id: 'run-repair',
+      repair_verification: { reference, verification_run_id: 'run-repair', status: 'VERIFIED', message: '原违规业务后果已被完整证明消失，合法功能保持。', reason_codes: ['REPAIR_REQUIREMENTS_SATISFIED'] },
+      issues: [{ finding_id: 'finding-repair', title: '原权限问题', subject_group: '普通成员', action: '修改', resource: '文档', relation: '其他权限组', expectation: '不应允许', surface_result: '已拒绝', actual_result: '真实资源没有变化', conclusion: '符合预期', explanation: '真实业务后果符合原权限要求。', planned_identity_id: 'member-a', planned_identity_label: '成员 A', actual_identity_status: 'CONFIRMED', actual_identity_id: 'bob', actual_identity_label: 'Bob', severity: 'high', evidence_refs: [], evidence_sources: [], diagnosis: null, verdict: 'SAFE', occurrence_status: 'DISAPPEARED', repair_requirement: { reference, must_disappear: '普通成员造成的文档变化必须消失。', must_remain: '项目负责人仍能修改文档。', must_not_change: ['原拒绝权限', '关键证据要求'] } }],
+    }))
+
+    render(<CheckResultsPage run={run} onError={vi.fn()} />)
+
+    expect(await screen.findByText('修复要求已验证')).toBeInTheDocument()
+    expect(screen.getByText('普通成员造成的文档变化必须消失。')).toBeInTheDocument()
+    expect(screen.getByText('项目负责人仍能修改文档。')).toBeInTheDocument()
+    expect(screen.queryByText(reference.repair_fingerprint)).not.toBeInTheDocument()
   })
 })

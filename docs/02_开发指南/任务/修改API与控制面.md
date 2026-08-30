@@ -38,7 +38,7 @@ MCP 使用官方 Python SDK v2 的 Streamable HTTP，精确挂载在同一 FastA
 
 每个工具必须经过统一 `require_mcp_level`。`READ` 只返回现有 Pydantic View 或有界轻量投影；`PREPARE` 只能重分析已授权应用、准备身份或检查条件，不能新选目录、首次授权、修改 PermissionIntent 或决定角色/动作候选；`EXECUTE` 只启动、停止或取消已经冻结的受控操作。权限意图白名单固定为 READ 的 `jiejian_intent_list/show` 和 PREPARE 的 `jiejian_intent_propose/rebind_propose`，proposal 不修改 revision、hash 或 epoch。代码变化白名单为 PREPARE 的 `jiejian_change_submit` 和 READ 的 `jiejian_change_show`；`jiejian_check_prepare/run` 只增加可选 `change_id`，不能接收权限、Case、Effect、Profile 或文件范围。任何 level 都不能提供 permission_set、candidate_decide、approve 或 reject。白名单不得扩展为 shell、任意 HTTP、任意路径、秘密、请求正文、完整日志或完整 Evidence。访问失败稳定映射为 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED`，权限不足 details 只包含 `required_level/project_id`。
 
-Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `schema_version/kind/status/data/next_actions/warnings`，失败增加有界 `error`。Human 只给结论与下一步，Verbose 才给技术引用；三种输出都来自同一产品事实。更完整的关系见[控制面与 Machine 输出协议](../../03_参考手册/协议/控制面与Machine输出协议.md)。
+Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `schema_version/kind/status/data/next_actions/warnings`，失败增加有界 `error`。默认 Human 只给结论与下一步，只有显式 `--json` 才进入 Machine 模式；两种输出都来自同一产品事实。更完整的关系见[控制面与 Machine 输出协议](../../03_参考手册/协议/控制面与Machine输出协议.md)。
 
 ## 不能破坏
 
@@ -50,7 +50,7 @@ Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `sche
 - `/health`、`/ready`、系统状态和业务状态各司其职；浏览器自动打开失败不能被解释为服务未 ready。
 - MCP 是 Web 产品的控制入口，不是 `MCP_AGENT` Target；高风险动作仍通过共享 Worker/Runner，工具不能旁路检查主链。
 - CLI、Machine 与 MCP 都不是权限审批人；不得增加直接修改 ALLOW/DENY、确认/拒绝正式实现映射或降低受保护效果的入口。
-- MCP 的 claimed paths 只是有界线索；真实变化、影响分类和重验计划必须由 `SourceChangeService` 形成。读取投影不得返回源码路径、hash、diff 或正文。
+- MCP 的 claimed paths 只是有界线索；真实变化、影响分类和重验计划必须由 `SourceChangeService` 形成。读取投影只允许返回授权源码根下的 claimed/added/modified/removed 相对路径，不得返回绝对路径、hash、diff 或正文。
 
 ## 怎么验证
 

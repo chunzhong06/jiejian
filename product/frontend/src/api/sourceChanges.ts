@@ -1,4 +1,4 @@
-// 代码变化产品摘要 API；普通界面不接收源码路径、正文或内部指纹。
+// 代码变化产品摘要 API；只接收授权源码根下的相对路径，不接收正文或内部指纹。
 
 import { request } from './http'
 
@@ -13,6 +13,10 @@ export type SourceChangeViewDto = {
   added_count: number
   modified_count: number
   removed_count: number
+  claimed_paths: string[]
+  added_paths: string[]
+  modified_paths: string[]
+  removed_paths: string[]
   directly_affected_count: number
   mapping_review_required_count: number
   no_direct_evidence_count: number

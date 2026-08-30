@@ -151,7 +151,7 @@
 - `class SourceChangeSetRow`
 - `class ChangeImpactAssessmentRow`
 - `class SourceChangeRepository`
-主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.errors`, `product.backend.core.source_changes`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
+主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.errors`, `product.backend.core.repair`, `product.backend.core.source_changes`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
 
 ### `product/backend/infra/storage/unit_of_work.py`
 - `class StorageUnitOfWork`

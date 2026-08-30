@@ -112,6 +112,7 @@ class AssistantSurfaceResolver:
                     "breakpoint_type": (
                         item.diagnosis.breakpoint_type.value
                         if item.diagnosis is not None
+                        and item.diagnosis.breakpoint_type is not None
                         else "UNAVAILABLE"
                     ),
                     "precision": (

@@ -21,6 +21,9 @@ from product.backend.infra.runtime.process.identity import python_environment_re
 ROOT = Path(__file__).resolve().parents[2]
 DRIVER_PATH = ROOT / "scripts" / "dev" / "sample_test.py"
 WINDOWS_DRIVER_PATH = ROOT / "scripts" / "dev" / "sample_test_windows.py"
+REGISTRY_PATH = ROOT / "scripts" / "dev" / "sample_test_registry.py"
+ORACLE_PATH = ROOT / "scripts" / "dev" / "sample_test_oracle.py"
+VALIDATION_PATH = ROOT / "scripts" / "dev" / "sample_test_validation.py"
 COMMON_IDENTITY_NAMES = {
     "JIEJIAN_PYTHON_EXECUTABLE",
     "JIEJIAN_PYTHON_ENVIRONMENT_PATH",
@@ -48,6 +51,18 @@ def _load_driver() -> ModuleType:
 
 def _load_windows_driver() -> ModuleType:
     return _load_module(WINDOWS_DRIVER_PATH, "jiejian_sample_test_windows_driver")
+
+
+def _load_registry() -> ModuleType:
+    return _load_module(REGISTRY_PATH, "jiejian_sample_test_registry")
+
+
+def _load_oracle() -> ModuleType:
+    return _load_module(ORACLE_PATH, "jiejian_sample_test_oracle")
+
+
+def _load_validation() -> ModuleType:
+    return _load_module(VALIDATION_PATH, "jiejian_sample_test_validation")
 
 
 def _fresh_real_probe_dir() -> Path:
@@ -152,6 +167,188 @@ def test_start_product_invokes_root_start_cmd_and_owns_its_process_tree(
     assert str(captured["kwargs"]["tree_name"]).startswith("jiejian-sample-test-")
 
 
+def test_sample_test_suite_keeps_no_argument_semantics_on_official(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _load_driver()
+    calls: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(driver, "run", lambda root, var_dir: calls.append((root, var_dir)))
+
+    driver.run_suite(ROOT, tmp_path, "official")
+
+    assert calls == [(ROOT, tmp_path)]
+
+
+def test_sample_test_argument_parser_accepts_the_single_public_suite_form(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _load_driver()
+    observed: list[str] = []
+    monkeypatch.setattr(
+        driver,
+        "run_suite",
+        lambda _root, _var_dir, suite: observed.append(suite),
+    )
+    for arguments, expected in (
+        ((), "official"),
+        (("--suite", "official"), "official"),
+        (("--suite", "validation"), "validation"),
+        (("--suite", "competition"), "competition"),
+        (("--suite", "all"), "all"),
+    ):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                str(DRIVER_PATH),
+                "--root",
+                str(ROOT),
+                "--var-dir",
+                str(tmp_path),
+                *arguments,
+            ],
+        )
+        assert driver.main() == 0
+    assert observed == [
+        "official",
+        "official",
+        "validation",
+        "competition",
+        "all",
+    ]
+
+
+def test_validation_registry_has_stable_public_cases_and_allow_controls() -> None:
+    registry = _load_registry()
+    cases = registry.load_public_registry(ROOT)
+    payload = registry.public_registry_payload(ROOT, cases)
+    encoded = json.dumps(payload, ensure_ascii=False)
+
+    assert len(cases) == 30
+    assert len({item.case_id for item in cases}) == 30
+    assert {item.application_id for item in cases} == {
+        "collaboration-space",
+        "tenant-records",
+    }
+    assert all(item.allow_control_identity for item in cases)
+    assert all(item.protected_effects for item in cases)
+    assert all(item.state_selector for item in cases)
+    assert {
+        (
+            item.application_id,
+            item.mode,
+            str(item.state_selector["implementation"]),
+            str(item.state_selector["observation"]),
+        )
+        for item in cases
+    } == {
+        (application, mode, implementation, observation)
+        for application in ("collaboration-space", "tenant-records")
+        for mode in (
+            "object_tenant_check_missing",
+            "new_entry_inheritance",
+            "feature_authorization_bypass",
+            "delegation_authority_expansion",
+            "deny_async_consequence",
+        )
+        for implementation, observation in (
+            ("MODE_FAULT_PRESENT", "AVAILABLE"),
+            ("MODE_GUARD_ACTIVE", "AVAILABLE"),
+            ("MODE_GUARD_ACTIVE", "UNAVAILABLE"),
+        )
+    }
+    for forbidden in (
+        "expected_verdict",
+        "breakpoint_type",
+        "maximum_precision",
+        "golden_answer",
+    ):
+        assert forbidden not in encoded
+
+
+def test_private_oracle_is_outside_every_authorized_source_root_and_product_input() -> None:
+    registry = _load_registry()
+    _load_oracle()
+    cases = registry.load_public_registry(ROOT)
+    evaluator_module = sys.modules["jiejian_sample_test_oracle"]
+    evaluator = evaluator_module.PrivateOracleEvaluator(ROOT, cases)
+    public_payload = registry.public_registry_payload(ROOT, cases)
+
+    for case in cases:
+        with pytest.raises(ValueError):
+            evaluator.path.resolve().relative_to(case.source_root.resolve())
+        assert evaluator.path.name not in {
+            path.name for path in case.source_root.rglob("*") if path.is_file()
+        }
+    product_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in (ROOT / "product").rglob("*")
+        if path.is_file() and path.suffix in {".py", ".ts", ".tsx", ".json"}
+    )
+    assert "private_oracle" not in product_text
+    assert "expected_verdict" not in json.dumps(public_payload, ensure_ascii=False)
+
+
+def test_validation_representatives_run_both_real_apps_without_public_oracle_leak(
+    tmp_path: Path,
+) -> None:
+    validation = _load_validation()
+    summary = validation.run_validation_suite(
+        ROOT,
+        tmp_path,
+        repetitions=1,
+        representative_only=True,
+    )
+    encoded = json.dumps(summary, ensure_ascii=False)
+
+    assert summary["status"] == "accepted"
+    assert summary["case_count"] == 6
+    assert summary["applications"] == ["collaboration-space", "tenant-records"]
+    results = summary["results"]
+    assert len(results) == 6
+    assert {item["verdict"] for item in results} == {
+        "BLOCK",
+        "PASS",
+        "INCONCLUSIVE",
+    }
+    assert all("expected" not in key and "golden" not in key for key in summary)
+    assert "expected_verdict" not in encoded
+    assert "golden_answer" not in encoded
+    assert all(item["allow_control_valid"] for item in results if item["verdict"] != "INCONCLUSIVE")
+    assert summary["method_metrics"]["full"]["wrong_pass_vulnerable"] == 0
+    assert summary["method_metrics"]["full"]["wrong_pass_evidence_gap"] == 0
+    assert summary["method_metrics"]["full"]["exact_match_count"] == 6
+    assert summary["method_metrics"]["full"]["effect_decision_correct_count"] == 6
+    assert (
+        summary["method_metrics"]["full"]["continuity_or_orphan_correct_count"]
+        == 6
+    )
+    assert summary["method_metrics"]["full"]["actual_identity_attributed_count"] == 6
+    assert summary["method_metrics"]["full"]["allow_control_valid_count"] == 6
+    assert summary["method_metrics"]["full"]["recovery_success_count"] == 6
+    assert (
+        summary["method_metrics"]["full"]["repair_verification_applicable_count"]
+        == 2
+    )
+    assert (
+        summary["method_metrics"]["full"]["repair_verification_success_count"]
+        == 2
+    )
+    assert summary["method_metrics"]["http_only"]["exact_match_count"] == 4
+    assert summary["method_metrics"]["http_only"]["wrong_pass_evidence_gap"] == 2
+    assert summary["method_metrics"]["single_state"]["exact_match_count"] == 6
+    assert (
+        summary["method_metrics"]["authorization_regression"][
+            "wrong_pass_evidence_gap"
+        ]
+        == 2
+    )
+    assert summary["repeat_consistency"]["inconsistent_case_count"] == 0
+    assert (tmp_path / "runtime" / "validation").is_dir()
+
+
 def test_start_waits_for_source_prepare_before_control_ready(
     tmp_path: Path,
 ) -> None:
@@ -179,7 +376,7 @@ def test_start_waits_for_source_prepare_before_control_ready(
         driver._wait_product_ready(Client(), PreparedProcess(), timeout=1)
 
 
-def test_cli_equivalence_compares_published_evidence_index_not_documents(
+def test_cli_equivalence_uses_result_and_history_while_evidence_stays_api_owned(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -218,17 +415,13 @@ def test_cli_equivalence_compares_published_evidence_index_not_documents(
 
     presentation = {"run_id": run_id, "verdict": "INCONCLUSIVE"}
     history = {"project_id": "project-current", "comparisons": []}
-    cli_index = evidence_index
-
     def run_cli(_root, _var_dir, _environment, *arguments: str) -> str:
-        if arguments[:2] == ("--human", "result"):
-            return "已发布证据：2 项" if arguments[2] == "evidence" else "检查结果"
-        if arguments[:2] == ("--human", "history"):
+        if arguments[:2] == ("result", "show"):
+            return "检查结果"
+        if arguments[0] == "history":
             return "历史变化"
         if arguments[1:3] == ("result", "show"):
             return json.dumps({"data": presentation})
-        if arguments[1:3] == ("result", "evidence"):
-            return json.dumps({"data": {"run_id": run_id, "evidence": cli_index}})
         return json.dumps({"data": history})
 
     monkeypatch.setattr(driver, "_run_cli", run_cli)
@@ -246,21 +439,6 @@ def test_cli_equivalence_compares_published_evidence_index_not_documents(
         history,
         {},
     )
-
-    cli_index = evidence_index[:1]
-    with pytest.raises(
-        driver.SampleTestError,
-        match=f"L5_CLI_EVIDENCE_INDEX_MISMATCH: run_id={run_id}",
-    ):
-        driver._assert_cli_equivalence(
-            ROOT,
-            tmp_path,
-            "project-current",
-            run,
-            history,
-            {},
-        )
-
 
 def test_recording_window_requires_a_unique_new_controlled_chromium(
     monkeypatch: pytest.MonkeyPatch,

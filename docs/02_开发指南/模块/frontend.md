@@ -65,7 +65,7 @@
 - 普通用户先看到任务语言和唯一主动作，内部 ID、reason code、Schema、路径和原始 Evidence 进入高级信息。
 - 真正 `<button>`、label、dialog 和状态文本保持可访问；自动 L5 通过 UI Automation InvokePattern 操作正式按钮，不为测试增加隐藏入口。
 - `product/frontend` 只保存源码/配置，禁止 node_modules、dist、测试缓存和 tsbuildinfo。
-- Workbench 不常驻显示产品版本；1.0.5 只在系统设置等明确诊断位置展示。
+- Workbench 不常驻显示产品版本；1.0.6 只在系统设置等明确诊断位置展示。
 
 ## 直接验证
 

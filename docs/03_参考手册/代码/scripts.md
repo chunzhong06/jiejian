@@ -109,6 +109,7 @@
 - `RESOURCE_ID`
 - `EXPORT_ACTION_KEY`
 - `CONTROL_PORT`
+- `SUITES`
 - `PHASE_TITLES`
 - `ROLE_LABELS`
 - `SOURCE_LABELS`
@@ -120,8 +121,38 @@
 - `class HarnessState`
 - `class ApiClient`
 - `run(root, var_dir, stop_after_recording) -> None`
+- `run_suite(root, var_dir, suite) -> None`
 - `main() -> int`
 主要 import / dot-source：`__future__`, `argparse`, `collections.abc`, `dataclasses`, `json`, `os`, `pathlib`, `playwright.sync_api`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.identity`, `product.backend.infra.runtime.process.lock`, `product.backend.infra.runtime.process.tree`, `product.protocols`, `re`, `sample_test_windows`, `socket`, `subprocess`, `sys`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
+
+### `scripts/dev/sample_test_oracle.py`
+- `_ORACLE_KEYS`
+- `class PrivateOracleError`
+- `class OracleEvaluation`
+- `class PrivateOracleEvaluator`
+主要 import / dot-source：`__future__`, `dataclasses`, `json`, `pathlib`, `sample_test_registry`, `typing`
+
+### `scripts/dev/sample_test_registry.py`
+- `_PUBLIC_ID`
+- `_APPLICATIONS`
+- `_BREAK_MODES`
+- `_STATES`
+- `_PRIVATE_KEYS`
+- `_CASE_KEYS`
+- `class ValidationRegistryError`
+- `class PublicValidationCase`
+- `class ValidationCaseResult`
+- `load_public_registry(root) -> tuple[PublicValidationCase, ...]`
+- `public_registry_payload(root, cases) -> dict[str, object]`
+主要 import / dot-source：`__future__`, `dataclasses`, `json`, `pathlib`, `re`, `typing`
+
+### `scripts/dev/sample_test_validation.py`
+- `_VERDICT`
+- `OFFICIAL_PROJECT_ID`
+- `OFFICIAL_RESOURCE_ID`
+- `class ValidationSuiteError`
+- `run_validation_suite(root, var_dir, repetitions, representative_only) -> dict[str, object]`
+主要 import / dot-source：`__future__`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.lifecycle`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.coverage`, `product.backend.core.verification.permissions.evaluation`, `sample_test_oracle`, `sample_test_registry`, `secrets`, `shutil`, `subprocess`, `sys`, `threading`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
 
 ### `scripts/dev/sample_test_windows.py`
 - `_PROCESS_QUERY_LIMITED_INFORMATION`

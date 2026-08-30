@@ -59,6 +59,7 @@ def test_unavailable_installation_keeps_product_alive_and_requires_consent(
             "identities_ready": False,
             "authorization_order": None,
             "blob_observation": None,
+            "repair_change_id": None,
         }
         assert client.get("/ready").status_code == 200
         rejected = client.post(

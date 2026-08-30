@@ -16,6 +16,7 @@ const experience = {
   identities_ready: false,
   authorization_order: 'ENQUEUE_BEFORE_AUTHORIZE' as const,
   blob_observation: 'AVAILABLE' as const,
+  repair_change_id: null,
 }
 
 function status(action: string, route: string) {

@@ -1,4 +1,4 @@
-# 验证代码变化只读 API 只返回有界产品摘要，不泄露路径或指纹。
+# 验证代码变化只读 API 只返回有界相对路径摘要，不泄露正文或指纹。
 
 from pathlib import Path
 
@@ -25,6 +25,9 @@ def test_source_change_read_api_returns_bounded_latest_view(tmp_path: Path) -> N
         added_count=1,
         modified_count=1,
         removed_count=0,
+        claimed_paths=("product/agent.py",),
+        added_paths=("product/new.py",),
+        modified_paths=("product/agent.py",),
         directly_affected_count=1,
         mapping_review_required_count=0,
         no_direct_evidence_count=1,
@@ -44,7 +47,11 @@ def test_source_change_read_api_returns_bounded_latest_view(tmp_path: Path) -> N
     assert latest.status_code == shown.status_code == 200
     assert latest.json()["data"] == shown.json()["data"]
     assert latest.json()["data"]["actual_changed_path_count"] == 2
+    assert latest.json()["data"]["claimed_paths"] == ["product/agent.py"]
+    assert latest.json()["data"]["added_paths"] == ["product/new.py"]
+    assert latest.json()["data"]["modified_paths"] == ["product/agent.py"]
     encoded = latest.text
     assert "source_fingerprint" not in encoded
     assert "impact_fingerprint" not in encoded
-    assert "changed_paths" not in encoded
+    assert "source body" not in encoded
+    assert "content_sha256" not in encoded

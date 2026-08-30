@@ -1,6 +1,6 @@
 # 修改 Agent 变更影响
 
-> 状态：CURRENT。用于修改源码版本快照、Agent 变化声明、权限实现影响、重验计划、变化感知的检查提交，以及结果和历史中的变化摘要。
+> 状态：CURRENT。用于修改源码版本快照、Agent 变化声明、权限实现影响、修复要求引用、重验计划、变化感知的检查提交，以及结果和历史中的变化摘要。
 
 ## 先确认边界
 
@@ -11,7 +11,8 @@ Agent 只能说明“这次修改是为了什么”，并可附上有界的相�
 ## 当前闭环
 
 ```text
-jiejian_change_submit（PREPARE）
+jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
+  → 服务端按 source Run/Finding 重建 RepairContract 并核对 fingerprint
   → 保存 ChangeManifest
   → 受控源码重分析
   → SourceRevisionSnapshot 前后比较
@@ -20,20 +21,22 @@ jiejian_change_submit（PREPARE）
   → RevalidationPlan
   → jiejian_check_prepare / jiejian_check_run(change_id)
   → PersistedExecutionRequest.change_context
-  → ResultPresentation / HistoryView
+  → 可选 PersistedExecutionRequest.repair_context
+  → ResultPresentation / HistoryView / report.json
 ```
 
-`jiejian_change_show` 是 READ 工具，只返回变化数量、影响计数、待复核权限和安全文案。它不返回源码正文、文件清单、diff、hash、Git 信息或命令输出。
+`jiejian_change_show` 是 READ 工具，返回变化数量、影响计数、待复核权限、安全文案，以及 Agent 声明和界鉴实际确认的新增/修改/删除相对路径。路径只允许位于已授权源码根下；工具不返回绝对路径、源码正文、diff、hash、Git 信息或命令输出。GUI 默认只显示数量，用户展开“查看变化明细”后才显示这些相对路径。修复型变化只保存 `RepairContractReference`，不复制合同，也不接受文件、函数、行号或补丁建议；提交与后续检查都会从已发布事实重新校验引用。
 
 ## 代码与测试入口
 
 | 修改内容 | 生产真源 | 直接测试 |
 | --- | --- | --- |
 | 快照、Manifest、diff、影响与重验模型 | `product/backend/core/source_changes.py` | `tests/backend/workflows/source_changes/test_source_changes.py` |
-| SQLite 聚合与 migration | `product/backend/infra/storage/source_changes.py`、`product/backend/migrations/versions/0005_source_change_impacts.py` | Storage 与 migration 测试 |
+| SQLite 聚合与 migration | `product/backend/infra/storage/source_changes.py`、`product/backend/migrations/versions/0005_source_change_impacts.py`、`0006_repair_contract_reference.py` | Storage 与 migration 测试 |
 | 重分析、影响评估与重验计划 | `product/backend/workflows/source_changes.py` | source changes workflow 测试 |
 | MCP 与只读 API | `product/backend/api/mcp.py`、`product/backend/api/routers/source_changes.py` | `test_mcp.py`、`test_source_changes.py`、Oracle invariant |
 | 检查准备、提交和 Run 冻结 | `product/backend/workflows/security_setup/checks.py`、`product/backend/workflows/runs/execution.py`、`product/protocols/execution_request.py` | checks、request store、source changes 测试 |
+| 修复合同重建与复验 | `product/backend/workflows/results/repair.py`、`product/backend/core/repair.py` | `test_repair_contracts.py`、官方 Sample 修复编排测试 |
 | 工作台、结果与历史 | `WorkbenchPage`、`CheckResultsPage`、`CheckHistoryPage` | 各页面同目录测试 |
 
 ## 影响分类
@@ -46,7 +49,7 @@ jiejian_change_submit（PREPARE）
 
 ## 冻结与历史
 
-变化感知的检查提交会在 `PersistedExecutionRequest` 中冻结 `change_id`、影响指纹、排序去重后的必需权限 ID 和源码指纹。Runner 与 Evidence 不接收文件清单或源码内容，也不在执行时重新读取 live 变化记录。
+变化感知的检查提交会在 `PersistedExecutionRequest` 中冻结 `change_id`、影响指纹、排序去重后的必需权限 ID 和源码指纹。修复型变化还冻结独立 `RepairVerificationContext`，其中只保留权威引用、原权限身份、必须消失的效果、必须保留的 ALLOW 控制和原关键证据标准。Runner 与 Evidence 不接收文件清单、源码内容或补丁建议，也不在执行时重新读取 live 变化记录。
 
 结果和历史从该 Run 的冻结请求投影权限版本、代码变化重验标记和必需权限数量。普通页面不显示内部权限 ID 或任何指纹；后续源码、权限或 binding 变化不能改写已经提交的 Run。
 
@@ -58,7 +61,8 @@ jiejian_change_submit（PREPARE）
 4. Agent rebind 只形成 `IntentProposal`；只有 GUI 批准事务可以把 binding 恢复为 CURRENT，且纯重绑不推进 `policy_epoch`。
 5. `check_prepare` 与 `check_run` 只接受可选 `change_id`，不新增选择权限、Case、Effect、Profile 或文件范围的参数。
 6. `ChangeVerificationContext` 保持嵌套对象，不单独增加 `schema_version`；公共执行请求变化后同步 checked-in Schema。
-7. 工作台、结果和历史只显示有界业务摘要，并覆盖无基线、直接影响、映射待审和无直接证据四种情况。
+7. `RepairContractReference` 必须由服务端重建校验后才能持久化；后续 check prepare/run 继续复用同一 `change_id`，不增加修复专用运行入口。
+8. 工作台默认只显示有界业务摘要；展开变化明细时才显示 Agent 声明和界鉴实际确认的相对路径。结果和历史不显示 change ID、权限内部 ID 或指纹，并覆盖无基线、直接影响、映射待审和无直接证据四种情况。
 
 ## 最小验证
 
@@ -66,6 +70,7 @@ jiejian_change_submit（PREPARE）
 
 ```powershell
 .\scripts\dev.ps1 test tests/backend/workflows/source_changes/test_source_changes.py
+.\scripts\dev.ps1 test tests/backend/workflows/results/test_repair_contracts.py tests/backend/workflows/test_official_sample_repair.py
 .\scripts\dev.ps1 test tests/backend/api/test_mcp.py tests/backend/api/test_permission_oracle_invariant.py
 .\scripts\dev.ps1 test tests/backend/workflows/security_setup/test_checks.py tests/backend/workflows/results/test_result_presentation.py tests/backend/workflows/results/test_history.py
 .\scripts\dev.ps1 frontend-test src/features/workspace/WorkbenchPage.test.tsx src/features/checks/CheckResultsPage.test.tsx src/features/checks/CheckHistoryPage.test.tsx

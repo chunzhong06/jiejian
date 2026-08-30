@@ -312,6 +312,18 @@ def emit_result_presentation(presentation: ResultPresentation) -> None:
     if presentation.execution_problem:
         typer.echo("")
         _emit_section("执行状态", [("", presentation.execution_problem, "FAILED")])
+    if presentation.repair_verification is not None:
+        typer.echo("")
+        _emit_section(
+            "修复验证",
+            [
+                (
+                    "修复要求",
+                    presentation.repair_verification.message,
+                    presentation.repair_verification.status.value,
+                )
+            ],
+        )
     if presentation.issues:
         typer.echo("")
         _emit_section(
@@ -326,6 +338,19 @@ def emit_result_presentation(presentation: ResultPresentation) -> None:
             ],
         )
         for issue in presentation.issues:
+            if issue.repair_requirement is not None:
+                typer.echo("")
+                _emit_section(
+                    f"{issue.title} · 修复后必须满足",
+                    [
+                        ("必须消失", issue.repair_requirement.must_disappear, ""),
+                        ("必须保持", issue.repair_requirement.must_remain, ""),
+                        *(
+                            ("不能改变", item, "")
+                            for item in issue.repair_requirement.must_not_change
+                        ),
+                    ],
+                )
             diagnosis = getattr(issue, "diagnosis", None)
             if diagnosis is not None:
                 typer.echo("")
@@ -336,7 +361,11 @@ def emit_result_presentation(presentation: ResultPresentation) -> None:
                             item.label,
                             item.detail,
                             (
-                                diagnosis.breakpoint_type.value
+                                (
+                                    diagnosis.breakpoint_type.value
+                                    if diagnosis.breakpoint_type is not None
+                                    else "UNLOCATED"
+                                )
                                 if item.kind == "BREAKPOINT"
                                 else ""
                             ),

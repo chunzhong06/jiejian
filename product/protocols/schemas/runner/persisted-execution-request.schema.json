@@ -2266,6 +2266,15 @@
       "title": "PermissionExpectation",
       "type": "string"
     },
+    "PermissionIntentRelation": {
+      "enum": [
+        "OWNS",
+        "SAME_ROLE_OTHER_ACCOUNT",
+        "OTHER_ROLE"
+      ],
+      "title": "PermissionIntentRelation",
+      "type": "string"
+    },
     "PermissionMutationCase": {
       "additionalProperties": false,
       "properties": {
@@ -2567,10 +2576,48 @@
       "additionalProperties": false,
       "description": "一次运行冻结的单条人类权限 revision 与实现绑定身份。",
       "properties": {
+        "action_candidate_id": {
+          "anyOf": [
+            {
+              "pattern": "^action_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Candidate Id"
+        },
+        "action_display_name": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Display Name"
+        },
         "binding_fingerprint": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Binding Fingerprint",
           "type": "string"
+        },
+        "expectation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionExpectation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "intent_hash": {
           "pattern": "^[0-9a-f]{64}$",
@@ -2582,10 +2629,71 @@
           "title": "Intent Id",
           "type": "string"
         },
+        "protected_effects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProtectedEffect"
+          },
+          "maxItems": 16,
+          "title": "Protected Effects",
+          "type": "array"
+        },
+        "relation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PermissionIntentRelation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "resource_owner_display_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resource Owner Display Name"
+        },
         "revision": {
           "minimum": 1,
           "title": "Revision",
           "type": "integer"
+        },
+        "subject_display_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Display Name"
+        },
+        "subject_test_identity_id": {
+          "anyOf": [
+            {
+              "pattern": "^tid_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Test Identity Id"
         }
       },
       "required": [
@@ -2792,6 +2900,42 @@
       "title": "PreparedCookieSessionIdentityBinding",
       "type": "object"
     },
+    "ProtectedEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "business_label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Business Label",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SecurityEffectKind"
+        },
+        "protected_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Fields",
+          "type": "array"
+        },
+        "resource_type": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Resource Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "resource_type",
+        "business_label"
+      ],
+      "title": "ProtectedEffect",
+      "type": "object"
+    },
     "QueuePeekBudget": {
       "additionalProperties": false,
       "properties": {
@@ -2906,6 +3050,168 @@
       ],
       "title": "RelationType",
       "type": "string"
+    },
+    "RepairAllowControlIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "case_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Case Fingerprint",
+          "type": "string"
+        },
+        "intent": {
+          "$ref": "#/$defs/RepairIntentIdentity"
+        },
+        "subject_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Subject Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "action_id",
+        "subject_id",
+        "case_fingerprint"
+      ],
+      "title": "RepairAllowControlIdentity",
+      "type": "object"
+    },
+    "RepairContractReference": {
+      "additionalProperties": false,
+      "properties": {
+        "repair_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Repair Fingerprint",
+          "type": "string"
+        },
+        "source_finding_id": {
+          "pattern": "^finding_[0-9a-f]{32}$",
+          "title": "Source Finding Id",
+          "type": "string"
+        },
+        "source_run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Source Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_run_id",
+        "source_finding_id",
+        "repair_fingerprint"
+      ],
+      "title": "RepairContractReference",
+      "type": "object"
+    },
+    "RepairEvidenceStandard": {
+      "additionalProperties": false,
+      "properties": {
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "requirement_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Requirement Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirement_ids",
+        "fingerprint"
+      ],
+      "title": "RepairEvidenceStandard",
+      "type": "object"
+    },
+    "RepairIntentIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash"
+      ],
+      "title": "RepairIntentIdentity",
+      "type": "object"
+    },
+    "RepairVerificationContext": {
+      "additionalProperties": false,
+      "description": "随修复重验 Run 冻结原考题、受保护后果、ALLOW 控制和证据标准。",
+      "properties": {
+        "must_disappear_effect_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Must Disappear Effect Ids",
+          "type": "array"
+        },
+        "must_remain_allow_control": {
+          "$ref": "#/$defs/RepairAllowControlIdentity"
+        },
+        "original_intents": {
+          "items": {
+            "$ref": "#/$defs/RepairIntentIdentity"
+          },
+          "maxItems": 4096,
+          "minItems": 2,
+          "title": "Original Intents",
+          "type": "array"
+        },
+        "original_key_evidence": {
+          "$ref": "#/$defs/RepairEvidenceStandard"
+        },
+        "original_policy_epoch": {
+          "minimum": 0,
+          "title": "Original Policy Epoch",
+          "type": "integer"
+        },
+        "reference": {
+          "$ref": "#/$defs/RepairContractReference"
+        },
+        "target_intent": {
+          "$ref": "#/$defs/RepairIntentIdentity"
+        }
+      },
+      "required": [
+        "reference",
+        "original_policy_epoch",
+        "target_intent",
+        "original_intents",
+        "must_disappear_effect_ids",
+        "must_remain_allow_control",
+        "original_key_evidence"
+      ],
+      "title": "RepairVerificationContext",
+      "type": "object"
     },
     "ResetEndpointStrategy": {
       "additionalProperties": false,
@@ -4058,6 +4364,17 @@
     },
     "project_snapshot": {
       "$ref": "#/$defs/WebExecutionSnapshot"
+    },
+    "repair_context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RepairVerificationContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "schema_version": {
       "const": "1",

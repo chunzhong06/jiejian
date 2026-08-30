@@ -48,6 +48,7 @@ export function WorkbenchPage({
   onNavigate: (path: string) => void
 }) {
   const [requestedMode, setRequestedMode] = useState<OfficialExperienceMode | null>(null)
+  const [showChangeDetails, setShowChangeDetails] = useState(false)
   const latest = runs[0]
   const systemIssue = systemStatus.api === 'unknown' || systemStatus.worker === 'stopped' || systemStatus.browser === 'unavailable'
     ? '运行环境中有服务暂不可用'
@@ -153,14 +154,16 @@ export function WorkbenchPage({
         </Space>}
       </Card>
 
-      <Card title="最近代码变化" extra={latestChange?.next_path && <Button type="link" onClick={() => onNavigate(latestChange.next_path!)}>复核权限映射</Button>}>
+      <Card title="最近代码变化" extra={latestChange?.next_path && <Button type="link" onClick={() => onNavigate(latestChange.next_path!)}>确认权限要求</Button>}>
         {!latestChange && <Typography.Text type="secondary">尚未收到 Agent 提交的代码变化</Typography.Text>}
         {latestChange && <Space direction="vertical" size={6}>
           <Typography.Text strong>{latestChange.reason}</Typography.Text>
           <Typography.Text>{latestChange.summary}</Typography.Text>
-          <Typography.Text type="secondary">服务端确认 {latestChange.actual_changed_path_count} 个文件发生变化</Typography.Text>
+          <Typography.Text type="secondary">界鉴确认 {latestChange.actual_changed_path_count} 个文件发生变化</Typography.Text>
           <Typography.Text type="secondary">直接影响 {latestChange.directly_affected_count} 条权限要求</Typography.Text>
-          <Typography.Text type={latestChange.mapping_review_required_count > 0 ? 'warning' : 'secondary'}>{latestChange.mapping_review_required_count} 条实现映射需要确认</Typography.Text>
+          <Typography.Text type={latestChange.mapping_review_required_count > 0 ? 'warning' : 'secondary'}>{latestChange.mapping_review_required_count > 0 ? `有 ${latestChange.mapping_review_required_count} 条权限要求无法自动对应到修改后的代码，需要你确认` : '已确认的权限要求都能继续对应到当前代码'}</Typography.Text>
+          <Button type="link" onClick={() => setShowChangeDetails((value) => !value)}>{showChangeDetails ? '收起变化明细' : '查看变化明细'}</Button>
+          {showChangeDetails && <ChangeDetails change={latestChange} />}
         </Space>}
       </Card>
 
@@ -176,5 +179,19 @@ export function WorkbenchPage({
       </Card>
     </div>
     {consent}
+  </div>
+}
+
+function ChangeDetails({ change }: { change: SourceChangeViewDto }) {
+  const groups = [
+    ['界鉴实际确认新增', change.added_paths],
+    ['界鉴实际确认修改', change.modified_paths],
+    ['界鉴实际确认删除', change.removed_paths],
+  ] as const
+  return <div className="workbench-change-details">
+    <Typography.Text strong>Agent 说自己改了什么</Typography.Text>
+    {change.claimed_paths.length > 0 ? <ul>{change.claimed_paths.map((path) => <li key={path}><Typography.Text code>{path}</Typography.Text></li>)}</ul> : <Typography.Text type="secondary">Agent 没有提供文件线索</Typography.Text>}
+    <Typography.Text strong>界鉴实际确认新增/修改/删除什么</Typography.Text>
+    {groups.map(([label, paths]) => <div key={label}><Typography.Text type="secondary">{label}</Typography.Text>{paths.length > 0 ? <ul>{paths.map((path) => <li key={`${label}-${path}`}><Typography.Text code>{path}</Typography.Text></li>)}</ul> : <Typography.Text type="secondary">：无</Typography.Text>}</div>)}
   </div>
 }

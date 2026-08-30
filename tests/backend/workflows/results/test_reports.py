@@ -11,10 +11,17 @@ import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle, RunVerdict
+from product.backend.core.repair import (
+    RepairContractReference,
+    RepairRequirementView,
+    RepairVerification,
+    RepairVerificationStatus,
+)
 from product.backend.core.verification.breakpoints import (
     BreakpointPrecision,
     BreakpointType,
 )
+from product.backend.core.verification.continuity import AuthorizationContinuityState
 from product.backend.core.verification.trace import TraceEventKind
 from product.backend.core.reporting import render_html, render_junit, render_sarif
 from product.backend.infra.artifacts.report_store import ReportStore
@@ -81,9 +88,11 @@ def _result_diagnosis() -> ResultDiagnosis:
             (
                 ("PERMISSION_REQUIREMENT", "权限要求", "不应允许导出"),
                 ("ACTUAL_IDENTITY", "实际身份", "普通成员"),
-                ("AUTHORIZATION_DECISION", "权限决定", "拒绝"),
+                ("PROTECTED_EFFECT", "本不该发生的业务后果", "归档已经生成"),
+                ("AUTHORIZATION_CONTINUITY", "合法授权来源", "找不到符合原权限要求的合法授权来源"),
                 ("BREAKPOINT", "首个可证明断裂", "权限决定发生过晚"),
-                ("CONFIRMED_EFFECT", "已确认最终后果", "归档已经生成"),
+                ("AMPLIFIERS", "后续扩大影响的行为", "后台任务继续执行"),
+                ("CONFIRMED_IMPACT", "最终业务影响", "归档已经生成"),
             ),
             start=1,
         )
@@ -93,6 +102,8 @@ def _result_diagnosis() -> ResultDiagnosis:
         action_id="export-package",
         breakpoint_type=BreakpointType.AUTHORIZATION_LATE,
         precision=BreakpointPrecision.EXACT,
+        continuity_state=AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED,
+        amplifier_types=(BreakpointType.AUTHORITY_EXPANSION,),
         summary="首个可证明断裂：权限决定发生过晚",
         minimal_witness=witness,
         confirmed_impacts=(
@@ -152,6 +163,11 @@ def _presentation(*, verdict: str | None = None) -> ReportPresentation:
 def test_report_snapshot_omits_result_page_only_evidence_source_projection(
     tmp_path: Path,
 ) -> None:
+    repair_reference = RepairContractReference(
+        source_run_id=RUN_ID,
+        source_finding_id="finding_" + "c" * 32,
+        repair_fingerprint="9" * 64,
+    )
     issue = ResultPresentationIssue(
         finding_id="finding_" + "c" * 32,
         title="成员账号不应导出项目资料",
@@ -180,6 +196,12 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
         verdict=PresentedCaseVerdict.VULNERABLE,
         occurrence_status="APPEARED",
         diagnosis=_result_diagnosis(),
+        repair_requirement=RepairRequirementView(
+            reference=repair_reference,
+            must_disappear="普通成员修改后，受保护文档变化必须消失。",
+            must_remain="项目负责人仍能正常修改文档。",
+            must_not_change=("原拒绝权限", "关键证据要求"),
+        ),
     )
     result_view = ResultPresentation(
         run_id=RUN_ID,
@@ -204,6 +226,13 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
         inconclusive_count=0,
         uncovered_count=0,
         issues=(issue,),
+        repair_verification=RepairVerification(
+            reference=repair_reference,
+            verification_run_id=RUN_ID,
+            status=RepairVerificationStatus.NOT_VERIFIED,
+            message="原违规业务后果仍然存在。",
+            reason_codes=("DENY_EFFECT_STILL_PRESENT",),
+        ),
     )
     builder = ReportBuilder(
         tmp_path,
@@ -223,7 +252,13 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
     assert "planned_identity_id" not in snapshot.issues[0].model_dump(mode="json")
     assert snapshot.issues[0].diagnosis is not None
     assert snapshot.issues[0].diagnosis.breakpoint_type == "AUTHORIZATION_LATE"
-    assert snapshot.issues[0].diagnosis.minimal_witness[3].kind == "BREAKPOINT"
+    assert snapshot.issues[0].diagnosis.minimal_witness[4].kind == "BREAKPOINT"
+    assert snapshot.issues[0].repair_requirement is not None
+    assert snapshot.repair_verification is not None
+    assert snapshot.repair_verification.status == "NOT_VERIFIED"
+    rendered = render_html(_base(verdict="BLOCK", presentation=snapshot)).decode("utf-8")
+    assert "修复要求未通过" in rendered
+    assert "项目负责人仍能正常修改文档" in rendered
 
 
 def _base(

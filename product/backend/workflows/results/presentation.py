@@ -5,10 +5,10 @@
 #   已验证 Run、Finding 与 Evidence 之上的唯一人类结果表达。
 #
 # 职责
-#   汇总本次范围与三态结论｜投影冻结权限版本与断裂见证｜提供 GUI/CLI/MCP 共用只读 View
+#   汇总本次范围与三态结论｜投影冻结权限版本、断裂见证、修复要求与复验｜提供共用只读 View
 #
 # 边界
-#   只翻译已发布事实和 Run 权限快照，不读取 live Ledger，不修改 Finding、Evidence 或 Report。
+#   只翻译已发布事实和 Run 权限/修复快照，不读取 live Ledger，不修改 Finding、Evidence 或 Report。
 #
 # 调用链
 #   API / CLI / Report → ResultPresentationBuilder → PublishedResultReader / FindingQueries
@@ -23,12 +23,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle, RunVerdict
+from product.backend.core.repair import RepairRequirementView, RepairVerification
 from product.backend.core.verification.breakpoints import (
     BreakpointLocator,
     BreakpointPrecision,
     BreakpointResult,
     BreakpointType,
 )
+from product.backend.core.verification.continuity import AuthorizationContinuityState
 from product.backend.core.verification.facts import ObservedEffect, TemporalClosure
 from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
 from product.backend.workflows.results.trace import build_execution_traces
@@ -69,9 +71,11 @@ class ResultWitnessItem(_PresentationModel):
     kind: Literal[
         "PERMISSION_REQUIREMENT",
         "ACTUAL_IDENTITY",
-        "AUTHORIZATION_DECISION",
+        "PROTECTED_EFFECT",
+        "AUTHORIZATION_CONTINUITY",
         "BREAKPOINT",
-        "CONFIRMED_EFFECT",
+        "AMPLIFIERS",
+        "CONFIRMED_IMPACT",
     ]
     label: str = Field(min_length=1, max_length=80)
     detail: str = Field(min_length=1, max_length=240)
@@ -92,10 +96,12 @@ class ResultConfirmedImpact(_PresentationModel):
 class ResultDiagnosis(_PresentationModel):
     case_id: str = Field(min_length=1, max_length=160)
     action_id: str = Field(min_length=1, max_length=160)
-    breakpoint_type: BreakpointType
+    breakpoint_type: BreakpointType | None
     precision: BreakpointPrecision
+    continuity_state: AuthorizationContinuityState
+    amplifier_types: tuple[BreakpointType, ...] = Field(default=(), max_length=5)
     summary: str = Field(min_length=1, max_length=320)
-    minimal_witness: tuple[ResultWitnessItem, ...] = Field(min_length=5, max_length=5)
+    minimal_witness: tuple[ResultWitnessItem, ...] = Field(min_length=7, max_length=7)
     confirmed_impacts: tuple[ResultConfirmedImpact, ...] = Field(
         default=(),
         max_length=512,
@@ -104,12 +110,24 @@ class ResultDiagnosis(_PresentationModel):
 
     @model_validator(mode="after")
     def validate_witness_order(self) -> ResultDiagnosis:
+        if (
+            self.breakpoint_type is None
+            and self.precision is not BreakpointPrecision.VIOLATION_ONLY
+        ):
+            raise ValueError("unlocated diagnosis must use VIOLATION_ONLY precision")
+        if len(set(self.amplifier_types)) != len(self.amplifier_types) or (
+            self.breakpoint_type is not None
+            and self.breakpoint_type in self.amplifier_types
+        ):
+            raise ValueError("diagnosis primary and amplifier types must be separate")
         expected = (
             "PERMISSION_REQUIREMENT",
             "ACTUAL_IDENTITY",
-            "AUTHORIZATION_DECISION",
+            "PROTECTED_EFFECT",
+            "AUTHORIZATION_CONTINUITY",
             "BREAKPOINT",
-            "CONFIRMED_EFFECT",
+            "AMPLIFIERS",
+            "CONFIRMED_IMPACT",
         )
         if tuple(item.kind for item in self.minimal_witness) != expected:
             raise ValueError("minimal witness order is fixed")
@@ -146,6 +164,7 @@ class ResultPresentationIssue(_PresentationModel):
     diagnosis: ResultDiagnosis | None = None
     verdict: PresentedCaseVerdict
     occurrence_status: str | None = Field(default=None, max_length=32)
+    repair_requirement: RepairRequirementView | None = None
 
 
 class ResultRelevantIntent(_PresentationModel):
@@ -178,6 +197,7 @@ class ResultPresentation(_PresentationModel):
         max_length=4096,
     )
     change_verification: ResultChangeVerification | None = None
+    repair_verification: RepairVerification | None = None
     headline: str = Field(min_length=1, max_length=160)
     scope_statement: str = Field(min_length=1, max_length=320)
     checked_count: int = Field(ge=0)
@@ -194,9 +214,10 @@ class ResultPresentation(_PresentationModel):
 class ResultPresentationBuilder:
     """只接受完整性已验证的 publication，并组合现有只读 Finding 查询。"""
 
-    def __init__(self, reader, findings) -> None:
+    def __init__(self, reader, findings, repairs=None) -> None:
         self._reader = reader
         self._findings = findings
+        self._repairs = repairs
 
     def build(self, run_id: str) -> ResultPresentation:
         """生成同一 Run 的唯一业务投影；读取失败由既有稳定错误表达。"""
@@ -204,12 +225,43 @@ class ResultPresentationBuilder:
         view = self._reader.read(run_id)
         request = self._reader.execution_request(view)
         finding_views = self._findings.findings_for_run(run_id)
-        return build_result_presentation(
+        presentation = build_result_presentation(
             view,
             request.project_snapshot,
             finding_views,
             permission_policy=request.permission_policy,
             change_context=request.change_context,
+        )
+        if self._repairs is None:
+            return presentation
+        repair_capable = all(
+            item.expectation is not None
+            and item.relation is not None
+            and item.subject_display_name is not None
+            and item.action_display_name is not None
+            and item.resource_owner_display_name is not None
+            and item.action_candidate_id is not None
+            and item.subject_test_identity_id is not None
+            for item in request.permission_policy.entries
+        )
+        issues = tuple(
+            issue.model_copy(
+                update={
+                    "repair_requirement": self._repairs.requirement(
+                        run_id,
+                        issue.finding_id,
+                    )
+                }
+            )
+            if repair_capable and issue.verdict is PresentedCaseVerdict.VULNERABLE
+            else issue
+            for issue in presentation.issues
+        )
+        return presentation.model_copy(
+            update={
+                "issues": issues,
+                "repair_verification": self._repairs.verify_run(run_id),
+            }
         )
 
 
@@ -235,7 +287,7 @@ def build_result_presentation(
     traces_by_case = {
         (item.case_id, item.action_id): item for item in execution_traces
     }
-    breakpoints_by_case = _locate_breakpoints(
+    breakpoints_by_case = locate_published_breakpoints(
         snapshot,
         evidence_items,
         traces_by_case,
@@ -663,7 +715,7 @@ def _actual_identity(
     return "CONFIRMED", identity_id, identity_id
 
 
-def _locate_breakpoints(
+def locate_published_breakpoints(
     snapshot: Any,
     evidence_items: tuple[Any, ...],
     traces_by_case: dict[tuple[str, str], ExecutionTrace],
@@ -715,9 +767,11 @@ def _locate_breakpoints(
 _WITNESS_LABELS = {
     "PERMISSION_REQUIREMENT": "权限要求",
     "ACTUAL_IDENTITY": "实际身份",
-    "AUTHORIZATION_DECISION": "权限决定",
+    "PROTECTED_EFFECT": "本不该发生的业务后果",
+    "AUTHORIZATION_CONTINUITY": "合法授权来源",
     "BREAKPOINT": "首个可证明断裂",
-    "CONFIRMED_EFFECT": "已确认最终后果",
+    "AMPLIFIERS": "后续扩大影响的行为",
+    "CONFIRMED_IMPACT": "最终业务影响",
 }
 _BREAKPOINT_LABELS = {
     BreakpointType.AUTHORIZATION_MISSING: "缺少权限决定",
@@ -749,10 +803,6 @@ def _diagnosis(
     actual_identity_label: str | None,
 ) -> ResultDiagnosis:
     by_id = {event.event_id: event for event in trace.events}
-    authorization = next(
-        (event for event in trace.events if event.kind is TraceEventKind.AUTHORIZATION),
-        None,
-    )
     effect_events = tuple(
         event
         for event in trace.events
@@ -792,10 +842,15 @@ def _diagnosis(
             evidence_refs=(str(evidence.evidence_id),),
         ),
         _witness(
-            "AUTHORIZATION_DECISION",
-            _authorization_detail(authorization),
-            event=authorization,
+            "PROTECTED_EFFECT",
+            _actual_result(evidence),
+            event=final_effect,
             evidence_refs=(str(evidence.evidence_id),),
+        ),
+        _witness(
+            "AUTHORIZATION_CONTINUITY",
+            _continuity_detail(breakpoint.continuity.state),
+            evidence_refs=breakpoint.evidence_refs,
         ),
         _witness(
             "BREAKPOINT",
@@ -808,7 +863,12 @@ def _diagnosis(
             evidence_refs=breakpoint.evidence_refs,
         ),
         _witness(
-            "CONFIRMED_EFFECT",
+            "AMPLIFIERS",
+            _amplifier_detail(breakpoint.amplifier_types),
+            evidence_refs=breakpoint.evidence_refs,
+        ),
+        _witness(
+            "CONFIRMED_IMPACT",
             _actual_result(evidence),
             event=final_effect,
             evidence_refs=breakpoint.evidence_refs,
@@ -832,7 +892,12 @@ def _diagnosis(
         action_id=breakpoint.action_id,
         breakpoint_type=breakpoint.breakpoint_type,
         precision=breakpoint.precision,
-        summary=_breakpoint_detail(breakpoint, by_id),
+        continuity_state=breakpoint.continuity.state,
+        amplifier_types=breakpoint.amplifier_types,
+        summary=(
+            f"{_continuity_detail(breakpoint.continuity.state)} "
+            f"{_breakpoint_detail(breakpoint, by_id)}"
+        ),
         minimal_witness=witness,
         confirmed_impacts=confirmed_impacts,
         evidence_refs=breakpoint.evidence_refs,
@@ -843,9 +908,11 @@ def _witness(
     kind: Literal[
         "PERMISSION_REQUIREMENT",
         "ACTUAL_IDENTITY",
-        "AUTHORIZATION_DECISION",
+        "PROTECTED_EFFECT",
+        "AUTHORIZATION_CONTINUITY",
         "BREAKPOINT",
-        "CONFIRMED_EFFECT",
+        "AMPLIFIERS",
+        "CONFIRMED_IMPACT",
     ],
     detail: str,
     *,
@@ -863,11 +930,19 @@ def _witness(
     )
 
 
-def _authorization_detail(event) -> str:
-    decision = getattr(event, "authorization_decision", None)
-    if decision is None:
-        return "未发布有效权限决定"
-    return "允许" if decision.value == "ALLOW" else "拒绝"
+def _continuity_detail(state: AuthorizationContinuityState) -> str:
+    if state is AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED:
+        return "这个本不应该发生的业务结果已经发生，但找不到符合原权限要求的合法授权来源。"
+    if state is AuthorizationContinuityState.INTACT:
+        return "所有受保护业务后果都被可靠确认没有发生。"
+    return "当前证据不足以确认受保护业务后果是否拥有合法授权来源。"
+
+
+def _amplifier_detail(values: tuple[BreakpointType, ...]) -> str:
+    if not values:
+        return "当前没有确认到让影响继续扩大的后续行为"
+    labels = "、".join(_BREAKPOINT_LABELS[value] for value in values)
+    return f"已确认后续扩大影响：{labels}"
 
 
 def _breakpoint_detail(
@@ -1078,6 +1153,7 @@ def _value(value: Any) -> str:
 
 
 __all__ = [
+    "locate_published_breakpoints",
     "PresentedCaseVerdict",
     "ResultConfirmedImpact",
     "ResultChangeVerification",

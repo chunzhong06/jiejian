@@ -19,6 +19,6 @@ def test_current_migration_adds_immutable_baseline_and_gate_tables(tmp_path: Pat
         assert "baseline_id" in {item["name"] for item in inspector.get_columns("regression_baselines")}
         assert "input_hash" in {item["name"] for item in inspector.get_columns("gate_results")}
         with engine.connect() as connection:
-            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == "0005_source_change_impacts"
+            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == "0006_repair_contract_reference"
     finally:
         engine.dispose()

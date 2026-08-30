@@ -16,9 +16,7 @@ from product.backend.infra.runtime.logging import configure_logging
 
 @dataclass(frozen=True, slots=True)
 class CliOptions:
-    config: Path | None
     var_dir: Path | None
-    log_level: str | None
     trace_id: str | None
     presentation: str = "auto"
     machine_only: bool = False
@@ -27,10 +25,8 @@ class CliOptions:
 def runtime_settings(context: typer.Context) -> Settings:
     options: CliOptions = context.obj
     loaded = load_settings(
-        config_path=options.config,
         cli_overrides={
             "var_dir": options.var_dir,
-            "log_level": options.log_level,
             "trace_id": options.trace_id,
         },
     )

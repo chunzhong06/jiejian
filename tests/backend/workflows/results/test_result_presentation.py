@@ -8,10 +8,16 @@ import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
+from product.backend.core.permission_intent import PermissionIntentRelation
 from product.backend.core.verification.breakpoints import (
     BreakpointPrecision,
     BreakpointResult,
     BreakpointType,
+)
+from product.backend.core.verification.continuity import (
+    AuthorizationContinuityAssessment,
+    AuthorizationContinuityState,
+    AuthorizationEffectReference,
 )
 from product.backend.core.verification.facts import (
     ExecutionOutcome,
@@ -45,6 +51,19 @@ OBSERVER_ID = "owner-observer"
 CASE_ID = "case-presentation"
 
 
+def _orphan_continuity() -> AuthorizationContinuityAssessment:
+    effect = AuthorizationEffectReference(
+        effect_id=EFFECT_ID,
+        resource_id=RESOURCE_ID,
+    )
+    return AuthorizationContinuityAssessment(
+        case_id=CASE_ID,
+        action_id=ACTION_ID,
+        state=AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED,
+        protected_effects=(effect,),
+        confirmed_effects=(effect,),
+        reason_codes=("DENY_PROTECTED_EFFECT_CONFIRMED",),
+    )
 def _view(
     verdict: RunVerdict | None,
     case_verdict: CaseVerdict,
@@ -251,6 +270,14 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
                 revision=3,
                 intent_hash="5" * 64,
                 binding_fingerprint="6" * 64,
+                expectation=PermissionExpectation.DENY,
+                relation=PermissionIntentRelation.OTHER_ROLE,
+                subject_display_name="普通成员",
+                action_display_name="创建任务",
+                resource_owner_display_name="项目负责人",
+                protected_effects=(),
+                action_candidate_id="action_" + "7" * 32,
+                subject_test_identity_id="tid_" + "8" * 32,
             ),
         ),
     )
@@ -517,6 +544,7 @@ def test_published_audit_trace_exposes_unified_identity_and_diagnosis(
         precision=BreakpointPrecision.EXACT,
         last_known_good_event_id="trace-2",
         first_violation_event_id="trace-3",
+        continuity=_orphan_continuity(),
         orphan_effect_ids=(EFFECT_ID,),
         downstream_event_ids=tuple(f"trace-{index}" for index in range(4, 9)),
         evidence_refs=(EVIDENCE_ID,),
@@ -548,14 +576,17 @@ def test_published_audit_trace_exposes_unified_identity_and_diagnosis(
     assert tuple(item.kind for item in diagnosis.minimal_witness) == (
         "PERMISSION_REQUIREMENT",
         "ACTUAL_IDENTITY",
-        "AUTHORIZATION_DECISION",
+        "PROTECTED_EFFECT",
+        "AUTHORIZATION_CONTINUITY",
         "BREAKPOINT",
-        "CONFIRMED_EFFECT",
+        "AMPLIFIERS",
+        "CONFIRMED_IMPACT",
     )
     assert diagnosis.minimal_witness[1].detail == result.issues[0].actual_identity_label
-    assert diagnosis.minimal_witness[2].detail == "拒绝"
-    assert diagnosis.minimal_witness[3].event_id == "trace-3"
-    assert diagnosis.minimal_witness[4].event_id == "trace-8"
+    assert diagnosis.minimal_witness[2].event_id == "trace-8"
+    assert "找不到符合原权限要求的合法授权来源" in diagnosis.minimal_witness[3].detail
+    assert diagnosis.minimal_witness[4].event_id == "trace-3"
+    assert diagnosis.minimal_witness[6].event_id == "trace-8"
     assert {item.event_id for item in diagnosis.confirmed_impacts} == {
         f"trace-{index}" for index in range(4, 9)
     }
@@ -609,6 +640,7 @@ def test_breakpoint_precision_copy_is_explicit_in_user_text() -> None:
         last_known_good_event_id="trace-start",
         range_start_event_id="trace-start",
         range_end_event_id="trace-end",
+        continuity=_orphan_continuity(),
         orphan_effect_ids=(EFFECT_ID,),
         evidence_refs=(EVIDENCE_ID,),
         reason_codes=("BREAKPOINT_RANGE_ONLY",),
@@ -619,6 +651,7 @@ def test_breakpoint_precision_copy_is_explicit_in_user_text() -> None:
         breakpoint_type=BreakpointType.AUTHORIZATION_LATE,
         precision=BreakpointPrecision.VIOLATION_ONLY,
         first_violation_event_id="trace-violation",
+        continuity=_orphan_continuity(),
         orphan_effect_ids=(EFFECT_ID,),
         evidence_refs=(EVIDENCE_ID,),
         reason_codes=("VIOLATION_ONLY",),
@@ -630,3 +663,51 @@ def test_breakpoint_precision_copy_is_explicit_in_user_text() -> None:
     assert _breakpoint_detail(violation, by_id) == (
         "违规已确认，但当前证据不足以进一步定位"
     )
+
+
+def test_non_audit_confirmed_effect_keeps_orphan_story_and_original_verdict(
+    monkeypatch,
+) -> None:
+    view = _view(
+        RunVerdict.BLOCK,
+        CaseVerdict.VULNERABLE,
+        effect=ObservedEffect.CONFIRMED,
+    )
+    snapshot = _snapshot()
+    case = view.publication.result.evidence[0].case_snapshot
+    snapshot.differential_plan = SimpleNamespace(
+        twins=(SimpleNamespace(allow_case=case, deny_case=case),)
+    )
+    breakpoint = BreakpointResult(
+        case_id=CASE_ID,
+        action_id=ACTION_ID,
+        breakpoint_type=None,
+        precision=BreakpointPrecision.VIOLATION_ONLY,
+        continuity=_orphan_continuity(),
+        orphan_effect_ids=(EFFECT_ID,),
+        evidence_refs=(EVIDENCE_ID,),
+        reason_codes=(
+            "CONFIRMED_ORPHAN_EFFECT",
+            "PROTECTED_EFFECT_EVENT_UNAVAILABLE",
+            "VIOLATION_ONLY",
+        ),
+    )
+    monkeypatch.setattr(
+        "product.backend.workflows.results.presentation.BreakpointLocator.locate",
+        lambda *_args, **_kwargs: breakpoint,
+    )
+
+    result = build_result_presentation(
+        view,
+        snapshot,
+        _finding(CaseVerdict.VULNERABLE),
+    )
+
+    diagnosis = result.issues[0].diagnosis
+    assert diagnosis is not None
+    assert result.execution_traces[0].complete is False
+    assert diagnosis.continuity_state is AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED
+    assert diagnosis.precision is BreakpointPrecision.VIOLATION_ONLY
+    assert "找不到符合原权限要求的合法授权来源" in diagnosis.summary
+    assert "当前证据不足以进一步定位" in diagnosis.summary
+    assert result.verdict is view.publication.result.verdict is RunVerdict.BLOCK

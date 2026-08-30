@@ -128,6 +128,7 @@ class ApplicationCore:
         self.findings = self.result_services.queries
         self.gating = self.result_services.gate
         self.result_presentation = self.result_services.presentation
+        self.repair_contracts = self.result_services.repair
         self.result_history = self.result_services.history
         self.reports = self.result_services.reports
         self.result_finalizer = self.result_services.finalizer
@@ -205,6 +206,7 @@ class ApplicationCore:
             factory,
             application_understanding=self.application_understanding,
             permission_intents=self.permission_intents,
+            repair_contracts=self.repair_contracts,
             clock_us=clock_us,
         )
         self.action_safety_setup.set_permission_binding_refresher(
@@ -236,6 +238,7 @@ class ApplicationCore:
             security_setup=self.security_setup,
             execution=self.execution,
             source_changes=self.source_changes,
+            repair_contracts=self.repair_contracts,
         )
         self.project_readiness = ProjectReadinessService(
             factory,
@@ -262,6 +265,8 @@ class ApplicationCore:
             self.secret_store,
             self.local_observer_environments,
             self.product_status,
+            repair_contracts=self.repair_contracts,
+            source_changes=self.source_changes,
             clock_us=clock_us,
         )
         self.project_lifecycle = ProjectLifecycleService(

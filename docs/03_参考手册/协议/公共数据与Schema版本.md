@@ -19,7 +19,7 @@
 | `Flow` | `recording_flow.py` | `schemas/recording/flow.schema.json` | 1 |
 | `IdentityPreparationRequest`、`IdentityPreparationResult` | `test_identity_preparation.py` | `schemas/identity/` | 1 |
 | `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest`、`PublicationManifest` | `artifacts.py`、`run_packages.py` | `schemas/artifacts/` | 1 |
-| `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 3 |
+| `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 5 |
 | `ReportPackageManifest` | `report.py` | `schemas/reports/report-package-manifest.schema.json` | 1 |
 | `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
 | `HttpBindingCandidateBatch` | `product/protocols/http_binding_candidate.py` | `schemas/execution/http-binding-candidate.schema.json` | 1 |
@@ -31,7 +31,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 `RunnerProgressEvent` 每行独立持久化并由专用 reader 读取，因此携带自己的格式 1；`GET /api/jobs/{job_id}/progress` 的 `data` 只是 `ApiResponse` 内部视图，不再重复版本。该事件是 staging 外的非权威运行中旁路，不进入 RunnerResult、Evidence、publication、Finding、Report、Gate 或恢复语义。
 
-`ChangeVerificationContext` 只嵌入 `PersistedExecutionRequest`，不是独立交换根，因此不重复 `schema_version`。它冻结一次变化重验的身份、影响指纹、必需权限集合和源码指纹；文件清单、diff 与源码内容不进入执行请求。
+`ChangeVerificationContext` 与 `RepairVerificationContext` 只嵌入 `PersistedExecutionRequest`，不是独立交换根，因此不重复 `schema_version`。前者冻结一次变化重验的身份、影响指纹、必需权限集合和源码指纹；后者冻结权威修复引用、原 `policy_epoch`、原权限身份、必须消失的效果、必须保留的 ALLOW 控制和原关键证据标准。文件清单、diff、源码内容与补丁建议都不进入执行请求。版本 1 的旧冻结请求中权限条目可能不含 1.0.6 新增的业务语义投影；reader 继续安全读取，只有新提交 Run 才完整填充这些字段并可形成 RepairContract。
 
 ## 生命周期与数据流
 

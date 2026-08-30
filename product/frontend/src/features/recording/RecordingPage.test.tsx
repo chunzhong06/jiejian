@@ -55,6 +55,7 @@ describe('RecordingPage', () => {
     render(<RecordingPage project={{ project_id: 'p1' }} onError={vi.fn()} onBack={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: '打开浏览器并开始准备' }))
     await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', action.action_candidate_id, identity.test_identity_id, 600))
+    expect(screen.queryByRole('list', { name: '业务流程准备进度' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Profile|JSONPath|TARGET|高级/)).not.toBeInTheDocument()
   })
 

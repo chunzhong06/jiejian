@@ -139,6 +139,9 @@
 - `HistoryComparisonDto`
 - `HistoryViewDto`
 - `ObservationFactDto`
+- `RepairContractReferenceDto`
+- `RepairRequirementDto`
+- `RepairVerificationDto`
 - `ReportDto`
 - `ResultChangeVerificationDto`
 - `ResultDiagnosisDto`

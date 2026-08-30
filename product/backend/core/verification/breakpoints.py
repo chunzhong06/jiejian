@@ -12,6 +12,11 @@ from product.backend.core.verification.differential import (
     DifferentialExperimentPlan,
     PermissionTwin,
 )
+from product.backend.core.verification.continuity import (
+    AuthorizationContinuityAssessment,
+    AuthorizationContinuityState,
+    assess_authorization_continuity,
+)
 from product.backend.core.verification.facts import ObservedEffect, SecurityEffectFact
 from product.backend.core.verification.permissions import (
     PermissionContract,
@@ -56,12 +61,13 @@ class _BreakpointModel(BaseModel):
 class BreakpointResult(_BreakpointModel):
     case_id: str = Field(pattern=_PUBLIC_ID)
     action_id: str = Field(pattern=_PUBLIC_ID)
-    breakpoint_type: BreakpointType
+    breakpoint_type: BreakpointType | None
     precision: BreakpointPrecision
     last_known_good_event_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
     first_violation_event_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
     range_start_event_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
     range_end_event_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
+    continuity: AuthorizationContinuityAssessment
     orphan_effect_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
     downstream_event_ids: tuple[str, ...] = Field(default=(), max_length=512)
     amplifier_types: tuple[BreakpointType, ...] = Field(default=(), max_length=5)
@@ -99,27 +105,36 @@ class BreakpointResult(_BreakpointModel):
 
     @model_validator(mode="after")
     def validate_precision_shape(self) -> BreakpointResult:
-        if self.breakpoint_type in self.amplifier_types:
+        if (
+            self.continuity.state
+            is not AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED
+            or self.continuity.case_id != self.case_id
+            or self.continuity.action_id != self.action_id
+            or set(self.orphan_effect_ids)
+            != {item.effect_id for item in self.continuity.confirmed_effects}
+        ):
+            raise ValueError("breakpoint must reuse its confirmed continuity assessment")
+        if self.breakpoint_type is not None and self.breakpoint_type in self.amplifier_types:
             raise ValueError("primary breakpoint cannot also be an amplifier")
         if self.precision is BreakpointPrecision.EXACT:
-            if self.first_violation_event_id is None:
-                raise ValueError("EXACT breakpoint requires a first violation event")
+            if self.breakpoint_type is None or self.first_violation_event_id is None:
+                raise ValueError("EXACT breakpoint requires a type and first violation event")
             if self.range_start_event_id is not None or self.range_end_event_id is not None:
                 raise ValueError("EXACT breakpoint cannot carry a range")
         elif self.precision is BreakpointPrecision.RANGE:
             if (
-                self.first_violation_event_id is not None
+                self.breakpoint_type is None
+                or self.first_violation_event_id is not None
                 or self.range_start_event_id is None
                 or self.range_end_event_id is None
             ):
                 raise ValueError("RANGE breakpoint requires only range boundaries")
         elif (
-            self.first_violation_event_id is None
-            or self.last_known_good_event_id is not None
+            self.last_known_good_event_id is not None
             or self.range_start_event_id is not None
             or self.range_end_event_id is not None
         ):
-            raise ValueError("VIOLATION_ONLY can only identify the violation event")
+            raise ValueError("VIOLATION_ONLY cannot claim a stable trace boundary")
         return self
 
 
@@ -164,21 +179,32 @@ class BreakpointLocator:
         twin = _resolve_twin(differential_plan, allow_trace, deny_trace)
         _validate_frozen_scope(contract, twin, allow_trace, deny_trace)
         published_refs = _published_refs(evidence_refs)
+        continuity = assess_authorization_continuity(
+            contract,
+            twin,
+            deny_effect_facts,
+        )
+        if continuity.state is not AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED:
+            return None
+        confirmed_keys = {
+            (item.effect_id, item.resource_id)
+            for item in continuity.confirmed_effects
+        }
         orphan_facts = tuple(
             fact
             for fact in deny_effect_facts
-            if fact.state is ObservedEffect.CONFIRMED
-            and fact.effect_id in _action_effect_ids(contract, twin.invariant.action_id)
-            and fact.resource_id in twin.invariant.resource_ids
+            if (fact.effect_id, fact.resource_id) in confirmed_keys
         )
-        if not orphan_facts:
-            return None
 
         graph = _build_graph(deny_trace)
         allow_graph = _build_graph(allow_trace)
         protected = _protected_events(graph, orphan_facts)
         if not protected:
-            return None
+            return _violation_only_result(
+                continuity=continuity,
+                evidence_refs=published_refs,
+                reason_code="PROTECTED_EFFECT_EVENT_UNAVAILABLE",
+            )
         allow_control = _allow_control_events(
             allow_trace,
             allow_graph,
@@ -193,7 +219,11 @@ class BreakpointLocator:
             allow_control=allow_control,
         )
         if not candidates:
-            return None
+            return _violation_only_result(
+                continuity=continuity,
+                evidence_refs=published_refs,
+                reason_code="BREAKPOINT_TRACE_UNRESOLVED",
+            )
 
         causal_first = tuple(
             candidate
@@ -243,6 +273,7 @@ class BreakpointLocator:
             action_id=deny_trace.action_id,
             breakpoint_type=primary.breakpoint_type,
             precision=precision,
+            continuity=continuity,
             orphan_effect_ids=tuple(sorted({fact.effect_id for fact in orphan_facts})),
             downstream_event_ids=downstream,
             amplifier_types=amplifiers,
@@ -258,6 +289,33 @@ class BreakpointLocator:
         )
         _validate_result_event_refs(result, graph)
         return result
+
+
+def _violation_only_result(
+    *,
+    continuity: AuthorizationContinuityAssessment,
+    evidence_refs: tuple[str, ...],
+    reason_code: str,
+) -> BreakpointResult:
+    """效果已确认但 Trace 无稳定节点时，只声明违规存在，不虚构因果事件。"""
+
+    return BreakpointResult(
+        case_id=continuity.case_id,
+        action_id=continuity.action_id,
+        breakpoint_type=None,
+        precision=BreakpointPrecision.VIOLATION_ONLY,
+        continuity=continuity,
+        orphan_effect_ids=tuple(
+            sorted({item.effect_id for item in continuity.confirmed_effects})
+        ),
+        evidence_refs=evidence_refs,
+        reason_codes=(
+            "CONFIRMED_ORPHAN_EFFECT",
+            reason_code,
+            "TRACE_EVIDENCE_INCOMPLETE",
+            "VIOLATION_ONLY",
+        ),
+    )
 
 
 def _resolve_twin(
@@ -313,15 +371,6 @@ def _validate_frozen_scope(
         raise ValueError("frozen twin is outside the contract action or resource scope")
     if allow_trace.planned_subject_id not in subject_ids or deny_trace.planned_subject_id not in subject_ids:
         raise ValueError("trace planned subject is outside the frozen contract")
-
-
-def _action_effect_ids(contract: PermissionContract, action_id: str) -> frozenset[str]:
-    return frozenset(
-        effect_id
-        for action in contract.actions
-        if action.action_id == action_id
-        for effect_id in action.effect_ids
-    )
 
 
 def _published_refs(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -675,6 +724,8 @@ def _exceeds_legal_scope(
     trace: ExecutionTrace,
     graph: _Graph,
 ) -> bool:
+    if _has_legal_delegation(event, graph):
+        return False
     scope = event.authority_scope
     if any(
         action_id not in legal_actions or action_id != invariant_action
@@ -696,6 +747,44 @@ def _exceeds_legal_scope(
         and candidate.kind in {TraceEventKind.IDENTITY, TraceEventKind.AUTHORIZATION}
     }
     return event.credential_source not in subject_sources
+
+
+def _has_legal_delegation(
+    event: TraceEvent,
+    graph: _Graph,
+) -> bool:
+    """显式委托只在来源授权、因果关系和授权范围都闭合时视为合法。"""
+
+    delegated_from = event.authority_scope.delegated_from_event_id
+    if delegated_from is None or delegated_from not in graph.ancestors[event.event_id]:
+        return False
+    source = graph.by_id[delegated_from]
+    if (
+        source.kind is not TraceEventKind.AUTHORIZATION
+        or source.authorization_decision is not TraceAuthorizationDecision.ALLOW
+    ):
+        return False
+    source_scope = source.authority_scope
+    delegated_scope = event.authority_scope
+    if (
+        not source_scope.allowed_action_ids
+        or not source_scope.allowed_resource_ids
+        or not set(delegated_scope.allowed_action_ids).issubset(
+            source_scope.allowed_action_ids
+        )
+        or not set(delegated_scope.allowed_resource_ids).issubset(
+            source_scope.allowed_resource_ids
+        )
+    ):
+        return False
+    return (
+        event.action_id in source_scope.allowed_action_ids
+        and set(event.resource_ids).issubset(source_scope.allowed_resource_ids)
+        and (
+            event.credential_source is None
+            or event.credential_source == source.credential_source
+        )
+    )
 
 
 def _parent_roles(event: TraceEvent, graph: _Graph) -> tuple[str, ...]:

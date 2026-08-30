@@ -5,10 +5,10 @@
 #   Agent 声明完成变更后，受控源码重分析与长期 PermissionIntent 之间的确定性编排层。
 #
 # 职责
-#   保存有界声明｜生成权威文件 diff｜刷新实现绑定｜按候选证据路径评估逐 Intent 影响。
+#   校验可选修复引用｜保存有界声明｜生成权威文件 diff｜刷新实现绑定｜评估逐 Intent 影响。
 #
 # 边界
-#   不信任 claimed paths，不读取 Git 或源码正文，不调用 LLM/Runner，也不修改权限 revision、hash 或 epoch。
+#   不信任 claimed paths，不复制 RepairContract，不读取 Git 或源码正文，不调用 LLM/Runner，也不修改权限真源。
 #
 # 调用链
 #   ApplicationCore → SourceChangeService → ApplicationUnderstanding / PermissionIntent / Storage
@@ -21,7 +21,7 @@ import uuid
 from collections.abc import Callable, Iterable
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from product.backend.core.application_understanding import (
     ActionCandidate,
@@ -36,6 +36,7 @@ from product.backend.core.permission_intent import (
     PermissionIntentEffectiveState,
     PermissionIntentRevision,
 )
+from product.backend.core.repair import RepairContractReference
 from product.backend.core.source_changes import (
     ChangeImpactAssessment,
     ChangeManifest,
@@ -52,10 +53,11 @@ from product.backend.workflows.application_understanding.service import (
     ApplicationUnderstandingService,
 )
 from product.backend.workflows.permission_intents import PermissionIntentService
+from product.backend.workflows.results.repair import RepairContractService
 
 
 class SourceChangeView(BaseModel):
-    """给 GUI 与 MCP 的有界变化摘要；不暴露源码路径、正文或指纹。"""
+    """给 GUI 与 MCP 的有界变化摘要；只暴露授权源码根下的相对路径。"""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -74,12 +76,28 @@ class SourceChangeView(BaseModel):
     added_count: int = Field(ge=0)
     modified_count: int = Field(ge=0)
     removed_count: int = Field(ge=0)
+    claimed_paths: tuple[str, ...] = Field(default=(), max_length=128)
+    added_paths: tuple[str, ...] = Field(default=(), max_length=512)
+    modified_paths: tuple[str, ...] = Field(default=(), max_length=512)
+    removed_paths: tuple[str, ...] = Field(default=(), max_length=512)
     directly_affected_count: int = Field(ge=0)
     mapping_review_required_count: int = Field(ge=0)
     no_direct_evidence_count: int = Field(ge=0)
     review_intent_ids: tuple[str, ...] = Field(default=(), max_length=1024)
     summary: str = Field(min_length=1, max_length=240)
     next_path: Literal["/check"] | None = None
+
+    @field_validator(
+        "claimed_paths",
+        "added_paths",
+        "modified_paths",
+        "removed_paths",
+    )
+    @classmethod
+    def validate_relative_paths(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        """产品投影复用源码授权边界，不接受绝对路径或父目录跳转。"""
+
+        return tuple(normalize_relative_source_path(value) for value in values)
 
 
 class SourceChangeService:
@@ -91,11 +109,13 @@ class SourceChangeService:
         *,
         application_understanding: ApplicationUnderstandingService,
         permission_intents: PermissionIntentService,
+        repair_contracts: RepairContractService | None = None,
         clock_us: Callable[[], int] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._application_understanding = application_understanding
         self._permission_intents = permission_intents
+        self._repair_contracts = repair_contracts
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
 
     def submit(
@@ -105,9 +125,14 @@ class SourceChangeService:
         reason: str,
         claimed_paths: Iterable[str] = (),
         submitted_by: str,
+        repair_reference: RepairContractReference | None = None,
     ) -> tuple[ChangeManifest, SourceChangeSet, ChangeImpactAssessment]:
         """按旧快照、重分析、新快照、真实 diff、绑定刷新和影响评估的顺序执行。"""
 
+        if repair_reference is not None:
+            if self._repair_contracts is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "修复要求服务未装配")
+            self._repair_contracts.verify_reference(project_id, repair_reference)
         now_us = self._clock_us()
         normalized_claims = tuple(
             sorted(
@@ -120,6 +145,7 @@ class SourceChangeService:
             project_id=project_id,
             reason=reason,
             claimed_paths=normalized_claims,
+            repair_reference=repair_reference,
             submitted_by=submitted_by,
             created_at_us=now_us,
         )
@@ -302,6 +328,7 @@ class SourceChangeService:
             impact_fingerprint=assessment.impact_fingerprint,
             required_intent_ids=tuple(required),
             source_fingerprint=current_snapshot.source_fingerprint,
+            repair_reference=manifest.repair_reference,
         )
 
     @staticmethod
@@ -327,7 +354,10 @@ class SourceChangeService:
         if not assessment.complete:
             summary = "当前没有可比较的源码基线，需要先建立基线后再提交变化。"
         elif mapping_review:
-            summary = f"{len(mapping_review)} 条权限实现映射需要用户复核。"
+            summary = (
+                f"有 {len(mapping_review)} 条权限要求无法自动对应到修改后的代码，"
+                "需要你确认。"
+            )
         elif directly_affected:
             summary = f"发现 {len(directly_affected)} 条权限要求与本次变化直接相关。"
         else:
@@ -346,6 +376,10 @@ class SourceChangeService:
             added_count=len(change_set.added_paths),
             modified_count=len(change_set.modified_paths),
             removed_count=len(change_set.removed_paths),
+            claimed_paths=manifest.claimed_paths,
+            added_paths=change_set.added_paths,
+            modified_paths=change_set.modified_paths,
+            removed_paths=change_set.removed_paths,
             directly_affected_count=len(directly_affected),
             mapping_review_required_count=len(mapping_review),
             no_direct_evidence_count=len(no_direct_evidence),

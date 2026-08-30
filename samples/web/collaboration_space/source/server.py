@@ -30,6 +30,22 @@ else:
 
 AuthorizationOrder = Literal["ENQUEUE_BEFORE_AUTHORIZE", "AUTHORIZE_BEFORE_ENQUEUE"]
 BlobObservation = Literal["AVAILABLE", "UNAVAILABLE"]
+ValidationBreakMode = Literal[
+    "object_tenant_check_missing",
+    "new_entry_inheritance",
+    "feature_authorization_bypass",
+    "delegation_authority_expansion",
+    "deny_async_consequence",
+]
+ValidationImplementation = Literal["MODE_FAULT_PRESENT", "MODE_GUARD_ACTIVE"]
+
+_VALIDATION_BREAK_MODES = {
+    "object_tenant_check_missing",
+    "new_entry_inheritance",
+    "feature_authorization_bypass",
+    "delegation_authority_expansion",
+    "deny_async_consequence",
+}
 
 _MARKER_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-")
 _SECRET_ENV = {
@@ -94,6 +110,8 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
         *,
         authorization_order: AuthorizationOrder = "AUTHORIZE_BEFORE_ENQUEUE",
         blob_observation: BlobObservation = "AVAILABLE",
+        validation_mode: ValidationBreakMode | None = None,
+        validation_implementation: ValidationImplementation | None = None,
         runtime_root: str | Path | None = None,
         passwords: Mapping[str, str] | None = None,
         session_material: Mapping[str, str] | None = None,
@@ -108,6 +126,14 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
             raise ValueError("invalid authorization order")
         if blob_observation not in {"AVAILABLE", "UNAVAILABLE"}:
             raise ValueError("invalid blob observation mode")
+        if (validation_mode is None) != (validation_implementation is None):
+            raise ValueError("validation mode and implementation must be provided together")
+        if validation_mode is not None and validation_mode not in _VALIDATION_BREAK_MODES:
+            raise ValueError("invalid validation break mode")
+        if validation_implementation not in {None, "MODE_FAULT_PRESENT", "MODE_GUARD_ACTIVE"}:
+            raise ValueError("invalid validation implementation")
+        self.validation_mode = validation_mode
+        self.validation_implementation = validation_implementation
         self.passwords = _read_secret_map(passwords, _SECRET_ENV, required=True)
         injected_sessions = _read_secret_map(session_material, _SESSION_ENV, required=False)
         self.sessions = {account: injected_sessions.get(account, secrets.token_urlsafe(24)) for account in _SECRET_ENV}
@@ -468,6 +494,13 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             source_component="collaboration-server",
             source_location="session:account",
         )
+        if self.server.validation_mode is not None:
+            self._create_validation_export(
+                account=account,
+                marker=marker,
+                identity_event_id=identity_event_id,
+            )
+            return
         if account == "bob" and self.server.authorization_order == "AUTHORIZE_BEFORE_ENQUEUE":
             self.server.storage.append_audit(
                 marker=marker,
@@ -565,6 +598,230 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             self._forbidden("EXPORT_PERMISSION_REQUIRED")
             return
         self._json(HTTPStatus.ACCEPTED, {"code": "EXPORT_ACCEPTED", "request_marker": marker, "task_id": job["task_id"]})
+
+    def _create_validation_export(
+        self,
+        *,
+        account: str,
+        marker: str,
+        identity_event_id: str,
+    ) -> None:
+        """仅供 competition validation 选择真实权限实现；普通 Official Sample 不进入此分支。"""
+
+        implementation = self.server.validation_implementation
+        mode = self.server.validation_mode
+        if implementation is None or mode is None:
+            raise RuntimeError("validation configuration is incomplete")
+        if account == "alice":
+            authorization_id = self.server.storage.append_audit(
+                marker=marker,
+                task_id=marker,
+                event_type="authorization_decided",
+                sequence=3,
+                result="allow",
+                effect="ALLOW",
+                parent_event_id=identity_event_id,
+                kind="AUTHORIZATION",
+                semantic_key="authorization_decided",
+                subject_id=account,
+                actor_id="authorization-policy",
+                authorization_decision="ALLOW",
+                source_component="collaboration-server",
+                source_location="policy:project-owner",
+            )
+            job = self._enqueue_validation_export(
+                account=account,
+                marker=marker,
+                parent_event_id=authorization_id,
+                first_sequence=4,
+                origin_authorization_event_id=authorization_id,
+            )
+            self._json(
+                HTTPStatus.ACCEPTED,
+                {
+                    "code": "EXPORT_ACCEPTED",
+                    "request_marker": marker,
+                    "task_id": job["task_id"],
+                },
+            )
+            return
+
+        if implementation == "MODE_GUARD_ACTIVE":
+            self.server.storage.append_audit(
+                marker=marker,
+                task_id=marker,
+                event_type="authorization_decided",
+                sequence=3,
+                result="denied",
+                effect="DENY",
+                parent_event_id=identity_event_id,
+                kind="AUTHORIZATION",
+                semantic_key="authorization_decided",
+                subject_id=account,
+                actor_id="authorization-policy",
+                authorization_decision="DENY",
+                source_component="collaboration-server",
+                source_location=f"policy:{mode}",
+            )
+            self._forbidden("EXPORT_PERMISSION_REQUIRED")
+            return
+
+        if mode in {"object_tenant_check_missing", "new_entry_inheritance"}:
+            job = self._enqueue_validation_export(
+                account=account,
+                marker=marker,
+                parent_event_id=identity_event_id,
+                first_sequence=3,
+                origin_authorization_event_id=None,
+            )
+            self._json(
+                HTTPStatus.ACCEPTED,
+                {
+                    "code": "EXPORT_ACCEPTED",
+                    "request_marker": marker,
+                    "task_id": job["task_id"],
+                },
+            )
+            return
+
+        authorization_id = self.server.storage.append_audit(
+            marker=marker,
+            task_id=marker,
+            event_type="authorization_decided",
+            sequence=3,
+            result="denied",
+            effect="DENY",
+            parent_event_id=identity_event_id,
+            kind="AUTHORIZATION",
+            semantic_key="authorization_decided",
+            subject_id=account,
+            actor_id="authorization-policy",
+            authorization_decision="DENY",
+            source_component="collaboration-server",
+            source_location=f"policy:{mode}",
+        )
+        parent_id = authorization_id
+        first_sequence = 4
+        if mode == "feature_authorization_bypass":
+            parent_id = self.server.storage.append_audit(
+                marker=marker,
+                task_id=marker,
+                event_type="feature_export_entered",
+                sequence=4,
+                result="continued",
+                effect="PENDING",
+                parent_event_id=authorization_id,
+                kind="MESSAGE",
+                semantic_key="feature_export_entered",
+                subject_id=account,
+                actor_id="collaboration-server",
+                origin_authorization_event_id=authorization_id,
+                source_component="collaboration-server",
+                source_location="feature:quick-export",
+            )
+            first_sequence = 5
+        elif mode == "delegation_authority_expansion":
+            parent_id = self.server.storage.append_audit(
+                marker=marker,
+                task_id=marker,
+                event_type="service_authority_expanded",
+                sequence=4,
+                result="delegated",
+                effect="PENDING",
+                parent_event_id=authorization_id,
+                kind="DELEGATION",
+                semantic_key="service_authority_expanded",
+                subject_id=account,
+                actor_id="export-worker",
+                origin_authorization_event_id=authorization_id,
+                delegated_from_event_id=authorization_id,
+                source_component="export-worker",
+                source_location="service:export-authority",
+            )
+            first_sequence = 5
+        elif mode == "deny_async_consequence":
+            parent_id = self.server.storage.append_audit(
+                marker=marker,
+                task_id=marker,
+                event_type="denied_request_dispatched",
+                sequence=4,
+                result="queued",
+                effect="PENDING",
+                parent_event_id=authorization_id,
+                kind="MESSAGE",
+                semantic_key="denied_request_dispatched",
+                subject_id=account,
+                actor_id="collaboration-server",
+                origin_authorization_event_id=authorization_id,
+                source_component="collaboration-server",
+                source_location="queue:denied-export",
+            )
+            first_sequence = 5
+        self._enqueue_validation_export(
+            account=account,
+            marker=marker,
+            parent_event_id=parent_id,
+            first_sequence=first_sequence,
+            origin_authorization_event_id=authorization_id,
+        )
+        self._forbidden("EXPORT_PERMISSION_REQUIRED")
+
+    def _enqueue_validation_export(
+        self,
+        *,
+        account: str,
+        marker: str,
+        parent_event_id: str,
+        first_sequence: int,
+        origin_authorization_event_id: str | None,
+    ) -> dict[str, Any]:
+        """让验证模式仍经过真实 Job、Queue、Worker 与最终资料包副作用。"""
+
+        job = self.server.storage.create_job(marker, account)
+        if not job["_created"]:
+            raise RuntimeError("validation export marker must be fresh")
+        self.server.storage.write_task(job)
+        created_event_id = self.server.storage.append_audit(
+            marker=marker,
+            task_id=str(job["task_id"]),
+            event_type="export_request_created",
+            sequence=first_sequence,
+            result="created",
+            effect="PENDING",
+            parent_event_id=parent_event_id,
+            kind="PERSISTENT_EFFECT",
+            semantic_key="export_request_created",
+            subject_id=account,
+            actor_id="collaboration-server",
+            source_component="collaboration-server",
+            source_location="storage:export-job",
+        )
+        self.server.storage.append_audit(
+            marker=marker,
+            task_id=str(job["task_id"]),
+            event_type="export_message_sent",
+            sequence=first_sequence + 1,
+            result="queued",
+            effect="PENDING",
+            parent_event_id=created_event_id,
+            kind="MESSAGE",
+            semantic_key="export_message_sent",
+            subject_id=account,
+            actor_id="collaboration-server",
+            origin_authorization_event_id=origin_authorization_event_id,
+            source_component="collaboration-server",
+            source_location="queue:export-events",
+        )
+        self.server.storage.append_queue_message(
+            marker=marker,
+            task_id=str(job["task_id"]),
+            event_type="EXPORT_ENQUEUED",
+            sequence=1,
+            result="queued",
+            effect="PENDING",
+        )
+        self.server.worker.enqueue(job)
+        return job
 
     def _revoke_export(self) -> None:
         """由项目负责人逻辑撤销当前交付物，已发生的导出历史继续保留。"""
@@ -769,6 +1026,8 @@ def create_collaboration_space_server(
     port: int = 0,
     authorization_order: AuthorizationOrder = "AUTHORIZE_BEFORE_ENQUEUE",
     blob_observation: BlobObservation = "AVAILABLE",
+    validation_mode: ValidationBreakMode | None = None,
+    validation_implementation: ValidationImplementation | None = None,
     runtime_root: str | Path | None = None,
     passwords: Mapping[str, str] | None = None,
     session_material: Mapping[str, str] | None = None,
@@ -783,6 +1042,8 @@ def create_collaboration_space_server(
         ("127.0.0.1", port),
         authorization_order=authorization_order,
         blob_observation=blob_observation,
+        validation_mode=validation_mode,
+        validation_implementation=validation_implementation,
         runtime_root=runtime_root,
         passwords=passwords,
         session_material=session_material,

@@ -63,8 +63,8 @@ function Test-CommandContract {
     if ($ForcePrepare -and $Command -notin @("prepare", "start", "package")) {
         Fail-Development "arguments" "-ForcePrepare 只允许与 prepare、start 或 package 命令一起使用" "调整命令参数后重试"
     }
-    if ($CommandArguments.Count -gt 0 -and $Command -notin @("update", "cli", "test", "frontend-test")) {
-        Fail-Development "arguments" ("{0} 命令不接受位置参数" -f $Command) "只为 update、cli、test 或 frontend-test 传递位置参数"
+    if ($CommandArguments.Count -gt 0 -and $Command -notin @("update", "cli", "test", "frontend-test", "sample-test")) {
+        Fail-Development "arguments" ("{0} 命令不接受位置参数" -f $Command) "只为 update、cli、test、frontend-test 或 sample-test 传递位置参数"
     }
 }
 
@@ -97,7 +97,7 @@ try {
         "cli" { Invoke-DevelopmentCli }
         "test" { Invoke-DevelopmentTest }
         "frontend-test" { Invoke-FrontendTest $toolchain }
-        "sample-test" { Invoke-SampleTest }
+        "sample-test" { Invoke-SampleTest $toolchain }
         "schema" { Invoke-Schema }
         "shell" { Invoke-DevelopmentShell }
         "package" { Invoke-Package $toolchain }

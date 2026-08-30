@@ -41,32 +41,67 @@ def status_command(
         fail(exc)
 
 
-def app_list_command(
-    context: typer.Context,
-    include_archived: bool = typer.Option(False, "--include-archived", help="同时列出已移除应用"),
-) -> None:
+def application_list_command(context: typer.Context) -> None:
     """列出已经正式接入的应用。"""
 
     try:
         with application_scope(context) as application:
-            projects = application.projects.list(include_archived=include_archived)
-        emit_command("app-list", [_dump(item) for item in projects])
+            projects = application.projects.list()
+        rows = [
+            {
+                "project_id": item.project_id,
+                "name": item.name,
+                "status": item.status.value,
+            }
+            for item in projects
+        ]
+        emit_command("application-list", rows)
     except JiejianError as exc:
         fail(exc)
 
 
-def app_show_command(context: typer.Context, project_id: str) -> None:
-    """只读查看应用理解事实，不触发探测或分析。"""
+def application_show_command(context: typer.Context, project_id: str) -> None:
+    """只读展示与 GUI 同源的应用业务摘要，不返回源码或候选内部事实。"""
 
     try:
         with application_scope(context) as application:
-            understanding = application.application_understanding.get(project_id)
-        emit_command("app", understanding)
+            status = application.product_status.get(project_id)
+        readiness = status.readiness
+        if status.project is None or readiness is None:
+            raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "应用不存在")
+        summary = {
+            "project_id": status.project.project_id,
+            "name": status.project.name,
+            "status": status.project.status.value,
+            "connection": {
+                "endpoint": readiness.endpoint_status,
+                "source_analysis": readiness.source_analysis_status,
+            },
+            "confirmed_business_facts": {
+                "permission_group_count": readiness.confirmed_role_count,
+                "business_action_count": readiness.confirmed_action_count,
+            },
+            "preparation": {
+                "business_flow_ready": readiness.completed_flow_available,
+                "permission_requirements_ready": readiness.active_contract_available,
+                "check_ready": readiness.current_scope_runnable,
+            },
+            "next_step": {
+                "label": status.next_action.label,
+                "description": status.next_action.description,
+                "route": status.next_action.route,
+            },
+        }
+        emit_command(
+            "application",
+            summary,
+            human=lambda: _emit_application_summary(summary),
+        )
     except JiejianError as exc:
         fail(exc)
 
 
-def app_remove_command(
+def application_remove_command(
     context: typer.Context,
     project_id: str,
     confirmed: bool = typer.Option(False, "--confirm", help="确认移除当前应用但保留源码和历史结果"),
@@ -78,7 +113,7 @@ def app_remove_command(
             raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED, "移除应用前需要使用 --confirm 明确确认")
         with application_scope(context) as application:
             result = application.project_lifecycle.archive(project_id)
-        emit_command("app-removed", result)
+        emit_command("application-removed", result)
     except JiejianError as exc:
         fail(exc)
 
@@ -142,7 +177,6 @@ def check_cancel_command(
 def check_run_command(
     context: typer.Context,
     project_id: str,
-    idempotency_key: str | None = typer.Option(None, "--idempotency-key"),
 ) -> None:
     """按当前已确认事实提交检查，不接收内部执行配置路径。"""
 
@@ -150,7 +184,7 @@ def check_run_command(
         with application_scope(context) as application:
             result, request, _ = application.checks.submit(
                 project_id,
-                idempotency_key=idempotency_key or f"cli-{uuid4().hex}",
+                idempotency_key=f"cli-{uuid4().hex}",
             )
         emit_command(
             "check-submitted",
@@ -179,29 +213,31 @@ def result_show_command(
         fail(exc)
 
 
-def result_reports_command(context: typer.Context, run_id: str) -> None:
-    """列出一次检查已经发布的报告。"""
-
-    try:
-        with application_scope(context) as application:
-            result = application.reports.list(run_id)
-        emit_command("result-reports", result)
-    except JiejianError as exc:
-        fail(exc)
-
-
-def result_report_command(context: typer.Context, run_id: str, report_id: str) -> None:
+def result_report_command(
+    context: typer.Context,
+    run_id: str = typer.Option(..., "--run"),
+    report_id: str | None = typer.Option(None, "--report"),
+) -> None:
     """读取已发布报告 JSON，并置于稳定 Machine envelope 的 data 中。"""
 
     try:
         with application_scope(context) as application:
-            result = application.reports.read(run_id, report_id)
+            selected_report_id = report_id
+            if selected_report_id is None:
+                reports = application.reports.list(run_id)
+                if not reports:
+                    raise JiejianError(
+                        ErrorCode.REPORT_NOT_FOUND,
+                        "当前检查还没有已发布报告",
+                    )
+                selected_report_id = str(reports[0]["report_id"])
+            result = application.reports.read(run_id, selected_report_id)
         emit_command("report", result)
     except JiejianError as exc:
         fail(exc)
 
 
-def history_show_command(
+def history_command(
     context: typer.Context,
     project_id: str | None = typer.Option(None, "--project"),
 ) -> None:
@@ -213,6 +249,26 @@ def history_show_command(
         emit_command("history", result)
     except JiejianError as exc:
         fail(exc)
+
+
+def _emit_application_summary(summary: dict[str, object]) -> None:
+    """人类输出只保留当前应用事实和唯一下一步。"""
+
+    facts = summary["confirmed_business_facts"]
+    preparation = summary["preparation"]
+    next_step = summary["next_step"]
+    assert isinstance(facts, dict)
+    assert isinstance(preparation, dict)
+    assert isinstance(next_step, dict)
+    typer.echo(str(summary["name"]))
+    typer.echo("")
+    typer.echo(f"已确认权限组：{facts['permission_group_count']}")
+    typer.echo(f"已确认关键业务动作：{facts['business_action_count']}")
+    typer.echo(f"业务流程：{'已准备' if preparation['business_flow_ready'] else '待准备'}")
+    typer.echo(f"权限与检查：{'可开始' if preparation['check_ready'] else '仍需准备'}")
+    typer.echo("")
+    typer.echo(f"下一步：{next_step['label']}")
+    typer.echo(str(next_step["description"]))
 
 
 __all__ = [name for name in globals() if name.endswith("_command")]

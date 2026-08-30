@@ -233,12 +233,6 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
 
   const reviewable = recording?.state === 'PENDING_REVIEW' && Boolean(draft)
   const phase = String(recording?.capture_phase ?? '')
-  const currentStage = !recording ? 1 : reviewable ? 3 : recording.state === 'COMPLETED' ? 4 : 2
-  const sequence = recording?.purpose === 'OBSERVATION'
-    ? ['沿用原业务动作', '演示独立验证', '保存验证方式', '返回业务流程']
-    : recording?.purpose === 'RECOVERY'
-      ? ['沿用原业务动作', '演示恢复现场', '保存恢复方法', '返回业务流程']
-      : ['选择动作和账号', '在浏览器完成操作', '确认业务含义', '确认真实结果与恢复']
   const setupDisabled = Boolean(recording && !['COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].includes(recording.state))
   const primaryAction = !recording
     ? { label: '打开浏览器并开始准备', onClick: () => void createRecording(), loading: busy, disabled: !actionId || !testIdentityId }
@@ -269,13 +263,6 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
 
   return <Space direction="vertical" size="large" className="full-width recording-page">
     <PageTaskHeader title="业务流程" description="在真实浏览器中完成一次操作，再把它整理为可重复使用的检查流程。" status={captureLabel(recording)} />
-    <ol className="task-sequence" aria-label="业务流程准备进度">
-      {sequence.map((label, index) => {
-        const step = index + 1
-        const state = step < currentStage ? 'complete' : step === currentStage ? 'current' : 'upcoming'
-        return <li key={label} className={`task-sequence-step is-${state}`}><span>{step < currentStage ? '✓' : step}</span><div><strong>{label}</strong><small>{state === 'complete' ? '已完成' : state === 'current' ? '当前任务' : '随后进行'}</small></div></li>
-      })}
-    </ol>
     <RecordingSetupCard actions={actionOptions} identities={identityOptions} actionId={actionId} testIdentityId={testIdentityId} duration={duration} disabled={setupDisabled} onActionChange={setActionId} onIdentityChange={setTestIdentityId} onDurationChange={setDuration} />
     {recording && <RecordingCaptureCard recording={recording} onRefresh={() => void refresh()} />}
     {draft && <AssistantPanel projectId={project.project_id} surface="recording-review" title="这次录制的步骤用途" actionLabel="AI 解读这次录制" />}

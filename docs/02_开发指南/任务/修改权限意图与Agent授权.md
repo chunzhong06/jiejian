@@ -16,6 +16,7 @@
 | MCP 权限意图工具 | `product/backend/api/mcp.py` | `tests/backend/api/test_mcp.py`、`tests/backend/api/test_permission_oracle_invariant.py` |
 | Compiler 与冻结执行请求 | `product/backend/workflows/security_setup/compiler.py`、`product/protocols/execution_request.py` | `tests/backend/workflows/security_setup/test_compiler.py` |
 | 结果、历史与报告快照摘要 | `product/backend/workflows/results/presentation.py`、`product/protocols/report.py` | `tests/backend/workflows/results/test_result_presentation.py`、`tests/backend/workflows/results/test_history.py`、`tests/backend/workflows/results/test_reports.py` |
+| 修复要求与同考题复验 | `product/backend/core/repair.py`、`product/backend/workflows/results/repair.py` | `tests/backend/workflows/results/test_repair_contracts.py` |
 | 权限确认与 proposal 页面 | `product/frontend/src/features/checks/PermissionCheckPage.tsx`、`product/frontend/src/api/permissionIntents.ts` | `product/frontend/src/features/checks/PermissionCheckPage.test.tsx` |
 
 ## 长期账本怎样工作
@@ -45,16 +46,20 @@ jiejian_intent_rebind_propose    PREPARE
 
 MCP 没有 approve/reject，也没有 permission_set 或 candidate_decide。无论 READ、PREPARE 还是 EXECUTE，MCP 允许的重分析、身份准备、Recording、检查准备、运行和取消都不能改变 active revision、`intent_hash` 或 `policy_epoch`；proposal 在人类批准前也不能生效。
 
+修复入口只新增 READ 的 `jiejian_repair_contract_get`。它从已发布 BLOCK 与 Finding 重建权威要求；Agent 在 `jiejian_change_submit` 中只能回传服务端给出的引用，不能修改要求、批准权限或直接宣称修复通过。CLI 不提供修复合同、批准或修复专用运行命令。
+
 ## Run 权限策略快照
 
-提交 Run 前把 `project_id`、`policy_epoch`、`policy_fingerprint` 以及每条 ACTIVE revision 的 `intent_id/revision/intent_hash/binding_fingerprint` 冻结进 `PermissionPolicySnapshot` 和持久执行请求。代码变化重验还冻结独立 `ChangeVerificationContext`，但不能用它裁剪完整 Coverage。ResultPresentation、History 和 report.json 只从该冻结请求复制摘要，不读取 live Ledger 改写旧结果。普通页面显示“本次检查依据权限版本 X”和可选重验数量，不显示内部指纹或 intent 标识。
+提交 Run 前把 `project_id`、`policy_epoch`、`policy_fingerprint` 以及每条 ACTIVE revision 的语义身份和实现映射冻结进 `PermissionPolicySnapshot` 和持久执行请求。代码变化重验还冻结独立 `ChangeVerificationContext`，但不能用它裁剪完整 Coverage。修复重验再冻结 `RepairVerificationContext`：原要求的 revision/hash 必须精确不变；纯实现重绑只要未改变 `policy_epoch` 和 `intent_hash` 可以继续。删除受保护效果、降低原关键证据要求或破坏 ALLOW 控制都不能得到 `VERIFIED`。ResultPresentation、History 和 report.json 只从该冻结请求复制摘要，不读取 live Ledger 改写旧结果。普通页面显示“本次检查依据权限版本 X”和可选重验数量，不显示内部指纹或 intent 标识。
+
+如果提交修复重验前发现任一原要求身份变化，服务端固定失败为“原权限要求已经改变，请按新权限重新形成检查。”，不得把改变考题当作修复。修复复验的 `VERIFIED / NOT_VERIFIED / INCONCLUSIVE` 独立于 Verification Verdict，只说明同一考题下的修复要求是否被证明满足。
 
 ## 怎么验证
 
 先按修改面运行最小直接测试，不为局部权限意图变化重复完整 L4/L5：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/test_permission_intent_human_approval.py tests/backend/api/test_permission_oracle_invariant.py tests/backend/workflows/security_setup/test_permission_intent_ledger.py tests/backend/workflows/results/test_result_presentation.py tests/backend/workflows/results/test_history.py tests/backend/workflows/results/test_reports.py
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/test_permission_intent_human_approval.py tests/backend/api/test_permission_oracle_invariant.py tests/backend/workflows/security_setup/test_permission_intent_ledger.py tests/backend/workflows/results/test_repair_contracts.py tests/backend/workflows/results/test_result_presentation.py tests/backend/workflows/results/test_history.py tests/backend/workflows/results/test_reports.py
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 frontend-test src/features/checks/PermissionCheckPage.test.tsx src/features/checks/CheckResultsPage.test.tsx src/features/checks/CheckHistoryPage.test.tsx
 ```
 

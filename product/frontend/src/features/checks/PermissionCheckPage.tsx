@@ -23,11 +23,12 @@ type PermissionCheckPageProps = {
   onNavigate: (path: string) => void
   onBack: () => void
   onNext: () => void
+  changeId?: string
 }
 
 const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'])
 
-export function PermissionCheckPage({ project, runs, onRefresh, onError, onResolved, onNavigate, onBack, onNext }: PermissionCheckPageProps) {
+export function PermissionCheckPage({ project, runs, onRefresh, onError, onResolved, onNavigate, onBack, onNext, changeId }: PermissionCheckPageProps) {
   const [matrix, setMatrix] = useState<PermissionIntentMatrixDto | null>(null)
   const [proposals, setProposals] = useState<PermissionIntentProposalDto[]>([])
   const [preview, setPreview] = useState<CheckPreviewDto | null>(null)
@@ -44,6 +45,9 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
   const [pendingChange, setPendingChange] = useState<PendingPermissionChange | null>(null)
   const [savingProposalId, setSavingProposalId] = useState<string>()
   const reconciledTerminalRun = useRef<string | null>(null)
+  const readPreview = () => changeId
+    ? checksApi.preview(project.project_id, changeId)
+    : checksApi.preview(project.project_id)
 
   const latest = currentRun ?? runs[0]
   const activeRun = Boolean(latest?.run_id && !terminalStates.has(String(latest.lifecycle)))
@@ -68,7 +72,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     void Promise.all([
       permissionIntentsApi.matrix(project.project_id),
       permissionIntentsApi.proposals(project.project_id),
-      checksApi.preview(project.project_id),
+      readPreview(),
     ]).then(([nextMatrix, proposalView, nextPreview]) => {
       if (!active) return
       setMatrix(nextMatrix)
@@ -78,7 +82,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
       onResolved?.()
     }).catch((error) => { if (active) onError(error as ApiError) }).finally(() => { if (active) setRefreshing(false) })
     return () => { active = false }
-  }, [project.project_id])
+  }, [project.project_id, changeId])
 
   useEffect(() => {
     const summary = runs[0]
@@ -161,7 +165,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
       const [nextMatrix, proposalView, nextPreview] = await Promise.all([
         permissionIntentsApi.matrix(project.project_id),
         permissionIntentsApi.proposals(project.project_id),
-        checksApi.preview(project.project_id),
+        readPreview(),
       ])
       setMatrix(nextMatrix)
       setProposals(proposalView.proposals)
@@ -180,7 +184,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
       const [nextMatrix, proposalView, nextPreview] = await Promise.all([
         permissionIntentsApi.matrix(project.project_id),
         permissionIntentsApi.proposals(project.project_id),
-        checksApi.preview(project.project_id),
+        readPreview(),
       ])
       setMatrix(nextMatrix)
       setProposals(proposalView.proposals)
@@ -202,7 +206,9 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     if (!canSubmit) return
     setSubmitting(true)
     try {
-      const result = await checksApi.submit(project.project_id)
+      const result = await (changeId
+        ? checksApi.submit(project.project_id, changeId)
+        : checksApi.submit(project.project_id))
       setCurrentRun(result.run)
       setNeedsNewRun(false)
       await onRefresh()

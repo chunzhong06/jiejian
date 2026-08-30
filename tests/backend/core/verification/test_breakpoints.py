@@ -601,6 +601,75 @@ def test_root_only_partial_trace_reports_violation_only(
     assert result.first_violation_event_id == effect.event_id
 
 
+def test_confirmed_external_effect_survives_missing_trace(
+    frozen_context: FrozenContext,
+) -> None:
+    result = _locate(
+        frozen_context,
+        _trace(
+            frozen_context,
+            allow=False,
+            events=(),
+            complete=False,
+        ),
+    )
+
+    assert result is not None
+    assert result.continuity.state.value == "ORPHAN_EFFECT_CONFIRMED"
+    assert result.precision is BreakpointPrecision.VIOLATION_ONLY
+    assert result.breakpoint_type is None
+    assert result.first_violation_event_id is None
+    assert "PROTECTED_EFFECT_EVENT_UNAVAILABLE" in result.reason_codes
+
+
+def test_legal_delegation_does_not_become_authority_expansion(
+    frozen_context: FrozenContext,
+) -> None:
+    actual = frozen_context.allow_subject_id
+    entry, identity = _base_events(frozen_context, actual_subject=actual)
+    authorization = _authorization(
+        frozen_context,
+        identity.event_id,
+        subject_id=actual,
+    )
+    delegation = _event(
+        frozen_context,
+        case_id=frozen_context.deny_case_id,
+        event_id="deny-legal-delegation",
+        kind=TraceEventKind.DELEGATION,
+        semantic_key="export_job_started",
+        parent_ids=(authorization.event_id,),
+        subject_id=actual,
+        actor_id="export-worker",
+        credential_source="session-cookie",
+        authority_scope=TraceAuthorityScope(
+            allowed_action_ids=(frozen_context.action_id,),
+            allowed_resource_ids=(frozen_context.resource_id,),
+            origin_authorization_event_id=authorization.event_id,
+            delegated_from_event_id=authorization.event_id,
+        ),
+    )
+    effect = _protected(
+        frozen_context,
+        delegation.event_id,
+        subject_id=actual,
+        actor_id="export-worker",
+    )
+
+    result = _locate(
+        frozen_context,
+        _trace(
+            frozen_context,
+            allow=False,
+            events=(effect, delegation, authorization, identity, entry),
+        ),
+    )
+
+    assert result is not None
+    assert result.breakpoint_type is BreakpointType.IDENTITY_SUBSTITUTION
+    assert BreakpointType.AUTHORITY_EXPANSION not in result.amplifier_types
+
+
 def test_alignment_ignores_random_ids_timestamps_and_input_order(
     frozen_context: FrozenContext,
 ) -> None:

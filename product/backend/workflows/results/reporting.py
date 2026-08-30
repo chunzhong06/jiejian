@@ -37,6 +37,7 @@ from product.protocols.report import (
     ReportObserverStatus,
     ReportPresentation,
     ReportPresentationIssue,
+    ReportRelevantIntent,
     ReportRun,
     ReportRuntime,
     ReportVersions,
@@ -172,9 +173,10 @@ class ReportBuilder:
         if self._presentation is None:
             raise JiejianError(ErrorCode.REPORT_INPUT_INVALID, "报告展示投影未装配")
         presentation = self._presentation.build(run_id).model_dump(mode="json")
-        # diagnosis 是 v2 机器事实；身份标签与 Evidence 来源角色仍只属于即时结果页。
+        # diagnosis 与修复复验是 Report v5 机器事实；身份标签和 Evidence 来源角色仍只属于即时结果页。
         report_fields = set(ReportPresentation.model_fields)
         issue_fields = set(ReportPresentationIssue.model_fields)
+        intent_fields = set(ReportRelevantIntent.model_fields)
         presentation = {
             key: value
             for key, value in presentation.items()
@@ -183,6 +185,10 @@ class ReportBuilder:
         presentation["issues"] = [
             {key: value for key, value in issue.items() if key in issue_fields}
             for issue in presentation.get("issues", [])
+        ]
+        presentation["relevant_intents"] = [
+            {key: value for key, value in intent.items() if key in intent_fields}
+            for intent in presentation.get("relevant_intents", [])
         ]
         snapshot = ReportPresentation.model_validate_json(
             json.dumps(

@@ -65,7 +65,7 @@ def test_root_help_is_task_oriented() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for text in ("status", "serve", "app", "check", "result", "history", "system"):
+    for text in ("status", "serve", "application", "check", "result", "history", "system"):
         assert text in result.stdout
     for section in ("普通任务", "图形界面", "运行与维护"):
         assert section in result.stdout
@@ -75,10 +75,9 @@ def test_root_help_is_task_oriented() -> None:
 
 def test_command_groups_without_leaf_show_help_and_succeed() -> None:
     groups = (
-        ("app",),
+        ("application",),
         ("check",),
         ("result",),
-        ("history",),
         ("system",),
         ("system", "clean"),
     )
@@ -93,8 +92,8 @@ def test_command_groups_without_leaf_show_help_and_succeed() -> None:
 
 
 def test_invalid_command_and_missing_argument_use_chinese_framework_messages() -> None:
-    unknown = CliRunner().invoke(app, ["app", "unknown"])
-    missing = CliRunner().invoke(app, ["app", "show"])
+    unknown = CliRunner().invoke(app, ["application", "unknown"])
+    missing = CliRunner().invoke(app, ["application", "show"])
 
     assert unknown.exit_code != 0
     assert "没有名为“unknown”的命令" in unknown.output
@@ -106,16 +105,13 @@ def test_invalid_command_and_missing_argument_use_chinese_framework_messages() -
 
 def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
     trusted_doctor_environment: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     isolated_environment = trusted_doctor_environment
     runtime = isolated_environment / "runtime"
-    config = isolated_environment / "doctor.toml"
-    config.write_text(
-        f'[jiejian]\nvar_dir = "{runtime.as_posix()}"\nlog_level = "INFO"\n',
-        encoding="utf-8",
-    )
+    monkeypatch.setenv("JIEJIAN_VAR_DIR", str(runtime))
 
-    result = CliRunner().invoke(app, ["--config", str(config), "--json", "system", "doctor"])
+    result = CliRunner().invoke(app, ["--json", "system", "doctor"])
 
     assert result.exit_code == 0, result.stdout
     envelope = json.loads(result.stdout)
@@ -164,14 +160,12 @@ def test_doctor_rejects_legacy_local_json_position() -> None:
 
 def test_doctor_returns_nonzero_when_a_required_check_fails(
     isolated_environment: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = isolated_environment / "invalid.toml"
-    config.write_text(
-        '[jiejian]\nschema_version = "999"\nvar_dir = "runtime"\n',
-        encoding="utf-8",
-    )
+    monkeypatch.setenv("JIEJIAN_SCHEMA_VERSION", "999")
+    monkeypatch.setenv("JIEJIAN_VAR_DIR", str(isolated_environment / "runtime"))
 
-    result = CliRunner().invoke(app, ["--config", str(config), "--json", "system", "doctor"])
+    result = CliRunner().invoke(app, ["--json", "system", "doctor"])
 
     assert result.exit_code == 1
     report = json.loads(result.stdout)["data"]
@@ -183,37 +177,35 @@ def test_doctor_returns_nonzero_when_a_required_check_fails(
     assert config_check["ok"] is False
 
 
-def test_doctor_uses_cli_trace_override_without_polluting_json_stdout(
+def test_doctor_uses_automatic_trace_without_polluting_json_stdout(
     trusted_doctor_environment: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     isolated_environment = trusted_doctor_environment
-    config = isolated_environment / "doctor.toml"
-    config.write_text(
-        '[jiejian]\nvar_dir = "runtime"\nlog_level = "INFO"\ntrace_id = "config-trace"\n',
-        encoding="utf-8",
-    )
+    runtime = isolated_environment / "runtime"
+    monkeypatch.setenv("JIEJIAN_VAR_DIR", str(runtime))
 
     result = CliRunner().invoke(
         app,
-        ["--config", str(config), "--trace-id", "cli-trace", "--json", "system", "doctor"],
+        ["--json", "system", "doctor"],
     )
 
     assert result.exit_code == 0
     assert json.loads(result.stdout)["data"]["ok"] is True
     assert result.stderr == ""
-    log_path = Path("runtime") / "logs" / "app" / "jiejian.log"
-    assert json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])["trace_id"] == "cli-trace"
+    log_path = runtime / "logs" / "app" / "jiejian.log"
+    assert json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])["trace_id"].startswith("cli-")
 
 
-def test_doctor_respects_error_log_level(trusted_doctor_environment: Path) -> None:
+def test_doctor_respects_error_log_level(
+    trusted_doctor_environment: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     isolated_environment = trusted_doctor_environment
-    config = isolated_environment / "doctor.toml"
-    config.write_text(
-        '[jiejian]\nvar_dir = "runtime"\nlog_level = "ERROR"\n',
-        encoding="utf-8",
-    )
+    monkeypatch.setenv("JIEJIAN_VAR_DIR", str(isolated_environment / "runtime"))
+    monkeypatch.setenv("JIEJIAN_LOG_LEVEL", "ERROR")
 
-    result = CliRunner().invoke(app, ["--config", str(config), "--json", "system", "doctor"])
+    result = CliRunner().invoke(app, ["--json", "system", "doctor"])
 
     assert result.exit_code == 0
     assert json.loads(result.stdout)["data"]["ok"] is True
@@ -222,17 +214,12 @@ def test_doctor_respects_error_log_level(trusted_doctor_environment: Path) -> No
 
 def test_doctor_human_uses_named_checks_and_conclusion(
     trusted_doctor_environment: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     isolated_environment = trusted_doctor_environment
-    config = isolated_environment / "doctor-human.toml"
-    config.write_text(
-        '[jiejian]\nvar_dir = "runtime"\nlog_level = "INFO"\n',
-        encoding="utf-8",
-    )
+    monkeypatch.setenv("JIEJIAN_VAR_DIR", str(isolated_environment / "runtime"))
 
-    result = CliRunner().invoke(
-        app, ["--human", "--config", str(config), "system", "doctor"]
-    )
+    result = CliRunner().invoke(app, ["system", "doctor"])
 
     assert result.exit_code == 0, result.stdout + result.stderr
     assert result.stdout.startswith("界鉴运行环境\n\n所有必要检查均已通过")
@@ -300,7 +287,7 @@ def test_toolchain_probe_is_local_version_check_without_network(
 def test_status_human_mode_does_not_require_an_interactive_terminal(tmp_path: Path) -> None:
     result = CliRunner().invoke(
         app,
-        ["--var-dir", str(tmp_path / "var"), "--human", "status"],
+        ["--var-dir", str(tmp_path / "var"), "status"],
     )
 
     assert result.exit_code == 0

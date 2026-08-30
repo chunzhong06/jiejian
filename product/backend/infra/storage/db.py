@@ -35,13 +35,14 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.paths import RuntimePaths
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-_CURRENT_MIGRATION_REVISION = "0005_source_change_impacts"
+_CURRENT_MIGRATION_REVISION = "0006_repair_contract_reference"
 _UPGRADEABLE_MIGRATION_REVISIONS = frozenset(
     {
         "0001_web_v1",
         "0002_remove_contract_workbench",
         "0003_permission_intent_ledger",
         "0004_recording_supplements",
+        "0005_source_change_impacts",
     }
 )
 _INCOMPATIBLE_DATABASE_MESSAGE = (

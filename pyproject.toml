@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "jiejian"
 dynamic = ["version"]
-description = "面向 AI 生成 Web 应用的交付前安全验证与持续回归平台"
+description = "面向 Vibe Coding 的权限意图持续验证与断裂诊断系统"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [

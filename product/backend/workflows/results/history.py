@@ -5,7 +5,7 @@
 #   多次已验证 Run 之间的稳定问题变化只读投影。
 #
 # 职责
-#   维护稳定问题身份｜保留各 Run 冻结权限版本｜区分新发现、已修复、证据不足与本次未覆盖
+#   维护稳定问题身份｜保留各 Run 冻结权限版本与修复复验｜区分新发现、已修复、证据不足与本次未覆盖
 #
 # 边界
 #   不新建历史表，不修改 Finding，不以 DISAPPEARED 或缺失记录单独推断已修复。
@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import JiejianError
 from product.backend.core.lifecycle import RunLifecycle
+from product.backend.core.repair import RepairVerification
 from product.backend.workflows.results.presentation import (
     PresentedCaseVerdict,
     ResultPresentation,
@@ -76,6 +77,7 @@ class HistoryComparison(_HistoryModel):
         max_length=4096,
     )
     change_verification: ResultChangeVerification | None = None
+    repair_verification: RepairVerification | None = None
     changes: tuple[HistoryChange, ...] = ()
 
 
@@ -158,6 +160,7 @@ def _comparisons(
                 policy_fingerprint=presentation.policy_fingerprint,
                 relevant_intents=presentation.relevant_intents,
                 change_verification=presentation.change_verification,
+                repair_verification=presentation.repair_verification,
                 changes=tuple(changes),
             )
         )

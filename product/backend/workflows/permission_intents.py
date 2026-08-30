@@ -751,6 +751,11 @@ class PermissionIntentService:
 
     def policy_snapshot(self, project_id: str) -> PermissionPolicySnapshot:
         self.refresh_bindings(project_id)
+        executions = {
+            item.revision.intent_id: item
+            for item in self.execution_intents(project_id)
+            if item.gap is None and item.subject_test_identity_id is not None
+        }
         with self._uow_factory() as work:
             state = work.permission_intents.policy_state(project_id)
             latest = work.permission_intents.list_latest(project_id)
@@ -769,12 +774,27 @@ class PermissionIntentService:
                     "存在需要重新映射的权限要求，不能冻结执行请求",
                     details={"intent_id": revision.intent_id},
                 )
+            execution = executions.get(revision.intent_id)
+            if execution is None or execution.subject_test_identity_id is None:
+                raise JiejianError(
+                    ErrorCode.STATE_PRECONDITION,
+                    "权限要求缺少当前可执行代表，不能冻结执行请求",
+                    details={"intent_id": revision.intent_id},
+                )
             entries.append(
                 PermissionPolicySnapshotEntry(
                     intent_id=revision.intent_id,
                     revision=revision.revision,
                     intent_hash=revision.intent_hash,
                     binding_fingerprint=binding.binding_fingerprint,
+                    expectation=revision.expectation,
+                    relation=revision.relation,
+                    subject_display_name=revision.subject_display_name,
+                    action_display_name=revision.action_display_name,
+                    resource_owner_display_name=revision.resource_owner_display_name,
+                    protected_effects=revision.protected_effects,
+                    action_candidate_id=binding.action_candidate_id,
+                    subject_test_identity_id=execution.subject_test_identity_id,
                 )
             )
         return build_permission_policy_snapshot(

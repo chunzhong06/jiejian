@@ -37,6 +37,8 @@ export type CheckPreviewDto = {
   next_label: string | null
   case_count: number
   differential_pair_count: number
+  change_id: string | null
+  required_intent_count: number
 }
 
 export type CheckSubmissionDto = {
@@ -46,10 +48,10 @@ export type CheckSubmissionDto = {
 }
 
 export const checksApi = {
-  preview: (projectId: string) => request<CheckPreviewDto>(`/api/projects/${projectId}/check-preview`),
-  submit: (projectId: string) => request<CheckSubmissionDto>(`/api/projects/${projectId}/checks`, {
+  preview: (projectId: string, changeId?: string) => request<CheckPreviewDto>(`/api/projects/${projectId}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
+  submit: (projectId: string, changeId?: string) => request<CheckSubmissionDto>(`/api/projects/${projectId}/checks`, {
     method: 'POST',
-    body: JSON.stringify({ schema_version: '1', idempotency_key: createIdempotencyKey() }),
+    body: JSON.stringify({ schema_version: '1', idempotency_key: createIdempotencyKey(), change_id: changeId ?? null }),
   }),
 }
 

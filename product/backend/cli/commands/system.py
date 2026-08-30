@@ -109,16 +109,16 @@ def _wait_for_ready(
 
 def serve_command(
     context: typer.Context,
-    host: str = typer.Option("127.0.0.1", "--host"),
-    port: int = typer.Option(8765, "--port", min=1, max=65535),
-    open_browser: bool = typer.Option(False, "--open/--no-open"),
+    host: str = typer.Option("127.0.0.1", "--host", hidden=True),
+    port: int = typer.Option(8765, "--port", min=1, max=65535, hidden=True),
+    open_browser: bool = typer.Option(False, "--open/--no-open", hidden=True),
     frontend_dir: Path | None = typer.Option(
-        None, "--frontend-dir", help="前端 dist 静态资源目录"
+        None, "--frontend-dir", hidden=True
     ),
     official_sample_root: Path | None = typer.Option(
         None,
         "--official-sample-root",
-        help="显式官方示例安装目录；无效时不影响控制面启动",
+        hidden=True,
     ),
 ) -> None:
     """启动本地回环 API、Worker 和前端静态资源。"""
@@ -223,10 +223,9 @@ def doctor_command(
     options = context.obj
     overrides = {
         "var_dir": options.var_dir,
-        "log_level": options.log_level,
         "trace_id": options.trace_id,
     }
-    report = run_doctor(config_path=options.config, cli_overrides=overrides)
+    report = run_doctor(cli_overrides=overrides)
     emit_command("system-doctor", report, human=lambda: emit_doctor(report))
     raise typer.Exit(code=0 if report.ok else 1)
 

@@ -5,6 +5,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from product.backend.core.lifecycle import RunLifecycle, RunVerdict
+from product.backend.core.repair import (
+    RepairContractReference,
+    RepairVerification,
+    RepairVerificationStatus,
+)
 from product.backend.workflows.results.history import (
     HistoryChangeStatus,
     HistoryComparisonBuilder,
@@ -139,6 +144,20 @@ def test_uncovered_run_never_looks_fixed_and_later_safe_evidence_can_fix() -> No
         RUN_FIXED: _presentation(
             RUN_FIXED,
             _issue(PresentedCaseVerdict.SAFE, "DISAPPEARED"),
+        ).model_copy(
+            update={
+                "repair_verification": RepairVerification(
+                    reference=RepairContractReference(
+                        source_run_id=RUN_BLOCK,
+                        source_finding_id=FINDING_ID,
+                        repair_fingerprint="9" * 64,
+                    ),
+                    verification_run_id=RUN_FIXED,
+                    status=RepairVerificationStatus.VERIFIED,
+                    message="原违规业务后果已消失，合法功能保持。",
+                    reason_codes=("REPAIR_REQUIREMENTS_SATISFIED",),
+                )
+            }
         ),
     }
     builder = HistoryComparisonBuilder(
@@ -164,6 +183,8 @@ def test_uncovered_run_never_looks_fixed_and_later_safe_evidence_can_fix() -> No
     assert result.comparisons[2].changes[0].current_verdict is PresentedCaseVerdict.SAFE
     assert result.comparisons[2].change_verification is not None
     assert len(result.comparisons[2].change_verification.required_intents) == 1
+    assert result.comparisons[2].repair_verification is not None
+    assert result.comparisons[2].repair_verification.status is RepairVerificationStatus.VERIFIED
 
 
 def test_repeated_vulnerable_evidence_is_still_present() -> None:

@@ -5,10 +5,10 @@
 #   官方 Sample 运行时与正式 ApplicationUnderstanding、TestIdentity、ProductStatus 之间的应用编排层
 #
 # 职责
-#   建立活跃体验｜创建并确认正式应用连接｜按明确模式授权分析｜准备正式测试账号｜约束行为切换与停止
+#   建立活跃体验｜创建并确认正式应用连接｜准备正式测试账号｜把修复行为接入权威变化与检查链｜约束停止
 #
 # 边界
-#   不确认候选、不生成 Recording/Flow/PermissionIntent/Run，不返回秘密、源码绝对路径或预期结论。
+#   不确认候选、不生成 Recording/Flow/PermissionIntent/Run，不绕过变化重验，也不返回秘密、源码绝对路径或预期结论。
 #
 # 调用链
 #   Experience API → OfficialSampleExperience → official runtime + existing workflows
@@ -35,6 +35,8 @@ from product.backend.workflows.application_understanding.service import (
     ApplicationUnderstandingService,
 )
 from product.backend.workflows.control import ProductStatusService
+from product.backend.workflows.results.repair import RepairContractService
+from product.backend.workflows.source_changes import SourceChangeService
 from product.backend.workflows.security_setup.local_observer_registry import (
     LocalObserverEnvironmentRegistry,
 )
@@ -71,6 +73,7 @@ class OfficialExperienceView(BaseModel):
     identities_ready: bool
     authorization_order: str | None = None
     blob_observation: str | None = None
+    repair_change_id: str | None = Field(default=None, pattern=r"^chg_[0-9a-f]{32}$")
 
 
 @dataclass(slots=True)
@@ -82,6 +85,7 @@ class _Experience:
     authorization_order: str = "ENQUEUE_BEFORE_AUTHORIZE"
     blob_observation: str = "AVAILABLE"
     active: bool = True
+    repair_change_id: str | None = None
 
 
 _IDENTITY_MAPPING = {
@@ -106,6 +110,8 @@ class OfficialSampleExperience:
         local_observer_environments: LocalObserverEnvironmentRegistry,
         product_status: ProductStatusService,
         *,
+        repair_contracts: RepairContractService,
+        source_changes: SourceChangeService,
         clock_us=None,
     ) -> None:
         self._manager = manager
@@ -114,6 +120,8 @@ class OfficialSampleExperience:
         self._secret_store = secret_store
         self._local_observer_environments = local_observer_environments
         self._product_status = product_status
+        self._repair_contracts = repair_contracts
+        self._source_changes = source_changes
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
         self._lock = RLock()
         self._current: _Experience | None = None
@@ -140,6 +148,7 @@ class OfficialSampleExperience:
                 identities_ready=current.identities_ready if current else False,
                 authorization_order=current.authorization_order if current else None,
                 blob_observation=current.blob_observation if current else None,
+                repair_change_id=current.repair_change_id if current else None,
             )
 
     def start(
@@ -310,11 +319,39 @@ class OfficialSampleExperience:
                         ErrorCode.STATE_PRECONDITION,
                         "当前结果不允许进入修复行为验证",
                     )
+                repair_contract = self._repair_contracts.for_run(verification_run_id)
+                if repair_contract.project_id != current.project_id:
+                    raise JiejianError(
+                        ErrorCode.STATE_PRECONDITION,
+                        "当前修复要求不属于官方示例应用",
+                    )
+            else:
+                repair_contract = None
+            original_authorization_order = current.authorization_order
+            original_blob_observation = current.blob_observation
             self._manager.switch_behavior(
                 current.runtime.experience_id,
                 authorization_order=authorization_order,
                 blob_observation=blob_observation,
             )
+            try:
+                if repair_contract is not None:
+                    manifest, _, _ = self._source_changes.submit(
+                        current.project_id,
+                        reason="按已发布权限问题验证修复后的官方示例行为",
+                        submitted_by="Official Sample",
+                        repair_reference=repair_contract.reference,
+                    )
+                    current.repair_change_id = manifest.change_id
+                else:
+                    current.repair_change_id = None
+            except Exception:
+                self._manager.switch_behavior(
+                    current.runtime.experience_id,
+                    authorization_order=original_authorization_order,
+                    blob_observation=original_blob_observation,
+                )
+                raise
             current.authorization_order = authorization_order
             current.blob_observation = blob_observation
             return self.status()

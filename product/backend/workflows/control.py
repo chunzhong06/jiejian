@@ -256,22 +256,22 @@ def _next_action(readiness: ProjectReadinessView | None) -> ProductNextAction:
         "CONNECT_APPLICATION": (
             "接入应用",
             "选择本地应用目录，让界鉴建立正式应用记录。",
-            "jiejian app connect <应用目录>",
+            "jiejian serve",
         ),
         "CONFIRM_TARGET": (
             "确认应用地址",
             "确认真正要检查的本地 Web 应用地址。",
-            "jiejian app confirm-endpoint --help",
+            "jiejian serve",
         ),
         "AUTHORIZE_SOURCE_ANALYSIS": (
             "授权只读分析",
             "明确授权后，界鉴才会只读分析应用源码。",
-            "jiejian app authorize-source --help",
+            "jiejian serve",
         ),
         "REVIEW_DISCOVERY": (
             "确认权限组与业务动作",
             "审阅系统发现的候选，不把候选当作权限结论。",
-            "jiejian app show --help",
+            "jiejian serve",
         ),
         "RECORD_FLOW": (
             (
@@ -284,16 +284,12 @@ def _next_action(readiness: ProjectReadinessView | None) -> ProductNextAction:
                 if route == "/identities"
                 else "用真实浏览器录制关键业务操作，并确认观察与恢复方式。"
             ),
-            (
-                "jiejian account --help"
-                if route == "/identities"
-                else "jiejian flow --help"
-            ),
+            "jiejian serve",
         ),
         "REVIEW_PERMISSION": (
             "确认权限规则",
             "明确谁应该允许或拒绝执行关键业务动作。",
-            "jiejian check permissions --help",
+            "jiejian serve",
         ),
         "RUN_CHECK": (
             "开始权限检查",

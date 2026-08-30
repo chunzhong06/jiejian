@@ -58,7 +58,7 @@ function jiejian {
 }
 Set-Location -LiteralPath `$projectRoot
 if (`$showStatus) {
-    jiejian --human status
+    jiejian status
     Write-Host ""
     Write-Host "已进入普通命令行" -ForegroundColor Cyan
     Write-Host "输入 jiejian --help 查看命令。" -ForegroundColor DarkGray

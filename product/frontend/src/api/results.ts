@@ -140,7 +140,7 @@ export type ExecutionTraceDto = {
 }
 
 export type ResultDiagnosisWitnessDto = {
-  kind: 'PERMISSION_REQUIREMENT' | 'ACTUAL_IDENTITY' | 'AUTHORIZATION_DECISION' | 'BREAKPOINT' | 'CONFIRMED_EFFECT'
+  kind: 'PERMISSION_REQUIREMENT' | 'ACTUAL_IDENTITY' | 'PROTECTED_EFFECT' | 'AUTHORIZATION_CONTINUITY' | 'BREAKPOINT' | 'AMPLIFIERS' | 'CONFIRMED_IMPACT'
   label: string
   detail: string
   event_id: string | null
@@ -160,10 +160,14 @@ export type ResultDiagnosisImpactDto = {
 export type ResultDiagnosisDto = {
   case_id: string
   action_id: string
-  breakpoint_type: 'AUTHORIZATION_MISSING' | 'AUTHORIZATION_LATE' | 'AUTHORIZATION_BYPASS' | 'IDENTITY_SUBSTITUTION' | 'AUTHORITY_EXPANSION' | 'COMPENSATION_MASKING'
+  breakpoint_type: 'AUTHORIZATION_MISSING' | 'AUTHORIZATION_LATE' | 'AUTHORIZATION_BYPASS' | 'IDENTITY_SUBSTITUTION' | 'AUTHORITY_EXPANSION' | 'COMPENSATION_MASKING' | null
   precision: 'EXACT' | 'RANGE' | 'VIOLATION_ONLY'
+  continuity_state: 'INTACT' | 'ORPHAN_EFFECT_CONFIRMED' | 'UNKNOWN'
+  amplifier_types: Array<'AUTHORIZATION_MISSING' | 'AUTHORIZATION_LATE' | 'AUTHORIZATION_BYPASS' | 'IDENTITY_SUBSTITUTION' | 'AUTHORITY_EXPANSION' | 'COMPENSATION_MASKING'>
   summary: string
   minimal_witness: [
+    ResultDiagnosisWitnessDto,
+    ResultDiagnosisWitnessDto,
     ResultDiagnosisWitnessDto,
     ResultDiagnosisWitnessDto,
     ResultDiagnosisWitnessDto,
@@ -197,6 +201,27 @@ export type ResultPresentationIssueDto = {
   diagnosis: ResultDiagnosisDto | null
   verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'
   occurrence_status: string | null
+  repair_requirement: RepairRequirementDto | null
+}
+export type RepairContractReferenceDto = {
+  source_run_id: string
+  source_finding_id: string
+  repair_fingerprint: string
+}
+
+export type RepairRequirementDto = {
+  reference: RepairContractReferenceDto
+  must_disappear: string
+  must_remain: string
+  must_not_change: string[]
+}
+
+export type RepairVerificationDto = {
+  reference: RepairContractReferenceDto
+  verification_run_id: string
+  status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE'
+  message: string
+  reason_codes: string[]
 }
 export type ResultRelevantIntentDto = {
   intent_id: string
@@ -220,6 +245,7 @@ export type ResultPresentationDto = {
   policy_fingerprint: string
   relevant_intents: ResultRelevantIntentDto[]
   change_verification: ResultChangeVerificationDto | null
+  repair_verification: RepairVerificationDto | null
   headline: string
   scope_statement: string
   checked_count: number
@@ -257,6 +283,7 @@ export type HistoryComparisonDto = {
   policy_fingerprint: string
   relevant_intents: ResultRelevantIntentDto[]
   change_verification: ResultChangeVerificationDto | null
+  repair_verification: RepairVerificationDto | null
   changes: HistoryChangeDto[]
 }
 

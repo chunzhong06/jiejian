@@ -180,9 +180,11 @@ def _resolver() -> AssistantSurfaceResolver:
             minimal_witness=(
                 SimpleNamespace(label="权限要求", detail="成员不应导出"),
                 SimpleNamespace(label="实际身份", detail="成员账号"),
-                SimpleNamespace(label="权限决定", detail="拒绝"),
+                SimpleNamespace(label="本不该发生的业务后果", detail="归档已经生成"),
+                SimpleNamespace(label="合法授权来源", detail="找不到符合原权限要求的合法授权来源"),
                 SimpleNamespace(label="首个可证明断裂", detail="权限决定发生过晚"),
-                SimpleNamespace(label="已确认最终后果", detail="归档已经生成"),
+                SimpleNamespace(label="后续扩大影响的行为", detail="后台任务继续执行"),
+                SimpleNamespace(label="最终业务影响", detail="归档已经生成"),
             ),
             confirmed_impacts=(SimpleNamespace(summary="已确认：最终后果"),),
         ),
@@ -256,5 +258,5 @@ def test_resolver_builds_all_nine_surfaces_with_stable_fingerprints() -> None:
     }
     assert result_facts["breakpoint_type"] == "AUTHORIZATION_LATE"
     assert result_facts["precision"] == "EXACT"
-    assert result_facts["minimal_witness"][3] == "首个可证明断裂:权限决定发生过晚"
+    assert result_facts["minimal_witness"][4] == "首个可证明断裂:权限决定发生过晚"
     assert result_facts["confirmed_impacts"] == ("已确认：最终后果",)

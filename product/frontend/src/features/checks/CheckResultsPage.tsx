@@ -5,7 +5,7 @@
  *   把后端 ResultPresentation、ExecutionTrace 与已发布 Evidence 组织成单一可信结果故事。
  *
  * 职责
- *   依次说明冻结权限版本、权限预期、实际身份、表面响应、断裂见证、确认影响与最终结论
+ *   依次说明权限预期、实际身份、表面响应、断裂见证、确认影响与最终结论
  *   ｜默认折叠完整执行路径｜按需展开证据和报告｜不在前端推断或重算安全结论
  * ============================================================================= */
 
@@ -122,10 +122,9 @@ export function CheckResultsPage({
       <Typography.Title id="result-headline" level={2}>{headline}</Typography.Title>
       <Typography.Paragraph type="secondary">{presentation?.scope_statement ?? (verified ? '结果正在加载。' : '结果尚未通过完整性校验，暂不提供安全结论。')}</Typography.Paragraph>
       {presentation && <Space direction="vertical" size={2}>
-        <Typography.Text>本次检查依据权限版本 {presentation.policy_epoch}</Typography.Text>
         {presentation.change_verification && <>
-          <Typography.Text>本次为代码变化 {presentation.change_verification.change_id} 的重新验证</Typography.Text>
-          <Typography.Text>需要重验的权限：{presentation.change_verification.required_intents.map((intent) => intent.display_label).filter(Boolean).join('、') || `${presentation.change_verification.required_intents.length} 条`}</Typography.Text>
+          <Typography.Text>本次检查由最近一次代码修改触发</Typography.Text>
+          <Typography.Text>使用你之前确认的 {presentation.change_verification.required_intents.length} 条权限要求重新检查</Typography.Text>
         </>}
       </Space>}
       </div>
@@ -137,6 +136,12 @@ export function CheckResultsPage({
         <div><dt>未覆盖</dt><dd>{presentation.uncovered_count} 项</dd></div>
       </dl>}
       {presentation?.execution_problem && <Alert type="error" showIcon message="检查执行未完整结束" description={presentation.execution_problem} />}
+      {presentation?.repair_verification && <Alert
+        type={presentation.repair_verification.status === 'VERIFIED' ? 'success' : presentation.repair_verification.status === 'NOT_VERIFIED' ? 'error' : 'warning'}
+        showIcon
+        message={presentation.repair_verification.status === 'VERIFIED' ? '修复要求已验证' : presentation.repair_verification.status === 'NOT_VERIFIED' ? '修复要求未通过' : '修复结果暂时无法确认'}
+        description={presentation.repair_verification.message}
+      />}
       {String(current.result_integrity) === 'INVALID' && <Alert type="warning" showIcon message="结果完整性校验未通过，不能形成安全结论。" />}
     </section>}
     {current && presentation && <AssistantPanel runId={String(current.run_id)} title="这个结果的因果说明" actionLabel="AI 解读这个结果" />}
@@ -192,6 +197,14 @@ function ResultStory({ issue, index, onEvidence, onNavigate }: { issue: ResultPr
         : <Typography.Text type="secondary">本次发布结果没有可展示的观察来源。</Typography.Text>}
     </section>
     {issue.diagnosis && <ResultDiagnosis diagnosis={issue.diagnosis} />}
+    {issue.repair_requirement && <section className="result-repair-requirement" aria-label="修复要求">
+      <Typography.Text strong>修复后必须满足</Typography.Text>
+      <ul>
+        <li>{issue.repair_requirement.must_disappear}</li>
+        <li>{issue.repair_requirement.must_remain}</li>
+        {issue.repair_requirement.must_not_change.map((item) => <li key={item}>{item}不能改变。</li>)}
+      </ul>
+    </section>}
     {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message={issue.conclusion} description={<Space direction="vertical"><Typography.Text>{issue.explanation}</Typography.Text><Button onClick={() => onNavigate?.('/flows')}>完善真实结果确认方式</Button></Space>} />}
     <div className="result-story-actions"><Button type="link" onClick={onEvidence} aria-controls="published-evidence">查看对应证据</Button><Tag>{occurrenceStatusLabel(issue.occurrence_status)}</Tag></div>
   </article>
@@ -199,8 +212,8 @@ function ResultStory({ issue, index, onEvidence, onNavigate }: { issue: ResultPr
 
 function ResultDiagnosis({ diagnosis }: { diagnosis: ResultDiagnosisDto }) {
   return <section className="result-diagnosis" aria-label="诊断">
-    <div className="result-diagnosis-summary"><Typography.Text strong>确定性诊断</Typography.Text><Typography.Paragraph>{diagnosis.summary}</Typography.Paragraph></div>
-    <div><Typography.Text strong>最小见证</Typography.Text><ol className="result-diagnosis-witness">{diagnosis.minimal_witness.map((witness, index) => <li key={`${witness.kind}-${index}`}><span className="result-story-step-index" aria-hidden="true">{index + 1}</span><div className="result-diagnosis-witness-copy"><Typography.Text type="secondary">{witness.label}</Typography.Text><Typography.Text strong>{witness.detail}</Typography.Text></div></li>)}</ol></div>
+    <div className="result-diagnosis-summary"><Typography.Text strong>问题出在哪里</Typography.Text><Typography.Paragraph>{diagnosis.summary}</Typography.Paragraph></div>
+    <div><Typography.Text strong>为什么这样判断</Typography.Text><ol className="result-diagnosis-witness">{diagnosis.minimal_witness.map((witness, index) => <li key={`${witness.kind}-${index}`}><span className="result-story-step-index" aria-hidden="true">{index + 1}</span><div className="result-diagnosis-witness-copy"><Typography.Text type="secondary">{witness.label}</Typography.Text><Typography.Text strong>{witness.detail}</Typography.Text></div></li>)}</ol></div>
     {diagnosis.confirmed_impacts.length > 0 && <div><Typography.Text strong>已确认影响</Typography.Text><ul className="result-diagnosis-impact-list">{diagnosis.confirmed_impacts.map((impact) => <li key={impact.event_id}><Typography.Text strong>{impact.summary}</Typography.Text></li>)}</ul></div>}
   </section>
 }

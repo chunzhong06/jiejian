@@ -77,6 +77,16 @@ describe('PermissionCheckPage', () => {
     expect(screen.queryByText(/Profile|Contract|Observer|profile_id|contract_id/)).not.toBeInTheDocument()
   })
 
+  it('修复复验沿用普通 preview 和 submit，并传入服务端形成的 change_id', async () => {
+    const changeId = `chg_${'9'.repeat(32)}`
+    renderPage({ changeId })
+
+    expect(await screen.findByRole('button', { name: '开始检查' })).toBeEnabled()
+    expect(api.preview).toHaveBeenCalledWith('p1', changeId)
+    fireEvent.click(screen.getByRole('button', { name: '开始检查' }))
+    await waitFor(() => expect(api.submit).toHaveBeenCalledWith('p1', changeId))
+  })
+
   it('点击 Segmented 只打开确认 Modal，确认后才保存并使旧 preview 失效', async () => {
     let resolvePreview: (value: typeof readyPreview) => void = () => undefined
     const newPreview = { ...readyPreview, case_count: 3 }

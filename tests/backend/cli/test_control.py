@@ -36,15 +36,58 @@ def test_top_level_help_only_exposes_web_v1_tasks_and_serve() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for command in ("status", "app", "check", "result", "history", "system", "serve"):
+    for command in ("status", "application", "check", "result", "history", "system", "serve"):
         assert command in result.stdout
     for legacy in ("account ", "flow ", "settings ", "guide", "project ", "contract ", "recording ", "baseline ", "gate ", "cache ", "runtime ", "ci "):
         assert legacy not in result.stdout
 
 
+def test_removed_cli_aliases_and_public_runtime_flags_are_inaccessible() -> None:
+    root_help = CliRunner().invoke(app, ["--help"])
+    assert root_help.exit_code == 0
+    for hidden_or_removed in (
+        "--human",
+        "--log-level",
+        "--trace-id",
+        "--config",
+        "--var-dir",
+    ):
+        assert hidden_or_removed not in root_help.stdout
+
+    removed_commands = (
+        ["app", "list"],
+        ["history", "show"],
+        ["result", "reports", "run-demo"],
+    )
+    for arguments in removed_commands:
+        result = CliRunner().invoke(app, arguments)
+        assert result.exit_code != 0, arguments
+
+    removed_options = (
+        ["--human", "status"],
+        ["--log-level", "INFO", "status"],
+        ["--trace-id", "manual", "status"],
+        ["--config", "settings.toml", "status"],
+    )
+    for arguments in removed_options:
+        result = CliRunner().invoke(app, arguments)
+        assert result.exit_code != 0, arguments
+
+    serve_help = CliRunner().invoke(app, ["serve", "--help"])
+    assert serve_help.exit_code == 0
+    for internal in (
+        "--host",
+        "--port",
+        "--open",
+        "--frontend-dir",
+        "--official-sample-root",
+    ):
+        assert internal not in serve_help.stdout
+
+
 def test_oracle_mutators_are_absent_from_cli_command_tree() -> None:
     forbidden = {
-        "app": ("decide-role", "decide-action", "add-role", "add-action"),
+        "application": ("decide-role", "decide-action", "add-role", "add-action"),
         "check": ("set-permission",),
     }
     for group, commands in forbidden.items():
@@ -64,6 +107,17 @@ def test_oracle_mutators_are_absent_from_cli_command_tree() -> None:
         "check_set_permission_command",
     ):
         assert not hasattr(control_commands, command_function)
+
+
+def test_repair_contract_has_no_cli_command_or_alias() -> None:
+    root_help = CliRunner().invoke(app, ["--help"])
+    assert root_help.exit_code == 0
+    assert "repair-contract" not in root_help.stdout
+    for group in ("check", "result"):
+        help_result = CliRunner().invoke(app, [group, "--help"])
+        assert help_result.exit_code == 0
+        assert "repair" not in help_result.stdout
+        assert CliRunner().invoke(app, [group, "repair"]).exit_code != 0
 
 
 def test_version_uses_the_single_product_version_source() -> None:
@@ -182,12 +236,12 @@ def test_check_prepare_only_compiles_then_reads_preview(monkeypatch) -> None:
     assert payload["data"]["preview"]["ready"] is True
 
 
-def test_app_list_hides_archived_by_default_and_supports_explicit_history(monkeypatch) -> None:
-    calls: list[bool] = []
+def test_application_list_only_uses_current_product_catalog(monkeypatch) -> None:
+    calls: list[str] = []
     application = SimpleNamespace(
         projects=SimpleNamespace(
-            list=lambda *, include_archived=False: (
-                calls.append(include_archived) or ()
+            list=lambda: (
+                calls.append("list") or ()
             )
         )
     )
@@ -197,18 +251,69 @@ def test_app_list_hides_archived_by_default_and_supports_explicit_history(monkey
         yield application
 
     monkeypatch.setattr(control_commands, "application_scope", fake_scope)
-    normal = CliRunner().invoke(app, ["--json", "app", "list"])
-    historical = CliRunner().invoke(
-        app,
-        ["--json", "app", "list", "--include-archived"],
-    )
+    normal = CliRunner().invoke(app, ["--json", "application", "list"])
+    historical = CliRunner().invoke(app, ["application", "list", "--include-archived"])
 
     assert normal.exit_code == 0
-    assert historical.exit_code == 0
-    assert calls == [False, True]
+    assert historical.exit_code != 0
+    assert calls == ["list"]
 
 
-def test_app_remove_requires_confirmation_and_uses_project_lifecycle(monkeypatch) -> None:
+def test_application_show_uses_bounded_product_summary(monkeypatch) -> None:
+    status = SimpleNamespace(
+        project=SimpleNamespace(
+            project_id="project_demo",
+            name="演示应用",
+            status=SimpleNamespace(value="READY"),
+        ),
+        readiness=SimpleNamespace(
+            endpoint_status="CONFIRMED",
+            source_analysis_status="COMPLETED",
+            confirmed_role_count=2,
+            confirmed_action_count=3,
+            completed_flow_available=True,
+            active_contract_available=True,
+            current_scope_runnable=True,
+        ),
+        next_action=SimpleNamespace(
+            label="查看检查结果",
+            description="查看真实业务后果。",
+            route="/results",
+        ),
+    )
+    application = SimpleNamespace(product_status=SimpleNamespace(get=lambda _project: status))
+
+    @contextmanager
+    def fake_scope(_context):
+        yield application
+
+    monkeypatch.setattr(control_commands, "application_scope", fake_scope)
+    result = CliRunner().invoke(
+        app,
+        ["--json", "application", "show", "project_demo"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)["data"]
+    assert payload["name"] == "演示应用"
+    assert payload["confirmed_business_facts"] == {
+        "business_action_count": 3,
+        "permission_group_count": 2,
+    }
+    assert payload["preparation"]["check_ready"] is True
+    encoded = result.stdout
+    for forbidden in (
+        "source_root",
+        "source_fingerprint",
+        "candidate",
+        "line_number",
+        "detector",
+        "revision",
+    ):
+        assert forbidden not in encoded
+
+
+def test_application_remove_requires_confirmation_and_uses_project_lifecycle(monkeypatch) -> None:
     calls: list[str] = []
     application = SimpleNamespace(
         project_lifecycle=SimpleNamespace(
@@ -224,16 +329,60 @@ def test_app_remove_requires_confirmation_and_uses_project_lifecycle(monkeypatch
         yield application
 
     monkeypatch.setattr(control_commands, "application_scope", fake_scope)
-    rejected = CliRunner().invoke(app, ["--json", "app", "remove", "project_demo"])
+    rejected = CliRunner().invoke(app, ["--json", "application", "remove", "project_demo"])
     accepted = CliRunner().invoke(
         app,
-        ["--json", "app", "remove", "project_demo", "--confirm"],
+        ["--json", "application", "remove", "project_demo", "--confirm"],
     )
 
     assert rejected.exit_code != 0
     assert calls == ["project_demo"]
     assert accepted.exit_code == 0
     assert json.loads(accepted.stdout)["data"]["status"] == "ARCHIVED"
+
+
+def test_result_report_uses_default_or_explicit_published_report(monkeypatch) -> None:
+    reads: list[tuple[str, str]] = []
+    application = SimpleNamespace(
+        reports=SimpleNamespace(
+            list=lambda run_id: [
+                {"report_id": "report-default"},
+                {"report_id": "report-other"},
+            ],
+            read=lambda run_id, report_id: (
+                reads.append((run_id, report_id))
+                or {"report_id": report_id}
+            ),
+        )
+    )
+
+    @contextmanager
+    def fake_scope(_context):
+        yield application
+
+    monkeypatch.setattr(control_commands, "application_scope", fake_scope)
+    default = CliRunner().invoke(
+        app,
+        ["--json", "result", "report", "--run", "run-demo"],
+    )
+    specified = CliRunner().invoke(
+        app,
+        [
+            "--json",
+            "result",
+            "report",
+            "--run",
+            "run-demo",
+            "--report",
+            "report-other",
+        ],
+    )
+
+    assert default.exit_code == specified.exit_code == 0
+    assert reads == [
+        ("run-demo", "report-default"),
+        ("run-demo", "report-other"),
+    ]
 
 
 def test_check_cancel_resolves_latest_nonterminal_run_job(monkeypatch) -> None:

@@ -1,10 +1,11 @@
-# 验证源码快照、真实增删改、权限实现影响和 Oracle 不变量。
+# 验证源码快照、真实增删改、权威修复引用、权限实现影响和 Oracle 不变量。
 
 from __future__ import annotations
 
 import hashlib
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,7 @@ from product.backend.core.application_understanding import (
 )
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.permission_intent import IntentImplementationBindingStatus
+from product.backend.core.repair import RepairContractReference
 from product.backend.core.source_changes import (
     ChangeManifest,
     SourceFileFingerprint,
@@ -87,6 +89,45 @@ def test_same_source_fingerprint_is_idempotent_and_mtime_is_ignored(
         assert first_snapshot == second_snapshot
         assert first_snapshot is not None
         assert first_snapshot.understanding_revision == first.revision
+    finally:
+        core.close()
+
+
+def test_repair_reference_is_verified_persisted_and_carried_into_revalidation(
+    tmp_path: Path,
+) -> None:
+    core, project_id, source = _connected_core(tmp_path)
+    try:
+        first = _authorize_and_analyze(core, project_id)
+        (source / "app.py").write_text(
+            "roles = ['owner']\n@app.get('/documents')\ndef documents(): return []\n",
+            encoding="utf-8",
+        )
+        reference = RepairContractReference(
+            source_run_id="run_" + "1" * 32,
+            source_finding_id="finding_" + "2" * 32,
+            repair_fingerprint="3" * 64,
+        )
+        verified: list[tuple[str, RepairContractReference]] = []
+        core.source_changes._repair_contracts = SimpleNamespace(
+            verify_reference=lambda checked_project, checked_reference: verified.append(
+                (checked_project, checked_reference)
+            )
+        )
+
+        manifest, _, _ = core.source_changes.submit(
+            project_id,
+            reason="验证修复后的实现",
+            submitted_by="MCP Agent",
+            repair_reference=reference,
+        )
+
+        stored, _, _ = core.source_changes.get(manifest.change_id)
+        plan = core.source_changes.revalidation_plan(project_id, manifest.change_id)
+        assert first.source_fingerprint is not None
+        assert verified == [(project_id, reference)]
+        assert stored.repair_reference == reference
+        assert plan.repair_reference == reference
     finally:
         core.close()
 
@@ -408,6 +449,8 @@ def test_change_revalidation_plan_freezes_into_run_without_narrowing_coverage(
         assert core.permission_intents.matrix(PROJECT_ID).policy_epoch == before_epoch
         payload = core.source_changes.view(manifest.change_id).model_dump(mode="json")
         assert payload["actual_changed_path_count"] == 1
+        assert payload["claimed_paths"] == ["other.py"]
+        assert payload["modified_paths"] == ["action.py"]
         assert "source_fingerprint" not in payload
         assert "impact_fingerprint" not in payload
         assert "changed_paths" not in payload

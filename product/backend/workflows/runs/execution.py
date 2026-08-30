@@ -5,7 +5,7 @@
 # SecuritySetupCompiler 生成资产、冻结执行请求与 Job 提交之间的唯一应用服务。
 #
 # 职责
-# 登记 generated-only 执行输入｜解析 ACTIVE Contract｜编译覆盖计划｜冻结并提交执行请求
+# 登记 generated-only 执行输入｜解析 ACTIVE Contract｜冻结权限、变化与修复上下文｜提交执行请求
 #
 # 边界
 # 不在入口进程执行目标；秘密只用于提交前完整性检查，并通过受控环境交给 Worker。
@@ -43,6 +43,7 @@ from product.protocols.web.profile import (
 from product.protocols.execution_request import (
     ChangeVerificationContext,
     PermissionPolicySnapshot,
+    RepairVerificationContext,
 )
 
 
@@ -131,6 +132,7 @@ class ExecutionWorkflow:
         *,
         project_id: str | None = None,
         change_context: ChangeVerificationContext | None = None,
+        repair_context: RepairVerificationContext | None = None,
     ) -> PersistedExecutionRequest:
         """从已登记 Profile 和 ACTIVE Contract 构造带预算的不可变执行快照。"""
 
@@ -163,6 +165,7 @@ class ExecutionWorkflow:
             permission_policy=permission_policy,
             project_snapshot=snapshot,
             change_context=change_context,
+            repair_context=repair_context,
         )
 
     def submit(
@@ -171,6 +174,7 @@ class ExecutionWorkflow:
         *,
         project_id: str | None = None,
         change_context: ChangeVerificationContext | None = None,
+        repair_context: RepairVerificationContext | None = None,
         idempotency_key: str,
         max_attempts: int = 3,
         now_us: int | None = None,
@@ -184,6 +188,7 @@ class ExecutionWorkflow:
             profile_id,
             project_id=project_id,
             change_context=change_context,
+            repair_context=repair_context,
         )
         names = required_secret_names(request)
         environment = self._environment_provider(names)

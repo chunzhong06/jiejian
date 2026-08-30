@@ -176,6 +176,14 @@ def render_html(report: ReportDocument) -> bytes:
             '</div>'
             f"<h3>Gate 原因</h3><ul>{gate_reasons}</ul></section>"
         )
+    repair_text = ""
+    if presentation.repair_verification is not None:
+        repair = presentation.repair_verification
+        repair_text = (
+            '<section><h2>修复验证</h2>'
+            f'<p><strong>{_esc(_repair_status_label(repair.status))}</strong></p>'
+            f'<p>{_esc(repair.message)}</p></section>'
+        )
     document = (
         '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -201,6 +209,7 @@ def render_html(report: ReportDocument) -> bytes:
         f'<div class="summary-item"><span>未覆盖</span><strong>{_esc(presentation.uncovered_count)}</strong></div>'
         '</div></section>'
         f'<section><h2>关键问题</h2><div class="issue-list">{issue_cards}</div></section>'
+        f"{repair_text}"
         '<section><h2>权限覆盖与未覆盖</h2>'
         f'<p class="coverage-note">已检查 <strong>{_esc(presentation.checked_count)}</strong> 项；仍有 <strong>{_esc(presentation.uncovered_count)}</strong> 项权限要求未覆盖。</p><p>{_esc(presentation.scope_statement)}</p></section>'
         f"<section><h2>限制与证据不足</h2><h3>业务限制</h3><ul>{business_limitations}</ul><h3>报告技术限制</h3><ul>{technical_limitations}</ul></section>"
@@ -249,9 +258,30 @@ def _issue_cards(issues: tuple[ReportPresentationIssue, ...]) -> str:
         '</div><div class="conclusion-box"><span>安全结论</span>'
         f'<strong>{_esc(issue.conclusion)}</strong><p>{_esc(issue.explanation)}</p></div>'
         f'{_diagnosis_card(issue.diagnosis)}'
+        f'{_repair_requirement_card(issue.repair_requirement)}'
         '</div></article>'
         for issue in issues
     )
+
+
+def _repair_requirement_card(requirement) -> str:
+    if requirement is None:
+        return ""
+    unchanged = "".join(f"<li>{_esc(item)}不能改变。</li>" for item in requirement.must_not_change)
+    return (
+        '<div class="conclusion-box"><span>修复后必须满足</span><ul>'
+        f"<li>{_esc(requirement.must_disappear)}</li>"
+        f"<li>{_esc(requirement.must_remain)}</li>"
+        f"{unchanged}</ul></div>"
+    )
+
+
+def _repair_status_label(status: str) -> str:
+    return {
+        "VERIFIED": "修复要求已验证",
+        "NOT_VERIFIED": "修复要求未通过",
+        "INCONCLUSIVE": "修复结果暂时无法确认",
+    }.get(str(status), "修复验证状态未知")
 
 
 def _diagnosis_card(diagnosis) -> str:

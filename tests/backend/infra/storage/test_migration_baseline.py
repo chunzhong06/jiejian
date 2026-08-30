@@ -18,7 +18,7 @@ from product.backend.workflows.context import ApplicationCore
 
 pytestmark = [pytest.mark.database, pytest.mark.essential]
 ROOT = Path(__file__).resolve().parents[4]
-CURRENT_REVISION = "0005_source_change_impacts"
+CURRENT_REVISION = "0006_repair_contract_reference"
 INCOMPATIBLE_MESSAGE = (
     "旧开发数据库或当前数据库结构与 Web V1 基线不兼容，请备份后重新初始化 var"
 )
@@ -373,6 +373,7 @@ def test_migration_directory_contains_formal_baseline_and_current_reduction() ->
         "0003_permission_intent_ledger.py",
         "0004_recording_supplements.py",
         "0005_source_change_impacts.py",
+        "0006_repair_contract_reference.py",
     ]
 
 

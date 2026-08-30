@@ -6,7 +6,7 @@
 #   GateResult 组成不可变 Report；report.json 是唯一语义真源。
 #
 # 职责
-#   约束 Base/Gate 判别联合、冻结权限摘要与有界断裂诊断｜计算稳定身份｜约束 package manifest。
+#   约束 Base/Gate 判别联合、权限摘要、断裂诊断与修复复验｜计算稳定身份｜约束 package manifest。
 #
 # 边界
 #   协议只消费已验证事实，不执行 Target、不写 Finding、不决定 Verdict。
@@ -24,9 +24,9 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from product.backend.core.redaction import redact
 
-REPORT_SCHEMA_VERSION = "3"
+REPORT_SCHEMA_VERSION = "5"
 REPORT_PACKAGE_SCHEMA_VERSION = "1"
-REPORT_RULESET_VERSION = "report-local-2026.08.29"
+REPORT_RULESET_VERSION = "report-local-2026.08.30"
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/@+\-]{0,255}$")
 _SHA256 = r"^[0-9a-f]{64}$"
 
@@ -168,7 +168,7 @@ class ReportVersions(ReportModel):
     evidence_schema_version: Literal["1"]
     observer_schema_version: Literal["1"]
     artifact_schema_version: Literal["1"]
-    report_schema_version: Literal["3"] = REPORT_SCHEMA_VERSION
+    report_schema_version: Literal["5"] = REPORT_SCHEMA_VERSION
     ruleset_versions: tuple[str, ...] = Field(default=(), max_length=16)
 
     @model_validator(mode="after")
@@ -202,9 +202,11 @@ class ReportWitnessItem(ReportModel):
     kind: Literal[
         "PERMISSION_REQUIREMENT",
         "ACTUAL_IDENTITY",
-        "AUTHORIZATION_DECISION",
+        "PROTECTED_EFFECT",
+        "AUTHORIZATION_CONTINUITY",
         "BREAKPOINT",
-        "CONFIRMED_EFFECT",
+        "AMPLIFIERS",
+        "CONFIRMED_IMPACT",
     ]
     label: str = Field(min_length=1, max_length=80)
     detail: str = Field(min_length=1, max_length=240)
@@ -241,21 +243,42 @@ class ReportDiagnosis(ReportModel):
         "IDENTITY_SUBSTITUTION",
         "AUTHORITY_EXPANSION",
         "COMPENSATION_MASKING",
-    ]
+    ] | None
     precision: Literal["EXACT", "RANGE", "VIOLATION_ONLY"]
+    continuity_state: Literal["INTACT", "ORPHAN_EFFECT_CONFIRMED", "UNKNOWN"]
+    amplifier_types: tuple[
+        Literal[
+            "AUTHORIZATION_MISSING",
+            "AUTHORIZATION_LATE",
+            "AUTHORIZATION_BYPASS",
+            "IDENTITY_SUBSTITUTION",
+            "AUTHORITY_EXPANSION",
+            "COMPENSATION_MASKING",
+        ],
+        ...,
+    ] = Field(default=(), max_length=5)
     summary: str = Field(min_length=1, max_length=320)
-    minimal_witness: tuple[ReportWitnessItem, ...] = Field(min_length=5, max_length=5)
+    minimal_witness: tuple[ReportWitnessItem, ...] = Field(min_length=7, max_length=7)
     confirmed_impacts: tuple[ReportConfirmedImpact, ...] = Field(default=(), max_length=512)
     evidence_refs: tuple[str, ...] = Field(min_length=1, max_length=128)
 
     @model_validator(mode="after")
     def validate_diagnosis(self) -> ReportDiagnosis:
+        if self.breakpoint_type is None and self.precision != "VIOLATION_ONLY":
+            raise ValueError("unlocated report diagnosis must use VIOLATION_ONLY")
+        if len(set(self.amplifier_types)) != len(self.amplifier_types) or (
+            self.breakpoint_type is not None
+            and self.breakpoint_type in self.amplifier_types
+        ):
+            raise ValueError("report primary and amplifier types must be separate")
         expected = (
             "PERMISSION_REQUIREMENT",
             "ACTUAL_IDENTITY",
-            "AUTHORIZATION_DECISION",
+            "PROTECTED_EFFECT",
+            "AUTHORIZATION_CONTINUITY",
             "BREAKPOINT",
-            "CONFIRMED_EFFECT",
+            "AMPLIFIERS",
+            "CONFIRMED_IMPACT",
         )
         if tuple(item.kind for item in self.minimal_witness) != expected:
             raise ValueError("report minimal witness order is fixed")
@@ -272,6 +295,27 @@ class ReportDiagnosis(ReportModel):
         ):
             raise ValueError("report diagnosis evidence reference is invalid")
         return self
+
+
+class ReportRepairReference(ReportModel):
+    source_run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
+    source_finding_id: str = Field(pattern=r"^finding_[0-9a-f]{32}$")
+    repair_fingerprint: str = Field(pattern=_SHA256)
+
+
+class ReportRepairRequirement(ReportModel):
+    reference: ReportRepairReference
+    must_disappear: str = Field(min_length=1, max_length=320)
+    must_remain: str = Field(min_length=1, max_length=320)
+    must_not_change: tuple[str, ...] = Field(min_length=2, max_length=8)
+
+
+class ReportRepairVerification(ReportModel):
+    reference: ReportRepairReference
+    verification_run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
+    status: Literal["VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE"]
+    message: str = Field(min_length=1, max_length=320)
+    reason_codes: tuple[str, ...] = Field(min_length=1, max_length=32)
 
 
 class ReportPresentationIssue(ReportModel):
@@ -296,6 +340,7 @@ class ReportPresentationIssue(ReportModel):
         default=None,
         pattern=r"^[A-Z][A-Z0-9_]{0,31}$",
     )
+    repair_requirement: ReportRepairRequirement | None = None
 
     @model_validator(mode="after")
     def validate_evidence_refs(self) -> ReportPresentationIssue:
@@ -336,6 +381,7 @@ class ReportPresentation(ReportModel):
         default=(),
         max_length=4096,
     )
+    repair_verification: ReportRepairVerification | None = None
     headline: str = Field(min_length=1, max_length=160)
     scope_statement: str = Field(min_length=1, max_length=320)
     checked_count: int = Field(ge=0)
@@ -355,7 +401,7 @@ class ReportPresentation(ReportModel):
 
 
 class BaseRunReport(ReportModel):
-    schema_version: Literal["3"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["5"] = REPORT_SCHEMA_VERSION
     report_type: Literal["BASE"]
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
@@ -392,7 +438,7 @@ class BaseRunReport(ReportModel):
 
 
 class GateRunReport(ReportModel):
-    schema_version: Literal["3"] = REPORT_SCHEMA_VERSION
+    schema_version: Literal["5"] = REPORT_SCHEMA_VERSION
     report_type: Literal["GATE"]
     report_id: str = Field(pattern=r"^report_[0-9a-f]{32}$")
     run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")

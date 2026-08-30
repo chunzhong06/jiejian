@@ -96,8 +96,8 @@
           "$ref": "#/$defs/ReportRuntime"
         },
         "schema_version": {
-          "const": "3",
-          "default": "3",
+          "const": "5",
+          "default": "5",
           "title": "Schema Version",
           "type": "string"
         },
@@ -194,8 +194,8 @@
           "$ref": "#/$defs/ReportRuntime"
         },
         "schema_version": {
-          "const": "3",
-          "default": "3",
+          "const": "5",
+          "default": "5",
           "title": "Schema Version",
           "type": "string"
         },
@@ -388,17 +388,41 @@
           "title": "Action Id",
           "type": "string"
         },
+        "amplifier_types": {
+          "default": [],
+          "items": {
+            "enum": [
+              "AUTHORIZATION_MISSING",
+              "AUTHORIZATION_LATE",
+              "AUTHORIZATION_BYPASS",
+              "IDENTITY_SUBSTITUTION",
+              "AUTHORITY_EXPANSION",
+              "COMPENSATION_MASKING"
+            ],
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Amplifier Types",
+          "type": "array"
+        },
         "breakpoint_type": {
-          "enum": [
-            "AUTHORIZATION_MISSING",
-            "AUTHORIZATION_LATE",
-            "AUTHORIZATION_BYPASS",
-            "IDENTITY_SUBSTITUTION",
-            "AUTHORITY_EXPANSION",
-            "COMPENSATION_MASKING"
+          "anyOf": [
+            {
+              "enum": [
+                "AUTHORIZATION_MISSING",
+                "AUTHORIZATION_LATE",
+                "AUTHORIZATION_BYPASS",
+                "IDENTITY_SUBSTITUTION",
+                "AUTHORITY_EXPANSION",
+                "COMPENSATION_MASKING"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Breakpoint Type",
-          "type": "string"
+          "title": "Breakpoint Type"
         },
         "case_id": {
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
@@ -414,6 +438,15 @@
           "title": "Confirmed Impacts",
           "type": "array"
         },
+        "continuity_state": {
+          "enum": [
+            "INTACT",
+            "ORPHAN_EFFECT_CONFIRMED",
+            "UNKNOWN"
+          ],
+          "title": "Continuity State",
+          "type": "string"
+        },
         "evidence_refs": {
           "items": {
             "type": "string"
@@ -427,8 +460,8 @@
           "items": {
             "$ref": "#/$defs/ReportWitnessItem"
           },
-          "maxItems": 5,
-          "minItems": 5,
+          "maxItems": 7,
+          "minItems": 7,
           "title": "Minimal Witness",
           "type": "array"
         },
@@ -453,6 +486,7 @@
         "action_id",
         "breakpoint_type",
         "precision",
+        "continuity_state",
         "summary",
         "minimal_witness",
         "evidence_refs"
@@ -797,6 +831,17 @@
           "title": "Relevant Intents",
           "type": "array"
         },
+        "repair_verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportRepairVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "run_id": {
           "pattern": "^run_[0-9a-f]{32}$",
           "title": "Run Id",
@@ -944,6 +989,17 @@
           "title": "Relation",
           "type": "string"
         },
+        "repair_requirement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportRepairRequirement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "resource": {
           "maxLength": 160,
           "minLength": 1,
@@ -1033,6 +1089,116 @@
         "intent_hash"
       ],
       "title": "ReportRelevantIntent",
+      "type": "object"
+    },
+    "ReportRepairReference": {
+      "additionalProperties": false,
+      "properties": {
+        "repair_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Repair Fingerprint",
+          "type": "string"
+        },
+        "source_finding_id": {
+          "pattern": "^finding_[0-9a-f]{32}$",
+          "title": "Source Finding Id",
+          "type": "string"
+        },
+        "source_run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Source Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_run_id",
+        "source_finding_id",
+        "repair_fingerprint"
+      ],
+      "title": "ReportRepairReference",
+      "type": "object"
+    },
+    "ReportRepairRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "must_disappear": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Must Disappear",
+          "type": "string"
+        },
+        "must_not_change": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 2,
+          "title": "Must Not Change",
+          "type": "array"
+        },
+        "must_remain": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Must Remain",
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/ReportRepairReference"
+        }
+      },
+      "required": [
+        "reference",
+        "must_disappear",
+        "must_remain",
+        "must_not_change"
+      ],
+      "title": "ReportRepairRequirement",
+      "type": "object"
+    },
+    "ReportRepairVerification": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "reference": {
+          "$ref": "#/$defs/ReportRepairReference"
+        },
+        "status": {
+          "enum": [
+            "VERIFIED",
+            "NOT_VERIFIED",
+            "INCONCLUSIVE"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "verification_run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
+          "title": "Verification Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference",
+        "verification_run_id",
+        "status",
+        "message",
+        "reason_codes"
+      ],
+      "title": "ReportRepairVerification",
       "type": "object"
     },
     "ReportRun": {
@@ -1194,8 +1360,8 @@
           "type": "string"
         },
         "report_schema_version": {
-          "const": "3",
-          "default": "3",
+          "const": "5",
+          "default": "5",
           "title": "Report Schema Version",
           "type": "string"
         },
@@ -1261,9 +1427,11 @@
           "enum": [
             "PERMISSION_REQUIREMENT",
             "ACTUAL_IDENTITY",
-            "AUTHORIZATION_DECISION",
+            "PROTECTED_EFFECT",
+            "AUTHORIZATION_CONTINUITY",
             "BREAKPOINT",
-            "CONFIRMED_EFFECT"
+            "AMPLIFIERS",
+            "CONFIRMED_IMPACT"
           ],
           "title": "Kind",
           "type": "string"

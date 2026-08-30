@@ -5,7 +5,7 @@
 # Application Core、Job 存储与 Worker 之间的唯一冻结执行快照。
 #
 # 职责
-# 组合执行预算与项目快照｜校验秘密引用｜编码有界 canonical JSON
+# 组合执行预算、项目快照、权限策略及可选变化/修复上下文｜校验秘密引用｜编码有界 canonical JSON
 #
 # 边界
 # 不包含秘密正文、不读取 Profile 源文件，也不允许 Worker 重新解释治理配置。
@@ -26,7 +26,19 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
+from product.backend.core.identifiers import (
+    PROJECT_ID_PATTERN,
+    SHA256_PATTERN,
+    TEST_IDENTITY_ID_PATTERN,
+)
+from product.backend.core.permission_intent import PermissionIntentRelation, ProtectedEffect
+from product.backend.core.repair import (
+    RepairAllowControlIdentity,
+    RepairContractReference,
+    RepairEvidenceStandard,
+    RepairIntentIdentity,
+)
+from product.backend.core.verification.permissions import PermissionExpectation
 from product.protocols.execution import ExecutionBudget
 from product.protocols.runner import RUNNER_INPUT_MAX_BYTES
 from product.protocols.web.profile import (
@@ -44,6 +56,50 @@ class PermissionPolicySnapshotEntry(BaseModel):
     revision: int = Field(ge=1)
     intent_hash: str = Field(pattern=SHA256_PATTERN)
     binding_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    expectation: PermissionExpectation | None = None
+    relation: PermissionIntentRelation | None = None
+    subject_display_name: str | None = Field(default=None, min_length=1, max_length=128)
+    action_display_name: str | None = Field(default=None, min_length=1, max_length=256)
+    resource_owner_display_name: str | None = Field(default=None, min_length=1, max_length=128)
+    protected_effects: tuple[ProtectedEffect, ...] = Field(default=(), max_length=16)
+    action_candidate_id: str | None = Field(default=None, pattern=r"^action_[0-9a-f]{32}$")
+    subject_test_identity_id: str | None = Field(default=None, pattern=TEST_IDENTITY_ID_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_semantic_projection(self) -> PermissionPolicySnapshotEntry:
+        projection = (
+            self.expectation,
+            self.relation,
+            self.subject_display_name,
+            self.action_display_name,
+            self.resource_owner_display_name,
+            self.action_candidate_id,
+            self.subject_test_identity_id,
+        )
+        if any(item is not None for item in projection) and any(item is None for item in projection):
+            raise ValueError("permission policy semantic projection must be complete")
+        if all(item is None for item in projection) and self.protected_effects:
+            raise ValueError("legacy permission policy entry cannot carry protected effects")
+        return self
+
+    def fingerprint_payload(self) -> dict[str, Any]:
+        """旧冻结请求保持原指纹；新请求把完整业务语义投影纳入指纹。"""
+
+        if self.expectation is not None:
+            return self.model_dump(mode="json")
+        return self.model_dump(
+            mode="json",
+            exclude={
+                "expectation",
+                "relation",
+                "subject_display_name",
+                "action_display_name",
+                "resource_owner_display_name",
+                "protected_effects",
+                "action_candidate_id",
+                "subject_test_identity_id",
+            },
+        )
 
 
 class PermissionPolicySnapshot(BaseModel):
@@ -64,7 +120,7 @@ class PermissionPolicySnapshot(BaseModel):
         payload = {
             "project_id": self.project_id,
             "policy_epoch": self.policy_epoch,
-            "entries": [item.model_dump(mode="json") for item in ordered],
+            "entries": [item.fingerprint_payload() for item in ordered],
         }
         encoded = json.dumps(
             payload,
@@ -87,7 +143,7 @@ def build_permission_policy_snapshot(
     payload = {
         "project_id": project_id,
         "policy_epoch": policy_epoch,
-        "entries": [item.model_dump(mode="json") for item in ordered],
+        "entries": [item.fingerprint_payload() for item in ordered],
     }
     encoded = json.dumps(
         payload,
@@ -128,6 +184,35 @@ class ChangeVerificationContext(BaseModel):
         return self
 
 
+class RepairVerificationContext(BaseModel):
+    """随修复重验 Run 冻结原考题、受保护后果、ALLOW 控制和证据标准。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+
+    reference: RepairContractReference
+    original_policy_epoch: int = Field(ge=0)
+    target_intent: RepairIntentIdentity
+    original_intents: tuple[RepairIntentIdentity, ...] = Field(min_length=2, max_length=4096)
+    must_disappear_effect_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
+    must_remain_allow_control: RepairAllowControlIdentity
+    original_key_evidence: RepairEvidenceStandard
+
+    @model_validator(mode="after")
+    def validate_context(self) -> RepairVerificationContext:
+        ordered = tuple(sorted(self.original_intents, key=lambda item: item.intent_id))
+        if (
+            ordered != self.original_intents
+            or len({item.intent_id for item in ordered}) != len(ordered)
+            or self.target_intent.intent_id not in {item.intent_id for item in ordered}
+            or self.must_remain_allow_control.intent.intent_id
+            not in {item.intent_id for item in ordered}
+            or self.must_disappear_effect_ids
+            != tuple(sorted(set(self.must_disappear_effect_ids)))
+        ):
+            raise ValueError("repair verification context must preserve sorted original facts")
+        return self
+
+
 class PersistedExecutionRequest(BaseModel):
     """Worker 使用的不可变、无路径执行快照。"""
 
@@ -138,6 +223,7 @@ class PersistedExecutionRequest(BaseModel):
     permission_policy: PermissionPolicySnapshot
     project_snapshot: WebExecutionSnapshot
     change_context: ChangeVerificationContext | None = None
+    repair_context: RepairVerificationContext | None = None
 
     @model_validator(mode="after")
     def validate_budget_snapshot(self) -> PersistedExecutionRequest:
@@ -147,6 +233,22 @@ class PersistedExecutionRequest(BaseModel):
             self.change_context.required_intent_ids
         ).issubset({item.intent_id for item in self.permission_policy.entries}):
             raise ValueError("change verification intents must belong to the frozen policy")
+        if self.repair_context is not None:
+            if self.change_context is None:
+                raise ValueError("repair verification requires a change verification context")
+            current = {
+                item.intent_id: (item.revision, item.intent_hash)
+                for item in self.permission_policy.entries
+            }
+            original = {
+                item.intent_id: (item.revision, item.intent_hash)
+                for item in self.repair_context.original_intents
+            }
+            if self.permission_policy.policy_epoch != self.repair_context.original_policy_epoch or any(
+                intent_id not in current or current[intent_id] != identity
+                for intent_id, identity in original.items()
+            ):
+                raise ValueError("repair verification must use the original permission intents")
         target = self.project_snapshot.target.scope
         if self.budget.max_requests != target.max_requests:
             raise ValueError("request budget max_requests does not match snapshot")

@@ -1,0 +1,155 @@
+{
+  "schema_version": "1",
+  "cases": [
+    {
+      "case_id": "tenant-object-scope-a", "application_id": "tenant-records", "mode": "object_tenant_check_missing", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "read_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "普通成员不能读取项目负责人管理的记录"},
+      "protected_effects": ["record_disclosed"], "observation_config": {"effect_kind": "DATA_DISCLOSURE", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_disclosed"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-object-scope-b", "application_id": "tenant-records", "mode": "object_tenant_check_missing", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "read_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "普通成员不能读取项目负责人管理的记录"},
+      "protected_effects": ["record_disclosed"], "observation_config": {"effect_kind": "DATA_DISCLOSURE", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_disclosed"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-object-scope-c", "application_id": "tenant-records", "mode": "object_tenant_check_missing", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "read_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "普通成员不能读取项目负责人管理的记录"},
+      "protected_effects": ["record_disclosed"], "observation_config": {"effect_kind": "DATA_DISCLOSURE", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_disclosed"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "tenant-new-entry-a", "application_id": "tenant-records", "mode": "new_entry_inheritance", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "new_project_record",
+      "permission_intent": {"expectation": "DENY", "relation": "INHERITED_PROJECT_POLICY", "statement": "新建项目记录必须继承原有负责人权限"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-new-entry-b", "application_id": "tenant-records", "mode": "new_entry_inheritance", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "new_project_record",
+      "permission_intent": {"expectation": "DENY", "relation": "INHERITED_PROJECT_POLICY", "statement": "新建项目记录必须继承原有负责人权限"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-new-entry-c", "application_id": "tenant-records", "mode": "new_entry_inheritance", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "new_project_record",
+      "permission_intent": {"expectation": "DENY", "relation": "INHERITED_PROJECT_POLICY", "statement": "新建项目记录必须继承原有负责人权限"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "tenant-feature-bypass-a", "application_id": "tenant-records", "mode": "feature_authorization_bypass", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "新增快捷修改功能仍须遵守原记录权限"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-feature-bypass-b", "application_id": "tenant-records", "mode": "feature_authorization_bypass", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "新增快捷修改功能仍须遵守原记录权限"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-feature-bypass-c", "application_id": "tenant-records", "mode": "feature_authorization_bypass", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "新增快捷修改功能仍须遵守原记录权限"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "tenant-delegation-a", "application_id": "tenant-records", "mode": "delegation_authority_expansion", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "grant_authority", "identity": "member", "resource": "project_authority",
+      "permission_intent": {"expectation": "DENY", "relation": "MEMBER_OF_PROJECT", "statement": "普通成员不能借服务身份邀请成员或授予项目权限"},
+      "protected_effects": ["authority_granted"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "authority_granted"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-delegation-b", "application_id": "tenant-records", "mode": "delegation_authority_expansion", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "grant_authority", "identity": "member", "resource": "project_authority",
+      "permission_intent": {"expectation": "DENY", "relation": "MEMBER_OF_PROJECT", "statement": "普通成员不能借服务身份邀请成员或授予项目权限"},
+      "protected_effects": ["authority_granted"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "authority_granted"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-delegation-c", "application_id": "tenant-records", "mode": "delegation_authority_expansion", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "grant_authority", "identity": "member", "resource": "project_authority",
+      "permission_intent": {"expectation": "DENY", "relation": "MEMBER_OF_PROJECT", "statement": "普通成员不能借服务身份邀请成员或授予项目权限"},
+      "protected_effects": ["authority_granted"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "authority_granted"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "tenant-deny-async-a", "application_id": "tenant-records", "mode": "deny_async_consequence", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "权限拒绝后异步任务不得继续修改负责人记录"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-deny-async-b", "application_id": "tenant-records", "mode": "deny_async_consequence", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "权限拒绝后异步任务不得继续修改负责人记录"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "tenant-deny-async-c", "application_id": "tenant-records", "mode": "deny_async_consequence", "source_root": "tests/validation/apps/tenant_records/source", "business_action": "modify_record", "identity": "member", "resource": "owner_record",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_OWNER", "statement": "权限拒绝后异步任务不得继续修改负责人记录"},
+      "protected_effects": ["record_modified"], "observation_config": {"effect_kind": "STATE_MUTATION", "required_channel": "effect_log", "trace_channel": "effect_log", "trace_effect_key": "record_modified"}, "allow_control_identity": "owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "official-object-scope-a", "application_id": "collaboration-space", "mode": "object_tenant_check_missing", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "普通成员不能生成由项目负责人管理的完整资料包"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-object-scope-b", "application_id": "collaboration-space", "mode": "object_tenant_check_missing", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "普通成员不能生成由项目负责人管理的完整资料包"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-object-scope-c", "application_id": "collaboration-space", "mode": "object_tenant_check_missing", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "普通成员不能生成由项目负责人管理的完整资料包"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "official-new-entry-a", "application_id": "collaboration-space", "mode": "new_entry_inheritance", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "INHERITED_PROJECT_POLICY", "statement": "重新生成的新资料包必须继承原项目权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-new-entry-b", "application_id": "collaboration-space", "mode": "new_entry_inheritance", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "INHERITED_PROJECT_POLICY", "statement": "重新生成的新资料包必须继承原项目权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-new-entry-c", "application_id": "collaboration-space", "mode": "new_entry_inheritance", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "INHERITED_PROJECT_POLICY", "statement": "重新生成的新资料包必须继承原项目权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "official-feature-bypass-a", "application_id": "collaboration-space", "mode": "feature_authorization_bypass", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "快捷导出功能仍须遵守原资料包权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-feature-bypass-b", "application_id": "collaboration-space", "mode": "feature_authorization_bypass", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "快捷导出功能仍须遵守原资料包权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-feature-bypass-c", "application_id": "collaboration-space", "mode": "feature_authorization_bypass", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "快捷导出功能仍须遵守原资料包权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "official-delegation-a", "application_id": "collaboration-space", "mode": "delegation_authority_expansion", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "后台导出服务不得把普通成员权限扩张为负责人权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-delegation-b", "application_id": "collaboration-space", "mode": "delegation_authority_expansion", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "后台导出服务不得把普通成员权限扩张为负责人权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-delegation-c", "application_id": "collaboration-space", "mode": "delegation_authority_expansion", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "后台导出服务不得把普通成员权限扩张为负责人权限"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    },
+    {
+      "case_id": "official-deny-async-a", "application_id": "collaboration-space", "mode": "deny_async_consequence", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "权限拒绝或撤销后后台任务不得继续生成资料包"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_FAULT_PRESENT", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-deny-async-b", "application_id": "collaboration-space", "mode": "deny_async_consequence", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "权限拒绝或撤销后后台任务不得继续生成资料包"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "AVAILABLE"}
+    },
+    {
+      "case_id": "official-deny-async-c", "application_id": "collaboration-space", "mode": "deny_async_consequence", "source_root": "samples/web/collaboration_space/source", "business_action": "generate_project_artifact", "identity": "member", "resource": "project_artifact",
+      "permission_intent": {"expectation": "DENY", "relation": "OTHER_ROLE", "statement": "权限拒绝或撤销后后台任务不得继续生成资料包"},
+      "protected_effects": ["protected_artifact_generated"], "observation_config": {"effect_kind": "OBJECT_CREATION", "required_channel": "final_artifact", "trace_channel": "structured_audit", "trace_effect_key": "export_request_created"}, "allow_control_identity": "project_owner", "state_selector": {"implementation": "MODE_GUARD_ACTIVE", "observation": "UNAVAILABLE"}
+    }
+  ]
+}

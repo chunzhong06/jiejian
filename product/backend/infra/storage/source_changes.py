@@ -5,10 +5,10 @@
 #   受控源码快照、Agent 变更声明、真实 diff 与权限影响评估的 SQLite 聚合。
 #
 # 职责
-#   幂等保存不可变快照｜按一次 change 聚合保存路径变化和逐 Intent 影响｜稳定回读最近事实。
+#   幂等保存不可变快照｜按一次 change 聚合保存路径变化、修复引用和逐 Intent 影响｜稳定回读最近事实。
 #
 # 边界
-#   不保存源码正文、文本 diff、Git 凭据或每文件/每 Intent 独立行；Repository 不提交事务。
+#   不保存源码正文、文本 diff、完整 RepairContract、Git 凭据或每文件/每 Intent 独立行；Repository 不提交事务。
 #
 # 调用链
 #   SourceChangeService → SourceChangeRepository → SQLAlchemy / SQLite
@@ -34,6 +34,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.repair import RepairContractReference
 from product.backend.core.source_changes import (
     ChangeImpactAssessment,
     ChangeManifest,
@@ -90,6 +91,11 @@ class ChangeManifestRow(Base):
             name="claimed_paths_json_length",
         ),
         CheckConstraint("length(submitted_by) BETWEEN 1 AND 128", name="submitted_by_length"),
+        CheckConstraint(
+            "repair_reference_json IS NULL OR "
+            "length(repair_reference_json) BETWEEN 2 AND 1024",
+            name="repair_reference_json_length",
+        ),
         CheckConstraint("created_at_us >= 0", name="created_nonnegative"),
         Index("ix_change_manifests_project_created", "project_id", "created_at_us"),
     )
@@ -100,6 +106,7 @@ class ChangeManifestRow(Base):
     )
     reason: Mapped[str] = mapped_column(String(512), nullable=False)
     claimed_paths_json: Mapped[str] = mapped_column(Text, nullable=False)
+    repair_reference_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
@@ -219,8 +226,16 @@ class SourceChangeRepository:
             and change_set.change_fingerprint == assessment.change_fingerprint
         ):
             raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "代码变化聚合身份不一致")
-        manifest_values = manifest.model_dump(mode="json", exclude={"claimed_paths"})
+        manifest_values = manifest.model_dump(
+            mode="json",
+            exclude={"claimed_paths", "repair_reference"},
+        )
         manifest_values["claimed_paths_json"] = _canonical_json(list(manifest.claimed_paths))
+        manifest_values["repair_reference_json"] = (
+            None
+            if manifest.repair_reference is None
+            else _canonical_json(manifest.repair_reference.model_dump(mode="json"))
+        )
         change_values = change_set.model_dump(
             mode="json",
             exclude={"added_paths", "modified_paths", "removed_paths"},
@@ -307,6 +322,14 @@ class SourceChangeRepository:
                 project_id=row.project_id,
                 reason=row.reason,
                 claimed_paths=tuple(json.loads(row.claimed_paths_json)),
+                repair_reference=(
+                    None
+                    if row.repair_reference_json is None
+                    else RepairContractReference.model_validate(
+                        json.loads(row.repair_reference_json),
+                        strict=False,
+                    )
+                ),
                 submitted_by=row.submitted_by,
                 created_at_us=row.created_at_us,
             )

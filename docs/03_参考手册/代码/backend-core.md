@@ -122,6 +122,23 @@
 - `redact_known_secrets(value, secrets) -> Any`
 主要 import / dot-source：`__future__`, `collections.abc`, `re`, `typing`
 
+### `product/backend/core/repair.py`
+- `_FINDING_ID_PATTERN`
+- `_INTENT_ID_PATTERN`
+- `_PUBLIC_ID_PATTERN`
+- `_REASON_CODE`
+- `class RepairModel`
+- `class RepairContractReference`
+- `class RepairIntentIdentity`
+- `class RepairAllowControlIdentity`
+- `class RepairEvidenceStandard`
+- `class RepairContract`
+- `class RepairRequirementView`
+- `class RepairVerificationStatus`
+- `class RepairVerification`
+- `repair_contract_fingerprint(contract) -> str`
+主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
+
 ### `product/backend/core/reporting.py`
 - `_REPORT_CSS`
 - `render_json(report) -> bytes`
@@ -150,7 +167,7 @@
 - `class RevalidationPlan`
 - `source_change_fingerprint(payload) -> str`
 - `change_impact_fingerprint(payload) -> str`
-主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.identifiers`, `product.backend.core.repair`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/test_identity.py`
 - `_ROLE_CANDIDATE_ID_PATTERN`
@@ -205,7 +222,7 @@
 - `class BreakpointPrecision`
 - `class BreakpointResult`
 - `class BreakpointLocator`
-主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.trace`, `pydantic`, `re`
+主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.verification.continuity`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.trace`, `pydantic`, `re`
 
 ### `product/backend/core/verification/collision.py`
 - `class CollisionModel`
@@ -217,6 +234,15 @@
 - `class CollisionExperimentResult`
 - `classify_collision_trials(sequential_semantics_valid, expected_repetitions, trials) -> CollisionExperimentResult`
 主要 import / dot-source：`__future__`, `collections`, `enum`, `product.backend.core.lifecycle`, `pydantic`, `typing`
+
+### `product/backend/core/verification/continuity.py`
+- `_PUBLIC_ID`
+- `_REASON_CODE`
+- `class AuthorizationContinuityState`
+- `class AuthorizationEffectReference`
+- `class AuthorizationContinuityAssessment`
+- `assess_authorization_continuity(contract, twin, effect_facts) -> AuthorizationContinuityAssessment`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `pydantic`, `re`
 
 ### `product/backend/core/verification/differential.py`
 - `class TwinPlanGapCode`
