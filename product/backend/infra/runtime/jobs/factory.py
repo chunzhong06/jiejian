@@ -21,13 +21,17 @@ from product.backend.infra.artifacts.scan_job import ArtifactCheckJobHandler
 from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.handlers import JobHandlerRegistry
-from product.backend.infra.runtime.jobs.recording import RecordingJobHandler
+from product.backend.infra.runtime.jobs.recording import (
+    RecordingJobHandler,
+    RecordingSubmissionPort,
+)
 from product.backend.infra.runtime.jobs.targets import JobTargetType
-from product.backend.infra.runtime.jobs.verification import VerificationRunJobHandler
+from product.backend.infra.runtime.jobs.verification import (
+    ResultFinalizerPort,
+    VerificationRunJobHandler,
+)
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.storage import StorageUnitOfWork
-from product.backend.workflows.recording.submission import RecordingSubmission
-from product.backend.workflows.results.services import ResultServices
 
 
 class WorkerHandlerFactory:
@@ -39,7 +43,9 @@ class WorkerHandlerFactory:
         uow_factory: Callable[..., StorageUnitOfWork],
         attempts: JobAttempts,
         request_store: ExecutionRequestStore,
-        result_services: ResultServices,
+        result_finalizer: ResultFinalizerPort,
+        recording_store: RecordingRequestStore,
+        recording_submission_factory: Callable[[], RecordingSubmissionPort],
         publication_service,
         reconciliation_service,
     ) -> None:
@@ -47,10 +53,11 @@ class WorkerHandlerFactory:
         self._uow_factory = uow_factory
         self._attempts = attempts
         self._request_store = request_store
-        self._results = result_services
+        self._result_finalizer = result_finalizer
+        self._recording_submission_factory = recording_submission_factory
         self._publication = publication_service
         self._reconciliation = reconciliation_service
-        self._recording_store = RecordingRequestStore(self._var_dir)
+        self._recording_store = recording_store
 
     def build_registry(
         self,
@@ -70,7 +77,7 @@ class WorkerHandlerFactory:
                 request_store=self._request_store,
                 publication_service=self._publication,
                 reconciliation_service=self._reconciliation,
-                result_finalizer=self._results.finalizer,
+                result_finalizer=self._result_finalizer,
                 environ=environ,
             )
 
@@ -80,11 +87,7 @@ class WorkerHandlerFactory:
                 lease_owner=lease_owner,
                 uow_factory=self._uow_factory,
                 attempts=self._attempts,
-                application=RecordingSubmission(
-                    self._uow_factory,
-                    self._recording_store,
-                    attempts=self._attempts,
-                ),
+                application=self._recording_submission_factory(),
                 request_store=self._recording_store,
                 cancel_path_for=lambda root, job: attempt_paths_for(root, job).cancel_path,
                 environ=environ,

@@ -6,7 +6,6 @@ from pydantic import ValidationError
 
 from product.backend.api.routers.llm import (
     LLMProfileCreateRequest,
-    LLMProfileResponse,
     LLMProfileUpdateRequest,
 )
 from product.backend.infra.llm.config import LLMProviderType
@@ -36,22 +35,6 @@ def test_llm_write_requests_carry_optional_reasoning_effort() -> None:
     update = LLMProfileUpdateRequest(schema_version="1", reasoning_effort=None)
     assert create.reasoning_effort == "high"
     assert update.reasoning_effort is None
-
-
-def test_llm_response_contains_reference_and_configuration_state_only() -> None:
-    response = LLMProfileResponse(
-        profile_name="local",
-        provider=LLMProviderType.OPENAI,
-        model="gpt-test",
-        secret_ref="env:OPENAI_KEY",
-        secret_configured=True,
-        created_at_us=1,
-        updated_at_us=1,
-    )
-    dumped = response.model_dump(mode="json")
-    assert dumped["secret_ref"] == "env:OPENAI_KEY"
-    assert dumped["secret_configured"] is True
-    assert "secret" not in dumped
 
 
 def test_llm_create_rejects_unknown_fields() -> None:

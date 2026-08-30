@@ -37,16 +37,6 @@ class RunVerdict(StrEnum):
     INCONCLUSIVE = "INCONCLUSIVE"
 
 
-class CaseLifecycle(StrEnum):
-    PLANNED = "PLANNED"
-    SNAPSHOTTED = "SNAPSHOTTED"
-    EXECUTED = "EXECUTED"
-    OBSERVED = "OBSERVED"
-    CLEANED = "CLEANED"
-    DONE = "DONE"
-    ERROR = "ERROR"
-
-
 class CaseVerdict(StrEnum):
     SAFE = "SAFE"
     VULNERABLE = "VULNERABLE"

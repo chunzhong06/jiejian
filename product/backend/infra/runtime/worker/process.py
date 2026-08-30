@@ -81,7 +81,7 @@ def main() -> int:
     try:
         from product.backend.infra.runtime.process.identity import require_python_environment
         from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock
-        from product.backend.workflows.worker_container import WorkerContainer
+        from product.backend.worker_container import WorkerContainer
         from product.backend.core.lifecycle import JobState
         from product.backend.core.errors import JiejianError
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
@@ -31,14 +30,13 @@ from product.backend.infra.runtime.process.tree import (
 )
 from product.backend.infra.runtime.process.identity import require_python_environment
 from product.protocols import FlowDraftVariableSource, flow_draft_source_choice_id
-from sample_test_windows import RecordingWindowDriver, WindowsL5Error, window_snapshot
+from .windows import RecordingWindowDriver, WindowsL5Error, window_snapshot
 
 
 PROJECT_KEY = "campus-digital-museum"
 RESOURCE_ID = "campus-digital-museum-package"
 EXPORT_ACTION_KEY = "POST /api/projects/{project_id}/exports"
 CONTROL_PORT = 8765
-SUITES = ("official", "validation", "competition", "all")
 PHASE_TITLES = {
     1: "界鉴真实启动",
     2: "官方示例与应用理解",
@@ -1619,47 +1617,3 @@ def run(
                 )
     if primary_failure is not None:
         raise primary_failure
-
-
-def run_suite(root: Path, var_dir: Path, suite: str) -> None:
-    """保留 official 原链，并把 validation/competition 纳入同一公共入口。"""
-
-    if suite == "official":
-        run(root, var_dir)
-        return
-    from sample_test_validation import run_validation_suite
-
-    if suite == "validation":
-        run_validation_suite(root, var_dir, repetitions=1)
-        return
-    if suite == "competition":
-        run_validation_suite(root, var_dir, repetitions=3)
-        return
-    if suite == "all":
-        official_dir = var_dir / "official"
-        validation_dir = var_dir / "validation"
-        official_dir.mkdir(parents=True)
-        validation_dir.mkdir(parents=True)
-        run(root, official_dir)
-        run_validation_suite(root, validation_dir, repetitions=1)
-        return
-    raise SampleTestError("SAMPLE_TEST_SUITE_INVALID")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the official sample delivery validation.")
-    parser.add_argument("--root", required=True, type=Path)
-    parser.add_argument("--var-dir", required=True, type=Path)
-    parser.add_argument("--suite", choices=SUITES, default="official")
-    arguments = parser.parse_args()
-    try:
-        run_suite(arguments.root, arguments.var_dir, arguments.suite)
-    except Exception as exc:
-        code, summary = _failure_identity(exc)
-        print(f"sample-test failed: {code}: {summary}", file=sys.stderr, flush=True)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

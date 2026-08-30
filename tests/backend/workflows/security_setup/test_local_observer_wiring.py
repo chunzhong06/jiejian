@@ -242,14 +242,9 @@ def test_compiler_publishes_local_observer_contract_and_profile_snapshot(tmp_pat
             store,
             endpoint=endpoint,
             sessions=credentials["session_material"],
+            observer_descriptor_path=descriptor_path,
         )
         core = app.state.context
-        core.local_observer_environments.register(
-            experience_id="exp_" + "a" * 32,
-            source_root=Path(__file__).resolve().parents[4] / "samples" / "web",
-            confirmed_endpoint=endpoint,
-            descriptor_path=descriptor_path,
-        )
         compiled = core.security_setup.compile(setup["project_id"])
         contract = core.contracts.list_versions(
             setup["project_id"], compiled.contract_id

@@ -269,10 +269,9 @@ def prepare_formal_project(
     recovery = next(
         item for item in view["recovery_candidates"] if item["method"] == "DELETE"
     )
-    effect = next(
-        item
+    assert any(
+        item["kind"] == "OBJECT_CREATION"
         for item in view["security_effect_candidates"]
-        if item["kind"] == "OBJECT_CREATION"
     )
     confirmed_setup = client.put(
         f"/api/recordings/{recording_id}/safety-setup",
@@ -281,11 +280,8 @@ def prepare_formal_project(
             "resource_candidate_id": resource["candidate_id"],
             "logical_name": "校园数字展馆完整项目资料包",
             "resource_type": "项目资料包",
-            "owner_test_identity_id": identity_ids["alice"],
             "observation_candidate_id": observation["candidate_id"],
             "recovery_candidate_id": recovery["candidate_id"],
-            "confirm_recovery_not_required": False,
-            "security_effect_candidate_id": effect["candidate_id"],
         },
     )
     assert confirmed_setup.status_code == 200, confirmed_setup.text

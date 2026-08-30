@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from sample_test_registry import PublicValidationCase, ValidationCaseResult
+from .registry import PublicValidationCase, ValidationCaseResult
 
 
 _ORACLE_KEYS = frozenset(

@@ -79,7 +79,6 @@
 - `class LLMProfileBase`
 - `class LLMProfileCreateRequest`
 - `class LLMProfileUpdateRequest`
-- `class LLMProfileResponse`
 - `class LLMDefaultProfileRequest`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.infra.llm.catalog`, `product.backend.infra.llm.config`, `product.backend.workflows.context`, `pydantic`, `typing`
 

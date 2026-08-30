@@ -35,7 +35,7 @@ from product.protocols.web.target import WebTargetDefinition, WebTargetScope
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.recording import RECORDING_EVENT_MAX_BYTES, RecordingBudget, RecordingEventKind, RecordingEvent
 from product.backend.infra.execution.web.adapter import WebTargetGuard
-from product.backend.workflows.recording.sanitization import RecordingSanitizer
+from product.backend.core.recording_sanitization import RecordingSanitizer
 from product.backend.infra.recording.transport import BoundedRouteTransport
 from product.backend.infra.recording.ui_capture import install_ui_capture
 

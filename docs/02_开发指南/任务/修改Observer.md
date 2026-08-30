@@ -30,7 +30,7 @@ Azure Blob
 | 后台任务、Queue、Blob | `product/backend/infra/observers/async_task.py`、`azure_queue.py`、`azure_blob.py` | EVENTUAL 预算、终态闭合、相关性与模拟服务测试 |
 | 本地应用的六面观察接线 | `product/backend/workflows/security_setup/local_observer_wiring.py` | `profile_builder.py`、生成 Profile、Sample 配置 |
 | Runner 调用和 Evidence 组装 | `product/backend/infra/runtime/runner/case_orchestrator.py`、`result_builder.py` | `executor.py`、`product/protocols/runner/evidence.py` |
-| 人类结果中的来源角色和状态 | `product/backend/workflows/results/presentation.py` | Effect binding、已发布 Evidence、前端结果组件 |
+| 人类结果中的来源角色和状态 | `product/backend/workflows/results/presentation/` | Effect binding、已发布 Evidence、前端结果组件 |
 | 已发布执行路径 | `product/backend/workflows/results/trace.py`、`product/backend/core/verification/trace.py` | 结构化 Audit、Evidence、ResultPresentation |
 
 精确类名和导出清单由对应自动代码参考生成。本文维护修改路线和不能从符号表得出的语义边界。

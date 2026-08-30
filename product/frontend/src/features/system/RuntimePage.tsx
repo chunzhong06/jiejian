@@ -58,10 +58,10 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
     finally { setBusy(false) }
   }
   const execute = async () => {
-    if (!selectedOperation) return
+    if (!selectedOperation || !preview) return
     setBusy(true); setMaintenanceError(null)
     try {
-      const result = await systemApi.maintenanceOperation(selectedOperation, { confirmed: true, dry_run: false })
+      const result = await systemApi.maintenanceOperation(selectedOperation, { confirmed: true, dry_run: false, plan_id: preview.plan_id })
       setCompleted(result); setMaintenance(result.status); setPreview(null); setSelectedOperation(null)
     } catch (error) { setMaintenanceError((error as Error).message) }
     finally { setBusy(false) }
@@ -102,7 +102,8 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
     <Card title="本地运行数据维护" extra={busy ? <Spin size="small" /> : <Button onClick={refreshMaintenance}>刷新状态</Button>}>
       <Typography.Paragraph type="secondary">这里只维护当前实例可安全删除的缓存、历史日志和临时文件；开发工具与构建缓存不在范围内。</Typography.Paragraph>
       {maintenanceError && <Alert type="error" showIcon message="维护操作失败" description={maintenanceError} closable onClose={() => setMaintenanceError(null)} />}
-      {completed && <Alert style={{ marginBottom: 12 }} type="success" showIcon message="维护操作已完成" description={`已处理 ${completed.removed.length} 项，共 ${bytes(completed.estimated_bytes)}。${completed.requires_restart ? '请重新启动界鉴以重建运行环境。' : ''}`} />}
+      {completed && <Alert style={{ marginBottom: 12 }} type={completed.counts.FAILED > 0 ? 'warning' : 'success'} showIcon message="维护操作已完成" description={`成功清理 ${completed.counts.DELETED} 项，安全跳过 ${completed.counts.ALREADY_MISSING + completed.counts.SKIPPED_IN_USE + completed.counts.SKIPPED_CHANGED} 项，失败 ${completed.counts.FAILED} 项。${completed.requires_restart ? '请重新启动界鉴以重建运行环境。' : ''}`} />}
+      {completed?.results.some((item) => item.status !== 'DELETED') && <Collapse style={{ marginBottom: 12 }} items={[{ key: 'maintenance-results', label: '查看跳过与失败原因', children: <Space direction="vertical">{completed.results.filter((item) => item.status !== 'DELETED').map((item) => <Typography.Text key={item.item_id}>{item.label}：{item.reason}</Typography.Text>)}</Space> }]} />}
       <Row gutter={[12, 12]}>
         <Col xs={24} md={8}><Card size="small"><Statistic title="AI 辅助缓存" value={bytes(maintenance?.entries.assistant.bytes)} /><Typography.Text type="secondary">{maintenance?.entries.assistant.files ?? 0} 个文件</Typography.Text><div><Button style={{ marginTop: 12 }} disabled={busy} onClick={() => void showPreview('clear-assistant-cache')}>清空 AI 辅助缓存</Button></div></Card></Col>
         <Col xs={24} md={8}><Card size="small"><Statistic title="历史运行日志" value={bytes(maintenance?.entries.logs.bytes)} /><Typography.Text type="secondary">{maintenance?.entries.logs.files ?? 0} 个文件</Typography.Text><div><Button style={{ marginTop: 12 }} disabled={busy} onClick={() => void showPreview('clear-logs')}>清理历史运行日志</Button></div></Card></Col>
@@ -125,8 +126,8 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       onCancel={() => { setPreview(null); setSelectedOperation(null) }}
       onOk={() => void execute()}
     >
-      <Typography.Paragraph>预计处理 {preview?.targets.length ?? 0} 项，共 {bytes(preview?.estimated_bytes)}。</Typography.Paragraph>
-      {(preview?.targets ?? []).slice(0, 8).map((target) => <Typography.Paragraph key={target.path}><Typography.Text copyable>{target.path}</Typography.Text> · {bytes(target.estimated_bytes)}</Typography.Paragraph>)}
+      <Typography.Paragraph>预计处理 {preview?.targets.length ?? 0} 项，共 {bytes(preview?.estimated_bytes)}。确认时只处理这份固定计划。</Typography.Paragraph>
+      {(preview?.targets ?? []).slice(0, 8).map((target) => <Typography.Paragraph key={target.item_id}><Typography.Text>{target.label}</Typography.Text> · {target.relative_path} · {bytes(target.estimated_bytes)}</Typography.Paragraph>)}
       <Alert type="warning" showIcon message="确认范围" description="只处理以上可删除内容；不会删除应用、权限配置、数据库、证据、报告和凭据。" />
     </Modal>
   </Space>

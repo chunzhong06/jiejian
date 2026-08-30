@@ -23,18 +23,6 @@
 - `checksApi`
 主要 import / dot-source：`./http`, `./runs`
 
-### `product/frontend/src/api/contracts.ts`
-- `PermissionActionDto`
-- `PermissionBatchExpectationDto`
-- `PermissionBatchRuleDto`
-- `PermissionContractDto`
-- `PermissionEndpointDto`
-- `PermissionRelationDto`
-- `PermissionResourceDto`
-- `PermissionRuleDto`
-- `PermissionSubjectDto`
-- `SecurityEffectDto`
-
 ### `product/frontend/src/api/experience.ts`
 - `OfficialExperienceDto`
 - `OfficialExperienceMode`
@@ -379,39 +367,6 @@
 ### `product/frontend/src/features/identities/TestIdentityPage.tsx`
 - `TestIdentityPage`
 主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/testIdentities`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `antd`, `react`
-
-### `product/frontend/src/features/permissions/explorer/PermissionExplorer.tsx`
-- `PermissionExplorer`
-主要 import / dot-source：`../../../api/contracts`, `./PermissionGraph`, `./PermissionMatrix`, `./projection`, `antd`, `react`
-
-### `product/frontend/src/features/permissions/explorer/PermissionGraph.tsx`
-- `PermissionGraph`
-主要 import / dot-source：`../../../api/contracts`, `../../../app/presentation`, `./projection`, `./types`, `antd`, `react`
-
-### `product/frontend/src/features/permissions/explorer/PermissionMatrix.tsx`
-- `PermissionMatrix`
-主要 import / dot-source：`../../../app/presentation`, `./types`, `antd`, `react`
-
-### `product/frontend/src/features/permissions/explorer/projection.test.ts`
-主要 import / dot-source：`../../../api/contracts`, `./projection`, `vitest`
-
-### `product/frontend/src/features/permissions/explorer/projection.ts`
-- `buildFocusedRelationshipGraph`
-- `buildGlobalRelationshipGraph`
-- `buildPermissionMatrix`
-- `expandPermissionRules`
-主要 import / dot-source：`../../../api/contracts`, `../../../app/presentation`, `./types`
-
-### `product/frontend/src/features/permissions/explorer/types.ts`
-- `ExpandedPermissionRule`
-- `PermissionCellState`
-- `PermissionMatrixCell`
-- `PermissionMatrixModel`
-- `PermissionMatrixRow`
-- `RelationshipEdge`
-- `RelationshipGraphModel`
-- `RelationshipNode`
-主要 import / dot-source：`../../../api/contracts`
 
 ### `product/frontend/src/features/recording/ActionSafetySetupCard.tsx`
 - `ActionSafetySetupCard`

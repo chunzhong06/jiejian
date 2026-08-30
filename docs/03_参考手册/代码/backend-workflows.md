@@ -140,21 +140,6 @@
 - `class ContractGovernance`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.contracts.lifecycle`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `time`
 
-### `product/backend/workflows/contracts/http_binding_candidates.py`
-- `_HTTP_METHODS`
-- `_OPENAPI_MAX_BYTES`
-- `_PATH_FIELD`
-- `build_recording_http_binding_candidates(flow) -> HttpBindingCandidateBatch`
-- `build_openapi_http_binding_candidates(document, source_locator, max_bytes) -> HttpBindingCandidateBatch`
-主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.verification.permissions`, `product.protocols.http_binding_candidate`, `product.protocols.recording_flow`, `re`, `typing`
-
-### `product/backend/workflows/contracts/setup_minimizer.py`
-- `class SetupMinimizationModel`
-- `class SetupMinimizationInvariant`
-- `class SetupMinimizationResult`
-- `minimize_failure_setup(workflow, case, security_effect_fingerprint, reproduces) -> SetupMinimizationResult`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.coverage`, `product.protocols.web.workflow`, `pydantic`, `typing`
-
 ### `product/backend/workflows/control.py`
 - `class ProductFlowQuery`
 - `class ProductResultQuery`
@@ -309,14 +294,6 @@
 - `class ActionSafetySetupService`
 主要 import / dot-source：`.safety_candidates`, `__future__`, `collections.abc`, `dataclasses`, `pathlib`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.recording.request_store`, `product.backend.infra.storage`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording`, `product.protocols.recording_flow`, `pydantic`, `time`, `typing`
 
-### `product/backend/workflows/recording/sanitization.py`
-- `_MAX_STRUCTURED_DEPTH`
-- `_MAX_CAPTURED_HEADERS`
-- `_MAX_CAPTURED_HEADER_VALUE_CHARS`
-- `_SENSITIVE_FIELD`
-- `class RecordingSanitizer`
-主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.redaction`, `product.protocols.recording`, `re`, `typing`, `urllib.parse`
-
 ### `product/backend/workflows/recording/submission.py`
 - `class RecordingApplicationModel`
 - `class SubmitRecording`
@@ -357,7 +334,31 @@
 - `_STATUS_VIEW`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.verification.permissions`, `product.backend.workflows.results.presentation`, `pydantic`, `typing`
 
-### `product/backend/workflows/results/presentation.py`
+### `product/backend/workflows/results/presentation/__init__.py`
+主要 import / dot-source：`.builder`, `.explanations`, `.models`, `product.backend.core.verification.breakpoints`
+
+### `product/backend/workflows/results/presentation/builder.py`
+- `class ResultPresentationBuilder`
+- `build_result_presentation(view, snapshot, finding_views, permission_policy, change_context) -> ResultPresentation`
+- `_POLICY_RELATION_TEXT`
+- `locate_published_breakpoints(snapshot, evidence_items, traces_by_case) -> dict[tuple[str, str], BreakpointResult]`
+- `_WITNESS_LABELS`
+- `_BREAKPOINT_LABELS`
+- `_TRACE_KIND_LABELS`
+主要 import / dot-source：`.explanations`, `.models`, `__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.repair`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.continuity`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.backend.workflows.results.trace`, `product.protocols.execution_request`, `product.protocols.observer`, `pydantic`, `typing`
+
+### `product/backend/workflows/results/presentation/explanations.py`
+- `_ROLE_LABELS`
+- `_ACTION_LABELS`
+- `_RESOURCE_LABELS`
+- `_RELATION_LABELS`
+- `_SOURCE_PRESENTATION`
+- `_SOURCE_STEPS`
+- `_SOURCE_LIMITS`
+- `_SOURCE_FOUND_FACTS`
+主要 import / dot-source：`.models`, `__future__`, `product.backend.core.lifecycle`, `product.backend.core.repair`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.protocols.execution_request`, `product.protocols.observer`, `typing`
+
+### `product/backend/workflows/results/presentation/models.py`
 - `class PresentedCaseVerdict`
 - `class ResultEvidenceSource`
 - `class ResultWitnessItem`
@@ -369,22 +370,7 @@
 - `class ResultRelevantIntent`
 - `class ResultChangeVerification`
 - `class ResultPresentation`
-- `class ResultPresentationBuilder`
-- `build_result_presentation(view, snapshot, finding_views, permission_policy, change_context) -> ResultPresentation`
-- `_POLICY_RELATION_TEXT`
-- `_ROLE_LABELS`
-- `_ACTION_LABELS`
-- `_RESOURCE_LABELS`
-- `_RELATION_LABELS`
-- `_SOURCE_PRESENTATION`
-- `_SOURCE_STEPS`
-- `_SOURCE_LIMITS`
-- `_SOURCE_FOUND_FACTS`
-- `locate_published_breakpoints(snapshot, evidence_items, traces_by_case) -> dict[tuple[str, str], BreakpointResult]`
-- `_WITNESS_LABELS`
-- `_BREAKPOINT_LABELS`
-- `_TRACE_KIND_LABELS`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.repair`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.continuity`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.backend.workflows.results.trace`, `product.protocols.execution_request`, `product.protocols.observer`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.lifecycle`, `product.backend.core.repair`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.continuity`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.protocols.observer`, `pydantic`, `typing`
 
 ### `product/backend/workflows/results/published.py`
 - `class PublishedRunView`
@@ -498,9 +484,5 @@
 - `class TestIdentityView`
 - `class TestIdentityService`
 主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.test_identity`, `product.backend.infra.secrets.store`, `product.backend.infra.storage`, `pydantic`, `time`, `uuid`
-
-### `product/backend/workflows/worker_container.py`
-- `class WorkerContainer`
-主要 import / dot-source：`__future__`, `collections.abc`, `functools`, `os`, `pathlib`, `product.backend.infra.artifacts.run_publication`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.factory`, `product.backend.infra.runtime.jobs.queue`, `product.backend.infra.runtime.jobs.reconciliation`, `product.backend.infra.runtime.jobs.recording`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.paths`, `product.backend.infra.storage`, `product.backend.workflows.results.services`
 
 <!-- GENERATED:END -->

@@ -23,8 +23,11 @@
 | `scripts/dev/prepare.ps1` | Chromium、数据库、source receipt 和源码可启动组合 | Wheel 与普通产品启动展示 |
 | `scripts/dev/commands.ps1` | start/test/schema/docs/frontend-test/cli/shell 的能力组合 | 重复实现各模块已有能力 |
 | `scripts/dev/sample-test.ps1` | 自动 L5 的 PowerShell 入口、独立运行目录和 Harness 调用 | 产品 prepare、UIA 或十阶段编排实现 |
-| `scripts/dev/sample_test.py` | 从真实 `start.cmd` 开始的十阶段自动 L5、错误保真和资源收口 | Windows UI Automation 细节、生产领域语义 |
-| `scripts/dev/sample_test_windows.py` | Windows UIA 窗口证明、InvokePattern 与可访问性状态等待 | 前台激活、物理输入、CDP 或浏览器测试开关 |
+| `scripts/dev/sample_test/driver.py` | `official/validation/competition/all` 参数解析与 suite 分派 | 十阶段编排、30 Case 实现或 Windows UIA |
+| `scripts/dev/sample_test/official.py` | 从真实 `start.cmd` 开始的十阶段自动 L5、错误保真和资源收口 | Windows UI Automation 细节、生产领域语义 |
+| `scripts/dev/sample_test/validation.py` | 30 Case 编排与正式 Continuity/Breakpoint 算法调用 | private oracle 定义或 Domain Model 重写 |
+| `scripts/dev/sample_test/adapter.py`、`registry.py`、`oracle.py` | 公开事实适配、public registry 与 private oracle 外层验收 | 产品 Verdict 或目标授权输入 |
+| `scripts/dev/sample_test/windows.py` | Windows UIA 窗口证明、InvokePattern 与可访问性状态等待 | 前台激活、物理输入、CDP 或浏览器测试开关 |
 | `scripts/dev/package.ps1` | Windows x64 Portable 的工具准备、内部 Wheel 与固定 artifacts 总编排 | Base Tree/ZIP 细节、产品领域语义 |
 | `scripts/build/` | Hatch 前端映射与 Portable Base Tree、双 ZIP、校验和组装 | 开发命令分派、源码运行准备和产品领域逻辑 |
 | `scripts/start.ps1`、`scripts/startup/` | 六阶段 Windows 产品启动、展示、运行状态、源码回执消费和产品入口 | 开发命令总控、第二套 prepare |
@@ -39,7 +42,7 @@
 | 修改 Python/Conda/uv 或依赖同步 | `environment.yml`、`uv.lock`、`scripts/dev/python.ps1` | `dev.ps1 test tests/scripts/test_dev_script.py`；按需 `bootstrap` / `sync` / `prepare` |
 | 修改 Node/pnpm、前端工作区或 build | `scripts/dev/frontend.ps1`、`product/frontend/package.json`、`product/frontend/pnpm-lock.yaml` | `dev.ps1 frontend-test`；`dev.ps1 prepare -ForcePrepare` |
 | 新增或调整开发命令 | `scripts/dev.ps1`、`scripts/dev/commands.ps1` 和唯一所属模块 | `dev.ps1 test tests/scripts/test_dev_script.py`；直接运行目标命令 |
-| 修改自动 L5 | `scripts/dev/sample-test.ps1`、`scripts/dev/sample_test.py`、`scripts/dev/sample_test_windows.py` | `dev.ps1 test tests/scripts/test_sample_test.py tests/scripts/test_dev_script.py`；阶段收口时运行一次 `dev.ps1 sample-test` |
+| 修改自动 L5 | `scripts/dev/sample-test.ps1`、`scripts/dev/sample_test/` | `dev.ps1 test tests/scripts/test_sample_test.py tests/scripts/test_dev_script.py`；阶段收口时运行一次 `dev.ps1 sample-test` |
 | 修改 prepare 的 Chromium、数据库或源码回执 | `scripts/dev/prepare.ps1` | `dev.ps1 prepare`；相关脚本测试 |
 | 修改 Windows Banner、菜单、阶段或动画 | `scripts/start.ps1`、`scripts/startup/presentation.ps1`、`scripts/startup/runtime.ps1` | `dev.ps1 test tests/scripts/test_start_script.py`；自动 L5 与展示验收 |
 | 修改启动对源码回执的校验 | `scripts/startup/source.ps1`、`scripts/dev/prepare.ps1` | 启动脚本测试；`dev.ps1 prepare` |

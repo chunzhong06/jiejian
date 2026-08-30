@@ -91,9 +91,15 @@ def test_system_maintenance_api_previews_and_preserves_product_data(tmp_path: Pa
             "/api/system/maintenance/clear-assistant-cache",
             json={"schema_version": "1", "confirmed": False, "dry_run": True},
         )
+        plan_id = preview.json()["data"]["plan_id"]
         applied = client.post(
             "/api/system/maintenance/clear-assistant-cache",
-            json={"schema_version": "1", "confirmed": True, "dry_run": False},
+            json={
+                "schema_version": "1",
+                "confirmed": True,
+                "dry_run": False,
+                "plan_id": plan_id,
+            },
         )
 
     assert status.status_code == 200
@@ -104,6 +110,29 @@ def test_system_maintenance_api_previews_and_preserves_product_data(tmp_path: Pa
     assert applied.status_code == 200
     assert data_marker.read_text(encoding="utf-8") == "keep"
     assert not cache_marker.exists()
+
+
+def test_system_maintenance_unexpected_error_keeps_redacted_json_envelope(
+    tmp_path: Path,
+) -> None:
+    app = create_app(tmp_path / "var", start_worker=False)
+    app.state.context.maintenance.startup_maintenance = lambda: {"status": "completed"}
+
+    def failed_preview(operation: str):
+        raise OSError(r"C:\private\operator\secret.txt")
+
+    app.state.context.maintenance.preview = failed_preview
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/system/maintenance/clear-temporary",
+            json={"schema_version": "1", "confirmed": False, "dry_run": True},
+        )
+
+    payload = response.json()
+    assert response.status_code == 503
+    assert payload["schema_version"] == "1"
+    assert payload["error"]["code"] == "LOCAL_MAINTENANCE_FAILED"
+    assert "private" not in str(payload)
 
 def test_ready_does_not_wait_for_blocked_local_maintenance(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)

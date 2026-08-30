@@ -57,6 +57,48 @@ def _write_profile(tmp_path: Path, *, port: int | None = None) -> Path:
 def _register_project(app, profile_path: Path) -> dict[str, object]:
     return seed_project_from_generated_profile(app, profile_path)
 
+def _register_understanding(app, profile_path: Path) -> None:
+    """补齐 Run 冻结权限策略所需的已确认应用理解事实。"""
+
+    profile = parse_web_execution_profile(profile_path.read_bytes())
+    now_us = time.time_ns() // 1_000
+    with app.state.context.uow_factory() as work:
+        work.application_understanding.add(
+            ApplicationUnderstanding(
+                project_id=profile.project_id,
+                source_root=str(profile_path.parent.resolve()),
+                confirmed_endpoint=profile.target.scope.base_url,
+                endpoint_source_fingerprint="a" * 64,
+                endpoint_confirmed_at_us=now_us,
+                endpoint_last_checked_at_us=now_us,
+                endpoint_reachable=True,
+                role_candidates=(
+                    RoleCandidate(
+                        candidate_id=candidate_id("role", "member"),
+                        canonical_key="member",
+                        display_name="普通成员",
+                        confidence=CandidateConfidence.HIGH,
+                        decision=CandidateDecision.CONFIRMED,
+                        origin=CandidateOrigin.MANUAL,
+                    ),
+                ),
+                action_candidates=(
+                    ActionCandidate(
+                        candidate_id=candidate_id("action", "modify"),
+                        canonical_key="modify",
+                        display_name="修改资源",
+                        confidence=CandidateConfidence.HIGH,
+                        decision=CandidateDecision.CONFIRMED,
+                        origin=CandidateOrigin.MANUAL,
+                    ),
+                ),
+                revision=1,
+                created_at_us=now_us,
+                updated_at_us=now_us,
+            )
+        )
+        work.commit()
+
 def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionContract:
     contract = PermissionContract.model_validate_json(profile_path.with_name("contract.json").read_text(encoding="utf-8"), strict=True)
     draft = app.state.context.contracts.create_draft(
@@ -75,6 +117,7 @@ def _activate_contract(app, project_id: str, profile_path: Path) -> PermissionCo
 
 def _register_active_profile(app, client: TestClient, profile_path: Path) -> tuple[dict[str, object], PermissionContract, dict[str, object]]:
     project = _register_project(app, profile_path)
+    _register_understanding(app, profile_path)
     contract = _activate_contract(app, str(project["project_id"]), profile_path)
     profile = register_test_generated_profile(app, profile_path)
     return project, contract, profile.model_dump(mode="json")

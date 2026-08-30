@@ -153,14 +153,6 @@ from .web.profile import (
     required_web_secret_refs,
     web_execution_profile_sha256,
 )
-from .http_binding_candidate import (
-    HttpBindingCandidate,
-    HttpBindingCandidateBatch,
-    HttpBindingCandidateSource,
-    HttpProducerConsumerKind,
-    HttpProducerConsumerLink,
-    HttpResponseSchemaCandidate,
-)
 from .web.identity import (
     AuthTargetScope,
     BearerIdentityBinding,

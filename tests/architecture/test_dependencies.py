@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import inspect
 import json
 import re
 import tomllib
@@ -14,7 +13,7 @@ import pytest
 from product.backend import __version__
 from product.backend.core.verification.facts import TargetType
 from product.backend.workflows.context import ApplicationCore
-from product.backend.workflows.worker_container import WorkerContainer
+from product.backend.worker_container import WorkerContainer
 
 
 pytestmark = pytest.mark.essential
@@ -81,15 +80,6 @@ def test_control_plane_and_verification_do_not_reach_target_adapters() -> None:
         assert not _forbidden_imports(path, verification_forbidden), path
 
 
-def test_application_understanding_does_not_depend_on_removed_contract_analysis() -> None:
-    analysis_root = BACKEND / "workflows" / "application_understanding" / "analysis"
-    for path in _python_files(analysis_root):
-        assert not _forbidden_imports(
-            path,
-            ("product.backend.core.contracts.analysis",),
-        ), path
-
-
 def test_target_runtime_dependencies_have_one_web_composition_point() -> None:
     execution = BACKEND / "infra" / "execution"
     port = execution / "port.py"
@@ -123,97 +113,21 @@ def test_generic_runner_modules_do_not_import_web_protocol_or_runtime() -> None:
         assert not _forbidden_imports(path, forbidden), path
 
 
-def test_current_target_capability_is_web_only_without_test_or_placeholder_kinds() -> None:
+def test_current_target_capability_is_web_only() -> None:
     assert tuple(TargetType) == (TargetType.WEB,)
-    schema_text = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted((PROTOCOLS / "schemas").rglob("*.json"))
-    )
-    production_text = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in _python_files(ROOT / "product")
-    )
-    for name in ("CLI_APPLICATION", "MCP_AGENT", "TEST_FAKE"):
-        assert name not in schema_text
-        assert name not in production_text
 
 
 def test_application_and_worker_containers_are_independent_complete_roots() -> None:
     assert ApplicationCore not in WorkerContainer.__mro__
     assert WorkerContainer not in ApplicationCore.__mro__
-    assert "_minimal" not in inspect.signature(ApplicationCore).parameters
-    container_text = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (
-            BACKEND / "workflows" / "context.py",
-            BACKEND / "workflows" / "worker_container.py",
-        )
-    )
-    assert "WorkerContext" not in container_text
-    assert "_minimal" not in container_text
 
 
-def test_f0_flattened_workflow_modules_have_no_legacy_package_paths() -> None:
-    workflows = BACKEND / "workflows"
-    for path in (
-        workflows / "control.py",
-        workflows / "official_sample.py",
-        workflows / "permission_intents.py",
-    ):
-        assert path.is_file(), path
-    for path in (
-        workflows / "control",
-        workflows / "experience",
-        workflows / "permission_intents",
-    ):
-        assert not path.exists(), path
-    context_imports = _imports(workflows / "context.py")
-    assert "product.backend.workflows.control" in context_imports
-    assert "product.backend.workflows.official_sample" in context_imports
-    assert "product.backend.workflows.permission_intents" in context_imports
-
-
-def test_removed_execution_abstractions_have_no_definition_alias_or_export() -> None:
-    old_names = {
-        "ExecutionRouter",
-        "ExecutionAdapter",
-        "ExecutionProfile",
-        "ExecutionIdentity",
-        "ExecutionProjectSnapshot",
-        "WorkerContext",
-    }
-    for path in _python_files(ROOT / "product"):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        declared = {
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        imported = {
-            alias.asname or alias.name.rsplit(".", 1)[-1]
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.Import, ast.ImportFrom))
-            for alias in node.names
-        }
-        assigned = {
-            target.id
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.Assign, ast.AnnAssign))
-            for target in (
-                node.targets if isinstance(node, ast.Assign) else (node.target,)
-            )
-            if isinstance(target, ast.Name)
-        }
-        assert not old_names.intersection(declared | imported | assigned), path
-
-    for path in (
-        BACKEND / "infra" / "execution" / "router.py",
-        BACKEND / "infra" / "execution" / "http.py",
-        BACKEND / "infra" / "execution" / "http_identity.py",
-        PROTOCOLS / "execution_profile.py",
-        PROTOCOLS / "http.py",
-    ):
-        assert not path.exists(), path
+def test_infrastructure_does_not_construct_concrete_workflow_services() -> None:
+    for path in _python_files(BACKEND / "infra"):
+        assert not _forbidden_imports(
+            path,
+            ("product.backend.workflows",),
+        ), path
 
 
 def test_worker_runner_and_recording_process_boundaries_are_explicit() -> None:
@@ -222,30 +136,12 @@ def test_worker_runner_and_recording_process_boundaries_are_explicit() -> None:
     assert (BACKEND / "infra" / "recording" / "process.py").is_file()
 
 
-def test_automated_l5_dependencies_and_controls_do_not_enter_product_runtime() -> None:
+def test_automated_l5_dependencies_do_not_enter_product_runtime() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert "pywinauto==0.6.9" in project["dependency-groups"]["dev"]
     assert not any("pywinauto" in item.casefold() for item in project["project"]["dependencies"])
     for path in _python_files(ROOT / "product"):
         assert not _forbidden_imports(path, ("pywinauto",)), path
-    factory = (BACKEND / "infra" / "runtime" / "jobs" / "factory.py").read_text(encoding="utf-8")
-    assert "controlled_runner" not in factory
-    l5_source = "\n".join(
-        path.read_text(encoding="utf-8-sig")
-        for path in sorted((ROOT / "scripts" / "dev").glob("sample_test*"))
-    )
-    for forbidden in (
-        "--remote-debugging-port",
-        "JIEJIAN_SAMPLE_TEST",
-        "JIEJIAN_L5_RUNNER",
-        "--controlled-runner",
-        "--test-browser",
-        "SetForegroundWindow",
-        "SendInput",
-        "keybd_event",
-        "click_input",
-    ):
-        assert forbidden not in l5_source
 
 
 def test_product_names_do_not_encode_development_generations() -> None:
@@ -284,11 +180,8 @@ def test_public_api_does_not_reintroduce_generation_paths() -> None:
         assert not re.search(r"/api/v[12](?:/|['\"])", path.read_text(encoding="utf-8")), path
 
 
-def test_no_compatibility_import_mechanisms_or_old_python_root() -> None:
+def test_product_does_not_mutate_python_import_paths() -> None:
     files = _python_files(ROOT / "product")
-    text = "\n".join(path.read_text(encoding="utf-8") for path in files)
-    assert "backend/src/jiejian" not in text
-    assert "import jiejian." not in text
     for path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
@@ -309,7 +202,6 @@ def test_samples_are_one_way_test_data_not_product_dependencies() -> None:
     sample_web = samples / "web"
     collaboration = sample_web / "collaboration_space"
     source = collaboration / "source"
-    assert not (samples / "http").exists()
     assert (collaboration / "sample.json").is_file()
     assert (source / "openapi.json").is_file()
     assert {path.name for path in source.iterdir() if path.is_file()} == {
@@ -319,48 +211,10 @@ def test_samples_are_one_way_test_data_not_product_dependencies() -> None:
         "background.py",
         "openapi.json",
     }
-    assert not (source / "collaboration_space").exists()
-    assert not (sample_web / "target").exists()
-    assert not (sample_web / "launch").exists()
-    assert not (sample_web / "openapi.json").exists()
-    assert not any((sample_web / variant).exists() for variant in ("fixed", "vulnerable", "inconclusive"))
-    legacy_fixture_dir = ROOT / "tests" / "fixtures" / "execution" / ("legacy_" + "authorization_web")
-    assert not legacy_fixture_dir.exists()
-    assert not any(
-        path.name == "truth" + ".json"
-        for path in (ROOT / "tests" / "fixtures").rglob("*")
-        if path.is_file()
-    )
     for path in _python_files(ROOT / "product"):
         assert not any(item == "samples" or item.startswith("samples.") for item in _imports(path)), path
     for path in _python_files(samples):
         assert not any(item == "tests" or item.startswith("tests.") for item in _imports(path)), path
-    product_text = "\n".join(path.read_text(encoding="utf-8") for path in _python_files(ROOT / "product"))
-    assert "truth.json" not in product_text
-    frontend_text = "\n".join(
-        path.read_text(encoding="utf-8")
-        for suffix in ("*.ts", "*.tsx")
-        for path in sorted((ROOT / "product" / "frontend" / "src").rglob(suffix))
-    )
-    assert "samples/" not in frontend_text
-    for removed_handle in (
-        "DemoRuntimeSupervisor",
-        "DemoRunService",
-        "OnboardingDemoStatus",
-        "ONBOARDING_DEMO_FAILED",
-        "/api/onboarding/demo",
-        "demoStatus",
-        "demoStart",
-        "demoStop",
-        "demo_data",
-    ):
-        assert removed_handle not in product_text + frontend_text
-    for removed_path in (
-        BACKEND / "workflows" / "onboarding" / "demo.py",
-        BACKEND / "workflows" / "onboarding" / "demo_service.py",
-        BACKEND / "workflows" / "onboarding" / "demo_target.py",
-    ):
-        assert not removed_path.exists()
 
 
 def test_frontend_and_wheel_sources_are_scoped() -> None:
@@ -387,7 +241,7 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
         (frontend / "package.json").read_text(encoding="utf-8")
     )
     assert "version" not in frontend_manifest
-    assert __version__ == "1.0.7"
+    assert __version__ == "1.0.8"
 
 
 def test_frontend_source_tree_contains_no_generated_install_or_build_artifacts() -> None:

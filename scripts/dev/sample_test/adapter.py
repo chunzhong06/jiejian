@@ -41,7 +41,7 @@ from product.backend.core.verification.trace import (
     TraceEvent,
     TraceEventKind,
 )
-from sample_test_registry import PublicValidationCase
+from .registry import PublicValidationCase
 
 
 _TRACE_KIND_ALIASES = {

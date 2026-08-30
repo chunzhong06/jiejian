@@ -49,14 +49,14 @@ from product.backend.core.verification.permissions.evaluation import (
     CaseDecisionInput,
     evaluate_permission_case,
 )
-from sample_test_oracle import OracleEvaluation, PrivateOracleEvaluator
-from sample_test_registry import (
+from .adapter import build_validation_domain_bundle
+from .oracle import OracleEvaluation, PrivateOracleEvaluator
+from .registry import (
     PublicValidationCase,
     ValidationCaseResult,
     load_public_registry,
     public_registry_payload,
 )
-from sample_test_validation_adapter import build_validation_domain_bundle
 
 
 _VERDICT = {

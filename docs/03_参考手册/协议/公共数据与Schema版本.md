@@ -22,7 +22,6 @@
 | `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 5 |
 | `ReportPackageManifest` | `report.py` | `schemas/reports/report-package-manifest.schema.json` | 1 |
 | `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
-| `HttpBindingCandidateBatch` | `product/protocols/http_binding_candidate.py` | `schemas/execution/http-binding-candidate.schema.json` | 1 |
 | `RunnerProgressEvent` | `product/backend/infra/runtime/runner/progress.py` | 无；内部有界 JSONL reader | 1 |
 
 API `ApiResponse` 根格式为字符串 1，前端必须先严格验证该最外层版本再读取 `data` 或脱敏错误；未知或缺失版本直接失败。`HealthResponse`、`ReadyResponse`、各独立请求体、运行配置 `Settings` 和 CLI `DoctorReport` 也为 1。ApplicationUnderstanding、ApplicationConnectionView、EndpointDiscoveryResult、ProjectReadiness、AIAssistanceSettings、GuidanceSnapshot、AssistantGuidanceView、ErrorDiagnosis、LLMModelCatalog、LLMProfileView 和其他 `ApiResponse.data` 或 error 内部视图不重复声明版本。它们的 Python 真源位于相应 API 或运行时入口，目前没有 checked-in JSON Schema。Sample 的 `scenario.json`、`truth.json`、`contract.json`、`profile.json` 是当前 Web V1 演示根文档，格式版本统一为 1；样例不扩展 Verdict 覆盖范围。
@@ -68,7 +67,6 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/contracts/normalized-permission-plan.schema.json`
 - `product/protocols/schemas/contracts/permission-contract.schema.json`
 - `product/protocols/schemas/contracts/permission-mutation-plan.schema.json`
-- `product/protocols/schemas/execution/http-binding-candidate.schema.json`
 - `product/protocols/schemas/execution/http.schema.json`
 - `product/protocols/schemas/execution/web-execution-profile.schema.json`
 - `product/protocols/schemas/identity/identity-preparation-request.schema.json`

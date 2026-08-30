@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from product.backend.workflows.recording.sanitization import RecordingSanitizer
+from product.backend.core.recording_sanitization import RecordingSanitizer
 from product.protocols import RecordingBudget
 
 

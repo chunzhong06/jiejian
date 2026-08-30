@@ -23,7 +23,7 @@ import tempfile
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
@@ -34,7 +34,6 @@ from product.backend.infra.runtime.process.environment import ProcessEnvironment
 from product.backend.infra.runtime.process.tree import release_process_tree
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.protocols import RECORDING_RESULT_MAX_BYTES, RecordingRunnerRequest, RecordingRunnerResult, canonical_recording_json_bytes, parse_recording_result, required_recording_secret_names
-from product.backend.workflows.recording.submission import RecordingSubmission, RecordingCompletionResult
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.recording.control import control_paths_for_attempt
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
@@ -42,6 +41,21 @@ from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 _CANCEL_PATH_ENV = "JIEJIAN_RECORDING_CANCEL_FILE"
 _ATTEMPT_DIR_ENV = "JIEJIAN_RECORDING_ATTEMPT_DIR"
 logger = logging.getLogger("jiejian.runtime.recording_job")
+
+
+class RecordingSubmissionPort(Protocol):
+    """Infra Handler 只依赖消费 fenced 结果这一条应用能力。"""
+
+    def consume_result(
+        self,
+        *,
+        job_id: str,
+        lease_owner: str,
+        fencing_token: int,
+        result: RecordingRunnerResult,
+        now_us: int,
+        known_secrets: Sequence[str],
+    ) -> Any: ...
 
 
 class RecordingJobHandler:
@@ -54,7 +68,7 @@ class RecordingJobHandler:
         lease_owner: str,
         uow_factory: Callable[..., StorageUnitOfWork],
         attempts: JobAttemptPort,
-        application: RecordingSubmission,
+        application: RecordingSubmissionPort,
         request_store: RecordingRequestStore,
         cancel_path_for: Callable[[Path, JobRecord], Path],
         controlled_runner: Callable[
@@ -94,7 +108,7 @@ class RecordingJobHandler:
             termination_grace_seconds=termination_grace_seconds,
         )
 
-    def run_job(self, job_id: str) -> RecordingCompletionResult | None:
+    def run_job(self, job_id: str) -> Any | None:
         """领取并执行录制任务；未取得租约时返回 ``None``，失败会落入受控任务终态。"""
 
         now_us = self._utc_now_us()

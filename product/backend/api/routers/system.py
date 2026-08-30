@@ -58,7 +58,15 @@ def build_system_router(
     def maintenance_status() -> JSONResponse:
         """读取三类可清理统计与永不进入普通清理的受保护摘要。"""
 
-        return data_response(context.maintenance.status())
+        try:
+            return data_response(context.maintenance.status())
+        except JiejianError:
+            raise
+        except Exception:
+            raise JiejianError(
+                ErrorCode.LOCAL_MAINTENANCE_FAILED,
+                "本地运行数据状态读取失败",
+            ) from None
 
     @router.post("/api/system/maintenance/{operation}", response_model=ApiResponse)
     def maintenance_operation(
@@ -71,15 +79,34 @@ def build_system_router(
         ],
         body: MaintenanceOperationRequest,
     ) -> JSONResponse:
-        """统一执行 GUI/CLI 同语义的预览、确认和维护操作。"""
+        """预览冻结计划；确认时只执行同一 plan_id 中的候选。"""
 
-        return data_response(
-            context.maintenance.operate(
-                operation,
-                confirmed=body.confirmed,
-                dry_run=body.dry_run,
-            )
-        )
+        try:
+            if body.confirmed and not body.dry_run:
+                if body.plan_id is None:
+                    raise JiejianError(
+                        ErrorCode.INPUT_INVALID,
+                        "确认维护操作需要预览返回的 plan_id",
+                    )
+                result = context.maintenance.execute(
+                    body.plan_id,
+                    expected_scope=operation,
+                )
+            elif not body.confirmed and body.dry_run:
+                result = context.maintenance.preview(operation)
+            else:
+                raise JiejianError(
+                    ErrorCode.INPUT_INVALID,
+                    "本地维护操作状态无效",
+                )
+            return data_response(result)
+        except JiejianError:
+            raise
+        except Exception:
+            raise JiejianError(
+                ErrorCode.LOCAL_MAINTENANCE_FAILED,
+                "本地运行数据维护失败",
+            ) from None
 
     @router.post("/api/system/shutdown", response_model=ApiResponse, status_code=202)
     def shutdown() -> JSONResponse:
@@ -120,3 +147,4 @@ class MaintenanceOperationRequest(ApiModel):
     schema_version: Literal["1"]
     confirmed: bool = False
     dry_run: bool = True
+    plan_id: str | None = None

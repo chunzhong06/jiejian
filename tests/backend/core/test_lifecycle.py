@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from product.backend.core.lifecycle import (
-    CaseLifecycle,
     CaseVerdict,
     ContractStatus,
     DomainModel,
@@ -37,7 +36,6 @@ pytestmark = pytest.mark.essential
             },
         ),
         (RunVerdict, {"PASS", "BLOCK", "INCONCLUSIVE"}),
-        (CaseLifecycle, {"PLANNED", "SNAPSHOTTED", "EXECUTED", "OBSERVED", "CLEANED", "DONE", "ERROR"}),
         (CaseVerdict, {"SAFE", "VULNERABLE", "INCONCLUSIVE", "SKIPPED", "ERROR"}),
         (JobState, {"PENDING", "RUNNING", "RETRY_WAIT", "SUCCEEDED", "FAILED", "CANCELLED"}),
     ],

@@ -250,36 +250,49 @@ def test_frontend_install_build_test_and_package_stay_outside_source_tree() -> N
 def test_sample_test_routes_to_real_start_cmd_with_a_fresh_var_directory() -> None:
     dev = _text(DEV)
     function = _text(MODULE_ROOT / "sample-test.ps1")
-    driver_path = MODULE_ROOT / "sample_test.py"
+    package_root = MODULE_ROOT / "sample_test"
+    driver_path = package_root / "driver.py"
+    official_path = package_root / "official.py"
     driver = _text(driver_path)
+    official = _text(official_path)
     assert '"sample-test" { Invoke-SampleTest $toolchain }' in dev
     assert "Prepare-SourceRuntime" not in function
     assert "Exit-PrepareLock" in function
     assert '"test\\sample-test\\{0}"' in function
-    assert '"scripts\\dev\\sample_test.py"' in function
+    assert '"scripts\\dev\\sample_test\\driver.py"' in function
     assert '"official", "validation", "competition", "all"' in function
     assert '"--suite"' in function
     assert "Resolve-DevelopmentNode $Toolchain $true" in function
     assert '"--source-receipt"' not in function
     assert '"--frontend-dir"' not in function
-    assert "_start_product(root, var_dir)" in driver
-    assert 'root / "start.cmd"' in driver
-    assert 'CONTROL_PORT = 8765' in driver
-    assert '"L5_CONTROL_PORT_OCCUPIED"' in driver
-    start_product = driver[driver.index("def _start_product(") : driver.index("def _wait_product_ready(")]
-    run_cli = driver[driver.index("def _run_cli(") : driver.index("def _assert_cli_equivalence(")]
+    assert "_start_product(root, var_dir)" in official
+    assert 'root / "start.cmd"' in official
+    assert 'CONTROL_PORT = 8765' in official
+    assert '"L5_CONTROL_PORT_OCCUPIED"' in official
+    start_product = official[
+        official.index("def _start_product(") : official.index("def _wait_product_ready(")
+    ]
+    run_cli = official[
+        official.index("def _run_cli(") : official.index("def _assert_cli_equivalence(")
+    ]
     assert '"product.backend.cli"' not in start_product
     assert '"product.backend.cli"' in run_cli
     assert not (ROOT / "scripts" / "sample_test.py").exists()
     assert driver_path.is_file()
+    assert official_path.is_file()
+    assert "def _start_product(" not in driver
+    assert "def run_suite(" in driver
+    for name in ("adapter", "registry", "oracle", "validation", "windows"):
+        assert (package_root / f"{name}.py").is_file()
+    assert not tuple(MODULE_ROOT.glob("sample_test*.py"))
     assert "prepare_formal_project" not in function
     assert "_persist_export_recording" not in function
-    assert '"JIEJIAN_VAR_DIR": str(var_dir)' in driver
-    assert "require_python_environment(environment)" in driver
-    assert "client.bind_page(page)" in driver
-    assert "context.cookies" not in driver
-    assert "prepare_formal_project" not in driver
-    assert "_persist_export_recording" not in driver
+    assert '"JIEJIAN_VAR_DIR": str(var_dir)' in official
+    assert "require_python_environment(environment)" in official
+    assert "client.bind_page(page)" in official
+    assert "context.cookies" not in official
+    assert "prepare_formal_project" not in official
+    assert "_persist_export_recording" not in official
 
 
 def test_frontend_editor_reuses_only_controlled_dependency_workspace() -> None:

@@ -35,7 +35,7 @@
 
 ### `product/backend/infra/runtime/jobs/factory.py`
 - `class WorkerHandlerFactory`
-主要 import / dot-source：`__future__`, `collections.abc`, `pathlib`, `product.backend.infra.artifacts.run_packages`, `product.backend.infra.artifacts.scan_job`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.recording`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.jobs.verification`, `product.backend.infra.storage`, `product.backend.workflows.recording.submission`, `product.backend.workflows.results.services`
+主要 import / dot-source：`__future__`, `collections.abc`, `pathlib`, `product.backend.infra.artifacts.run_packages`, `product.backend.infra.artifacts.scan_job`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.recording`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.jobs.verification`, `product.backend.infra.storage`
 
 ### `product/backend/infra/runtime/jobs/handlers.py`
 - `class JobHandler`
@@ -90,9 +90,10 @@
 ### `product/backend/infra/runtime/jobs/recording.py`
 - `_CANCEL_PATH_ENV`
 - `_ATTEMPT_DIR_ENV`
+- `class RecordingSubmissionPort`
 - `class RecordingJobHandler`
 - `class RecordingJobTargetHandler`
-主要 import / dot-source：`__future__`, `collections.abc`, `logging`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.recording.control`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.control`, `product.backend.infra.runtime.process.environment`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.storage`, `product.backend.workflows.recording.submission`, `product.protocols`, `subprocess`, `tempfile`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `logging`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.recording.control`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.control`, `product.backend.infra.runtime.process.environment`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.storage`, `product.protocols`, `subprocess`, `tempfile`, `time`, `typing`
 
 ### `product/backend/infra/runtime/jobs/recovery.py`
 - `_TERMINAL_JOB_STATES`
@@ -114,8 +115,9 @@
 
 ### `product/backend/infra/runtime/jobs/verification.py`
 - `_LOGGER`
+- `class ResultFinalizerPort`
 - `class VerificationRunJobHandler`
-主要 import / dot-source：`__future__`, `collections.abc`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.artifacts.run_packages`, `product.backend.infra.artifacts.run_publication`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.reconciliation`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.runner.supervisor`, `product.backend.infra.storage`, `product.backend.workflows.results.finalizer`
+主要 import / dot-source：`__future__`, `collections.abc`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.artifacts.run_packages`, `product.backend.infra.artifacts.run_publication`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.reconciliation`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.runner.supervisor`, `product.backend.infra.storage`, `typing`
 
 ### `product/backend/infra/runtime/logging.py`
 - `class JsonFormatter`
@@ -127,9 +129,12 @@
 - `_LOG_MAX_AGE_SECONDS`
 - `_LOG_KEEP_PER_CATEGORY`
 - `_SESSION_MTIME_TOLERANCE_SECONDS`
+- `_PLAN_TTL_SECONDS`
 - `_OPERATIONS`
+- `class MaintenanceCandidate`
+- `class MaintenancePlan`
 - `class LocalMaintenanceService`
-主要 import / dot-source：`__future__`, `collections.abc`, `contextlib`, `json`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.lock`, `shutil`, `time`
+主要 import / dot-source：`__future__`, `collections.abc`, `contextlib`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.lock`, `secrets`, `shutil`, `time`
 
 ### `product/backend/infra/runtime/paths.py`
 - `class RuntimePaths`

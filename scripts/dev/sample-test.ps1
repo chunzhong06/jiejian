@@ -22,7 +22,7 @@ function Invoke-SampleTest($Toolchain) {
     Invoke-External "sample-test" @(
         $script:Python,
         "-B",
-        (Join-Path $script:ProjectRoot "scripts\dev\sample_test.py"),
+        (Join-Path $script:ProjectRoot "scripts\dev\sample_test\driver.py"),
         "--root",
         $script:ProjectRoot,
         "--var-dir",

@@ -37,7 +37,7 @@
 | 修改 Flow 编译 | `workflows/recording/flow_compiler.py`、`product/protocols/recording_flow.py` | `test_flow_compiler.py`、Recording protocol 测试 |
 | 修改资源、观察或恢复准备 | `safety_candidates.py`、`safety_setup.py`、`workflows/security_setup/` | [修改安全准备](../任务/修改安全准备.md)及两个 workflow 直接测试 |
 | 修改页面业务流程 | `product/frontend/src/features/recording/` | 对应 Vitest；必要时展示验收 |
-| 修改真实浏览器自动验收 | `scripts/dev/sample_test_windows.py` | 低成本 UIA/Recording 局部探针；最终一次 sample-test |
+| 修改真实浏览器自动验收 | `scripts/dev/sample_test/windows.py` | 低成本 UIA/Recording 局部探针；最终一次 sample-test |
 
 ## 正式生命周期与事实产物
 

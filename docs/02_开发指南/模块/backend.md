@@ -12,7 +12,7 @@
 
 ## 稳定入口与分层边界
 
-组合根是 `product/backend/workflows/context.py` 的 `ApplicationCore`。新增 GUI/CLI/API 能力前先确认它属于哪个 workflow；入口层不能绕过它直接拼 Repository 或 Adapter。
+GUI/CLI/API 的组合根是 `product/backend/workflows/context.py` 的 `ApplicationCore`；独立 Worker 的组合根是 `product/backend/worker_container.py` 的 `WorkerContainer`。新增控制面能力前先确认它属于哪个 workflow；入口层不能绕过组合根直接拼 Repository 或 Adapter，Infra 也不能反向创建具体 Workflow Service。
 
 | 位置 | 负责什么 | 不负责什么 |
 | --- | --- | --- |

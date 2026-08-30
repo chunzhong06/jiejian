@@ -534,7 +534,7 @@ def spawn_python_module(
 def _process_gate_root(environment: Mapping[str, str], cwd: Path) -> Path:
     var_dir = environment.get("JIEJIAN_VAR_DIR")
     if var_dir:
-        return RuntimePaths(Path(var_dir)).temp / "process-gates"
+        return RuntimePaths(Path(var_dir)).process_gates
     # 直接边界测试可能没有完整启动环境；生产进程始终由启动器注入 JIEJIAN_VAR_DIR。
     return cwd / ".jiejian-process-gates"
 

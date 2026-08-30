@@ -69,7 +69,6 @@
 - `class ContractStatus`
 - `class RunLifecycle`
 - `class RunVerdict`
-- `class CaseLifecycle`
 - `class CaseVerdict`
 - `class JobState`
 - `class DomainModel`
@@ -112,6 +111,14 @@
 - `_TRANSITIONS`
 - `transition_recording_state(recording, target, operator, occurred_at_us, reason_code, pending_terminal_state) -> Recording`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
+
+### `product/backend/core/recording_sanitization.py`
+- `_MAX_STRUCTURED_DEPTH`
+- `_MAX_CAPTURED_HEADERS`
+- `_MAX_CAPTURED_HEADER_VALUE_CHARS`
+- `_SENSITIVE_FIELD`
+- `class RecordingSanitizer`
+主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.redaction`, `product.protocols.recording`, `re`, `typing`, `urllib.parse`
 
 ### `product/backend/core/redaction.py`
 - `REDACTED`
@@ -223,17 +230,6 @@
 - `class BreakpointResult`
 - `class BreakpointLocator`
 主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.verification.continuity`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.trace`, `pydantic`, `re`
-
-### `product/backend/core/verification/collision.py`
-- `class CollisionModel`
-- `class CollisionAnomaly`
-- `class CollisionClue`
-- `class CollisionBudget`
-- `class CollisionObservation`
-- `class CollisionTrial`
-- `class CollisionExperimentResult`
-- `classify_collision_trials(sequential_semantics_valid, expected_repetitions, trials) -> CollisionExperimentResult`
-主要 import / dot-source：`__future__`, `collections`, `enum`, `product.backend.core.lifecycle`, `pydantic`, `typing`
 
 ### `product/backend/core/verification/continuity.py`
 - `_PUBLIC_ID`
@@ -367,14 +363,6 @@
 - `class BatchResourceExpectation`
 - `class BatchPermissionRule`
 主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `hashlib`, `json`, `pydantic`, `re`, `typing`
-
-### `product/backend/core/verification/sql_trace.py`
-- `class SqlTraceModel`
-- `sql_trace_advisory_sha256(value) -> str`
-- `class SqlStatementKind`
-- `class SqlTraceEvent`
-- `class SqlTraceAdvisory`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.verification.permissions`, `pydantic`, `typing`
 
 ### `product/backend/core/verification/trace.py`
 - `_PUBLIC_ID`

@@ -32,7 +32,6 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("contracts/normalized-permission-plan.schema.json", "product.backend.core.verification.permissions.contract:NormalizedPermissionPlan"),
     SchemaEntry("contracts/permission-contract.schema.json", "product.backend.core.verification.permissions.contract:PermissionContract"),
     SchemaEntry("contracts/permission-mutation-plan.schema.json", "product.backend.core.verification.permissions.coverage:PermissionMutationPlan"),
-    SchemaEntry("execution/http-binding-candidate.schema.json", "product.protocols.http_binding_candidate:HttpBindingCandidateBatch"),
     SchemaEntry("execution/http.schema.json", "product.protocols.web.request:HttpRequestTemplate"),
     SchemaEntry("execution/web-execution-profile.schema.json", "product.protocols.web.profile:WebExecutionProfile"),
     SchemaEntry("identity/identity-preparation-request.schema.json", "product.protocols.test_identity_preparation:IdentityPreparationRequest"),

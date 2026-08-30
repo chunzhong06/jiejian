@@ -130,6 +130,12 @@ class RuntimePaths:
         return self.root / "temp"
 
     @property
+    def process_gates(self) -> Path:
+        """子进程 source receipt 门禁；任何普通清理都不得触碰。"""
+
+        return self.temp / "process-gates"
+
+    @property
     def test(self) -> Path:
         return self.root / "test"
 
@@ -160,6 +166,7 @@ class RuntimePaths:
             self.app_logs,
             self.official_sample_logs,
             self.temp,
+            self.process_gates,
             self.test,
         ):
             path.mkdir(parents=True, exist_ok=True)

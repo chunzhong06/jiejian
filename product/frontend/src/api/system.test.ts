@@ -15,7 +15,7 @@ describe('系统维护 API', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await systemApi.maintenanceOperation('clear-logs', { confirmed: false, dry_run: true })
+    await systemApi.maintenanceOperation('clear-logs', { confirmed: true, dry_run: false, plan_id: 'plan_1' })
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/system/maintenance/clear-logs',
@@ -23,8 +23,9 @@ describe('系统维护 API', () => {
         method: 'POST',
         body: JSON.stringify({
           schema_version: '1',
-          confirmed: false,
-          dry_run: true,
+          confirmed: true,
+          dry_run: false,
+          plan_id: 'plan_1',
         }),
       }),
     )

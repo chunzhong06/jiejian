@@ -242,29 +242,6 @@ class LLMProfileUpdateRequest(ApiModel):
         return None if value is None else validate_secret_ref(value)
 
 
-class LLMProfileResponse(ApiModel):
-    profile_name: str = Field(pattern=PROFILE_NAME_PATTERN)
-    provider: LLMProviderType
-    model: str = Field(min_length=1, max_length=256)
-    reasoning_effort: str | None = Field(default=None, max_length=16)
-    allow_local_http: bool = False
-    base_url: str | None = Field(default=None, max_length=2048)
-    timeout_ms: int = Field(default=30_000, ge=100, le=300_000)
-    max_input_bytes: int = Field(default=131_072, ge=1, le=1_048_576)
-    max_output_bytes: int = Field(default=65_536, ge=1, le=1_048_576)
-    max_budget_microusd: int = Field(default=1_000_000, ge=0, le=1_000_000_000)
-    enabled: bool = True
-    secret_ref: str | None = Field(default=None, max_length=256)
-    created_at_us: int = Field(ge=0)
-    updated_at_us: int = Field(ge=0)
-    secret_configured: bool
-    connection_status: Literal["testing", "configured", "available", "unavailable", "unknown"] = "unknown"
-    tested_at_us: int | None = Field(default=None, ge=0)
-    duration_ms: int | None = Field(default=None, ge=0)
-    error_code: str | None = Field(default=None, max_length=64)
-    error_message: str | None = Field(default=None, max_length=256)
-
-
 class LLMDefaultProfileRequest(LLMProfileBase):
     schema_version: Literal["1"]
     # 普通保存的目标由全局设置服务端推导，不能由请求体选择 profile。

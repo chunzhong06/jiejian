@@ -2,28 +2,28 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
-from types import ModuleType
 from uuid import uuid4
 
 import pytest
 from playwright.sync_api import sync_playwright
 
 from product.backend.infra.runtime.process.identity import python_environment_report
+from scripts.dev.sample_test import adapter as adapter_module
+from scripts.dev.sample_test import driver as suite_driver
+from scripts.dev.sample_test import official
+from scripts.dev.sample_test import oracle as oracle_module
+from scripts.dev.sample_test import registry as registry_module
+from scripts.dev.sample_test import validation as validation_module
+from scripts.dev.sample_test import windows as windows_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DRIVER_PATH = ROOT / "scripts" / "dev" / "sample_test.py"
-WINDOWS_DRIVER_PATH = ROOT / "scripts" / "dev" / "sample_test_windows.py"
-REGISTRY_PATH = ROOT / "scripts" / "dev" / "sample_test_registry.py"
-ORACLE_PATH = ROOT / "scripts" / "dev" / "sample_test_oracle.py"
-VALIDATION_PATH = ROOT / "scripts" / "dev" / "sample_test_validation.py"
 COMMON_IDENTITY_NAMES = {
     "JIEJIAN_PYTHON_EXECUTABLE",
     "JIEJIAN_PYTHON_ENVIRONMENT_PATH",
@@ -33,36 +33,6 @@ COMMON_IDENTITY_NAMES = {
     "JIEJIAN_RUNTIME_MODE",
     "JIEJIAN_VAR_DIR",
 }
-
-
-def _load_module(path: Path, name: str) -> ModuleType:
-    sys.path.insert(0, str(path.parent))
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def _load_driver() -> ModuleType:
-    return _load_module(DRIVER_PATH, "jiejian_sample_test_driver")
-
-
-def _load_windows_driver() -> ModuleType:
-    return _load_module(WINDOWS_DRIVER_PATH, "jiejian_sample_test_windows_driver")
-
-
-def _load_registry() -> ModuleType:
-    return _load_module(REGISTRY_PATH, "jiejian_sample_test_registry")
-
-
-def _load_oracle() -> ModuleType:
-    return _load_module(ORACLE_PATH, "jiejian_sample_test_oracle")
-
-
-def _load_validation() -> ModuleType:
-    return _load_module(VALIDATION_PATH, "jiejian_sample_test_validation")
 
 
 def _fresh_real_probe_dir() -> Path:
@@ -113,7 +83,7 @@ def test_real_start_receipt_builds_complete_runtime_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     receipt_path, var_dir, frontend, browser = _write_receipt(tmp_path)
     for name in COMMON_IDENTITY_NAMES:
         monkeypatch.delenv(name, raising=False)
@@ -128,7 +98,7 @@ def test_real_start_receipt_builds_complete_runtime_identity(
 
 
 def test_source_receipt_rejects_a_different_var_directory(tmp_path: Path) -> None:
-    driver = _load_driver()
+    driver = official
     receipt_path, _var_dir, _frontend, _browser = _write_receipt(tmp_path)
     different = tmp_path / "different-var"
     different.mkdir()
@@ -141,7 +111,7 @@ def test_start_product_invokes_root_start_cmd_and_owns_its_process_tree(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     captured: dict[str, object] = {}
 
     class Process:
@@ -171,11 +141,14 @@ def test_sample_test_suite_keeps_no_argument_semantics_on_official(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
     calls: list[tuple[Path, Path]] = []
-    monkeypatch.setattr(driver, "run", lambda root, var_dir: calls.append((root, var_dir)))
+    monkeypatch.setattr(
+        suite_driver.official,
+        "run",
+        lambda root, var_dir: calls.append((root, var_dir)),
+    )
 
-    driver.run_suite(ROOT, tmp_path, "official")
+    suite_driver.run_suite(ROOT, tmp_path, "official")
 
     assert calls == [(ROOT, tmp_path)]
 
@@ -184,10 +157,9 @@ def test_sample_test_argument_parser_accepts_the_single_public_suite_form(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
     observed: list[str] = []
     monkeypatch.setattr(
-        driver,
+        suite_driver,
         "run_suite",
         lambda _root, _var_dir, suite: observed.append(suite),
     )
@@ -202,7 +174,7 @@ def test_sample_test_argument_parser_accepts_the_single_public_suite_form(
             sys,
             "argv",
             [
-                str(DRIVER_PATH),
+                str(Path(suite_driver.__file__)),
                 "--root",
                 str(ROOT),
                 "--var-dir",
@@ -210,7 +182,7 @@ def test_sample_test_argument_parser_accepts_the_single_public_suite_form(
                 *arguments,
             ],
         )
-        assert driver.main() == 0
+        assert suite_driver.main() == 0
     assert observed == [
         "official",
         "official",
@@ -221,7 +193,7 @@ def test_sample_test_argument_parser_accepts_the_single_public_suite_form(
 
 
 def test_validation_registry_has_stable_public_cases_and_allow_controls() -> None:
-    registry = _load_registry()
+    registry = registry_module
     cases = registry.load_public_registry(ROOT)
     payload = registry.public_registry_payload(ROOT, cases)
     encoded = json.dumps(payload, ensure_ascii=False)
@@ -269,10 +241,9 @@ def test_validation_registry_has_stable_public_cases_and_allow_controls() -> Non
 
 
 def test_private_oracle_is_outside_every_authorized_source_root_and_product_input() -> None:
-    registry = _load_registry()
-    _load_oracle()
+    registry = registry_module
     cases = registry.load_public_registry(ROOT)
-    evaluator_module = sys.modules["jiejian_sample_test_oracle"]
+    evaluator_module = oracle_module
     evaluator = evaluator_module.PrivateOracleEvaluator(ROOT, cases)
     public_payload = registry.public_registry_payload(ROOT, cases)
 
@@ -292,9 +263,8 @@ def test_private_oracle_is_outside_every_authorized_source_root_and_product_inpu
 
 
 def test_validation_adapter_only_translates_public_trace_structure() -> None:
-    registry = _load_registry()
-    _load_validation()
-    adapter = sys.modules["sample_test_validation_adapter"]
+    registry = registry_module
+    adapter = adapter_module
     case = registry.load_public_registry(ROOT)[0]
     identity_event = "validation-identity"
     delegation_event = "validation-delegation"
@@ -349,7 +319,7 @@ def test_validation_representatives_run_both_real_apps_without_public_oracle_lea
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    validation = _load_validation()
+    validation = validation_module
     continuity_calls = 0
     breakpoint_calls = 0
     real_assess = validation.assess_authorization_continuity
@@ -441,7 +411,7 @@ def test_validation_representatives_run_both_real_apps_without_public_oracle_lea
 def test_start_waits_for_source_prepare_before_control_ready(
     tmp_path: Path,
 ) -> None:
-    driver = _load_driver()
+    driver = official
 
     class ExitedProcess:
         @staticmethod
@@ -469,7 +439,7 @@ def test_cli_equivalence_uses_result_and_history_while_evidence_stays_api_owned(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     run_id = "run_current"
     evidence_index = [
         {"evidence_id": "evidence-a", "artifact_path": "artifacts/evidence/a.json"},
@@ -532,7 +502,7 @@ def test_cli_equivalence_uses_result_and_history_while_evidence_stays_api_owned(
 def test_recording_window_requires_a_unique_new_controlled_chromium(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    windows = _load_windows_driver()
+    windows = windows_module
     chromium = Path(sys.executable).resolve()
     fact = windows.WindowFact(22, 100, "协作空间 · 校园数字展馆", chromium)
 
@@ -566,7 +536,7 @@ def test_recording_window_requires_a_unique_new_controlled_chromium(
 def test_recording_ui_flow_uses_invoke_and_waits_for_revoked_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    windows = _load_windows_driver()
+    windows = windows_module
     events: list[tuple[str, str]] = []
     driver = windows.RecordingWindowDriver(frozenset(), Path(sys.executable))
     driver._window = object()
@@ -602,7 +572,7 @@ def test_recording_ui_flow_uses_invoke_and_waits_for_revoked_state(
 
 
 def test_text_wait_accepts_repeated_state_without_relaxing_buttons() -> None:
-    windows = _load_windows_driver()
+    windows = windows_module
     criteria: list[dict[str, object]] = []
 
     class Control:
@@ -635,7 +605,7 @@ def test_text_wait_accepts_repeated_state_without_relaxing_buttons() -> None:
 def test_failure_cleanup_uses_public_stop_cancel_and_shutdown_without_overwriting_primary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     state = driver.HarnessState(
         stage=4,
         recording_id="rec_0123456789abcdef0123456789abcdef",
@@ -693,7 +663,7 @@ def test_occupied_default_port_writes_failure_without_touching_the_existing_cont
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     run_dir = tmp_path / "occupied-port"
     run_dir.mkdir()
     monkeypatch.setattr(driver, "_port_open", lambda _port: True)
@@ -715,7 +685,7 @@ def test_occupied_default_port_writes_failure_without_touching_the_existing_cont
 def test_recording_driver_failure_remains_the_primary_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     state = driver.HarnessState(stage=4)
 
     class Client:
@@ -766,7 +736,7 @@ def test_runtime_lock_receipts_do_not_count_as_active_locks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     runtime = tmp_path / "runtime"
     serve_lock = runtime / "locks" / "serve.lock"
     worker_lock = runtime / "workers" / "job_recording.lock"
@@ -787,7 +757,7 @@ def test_runtime_lock_receipts_do_not_count_as_active_locks(
 
 
 def test_failure_artifact_separates_primary_error_and_cleanup_facts(tmp_path: Path) -> None:
-    driver = _load_driver()
+    driver = official
     audit = tmp_path / "audit"
     audit.mkdir()
     driver._write_failure(
@@ -819,7 +789,7 @@ def test_failure_artifact_separates_primary_error_and_cleanup_facts(tmp_path: Pa
 
 
 def test_completed_recording_is_a_closed_cleanup_state() -> None:
-    driver = _load_driver()
+    driver = official
 
     assert driver._recording_state_closed(
         {
@@ -833,7 +803,7 @@ def test_completed_recording_is_a_closed_cleanup_state() -> None:
 def test_unavailable_run_result_has_stable_failure_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     monkeypatch.setattr(
         driver,
         "_wait_for",
@@ -858,7 +828,7 @@ def test_unavailable_run_result_has_stable_failure_identity(
     reason="真实源码准备隔离只在明确授权的交互用户环境运行",
 )
 def test_real_source_prepare_reuses_shared_tools_across_two_fresh_runtimes() -> None:
-    driver = _load_driver()
+    driver = official
     command_shell = os.environ.get("COMSPEC")
     assert command_shell and Path(command_shell).is_file()
     shared = (ROOT / "var" / "development").resolve()
@@ -937,7 +907,7 @@ def test_real_source_prepare_reuses_shared_tools_across_two_fresh_runtimes() -> 
 def test_real_start_reaches_workbench_and_shuts_down_safely() -> None:
     """用正式 start.cmd 验证最小产品启动链，不进入 Recording 或完整 L5。"""
 
-    driver = _load_driver()
+    driver = official
     assert not driver._port_open(driver.CONTROL_PORT), "默认控制端口已被占用"
     run_dir = _fresh_real_probe_dir()
     process = None
@@ -1000,7 +970,7 @@ def test_real_start_reaches_workbench_and_shuts_down_safely() -> None:
     reason="真实 Windows UIA capability 只在明确授权的交互用户环境运行",
 )
 def test_real_uia_capability_invokes_html_button_and_reads_status(tmp_path: Path) -> None:
-    windows = _load_windows_driver()
+    windows = windows_module
     receipt = json.loads((ROOT / "var" / "runtime" / "source" / "receipt.json").read_text(encoding="utf-8"))
     chromium = Path(receipt["playwright"]["executable"]).resolve()
     browser_root = Path(os.environ["PLAYWRIGHT_BROWSERS_PATH"]).resolve()
@@ -1049,7 +1019,7 @@ def test_real_uia_capability_invokes_html_button_and_reads_status(tmp_path: Path
     reason="真实 Windows Recording 局部闭环只在明确授权的交互用户环境运行",
 )
 def test_real_recording_ui_automation_closes_before_full_l5() -> None:
-    driver = _load_driver()
+    driver = official
     run_dir = _fresh_real_probe_dir()
 
     driver.run(ROOT, run_dir, stop_after_recording=True)
@@ -1070,7 +1040,7 @@ def test_real_recording_ui_automation_closes_before_full_l5() -> None:
 def test_real_recording_driver_failure_keeps_primary_error_and_closes_resources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    driver = _load_driver()
+    driver = official
     run_dir = _fresh_real_probe_dir()
 
     def fail_driver(_self) -> None:

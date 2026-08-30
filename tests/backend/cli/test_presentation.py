@@ -49,12 +49,14 @@ def test_result_presentation_uses_surface_and_real_effect_language(capsys) -> No
         inconclusive_count=0,
         uncovered_count=0,
         execution_problem=None,
+        repair_verification=None,
         issues=(SimpleNamespace(
             finding_id="finding_demo",
             title="成员账号不应对文档执行修改",
             conclusion="发现权限问题",
             explanation="页面或接口虽然显示已拒绝，但外部可信观察确认真实资源已经变化；权限限制没有真正阻止修改，表面拒绝没有阻止真实副作用。",
             verdict=SimpleNamespace(value="VULNERABLE"),
+            repair_requirement=None,
             evidence_sources=(
                 SimpleNamespace(role="KEY", status="FOUND", label="数据库状态"),
                 SimpleNamespace(role="SUPPORTING", status="UNAVAILABLE", label="审计日志"),

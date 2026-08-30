@@ -6,7 +6,7 @@ import inspect
 
 from product.backend.workflows.context import ApplicationCore
 from product.backend.infra.runtime.jobs.targets import JobTargetType
-from product.backend.workflows.worker_container import WorkerContainer
+from product.backend.worker_container import WorkerContainer
 
 
 def test_application_and_worker_containers_are_independent_and_complete(tmp_path) -> None:

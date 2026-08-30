@@ -55,6 +55,8 @@ def _status_for(code: str) -> int:
         ErrorCode.LLM_PROFILE_STORAGE_FAILED.value,
         ErrorCode.ONBOARDING_SELECTOR_UNAVAILABLE.value,
         ErrorCode.EXECUTION_PROFILE_STORAGE_FAILED.value,
+        ErrorCode.LOCAL_MAINTENANCE_FAILED.value,
+        ErrorCode.RUNTIME_REPAIR_FAILED.value,
     }:
         return 503
     if code in {

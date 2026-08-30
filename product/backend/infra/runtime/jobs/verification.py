@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any, Protocol
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
@@ -28,11 +29,16 @@ from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
 from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, required_secret_names
 from product.backend.infra.runtime.runner.supervisor import RunnerSupervisor
-from product.backend.workflows.results.finalizer import ResultFinalizer
 import logging
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class ResultFinalizerPort(Protocol):
+    """Infra Handler 只知道已发布 Run 的最终化动作。"""
+
+    def finalize(self, run_id: str) -> Any: ...
 
 
 class VerificationRunJobHandler(JobHandler[StagedAttempt]):
@@ -48,7 +54,7 @@ class VerificationRunJobHandler(JobHandler[StagedAttempt]):
         request_store: ExecutionRequestStore,
         publication_service: RunPublisher,
         reconciliation_service: RunReconciler,
-        result_finalizer: ResultFinalizer,
+        result_finalizer: ResultFinalizerPort,
         environ: Mapping[str, str] | None = None,
     ) -> None:
         self._uow_factory = uow_factory

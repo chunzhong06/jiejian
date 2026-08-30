@@ -20,7 +20,7 @@ const maintenanceStatus = {
 }
 
 const status: SystemStatus = {
-  version: '1.0.7',
+  version: '1.0.8',
   api: 'available',
   worker: 'running',
   browser: 'available',
@@ -43,18 +43,24 @@ describe('RuntimePage', () => {
     vi.spyOn(systemApi, 'maintenanceStatus').mockResolvedValue(maintenanceStatus)
     vi.spyOn(systemApi, 'maintenanceOperation').mockResolvedValue({
       schema_version: '1',
+      plan_id: 'plan_1',
+      scope: 'clear-all',
       operation: 'clear-all',
+      generated_at_us: 100,
+      expires_at_us: 200,
       dry_run: true,
       estimated_bytes: 6144,
-      targets: [{ path: 'D:/jiejian/var/cache/assistant/one', estimated_bytes: 1024 }],
+      targets: [{ item_id: 'item_1', label: 'AI 辅助缓存：one', relative_path: 'cache/assistant/one', estimated_bytes: 1024 }],
       removed: [],
+      results: [],
+      counts: { DELETED: 0, ALREADY_MISSING: 0, SKIPPED_IN_USE: 0, SKIPPED_CHANGED: 0, FAILED: 0 },
       protected: maintenanceStatus.protected,
       status: maintenanceStatus,
     })
 
     render(<RuntimePage status={status} profiles={[]} failed={false} />)
 
-    expect(screen.getByText('1.0.7')).toBeInTheDocument()
+    expect(screen.getByText('1.0.8')).toBeInTheDocument()
     expect(screen.getAllByText(/仅构建时需要/)).toHaveLength(2)
     expect(screen.getByText(/源码构建/)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('1.0 KiB')).toBeInTheDocument())
@@ -65,6 +71,10 @@ describe('RuntimePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '清理全部可删除内容' }))
     await waitFor(() => expect(systemApi.maintenanceOperation).toHaveBeenCalledWith('clear-all', { confirmed: false, dry_run: true }))
     expect(await screen.findByText(/预计处理 1 项/)).toBeInTheDocument()
+    expect(screen.getByText(/确认时只处理这份固定计划/)).toBeInTheDocument()
+    expect(screen.getByText(/cache\/assistant\/one/)).toBeInTheDocument()
     expect(screen.getByText(/不会删除应用、权限配置、数据库、证据、报告和凭据/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }))
+    await waitFor(() => expect(systemApi.maintenanceOperation).toHaveBeenCalledWith('clear-all', { confirmed: true, dry_run: false, plan_id: 'plan_1' }))
   })
 })

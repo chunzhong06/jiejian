@@ -15,7 +15,7 @@
 | Human-only HTTP API | `product/backend/api/routers/permission_intents.py` | `tests/backend/api/test_permission_intent_approval_boundary.py` |
 | MCP 权限意图工具 | `product/backend/api/mcp.py` | `tests/backend/api/test_mcp.py`、`tests/backend/api/test_permission_oracle_invariant.py` |
 | Compiler 与冻结执行请求 | `product/backend/workflows/security_setup/compiler.py`、`product/protocols/execution_request.py` | `tests/backend/workflows/security_setup/test_compiler.py` |
-| 结果、历史与报告快照摘要 | `product/backend/workflows/results/presentation.py`、`product/protocols/report.py` | `tests/backend/workflows/results/test_result_presentation.py`、`tests/backend/workflows/results/test_history.py`、`tests/backend/workflows/results/test_reports.py` |
+| 结果、历史与报告快照摘要 | `product/backend/workflows/results/presentation/`、`product/protocols/report.py` | `tests/backend/workflows/results/test_result_presentation.py`、`tests/backend/workflows/results/test_history.py`、`tests/backend/workflows/results/test_reports.py` |
 | 修复要求与同考题复验 | `product/backend/core/repair.py`、`product/backend/workflows/results/repair.py` | `tests/backend/workflows/results/test_repair_contracts.py` |
 | 权限确认与 proposal 页面 | `product/frontend/src/features/checks/PermissionCheckPage.tsx`、`product/frontend/src/api/permissionIntents.ts` | `product/frontend/src/features/checks/PermissionCheckPage.test.tsx` |
 
