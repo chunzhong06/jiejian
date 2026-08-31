@@ -17,12 +17,12 @@ const actionId = `action_${'1'.repeat(32)}`
 const ownerRoleId = `role_${'2'.repeat(32)}`
 const peerRoleId = `role_${'3'.repeat(32)}`
 const matrix = {
-  project_id: 'p1', policy_epoch: 2, confirmed_count: 2, review_required_count: 0, unconfirmed_count: 0, executable_count: 2, representative_gap_count: 0, compilable_action_count: 1,
+  project_id: 'p1', policy_epoch: 2, confirmed_count: 2, review_required_count: 0, unconfirmed_count: 0, executable_count: 2, representative_gap_count: 0, compilable_action_count: 1, actionable_confirmation_count: 2, required_confirmation_count: 0,
   actions: [{
     action_candidate_id: actionId, action_display_name: '修改测试文档', resource_logical_name: '所有者的测试文档', gaps: [], required_intent_count: 2, confirmed_intent_count: 2, executable_intent_count: 2, representative_gap_count: 0, compilable: true,
     cells: [
-      { action_candidate_id: actionId, subject_role_candidate_id: ownerRoleId, subject_role_display_name: '所有者', resource_owner_role_candidate_id: ownerRoleId, resource_owner_role_display_name: '所有者', relation: 'OWNS', expectation: 'ALLOW', protected_effects: [{ kind: 'STATE_MUTATION', resource_type: 'document', business_label: '测试文档内容', protected_fields: ['content'] }], status: 'CURRENT', review_reasons: [], intent_id: `pin_${'a'.repeat(32)}`, intent_revision: 1, intent_hash: 'a'.repeat(64), policy_epoch: 1, binding_fingerprint: 'c'.repeat(64), representative_test_identity_id: 'identity-owner', representative_label: '所有者账号', execution_gap: null },
-      { action_candidate_id: actionId, subject_role_candidate_id: peerRoleId, subject_role_display_name: '普通成员', resource_owner_role_candidate_id: ownerRoleId, resource_owner_role_display_name: '所有者', relation: 'OTHER_ROLE', expectation: 'DENY', protected_effects: [{ kind: 'OBJECT_CREATION', resource_type: 'document', business_label: '测试文档', protected_fields: [] }], status: 'CURRENT', review_reasons: [], intent_id: `pin_${'b'.repeat(32)}`, intent_revision: 1, intent_hash: 'b'.repeat(64), policy_epoch: 2, binding_fingerprint: 'd'.repeat(64), representative_test_identity_id: 'identity-peer', representative_label: '普通成员账号', execution_gap: null },
+      { action_candidate_id: actionId, subject_role_candidate_id: ownerRoleId, subject_role_display_name: '所有者', resource_owner_role_candidate_id: ownerRoleId, resource_owner_role_display_name: '所有者', relation: 'OWNS', expectation: 'ALLOW', protected_effects: [{ kind: 'STATE_MUTATION', resource_type: 'document', business_label: '测试文档内容', protected_fields: ['content'] }], status: 'CURRENT', review_reasons: [], can_confirm: true, requires_human_confirmation: false, confirmation_blockers: [], intent_id: `pin_${'a'.repeat(32)}`, intent_revision: 1, intent_hash: 'a'.repeat(64), policy_epoch: 1, binding_fingerprint: 'c'.repeat(64), representative_test_identity_id: 'identity-owner', representative_label: '所有者账号', execution_gap: null },
+      { action_candidate_id: actionId, subject_role_candidate_id: peerRoleId, subject_role_display_name: '普通成员', resource_owner_role_candidate_id: ownerRoleId, resource_owner_role_display_name: '所有者', relation: 'OTHER_ROLE', expectation: 'DENY', protected_effects: [{ kind: 'OBJECT_CREATION', resource_type: 'document', business_label: '测试文档', protected_fields: [] }], status: 'CURRENT', review_reasons: [], can_confirm: true, requires_human_confirmation: false, confirmation_blockers: [], intent_id: `pin_${'b'.repeat(32)}`, intent_revision: 1, intent_hash: 'b'.repeat(64), policy_epoch: 2, binding_fingerprint: 'd'.repeat(64), representative_test_identity_id: 'identity-peer', representative_label: '普通成员账号', execution_gap: null },
     ],
   }],
 }
@@ -47,7 +47,7 @@ const draftSuggestion = {
 
 function renderPage(overrides: Record<string, unknown> = {}) {
   const props = {
-    mode: 'validation', project: { project_id: 'p1' }, runs: [], onRefresh: vi.fn(), onError: vi.fn(), onResolved: vi.fn(), onNavigate: vi.fn(), onBack: vi.fn(), onNext: vi.fn(),
+    mode: 'validation', project: { project_id: 'p1' }, runs: [], onRefresh: vi.fn(), onError: vi.fn(), onResolved: vi.fn(), onNavigate: vi.fn(), onBack: vi.fn(), onContinuePreparation: vi.fn(), onResult: vi.fn(),
     ...overrides,
   }
   render(<PermissionCheckPage {...props as any} />)
@@ -98,7 +98,7 @@ describe('PermissionCheckPage', () => {
     expect(screen.queryByRole('button', { name: /AI 帮我复核权限/ })).not.toBeInTheDocument()
     expect(screen.queryByText('准备检查条件')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '开始真实检查' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '继续测试准备' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '继续准备' })).toBeInTheDocument()
   })
 
   it('用户明确点击后显示可核对草稿，确认单条仍走现有 Human approval', async () => {
@@ -206,11 +206,11 @@ describe('PermissionCheckPage', () => {
 
     expect(await screen.findByRole('button', { name: '正在保存权限要求' })).toBeDisabled()
     finishSave(matrix)
-    expect(await screen.findByRole('button', { name: '继续测试准备' })).toBeEnabled()
+    expect(await screen.findByRole('button', { name: '继续准备' })).toBeEnabled()
   })
 
   it('同一期望值复核只提示重新确认映射，Proposal 批准和拒绝按权威事实刷新', async () => {
-    const reviewMatrix = { ...matrix, review_required_count: 1, unconfirmed_count: 0, actions: [{ ...matrix.actions[0], cells: [{ ...matrix.actions[0].cells[0], status: 'NEEDS_REVIEW' as const }, matrix.actions[0].cells[1]] }] }
+    const reviewMatrix = { ...matrix, review_required_count: 1, unconfirmed_count: 0, required_confirmation_count: 1, actions: [{ ...matrix.actions[0], cells: [{ ...matrix.actions[0].cells[0], status: 'NEEDS_REVIEW' as const, requires_human_confirmation: true }, matrix.actions[0].cells[1]] }] }
     const proposals = [{ proposal_id: 'proposal-semantic', project_id: 'p1', kind: 'SEMANTIC_CHANGE' as const, status: 'PENDING' as const, intent_id: matrix.actions[0].cells[0].intent_id, semantic_change: { effective_state: 'RETIRED' as const, subject_display_name: '所有者', action_display_name: '修改测试文档', resource_owner_display_name: '所有者', relation: 'OWNS' as const, expectation: 'ALLOW' as const, protected_effects: matrix.actions[0].cells[0].protected_effects }, implementation_rebind: null, proposed_by: 'Agent', reason: '建议收紧权限', created_at_us: 1, decided_at_us: null }, { proposal_id: 'proposal-rebind', project_id: 'p1', kind: 'IMPLEMENTATION_REBIND' as const, status: 'PENDING' as const, intent_id: matrix.actions[0].cells[0].intent_id, semantic_change: null, implementation_rebind: { action_candidate_id: actionId, subject_role_candidate_id: ownerRoleId, resource_owner_role_candidate_id: ownerRoleId, understanding_revision: 2, action_safety_setup_fingerprint: 'f'.repeat(64) }, proposed_by: 'Agent', reason: '实现映射需要复核', created_at_us: 2, decided_at_us: null }]
     api.matrix.mockResolvedValue(reviewMatrix)
     api.proposals.mockResolvedValue({ project_id: 'p1', proposals })
@@ -310,10 +310,42 @@ describe('PermissionCheckPage', () => {
     const props = renderPage({ runs: [completed] })
 
     fireEvent.click(await screen.findByRole('button', { name: '查看检查结果' }))
-    expect(props.onNext).toHaveBeenCalledOnce()
+    expect(props.onResult).toHaveBeenCalledOnce()
     fireEvent.click(screen.getByRole('button', { name: '重新检查当前范围' }))
     expect(await screen.findByText('界鉴会创建一次新的受控检查；已经发布的结果和历史记录不会被覆盖。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '开始新检查' }))
     await waitFor(() => expect(api.submit).toHaveBeenCalledWith('p1'))
+  })
+
+  it('前置事实不足时由可操作性字段禁用权限单元，且不会伪称仍需确认', async () => {
+    const onContinuePreparation = vi.fn()
+    api.matrix.mockResolvedValue({
+      ...matrix,
+      confirmed_count: 0,
+      actionable_confirmation_count: 0,
+      required_confirmation_count: 0,
+      compilable_action_count: 0,
+      actions: [{
+        ...matrix.actions[0],
+        compilable: false,
+        gaps: ['FLOW_NOT_READY'],
+        cells: matrix.actions[0].cells.map((cell) => ({
+          ...cell,
+          can_confirm: false,
+          requires_human_confirmation: false,
+          confirmation_blockers: ['FLOW_NOT_READY'],
+          review_reasons: ['IMPLEMENTATION_REVIEW_REQUIRED'],
+        })),
+      }],
+    })
+
+    renderPage({ mode: 'permissions', onContinuePreparation })
+
+    expect(await screen.findByText('当前还没有真正可确认的权限规则')).toBeInTheDocument()
+    expect(screen.queryByText('仍需确认')).not.toBeInTheDocument()
+    expect(screen.getByText('等待准备事实')).toBeInTheDocument()
+    expect(screen.getByLabelText('所有者权限组以自己的资源关系对修改测试文档的权限')).toHaveClass('ant-segmented-disabled')
+    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    expect(onContinuePreparation).toHaveBeenCalledOnce()
   })
 })

@@ -28,12 +28,10 @@ export function PreparationPage({ readiness, onPrepareSafe, onNavigate }: {
     (item) => item.key === preparation.next_item_key,
   )
   const nextItem = preparation?.items.find((item) => item.key === preparation.next_item_key)
-  const blocked = nextItem?.status === 'BLOCKED' && nextBlocker === undefined
   const canContinue = Boolean(
     preparation?.ready
-    || nextBlocker
     || nextItem?.status === 'AUTO'
-    || (nextItem?.status === 'USER' && nextItem.next_path),
+    || preparation?.next_path,
   )
 
   const continuePreparation = async () => {
@@ -42,21 +40,16 @@ export function PreparationPage({ readiness, onPrepareSafe, onNavigate }: {
       onNavigate('/validation')
       return
     }
-    if (nextBlocker) {
-      onNavigate(nextBlocker.next_path)
+    if (nextItem?.status === 'AUTO') {
+      setPreparing(true)
+      try {
+        await onPrepareSafe()
+      } finally {
+        setPreparing(false)
+      }
       return
     }
-    if (nextItem?.status === 'USER' && nextItem.next_path) {
-      onNavigate(nextItem.next_path)
-      return
-    }
-    if (nextItem?.status !== 'AUTO') return
-    setPreparing(true)
-    try {
-      await onPrepareSafe()
-    } finally {
-      setPreparing(false)
-    }
+    if (preparation.next_path) onNavigate(preparation.next_path)
   }
 
   return <div className="preparation-page">
@@ -98,10 +91,10 @@ export function PreparationPage({ readiness, onPrepareSafe, onNavigate }: {
       <Button
         type="primary"
         loading={preparing}
-        disabled={!canContinue || blocked}
+        disabled={!canContinue}
         onClick={() => { void continuePreparation() }}
       >
-        {preparation?.ready ? '前往验证运行' : '继续准备'}
+        {preparation?.ready ? '前往验证运行' : preparation?.next_label ?? '继续准备'}
       </Button>
     </div>
   </div>

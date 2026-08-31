@@ -152,6 +152,13 @@ def test_application_connection_confirms_endpoint_without_profile(
             },
         )
         assert decided_action.status_code == 200
+        delivery = client.post(f"/api/projects/{project_id}/delivery-check")
+        assert delivery.status_code == 200
+        assert delivery.json()["data"]["decision"] == "BLOCKED"
+        assert delivery.json()["data"]["reason_codes"] == [
+            "TRUSTED_RESULT_MISSING"
+        ]
+        assert delivery.json()["data"]["next_path"] == "/validation"
         manual_role = client.post(
             f"/api/projects/{project_id}/roles",
             json={"schema_version": "1", "display_name": "访客", "revision": 5},

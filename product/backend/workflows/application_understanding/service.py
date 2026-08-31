@@ -317,6 +317,17 @@ class ApplicationUnderstandingService:
             refresh_permission_bindings=False,
         )
 
+    def inspect_source_fingerprint(self, project_id: str) -> str:
+        """按正式扫描边界只读计算当前源码身份，不保存候选、快照或 revision。"""
+
+        current = self.get(project_id)
+        if not current.source_analysis_authorized:
+            raise JiejianError(
+                ErrorCode.APPLICATION_ANALYSIS_NOT_AUTHORIZED,
+                "尚未获得源码只读分析授权",
+            )
+        return self.analyzer.analyze(current.project_id, current.source_root).source_fingerprint
+
     def _analyze_source(
         self,
         project_id: str,

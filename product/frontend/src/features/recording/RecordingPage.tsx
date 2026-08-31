@@ -11,6 +11,7 @@ import { ApiError } from '../../api/http'
 import { recordingsApi, type ActionSafetySetupViewDto, type ConfirmActionSafetySetupInput, type FlowDraftDto, type RecordingActionDto, type RecordingDto, type RecordingReviewCommand, type RecordingTestIdentityDto, type RecordingViewDto } from '../../api/recordings'
 import { runsApi } from '../../api/runs'
 import type { ProjectDto } from '../../api/projects'
+import type { WorkspaceSnapshot } from '../../app/useProjectWorkspace'
 import { browserState } from '../../app/browserState'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { AssistantPanel } from '../../components/AssistantPanel'
@@ -30,7 +31,7 @@ async function sourceChoiceId(value: string) {
   return `choice-${Array.from(new Uint8Array(digest)).map((item) => item.toString(16).padStart(2, '0')).join('').slice(0, 16)}`
 }
 
-export function RecordingPage({ project, onError, onBack, onNext }: { project: ProjectDto; onError: (error: ApiError) => void; onBack: () => void; onNext?: () => void }) {
+export function RecordingPage({ project, onError, onBack, onStateChanged, onContinuePreparation }: { project: ProjectDto; onError: (error: ApiError) => void; onBack: () => void; onStateChanged: () => Promise<WorkspaceSnapshot | undefined>; onContinuePreparation: () => Promise<void> | void }) {
   const [recording, setRecording] = useState<RecordingDto | null>(null)
   const [actionOptions, setActionOptions] = useState<RecordingActionDto[]>([])
   const [actionId, setActionId] = useState<string>()
@@ -41,6 +42,16 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string>()
   const [safetySetup, setSafetySetup] = useState<ActionSafetySetupViewDto>()
+  const [syncError, setSyncError] = useState<string>()
+
+  const syncWorkspace = async (savedMessage: string) => {
+    const snapshot = await onStateChanged()
+    if (snapshot) {
+      setSyncError(undefined)
+      return
+    }
+    setSyncError(`${savedMessage}，但工作区状态刷新失败，请重试“刷新流程状态”。`)
+  }
 
   const updateView = (view: RecordingViewDto | RecordingDto) => {
     setRecording((current) => {
@@ -107,24 +118,6 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
     void refreshSafetySetup(recording.recording_id)
   }, [recording?.recording_id, recording?.state])
 
-  useEffect(() => {
-    if (
-      recording?.state !== 'COMPLETED'
-      || !recording.recording_id
-      || !safetySetup
-      || safetySetup.confirmed_setup
-      || safetySetup.resource_candidates.length !== 1
-      || safetySetup.observation_candidates.length !== 1
-      || safetySetup.security_effect_candidates.length !== 1
-      || (safetySetup.state_changing && safetySetup.recovery_candidates.length !== 1)
-    ) return
-    setBusy(true)
-    void recordingsApi.confirmSafetySetup(recording.recording_id, {}).then((confirmed) => {
-      setSafetySetup(confirmed)
-      setMessage(confirmed.ready ? '业务事实已经自动整理完成。' : '仍有业务事实需要补充。')
-    }).catch((error) => onError(error as ApiError)).finally(() => setBusy(false))
-  }, [recording?.recording_id, recording?.state, safetySetup?.confirmed_setup])
-
   const draft = recording?.draft ?? undefined
   const steps = useMemo(() => draft?.steps ?? [], [draft?.revision])
   const variables = useMemo(() => draft?.variables ?? [], [draft?.revision])
@@ -167,6 +160,7 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
       const recordingId = recording?.recording_id ?? items[0]?.recording_id
       if (recordingId) updateView(await recordingsApi.recording(recordingId))
       else { setRecording(null); browserState.clearRecording() }
+      await syncWorkspace('流程状态已刷新')
     } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
@@ -216,6 +210,7 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
         setSafetySetup(await recordingsApi.safetySetup(recording.recording_id))
         setMessage('业务流程已经保存。界鉴正在确认真实结果与恢复方式。')
       }
+      await syncWorkspace(recordingPurpose === 'TARGET' ? '业务流程已保存' : '补录事实已保存')
     } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
@@ -227,6 +222,7 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
       const confirmed = await recordingsApi.confirmSafetySetup(recording.recording_id, input)
       setSafetySetup(confirmed)
       setMessage(confirmed.automatic_execution_allowed ? '真实观察与安全恢复已经确认。' : '当前确认已保存；未补齐的内容会明确显示为尚未完成。')
+      await syncWorkspace('业务事实已保存')
     } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
@@ -246,8 +242,8 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
             ? { label: '正在读取真实结果与恢复选项', disabled: true }
             : recording.state === 'COMPLETED' && safetySetup && !safetySetup.ready
               ? { label: '采用已识别的业务事实', submitForm: 'recording-safety-setup', loading: busy, disabled: safetySetup.resource_candidates.length === 0 || safetySetup.observation_candidates.length === 0 || (safetySetup.state_changing && safetySetup.recovery_candidates.length === 0) }
-              : recording.state === 'COMPLETED' && safetySetup?.ready && onNext
-                ? { label: '继续确认权限规则', onClick: onNext }
+              : recording.state === 'COMPLETED' && safetySetup?.ready
+                ? { label: '继续准备', onClick: onContinuePreparation }
                 : undefined
   const restartAction = recording && !finishedStates.has(recording.state)
     ? {
@@ -269,6 +265,7 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
     {reviewable && draft && recordingPurpose === 'TARGET' && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.action_candidate_id === draft.action_candidate_id)?.display_name ?? '这个业务动作'} sources={sources} canFinalize={canFinalize} onSourcesChange={setSources} onReview={(command) => void review(command)} />}
     {reviewable && draft && recordingPurpose !== 'TARGET' && <Alert type="success" showIcon message={recordingPurpose === 'OBSERVATION' ? '已经识别这次验证操作' : '已经识别这次恢复操作'} description="保存后会回到原业务流程，不会创建新的业务动作或权限要求。" />}
     {message && <Alert type={safetySetup && !safetySetup.automatic_execution_allowed ? 'info' : 'success'} showIcon message={message} />}
+    {syncError && <Alert type="warning" showIcon message={syncError} />}
     {recording?.state === 'COMPLETED' && draft && <Card className="recording-summary" title="已保存的业务流程"><Descriptions size="small" column={1}><Descriptions.Item label="业务动作">{recording.action?.display_name ?? actionOptions.find((item) => item.action_candidate_id === draft.action_candidate_id)?.display_name ?? '已确认动作'}</Descriptions.Item><Descriptions.Item label="用于录制的账号">{recording.test_identity?.label ?? '已准备测试账号'}{recording.test_identity?.role_display_name ? `（${recording.test_identity.role_display_name}）` : ''}</Descriptions.Item><Descriptions.Item label="状态">录制内容已保存</Descriptions.Item></Descriptions></Card>}
     {recording?.state === 'COMPLETED' && safetySetup && <ActionSafetySetupCard setup={safetySetup} busy={busy} onConfirm={(input) => void confirmSafetySetup(input)} onSupplement={(purpose) => void createSupplement(purpose)} />}
     <TaskActionBar back={{ label: '返回测试账号', onClick: onBack }} refresh={{ label: '刷新流程状态', onClick: () => void refreshPage(), loading: busy }} restart={restartAction} primary={primaryAction} />

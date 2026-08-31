@@ -26,6 +26,8 @@
 
 `HumanApproval` 由服务端写入固定 `LOCAL_GUI` 身份、审批时间和原因。HTTP body 只接受 cell target、目标 expectation 和可选 reason，不接受自由 actor。批准事务在同一 UnitOfWork 中校验预期 epoch，追加 revision 与 binding，并更新项目 epoch；并发变化必须要求用户刷新后重试。
 
+矩阵 cell 的可操作性由服务端明确发布：`can_confirm` 决定当前是否允许确认，`requires_human_confirmation` 说明该 cell 尚未确认或已有正式规则需要复核，`confirmation_blockers` 给出缺失前置事实。矩阵顶层 `required_confirmation_count` 只统计补齐当前可运行范围或逐条复核既有正式规则所需的最少确认数；已经形成 ALLOW/DENY 范围后，仍可确认但未被用户选择的 cell 不重新阻断准备链。前端只消费这些字段，不读取 `review_reasons` 推导按钮状态，也不能把“存在 action 但没有可确认 cell”显示为仍需确认。权限写入或 proposal 处理完成后，页面刷新矩阵和整个工作区，再按最新准备投影继续。
+
 `PermissionDraftService.draft(project_id, human_text)` 只在用户显式请求时读取当前矩阵，并为可审批 cell 生成本次 opaque option ID。模型只能返回 option ID、ALLOW/DENY 和人类原文中的精确引文；服务端拒绝未知 option、越界字段、非精确引文和冲突。返回的 READY_FOR_REVIEW 只表示草稿通过本地格式与引用校验，不表示完整、正确或已批准。草稿不写数据库/AssistantCache，也没有 apply/activate API；用户确认后仍走同一 Human Approval endpoint。
 
 ## 实现映射与重新分析

@@ -14,7 +14,7 @@
 
 ## 协议边界
 
-- `PersistedExecutionRequest` 是执行真源，保存项目、Contract/plan/孪生快照、workflow/effect bindings、身份、目标范围、预算、Observer 引用和指纹。代码变化重验可以额外冻结最小 `ChangeVerificationContext`；Runner 不读取变化数据库，也不接收文件列表、diff 或源码正文。
+- `PersistedExecutionRequest` 是执行真源，保存项目级 live 源码指纹、Contract/plan/孪生快照、workflow/effect bindings、身份、目标范围、预算、Observer 引用和权限指纹。代码变化重验可以额外冻结最小 `ChangeVerificationContext`；Runner 不读取变化数据库，也不接收文件列表、diff 或源码正文。
 - `RunnerInput` 绑定 run、job、attempt、lease owner、fencing token、创建时间、预算和项目快照。
 - `Evidence` 绑定不可变 case/twin snapshot、ExecutionFact、ObservationFact、SecurityEffectFact、基线/闭合状态、verdict 和 evidence hash。
 - `RunnerResult` 返回结果类型、生命周期状态、Job 状态、Verdict、清理结果、错误和覆盖计数。失败时 `RunnerError` 分别保存主错误 `code`、有限 `phase`、可选稳定 `cause_code` 和可重试性；`CleanupResult.issues` 另存现场恢复、身份关闭、Runtime 关闭或进程树清理问题，不覆盖主错误。
@@ -50,13 +50,13 @@ writer 最多追加 256 条、64 KiB、单行 2 KiB，任一构造、校验、�
 
 ## 版本规则与 Schema 真源
 
-当前 `PersistedExecutionRequest`、`RunnerInput`、`Evidence` 与 `RunnerResult` 都以字符串 `schema_version="1"` 作为 Web V1 发布基线。每个 reader 只接受各自唯一当前格式，`schema_version` 是机器格式版本，不表示产品代际。协议正文不复制完整字段表，严格模型、required、枚举和 canonical 规则以：
+当前 `PersistedExecutionRequest` 使用字符串 `schema_version="2"`；`RunnerInput`、`Evidence` 与 `RunnerResult` 仍使用格式 1。新的 Job、Worker 与 Runner 请求入口只接受格式 2。已发布结果的专用历史 reader 可以读取严格 canonical 的格式 1 请求，但不会补猜缺失的项目级源码身份，也不能把格式 1 重新投入执行。`schema_version` 是机器格式版本，不表示产品代际。协议正文不复制完整字段表，严格模型、required、枚举和 canonical 规则以：
 
 - `product/protocols/runner/`
 - `product/protocols/execution_request.py`
 - `product/protocols/schemas/runner/`
 
-为准。旧开发请求、结果和 wire format 不兼容读取。
+为准。除已发布请求的上述只读历史入口外，旧开发请求、结果和 wire format 不兼容读取。
 
 `RunnerProgressEvent` 的严格模型和唯一 reader 位于 `product/backend/infra/runtime/runner/progress.py`；它没有 checked-in Runner Schema，因为它不是跨进程结果或 publication 输入。字段变化必须同步该 reader、只读 API 和前端类型，不能通过扩展 `RunnerResult` 偷渡运行中状态。
 

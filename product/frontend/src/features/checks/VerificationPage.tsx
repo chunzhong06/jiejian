@@ -140,8 +140,6 @@ export function VerificationPage({
   onError,
   onBack,
   onHistory,
-  onRetest,
-  retestBusy = false,
   onObservationGap,
   observationGapBusy = false,
 }: {
@@ -149,8 +147,6 @@ export function VerificationPage({
   onError: (error: ApiError) => void
   onBack?: () => void
   onHistory?: () => void
-  onRetest?: () => void
-  retestBusy?: boolean
   onObservationGap?: () => void
   observationGapBusy?: boolean
 }) {
@@ -225,7 +221,7 @@ export function VerificationPage({
         </div>
         <Alert type={presentation.repair_verification.status === 'VERIFIED' ? 'success' : presentation.repair_verification.status === 'NOT_VERIFIED' ? 'error' : 'warning'} showIcon message={claimValue(presentation.repair_verification.status)} description={presentation.repair_verification.message} />
       </section>}
-      {(onRetest || onObservationGap) && <Space wrap>{onRetest && <Button type="primary" loading={retestBusy} onClick={onRetest}>使用原考题复验</Button>}{onObservationGap && <Button loading={observationGapBusy} onClick={onObservationGap}>验证关键结果不可读取时会怎样</Button>}</Space>}
+      {onObservationGap && <Space wrap><Button loading={observationGapBusy} onClick={onObservationGap}>验证关键结果不可读取时会怎样</Button></Space>}
       <section className="verification-ai-boundary"><Typography.Text type="secondary">仅辅助解释，不参与安全判定</Typography.Text><AssistantPanel runId={String(run.run_id)} title="解释这次现场验证" actionLabel="生成辅助解释" /></section>
       <EvidenceExplanationDrawer open={drawerOpen} title={issue.title} explanations={issue.evidence_explanations} onClose={() => setDrawerOpen(false)} />
     </>}

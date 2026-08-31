@@ -12,7 +12,6 @@ from product.backend.core.application_understanding import CandidateDecision
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.permission_intent import PermissionIntentRelation
 from product.backend.infra.storage import StorageUnitOfWork
-from product.backend.workflows.permission_intents import PermissionIntentCellStatus
 from product.backend.workflows.recording.safety_setup import (
     ActionSafetyAssetKind,
     ActionSafetyAssetStatus,
@@ -95,6 +94,8 @@ class ProjectPreparationView(_PreparationModel):
     ready: bool
     items: tuple[PreparationItemView, ...]
     next_item_key: str | None = Field(default=None, max_length=256)
+    next_path: PreparationPath | None = None
+    next_label: str | None = Field(default=None, min_length=1, max_length=80)
     auto_action_count: int = Field(ge=0)
     user_action_count: int = Field(ge=0)
     blocked_count: int = Field(ge=0)
@@ -180,16 +181,15 @@ class ProjectPreparationService:
         if understanding is None:
             return self._view(project_id, (), external)
 
-        matrix = self._permission_intents.matrix(project_id)
         identities = tuple(
             sorted(
                 self._test_identities.list(project_id),
                 key=lambda item: item.identity_id,
             )
         )
-        external.extend(self._permission_blockers(matrix))
         external.extend(self._source_change_blockers(project_id))
-
+        matrix = self._permission_intents.matrix(project_id)
+        external.extend(self._permission_blockers(matrix))
         active_by_action = {
             action.action_candidate_id: tuple(
                 cell
@@ -198,30 +198,64 @@ class ProjectPreparationService:
             )
             for action in matrix.actions
         }
-        active_by_action = {
-            action_id: cells for action_id, cells in active_by_action.items() if cells
+        confirmed_actions = tuple(
+            sorted(
+                (
+                    action
+                    for action in understanding.action_candidates
+                    if action.decision is CandidateDecision.CONFIRMED and not action.stale
+                ),
+                key=lambda item: item.candidate_id,
+            )
+        )
+        inspections = {
+            action.candidate_id: self._action_safety_setup.inspect_action(
+                project_id,
+                action.candidate_id,
+            )
+            for action in confirmed_actions
         }
-
         items: list[PreparationItemView] = []
-        for action in sorted(matrix.actions, key=lambda item: item.action_candidate_id):
-            cells = active_by_action.get(action.action_candidate_id, ())
-            if not cells:
-                continue
-            items.extend(
-                self._identity_items(
-                    action,
-                    cells,
-                    identities,
-                    automation_allowed=not external,
+        flow_incomplete = any(
+            any(
+                asset.kind is ActionSafetyAssetKind.FLOW
+                and asset.status is not ActionSafetyAssetStatus.CURRENT
+                for asset in inspection.assets
+            )
+            for inspection in inspections.values()
+        )
+        if flow_incomplete and not any(
+            identity.status is TestIdentityStatus.PREPARED for identity in identities
+        ):
+            items.append(
+                PreparationItemView(
+                    key="identity:recording-bootstrap",
+                    kind=PreparationItemKind.IDENTITY,
+                    label="先准备一个用于录制业务流程的测试账号",
+                    status=PreparationItemStatus.USER,
+                    description="录制第一条业务流程前，需要一个已登录的测试账号。",
+                    next_path="/identities",
+                    next_label="准备录制账号",
+                    reason_codes=("RECORDING_IDENTITY_REQUIRED",),
                 )
             )
+        matrix_actions = {action.action_candidate_id: action for action in matrix.actions}
+        for candidate in confirmed_actions:
+            action = matrix_actions.get(candidate.candidate_id)
+            cells = () if action is None else active_by_action.get(candidate.candidate_id, ())
+            if action is not None and cells:
+                items.extend(
+                    self._identity_items(
+                        action,
+                        cells,
+                        identities,
+                        automation_allowed=not external,
+                    )
+                )
             items.extend(
                 self._action_items(
-                    action,
-                    self._action_safety_setup.inspect_action(
-                        project_id,
-                        action.action_candidate_id,
-                    ),
+                    candidate,
+                    inspections[candidate.candidate_id],
                 )
             )
 
@@ -359,35 +393,30 @@ class ProjectPreparationService:
     def _permission_blockers(matrix) -> list[PreparationExternalBlockerView]:
         application_reasons: set[str] = set()
         permission_reasons: set[str] = set()
-        if matrix.confirmed_count == 0:
-            permission_reasons.add("PERMISSION_INTENT_UNCONFIRMED")
-        if matrix.review_required_count:
-            permission_reasons.add("PERMISSION_INTENT_NEEDS_REVIEW")
         for action in matrix.actions:
-            active = tuple(
-                cell
-                for cell in action.cells
-                if cell.intent_id is not None and cell.expectation is not None
-            )
-            expectations = {
-                cell.expectation.value for cell in active if cell.expectation is not None
-            }
             for code in action.gaps:
                 if code in _PREPARATION_GAPS:
                     continue
-                if code == "ALLOW_INTENT_MISSING" and "ALLOW" in expectations:
-                    continue
-                if code == "DENY_INTENT_MISSING" and "DENY" in expectations:
+                if code in {
+                    "ALLOW_INTENT_MISSING",
+                    "DENY_INTENT_MISSING",
+                    "PERMISSION_INTENT_UNCONFIRMED",
+                    "PERMISSION_INTENT_NEEDS_REVIEW",
+                }:
                     continue
                 if code in _APPLICATION_GAPS:
                     application_reasons.add(code)
                 else:
                     permission_reasons.add(code)
-            for cell in active:
-                if cell.status is not PermissionIntentCellStatus.CURRENT:
+            for cell in action.cells:
+                if cell.requires_human_confirmation:
                     permission_reasons.update(
-                        cell.review_reasons or ("PERMISSION_INTENT_NEEDS_REVIEW",)
+                        cell.review_reasons or ("PERMISSION_CONFIRMATION_REQUIRED",)
                     )
+        if matrix.required_confirmation_count > 0:
+            permission_reasons.add("PERMISSION_CONFIRMATION_REQUIRED")
+        else:
+            permission_reasons.clear()
         blockers: list[PreparationExternalBlockerView] = []
         if application_reasons:
             blockers.append(
@@ -565,6 +594,7 @@ class ProjectPreparationService:
             ActionSafetyAssetKind.RECOVERY: "现场恢复",
             ActionSafetyAssetKind.EFFECT: "受保护后果",
         }
+        action_label = inspection.action_display_name
         items: list[PreparationItemView] = []
         for asset in inspection.assets:
             kind = PreparationItemKind(asset.kind.value)
@@ -588,7 +618,7 @@ class ProjectPreparationService:
                     action,
                     kind,
                     status,
-                    f"{action.action_display_name}{suffixes[asset.kind]}",
+                    f"{action_label}{suffixes[asset.kind]}",
                     description,
                     asset.reason_codes,
                     recording_id=asset.recording_id,
@@ -712,7 +742,7 @@ class ProjectPreparationService:
                     )
                 }
             )
-        order = {"APPLICATION": 0, "PERMISSION": 1, "SOURCE_CHANGE": 2}
+        order = {"APPLICATION": 0, "SOURCE_CHANGE": 1, "PERMISSION": 2}
         return tuple(
             sorted(merged.values(), key=lambda item: (order[item.category], item.key))
         )
@@ -737,8 +767,19 @@ class ProjectPreparationService:
         )
         if external:
             next_key = external[0].key
+            next_path = external[0].next_path
+            next_label = external[0].next_label
         else:
             next_key = None if next_item is None else next_item.key
+            if next_item is None:
+                next_path = "/validation"
+                next_label = "前往验证运行"
+            elif next_item.status is PreparationItemStatus.AUTO:
+                next_path = "/preparation"
+                next_label = "自动完成这一步"
+            else:
+                next_path = next_item.next_path or "/preparation"
+                next_label = next_item.next_label or "继续测试准备"
         return ProjectPreparationView(
             project_id=project_id,
             ready=bool(ordered)
@@ -746,6 +787,8 @@ class ProjectPreparationService:
             and all(item.status is PreparationItemStatus.READY for item in ordered),
             items=ordered,
             next_item_key=next_key,
+            next_path=next_path,
+            next_label=next_label,
             auto_action_count=sum(
                 item.status is PreparationItemStatus.AUTO for item in ordered
             ),
@@ -778,8 +821,13 @@ def _item(
     *,
     recording_id: str | None = None,
 ) -> PreparationItemView:
+    action_id = (
+        action.action_candidate_id
+        if hasattr(action, "action_candidate_id")
+        else action.candidate_id
+    )
     return PreparationItemView(
-        key=f"{kind.value.lower()}:{action.action_candidate_id}",
+        key=f"{kind.value.lower()}:{action_id}",
         kind=kind,
         label=label,
         status=status,
@@ -787,7 +835,7 @@ def _item(
         next_path=None if status is PreparationItemStatus.READY else "/flows",
         next_label=None if status is PreparationItemStatus.READY else "管理业务流程",
         reason_codes=reason_codes,
-        action_candidate_id=action.action_candidate_id,
+        action_candidate_id=action_id,
         recording_id=recording_id,
     )
 

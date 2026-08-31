@@ -140,6 +140,40 @@ def test_missing_flow_is_user_work_and_never_generates_recording() -> None:
     assert harness.safety.confirm_count == 0
 
 
+def test_first_recording_without_identity_or_intent_goes_to_identities() -> None:
+    harness = _Harness(
+        recording=False,
+        identity_status=None,
+        intent_present=False,
+    )
+
+    view = harness.service.status(PROJECT_ID)
+
+    assert view.next_path == "/identities"
+    assert view.next_item_key == "identity:recording-bootstrap"
+    assert {item.category for item in view.external_blockers} == set()
+    assert harness.permission_intents._matrix.required_confirmation_count == 0
+
+
+def test_prepared_identity_without_flow_or_intent_goes_to_flows() -> None:
+    harness = _Harness(recording=False, intent_present=False)
+
+    view = harness.service.status(PROJECT_ID)
+
+    assert view.next_path == "/flows"
+    assert {item.category for item in view.external_blockers} == set()
+
+
+def test_actionable_unconfirmed_permission_becomes_the_next_step() -> None:
+    harness = _Harness(assets_current=True, intent_present=False)
+
+    view = harness.service.status(PROJECT_ID)
+
+    assert harness.permission_intents._matrix.required_confirmation_count == 1
+    assert {item.category for item in view.external_blockers} == {"PERMISSION"}
+    assert view.next_path == "/permissions"
+
+
 @pytest.mark.parametrize("candidate_count", [1, 2])
 def test_finite_safety_candidates_stay_user_and_are_never_confirmed(
     candidate_count: int,
@@ -187,6 +221,34 @@ def test_unprepared_identity_does_not_invalidate_current_action_assets() -> None
         PreparationItemKind.EFFECT,
     ):
         assert _kind(view, kind).status is PreparationItemStatus.READY
+    assert view.next_path == "/identities"
+
+
+def test_profile_is_the_only_auto_step_after_all_business_prerequisites() -> None:
+    harness = _Harness(assets_current=True)
+
+    view = harness.service.status(PROJECT_ID)
+
+    profile = _kind(view, PreparationItemKind.PROFILE)
+    assert profile.status is PreparationItemStatus.AUTO
+    assert profile.auto_action is PreparationAutoAction.BUILD_CURRENT_PROFILE
+    assert view.next_path == "/preparation"
+    assert view.next_label == "自动完成这一步"
+
+
+def test_fully_ready_preparation_routes_to_validation_and_status_is_zero_write() -> None:
+    harness = _Harness(assets_current=True, profile_current=True)
+
+    first = harness.service.status(PROJECT_ID)
+    second = harness.service.status(PROJECT_ID)
+
+    assert first == second
+    assert second.ready is True
+    assert second.next_path == "/validation"
+    assert second.next_label == "前往验证运行"
+    assert harness.identities.create_count == 0
+    assert harness.checks.prepare_count == 0
+    assert harness.safety.confirm_count == 0
 
 
 def test_safe_automation_whitelist_has_exactly_two_actions() -> None:
@@ -197,7 +259,7 @@ def test_safe_automation_whitelist_has_exactly_two_actions() -> None:
 
 
 def test_permission_and_source_change_blockers_prevent_every_write() -> None:
-    permission = _Harness(permission_blocked=True)
+    permission = _Harness(permission_blocked=True, assets_current=True)
     source_change = _Harness(source_change_blocked=True)
 
     permission_view = permission.service.prepare_safe(PROJECT_ID)
@@ -250,12 +312,24 @@ def _identity(*, status: IdentityStatus = IdentityStatus.PREPARED) -> IdentityVi
     )
 
 
-def _matrix(*, permission_blocked: bool) -> PermissionIntentMatrixView:
+def _matrix(
+    *,
+    permission_blocked: bool,
+    intent_present: bool,
+    assets_current: bool,
+) -> PermissionIntentMatrixView:
     status = (
-        PermissionIntentCellStatus.NEEDS_REVIEW
+        PermissionIntentCellStatus.UNCONFIRMED
+        if not intent_present
+        else PermissionIntentCellStatus.NEEDS_REVIEW
         if permission_blocked
         else PermissionIntentCellStatus.CURRENT
     )
+    can_confirm = assets_current
+    requires_confirmation = can_confirm and (
+        not intent_present or permission_blocked
+    )
+    confirmation_blockers = () if can_confirm else ("ACTION_SAFETY_SETUP_STALE",)
     cell = PermissionIntentCellView(
         action_candidate_id=ACTION_ID,
         subject_role_candidate_id=OTHER_ROLE_ID,
@@ -263,40 +337,57 @@ def _matrix(*, permission_blocked: bool) -> PermissionIntentMatrixView:
         resource_owner_role_candidate_id=ROLE_ID,
         resource_owner_role_display_name="所有者",
         relation=PermissionIntentRelation.OTHER_ROLE,
-        expectation=PermissionExpectation.DENY,
+        expectation=PermissionExpectation.DENY if intent_present else None,
         status=status,
-        review_reasons=("ACTION_SAFETY_SETUP_CHANGED",) if permission_blocked else (),
-        intent_id="intent_" + "1" * 32,
-        intent_revision=1,
-        intent_hash="1" * 64,
-        policy_epoch=1,
-        binding_fingerprint="2" * 64,
+        review_reasons=(
+            ("PERMISSION_INTENT_UNCONFIRMED",)
+            if not intent_present
+            else ("ACTION_SAFETY_SETUP_CHANGED",)
+            if permission_blocked
+            else ()
+        ),
+        intent_id="intent_" + "1" * 32 if intent_present else None,
+        intent_revision=1 if intent_present else None,
+        intent_hash="1" * 64 if intent_present else None,
+        policy_epoch=1 if intent_present else None,
+        binding_fingerprint="2" * 64 if intent_present else None,
         representative_test_identity_id=(
             None if permission_blocked else OTHER_IDENTITY_ID
         ),
+        can_confirm=can_confirm,
+        requires_human_confirmation=requires_confirmation,
+        confirmation_blockers=confirmation_blockers,
     )
     action = PermissionIntentActionView(
         action_candidate_id=ACTION_ID,
         action_display_name="导出完整项目",
         resource_logical_name="完整项目包",
         cells=(cell,),
-        gaps=("ACTION_SAFETY_SETUP_CHANGED",) if permission_blocked else (),
-        required_intent_count=1,
-        confirmed_intent_count=1,
-        executable_intent_count=0 if permission_blocked else 1,
+        gaps=("ACTION_SAFETY_SETUP_CHANGED",) if not assets_current else (),
+        required_intent_count=1 if intent_present else 0,
+        confirmed_intent_count=1 if intent_present else 0,
+        executable_intent_count=(
+            1 if intent_present and not permission_blocked and assets_current else 0
+        ),
         representative_gap_count=0,
-        compilable=not permission_blocked,
+        compilable=intent_present and not permission_blocked and assets_current,
     )
     return PermissionIntentMatrixView(
         project_id=PROJECT_ID,
         policy_epoch=1,
         actions=(action,),
-        confirmed_count=1,
+        confirmed_count=1 if intent_present else 0,
         review_required_count=1 if permission_blocked else 0,
-        unconfirmed_count=0,
-        executable_count=0 if permission_blocked else 1,
+        unconfirmed_count=0 if intent_present else 1,
+        executable_count=(
+            1 if intent_present and not permission_blocked and assets_current else 0
+        ),
         representative_gap_count=0,
-        compilable_action_count=0 if permission_blocked else 1,
+        compilable_action_count=(
+            1 if intent_present and not permission_blocked and assets_current else 0
+        ),
+        actionable_confirmation_count=1 if can_confirm else 0,
+        required_confirmation_count=1 if requires_confirmation else 0,
     )
 
 
@@ -358,8 +449,8 @@ class _Work:
 
 
 class _Identities:
-    def __init__(self, *, status: IdentityStatus):
-        self.records = [_identity(status=status)]
+    def __init__(self, *, status: IdentityStatus | None):
+        self.records = [] if status is None else [_identity(status=status)]
         self.create_count = 0
 
     def list(self, project_id):
@@ -376,8 +467,18 @@ class _Identities:
 
 
 class _PermissionIntents:
-    def __init__(self, *, blocked: bool):
-        self._matrix = _matrix(permission_blocked=blocked)
+    def __init__(
+        self,
+        *,
+        blocked: bool,
+        intent_present: bool,
+        assets_current: bool,
+    ):
+        self._matrix = _matrix(
+            permission_blocked=blocked,
+            intent_present=intent_present,
+            assets_current=assets_current,
+        )
 
     def matrix(self, project_id):
         assert project_id == PROJECT_ID
@@ -462,12 +563,13 @@ class _Safety:
 
 
 class _Checks:
-    def __init__(self):
+    def __init__(self, *, profile_current: bool):
         self.prepare_count = 0
+        self._profile_current = profile_current
 
     def preview(self, project_id):
         return SimpleNamespace(
-            gaps=(
+            gaps=() if self._profile_current else (
                 SimpleNamespace(
                     code="GENERATED_PROFILE_MISSING",
                     next_path="/validation",
@@ -510,8 +612,10 @@ class _Harness:
         candidate_count: int = 1,
         permission_blocked: bool = False,
         source_change_blocked: bool = False,
-        identity_status: IdentityStatus = IdentityStatus.PREPARED,
+        identity_status: IdentityStatus | None = IdentityStatus.PREPARED,
         assets_current: bool = False,
+        intent_present: bool = True,
+        profile_current: bool = False,
     ) -> None:
         self.work = _Work()
         self.identities = _Identities(status=identity_status)
@@ -520,11 +624,16 @@ class _Harness:
             candidate_count=candidate_count,
             assets_current=assets_current,
         )
-        self.checks = _Checks()
+        self.checks = _Checks(profile_current=profile_current)
+        self.permission_intents = _PermissionIntents(
+            blocked=permission_blocked,
+            intent_present=intent_present,
+            assets_current=assets_current,
+        )
         self.service = ProjectPreparationService(
             lambda: self.work,
             test_identities=self.identities,
-            permission_intents=_PermissionIntents(blocked=permission_blocked),
+            permission_intents=self.permission_intents,
             action_safety_setup=self.safety,
             checks=self.checks,
             source_changes=_SourceChanges(blocked=source_change_blocked),

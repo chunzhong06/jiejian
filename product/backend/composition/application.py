@@ -34,6 +34,8 @@ from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
 from product.backend.workflows.projects.preparation import ProjectPreparationService
 from product.backend.workflows.projects.readiness import ProjectReadinessService
 from product.backend.workflows.projects.revalidation import ProjectRevalidationService
+from product.backend.workflows.projects.repair import ProjectRepairService
+from product.backend.workflows.projects.delivery import DeliveryCheckService
 from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
 from product.backend.workflows.recording.submission import RecordingSubmission
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
@@ -217,6 +219,13 @@ class ApplicationCore:
             clock_us=clock_us,
         )
         self.project_revalidation = ProjectRevalidationService(self.source_changes)
+        self.project_repair = ProjectRepairService(
+            factory,
+            self.repair_contracts,
+            self.source_changes,
+            self.project_revalidation,
+            self.result_presentation,
+        )
         self.action_safety_setup.set_permission_binding_refresher(
             self.permission_intents.refresh_bindings
         )
@@ -270,7 +279,15 @@ class ApplicationCore:
             self.result_presentation,
             self.source_changes,
             project_revalidation=self.project_revalidation,
+            project_repair=self.project_repair,
             current_permission_intents=self.permission_intents.current_intents,
+        )
+        self.delivery_check = DeliveryCheckService(
+            source_changes=self.source_changes,
+            permission_intents=self.permission_intents,
+            product_status=self.product_status,
+            result_presentation=self.result_presentation,
+            published_reader=self.results,
         )
         self.product_results = ProductResultQuery(
             self.product_status,

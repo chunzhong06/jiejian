@@ -45,16 +45,28 @@ const exactDiagnosis = (overrides: Record<string, unknown> = {}) => ({
 })
 
 describe('CheckResultsPage', () => {
-  it('只在调用方确认活跃官方示例结果后显示修复验证，并仍等待用户点击', () => {
+  it('只按正式 ProjectRepair 展示修复入口，不保留 Sample 专用复验按钮', () => {
     const run = { run_id: 'run-fix', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED' }
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-fix', verdict: 'BLOCK', headline: '发现权限问题' }))
     resultsApi.evidence.mockResolvedValue([])
-    const verify = vi.fn()
-    render(<CheckResultsPage run={run} onError={vi.fn()} canVerifyFix onVerifyFix={verify} />)
-    fireEvent.click(screen.getByRole('button', { name: '按原考题重新检查' }))
-    expect(verify).toHaveBeenCalledOnce()
-    expect(screen.queryByText(/预期.*通过/)).not.toBeInTheDocument()
+    const onNavigate = vi.fn()
+    render(<CheckResultsPage run={run} onError={vi.fn()} onNavigate={onNavigate} repair={{
+      project_id: 'project-demo',
+      status: 'READY_TO_VERIFY',
+      tasks: [{
+        source_run_id: 'run-fix', source_finding_id: 'finding-fix', status: 'READY_TO_VERIFY',
+        must_disappear: '普通成员造成的越权变化必须消失。', must_remain: '负责人合法修改仍然成功。',
+        must_not_change: ['原权限要求', '关键证据要求'], linked_change_id: `chg_${'1'.repeat(32)}`,
+        verification_run_id: null, verification_status: null, next_path: '/validation', next_label: '复验这次修复',
+        reason_codes: ['REPAIR_VERIFICATION_REQUIRED'],
+      }],
+      next_path: '/validation', next_label: '复验这次修复', reason_codes: ['REPAIR_VERIFICATION_REQUIRED'],
+    }} />)
+    fireEvent.click(screen.getByRole('button', { name: '复验这次修复' }))
+    expect(onNavigate).toHaveBeenCalledWith('/validation')
+    expect(screen.queryByRole('button', { name: '按原考题重新检查' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/发送给 Agent/)).not.toBeInTheDocument()
   })
 
   it('原样展示后端对表面拒绝与真实变化的业务解释', async () => {

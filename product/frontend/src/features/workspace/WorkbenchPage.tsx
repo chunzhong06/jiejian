@@ -1,10 +1,11 @@
 // 项目概览聚合当前安全基线和全部待办，不把一次页面位置保存成线性进度。
 
-import { Button, Divider, Modal, Space, Tag, Typography } from 'antd'
-import { useState } from 'react'
+import { Alert, Button, Divider, Modal, Space, Tag, Typography } from 'antd'
+import { useEffect, useState } from 'react'
+import { ApiError } from '../../api/http'
 import type { OfficialExperienceDto } from '../../api/experience'
 import type { MCPAccessView } from '../../api/mcp'
-import type { ProductStatusDto, ProjectDto, ProjectReadinessDto } from '../../api/projects'
+import { projectsApi, type DeliveryCheckDto, type ProductStatusDto, type ProjectDto, type ProjectReadinessDto } from '../../api/projects'
 import type { RunDto } from '../../api/runs'
 import type { SystemStatus } from '../../api/system'
 import { formatTimestamp, integrityLabel, lifecycleLabel, verdictLabel } from '../../app/presentation'
@@ -30,6 +31,7 @@ export function WorkbenchPage({
   onStopExperience,
   onEnterPresentation,
   onNavigate,
+  onError,
 }: {
   selected: ProjectDto | null
   readiness: ProjectReadinessDto | null
@@ -44,8 +46,12 @@ export function WorkbenchPage({
   onStopExperience?: () => Promise<void>
   onEnterPresentation?: () => void
   onNavigate: (path: string) => void
+  onError: (error: ApiError) => void
 }) {
   const [startConfirmOpen, setStartConfirmOpen] = useState(false)
+  const [deliveryBusy, setDeliveryBusy] = useState(false)
+  const [delivery, setDelivery] = useState<DeliveryCheckDto | null>(null)
+  useEffect(() => { setDelivery(null) }, [selected?.project_id])
   const latest = runs[0]
   const latestChange = status?.latest_change ?? null
   const systemIssue = systemStatus.api === 'unknown' || systemStatus.worker === 'stopped' || systemStatus.browser === 'unavailable'
@@ -70,6 +76,18 @@ export function WorkbenchPage({
     <Typography.Paragraph>界鉴会只读分析示例源码，用于建立权限基线并验证后续 Agent 代码变化。</Typography.Paragraph>
     <Typography.Paragraph strong>启动示例不会开始真实检查，也不会预先生成结论。</Typography.Paragraph>
   </Modal>
+  const checkDelivery = async () => {
+    if (!selected?.project_id) return
+    setDeliveryBusy(true)
+    try {
+      setDelivery(await projectsApi.deliveryCheck(selected.project_id))
+    } catch (error) {
+      setDelivery(null)
+      onError(error as ApiError)
+    } finally {
+      setDeliveryBusy(false)
+    }
+  }
 
   if (!selected) return <div className="workbench-page">
     <PageTaskHeader title="项目概览" description="接入应用后，界鉴会持续跟踪权限规则、测试准备、代码变化与可信结果。" status="等待接入应用" />
@@ -109,6 +127,18 @@ export function WorkbenchPage({
           <div><Typography.Text strong>{item.label}</Typography.Text><Typography.Text type="secondary">{item.description}</Typography.Text></div>
           <Button type={item.tone === 'ACTION' ? 'primary' : 'default'} onClick={() => onNavigate(item.route)}>打开</Button>
         </article>)}</div>}
+      </div>
+      <div className="workbench-next-task" aria-label="交付前检查">
+        <Typography.Text className="workbench-eyebrow">交付前检查</Typography.Text>
+        <Typography.Paragraph type="secondary">只在你点击时核对当前磁盘源码、权限规则、修复状态与最近可信完整检查是否属于同一版本。</Typography.Paragraph>
+        <Button loading={deliveryBusy} onClick={() => void checkDelivery()}>交付前检查</Button>
+        {delivery && <Alert
+          type={delivery.decision === 'READY' ? 'success' : delivery.decision === 'BLOCKED' ? 'warning' : 'error'}
+          showIcon
+          message={delivery.decision === 'READY' ? '可以交付' : delivery.decision === 'BLOCKED' ? '暂不能交付' : '当前无法可靠完成交付检查'}
+          description={delivery.decision === 'READY' ? '当前磁盘源码、权限规则和最新可信完整检查属于同一版本。' : delivery.summary}
+          action={delivery.decision === 'BLOCKED' && delivery.next_path ? <Button onClick={() => onNavigate(delivery.next_path!)}>{delivery.next_label ?? '继续处理'}</Button> : undefined}
+        />}
       </div>
       {systemIssue && <Button type="link" className="workbench-system-link" onClick={() => onNavigate('/settings/system')}>运行环境中有服务暂不可用，查看详情</Button>}
     </section>

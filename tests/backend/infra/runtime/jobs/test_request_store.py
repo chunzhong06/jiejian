@@ -17,6 +17,10 @@ from product.backend.infra.runtime.jobs.requests import (
     required_secret_names,
 )
 from product.protocols.execution_request import build_permission_policy_snapshot
+from product.protocols.execution_request import (
+    LegacyPersistedExecutionRequest,
+    canonical_legacy_execution_request_bytes,
+)
 from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, minimal_process_environment
 from tests.fixtures.runtime_environment import runtime_identity_environment
 from tests.fixtures.runner import runner_input as make_runner_input
@@ -51,7 +55,13 @@ def test_request_store_rejects_drift_duplicate_keys_and_known_secrets(
     job_id = "job_fedcba9876543210fedcba9876543210"
     request_hash, _ = store.write(job_id, request)
     path = store.path_for(job_id)
-    path.write_bytes(path.read_bytes().replace(b'"schema_version":"1"', b'"schema_version":"1","schema_version":"1"', 1))
+    path.write_bytes(
+        path.read_bytes().replace(
+            b'"schema_version":"2"',
+            b'"schema_version":"2","schema_version":"2"',
+            1,
+        )
+    )
     drift_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     with pytest.raises(JiejianError) as duplicate:
         store.load(job_id, expected_hash=drift_hash)
@@ -98,7 +108,8 @@ def test_request_parser_and_minimal_environment_do_not_copy_parent_values(
 def test_current_request_store_dispatches_canonical_and_uses_minimal_secret_refs(tmp_path: Path) -> None:
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="1",
+        schema_version="2",
+        source_fingerprint="d" * 64,
         budget=runner_input.budget,
         permission_policy=build_permission_policy_snapshot(
             runner_input.project_snapshot.project_id,
@@ -115,3 +126,36 @@ def test_current_request_store_dispatches_canonical_and_uses_minimal_secret_refs
     assert store.load(job_id, expected_hash=request_hash) == request
     assert required_secret_names(request) == ("JIEJIAN_TEST_TOKEN", "OWNER_READ_ONLY")
     assert not list((tmp_path / "var").rglob("*.tmp-*"))
+
+
+def test_legacy_v1_is_readable_only_through_historical_result_path(
+    tmp_path: Path,
+) -> None:
+    current_input = make_runner_input()
+    legacy = LegacyPersistedExecutionRequest(
+        schema_version="1",
+        budget=current_input.budget,
+        permission_policy=build_permission_policy_snapshot(
+            current_input.project_snapshot.project_id,
+            0,
+            (),
+        ),
+        project_snapshot=current_input.project_snapshot,
+    )
+    raw = canonical_legacy_execution_request_bytes(legacy)
+    store = ExecutionRequestStore(tmp_path / "var")
+    job_id = "job_11111111111111111111111111111111"
+    path = store.path_for(job_id)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(raw)
+    request_hash = hashlib.sha256(raw).hexdigest()
+
+    parsed = parse_execution_request(raw)
+    assert parsed == legacy
+    assert parsed.source_fingerprint is None
+    assert store.load_historical(job_id, expected_hash=request_hash) == legacy
+    with pytest.raises(JiejianError) as current_load:
+        store.load(job_id, expected_hash=request_hash)
+    assert current_load.value.code == ErrorCode.JOB_REQUEST_CONFLICT.value
+    with pytest.raises(TypeError):
+        canonical_execution_request_bytes(legacy)

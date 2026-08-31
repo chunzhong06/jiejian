@@ -12,7 +12,8 @@
 | --- | --- | --- | --- |
 | `PermissionContract`、规范化/覆盖/差分计划 | `product/backend/core/verification/permissions/`、`differential.py` | `schemas/contracts/` | 1 |
 | `WebExecutionProfile`、`HttpRequestTemplate` | `web/profile.py`、`web/request.py` | `schemas/execution/` | 1 |
-| `PersistedExecutionRequest`、`RunnerInput`、`Evidence`、`RunnerResult` | `execution_request.py`、`runner/` | `schemas/runner/` | 1 |
+| `PersistedExecutionRequest` | `execution_request.py` | `schemas/runner/persisted-execution-request.schema.json` | 2 |
+| `RunnerInput`、`Evidence`、`RunnerResult` | `runner/` | `schemas/runner/` | 1 |
 | Observer Invocation、`ObservationEnvelope` | `observer/` | `schemas/observer/`；同时签入 `ObserverSpec`/`ObserverOutcome` 组件 Schema | 1 |
 | `RecordingRunnerRequest`、`RecordingEvent`、`RecordingRunnerResult` | `recording.py` | `schemas/recording/` | 1 |
 | `FlowDraft`、FlowDraft 审阅命令 | `flow_draft.py` | `schemas/recording/` | 1 |
@@ -30,7 +31,9 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 `RunnerProgressEvent` 每行独立持久化并由专用 reader 读取，因此携带自己的格式 1；`GET /api/jobs/{job_id}/progress` 的 `data` 只是 `ApiResponse` 内部视图，不再重复版本。该事件是 staging 外的非权威运行中旁路，不进入 RunnerResult、Evidence、publication、Finding、Report、Gate 或恢复语义。
 
-`ChangeVerificationContext` 与 `RepairVerificationContext` 只嵌入 `PersistedExecutionRequest`，不是独立交换根，因此不重复 `schema_version`。前者冻结一次变化重验的身份、影响指纹、必需权限集合和源码指纹；后者冻结权威修复引用、原 `policy_epoch`、原权限身份、必须消失的效果、必须保留的 ALLOW 控制和原关键证据标准。文件清单、diff、源码内容与补丁建议都不进入执行请求。版本 1 的旧冻结请求中权限条目可能不含 1.0.6 新增的业务语义投影；reader 继续安全读取，只有新提交 Run 才完整填充这些字段并可形成 RepairContract。
+`ChangeVerificationContext` 与 `RepairVerificationContext` 只嵌入 `PersistedExecutionRequest`，不是独立交换根，因此不重复 `schema_version`。当前请求在顶层冻结项目源码指纹；`ChangeVerificationContext` 只保留变化身份、影响指纹和必需权限集合。`RepairVerificationContext` 冻结权威修复引用、原 `policy_epoch`、原权限身份、必须消失的效果、必须保留的 ALLOW 控制和原关键证据标准。文件清单、diff、源码内容与补丁建议都不进入执行请求。
+
+当前 Job 与 Worker 只接受格式 2。已发布历史结果有一个明确的只读例外：历史 reader 可以解析严格 canonical 的格式 1 请求，用于 Result、History 与 RepairContract 重建；它不会补猜格式 1 缺少的项目级源码身份，也不能把历史请求送回当前执行入口。只有格式 2 请求能作为新的 Run 输入。
 
 ## 生命周期与数据流
 
@@ -42,7 +45,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 ## 兼容规则
 
-当前不兼容旧开发数据库、Profile、Run、Evidence、Artifact、Report 或旧 wire format。每个根只接受上表当前格式，不提供旧 reader、fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库从签入的 `0001_web_v1` 正式基线经显式 migration 升级到当前 head；数据库 revision 与根文档版本不能互相替代。
+当前不兼容旧开发数据库、Profile、Evidence、Artifact、Report 或任意旧 wire format。除已发布 `PersistedExecutionRequest` 格式 1 的严格只读历史入口外，每个根只接受上表当前格式，不提供 fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库从签入的 `0001_web_v1` 正式基线经显式 migration 升级到当前 head；数据库 revision 与根文档版本不能互相替代。
 
 ## 版本规则与 Schema 真源
 

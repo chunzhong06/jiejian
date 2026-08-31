@@ -57,16 +57,6 @@ export const experienceApi = {
     }),
   prepareIdentities: () =>
     request<OfficialExperienceDto>('/api/experience/official-sample/identities', { method: 'POST' }),
-  verifyFixedBehavior: (runId: string) =>
-    request<OfficialExperienceDto>('/api/experience/official-sample/behavior', {
-      method: 'POST',
-      body: JSON.stringify({
-        schema_version: '1',
-        authorization_order: 'AUTHORIZE_BEFORE_ENQUEUE',
-        blob_observation: 'AVAILABLE',
-        verification_run_id: runId,
-      }),
-    }),
   useUnavailableObservation: (authorizationOrder: 'ENQUEUE_BEFORE_AUTHORIZE' | 'AUTHORIZE_BEFORE_ENQUEUE') =>
     request<OfficialExperienceDto>('/api/experience/official-sample/behavior', {
       method: 'POST',

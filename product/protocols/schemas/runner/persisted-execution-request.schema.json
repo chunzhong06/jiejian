@@ -645,17 +645,11 @@
           "maxItems": 4096,
           "title": "Required Intent Ids",
           "type": "array"
-        },
-        "source_fingerprint": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Source Fingerprint",
-          "type": "string"
         }
       },
       "required": [
         "change_id",
-        "impact_fingerprint",
-        "source_fingerprint"
+        "impact_fingerprint"
       ],
       "title": "ChangeVerificationContext",
       "type": "object"
@@ -4461,13 +4455,19 @@
       "default": null
     },
     "schema_version": {
-      "const": "1",
-      "default": "1",
+      "const": "2",
+      "default": "2",
       "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
       "type": "string"
     }
   },
   "required": [
+    "source_fingerprint",
     "budget",
     "permission_policy",
     "project_snapshot"

@@ -19,10 +19,12 @@ export function ActionSafetySetupCard({ setup, busy, onConfirm, onSupplement }: 
   }, [setup.recording_id, setup.observation_candidates.length, setup.recovery_candidates.length])
 
   const resource = setup.resource_candidates[0]
+  const selectedObservationId = observationId ?? (setup.observation_candidates.length === 1 ? setup.observation_candidates[0].candidate_id : undefined)
+  const selectedRecoveryId = recoveryId ?? (setup.recovery_candidates.length === 1 ? setup.recovery_candidates[0].candidate_id : undefined)
   const submit = () => onConfirm({
     resource_candidate_id: resource?.candidate_id,
-    observation_candidate_id: observationId ?? null,
-    recovery_candidate_id: recoveryId ?? null,
+    observation_candidate_id: selectedObservationId ?? null,
+    recovery_candidate_id: selectedRecoveryId ?? null,
   })
 
   return <Card className="action-safety-card" title="真实结果与恢复" extra={setup.ready ? <Tag color="success">准备完成</Tag> : <Tag color="warning">还需补充</Tag>}>
@@ -35,9 +37,9 @@ export function ActionSafetySetupCard({ setup, busy, onConfirm, onSupplement }: 
         <Descriptions.Item label="如何恢复现场">{setup.recovery_status === 'NOT_REQUIRED' ? '只读操作，不需要恢复' : setup.recovery_status === 'READY' ? '已准备恢复方法' : '还缺恢复测试现场的方法'}</Descriptions.Item>
       </Descriptions>
       {setup.observation_status === 'MISSING' && setup.observation_candidates.length === 0 && <Alert type="warning" showIcon message="还缺独立验证方式" action={<Button loading={busy} onClick={() => onSupplement('OBSERVATION')}>补录验证操作</Button>} />}
-      {setup.observation_candidates.length > 1 && <section><Typography.Text strong>选择真实验证方式</Typography.Text><Radio.Group value={observationId} onChange={(event) => setObservationId(event.target.value)}><Space direction="vertical">{setup.observation_candidates.map((item) => <Radio key={item.candidate_id} value={item.candidate_id}>{item.label}</Radio>)}</Space></Radio.Group></section>}
+      {setup.observation_candidates.length > 1 && <section><Typography.Text strong>选择真实验证方式</Typography.Text><Radio.Group value={selectedObservationId} onChange={(event) => setObservationId(event.target.value)}><Space direction="vertical">{setup.observation_candidates.map((item) => <Radio key={item.candidate_id} value={item.candidate_id}>{item.label}</Radio>)}</Space></Radio.Group></section>}
       {setup.state_changing && setup.recovery_status === 'MISSING' && setup.recovery_candidates.length === 0 && <Alert type="warning" showIcon message="还缺恢复测试现场的方法" action={<Button loading={busy} onClick={() => onSupplement('RECOVERY')}>补录恢复操作</Button>} />}
-      {setup.recovery_candidates.length > 1 && <section><Typography.Text strong>选择恢复测试现场的方法</Typography.Text><Radio.Group value={recoveryId} onChange={(event) => setRecoveryId(event.target.value)}><Space direction="vertical">{setup.recovery_candidates.map((item) => <Radio key={item.candidate_id} value={item.candidate_id}>{item.label}</Radio>)}</Space></Radio.Group></section>}
+      {setup.recovery_candidates.length > 1 && <section><Typography.Text strong>选择恢复测试现场的方法</Typography.Text><Radio.Group value={selectedRecoveryId} onChange={(event) => setRecoveryId(event.target.value)}><Space direction="vertical">{setup.recovery_candidates.map((item) => <Radio key={item.candidate_id} value={item.candidate_id}>{item.label}</Radio>)}</Space></Radio.Group></section>}
       <Form id="recording-safety-setup" onFinish={submit} />
       {setup.ready && <Alert type="success" showIcon message="业务流程已经准备完成" description="现在可以进入权限页，由人确认哪些账号应该允许或拒绝。" />}
     </Space>

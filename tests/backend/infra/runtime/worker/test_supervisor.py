@@ -353,7 +353,8 @@ def test_local_supervisor_recovers_expired_job_only_after_exit_proof(
 def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_path: Path) -> None:
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="1",
+        schema_version="2",
+        source_fingerprint="d" * 64,
         budget=runner_input.budget,
         permission_policy=build_permission_policy_snapshot(
             runner_input.project_snapshot.project_id,

@@ -55,7 +55,10 @@ from product.backend.core.verification.permissions import (
     SecurityEffectKind,
 )
 from product.backend.infra.storage import StorageUnitOfWork
-from product.backend.workflows.recording.safety_setup import ActionSafetySetupService
+from product.backend.workflows.recording.safety_setup import (
+    ActionSafetySetupInspection,
+    ActionSafetySetupService,
+)
 from product.backend.workflows.test_identities import (
     TestIdentityService,
     TestIdentityStatus,
@@ -106,6 +109,9 @@ class PermissionIntentCellView(PermissionIntentViewModel):
     representative_test_identity_id: str | None = None
     representative_label: str | None = None
     execution_gap: str | None = None
+    can_confirm: bool = False
+    requires_human_confirmation: bool = False
+    confirmation_blockers: tuple[str, ...] = Field(default=(), max_length=32)
 
 
 class PermissionIntentActionView(PermissionIntentViewModel):
@@ -131,6 +137,8 @@ class PermissionIntentMatrixView(PermissionIntentViewModel):
     executable_count: int = Field(ge=0)
     representative_gap_count: int = Field(ge=0)
     compilable_action_count: int = Field(ge=0)
+    actionable_confirmation_count: int = Field(default=0, ge=0)
+    required_confirmation_count: int = Field(default=0, ge=0)
 
 
 class PermissionIntentExecution(PermissionIntentViewModel):
@@ -202,6 +210,13 @@ class PermissionIntentService:
         identities = tuple(
             sorted(self._test_identities.list(project_id), key=lambda item: item.identity_id)
         )
+        inspections = {
+            action.candidate_id: self._action_safety_setup.inspect_action(
+                project_id,
+                action.candidate_id,
+            )
+            for action in actions
+        }
         latest_by_key: dict[
             tuple[str, str, str, PermissionIntentRelation],
             tuple[PermissionIntentRevision, IntentImplementationBinding],
@@ -221,6 +236,7 @@ class PermissionIntentService:
                 latest_by_key,
                 understanding,
                 setups,
+                inspections[action.candidate_id],
                 seen,
             )
             for action in actions
@@ -263,6 +279,10 @@ class PermissionIntentService:
                 for cell in active_cells
             ),
             compilable_action_count=sum(action.compilable for action in action_views),
+            actionable_confirmation_count=sum(cell.can_confirm for cell in cells),
+            required_confirmation_count=sum(
+                _required_confirmation_count(action) for action in action_views
+            ),
         )
 
     def confirm(
@@ -299,6 +319,12 @@ class PermissionIntentService:
             raise JiejianError(
                 ErrorCode.STATE_PRECONDITION,
                 "当前动作尚未形成可批准的权限组与资源关系",
+            )
+        if expectation is not None and not cell.can_confirm:
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "当前权限目标所需业务事实尚未完整",
+                details={"reason_codes": cell.confirmation_blockers},
             )
         with self._uow_factory() as work:
             understanding = work.application_understanding.get(project_id)
@@ -966,6 +992,7 @@ class PermissionIntentService:
         ],
         understanding: ApplicationUnderstanding,
         setups: dict[str, ActionSafetySetup | None],
+        inspection: ActionSafetySetupInspection,
         seen: set[str],
     ) -> PermissionIntentActionView:
         if setup is None:
@@ -990,7 +1017,8 @@ class PermissionIntentService:
                 executable_intent_count=0,
                 representative_gap_count=0,
             )
-        setup_gaps = self._setup_gaps(setup)
+        setup_gaps = self._setup_gaps(inspection)
+        confirmation_blockers = self._confirmation_blockers(inspection)
         requirements = [
             (owner_role, PermissionIntentRelation.OWNS),
             (owner_role, PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT),
@@ -1023,6 +1051,7 @@ class PermissionIntentService:
                     ledger,
                     understanding,
                     setups,
+                    confirmation_blockers,
                 )
             )
         confirmed = tuple(cell for cell in cells if cell.expectation is not None)
@@ -1132,19 +1161,25 @@ class PermissionIntentService:
             for action_id, cells in sorted(grouped.items())
         )
 
-    def _setup_gaps(self, setup: ActionSafetySetup) -> tuple[str, ...]:
-        try:
-            view = self._action_safety_setup.preview(setup.resource.recording_id)
-        except JiejianError as exc:
-            if exc.code in {
-                ErrorCode.TEST_IDENTITY_NOT_FOUND.value,
-                ErrorCode.TEST_IDENTITY_NOT_READY.value,
-            }:
-                return ()
-            return ("ACTION_SAFETY_SETUP_STALE",)
-        if view.automatic_execution_allowed and view.confirmed_setup is not None:
-            return ()
-        return tuple(view.gaps) or ("ACTION_SAFETY_SETUP_STALE",)
+    @staticmethod
+    def _setup_gaps(inspection: ActionSafetySetupInspection) -> tuple[str, ...]:
+        return () if inspection.fully_current else ("ACTION_SAFETY_SETUP_STALE",)
+
+    @staticmethod
+    def _confirmation_blockers(
+        inspection: ActionSafetySetupInspection,
+    ) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                reason
+                for asset in inspection.assets
+                if asset.status.value != "CURRENT"
+                for reason in (
+                    asset.reason_codes
+                    or (f"{asset.kind.value}_{asset.status.value}",)
+                )
+            )
+        )
 
     @staticmethod
     def _cell_view(
@@ -1157,6 +1192,7 @@ class PermissionIntentService:
         ledger: tuple[PermissionIntentRevision, IntentImplementationBinding] | None,
         understanding: ApplicationUnderstanding,
         setups: dict[str, ActionSafetySetup | None],
+        confirmation_blockers: tuple[str, ...],
     ) -> PermissionIntentCellView:
         representative, execution_gap = _representative(
             relation,
@@ -1180,6 +1216,9 @@ class PermissionIntentService:
                 ),
                 representative_label=None if representative is None else representative.label,
                 execution_gap=execution_gap,
+                can_confirm=not confirmation_blockers,
+                requires_human_confirmation=not confirmation_blockers,
+                confirmation_blockers=confirmation_blockers,
             )
         revision, binding = ledger
         status, reasons = _live_binding_status(understanding, setups, binding)
@@ -1193,7 +1232,43 @@ class PermissionIntentService:
             reasons,
             representative,
             execution_gap,
+            can_confirm=not confirmation_blockers,
+            confirmation_blockers=confirmation_blockers,
         )
+
+
+def _required_confirmation_count(action: PermissionIntentActionView) -> int:
+    """统计补齐当前可运行范围或复核既有正式规则所需的最少确认数。"""
+
+    actionable = tuple(cell for cell in action.cells if cell.can_confirm)
+    if not actionable:
+        return 0
+    pending_reviews = tuple(
+        cell
+        for cell in actionable
+        if cell.expectation is not None and cell.requires_human_confirmation
+    )
+    review_expectations = {cell.expectation for cell in pending_reviews}
+    current_expectations = {
+        cell.expectation
+        for cell in action.cells
+        if cell.expectation is not None
+        and cell.status is PermissionIntentCellStatus.CURRENT
+    }
+    required = len(pending_reviews)
+    # 尚未选择但可确认的 cell 仍保留给用户；已有 ALLOW/DENY 范围成立后，
+    # 它们不应重新阻断准备链。已有正式规则待复核时则始终逐条计数。
+    for gap, expectation in (
+        ("ALLOW_INTENT_MISSING", PermissionExpectation.ALLOW),
+        ("DENY_INTENT_MISSING", PermissionExpectation.DENY),
+    ):
+        if (
+            gap in action.gaps
+            and expectation not in review_expectations
+            and expectation not in current_expectations
+        ):
+            required += 1
+    return required
 
 
 def _setup_fingerprint(setup: ActionSafetySetup) -> str:
@@ -1339,6 +1414,9 @@ def _ledger_cell(
     reasons: tuple[str, ...],
     representative: TestIdentityView | None,
     execution_gap: str | None,
+    *,
+    can_confirm: bool = False,
+    confirmation_blockers: tuple[str, ...] = (),
 ) -> PermissionIntentCellView:
     return PermissionIntentCellView(
         action_candidate_id=binding.action_candidate_id,
@@ -1359,6 +1437,11 @@ def _ledger_cell(
         representative_test_identity_id=None if representative is None else representative.identity_id,
         representative_label=None if representative is None else representative.label,
         execution_gap=execution_gap,
+        can_confirm=can_confirm,
+        requires_human_confirmation=(
+            can_confirm and status is not PermissionIntentCellStatus.CURRENT
+        ),
+        confirmation_blockers=confirmation_blockers,
     )
 
 

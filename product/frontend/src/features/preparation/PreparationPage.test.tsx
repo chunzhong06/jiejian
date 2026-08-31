@@ -37,11 +37,14 @@ function preparation(
   updates: Partial<ProjectPreparationDto> = {},
 ): ProjectPreparationDto {
   const next = items.find((item) => item.status !== 'READY')
+  const ready = items.length > 0 && items.every((item) => item.status === 'READY')
   return {
     project_id: 'p1',
-    ready: items.length > 0 && items.every((item) => item.status === 'READY'),
+    ready,
     items,
     next_item_key: next?.key ?? null,
+    next_path: next?.status === 'USER' ? next.next_path : ready ? '/validation' : null,
+    next_label: next?.status === 'USER' ? next.next_label : ready ? '前往验证运行' : next?.status === 'AUTO' ? '继续准备' : null,
     auto_action_count: items.filter((item) => item.status === 'AUTO').length,
     user_action_count: items.filter((item) => item.status === 'USER').length,
     blocked_count: items.filter((item) => item.status === 'BLOCKED').length,
@@ -112,7 +115,7 @@ describe('PreparationPage', () => {
       onNavigate={onNavigate}
     />)
 
-    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    fireEvent.click(screen.getByRole('button', { name: '管理测试账号' }))
     expect(onNavigate).toHaveBeenCalledOnce()
     expect(onNavigate).toHaveBeenCalledWith('/identities')
   })
@@ -145,6 +148,8 @@ describe('PreparationPage', () => {
     const onNavigate = vi.fn()
     const current = preparation([preparationItem('BLOCKED')], {
       next_item_key: 'permission-incomplete',
+      next_path: '/permissions',
+      next_label: '去确认权限规则',
       external_blockers: [{
         key: 'permission-incomplete',
         category: 'PERMISSION',
@@ -161,7 +166,7 @@ describe('PreparationPage', () => {
       onNavigate={onNavigate}
     />)
 
-    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    fireEvent.click(screen.getByRole('button', { name: '去确认权限规则' }))
     expect(onNavigate).toHaveBeenCalledWith('/permissions')
     expect(onPrepareSafe).not.toHaveBeenCalled()
   })
@@ -197,9 +202,23 @@ describe('PreparationPage', () => {
     />)
 
     expect(onPrepareSafe).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认恢复方式' }))
     expect(onNavigate).toHaveBeenCalledWith('/flows')
     expect(onPrepareSafe).not.toHaveBeenCalled()
+  })
+
+  it('只信任 ProjectPreparation 顶层导航，不使用 item 内部的旧路径', () => {
+    const onNavigate = vi.fn()
+    render(<PreparationPage
+      readiness={readiness(preparation([
+        preparationItem('USER', { next_path: '/flows', next_label: '旧入口' }),
+      ], { next_path: '/identities', next_label: '准备测试账号' }))}
+      onPrepareSafe={vi.fn()}
+      onNavigate={onNavigate}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: '准备测试账号' }))
+    expect(onNavigate).toHaveBeenCalledWith('/identities')
   })
 
   it('账号登录失效时只把身份项标为需要处理，静态资产继续可复用', () => {

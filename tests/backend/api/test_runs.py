@@ -61,17 +61,26 @@ def _register_understanding(app, profile_path: Path) -> None:
     """补齐 Run 冻结权限策略所需的已确认应用理解事实。"""
 
     profile = parse_web_execution_profile(profile_path.read_bytes())
+    source_root = str(profile_path.parent.resolve())
+    source_identity = app.state.context.application_understanding.analyzer.analyze(
+        profile.project_id,
+        source_root,
+    ).source_fingerprint
     now_us = time.time_ns() // 1_000
     with app.state.context.uow_factory() as work:
         work.application_understanding.add(
             ApplicationUnderstanding(
                 project_id=profile.project_id,
-                source_root=str(profile_path.parent.resolve()),
+                source_root=source_root,
                 confirmed_endpoint=profile.target.scope.base_url,
                 endpoint_source_fingerprint="a" * 64,
                 endpoint_confirmed_at_us=now_us,
                 endpoint_last_checked_at_us=now_us,
                 endpoint_reachable=True,
+                source_analysis_authorized=True,
+                source_analysis_authorized_at_us=now_us,
+                source_fingerprint=source_identity,
+                analysis_completed_at_us=now_us,
                 role_candidates=(
                     RoleCandidate(
                         candidate_id=candidate_id("role", "member"),

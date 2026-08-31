@@ -346,6 +346,21 @@ def build_mcp_control(
         require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
         return _json(_invoke(lambda: context.product_status.get(project_id)))
 
+    @server.tool(name="jiejian_repair_status", structured_output=True)
+    def repair_status(ctx: Context, project_id: str) -> dict[str, Any]:
+        """只读返回项目修复闭环，不提供应用补丁或确认修复入口。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        status = _invoke(lambda: context.product_status.get(project_id))
+        return _json(status.repair)
+
+    @server.tool(name="jiejian_delivery_check", structured_output=True)
+    def delivery_check(ctx: Context, project_id: str) -> dict[str, Any]:
+        """显式扫描当前源码并读取确定性交付结论。"""
+
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        return _json(_invoke(lambda: context.delivery_check.check(project_id)))
+
     @server.tool(name="jiejian_project_list", structured_output=True)
     def project_list(ctx: Context, include_archived: bool = False) -> list[dict[str, Any]]:
         """列出已有 Project，不创建或移除目录。"""

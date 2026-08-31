@@ -33,7 +33,10 @@ from product.backend.workflows.application_understanding.endpoints import (
     EndpointProbeObservation,
     TargetEndpointDiscovery,
 )
-from product.backend.workflows.source_changes import SourceRevalidationInspectionStatus
+from product.backend.workflows.source_changes import (
+    SourceRevalidationInspectionStatus,
+    SourceWorkspaceInspectionStatus,
+)
 from product.backend.composition import ApplicationCore
 from tests.backend.workflows.recording.test_action_safety_setup import (
     ACTION_ID,
@@ -95,6 +98,46 @@ def test_same_source_fingerprint_is_idempotent_and_mtime_is_ignored(
         core.close()
 
 
+def test_workspace_inspection_is_current_drifted_unavailable_and_zero_write(
+    tmp_path: Path,
+) -> None:
+    core, project_id, source = _connected_core(tmp_path)
+    source_file = source / "app.py"
+    source_file.write_text(
+        "roles = ['owner']\n@app.get('/documents')\ndef documents(): pass\n",
+        encoding="utf-8",
+    )
+    try:
+        baseline = _authorize_and_analyze(core, project_id)
+
+        current = core.source_changes.inspect_workspace(project_id)
+        unchanged = core.application_understanding.get(project_id)
+        assert current.status is SourceWorkspaceInspectionStatus.CURRENT
+        assert current.live_source_fingerprint == baseline.source_fingerprint
+        assert unchanged == baseline
+
+        source_file.write_text(
+            "roles = ['owner']\n@app.get('/documents')\ndef documents(): return []\n",
+            encoding="utf-8",
+        )
+        drifted = core.source_changes.inspect_workspace(project_id)
+        assert drifted.status is SourceWorkspaceInspectionStatus.DRIFTED
+        assert drifted.live_source_fingerprint != baseline.source_fingerprint
+        assert core.application_understanding.get(project_id) == baseline
+
+        def fail_scan(_project_id: str, _source_root: str):
+            raise JiejianError(ErrorCode.INPUT_PATH, "源码目录暂时不可读")
+
+        core.application_understanding.analyzer = SimpleNamespace(analyze=fail_scan)
+        unavailable = core.source_changes.inspect_workspace(project_id)
+        assert unavailable.status is SourceWorkspaceInspectionStatus.UNAVAILABLE
+        assert unavailable.live_source_fingerprint is None
+        assert unavailable.reason_codes == (ErrorCode.INPUT_PATH.value,)
+        assert core.application_understanding.get(project_id) == baseline
+    finally:
+        core.close()
+
+
 def test_repair_reference_is_verified_persisted_and_carried_into_revalidation(
     tmp_path: Path,
 ) -> None:
@@ -123,13 +166,26 @@ def test_repair_reference_is_verified_persisted_and_carried_into_revalidation(
             submitted_by="MCP Agent",
             repair_reference=reference,
         )
-
         stored, _, _ = core.source_changes.get(manifest.change_id)
         plan = core.source_changes.revalidation_plan(project_id, manifest.change_id)
+        (source / "app.py").write_text(
+            "roles = ['owner']\n@app.get('/documents')\ndef documents(): return [1]\n",
+            encoding="utf-8",
+        )
+        latest_manifest, _, _ = core.source_changes.submit(
+            project_id,
+            reason="继续完成同一项修复",
+            submitted_by="MCP Agent",
+            repair_reference=reference,
+        )
+
+        latest = core.source_changes.latest_for_repair(project_id, reference)
         assert first.source_fingerprint is not None
-        assert verified == [(project_id, reference)]
+        assert verified == [(project_id, reference)] * 3
         assert stored.repair_reference == reference
         assert plan.repair_reference == reference
+        assert latest is not None
+        assert latest[0].change_id == latest_manifest.change_id
     finally:
         core.close()
 
@@ -610,7 +666,8 @@ def test_change_revalidation_plan_freezes_into_run_without_narrowing_coverage(
         assert request.change_context.change_id == manifest.change_id
         assert request.change_context.impact_fingerprint == assessment.impact_fingerprint
         assert request.change_context.required_intent_ids == plan.required_intent_ids
-        assert request.change_context.source_fingerprint == plan.source_fingerprint
+        assert request.source_fingerprint == plan.source_fingerprint
+        assert "source_fingerprint" not in request.change_context.model_dump(mode="json")
         assert len(request.project_snapshot.plan.cases) == 2
         persisted = core.execution_request_store.load(
             submission.job.job_id,

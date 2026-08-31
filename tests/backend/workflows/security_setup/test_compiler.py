@@ -134,7 +134,11 @@ def test_compiler_is_deterministic_and_rejects_profile_after_authority_change(
             if predicate.kind is HttpPredicateKind.STATUS_IN
             for status in predicate.statuses
         } == {401, 403, 404}
-        core.execution.build_request(first.profile_id, project_id=PROJECT_ID)
+        core.execution.build_request(
+            first.profile_id,
+            project_id=PROJECT_ID,
+            source_fingerprint="d" * 64,
+        )
         ready = core.project_readiness.get(PROJECT_ID)
         assert ready.current_scope_runnable is True
         assert ready.remaining_gap_count == 0
@@ -154,7 +158,11 @@ def test_compiler_is_deterministic_and_rejects_profile_after_authority_change(
             work.commit()
 
         with pytest.raises(JiejianError) as stale:
-            core.execution.build_request(first.profile_id, project_id=PROJECT_ID)
+            core.execution.build_request(
+                first.profile_id,
+                project_id=PROJECT_ID,
+                source_fingerprint="d" * 64,
+            )
         assert stale.value.code == ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT.value
         changed = core.project_readiness.get(PROJECT_ID)
         assert changed.current_scope_runnable is False

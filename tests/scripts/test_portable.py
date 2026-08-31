@@ -23,7 +23,7 @@ from scripts.dev.sample_test import official
 ROOT = Path(__file__).parents[2]
 BUILDER_PATH = ROOT / "scripts" / "build" / "portable.py"
 ARTIFACT_ROOT = ROOT / "var" / "development" / "release" / "artifacts"
-RELEASE_NAME = "JieJian-WebV1-1.0.13-Windows-x64"
+RELEASE_NAME = "JieJian-WebV1-1.0.14-Windows-x64"
 
 
 def _load_module(path: Path, name: str) -> ModuleType:
@@ -47,7 +47,7 @@ def _driver() -> ModuleType:
 def test_portable_launcher_is_relative_offline_and_uses_installed_product() -> None:
     builder = _builder()
 
-    assert builder.RELEASE_VERSION == "1.0.13"
+    assert builder.RELEASE_VERSION == "1.0.14"
     assert builder.RELEASE_NAME == RELEASE_NAME
     assert "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" in builder._START_CMD
     assert "%~dp0" in builder._START_CMD
@@ -85,7 +85,7 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
         base,
         {
             "python_version": "3.13.13",
-            "wheel_version": "1.0.13",
+            "wheel_version": "1.0.14",
             "playwright_version": "1.58.0",
             "chromium_revision": "1228",
         },
@@ -101,8 +101,8 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
     assert release == {
         "schema_version": "1",
         "product": "JieJian Web V1",
-        "version": "1.0.13",
-        "package_version": "1.0.13",
+        "version": "1.0.14",
+        "package_version": "1.0.14",
         "platform": "windows",
         "architecture": "x64",
         "runtime_layout_version": "1",
@@ -148,7 +148,7 @@ def test_portable_tree_rejects_repository_paths_and_local_wheel_metadata(tmp_pat
         builder._validate_tree_content(base, ROOT)
 
     leaked.unlink()
-    direct_url = site_packages / "jiejian-1.0.13.dist-info" / "direct_url.json"
+    direct_url = site_packages / "jiejian-1.0.14.dist-info" / "direct_url.json"
     direct_url.parent.mkdir()
     direct_url.write_text("{}", encoding="ascii")
     with pytest.raises(RuntimeError, match="direct_url"):
@@ -164,7 +164,7 @@ def test_portable_runtime_prunes_dependency_tests_and_generated_python_artifacts
     dependency_tests = site_packages / "dependency" / "tests"
     dependency_tests.mkdir(parents=True)
     (dependency_tests / "test_runtime.py").write_text("raise AssertionError", encoding="utf-8")
-    metadata = site_packages / "jiejian-1.0.13.dist-info"
+    metadata = site_packages / "jiejian-1.0.14.dist-info"
     metadata.mkdir()
     (metadata / "direct_url.json").write_text("{}", encoding="ascii")
     cache = site_packages / "dependency" / "__pycache__"

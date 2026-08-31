@@ -1,9 +1,12 @@
 // 验证项目概览展示持续安全基线、并行待办和官方示例入口。
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ProductStatusDto, ProjectReadinessDto } from '../../api/projects'
 import { WorkbenchPage } from './WorkbenchPage'
+
+const api = vi.hoisted(() => ({ deliveryCheck: vi.fn() }))
+vi.mock('../../api/projects', () => ({ projectsApi: { deliveryCheck: api.deliveryCheck } }))
 
 const readiness: ProjectReadinessDto = {
   project_id: 'p1', project_status: 'READY', application_connected: true,
@@ -49,6 +52,7 @@ const status: ProductStatusDto = {
   },
   latest_result: { run_id: 'run-current', verdict: 'BLOCK', headline: '发现权限问题', scope_statement: '当前范围已检查。', verified_change_id: null },
   inconclusive_recovery: null,
+  repair: null,
 }
 
 const officialExperience = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null, repair_change_id: null }
@@ -64,7 +68,7 @@ const common = {
 describe('WorkbenchPage', () => {
   it('同时展示全部待办，不再生成唯一下一步', () => {
     const onNavigate = vi.fn()
-    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} />)
+    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} onError={vi.fn()} />)
     expect(screen.getByText('项目概览')).toBeInTheDocument()
     expect(screen.getByText('重新确认权限规则与当前实现')).toBeInTheDocument()
     expect(screen.getByText('检查最近一次代码变化')).toBeInTheDocument()
@@ -75,7 +79,7 @@ describe('WorkbenchPage', () => {
 
   it('展示最近变化并进入完整变化记录', () => {
     const onNavigate = vi.fn()
-    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} />)
+    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} onError={vi.fn()} />)
     expect(screen.getByText('Agent 增加导出能力')).toBeInTheDocument()
     expect(screen.getByText(/实际确认 2 个文件变化/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '查看变化记录' }))
@@ -83,16 +87,32 @@ describe('WorkbenchPage', () => {
   })
 
   it('空工作区说明持续基线而不是六步接入', () => {
-    render(<WorkbenchPage {...common} selected={null} readiness={null} status={null} onNavigate={vi.fn()} />)
+    render(<WorkbenchPage {...common} selected={null} readiness={null} status={null} onNavigate={vi.fn()} onError={vi.fn()} />)
     expect(screen.getByText('建立第一份权限安全基线')).toBeInTheDocument()
     expect(screen.getByText(/应用继续开发时/)).toBeInTheDocument()
     expect(screen.queryByText(/六个连续步骤/)).not.toBeInTheDocument()
   })
 
   it('官方示例仍由用户明确同意后启动', () => {
-    render(<WorkbenchPage {...common} selected={null} readiness={null} status={null} onNavigate={vi.fn()} />)
+    render(<WorkbenchPage {...common} selected={null} readiness={null} status={null} onNavigate={vi.fn()} onError={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: '启动官方示例' }))
     expect(screen.getByText('启动官方示例？')).toBeInTheDocument()
     expect(screen.getByText(/不会开始真实检查/)).toBeInTheDocument()
+  })
+
+  it('交付前检查只在用户点击时读取后端结论', async () => {
+    api.deliveryCheck.mockResolvedValue({
+      project_id: 'p1', decision: 'BLOCKED', summary: '当前磁盘源码尚未完成独立检查。',
+      reason_codes: ['CURRENT_SOURCE_NOT_VERIFIED'], next_path: '/validation', next_label: '检查当前源码', verified_run_id: null,
+    })
+    const onNavigate = vi.fn()
+    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} onError={vi.fn()} />)
+
+    expect(api.deliveryCheck).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '交付前检查' }))
+    await waitFor(() => expect(api.deliveryCheck).toHaveBeenCalledWith('p1'))
+    expect(screen.getByText('暂不能交付')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '检查当前源码' }))
+    expect(onNavigate).toHaveBeenCalledWith('/validation')
   })
 })

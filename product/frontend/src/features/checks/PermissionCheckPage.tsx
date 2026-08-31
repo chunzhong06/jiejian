@@ -23,13 +23,14 @@ type PermissionCheckPageProps = {
   onResolved?: () => void
   onNavigate: (path: string) => void
   onBack: () => void
-  onNext: () => void
+  onContinuePreparation?: () => Promise<void> | void
+  onResult?: () => void
   changeId?: string
 }
 
 const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'])
 
-export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, onResolved, onNavigate, onBack, onNext, changeId }: PermissionCheckPageProps) {
+export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, onResolved, onNavigate, onBack, onContinuePreparation, onResult, changeId }: PermissionCheckPageProps) {
   const [matrix, setMatrix] = useState<PermissionIntentMatrixDto | null>(null)
   const [proposals, setProposals] = useState<PermissionIntentProposalDto[]>([])
   const [preview, setPreview] = useState<CheckPreviewDto | null>(null)
@@ -289,7 +290,7 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
   const primary = activeRun
     ? undefined
     : canViewResult && !needsNewRun
-      ? { label: '查看检查结果', onClick: onNext }
+      ? { label: '查看检查结果', onClick: onResult }
       : canSubmit
         ? { label: latest && terminalStates.has(String(latest.lifecycle)) ? '重新开始真实检查' : '开始真实检查', onClick: () => void submit(), loading: submitting }
         : savingCell
@@ -331,7 +332,7 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
       {draft && draft.status !== 'UNAVAILABLE' && <div className="permission-draft-results">
         <div className="permission-draft-source"><Typography.Text strong>用户原话</Typography.Text><Typography.Paragraph>{draftSourceText}</Typography.Paragraph></div>
         {draft.suggestions.map((suggestion) => {
-          const available = Boolean(findDraftCell(suggestion, matrix))
+          const available = findDraftCell(suggestion, matrix)?.can_confirm === true
           return <article className="permission-draft-card" key={suggestion.option_id}>
             <div className="permission-draft-card-heading"><Typography.Text strong>{suggestion.subject_display_name} · {suggestion.action_display_name}</Typography.Text><Tag color="blue">待你确认</Tag></div>
             <Descriptions size="small" column={1}>
@@ -352,12 +353,12 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
     <section className="permission-check-section" aria-labelledby="permission-requirements-title">
       <div className="permission-check-heading"><div><Typography.Title level={3} id="permission-requirements-title">确认权限要求</Typography.Title><Typography.Paragraph type="secondary">为每个权限组和资源关系选择“允许”或“拒绝”。这里表达的是你的安全要求，不是界鉴自动作出的漏洞结论。</Typography.Paragraph></div><Tag>{matrix ? `已确认 ${matrix.confirmed_count} 项` : '正在读取'}</Tag></div>
       {matrix?.actions.length === 0 && <Alert type="info" showIcon message="还没有可确认的业务动作" description="请先完成业务流程录制，并确认测试资源、真实结果观察和恢复方式。" />}
+      {matrix && matrix.actions.length > 0 && matrix.required_confirmation_count === 0 && matrix.actions.some((action) => !action.compilable) && <Alert type="info" showIcon message="当前还没有真正可确认的权限规则" description="当前还缺业务流程、测试资源或其他前置事实。先完成测试准备后，界鉴才会让你确认真正可执行的权限规则。" />}
       <div className="permission-requirement-list">
         {matrix?.actions.map((action) => <article className="permission-requirement-action" key={action.action_candidate_id}>
-          <div className="permission-requirement-title"><div><Typography.Title level={4}>{action.action_display_name}</Typography.Title><Typography.Text type="secondary">测试资源：{action.resource_logical_name ?? '尚未准备'}</Typography.Text></div><Tag color={action.compilable ? 'success' : 'warning'}>{action.compilable ? '允许与拒绝已齐全' : '仍需确认'}</Tag></div>
+          <div className="permission-requirement-title"><div><Typography.Title level={4}>{action.action_display_name}</Typography.Title><Typography.Text type="secondary">测试资源：{action.resource_logical_name ?? '尚未准备'}</Typography.Text></div><Tag color={action.compilable ? 'success' : action.cells.some((cell) => cell.requires_human_confirmation) ? 'warning' : 'default'}>{action.compilable ? '允许与拒绝已齐全' : action.cells.some((cell) => cell.requires_human_confirmation) ? '仍需确认' : '等待准备事实'}</Tag></div>
           {action.cells.map((cell) => {
             const key = permissionCellKey(action.action_candidate_id, cell)
-            const blocking = cell.review_reasons.some((reason) => !['PERMISSION_INTENT_UNCONFIRMED', 'PERMISSION_INTENT_STALE'].includes(reason))
             return <div className="permission-requirement-row" key={key}>
               <div className="permission-sentence">
                 <Typography.Text className="permission-sentence-role">{cell.subject_role_display_name}</Typography.Text>
@@ -366,7 +367,7 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
                 <Typography.Text>执行“{action.action_display_name}”</Typography.Text>
                 <div className={`permission-effect-summary is-${String(cell.expectation ?? 'UNCONFIRMED').toLowerCase()}`}><Typography.Text strong>{cell.expectation === 'ALLOW' ? '合法功能必须保持：' : cell.expectation === 'DENY' ? '禁止发生：' : '需要确认的真实业务后果：'}</Typography.Text>{cell.protected_effects.length > 0 ? <ul>{cell.protected_effects.map((effect, index) => <li key={`${effect.business_label}-${index}`}>{effect.business_label || effect.resource_type}</li>)}</ul> : <Typography.Text type="secondary">尚未确认受保护业务后果</Typography.Text>}</div>
               </div>
-              <div className="permission-requirement-control"><Segmented aria-label={`${cell.subject_role_display_name}权限组以${relationLabels[cell.relation]}关系对${action.action_display_name}的权限`} value={cell.expectation ?? 'UNCONFIRMED'} disabled={blocking || savingCell === key || activeRun} options={[{ label: '未确认', value: 'UNCONFIRMED' }, { label: '允许', value: 'ALLOW' }, { label: '拒绝', value: 'DENY' }]} onChange={(value) => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: value === 'ALLOW' || value === 'DENY' ? value : null })} />{cell.status === 'NEEDS_REVIEW' && cell.expectation !== null && <Button type="link" size="small" disabled={savingCell === key || activeRun} onClick={() => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: cell.expectation })}>重新确认当前要求</Button>}{cell.status === 'NEEDS_REVIEW' && <Typography.Text type="warning">依赖事实已变化，请重新确认</Typography.Text>}{blocking && <Typography.Text type="danger">{cell.review_reasons.map((reason) => gapLabels[reason] ?? reason).join('、')}</Typography.Text>}{cell.execution_gap && <Typography.Text type="secondary">{executionGapLabel(cell.execution_gap, cell)}</Typography.Text>}<details className="permission-technical-details"><summary>查看版本与实现状态</summary><Typography.Text type="secondary">{cell.expectation === null ? '尚未确认' : `权限版本 ${cell.policy_epoch ?? matrix.policy_epoch}`}{cell.intent_revision !== null && ` · 修订 ${cell.intent_revision}`} · {bindingLabel(cell.status)}</Typography.Text></details></div>
+              <div className="permission-requirement-control"><Segmented aria-label={`${cell.subject_role_display_name}权限组以${relationLabels[cell.relation]}关系对${action.action_display_name}的权限`} value={cell.expectation ?? 'UNCONFIRMED'} disabled={!cell.can_confirm || savingCell === key || activeRun} options={[{ label: '未确认', value: 'UNCONFIRMED' }, { label: '允许', value: 'ALLOW' }, { label: '拒绝', value: 'DENY' }]} onChange={(value) => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: value === 'ALLOW' || value === 'DENY' ? value : null })} />{cell.status === 'NEEDS_REVIEW' && cell.expectation !== null && cell.can_confirm && <Button type="link" size="small" disabled={savingCell === key || activeRun} onClick={() => setPendingChange({ actionId: action.action_candidate_id, cell, expectation: cell.expectation })}>重新确认当前要求</Button>}{cell.requires_human_confirmation && <Typography.Text type="warning">依赖事实已变化，请重新确认</Typography.Text>}{!cell.can_confirm && cell.confirmation_blockers.length > 0 && <Typography.Text type="secondary">{cell.confirmation_blockers.map((reason) => gapLabels[reason] ?? reason).join('、')}</Typography.Text>}{cell.execution_gap && <Typography.Text type="secondary">{executionGapLabel(cell.execution_gap, cell)}</Typography.Text>}<details className="permission-technical-details"><summary>查看版本与实现状态</summary><Typography.Text type="secondary">{cell.expectation === null ? '尚未确认' : `权限版本 ${cell.policy_epoch ?? matrix.policy_epoch}`}{cell.intent_revision !== null && ` · 修订 ${cell.intent_revision}`} · {bindingLabel(cell.status)}</Typography.Text></details></div>
             </div>
           })}
           {action.gaps.length > 0 && <Typography.Paragraph type="secondary" className="permission-requirement-gaps">尚缺：{action.gaps.map((gap) => gapLabels[gap] ?? gap).join('、')}</Typography.Paragraph>}
@@ -438,7 +439,9 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
       primary={mode === 'permissions'
         ? savingCell
           ? { label: '正在保存权限要求', ariaLabel: '正在保存权限要求', disabled: true, loading: true }
-          : { label: '继续测试准备', onClick: onNext }
+          : matrix && matrix.required_confirmation_count > 0
+            ? { label: `还有 ${matrix.required_confirmation_count} 项权限规则需要确认`, disabled: true }
+            : { label: '继续准备', onClick: onContinuePreparation }
         : primary}
     />
     <Modal open={Boolean(pendingChange)} title="确认权限变更" okText="确认权限变更" cancelText="暂不变更" confirmLoading={Boolean(savingCell)} onOk={() => void approveChange()} onCancel={() => { if (!savingCell) { setPendingChange(null); setPendingDraftOptionId(undefined) } }}>

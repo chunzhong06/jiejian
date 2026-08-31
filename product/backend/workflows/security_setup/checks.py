@@ -30,7 +30,10 @@ from product.backend.workflows.permission_intents import (
 from product.backend.workflows.runs.execution import ExecutionWorkflow
 from product.backend.workflows.results.repair import RepairContractService
 from product.backend.workflows.security_setup.compiler import SecuritySetupCompiler
-from product.backend.workflows.source_changes import SourceChangeService
+from product.backend.workflows.source_changes import (
+    SourceChangeService,
+    SourceWorkspaceInspectionStatus,
+)
 from product.backend.core.source_changes import RevalidationPlan
 from product.protocols.execution_request import (
     ChangeVerificationContext,
@@ -126,7 +129,6 @@ class CheckWorkflow:
         revalidation: RevalidationPlan | None,
     ) -> CheckPreview:
         matrix = self._permission_intents.matrix(project_id)
-        repair_context = self._repair_context(project_id, revalidation)
         profile_id = self._security_setup.current_generated_profile_id(project_id)
         snapshot = None
         profile_gap: CheckPreviewGap | None = None
@@ -134,12 +136,10 @@ class CheckWorkflow:
             profile_gap = _gap("GENERATED_PROFILE_MISSING")
         else:
             try:
-                snapshot = self._execution.build_request(
+                snapshot = self._execution.build_snapshot(
                     profile_id,
                     project_id=project_id,
-                    change_context=self._change_context(revalidation),
-                    repair_context=repair_context,
-                ).project_snapshot
+                )
             except JiejianError:
                 profile_gap = _gap("GENERATED_PROFILE_STALE")
 
@@ -316,8 +316,28 @@ class CheckWorkflow:
                 ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT,
                 "当前检查配置已经失效，请重新生成",
             )
+        workspace = self._source_changes.inspect_workspace(project_id)
+        if workspace.status is SourceWorkspaceInspectionStatus.DRIFTED:
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "磁盘源码已经变化，请先提交并审阅代码变化",
+                details={
+                    "next_path": "/changes",
+                    "reason_codes": workspace.reason_codes,
+                },
+            )
+        if (
+            workspace.status is not SourceWorkspaceInspectionStatus.CURRENT
+            or workspace.live_source_fingerprint is None
+        ):
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "当前无法确认磁盘源码身份，未创建检查任务",
+                details={"reason_codes": workspace.reason_codes},
+            )
         return self._execution.submit(
             profile_id,
+            source_fingerprint=workspace.live_source_fingerprint,
             project_id=project_id,
             change_context=self._change_context(revalidation),
             repair_context=self._repair_context(project_id, revalidation),
@@ -345,7 +365,6 @@ class CheckWorkflow:
             change_id=revalidation.change_id,
             impact_fingerprint=revalidation.impact_fingerprint,
             required_intent_ids=revalidation.required_intent_ids,
-            source_fingerprint=revalidation.source_fingerprint,
         )
 
     def _repair_context(

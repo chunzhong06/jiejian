@@ -135,14 +135,11 @@ describe('VerificationPage', () => {
     expect(screen.getAllByText('原考题复验已通过').length).toBeGreaterThan(0)
   })
 
-  it('证据不足的官方示例动作只转交明确的新 Run 请求', async () => {
+  it('证据不足的官方示例只转交观察缺口的新 Run 请求', async () => {
     const onObservationGap = vi.fn()
-    const onRetest = vi.fn()
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(presentation({ verdict: 'INCONCLUSIVE', issues: [issue({ verdict: 'INCONCLUSIVE', conclusion: '证据不足' })] }))
-    render(<VerificationPage run={run} onError={vi.fn()} onObservationGap={onObservationGap} onRetest={onRetest} />)
-    fireEvent.click(await screen.findByRole('button', { name: '使用原考题复验' }))
-    expect(onRetest).toHaveBeenCalledOnce()
+    render(<VerificationPage run={run} onError={vi.fn()} onObservationGap={onObservationGap} />)
     fireEvent.click(await screen.findByRole('button', { name: '验证关键结果不可读取时会怎样' }))
     await waitFor(() => expect(onObservationGap).toHaveBeenCalledOnce())
   })

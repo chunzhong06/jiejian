@@ -15,6 +15,7 @@ from product.backend.infra.storage import FindingFinalizationState
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
 from product.backend.api.envelope import ApiModel
+from product.backend.workflows.source_changes import SourceWorkspaceInspectionStatus
 
 
 def _run_list_item(
@@ -49,8 +50,26 @@ def build_runs_router(
         status_code=202,
     )
     async def create_run(project_id: str, body: RunCreateRequest):
+        workspace = context.source_changes.inspect_workspace(project_id)
+        if (
+            workspace.status is not SourceWorkspaceInspectionStatus.CURRENT
+            or workspace.live_source_fingerprint is None
+        ):
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "当前磁盘源码身份不可用于创建检查任务",
+                details={
+                    "next_path": (
+                        "/changes"
+                        if workspace.status is SourceWorkspaceInspectionStatus.DRIFTED
+                        else None
+                    ),
+                    "reason_codes": workspace.reason_codes,
+                },
+            )
         result, request, _ = context.execution.submit(
             body.profile_id,
+            source_fingerprint=workspace.live_source_fingerprint,
             project_id=project_id,
             idempotency_key=body.idempotency_key,
         )

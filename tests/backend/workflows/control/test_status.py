@@ -6,6 +6,7 @@ import pytest
 
 from product.backend.core.errors import JiejianError
 from product.backend.core.lifecycle import ProjectStatus, RunVerdict
+from product.backend.core.repair import RepairContractReference
 from product.backend.workflows.control import ProductResultQuery, ProductStatusService
 from product.backend.workflows.projects.readiness import (
     ActionPermissionReadinessView,
@@ -21,6 +22,11 @@ from product.backend.workflows.projects.preparation import (
 from product.backend.workflows.projects.revalidation import (
     ProjectRevalidationStatus,
     ProjectRevalidationView,
+)
+from product.backend.workflows.projects.repair import (
+    ProjectRepairStatus,
+    ProjectRepairView,
+    RepairTaskView,
 )
 from product.backend.workflows.source_changes import SourceChangeView
 from product.protocols import TargetType
@@ -168,6 +174,33 @@ def test_status_reuses_exact_readiness_and_presentation_reference() -> None:
     assert status.latest_result.run_id == readiness.latest_verified_run_id
     assert status.latest_result.verdict is RunVerdict.BLOCK
     assert status.latest_result.verified_change_id == change.change_id
+
+
+def test_latest_result_and_cross_run_project_repair_remain_independent() -> None:
+    readiness = _readiness(action="OPEN_RESULT", latest_run_id="run_demo")
+    project = _project()
+    presentation = _presentation(RunVerdict.PASS, (_intent(),))
+    repair = _repair(ProjectRepairStatus.REPAIR_REQUIRED, "/results")
+    received: list[dict[str, object]] = []
+
+    def evaluate(_project_id: str, **kwargs):
+        received.append(kwargs)
+        return repair
+
+    service = ProductStatusService(
+        SimpleNamespace(list=lambda: (project,), get=lambda _project_id: project),
+        lambda _project_id: readiness,
+        SimpleNamespace(build=lambda _run_id: presentation),
+        project_repair=SimpleNamespace(evaluate=evaluate),
+    )
+
+    status = service.get("project_demo")
+
+    assert status.latest_result is not None
+    assert status.latest_result.verdict is RunVerdict.PASS
+    assert status.repair is repair
+    assert len(received) == 1
+    assert "latest_presentation" not in received[0]
 
 
 def test_result_query_selects_current_presentation_and_history_without_reinterpretation() -> None:
@@ -358,6 +391,56 @@ def test_incomplete_preparation_routes_to_only_current_asset_repairs() -> None:
     ) == 1
 
 
+def test_unfinished_repair_precedes_same_route_revalidation_attention() -> None:
+    revalidation = ProjectRevalidationView(
+        project_id="project_demo",
+        status=ProjectRevalidationStatus.REVIEW_REQUIRED,
+        change_id=f"chg_{'1' * 32}",
+        summary="当前修复变化仍需确认实现映射。",
+        next_path="/permissions",
+        next_label="确认权限实现",
+        required_intent_count=1,
+        reason_codes=("MAPPING_REVIEW_REQUIRED",),
+    )
+    status = _recovery_service(
+        verdict=RunVerdict.BLOCK,
+        revalidation=revalidation,
+        repair=_repair(ProjectRepairStatus.CHANGE_SUBMITTED, "/permissions"),
+    ).get("project_demo")
+
+    warnings = [
+        item
+        for item in status.attention_items
+        if item.route == "/permissions" and item.tone != "INFO"
+    ]
+    assert [item.key for item in warnings] == ["continue-project-repair"]
+
+
+def test_inconclusive_repair_reuses_recovery_route_without_duplicate_attention() -> None:
+    status = _recovery_service(
+        source_intents=(_intent(),),
+        current_intents=(
+            SimpleNamespace(intent_id=INTENT_ID, revision=2, intent_hash=INTENT_HASH),
+        ),
+        repair=_repair(ProjectRepairStatus.INCONCLUSIVE, "/preparation"),
+    ).get("project_demo")
+
+    assert status.repair is not None
+    assert status.repair.next_path == "/permissions"
+    assert status.repair.tasks[0].next_path == "/permissions"
+    assert status.repair.reason_codes == (
+        "REPAIR_INCONCLUSIVE",
+        "ORIGINAL_PERMISSION_INTENT_CHANGED",
+    )
+    assert len(
+        [
+            item
+            for item in status.attention_items
+            if item.route == "/permissions" and item.tone != "INFO"
+        ]
+    ) == 1
+
+
 def test_recovery_projection_repeated_reads_have_no_write_callback() -> None:
     calls = {"presentation": 0, "intents": 0}
     presentation = _presentation(RunVerdict.INCONCLUSIVE, (_intent(),))
@@ -418,6 +501,7 @@ def _recovery_service(
     current_intents=(),
     preparation_ready: bool = True,
     revalidation: ProjectRevalidationView | None = None,
+    repair: ProjectRepairView | None = None,
 ) -> ProductStatusService:
     project = _project()
     readiness = _readiness(action="OPEN_RESULT", latest_run_id="run_demo").model_copy(
@@ -437,5 +521,38 @@ def _recovery_service(
             if revalidation is None
             else SimpleNamespace(evaluate=lambda *_args, **_kwargs: revalidation)
         ),
+        project_repair=(
+            None
+            if repair is None
+            else SimpleNamespace(evaluate=lambda *_args, **_kwargs: repair)
+        ),
         current_permission_intents=lambda _project_id: current_intents,
+    )
+
+
+def _repair(status: ProjectRepairStatus, next_path: str) -> ProjectRepairView:
+    reference = RepairContractReference(
+        source_run_id="run_" + "d" * 32,
+        source_finding_id="finding_" + "e" * 32,
+        repair_fingerprint="d" * 64,
+    )
+    task = RepairTaskView(
+        reference=reference,
+        source_run_id=reference.source_run_id,
+        source_finding_id=reference.source_finding_id,
+        status=status,
+        must_disappear="越权业务后果必须消失。",
+        must_remain="合法业务路径必须保留。",
+        must_not_change=("原权限考题", "受保护业务后果"),
+        next_path=next_path,
+        next_label="继续处理当前修复",
+        reason_codes=(f"REPAIR_{status.value}",),
+    )
+    return ProjectRepairView(
+        project_id="project_demo",
+        status=status,
+        tasks=(task,),
+        next_path=next_path,
+        next_label=task.next_label,
+        reason_codes=task.reason_codes,
     )

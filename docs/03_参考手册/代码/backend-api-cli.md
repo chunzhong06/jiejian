@@ -129,7 +129,7 @@
 ### `product/backend/api/routers/runs.py`
 - `build_runs_router(context, results) -> APIRouter`
 - `class RunCreateRequest`
-主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.storage`, `product.backend.workflows.results.published`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.storage`, `product.backend.workflows.results.published`, `product.backend.workflows.source_changes`, `pydantic`, `typing`
 
 ### `product/backend/api/routers/source_changes.py`
 - `build_source_changes_router(context) -> APIRouter`

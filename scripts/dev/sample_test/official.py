@@ -784,12 +784,14 @@ def _confirm_permissions(
             timeout=30_000,
         )
 
+    navigation_step = "从权限规则进入测试准备"
     try:
-        page.get_by_role("button", name="继续测试准备", exact=True).click()
+        page.get_by_role("button", name="继续准备", exact=True).click()
         page.wait_for_url("**/#/preparation", timeout=30_000)
         page.get_by_role("heading", name="测试准备", exact=True).wait_for(
             timeout=30_000
         )
+        navigation_step = "在测试准备页执行安全机械动作"
         with page.expect_response(
             lambda response: response.request.method == "POST"
             and response.url.endswith(
@@ -798,13 +800,14 @@ def _confirm_permissions(
             timeout=30_000,
         ) as pending_prepare_safe:
             page.get_by_role(
-                "button", name="继续准备", exact=True
+                "button", name="自动完成这一步", exact=True
             ).click()
         if pending_prepare_safe.value.status != 200:
             raise SampleTestError(
                 "测试准备页执行安全机械动作返回非预期状态 "
                 f"{pending_prepare_safe.value.status}"
             )
+        navigation_step = "从测试准备进入验证运行"
         page.get_by_role(
             "button", name="前往验证运行", exact=True
         ).last.click()
@@ -818,7 +821,7 @@ def _confirm_permissions(
             full_page=True,
         )
         raise SampleTestError(
-            "权限确认完成后没有按正式工作区进入测试准备和验证运行"
+            f"{navigation_step}失败：{error}"
         ) from error
     page.get_by_text(
         "当前检查条件已经准备好",
@@ -1099,7 +1102,6 @@ def _assert_verification_view(
     audit_dir: Path,
     *,
     name: str,
-    click_retest: bool = False,
     verify_interactions: bool = False,
 ) -> None:
     """在 2560×1440 首屏核对现场验证，并只使用公开可见交互。"""
@@ -1146,7 +1148,7 @@ def _assert_verification_view(
         if bounds is None or bounds["y"] < 0 or bounds["y"] + bounds["height"] > 1440:
             raise SampleTestError(f"{name} 的{label}没有出现在 2560×1440 首屏")
 
-    if verify_interactions or click_retest:
+    if verify_interactions:
         interaction_step = "打开证据说明"
         try:
             node = page.locator("button.verification-path-node").first
@@ -1163,24 +1165,123 @@ def _assert_verification_view(
             page.get_by_role("button", name="查看限制", exact=True).click()
             if page.evaluate("document.activeElement?.id") != "verification-limitations":
                 raise SampleTestError(f"{name} 的查看限制没有聚焦证据边界")
-
-            if click_retest:
-                interaction_step = "使用原考题复验"
-                with page.expect_response(
-                    lambda response: response.request.method == "POST"
-                    and response.url.endswith("/api/experience/official-sample/behavior"),
-                    timeout=30_000,
-                ) as pending_retest:
-                    page.get_by_role(
-                        "button", name="使用原考题复验", exact=True
-                    ).click()
-                if pending_retest.value.status != 200:
-                    raise SampleTestError(
-                        f"{name} 的原考题复验返回非预期状态 {pending_retest.value.status}"
-                    )
-                page.wait_for_url(re.compile(r"#/validation$"), timeout=30_000)
         except PlaywrightError as error:
             raise SampleTestError(f"{name} 的{interaction_step}交互失败") from error
+
+
+def _prepare_official_repair_verification(
+    page: Page,
+    client: ApiClient,
+    project_id: str,
+    source_run_id: str,
+) -> None:
+    """Sample 只负责形成真实修复变化，后续入口必须服从普通 ProjectRepair。"""
+
+    switched = client.call(
+        "POST",
+        "/api/experience/official-sample/behavior",
+        {
+            "schema_version": "1",
+            "authorization_order": "AUTHORIZE_BEFORE_ENQUEUE",
+            "blob_observation": "AVAILABLE",
+            "verification_run_id": source_run_id,
+        },
+    )
+    repair_change_id = switched.get("repair_change_id")
+    if not isinstance(repair_change_id, str):
+        raise SampleTestError("官方示例没有形成正式修复变化")
+    status = client.call("GET", f"/api/projects/{project_id}/status")
+    repair = status.get("repair") or {}
+    if repair.get("status") == "CHANGE_SUBMITTED":
+        if repair.get("next_path") != "/preparation":
+            raise SampleTestError(
+                "官方示例修复变化需要超出 fixture 权限的人工处理："
+                f"{repair.get('next_path')} {repair.get('reason_codes')}"
+            )
+        try:
+            page.goto(client.origin + "/#/results", wait_until="networkidle")
+            page.get_by_text("Agent 已提交代码变化", exact=True).wait_for(
+                timeout=30_000
+            )
+            page.get_by_role(
+                "button", name=str(repair.get("next_label")), exact=True
+            ).click()
+            page.wait_for_url(re.compile(r"#/preparation$"), timeout=30_000)
+        except PlaywrightError as error:
+            raise SampleTestError(
+                f"普通 ProjectRepair 没有进入修复准备：{error}"
+            ) from error
+
+        for _ in range(4):
+            readiness = status.get("readiness") or {}
+            preparation = readiness.get("preparation") or {}
+            next_key = preparation.get("next_item_key")
+            next_item = next(
+                (
+                    item
+                    for item in preparation.get("items") or []
+                    if item.get("key") == next_key
+                ),
+                None,
+            )
+            if repair.get("status") == "READY_TO_VERIFY":
+                break
+            if next_item is None or next_item.get("status") != "AUTO":
+                raise SampleTestError(
+                    "官方示例修复准备不能由安全机械动作完成："
+                    f"{preparation.get('next_path')} {repair.get('reason_codes')}"
+                )
+            try:
+                with page.expect_response(
+                    lambda response: response.request.method == "POST"
+                    and response.url.endswith(
+                        f"/api/projects/{project_id}/preparation/prepare-safe"
+                    ),
+                    timeout=30_000,
+                ) as pending_prepare:
+                    page.get_by_role(
+                        "button",
+                        name=str(preparation.get("next_label")),
+                        exact=True,
+                    ).click()
+                if pending_prepare.value.status != 200:
+                    raise SampleTestError(
+                        "修复准备安全机械动作返回非预期状态 "
+                        f"{pending_prepare.value.status}"
+                    )
+                status = client.call("GET", f"/api/projects/{project_id}/status")
+                repair = status.get("repair") or {}
+                page.reload(wait_until="networkidle")
+            except PlaywrightError as error:
+                raise SampleTestError(
+                    f"修复准备页安全机械动作失败：{error}"
+                ) from error
+
+    tasks = repair.get("tasks") or []
+    if repair.get("status") != "READY_TO_VERIFY" or not any(
+        task.get("linked_change_id") == repair_change_id for task in tasks
+    ):
+        raise SampleTestError(
+            "官方示例修复变化没有进入 ProjectRepair READY_TO_VERIFY："
+            f"{repair.get('status')} {repair.get('reason_codes')}"
+        )
+
+    try:
+        page.goto(client.origin + "/#/results", wait_until="networkidle")
+        page.get_by_text(
+            "当前修复已经可以独立复验", exact=True
+        ).wait_for(timeout=30_000)
+        page.get_by_role(
+            "button", name="复验这次修复", exact=True
+        ).click()
+        page.wait_for_url(re.compile(r"#/validation$"), timeout=30_000)
+        page.get_by_role("heading", name="验证运行", exact=True).wait_for(
+            timeout=30_000
+        )
+    except PlaywrightError as error:
+        raise SampleTestError(
+            f"普通 ProjectRepair 没有进入正式复验页：{error}"
+        ) from error
 
 
 def _assert_workspace_viewports(page: Page, origin: str, audit_dir: Path) -> None:
@@ -1716,8 +1817,13 @@ def run(
             vulnerable,
             audit_dir,
             name="block",
-            click_retest=True,
             verify_interactions=True,
+        )
+        _prepare_official_repair_verification(
+            page,
+            client,
+            project_id,
+            str(vulnerable["run_id"]),
         )
 
         _phase(state, 7)

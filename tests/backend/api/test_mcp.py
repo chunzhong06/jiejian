@@ -62,6 +62,7 @@ EXPECTED_MCP_TOOLS = {
     "jiejian_check_preview",
     "jiejian_check_run",
     "jiejian_evidence_index",
+    "jiejian_delivery_check",
     "jiejian_flow_list",
     "jiejian_flow_status",
     "jiejian_identity_list",
@@ -86,6 +87,7 @@ EXPECTED_MCP_TOOLS = {
     "jiejian_result_history",
     "jiejian_result_presentation",
     "jiejian_repair_contract_get",
+    "jiejian_repair_status",
     "jiejian_system_status",
 }
 
@@ -361,6 +363,23 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                     )
                     assert status.is_error is False
                     assert status.structured_content == expected
+
+                    repair_status = await client.call_tool(
+                        "jiejian_repair_status",
+                        {"project_id": project_id},
+                    )
+                    assert repair_status.is_error is False
+                    assert repair_status.structured_content == expected["repair"]
+
+                    expected_delivery = app.state.context.delivery_check.check(
+                        project_id
+                    ).model_dump(mode="json")
+                    delivery = await client.call_tool(
+                        "jiejian_delivery_check",
+                        {"project_id": project_id},
+                    )
+                    assert delivery.is_error is False
+                    assert delivery.structured_content == expected_delivery
 
                     repair_reference = RepairContractReference(
                         source_run_id="run_" + "6" * 32,

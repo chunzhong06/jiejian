@@ -109,6 +109,29 @@ class SourceRevalidationInspectionStatus(StrEnum):
     MAPPING_REVIEW_REQUIRED = "MAPPING_REVIEW_REQUIRED"
 
 
+class SourceWorkspaceInspectionStatus(StrEnum):
+    CURRENT = "CURRENT"
+    DRIFTED = "DRIFTED"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class SourceWorkspaceInspection(BaseModel):
+    """源码工作区与已登记应用理解身份的只读比较。"""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        hide_input_in_errors=True,
+    )
+
+    project_id: str
+    status: SourceWorkspaceInspectionStatus
+    registered_source_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    live_source_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    reason_codes: tuple[str, ...] = Field(default=(), max_length=32)
+
+
 class SourceRevalidationInspection(BaseModel):
     """一次变化相对当前源码、权限版本和实现映射的唯一只读判定。"""
 
@@ -252,6 +275,66 @@ class SourceChangeService:
         if manifest is None or change_set is None:
             raise JiejianError(ErrorCode.STORAGE_FAILURE, "代码变化聚合数据不完整")
         return manifest, change_set, assessment
+
+    def latest_for_repair(
+        self,
+        project_id: str,
+        reference: RepairContractReference,
+    ) -> tuple[ChangeManifest, SourceChangeSet, ChangeImpactAssessment] | None:
+        """读取项目内最近一条精确关联修复要求的完整变化聚合。"""
+
+        if self._repair_contracts is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "修复要求服务未装配")
+        self._repair_contracts.verify_reference(project_id, reference)
+        with self._uow_factory() as work:
+            manifest = work.source_changes.latest_manifest_for_repair(project_id, reference)
+            if manifest is None:
+                return None
+            change_set = work.source_changes.change_set(manifest.change_id)
+            assessment = work.source_changes.assessment(manifest.change_id)
+        if change_set is None or assessment is None:
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, "代码变化聚合数据不完整")
+        return manifest, change_set, assessment
+
+    def inspect_workspace(self, project_id: str) -> SourceWorkspaceInspection:
+        """用正式源码分析器比较 live 与登记 fingerprint，全程零写入。"""
+
+        try:
+            understanding = self._application_understanding.get(project_id)
+        except JiejianError as exc:
+            return SourceWorkspaceInspection(
+                project_id=project_id,
+                status=SourceWorkspaceInspectionStatus.UNAVAILABLE,
+                reason_codes=(exc.code,),
+            )
+        registered = understanding.source_fingerprint
+        if registered is None:
+            return SourceWorkspaceInspection(
+                project_id=project_id,
+                status=SourceWorkspaceInspectionStatus.UNAVAILABLE,
+                reason_codes=("SOURCE_BASELINE_MISSING",),
+            )
+        try:
+            live = self._application_understanding.inspect_source_fingerprint(project_id)
+        except JiejianError as exc:
+            return SourceWorkspaceInspection(
+                project_id=project_id,
+                status=SourceWorkspaceInspectionStatus.UNAVAILABLE,
+                registered_source_fingerprint=registered,
+                reason_codes=(exc.code,),
+            )
+        drifted = live != registered
+        return SourceWorkspaceInspection(
+            project_id=project_id,
+            status=(
+                SourceWorkspaceInspectionStatus.DRIFTED
+                if drifted
+                else SourceWorkspaceInspectionStatus.CURRENT
+            ),
+            registered_source_fingerprint=registered,
+            live_source_fingerprint=live,
+            reason_codes=("SOURCE_WORKSPACE_DRIFTED",) if drifted else (),
+        )
 
     def view(self, change_id: str) -> SourceChangeView:
         """读取单次变化的最小产品摘要。"""
@@ -749,4 +832,6 @@ __all__ = [
     "SourceChangeView",
     "SourceRevalidationInspection",
     "SourceRevalidationInspectionStatus",
+    "SourceWorkspaceInspection",
+    "SourceWorkspaceInspectionStatus",
 ]

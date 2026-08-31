@@ -29,8 +29,11 @@ from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.core.identifiers import JOB_ID_PATTERN
 from product.protocols import RUNNER_INPUT_MAX_BYTES
 from product.protocols.execution_request import (
+    ExecutionRequestDocument,
+    LegacyPersistedExecutionRequest,
     PersistedExecutionRequest,
     canonical_execution_request_bytes,
+    canonical_legacy_execution_request_bytes,
     parse_execution_request,
     required_secret_names,
 )
@@ -89,7 +92,29 @@ class ExecutionRequestStore:
         if not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), expected_hash):
             raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求哈希不匹配")
         parsed = parse_execution_request(raw, known_secrets=known_secrets)
+        if not isinstance(parsed, PersistedExecutionRequest):
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "当前执行入口只接受 v2 请求")
         if canonical_execution_request_bytes(parsed, known_secrets=known_secrets) != raw:
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求不是规范 JSON")
+        return parsed
+
+    def load_historical(
+        self,
+        job_id: str,
+        *,
+        expected_hash: str,
+        known_secrets: Sequence[str] = (),
+    ) -> ExecutionRequestDocument:
+        """读取已发布结果绑定的 v1/v2 请求；该入口不能供 Worker 消费。"""
+
+        raw = self._read_verified(job_id, expected_hash)
+        parsed = parse_execution_request(raw, known_secrets=known_secrets)
+        canonical = (
+            canonical_legacy_execution_request_bytes(parsed, known_secrets=known_secrets)
+            if isinstance(parsed, LegacyPersistedExecutionRequest)
+            else canonical_execution_request_bytes(parsed, known_secrets=known_secrets)
+        )
+        if canonical != raw:
             raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求不是规范 JSON")
         return parsed
 
@@ -109,6 +134,22 @@ class ExecutionRequestStore:
                 pass
         except OSError:
             raise JiejianError(ErrorCode.JOB_PERSISTENCE, "孤儿任务执行请求清理失败") from None
+
+    def _read_verified(self, job_id: str, expected_hash: str) -> bytes:
+        path = self.path_for(job_id)
+        if not path.is_file():
+            raise JiejianError(ErrorCode.JOB_REQUEST_MISSING, "任务执行请求不存在")
+        try:
+            if path.stat().st_size > RUNNER_INPUT_MAX_BYTES:
+                raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求超过大小限制")
+            raw = path.read_bytes()
+        except JiejianError:
+            raise
+        except OSError:
+            raise JiejianError(ErrorCode.JOB_REQUEST_MISSING, "任务执行请求不可读取") from None
+        if not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), expected_hash):
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求哈希不匹配")
+        return raw
 
     def path_for(self, job_id: str) -> Path:
         if re.fullmatch(JOB_ID_PATTERN, job_id) is None:

@@ -51,6 +51,7 @@ def test_current_web_stable_identities_do_not_drift(tmp_path: Path) -> None:
     plan = ExecutionWorkflow._compile_plan(profile, contract)
     snapshot = profile.build_snapshot(contract, plan)
     request = PersistedExecutionRequest(
+        source_fingerprint="d" * 64,
         budget=ExecutionBudget(
             max_requests=profile.target.scope.max_requests,
             request_timeout_us=int(profile.target.scope.timeout_seconds * 1_000_000),

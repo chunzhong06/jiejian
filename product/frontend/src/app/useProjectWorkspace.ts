@@ -9,6 +9,12 @@ import { projectsApi, type ProductStatusDto, type ProjectDto, type ProjectReadin
 import { runsApi, type RunDto } from '../api/runs'
 import { browserState } from './browserState'
 
+export type WorkspaceSnapshot = {
+  status: ProductStatusDto
+  readiness: ProjectReadinessDto | null
+  runs: RunDto[]
+}
+
 export function useProjectWorkspace(onError: (error: ApiError) => void) {
   const [projects, setProjects] = useState<ProjectDto[]>([])
   const [selected, setSelected] = useState<ProjectDto | null>(null)
@@ -44,7 +50,7 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
       setStatus(null)
       setReadiness(null)
       setRuns([])
-      return
+      return undefined
     }
     try {
       const [nextStatus, nextRuns] = await Promise.all([
@@ -54,8 +60,10 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
       setStatus(nextStatus)
       setReadiness(nextStatus.readiness)
       setRuns(nextRuns)
+      return { status: nextStatus, readiness: nextStatus.readiness, runs: nextRuns }
     } catch (error) {
       onError(error as ApiError)
+      return undefined
     }
   }, [onError, selected?.project_id])
 

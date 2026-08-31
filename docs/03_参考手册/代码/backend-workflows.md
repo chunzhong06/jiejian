@@ -154,7 +154,7 @@
 - `class InconclusiveRecoveryView`
 - `class ProductStatusView`
 - `class ProductStatusService`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.source_changes`, `product.protocols`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.projects.repair`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.source_changes`, `product.protocols`, `pydantic`, `typing`
 
 ### `product/backend/workflows/mcp_access.py`
 - `MCP_PAIRING_SECRET_REF`
@@ -234,11 +234,17 @@
 主要 import / dot-source：`__future__`, `collections`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.test_identities`, `product.protocols.execution_request`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/workflows/projects/__init__.py`
-主要 import / dot-source：`.preparation`
+主要 import / dot-source：`.delivery`, `.preparation`, `.repair`
 
 ### `product/backend/workflows/projects/catalog.py`
 - `class ProjectCatalog`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.storage`
+
+### `product/backend/workflows/projects/delivery.py`
+- `class DeliveryDecision`
+- `class DeliveryCheckView`
+- `class DeliveryCheckService`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.repair`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.source_changes`, `product.protocols.execution_request`, `pydantic`, `typing`
 
 ### `product/backend/workflows/projects/lifecycle.py`
 - `_ACTIVE_JOB_STATES`
@@ -258,7 +264,7 @@
 - `_PREPARATION_GAPS`
 - `_APPLICATION_GAPS`
 - `class ProjectPreparationService`
-主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.infra.storage`, `product.backend.workflows.permission_intents`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.source_changes`, `product.backend.workflows.test_identities`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.infra.storage`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.source_changes`, `product.backend.workflows.test_identities`, `pydantic`, `typing`
 
 ### `product/backend/workflows/projects/readiness.py`
 - `class ReadinessModel`
@@ -267,6 +273,13 @@
 - `class ProjectReadinessView`
 - `class ProjectReadinessService`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.projects.preparation`, `pydantic`, `typing`
+
+### `product/backend/workflows/projects/repair.py`
+- `class ProjectRepairStatus`
+- `class RepairTaskView`
+- `class ProjectRepairView`
+- `class ProjectRepairService`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.repair`, `product.backend.workflows.projects.preparation`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.results.presentation`, `pydantic`, `typing`
 
 ### `product/backend/workflows/projects/revalidation.py`
 - `class ProjectRevalidationStatus`
@@ -419,7 +432,7 @@
 ### `product/backend/workflows/results/published.py`
 - `class PublishedRunView`
 - `class PublishedResultReader`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.redaction`, `product.backend.infra.artifacts.run_packages`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.paths`, `product.backend.infra.storage`, `product.backend.workflows.assistant`, `product.protocols`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.redaction`, `product.backend.infra.artifacts.run_packages`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.paths`, `product.backend.infra.storage`, `product.backend.workflows.assistant`, `product.protocols`, `product.protocols.execution_request`, `typing`
 
 ### `product/backend/workflows/results/repair.py`
 - `class RepairContractService`
@@ -506,6 +519,8 @@
 ### `product/backend/workflows/source_changes.py`
 - `class SourceChangeView`
 - `class SourceRevalidationInspectionStatus`
+- `class SourceWorkspaceInspectionStatus`
+- `class SourceWorkspaceInspection`
 - `class SourceRevalidationInspection`
 - `class SourceChangeService`
 主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.source_changes`, `product.backend.infra.storage`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.permission_intents`, `product.backend.workflows.results.repair`, `pydantic`, `time`, `typing`, `uuid`

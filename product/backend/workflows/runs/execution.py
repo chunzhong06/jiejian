@@ -130,6 +130,7 @@ class ExecutionWorkflow:
         self,
         profile_id: str,
         *,
+        source_fingerprint: str,
         project_id: str | None = None,
         change_context: ChangeVerificationContext | None = None,
         repair_context: RepairVerificationContext | None = None,
@@ -161,6 +162,7 @@ class ExecutionWorkflow:
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "权限策略冻结器尚未装配")
         permission_policy = self._permission_policy_snapshot_resolver(profile.project_id)
         return PersistedExecutionRequest(
+            source_fingerprint=source_fingerprint,
             budget=budget,
             permission_policy=permission_policy,
             project_snapshot=snapshot,
@@ -168,10 +170,27 @@ class ExecutionWorkflow:
             repair_context=repair_context,
         )
 
+    def build_snapshot(
+        self,
+        profile_id: str,
+        *,
+        project_id: str | None = None,
+    ):
+        """只读冻结当前 Profile/Contract 快照，供 preview 使用且不读取 live 源码。"""
+
+        record, profile, contract, plan, metadata = self._validated(
+            profile_id,
+            project_id=project_id,
+        )
+        if not _metadata_matches(record, metadata):
+            raise JiejianError(ErrorCode.EXECUTION_PROFILE_SOURCE_DRIFT, "Profile 发生漂移，请显式重新校验")
+        return profile.build_snapshot(contract, plan)
+
     def submit(
         self,
         profile_id: str,
         *,
+        source_fingerprint: str,
         project_id: str | None = None,
         change_context: ChangeVerificationContext | None = None,
         repair_context: RepairVerificationContext | None = None,
@@ -186,6 +205,7 @@ class ExecutionWorkflow:
 
         request = self.build_request(
             profile_id,
+            source_fingerprint=source_fingerprint,
             project_id=project_id,
             change_context=change_context,
             repair_context=repair_context,

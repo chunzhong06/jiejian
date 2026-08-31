@@ -1,6 +1,7 @@
 # 验证普通检查只投影现有计划，并以当前 Generated Profile 提交唯一执行链。
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,6 +25,7 @@ from tests.backend.workflows.recording.test_action_safety_setup import (
     PROJECT_ID,
     RECORDING_ID,
     ROLE_ID,
+    SOURCE_FINGERPRINT,
     _FakeSecretStore,
     _confirmation,
     _persist_completed_recording,
@@ -68,6 +70,8 @@ def test_check_preview_and_submit_reuse_current_frozen_execution_plan(
             idempotency_key="ordinary-check-1",
         )
         snapshot = request.project_snapshot
+        assert request.schema_version == "2"
+        assert request.source_fingerprint == SOURCE_FINGERPRINT
         assert submission.run.project_id == PROJECT_ID
         assert not snapshot.plan.gaps
         assert not snapshot.differential_plan.gaps
@@ -77,6 +81,38 @@ def test_check_preview_and_submit_reuse_current_frozen_execution_plan(
             core.security_setup.current_generated_profile_id(PROJECT_ID)
             == compiled.profile_id
         )
+    finally:
+        core.close()
+
+
+def test_preview_does_not_scan_live_source_and_drifted_submit_creates_no_job(
+    tmp_path: Path,
+) -> None:
+    core = _prepared_core(tmp_path)
+    try:
+        core.security_setup.compile(PROJECT_ID)
+        scans = 0
+
+        def drifted_scan(_project_id: str, _source_root: str):
+            nonlocal scans
+            scans += 1
+            return SimpleNamespace(source_fingerprint="c" * 64)
+
+        core.application_understanding.analyzer = SimpleNamespace(analyze=drifted_scan)
+        with core.uow_factory() as work:
+            jobs_before = work.jobs.list_for_project(PROJECT_ID)
+            runs_before = work.runs.list_for_project(PROJECT_ID)
+
+        assert core.checks.preview(PROJECT_ID).ready is True
+        assert scans == 0
+        with pytest.raises(JiejianError) as blocked:
+            core.checks.submit(PROJECT_ID, idempotency_key="source-drift")
+        assert blocked.value.code == ErrorCode.STATE_PRECONDITION.value
+        assert blocked.value.to_dict()["details"]["next_path"] == "/changes"
+        assert scans == 1
+        with core.uow_factory() as work:
+            assert work.jobs.list_for_project(PROJECT_ID) == jobs_before
+            assert work.runs.list_for_project(PROJECT_ID) == runs_before
     finally:
         core.close()
 
@@ -261,7 +297,12 @@ def test_candidate_changes_recompute_current_preparation_without_mutating_histor
         core.close()
 
 
-def _prepared_core(tmp_path: Path) -> ApplicationCore:
+def _prepared_core(
+    tmp_path: Path,
+    *,
+    include_recovery: bool = True,
+    confirm_permissions: bool = True,
+) -> ApplicationCore:
     store = _FakeSecretStore()
     owner_ref = f"cred:jiejian/test-identity/{PROJECT_ID}/{IDENTITY_ID}/bearer"
     peer_ref = f"cred:jiejian/test-identity/{PROJECT_ID}/{PEER_IDENTITY_ID}/bearer"
@@ -276,7 +317,7 @@ def _prepared_core(tmp_path: Path) -> ApplicationCore:
     preview = core.action_safety_setup.preview(RECORDING_ID)
     core.action_safety_setup.confirm(
         RECORDING_ID,
-        _confirmation(preview, include_recovery=True),
+        _confirmation(preview, include_recovery=include_recovery),
     )
     with core.uow_factory() as work:
         work.test_identities.add(
@@ -299,20 +340,26 @@ def _prepared_core(tmp_path: Path) -> ApplicationCore:
             )
         )
         work.commit()
-    core.permission_intents.confirm(
-        PROJECT_ID,
-        ACTION_ID,
-        ROLE_ID,
-        ROLE_ID,
-        PermissionIntentRelation.OWNS,
-        expectation=PermissionExpectation.ALLOW,
-    )
-    core.permission_intents.confirm(
-        PROJECT_ID,
-        ACTION_ID,
-        ROLE_ID,
-        ROLE_ID,
-        PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT,
-        expectation=PermissionExpectation.DENY,
+    if confirm_permissions:
+        core.permission_intents.confirm(
+            PROJECT_ID,
+            ACTION_ID,
+            ROLE_ID,
+            ROLE_ID,
+            PermissionIntentRelation.OWNS,
+            expectation=PermissionExpectation.ALLOW,
+        )
+        core.permission_intents.confirm(
+            PROJECT_ID,
+            ACTION_ID,
+            ROLE_ID,
+            ROLE_ID,
+            PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT,
+            expectation=PermissionExpectation.DENY,
+        )
+    core.application_understanding.analyzer = SimpleNamespace(
+        analyze=lambda project_id, source_root: SimpleNamespace(
+            source_fingerprint=SOURCE_FINGERPRINT
+        )
     )
     return core

@@ -16,7 +16,8 @@ def runtime_request_factory() -> Callable[[], PersistedExecutionRequest]:
     def create() -> PersistedExecutionRequest:
         current_input = runner_input()
         return PersistedExecutionRequest(
-            schema_version="1",
+            schema_version="2",
+            source_fingerprint="d" * 64,
             budget=current_input.budget,
             permission_policy=build_permission_policy_snapshot(
                 current_input.project_snapshot.project_id,

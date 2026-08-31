@@ -65,6 +65,42 @@ export type ProjectPreparationDto = {
   user_action_count: number
   blocked_count: number
   external_blockers: PreparationExternalBlockerDto[]
+  next_path: PreparationPath | null
+  next_label: string | null
+}
+
+export type ProjectRepairStatus = 'NONE' | 'REPAIR_REQUIRED' | 'CHANGE_SUBMITTED' | 'READY_TO_VERIFY' | 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | 'STALE'
+export type ProjectRepairPath = '/changes' | '/permissions' | '/preparation' | '/validation' | '/results'
+export type RepairTaskDto = {
+  source_run_id: string
+  source_finding_id: string
+  status: ProjectRepairStatus
+  must_disappear: string
+  must_remain: string
+  must_not_change: string[]
+  linked_change_id: string | null
+  verification_run_id: string | null
+  verification_status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | null
+  next_path: ProjectRepairPath
+  next_label: string
+  reason_codes: string[]
+}
+export type ProjectRepairDto = {
+  project_id: string
+  status: ProjectRepairStatus
+  tasks: RepairTaskDto[]
+  next_path: ProjectRepairPath | null
+  next_label: string | null
+  reason_codes: string[]
+}
+export type DeliveryCheckDto = {
+  project_id: string
+  decision: 'READY' | 'BLOCKED' | 'ERROR'
+  summary: string
+  reason_codes: string[]
+  next_path: ProjectRepairPath | null
+  next_label: string | null
+  verified_run_id: string | null
 }
 
 export type ProjectReadinessDto = {
@@ -108,6 +144,7 @@ export type ProductStatusDto = {
     verified_run_id: string | null
     verified_change_id: string | null
   } | null
+  repair: ProjectRepairDto | null
   areas: Array<{
     key: 'overview' | 'changes' | 'permissions' | 'preparation' | 'validation' | 'results'
     label: string
@@ -219,6 +256,7 @@ export const projectsApi = {
   project: (id: string) => request<ProjectDto>(`/api/projects/${id}`),
   remove: (id: string) => request<ProjectDto>(`/api/projects/${id}`, { method: 'DELETE' }),
   status: (id: string) => request<ProductStatusDto>(`/api/projects/${id}/status`),
+  deliveryCheck: (id: string) => request<DeliveryCheckDto>(`/api/projects/${id}/delivery-check`, { method: 'POST' }),
   prepareSafe: (id: string) => request<ProjectPreparationDto>(`/api/projects/${id}/preparation/prepare-safe`, { method: 'POST' }),
   understanding: (id: string) => request<ApplicationUnderstandingDto>(`/api/projects/${id}/application-understanding`),
   discoverEndpoints: (id: string) => request<EndpointDiscoveryDto>(`/api/projects/${id}/endpoint-candidates`, { method: 'POST' }),

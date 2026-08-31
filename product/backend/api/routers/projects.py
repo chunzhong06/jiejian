@@ -58,6 +58,17 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
         )
 
     @router.post(
+        "/api/projects/{project_id}/delivery-check",
+        response_model=ApiResponse,
+    )
+    async def check_project_delivery(project_id: str):
+        """显式扫描当前源码并返回无持久副作用的交付证明。"""
+
+        return data_response(
+            context.delivery_check.check(project_id).model_dump(mode="json")
+        )
+
+    @router.post(
         "/api/projects/{project_id}/preparation/prepare-safe",
         response_model=ApiResponse,
     )

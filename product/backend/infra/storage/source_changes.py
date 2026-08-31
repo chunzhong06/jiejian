@@ -296,6 +296,29 @@ class SourceChangeRepository:
         )
         return None if row is None else self._assessment(row)
 
+    def latest_manifest_for_repair(
+        self,
+        project_id: str,
+        reference: RepairContractReference,
+    ) -> ChangeManifest | None:
+        """按既有时间索引有界读取最近一条精确修复引用声明。"""
+
+        encoded = _canonical_json(reference.model_dump(mode="json"))
+        row = _scalar(
+            self._session,
+            select(ChangeManifestRow)
+            .where(
+                ChangeManifestRow.project_id == project_id,
+                ChangeManifestRow.repair_reference_json == encoded,
+            )
+            .order_by(
+                ChangeManifestRow.created_at_us.desc(),
+                ChangeManifestRow.change_id.desc(),
+            )
+            .limit(1),
+        )
+        return None if row is None else self._manifest(row)
+
     def list_assessments(
         self,
         project_id: str,

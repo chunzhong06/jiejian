@@ -62,9 +62,7 @@ export function CheckResultsPage({
   onHistory,
   onVerification,
   onNavigate,
-  canVerifyFix = false,
-  verifyingFix = false,
-  onVerifyFix,
+  repair,
   inconclusiveRecovery,
 }: {
   run?: RunDto
@@ -73,9 +71,7 @@ export function CheckResultsPage({
   onHistory?: () => void
   onVerification?: () => void
   onNavigate?: (path: string) => void
-  canVerifyFix?: boolean
-  verifyingFix?: boolean
-  onVerifyFix?: () => void
+  repair?: ProductStatusDto['repair']
   inconclusiveRecovery?: ProductStatusDto['inconclusive_recovery']
 }) {
   const [current, setCurrent] = useState<RunDto | undefined>(run)
@@ -154,6 +150,7 @@ export function CheckResultsPage({
       description={<Space direction="vertical" size={2}><Typography.Text>界鉴不会在运行结束后补写旧证据或修改这次结论。</Typography.Text><Typography.Text>{inconclusiveRecovery.summary}</Typography.Text></Space>}
       action={<Button type="primary" onClick={() => onNavigate?.(inconclusiveRecovery.next_path)}>{inconclusiveRecovery.next_label}</Button>}
     />}
+    {repair && repair.status !== 'NONE' && <ProjectRepairPanel repair={repair} onNavigate={onNavigate} showRequirements={!presentation?.issues.some((issue) => issue.repair_requirement)} />}
     {current && <Segmented className="result-view-switch" value={view} onChange={(value) => setView(value as 'results' | 'report')} options={[{ label: '结论与证据', value: 'results' }, { label: '完整报告', value: 'report' }]} />}
     {view === 'results' && current && <>
       {presentation && presentation.execution_traces.length > 0 && <ExecutionPaths traces={presentation.execution_traces} />}
@@ -172,9 +169,33 @@ export function CheckResultsPage({
     </>}
     {view === 'report' && <ReportPanel run={current} onError={onError} />}
     {presentation && onHistory && <Button className="result-history-link" onClick={onHistory}>查看历史变化</Button>}
-    <TaskActionBar back={onBack ? { label: '返回验证运行', onClick: onBack } : undefined} refresh={current ? { label: '刷新已发布结果', onClick: () => setRefreshEpoch((value) => value + 1), loading } : undefined} restart={canVerifyFix && onVerifyFix ? { label: '按原考题重新检查', onClick: onVerifyFix, loading: verifyingFix } : undefined} primary={presentation && onVerification ? { label: '进入现场验证', onClick: onVerification } : undefined} />
+    <TaskActionBar back={onBack ? { label: '返回验证运行', onClick: onBack } : undefined} refresh={current ? { label: '刷新已发布结果', onClick: () => setRefreshEpoch((value) => value + 1), loading } : undefined} primary={presentation && onVerification ? { label: '进入现场验证', onClick: onVerification } : undefined} />
     <EvidenceExplanationDrawer open={evidenceDrawerOpen} title={selectedIssue?.title} explanations={selectedIssue?.evidence_explanations ?? []} onClose={() => setEvidenceDrawerOpen(false)} />
   </Space>
+}
+
+function ProjectRepairPanel({ repair, onNavigate, showRequirements }: { repair: NonNullable<ProductStatusDto['repair']>; onNavigate?: (path: string) => void; showRequirements: boolean }) {
+  const task = repair.tasks.find((item) => item.status !== 'VERIFIED') ?? repair.tasks[0]
+  const presentation = {
+    NONE: ['info', '当前没有待处理修复', '当前项目没有待处理的正式修复任务。'],
+    REPAIR_REQUIRED: ['warning', '等待 Coding Agent 提交修复', '修复要求已经准备好。连接的 Coding Agent 可以通过界鉴 MCP 读取；Agent 不能宣布修复完成。'],
+    CHANGE_SUBMITTED: ['info', 'Agent 已提交代码变化', `当前需要：${repair.next_label ?? '继续完成修复准备'}`],
+    READY_TO_VERIFY: ['success', '当前修复已经可以独立复验', '当前修复代码与准备事实已就绪；复验仍由正式检查形成三态结果。'],
+    VERIFIED: ['success', '修复已经通过独立复验', '当前修复满足原权限要求，旧结果和新结果都会保留。'],
+    NOT_VERIFIED: ['error', '修复没有满足原要求', '请让 Coding Agent 继续修改；用户不能把当前状态手工标记为已修复。'],
+    INCONCLUSIVE: ['warning', '本次复验证据不足', '旧结果不会改写，请按当前恢复提示继续。'],
+    STALE: ['warning', '修复引用或代码变化已经失效', '请按当前提示重新建立可核验的修复变化。'],
+  } as const
+  const [type, message, description] = presentation[repair.status]
+  const action = repair.next_path && ['CHANGE_SUBMITTED', 'READY_TO_VERIFY', 'INCONCLUSIVE', 'STALE'].includes(repair.status)
+    ? <Button type={repair.status === 'READY_TO_VERIFY' ? 'primary' : 'default'} onClick={() => onNavigate?.(repair.next_path!)}>{repair.status === 'READY_TO_VERIFY' ? '复验这次修复' : repair.next_label ?? '继续处理'}</Button>
+    : undefined
+  return <section className="result-section result-repair-status" aria-labelledby="project-repair-status-title">
+    <Typography.Title id="project-repair-status-title" level={3}>当前修复状态</Typography.Title>
+    <Alert type={type} showIcon message={message} description={description} action={action} />
+    {repair.status === 'REPAIR_REQUIRED' && <Typography.Paragraph type="secondary">可交给 Coding Agent 的简短指令：修复界鉴当前发现的权限问题。</Typography.Paragraph>}
+    {showRequirements && task && <div className="result-repair-requirement"><Typography.Text strong>修复后必须满足</Typography.Text><ul><li>{task.must_disappear}</li><li>{task.must_remain}</li>{task.must_not_change.map((item) => <li key={item}>{item}不能改变。</li>)}</ul></div>}
+  </section>
 }
 
 function ExecutionPaths({ traces }: { traces: ExecutionTraceDto[] }) {

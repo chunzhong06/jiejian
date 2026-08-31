@@ -21,6 +21,12 @@ from product.backend.core.source_changes import SourceFileFingerprint, source_fi
 from product.backend.workflows.application_understanding.analysis.models import (
     ApplicationAnalysisResult,
 )
+from product.backend.workflows.permission_intents import (
+    PermissionIntentActionView,
+    PermissionIntentCellStatus,
+    PermissionIntentCellView,
+    _required_confirmation_count,
+)
 from tests.backend.workflows.recording.test_action_safety_setup import (
     ACTION_ID,
     PROJECT_ID,
@@ -177,7 +183,15 @@ def test_safety_fact_change_requires_rebind_without_advancing_epoch(
         core.action_safety_setup.confirm(RECORDING_ID, command)
 
         stale = _binding(core, owns.intent_id, owns.revision)
+        stale_matrix = core.permission_intents.matrix(PROJECT_ID)
+        stale_cells = tuple(
+            cell for action in stale_matrix.actions for cell in action.cells
+        )
         assert stale.status is IntentImplementationBindingStatus.NEEDS_REVIEW
+        assert stale_cells
+        assert all(cell.can_confirm for cell in stale_cells)
+        assert all(not cell.confirmation_blockers for cell in stale_cells)
+        assert stale_matrix.required_confirmation_count == len(stale_cells)
         assert core.permission_intents.matrix(PROJECT_ID).policy_epoch == before.policy_epoch
         rebound = core.permission_intents.rebind(
             PROJECT_ID,
@@ -192,6 +206,121 @@ def test_safety_fact_change_requires_rebind_without_advancing_epoch(
         assert _latest_for(core, PermissionIntentRelation.OWNS) == owns
     finally:
         core.close()
+
+
+def test_structural_safety_gap_blocks_human_permission_confirmation(
+    tmp_path: Path,
+) -> None:
+    core = _prepared_core(
+        tmp_path,
+        confirm_permissions=False,
+    )
+    try:
+        with core.uow_factory() as work:
+            setup = work.action_safety_setups.get_for_action(PROJECT_ID, ACTION_ID)
+            assert setup is not None
+            work.action_safety_setups.replace(
+                setup.model_copy(update={"recovery": None})
+            )
+            work.commit()
+        matrix = core.permission_intents.matrix(PROJECT_ID)
+        cells = tuple(cell for action in matrix.actions for cell in action.cells)
+
+        assert cells
+        assert all(not cell.can_confirm for cell in cells)
+        assert all(cell.confirmation_blockers for cell in cells)
+        assert matrix.actionable_confirmation_count == 0
+        assert matrix.required_confirmation_count == 0
+        with pytest.raises(JiejianError) as blocked:
+            core.permission_intents.confirm(
+                PROJECT_ID,
+                ACTION_ID,
+                ROLE_ID,
+                ROLE_ID,
+                PermissionIntentRelation.OWNS,
+                expectation=PermissionExpectation.ALLOW,
+            )
+        assert blocked.value.code == ErrorCode.STATE_PRECONDITION.value
+    finally:
+        core.close()
+
+
+def test_required_confirmation_count_keeps_optional_unselected_cells_non_blocking() -> None:
+    def cell(
+        relation: PermissionIntentRelation,
+        expectation: PermissionExpectation | None,
+        *,
+        status: PermissionIntentCellStatus,
+        requires_confirmation: bool,
+    ) -> PermissionIntentCellView:
+        return PermissionIntentCellView(
+            action_candidate_id=ACTION_ID,
+            subject_role_candidate_id=ROLE_ID,
+            subject_role_display_name="所有者",
+            resource_owner_role_candidate_id=ROLE_ID,
+            resource_owner_role_display_name="所有者",
+            relation=relation,
+            expectation=expectation,
+            status=status,
+            can_confirm=True,
+            requires_human_confirmation=requires_confirmation,
+        )
+
+    ready = PermissionIntentActionView(
+        action_candidate_id=ACTION_ID,
+        action_display_name="导出项目",
+        cells=(
+            cell(
+                PermissionIntentRelation.OWNS,
+                PermissionExpectation.ALLOW,
+                status=PermissionIntentCellStatus.CURRENT,
+                requires_confirmation=False,
+            ),
+            cell(
+                PermissionIntentRelation.OTHER_ROLE,
+                PermissionExpectation.DENY,
+                status=PermissionIntentCellStatus.CURRENT,
+                requires_confirmation=False,
+            ),
+            cell(
+                PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT,
+                None,
+                status=PermissionIntentCellStatus.UNCONFIRMED,
+                requires_confirmation=True,
+            ),
+        ),
+        gaps=(),
+        required_intent_count=3,
+        confirmed_intent_count=2,
+        executable_intent_count=2,
+        representative_gap_count=0,
+        compilable=True,
+    )
+
+    assert _required_confirmation_count(ready) == 0
+    needs_deny = ready.model_copy(
+        update={
+            "cells": (
+                ready.cells[0],
+                ready.cells[1].model_copy(
+                    update={
+                        "expectation": None,
+                        "status": PermissionIntentCellStatus.UNCONFIRMED,
+                        "requires_human_confirmation": True,
+                    }
+                ),
+                ready.cells[2],
+            ),
+            "gaps": ("DENY_INTENT_MISSING",),
+            "compilable": False,
+        }
+    )
+    assert _required_confirmation_count(needs_deny) == 1
+    assert _required_confirmation_count(
+        ready.model_copy(
+            update={"gaps": ("DENY_INTENT_MISSING",), "compilable": False}
+        )
+    ) == 0
 
 
 def test_reanalysis_preserves_current_mapping_without_deleting_revision_or_epoch(
@@ -272,7 +401,11 @@ def test_pending_proposal_does_not_change_policy_and_run_keeps_frozen_snapshot(
     core = _prepared_core(tmp_path)
     try:
         compiled = core.security_setup.compile(PROJECT_ID)
-        request = core.execution.build_request(compiled.profile_id, project_id=PROJECT_ID)
+        request = core.execution.build_request(
+            compiled.profile_id,
+            project_id=PROJECT_ID,
+            source_fingerprint="d" * 64,
+        )
         frozen = request.permission_policy
         owns = _latest_for(core, PermissionIntentRelation.OWNS)
         proposal = core.permission_intents.propose_semantic_change(

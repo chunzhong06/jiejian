@@ -28,6 +28,9 @@ export type PermissionIntentCellDto = {
   representative_test_identity_id: string | null
   representative_label: string | null
   execution_gap: string | null
+  can_confirm: boolean
+  requires_human_confirmation: boolean
+  confirmation_blockers: string[]
 }
 export type PermissionIntentSemanticChangeDto = {
   effective_state: 'ACTIVE' | 'RETIRED'
@@ -84,6 +87,8 @@ export type PermissionIntentMatrixDto = {
   executable_count: number
   representative_gap_count: number
   compilable_action_count: number
+  actionable_confirmation_count: number
+  required_confirmation_count: number
 }
 export type PermissionDraftSuggestionDto = {
   option_id: string

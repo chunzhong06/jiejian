@@ -102,7 +102,9 @@ function ControlShellContent() {
 
   const choose = (project: ProjectDto) => { workspace.selectProject(project); navigate('/workspace') }
   const connectForAccess = (project: ProjectDto) => { workspace.selectProject(project); clearError() }
-  const refreshRuns = workspace.refreshCurrent
+  const refreshRuns = useCallback(async () => {
+    await workspace.refreshCurrent()
+  }, [workspace.refreshCurrent])
   const retryCurrentPage = () => { clearError(); setRetryEpoch((epoch) => epoch + 1); void workspace.refreshProjects(); void workspace.refreshCurrent() }
   const requestShutdown = () => setShutdownConfirmOpen(true)
   const removeCurrentProject = async () => {
@@ -124,18 +126,14 @@ function ControlShellContent() {
     }
   }
   const activeRun = useMemo(() => runs[0], [runs])
-  const currentCheckChangeId = experience?.repair_change_id ?? (
-    status?.revalidation?.status === 'READY'
-      ? status.revalidation.change_id ?? undefined
-      : undefined
-  )
-  const canVerifyOfficialFix = Boolean(
-    experience?.active
-    && experience.experience_mode === 'GUIDED'
-    && experience.project_id === selected?.project_id
-    && status?.latest_result?.run_id === activeRun?.run_id
-    && activeRun?.verdict === 'BLOCK',
-  )
+  const repairReadyToVerify = status?.repair?.status === 'READY_TO_VERIFY'
+  const currentCheckChangeId = repairReadyToVerify
+    ? status?.repair?.tasks.find((task) => task.status === 'READY_TO_VERIFY')?.linked_change_id ?? undefined
+    : (
+      status?.revalidation?.status === 'READY'
+        ? status.revalidation.change_id ?? undefined
+        : undefined
+    )
   const startOfficialExperience = async () => {
     setExperienceBusy(true)
     try {
@@ -177,18 +175,23 @@ function ControlShellContent() {
       setExperienceBusy(false)
     }
   }
-  const verifyOfficialFix = async () => {
-    if (!activeRun?.run_id) return
-    setExperienceBusy(true)
-    try {
-      setExperience(await experienceApi.verifyFixedBehavior(String(activeRun.run_id)))
-      await workspace.refreshCurrent()
-      navigate('/validation')
-    } catch (experienceError) {
-      notifyError(experienceError as ApiError)
-    } finally {
-      setExperienceBusy(false)
+  const continuePreparation = async () => {
+    if (!selected?.project_id) {
+      navigate('/application')
+      return
     }
+    const snapshot = await workspace.refreshCurrent()
+    if (!snapshot) return
+    const preparation = snapshot.readiness?.preparation
+    if (!preparation) {
+      navigate('/application')
+      return
+    }
+    if (preparation.ready) {
+      navigate('/validation')
+      return
+    }
+    navigate(normalizeRoute(preparation.next_path ?? '/preparation'))
   }
   const prepareCurrentProject = async () => {
     if (!selected?.project_id) return
@@ -222,12 +225,12 @@ function ControlShellContent() {
     if (location.pathname !== route) navigate(route, { replace: true })
   }, [location.pathname, navigate, route])
   useEffect(() => {
-    if (route !== '/validation' || experience?.repair_change_id || !status?.revalidation) return
+    if (route !== '/validation' || repairReadyToVerify || !status?.revalidation) return
     if (['NO_CHANGE', 'READY'].includes(status.revalidation.status)) return
     if (status.revalidation.next_path && status.revalidation.next_path !== '/validation') {
       navigate(status.revalidation.next_path, { replace: true })
     }
-  }, [experience?.repair_change_id, navigate, route, status?.revalidation])
+  }, [navigate, repairReadyToVerify, route, status?.revalidation])
   useEffect(() => {
     if (
       presentationOpen
@@ -254,27 +257,30 @@ function ControlShellContent() {
     navigate(presentationReturnRoute)
   }
   const content = () => {
-    if (route === '/workspace') return <WorkbenchPage selected={selected} readiness={readiness} status={status} runs={runs} systemStatus={systemStatus} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} experience={experience} experienceBusy={experienceBusy} onStartExperience={startOfficialExperience} onStopExperience={stopOfficialExperience} onEnterPresentation={enterPresentation} onNavigate={(path) => navigate(path)} />
+    if (route === '/workspace') return <WorkbenchPage selected={selected} readiness={readiness} status={status} runs={runs} systemStatus={systemStatus} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} experience={experience} experienceBusy={experienceBusy} onStartExperience={startOfficialExperience} onStopExperience={stopOfficialExperience} onEnterPresentation={enterPresentation} onNavigate={(path) => navigate(path)} onError={notifyError} />
     if (route === '/tools') return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={readiness?.endpoint_status} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspace.refreshCurrent() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/preparation')} />
     if (route === '/settings/models') return <ModelServicePage profiles={llmProfiles} onManage={() => setSettingsOpen(true)} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/changes') return <ChangesPage project={selected} status={status} onError={notifyError} onNavigate={(path) => navigate(normalizeRoute(path))} />
-    if (route === '/identities') return <TestIdentityPage key={`identities-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/preparation')} onNext={() => navigate('/flows')} />
-    if (route === '/flows') return <RecordingPage key={`recording-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/preparation')} onNext={() => navigate('/permissions')} />
-    if (route === '/permissions') return <PermissionCheckPage mode="permissions" key={`permissions-${retryEpoch}`} project={selected} runs={runs} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/permissions'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/changes')} onNext={() => navigate('/preparation')} />
+    if (route === '/identities') return <TestIdentityPage key={`identities-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/preparation')} onStateChanged={workspace.refreshCurrent} onContinuePreparation={continuePreparation} />
+    if (route === '/flows') return <RecordingPage key={`recording-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/preparation')} onStateChanged={workspace.refreshCurrent} onContinuePreparation={continuePreparation} />
+    if (route === '/permissions') return <PermissionCheckPage mode="permissions" key={`permissions-${retryEpoch}`} project={selected} runs={runs} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/permissions'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/changes')} onContinuePreparation={continuePreparation} />
     if (route === '/preparation') return readiness ? <PreparationPage readiness={readiness} onPrepareSafe={prepareCurrentProject} onNavigate={(path) => navigate(normalizeRoute(path))} /> : <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/validation') {
       if (!status) return <Result status="info" title="正在确认当前检查状态" subTitle="界鉴会先核对代码变化、权限规则和测试准备，再开放验证运行。" />
-      if (!experience?.repair_change_id && status.revalidation && !['NO_CHANGE', 'READY'].includes(status.revalidation.status)) {
+      if (status.repair && !['NONE', 'READY_TO_VERIFY', 'VERIFIED'].includes(status.repair.status)) {
+        return <Result status="info" title={status.repair.next_label ?? '当前修复尚未就绪'} subTitle="请先完成当前修复任务，再开始独立复验。" />
+      }
+      if (!repairReadyToVerify && status.revalidation && !['NO_CHANGE', 'READY'].includes(status.revalidation.status)) {
         return <Result status="info" title={status.revalidation.summary} subTitle="当前前置事项完成后，才能开始这次检查。" />
       }
-      return <PermissionCheckPage mode="validation" key={`validation-${retryEpoch}-${currentCheckChangeId ?? 'baseline'}`} project={selected} runs={runs} changeId={currentCheckChangeId} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/validation'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/preparation')} onNext={() => navigate('/results')} />
+      return <PermissionCheckPage mode="validation" key={`validation-${retryEpoch}-${currentCheckChangeId ?? 'baseline'}`} project={selected} runs={runs} changeId={currentCheckChangeId} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/validation'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/preparation')} onResult={() => navigate('/results')} />
     }
     if (route === '/history') return <CheckHistoryPage projectId={selected.project_id} onError={notifyError} onBack={() => navigate('/results')} />
-    if (route === '/verification') return <VerificationPage key={`verification-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/results')} onHistory={() => navigate('/history')} onRetest={canVerifyOfficialFix ? verifyOfficialFix : undefined} retestBusy={experienceBusy} onObservationGap={experience?.active && experience.experience_mode === 'GUIDED' && experience.project_id === selected.project_id ? runOfficialObservationGap : undefined} observationGapBusy={experienceBusy} />
-    return <CheckResultsPage key={`results-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/validation')} onHistory={() => navigate('/history')} onVerification={() => navigate('/verification')} onNavigate={(path) => navigate(normalizeRoute(path))} canVerifyFix={canVerifyOfficialFix} verifyingFix={experienceBusy} onVerifyFix={verifyOfficialFix} inconclusiveRecovery={status?.inconclusive_recovery} />
+    if (route === '/verification') return <VerificationPage key={`verification-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/results')} onHistory={() => navigate('/history')} onObservationGap={experience?.active && experience.experience_mode === 'GUIDED' && experience.project_id === selected.project_id ? runOfficialObservationGap : undefined} observationGapBusy={experienceBusy} />
+    return <CheckResultsPage key={`results-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/validation')} onHistory={() => navigate('/history')} onVerification={() => navigate('/verification')} onNavigate={(path) => navigate(normalizeRoute(path))} repair={status?.repair} inconclusiveRecovery={status?.inconclusive_recovery} />
   }
   if (shutdownRequested) return <Result status="success" title="界鉴正在安全退出" subTitle="服务、Worker 和受控浏览器清理完成后，可以关闭此页面；下次启动会自动检查异常中断记录。" />
   if (presentationOpen && experience?.active && selected && experience.project_id === selected.project_id) return <PresentationMode

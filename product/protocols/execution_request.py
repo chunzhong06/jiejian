@@ -169,7 +169,6 @@ class ChangeVerificationContext(BaseModel):
     change_id: str = Field(pattern=r"^chg_[0-9a-f]{32}$")
     impact_fingerprint: str = Field(pattern=SHA256_PATTERN)
     required_intent_ids: tuple[str, ...] = Field(default=(), max_length=4096)
-    source_fingerprint: str = Field(pattern=SHA256_PATTERN)
 
     @model_validator(mode="after")
     def validate_required_intents(self) -> ChangeVerificationContext:
@@ -182,6 +181,22 @@ class ChangeVerificationContext(BaseModel):
             )
         ):
             raise ValueError("change verification intent IDs must be unique and sorted")
+        return self
+
+
+class LegacyChangeVerificationContext(BaseModel):
+    """仅为已发布 v1 Run 保留的旧变化上下文，禁止用于当前提交。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+
+    change_id: str = Field(pattern=r"^chg_[0-9a-f]{32}$")
+    impact_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    required_intent_ids: tuple[str, ...] = Field(default=(), max_length=4096)
+    source_fingerprint: str = Field(pattern=SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_required_intents(self) -> LegacyChangeVerificationContext:
+        _validate_required_intent_ids(self.required_intent_ids)
         return self
 
 
@@ -233,7 +248,8 @@ class PersistedExecutionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
 
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["2"] = "2"
+    source_fingerprint: str = Field(pattern=SHA256_PATTERN)
     budget: ExecutionBudget
     permission_policy: PermissionPolicySnapshot
     project_snapshot: WebExecutionSnapshot
@@ -242,38 +258,35 @@ class PersistedExecutionRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_budget_snapshot(self) -> PersistedExecutionRequest:
-        if self.permission_policy.project_id != self.project_snapshot.project_id:
-            raise ValueError("permission policy project does not match snapshot")
-        if self.change_context is not None and not set(
-            self.change_context.required_intent_ids
-        ).issubset({item.intent_id for item in self.permission_policy.entries}):
-            raise ValueError("change verification intents must belong to the frozen policy")
-        if self.repair_context is not None:
-            if self.change_context is None:
-                raise ValueError("repair verification requires a change verification context")
-            current = {
-                item.intent_id: (item.revision, item.intent_hash)
-                for item in self.permission_policy.entries
-            }
-            original = {
-                item.intent_id: (item.revision, item.intent_hash)
-                for item in self.repair_context.original_intents
-            }
-            if self.permission_policy.policy_epoch != self.repair_context.original_policy_epoch or any(
-                intent_id not in current or current[intent_id] != identity
-                for intent_id, identity in original.items()
-            ):
-                raise ValueError("repair verification must use the original permission intents")
-        target = self.project_snapshot.target.scope
-        if self.budget.max_requests != target.max_requests:
-            raise ValueError("request budget max_requests does not match snapshot")
-        if self.budget.max_response_bytes != target.max_response_bytes:
-            raise ValueError("request response budget does not match snapshot")
-        if self.budget.request_timeout_us != int(target.timeout_seconds * 1_000_000):
-            raise ValueError("request timeout does not match snapshot")
-        if self.budget.max_cases < len(self.project_snapshot.plan.cases):
-            raise ValueError("max_cases cannot be smaller than the permission plan")
+        _validate_execution_request(self)
         return self
+
+
+class LegacyPersistedExecutionRequest(BaseModel):
+    """已发布历史结果的只读 v1 请求；新 Job 与 Worker 不接受该模型。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+
+    schema_version: Literal["1"] = "1"
+    budget: ExecutionBudget
+    permission_policy: PermissionPolicySnapshot
+    project_snapshot: WebExecutionSnapshot
+    change_context: LegacyChangeVerificationContext | None = None
+    repair_context: RepairVerificationContext | None = None
+
+    @model_validator(mode="after")
+    def validate_budget_snapshot(self) -> LegacyPersistedExecutionRequest:
+        _validate_execution_request(self)
+        return self
+
+    @property
+    def source_fingerprint(self) -> None:
+        """历史 v1 没有项目级源码身份，读取方不得从变化上下文补猜。"""
+
+        return None
+
+
+ExecutionRequestDocument = PersistedExecutionRequest | LegacyPersistedExecutionRequest
 
 
 def canonical_execution_request_bytes(
@@ -283,6 +296,65 @@ def canonical_execution_request_bytes(
 ) -> bytes:
     if not isinstance(request, PersistedExecutionRequest):
         raise TypeError("execution request serializer requires the current model")
+    return _canonical_request_bytes(request, known_secrets=known_secrets)
+
+
+def canonical_legacy_execution_request_bytes(
+    request: LegacyPersistedExecutionRequest,
+    *,
+    known_secrets: Sequence[str] = (),
+) -> bytes:
+    """仅用于校验已发布 v1 请求仍是当时的 canonical JSON。"""
+
+    if not isinstance(request, LegacyPersistedExecutionRequest):
+        raise TypeError("legacy execution request serializer requires the legacy model")
+    return _canonical_request_bytes(request, known_secrets=known_secrets)
+
+
+def parse_execution_request(
+    raw: bytes,
+    *,
+    known_secrets: Sequence[str] = (),
+) -> ExecutionRequestDocument:
+    if not isinstance(raw, bytes):
+        raise TypeError("execution request parser requires bytes")
+    if len(raw) > RUNNER_INPUT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
+        raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求格式无效")
+    try:
+        parsed = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_nonfinite,
+        )
+        _reject_known_secrets(parsed, known_secrets)
+        if not isinstance(parsed, dict) or parsed.get("schema_version") not in {"1", "2"}:
+            raise ValueError("unsupported request schema version")
+        model = (
+            LegacyPersistedExecutionRequest
+            if parsed["schema_version"] == "1"
+            else PersistedExecutionRequest
+        )
+        return model.model_validate_json(raw, strict=True)
+    except JiejianError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, ValidationError):
+        raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求格式无效") from None
+
+
+def required_secret_names(request: ExecutionRequestDocument) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            reference.removeprefix("env:")
+            for reference in required_web_secret_refs(request.project_snapshot)
+        )
+    )
+
+
+def _canonical_request_bytes(
+    request: BaseModel,
+    *,
+    known_secrets: Sequence[str],
+) -> bytes:
     payload = request.model_dump(mode="json")
     _reject_known_secrets(payload, known_secrets)
     try:
@@ -300,38 +372,47 @@ def canonical_execution_request_bytes(
     return encoded
 
 
-def parse_execution_request(
-    raw: bytes,
-    *,
-    known_secrets: Sequence[str] = (),
-) -> PersistedExecutionRequest:
-    if not isinstance(raw, bytes):
-        raise TypeError("execution request parser requires bytes")
-    if len(raw) > RUNNER_INPUT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
-        raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求格式无效")
-    try:
-        parsed = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_unique_object,
-            parse_constant=_reject_nonfinite,
-        )
-        _reject_known_secrets(parsed, known_secrets)
-        if not isinstance(parsed, dict) or parsed.get("schema_version") != "1":
-            raise ValueError("unsupported request schema version")
-        return PersistedExecutionRequest.model_validate_json(raw, strict=True)
-    except JiejianError:
-        raise
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, ValidationError):
-        raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求格式无效") from None
+def _validate_required_intent_ids(values: tuple[str, ...]) -> None:
+    if (
+        values != tuple(sorted(values))
+        or len(set(values)) != len(values)
+        or any(re.fullmatch(r"pin_[0-9a-f]{32}", intent_id) is None for intent_id in values)
+    ):
+        raise ValueError("change verification intent IDs must be unique and sorted")
 
 
-def required_secret_names(request: PersistedExecutionRequest) -> tuple[str, ...]:
-    return tuple(
-        dict.fromkeys(
-            reference.removeprefix("env:")
-            for reference in required_web_secret_refs(request.project_snapshot)
-        )
-    )
+def _validate_execution_request(request: Any) -> None:
+    if request.permission_policy.project_id != request.project_snapshot.project_id:
+        raise ValueError("permission policy project does not match snapshot")
+    if request.change_context is not None and not set(
+        request.change_context.required_intent_ids
+    ).issubset({item.intent_id for item in request.permission_policy.entries}):
+        raise ValueError("change verification intents must belong to the frozen policy")
+    if request.repair_context is not None:
+        if request.change_context is None:
+            raise ValueError("repair verification requires a change verification context")
+        current = {
+            item.intent_id: (item.revision, item.intent_hash)
+            for item in request.permission_policy.entries
+        }
+        original = {
+            item.intent_id: (item.revision, item.intent_hash)
+            for item in request.repair_context.original_intents
+        }
+        if request.permission_policy.policy_epoch != request.repair_context.original_policy_epoch or any(
+            intent_id not in current or current[intent_id] != identity
+            for intent_id, identity in original.items()
+        ):
+            raise ValueError("repair verification must use the original permission intents")
+    target = request.project_snapshot.target.scope
+    if request.budget.max_requests != target.max_requests:
+        raise ValueError("request budget max_requests does not match snapshot")
+    if request.budget.max_response_bytes != target.max_response_bytes:
+        raise ValueError("request response budget does not match snapshot")
+    if request.budget.request_timeout_us != int(target.timeout_seconds * 1_000_000):
+        raise ValueError("request timeout does not match snapshot")
+    if request.budget.max_cases < len(request.project_snapshot.plan.cases):
+        raise ValueError("max_cases cannot be smaller than the permission plan")
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

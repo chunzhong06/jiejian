@@ -71,15 +71,32 @@ class ProjectRevalidationService:
                 verified_run_id=verified_run_id,
                 verified_change_id=verified_change_id,
             )
+        return self.evaluate_change(
+            project_id,
+            latest[0].change_id,
+            preparation=preparation,
+            verified_run_id=verified_run_id,
+            verified_change_id=verified_change_id,
+        )
 
-        manifest, _, _ = latest
+    def evaluate_change(
+        self,
+        project_id: str,
+        change_id: str,
+        *,
+        preparation: ProjectPreparationView | None,
+        verified_run_id: str | None,
+        verified_change_id: str | None,
+    ) -> ProjectRevalidationView:
+        """对指定变化复用唯一状态算法，供项目修复与普通重验共同消费。"""
+
         inspection = self._source_changes.inspect_revalidation(
             project_id,
-            manifest.change_id,
+            change_id,
         )
         common = {
             "project_id": project_id,
-            "change_id": manifest.change_id,
+            "change_id": change_id,
             "required_intent_count": len(inspection.required_intent_ids),
             "reason_codes": inspection.reason_codes,
             "verified_run_id": verified_run_id,
@@ -108,7 +125,7 @@ class ProjectRevalidationService:
                 next_path="/changes",
                 next_label="重新说明代码变化",
             )
-        if verified_change_id == manifest.change_id and verified_run_id is not None:
+        if verified_change_id == change_id and verified_run_id is not None:
             return ProjectRevalidationView(
                 **common,
                 status=ProjectRevalidationStatus.VERIFIED,

@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
+import type { WorkspaceSnapshot } from '../../app/useProjectWorkspace'
 import { projectsApi, type ProjectDto, type RoleCandidateDto } from '../../api/projects'
 import {
   testIdentitiesApi,
@@ -39,11 +40,12 @@ function preparationStatus(preparation: IdentityPreparationDto | null) {
   return preparation.status === 'FAILED' ? '登录准备失败' : preparation.message
 }
 
-export function TestIdentityPage({ project, onError, onBack, onNext }: {
+export function TestIdentityPage({ project, onError, onBack, onStateChanged, onContinuePreparation }: {
   project: ProjectDto
   onError: (error: ApiError) => void
   onBack: () => void
-  onNext: () => void
+  onStateChanged: () => Promise<WorkspaceSnapshot | undefined>
+  onContinuePreparation: () => Promise<void> | void
 }) {
   const [roles, setRoles] = useState<RoleCandidateDto[]>([])
   const [identities, setIdentities] = useState<TestIdentityDto[]>([])
@@ -52,6 +54,17 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
   const [preparation, setPreparation] = useState<IdentityPreparationDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [syncError, setSyncError] = useState<string>()
+
+  const syncWorkspace = async (savedMessage: string) => {
+    const snapshot = await onStateChanged()
+    if (snapshot) {
+      setSyncError(undefined)
+      return true
+    }
+    setSyncError(`${savedMessage}，但工作区状态刷新失败，请重试“刷新账号状态”。`)
+    return false
+  }
 
   const load = async () => {
     const [understanding, accounts] = await Promise.all([
@@ -76,7 +89,10 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
     const timer = window.setTimeout(() => {
       void testIdentitiesApi.preparation(preparation.preparation_id).then(async (next) => {
         setPreparation(next)
-        if (next.status === 'PREPARED') await load()
+        if (next.status === 'PREPARED') {
+          await load()
+          await syncWorkspace('账号登录状态已保存')
+        }
       }).catch((error) => onError(error as ApiError))
     }, 500)
     return () => window.clearTimeout(timer)
@@ -88,7 +104,10 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
 
   const refresh = async () => {
     setBusy(true)
-    try { await load() }
+    try {
+      await load()
+      await syncWorkspace('账号状态已刷新')
+    }
     catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
@@ -100,6 +119,7 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
       await testIdentitiesApi.create(project.project_id, selectedRole, label.trim())
       setLabel('')
       await load()
+      await syncWorkspace('测试账号已添加')
     } catch (error) { onError(error as ApiError) } finally { setBusy(false) }
   }
 
@@ -112,7 +132,12 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
   const confirm = async () => {
     if (!preparation) return
     setBusy(true)
-    try { setPreparation(await testIdentitiesApi.confirmPreparation(preparation.preparation_id)) }
+    try {
+      const next = await testIdentitiesApi.confirmPreparation(preparation.preparation_id)
+      setPreparation(next)
+      await load()
+      await syncWorkspace('账号登录状态已保存')
+    }
     catch (error) { onError(error as ApiError) } finally { setBusy(false) }
   }
 
@@ -128,7 +153,7 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
     content: '界鉴会精确删除该测试账号保存的登录状态；账号名称与权限组绑定会保留。',
     okText: '清除登录状态', cancelText: '取消', okButtonProps: { danger: true },
     onOk: async () => {
-      try { await testIdentitiesApi.reset(identity.identity_id); await load() }
+      try { await testIdentitiesApi.reset(identity.identity_id); await load(); await syncWorkspace('账号登录状态已清除') }
       catch (error) { onError(error as ApiError); throw error }
     },
   })
@@ -138,7 +163,7 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
     content: '界鉴会先删除该账号的全部安全登录状态；如果安全存储清理失败，账号信息会保留以便重试。',
     okText: '删除测试账号', cancelText: '取消', okButtonProps: { danger: true },
     onOk: async () => {
-      try { await testIdentitiesApi.delete(identity.identity_id); await load() }
+      try { await testIdentitiesApi.delete(identity.identity_id); await load(); await syncWorkspace('测试账号已删除') }
       catch (error) { onError(error as ApiError); throw error }
     },
   })
@@ -158,7 +183,7 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
     </Card>
 
     <section className="identity-role-section" aria-labelledby="identity-role-section-title">
-      <div className="identity-role-heading"><div><Typography.Title id="identity-role-section-title" level={3}>按权限组准备</Typography.Title><Typography.Paragraph type="secondary">每张角色卡说明它要验证什么、当前使用哪个账号，以及下一步需要你做什么。</Typography.Paragraph></div><Tag>{preparedCount} 个账号已准备</Tag></div>
+      <div className="identity-role-heading"><div><Typography.Title id="identity-role-section-title" level={3}>按权限组准备</Typography.Title><Typography.Paragraph type="secondary">每张角色卡说明它要验证什么、当前使用哪个账号，以及下一步需要你做什么。</Typography.Paragraph></div><Space wrap><Tag>{preparedCount} 个账号已准备</Tag><Button loading={busy} onClick={() => void refresh()}>刷新账号状态</Button></Space></div>
       {roles.length === 0 && <Empty description="请先在应用接入中确认至少一个权限组" />}
       <div className="identity-role-grid">{roles.map((role) => {
         const roleIdentities = identities.filter((identity) => identity.role_candidate_id === role.candidate_id)
@@ -191,12 +216,12 @@ export function TestIdentityPage({ project, onError, onBack, onNext }: {
         {['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status) && <Button onClick={() => setPreparation(null)}>关闭提示</Button>}
       </Space>}
     />}
+    {syncError && <Alert type="warning" showIcon message={syncError} />}
 
     <AssistantPanel projectId={project.project_id} surface="identity-preparation" title="测试账号准备顺序" actionLabel="AI 帮我安排准备顺序" />
     <TaskActionBar
       back={{ label: '返回应用接入', onClick: onBack }}
-      refresh={{ label: '刷新账号状态', onClick: () => void refresh(), loading: busy }}
-      primary={{ label: canContinue ? '继续准备业务流程' : '准备至少一个账号后继续', onClick: onNext, disabled: !canContinue }}
+      primary={{ label: canContinue ? '继续准备' : '准备至少一个账号后继续', onClick: onContinuePreparation, disabled: !canContinue }}
     />
   </div>
 }

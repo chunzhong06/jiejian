@@ -30,6 +30,8 @@ Recording 应根据录制顺序自动采用唯一且可执行的业务解释；�
 
 `ActionSafetySetupService.inspect_action()` 是 Recording、FlowDraft 与 ActionSafetySetup 当前事实的只读检查入口，统一形成 FLOW/RESOURCE/OBSERVATION/RECOVERY/EFFECT 的 CURRENT/MISSING/STALE 结果。它只读取已保存的非秘密事实，不访问目标应用、不恢复浏览器会话、不读取 secret 正文，也不写入确认。`ProjectPreparation` 只消费这份检查结果并组合独立的 TestIdentity 状态；缺 Flow、观察或恢复时，准备页只能把用户导航到现有 `/flows` 与确认流程，`prepare-safe` 不创建 Recording、不生成 FlowDraft，也不静默确认唯一候选。
 
+页面在最终 Flow 或安全准备事实保存成功后，先刷新 Recording 本地事实，再刷新项目工作区；底部“继续准备”只按这次工作区刷新返回的准备投影续接。Recording 生命周期轮询只更新本页状态，不能在每个 tick 刷新整个工作区。工作区同步失败不回滚已经成立的保存结果，但必须显示可恢复提示。
+
 ## 不能破坏
 
 - 登录和页面检查阶段不采集事件；秘密正文、Cookie、Bearer、storage state 和浏览器 profile 不进入协议、日志或 Git。

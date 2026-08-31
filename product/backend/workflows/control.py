@@ -24,6 +24,10 @@ from product.backend.workflows.projects.revalidation import (
     ProjectRevalidationStatus,
     ProjectRevalidationView,
 )
+from product.backend.workflows.projects.repair import (
+    ProjectRepairStatus,
+    ProjectRepairView,
+)
 from product.backend.workflows.projects.readiness import ProjectReadinessView
 from product.backend.workflows.source_changes import SourceChangeView
 from product.protocols import TargetType
@@ -183,6 +187,7 @@ class ProductStatusView(_ControlModel):
     project: ProductProjectSummary | None = None
     readiness: ProjectReadinessView | None = None
     revalidation: ProjectRevalidationView | None = None
+    repair: ProjectRepairView | None = None
     areas: tuple[ProductAreaView, ...]
     attention_items: tuple[ProductAttentionView, ...]
     latest_change: SourceChangeView | None = None
@@ -200,6 +205,7 @@ class ProductStatusService:
         result_presentation,
         source_changes=None,
         project_revalidation=None,
+        project_repair=None,
         current_permission_intents: Callable[[str], tuple] | None = None,
     ) -> None:
         self._projects = projects
@@ -207,6 +213,7 @@ class ProductStatusService:
         self._result_presentation = result_presentation
         self._source_changes = source_changes
         self._project_revalidation = project_revalidation
+        self._project_repair = project_repair
         self._current_permission_intents = current_permission_intents
 
     def get(self, project_id: str | None = None) -> ProductStatusView:
@@ -254,6 +261,19 @@ class ProductStatusService:
             latest_result,
             latest_presentation,
         )
+        repair = (
+            None
+            if self._project_repair is None
+            else self._project_repair.evaluate(
+                project.project_id,
+                preparation=readiness.preparation,
+                verified_run_id=None if latest_result is None else latest_result.run_id,
+                verified_change_id=(
+                    None if latest_result is None else latest_result.verified_change_id
+                ),
+            )
+        )
+        repair = _repair_with_inconclusive_recovery(repair, inconclusive_recovery)
         return ProductStatusView(
             project=ProductProjectSummary(
                 project_id=project.project_id,
@@ -263,12 +283,14 @@ class ProductStatusService:
             ),
             readiness=readiness,
             revalidation=revalidation,
+            repair=repair,
             areas=_areas(readiness, latest_change, revalidation),
             attention_items=_attention_items(
                 readiness,
                 revalidation,
                 latest_result,
                 inconclusive_recovery,
+                repair,
             ),
             latest_change=latest_change,
             latest_result=latest_result,
@@ -502,6 +524,7 @@ def _attention_items(
     revalidation: ProjectRevalidationView | None,
     latest_result: ProductResultSummary | None,
     inconclusive_recovery: InconclusiveRecoveryView | None,
+    repair: ProjectRepairView | None,
 ) -> tuple[ProductAttentionView, ...]:
     items: list[ProductAttentionView] = []
     if readiness.active_tasks:
@@ -553,23 +576,6 @@ def _attention_items(
                 tone="WARNING",
             )
         )
-    if revalidation is not None and revalidation.status in {
-        ProjectRevalidationStatus.REVIEW_REQUIRED,
-        ProjectRevalidationStatus.STALE,
-    }:
-        items.append(
-            ProductAttentionView(
-                key="review-change-mapping",
-                label=(
-                    "重新确认权限规则与当前实现"
-                    if revalidation.status is ProjectRevalidationStatus.REVIEW_REQUIRED
-                    else "重新建立代码变化事实"
-                ),
-                description=revalidation.summary,
-                route=revalidation.next_path or "/changes",
-                tone="WARNING",
-            )
-        )
     if any(not action.compilable for action in readiness.permission_actions):
         items.append(
             ProductAttentionView(
@@ -579,6 +585,50 @@ def _attention_items(
                 route="/permissions",
             )
         )
+    if repair is not None and repair.status not in {
+        ProjectRepairStatus.NONE,
+        ProjectRepairStatus.VERIFIED,
+    }:
+        route_already_present = bool(
+            repair.next_path
+            and any(item.route == repair.next_path and item.tone != "INFO" for item in items)
+        )
+        if not route_already_present:
+            items.append(
+                ProductAttentionView(
+                    key="continue-project-repair",
+                    label=repair.next_label or "继续处理当前修复",
+                    description=(
+                        repair.tasks[0].must_disappear
+                        if repair.tasks
+                        else "当前权限问题仍未完成独立修复复验。"
+                    ),
+                    route=repair.next_path or "/results",
+                    tone="WARNING",
+                )
+            )
+    if revalidation is not None and revalidation.status in {
+        ProjectRevalidationStatus.REVIEW_REQUIRED,
+        ProjectRevalidationStatus.STALE,
+    }:
+        route = revalidation.next_path or "/changes"
+        route_already_present = any(
+            item.route == route and item.tone != "INFO" for item in items
+        )
+        if not route_already_present:
+            items.append(
+                ProductAttentionView(
+                    key="review-change-mapping",
+                    label=(
+                        "重新确认权限规则与当前实现"
+                        if revalidation.status is ProjectRevalidationStatus.REVIEW_REQUIRED
+                        else "重新建立代码变化事实"
+                    ),
+                    description=revalidation.summary,
+                    route=route,
+                    tone="WARNING",
+                )
+            )
     if (
         inconclusive_recovery is None
         and readiness.preparation is not None
@@ -652,6 +702,42 @@ def _attention_items(
             )
         )
     return tuple(items)
+
+
+def _repair_with_inconclusive_recovery(
+    repair: ProjectRepairView | None,
+    recovery: InconclusiveRecoveryView | None,
+) -> ProjectRepairView | None:
+    if (
+        repair is None
+        or recovery is None
+        or repair.status is not ProjectRepairStatus.INCONCLUSIVE
+    ):
+        return repair
+    tasks = tuple(
+        task.model_copy(
+            update={
+                "next_path": recovery.next_path,
+                "next_label": recovery.next_label,
+                "reason_codes": tuple(
+                    dict.fromkeys((*task.reason_codes, *recovery.reason_codes))
+                ),
+            }
+        )
+        if task.status is ProjectRepairStatus.INCONCLUSIVE
+        else task
+        for task in repair.tasks
+    )
+    return repair.model_copy(
+        update={
+            "tasks": tasks,
+            "next_path": recovery.next_path,
+            "next_label": recovery.next_label,
+            "reason_codes": tuple(
+                dict.fromkeys((*repair.reason_codes, *recovery.reason_codes))
+            ),
+        }
+    )
 
 
 def _intent_identity(items) -> tuple[tuple[str, int, str], ...]:

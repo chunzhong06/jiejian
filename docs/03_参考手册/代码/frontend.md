@@ -86,6 +86,7 @@
 - `ApplicationConnectionDto`
 - `ApplicationUnderstandingDto`
 - `CandidateEvidenceDto`
+- `DeliveryCheckDto`
 - `EndpointCandidateDto`
 - `EndpointDiscoveryDto`
 - `PreparationExternalBlockerDto`
@@ -97,6 +98,10 @@
 - `ProjectDto`
 - `ProjectPreparationDto`
 - `ProjectReadinessDto`
+- `ProjectRepairDto`
+- `ProjectRepairPath`
+- `ProjectRepairStatus`
+- `RepairTaskDto`
 - `RoleCandidateDto`
 - `projectsApi`
 主要 import / dot-source：`./http`, `./onboarding`, `./sourceChanges`
@@ -254,6 +259,7 @@
 主要 import / dot-source：`antd`
 
 ### `product/frontend/src/app/useProjectWorkspace.ts`
+- `WorkspaceSnapshot`
 - `useProjectWorkspace`
 主要 import / dot-source：`../api/http`, `../api/projects`, `../api/runs`, `./browserState`, `react`
 
@@ -385,7 +391,7 @@
 
 ### `product/frontend/src/features/identities/TestIdentityPage.tsx`
 - `TestIdentityPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/testIdentities`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/testIdentities`, `../../app/useProjectWorkspace`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `antd`, `react`
 
 ### `product/frontend/src/features/preparation/PreparationPage.test.tsx`
 主要 import / dot-source：`../../api/projects`, `./PreparationPage`, `@testing-library/react`, `vitest`
@@ -419,7 +425,7 @@
 
 ### `product/frontend/src/features/recording/RecordingPage.tsx`
 - `RecordingPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/recordings`, `../../api/runs`, `../../app/browserState`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./ActionSafetySetupCard`, `./FlowDraftReview`, `./RecordingCaptureCard`, `./RecordingSetupCard`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/recordings`, `../../api/runs`, `../../app/browserState`, `../../app/useProjectWorkspace`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./ActionSafetySetupCard`, `./FlowDraftReview`, `./RecordingCaptureCard`, `./RecordingSetupCard`, `antd`, `react`
 
 ### `product/frontend/src/features/recording/RecordingSetupCard.tsx`
 - `RecordingSetupCard`
@@ -462,7 +468,7 @@
 
 ### `product/frontend/src/features/workspace/WorkbenchPage.tsx`
 - `WorkbenchPage`
-主要 import / dot-source：`../../api/experience`, `../../api/mcp`, `../../api/projects`, `../../api/runs`, `../../api/system`, `../../app/presentation`, `../../components/PageTaskHeader`, `antd`, `react`
+主要 import / dot-source：`../../api/experience`, `../../api/http`, `../../api/mcp`, `../../api/projects`, `../../api/runs`, `../../api/system`, `../../app/presentation`, `../../components/PageTaskHeader`, `antd`, `react`
 
 ### `product/frontend/src/main.tsx`
 主要 import / dot-source：`./app/ControlShell`, `./app/theme`, `antd`, `antd/locale/zh_CN`, `react`, `react-dom/client`

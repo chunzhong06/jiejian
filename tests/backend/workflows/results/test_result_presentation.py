@@ -320,7 +320,6 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
             change_id="chg_" + "7" * 32,
             impact_fingerprint="8" * 64,
             required_intent_ids=("pin_" + "4" * 32,),
-            source_fingerprint="9" * 64,
         ),
     )
 

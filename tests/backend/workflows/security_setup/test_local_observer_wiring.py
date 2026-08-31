@@ -311,6 +311,7 @@ def test_compiler_publishes_local_observer_contract_and_profile_snapshot(tmp_pat
         request = core.execution.build_request(
             compiled.profile_id,
             project_id=setup["project_id"],
+            source_fingerprint="d" * 64,
         )
         assert [item.observer_type for item in request.project_snapshot.observers] == [
             ObserverType.OWNER_API,

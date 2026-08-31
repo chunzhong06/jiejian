@@ -29,7 +29,8 @@ from product.backend.core.redaction import redact
 from product.backend.infra.storage import EvidenceIndexRecord, JobRecord, RunRecord, StorageUnitOfWork
 from product.protocols import CleanupIssueCode, RunnerFailurePhase, RunnerResult
 from product.backend.infra.artifacts.run_packages import ValidatedPublication, evidence_records_for_publication, final_run_dir, validate_published_run
-from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, PersistedExecutionRequest
+from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
+from product.protocols.execution_request import ExecutionRequestDocument
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.workflows.assistant import ErrorDiagnosisContext, diagnose_error
 
@@ -102,10 +103,10 @@ class PublishedResultReader:
             raise JiejianError(ErrorCode.ARTIFACT_HASH_MISMATCH, "发布工件 JSON 结构无效")
         return redact(document)
 
-    def execution_request(self, view: PublishedRunView) -> PersistedExecutionRequest:
+    def execution_request(self, view: PublishedRunView) -> ExecutionRequestDocument:
         """读取与已发布 Job hash 绑定的完整不可变执行请求。"""
 
-        return ExecutionRequestStore(self._var_dir).load(
+        return ExecutionRequestStore(self._var_dir).load_historical(
             view.job.job_id,
             expected_hash=view.job.request_hash,
         )
@@ -124,7 +125,10 @@ class PublishedResultReader:
             events = work.job_events.list_for_job(job.job_id) if job is not None else ()
         if run is None or job is None:
             raise JiejianError(ErrorCode.ARTIFACT_NOT_PUBLISHED, "运行缺少持久任务关联")
-        request = ExecutionRequestStore(self._var_dir).load(job.job_id, expected_hash=job.request_hash)
+        request = ExecutionRequestStore(self._var_dir).load_historical(
+            job.job_id,
+            expected_hash=job.request_hash,
+        )
         snapshot = request.project_snapshot
         required_observations = sorted({requirement for case in snapshot.plan.cases for requirement in case.required_observations})
         binding_map = {binding.requirement_id: binding for binding in snapshot.observer_bindings if binding.kind.value == "OBSERVER_SPEC"}

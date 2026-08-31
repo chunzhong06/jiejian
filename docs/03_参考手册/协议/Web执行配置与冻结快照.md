@@ -24,7 +24,9 @@ Profile 包含 project、Business/Auth/Observer scope、`WebExecutionIdentity`�
 
 登记时必须确认 ACTIVE Contract、项目绑定、target scope、bindings、Observer 和 fingerprint。普通生成配置还必须匹配当前 ApplicationUnderstanding、编译时选定的 TestIdentity 代表、Flow、测试安全事实与组级 PermissionIntent 的 authority fingerprint；代表补充或替换不会改变 PermissionIntent，但会产生新的生成配置身份。任一配置输入变化后，即使旧文件仍存在也拒绝构造或提交请求。Profile 变化、Contract 漂移、plan/binding hash 不一致或未知结构默认拒绝。
 
-提交时冻结完整 Contract、Coverage/PermissionMutationPlan、DifferentialExperimentPlan、workflow/effect bindings、目标范围、预算和身份，形成 `WebExecutionSnapshot`；同时把当前项目 `policy_epoch`、策略 fingerprint 以及每条 ACTIVE revision 的 `intent_id/revision/intent_hash/binding_fingerprint` 固定为 `PermissionPolicySnapshot`，共同写入 `PersistedExecutionRequest`。代码变化重验再加入可选 `ChangeVerificationContext`，只保存 `change_id`、影响指纹、排序后的必需权限 ID 与源码指纹，不保存文件清单或 diff。执行期间不重新读取当前 Profile、Ledger、变化聚合或治理表。
+提交真实 Run 前，ApplicationCore 用应用接入时的同一套源码分析边界只读扫描当前目录。目录不可读或源码已经偏离登记基线时，提交在创建 Job/Run 之前失败；通过后把本次 live 源码指纹写入 `PersistedExecutionRequest` 顶层。
+
+同一次提交还会冻结完整 Contract、Coverage/PermissionMutationPlan、DifferentialExperimentPlan、workflow/effect bindings、目标范围、预算和身份，形成 `WebExecutionSnapshot`；当前项目的 `policy_epoch`、策略 fingerprint 以及每条 ACTIVE revision 的 `intent_id/revision/intent_hash/binding_fingerprint` 固定为 `PermissionPolicySnapshot`。代码变化重验可再加入 `ChangeVerificationContext`，其中只保存 `change_id`、影响指纹和排序后的必需权限 ID，不保存第二份源码指纹、文件清单或 diff。执行期间不重新读取当前 Profile、Ledger、变化聚合或治理表。
 
 ## 生命周期与数据流
 
@@ -47,7 +49,7 @@ GUI 读取执行配置时只使用专用摘要投影：返回动作对应的目�
 
 ## 版本规则与 Schema 真源
 
-当前 `WebExecutionProfile` 与 `PersistedExecutionRequest` 独立根以字符串 `schema_version="1"` 起步，`WebExecutionSnapshot` 作为冻结请求内的嵌套对象不重复版本；各 reader 只接受单一当前格式。Schema/protocol 版本表示机器格式，不表示产品代际。严格模型和 canonical/hash 以：
+当前 `WebExecutionProfile` 使用字符串 `schema_version="1"`，当前 `PersistedExecutionRequest` 使用字符串 `schema_version="2"`。`WebExecutionSnapshot` 是冻结请求内的嵌套对象，不重复版本。新的提交与 Worker 只接受格式 2；Result、History 和 Repair 的历史 reader 可以继续读取已发布的严格格式 1 请求，但不会补猜其中缺少的项目级源码身份。Schema/protocol 版本表示机器格式，不表示产品代际。严格模型和 canonical/hash 以：
 
 - `product/protocols/web/profile.py`
 - `product/protocols/web/identity.py`
@@ -56,8 +58,9 @@ GUI 读取执行配置时只使用专用摘要投影：返回动作对应的目�
 - `product/protocols/execution.py`
 - `product/protocols/execution_request.py`
 - `product/protocols/schemas/execution/web-execution-profile.schema.json`
+- `product/protocols/schemas/runner/persisted-execution-request.schema.json`
 
-为准。旧开发 Profile、Run 和请求格式不兼容读取。
+为准。历史兼容只覆盖已经发布并由 request hash 绑定的格式 1 请求，不接受旧开发 Profile 或其他旧格式。
 
 ## 查询入口
 

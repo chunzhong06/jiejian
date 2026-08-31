@@ -20,6 +20,16 @@ const identity = {
   review_reasons: [], cookie_count: 0, prepared_at_us: null, refreshed_at_us: null, created_at_us: 1, updated_at_us: 1,
 }
 
+function pageProps() {
+  return {
+    project: { project_id: 'sample-project', name: '样例' },
+    onError: vi.fn(),
+    onBack: vi.fn(),
+    onStateChanged: vi.fn().mockResolvedValue({ status: {}, readiness: {}, runs: [] }),
+    onContinuePreparation: vi.fn(),
+  }
+}
+
 describe('TestIdentityPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -33,7 +43,7 @@ describe('TestIdentityPage', () => {
   })
 
   it('说明不保存密码并显示每个已确认角色的账号准备情况', async () => {
-    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
+    render(<TestIdentityPage {...pageProps()} />)
     expect(await screen.findByRole('heading', { name: '测试账号' })).toBeInTheDocument()
     expect(screen.getByText(/独立窗口中自行完成密码/)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '按权限组准备' })).toBeInTheDocument()
@@ -56,7 +66,8 @@ describe('TestIdentityPage', () => {
       status: 'PREPARED', message: '测试账号登录状态已安全保存', error_code: null,
       log_path: 'D:/sample/var/logs/identity-preparations/prep.log',
     })
-    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
+    const props = pageProps()
+    render(<TestIdentityPage {...props} />)
     fireEvent.click(await screen.findByRole('button', { name: '打开登录浏览器' }))
     expect(await screen.findByText('不要关闭这个窗口')).toBeInTheDocument()
     expect(screen.getByText('在新窗口完成登录')).toBeInTheDocument()
@@ -66,9 +77,10 @@ describe('TestIdentityPage', () => {
     await waitFor(() => expect(testIdentitiesApi.confirmPreparation).toHaveBeenCalledWith(`prep_${'c'.repeat(32)}`))
     expect(await screen.findByText('登录状态已准备；界鉴没有保存你的密码')).toBeInTheDocument()
     const header = screen.getByRole('region', { name: '测试账号' })
-    expect(screen.getByRole('button', { name: '继续准备业务流程' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '继续准备' })).toBeInTheDocument()
+    expect(props.onStateChanged).toHaveBeenCalled()
     expect(header).not.toHaveTextContent('完成当前登录准备')
-    expect(header).not.toHaveTextContent('继续准备业务流程')
+    expect(header).not.toHaveTextContent('继续准备')
   })
 
   it('保存中显示固定的安全保存提示', async () => {
@@ -82,14 +94,15 @@ describe('TestIdentityPage', () => {
       status: 'SAVING', message: '正在保存', error_code: null,
       log_path: 'D:/sample/var/logs/identity-preparations/prep.log',
     })
-    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
+    render(<TestIdentityPage {...pageProps()} />)
     fireEvent.click(await screen.findByRole('button', { name: '打开登录浏览器' }))
     fireEvent.click(await screen.findByRole('button', { name: '我已完成登录' }))
     expect(await screen.findByText('正在安全保存这个应用所需的登录状态…')).toBeInTheDocument()
   })
 
   it('刷新账号状态只重新读取权限组和账号事实', async () => {
-    render(<TestIdentityPage project={{ project_id: 'sample-project', name: '样例' }} onError={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} />)
+    const props = pageProps()
+    render(<TestIdentityPage {...props} />)
     expect(await screen.findByText('普通用户A')).toBeInTheDocument()
     vi.mocked(projectsApi.understanding).mockClear()
     vi.mocked(testIdentitiesApi.list).mockClear()
@@ -101,5 +114,16 @@ describe('TestIdentityPage', () => {
     expect(testIdentitiesApi.create).not.toHaveBeenCalled()
     expect(testIdentitiesApi.startPreparation).not.toHaveBeenCalled()
     expect(testIdentitiesApi.reset).not.toHaveBeenCalled()
+    expect(props.onStateChanged).toHaveBeenCalledOnce()
+  })
+
+  it('本地刷新成功但工作区同步失败时给出可恢复提示', async () => {
+    const props = pageProps()
+    props.onStateChanged.mockResolvedValue(undefined)
+    render(<TestIdentityPage {...props} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '刷新账号状态' }))
+
+    expect(await screen.findByText('账号状态已刷新，但工作区状态刷新失败，请重试“刷新账号状态”。')).toBeInTheDocument()
   })
 })

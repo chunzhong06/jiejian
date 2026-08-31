@@ -338,7 +338,8 @@ def test_current_publication_indexes_matching_evidence(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     runner_input = make_runner_input()
     request = PersistedExecutionRequest(
-        schema_version="1",
+        schema_version="2",
+        source_fingerprint="d" * 64,
         budget=runner_input.budget,
         permission_policy=build_permission_policy_snapshot(
             runner_input.project_snapshot.project_id,
