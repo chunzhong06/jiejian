@@ -12,8 +12,39 @@ from product.backend.workflows.projects.readiness import (
     ActiveTaskView,
     ProjectReadinessView,
 )
+from product.backend.workflows.projects.preparation import (
+    PreparationItemKind,
+    PreparationItemStatus,
+    PreparationItemView,
+    ProjectPreparationView,
+)
 from product.backend.workflows.source_changes import SourceChangeView
 from product.protocols import TargetType
+
+
+def _preparation(*, ready: bool) -> ProjectPreparationView:
+    status = PreparationItemStatus.READY if ready else PreparationItemStatus.USER
+    item = PreparationItemView(
+        key="flow:action_demo",
+        kind=PreparationItemKind.FLOW,
+        label="导出完整包业务流程",
+        status=status,
+        description="业务流程已经准备。" if ready else "需要录制真实业务流程。",
+        next_path=None if ready else "/flows",
+        next_label=None if ready else "管理业务流程",
+        reason_codes=() if ready else ("COMPLETED_FLOW_MISSING",),
+        action_candidate_id="action_demo",
+    )
+    return ProjectPreparationView(
+        project_id="project_demo",
+        ready=ready,
+        items=(item,),
+        next_item_key=None if ready else item.key,
+        auto_action_count=0,
+        user_action_count=0 if ready else 1,
+        blocked_count=0,
+        external_blockers=(),
+    )
 
 
 def _readiness(*, action: str, latest_run_id: str | None = None) -> ProjectReadinessView:
@@ -34,6 +65,7 @@ def _readiness(*, action: str, latest_run_id: str | None = None) -> ProjectReadi
         remaining_gap_count=0,
         latest_verified_run_id=latest_run_id,
         next_required_action=action,
+        preparation=_preparation(ready=True),
     )
 
 
@@ -159,6 +191,7 @@ def test_recording_task_and_preparation_gaps_route_back_to_preparation() -> None
             ),
             "completed_flow_available": False,
             "current_scope_runnable": False,
+            "preparation": _preparation(ready=False),
         }
     )
     project = SimpleNamespace(

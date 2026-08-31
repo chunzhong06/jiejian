@@ -191,6 +191,15 @@ function ControlShellContent() {
       setExperienceBusy(false)
     }
   }
+  const prepareCurrentProject = async () => {
+    if (!selected?.project_id) return
+    try {
+      await projectsApi.prepareSafe(selected.project_id)
+      await workspace.refreshCurrent()
+    } catch (preparationError) {
+      notifyError(preparationError as ApiError)
+    }
+  }
   const runOfficialObservationGap = async () => {
     if (!selected?.project_id || !experience?.active || experience.project_id !== selected.project_id) return
     setExperienceBusy(true)
@@ -220,8 +229,11 @@ function ControlShellContent() {
     ) setPresentationOpen(false)
   }, [experience?.active, experience?.project_id, presentationOpen, selected?.project_id])
   useEffect(() => {
-    if (!selected?.project_id || !['/results', '/verification', '/history'].includes(route)) return
-    // Run 可能由 Worker、CLI 或其他会话形成，进入结果相关页面时必须重新读取权威工作区状态。
+    if (
+      !selected?.project_id
+      || !['/preparation', '/results', '/verification', '/history'].includes(route)
+    ) return
+    // 准备事实与 Run 都可能在其他页面或进程形成，返回汇总页时重新读取权威工作区状态。
     void refreshRuns()
   }, [refreshRuns, route, selected?.project_id])
 
@@ -246,7 +258,7 @@ function ControlShellContent() {
     if (route === '/identities') return <TestIdentityPage key={`identities-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/preparation')} onNext={() => navigate('/flows')} />
     if (route === '/flows') return <RecordingPage key={`recording-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/preparation')} onNext={() => navigate('/permissions')} />
     if (route === '/permissions') return <PermissionCheckPage mode="permissions" key={`permissions-${retryEpoch}`} project={selected} runs={runs} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/permissions'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/changes')} onNext={() => navigate('/preparation')} />
-    if (route === '/preparation') return readiness ? <PreparationPage readiness={readiness} onNavigate={(path) => navigate(normalizeRoute(path))} /> : <MissingApplication onNavigate={() => navigate('/application')} />
+    if (route === '/preparation') return readiness ? <PreparationPage readiness={readiness} onPrepareSafe={prepareCurrentProject} onNavigate={(path) => navigate(normalizeRoute(path))} /> : <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/validation') return <PermissionCheckPage mode="validation" key={`validation-${retryEpoch}-${validationChangeId ?? 'baseline'}`} project={selected} runs={runs} changeId={validationChangeId} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/validation'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/preparation')} onNext={() => navigate('/results')} />
     if (route === '/history') return <CheckHistoryPage projectId={selected.project_id} onError={notifyError} onBack={() => navigate('/results')} />
     if (route === '/verification') return <VerificationPage key={`verification-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/results')} onHistory={() => navigate('/history')} onRetest={canVerifyOfficialFix ? verifyOfficialFix : undefined} retestBusy={experienceBusy} onObservationGap={experience?.active && experience.experience_mode === 'GUIDED' && experience.project_id === selected.project_id ? runOfficialObservationGap : undefined} observationGapBusy={experienceBusy} />

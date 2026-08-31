@@ -57,6 +57,17 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
             context.product_status.get(project_id).model_dump(mode="json")
         )
 
+    @router.post(
+        "/api/projects/{project_id}/preparation/prepare-safe",
+        response_model=ApiResponse,
+    )
+    async def prepare_project_safely(project_id: str):
+        """只执行测试准备白名单中的确定性机械动作。"""
+
+        return data_response(
+            context.project_preparation.prepare_safe(project_id).model_dump(mode="json")
+        )
+
     @router.get(
         "/api/projects/{project_id}/application-understanding",
         response_model=ApiResponse,

@@ -31,6 +31,7 @@ from product.backend.infra.runtime.jobs.targets import JobTargetType, default_ru
 from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
 from product.backend.workflows.projects.catalog import ProjectCatalog
 from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
+from product.backend.workflows.projects.preparation import ProjectPreparationService
 from product.backend.workflows.projects.readiness import ProjectReadinessService
 from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
 from product.backend.workflows.recording.submission import RecordingSubmission
@@ -244,12 +245,21 @@ class ApplicationCore:
             source_changes=self.source_changes,
             repair_contracts=self.repair_contracts,
         )
+        self.project_preparation = ProjectPreparationService(
+            factory,
+            test_identities=self.test_identities,
+            permission_intents=self.permission_intents,
+            action_safety_setup=self.action_safety_setup,
+            checks=self.checks,
+            source_changes=self.source_changes,
+        )
         self.project_readiness = ProjectReadinessService(
             factory,
             result_reader=self.results,
             endpoint_status_resolver=self.application_understanding.endpoint_status,
             permission_matrix_resolver=self.permission_intents.matrix,
             check_preview_resolver=self.checks.preview,
+            preparation_resolver=self.project_preparation.status,
         )
         self.product_status = ProductStatusService(
             self.projects,

@@ -71,7 +71,7 @@ def _resolver() -> AssistantSurfaceResolver:
     gap = CheckPreviewGap(
         code="OBSERVATION_UNCONFIRMED",
         message="可信观察方式未确认",
-        next_path="/flows",
+        next_path="/preparation",
         next_label="去确认观察方式",
     )
     preview = CheckPreview(
@@ -96,7 +96,7 @@ def _resolver() -> AssistantSurfaceResolver:
             ),
         ),
         gaps=(gap,),
-        next_path="/flows",
+        next_path="/preparation",
         next_label="去确认观察方式",
         case_count=1,
         differential_pair_count=0,

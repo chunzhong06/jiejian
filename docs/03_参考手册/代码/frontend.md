@@ -86,8 +86,14 @@
 - `CandidateEvidenceDto`
 - `EndpointCandidateDto`
 - `EndpointDiscoveryDto`
+- `PreparationExternalBlockerDto`
+- `PreparationItemDto`
+- `PreparationItemKind`
+- `PreparationItemStatus`
+- `PreparationPath`
 - `ProductStatusDto`
 - `ProjectDto`
+- `ProjectPreparationDto`
 - `ProjectReadinessDto`
 - `RoleCandidateDto`
 - `projectsApi`
@@ -384,7 +390,7 @@
 
 ### `product/frontend/src/features/preparation/PreparationPage.tsx`
 - `PreparationPage`
-主要 import / dot-source：`../../api/projects`, `../../components/PageTaskHeader`, `antd`
+主要 import / dot-source：`../../api/projects`, `../../components/PageTaskHeader`, `antd`, `react`
 
 ### `product/frontend/src/features/presentation/PresentationMode.test.tsx`
 主要 import / dot-source：`./PresentationMode`, `@testing-library/react`, `vitest`

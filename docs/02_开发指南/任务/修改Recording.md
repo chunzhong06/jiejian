@@ -28,6 +28,8 @@ Recording 把“用户在已登录网页里完成一次真实业务动作”转�
 
 Recording 应根据录制顺序自动采用唯一且可执行的业务解释；只有多个同级业务解释并存时，页面才让用户在业务动作、有限资源值或来源步骤之间选择。编译后的 Flow 仍保留必要 SETUP 与唯一 TARGET，通过 `CASE_SUBJECT`、`CASE_RESOURCE_ID` 在运行时注入差分事实，但 HTTP method、path 位置、JSONPath、step ID 和 candidate ID 不进入普通审阅。业务资源、真实结果、独立观察和恢复方式在安全准备中形成；权限要求只能由 Human Approval 改变，不能塞回 Recording 或 Flow。
 
+`ProjectPreparation` 只读取 Recording、FlowDraft 与 ActionSafetySetup 当前事实并形成 FLOW/RESOURCE/OBSERVATION/RECOVERY/EFFECT 清单。缺 Flow、观察或恢复时，准备页只能把用户导航到现有 `/flows` 与确认流程；`prepare-safe` 不创建 Recording、不生成 FlowDraft，也不静默确认唯一候选。
+
 ## 不能破坏
 
 - 登录和页面检查阶段不采集事件；秘密正文、Cookie、Bearer、storage state 和浏览器 profile 不进入协议、日志或 Git。

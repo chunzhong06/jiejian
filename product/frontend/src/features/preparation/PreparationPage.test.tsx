@@ -1,50 +1,222 @@
-// 验证测试准备按当前事实展示账号、流程和检查配置，不把缺失数据误报为可用。
+// 验证测试准备页只按后端四态推进，并始终把人工确认留在现有详细页面。
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { ProjectReadinessDto } from '../../api/projects'
+import type {
+  PreparationItemDto,
+  ProjectPreparationDto,
+  ProjectReadinessDto,
+} from '../../api/projects'
 import { PreparationPage } from './PreparationPage'
 
-const baseReadiness: ProjectReadinessDto = {
-  project_id: 'p1', project_status: 'READY', application_connected: true,
-  endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED',
-  discovered_role_count: 2, confirmed_role_count: 2,
-  discovered_action_count: 1, confirmed_action_count: 1,
-  execution_profile_available: false, completed_flow_available: false,
-  active_contract_available: false, current_scope_runnable: false,
-  remaining_gap_count: 3, active_tasks: [], latest_verified_run_id: null,
-  next_required_action: 'RECORD_FLOW',
+function preparationItem(
+  status: PreparationItemDto['status'],
+  updates: Partial<PreparationItemDto> = {},
+): PreparationItemDto {
+  return {
+    key: 'identity:alice',
+    kind: 'IDENTITY',
+    label: 'Alice 测试账号',
+    status,
+    description: status === 'READY' ? 'Alice 的登录状态当前可用。' : 'Alice 需要完成登录。',
+    next_path: status === 'READY' ? null : '/identities',
+    next_label: status === 'READY' ? null : '管理测试账号',
+    reason_codes: status === 'READY' ? [] : ['TEST_IDENTITY_NOT_PREPARED'],
+    auto_action: status === 'AUTO' ? 'ENSURE_IDENTITY_RECORD' : null,
+    role_candidate_id: null,
+    action_candidate_id: null,
+    recording_id: null,
+    identity_id: null,
+    owner_test_identity_id: null,
+    ...updates,
+  }
+}
+
+function preparation(
+  items: PreparationItemDto[],
+  updates: Partial<ProjectPreparationDto> = {},
+): ProjectPreparationDto {
+  const next = items.find((item) => item.status !== 'READY')
+  return {
+    project_id: 'p1',
+    ready: items.length > 0 && items.every((item) => item.status === 'READY'),
+    items,
+    next_item_key: next?.key ?? null,
+    auto_action_count: items.filter((item) => item.status === 'AUTO').length,
+    user_action_count: items.filter((item) => item.status === 'USER').length,
+    blocked_count: items.filter((item) => item.status === 'BLOCKED').length,
+    external_blockers: [],
+    ...updates,
+  }
+}
+
+function readiness(current: ProjectPreparationDto): ProjectReadinessDto {
+  return {
+    project_id: 'p1',
+    project_status: 'READY',
+    application_connected: true,
+    endpoint_status: 'CONFIRMED',
+    source_analysis_status: 'COMPLETED',
+    discovered_role_count: 2,
+    confirmed_role_count: 2,
+    discovered_action_count: 1,
+    confirmed_action_count: 1,
+    execution_profile_available: current.ready,
+    completed_flow_available: current.ready,
+    active_contract_available: current.ready,
+    current_scope_runnable: current.ready,
+    remaining_gap_count: current.ready ? 0 : 1,
+    active_tasks: [],
+    latest_verified_run_id: null,
+    next_required_action: current.ready ? 'RUN_CHECK' : 'RECORD_FLOW',
+    preparation: current,
+  }
 }
 
 describe('PreparationPage', () => {
-  it('权限动作尚未形成时不把测试账号误报为可用', () => {
-    render(<PreparationPage readiness={baseReadiness} onNavigate={vi.fn()} />)
+  it('READY 项只显示后端给出的当前可用事实', () => {
+    render(<PreparationPage
+      readiness={readiness(preparation([preparationItem('READY')]))}
+      onPrepareSafe={vi.fn()}
+      onNavigate={vi.fn()}
+    />)
 
-    expect(screen.getByText('0/3 项可用')).toBeInTheDocument()
-    const accountCard = screen.getByText('测试账号').closest('.ant-card')!
-    expect(within(accountCard as HTMLElement).getByText('需要处理')).toBeInTheDocument()
+    expect(screen.getByText('Alice 测试账号')).toBeInTheDocument()
+    expect(screen.getByText('当前可用')).toBeInTheDocument()
+    expect(screen.queryByText('TEST_IDENTITY_NOT_PREPARED')).not.toBeInTheDocument()
   })
 
-  it('三类准备事实齐备后仍允许分别维护并进入验证', () => {
+  it('AUTO 项点击继续准备只调用 prepare-safe 适配动作', async () => {
+    const onPrepareSafe = vi.fn().mockResolvedValue(undefined)
     const onNavigate = vi.fn()
-    const readiness: ProjectReadinessDto = {
-      ...baseReadiness,
-      permission_actions: [{ action_candidate_id: 'action-1', action_display_name: '导出完整包', compilable: true, gaps: [], required_intent_count: 2, confirmed_intent_count: 2, executable_intent_count: 2, representative_gap_count: 0 }],
-      execution_profile_available: true,
-      completed_flow_available: true,
-      active_contract_available: true,
-      current_scope_runnable: true,
-      remaining_gap_count: 0,
-      next_required_action: 'RUN_CHECK',
-    }
-    render(<PreparationPage readiness={readiness} onNavigate={onNavigate} />)
+    render(<PreparationPage
+      readiness={readiness(preparation([
+        preparationItem('AUTO', { description: '可以创建非秘密测试账号记录。' }),
+      ]))}
+      onPrepareSafe={onPrepareSafe}
+      onNavigate={onNavigate}
+    />)
 
-    expect(screen.getByText('3/3 项可用')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '管理测试账号' }))
-    fireEvent.click(screen.getByRole('button', { name: '管理业务流程' }))
-    fireEvent.click(screen.getAllByRole('button', { name: '前往验证运行' })[0])
-    expect(onNavigate).toHaveBeenNthCalledWith(1, '/identities')
-    expect(onNavigate).toHaveBeenNthCalledWith(2, '/flows')
-    expect(onNavigate).toHaveBeenNthCalledWith(3, '/validation')
+    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    await waitFor(() => expect(onPrepareSafe).toHaveBeenCalledOnce())
+    expect(onNavigate).not.toHaveBeenCalled()
+  })
+
+  it('USER 项使用后端 next_path 进入现有人工页面', () => {
+    const onNavigate = vi.fn()
+    render(<PreparationPage
+      readiness={readiness(preparation([
+        preparationItem('USER', { next_path: '/identities', next_label: '管理测试账号' }),
+      ]))}
+      onPrepareSafe={vi.fn()}
+      onNavigate={onNavigate}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    expect(onNavigate).toHaveBeenCalledOnce()
+    expect(onNavigate).toHaveBeenCalledWith('/identities')
+  })
+
+  it('BLOCKED 项显示原因且不会调用任何写动作', () => {
+    const onPrepareSafe = vi.fn()
+    const onNavigate = vi.fn()
+    render(<PreparationPage
+      readiness={readiness(preparation([
+        preparationItem('BLOCKED', {
+          kind: 'OBSERVATION',
+          label: '结果确认方式',
+          description: '当前还没有可靠的结果确认方式。',
+          next_path: '/flows',
+          next_label: '补录结果观察流程',
+        }),
+      ]))}
+      onPrepareSafe={onPrepareSafe}
+      onNavigate={onNavigate}
+    />)
+
+    expect(screen.getByText('当前还没有可靠的结果确认方式。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '继续准备' })).toBeDisabled()
+    expect(onPrepareSafe).not.toHaveBeenCalled()
+    expect(onNavigate).not.toHaveBeenCalled()
+  })
+
+  it('external blocker 按后端 next_item_key 导航到正式区域', () => {
+    const onPrepareSafe = vi.fn()
+    const onNavigate = vi.fn()
+    const current = preparation([preparationItem('BLOCKED')], {
+      next_item_key: 'permission-incomplete',
+      external_blockers: [{
+        key: 'permission-incomplete',
+        category: 'PERMISSION',
+        label: '权限规则尚未形成当前可执行映射',
+        description: '请先确认权限要求。',
+        next_path: '/permissions',
+        next_label: '去确认权限规则',
+        reason_codes: ['PERMISSION_INTENT_NEEDS_REVIEW'],
+      }],
+    })
+    render(<PreparationPage
+      readiness={readiness(current)}
+      onPrepareSafe={onPrepareSafe}
+      onNavigate={onNavigate}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    expect(onNavigate).toHaveBeenCalledWith('/permissions')
+    expect(onPrepareSafe).not.toHaveBeenCalled()
+  })
+
+  it('全部 READY 后唯一主操作进入验证运行', () => {
+    const onNavigate = vi.fn()
+    render(<PreparationPage
+      readiness={readiness(preparation([preparationItem('READY')]))}
+      onPrepareSafe={vi.fn()}
+      onNavigate={onNavigate}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: '前往验证运行' }))
+    expect(onNavigate).toHaveBeenCalledWith('/validation')
+    expect(screen.queryByRole('button', { name: '继续准备' })).not.toBeInTheDocument()
+  })
+
+  it('单一候选仍导航到人工确认页，不在加载或继续准备时确认', () => {
+    const onPrepareSafe = vi.fn()
+    const onNavigate = vi.fn()
+    render(<PreparationPage
+      readiness={readiness(preparation([
+        preparationItem('USER', {
+          kind: 'RECOVERY',
+          label: '测试后恢复',
+          description: '已找到一个可靠候选，请确认恢复方式。',
+          next_path: '/flows',
+          next_label: '确认恢复方式',
+        }),
+      ]))}
+      onPrepareSafe={onPrepareSafe}
+      onNavigate={onNavigate}
+    />)
+
+    expect(onPrepareSafe).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    expect(onNavigate).toHaveBeenCalledWith('/flows')
+    expect(onPrepareSafe).not.toHaveBeenCalled()
+  })
+
+  it('prepare-safe 后接受重新读取的权威 readiness，而不保留本地完成态', async () => {
+    const onPrepareSafe = vi.fn().mockResolvedValue(undefined)
+    const { rerender } = render(<PreparationPage
+      readiness={readiness(preparation([preparationItem('AUTO')]))}
+      onPrepareSafe={onPrepareSafe}
+      onNavigate={vi.fn()}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: '继续准备' }))
+    await waitFor(() => expect(onPrepareSafe).toHaveBeenCalledOnce())
+    rerender(<PreparationPage
+      readiness={readiness(preparation([preparationItem('READY')]))}
+      onPrepareSafe={onPrepareSafe}
+      onNavigate={vi.fn()}
+    />)
+    expect(screen.getByRole('button', { name: '前往验证运行' })).toBeInTheDocument()
   })
 })

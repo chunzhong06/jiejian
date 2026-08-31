@@ -7,6 +7,7 @@ import ControlShell from './ControlShell'
 
 const mockApi = vi.hoisted(() => ({
   projects: vi.fn().mockResolvedValue([]), readiness: vi.fn(), runs: vi.fn().mockResolvedValue([]), run: vi.fn(),
+  prepareSafe: vi.fn().mockResolvedValue({}),
   removeProject: vi.fn().mockResolvedValue({ project_id: 'p1', status: 'ARCHIVED' }),
   llmProfiles: vi.fn().mockResolvedValue([]), settings: vi.fn().mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }), systemStatus: vi.fn().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }), shutdown: vi.fn().mockResolvedValue({ status: 'stopping' }),
   mcpStatus: vi.fn().mockResolvedValue({ schema_version: '1', paired: false, accepting_connections: false, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null }),
@@ -31,6 +32,7 @@ const mockApi = vi.hoisted(() => ({
 vi.mock('../api/projects', () => ({ projectsApi: {
   projects: mockApi.projects,
   remove: mockApi.removeProject,
+  prepareSafe: mockApi.prepareSafe,
   status: async (projectId: string) => {
     const readiness = await mockApi.readiness(projectId)
     const resultReady = readiness.next_required_action === 'OPEN_RESULT'
@@ -189,6 +191,55 @@ describe('应用壳', () => {
     render(<ControlShell />)
     await waitFor(() => expect(window.location.hash).toBe('#/workspace'))
     expect(await screen.findByText('建立第一份权限安全基线')).toBeInTheDocument()
+  })
+
+  it('测试准备自动动作经项目 API 执行后重新读取权威工作区', async () => {
+    mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
+    mockApi.readiness.mockResolvedValue({
+      project_id: 'p1', project_status: 'READY', application_connected: true,
+      endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED',
+      discovered_role_count: 1, confirmed_role_count: 1,
+      discovered_action_count: 1, confirmed_action_count: 1,
+      execution_profile_available: false, completed_flow_available: false,
+      active_contract_available: false, current_scope_runnable: false,
+      remaining_gap_count: 1, active_tasks: [], latest_verified_run_id: null,
+      next_required_action: 'RECORD_FLOW',
+      preparation: {
+        project_id: 'p1', ready: false, next_item_key: 'identity:alice',
+        auto_action_count: 1, user_action_count: 0, blocked_count: 0,
+        external_blockers: [],
+        items: [{
+          key: 'identity:alice', kind: 'IDENTITY', label: 'Alice 测试账号',
+          status: 'AUTO', description: '可以创建非秘密测试账号记录。',
+          next_path: '/identities', next_label: '管理测试账号',
+          reason_codes: ['TEST_IDENTITY_MISSING'], auto_action: 'ENSURE_IDENTITY_RECORD',
+          role_candidate_id: null, action_candidate_id: null, recording_id: null,
+          identity_id: null, owner_test_identity_id: null,
+        }],
+      },
+    })
+    localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
+    window.location.hash = '#/preparation'
+    render(<ControlShell />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '继续准备' }))
+    await waitFor(() => expect(mockApi.prepareSafe).toHaveBeenCalledWith('p1'))
+    await waitFor(() => expect(mockApi.readiness.mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it('从详细确认页返回测试准备时重新读取权威状态', async () => {
+    mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
+    localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
+    window.location.hash = '#/permissions'
+    render(<ControlShell />)
+
+    expect(await screen.findByRole('heading', { name: '权限规则', level: 2 })).toBeInTheDocument()
+    const beforeReturn = mockApi.readiness.mock.calls.length
+    window.location.hash = '#/preparation'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+
+    expect(await screen.findByRole('heading', { name: '测试准备' })).toBeInTheDocument()
+    await waitFor(() => expect(mockApi.readiness.mock.calls.length).toBeGreaterThan(beforeReturn))
   })
 
   it('没有应用时模型服务和运行环境仍可访问', async () => {

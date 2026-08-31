@@ -29,6 +29,11 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus, RunLifecycle
 from product.backend.core.recording import RecordingState
 from product.backend.infra.storage import StorageUnitOfWork
+from product.backend.workflows.projects.preparation import (
+    PreparationItemKind,
+    PreparationItemStatus,
+    ProjectPreparationView,
+)
 
 
 NextRequiredAction = Literal[
@@ -94,6 +99,7 @@ class ProjectReadinessView(ReadinessModel):
     active_tasks: tuple[ActiveTaskView, ...] = ()
     latest_verified_run_id: str | None = Field(default=None, max_length=128)
     next_required_action: NextRequiredAction
+    preparation: ProjectPreparationView | None = None
 
 
 class ProjectReadinessService:
@@ -107,12 +113,14 @@ class ProjectReadinessService:
         endpoint_status_resolver: Callable[[ApplicationUnderstanding], str] | None = None,
         permission_matrix_resolver: Callable[[str], object] | None = None,
         check_preview_resolver: Callable[[str], object] | None = None,
+        preparation_resolver: Callable[[str], ProjectPreparationView] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._result_reader = result_reader
         self._endpoint_status_resolver = endpoint_status_resolver
         self._permission_matrix_resolver = permission_matrix_resolver
         self._check_preview_resolver = check_preview_resolver
+        self._preparation_resolver = preparation_resolver
 
     def get(self, project_id: str) -> ProjectReadinessView:
         with self._uow_factory() as work:
@@ -124,10 +132,32 @@ class ProjectReadinessService:
             runs = work.runs.list_for_project(project_id)
             understanding = work.application_understanding.get(project_id)
 
+        preparation = (
+            None
+            if self._preparation_resolver is None
+            else self._preparation_resolver(project_id)
+        )
         execution_profile_available = bool(profiles)
         completed_flow_available = any(
             item.state is RecordingState.COMPLETED for item in recordings
         )
+        if preparation is not None:
+            profile_items = tuple(
+                item
+                for item in preparation.items
+                if item.kind is PreparationItemKind.PROFILE
+            )
+            flow_items = tuple(
+                item
+                for item in preparation.items
+                if item.kind is PreparationItemKind.FLOW
+            )
+            execution_profile_available = bool(profile_items) and all(
+                item.status is PreparationItemStatus.READY for item in profile_items
+            )
+            completed_flow_available = bool(flow_items) and all(
+                item.status is PreparationItemStatus.READY for item in flow_items
+            )
         active_contract_available = (
             project.governed_contract_id is not None
             and project.governed_contract_version is not None
@@ -194,23 +224,18 @@ class ProjectReadinessService:
                     else "RUN_CHECK"
                 )
             elif next_action == "RECORD_FLOW" and permission_actions:
-                setup_gap_prefixes = (
-                    "ACTION_",
-                    "TEST_RESOURCE_",
-                    "OBSERVATION_",
-                    "RECOVERY_",
-                    "SECURITY_EFFECT_",
+                preparation_categories = (
+                    set()
+                    if preparation is None
+                    else {item.category for item in preparation.external_blockers}
                 )
-                has_setup_gap = any(
-                    gap.startswith(setup_gap_prefixes)
-                    for action in permission_actions
-                    for gap in action.gaps
-                )
-                all_compilable = all(action.compilable for action in permission_actions)
-                if has_setup_gap:
-                    next_action = "RECORD_FLOW"
-                elif not all_compilable:
+                if {
+                    "PERMISSION",
+                    "SOURCE_CHANGE",
+                } & preparation_categories:
                     next_action = "REVIEW_PERMISSION"
+                elif preparation is not None and not preparation.ready:
+                    next_action = "RECORD_FLOW"
                 else:
                     next_action = "REVIEW_PERMISSION"
             return ProjectReadinessView(
@@ -244,6 +269,7 @@ class ProjectReadinessService:
                 active_tasks=active_tasks,
                 latest_verified_run_id=latest_verified_run_id,
                 next_required_action=next_action,
+                preparation=preparation,
             )
 
         return ProjectReadinessView(
@@ -264,6 +290,7 @@ class ProjectReadinessService:
             active_tasks=active_tasks,
             latest_verified_run_id=latest_verified_run_id,
             next_required_action="CONNECT_APPLICATION",
+            preparation=preparation,
         )
 
     def _permission_actions(

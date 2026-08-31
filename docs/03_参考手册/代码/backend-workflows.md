@@ -218,6 +218,9 @@
 - `class PermissionIntentService`
 主要 import / dot-source：`__future__`, `collections`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.test_identities`, `product.protocols.execution_request`, `pydantic`, `time`, `uuid`
 
+### `product/backend/workflows/projects/__init__.py`
+主要 import / dot-source：`.preparation`
+
 ### `product/backend/workflows/projects/catalog.py`
 - `class ProjectCatalog`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.storage`
@@ -229,13 +232,26 @@
 - `class ProjectLifecycleService`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.test_identities`, `time`
 
+### `product/backend/workflows/projects/preparation.py`
+- `class PreparationItemKind`
+- `class PreparationItemStatus`
+- `class PreparationAutoAction`
+- `class PreparationItemView`
+- `class PreparationExternalBlockerView`
+- `class ProjectPreparationView`
+- `_KIND_ORDER`
+- `_PREPARATION_GAPS`
+- `_APPLICATION_GAPS`
+- `class ProjectPreparationService`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.permission_intents`, `product.backend.workflows.test_identities`, `pydantic`, `typing`
+
 ### `product/backend/workflows/projects/readiness.py`
 - `class ReadinessModel`
 - `class ActiveTaskView`
 - `class ActionPermissionReadinessView`
 - `class ProjectReadinessView`
 - `class ProjectReadinessService`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.storage`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.projects.preparation`, `pydantic`, `typing`
 
 ### `product/backend/workflows/recording/__init__.py`
 主要 import / dot-source：`.credentials`

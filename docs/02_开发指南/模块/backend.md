@@ -31,7 +31,7 @@ GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `Ap
 | 任务 | 主要位置 | 先读与直接验证 |
 | --- | --- | --- |
 | 修改权限合同、事实或三态 | `core/verification/permissions/`、`facts.py`、`gating.py` | [修改权限判断](../任务/修改权限判断.md)；`test_contract.py`、`test_evaluation.py`、`test_gating.py` |
-| 修改项目、接入或准备状态 | `workflows/projects/`、`onboarding/`、`application_understanding/` | 所属任务 Guide；`tests/backend/workflows/projects/`、`onboarding/`、`application_understanding/` |
+| 修改项目、接入或准备状态 | `workflows/projects/`、`onboarding/`、`application_understanding/` | 准备清单先看 `workflows/projects/preparation.py`，就绪汇总看 `workflows/projects/readiness.py`；直接验证 `tests/backend/workflows/projects/` |
 | 新增或修改应用用例 | 对应 `product/backend/workflows/` 子目录、`product/backend/composition/application.py` | 对应 `tests/backend/workflows/` 子目录；若改变装配再加 `tests/backend/composition/` |
 | 修改 API/CLI 控制面 | `product/backend/api/routers/`、`product/backend/cli/commands/` | [修改 API 与控制面](../任务/修改API与控制面.md)；`test_control_plane.py`、`test_control.py` |
 | 修改数据库或事务 | `infra/storage/`、`migrations/versions/` | [修改数据库](../任务/修改数据库.md)；storage/migration 直接测试 |
@@ -53,6 +53,7 @@ GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `Ap
 
 - `core` 不导入 workflows、infra、API、CLI 或具体 Web Runtime；纯规则必须可以在无 I/O 条件下测试。
 - API、CLI 和 GUI 复用 ApplicationCore，不各自复制事务、Readiness、ResultPresentation 或 History 逻辑。
+- `ProjectPreparationService` 只在 ApplicationCore 装配并实时读取既有事实；不得进入 WorkerContainer、建立准备进度表，或依赖 LLM、Playwright、Runner 和 ORM Row。
 - WorkerContainer 独立于 ApplicationCore；两个组合根只从 `product.backend.composition` 暴露，不在 Workflow 或 Infra 中建立第二个装配入口。
 - API 进程只管理控制面与 Worker 生命周期；目标请求、浏览器和高风险观察进入 Worker/Runner 或独立 Recording Process。
 - 当前生产 Target 只有 Web。新增 Target 必须先形成独立架构/协议决策，不能在现有枚举里预留空值。

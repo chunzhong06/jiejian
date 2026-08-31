@@ -25,6 +25,48 @@ export type ProjectDto = {
   updated_at_us?: number
 }
 
+export type PreparationItemKind = 'IDENTITY' | 'FLOW' | 'RESOURCE' | 'OBSERVATION' | 'RECOVERY' | 'EFFECT' | 'PROFILE'
+export type PreparationItemStatus = 'READY' | 'AUTO' | 'USER' | 'BLOCKED'
+export type PreparationPath = '/application' | '/changes' | '/permissions' | '/preparation' | '/identities' | '/flows' | '/validation'
+
+export type PreparationItemDto = {
+  key: string
+  kind: PreparationItemKind
+  label: string
+  status: PreparationItemStatus
+  description: string
+  next_path: PreparationPath | null
+  next_label: string | null
+  reason_codes: string[]
+  auto_action: 'ENSURE_IDENTITY_RECORD' | 'BUILD_CURRENT_PROFILE' | null
+  role_candidate_id: string | null
+  action_candidate_id: string | null
+  recording_id: string | null
+  identity_id: string | null
+  owner_test_identity_id: string | null
+}
+
+export type PreparationExternalBlockerDto = {
+  key: string
+  category: 'APPLICATION' | 'PERMISSION' | 'SOURCE_CHANGE'
+  label: string
+  description: string
+  next_path: PreparationPath
+  next_label: string
+  reason_codes: string[]
+}
+
+export type ProjectPreparationDto = {
+  project_id: string
+  ready: boolean
+  items: PreparationItemDto[]
+  next_item_key: string | null
+  auto_action_count: number
+  user_action_count: number
+  blocked_count: number
+  external_blockers: PreparationExternalBlockerDto[]
+}
+
 export type ProjectReadinessDto = {
   project_id: string
   project_status: string
@@ -48,6 +90,7 @@ export type ProjectReadinessDto = {
   active_tasks: Array<{ kind: 'RUN' | 'RECORDING'; task_id: string; state: string }>
   latest_verified_run_id: string | null
   next_required_action: 'CONNECT_APPLICATION' | 'CONFIRM_TARGET' | 'AUTHORIZE_SOURCE_ANALYSIS' | 'REVIEW_DISCOVERY' | 'RECORD_FLOW' | 'REVIEW_PERMISSION' | 'RUN_CHECK' | 'OPEN_RESULT'
+  preparation?: ProjectPreparationDto | null
 }
 
 export type ProductStatusDto = {
@@ -157,6 +200,7 @@ export const projectsApi = {
   project: (id: string) => request<ProjectDto>(`/api/projects/${id}`),
   remove: (id: string) => request<ProjectDto>(`/api/projects/${id}`, { method: 'DELETE' }),
   status: (id: string) => request<ProductStatusDto>(`/api/projects/${id}/status`),
+  prepareSafe: (id: string) => request<ProjectPreparationDto>(`/api/projects/${id}/preparation/prepare-safe`, { method: 'POST' }),
   understanding: (id: string) => request<ApplicationUnderstandingDto>(`/api/projects/${id}/application-understanding`),
   discoverEndpoints: (id: string) => request<EndpointDiscoveryDto>(`/api/projects/${id}/endpoint-candidates`, { method: 'POST' }),
   confirmEndpoint: (id: string, endpoint: string, revision: number) =>

@@ -790,6 +790,21 @@ def _confirm_permissions(
         page.get_by_role("heading", name="测试准备", exact=True).wait_for(
             timeout=30_000
         )
+        with page.expect_response(
+            lambda response: response.request.method == "POST"
+            and response.url.endswith(
+                f"/api/projects/{project_id}/preparation/prepare-safe"
+            ),
+            timeout=30_000,
+        ) as pending_prepare_safe:
+            page.get_by_role(
+                "button", name="继续准备", exact=True
+            ).click()
+        if pending_prepare_safe.value.status != 200:
+            raise SampleTestError(
+                "测试准备页执行安全机械动作返回非预期状态 "
+                f"{pending_prepare_safe.value.status}"
+            )
         page.get_by_role(
             "button", name="前往验证运行", exact=True
         ).last.click()
@@ -797,16 +812,6 @@ def _confirm_permissions(
         page.get_by_role("heading", name="验证运行", exact=True).wait_for(
             timeout=30_000
         )
-        with page.expect_response(
-            lambda response: response.request.method == "POST"
-            and response.url.endswith(
-                f"/api/projects/{project_id}/check-preparation"
-            ),
-            timeout=30_000,
-        ) as pending_compile:
-            page.get_by_role(
-                "button", name="准备本次检查", exact=True
-            ).click()
     except PlaywrightError as error:
         page.screenshot(
             path=str(audit_dir / "permission-preparation-failed.png"),
@@ -815,12 +820,9 @@ def _confirm_permissions(
         raise SampleTestError(
             "权限确认完成后没有按正式工作区进入测试准备和验证运行"
         ) from error
-    if pending_compile.value.status != 200:
-        raise SampleTestError(
-            f"权限页面准备检查返回非预期状态 {pending_compile.value.status}"
-        )
     page.get_by_text(
-        re.compile(r"^(?:当前检查条件已经准备好|检查条件已经重新确认)$")
+        "当前检查条件已经准备好",
+        exact=True,
     ).wait_for(timeout=30_000)
     preview = client.call("GET", f"/api/projects/{project_id}/check-preview")
     if (

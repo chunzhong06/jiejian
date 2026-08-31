@@ -51,7 +51,7 @@ def _guidance_gap(code: str, path: str, label: str) -> CheckPreviewGap:
 def test_guidance_keeps_runnable_scope_primary_and_gaps_optional() -> None:
     flow_gap = _guidance_gap(
         "OBSERVATION_UNCONFIRMED",
-        "/flows",
+        "/preparation",
         "去确认观察方式",
     )
     preview = CheckPreview(
@@ -66,7 +66,7 @@ def test_guidance_keeps_runnable_scope_primary_and_gaps_optional() -> None:
             ),
         ),
         gaps=(flow_gap,),
-        next_path="/flows",
+        next_path="/preparation",
         next_label="去确认观察方式",
         case_count=2,
         differential_pair_count=1,
@@ -77,8 +77,16 @@ def test_guidance_keeps_runnable_scope_primary_and_gaps_optional() -> None:
         preview,
     )
 
-    start = next(item for item in snapshot.options if item.kind is GuidanceOptionKind.START_CURRENT_CHECK)
-    remaining = next(item for item in snapshot.options if item.kind is GuidanceOptionKind.RECORD_ACTION)
+    start = next(
+        item
+        for item in snapshot.options
+        if item.kind is GuidanceOptionKind.START_CURRENT_CHECK
+    )
+    remaining = next(
+        item
+        for item in snapshot.options
+        if item.kind is GuidanceOptionKind.RESOLVE_COVERAGE_GAP
+    )
     assert snapshot.current_scope_runnable is True
     assert snapshot.remaining_gap_count == 1
     assert start.priority_tier is GuidancePriorityTier.PRIMARY
@@ -87,12 +95,12 @@ def test_guidance_keeps_runnable_scope_primary_and_gaps_optional() -> None:
 def test_guidance_only_exposes_highest_blocking_tier_and_has_semantic_fingerprint() -> None:
     identity_gap = _guidance_gap(
         "TEST_IDENTITY_MISSING",
-        "/identities",
+        "/preparation",
         "去准备测试账号",
     )
     flow_gap = _guidance_gap(
         "RECOVERY_UNCONFIRMED",
-        "/flows",
+        "/preparation",
         "去确认恢复方式",
     )
     preview = CheckPreview(
@@ -100,7 +108,7 @@ def test_guidance_only_exposes_highest_blocking_tier_and_has_semantic_fingerprin
         ready=False,
         actions=(),
         gaps=(flow_gap, identity_gap),
-        next_path="/identities",
+        next_path="/preparation",
         next_label="去准备测试账号",
         case_count=0,
         differential_pair_count=0,
@@ -110,5 +118,5 @@ def test_guidance_only_exposes_highest_blocking_tier_and_has_semantic_fingerprin
     first = build_guidance_snapshot(readiness, preview)
     second = build_guidance_snapshot(readiness.model_copy(), preview.model_copy())
 
-    assert {item.route for item in first.options} == {"/identities"}
+    assert {item.route for item in first.options} == {"/preparation"}
     assert first.state_fingerprint == second.state_fingerprint

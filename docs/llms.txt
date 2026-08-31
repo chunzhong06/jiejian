@@ -65,7 +65,7 @@ Recording、FlowDraft、业务流程
 → docs/02_开发指南/任务/修改测试账号.md
 → docs/03_参考手册/协议/测试身份准备协议.md
 
-安全准备、资源、恢复方式、CheckPreview
+测试准备清单、ProjectPreparation、prepare-safe、安全准备、资源、恢复方式、CheckPreview
 → docs/02_开发指南/任务/修改安全准备.md
 → docs/01_系统地图/应用接入与检查主流程.md
 

@@ -1,50 +1,108 @@
-// 测试准备总览把账号、业务流程和当前检查配置组织为可持续维护的能力区。
+// 测试准备页只展示后端实时投影，并通过一个主操作推进下一项准备工作。
 
-import { Button, Card, Space, Tag, Typography } from 'antd'
-import type { ProjectReadinessDto } from '../../api/projects'
+import { useState } from 'react'
+import { Alert, Button, Card, Tag, Typography } from 'antd'
+import type {
+  PreparationItemStatus,
+  ProjectReadinessDto,
+} from '../../api/projects'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 
-export function PreparationPage({ readiness, onNavigate }: {
+const statusPresentation: Record<PreparationItemStatus, { label: string; color: string }> = {
+  READY: { label: '当前可用', color: 'green' },
+  AUTO: { label: '可以自动准备', color: 'blue' },
+  USER: { label: '需要你处理', color: 'orange' },
+  BLOCKED: { label: '暂时受阻', color: 'red' },
+}
+
+export function PreparationPage({ readiness, onPrepareSafe, onNavigate }: {
   readiness: ProjectReadinessDto
+  onPrepareSafe: () => Promise<void>
   onNavigate: (path: string) => void
 }) {
-  const permissionActions = readiness.permission_actions ?? []
-  const cards = [
-    {
-      key: 'identities',
-      title: '测试账号',
-      ready: permissionActions.length > 0 && !permissionActions.some((action) => action.gaps.some((gap) => gap.startsWith('TEST_IDENTITY_') || gap === 'MISSING_SUBJECT')),
-      description: '为已确认权限组准备受控登录状态，用于允许与拒绝的差分检查。',
-      route: '/identities',
-      action: '管理测试账号',
-    },
-    {
-      key: 'flows',
-      title: '业务流程与真实后果',
-      ready: readiness.completed_flow_available,
-      description: '维护关键操作、测试资源、结果观察和现场恢复；应用变化后只补齐失效部分。',
-      route: '/flows',
-      action: '管理业务流程',
-    },
-    {
-      key: 'profile',
-      title: '当前检查配置',
-      ready: readiness.execution_profile_available,
-      description: '根据最新权限规则和测试准备生成；事实变化后必须重新生成。',
-      route: '/validation',
-      action: '前往验证运行',
-    },
-  ]
-  const readyCount = cards.filter((card) => card.ready).length
+  const [preparing, setPreparing] = useState(false)
+  const preparation = readiness.preparation
+  const readyCount = preparation?.items.filter((item) => item.status === 'READY').length ?? 0
+  const itemCount = preparation?.items.length ?? 0
+  const nextBlocker = preparation?.external_blockers.find(
+    (item) => item.key === preparation.next_item_key,
+  )
+  const nextItem = preparation?.items.find((item) => item.key === preparation.next_item_key)
+  const blocked = nextItem?.status === 'BLOCKED' && nextBlocker === undefined
+  const canContinue = Boolean(
+    preparation?.ready
+    || nextBlocker
+    || nextItem?.status === 'AUTO'
+    || (nextItem?.status === 'USER' && nextItem.next_path),
+  )
+
+  const continuePreparation = async () => {
+    if (!preparation) return
+    if (preparation.ready) {
+      onNavigate('/validation')
+      return
+    }
+    if (nextBlocker) {
+      onNavigate(nextBlocker.next_path)
+      return
+    }
+    if (nextItem?.status === 'USER' && nextItem.next_path) {
+      onNavigate(nextItem.next_path)
+      return
+    }
+    if (nextItem?.status !== 'AUTO') return
+    setPreparing(true)
+    try {
+      await onPrepareSafe()
+    } finally {
+      setPreparing(false)
+    }
+  }
+
   return <div className="preparation-page">
-    <PageTaskHeader title="测试准备" description="测试账号、真实业务流程和恢复方式会随应用持续维护，不需要每次从头接入。" status={`${readyCount}/${cards.length} 项可用`} />
-    <div className="preparation-grid">{cards.map((card) => <Card key={card.key} className="preparation-card">
-      <Space direction="vertical" size={14}>
-        <Space wrap><Typography.Title level={3}>{card.title}</Typography.Title><Tag color={card.ready ? 'green' : 'orange'}>{card.ready ? '当前可用' : '需要处理'}</Tag></Space>
-        <Typography.Paragraph type="secondary">{card.description}</Typography.Paragraph>
-        <Button type={card.ready ? 'default' : 'primary'} onClick={() => onNavigate(card.route)}>{card.action}</Button>
-      </Space>
-    </Card>)}</div>
-    <div className="preparation-footer"><Button onClick={() => onNavigate('/permissions')}>返回权限规则</Button><Button type="primary" onClick={() => onNavigate('/validation')}>前往验证运行</Button></div>
+    <PageTaskHeader
+      title="测试准备"
+      description="界鉴会自动复用已经准备好的内容，并只把真正需要你登录、录制或确认的部分交给你。"
+      status={preparation?.ready ? '全部准备完成' : `${readyCount}/${itemCount} 项可用`}
+    />
+    {nextBlocker && <Alert
+      type="warning"
+      showIcon
+      message={nextBlocker.label}
+      description={`${nextBlocker.description} ${nextBlocker.next_label}`}
+    />}
+    {!preparation && <Alert
+      type="info"
+      showIcon
+      message="正在形成测试准备清单"
+      description="刷新当前应用状态后，界鉴会列出需要复用、自动准备或由你完成的内容。"
+    />}
+    {preparation && <Card className="preparation-list-card">
+      <div className="preparation-list" aria-label="测试准备清单">
+        {preparation.items.map((item) => {
+          const presentation = statusPresentation[item.status]
+          return <div className="preparation-list-item" data-status={item.status} key={item.key}>
+            <div className="preparation-list-copy">
+              <Typography.Text strong>{item.label}</Typography.Text>
+              <Typography.Text type="secondary">{item.description}</Typography.Text>
+              {item.status !== 'READY' && item.next_label && <Typography.Text type="secondary">
+                建议：{item.next_label}
+              </Typography.Text>}
+            </div>
+            <Tag color={presentation.color}>{presentation.label}</Tag>
+          </div>
+        })}
+      </div>
+    </Card>}
+    <div className="preparation-footer">
+      <Button
+        type="primary"
+        loading={preparing}
+        disabled={!canContinue || blocked}
+        onClick={() => { void continuePreparation() }}
+      >
+        {preparation?.ready ? '前往验证运行' : '继续准备'}
+      </Button>
+    </div>
   </div>
 }

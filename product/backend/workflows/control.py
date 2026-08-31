@@ -267,14 +267,6 @@ class ProductStatusService:
         return projects[0]
 
 
-def _has_gap(readiness: ProjectReadinessView, prefixes: tuple[str, ...]) -> bool:
-    return any(
-        gap.startswith(prefixes)
-        for action in readiness.permission_actions
-        for gap in action.gaps
-    )
-
-
 def _areas(
     readiness: ProjectReadinessView | None,
     latest_change: SourceChangeView | None,
@@ -298,8 +290,7 @@ def _areas(
             not action.compilable for action in readiness.permission_actions
         )
         preparation_ready = bool(
-            readiness.completed_flow_available
-            and readiness.execution_profile_available
+            readiness.preparation is not None and readiness.preparation.ready
         )
         run_active = any(task.kind == "RUN" for task in readiness.active_tasks)
         states = {
@@ -444,22 +435,7 @@ def _attention_items(
                 route="/permissions",
             )
         )
-    preparation_gap = _has_gap(
-        readiness,
-        (
-            "ACTION_",
-            "TEST_IDENTITY_",
-            "TEST_RESOURCE_",
-            "OBSERVATION_",
-            "RECOVERY_",
-            "SECURITY_EFFECT_",
-            "MISSING_SUBJECT",
-            "MISSING_RESOURCE",
-            "MISSING_OBSERVER",
-            "RELATION_UNPROVABLE",
-        ),
-    )
-    if preparation_gap or not readiness.completed_flow_available:
+    if readiness.preparation is not None and not readiness.preparation.ready:
         items.append(
             ProductAttentionView(
                 key="complete-preparation",
