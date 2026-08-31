@@ -342,7 +342,7 @@
 
 ### `product/frontend/src/features/checks/CheckResultsPage.tsx`
 - `CheckResultsPage`
-主要 import / dot-source：`../../api/http`, `../../api/results`, `../../api/runs`, `../../app/presentation`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./EvidenceExplanationDrawer`, `./EvidenceTimeline`, `./ReportPanel`, `./ResultFactChain`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/results`, `../../api/runs`, `../../app/presentation`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./EvidenceExplanationDrawer`, `./EvidenceTimeline`, `./ReportPanel`, `./ResultFactChain`, `antd`, `react`
 
 ### `product/frontend/src/features/checks/EvidenceExplanationDrawer.tsx`
 - `EvidenceExplanationDrawer`

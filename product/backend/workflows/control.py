@@ -171,6 +171,14 @@ class ProductResultSummary(_ControlModel):
     )
 
 
+class InconclusiveRecoveryView(_ControlModel):
+    source_run_id: str = Field(min_length=1, max_length=128)
+    summary: str = Field(min_length=1, max_length=320)
+    next_path: Literal["/changes", "/permissions", "/preparation", "/validation"]
+    next_label: str = Field(min_length=1, max_length=80)
+    reason_codes: tuple[str, ...] = Field(default=(), max_length=32)
+
+
 class ProductStatusView(_ControlModel):
     project: ProductProjectSummary | None = None
     readiness: ProjectReadinessView | None = None
@@ -179,6 +187,7 @@ class ProductStatusView(_ControlModel):
     attention_items: tuple[ProductAttentionView, ...]
     latest_change: SourceChangeView | None = None
     latest_result: ProductResultSummary | None = None
+    inconclusive_recovery: InconclusiveRecoveryView | None = None
 
 
 class ProductStatusService:
@@ -191,12 +200,14 @@ class ProductStatusService:
         result_presentation,
         source_changes=None,
         project_revalidation=None,
+        current_permission_intents: Callable[[str], tuple] | None = None,
     ) -> None:
         self._projects = projects
         self._readiness = readiness
         self._result_presentation = result_presentation
         self._source_changes = source_changes
         self._project_revalidation = project_revalidation
+        self._current_permission_intents = current_permission_intents
 
     def get(self, project_id: str | None = None) -> ProductStatusView:
         project = self._select_project(project_id)
@@ -218,7 +229,8 @@ class ProductStatusService:
             if self._source_changes is None
             else self._source_changes.latest_view(project.project_id)
         )
-        latest_result = self._latest_result(readiness)
+        latest_presentation = self._latest_presentation(readiness)
+        latest_result = self._result_summary(latest_presentation)
         revalidation = (
             None
             if self._project_revalidation is None
@@ -235,6 +247,13 @@ class ProductStatusService:
                 ),
             )
         )
+        inconclusive_recovery = self._inconclusive_recovery(
+            project.project_id,
+            readiness,
+            revalidation,
+            latest_result,
+            latest_presentation,
+        )
         return ProductStatusView(
             project=ProductProjectSummary(
                 project_id=project.project_id,
@@ -249,20 +268,27 @@ class ProductStatusService:
                 readiness,
                 revalidation,
                 latest_result,
+                inconclusive_recovery,
             ),
             latest_change=latest_change,
             latest_result=latest_result,
+            inconclusive_recovery=inconclusive_recovery,
         )
 
-    def _latest_result(
+    def _latest_presentation(
         self,
         readiness: ProjectReadinessView,
-    ) -> ProductResultSummary | None:
+    ):
         if readiness.latest_verified_run_id is None:
             return None
-        presentation = self._result_presentation.build(
+        return self._result_presentation.build(
             readiness.latest_verified_run_id
         )
+
+    @staticmethod
+    def _result_summary(presentation) -> ProductResultSummary | None:
+        if presentation is None:
+            return None
         change_verification = presentation.change_verification
         return ProductResultSummary(
             run_id=presentation.run_id,
@@ -274,6 +300,75 @@ class ProductStatusService:
                 if change_verification is None
                 else change_verification.change_id
             ),
+        )
+
+    def _inconclusive_recovery(
+        self,
+        project_id: str,
+        readiness: ProjectReadinessView,
+        revalidation: ProjectRevalidationView | None,
+        latest_result: ProductResultSummary | None,
+        latest_presentation,
+    ) -> InconclusiveRecoveryView | None:
+        if (
+            latest_result is None
+            or latest_result.verdict is not RunVerdict.INCONCLUSIVE
+            or latest_presentation is None
+        ):
+            return None
+        current_intents = (
+            ()
+            if self._current_permission_intents is None
+            else self._current_permission_intents(project_id)
+        )
+        source_identity = _intent_identity(latest_presentation.relevant_intents)
+        current_identity = _intent_identity(current_intents)
+        if source_identity != current_identity:
+            return InconclusiveRecoveryView(
+                source_run_id=latest_result.run_id,
+                summary="原权限考题已经变化，当前不能把新的检查称为原题复验。",
+                next_path="/permissions",
+                next_label="查看当前权限规则",
+                reason_codes=("ORIGINAL_PERMISSION_INTENT_CHANGED",),
+            )
+        if revalidation is not None and revalidation.status in {
+            ProjectRevalidationStatus.REVIEW_REQUIRED,
+            ProjectRevalidationStatus.STALE,
+        }:
+            assert revalidation.next_path in {"/changes", "/permissions"}
+            return InconclusiveRecoveryView(
+                source_run_id=latest_result.run_id,
+                summary=(
+                    "上次证据不足结果会永久保留；请先完成当前代码变化审阅。"
+                ),
+                next_path=revalidation.next_path,
+                next_label=revalidation.next_label or "处理代码变化",
+                reason_codes=tuple(
+                    dict.fromkeys(
+                        (
+                            f"PROJECT_REVALIDATION_{revalidation.status.value}",
+                            *revalidation.reason_codes,
+                        )
+                    )
+                ),
+            )
+        if (
+            revalidation is not None
+            and revalidation.status is ProjectRevalidationStatus.PREPARATION_REQUIRED
+        ) or readiness.preparation is None or not readiness.preparation.ready:
+            return InconclusiveRecoveryView(
+                source_run_id=latest_result.run_id,
+                summary="上次结果仍保留为证据不足；请只修复当前失效的测试条件。",
+                next_path="/preparation",
+                next_label="修复测试准备",
+                reason_codes=("PREPARATION_NOT_READY",),
+            )
+        return InconclusiveRecoveryView(
+            source_run_id=latest_result.run_id,
+            summary="当前测试条件已经恢复；旧结果仍保持证据不足，可以开始一次新的独立检查。",
+            next_path="/validation",
+            next_label="重新检查原权限考题",
+            reason_codes=("ORIGINAL_PERMISSION_INTENT_READY",),
         )
 
     def _select_project(self, project_id: str | None):
@@ -406,6 +501,7 @@ def _attention_items(
     readiness: ProjectReadinessView,
     revalidation: ProjectRevalidationView | None,
     latest_result: ProductResultSummary | None,
+    inconclusive_recovery: InconclusiveRecoveryView | None,
 ) -> tuple[ProductAttentionView, ...]:
     items: list[ProductAttentionView] = []
     if readiness.active_tasks:
@@ -483,7 +579,11 @@ def _attention_items(
                 route="/permissions",
             )
         )
-    if readiness.preparation is not None and not readiness.preparation.ready:
+    if (
+        inconclusive_recovery is None
+        and readiness.preparation is not None
+        and not readiness.preparation.ready
+    ):
         items.append(
             ProductAttentionView(
                 key="complete-preparation",
@@ -492,8 +592,27 @@ def _attention_items(
                 route="/preparation",
             )
         )
+    recovery_route_already_present = bool(
+        inconclusive_recovery is not None
+        and any(
+            item.route == inconclusive_recovery.next_path
+            and item.tone != "INFO"
+            for item in items
+        )
+    )
+    if inconclusive_recovery is not None and not recovery_route_already_present:
+        items.append(
+            ProductAttentionView(
+                key="recover-inconclusive",
+                label=inconclusive_recovery.next_label,
+                description=inconclusive_recovery.summary,
+                route=inconclusive_recovery.next_path,
+                tone="WARNING",
+            )
+        )
     if (
-        readiness.current_scope_runnable
+        inconclusive_recovery is None
+        and readiness.current_scope_runnable
         and revalidation is not None
         and revalidation.status is ProjectRevalidationStatus.READY
     ):
@@ -506,7 +625,8 @@ def _attention_items(
             )
         )
     elif (
-        readiness.current_scope_runnable
+        inconclusive_recovery is None
+        and readiness.current_scope_runnable
         and latest_result is None
         and (
             revalidation is None
@@ -534,7 +654,21 @@ def _attention_items(
     return tuple(items)
 
 
+def _intent_identity(items) -> tuple[tuple[str, int, str], ...]:
+    return tuple(
+        sorted(
+            (
+                str(item.intent_id),
+                int(item.revision),
+                str(item.intent_hash),
+            )
+            for item in items
+        )
+    )
+
+
 __all__ = [
+    "InconclusiveRecoveryView",
     "ProductAreaView",
     "ProductAttentionView",
     "ProductFlowQuery",

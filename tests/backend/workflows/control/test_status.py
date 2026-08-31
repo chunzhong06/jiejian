@@ -26,6 +26,10 @@ from product.backend.workflows.source_changes import SourceChangeView
 from product.protocols import TargetType
 
 
+INTENT_ID = f"pin_{'1' * 32}"
+INTENT_HASH = "a" * 64
+
+
 def _preparation(*, ready: bool) -> ProjectPreparationView:
     status = PreparationItemStatus.READY if ready else PreparationItemStatus.USER
     item = PreparationItemView(
@@ -235,3 +239,203 @@ def test_recording_task_and_preparation_gaps_route_back_to_preparation() -> None
     assert active.route == "/preparation"
     assert active.label == "查看正在录制的业务流程"
     assert preparation.route == "/preparation"
+
+
+@pytest.mark.parametrize("verdict", [RunVerdict.PASS, RunVerdict.BLOCK])
+def test_non_inconclusive_latest_result_has_no_recovery(verdict: RunVerdict) -> None:
+    status = _recovery_service(
+        verdict=verdict,
+        source_intents=(_intent(),),
+        current_intents=(_intent(),),
+    ).get("project_demo")
+
+    assert status.inconclusive_recovery is None
+
+
+def test_exact_original_exam_and_ready_preparation_offer_new_validation_run() -> None:
+    status = _recovery_service(
+        source_intents=(_intent(),),
+        current_intents=(_intent(),),
+    ).get("project_demo")
+
+    recovery = status.inconclusive_recovery
+    assert recovery is not None
+    assert recovery.source_run_id == "run_demo"
+    assert recovery.next_path == "/validation"
+    assert recovery.next_label == "重新检查原权限考题"
+    assert "新的独立检查" in recovery.summary
+    assert any(item.key == "recover-inconclusive" for item in status.attention_items)
+
+
+@pytest.mark.parametrize(
+    "current_intents",
+    [
+        (SimpleNamespace(intent_id=INTENT_ID, revision=2, intent_hash=INTENT_HASH),),
+        (SimpleNamespace(intent_id=INTENT_ID, revision=1, intent_hash="b" * 64),),
+        (
+            SimpleNamespace(
+                intent_id=INTENT_ID,
+                revision=1,
+                intent_hash=INTENT_HASH,
+            ),
+            SimpleNamespace(
+                intent_id=f"pin_{'2' * 32}",
+                revision=1,
+                intent_hash="c" * 64,
+            ),
+        ),
+    ],
+)
+def test_changed_revision_hash_or_set_cannot_claim_original_exam_recheck(
+    current_intents,
+) -> None:
+    status = _recovery_service(
+        source_intents=(_intent(),),
+        current_intents=current_intents,
+    ).get("project_demo")
+
+    recovery = status.inconclusive_recovery
+    assert recovery is not None
+    assert recovery.next_path == "/permissions"
+    assert recovery.next_label == "查看当前权限规则"
+    assert recovery.reason_codes == ("ORIGINAL_PERMISSION_INTENT_CHANGED",)
+    assert "原题复验" in recovery.summary
+
+
+@pytest.mark.parametrize(
+    ("revalidation_status", "next_path"),
+    [
+        (ProjectRevalidationStatus.REVIEW_REQUIRED, "/permissions"),
+        (ProjectRevalidationStatus.STALE, "/changes"),
+    ],
+)
+def test_change_review_precedes_inconclusive_recovery(
+    revalidation_status: ProjectRevalidationStatus,
+    next_path: str,
+) -> None:
+    revalidation = ProjectRevalidationView(
+        project_id="project_demo",
+        status=revalidation_status,
+        change_id=f"chg_{'1' * 32}",
+        summary="当前代码变化仍需审阅。",
+        next_path=next_path,
+        next_label="处理代码变化",
+        required_intent_count=1,
+        reason_codes=("CHANGE_REVIEW",),
+    )
+    status = _recovery_service(
+        source_intents=(_intent(),),
+        current_intents=(_intent(),),
+        revalidation=revalidation,
+    ).get("project_demo")
+
+    recovery = status.inconclusive_recovery
+    assert recovery is not None
+    assert recovery.next_path == next_path
+    assert recovery.next_label == "处理代码变化"
+    assert len(
+        [
+            item
+            for item in status.attention_items
+            if item.route == next_path and item.tone != "INFO"
+        ]
+    ) == 1
+
+
+def test_incomplete_preparation_routes_to_only_current_asset_repairs() -> None:
+    status = _recovery_service(
+        source_intents=(_intent(),),
+        current_intents=(_intent(),),
+        preparation_ready=False,
+    ).get("project_demo")
+
+    recovery = status.inconclusive_recovery
+    assert recovery is not None
+    assert recovery.next_path == "/preparation"
+    assert recovery.next_label == "修复测试准备"
+    assert len(
+        [item for item in status.attention_items if item.route == "/preparation"]
+    ) == 1
+
+
+def test_recovery_projection_repeated_reads_have_no_write_callback() -> None:
+    calls = {"presentation": 0, "intents": 0}
+    presentation = _presentation(RunVerdict.INCONCLUSIVE, (_intent(),))
+
+    def build(_run_id):
+        calls["presentation"] += 1
+        return presentation
+
+    def current(_project_id):
+        calls["intents"] += 1
+        return (_intent(),)
+
+    project = _project()
+    service = ProductStatusService(
+        SimpleNamespace(list=lambda: (project,), get=lambda _project_id: project),
+        lambda _project_id: _readiness(action="OPEN_RESULT", latest_run_id="run_demo"),
+        SimpleNamespace(build=build),
+        current_permission_intents=current,
+    )
+
+    assert service.get("project_demo").inconclusive_recovery is not None
+    assert service.get("project_demo").inconclusive_recovery is not None
+    assert calls == {"presentation": 2, "intents": 2}
+
+
+def _intent():
+    return SimpleNamespace(
+        intent_id=INTENT_ID,
+        revision=1,
+        intent_hash=INTENT_HASH,
+    )
+
+
+def _project():
+    return SimpleNamespace(
+        project_id="project_demo",
+        name="演示应用",
+        status=ProjectStatus.READY,
+        target_type=TargetType.WEB,
+    )
+
+
+def _presentation(verdict: RunVerdict, relevant_intents):
+    return SimpleNamespace(
+        run_id="run_demo",
+        verdict=verdict,
+        headline="证据不足" if verdict is RunVerdict.INCONCLUSIVE else "已有结论",
+        scope_statement="当前范围已经形成可信发布结果。",
+        change_verification=None,
+        relevant_intents=relevant_intents,
+    )
+
+
+def _recovery_service(
+    *,
+    verdict: RunVerdict = RunVerdict.INCONCLUSIVE,
+    source_intents=(),
+    current_intents=(),
+    preparation_ready: bool = True,
+    revalidation: ProjectRevalidationView | None = None,
+) -> ProductStatusService:
+    project = _project()
+    readiness = _readiness(action="OPEN_RESULT", latest_run_id="run_demo").model_copy(
+        update={
+            "preparation": _preparation(ready=preparation_ready),
+            "current_scope_runnable": preparation_ready,
+        }
+    )
+    return ProductStatusService(
+        SimpleNamespace(list=lambda: (project,), get=lambda _project_id: project),
+        lambda _project_id: readiness,
+        SimpleNamespace(
+            build=lambda _run_id: _presentation(verdict, source_intents)
+        ),
+        project_revalidation=(
+            None
+            if revalidation is None
+            else SimpleNamespace(evaluate=lambda *_args, **_kwargs: revalidation)
+        ),
+        current_permission_intents=lambda _project_id: current_intents,
+    )

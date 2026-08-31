@@ -48,6 +48,7 @@ const status: ProductStatusDto = {
     review_intent_ids: [`pin_${'2'.repeat(32)}`], summary: '有 1 条权限规则需要重新确认。', next_path: '/permissions',
   },
   latest_result: { run_id: 'run-current', verdict: 'BLOCK', headline: '发现权限问题', scope_statement: '当前范围已检查。', verified_change_id: null },
+  inconclusive_recovery: null,
 }
 
 const officialExperience = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null, repair_change_id: null }

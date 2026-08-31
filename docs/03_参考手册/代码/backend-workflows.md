@@ -151,6 +151,7 @@
 - `class ProductAreaView`
 - `class ProductAttentionView`
 - `class ProductResultSummary`
+- `class InconclusiveRecoveryView`
 - `class ProductStatusView`
 - `class ProductStatusService`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.source_changes`, `product.protocols`, `pydantic`, `typing`
@@ -257,7 +258,7 @@
 - `_PREPARATION_GAPS`
 - `_APPLICATION_GAPS`
 - `class ProjectPreparationService`
-主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.permission_intents`, `product.backend.workflows.source_changes`, `product.backend.workflows.test_identities`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.infra.storage`, `product.backend.workflows.permission_intents`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.source_changes`, `product.backend.workflows.test_identities`, `pydantic`, `typing`
 
 ### `product/backend/workflows/projects/readiness.py`
 - `class ReadinessModel`
@@ -324,6 +325,10 @@
 - `_SUCCESS_MIN`
 - `_SUCCESS_MAX`
 - `class SafetySetupModel`
+- `class ActionSafetyAssetKind`
+- `class ActionSafetyAssetStatus`
+- `class ActionSafetyAssetInspection`
+- `class ActionSafetySetupInspection`
 - `class TestResourceCandidateView`
 - `class ObservationCandidateView`
 - `class RecoveryCandidateView`
@@ -331,7 +336,7 @@
 - `class ConfirmActionSafetySetup`
 - `class ActionSafetySetupView`
 - `class ActionSafetySetupService`
-主要 import / dot-source：`.safety_candidates`, `__future__`, `collections.abc`, `dataclasses`, `pathlib`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.recording.request_store`, `product.backend.infra.storage`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording`, `product.protocols.recording_flow`, `pydantic`, `time`, `typing`
+主要 import / dot-source：`.safety_candidates`, `__future__`, `collections.abc`, `dataclasses`, `enum`, `pathlib`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.recording.request_store`, `product.backend.infra.storage`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording`, `product.protocols.recording_flow`, `pydantic`, `time`, `typing`
 
 ### `product/backend/workflows/recording/submission.py`
 - `class RecordingApplicationModel`

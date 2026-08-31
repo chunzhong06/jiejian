@@ -111,7 +111,7 @@ def _binding_candidates(
                 "source_step_id": step.id,
                 "path_template": template.path,
                 "json_body_template": template.json_body,
-                "test_identity_id": context.recording_identity.identity_id,
+                "test_identity_id": context.recording_identity_id,
             }
             if step.method == "GET" and response.body:
                 digest = test_setup_sha256("observation_candidate", base)
@@ -123,7 +123,7 @@ def _binding_candidates(
                         source_step_id=step.id,
                         method="GET",
                         path_template=template.path,
-                        trusted_test_identity_id=context.recording_identity.identity_id,
+                        trusted_test_identity_id=context.recording_identity_id,
                     )
                 )
             elif step.method in _MUTATING_METHODS:
@@ -140,7 +140,7 @@ def _binding_candidates(
                         method=step.method,
                         path_template=template.path,
                         json_body_template=template.json_body,
-                        test_identity_id=context.recording_identity.identity_id,
+                        test_identity_id=context.recording_identity_id,
                     )
                 )
     return (

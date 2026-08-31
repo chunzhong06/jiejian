@@ -270,6 +270,7 @@ class ApplicationCore:
             self.result_presentation,
             self.source_changes,
             project_revalidation=self.project_revalidation,
+            current_permission_intents=self.permission_intents.current_intents,
         )
         self.product_results = ProductResultQuery(
             self.product_status,

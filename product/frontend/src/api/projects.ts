@@ -131,6 +131,13 @@ export type ProductStatusDto = {
     scope_statement: string
     verified_change_id: string | null
   } | null
+  inconclusive_recovery: {
+    source_run_id: string
+    summary: string
+    next_path: '/changes' | '/permissions' | '/preparation' | '/validation'
+    next_label: string
+    reason_codes: string[]
+  } | null
 }
 
 export type ApplicationUnderstandingDto = {

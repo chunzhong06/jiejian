@@ -11,9 +11,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from product.backend.core.application_understanding import CandidateDecision
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.recording import RecordingPurpose, RecordingState
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.permission_intents import PermissionIntentCellStatus
+from product.backend.workflows.recording.safety_setup import (
+    ActionSafetyAssetKind,
+    ActionSafetyAssetStatus,
+)
 from product.backend.workflows.source_changes import SourceRevalidationInspectionStatus
 from product.backend.workflows.test_identities import TestIdentityStatus
 
@@ -172,7 +175,6 @@ class ProjectPreparationService:
             if project is None:
                 raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
             understanding = work.application_understanding.get(project_id)
-            recordings = tuple(work.recordings.list_for_project(project_id))
 
         external = self._application_blockers(understanding)
         if understanding is None:
@@ -185,19 +187,6 @@ class ProjectPreparationService:
                 key=lambda item: item.identity_id,
             )
         )
-        with self._uow_factory() as work:
-            drafts = {
-                recording.recording_id: work.flow_drafts.latest(recording.recording_id)
-                for recording in recordings
-            }
-            setups = {
-                action.action_candidate_id: work.action_safety_setups.get_for_action(
-                    project_id,
-                    action.action_candidate_id,
-                )
-                for action in matrix.actions
-            }
-
         external.extend(self._permission_blockers(matrix))
         external.extend(self._source_change_blockers(project_id))
 
@@ -218,22 +207,21 @@ class ProjectPreparationService:
             cells = active_by_action.get(action.action_candidate_id, ())
             if not cells:
                 continue
-            setup = setups.get(action.action_candidate_id)
             items.extend(
                 self._identity_items(
                     action,
                     cells,
                     identities,
-                    setup,
                     automation_allowed=not external,
                 )
             )
             items.extend(
                 self._action_items(
                     action,
-                    recordings,
-                    drafts,
-                    setup,
+                    self._action_safety_setup.inspect_action(
+                        project_id,
+                        action.action_candidate_id,
+                    ),
                 )
             )
 
@@ -463,11 +451,9 @@ class ProjectPreparationService:
         action,
         cells,
         identities,
-        setup,
         *,
         automation_allowed: bool,
     ) -> tuple[PreparationItemView, ...]:
-        owner_id = None if setup is None else setup.resource.owner_test_identity_id
         items: list[PreparationItemView] = []
         for cell in sorted(
             cells,
@@ -491,7 +477,7 @@ class ProjectPreparationService:
                 next_label="管理测试账号",
                 role_candidate_id=cell.subject_role_candidate_id,
                 action_candidate_id=action.action_candidate_id,
-                owner_test_identity_id=owner_id,
+                identity_id=cell.representative_test_identity_id,
             )
             matching = ProjectPreparationService._matching_identities(probe, identities)
             prepared = tuple(
@@ -551,240 +537,64 @@ class ProjectPreparationService:
 
     @staticmethod
     def _matching_identities(item: PreparationItemView, identities) -> tuple:
+        if item.identity_id is not None:
+            return tuple(
+                identity
+                for identity in identities
+                if identity.identity_id == item.identity_id
+            )
         candidates = tuple(
             identity
             for identity in identities
             if identity.role_candidate_id == item.role_candidate_id
         )
-        relation = item.key.rsplit(":", 1)[-1]
-        if relation == PermissionIntentRelation.OWNS.value:
-            return tuple(
-                identity
-                for identity in candidates
-                if identity.identity_id == item.owner_test_identity_id
-            )
-        if relation == PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT.value:
-            return tuple(
-                identity
-                for identity in candidates
-                if identity.identity_id != item.owner_test_identity_id
-            )
-        return candidates
-
-    def _action_items(self, action, recordings, drafts, setup) -> tuple[PreparationItemView, ...]:
-        recording = self._recording_for_action(
-            action.action_candidate_id,
-            recordings,
-            drafts,
-            setup,
+        # Matrix 已经确认是否存在可执行 representative；没有时只投影
+        # 仍需用户处理的同角色身份，避免把资源所有者误当作 other-account。
+        return tuple(
+            identity
+            for identity in candidates
+            if identity.status is not TestIdentityStatus.PREPARED
         )
-        if recording is None:
-            return (
+
+    @staticmethod
+    def _action_items(action, inspection) -> tuple[PreparationItemView, ...]:
+        suffixes = {
+            ActionSafetyAssetKind.FLOW: "业务流程",
+            ActionSafetyAssetKind.RESOURCE: "测试资源",
+            ActionSafetyAssetKind.OBSERVATION: "结果观察",
+            ActionSafetyAssetKind.RECOVERY: "现场恢复",
+            ActionSafetyAssetKind.EFFECT: "受保护后果",
+        }
+        items: list[PreparationItemView] = []
+        for asset in inspection.assets:
+            kind = PreparationItemKind(asset.kind.value)
+            if asset.status is ActionSafetyAssetStatus.CURRENT:
+                status = PreparationItemStatus.READY
+                description = "当前静态测试资产仍与正式事实一致。"
+            elif asset.kind is ActionSafetyAssetKind.FLOW:
+                status = PreparationItemStatus.USER
+                description = "需要录制或重新确认当前真实业务流程。"
+            elif asset.candidate_count > 0 or (
+                asset.kind is ActionSafetyAssetKind.RECOVERY
+                and not inspection.state_changing
+            ):
+                status = PreparationItemStatus.USER
+                description = "已有有限候选，需要用户重新确认。"
+            else:
+                status = PreparationItemStatus.BLOCKED
+                description = "当前没有可靠候选，需要补录对应业务事实。"
+            items.append(
                 _item(
                     action,
-                    PreparationItemKind.FLOW,
-                    PreparationItemStatus.USER,
-                    f"{action.action_display_name}业务流程",
-                    "需要录制并保存当前真实业务流程。",
-                    ("COMPLETED_FLOW_MISSING",),
-                    recording_id=None,
-                ),
-                *self._waiting_safety_items(action, "FLOW_REQUIRED"),
-            )
-
-        try:
-            preview = self._action_safety_setup.preview(recording.recording_id)
-        except JiejianError as exc:
-            if exc.code in {
-                ErrorCode.TEST_IDENTITY_NOT_FOUND.value,
-                ErrorCode.TEST_IDENTITY_NOT_READY.value,
-            }:
-                if setup is None:
-                    return (
-                        _item(
-                            action,
-                            PreparationItemKind.FLOW,
-                            PreparationItemStatus.READY,
-                            f"{action.action_display_name}业务流程",
-                            "真实业务流程已经保存。",
-                            (),
-                            recording_id=recording.recording_id,
-                        ),
-                        *self._waiting_safety_items(action, "IDENTITY_REQUIRED"),
-                    )
-                return (
-                    _item(
-                        action,
-                        PreparationItemKind.FLOW,
-                        PreparationItemStatus.READY,
-                        f"{action.action_display_name}业务流程",
-                        "真实业务流程已经保存。",
-                        (),
-                        recording_id=recording.recording_id,
-                    ),
-                    *self._setup_fact_items(action, recording.recording_id, setup),
+                    kind,
+                    status,
+                    f"{action.action_display_name}{suffixes[asset.kind]}",
+                    description,
+                    asset.reason_codes,
+                    recording_id=asset.recording_id,
                 )
-            return (
-                _item(
-                    action,
-                    PreparationItemKind.FLOW,
-                    PreparationItemStatus.USER,
-                    f"{action.action_display_name}业务流程",
-                    "业务流程或关联事实已经变化，需要重新录制或确认。",
-                    (exc.code,),
-                    recording_id=recording.recording_id,
-                ),
-                *self._waiting_safety_items(action, "FLOW_STALE"),
             )
-
-        return (
-            _item(
-                action,
-                PreparationItemKind.FLOW,
-                PreparationItemStatus.READY,
-                f"{action.action_display_name}业务流程",
-                "真实业务流程已经保存。",
-                (),
-                recording_id=recording.recording_id,
-            ),
-            *self._preview_safety_items(action, preview),
-        )
-
-    @staticmethod
-    def _recording_for_action(action_id, recordings, drafts, setup):
-        candidates = tuple(
-            recording
-            for recording in recordings
-            if recording.purpose is RecordingPurpose.TARGET
-            and recording.state is RecordingState.COMPLETED
-            and (draft := drafts.get(recording.recording_id)) is not None
-            and draft.draft.action_candidate_id == action_id
-        )
-        if setup is not None:
-            current = next(
-                (
-                    item
-                    for item in candidates
-                    if item.recording_id == setup.resource.recording_id
-                ),
-                None,
-            )
-            if current is not None:
-                return current
-        return max(candidates, key=lambda item: item.updated_at_us, default=None)
-
-    @staticmethod
-    def _waiting_safety_items(action, reason: str) -> tuple[PreparationItemView, ...]:
-        return tuple(
-            _item(
-                action,
-                kind,
-                PreparationItemStatus.BLOCKED,
-                label,
-                "请先完成前面的准备项。",
-                (reason,),
-            )
-            for kind, label in (
-                (PreparationItemKind.RESOURCE, f"{action.action_display_name}测试资源"),
-                (PreparationItemKind.OBSERVATION, f"{action.action_display_name}结果观察"),
-                (PreparationItemKind.RECOVERY, f"{action.action_display_name}现场恢复"),
-                (PreparationItemKind.EFFECT, f"{action.action_display_name}受保护后果"),
-            )
-        )
-
-    @staticmethod
-    def _setup_fact_items(action, recording_id: str, setup) -> tuple[PreparationItemView, ...]:
-        facts = (
-            (PreparationItemKind.RESOURCE, setup.resource, "测试资源"),
-            (PreparationItemKind.OBSERVATION, setup.observation, "结果观察"),
-            (PreparationItemKind.RECOVERY, setup.recovery, "现场恢复"),
-            (PreparationItemKind.EFFECT, setup.effect, "受保护后果"),
-        )
-        return tuple(
-            _item(
-                action,
-                kind,
-                PreparationItemStatus.READY if fact is not None else PreparationItemStatus.BLOCKED,
-                f"{action.action_display_name}{suffix}",
-                "已确认当前事实。" if fact is not None else "请先恢复测试账号，再确认当前事实。",
-                () if fact is not None else ("IDENTITY_REQUIRED",),
-                recording_id=recording_id,
-            )
-            for kind, fact, suffix in facts
-        )
-
-    @staticmethod
-    def _preview_safety_items(action, preview) -> tuple[PreparationItemView, ...]:
-        gaps = set(preview.gaps)
-        resource = _item(
-            action,
-            PreparationItemKind.RESOURCE,
-            PreparationItemStatus.READY
-            if "TEST_RESOURCE_UNCONFIRMED" not in gaps
-            else PreparationItemStatus.USER,
-            f"{action.action_display_name}测试资源",
-            "测试业务对象已经确认。"
-            if "TEST_RESOURCE_UNCONFIRMED" not in gaps
-            else "请选择并确认这次操作影响的真实业务对象。",
-            () if "TEST_RESOURCE_UNCONFIRMED" not in gaps else ("TEST_RESOURCE_UNCONFIRMED",),
-            recording_id=preview.recording_id,
-        )
-        observation_missing = "OBSERVATION_UNCONFIRMED" in gaps
-        observation = _item(
-            action,
-            PreparationItemKind.OBSERVATION,
-            PreparationItemStatus.READY
-            if not observation_missing
-            else PreparationItemStatus.USER
-            if preview.observation_candidates
-            else PreparationItemStatus.BLOCKED,
-            f"{action.action_display_name}结果观察",
-            "独立结果观察方式已经确认。"
-            if not observation_missing
-            else "请选择可信观察方式。"
-            if preview.observation_candidates
-            else "没有可靠观察候选，需要补录结果观察流程。",
-            () if not observation_missing else ("OBSERVATION_UNCONFIRMED",),
-            recording_id=preview.recording_id,
-        )
-        recovery_missing = "RECOVERY_UNCONFIRMED" in gaps
-        recovery_user = bool(preview.recovery_candidates) or not preview.state_changing
-        recovery = _item(
-            action,
-            PreparationItemKind.RECOVERY,
-            PreparationItemStatus.READY
-            if not recovery_missing
-            else PreparationItemStatus.USER
-            if recovery_user
-            else PreparationItemStatus.BLOCKED,
-            f"{action.action_display_name}现场恢复",
-            "安全恢复方式已经确认。"
-            if not recovery_missing
-            else "请确认恢复方式。"
-            if recovery_user
-            else "没有可靠恢复候选，需要补录恢复流程。",
-            () if not recovery_missing else ("RECOVERY_UNCONFIRMED",),
-            recording_id=preview.recording_id,
-        )
-        effect_missing = "SECURITY_EFFECT_UNCONFIRMED" in gaps
-        effect = _item(
-            action,
-            PreparationItemKind.EFFECT,
-            PreparationItemStatus.READY
-            if not effect_missing
-            else PreparationItemStatus.USER
-            if preview.security_effect_candidates
-            else PreparationItemStatus.BLOCKED,
-            f"{action.action_display_name}受保护后果",
-            "受保护业务后果已经确认。"
-            if not effect_missing
-            else "请确认这项真实业务后果是否需要保护。"
-            if preview.security_effect_candidates
-            else "没有可靠业务后果候选，需要补齐可解释的业务结果。",
-            () if not effect_missing else ("SECURITY_EFFECT_UNCONFIRMED",),
-            recording_id=preview.recording_id,
-        )
-        return resource, observation, recovery, effect
+        return tuple(items)
 
     @staticmethod
     def _preview_external_blockers(preview) -> list[PreparationExternalBlockerView]:

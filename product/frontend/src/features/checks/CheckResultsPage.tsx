@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Collapse, Segmented, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
+import type { ProductStatusDto } from '../../api/projects'
 import { resultsApi, type EvidenceDto, type ExecutionTraceDto, type ResultDiagnosisDto, type ResultEvidenceSourceDto, type ResultPresentationDto, type ResultPresentationIssueDto } from '../../api/results'
 import { runsApi, type RunDto } from '../../api/runs'
 import { occurrenceStatusLabel, severityLabel } from '../../app/presentation'
@@ -64,6 +65,7 @@ export function CheckResultsPage({
   canVerifyFix = false,
   verifyingFix = false,
   onVerifyFix,
+  inconclusiveRecovery,
 }: {
   run?: RunDto
   onError: (error: ApiError) => void
@@ -74,6 +76,7 @@ export function CheckResultsPage({
   canVerifyFix?: boolean
   verifyingFix?: boolean
   onVerifyFix?: () => void
+  inconclusiveRecovery?: ProductStatusDto['inconclusive_recovery']
 }) {
   const [current, setCurrent] = useState<RunDto | undefined>(run)
   const [presentation, setPresentation] = useState<ResultPresentationDto | null>(null)
@@ -144,13 +147,20 @@ export function CheckResultsPage({
       />}
       {String(current.result_integrity) === 'INVALID' && <Alert type="warning" showIcon message="结果完整性校验未通过，不能形成安全结论。" />}
     </section>}
+    {inconclusiveRecovery && <Alert
+      type="warning"
+      showIcon
+      message="本次检查的证据不足结论会永久保留"
+      description={<Space direction="vertical" size={2}><Typography.Text>界鉴不会在运行结束后补写旧证据或修改这次结论。</Typography.Text><Typography.Text>{inconclusiveRecovery.summary}</Typography.Text></Space>}
+      action={<Button type="primary" onClick={() => onNavigate?.(inconclusiveRecovery.next_path)}>{inconclusiveRecovery.next_label}</Button>}
+    />}
     {current && <Segmented className="result-view-switch" value={view} onChange={(value) => setView(value as 'results' | 'report')} options={[{ label: '结论与证据', value: 'results' }, { label: '完整报告', value: 'report' }]} />}
     {view === 'results' && current && <>
       {presentation && presentation.execution_traces.length > 0 && <ExecutionPaths traces={presentation.execution_traces} />}
       <section className="result-section" aria-labelledby="result-stories-title">
         <div className="result-section-heading"><div><Typography.Title id="result-stories-title" level={3}>{presentation?.issues.some((issue) => issue.verdict !== 'SAFE') ? '需要处理的检查项' : '检查项说明'}</Typography.Title><Typography.Paragraph type="secondary">每一项都按照同一顺序展示权限预期、执行表象、真实影响和后端结论。</Typography.Paragraph></div></div>
         {presentation?.issues.length
-          ? <div className="result-story-list">{presentation.issues.map((issue, index) => <ResultStory key={issue.finding_id} issue={issue} index={index} onEvidence={() => { setSelectedIssue(issue); setEvidenceDrawerOpen(true) }} onNavigate={onNavigate} />)}</div>
+          ? <div className="result-story-list">{presentation.issues.map((issue, index) => <ResultStory key={issue.finding_id} issue={issue} index={index} onEvidence={() => { setSelectedIssue(issue); setEvidenceDrawerOpen(true) }} />)}</div>
           : <div className="result-empty">{verified ? '当前结果没有需要单独说明的检查项。' : '结果尚未可用。'}</div>}
       </section>
       {presentation && presentation.limitations.length > 0 && <section className="result-section result-limitations" aria-labelledby="result-limitations-title"><Typography.Title id="result-limitations-title" level={3}>本次范围与限制</Typography.Title><ul>{presentation.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>}
@@ -180,7 +190,7 @@ function ExecutionPaths({ traces }: { traces: ExecutionTraceDto[] }) {
   </section>
 }
 
-function ResultStory({ issue, index, onEvidence, onNavigate }: { issue: ResultPresentationIssueDto; index: number; onEvidence: () => void; onNavigate?: (path: string) => void }) {
+function ResultStory({ issue, index, onEvidence }: { issue: ResultPresentationIssueDto; index: number; onEvidence: () => void }) {
   return <article className={`result-story result-story-${resultTone(issue.verdict)}`} aria-labelledby={`result-story-${index}`}>
     <header className="result-story-header"><div><Typography.Text className="result-context" type="secondary">{issue.subject_group} · {issue.action} · {issue.resource} · {issue.relation}</Typography.Text><Typography.Title id={`result-story-${index}`} level={4}>{issue.title}</Typography.Title></div><Space wrap><Tag color={resultTagColor(issue.verdict)}>{issue.conclusion}</Tag><Tag>{severityLabel(issue.severity)}</Tag></Space></header>
     <Typography.Paragraph type="secondary">计划使用的账号：{plannedIdentityLabel(issue)}。计划账号只说明本次安排，不代替目标实际识别的账号。</Typography.Paragraph>
@@ -200,7 +210,7 @@ function ResultStory({ issue, index, onEvidence, onNavigate }: { issue: ResultPr
         {issue.repair_requirement.must_not_change.map((item) => <li key={item}>{item}不能改变。</li>)}
       </ul>
     </section>}
-    {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message={issue.conclusion} description={<Space direction="vertical"><Typography.Text>{issue.explanation}</Typography.Text><Button onClick={() => onNavigate?.('/preparation')}>完善真实结果确认方式</Button></Space>} />}
+    {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message={issue.conclusion} description={issue.explanation} />}
     <div className="result-story-actions"><Button type="link" onClick={onEvidence}>查看对应证据</Button><Tag>{occurrenceStatusLabel(issue.occurrence_status)}</Tag></div>
   </article>
 }

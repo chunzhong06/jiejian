@@ -9,7 +9,6 @@ import pytest
 from product.backend.core.application_understanding import CandidateDecision
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.recording import RecordingPurpose, RecordingState
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.workflows.permission_intents import (
     PermissionIntentActionView,
@@ -22,6 +21,12 @@ from product.backend.workflows.projects.preparation import (
     PreparationItemKind,
     PreparationItemStatus,
     ProjectPreparationService,
+)
+from product.backend.workflows.recording.safety_setup import (
+    ActionSafetyAssetInspection,
+    ActionSafetyAssetKind,
+    ActionSafetyAssetStatus,
+    ActionSafetySetupInspection,
 )
 from product.backend.workflows.source_changes import SourceRevalidationInspectionStatus
 from product.backend.workflows.test_identities import (
@@ -127,11 +132,9 @@ def test_existing_unprepared_identity_is_user_work_not_a_new_record(tmp_path) ->
 
 def test_missing_flow_is_user_work_and_never_generates_recording() -> None:
     harness = _Harness(recording=False)
-    before_count = len(harness.work.recordings.records)
 
     view = harness.service.prepare_safe(PROJECT_ID)
 
-    assert len(harness.work.recordings.records) == before_count
     assert _kind(view, PreparationItemKind.FLOW).status is PreparationItemStatus.USER
     assert _kind(view, PreparationItemKind.RESOURCE).status is PreparationItemStatus.BLOCKED
     assert harness.safety.confirm_count == 0
@@ -165,6 +168,32 @@ def test_missing_observation_and_recovery_candidates_fail_closed() -> None:
     assert _kind(view, PreparationItemKind.RECOVERY).status is PreparationItemStatus.BLOCKED
     assert _kind(view, PreparationItemKind.EFFECT).status is PreparationItemStatus.BLOCKED
     assert view.blocked_count >= 3
+
+
+def test_unprepared_identity_does_not_invalidate_current_action_assets() -> None:
+    harness = _Harness(
+        identity_status=IdentityStatus.NOT_PREPARED,
+        assets_current=True,
+    )
+
+    view = harness.service.status(PROJECT_ID)
+
+    assert _kind(view, PreparationItemKind.IDENTITY).status is PreparationItemStatus.USER
+    for kind in (
+        PreparationItemKind.FLOW,
+        PreparationItemKind.RESOURCE,
+        PreparationItemKind.OBSERVATION,
+        PreparationItemKind.RECOVERY,
+        PreparationItemKind.EFFECT,
+    ):
+        assert _kind(view, kind).status is PreparationItemStatus.READY
+
+
+def test_safe_automation_whitelist_has_exactly_two_actions() -> None:
+    assert set(PreparationAutoAction) == {
+        PreparationAutoAction.ENSURE_IDENTITY_RECORD,
+        PreparationAutoAction.BUILD_CURRENT_PROFILE,
+    }
 
 
 def test_permission_and_source_change_blockers_prevent_every_write() -> None:
@@ -292,24 +321,8 @@ class _Repo:
         )
 
 
-class _DraftRepo:
-    def __init__(self, drafts):
-        self._drafts = drafts
-
-    def latest(self, recording_id):
-        return self._drafts.get(recording_id)
-
-
-class _SetupRepo:
-    def __init__(self, setup):
-        self._setup = setup
-
-    def get_for_action(self, project_id, action_id):
-        return self._setup if project_id == PROJECT_ID and action_id == ACTION_ID else None
-
-
 class _Work:
-    def __init__(self, *, recording: bool, setup):
+    def __init__(self):
         self.projects = _Repo((SimpleNamespace(project_id=PROJECT_ID),))
         role = SimpleNamespace(
             candidate_id=OTHER_ROLE_ID,
@@ -337,26 +350,6 @@ class _Work:
             action_candidates=(action,),
         )
         self.application_understanding = _Repo((understanding,))
-        record = SimpleNamespace(
-            recording_id=RECORDING_ID,
-            project_id=PROJECT_ID,
-            purpose=RecordingPurpose.TARGET,
-            state=RecordingState.COMPLETED,
-            updated_at_us=1,
-        )
-        records = (record,) if recording else ()
-        self.recordings = _Repo(records)
-        self.flow_drafts = _DraftRepo(
-            {
-                RECORDING_ID: SimpleNamespace(
-                    draft=SimpleNamespace(action_candidate_id=ACTION_ID)
-                )
-            }
-            if recording
-            else {}
-        )
-        self.action_safety_setups = _SetupRepo(setup)
-
     def __enter__(self):
         return self
 
@@ -365,8 +358,8 @@ class _Work:
 
 
 class _Identities:
-    def __init__(self):
-        self.records = [_identity()]
+    def __init__(self, *, status: IdentityStatus):
+        self.records = [_identity(status=status)]
         self.create_count = 0
 
     def list(self, project_id):
@@ -392,31 +385,76 @@ class _PermissionIntents:
 
 
 class _Safety:
-    def __init__(self, *, candidate_count: int, setup):
-        candidates = tuple(
-            SimpleNamespace(candidate_id=f"candidate-{index}")
-            for index in range(candidate_count)
-        )
-        self._view = SimpleNamespace(
-            recording_id=RECORDING_ID,
-            gaps=(
-                "TEST_RESOURCE_UNCONFIRMED",
-                "OBSERVATION_UNCONFIRMED",
-                "RECOVERY_UNCONFIRMED",
-                "SECURITY_EFFECT_UNCONFIRMED",
-            ),
-            resource_candidates=(SimpleNamespace(candidate_id="resource"),),
-            observation_candidates=candidates,
-            recovery_candidates=candidates,
-            security_effect_candidates=candidates,
+    def __init__(
+        self,
+        *,
+        recording: bool,
+        candidate_count: int,
+        assets_current: bool,
+    ):
+        recording_id = RECORDING_ID if recording else None
+        if not recording:
+            assets = tuple(
+                ActionSafetyAssetInspection(
+                    kind=kind,
+                    status=(
+                        ActionSafetyAssetStatus.MISSING
+                        if kind is ActionSafetyAssetKind.FLOW
+                        else ActionSafetyAssetStatus.MISSING
+                    ),
+                    reason_codes=(
+                        "COMPLETED_FLOW_MISSING"
+                        if kind is ActionSafetyAssetKind.FLOW
+                        else "UPSTREAM_FLOW_NOT_CURRENT"
+                    ,),
+                    candidate_count=0,
+                )
+                for kind in ActionSafetyAssetKind
+            )
+        else:
+            assets = tuple(
+                ActionSafetyAssetInspection(
+                    kind=kind,
+                    status=(
+                        ActionSafetyAssetStatus.CURRENT
+                        if assets_current or kind is ActionSafetyAssetKind.FLOW
+                        else ActionSafetyAssetStatus.MISSING
+                    ),
+                    reason_codes=(
+                        ()
+                        if assets_current or kind is ActionSafetyAssetKind.FLOW
+                        else (f"{kind.value}_UNCONFIRMED",)
+                    ),
+                    candidate_count=(
+                        1
+                        if kind in {
+                            ActionSafetyAssetKind.FLOW,
+                            ActionSafetyAssetKind.RESOURCE,
+                        }
+                        else candidate_count
+                    ),
+                    recording_id=recording_id,
+                )
+                for kind in ActionSafetyAssetKind
+            )
+        self._inspection = ActionSafetySetupInspection(
+            project_id=PROJECT_ID,
+            action_candidate_id=ACTION_ID,
+            action_display_name="导出完整项目",
+            recording_id=recording_id,
             state_changing=True,
-            confirmed_setup=setup,
+            assets=assets,
+            fully_current=assets_current,
         )
         self.confirm_count = 0
 
-    def preview(self, recording_id):
-        assert recording_id == RECORDING_ID
-        return self._view
+    def inspect_action(self, project_id, action_candidate_id):
+        assert project_id == PROJECT_ID
+        assert action_candidate_id == ACTION_ID
+        return self._inspection
+
+    def preview(self, *args, **kwargs):
+        raise AssertionError("Preparation must consume inspect_action, not preview")
 
     def confirm(self, *args, **kwargs):
         self.confirm_count += 1
@@ -472,11 +510,16 @@ class _Harness:
         candidate_count: int = 1,
         permission_blocked: bool = False,
         source_change_blocked: bool = False,
+        identity_status: IdentityStatus = IdentityStatus.PREPARED,
+        assets_current: bool = False,
     ) -> None:
-        setup = None
-        self.work = _Work(recording=recording, setup=setup)
-        self.identities = _Identities()
-        self.safety = _Safety(candidate_count=candidate_count, setup=setup)
+        self.work = _Work()
+        self.identities = _Identities(status=identity_status)
+        self.safety = _Safety(
+            recording=recording,
+            candidate_count=candidate_count,
+            assets_current=assets_current,
+        )
         self.checks = _Checks()
         self.service = ProjectPreparationService(
             lambda: self.work,

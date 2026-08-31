@@ -67,7 +67,7 @@
 - 普通用户先看到任务语言和当前主动作，内部 ID、reason code、Schema、路径和原始 Evidence 只进入明确命名的证据、报告或 Machine 入口，不建立通用“高级信息”收纳箱。
 - 真正 `<button>`、label、dialog 和状态文本保持可访问；自动 L5 通过 UI Automation InvokePattern 操作正式按钮，不为测试增加隐藏入口。
 - `product/frontend` 只保存源码/配置，禁止 node_modules、dist、测试缓存和 tsbuildinfo。
-- Workbench 不常驻显示产品版本；1.0.12 只在系统设置等明确诊断位置展示。
+- Workbench 不常驻显示产品版本；1.0.13 只在系统设置等明确诊断位置展示。
 - 官方示例只有一个用户可见启动入口；内部 experience mode 不作为产品选择。准备工作留在正式持续工作区，状态条只投影 ProductStatus 待办，不生成示例专用步骤；展示模式只读取并重排当前正式事实，退出后恢复原项目与页面上下文。四页分别消费 ResultPresentation/History/源 Run 和净化 validation 汇总；缺失审批、源 Run 或非回归事实时显示不可用，不从页面文案推断。
 - 视觉验收以 2560×1440 为主基准，同时覆盖 1280px 与 600px；普通结果与展示模式复用同一事实链和颜色语义。
 

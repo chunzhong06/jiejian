@@ -121,16 +121,49 @@ describe('CheckResultsPage', () => {
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-inconclusive', verdict: 'INCONCLUSIVE', headline: '证据不足', scope_statement: '操作已经执行，但真实资源最终状态无法可靠确认；这不代表安全，也不代表已经确认漏洞。', safe_count: 0, inconclusive_count: 1, execution_traces: [{ ...vulnerableTrace, complete: false, reason_codes: ['TRACE_AUDIT_INCOMPLETE'], events: vulnerableTrace.events.slice(0, 2) }], issues: [{ finding_id: 'finding-1', title: '读取文档的真实结果暂时无法确认', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', expectation: '按当前权限规则执行', surface_result: '表面结果无法确定', actual_result: '真实资源状态尚不能可靠确认', conclusion: '证据不足', explanation: '必需观察不完整或不可靠，当前证据不足以确认资源是否按权限规则变化。', planned_identity_id: 'member-a', planned_identity_label: null, actual_identity_status: 'UNAVAILABLE', actual_identity_id: null, actual_identity_label: null, severity: 'high', evidence_refs: [], evidence_sources: [{ observer_type: 'OWNER_API', label: '目标业务状态', role: 'KEY', status: 'UNAVAILABLE', evidence_refs: [] }], verdict: 'INCONCLUSIVE', occurrence_status: 'APPEARED' }], limitations: ['有 1 项因真实状态观察不完整或不可靠而证据不足。'] }))
     resultsApi.evidence.mockResolvedValue([])
-    render(<CheckResultsPage run={run} onError={vi.fn()} />)
+    const onNavigate = vi.fn()
+    render(<CheckResultsPage run={run} onError={vi.fn()} onNavigate={onNavigate} inconclusiveRecovery={{ source_run_id: 'run-inconclusive', summary: '上次结果仍保留为证据不足；请只修复当前失效的测试条件。', next_path: '/preparation', next_label: '修复测试准备', reason_codes: ['PREPARATION_NOT_READY'] }} />)
     expect((await screen.findAllByRole('heading', { name: '证据不足' })).length).toBeGreaterThan(0)
     expect((await screen.findAllByText('证据不足')).length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: '完善真实结果确认方式' })).toBeInTheDocument()
+    expect(screen.getByText('本次检查的证据不足结论会永久保留')).toBeInTheDocument()
+    expect(screen.getByText('界鉴不会在运行结束后补写旧证据或修改这次结论。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '修复测试准备' }))
+    expect(onNavigate).toHaveBeenCalledWith('/preparation')
+    expect(screen.queryByRole('button', { name: '重新检查原权限考题' })).not.toBeInTheDocument()
     expect(screen.queryByText('检查执行未完整结束')).not.toBeInTheDocument()
     const traceToggle = screen.getByRole('button', { name: /查看完整执行路径/ })
     expect(traceToggle).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(traceToggle)
     expect(screen.getByText('当前只能确认部分执行路径')).toBeInTheDocument()
     expect(screen.queryByText('export_message_sent')).not.toBeInTheDocument()
+  })
+
+  it('原题变化时只展示后端权限入口，不在前端拼接重检动作', async () => {
+    const run = { run_id: 'run-changed-exam', lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED' }
+    runsApi.run.mockResolvedValue(run)
+    resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-changed-exam', verdict: 'INCONCLUSIVE', headline: '证据不足' }))
+    resultsApi.evidence.mockResolvedValue([])
+    const onNavigate = vi.fn()
+
+    render(<CheckResultsPage run={run} onError={vi.fn()} onNavigate={onNavigate} inconclusiveRecovery={{ source_run_id: 'run-changed-exam', summary: '原权限考题已经变化，当前不能把新的检查称为原题复验。', next_path: '/permissions', next_label: '查看当前权限规则', reason_codes: ['ORIGINAL_PERMISSION_INTENT_CHANGED'] }} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '查看当前权限规则' }))
+    expect(onNavigate).toHaveBeenCalledWith('/permissions')
+    expect(screen.queryByRole('button', { name: '重新检查原权限考题' })).not.toBeInTheDocument()
+  })
+
+  it('条件恢复后点击唯一动作只导航到普通验证页', async () => {
+    const run = { run_id: 'run-ready-recheck', lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED' }
+    runsApi.run.mockResolvedValue(run)
+    resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-ready-recheck', verdict: 'INCONCLUSIVE', headline: '证据不足' }))
+    resultsApi.evidence.mockResolvedValue([])
+    const onNavigate = vi.fn()
+
+    render(<CheckResultsPage run={run} onError={vi.fn()} onNavigate={onNavigate} inconclusiveRecovery={{ source_run_id: 'run-ready-recheck', summary: '当前测试条件已经恢复；旧结果仍保持证据不足，可以开始一次新的独立检查。', next_path: '/validation', next_label: '重新检查原权限考题', reason_codes: ['ORIGINAL_PERMISSION_INTENT_READY'] }} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '重新检查原权限考题' }))
+    expect(onNavigate).toHaveBeenCalledOnce()
+    expect(onNavigate).toHaveBeenCalledWith('/validation')
   })
 
   it('RANGE 和 VIOLATION_ONLY 原样展示后端诊断文案', async () => {

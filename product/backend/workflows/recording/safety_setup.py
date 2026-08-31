@@ -19,6 +19,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,38 @@ class SafetySetupModel(BaseModel):
         strict=True,
         hide_input_in_errors=True,
     )
+
+
+class ActionSafetyAssetKind(StrEnum):
+    FLOW = "FLOW"
+    RESOURCE = "RESOURCE"
+    OBSERVATION = "OBSERVATION"
+    RECOVERY = "RECOVERY"
+    EFFECT = "EFFECT"
+
+
+class ActionSafetyAssetStatus(StrEnum):
+    CURRENT = "CURRENT"
+    MISSING = "MISSING"
+    STALE = "STALE"
+
+
+class ActionSafetyAssetInspection(SafetySetupModel):
+    kind: ActionSafetyAssetKind
+    status: ActionSafetyAssetStatus
+    reason_codes: tuple[str, ...] = Field(default=(), max_length=32)
+    candidate_count: int = Field(ge=0)
+    recording_id: str | None = None
+
+
+class ActionSafetySetupInspection(SafetySetupModel):
+    project_id: str = Field(min_length=1, max_length=64)
+    action_candidate_id: str = Field(pattern=r"^action_[0-9a-f]{32}$")
+    action_display_name: str = Field(min_length=1, max_length=160)
+    recording_id: str | None = None
+    state_changing: bool
+    assets: tuple[ActionSafetyAssetInspection, ...] = Field(min_length=5, max_length=5)
+    fully_current: bool
 
 
 class TestResourceCandidateView(SafetySetupModel):
@@ -147,7 +180,8 @@ class _SetupContext:
     flow_sha256: str
     understanding: ApplicationUnderstanding
     action: ActionCandidate
-    recording_identity: TestIdentityView
+    recording_identity_id: str
+    recording_identity: TestIdentityView | None
     target_step: FlowDraftStep
     target_event: RecordingEvent
     resource_candidate: FlowDraftResourceCandidate
@@ -209,6 +243,79 @@ class ActionSafetySetupService:
     def preview(self, recording_id: str) -> ActionSafetySetupView:
         context = self._load_context(recording_id)
         return self._view(context)
+
+    def inspect_action(
+        self,
+        project_id: str,
+        action_candidate_id: str,
+    ) -> ActionSafetySetupInspection:
+        """只读判断五类动作资产，不要求当前登录态，也不确认或执行候选。"""
+
+        with self._uow_factory() as work:
+            project = work.projects.get(project_id)
+            if project is None:
+                raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
+            understanding = work.application_understanding.get(project_id)
+            if understanding is None:
+                raise JiejianError(
+                    ErrorCode.APPLICATION_UNDERSTANDING_NOT_FOUND,
+                    "应用理解事实不存在",
+                )
+            action = next(
+                (
+                    item
+                    for item in understanding.action_candidates
+                    if item.candidate_id == action_candidate_id
+                ),
+                None,
+            )
+            if action is None:
+                raise JiejianError(
+                    ErrorCode.APPLICATION_CANDIDATE_CONFLICT,
+                    "业务动作不存在或已经变化",
+                )
+            existing = work.action_safety_setups.get_for_action(
+                project_id,
+                action_candidate_id,
+            )
+            recordings = tuple(work.recordings.list_for_project(project_id))
+            drafts = {
+                recording.recording_id: work.flow_drafts.latest(
+                    recording.recording_id
+                )
+                for recording in recordings
+            }
+        candidates = tuple(
+            recording
+            for recording in recordings
+            if recording.purpose is RecordingPurpose.TARGET
+            and recording.state is RecordingState.COMPLETED
+            and (draft := drafts.get(recording.recording_id)) is not None
+            and draft.draft.action_candidate_id == action_candidate_id
+        )
+        recording = self._recording_for_action(candidates, existing)
+        if recording is None:
+            return self._inspection_without_flow(
+                project_id,
+                action,
+                reason_code="COMPLETED_FLOW_MISSING",
+                flow_status=ActionSafetyAssetStatus.MISSING,
+            )
+        try:
+            context = self._load_context(
+                recording.recording_id,
+                require_prepared_identity=False,
+            )
+        except JiejianError as exc:
+            return self._inspection_without_flow(
+                project_id,
+                action,
+                recording_id=recording.recording_id,
+                reason_code=self._flow_reason_code(exc.code),
+                flow_status=ActionSafetyAssetStatus.STALE,
+                flow_candidate_count=len(candidates),
+            )
+        return self._inspect_context(context, flow_candidate_count=len(candidates))
 
     def confirm(
         self,
@@ -280,13 +387,18 @@ class ActionSafetySetupService:
             self._permission_binding_refresher(context.recording.project_id)
         return self._view(self._load_context(recording_id))
 
-    def _load_context(self, recording_id: str) -> _SetupContext:
+    def _load_context(
+        self,
+        recording_id: str,
+        *,
+        require_prepared_identity: bool = True,
+    ) -> _SetupContext:
         with self._uow_factory() as work:
             recording = work.recordings.get(recording_id)
-            draft_record = work.flow_drafts.latest(recording_id)
-            job = work.jobs.get_by_recording(recording_id)
             if recording is None:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND, "录制对象不存在")
+            draft_record = work.flow_drafts.latest(recording_id)
+            job = work.jobs.get_by_recording(recording_id)
             if (
                 recording.state is not RecordingState.COMPLETED
                 or draft_record is None
@@ -319,8 +431,18 @@ class ActionSafetySetupService:
             expected_hash=job.request_hash,
         )
         identity_id = request.sessions[0].test_identity_id
-        identity = self._test_identities.get(identity_id)
-        if identity.status is not TestIdentityStatus.PREPARED:
+        try:
+            identity = self._test_identities.get(identity_id)
+        except JiejianError as exc:
+            if (
+                require_prepared_identity
+                or exc.code != ErrorCode.TEST_IDENTITY_NOT_FOUND.value
+            ):
+                raise
+            identity = None
+        if require_prepared_identity and (
+            identity is None or identity.status is not TestIdentityStatus.PREPARED
+        ):
             raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY, "录制账号需要重新准备")
         if not understanding.source_fingerprint:
             raise JiejianError(
@@ -368,8 +490,14 @@ class ActionSafetySetupService:
             "logical_name": "待确认测试资源",
             "resource_type": _suggest_resource_type(target_event, resource_candidate),
             "actual_resource_id": resource_value,
-            "owner_test_identity_id": identity.identity_id,
-            "owner_role_candidate_id": identity.role_candidate_id,
+            "owner_test_identity_id": identity_id,
+            "owner_role_candidate_id": (
+                identity.role_candidate_id
+                if identity is not None
+                else existing.resource.owner_role_candidate_id
+                if existing is not None
+                else None
+            ),
             "consumer": ResourceValueConsumer(resource_candidate.consumer.value),
             "location": resource_candidate.location,
             "source_fingerprint": understanding.source_fingerprint,
@@ -377,14 +505,15 @@ class ActionSafetySetupService:
             "understanding_revision": understanding.revision,
             "flow_sha256": "0" * 64,
         }
-        probe_fingerprint = test_setup_sha256("test_resource", probe_payload)
-        TestResource(
-            resource_id=f"trs_{probe_fingerprint[:32]}",
-            fingerprint=probe_fingerprint,
-            created_at_us=0,
-            updated_at_us=0,
-            **probe_payload,
-        )
+        if probe_payload["owner_role_candidate_id"] is not None:
+            probe_fingerprint = test_setup_sha256("test_resource", probe_payload)
+            TestResource(
+                resource_id=f"trs_{probe_fingerprint[:32]}",
+                fingerprint=probe_fingerprint,
+                created_at_us=0,
+                updated_at_us=0,
+                **probe_payload,
+            )
         flow_path = RecordingLifecycle.flow_path(self._var_dir, recording)
         flow = RecordingLifecycle.load_final_flow(flow_path)
         flow_sha256 = _json_sha256(flow.model_dump(mode="json"))
@@ -395,6 +524,7 @@ class ActionSafetySetupService:
             flow_sha256=flow_sha256,
             understanding=understanding,
             action=action,
+            recording_identity_id=identity_id,
             recording_identity=identity,
             target_step=target_step,
             target_event=target_event,
@@ -405,6 +535,8 @@ class ActionSafetySetupService:
         )
 
     def _view(self, context: _SetupContext) -> ActionSafetySetupView:
+        if context.recording_identity is None:
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, "录制账号不存在")
         resource = _resource_candidate_view(context)
         observations, recoveries = _binding_candidates(context)
         effects = _effect_candidates(context)
@@ -445,6 +577,302 @@ class ActionSafetySetupService:
         )
 
     @staticmethod
+    def _recording_for_action(candidates, existing):
+        if existing is not None:
+            current = next(
+                (
+                    item
+                    for item in candidates
+                    if item.recording_id == existing.resource.recording_id
+                ),
+                None,
+            )
+            if current is not None:
+                return current
+        return max(
+            candidates,
+            key=lambda item: (item.updated_at_us, item.recording_id),
+            default=None,
+        )
+
+    @staticmethod
+    def _flow_reason_code(error_code: str) -> str:
+        return {
+            ErrorCode.APPLICATION_CANDIDATE_CONFLICT.value: "FLOW_ACTION_STALE",
+            ErrorCode.RECORD_DRAFT_UNCONFIRMED.value: "FLOW_DRAFT_STALE",
+            ErrorCode.RECORD_DRAFT_REFERENCE.value: "FLOW_RESOURCE_STALE",
+        }.get(error_code, "FLOW_RECORDING_STALE")
+
+    @staticmethod
+    def _inspection_without_flow(
+        project_id: str,
+        action: ActionCandidate,
+        *,
+        reason_code: str,
+        flow_status: ActionSafetyAssetStatus,
+        recording_id: str | None = None,
+        flow_candidate_count: int = 0,
+    ) -> ActionSafetySetupInspection:
+        assets = (
+            ActionSafetyAssetInspection(
+                kind=ActionSafetyAssetKind.FLOW,
+                status=flow_status,
+                reason_codes=(reason_code,),
+                candidate_count=flow_candidate_count,
+                recording_id=recording_id,
+            ),
+            *(
+                ActionSafetyAssetInspection(
+                    kind=kind,
+                    status=ActionSafetyAssetStatus.MISSING,
+                    reason_codes=("UPSTREAM_FLOW_NOT_CURRENT",),
+                    candidate_count=0,
+                    recording_id=recording_id,
+                )
+                for kind in (
+                    ActionSafetyAssetKind.RESOURCE,
+                    ActionSafetyAssetKind.OBSERVATION,
+                    ActionSafetyAssetKind.RECOVERY,
+                    ActionSafetyAssetKind.EFFECT,
+                )
+            ),
+        )
+        return ActionSafetySetupInspection(
+            project_id=project_id,
+            action_candidate_id=action.candidate_id,
+            action_display_name=action.display_name,
+            recording_id=recording_id,
+            state_changing=not (
+                action.risk_hint.value == "READ" and flow_status is not ActionSafetyAssetStatus.CURRENT
+            ),
+            assets=assets,
+            fully_current=False,
+        )
+
+    def _inspect_context(
+        self,
+        context: _SetupContext,
+        *,
+        flow_candidate_count: int,
+    ) -> ActionSafetySetupInspection:
+        resource_candidate = _resource_candidate_view(context)
+        observations, recoveries = _binding_candidates(context)
+        effects = _effect_candidates(context)
+        state_changing = _state_changing(context)
+        setup = context.existing
+        structural_reasons = self._structural_identity_reasons(context)
+        resource_current = (
+            setup is not None
+            and not structural_reasons
+            and _setup_is_current(context)
+        )
+        flow = ActionSafetyAssetInspection(
+            kind=ActionSafetyAssetKind.FLOW,
+            status=ActionSafetyAssetStatus.CURRENT,
+            candidate_count=flow_candidate_count,
+            recording_id=context.recording.recording_id,
+        )
+        if setup is None:
+            resource = ActionSafetyAssetInspection(
+                kind=ActionSafetyAssetKind.RESOURCE,
+                status=ActionSafetyAssetStatus.MISSING,
+                reason_codes=("TEST_RESOURCE_UNCONFIRMED",),
+                candidate_count=1,
+                recording_id=context.recording.recording_id,
+            )
+        elif resource_current:
+            resource = ActionSafetyAssetInspection(
+                kind=ActionSafetyAssetKind.RESOURCE,
+                status=ActionSafetyAssetStatus.CURRENT,
+                candidate_count=1,
+                recording_id=context.recording.recording_id,
+            )
+        else:
+            resource = ActionSafetyAssetInspection(
+                kind=ActionSafetyAssetKind.RESOURCE,
+                status=ActionSafetyAssetStatus.STALE,
+                reason_codes=tuple(
+                    dict.fromkeys(("TEST_RESOURCE_STALE", *structural_reasons))
+                ),
+                candidate_count=1,
+                recording_id=context.recording.recording_id,
+            )
+        observation = self._inspect_observation(
+            context,
+            observations,
+            resource_current=resource_current,
+        )
+        recovery = self._inspect_recovery(
+            context,
+            recoveries,
+            resource_current=resource_current,
+            state_changing=state_changing,
+        )
+        effect = self._inspect_effect(
+            context,
+            effects,
+            resource_current=resource_current,
+        )
+        assets = (flow, resource, observation, recovery, effect)
+        return ActionSafetySetupInspection(
+            project_id=context.recording.project_id,
+            action_candidate_id=context.action.candidate_id,
+            action_display_name=context.action.display_name,
+            recording_id=context.recording.recording_id,
+            state_changing=state_changing,
+            assets=assets,
+            fully_current=all(
+                item.status is ActionSafetyAssetStatus.CURRENT for item in assets
+            ),
+        )
+
+    @staticmethod
+    def _structural_identity_reasons(context: _SetupContext) -> tuple[str, ...]:
+        identity = context.recording_identity
+        if identity is None:
+            return ("TEST_IDENTITY_NOT_FOUND",)
+        reasons = tuple(
+            code
+            for code in identity.review_reasons
+            if code in {"ENDPOINT_CHANGED", "ROLE_MISSING", "ROLE_NEEDS_REVIEW"}
+        )
+        setup = context.existing
+        if setup is not None and (
+            setup.resource.owner_test_identity_id != identity.identity_id
+            or setup.resource.owner_role_candidate_id != identity.role_candidate_id
+        ):
+            reasons = (*reasons, "ROLE_NEEDS_REVIEW")
+        return tuple(dict.fromkeys(reasons))
+
+    @staticmethod
+    def _inspect_observation(
+        context: _SetupContext,
+        candidates: tuple[ObservationCandidateView, ...],
+        *,
+        resource_current: bool,
+    ) -> ActionSafetyAssetInspection:
+        current = None if context.existing is None else context.existing.observation
+        matches = current is not None and any(
+            current.recording_id == candidate.source_recording_id
+            and current.source_step_id == candidate.source_step_id
+            and current.method == candidate.method
+            and current.path_template == candidate.path_template
+            and current.trusted_test_identity_id
+            == candidate.trusted_test_identity_id
+            for candidate in candidates
+        )
+        return ActionSafetySetupService._binding_inspection(
+            kind=ActionSafetyAssetKind.OBSERVATION,
+            current=current,
+            matches=matches and resource_current,
+            missing_code="OBSERVATION_UNCONFIRMED",
+            stale_code=(
+                "OBSERVATION_STALE"
+                if resource_current
+                else "UPSTREAM_RESOURCE_NOT_CURRENT"
+            ),
+            candidate_count=len(candidates),
+            recording_id=context.recording.recording_id,
+        )
+
+    @staticmethod
+    def _inspect_recovery(
+        context: _SetupContext,
+        candidates: tuple[RecoveryCandidateView, ...],
+        *,
+        resource_current: bool,
+        state_changing: bool,
+    ) -> ActionSafetyAssetInspection:
+        current = None if context.existing is None else context.existing.recovery
+        matches = False
+        if current is not None and current.kind is RecoveryBindingKind.NOT_REQUIRED:
+            matches = not state_changing
+        elif current is not None and current.kind is RecoveryBindingKind.RECORDED_REQUEST:
+            matches = any(
+                current.recording_id == candidate.source_recording_id
+                and current.source_step_id == candidate.source_step_id
+                and current.method == candidate.method
+                and current.path_template == candidate.path_template
+                and _json_sha256(current.json_body_template)
+                == _json_sha256(candidate.json_body_template)
+                and current.test_identity_id == candidate.test_identity_id
+                for candidate in candidates
+            )
+        return ActionSafetySetupService._binding_inspection(
+            kind=ActionSafetyAssetKind.RECOVERY,
+            current=current,
+            matches=matches and resource_current,
+            missing_code="RECOVERY_UNCONFIRMED",
+            stale_code=(
+                "RECOVERY_STALE"
+                if resource_current
+                else "UPSTREAM_RESOURCE_NOT_CURRENT"
+            ),
+            candidate_count=len(candidates),
+            recording_id=context.recording.recording_id,
+        )
+
+    @staticmethod
+    def _inspect_effect(
+        context: _SetupContext,
+        candidates: tuple[SecurityEffectCandidateView, ...],
+        *,
+        resource_current: bool,
+    ) -> ActionSafetyAssetInspection:
+        current = None if context.existing is None else context.existing.effect
+        resource_id = (
+            None if context.existing is None else context.existing.resource.resource_id
+        )
+        matches = current is not None and any(
+            current.resource_id == resource_id
+            and current.action_candidate_id == context.action.candidate_id
+            and current.kind is candidate.kind
+            and current.protected_fields == candidate.protected_fields
+            for candidate in candidates
+        )
+        return ActionSafetySetupService._binding_inspection(
+            kind=ActionSafetyAssetKind.EFFECT,
+            current=current,
+            matches=matches and resource_current,
+            missing_code="SECURITY_EFFECT_UNCONFIRMED",
+            stale_code=(
+                "SECURITY_EFFECT_STALE"
+                if resource_current
+                else "UPSTREAM_RESOURCE_NOT_CURRENT"
+            ),
+            candidate_count=len(candidates),
+            recording_id=context.recording.recording_id,
+        )
+
+    @staticmethod
+    def _binding_inspection(
+        *,
+        kind: ActionSafetyAssetKind,
+        current,
+        matches: bool,
+        missing_code: str,
+        stale_code: str,
+        candidate_count: int,
+        recording_id: str,
+    ) -> ActionSafetyAssetInspection:
+        if current is None:
+            status = ActionSafetyAssetStatus.MISSING
+            reasons = (missing_code,)
+        elif matches:
+            status = ActionSafetyAssetStatus.CURRENT
+            reasons = ()
+        else:
+            status = ActionSafetyAssetStatus.STALE
+            reasons = (stale_code,)
+        return ActionSafetyAssetInspection(
+            kind=kind,
+            status=status,
+            reason_codes=reasons,
+            candidate_count=candidate_count,
+            recording_id=recording_id,
+        )
+
+    @staticmethod
     def _resource_fact(
         context: _SetupContext,
         candidate: TestResourceCandidateView,
@@ -453,6 +881,8 @@ class ActionSafetySetupService:
         resource_type: str,
         now_us: int,
     ) -> TestResource:
+        if context.recording_identity is None:
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, "录制账号不存在")
         created_at_us = (
             context.existing.resource.created_at_us
             if context.existing is not None
@@ -568,6 +998,10 @@ class ActionSafetySetupService:
         )
 
 __all__ = [
+    "ActionSafetyAssetInspection",
+    "ActionSafetyAssetKind",
+    "ActionSafetyAssetStatus",
+    "ActionSafetySetupInspection",
     "ActionSafetySetupService",
     "ActionSafetySetupView",
     "ConfirmActionSafetySetup",

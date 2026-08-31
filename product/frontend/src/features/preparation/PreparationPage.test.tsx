@@ -202,6 +202,43 @@ describe('PreparationPage', () => {
     expect(onPrepareSafe).not.toHaveBeenCalled()
   })
 
+  it('账号登录失效时只把身份项标为需要处理，静态资产继续可复用', () => {
+    render(<PreparationPage
+      readiness={readiness(preparation([
+        preparationItem('USER', { key: 'identity:bob', label: 'Bob 测试账号', description: 'Bob 需要登录或重新登录。' }),
+        preparationItem('READY', { key: 'flow:export', kind: 'FLOW', label: '导出业务流程', description: '当前静态测试资产仍与正式事实一致。' }),
+        preparationItem('READY', { key: 'resource:export', kind: 'RESOURCE', label: '导出测试资源', description: '当前静态测试资产仍与正式事实一致。' }),
+        preparationItem('READY', { key: 'observation:export', kind: 'OBSERVATION', label: '导出结果观察', description: '当前静态测试资产仍与正式事实一致。' }),
+        preparationItem('READY', { key: 'recovery:export', kind: 'RECOVERY', label: '导出现场恢复', description: '当前静态测试资产仍与正式事实一致。' }),
+        preparationItem('READY', { key: 'effect:export', kind: 'EFFECT', label: '导出受保护后果', description: '当前静态测试资产仍与正式事实一致。' }),
+      ]))}
+      onPrepareSafe={vi.fn()}
+      onNavigate={vi.fn()}
+    />)
+
+    expect(screen.getAllByText('需要你处理')).toHaveLength(1)
+    expect(screen.getAllByText('当前可用')).toHaveLength(5)
+    expect(screen.getByText('Bob 需要登录或重新登录。')).toBeInTheDocument()
+  })
+
+  it('观察绑定失效时只展示这一项需要重新确认', () => {
+    render(<PreparationPage
+      readiness={readiness(preparation([
+        preparationItem('READY', { key: 'flow:export', kind: 'FLOW', label: '导出业务流程' }),
+        preparationItem('READY', { key: 'resource:export', kind: 'RESOURCE', label: '导出测试资源' }),
+        preparationItem('USER', { key: 'observation:export', kind: 'OBSERVATION', label: '导出结果观察', description: '已有有限候选，需要用户重新确认。', next_path: '/flows', next_label: '管理业务流程', reason_codes: ['OBSERVATION_STALE'] }),
+        preparationItem('READY', { key: 'recovery:export', kind: 'RECOVERY', label: '导出现场恢复' }),
+        preparationItem('READY', { key: 'effect:export', kind: 'EFFECT', label: '导出受保护后果' }),
+      ]))}
+      onPrepareSafe={vi.fn()}
+      onNavigate={vi.fn()}
+    />)
+
+    expect(screen.getAllByText('需要你处理')).toHaveLength(1)
+    expect(screen.getAllByText('当前可用')).toHaveLength(4)
+    expect(screen.getByText('已有有限候选，需要用户重新确认。')).toBeInTheDocument()
+  })
+
   it('prepare-safe 后接受重新读取的权威 readiness，而不保留本地完成态', async () => {
     const onPrepareSafe = vi.fn().mockResolvedValue(undefined)
     const { rerender } = render(<PreparationPage

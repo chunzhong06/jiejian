@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICE = ROOT / "product/backend/workflows/projects/preparation.py"
+SAFETY_SETUP = ROOT / "product/backend/workflows/recording/safety_setup.py"
 APPLICATION = ROOT / "product/backend/composition/application.py"
 WORKER = ROOT / "product/backend/composition/worker.py"
 STORAGE = ROOT / "product/backend/infra/storage"
@@ -74,6 +75,53 @@ def test_prepare_safe_does_not_call_human_confirmation_or_run_submission() -> No
     }
     assert "confirm" not in called_attributes
     assert "submit" not in called_attributes
+
+
+def test_preparation_consumes_action_asset_inspection_without_storage_internals() -> None:
+    source = SERVICE.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(SERVICE))
+    accessed = {
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+    }
+
+    assert "inspect_action" in accessed
+    assert not {"recordings", "flow_drafts", "action_safety_setups"} & accessed
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "preview"
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "_action_safety_setup"
+        for node in ast.walk(tree)
+    )
+
+
+def test_action_safety_inspection_has_no_runtime_observer_llm_or_health_storage() -> None:
+    imports = _imports(SAFETY_SETUP)
+    assert not any(
+        name.startswith(
+            (
+                "product.backend.infra.runtime.runner",
+                "product.backend.infra.observers",
+                "product.backend.infra.llm",
+                "httpx",
+                "playwright",
+            )
+        )
+        for name in imports
+    )
+    storage = "\n".join(
+        path.read_text(encoding="utf-8") for path in STORAGE.rglob("*.py")
+    )
+    for forbidden in (
+        "AssetHealth",
+        "asset_health",
+        "HealthManager",
+        "health_manager",
+    ):
+        assert forbidden not in storage
 
 
 def test_preparation_page_does_not_reconstruct_backend_gap_semantics() -> None:

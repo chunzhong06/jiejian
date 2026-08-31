@@ -193,7 +193,7 @@ def test_failed_worker_run_returns_copyable_user_diagnostic(
     assert error["cleanup_issues"] == ["POST_CASE_RECOVERY_FAILED"]
     assert error["diagnosis"]["headline"] == "检查前无法恢复测试现场"
     assert "恢复步骤和测试资源当前状态" in error["diagnosis"]["short_message"]
-    assert error["diagnosis"]["route"] == "/flows"
+    assert error["diagnosis"]["route"] == "/preparation"
     assert error["diagnosis"]["cleanup_warnings"] == [
         "业务检查结束后，测试现场没有完全恢复。"
     ]

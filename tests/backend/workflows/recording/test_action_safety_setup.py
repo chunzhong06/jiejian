@@ -20,7 +20,10 @@ from product.backend.core.application_understanding import (
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import JobState, ProjectStatus
 from product.backend.core.recording import Recording, RecordingState, RecordingStateEvent
-from product.backend.core.test_identity import TestIdentity, TestIdentityAuthMethod
+from product.backend.core.test_identity import (
+    TestIdentity as Identity,
+    TestIdentityAuthMethod as IdentityAuthMethod,
+)
 from product.backend.infra.storage import (
     FlowDraftRevisionRecord,
     JobRecord,
@@ -214,7 +217,7 @@ def _persist_completed_recording(core: ApplicationCore, secret_ref: str) -> None
         )
         work.application_understanding.add(_understanding())
         work.test_identities.add(
-            TestIdentity(
+            Identity(
                 identity_id=IDENTITY_ID,
                 project_id=PROJECT_ID,
                 role_candidate_id=ROLE_ID,
@@ -224,7 +227,7 @@ def _persist_completed_recording(core: ApplicationCore, secret_ref: str) -> None
                 confirmed_endpoint="http://127.0.0.1:18080",
                 endpoint_source_fingerprint=ENDPOINT_FINGERPRINT,
                 understanding_revision=3,
-                auth_method=TestIdentityAuthMethod.BEARER,
+                auth_method=IdentityAuthMethod.BEARER,
                 bearer_secret_ref=secret_ref,
                 prepared_at_us=NOW_US + 1,
                 refreshed_at_us=NOW_US + 1,
