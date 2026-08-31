@@ -1,4 +1,4 @@
-// 验证 Web V1 壳共享组件直接消费统一产品步骤、键盘焦点和唯一主动作。
+// 验证产品壳直接消费长期工作区状态，并保留键盘焦点和明确主动作。
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
@@ -6,36 +6,35 @@ import { ApplicationSwitcher } from './ApplicationSwitcher'
 import { DesktopProcessNavigation, MobileProcessNavigation } from './ProcessNavigation'
 import { TaskActionBar } from './TaskActionBar'
 
-const steps = [
-  { key: 'application' as const, label: '应用接入', route: '/application' as const, status: 'COMPLETE' as const, status_label: '已完成' },
-  { key: 'account' as const, label: '测试账号', route: '/identities' as const, status: 'COMPLETE' as const, status_label: '已完成' },
-  { key: 'flow' as const, label: '业务流程', route: '/flows' as const, status: 'COMPLETE' as const, status_label: '已完成' },
-  { key: 'check' as const, label: '权限与检查', route: '/check' as const, status: 'CURRENT' as const, status_label: '当前步骤' },
-  { key: 'result' as const, label: '检查结果', route: '/results' as const, status: 'UPCOMING' as const, status_label: '尚未开始' },
-  { key: 'history' as const, label: '历史变化', route: '/history' as const, status: 'EMPTY' as const, status_label: '暂无历史' },
+const areas = [
+  { key: 'overview' as const, label: '项目概览', description: '查看基线', route: '/workspace' as const, status: 'READY' as const, status_label: '当前概览' },
+  { key: 'changes' as const, label: '变化与待办', description: '查看变化', route: '/changes' as const, status: 'NEEDS_ATTENTION' as const, status_label: '需要处理' },
+  { key: 'permissions' as const, label: '权限规则', description: '维护规则', route: '/permissions' as const, status: 'READY' as const, status_label: '规则已建立' },
+  { key: 'preparation' as const, label: '测试准备', description: '准备条件', route: '/preparation' as const, status: 'READY' as const, status_label: '测试条件可用' },
+  { key: 'validation' as const, label: '验证运行', description: '运行检查', route: '/validation' as const, status: 'RUNNING' as const, status_label: '正在检查' },
+  { key: 'results' as const, label: '结果与历史', description: '查看结果', route: '/results' as const, status: 'AVAILABLE' as const, status_label: '已有可信结果' },
 ]
 
 describe('Web V1 产品壳共享组件', () => {
-  it('流程完成状态来自统一产品步骤，当前 route 只标记页面焦点', () => {
-    render(<DesktopProcessNavigation route="/flows" steps={steps} onNavigate={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /工作台/ })).toBeInTheDocument()
-    expect(screen.getByText('检查流程')).toBeInTheDocument()
+  it('区域状态来自统一产品状态，当前 route 只标记页面焦点', () => {
+    render(<DesktopProcessNavigation route="/flows" areas={areas} onNavigate={vi.fn()} />)
+    expect(screen.getByText('持续验证工作区')).toBeInTheDocument()
     expect(screen.queryByText('辅助工具')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /AI 工具/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /运行环境/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /业务流程/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('button', { name: /权限与检查.*当前步骤/ })).toBeInTheDocument()
-    expect(screen.getAllByText('已完成')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: /测试准备/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: /变化与待办.*需要处理/ })).toBeInTheDocument()
+    expect(screen.queryByText(/第 .* 步/)).not.toBeInTheDocument()
   })
 
   it('窄屏抽屉关闭后把焦点还给流程按钮', async () => {
     const onNavigate = vi.fn()
-    render(<MobileProcessNavigation route="/check" steps={steps} onNavigate={onNavigate} />)
-    const trigger = screen.getByRole('button', { name: '打开检查流程' })
+    render(<MobileProcessNavigation route="/validation" areas={areas} onNavigate={onNavigate} />)
+    const trigger = screen.getByRole('button', { name: '打开持续验证工作区' })
     trigger.focus()
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByRole('button', { name: /权限与检查/ })).toHaveFocus())
-    fireEvent.click(await screen.findByRole('button', { name: /检查结果/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /验证运行/ })).toHaveFocus())
+    fireEvent.click(await screen.findByRole('button', { name: /结果与历史/ }))
     expect(onNavigate).toHaveBeenCalledWith('/results')
     await waitFor(() => expect(trigger).toHaveFocus())
   })

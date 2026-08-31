@@ -1,4 +1,4 @@
-/* 普通检查 API：只读取当前检查预览，并无 Profile 参数地提交 Generated Profile。 */
+/* 持续验证 API：按当前权限基线或指定 Agent 变化准备、预览并提交检查。 */
 
 import { request } from './http'
 import type { RunDto } from './runs'
@@ -6,7 +6,7 @@ import type { RunDto } from './runs'
 export type CheckPreviewGapDto = {
   code: string
   message: string
-  next_path: '/application' | '/identities' | '/flows' | '/check'
+  next_path: '/application' | '/permissions' | '/preparation' | '/validation'
   next_label: string
 }
 
@@ -49,6 +49,10 @@ export type CheckSubmissionDto = {
 
 export const checksApi = {
   preview: (projectId: string, changeId?: string) => request<CheckPreviewDto>(`/api/projects/${projectId}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
+  prepare: (projectId: string, changeId?: string) => request<CheckPreviewDto>(`/api/projects/${projectId}/check-preparation`, {
+    method: 'POST',
+    body: JSON.stringify({ schema_version: '1', change_id: changeId ?? null }),
+  }),
   submit: (projectId: string, changeId?: string) => request<CheckSubmissionDto>(`/api/projects/${projectId}/checks`, {
     method: 'POST',
     body: JSON.stringify({ schema_version: '1', idempotency_key: createIdempotencyKey(), change_id: changeId ?? null }),

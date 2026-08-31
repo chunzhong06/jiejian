@@ -36,11 +36,14 @@ SOURCE_RUN_ID = "run_" + "1" * 32
 VERIFY_RUN_ID = "run_" + "2" * 32
 FINDING_ID = "finding_" + "3" * 32
 ACTION_ID = "action_" + "4" * 32
+VIEW_ACTION_ID = "action_" + "0" * 32
 DENY_SUBJECT_ID = "tid_" + "5" * 32
 ALLOW_SUBJECT_ID = "tid_" + "6" * 32
 DENY_INTENT_ID = "pin_" + "7" * 32
 ALLOW_INTENT_ID = "pin_" + "8" * 32
+VIEW_INTENT_ID = "pin_" + "9" * 32
 EFFECT_ID = "document-updated"
+VIEW_EFFECT_ID = "collaboration-materials-read"
 RESOURCE_ID = "owner-document"
 
 
@@ -148,14 +151,34 @@ def _policy(*, revision: int = 1, binding_suffix: str = "a", policy_epoch: int =
             action_candidate_id=ACTION_ID,
             subject_test_identity_id=ALLOW_SUBJECT_ID,
         ),
+        PermissionPolicySnapshotEntry(
+            intent_id=VIEW_INTENT_ID,
+            revision=1,
+            intent_hash="d" * 64,
+            binding_fingerprint=binding_suffix * 64,
+            expectation=PermissionExpectation.ALLOW,
+            relation=PermissionIntentRelation.OTHER_ROLE,
+            subject_display_name="普通成员 Bob",
+            action_display_name="查看日常协作资料",
+            resource_owner_display_name="项目负责人 Alice",
+            protected_effects=(),
+            action_candidate_id=VIEW_ACTION_ID,
+            subject_test_identity_id=DENY_SUBJECT_ID,
+        ),
     )
     return build_permission_policy_snapshot(PROJECT_ID, policy_epoch, entries)
 
 
-def _case(subject_id: str, expectation: PermissionExpectation, suffix: str):
+def _case(
+    subject_id: str,
+    expectation: PermissionExpectation,
+    suffix: str,
+    *,
+    action_id: str = ACTION_ID,
+):
     return SimpleNamespace(
         case_id=f"repair-{suffix}",
-        action_id=ACTION_ID,
+        action_id=action_id,
         subject_id=subject_id,
         resource_ids=(RESOURCE_ID,),
         expectations=(expectation,),
@@ -172,11 +195,16 @@ def _evidence(
     effect: ObservedEffect,
     *,
     requirements=("final-effect", "owner-state"),
+    effect_id: str = EFFECT_ID,
 ):
     case = SimpleNamespace(**vars(case))
     case.required_observations = requirements
     return SimpleNamespace(
-        evidence_id=("ev_" + "9" * 20 if role is TwinExecutionRole.DENY_VARIANT else "ev_" + "a" * 20),
+        evidence_id=(
+            "ev_" + "9" * 20
+            if role is TwinExecutionRole.DENY_VARIANT
+            else "ev_" + ("a" if role is TwinExecutionRole.ALLOW_CONTROL else "b") * 20
+        ),
         verdict=verdict,
         twin_role=role,
         twin_snapshot=twin,
@@ -186,7 +214,7 @@ def _evidence(
             for index, item in enumerate(requirements)
         ),
         security_effect_facts=(
-            SimpleNamespace(effect_id=EFFECT_ID, state=effect),
+            SimpleNamespace(effect_id=effect_id, state=effect),
         ),
     )
 
@@ -213,9 +241,26 @@ def _fixture(monkeypatch):
         CaseVerdict.SAFE,
         ObservedEffect.ABSENT,
     )
+    view_case = _case(
+        DENY_SUBJECT_ID,
+        PermissionExpectation.ALLOW,
+        "f",
+        action_id=VIEW_ACTION_ID,
+    )
+    view = _evidence(
+        view_case,
+        None,
+        None,
+        CaseVerdict.SAFE,
+        ObservedEffect.CONFIRMED,
+        effect_id=VIEW_EFFECT_ID,
+    )
     snapshot = SimpleNamespace(
         contract=SimpleNamespace(
-            actions=(SimpleNamespace(action_id=ACTION_ID, effect_ids=(EFFECT_ID,)),)
+            actions=(
+                SimpleNamespace(action_id=ACTION_ID, effect_ids=(EFFECT_ID,)),
+                SimpleNamespace(action_id=VIEW_ACTION_ID, effect_ids=(VIEW_EFFECT_ID,)),
+            )
         )
     )
     source_request = SimpleNamespace(
@@ -226,7 +271,7 @@ def _fixture(monkeypatch):
     source_view = SimpleNamespace(
         run=SimpleNamespace(run_id=SOURCE_RUN_ID, project_id=PROJECT_ID),
         publication=SimpleNamespace(
-            result=SimpleNamespace(verdict=RunVerdict.BLOCK, evidence=(allow, deny))
+            result=SimpleNamespace(verdict=RunVerdict.BLOCK, evidence=(allow, deny, view))
         ),
         request=source_request,
     )
@@ -251,11 +296,11 @@ def _fixture(monkeypatch):
         },
     )
     reader = _Reader({SOURCE_RUN_ID: source_view})
-    return RepairContractService(reader, _Findings()), reader, snapshot, twin
+    return RepairContractService(reader, _Findings()), reader, snapshot, twin, view_case
 
 
 def test_repair_contract_is_deterministic_human_readable_and_patch_free(monkeypatch) -> None:
-    service, _, _, _ = _fixture(monkeypatch)
+    service, _, _, _, _ = _fixture(monkeypatch)
 
     first = service.get(SOURCE_RUN_ID, FINDING_ID)
     second = service.get(SOURCE_RUN_ID, FINDING_ID)
@@ -264,12 +309,14 @@ def test_repair_contract_is_deterministic_human_readable_and_patch_free(monkeypa
     assert first.reference.repair_fingerprint == first.repair_fingerprint
     assert "普通成员不得再对项目负责人的资源执行修改文档" in first.must_disappear
     assert "项目负责人仍然能够" in first.must_remain
+    assert "普通成员 Bob仍然能够执行查看日常协作资料" in first.must_remain
+    assert len(first.regression_controls) == 1
     serialized = first.model_dump(mode="json")
     assert not ({"file", "line", "function", "patch"} & set(serialized))
 
 
 def test_original_permission_change_is_rejected_before_repair_run(monkeypatch) -> None:
-    service, _, _, _ = _fixture(monkeypatch)
+    service, _, _, _, _ = _fixture(monkeypatch)
     contract = service.get(SOURCE_RUN_ID, FINDING_ID)
 
     with pytest.raises(JiejianError, match="原权限要求已经改变，请按新权限重新形成检查。"):
@@ -277,7 +324,7 @@ def test_original_permission_change_is_rejected_before_repair_run(monkeypatch) -
 
 
 def test_policy_epoch_change_is_rejected_before_repair_run(monkeypatch) -> None:
-    service, _, _, _ = _fixture(monkeypatch)
+    service, _, _, _, _ = _fixture(monkeypatch)
     contract = service.get(SOURCE_RUN_ID, FINDING_ID)
 
     with pytest.raises(JiejianError, match="原权限要求已经改变，请按新权限重新形成检查。"):
@@ -292,6 +339,7 @@ def test_policy_epoch_change_is_rejected_before_repair_run(monkeypatch) -> None:
         ("effect-removed", RepairVerificationStatus.NOT_VERIFIED, "PROTECTED_EFFECT_REMOVED"),
         ("evidence-lowered", RepairVerificationStatus.NOT_VERIFIED, "KEY_EVIDENCE_STANDARD_LOWERED"),
         ("evidence-strengthened", RepairVerificationStatus.VERIFIED, "REPAIR_REQUIREMENTS_SATISFIED"),
+        ("regression-broken", RepairVerificationStatus.NOT_VERIFIED, "REGRESSION_CONTROL_BROKEN"),
     ),
 )
 def test_repair_verification_requires_same_exam_allow_control_effects_and_evidence(
@@ -300,7 +348,7 @@ def test_repair_verification_requires_same_exam_allow_control_effects_and_eviden
     expected: RepairVerificationStatus,
     reason: str,
 ) -> None:
-    service, reader, source_snapshot, twin = _fixture(monkeypatch)
+    service, reader, source_snapshot, twin, view_case = _fixture(monkeypatch)
     contract = service.get(SOURCE_RUN_ID, FINDING_ID)
     requirements = (
         ("owner-state",)
@@ -327,11 +375,25 @@ def test_repair_verification_requires_same_exam_allow_control_effects_and_eviden
         ObservedEffect.ABSENT,
         requirements=requirements,
     )
+    view = _evidence(
+        view_case,
+        None,
+        None,
+        CaseVerdict.VULNERABLE if case == "regression-broken" else CaseVerdict.SAFE,
+        ObservedEffect.ABSENT if case == "regression-broken" else ObservedEffect.CONFIRMED,
+        effect_id=VIEW_EFFECT_ID,
+    )
     snapshot = (
         SimpleNamespace(
-            contract=SimpleNamespace(
-                actions=(SimpleNamespace(action_id=ACTION_ID, effect_ids=()),)
-            )
+                contract=SimpleNamespace(
+                    actions=(
+                        SimpleNamespace(action_id=ACTION_ID, effect_ids=()),
+                        SimpleNamespace(
+                            action_id=VIEW_ACTION_ID,
+                            effect_ids=(VIEW_EFFECT_ID,),
+                        ),
+                    )
+                )
         )
         if case == "effect-removed"
         else source_snapshot
@@ -344,7 +406,7 @@ def test_repair_verification_requires_same_exam_allow_control_effects_and_eviden
     reader.views[VERIFY_RUN_ID] = SimpleNamespace(
         run=SimpleNamespace(run_id=VERIFY_RUN_ID, project_id=PROJECT_ID),
         publication=SimpleNamespace(
-            result=SimpleNamespace(verdict=RunVerdict.PASS, evidence=(allow, deny))
+            result=SimpleNamespace(verdict=RunVerdict.PASS, evidence=(allow, deny, view))
         ),
         request=request,
     )
@@ -354,3 +416,12 @@ def test_repair_verification_requires_same_exam_allow_control_effects_and_eviden
     assert verification is not None
     assert verification.status is expected
     assert verification.reason_codes == (reason,)
+    assert len(verification.path_results) == 3
+    regression = next(
+        item for item in verification.path_results if item.kind.value == "REGRESSION_CONTROL"
+    )
+    assert regression.status is (
+        RepairVerificationStatus.NOT_VERIFIED
+        if case == "regression-broken"
+        else RepairVerificationStatus.VERIFIED
+    )

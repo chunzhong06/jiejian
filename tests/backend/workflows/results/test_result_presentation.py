@@ -9,7 +9,12 @@ import pytest
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
 from product.backend.core.permission_intent import PermissionIntentRelation, ProtectedEffect
-from product.backend.core.repair import RepairVerificationStatus
+from product.backend.core.repair import (
+    RepairContractReference,
+    RepairRequirementView,
+    RepairVerification,
+    RepairVerificationStatus,
+)
 from product.backend.core.verification.breakpoints import (
     BreakpointPrecision,
     BreakpointResult,
@@ -34,6 +39,7 @@ from product.backend.workflows.results.presentation import (
     _actual_identity,
     _breakpoint_detail,
     _claim_boundary_with_repair,
+    ResultPresentationBuilder,
     build_result_presentation,
 )
 from product.protocols import ObservationCompleteness, ObserverOutcomeStatus, ObserverType
@@ -405,6 +411,99 @@ def test_repair_status_only_strengthens_claim_boundary_after_formal_verification
     assert all("修复" not in item for item in verified.unsupported_statements)
     assert inconclusive.repair_status is RepairVerificationStatus.INCONCLUSIVE
     assert "修复复验证据不足" in inconclusive.unsupported_statements[-1]
+
+
+def test_formal_repair_run_projects_contract_and_status_on_the_stable_finding() -> None:
+    source_run_id = "run_" + "9" * 32
+    reference = RepairContractReference(
+        source_run_id=source_run_id,
+        source_finding_id=FINDING_ID,
+        repair_fingerprint="8" * 64,
+    )
+    verification = RepairVerification(
+        reference=reference,
+        verification_run_id=RUN_ID,
+        status=RepairVerificationStatus.VERIFIED,
+        message="三条修复路径均已验证。",
+        reason_codes=("REPAIR_REQUIREMENTS_SATISFIED",),
+    )
+    requirement = RepairRequirementView(
+        reference=reference,
+        must_disappear="原违规后果必须消失。",
+        must_remain="两条合法业务路径必须保留。",
+        must_not_change=("原权限要求", "关键证据标准"),
+    )
+    policy = build_permission_policy_snapshot(
+        PROJECT_ID,
+        7,
+        (
+            PermissionPolicySnapshotEntry(
+                intent_id="pin_" + "4" * 32,
+                revision=3,
+                intent_hash="5" * 64,
+                binding_fingerprint="6" * 64,
+                expectation=PermissionExpectation.DENY,
+                relation=PermissionIntentRelation.OTHER_ROLE,
+                subject_display_name="普通成员",
+                action_display_name="修改文档",
+                resource_owner_display_name="项目负责人",
+                protected_effects=(
+                    ProtectedEffect(
+                        kind=SecurityEffectKind.STATE_MUTATION,
+                        resource_type="document",
+                        business_label="负责人文档被修改",
+                    ),
+                ),
+                action_candidate_id="action_" + "7" * 32,
+                subject_test_identity_id="tid_" + "8" * 32,
+            ),
+        ),
+    )
+    view = _view(
+        RunVerdict.PASS,
+        CaseVerdict.SAFE,
+        outcome=ExecutionOutcome.DENIED,
+        effect=ObservedEffect.ABSENT,
+    )
+
+    class Reader:
+        @staticmethod
+        def read(run_id: str):
+            assert run_id == RUN_ID
+            return view
+
+        @staticmethod
+        def execution_request(current):
+            assert current is view
+            return SimpleNamespace(
+                project_snapshot=_snapshot(),
+                permission_policy=policy,
+                change_context=None,
+            )
+
+    class Findings:
+        @staticmethod
+        def findings_for_run(run_id: str):
+            assert run_id == RUN_ID
+            return _finding(CaseVerdict.SAFE, status="DISAPPEARED")
+
+    class Repairs:
+        @staticmethod
+        def verify_run(run_id: str):
+            assert run_id == RUN_ID
+            return verification
+
+        @staticmethod
+        def requirement(run_id: str, finding_id: str):
+            assert (run_id, finding_id) == (source_run_id, FINDING_ID)
+            return requirement
+
+    result = ResultPresentationBuilder(Reader(), Findings(), Repairs()).build(RUN_ID)
+
+    assert result.repair_verification is verification
+    assert result.issues[0].repair_requirement is requirement
+    assert result.issues[0].claim_boundary.repair_status is RepairVerificationStatus.VERIFIED
+    assert all("修复" not in item for item in result.issues[0].claim_boundary.unsupported_statements)
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@
 # 普通用户检查预览与提交
 #
 # 定位
-#   PermissionIntent 准备事实与唯一 ExecutionWorkflow 之间的普通控制面应用服务。
+#   PermissionIntent 准备事实与唯一 ExecutionWorkflow 之间的持续验证应用服务。
 #
 # 职责
 #   投影人话 CheckPreview｜定位最早缺口｜冻结可选变化/修复上下文｜无 Profile 参数提交当前 Generated Profile
@@ -50,7 +50,12 @@ class _CheckModel(BaseModel):
 class CheckPreviewGap(_CheckModel):
     code: str = Field(min_length=1, max_length=96)
     message: str = Field(min_length=1, max_length=160)
-    next_path: Literal["/application", "/identities", "/flows", "/check"]
+    next_path: Literal[
+        "/application",
+        "/permissions",
+        "/preparation",
+        "/validation",
+    ]
     next_label: str = Field(min_length=1, max_length=32)
 
 
@@ -359,31 +364,31 @@ class CheckWorkflow:
 
 _GAP_PRESENTATION: Mapping[str, tuple[str, str, str]] = {
     "ACTION_MISSING": ("还没有已确认的业务动作", "/application", "去应用接入"),
-    "TEST_IDENTITY_MISSING": ("缺少完成差分所需的测试账号", "/identities", "去准备测试账号"),
-    "TEST_IDENTITY_NOT_PREPARED": ("测试账号的登录状态尚未准备", "/identities", "去准备测试账号"),
-    "MISSING_SUBJECT": ("差分检查所需测试账号不可用", "/identities", "去准备测试账号"),
-    "ACTION_FLOW_OR_RESOURCE_MISSING": ("尚未录制并确认这个业务动作", "/flows", "去准备业务流程"),
-    "ACTION_SAFETY_SETUP_STALE": ("业务动作准备信息已经变化", "/flows", "去重新确认业务流程"),
+    "TEST_IDENTITY_MISSING": ("缺少完成差分所需的测试账号", "/preparation", "去完成测试准备"),
+    "TEST_IDENTITY_NOT_PREPARED": ("测试账号的登录状态尚未准备", "/preparation", "去完成测试准备"),
+    "MISSING_SUBJECT": ("差分检查所需测试账号不可用", "/preparation", "去完成测试准备"),
+    "ACTION_FLOW_OR_RESOURCE_MISSING": ("尚未录制并确认这个业务动作", "/preparation", "去完成测试准备"),
+    "ACTION_SAFETY_SETUP_STALE": ("业务动作准备信息已经变化", "/preparation", "去重新确认测试准备"),
     "RESOURCE_OWNER_ROLE_UNCONFIRMED": ("资源所有者权限组尚未确认", "/application", "去确认权限组"),
-    "TEST_RESOURCE_UNCONFIRMED": ("测试资源尚未确认", "/flows", "去确认测试资源"),
-    "OBSERVATION_UNCONFIRMED": ("可信观察方式尚未确认", "/flows", "去确认观察方式"),
-    "RECOVERY_UNCONFIRMED": ("安全恢复方式尚未确认", "/flows", "去确认恢复方式"),
-    "SECURITY_EFFECT_UNCONFIRMED": ("真实安全影响尚未确认", "/flows", "去确认真实影响"),
-    "MISSING_RESOURCE": ("差分检查所需测试资源不可用", "/flows", "去确认测试资源"),
-    "MISSING_OBSERVER": ("差分检查缺少可信观察方式", "/flows", "去确认观察方式"),
-    "ALLOW_INTENT_MISSING": ("缺少一个可执行的允许权限组", "/check", "去确认权限规则"),
-    "DENY_INTENT_MISSING": ("缺少一个可执行的拒绝权限组", "/check", "去确认权限规则"),
-    "PERMISSION_INTENT_UNCONFIRMED": ("权限期望尚未确认", "/check", "去确认权限规则"),
-    "PERMISSION_INTENT_STALE": ("权限期望依赖的事实已经变化", "/check", "去重新确认权限规则"),
-    "PERMISSION_INTENT_NEEDS_REVIEW": ("已有权限期望需要重新确认", "/check", "去重新确认权限规则"),
-    "GENERATED_PROFILE_MISSING": ("尚未生成当前检查配置", "/check", "去生成检查配置"),
-    "GENERATED_PROFILE_STALE": ("当前检查配置已经失效", "/check", "去重新生成检查配置"),
-    "COVERAGE_RECORD_MISSING": ("当前权限要求没有形成可执行用例", "/check", "去检查权限规则"),
-    "COVERAGE_GAP": ("当前权限要求仍有覆盖缺口", "/check", "去检查权限规则"),
-    "RELATION_UNPROVABLE": ("当前账号与资源关系无法证明", "/check", "去检查权限规则"),
-    "BUDGET_EXCEEDED": ("检查用例超过当前安全预算", "/check", "去检查权限规则"),
-    "RELATION_DEPTH_EXCEEDED": ("权限关系路径超过当前安全深度", "/check", "去检查权限规则"),
-    "DIFFERENTIAL_PAIR_MISSING": ("拒绝用例缺少可比较的允许控制", "/check", "去检查权限规则"),
+    "TEST_RESOURCE_UNCONFIRMED": ("测试资源尚未确认", "/preparation", "去完成测试准备"),
+    "OBSERVATION_UNCONFIRMED": ("可信观察方式尚未确认", "/preparation", "去完成测试准备"),
+    "RECOVERY_UNCONFIRMED": ("安全恢复方式尚未确认", "/preparation", "去完成测试准备"),
+    "SECURITY_EFFECT_UNCONFIRMED": ("真实安全影响尚未确认", "/preparation", "去完成测试准备"),
+    "MISSING_RESOURCE": ("差分检查所需测试资源不可用", "/preparation", "去完成测试准备"),
+    "MISSING_OBSERVER": ("差分检查缺少可信观察方式", "/preparation", "去完成测试准备"),
+    "ALLOW_INTENT_MISSING": ("缺少一个可执行的允许权限组", "/permissions", "去确认权限规则"),
+    "DENY_INTENT_MISSING": ("缺少一个可执行的拒绝权限组", "/permissions", "去确认权限规则"),
+    "PERMISSION_INTENT_UNCONFIRMED": ("权限期望尚未确认", "/permissions", "去确认权限规则"),
+    "PERMISSION_INTENT_STALE": ("权限期望依赖的事实已经变化", "/permissions", "去重新确认权限规则"),
+    "PERMISSION_INTENT_NEEDS_REVIEW": ("已有权限期望需要重新确认", "/permissions", "去重新确认权限规则"),
+    "GENERATED_PROFILE_MISSING": ("尚未生成当前检查配置", "/validation", "去准备本次检查"),
+    "GENERATED_PROFILE_STALE": ("当前检查配置已经失效", "/validation", "去重新准备本次检查"),
+    "COVERAGE_RECORD_MISSING": ("当前权限要求没有形成可执行用例", "/permissions", "去检查权限规则"),
+    "COVERAGE_GAP": ("当前权限要求仍有覆盖缺口", "/permissions", "去检查权限规则"),
+    "RELATION_UNPROVABLE": ("当前账号与资源关系无法证明", "/preparation", "去完成测试准备"),
+    "BUDGET_EXCEEDED": ("检查用例超过当前安全预算", "/permissions", "去检查权限规则"),
+    "RELATION_DEPTH_EXCEEDED": ("权限关系路径超过当前安全深度", "/permissions", "去检查权限规则"),
+    "DIFFERENTIAL_PAIR_MISSING": ("拒绝用例缺少可比较的允许控制", "/permissions", "去检查权限规则"),
 }
 
 
@@ -391,7 +396,7 @@ def _gap(code: str, *, message: str | None = None) -> CheckPreviewGap:
     clean_code = code.removeprefix("CoverageGapCode.")
     presentation = _GAP_PRESENTATION.get(
         clean_code,
-        (message or "当前检查仍有未解决的覆盖缺口", "/check", "去检查权限规则"),
+        (message or "当前检查仍有未解决的覆盖缺口", "/permissions", "去检查权限规则"),
     )
     return CheckPreviewGap(
         code=clean_code,
@@ -408,9 +413,9 @@ def _unique_gaps(gaps: list[CheckPreviewGap]) -> tuple[CheckPreviewGap, ...]:
 def _gap_order(gap: CheckPreviewGap) -> tuple[int, str]:
     rank = {
         "/application": 0,
-        "/identities": 1,
-        "/flows": 2,
-        "/check": 3,
+        "/permissions": 1,
+        "/preparation": 2,
+        "/validation": 3,
     }
     return rank[gap.next_path], gap.code
 

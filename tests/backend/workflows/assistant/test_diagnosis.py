@@ -47,6 +47,6 @@ def test_project_archive_conflict_has_specific_chinese_recovery() -> None:
     assert diagnosis.area is ErrorArea.APPLICATION
     assert diagnosis.phase is ErrorPhase.APPLICATION_MAINTENANCE
     assert diagnosis.recovery_action.value == "FINISH_ACTIVE_TASKS"
-    assert diagnosis.route == "/check"
+    assert diagnosis.route == "/workspace"
     assert diagnosis.headline == "当前应用仍有任务在进行"
     assert "结束当前检查、录制或后台任务" in diagnosis.short_message

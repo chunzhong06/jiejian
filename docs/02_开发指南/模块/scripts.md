@@ -22,8 +22,8 @@
 | `scripts/dev/frontend.ps1` | 固定 Node/pnpm、受控工作区、编辑器插件、指纹和 production build | 正式前端源码、产品 UI 行为 |
 | `scripts/dev/prepare.ps1` | Chromium、数据库、source receipt 和源码可启动组合 | Wheel 与普通产品启动展示 |
 | `scripts/dev/commands.ps1` | start/test/schema/docs/frontend-test/cli/shell 的能力组合 | 重复实现各模块已有能力 |
-| `scripts/dev/sample-test.ps1` | 自动 L5 的 PowerShell 入口、独立运行目录和 Harness 调用 | 产品 prepare、UIA 或十阶段编排实现 |
-| `scripts/dev/sample_test/driver.py` | `official/validation/competition/all` 参数解析与 suite 分派 | 十阶段编排、30 Case 实现或 Windows UIA |
+| `scripts/dev/sample-test.ps1` | 自动 L5 的 PowerShell 入口、独立运行目录、Harness 调用与净化汇总发布位置 | 产品 prepare、UIA 或十阶段编排实现 |
+| `scripts/dev/sample_test/driver.py` | `official/validation/competition/all` 参数解析、suite 分派与成功汇总原子发布 | 十阶段编排、30 Case 实现或 Windows UIA |
 | `scripts/dev/sample_test/official.py` | 从真实 `start.cmd` 开始的十阶段自动 L5、错误保真和资源收口 | Windows UI Automation 细节、生产领域语义 |
 | `scripts/dev/sample_test/validation.py` | 30 Case 编排与正式 Continuity/Breakpoint 算法调用 | private oracle 定义或 Domain Model 重写 |
 | `scripts/dev/sample_test/adapter.py`、`registry.py`、`oracle.py` | 公开事实适配、public registry 与 private oracle 外层验收 | 产品 Verdict 或目标授权输入 |
@@ -59,6 +59,7 @@
 - `package` 准备冻结 CPython、生产依赖、前端与 Chromium，只从一个 Base Tree 生成 full/nosamples；正式产物只进入 `var/development/release/artifacts`。
 - `scripts/dev.ps1` 只做总控；sample-test 的 PowerShell、Python Harness 和 Windows UIA 实现都留在 `scripts/dev/`，不回填总入口或 `commands.ps1`。
 - `sample-test` 必须从真实 `start.cmd` 启动默认 GUI 控制面；不能改成直接 `serve`、`create_app()` 或 TestClient，也不能提前替产品完成前端、数据库和 source receipt 准备。
+- validation 类 suite 只有在外层验收成功后才原子替换 `var/audit/competition/latest-validation-summary.json`；展示副本只含聚合计数与来源元数据，失败运行、逐 Case 结果和 private oracle 都不能覆盖或进入该文件。
 - UIA 依赖只属于 dev dependency，`product/**` 不得导入 `pywinauto`；Recording 必须由正式 Worker 和独立 Recording Process 创建 headed Chromium。
 - `-Update`、`-ForcePrepare` 和位置参数按入口合同显式允许，非法组合在锁和其他副作用前失败。
 - 脚本设置的环境变量、控制台编码、当前目录和 prepare lock 在成功、失败与提前退出时都必须恢复。

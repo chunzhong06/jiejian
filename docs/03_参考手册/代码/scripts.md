@@ -112,14 +112,15 @@
 
 ### `scripts/dev/sample_test/driver.py`
 - `SUITES`
-- `run_suite(root, var_dir, suite) -> None`
+- `run_suite(root, var_dir, suite, publish_summary) -> None`
 - `main() -> int`
-主要 import / dot-source：`.`, `.validation`, `__future__`, `argparse`, `pathlib`, `sys`
+主要 import / dot-source：`.`, `.validation`, `__future__`, `argparse`, `json`, `os`, `pathlib`, `sys`, `uuid`
 
 ### `scripts/dev/sample_test/official.py`
 - `PROJECT_KEY`
 - `RESOURCE_ID`
 - `EXPORT_ACTION_KEY`
+- `VIEW_ACTION_KEY`
 - `CONTROL_PORT`
 - `PHASE_TITLES`
 - `ROLE_LABELS`
@@ -161,6 +162,7 @@
 - `OFFICIAL_RESOURCE_ID`
 - `class ValidationSuiteError`
 - `run_validation_suite(root, var_dir, repetitions, representative_only) -> dict[str, object]`
+- `build_presentation_summary(summary) -> dict[str, object]`
 主要 import / dot-source：`.adapter`, `.oracle`, `.registry`, `__future__`, `dataclasses`, `hashlib`, `json`, `os`, `pathlib`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.continuity`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.coverage`, `product.backend.core.verification.permissions.evaluation`, `secrets`, `shutil`, `subprocess`, `sys`, `threading`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
 
 ### `scripts/dev/sample_test/windows.py`

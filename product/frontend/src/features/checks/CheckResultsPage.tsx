@@ -21,6 +21,7 @@ import { TaskActionBar } from '../../components/TaskActionBar'
 import { EvidenceTimeline } from './EvidenceTimeline'
 import { EvidenceExplanationDrawer } from './EvidenceExplanationDrawer'
 import { ReportPanel } from './ReportPanel'
+import { ResultFactChain } from './ResultFactChain'
 import './checks.css'
 
 function fallbackHeadline(run: RunDto | undefined) {
@@ -39,11 +40,6 @@ function resultTagColor(verdict: ResultPresentationIssueDto['verdict']) {
 
 function plannedIdentityLabel(issue: ResultPresentationIssueDto) {
   return issue.planned_identity_label || '已安排一个测试账号'
-}
-
-function actualIdentityText(issue: ResultPresentationIssueDto) {
-  if (issue.actual_identity_status === 'UNAVAILABLE') return '无法独立确认'
-  return issue.actual_identity_label || '无法独立确认'
 }
 
 function sourceRoleLabel(role: ResultEvidenceSourceDto['role']) {
@@ -143,7 +139,7 @@ export function CheckResultsPage({
       {presentation?.repair_verification && <Alert
         type={presentation.repair_verification.status === 'VERIFIED' ? 'success' : presentation.repair_verification.status === 'NOT_VERIFIED' ? 'error' : 'warning'}
         showIcon
-        message={presentation.repair_verification.status === 'VERIFIED' ? '修复要求已验证' : presentation.repair_verification.status === 'NOT_VERIFIED' ? '修复要求未通过' : '修复结果暂时无法确认'}
+        message={presentation.repair_verification.status === 'VERIFIED' ? '原考题复验已通过' : presentation.repair_verification.status === 'NOT_VERIFIED' ? '原考题复验未通过' : '原考题复验暂时无法确认'}
         description={presentation.repair_verification.message}
       />}
       {String(current.result_integrity) === 'INVALID' && <Alert type="warning" showIcon message="结果完整性校验未通过，不能形成安全结论。" />}
@@ -166,7 +162,7 @@ export function CheckResultsPage({
     </>}
     {view === 'report' && <ReportPanel run={current} onError={onError} />}
     {presentation && onHistory && <Button className="result-history-link" onClick={onHistory}>查看历史变化</Button>}
-    <TaskActionBar back={onBack ? { label: '返回权限与检查', onClick: onBack } : undefined} refresh={current ? { label: '刷新已发布结果', onClick: () => setRefreshEpoch((value) => value + 1), loading } : undefined} restart={canVerifyFix && onVerifyFix ? { label: '验证修复后的行为', onClick: onVerifyFix, loading: verifyingFix } : undefined} primary={presentation && onVerification ? { label: '进入现场验证', onClick: onVerification } : undefined} />
+    <TaskActionBar back={onBack ? { label: '返回验证运行', onClick: onBack } : undefined} refresh={current ? { label: '刷新已发布结果', onClick: () => setRefreshEpoch((value) => value + 1), loading } : undefined} restart={canVerifyFix && onVerifyFix ? { label: '按原考题重新检查', onClick: onVerifyFix, loading: verifyingFix } : undefined} primary={presentation && onVerification ? { label: '进入现场验证', onClick: onVerification } : undefined} />
     <EvidenceExplanationDrawer open={evidenceDrawerOpen} title={selectedIssue?.title} explanations={selectedIssue?.evidence_explanations ?? []} onClose={() => setEvidenceDrawerOpen(false)} />
   </Space>
 }
@@ -185,17 +181,10 @@ function ExecutionPaths({ traces }: { traces: ExecutionTraceDto[] }) {
 }
 
 function ResultStory({ issue, index, onEvidence, onNavigate }: { issue: ResultPresentationIssueDto; index: number; onEvidence: () => void; onNavigate?: (path: string) => void }) {
-  const steps = [
-    { label: '原本应该怎样', value: issue.expectation },
-    { label: '计划使用的账号', value: plannedIdentityLabel(issue), note: '来自本次检查开始前冻结的执行请求。' },
-    { label: '目标实际识别的账号', value: actualIdentityText(issue), note: issue.actual_identity_status === 'UNAVAILABLE' ? '当前已发布证据没有目标服务器或可信记录提供的实际账号事实，界鉴不会把计划账号冒充为实际账号。' : undefined },
-    { label: '页面或接口怎样回应', value: issue.surface_result },
-    { label: '真实资源发生了什么', value: issue.actual_result },
-    { label: '最终结论', value: issue.conclusion, note: issue.explanation },
-  ]
   return <article className={`result-story result-story-${resultTone(issue.verdict)}`} aria-labelledby={`result-story-${index}`}>
     <header className="result-story-header"><div><Typography.Text className="result-context" type="secondary">{issue.subject_group} · {issue.action} · {issue.resource} · {issue.relation}</Typography.Text><Typography.Title id={`result-story-${index}`} level={4}>{issue.title}</Typography.Title></div><Space wrap><Tag color={resultTagColor(issue.verdict)}>{issue.conclusion}</Tag><Tag>{severityLabel(issue.severity)}</Tag></Space></header>
-    <ol className="result-story-steps">{steps.map((step, stepIndex) => <li key={step.label}><span className="result-story-step-index" aria-hidden="true">{stepIndex + 1}</span><div className="result-story-step-copy"><Typography.Text type="secondary">{step.label}</Typography.Text><Typography.Text strong>{step.value}</Typography.Text>{step.note && <Typography.Paragraph type="secondary">{step.note}</Typography.Paragraph>}</div></li>)}</ol>
+    <Typography.Paragraph type="secondary">计划使用的账号：{plannedIdentityLabel(issue)}。计划账号只说明本次安排，不代替目标实际识别的账号。</Typography.Paragraph>
+    <ResultFactChain issue={issue} />
     <section className="result-source-summary" aria-label="真实结果证据来源">
       <div className="result-source-summary-copy"><Typography.Text strong>真实结果证据来源</Typography.Text><Typography.Paragraph type="secondary">关键来源共同约束真实结果能否确认；佐证来源补充执行过程，但不会单独改变结论。</Typography.Paragraph></div>
       {issue.evidence_sources.length > 0
@@ -211,7 +200,7 @@ function ResultStory({ issue, index, onEvidence, onNavigate }: { issue: ResultPr
         {issue.repair_requirement.must_not_change.map((item) => <li key={item}>{item}不能改变。</li>)}
       </ul>
     </section>}
-    {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message={issue.conclusion} description={<Space direction="vertical"><Typography.Text>{issue.explanation}</Typography.Text><Button onClick={() => onNavigate?.('/flows')}>完善真实结果确认方式</Button></Space>} />}
+    {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message={issue.conclusion} description={<Space direction="vertical"><Typography.Text>{issue.explanation}</Typography.Text><Button onClick={() => onNavigate?.('/preparation')}>完善真实结果确认方式</Button></Space>} />}
     <div className="result-story-actions"><Button type="link" onClick={onEvidence}>查看对应证据</Button><Tag>{occurrenceStatusLabel(issue.occurrence_status)}</Tag></div>
   </article>
 }

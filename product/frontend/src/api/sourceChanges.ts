@@ -22,10 +22,11 @@ export type SourceChangeViewDto = {
   no_direct_evidence_count: number
   review_intent_ids: string[]
   summary: string
-  next_path: '/check' | null
+  next_path: '/permissions' | null
 }
 
 export const sourceChangesApi = {
+  list: (projectId: string, limit = 50) => request<SourceChangeViewDto[]>(`/api/projects/${encodeURIComponent(projectId)}/source-changes?limit=${limit}`),
   latest: (projectId: string) => request<SourceChangeViewDto | null>(`/api/projects/${encodeURIComponent(projectId)}/source-changes/latest`),
   show: (projectId: string, changeId: string) => request<SourceChangeViewDto>(`/api/projects/${encodeURIComponent(projectId)}/source-changes/${encodeURIComponent(changeId)}`),
 }

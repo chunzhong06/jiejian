@@ -34,10 +34,11 @@ from product.backend.workflows.security_setup.checks import CheckPreview, CheckP
 
 
 GuidanceRoute = Literal[
+    "/workspace",
     "/application",
-    "/identities",
-    "/flows",
-    "/check",
+    "/permissions",
+    "/preparation",
+    "/validation",
     "/results",
 ]
 
@@ -132,16 +133,16 @@ class GuidanceQueryService:
 
 _ROUTE_RANK: dict[str, int] = {
     "/application": 0,
-    "/identities": 1,
-    "/flows": 2,
-    "/check": 3,
+    "/permissions": 1,
+    "/preparation": 2,
+    "/validation": 3,
 }
 
 _ROUTE_PRESENTATION: dict[str, tuple[GuidanceOptionKind, str]] = {
     "/application": (GuidanceOptionKind.REVIEW_DISCOVERY, "完善应用与权限组信息"),
-    "/identities": (GuidanceOptionKind.PREPARE_IDENTITY, "准备测试账号"),
-    "/flows": (GuidanceOptionKind.RECORD_ACTION, "完善业务操作、观察与恢复"),
-    "/check": (GuidanceOptionKind.REVIEW_PERMISSION, "确认权限规则与覆盖"),
+    "/permissions": (GuidanceOptionKind.REVIEW_PERMISSION, "确认权限规则与覆盖"),
+    "/preparation": (GuidanceOptionKind.RESOLVE_COVERAGE_GAP, "完善测试账号、业务流程与真实结果确认"),
+    "/validation": (GuidanceOptionKind.RESOLVE_COVERAGE_GAP, "重新准备本次检查"),
 }
 
 _NEXT_ACTION: dict[
@@ -176,19 +177,19 @@ _NEXT_ACTION: dict[
         GuidancePhase.RECORDING,
         GuidanceOptionKind.RECORD_ACTION,
         "准备测试账号并录制业务操作",
-        "/identities",
+        "/preparation",
     ),
     "REVIEW_PERMISSION": (
         GuidancePhase.PERMISSION_REVIEW,
         GuidanceOptionKind.REVIEW_PERMISSION,
         "确认权限规则",
-        "/check",
+        "/permissions",
     ),
     "RUN_CHECK": (
         GuidancePhase.CHECK_READY,
         GuidanceOptionKind.START_CURRENT_CHECK,
         "开始检查当前可运行范围",
-        "/check",
+        "/validation",
     ),
     "OPEN_RESULT": (
         GuidancePhase.RESULT_AVAILABLE,
@@ -214,7 +215,7 @@ def build_guidance_snapshot(
                 "查看正在进行的检查或录制",
                 tuple(f"ACTIVE_{kind}" for kind in task_kinds),
                 GuidancePriorityTier.PRIMARY,
-                "/check",
+                "/workspace",
             )
         )
 
@@ -225,7 +226,7 @@ def build_guidance_snapshot(
                 "开始检查当前可运行范围",
                 ("CURRENT_SCOPE_RUNNABLE",),
                 GuidancePriorityTier.PRIMARY,
-                "/check",
+                "/validation",
             )
         )
         options.extend(_gap_options(preview, tier=GuidancePriorityTier.OPTIONAL))

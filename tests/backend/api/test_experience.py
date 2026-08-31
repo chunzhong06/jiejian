@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from product.backend.core.test_identity import (
@@ -40,6 +41,30 @@ def _start(client: TestClient, mode: str):
     )
 
 
+def _validation_summary() -> dict[str, object]:
+    return {
+        "schema_version": "1",
+        "generated_at_us": 1_800_000_000_000_000,
+        "suite": "validation",
+        "status": "accepted",
+        "repetitions": 1,
+        "case_count": 30,
+        "case_run_count": 30,
+        "application_count": 2,
+        "mode_count": 5,
+        "state_count": 3,
+        "full_exact_match_count": 30,
+        "full_wrong_pass_vulnerable": 0,
+        "full_wrong_pass_evidence_gap": 0,
+        "http_exact_match_count": 14,
+        "http_wrong_pass_vulnerable": 6,
+        "http_wrong_pass_evidence_gap": 10,
+        "http_wrong_pass_per_matrix": 16,
+        "source_revision": "a" * 40,
+        "source_dirty": False,
+    }
+
+
 def test_unavailable_installation_keeps_product_alive_and_requires_consent(
     tmp_path: Path,
 ) -> None:
@@ -71,6 +96,50 @@ def test_unavailable_installation_keeps_product_alive_and_requires_consent(
             },
         )
         assert rejected.status_code == 422
+
+
+def test_validation_summary_reads_only_the_stable_sanitized_receipt(
+    tmp_path: Path,
+) -> None:
+    app, _ = _app(tmp_path)
+    summary_path = (
+        app.state.context.paths.competition_audit
+        / "latest-validation-summary.json"
+    )
+    with TestClient(app) as client:
+        missing = client.get(
+            "/api/experience/official-sample/validation-summary"
+        )
+        assert missing.status_code == 200
+        assert missing.json()["data"] == {
+            "available": False,
+            "unavailable_reason": "尚未发布可展示的验证汇总",
+            "summary": None,
+        }
+
+        summary_path.write_text(
+            json.dumps(_validation_summary()),
+            encoding="utf-8",
+        )
+        published = client.get(
+            "/api/experience/official-sample/validation-summary"
+        )
+        assert published.status_code == 200
+        assert published.json()["data"]["available"] is True
+        assert published.json()["data"]["summary"]["case_count"] == 30
+        assert "private_oracle" not in published.text
+        assert "results" not in published.json()["data"]["summary"]
+
+        summary_path.write_text(
+            json.dumps({**_validation_summary(), "results": []}),
+            encoding="utf-8",
+        )
+        invalid = client.get(
+            "/api/experience/official-sample/validation-summary"
+        )
+        assert invalid.status_code == 200
+        assert invalid.json()["data"]["available"] is False
+        assert invalid.json()["data"]["summary"] is None
 
 
 def test_full_experience_creates_formal_project_and_keeps_behavior_mechanical(

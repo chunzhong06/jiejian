@@ -503,7 +503,7 @@ def test_change_revalidation_waits_for_human_approved_rebind_without_epoch_chang
         with pytest.raises(JiejianError) as blocked:
             core.source_changes.revalidation_plan(PROJECT_ID, manifest.change_id)
         assert blocked.value.code == ErrorCode.STATE_PRECONDITION.value
-        assert blocked.value.to_dict()["details"]["next_path"] == "/check"
+        assert blocked.value.to_dict()["details"]["next_path"] == "/permissions"
 
         proposal = core.permission_intents.propose_rebind_target(
             PROJECT_ID,

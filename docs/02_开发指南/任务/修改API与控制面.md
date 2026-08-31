@@ -20,7 +20,7 @@
 | Human GUI 权限审批与 Agent proposal 路由 | `product/backend/api/routers/permission_intents.py` | `tests/backend/api/test_permission_intent_human_approval.py` |
 | MCP 长期配对与逐 Project 临时权限 | `product/backend/workflows/mcp_access.py`、`product/backend/api/routers/mcp_access.py` | `tests/backend/api/test_mcp.py` |
 | ApplicationCore 组合 | `product/backend/workflows/context.py` | `tests/backend/workflows/` |
-| ProductStatus 与唯一下一步 | `product/backend/workflows/control.py` | `tests/backend/workflows/control/test_status.py` |
+| ProductStatus 区域、全部待办、最近变化与结果 | `product/backend/workflows/control.py` | `tests/backend/workflows/control/test_status.py` |
 | 普通 CLI 命令与 Machine 输出 | `product/backend/cli/app.py`、`product/backend/cli/commands/control.py`、`product/backend/cli/presentation.py` | `tests/backend/cli/test_control.py` |
 | 同一 VarDir 单控制者 | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` | `tests/backend/api/test_control_plane.py`、`tests/backend/cli/test_control.py` |
 

@@ -16,7 +16,7 @@ Profile 可以含受控 secret ref，但不含秘密值；Snapshot 固定“当�
 
 Profile 包含 project、Business/Auth/Observer scope、`WebExecutionIdentity`、`HttpIdentityBinding`、Contract 引用、subject/workflow/effect/Observer bindings、seed、case budget、关系深度和持续时间限制，以及受控 secret refs。它不内嵌可变 Contract 或秘密值。
 
-`HttpWorkflowBinding` 只允许一个 TARGET，并以 SETUP/TARGET/CLEANUP、受控请求模板、ValueSlot、确定性结果分类、基线投影和清理策略表达状态化流程。身份 bootstrap 与业务流程分离；Cookie jar 只在 Web Runtime 内存中按 identity 隔离。
+`HttpWorkflowBinding` 只允许一个 TARGET，并以 SETUP/TARGET/CLEANUP、受控请求模板、ValueSlot、确定性结果分类、基线投影和清理策略表达状态化流程。身份 bootstrap 与业务流程分离；Cookie jar 只在 Web Runtime 内存中按 identity 隔离。已确认 `RecoveryBindingKind.NOT_REQUIRED` 的纯 GET/HEAD 数据披露动作使用 `ResetStrategyKind.NOT_REQUIRED`：仍执行基线、Observer 与完整性校验，但不发送清理请求；该策略不得包含状态变化或 CLEANUP 步骤，不能作为缺失恢复能力的兜底。
 
 `HttpOutcomeClassifier.completion_binding` 只声明既有 Observer requirement，不自行读取任务或形成 Verdict。普通生成配置若把 202 列为 TARGET accepted status，会绑定本地 AsyncTask requirement；执行时仍必须由同一 Case 的异步终态事实明确证明完成，202 才能成为 ACCEPTED。没有绑定或终态证明时保持 UNKNOWN。
 

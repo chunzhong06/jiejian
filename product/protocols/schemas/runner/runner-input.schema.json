@@ -1354,6 +1354,7 @@
         "reset_strategy": {
           "discriminator": {
             "mapping": {
+              "NOT_REQUIRED": "#/$defs/ResetNotRequiredStrategy",
               "RESET_ENDPOINT": "#/$defs/ResetEndpointStrategy",
               "SNAPSHOT_PROVIDER": "#/$defs/SnapshotProviderResetStrategy",
               "UNIQUE_RESOURCE_WORKFLOW": "#/$defs/UniqueResourceWorkflowResetStrategy"
@@ -1369,6 +1370,9 @@
             },
             {
               "$ref": "#/$defs/SnapshotProviderResetStrategy"
+            },
+            {
+              "$ref": "#/$defs/ResetNotRequiredStrategy"
             }
           ],
           "title": "Reset Strategy"
@@ -2501,11 +2505,11 @@
           "$ref": "#/$defs/PermissionContext"
         },
         "coverage_dimensions": {
+          "default": [],
           "items": {
             "$ref": "#/$defs/CoverageDimension"
           },
           "maxItems": 6,
-          "minItems": 1,
           "title": "Coverage Dimensions",
           "type": "array"
         },
@@ -2564,8 +2568,7 @@
         "resource_id",
         "relation_path",
         "expectation",
-        "required_observations",
-        "coverage_dimensions"
+        "required_observations"
       ],
       "title": "PermissionRule",
       "type": "object"
@@ -2818,6 +2821,19 @@
         "path"
       ],
       "title": "ResetEndpointStrategy",
+      "type": "object"
+    },
+    "ResetNotRequiredStrategy": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "NOT_REQUIRED",
+          "default": "NOT_REQUIRED",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ResetNotRequiredStrategy",
       "type": "object"
     },
     "ResourceDefinition": {

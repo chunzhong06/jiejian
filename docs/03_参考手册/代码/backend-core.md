@@ -138,10 +138,13 @@
 - `class RepairContractReference`
 - `class RepairIntentIdentity`
 - `class RepairAllowControlIdentity`
+- `class RepairRegressionControlIdentity`
 - `class RepairEvidenceStandard`
 - `class RepairContract`
 - `class RepairRequirementView`
 - `class RepairVerificationStatus`
+- `class RepairPathKind`
+- `class RepairPathVerification`
 - `class RepairVerification`
 - `repair_contract_fingerprint(contract) -> str`
 主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`

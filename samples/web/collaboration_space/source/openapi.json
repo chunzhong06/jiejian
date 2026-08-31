@@ -6,7 +6,7 @@
   },
   "info": {
     "title": "协作空间项目资料管理 API",
-    "description": "校园数字展馆的项目成员、资料与完整资料包导出接口。",
+    "description": "校园数字展馆的项目成员、日常协作资料与完整项目交付包导出接口。",
     "version": "1.0.0"
   },
   "components": {
@@ -58,6 +58,26 @@
         ]
       }
     },
+    "/api/projects/{project_id}/collaboration": {
+      "parameters": [
+        {
+          "name": "project_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readProjectCollaborationMaterials",
+        "summary": "查看日常协作资料",
+        "x-required-roles": [
+          "PROJECT_OWNER",
+          "MEMBER"
+        ]
+      }
+    },
     "/api/projects/{project_id}/exports": {
       "parameters": [
         {
@@ -71,7 +91,7 @@
       ],
       "post": {
         "operationId": "exportCompleteProjectPackage",
-        "summary": "导出完整项目资料包",
+        "summary": "导出完整项目交付包",
         "x-required-roles": [
           "PROJECT_OWNER"
         ],
@@ -80,7 +100,7 @@
             "description": "导出任务已受理"
           },
           "403": {
-            "description": "当前成员没有完整资料导出权限"
+            "description": "当前成员没有完整项目交付包导出权限"
           }
         }
       }

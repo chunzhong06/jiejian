@@ -37,6 +37,7 @@ from product.backend.core.repair import (
     RepairContractReference,
     RepairEvidenceStandard,
     RepairIntentIdentity,
+    RepairRegressionControlIdentity,
 )
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.protocols.execution import ExecutionBudget
@@ -195,6 +196,10 @@ class RepairVerificationContext(BaseModel):
     original_intents: tuple[RepairIntentIdentity, ...] = Field(min_length=2, max_length=4096)
     must_disappear_effect_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
     must_remain_allow_control: RepairAllowControlIdentity
+    must_remain_regression_controls: tuple[RepairRegressionControlIdentity, ...] = Field(
+        default=(),
+        max_length=64,
+    )
     original_key_evidence: RepairEvidenceStandard
 
     @model_validator(mode="after")
@@ -206,10 +211,20 @@ class RepairVerificationContext(BaseModel):
             or self.target_intent.intent_id not in {item.intent_id for item in ordered}
             or self.must_remain_allow_control.intent.intent_id
             not in {item.intent_id for item in ordered}
+            or any(
+                item.intent.intent_id not in {identity.intent_id for identity in ordered}
+                for item in self.must_remain_regression_controls
+            )
             or self.must_disappear_effect_ids
             != tuple(sorted(set(self.must_disappear_effect_ids)))
         ):
             raise ValueError("repair verification context must preserve sorted original facts")
+        control_keys = tuple(
+            (item.intent.intent_id, item.action_id, item.subject_id)
+            for item in self.must_remain_regression_controls
+        )
+        if control_keys != tuple(sorted(control_keys)) or len(set(control_keys)) != len(control_keys):
+            raise ValueError("repair regression controls must be unique and sorted")
         return self
 
 

@@ -120,11 +120,11 @@ describe('VerificationPage', () => {
     expect(document.querySelectorAll('.is-exact-break')).toHaveLength(0)
   })
 
-  it('修复复验在同一种路径组件中并列展示前后事实', async () => {
+  it('原考题复验在同一种路径组件中并列展示前后事实', async () => {
     const source = presentation({ run_id: 'run-source' })
     const repairReference = { source_run_id: 'run-source', source_finding_id: 'finding-1', repair_fingerprint: 'c'.repeat(64) }
     const repairedIssue = issue({ verdict: 'SAFE', actual_result: '完整资料包没有生成', diagnosis: null, claim_boundary: { ...issue().claim_boundary, business_effect_status: 'ABSENT', breakpoint_precision: null, repair_status: 'VERIFIED' }, repair_requirement: { reference: repairReference, must_disappear: '成员导出产生的资料包必须消失。', must_remain: '负责人导出仍可使用。', must_not_change: ['原拒绝权限'] } })
-    const current = presentation({ issues: [repairedIssue], repair_verification: { reference: repairReference, verification_run_id: 'run-current', status: 'VERIFIED', message: '原违规后果已消失，合法功能保持。', reason_codes: [] } })
+    const current = presentation({ issues: [repairedIssue], repair_verification: { reference: repairReference, verification_run_id: 'run-current', status: 'VERIFIED', message: '原违规后果已消失，合法功能保持。', reason_codes: [], path_results: [] } })
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockImplementation((runId: string) => Promise.resolve(runId === 'run-source' ? source : current))
     render(<VerificationPage run={run} onError={vi.fn()} />)
@@ -132,7 +132,7 @@ describe('VerificationPage', () => {
     expect(await screen.findByText('修复前')).toBeInTheDocument()
     expect(screen.getByText('修复后')).toBeInTheDocument()
     expect(document.querySelectorAll('.verification-repair .verification-path')).toHaveLength(2)
-    expect(screen.getAllByText('修复要求已验证').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('原考题复验已通过').length).toBeGreaterThan(0)
   })
 
   it('证据不足的官方示例动作只转交明确的新 Run 请求', async () => {

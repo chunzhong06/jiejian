@@ -925,6 +925,7 @@
         "reset_strategy": {
           "discriminator": {
             "mapping": {
+              "NOT_REQUIRED": "#/$defs/ResetNotRequiredStrategy",
               "RESET_ENDPOINT": "#/$defs/ResetEndpointStrategy",
               "SNAPSHOT_PROVIDER": "#/$defs/SnapshotProviderResetStrategy",
               "UNIQUE_RESOURCE_WORKFLOW": "#/$defs/UniqueResourceWorkflowResetStrategy"
@@ -940,6 +941,9 @@
             },
             {
               "$ref": "#/$defs/SnapshotProviderResetStrategy"
+            },
+            {
+              "$ref": "#/$defs/ResetNotRequiredStrategy"
             }
           ],
           "title": "Reset Strategy"
@@ -1771,6 +1775,19 @@
         "path"
       ],
       "title": "ResetEndpointStrategy",
+      "type": "object"
+    },
+    "ResetNotRequiredStrategy": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "NOT_REQUIRED",
+          "default": "NOT_REQUIRED",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ResetNotRequiredStrategy",
       "type": "object"
     },
     "ResponseExtractor": {

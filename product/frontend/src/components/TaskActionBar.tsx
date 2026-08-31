@@ -4,6 +4,7 @@ import { Button, Popconfirm, Space } from 'antd'
 
 type TaskAction = {
   label: string
+  ariaLabel?: string
   onClick?: () => void
   submitForm?: string
   danger?: boolean
@@ -36,7 +37,7 @@ export function TaskActionBar({
       {restart && (restart.confirm
         ? <Popconfirm title={restart.confirm.title} description={restart.confirm.description} okText={restart.confirm.okText} cancelText={restart.confirm.cancelText} onConfirm={restart.onClick}><Button danger={restart.danger} disabled={restart.disabled} loading={restart.loading}>{restart.label}</Button></Popconfirm>
         : <Button danger={restart.danger} onClick={restart.onClick} disabled={restart.disabled} loading={restart.loading}>{restart.label}</Button>)}
-      {primary && <Button type="primary" htmlType={primary.submitForm ? 'submit' : 'button'} form={primary.submitForm} onClick={primary.onClick} disabled={primary.disabled} loading={primary.loading}>{primary.label}</Button>}
+      {primary && <Button type="primary" aria-label={primary.ariaLabel} htmlType={primary.submitForm ? 'submit' : 'button'} form={primary.submitForm} onClick={primary.onClick} disabled={primary.disabled} loading={primary.loading}>{primary.label}</Button>}
     </Space>
   </footer>
 }

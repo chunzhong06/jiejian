@@ -253,21 +253,24 @@ class SecuritySetupCompiler(ContractBuilderMixin, ProfileBuilderMixin):
         )
         if descriptor_path is None:
             return facts, None
-        if len(facts.actions) != 1:
+        matches: list[LocalObserverWiring] = []
+        for action in facts.actions:
+            wiring = load_local_observer_wiring(
+                descriptor_path,
+                var_dir=self._var_dir,
+                action_id=action.action_id,
+                expected_origin=facts.understanding.confirmed_endpoint,
+                expected_resource_id=action.setup.resource.actual_resource_id,
+                resource_mismatch_is_disabled=len(facts.actions) > 1,
+            )
+            if wiring is not None:
+                matches.append(wiring)
+        if len(matches) != 1:
             raise JiejianError(
                 ErrorCode.STATE_PRECONDITION,
-                "本地观察环境只能绑定一个已确认业务动作",
+                "本地观察环境必须唯一绑定一个已确认业务动作",
             )
-        action = facts.actions[0]
-        wiring = load_local_observer_wiring(
-            descriptor_path,
-            var_dir=self._var_dir,
-            action_id=action.action_id,
-            expected_origin=facts.understanding.confirmed_endpoint,
-            expected_resource_id=action.setup.resource.actual_resource_id,
-        )
-        if wiring is None:
-            return facts, None
+        wiring = matches[0]
         return replace(
             facts,
             authority_fingerprint=_sha256(

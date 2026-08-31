@@ -19,8 +19,37 @@ export type OfficialExperienceDto = {
   repair_change_id: string | null
 }
 
+export type CompetitionValidationSummaryDto = {
+  schema_version: '1'
+  generated_at_us: number
+  suite: 'validation' | 'competition'
+  status: 'accepted'
+  repetitions: 1 | 3
+  case_count: number
+  case_run_count: number
+  application_count: number
+  mode_count: number
+  state_count: number
+  full_exact_match_count: number
+  full_wrong_pass_vulnerable: number
+  full_wrong_pass_evidence_gap: number
+  http_exact_match_count: number
+  http_wrong_pass_vulnerable: number
+  http_wrong_pass_evidence_gap: number
+  http_wrong_pass_per_matrix: number
+  source_revision: string | null
+  source_dirty: boolean | null
+}
+
+export type CompetitionValidationSummaryViewDto = {
+  available: boolean
+  unavailable_reason: string | null
+  summary: CompetitionValidationSummaryDto | null
+}
+
 export const experienceApi = {
   status: () => request<OfficialExperienceDto>('/api/experience/official-sample'),
+  validationSummary: () => request<CompetitionValidationSummaryViewDto>('/api/experience/official-sample/validation-summary'),
   start: (experienceMode: OfficialExperienceMode) =>
     request<OfficialExperienceDto>('/api/experience/official-sample/start', {
       method: 'POST',

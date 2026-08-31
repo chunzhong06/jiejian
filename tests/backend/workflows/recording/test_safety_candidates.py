@@ -30,6 +30,8 @@ from product.backend.workflows.context import ApplicationCore
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.workflows.recording.processing import FlowDraftProcessor
 from product.backend.workflows.recording.review import FlowDraftReviewer
+from product.backend.workflows.recording.safety_setup import ConfirmActionSafetySetup
+from product.backend.core.verification.permissions import SecurityEffectKind
 from product.protocols import (
     ConfirmFlowDraftResource,
     ConfirmFlowDraftTarget,
@@ -108,11 +110,58 @@ def test_candidates_are_deterministic_before_confirmation(
         core.close()
 
 
-def _persist_completed_recording(core: ApplicationCore, secret_ref: str) -> None:
-    events = _recording_events()
+def test_read_action_uses_target_response_for_disclosure_proof_setup(
+    tmp_path: Path,
+) -> None:
+    store = _FakeSecretStore()
+    secret_ref = f"cred:jiejian/test-identity/{PROJECT_ID}/{IDENTITY_ID}/bearer"
+    store.write(secret_ref, "opaque-test-state")
+    core = ApplicationCore(
+        tmp_path / "var",
+        secret_store=store,
+        clock_us=lambda: NOW_US + 100,
+    )
+    try:
+        _persist_completed_recording(core, secret_ref, read_action=True)
+        preview = core.action_safety_setup.preview(RECORDING_ID)
+
+        assert preview.state_changing is False
+        assert len(preview.observation_candidates) == 1
+        assert preview.observation_candidates[0].source_recording_id == RECORDING_ID
+        assert preview.observation_candidates[0].method == "GET"
+        assert preview.recovery_candidates == ()
+        assert len(preview.security_effect_candidates) == 1
+        effect = preview.security_effect_candidates[0]
+        assert effect.kind is SecurityEffectKind.DATA_DISCLOSURE
+        assert effect.protected_fields == ("materials", "project_id")
+
+        confirmed = core.action_safety_setup.confirm(
+            RECORDING_ID,
+            ConfirmActionSafetySetup(
+                logical_name="日常协作资料",
+                resource_type="项目",
+            ),
+        )
+        assert confirmed.ready is True
+        assert confirmed.recovery_status == "NOT_REQUIRED"
+        assert confirmed.confirmed_setup is not None
+        assert confirmed.confirmed_setup.effect is not None
+        assert confirmed.confirmed_setup.effect.kind is SecurityEffectKind.DATA_DISCLOSURE
+    finally:
+        core.close()
+
+
+def _persist_completed_recording(
+    core: ApplicationCore,
+    secret_ref: str,
+    *,
+    read_action: bool = False,
+) -> None:
+    events = _recording_events(read_action=read_action)
+    flow_id = "view-owner-resource" if read_action else "modify-owner-resource"
     draft = FlowDraftProcessor().build(
         recording_id=RECORDING_ID,
-        flow_id="modify-owner-resource",
+        flow_id=flow_id,
         action_candidate_id=ACTION_ID,
         events=events,
     )
@@ -185,7 +234,7 @@ def _persist_completed_recording(core: ApplicationCore, secret_ref: str) -> None
                 updated_at_us=NOW_US,
             )
         )
-        work.application_understanding.add(_understanding())
+        work.application_understanding.add(_understanding(read_action=read_action))
         work.test_identities.add(
             TestIdentity(
                 identity_id=IDENTITY_ID,
@@ -208,7 +257,7 @@ def _persist_completed_recording(core: ApplicationCore, secret_ref: str) -> None
         work.recordings.add(
             RecordingRecord.from_domain(
                 recording,
-                flow_id="modify-owner-resource",
+                flow_id=flow_id,
                 browser_events=events,
             )
         )
@@ -248,7 +297,7 @@ def _persist_completed_recording(core: ApplicationCore, secret_ref: str) -> None
     )
 
 
-def _understanding() -> ApplicationUnderstanding:
+def _understanding(*, read_action: bool = False) -> ApplicationUnderstanding:
     return ApplicationUnderstanding(
         project_id=PROJECT_ID,
         source_root="D:/sample",
@@ -274,10 +323,10 @@ def _understanding() -> ApplicationUnderstanding:
         action_candidates=(
             ActionCandidate(
                 candidate_id=ACTION_ID,
-                canonical_key="modify_owner_resource",
-                display_name="修改所有者资源",
+                canonical_key=("view_owner_resource" if read_action else "modify_owner_resource"),
+                display_name=("查看所有者资源" if read_action else "修改所有者资源"),
                 confidence=CandidateConfidence.HIGH,
-                risk_hint=ActionRiskHint.WRITE,
+                risk_hint=(ActionRiskHint.READ if read_action else ActionRiskHint.WRITE),
                 decision=CandidateDecision.CONFIRMED,
                 origin=CandidateOrigin.MANUAL,
             ),
@@ -309,16 +358,26 @@ def _recording_state_events() -> tuple[RecordingStateEvent, ...]:
     )
 
 
-def _recording_events() -> tuple[RecordingEvent, ...]:
-    requests = (
-        ("PATCH", "request_000001", '{"value":"changed"}'),
-        ("GET", "request_000002", None),
-        ("PATCH", "request_000003", '{"value":"original"}'),
-        ("GET", "request_000004", None),
-    )
+def _recording_events(*, read_action: bool = False) -> tuple[RecordingEvent, ...]:
+    if read_action:
+        requests = (
+            (
+                "GET",
+                "request_000001",
+                None,
+                '{"project_id":"owner-resource","materials":[{"name":"说明"}]}',
+            ),
+        )
+    else:
+        requests = (
+            ("PATCH", "request_000001", '{"value":"changed"}', "{}"),
+            ("GET", "request_000002", None, '{"state":"changed"}'),
+            ("PATCH", "request_000003", '{"value":"original"}', "{}"),
+            ("GET", "request_000004", None, '{"state":"original"}'),
+        )
     events: list[RecordingEvent] = []
     sequence = 1
-    for method, request_id, body in requests:
+    for method, request_id, body, response_body in requests:
         events.append(
             RecordingEvent(
                 sequence=sequence,
@@ -346,13 +405,7 @@ def _recording_events() -> tuple[RecordingEvent, ...]:
                 request_id=request_id,
                 url="http://127.0.0.1:18080/resources/owner-resource",
                 status_code=200,
-                body=(
-                    '{"state":"changed"}'
-                    if request_id == "request_000002"
-                    else '{"state":"original"}'
-                    if request_id == "request_000004"
-                    else "{}"
-                ),
+                body=response_body,
             )
         )
         sequence += 1

@@ -351,6 +351,20 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 return
             self._json(HTTPStatus.OK, self.server.storage.project_detail())
             return
+        if path == f"/api/projects/{PROJECT_ID}/collaboration":
+            account = self._session_account()
+            if account is None:
+                return
+            if self.server.storage.member_role(account) is None:
+                self._forbidden("PROJECT_MEMBER_REQUIRED")
+                return
+            # 该端点只承载成员日常查看能力，避免把导出任务状态误当成
+            # DATA_DISCLOSURE 的受保护内容。
+            self._json(
+                HTTPStatus.OK,
+                self.server.storage.collaboration_materials(),
+            )
+            return
         if path.startswith(f"/api/projects/{PROJECT_ID}/exports/"):
             account = self._session_account()
             if account is None:

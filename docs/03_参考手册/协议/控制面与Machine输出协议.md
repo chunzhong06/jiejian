@@ -19,9 +19,9 @@ ApplicationCore / Published facts
 
 ## ProductStatus 与 GUI
 
-`ProductStatus` 只读汇总当前项目、六步准备状态、唯一下一步、活动任务和最近可信结果，不保存独立“向导进度”。浏览器本地状态只记当前选择和页面；刷新后由 API 恢复权威事实。Workbench 不常驻显示产品版本，产品版本在 `/settings/system` 等明确诊断位置展示。
+`ProductStatus` 只读汇总当前项目、六个长期工作区区域、全部待办、最近 Agent 变化和最近可信结果，不保存独立“向导进度”或唯一下一步。区域状态只表达当前事实是否可用、需处理、运行中、已有结果或暂无数据；多个缺口可以并列。浏览器本地状态只记当前选择和页面；刷新后由 API 恢复权威事实。Workbench 不常驻显示产品版本，产品版本在 `/settings/system` 等明确诊断位置展示。
 
-GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.8。
+GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.9。
 
 ## CLI Human 与 Machine
 

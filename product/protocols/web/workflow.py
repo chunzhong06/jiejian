@@ -61,6 +61,7 @@ class ResetStrategyKind(StrEnum):
     RESET_ENDPOINT = "RESET_ENDPOINT"
     UNIQUE_RESOURCE_WORKFLOW = "UNIQUE_RESOURCE_WORKFLOW"
     SNAPSHOT_PROVIDER = "SNAPSHOT_PROVIDER"
+    NOT_REQUIRED = "NOT_REQUIRED"
 
 
 class BaselineIntegrityMode(StrEnum):
@@ -101,8 +102,15 @@ class SnapshotProviderResetStrategy(ProtocolModel):
     provider_ref: str = Field(pattern=r"^[a-z][a-z0-9_.:-]{0,127}$")
 
 
+class ResetNotRequiredStrategy(ProtocolModel):
+    kind: Literal[ResetStrategyKind.NOT_REQUIRED] = ResetStrategyKind.NOT_REQUIRED
+
+
 ResetStrategy: TypeAlias = Annotated[
-    ResetEndpointStrategy | UniqueResourceWorkflowResetStrategy | SnapshotProviderResetStrategy,
+    ResetEndpointStrategy
+    | UniqueResourceWorkflowResetStrategy
+    | SnapshotProviderResetStrategy
+    | ResetNotRequiredStrategy,
     Field(discriminator="kind"),
 ]
 
@@ -185,6 +193,11 @@ class HttpWorkflowBinding(ProtocolModel):
             raise ValueError("logical resource slots must be unique")
         if len({item.projection_id for item in self.baseline_projections}) != len(self.baseline_projections):
             raise ValueError("baseline projections must be unique")
+        if self.reset_strategy.kind is ResetStrategyKind.NOT_REQUIRED:
+            if any(step.purpose is WorkflowStepPurpose.CLEANUP for step in self.steps):
+                raise ValueError("NOT_REQUIRED reset strategy cannot contain cleanup steps")
+            if any(step.request_template.method not in {"GET", "HEAD"} for step in self.steps):
+                raise ValueError("NOT_REQUIRED reset strategy only supports read-only workflow steps")
         graph = {step.id: set(step.depends_on_step_ids) for step in self.steps}
         if any(dependency not in graph or dependency == step_id for step_id, dependencies in graph.items() for dependency in dependencies):
             raise ValueError("workflow dependency reference is invalid")

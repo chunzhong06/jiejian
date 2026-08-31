@@ -23,7 +23,7 @@ from scripts.dev.sample_test import official
 ROOT = Path(__file__).parents[2]
 BUILDER_PATH = ROOT / "scripts" / "build" / "portable.py"
 ARTIFACT_ROOT = ROOT / "var" / "development" / "release" / "artifacts"
-RELEASE_NAME = "JieJian-WebV1-1.0.8-Windows-x64"
+RELEASE_NAME = "JieJian-WebV1-1.0.9-Windows-x64"
 
 
 def _load_module(path: Path, name: str) -> ModuleType:
@@ -47,7 +47,7 @@ def _driver() -> ModuleType:
 def test_portable_launcher_is_relative_offline_and_uses_installed_product() -> None:
     builder = _builder()
 
-    assert builder.RELEASE_VERSION == "1.0.8"
+    assert builder.RELEASE_VERSION == "1.0.9"
     assert builder.RELEASE_NAME == RELEASE_NAME
     assert "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" in builder._START_CMD
     assert "%~dp0" in builder._START_CMD
@@ -85,7 +85,7 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
         base,
         {
             "python_version": "3.13.13",
-            "wheel_version": "1.0.8",
+            "wheel_version": "1.0.9",
             "playwright_version": "1.58.0",
             "chromium_revision": "1228",
         },
@@ -101,8 +101,8 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
     assert release == {
         "schema_version": "1",
         "product": "JieJian Web V1",
-        "version": "1.0.8",
-        "package_version": "1.0.8",
+        "version": "1.0.9",
+        "package_version": "1.0.9",
         "platform": "windows",
         "architecture": "x64",
         "runtime_layout_version": "1",
@@ -148,7 +148,7 @@ def test_portable_tree_rejects_repository_paths_and_local_wheel_metadata(tmp_pat
         builder._validate_tree_content(base, ROOT)
 
     leaked.unlink()
-    direct_url = site_packages / "jiejian-1.0.8.dist-info" / "direct_url.json"
+    direct_url = site_packages / "jiejian-1.0.9.dist-info" / "direct_url.json"
     direct_url.parent.mkdir()
     direct_url.write_text("{}", encoding="ascii")
     with pytest.raises(RuntimeError, match="direct_url"):
@@ -164,7 +164,7 @@ def test_portable_runtime_prunes_dependency_tests_and_generated_python_artifacts
     dependency_tests = site_packages / "dependency" / "tests"
     dependency_tests.mkdir(parents=True)
     (dependency_tests / "test_runtime.py").write_text("raise AssertionError", encoding="utf-8")
-    metadata = site_packages / "jiejian-1.0.8.dist-info"
+    metadata = site_packages / "jiejian-1.0.9.dist-info"
     metadata.mkdir()
     (metadata / "direct_url.json").write_text("{}", encoding="ascii")
     cache = site_packages / "dependency" / "__pycache__"
@@ -235,12 +235,12 @@ def _accept_full_delivery(
     state,
     identities: dict[str, str],
 ) -> int:
-    """在 full Portable 内完成六步主流程和一次真实 BLOCK 代表性检查。"""
+    """在 full Portable 内完成持续验证主流程和一次真实 BLOCK 代表性检查。"""
 
     experience = driver._start_guided_experience(page, client, audit_dir, state)
     project_id = str(experience["project_id"])
     sample_port = int(str(experience["origin"]).rsplit(":", 1)[1])
-    role_ids, action_id = driver._confirm_understanding(client, project_id)
+    role_ids, action_ids = driver._confirm_understanding(client, project_id)
     page.goto(client.origin + "/#/application", wait_until="networkidle")
     page.get_by_role("heading", name="应用接入").wait_for()
 
@@ -254,20 +254,32 @@ def _accept_full_delivery(
     recording_id = driver._record_flow(
         client,
         project_id,
-        action_id,
+        action_ids[driver.EXPORT_ACTION_KEY],
         identities["project_owner"],
         _portable_chromium(release),
         state,
     )
-    driver._confirm_safety(
+    driver._confirm_safety(client, recording_id)
+    view_recording_id = driver._record_flow(
         client,
-        recording_id,
+        project_id,
+        action_ids[driver.VIEW_ACTION_KEY],
         identities["project_owner"],
+        _portable_chromium(release),
+        state,
+        flow_kind="view",
     )
+    driver._confirm_safety(client, view_recording_id, flow_kind="view")
 
-    driver._confirm_permissions(client, project_id, action_id, role_ids)
-    page.goto(client.origin + "/#/check", wait_until="networkidle")
-    page.get_by_role("heading", name="权限与检查").wait_for()
+    driver._confirm_permissions(
+        page,
+        client,
+        audit_dir,
+        project_id,
+        action_ids,
+        role_ids,
+    )
+    page.get_by_role("heading", name="验证运行").wait_for()
     result = driver._run_case(
         client,
         project_id,
@@ -278,6 +290,7 @@ def _accept_full_delivery(
         blob_observation="AVAILABLE",
         expected_verdict="BLOCK",
         expected_issue="VULNERABLE",
+        action_ids=action_ids,
     )
 
     page.goto(client.origin + "/#/results", wait_until="networkidle")
@@ -333,7 +346,7 @@ def _smoke_archive(driver: ModuleType, archive: Path, root: Path, *, samples: bo
         client.bind_page(page)
         sample_status = client.call("GET", "/api/experience/official-sample")
         assert sample_status["available"] is samples
-        sample_button = page.get_by_role("button", name="评委导览")
+        sample_button = page.get_by_role("button", name="启动官方示例")
         assert sample_button.is_disabled() is (not samples)
         if samples:
             sample_port = _accept_full_delivery(

@@ -168,9 +168,17 @@ class RecordingWindowDriver:
         if self._window is None:
             raise WindowsL5Error("RECORDING_WINDOW_NOT_FOUND")
         _invoke_button(self._window, "进入项目")
-        _invoke_button(self._window, "生成完整资料包")
-        _wait_text(self._window, "完整项目资料包已生成。", timeout=20)
+        _invoke_button(self._window, "生成完整交付包")
+        _wait_text(self._window, "完整项目交付包已生成。", timeout=20)
         _invoke_button(self._window, "撤销本次导出")
         _invoke_button(self._window, "确认撤销")
         _wait_text(self._window, "已撤销", timeout=15)
-        _wait_control(self._window, "重新生成资料包", "Button", timeout=15)
+        _wait_control(self._window, "重新生成交付包", "Button", timeout=15)
+
+    def run_view_flow(self) -> None:
+        """进入项目并等待日常资料渲染，让页面自己的 GET 成为录制目标。"""
+
+        if self._window is None:
+            raise WindowsL5Error("RECORDING_WINDOW_NOT_FOUND")
+        _invoke_button(self._window, "进入项目")
+        _wait_text(self._window, "项目资料", timeout=15)

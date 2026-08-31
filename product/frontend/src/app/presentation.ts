@@ -3,9 +3,12 @@
 export type AppRoute =
   | '/workspace'
   | '/application'
+  | '/changes'
+  | '/permissions'
+  | '/preparation'
   | '/identities'
   | '/flows'
-  | '/check'
+  | '/validation'
   | '/results'
   | '/verification'
   | '/history'
@@ -13,23 +16,21 @@ export type AppRoute =
   | '/settings/models'
   | '/settings/system'
 
-export type ProcessRoute = Exclude<AppRoute, '/workspace' | '/verification' | '/tools' | '/settings/models' | '/settings/system'>
-export type ProcessStepState = 'complete' | 'current' | 'upcoming'
+export type ProductAreaRoute = '/workspace' | '/changes' | '/permissions' | '/preparation' | '/validation' | '/results'
 
-export const processSteps = [
-  { route: '/application', label: '应用接入', shortLabel: '接入', description: '连接应用并确认权限组和业务动作' },
-  { route: '/identities', label: '测试账号', shortLabel: '账号', description: '准备受控测试身份' },
-  { route: '/flows', label: '业务流程', shortLabel: '流程', description: '录制真实操作并确认恢复方式' },
-  { route: '/check', label: '权限与检查', shortLabel: '检查', description: '确认权限期望并开始受控检查' },
-  { route: '/results', label: '检查结果', shortLabel: '结果', description: '查看真实影响、结论与证据' },
-  { route: '/history', label: '历史变化', shortLabel: '历史', description: '比较问题的出现、持续与消失' },
+export const productAreas = [
+  { route: '/workspace', label: '项目概览', shortLabel: '概览' },
+  { route: '/changes', label: '变化与待办', shortLabel: '变化' },
+  { route: '/permissions', label: '权限规则', shortLabel: '规则' },
+  { route: '/preparation', label: '测试准备', shortLabel: '准备' },
+  { route: '/validation', label: '验证运行', shortLabel: '验证' },
+  { route: '/results', label: '结果与历史', shortLabel: '结果' },
 ] as const
 
 export function normalizeRoute(pathname: string): AppRoute {
-  if (pathname === '/workspace') return pathname
-  if (pathname === '/verification') return pathname
+  if (productAreas.some((area) => area.route === pathname)) return pathname as ProductAreaRoute
+  if (pathname === '/application' || pathname === '/identities' || pathname === '/flows' || pathname === '/verification' || pathname === '/history') return pathname
   if (pathname === '/tools' || pathname === '/settings/models' || pathname === '/settings/system') return pathname
-  if (processSteps.some((step) => step.route === pathname)) return pathname as ProcessRoute
   return '/workspace'
 }
 

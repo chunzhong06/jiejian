@@ -296,6 +296,25 @@ class SourceChangeRepository:
         )
         return None if row is None else self._assessment(row)
 
+    def list_assessments(
+        self,
+        project_id: str,
+        *,
+        limit: int = 50,
+    ) -> tuple[ChangeImpactAssessment, ...]:
+        """按新到旧读取项目代码变化；调用者负责补齐同一聚合的声明和真实差异。"""
+
+        rows = self._session.scalars(
+            select(ChangeImpactAssessmentRow)
+            .where(ChangeImpactAssessmentRow.project_id == project_id)
+            .order_by(
+                ChangeImpactAssessmentRow.created_at_us.desc(),
+                ChangeImpactAssessmentRow.change_id.desc(),
+            )
+            .limit(limit)
+        ).all()
+        return tuple(self._assessment(row) for row in rows)
+
     @staticmethod
     def _snapshot(row: SourceRevisionSnapshotRow) -> SourceRevisionSnapshot:
         try:

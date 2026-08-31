@@ -20,6 +20,10 @@ from product.backend.core.verification.permissions.evaluation import (
     CaseDecisionInput,
     evaluate_permission_case,
 )
+from product.backend.core.verification.permissions import (
+    SecurityEffectDefinition,
+    SecurityEffectKind,
+)
 from product.backend.infra.execution.port import TargetRuntimeContext
 from product.backend.infra.execution.web.runtime import WebTargetRuntimeFactory
 from product.protocols import (
@@ -460,6 +464,96 @@ def test_web_runtime_cleanup_is_still_attempted_after_target_error(
             runtime.close()
         assert "/workflow-cleanup" in server.events  # type: ignore[attr-defined]
         assert "/reset" in server.events  # type: ignore[attr-defined]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_web_runtime_read_only_workflow_does_not_send_reset_request(
+    tmp_path: Path,
+) -> None:
+    server, thread = _server()
+    try:
+        document = _document(server.server_port)
+        snapshot = document.project_snapshot
+        read_step = HttpWorkflowStep(
+            id="read-project",
+            purpose=WorkflowStepPurpose.TARGET,
+            identity_id=CASE_SUBJECT_IDENTITY,
+            request_template=HttpRequestTemplate(
+                method="GET",
+                path="/owner/resources/document",
+            ),
+            classifier=HttpOutcomeClassifier(
+                accepted=(
+                    HttpPredicate(
+                        kind=HttpPredicateKind.STATUS_IN,
+                        statuses=(200,),
+                    ),
+                ),
+            ),
+        )
+        read_workflow = HttpWorkflowBinding(
+            workflow_id="read-project-workflow",
+            source_flow_id="read-project-flow",
+            action_id=snapshot.contract.actions[0].action_id,
+            steps=(read_step,),
+            target_step_id=read_step.id,
+            reset_strategy={"kind": "NOT_REQUIRED"},
+        )
+        read_snapshot = snapshot.model_copy(
+            update={"workflow_bindings": (read_workflow,)}
+        )
+        runtime = WebTargetRuntimeFactory().create(
+            read_snapshot,
+            TargetRuntimeContext(
+                environ={
+                    "JIEJIAN_TEST_TOKEN": "subject-secret",
+                    "OWNER_READ_ONLY": "owner-secret",
+                },
+                staging=tmp_path / "read-staging",
+                clock=iter(range(100, 200)).__next__,
+                cancellation_requested=lambda: False,
+            ),
+        )
+        session = runtime.open_case(
+            read_snapshot.plan.cases[0],
+            read_snapshot.contract.actions[0],
+        )
+        try:
+            session.prepare()
+            baseline = _owner_observation(
+                session,
+                document.model_copy(update={"project_snapshot": read_snapshot}),
+                read_snapshot.plan.cases[0],
+                ObservationPhase.BASELINE,
+            )
+            result = session.execute_target()
+            assert result.outcome.value == "ACCEPTED"
+            disclosure = session.build_disclosure_proof(
+                SecurityEffectDefinition(
+                    effect_id=read_snapshot.contract.effects[0].effect_id,
+                    kind=SecurityEffectKind.DATA_DISCLOSURE,
+                    resource_type="document",
+                    protected_fields=("approved", "exists"),
+                ),
+                read_snapshot.plan.cases[0].resource_ids[0],
+                (baseline,),
+            )
+            assert disclosure is not None
+            assert disclosure.projection_complete is True
+            assert disclosure.matched is True
+        finally:
+            session.cleanup()
+            runtime.close()
+
+        assert "/reset" not in server.events  # type: ignore[attr-defined]
+        assert server.events == [  # type: ignore[attr-defined]
+            "/login",
+            "/owner/resources/document",
+            "/owner/resources/document",
+        ]
     finally:
         server.shutdown()
         server.server_close()

@@ -38,6 +38,7 @@ from product.backend.core.verification.permissions import (
     RelationType,
     ResourceDefinition,
     SecurityEffectDefinition,
+    SecurityEffectKind,
     SubjectDefinition,
 )
 from product.backend.infra.storage import ExecutionProfileRecord, StorageUnitOfWork
@@ -154,10 +155,17 @@ class ContractBuilderMixin:
                 sources=(self._source(facts),),
                 actor=actor,
             )
-        observations = (
-            local_wiring.required_channels
-            if local_wiring is not None
-            else tuple(_observation_requirement(item.action_id) for item in facts.actions)
+        observations = tuple(
+            sorted(
+                (
+                    *(local_wiring.required_channels if local_wiring is not None else ()),
+                    *(
+                        _observation_requirement(item.action_id)
+                        for item in facts.actions
+                        if local_wiring is None or item.action_id != local_wiring.action_id
+                    ),
+                )
+            )
         )
         reviewed = self._contracts.submit_review(
             facts.project.project_id,
@@ -278,15 +286,18 @@ class ContractBuilderMixin:
                 for item in action.intents
                 if item.expectation is PermissionExpectation.DENY
             )
-            if not allow_intents or not deny_intents:
+            if not allow_intents or (
+                not deny_intents
+                and effect.kind is not SecurityEffectKind.DATA_DISCLOSURE
+            ):
                 raise JiejianError(
                     ErrorCode.STATE_PRECONDITION,
                     "业务动作必须同时确认一个允许主体和一个拒绝主体",
                     details={"action_id": action.action_id},
                 )
-            # 现有 Coverage 会把关系维度从 ALLOW 基线变异为 DENY Case。
-            # DENY Intent 因此作为已确认候选主体参与计划，不能再生成一条
-            # 自身也要求额外关系变异的重复规则，否则会制造伪 coverage gap。
+            # 具备明确 DENY 的动作继续用关系变异形成孪生考题；只有
+            # DATA_DISCLOSURE 可以把已确认 ALLOW 作为独立非回归 Case，
+            # 避免为了证明合法读取而虚构第三个拒绝角色。
             control = next(
                 (
                     item
@@ -298,18 +309,20 @@ class ContractBuilderMixin:
             )
             relation_path = (owns.relation_id,)
             if control.subject_test_identity_id != setup.resource.owner_test_identity_id:
-                scope = _relation(
-                    RelationType.SAME_TENANT,
+                membership = _relation(
+                    RelationType.MEMBER_OF,
                     control.subject_test_identity_id,
                     "subject",
-                    setup.resource.owner_test_identity_id,
-                    "subject",
+                    actual_resource_id,
+                    "resource",
                 )
-                relations[scope.relation_id] = scope
-                relation_path = (scope.relation_id, owns.relation_id)
+                # 成员能力只绑定当前协作资源，不能经所有者主体外溢到其余资源。
+                relations[membership.relation_id] = membership
+                relation_path = (membership.relation_id,)
             required_observations = (
                 local_wiring.required_channels
                 if local_wiring is not None
+                and action.action_id == local_wiring.action_id
                 else (_observation_requirement(action.action_id),)
             )
             rules.append(
@@ -322,7 +335,11 @@ class ContractBuilderMixin:
                     context=PermissionContext(resource_ids=(actual_resource_id,)),
                     expectation=PermissionExpectation.ALLOW,
                     required_observations=required_observations,
-                    coverage_dimensions=(CoverageDimension.RELATION,),
+                    coverage_dimensions=(
+                        (CoverageDimension.RELATION,)
+                        if deny_intents
+                        else ()
+                    ),
                     severity="critical",
                 )
             )

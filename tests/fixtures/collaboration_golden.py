@@ -58,6 +58,7 @@ from tests.fixtures.control_plane import TestClient
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2] / "samples" / "web"
 EXPORT_ACTION_KEY = "POST /api/projects/{project_id}/exports"
+VIEW_ACTION_KEY = "GET /api/projects/{project_id}/collaboration"
 COOKIE_NAME = "jiejian_sample_session"
 
 
@@ -188,25 +189,28 @@ def prepare_formal_project(
         role_ids[key] = role["candidate_id"]
     assert set(role_ids) == set(role_labels)
 
-    action_id = ""
+    action_labels = {
+        EXPORT_ACTION_KEY: "导出完整项目交付包",
+        VIEW_ACTION_KEY: "查看日常协作资料",
+    }
+    action_ids: dict[str, str] = {}
     for action in understanding["action_candidates"]:
-        selected = action["canonical_key"] == EXPORT_ACTION_KEY
+        canonical_key = action["canonical_key"]
+        selected = canonical_key in action_labels
         decided = client.put(
             f"/api/projects/{project_id}/actions/{action['candidate_id']}",
             json={
                 "schema_version": "1",
                 "decision": "CONFIRMED" if selected else "REJECTED",
-                "display_name": (
-                    "导出完整项目资料包" if selected else action["display_name"]
-                ),
+                "display_name": action_labels.get(canonical_key, action["display_name"]),
                 "revision": revision,
             },
         )
         assert decided.status_code == 200, decided.text
         revision = decided.json()["data"]["revision"]
         if selected:
-            action_id = action["candidate_id"]
-    assert action_id
+            action_ids[canonical_key] = action["candidate_id"]
+    assert set(action_ids) == set(action_labels)
 
     identity_ids: dict[str, str] = {}
     for account, role_key in (
@@ -250,7 +254,7 @@ def prepare_formal_project(
     recording_id = _persist_export_recording(
         core,
         project_id=project_id,
-        action_id=action_id,
+        action_id=action_ids[EXPORT_ACTION_KEY],
         alice_id=identity_ids["alice"],
         endpoint=endpoint,
     )
@@ -287,6 +291,49 @@ def prepare_formal_project(
     assert confirmed_setup.status_code == 200, confirmed_setup.text
     assert confirmed_setup.json()["data"]["automatic_execution_allowed"] is True
 
+    view_recording_id = _persist_view_recording(
+        core,
+        project_id=project_id,
+        action_id=action_ids[VIEW_ACTION_KEY],
+        alice_id=identity_ids["alice"],
+        endpoint=endpoint,
+    )
+    view_safety = client.get(f"/api/recordings/{view_recording_id}/safety-setup")
+    assert view_safety.status_code == 200, view_safety.text
+    view_setup = view_safety.json()["data"]
+    view_resource = next(
+        item
+        for item in view_setup["resource_candidates"]
+        if item["actual_resource_id"] == "collaboration"
+        and item["consumer"] == "PATH"
+    )
+    view_observation = next(
+        item for item in view_setup["observation_candidates"] if item["method"] == "GET"
+    )
+    view_effect = next(
+        item
+        for item in view_setup["security_effect_candidates"]
+        if item["kind"] == "DATA_DISCLOSURE"
+    )
+    assert view_effect["protected_fields"] == [
+        "materials",
+        "members",
+        "name",
+        "project_id",
+    ]
+    confirmed_view_setup = client.put(
+        f"/api/recordings/{view_recording_id}/safety-setup",
+        json={
+            "schema_version": "1",
+            "resource_candidate_id": view_resource["candidate_id"],
+            "logical_name": "校园数字展馆日常协作资料",
+            "resource_type": "项目",
+            "observation_candidate_id": view_observation["candidate_id"],
+        },
+    )
+    assert confirmed_view_setup.status_code == 200, confirmed_view_setup.text
+    assert confirmed_view_setup.json()["data"]["automatic_execution_allowed"] is True
+
     for subject_role, relation, expectation in (
         (role_ids["project_owner"], "OWNS", "ALLOW"),
         (role_ids["member"], "OTHER_ROLE", "DENY"),
@@ -296,7 +343,7 @@ def prepare_formal_project(
             json={
                 "schema_version": "1",
                 "target": {
-                    "action_candidate_id": action_id,
+                    "action_candidate_id": action_ids[EXPORT_ACTION_KEY],
                     "subject_role_candidate_id": subject_role,
                     "resource_owner_role_candidate_id": role_ids["project_owner"],
                     "relation": relation,
@@ -305,9 +352,25 @@ def prepare_formal_project(
             },
         )
         assert response.status_code == 200, response.text
+    view_permission = client.post(
+        f"/api/projects/{project_id}/permission-intents/approvals",
+        json={
+            "schema_version": "1",
+            "target": {
+                "action_candidate_id": action_ids[VIEW_ACTION_KEY],
+                "subject_role_candidate_id": role_ids["member"],
+                "resource_owner_role_candidate_id": role_ids["project_owner"],
+                "relation": "OTHER_ROLE",
+            },
+            "expectation": "ALLOW",
+        },
+    )
+    assert view_permission.status_code == 200, view_permission.text
     return {
         "project_id": project_id,
-        "action_id": action_id,
+        "action_id": action_ids[EXPORT_ACTION_KEY],
+        "export_action_id": action_ids[EXPORT_ACTION_KEY],
+        "view_action_id": action_ids[VIEW_ACTION_KEY],
         "alice_id": identity_ids["alice"],
         "bob_id": identity_ids["bob"],
     }
@@ -323,7 +386,6 @@ def _persist_export_recording(
 ) -> str:
     now_us = time.time_ns() // 1_000
     recording_id = f"rec_{uuid4().hex}"
-    job_id = f"job_{uuid4().hex}"
     events = _recording_events(endpoint, alice_id, now_us)
     draft = FlowDraftProcessor().build(
         recording_id=recording_id,
@@ -369,6 +431,95 @@ def _persist_export_recording(
             candidate_id=resource.candidate_id,
         ),
     )
+    return _persist_completed_recording(
+        core,
+        project_id=project_id,
+        action_id=action_id,
+        identity_id=alice_id,
+        endpoint=endpoint,
+        recording_id=recording_id,
+        flow_id="collaboration-export-package",
+        events=events,
+        confirmed=confirmed,
+        now_us=now_us,
+    )
+
+
+def _persist_view_recording(
+    core,
+    *,
+    project_id: str,
+    action_id: str,
+    alice_id: str,
+    endpoint: str,
+) -> str:
+    """由 Alice 保存协作资料基线；正式 ALLOW Case 再让 Bob 读取。"""
+
+    now_us = time.time_ns() // 1_000
+    recording_id = f"rec_{uuid4().hex}"
+    events = _view_recording_events(endpoint, alice_id, now_us)
+    draft = FlowDraftProcessor().build(
+        recording_id=recording_id,
+        flow_id="collaboration-view-materials",
+        action_candidate_id=action_id,
+        events=events,
+    )
+    target_step = next(
+        step for step in draft.steps if step.request_id == "request_000001"
+    )
+    reviewer = FlowDraftReviewer()
+    targeted = reviewer.apply(
+        draft,
+        ConfirmFlowDraftTarget(
+            schema_version="1",
+            operation="CONFIRM_TARGET_STEP",
+            step_id=target_step.id,
+        ),
+    )
+    resource = next(
+        item
+        for item in target_step.resource_candidates
+        if item.consumer is ValueSlotConsumer.PATH
+        and item.location == "path[3]"
+    )
+    confirmed = reviewer.apply(
+        targeted,
+        ConfirmFlowDraftResource(
+            schema_version="1",
+            operation="CONFIRM_RESOURCE_SLOT",
+            candidate_id=resource.candidate_id,
+        ),
+    )
+    return _persist_completed_recording(
+        core,
+        project_id=project_id,
+        action_id=action_id,
+        identity_id=alice_id,
+        endpoint=endpoint,
+        recording_id=recording_id,
+        flow_id="collaboration-view-materials",
+        events=events,
+        confirmed=confirmed,
+        now_us=now_us,
+    )
+
+
+def _persist_completed_recording(
+    core,
+    *,
+    project_id: str,
+    action_id: str,
+    identity_id: str,
+    endpoint: str,
+    recording_id: str,
+    flow_id: str,
+    events: tuple[RecordingEvent, ...],
+    confirmed,
+    now_us: int,
+) -> str:
+    """通过同一正式存储边界发布已经审阅的录制，不跳过 Runner 请求凭据。"""
+
+    job_id = f"job_{uuid4().hex}"
     request = RecordingRunnerRequest(
         schema_version="1",
         recording_id=recording_id,
@@ -379,7 +530,7 @@ def _persist_export_recording(
         sessions=(
             core.recording_credentials.prepare(
                 project_id=project_id,
-                test_identity_id=alice_id,
+                test_identity_id=identity_id,
                 recording_id=recording_id,
                 session_ref=f"session_{uuid4().hex}",
                 now_us=now_us,
@@ -405,7 +556,7 @@ def _persist_export_recording(
         work.recordings.add(
             RecordingRecord.from_domain(
                 recording,
-                flow_id="collaboration-export-package",
+                flow_id=flow_id,
                 browser_events=events,
             )
         )
@@ -427,7 +578,7 @@ def _persist_export_recording(
                 recording_id=recording_id,
                 operation_type="BROWSER_RECORDING",
                 state=JobState.SUCCEEDED,
-                idempotency_key="collaboration-golden-recording",
+                idempotency_key=f"collaboration-golden-{flow_id}",
                 request_hash=request_hash,
                 attempt=0,
                 max_attempts=1,
@@ -445,6 +596,58 @@ def _persist_export_recording(
     )
     core.recording_credentials.clear(recording_id)
     return recording_id
+
+
+def _view_recording_events(
+    endpoint: str,
+    identity_id: str,
+    now_us: int,
+) -> tuple[RecordingEvent, ...]:
+    url = f"{endpoint}/api/projects/{SAMPLE_PROJECT_ID}/collaboration"
+    response_body = json.dumps(
+        {
+            "project_id": SAMPLE_PROJECT_ID,
+            "name": "校园数字展馆",
+            "members": [
+                {"user_id": "alice", "role": "PROJECT_OWNER"},
+                {"user_id": "bob", "role": "MEMBER"},
+            ],
+            "materials": [
+                {"name": "展馆项目申报说明", "kind": "APPLICATION_NOTE"},
+                {"name": "展陈视觉设计稿", "kind": "DESIGN_SOURCE"},
+                {"name": "项目预算摘要", "kind": "BUDGET_SUMMARY"},
+                {"name": "内部评审纪要", "kind": "REVIEW_NOTE"},
+            ],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return (
+        RecordingEvent(
+            sequence=1,
+            occurred_at_us=now_us + 11,
+            kind=RecordingEventKind.REQUEST,
+            identity_id=identity_id,
+            page_id="page_000001",
+            frame_id="frame_000001",
+            request_id="request_000001",
+            url=url,
+            method="GET",
+            resource_type="fetch",
+        ),
+        RecordingEvent(
+            sequence=2,
+            occurred_at_us=now_us + 12,
+            kind=RecordingEventKind.RESPONSE,
+            identity_id=identity_id,
+            page_id="page_000001",
+            frame_id="frame_000001",
+            request_id="request_000001",
+            url=url,
+            status_code=200,
+            body=response_body,
+        ),
+    )
 
 
 def _recording_events(

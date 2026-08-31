@@ -180,6 +180,7 @@ def test_report_snapshot_omits_result_page_only_evidence_source_projection(
         finding_id="finding_" + "c" * 32,
         title="成员账号不应导出项目资料",
         subject_group="成员账号",
+        action_id="export-project-package",
         action="导出",
         resource="项目资料",
         relation="受权限规则约束",

@@ -57,6 +57,7 @@ def _issue(verdict: PresentedCaseVerdict, occurrence_status: str) -> ResultPrese
         finding_id=FINDING_ID,
         title="成员账号不应对文档执行修改",
         subject_group="成员账号",
+        action_id="modify-document",
         action="修改",
         resource="文档",
         relation="拥有",

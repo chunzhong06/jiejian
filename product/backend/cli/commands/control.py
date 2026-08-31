@@ -1,4 +1,4 @@
-# CLI 精简控制面：只公开已接入应用、已批准检查、可信结果和历史的非交互入口。
+# CLI 持续验证控制面：公开应用、代码变化、检查和可信结果的非交互入口。
 
 from __future__ import annotations
 
@@ -22,21 +22,32 @@ def _dump(value: object) -> object:
     return value
 
 
-def _next_actions(status: object) -> list[dict[str, str]]:
-    action = status.next_action
-    return [{"action": action.action, "label": action.label, "route": action.route, "cli_command": action.cli_command}]
+def _attention_actions(status: object) -> list[dict[str, str]]:
+    return [
+        {
+            "action": item.key,
+            "label": item.label,
+            "route": item.route,
+        }
+        for item in status.attention_items
+    ]
 
 
 def status_command(
     context: typer.Context,
     project_id: str | None = typer.Option(None, "--project", help="明确选择应用"),
 ) -> None:
-    """查看产品准备状态、唯一下一步和最近可信结果。"""
+    """查看持续验证工作区、全部待办和最近可信结果。"""
 
     try:
         with application_scope(context) as application:
             status = application.product_status.get(project_id)
-        emit_command("status", status, next_actions=_next_actions(status), human=lambda: emit_status(status))
+        emit_command(
+            "status",
+            status,
+            next_actions=_attention_actions(status),
+            human=lambda: emit_status(status),
+        )
     except JiejianError as exc:
         fail(exc)
 
@@ -86,11 +97,14 @@ def application_show_command(context: typer.Context, project_id: str) -> None:
                 "permission_requirements_ready": readiness.active_contract_available,
                 "check_ready": readiness.current_scope_runnable,
             },
-            "next_step": {
-                "label": status.next_action.label,
-                "description": status.next_action.description,
-                "route": status.next_action.route,
-            },
+            "attention_items": [
+                {
+                    "label": item.label,
+                    "description": item.description,
+                    "route": item.route,
+                }
+                for item in status.attention_items
+            ],
         }
         emit_command(
             "application",
@@ -118,27 +132,74 @@ def application_remove_command(
         fail(exc)
 
 
-def check_preview_command(context: typer.Context, project_id: str) -> None:
+def source_change_list_command(
+    context: typer.Context,
+    project_id: str,
+    limit: int = typer.Option(20, "--limit", min=1, max=100, help="最多显示多少次变化"),
+) -> None:
+    """按新到旧查看 Agent 提交的代码变化及其权限影响。"""
+
+    try:
+        with application_scope(context) as application:
+            changes = application.source_changes.list_views(project_id, limit=limit)
+        emit_command(
+            "change-list",
+            _dump(changes),
+            human=lambda: _emit_source_changes(changes),
+        )
+    except JiejianError as exc:
+        fail(exc)
+
+
+def source_change_show_command(
+    context: typer.Context,
+    project_id: str,
+    change_id: str,
+) -> None:
+    """查看一次代码变化的真实差异摘要和重新确认范围。"""
+
+    try:
+        with application_scope(context) as application:
+            change = application.source_changes.view(change_id)
+        if change.project_id != project_id:
+            raise JiejianError(ErrorCode.INPUT_INVALID, "代码变化不属于当前应用")
+        emit_command(
+            "change",
+            change,
+            human=lambda: _emit_source_changes((change,)),
+        )
+    except JiejianError as exc:
+        fail(exc)
+
+
+def check_preview_command(
+    context: typer.Context,
+    project_id: str,
+    change_id: str | None = typer.Option(None, "--change", help="核对指定 Agent 代码变化"),
+) -> None:
     """只读预览当前已批准权限要求能否形成检查。"""
 
     try:
         with application_scope(context) as application:
-            result = application.checks.preview(project_id)
+            result = application.checks.preview(project_id, change_id=change_id)
         emit_command("check-preview", result)
     except JiejianError as exc:
         fail(exc)
 
 
-def check_prepare_command(context: typer.Context, project_id: str) -> None:
+def check_prepare_command(
+    context: typer.Context,
+    project_id: str,
+    change_id: str | None = typer.Option(None, "--change", help="为指定 Agent 代码变化准备检查"),
+) -> None:
     """调用正式编译器准备当前检查条件，并回读最新预览。"""
 
     try:
         with application_scope(context) as application:
-            compiled = application.security_setup.compile(project_id)
-            preview = application.checks.preview(project_id)
+            preview = application.checks.prepare(project_id, change_id=change_id)
         emit_command(
             "check-prepared",
-            {"preview": _dump(preview), "compilation": _dump(compiled)},
+            {"preview": _dump(preview)},
             human=lambda: typer.echo("检查条件已经准备好" if preview.ready else "检查条件仍有缺项"),
         )
     except JiejianError as exc:
@@ -177,6 +238,7 @@ def check_cancel_command(
 def check_run_command(
     context: typer.Context,
     project_id: str,
+    change_id: str | None = typer.Option(None, "--change", help="把指定 Agent 变化冻结到本次检查"),
 ) -> None:
     """按当前已确认事实提交检查，不接收内部执行配置路径。"""
 
@@ -185,6 +247,7 @@ def check_run_command(
             result, request, _ = application.checks.submit(
                 project_id,
                 idempotency_key=f"cli-{uuid4().hex}",
+                change_id=change_id,
             )
         emit_command(
             "check-submitted",
@@ -252,23 +315,42 @@ def history_command(
 
 
 def _emit_application_summary(summary: dict[str, object]) -> None:
-    """人类输出只保留当前应用事实和唯一下一步。"""
+    """人类输出保留当前应用事实和全部需要处理的事项。"""
 
     facts = summary["confirmed_business_facts"]
     preparation = summary["preparation"]
-    next_step = summary["next_step"]
+    attention_items = summary["attention_items"]
     assert isinstance(facts, dict)
     assert isinstance(preparation, dict)
-    assert isinstance(next_step, dict)
+    assert isinstance(attention_items, list)
     typer.echo(str(summary["name"]))
     typer.echo("")
     typer.echo(f"已确认权限组：{facts['permission_group_count']}")
     typer.echo(f"已确认关键业务动作：{facts['business_action_count']}")
     typer.echo(f"业务流程：{'已准备' if preparation['business_flow_ready'] else '待准备'}")
-    typer.echo(f"权限与检查：{'可开始' if preparation['check_ready'] else '仍需准备'}")
-    typer.echo("")
-    typer.echo(f"下一步：{next_step['label']}")
-    typer.echo(str(next_step["description"]))
+    typer.echo(f"当前范围：{'可以检查' if preparation['check_ready'] else '仍需准备'}")
+    if attention_items:
+        typer.echo("")
+        typer.echo("需要处理")
+        for item in attention_items:
+            assert isinstance(item, dict)
+            typer.echo(f"- {item['label']}：{item['description']}")
+
+
+def _emit_source_changes(changes: object) -> None:
+    """以业务影响为主展示代码变化，不输出源码正文和内部指纹。"""
+
+    rows = tuple(changes)
+    if not rows:
+        typer.echo("当前还没有 Agent 代码变化记录")
+        return
+    for change in rows:
+        typer.echo(f"{change.change_id}  {change.reason}")
+        typer.echo(f"  {change.summary}")
+        typer.echo(
+            "  实际文件变化："
+            f"新增 {change.added_count}，修改 {change.modified_count}，删除 {change.removed_count}"
+        )
 
 
 __all__ = [name for name in globals() if name.endswith("_command")]

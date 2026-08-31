@@ -157,6 +157,7 @@ def _spec(
 class LocalObserverWiring:
     """单一受限 Action 的本地六来源组合结果。"""
 
+    action_id: str
     descriptor_fingerprint: str
     observers: tuple[ObserverSpec, ...]
     bindings: tuple[ObserverRequirementBinding, ...]
@@ -171,6 +172,7 @@ def load_local_observer_wiring(
     action_id: str,
     expected_origin: str | None,
     expected_resource_id: str,
+    resource_mismatch_is_disabled: bool = False,
 ) -> LocalObserverWiring | None:
     """从受控环境路径构造本地观察组合；未启用时保留普通 Owner 配置。"""
 
@@ -200,6 +202,8 @@ def load_local_observer_wiring(
     if _ID.fullmatch(application_project_id) is None or _ID.fullmatch(application_resource_id) is None:
         raise _fail("本地观察环境描述项目或资源标识无效")
     if application_resource_id != expected_resource_id:
+        if resource_mismatch_is_disabled:
+            return None
         raise _fail("本地观察环境描述未绑定当前测试资源")
     if _origin(owner["origin"], expected=origin) != origin:
         raise _fail("所有者观察 origin 不一致")
@@ -272,6 +276,7 @@ def load_local_observer_wiring(
     )
     descriptor_fingerprint = hashlib.sha256(json.dumps(descriptor, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     return LocalObserverWiring(
+        action_id=action_id,
         descriptor_fingerprint=descriptor_fingerprint,
         observers=observers,
         bindings=bindings,

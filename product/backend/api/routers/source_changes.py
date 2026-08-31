@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from product.backend.api.envelope import ApiResponse, data_response
 from product.backend.core.errors import ErrorCode, JiejianError
@@ -13,6 +13,17 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
     """组合最近变化和指定变化两个只读入口。"""
 
     router = APIRouter()
+
+    @router.get(
+        "/api/projects/{project_id}/source-changes",
+        response_model=ApiResponse,
+    )
+    async def source_change_list(
+        project_id: str,
+        limit: int = Query(default=50, ge=1, le=100),
+    ):
+        views = context.source_changes.list_views(project_id, limit=limit)
+        return data_response([view.model_dump(mode="json") for view in views])
 
     @router.get(
         "/api/projects/{project_id}/source-changes/latest",

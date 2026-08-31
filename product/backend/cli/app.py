@@ -1,5 +1,5 @@
 # =============================================================================
-# Web V1 CLI 组合入口
+# 持续权限验证 CLI 组合入口
 #
 # 定位
 #   装配与 GUI 同步的普通任务命令树和本地维护入口。
@@ -33,6 +33,8 @@ from product.backend.cli.commands.control import (
     history_command,
     result_report_command,
     result_show_command,
+    source_change_list_command,
+    source_change_show_command,
     status_command,
 )
 from product.backend.cli.commands.system import (
@@ -61,6 +63,7 @@ app = typer.Typer(
 )
 application_group = typer.Typer(help="查看和移除已经接入的 Web 应用", invoke_without_command=True)
 check_group = typer.Typer(help="确认权限要求并提交检查", invoke_without_command=True)
+change_group = typer.Typer(help="查看 Agent 代码变化及其权限影响", invoke_without_command=True)
 result_group = typer.Typer(help="查看可信检查结果和报告", invoke_without_command=True)
 system_group = typer.Typer(help="检查运行环境和执行显式维护", invoke_without_command=True)
 
@@ -111,6 +114,7 @@ def _group_help(context: typer.Context) -> None:
 app.callback()(root)
 for group in (
     application_group,
+    change_group,
     check_group,
     result_group,
     system_group,
@@ -119,16 +123,19 @@ for group in (
     group.callback()(_group_help)
 
 app.add_typer(application_group, name="application", rich_help_panel="普通任务")
+app.add_typer(change_group, name="change", rich_help_panel="普通任务")
 app.add_typer(check_group, name="check", rich_help_panel="普通任务")
 app.add_typer(result_group, name="result", rich_help_panel="普通任务")
 app.add_typer(system_group, name="system", rich_help_panel="运行与维护")
-app.command("status", help="查看六步状态和唯一下一步", rich_help_panel="普通任务")(status_command)
+app.command("status", help="查看持续验证工作区和全部待办", rich_help_panel="普通任务")(status_command)
 app.command("serve", help="打开图形界面", rich_help_panel="图形界面")(serve_command)
 app.command("history", help="查看同一应用的历史变化", rich_help_panel="普通任务")(history_command)
 
 application_group.command("list")(application_list_command)
 application_group.command("show")(application_show_command)
 application_group.command("remove")(application_remove_command)
+change_group.command("list")(source_change_list_command)
+change_group.command("show")(source_change_show_command)
 check_group.command("prepare")(check_prepare_command)
 check_group.command("preview")(check_preview_command)
 check_group.command("run")(check_run_command)

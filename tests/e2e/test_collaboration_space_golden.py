@@ -121,15 +121,18 @@ def test_three_state_golden_uses_real_sample_observers_and_published_results(
                 sample.reset()
                 sample._write_control(authorization_order, blob_observation)
                 compiled = client.post(
-                    f"/api/projects/{setup['project_id']}/security-setup/compile",
-                    json={"schema_version": "1"},
+                    f"/api/projects/{setup['project_id']}/check-preparation",
+                    json={"schema_version": "1", "change_id": None},
                 )
                 assert compiled.status_code == 200, compiled.text
                 preview = client.get(
                     f"/api/projects/{setup['project_id']}/check-preview"
                 )
                 assert preview.status_code == 200, preview.text
-                assert preview.json()["data"]["ready"] is True
+                preview_data = preview.json()["data"]
+                assert preview_data["ready"] is True
+                assert preview_data["case_count"] == 3, preview_data
+                assert preview_data["differential_pair_count"] == 1, preview_data
                 submitted = client.post(
                     f"/api/projects/{setup['project_id']}/checks",
                     json={
@@ -150,16 +153,34 @@ def test_three_state_golden_uses_real_sample_observers_and_published_results(
                         sort_keys=True,
                     )
                 )
-                assert len(evidence) == 2, evidence
-                alice = _evidence_for_label(evidence, setup["alice_id"])
-                bob = _evidence_for_label(evidence, setup["bob_id"])
+                assert len(evidence) == 3, evidence
+                alice = _evidence_for_case(
+                    evidence,
+                    setup["alice_id"],
+                    setup["export_action_id"],
+                )
+                bob = _evidence_for_case(
+                    evidence,
+                    setup["bob_id"],
+                    setup["export_action_id"],
+                )
+                bob_view = _evidence_for_case(
+                    evidence,
+                    setup["bob_id"],
+                    setup["view_action_id"],
+                )
                 assert alice["case_snapshot"]["expectations"] == ["ALLOW"]
                 assert alice["execution_fact"]["outcome"] == "ACCEPTED"
                 assert alice["verdict"] == "SAFE"
                 assert bob["case_snapshot"]["expectations"] == ["DENY"]
                 assert bob["execution_fact"]["outcome"] == "DENIED"
                 assert bob["verdict"] == expected_bob_verdict
-                for item in evidence:
+                assert bob_view["case_snapshot"]["expectations"] == ["ALLOW"]
+                assert bob_view["execution_fact"]["outcome"] == "ACCEPTED"
+                assert bob_view["verdict"] == "SAFE"
+                assert bob_view["security_effect_facts"][0]["kind"] == "DATA_DISCLOSURE"
+                assert bob_view["security_effect_facts"][0]["state"] == "CONFIRMED"
+                for item in (alice, bob):
                     _assert_six_sources_published(item)
 
                 presentation_response = client.get(
@@ -174,6 +195,7 @@ def test_three_state_golden_uses_real_sample_observers_and_published_results(
                     item
                     for item in presentation["issues"]
                     if item["planned_identity_id"] == setup["bob_id"]
+                    and item["action_id"] == setup["export_action_id"]
                 )
                 assert [
                     (item["observer_type"], item["label"], item["role"])
@@ -349,14 +371,16 @@ def _source_status(issue: dict[str, object], observer_type: str) -> str:
     )
 
 
-def _evidence_for_label(
+def _evidence_for_case(
     evidence: list[dict[str, object]],
     identity_id: str,
+    action_id: str,
 ) -> dict[str, object]:
     return next(
         item
         for item in evidence
         if item["case_snapshot"]["subject_id"] == identity_id
+        and item["case_snapshot"]["action_id"] == action_id
     )
 
 
@@ -391,9 +415,16 @@ def _assert_sample_recovered(sample, case_ids: set[str]) -> None:
             continue
         assert job["state"] == "REVOKED"
         assert sample.storage.task_for_marker(case_id)["state"] == "REVOKED"
-        assert [
-            item["event_type"] for item in audit if item.get("case_tag") == case_id
-        ] == ["EXPORT_ENQUEUED", "TASK_RUNNING", "EXPORT_READY", "EXPORT_REVOKED"]
+        audit_events = [
+            item["event_type"]
+            for item in audit
+            if item.get("case_tag") == case_id
+        ]
+        assert "export_request_created" in audit_events
+        assert "export_job_started" in audit_events
+        assert "archive_generated" in audit_events
+        assert "export_job_completed" in audit_events
+        assert audit_events[-1] == "EXPORT_REVOKED"
         assert [
             item["event_type"] for item in queued if item.get("case_tag") == case_id
         ] == ["EXPORT_ENQUEUED", "TASK_RUNNING", "EXPORT_READY", "EXPORT_REVOKED"]

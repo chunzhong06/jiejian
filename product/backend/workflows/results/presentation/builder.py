@@ -144,26 +144,62 @@ class ResultPresentationBuilder:
         )
         repair_verification = self._repairs.verify_run(run_id)
         issues = tuple(
-            issue.model_copy(
-                update={
-                    "repair_requirement": self._repairs.requirement(
-                        run_id,
-                        issue.finding_id,
-                    ),
-                    "claim_boundary": _claim_boundary_with_repair(
-                        issue.claim_boundary,
-                        repair_verification.status if repair_verification is not None else None,
-                    ),
-                }
+            self._with_repair_facts(
+                issue,
+                run_id=run_id,
+                repair_capable=repair_capable,
+                repair_verification=repair_verification,
             )
-            if repair_capable and issue.verdict is PresentedCaseVerdict.VULNERABLE
-            else issue
             for issue in presentation.issues
         )
         return presentation.model_copy(
             update={
                 "issues": issues,
                 "repair_verification": repair_verification,
+            }
+        )
+
+    def _with_repair_facts(
+        self,
+        issue: ResultPresentationIssue,
+        *,
+        run_id: str,
+        repair_capable: bool,
+        repair_verification: RepairVerification | None,
+    ) -> ResultPresentationIssue:
+        """把源问题合同和正式复验结论投影到同一稳定 Finding。"""
+
+        if not repair_capable:
+            return issue
+        if (
+            repair_verification is not None
+            and issue.finding_id == repair_verification.reference.source_finding_id
+        ):
+            reference = repair_verification.reference
+            return issue.model_copy(
+                update={
+                    "repair_requirement": self._repairs.requirement(
+                        reference.source_run_id,
+                        reference.source_finding_id,
+                    ),
+                    "claim_boundary": _claim_boundary_with_repair(
+                        issue.claim_boundary,
+                        repair_verification.status,
+                    ),
+                }
+            )
+        if issue.verdict is not PresentedCaseVerdict.VULNERABLE:
+            return issue
+        return issue.model_copy(
+            update={
+                "repair_requirement": self._repairs.requirement(
+                    run_id,
+                    issue.finding_id,
+                ),
+                "claim_boundary": _claim_boundary_with_repair(
+                    issue.claim_boundary,
+                    None,
+                ),
             }
         )
 
@@ -357,6 +393,7 @@ def _issue(
     )
     expectation = _expectation(evidence)
     subject_group = _subject_group(identity, expectation)
+    action_id = str(getattr(case, "action_id", "") or identity.get("action") or "")
     action = _action(identity)
     resource = _resource(identity)
     relation = _relation(identity)
@@ -386,6 +423,7 @@ def _issue(
         finding_id=finding_id,
         title=_title(subject_group, action, resource, verdict),
         subject_group=subject_group,
+        action_id=action_id,
         action=action,
         resource=resource,
         relation=relation,

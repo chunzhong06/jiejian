@@ -1,4 +1,4 @@
-# Web V1 CLI 合同测试：覆盖普通命令树、Machine envelope 与同一 VarDir 单控制者。
+# 持续验证 CLI 合同测试：覆盖普通命令树、Machine envelope 与同一 VarDir 单控制者。
 
 from contextlib import contextmanager
 import json
@@ -36,7 +36,7 @@ def test_top_level_help_only_exposes_web_v1_tasks_and_serve() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for command in ("status", "application", "check", "result", "history", "system", "serve"):
+    for command in ("status", "application", "change", "check", "result", "history", "system", "serve"):
         assert command in result.stdout
     for legacy in ("account ", "flow ", "settings ", "guide", "project ", "contract ", "recording ", "baseline ", "gate ", "cache ", "runtime ", "ci "):
         assert legacy not in result.stdout
@@ -146,7 +146,8 @@ def test_status_machine_output_is_one_stable_stdout_object(monkeypatch) -> None:
     assert payload["schema_version"] == "1"
     assert payload["kind"] == "status"
     assert payload["status"] == "ok"
-    assert payload["data"]["next_action"]["action"] == "CONNECT_APPLICATION"
+    assert payload["data"]["attention_items"][0]["key"] == "connect-application"
+    assert payload["next_actions"][0]["route"] == "/application"
 
 
 def test_result_machine_output_keeps_shared_presentation_diagnosis(monkeypatch) -> None:
@@ -194,24 +195,13 @@ def test_result_machine_output_keeps_shared_presentation_diagnosis(monkeypatch) 
     assert payload["data"]["issues"][0]["diagnosis"]["precision"] == "EXACT"
 
 
-def test_check_prepare_only_compiles_then_reads_preview(monkeypatch) -> None:
-    calls: list[tuple[str, object]] = []
-    compiled = _Model(
-        contract_id="contract_demo",
-        contract_version=1,
-        profile_id="profile_demo",
-        profile_sha256="a" * 64,
-    )
+def test_check_prepare_uses_change_aware_workflow(monkeypatch) -> None:
+    calls: list[tuple[str, object, object]] = []
     preview = _Model(ready=True, project_id="project_demo")
     application = SimpleNamespace(
-        security_setup=SimpleNamespace(
-            compile=lambda project_id: (
-                calls.append(("compile", project_id)) or compiled
-            )
-        ),
         checks=SimpleNamespace(
-            preview=lambda project_id: (
-                calls.append(("preview", project_id)) or preview
+            prepare=lambda project_id, *, change_id: (
+                calls.append(("prepare", project_id, change_id)) or preview
             )
         ),
     )
@@ -223,14 +213,11 @@ def test_check_prepare_only_compiles_then_reads_preview(monkeypatch) -> None:
     monkeypatch.setattr(control_commands, "application_scope", fake_scope)
     result = CliRunner().invoke(
         app,
-        ["--json", "check", "prepare", "project_demo"],
+        ["--json", "check", "prepare", "project_demo", "--change", f"chg_{'1' * 32}"],
     )
 
     assert result.exit_code == 0
-    assert calls == [
-        ("compile", "project_demo"),
-        ("preview", "project_demo"),
-    ]
+    assert calls == [("prepare", "project_demo", f"chg_{'1' * 32}")]
     payload = json.loads(result.stdout)
     assert payload["kind"] == "check-prepared"
     assert payload["data"]["preview"]["ready"] is True
@@ -275,11 +262,11 @@ def test_application_show_uses_bounded_product_summary(monkeypatch) -> None:
             active_contract_available=True,
             current_scope_runnable=True,
         ),
-        next_action=SimpleNamespace(
-            label="查看检查结果",
+        attention_items=(SimpleNamespace(
+            label="查看当前安全基线",
             description="查看真实业务后果。",
             route="/results",
-        ),
+        ),),
     )
     application = SimpleNamespace(product_status=SimpleNamespace(get=lambda _project: status))
 
@@ -311,6 +298,60 @@ def test_application_show_uses_bounded_product_summary(monkeypatch) -> None:
         "revision",
     ):
         assert forbidden not in encoded
+
+
+def test_change_list_is_bounded_and_check_run_freezes_selected_change(monkeypatch) -> None:
+    change_id = f"chg_{'4' * 32}"
+    calls: list[tuple[str, object]] = []
+    change = _Model(
+        change_id=change_id,
+        project_id="project_demo",
+        reason="Agent 增加导出能力",
+        summary="需要重新确认 1 条权限规则。",
+        added_count=1,
+        modified_count=0,
+        removed_count=0,
+    )
+    application = SimpleNamespace(
+        source_changes=SimpleNamespace(
+            list_views=lambda project_id, *, limit: (
+                calls.append(("list", (project_id, limit))) or (change,)
+            )
+        ),
+        checks=SimpleNamespace(
+            submit=lambda project_id, *, idempotency_key, change_id: (
+                calls.append(("run", (project_id, change_id)))
+                or (
+                    SimpleNamespace(
+                        job=_Model(job_id="job_demo"),
+                        run=_Model(run_id="run_demo"),
+                    ),
+                    SimpleNamespace(schema_version="1"),
+                    None,
+                )
+            )
+        ),
+    )
+
+    @contextmanager
+    def fake_scope(_context):
+        yield application
+
+    monkeypatch.setattr(control_commands, "application_scope", fake_scope)
+    listed = CliRunner().invoke(
+        app,
+        ["--json", "change", "list", "project_demo", "--limit", "12"],
+    )
+    run = CliRunner().invoke(
+        app,
+        ["--json", "check", "run", "project_demo", "--change", change_id],
+    )
+
+    assert listed.exit_code == run.exit_code == 0
+    assert calls == [
+        ("list", ("project_demo", 12)),
+        ("run", ("project_demo", change_id)),
+    ]
 
 
 def test_application_remove_requires_confirmation_and_uses_project_lifecycle(monkeypatch) -> None:

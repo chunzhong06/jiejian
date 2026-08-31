@@ -1,10 +1,10 @@
-/* 权限与检查连续页：先预览 Human Approval、审阅 Agent proposal，再完成准备、提交与结果入口。 */
+/* 权限规则与验证运行共享同一事实读取；页面只按长期工作区拆分用户任务。 */
 
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Descriptions, List, Modal, Segmented, Space, Tag, Typography } from 'antd'
 import { checksApi, type CheckPreviewDto } from '../../api/checks'
 import { ApiError } from '../../api/http'
-import { permissionIntentsApi, type PermissionIntentCellDto, type PermissionIntentExpectation, type PermissionIntentMatrixDto, type PermissionIntentProposalDto, type SecuritySetupCompileResultDto } from '../../api/permissionIntents'
+import { permissionIntentsApi, type PermissionIntentCellDto, type PermissionIntentExpectation, type PermissionIntentMatrixDto, type PermissionIntentProposalDto } from '../../api/permissionIntents'
 import type { ProjectDto } from '../../api/projects'
 import { runsApi, type RunDto } from '../../api/runs'
 import { lifecycleLabel } from '../../app/presentation'
@@ -15,6 +15,7 @@ import { CheckProgress } from './CheckProgress'
 import './checks.css'
 
 type PermissionCheckPageProps = {
+  mode: 'permissions' | 'validation'
   project: ProjectDto
   runs: RunDto[]
   onRefresh: () => void | Promise<void>
@@ -28,14 +29,14 @@ type PermissionCheckPageProps = {
 
 const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'])
 
-export function PermissionCheckPage({ project, runs, onRefresh, onError, onResolved, onNavigate, onBack, onNext, changeId }: PermissionCheckPageProps) {
+export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, onResolved, onNavigate, onBack, onNext, changeId }: PermissionCheckPageProps) {
   const [matrix, setMatrix] = useState<PermissionIntentMatrixDto | null>(null)
   const [proposals, setProposals] = useState<PermissionIntentProposalDto[]>([])
   const [preview, setPreview] = useState<CheckPreviewDto | null>(null)
   const [previewFresh, setPreviewFresh] = useState(false)
   const [requiresCompile, setRequiresCompile] = useState(false)
   const [needsNewRun, setNeedsNewRun] = useState(false)
-  const [compileResult, setCompileResult] = useState<SecuritySetupCompileResultDto | null>(null)
+  const [preparedNow, setPreparedNow] = useState(false)
   const [currentRun, setCurrentRun] = useState<RunDto | undefined>(runs[0])
   const [savingCell, setSavingCell] = useState<string>()
   const [refreshing, setRefreshing] = useState(false)
@@ -70,7 +71,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     setPreviewFresh(false)
     setRequiresCompile(false)
     setNeedsNewRun(false)
-    setCompileResult(null)
+    setPreparedNow(false)
     setRefreshing(true)
     void Promise.all([
       permissionIntentsApi.matrix(project.project_id),
@@ -109,7 +110,7 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     setPreviewFresh(false)
     setRequiresCompile(true)
     setNeedsNewRun(true)
-    setCompileResult(null)
+    setPreparedNow(false)
   }
 
   const refreshPermissionFacts = async () => {
@@ -163,13 +164,12 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
     setPreviewFresh(false)
     setRequiresCompile(true)
     try {
-      const result = await permissionIntentsApi.compile(project.project_id)
-      setCompileResult(result)
       const [nextMatrix, proposalView, nextPreview] = await Promise.all([
         permissionIntentsApi.matrix(project.project_id),
         permissionIntentsApi.proposals(project.project_id),
-        readPreview(),
+        checksApi.prepare(project.project_id, changeId),
       ])
+      setPreparedNow(true)
       setMatrix(nextMatrix)
       setProposals(proposalView.proposals)
       setPreview(nextPreview)
@@ -232,6 +232,9 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
   }
 
   const titleStatus = activeRun ? lifecycleLabel(latest?.lifecycle) : canViewResult && !needsNewRun ? '检查已完成' : canSubmit ? '可以开始检查' : requiresCompile ? '权限要求已更新' : '正在准备检查'
+  const profilePreparationNeeded = requiresCompile || !previewFresh || Boolean(
+    preview?.gaps.some((gap) => gap.code === 'GENERATED_PROFILE_MISSING' || gap.code === 'GENERATED_PROFILE_STALE'),
+  )
 
   const assistantPanel = matrix && (matrix.unconfirmed_count > 0 || matrix.review_required_count > 0 || proposals.length > 0)
     ? { surface: 'permission-review' as const, title: '权限要求复核', actionLabel: 'AI 帮我复核权限' }
@@ -247,7 +250,9 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
         ? { label: latest && terminalStates.has(String(latest.lifecycle)) ? '重新开始真实检查' : '开始真实检查', onClick: () => void submit(), loading: submitting }
         : savingCell
           ? { label: '正在保存权限要求', disabled: true, loading: true }
-        : previewFresh && !requiresCompile && preview?.next_path && preview.next_path !== '/check'
+        : matrix?.compilable_action_count && profilePreparationNeeded
+          ? { label: '准备本次检查', onClick: () => void compile(), loading: compiling }
+        : previewFresh && !requiresCompile && preview?.next_path && preview.next_path !== '/validation'
           ? { label: preview.next_label ?? '去完成测试条件', onClick: () => onNavigate(preview.next_path!) }
           : matrix?.compilable_action_count
             ? { label: '准备本次检查', onClick: () => void compile(), loading: compiling }
@@ -266,8 +271,14 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
       : undefined
 
   return <div className="permission-check-page">
-    <PageTaskHeader title="权限与检查" description="先确认谁应该允许或拒绝，再核对测试账号和对照范围，最后由界鉴在受控环境中检查真实结果。" status={titleStatus} />
-    <section className="permission-check-section" aria-labelledby="permission-requirements-title">
+    <PageTaskHeader
+      title={mode === 'permissions' ? '权限规则' : '验证运行'}
+      description={mode === 'permissions'
+        ? '确认谁可以执行哪些业务动作。Agent 可以提出建议，但只有人能批准权限规则和实现对应关系。'
+        : '按当前完整权限范围核对测试条件，并在受控环境中检查页面响应、后台任务和真实业务后果。'}
+      status={mode === 'permissions' ? `${matrix?.confirmed_count ?? 0} 项已确认` : titleStatus}
+    />
+    {mode === 'permissions' && <><section className="permission-check-section" aria-labelledby="permission-requirements-title">
       <div className="permission-check-heading"><div><Typography.Title level={3} id="permission-requirements-title">确认权限要求</Typography.Title><Typography.Paragraph type="secondary">为每个权限组和资源关系选择“允许”或“拒绝”。这里表达的是你的安全要求，不是界鉴自动作出的漏洞结论。</Typography.Paragraph></div><Tag>{matrix ? `已确认 ${matrix.confirmed_count} 项` : '正在读取'}</Tag></div>
       {matrix?.actions.length === 0 && <Alert type="info" showIcon message="还没有可确认的业务动作" description="请先完成业务流程录制，并确认测试资源、真实结果观察和恢复方式。" />}
       <div className="permission-requirement-list">
@@ -303,14 +314,14 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
         </Descriptions>
         <Space><Button disabled={proposal.status !== 'PENDING' || Boolean(savingProposalId)} loading={savingProposalId === proposal.proposal_id && proposal.status === 'PENDING'} onClick={() => void decideProposal(proposal, 'approve')}>批准</Button><Button danger disabled={proposal.status !== 'PENDING' || Boolean(savingProposalId)} loading={savingProposalId === proposal.proposal_id && proposal.status === 'PENDING'} onClick={() => void decideProposal(proposal, 'reject')}>拒绝</Button></Space>
       </article>)}</div>
-    </section>}
+    </section>}</>}
 
-    <section className="permission-check-section" aria-labelledby="check-preparation-title">
-      <div className="permission-check-heading"><div><Typography.Title level={3} id="check-preparation-title">准备检查条件</Typography.Title><Typography.Paragraph type="secondary">界鉴会把已确认权限要求与业务流程、测试账号、观察和恢复方式编译成一次受控检查。</Typography.Paragraph></div></div>
+    {mode === 'validation' && <><section className="permission-check-section" aria-labelledby="check-preparation-title">
+      <div className="permission-check-heading"><div><Typography.Title level={3} id="check-preparation-title">准备检查条件</Typography.Title><Typography.Paragraph type="secondary">界鉴会把已确认权限要求与业务流程、测试账号、观察和恢复方式整理成一次受控检查。</Typography.Paragraph></div></div>
       {requiresCompile && <Alert type="warning" showIcon message="权限要求已经更新，旧检查预览已失效" description="请重新准备检查。只有重新生成配置并读取新的检查预览后，才能开始检查。" />}
-      {!requiresCompile && compileResult && <Alert type="success" showIcon message={compileResult.reused ? '当前检查条件已经重新确认' : '检查条件已经准备好'} description={`已准备 ${compileResult.covered_action_ids.length} 个业务动作；${matrix?.representative_gap_count ?? 0} 项权限要求暂缺测试条件。`} />}
-      {!requiresCompile && !compileResult && previewFresh && preview?.ready && <Alert type="success" showIcon message="当前检查条件已经准备好" description="下面的预览来自后端当前权威事实，可以继续核对本次检查范围。" />}
-      {!requiresCompile && !compileResult && (!previewFresh || !preview?.ready) && <Alert type="info" showIcon message={matrix?.compilable_action_count ? '权限要求可以生成检查条件' : '还需要确认允许和拒绝'} description={matrix?.compilable_action_count ? '点击页面底部“准备本次检查”后，界鉴会重新生成配置并读取最新预览。' : '至少完成一个业务动作的允许/拒绝对照后才能准备检查。'} />}
+      {!requiresCompile && preparedNow && <Alert type="success" showIcon message="检查条件已经重新确认" description={`当前有 ${preview?.actions.filter((action) => action.ready).length ?? 0} 个业务动作可以检查；${matrix?.representative_gap_count ?? 0} 项权限规则暂缺测试条件。`} />}
+      {!requiresCompile && !preparedNow && previewFresh && preview?.ready && <Alert type="success" showIcon message="当前检查条件已经准备好" description="下面的预览来自后端当前权威事实，可以继续核对本次检查范围。" />}
+      {!requiresCompile && !preparedNow && (!previewFresh || !preview?.ready) && <Alert type="info" showIcon message={matrix?.compilable_action_count ? '权限规则可以生成检查条件' : '还需要确认允许和拒绝'} description={matrix?.compilable_action_count ? '点击页面底部“准备本次检查”后，界鉴会重新生成配置并读取最新预览。' : '至少完成一个业务动作的允许/拒绝对照后才能准备检查。'} />}
     </section>
 
     <section className="permission-check-section" aria-labelledby="check-preview-title">
@@ -347,9 +358,18 @@ export function PermissionCheckPage({ project, runs, onRefresh, onError, onResol
       {!latest && <Typography.Text type="secondary">准备和预览完成后，可从页面底部开始本次检查。</Typography.Text>}
       {latest && <CheckProgress run={latest} actions={preview?.actions} onRefresh={refreshRun} onError={onError} onNavigate={onNavigate} />}
       {canViewResult && !needsNewRun && <Alert type="success" showIcon message="本次检查已经完成" description="可信结果已经发布，可以继续查看检查结果和证据。" />}
-    </section>
+    </section></>}
 
-    <TaskActionBar back={{ label: '返回业务流程', onClick: onBack }} refresh={{ label: '刷新当前状态', onClick: () => void refreshFacts(), loading: refreshing }} restart={restart} primary={primary} />
+    <TaskActionBar
+      back={{ label: mode === 'permissions' ? '返回变化与待办' : '返回测试准备', onClick: onBack }}
+      refresh={{ label: '刷新当前状态', onClick: () => void refreshFacts(), loading: refreshing }}
+      restart={mode === 'validation' ? restart : undefined}
+      primary={mode === 'permissions'
+        ? savingCell
+          ? { label: '正在保存权限要求', ariaLabel: '正在保存权限要求', disabled: true, loading: true }
+          : { label: '继续测试准备', onClick: onNext }
+        : primary}
+    />
     <Modal open={Boolean(pendingChange)} title="确认权限变更" okText="确认权限变更" cancelText="暂不变更" confirmLoading={Boolean(savingCell)} onOk={() => void approveChange()} onCancel={() => { if (!savingCell) setPendingChange(null) }}>
       {pendingChange && <Space direction="vertical" size="small">
         <Typography.Text>当前要求：{expectationLabel(pendingChange.cell.expectation)}</Typography.Text>

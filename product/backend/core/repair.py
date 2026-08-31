@@ -61,6 +61,25 @@ class RepairAllowControlIdentity(RepairModel):
     case_fingerprint: str = Field(pattern=SHA256_PATTERN)
 
 
+# 这类路径不属于漏洞孪生，但修复后仍必须保持原 ALLOW 语义。
+class RepairRegressionControlIdentity(RepairModel):
+    intent: RepairIntentIdentity
+    action_id: str = Field(pattern=_PUBLIC_ID_PATTERN)
+    subject_id: str = Field(pattern=_PUBLIC_ID_PATTERN)
+    subject_display_name: str = Field(min_length=1, max_length=160)
+    action_display_name: str = Field(min_length=1, max_length=160)
+    case_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    protected_effect_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
+    key_evidence: RepairEvidenceStandard
+
+    @field_validator("protected_effect_ids")
+    @classmethod
+    def validate_effects(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if values != tuple(sorted(values)) or len(set(values)) != len(values):
+            raise ValueError("repair regression effects must be unique and sorted")
+        return values
+
+
 class RepairEvidenceStandard(RepairModel):
     requirement_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
     fingerprint: str = Field(pattern=SHA256_PATTERN)
@@ -90,6 +109,10 @@ class RepairContract(RepairModel):
     resource_relation: tuple[str, ...] = Field(min_length=1, max_length=128)
     protected_effect_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
     allow_control: RepairAllowControlIdentity
+    regression_controls: tuple[RepairRegressionControlIdentity, ...] = Field(
+        default=(),
+        max_length=64,
+    )
     key_evidence: RepairEvidenceStandard
     authorization_continuity_state: Literal["ORPHAN_EFFECT_CONFIRMED"]
     orphan_effect_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
@@ -141,10 +164,17 @@ class RepairContract(RepairModel):
         if (
             self.intent.intent_id not in identities
             or self.allow_control.intent.intent_id not in identities
+            or any(item.intent.intent_id not in identities for item in self.regression_controls)
             or not set(self.orphan_effect_ids).issubset(self.protected_effect_ids)
             or self.repair_fingerprint != repair_contract_fingerprint(self)
         ):
             raise ValueError("repair contract identity or fingerprint is inconsistent")
+        control_keys = tuple(
+            (item.intent.intent_id, item.action_id, item.subject_id)
+            for item in self.regression_controls
+        )
+        if control_keys != tuple(sorted(control_keys)) or len(set(control_keys)) != len(control_keys):
+            raise ValueError("repair regression controls must be unique and sorted")
         if self.primary_breakpoint is None and self.breakpoint_precision != "VIOLATION_ONLY":
             raise ValueError("unlocated repair breakpoint must be VIOLATION_ONLY")
         if self.primary_breakpoint is not None and self.primary_breakpoint in self.amplifier_types:
@@ -173,23 +203,66 @@ class RepairVerificationStatus(StrEnum):
     INCONCLUSIVE = "INCONCLUSIVE"
 
 
+class RepairPathKind(StrEnum):
+    DENY_EFFECT_REMOVAL = "DENY_EFFECT_REMOVAL"
+    ALLOW_CONTROL = "ALLOW_CONTROL"
+    REGRESSION_CONTROL = "REGRESSION_CONTROL"
+
+
+# 路径结果只拆解总复验的既有事实，不引入第二套 Verdict。
+class RepairPathVerification(RepairModel):
+    kind: RepairPathKind
+    action_id: str = Field(pattern=_PUBLIC_ID_PATTERN)
+    subject_id: str = Field(pattern=_PUBLIC_ID_PATTERN)
+    subject_display_name: str = Field(min_length=1, max_length=160)
+    action_display_name: str = Field(min_length=1, max_length=160)
+    status: RepairVerificationStatus
+    message: str = Field(min_length=1, max_length=320)
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=64)
+    reason_codes: tuple[str, ...] = Field(min_length=1, max_length=32)
+
+    @field_validator("evidence_refs")
+    @classmethod
+    def validate_evidence_refs(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if values != tuple(sorted(values)) or len(set(values)) != len(values):
+            raise ValueError("repair path evidence refs must be unique and sorted")
+        return values
+
+    @field_validator("reason_codes")
+    @classmethod
+    def validate_reason_codes(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        return _validate_reason_codes(values, "repair path")
+
+
 class RepairVerification(RepairModel):
     reference: RepairContractReference
     verification_run_id: str = Field(pattern=RUN_ID_PATTERN)
     status: RepairVerificationStatus
     message: str = Field(min_length=1, max_length=320)
     reason_codes: tuple[str, ...] = Field(min_length=1, max_length=32)
+    path_results: tuple[RepairPathVerification, ...] = Field(default=(), max_length=66)
 
     @field_validator("reason_codes")
     @classmethod
     def validate_reason_codes(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        if (
-            values != tuple(sorted(values))
-            or len(set(values)) != len(values)
-            or any(_REASON_CODE.fullmatch(value) is None for value in values)
-        ):
-            raise ValueError("repair verification reason codes must be stable sorted tokens")
-        return values
+        return _validate_reason_codes(values, "repair verification")
+
+    @model_validator(mode="after")
+    def validate_path_results(self) -> RepairVerification:
+        keys = tuple((item.kind.value, item.action_id, item.subject_id) for item in self.path_results)
+        if keys != tuple(sorted(keys)) or len(set(keys)) != len(keys):
+            raise ValueError("repair path results must be unique and sorted")
+        return self
+
+
+def _validate_reason_codes(values: tuple[str, ...], label: str) -> tuple[str, ...]:
+    if (
+        values != tuple(sorted(values))
+        or len(set(values)) != len(values)
+        or any(_REASON_CODE.fullmatch(value) is None for value in values)
+    ):
+        raise ValueError(f"{label} reason codes must be stable sorted tokens")
+    return values
 
 
 def repair_contract_fingerprint(contract: RepairContract | dict[str, Any]) -> str:
@@ -228,6 +301,9 @@ __all__ = [
     "RepairContractReference",
     "RepairEvidenceStandard",
     "RepairIntentIdentity",
+    "RepairPathKind",
+    "RepairPathVerification",
+    "RepairRegressionControlIdentity",
     "RepairRequirementView",
     "RepairVerification",
     "RepairVerificationStatus",

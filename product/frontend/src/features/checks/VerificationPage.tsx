@@ -17,6 +17,7 @@ import { Alert, Button, Collapse, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { resultsApi, type ExecutionTraceDto, type ResultDiagnosisDto, type ResultPresentationDto, type ResultPresentationIssueDto } from '../../api/results'
 import { runsApi, type RunDto } from '../../api/runs'
+import { expectationLabel } from '../../app/presentation'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { TaskActionBar } from '../../components/TaskActionBar'
@@ -39,8 +40,8 @@ function claimValue(value: string | null) {
     ACCEPTED: '页面或接口接受了操作', DENIED: '页面或接口拒绝了操作', FAILED: '操作执行失败', UNKNOWN: '表面响应无法确认',
     CONFIRMED: '已确认受保护业务后果发生', ABSENT: '未发现受保护业务后果',
     UNAVAILABLE: '实际执行身份无法独立确认', EXACT: '已定位唯一断裂点', RANGE: '只能定位断裂区间',
-    VIOLATION_ONLY: '已确认违规，但不能定位断裂点', VERIFIED: '修复要求已验证', NOT_VERIFIED: '修复要求未通过',
-    INCONCLUSIVE: '修复或证据仍不足',
+    VIOLATION_ONLY: '已确认违规，但不能定位断裂点', VERIFIED: '原考题复验已通过', NOT_VERIFIED: '原考题复验未通过',
+    INCONCLUSIVE: '原考题复验证据仍不足',
   } as Record<string, string>)[String(value)] ?? '当前没有形成这项事实'
 }
 
@@ -88,11 +89,11 @@ function PermissionExam({ presentation }: { presentation: ResultPresentationDto 
     <Typography.Text className="verification-kicker">被检查的业务规则</Typography.Text>
     <Typography.Title id="verification-exam-title" level={3}>权限考题已锁定</Typography.Title>
     <Tag color="green">已由用户确认</Tag>
-    {presentation.relevant_intents.length === 0 && <Alert type="warning" showIcon message="这次运行没有可展示的权限 revision" />}
+    {presentation.relevant_intents.length === 0 && <Alert type="warning" showIcon message="这次检查没有可展示的权限规则版本" />}
     <div className="verification-intents">{presentation.relevant_intents.map((intent) => <article key={intent.intent_id}>
       <Space wrap><Tag color="blue">{intent.display_label ?? '权限要求'}</Tag><Typography.Text strong>第 {intent.revision} 版</Typography.Text></Space>
       <Typography.Paragraph>{intent.business_statement ?? '这次较早运行没有保存完整业务语义，界鉴不补猜权限句。'}</Typography.Paragraph>
-      <Collapse ghost items={[{ key: 'technical', label: '查看技术标识', children: <Space direction="vertical"><Typography.Text code>{intent.intent_hash}</Typography.Text><Typography.Text type="secondary">策略纪元 {presentation.policy_epoch}</Typography.Text></Space> }]} />
+      <Collapse ghost items={[{ key: 'technical', label: '查看技术标识', children: <Space direction="vertical"><Typography.Text code>{intent.intent_hash}</Typography.Text><Typography.Text type="secondary">权限规则版本 {presentation.policy_epoch}</Typography.Text></Space> }]} />
     </article>)}</div>
     <Typography.Text type="secondary">本页始终读取本次检查锁定的权限版本。</Typography.Text>
   </section>
@@ -105,11 +106,11 @@ function ClaimBoundary({ issue }: { issue: ResultPresentationIssueDto }) {
     ['真实业务后果', boundary.business_effect_status],
     ['实际执行身份', boundary.actual_identity_status],
     ['断裂定位精度', boundary.breakpoint_precision],
-    ['修复复验', boundary.repair_status],
+    ['原考题复验', boundary.repair_status],
   ] as const
   return <section id="verification-limitations" tabIndex={-1} className="verification-column verification-claims" aria-labelledby="verification-claims-title">
     <Typography.Text className="verification-kicker">证据允许说到哪里</Typography.Text>
-    <Typography.Title id="verification-claims-title" level={3}>可支持的主张</Typography.Title>
+    <Typography.Title id="verification-claims-title" level={3}>现有证据能够确认什么</Typography.Title>
     <dl className="verification-claim-grid">{dimensions.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{claimValue(value)}</dd></div>)}</dl>
     <Alert type="success" showIcon message="当前证据支持" description={boundary.supported_statement} />
     {boundary.unsupported_statements.length > 0 && <div><Typography.Text strong>当前不能宣称</Typography.Text><ul>{boundary.unsupported_statements.map((item) => <li key={item}>{item}</li>)}</ul></div>}
@@ -122,7 +123,7 @@ function ActualPathColumn({ issue, presentation, onEvidence }: { issue: ResultPr
     <Typography.Title id="verification-actual-title" level={3}>预期与实际业务路径</Typography.Title>
     <article className="verification-expected-path"><Typography.Text strong>预期业务路径</Typography.Text>{presentation.relevant_intents.length === 0
       ? <Alert type="warning" showIcon message="本次检查没有可读取的权限语义" />
-      : presentation.relevant_intents.map((intent) => <div key={intent.intent_id}><Typography.Paragraph className="verification-expected-statement" title={intent.business_statement ?? undefined}>{intent.business_statement ?? '较早运行没有保存完整业务语义，界鉴不补猜权限路径。'}</Typography.Paragraph><Space wrap><Tag>{intent.display_label ?? '权限要求'}</Tag>{intent.expectation && <Tag color={intent.expectation === 'DENY' ? 'red' : 'green'}>{intent.expectation}</Tag>}<Tag>{intent.expectation === 'DENY' ? '应当停止' : intent.expectation === 'ALLOW' ? '应当继续' : '预期方向不可用'}</Tag></Space></div>)}</article>
+      : presentation.relevant_intents.map((intent) => <div key={intent.intent_id}><Typography.Paragraph className="verification-expected-statement" title={intent.business_statement ?? undefined}>{intent.business_statement ?? '较早检查没有保存完整业务语义，界鉴不补猜权限路径。'}</Typography.Paragraph><Space wrap><Tag>{intent.display_label ?? '权限要求'}</Tag>{intent.expectation && <Tag color={intent.expectation === 'DENY' ? 'red' : 'green'}>{expectationLabel(intent.expectation)}</Tag>}<Tag>{intent.expectation === 'DENY' ? '应当停止' : intent.expectation === 'ALLOW' ? '应当继续' : '预期方向不可用'}</Tag></Space></div>)}</article>
     <Typography.Text strong>实际业务路径</Typography.Text>
     <Typography.Paragraph>{issue.actual_result}</Typography.Paragraph>
     <VerificationPath compact issue={issue} trace={traceFor(issue, presentation)} onEvidence={onEvidence} />

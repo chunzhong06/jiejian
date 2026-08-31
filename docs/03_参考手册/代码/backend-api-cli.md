@@ -53,6 +53,7 @@
 
 ### `product/backend/api/routers/checks.py`
 - `class CheckSubmitRequest`
+- `class CheckPrepareRequest`
 - `build_checks_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.workflows.context`, `pydantic`, `typing`
 
@@ -97,7 +98,6 @@
 - `class PermissionIntentApprovalRequest`
 - `class PermissionIntentProposalApprovalRequest`
 - `class PermissionIntentProposalDecisionRequest`
-- `class SecuritySetupCompileRequest`
 - `build_permission_intents_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.workflows.context`, `pydantic`, `typing`
 
@@ -170,10 +170,12 @@
 - `application_list_command(context) -> None`
 - `application_show_command(context, project_id) -> None`
 - `application_remove_command(context, project_id, confirmed) -> None`
-- `check_preview_command(context, project_id) -> None`
-- `check_prepare_command(context, project_id) -> None`
+- `source_change_list_command(context, project_id, limit) -> None`
+- `source_change_show_command(context, project_id, change_id) -> None`
+- `check_preview_command(context, project_id, change_id) -> None`
+- `check_prepare_command(context, project_id, change_id) -> None`
 - `check_cancel_command(context, project_id) -> None`
-- `check_run_command(context, project_id) -> None`
+- `check_run_command(context, project_id, change_id) -> None`
 - `result_show_command(context, run_id, project_id) -> None`
 - `result_report_command(context, run_id, report_id) -> None`
 - `history_command(context, project_id) -> None`

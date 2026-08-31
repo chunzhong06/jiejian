@@ -1,14 +1,14 @@
 # =============================================================================
-# Web V1 控制面只读查询
+# 持续验证控制面只读查询
 #
 # 定位
-#   GUI 工作台、CLI status 与 Machine status 共同消费的薄查询边界。
+#   GUI 工作区、CLI status 与 Machine status 共同消费的产品状态投影。
 #
 # 职责
-#   业务流程列表｜结果选择｜组合 ProjectReadiness｜给出六步状态、唯一下一步和最近结果摘要
+#   业务流程列表｜结果选择｜组合准备度、代码变化、长期工作区与多项待办
 #
 # 边界
-#   不保存进度，不调用 AI，不编译或提交检查，也不重新解释 ResultPresentation。
+#   不保存进度，不调用 AI，不编译或提交检查，也不重新解释安全结论。
 # =============================================================================
 
 from __future__ import annotations
@@ -20,11 +20,23 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus, RunVerdict
-from product.backend.workflows.projects.readiness import (
-    NextRequiredAction,
-    ProjectReadinessView,
-)
+from product.backend.workflows.projects.readiness import ProjectReadinessView
+from product.backend.workflows.source_changes import SourceChangeView
 from product.protocols import TargetType
+
+ProductRoute = Literal[
+    "/workspace",
+    "/application",
+    "/changes",
+    "/permissions",
+    "/preparation",
+    "/identities",
+    "/flows",
+    "/validation",
+    "/results",
+    "/verification",
+    "/history",
+]
 
 
 class ProductFlowQuery:
@@ -106,27 +118,42 @@ class ProductProjectSummary(_ControlModel):
     target_type: TargetType
 
 
-class ProductStepView(_ControlModel):
-    key: Literal["application", "account", "flow", "check", "result", "history"]
-    label: str = Field(min_length=1, max_length=32)
-    route: Literal[
-        "/application",
-        "/identities",
-        "/flows",
-        "/check",
-        "/results",
-        "/history",
+class ProductAreaView(_ControlModel):
+    key: Literal[
+        "overview",
+        "changes",
+        "permissions",
+        "preparation",
+        "validation",
+        "results",
     ]
-    status: Literal["COMPLETE", "CURRENT", "UPCOMING", "AVAILABLE", "EMPTY"]
+    label: str = Field(min_length=1, max_length=32)
+    description: str = Field(min_length=1, max_length=160)
+    route: Literal[
+        "/workspace",
+        "/changes",
+        "/permissions",
+        "/preparation",
+        "/validation",
+        "/results",
+    ]
+    status: Literal[
+        "READY",
+        "NEEDS_ATTENTION",
+        "RUNNING",
+        "AVAILABLE",
+        "BLOCKED",
+        "EMPTY",
+    ]
     status_label: str = Field(min_length=1, max_length=32)
 
 
-class ProductNextAction(_ControlModel):
-    action: NextRequiredAction
-    label: str = Field(min_length=1, max_length=64)
+class ProductAttentionView(_ControlModel):
+    key: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=80)
     description: str = Field(min_length=1, max_length=240)
-    route: Literal["/application", "/identities", "/flows", "/check", "/results"]
-    cli_command: str = Field(min_length=1, max_length=160)
+    route: ProductRoute
+    tone: Literal["ACTION", "WARNING", "INFO"] = "ACTION"
 
 
 class ProductResultSummary(_ControlModel):
@@ -134,60 +161,57 @@ class ProductResultSummary(_ControlModel):
     verdict: RunVerdict | None
     headline: str = Field(min_length=1, max_length=160)
     scope_statement: str = Field(min_length=1, max_length=320)
+    verified_change_id: str | None = Field(
+        default=None,
+        pattern=r"^chg_[0-9a-f]{32}$",
+    )
 
 
 class ProductStatusView(_ControlModel):
     project: ProductProjectSummary | None = None
     readiness: ProjectReadinessView | None = None
-    steps: tuple[ProductStepView, ...]
-    next_action: ProductNextAction
+    areas: tuple[ProductAreaView, ...]
+    attention_items: tuple[ProductAttentionView, ...]
+    latest_change: SourceChangeView | None = None
     latest_result: ProductResultSummary | None = None
 
 
-_STEP_DEFINITIONS = (
-    ("application", "应用接入", "/application"),
-    ("account", "测试账号", "/identities"),
-    ("flow", "业务流程", "/flows"),
-    ("check", "权限与检查", "/check"),
-    ("result", "检查结果", "/results"),
-    ("history", "历史变化", "/history"),
-)
-
-
 class ProductStatusService:
-    """只组合现有权威 View；每次调用都重新读取当前事实。"""
+    """每次从当前事实组合持续验证工作区，不把页面位置保存成产品进度。"""
 
     def __init__(
         self,
         projects,
         readiness: Callable[[str], ProjectReadinessView],
         result_presentation,
+        source_changes=None,
     ) -> None:
         self._projects = projects
         self._readiness = readiness
         self._result_presentation = result_presentation
+        self._source_changes = source_changes
 
     def get(self, project_id: str | None = None) -> ProductStatusView:
         project = self._select_project(project_id)
         if project is None:
-            next_action = _next_action(None)
             return ProductStatusView(
-                steps=_steps(None, next_action.route),
-                next_action=next_action,
+                areas=_areas(None, None, None),
+                attention_items=(
+                    ProductAttentionView(
+                        key="connect-application",
+                        label="接入第一个应用",
+                        description="选择本地 Web 应用，建立持续验证的初始安全基线。",
+                        route="/application",
+                    ),
+                ),
             )
         readiness = self._readiness(project.project_id)
-        next_action = _next_action(readiness)
-        latest_result = None
-        if readiness.latest_verified_run_id is not None:
-            presentation = self._result_presentation.build(
-                readiness.latest_verified_run_id
-            )
-            latest_result = ProductResultSummary(
-                run_id=presentation.run_id,
-                verdict=presentation.verdict,
-                headline=presentation.headline,
-                scope_statement=presentation.scope_statement,
-            )
+        latest_change = (
+            None
+            if self._source_changes is None
+            else self._source_changes.latest_view(project.project_id)
+        )
+        latest_result = self._latest_result(readiness)
         return ProductStatusView(
             project=ProductProjectSummary(
                 project_id=project.project_id,
@@ -196,9 +220,36 @@ class ProductStatusService:
                 target_type=project.target_type,
             ),
             readiness=readiness,
-            steps=_steps(readiness, next_action.route),
-            next_action=next_action,
+            areas=_areas(readiness, latest_change, latest_result),
+            attention_items=_attention_items(
+                readiness,
+                latest_change,
+                latest_result,
+            ),
+            latest_change=latest_change,
             latest_result=latest_result,
+        )
+
+    def _latest_result(
+        self,
+        readiness: ProjectReadinessView,
+    ) -> ProductResultSummary | None:
+        if readiness.latest_verified_run_id is None:
+            return None
+        presentation = self._result_presentation.build(
+            readiness.latest_verified_run_id
+        )
+        change_verification = presentation.change_verification
+        return ProductResultSummary(
+            run_id=presentation.run_id,
+            verdict=presentation.verdict,
+            headline=presentation.headline,
+            scope_statement=presentation.scope_statement,
+            verified_change_id=(
+                None
+                if change_verification is None
+                else change_verification.change_id
+            ),
         )
 
     def _select_project(self, project_id: str | None):
@@ -216,142 +267,252 @@ class ProductStatusService:
         return projects[0]
 
 
-def _readiness_route(readiness: ProjectReadinessView | None) -> str:
-    if readiness is None:
-        return "/application"
-    if readiness.next_required_action in {
-        "CONNECT_APPLICATION",
-        "CONFIRM_TARGET",
-        "AUTHORIZE_SOURCE_ANALYSIS",
-        "REVIEW_DISCOVERY",
-    }:
-        return "/application"
-    if readiness.next_required_action == "RECORD_FLOW":
-        identity_gap_codes = {
-            "TEST_IDENTITY_MISSING",
-            "TEST_IDENTITY_NOT_PREPARED",
-            "MISSING_SUBJECT",
-        }
-        has_identity_gap = any(
-            gap in identity_gap_codes
-            for action in readiness.permission_actions
-            for gap in action.gaps
-        )
-        return (
-            "/identities"
-            if not readiness.permission_actions or has_identity_gap
-            else "/flows"
-        )
-    if readiness.next_required_action in {"REVIEW_PERMISSION", "RUN_CHECK"}:
-        return "/check"
-    return "/results"
-
-
-def _next_action(readiness: ProjectReadinessView | None) -> ProductNextAction:
-    action: NextRequiredAction = (
-        "CONNECT_APPLICATION" if readiness is None else readiness.next_required_action
-    )
-    route = _readiness_route(readiness)
-    values: dict[NextRequiredAction, tuple[str, str, str]] = {
-        "CONNECT_APPLICATION": (
-            "接入应用",
-            "选择本地应用目录，让界鉴建立正式应用记录。",
-            "jiejian serve",
-        ),
-        "CONFIRM_TARGET": (
-            "确认应用地址",
-            "确认真正要检查的本地 Web 应用地址。",
-            "jiejian serve",
-        ),
-        "AUTHORIZE_SOURCE_ANALYSIS": (
-            "授权只读分析",
-            "明确授权后，界鉴才会只读分析应用源码。",
-            "jiejian serve",
-        ),
-        "REVIEW_DISCOVERY": (
-            "确认权限组与业务动作",
-            "审阅系统发现的候选，不把候选当作权限结论。",
-            "jiejian serve",
-        ),
-        "RECORD_FLOW": (
-            (
-                "准备测试账号"
-                if route == "/identities"
-                else "录制业务流程"
-            ),
-            (
-                "先为已确认权限组准备安全登录状态。"
-                if route == "/identities"
-                else "用真实浏览器录制关键业务操作，并确认观察与恢复方式。"
-            ),
-            "jiejian serve",
-        ),
-        "REVIEW_PERMISSION": (
-            "确认权限规则",
-            "明确谁应该允许或拒绝执行关键业务动作。",
-            "jiejian serve",
-        ),
-        "RUN_CHECK": (
-            "开始权限检查",
-            "核对受控检查范围后，明确开始本次安全验证。",
-            "jiejian check run --help",
-        ),
-        "OPEN_RESULT": (
-            "查看检查结果",
-            "查看真实副作用、可信证据和已经发布的安全结论。",
-            "jiejian result show --help",
-        ),
-    }
-    label, description, command = values[action]
-    return ProductNextAction(
-        action=action,
-        label=label,
-        description=description,
-        route=route,
-        cli_command=command,
+def _has_gap(readiness: ProjectReadinessView, prefixes: tuple[str, ...]) -> bool:
+    return any(
+        gap.startswith(prefixes)
+        for action in readiness.permission_actions
+        for gap in action.gaps
     )
 
 
-def _steps(
+def _areas(
     readiness: ProjectReadinessView | None,
-    current_route: str,
-) -> tuple[ProductStepView, ...]:
-    current_index = next(
-        index
-        for index, (_, _, route) in enumerate(_STEP_DEFINITIONS)
-        if route == current_route
+    latest_change: SourceChangeView | None,
+    latest_result: ProductResultSummary | None,
+) -> tuple[ProductAreaView, ...]:
+    if readiness is None:
+        states = {
+            "overview": ("READY", "可以开始"),
+            "changes": ("EMPTY", "尚无应用"),
+            "permissions": ("BLOCKED", "尚未建立"),
+            "preparation": ("BLOCKED", "尚未建立"),
+            "validation": ("BLOCKED", "尚未建立"),
+            "results": ("EMPTY", "暂无结果"),
+        }
+    else:
+        discovery_attention = readiness.source_analysis_status != "COMPLETED"
+        change_attention = bool(
+            latest_change and latest_change.mapping_review_required_count > 0
+        )
+        permission_attention = any(
+            not action.compilable for action in readiness.permission_actions
+        )
+        preparation_ready = bool(
+            readiness.completed_flow_available
+            and readiness.execution_profile_available
+        )
+        run_active = any(task.kind == "RUN" for task in readiness.active_tasks)
+        states = {
+            "overview": ("READY", "当前概览"),
+            "changes": (
+                "NEEDS_ATTENTION"
+                if discovery_attention or change_attention
+                else "AVAILABLE"
+                if latest_change
+                else "EMPTY",
+                "需要处理"
+                if discovery_attention or change_attention
+                else "已有记录"
+                if latest_change
+                else "等待变化",
+            ),
+            "permissions": (
+                "NEEDS_ATTENTION"
+                if permission_attention
+                else "READY"
+                if readiness.active_contract_available
+                else "BLOCKED",
+                "需要确认"
+                if permission_attention
+                else "规则已建立"
+                if readiness.active_contract_available
+                else "尚未建立",
+            ),
+            "preparation": (
+                "READY" if preparation_ready else "NEEDS_ATTENTION",
+                "测试条件可用" if preparation_ready else "需要补充",
+            ),
+            "validation": (
+                "RUNNING"
+                if run_active
+                else "READY"
+                if readiness.current_scope_runnable
+                else "BLOCKED",
+                "正在检查"
+                if run_active
+                else "可以检查"
+                if readiness.current_scope_runnable
+                else "等待准备",
+            ),
+            "results": (
+                "AVAILABLE" if latest_result else "EMPTY",
+                "已有可信结果" if latest_result else "暂无结果",
+            ),
+        }
+    definitions = (
+        ("overview", "项目概览", "查看当前安全基线、覆盖范围和待处理事项", "/workspace"),
+        ("changes", "变化与待办", "跟踪 Agent 修改、新发现和需要重新确认的内容", "/changes"),
+        ("permissions", "权限规则", "维护由人确认且不会被 Agent 改写的权限要求", "/permissions"),
+        ("preparation", "测试准备", "补齐测试账号、业务流程、结果确认和现场恢复", "/preparation"),
+        ("validation", "验证运行", "核对当前范围并检查真实业务后果", "/validation"),
+        ("results", "结果与历史", "查看结论、完整链路、证据和历次变化", "/results"),
     )
-    rows: list[ProductStepView] = []
-    for index, (key, label, route) in enumerate(_STEP_DEFINITIONS):
-        if index < current_index:
-            status, status_label = "COMPLETE", "已完成"
-        elif index == current_index:
-            status, status_label = "CURRENT", "当前步骤"
-        elif route in {"/results", "/history"} and readiness is not None and readiness.latest_verified_run_id:
-            status, status_label = "AVAILABLE", "可查看"
-        elif route == "/history":
-            status, status_label = "EMPTY", "暂无历史"
-        else:
-            status, status_label = "UPCOMING", "尚未开始"
-        rows.append(
-            ProductStepView(
-                key=key,
-                label=label,
-                route=route,
-                status=status,
-                status_label=status_label,
+    return tuple(
+        ProductAreaView(
+            key=key,
+            label=label,
+            description=description,
+            route=route,
+            status=states[key][0],
+            status_label=states[key][1],
+        )
+        for key, label, description, route in definitions
+    )
+
+
+def _attention_items(
+    readiness: ProjectReadinessView,
+    latest_change: SourceChangeView | None,
+    latest_result: ProductResultSummary | None,
+) -> tuple[ProductAttentionView, ...]:
+    items: list[ProductAttentionView] = []
+    if readiness.active_tasks:
+        run_active = any(task.kind == "RUN" for task in readiness.active_tasks)
+        items.append(
+            ProductAttentionView(
+                key="active-task",
+                label=(
+                    "查看正在进行的验证"
+                    if run_active
+                    else "查看正在录制的业务流程"
+                ),
+                description=(
+                    "当前验证仍在运行，可以查看最新进度。"
+                    if run_active
+                    else "当前业务流程仍在录制，可以返回测试准备继续处理。"
+                ),
+                route="/validation" if run_active else "/preparation",
+                tone="INFO",
             )
         )
-    return tuple(rows)
+    if readiness.endpoint_status != "CONFIRMED":
+        items.append(
+            ProductAttentionView(
+                key="confirm-application",
+                label="确认应用连接",
+                description="先确认被测应用地址和只读源码分析范围。",
+                route="/application",
+                tone="WARNING",
+            )
+        )
+    elif readiness.next_required_action == "AUTHORIZE_SOURCE_ANALYSIS":
+        items.append(
+            ProductAttentionView(
+                key="authorize-source-analysis",
+                label="授权只读源码分析",
+                description="明确授权后，界鉴才会分析源码并发现权限组与业务动作。",
+                route="/application",
+                tone="WARNING",
+            )
+        )
+    elif readiness.source_analysis_status != "COMPLETED":
+        items.append(
+            ProductAttentionView(
+                key="review-discovery",
+                label="确认新发现的权限范围",
+                description="代码变化后出现了新的权限组、业务动作或需要复核的候选。",
+                route="/application",
+                tone="WARNING",
+            )
+        )
+    if latest_change and latest_change.mapping_review_required_count > 0:
+        items.append(
+            ProductAttentionView(
+                key="review-change-mapping",
+                label="重新确认权限规则与当前实现",
+                description=latest_change.summary,
+                route="/permissions",
+                tone="WARNING",
+            )
+        )
+    if any(not action.compilable for action in readiness.permission_actions):
+        items.append(
+            ProductAttentionView(
+                key="review-permissions",
+                label="补齐或重新确认权限规则",
+                description="新增或变化的业务动作还没有形成完整的允许与拒绝对照。",
+                route="/permissions",
+            )
+        )
+    preparation_gap = _has_gap(
+        readiness,
+        (
+            "ACTION_",
+            "TEST_IDENTITY_",
+            "TEST_RESOURCE_",
+            "OBSERVATION_",
+            "RECOVERY_",
+            "SECURITY_EFFECT_",
+            "MISSING_SUBJECT",
+            "MISSING_RESOURCE",
+            "MISSING_OBSERVER",
+            "RELATION_UNPROVABLE",
+        ),
+    )
+    if preparation_gap or not readiness.completed_flow_available:
+        items.append(
+            ProductAttentionView(
+                key="complete-preparation",
+                label="补齐新增或失效的测试准备",
+                description="只处理当前缺少的测试账号、业务流程、结果确认或现场恢复。",
+                route="/preparation",
+            )
+        )
+    latest_change_unverified = bool(
+        latest_change
+        and (
+            latest_result is None
+            or latest_result.verified_change_id != latest_change.change_id
+        )
+    )
+    if readiness.current_scope_runnable and latest_change_unverified:
+        items.append(
+            ProductAttentionView(
+                key="verify-latest-change",
+                label="检查最近一次代码变化",
+                description="按当前完整权限范围运行，并把这次变化冻结到检查记录中。",
+                route="/validation",
+            )
+        )
+    elif readiness.current_scope_runnable and latest_result is None:
+        items.append(
+            ProductAttentionView(
+                key="run-current-scope",
+                label="建立第一份安全基线",
+                description="当前已有可运行范围，可以开始真实检查。",
+                route="/validation",
+            )
+        )
+    if latest_result is not None:
+        items.append(
+            ProductAttentionView(
+                key="open-result",
+                label="查看当前安全基线",
+                description=latest_result.headline,
+                route="/results",
+                tone="INFO",
+            )
+        )
+    return tuple(items)
 
 
 __all__ = [
+    "ProductAreaView",
+    "ProductAttentionView",
     "ProductFlowQuery",
-    "ProductNextAction",
     "ProductProjectSummary",
     "ProductResultQuery",
     "ProductResultSummary",
     "ProductStatusService",
     "ProductStatusView",
-    "ProductStepView",
 ]

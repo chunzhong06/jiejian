@@ -247,7 +247,7 @@ class PermissionRule(PermissionModel):
     expectation: PermissionExpectation
     required_observations: tuple[str, ...] = Field(min_length=1, max_length=16)
     coverage_dimensions: tuple[CoverageDimension, ...] = Field(
-        min_length=1, max_length=6
+        default=(), max_length=6
     )
     severity: Literal["low", "medium", "high", "critical"] = "high"
 

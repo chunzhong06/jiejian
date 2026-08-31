@@ -80,10 +80,10 @@ def test_product_page_supports_two_real_demo_sessions(
         assert page.status_code == 200
         assert "协作空间 · 校园数字展馆" in page.text
         assert "选择演示身份" in page.text
-        assert "导出完整项目资料包" in page.text
+        assert "导出完整项目交付包" in page.text
         assert "撤销当前资料包？" in page.text
         assert "确认撤销" in page.text
-        assert "重新生成资料包" in page.text
+        assert "重新生成交付包" in page.text
         assert 'data-account="eve"' not in page.text
         assert "外部访客" not in page.text
         assert "Observer" not in page.text
@@ -102,6 +102,15 @@ def test_product_page_supports_two_real_demo_sessions(
         assert catalog.status_code == 200
         assert set(catalog.json()["projects"][0]) == {"project_id", "name", "summary"}
         assert client.get(f"/api/projects/{PROJECT_ID}").status_code == 200
+        collaboration = client.get(f"/api/projects/{PROJECT_ID}/collaboration")
+        assert collaboration.status_code == 200
+        assert set(collaboration.json()) == {"project_id", "name", "members", "materials"}
+        assert {item["kind"] for item in collaboration.json()["materials"]} == {
+            "APPLICATION_NOTE",
+            "BUDGET_SUMMARY",
+            "DESIGN_SOURCE",
+            "REVIEW_NOTE",
+        }
 
 
 def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory) -> None:
@@ -173,8 +182,18 @@ def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory
         assert ranged.status_code == 206
         assert ranged.content == archive_path.read_bytes()
         with zipfile.ZipFile(archive_path) as archive:
-            assert {"project.json", "members.json", "design/placeholder.txt", "history.json"} == set(archive.namelist())
-            assert "校园数字展馆" in archive.read("project.json").decode("utf-8")
+            assert {
+                "01-项目申报书.json",
+                "02-完整预算.csv",
+                "03-成员信息.json",
+                "04-设计源文件/展馆首页线框.svg",
+                "05-评审记录.json",
+            } == set(archive.namelist())
+            assert "校园数字展馆" in archive.read("01-项目申报书.json").decode("utf-8")
+            assert "70000" in archive.read("02-完整预算.csv").decode("utf-8")
+            assert "虚构" in archive.read("03-成员信息.json").decode("utf-8")
+            assert "虚构设计源文件" in archive.read("04-设计源文件/展馆首页线框.svg").decode("utf-8")
+            assert "演示用途的虚构数据" in archive.read("05-评审记录.json").decode("utf-8")
 
         database_path = sample.server.runtime_root / "database" / "collaboration-space.sqlite3"
         with sqlite3.connect(database_path) as database:

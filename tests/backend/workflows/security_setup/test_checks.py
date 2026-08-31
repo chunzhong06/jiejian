@@ -41,7 +41,7 @@ def test_check_preview_and_submit_reuse_current_frozen_execution_plan(
     try:
         before = core.checks.preview(PROJECT_ID)
         assert before.ready is False
-        assert before.next_path == "/check"
+        assert before.next_path == "/validation"
         assert {item.code for item in before.gaps} == {"GENERATED_PROFILE_MISSING"}
 
         compiled = core.security_setup.compile(PROJECT_ID)
@@ -155,14 +155,14 @@ def test_check_submit_rejects_stale_preparation_and_returns_earliest_gap(
 
         preview = core.checks.preview(PROJECT_ID)
         assert preview.ready is False
-        assert preview.next_path == "/check"
+        assert preview.next_path == "/validation"
         assert "GENERATED_PROFILE_MISSING" in {
             item.code for item in preview.gaps
         }
         with pytest.raises(JiejianError) as error:
             core.checks.submit(PROJECT_ID, idempotency_key="stale-check")
         assert error.value.code == ErrorCode.STATE_PRECONDITION.value
-        assert error.value.to_dict()["details"]["next_path"] == "/check"
+        assert error.value.to_dict()["details"]["next_path"] == "/validation"
     finally:
         core.close()
 

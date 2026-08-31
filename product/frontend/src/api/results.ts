@@ -207,6 +207,7 @@ export type ResultPresentationIssueDto = {
   finding_id: string
   title: string
   subject_group: string
+  action_id: string
   action: string
   resource: string
   relation: string
@@ -248,6 +249,19 @@ export type RepairVerificationDto = {
   verification_run_id: string
   status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE'
   message: string
+  reason_codes: string[]
+  path_results: RepairPathVerificationDto[]
+}
+
+export type RepairPathVerificationDto = {
+  kind: 'DENY_EFFECT_REMOVAL' | 'ALLOW_CONTROL' | 'REGRESSION_CONTROL'
+  action_id: string
+  subject_id: string
+  subject_display_name: string
+  action_display_name: string
+  status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE'
+  message: string
+  evidence_refs: string[]
   reason_codes: string[]
 }
 export type ResultRelevantIntentDto = {

@@ -6,7 +6,7 @@ import { LLMProfile } from '../../api/llm'
 export function ModelServicePage({ profiles, onManage }: { profiles: LLMProfile[]; onManage: () => void }) {
   const scope = [
     ...['应用接入', '账号准备', '录制', '权限确认', '检查准备', '错误解释'].map((area) => ({ area, participation: '只排序/解释' })),
-    { area: 'ALLOW/DENY', participation: '否' },
+    { area: '允许/拒绝权限规则', participation: '否' },
     { area: 'PASS/BLOCK/INCONCLUSIVE', participation: '否' },
     { area: '真实执行', participation: '否' },
   ]

@@ -1,124 +1,91 @@
-// 验证工作台直接消费后端统一产品状态中的 Readiness 与唯一下一步。
+// 验证项目概览展示持续安全基线、并行待办和官方示例入口。
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import type { ProductStatusDto, ProjectReadinessDto } from '../../api/projects'
 import { WorkbenchPage } from './WorkbenchPage'
 
-const mockAssistant = vi.hoisted(() => ({ project: vi.fn(), generateProject: vi.fn(), result: vi.fn(), generateResult: vi.fn(), generateError: vi.fn() }))
-vi.mock('../../api/assistant', () => ({ assistantApi: mockAssistant }))
-
-const readiness = {
-  schema_version: '1' as const,
-  project_id: 'p1',
-  project_status: 'READY',
-  application_connected: true,
-  endpoint_status: 'CONFIRMED' as const,
-  source_analysis_status: 'COMPLETED' as const,
-  discovered_role_count: 3,
-  confirmed_role_count: 2,
-  discovered_action_count: 4,
-  confirmed_action_count: 3,
-  execution_profile_available: true,
-  completed_flow_available: true,
-  active_contract_available: true,
-  current_scope_runnable: true,
-  remaining_gap_count: 0,
-  active_tasks: [],
-  latest_verified_run_id: 'run-current',
-  next_required_action: 'OPEN_RESULT' as const,
+const readiness: ProjectReadinessDto = {
+  project_id: 'p1', project_status: 'READY', application_connected: true,
+  endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED',
+  discovered_role_count: 3, confirmed_role_count: 2,
+  discovered_action_count: 4, confirmed_action_count: 3,
+  execution_profile_available: true, completed_flow_available: true,
+  active_contract_available: true, current_scope_runnable: true,
+  remaining_gap_count: 0, active_tasks: [], latest_verified_run_id: 'run-current',
+  next_required_action: 'OPEN_RESULT',
 }
 
-const resultAction = { action: 'OPEN_RESULT' as const, label: '查看检查结果', description: '查看真实副作用、可信证据和已经发布的安全结论。', route: '/results' as const, cli_command: 'jiejian result show --help' }
-const accountAction = { action: 'RECORD_FLOW' as const, label: '准备测试账号', description: '先为已确认权限组准备安全登录状态。', route: '/identities' as const, cli_command: 'jiejian account --help' }
+const areas: ProductStatusDto['areas'] = [
+  { key: 'overview', label: '项目概览', description: '查看基线', route: '/workspace', status: 'READY', status_label: '当前概览' },
+  { key: 'changes', label: '变化与待办', description: '查看变化', route: '/changes', status: 'NEEDS_ATTENTION', status_label: '需要处理' },
+  { key: 'permissions', label: '权限规则', description: '维护规则', route: '/permissions', status: 'NEEDS_ATTENTION', status_label: '需要确认' },
+  { key: 'preparation', label: '测试准备', description: '准备条件', route: '/preparation', status: 'READY', status_label: '测试条件可用' },
+  { key: 'validation', label: '验证运行', description: '运行检查', route: '/validation', status: 'READY', status_label: '可以检查' },
+  { key: 'results', label: '结果与历史', description: '查看结果', route: '/results', status: 'AVAILABLE', status_label: '已有可信结果' },
+]
+
+const status: ProductStatusDto = {
+  project: { project_id: 'p1', name: '演示应用', status: 'READY', target_type: 'WEB' },
+  readiness,
+  areas,
+  attention_items: [
+    { key: 'review-change-mapping', label: '重新确认权限规则与当前实现', description: '有 1 条规则需要确认。', route: '/permissions', tone: 'WARNING' },
+    { key: 'verify-latest-change', label: '检查最近一次代码变化', description: '按完整权限范围运行。', route: '/validation', tone: 'ACTION' },
+  ],
+  latest_change: {
+    change_id: `chg_${'1'.repeat(32)}`, project_id: 'p1', reason: 'Agent 增加导出能力', created_at_us: 1,
+    status: 'COMPARABLE', complete: true, actual_changed_path_count: 2,
+    added_count: 1, modified_count: 1, removed_count: 0, claimed_paths: [],
+    added_paths: ['app/export.py'], modified_paths: ['app/permissions.py'], removed_paths: [],
+    directly_affected_count: 1, mapping_review_required_count: 1, no_direct_evidence_count: 0,
+    review_intent_ids: [`pin_${'2'.repeat(32)}`], summary: '有 1 条权限规则需要重新确认。', next_path: '/permissions',
+  },
+  latest_result: { run_id: 'run-current', verdict: 'BLOCK', headline: '发现权限问题', scope_statement: '当前范围已检查。', verified_change_id: null },
+}
+
 const officialExperience = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null, repair_change_id: null }
 
+const common = {
+  runs: [],
+  systemStatus: { api: 'available' as const, worker: 'running' as const, browser: 'available' as const },
+  experience: officialExperience,
+  experienceBusy: false,
+  onStartExperience: vi.fn().mockResolvedValue(true),
+}
+
 describe('WorkbenchPage', () => {
-  beforeEach(() => { vi.clearAllMocks(); mockAssistant.project.mockRejectedValue(new Error('assistant unavailable')) })
-
-  it('只展示唯一下一步主卡与固定辅助卡', () => {
-    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[{ lifecycle: 'COMPLETED', verdict: 'INCONCLUSIVE', result_integrity: 'VERIFIED' }]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} mcpStatus={{ schema_version: '1', paired: true, accepting_connections: true, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: true, client_name: 'Codex', client_version: null, last_seen_at_us: 1 }} latestChange={{ change_id: `chg_${'1'.repeat(32)}`, project_id: 'p1', reason: '完成权限修复', created_at_us: 1, status: 'COMPARABLE', complete: true, actual_changed_path_count: 2, added_count: 0, modified_count: 2, removed_count: 0, claimed_paths: ['agent/change.py'], added_paths: [], modified_paths: ['app/a.py', 'app/b.py'], removed_paths: [], directly_affected_count: 0, mapping_review_required_count: 0, no_direct_evidence_count: 2, review_intent_ids: [], summary: '当前没有发现与已知权限实现直接相交的变化；这不代表其他未建模影响一定不存在。', next_path: null }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
-    expect(screen.queryByText('六步检查进度')).not.toBeInTheDocument()
-    expect(screen.getByText('当前应用')).toBeInTheDocument()
-    expect(screen.getByText('现在继续')).toBeInTheDocument()
-    expect(screen.getByText('最近检查')).toBeInTheDocument()
-    expect(screen.getByText('最近代码变化')).toBeInTheDocument()
-    expect(screen.getByText('当前没有发现与已知权限实现直接相交的变化；这不代表其他未建模影响一定不存在。')).toBeInTheDocument()
-    expect(screen.getByText('界鉴确认 2 个文件发生变化')).toBeInTheDocument()
-    expect(screen.getByText('直接影响 0 条权限要求')).toBeInTheDocument()
-    expect(screen.getByText('已确认的权限要求都能继续对应到当前代码')).toBeInTheDocument()
-    expect(screen.queryByText('agent/change.py')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '查看变化明细' }))
-    expect(screen.getByText('Agent 说自己改了什么')).toBeInTheDocument()
-    expect(screen.getByText('agent/change.py')).toBeInTheDocument()
-    expect(screen.getByText('app/a.py')).toBeInTheDocument()
-    expect(screen.getByText('Codex 已连接')).toBeInTheDocument()
-    expect(screen.getByText('[AI辅助]')).toBeInTheDocument()
-    expect(screen.queryByText('系统状态')).not.toBeInTheDocument()
-    expect(screen.getByText('官方示例')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看检查结果' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '现场验证' })).toBeInTheDocument()
-    expect(screen.queryByText('INTERNAL_STATE')).not.toBeInTheDocument()
-    expect(screen.getByText('证据不足，暂时不能下结论')).toBeInTheDocument()
-    expect(screen.getByText('结果完整')).toBeInTheDocument()
-  })
-
-  it('没有应用时给出应用接入主操作', () => {
+  it('同时展示全部待办，不再生成唯一下一步', () => {
     const onNavigate = vi.fn()
-    render(<WorkbenchPage selected={null} readiness={null} nextAction={null} runs={[]} systemStatus={{ api: 'unknown', worker: 'unknown', browser: 'unknown' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={onNavigate} />)
-    expect(screen.getByText('开始一次安全检查')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '接入自己的应用' })).toBeInTheDocument()
-    expect(screen.getByText('或者先体验界鉴')).toBeInTheDocument()
+    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} />)
+    expect(screen.getByText('项目概览')).toBeInTheDocument()
+    expect(screen.getByText('重新确认权限规则与当前实现')).toBeInTheDocument()
+    expect(screen.getByText('检查最近一次代码变化')).toBeInTheDocument()
+    expect(screen.queryByText('唯一下一步')).not.toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: /打\s*开/ })[0])
+    expect(onNavigate).toHaveBeenCalledWith('/permissions')
   })
 
-  it('实现映射待审时只把用户带回权限页', () => {
+  it('展示最近变化并进入完整变化记录', () => {
     const onNavigate = vi.fn()
-    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} latestChange={{ change_id: `chg_${'2'.repeat(32)}`, project_id: 'p1', reason: '重构动作实现', created_at_us: 2, status: 'COMPARABLE', complete: true, actual_changed_path_count: 3, added_count: 1, modified_count: 2, removed_count: 0, claimed_paths: ['app/action.py'], added_paths: ['app/new.py'], modified_paths: ['app/action.py', 'app/role.py'], removed_paths: [], directly_affected_count: 1, mapping_review_required_count: 1, no_direct_evidence_count: 0, review_intent_ids: [`pin_${'3'.repeat(32)}`], summary: '有 1 条权限要求无法自动对应到修改后的代码，需要你确认。', next_path: '/check' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={onNavigate} />)
-    fireEvent.click(screen.getByRole('button', { name: '确认权限要求' }))
-    expect(onNavigate).toHaveBeenCalledWith('/check')
-    expect(screen.queryByText(`pin_${'3'.repeat(32)}`)).not.toBeInTheDocument()
+    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} />)
+    expect(screen.getByText('Agent 增加导出能力')).toBeInTheDocument()
+    expect(screen.getByText(/实际确认 2 个文件变化/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看变化记录' }))
+    expect(onNavigate).toHaveBeenCalledWith('/changes')
   })
 
-  it('角色与动作确认完成后指向业务流程', () => {
-    const onNavigate = vi.fn()
-    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'DRAFT' }} readiness={{ ...readiness, execution_profile_available: false, completed_flow_available: false, active_contract_available: false, latest_verified_run_id: null, next_required_action: 'RECORD_FLOW' }} nextAction={accountAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={onNavigate} />)
-    expect(screen.getByRole('button', { name: '准备测试账号' })).toBeInTheDocument()
+  it('空工作区说明持续基线而不是六步接入', () => {
+    render(<WorkbenchPage {...common} selected={null} readiness={null} status={null} onNavigate={vi.fn()} />)
+    expect(screen.getByText('建立第一份权限安全基线')).toBeInTheDocument()
+    expect(screen.getByText(/应用继续开发时/)).toBeInTheDocument()
+    expect(screen.queryByText(/六个连续步骤/)).not.toBeInTheDocument()
   })
 
-  it('先按服务端确定性主动作展示，再显示 READY 的 AI 排序解释', async () => {
-    mockAssistant.project.mockResolvedValue({ status: 'READY', template_id: 'jiejian.next_step', template_version: '1', subject_id: 'p1', state_fingerprint: 'a'.repeat(64), entities: [{ entity_id: 'task:check', entity_type: 'TASK', display_name: '开始检查当前可运行范围', facts: [] }], suggestions: [{ kind: 'PRIORITIZE', entity_ids: ['task:check'], explanation: '先开始当前可运行范围。' }], retry_after_us: null })
-    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
-    expect(await screen.findByText('开始检查当前可运行范围')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看检查结果' })).toBeInTheDocument()
-    expect(await screen.findByText('先开始当前可运行范围。')).toBeInTheDocument()
-  })
-
-  it('REFRESH_NEEDED 只冷读取，用户点击后才请求模型且失败不改变确定性主流程', async () => {
-    mockAssistant.project.mockResolvedValue({ status: 'REFRESH_NEEDED', template_id: 'jiejian.next_step', template_version: '1', subject_id: 'p1', state_fingerprint: 'b'.repeat(64), entities: [], suggestions: [], retry_after_us: null })
-    mockAssistant.generateProject.mockRejectedValue(new Error('provider unavailable'))
-    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onNavigate={vi.fn()} />)
-    expect(await screen.findByText('尚未生成建议，点击按钮后才会连接模型服务。')).toBeInTheDocument()
-    expect(mockAssistant.generateProject).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '生成 AI 建议' }))
-    await waitFor(() => expect(mockAssistant.generateProject).toHaveBeenCalledOnce())
-    expect(screen.getByRole('button', { name: '查看检查结果' })).toBeInTheDocument()
-  })
-
-  it('开始评委导览前明确说明本机运行、源码分析和不会预制结论', async () => {
-    const onStart = vi.fn().mockResolvedValue(true)
-    render(<WorkbenchPage selected={null} readiness={null} nextAction={null} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={officialExperience} experienceBusy={false} onStartExperience={onStart} onNavigate={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: '评委导览' }))
-    expect(await screen.findByText('评委导览还会授权界鉴只读分析随产品附带的示例源码。')).toBeInTheDocument()
-    expect(screen.getByText('不会开始真实安全检查，也不会预先生成检查结论。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '同意并开始' }))
-    await waitFor(() => expect(onStart).toHaveBeenCalledWith('GUIDED'))
-  })
-
-  it('官方体验进行中时只提供明确的结束体验动作', () => {
-    const onStop = vi.fn().mockResolvedValue(undefined)
-    render(<WorkbenchPage selected={{ project_id: 'p1', name: '协作空间', status: 'READY' }} readiness={readiness} nextAction={resultAction} runs={[]} systemStatus={{ api: 'available', worker: 'running', browser: 'available' }} experience={{ ...officialExperience, active: true, experience_id: 'exp-1', experience_mode: 'GUIDED', project_id: 'p1' }} experienceBusy={false} onStartExperience={vi.fn().mockResolvedValue(true)} onStopExperience={onStop} onNavigate={vi.fn()} />)
-
-    fireEvent.click(screen.getByRole('button', { name: '结束体验' }))
-    expect(onStop).toHaveBeenCalledOnce()
-    expect(screen.queryByRole('button', { name: '评委导览' })).not.toBeInTheDocument()
+  it('官方示例仍由用户明确同意后启动', () => {
+    render(<WorkbenchPage {...common} selected={null} readiness={null} status={null} onNavigate={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '启动官方示例' }))
+    expect(screen.getByText('启动官方示例？')).toBeInTheDocument()
+    expect(screen.getByText(/不会开始真实检查/)).toBeInTheDocument()
   })
 })

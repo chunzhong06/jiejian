@@ -50,7 +50,10 @@ from product.backend.core.permission_intent import (
     permission_intent_sha256,
 )
 from product.backend.core.test_setup import ActionSafetySetup
-from product.backend.core.verification.permissions import PermissionExpectation
+from product.backend.core.verification.permissions import (
+    PermissionExpectation,
+    SecurityEffectKind,
+)
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.recording.safety_setup import ActionSafetySetupService
 from product.backend.workflows.test_identities import (
@@ -1029,10 +1032,17 @@ class PermissionIntentService:
             if cell.status is PermissionIntentCellStatus.CURRENT and cell.execution_gap is None
         )
         executable_expectations = {cell.expectation for cell in executable}
+        allow_only_supported = (
+            setup.effect is not None
+            and setup.effect.kind is SecurityEffectKind.DATA_DISCLOSURE
+        )
         gaps = list(setup_gaps)
         if PermissionExpectation.ALLOW not in executable_expectations:
             gaps.append("ALLOW_INTENT_MISSING")
-        if PermissionExpectation.DENY not in executable_expectations:
+        if (
+            not allow_only_supported
+            and PermissionExpectation.DENY not in executable_expectations
+        ):
             gaps.append("DENY_INTENT_MISSING")
         gaps.extend(cell.execution_gap for cell in confirmed if cell.execution_gap is not None)
         gaps.extend(reason for cell in confirmed for reason in cell.review_reasons)
@@ -1049,7 +1059,10 @@ class PermissionIntentService:
             compilable=(
                 not setup_gaps
                 and PermissionExpectation.ALLOW in executable_expectations
-                and PermissionExpectation.DENY in executable_expectations
+                and (
+                    allow_only_supported
+                    or PermissionExpectation.DENY in executable_expectations
+                )
             ),
         )
 

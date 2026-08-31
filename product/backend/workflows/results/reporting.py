@@ -38,6 +38,7 @@ from product.protocols.report import (
     ReportObserverStatus,
     ReportPresentation,
     ReportPresentationIssue,
+    ReportRepairVerification,
     ReportRelevantIntent,
     ReportRun,
     ReportRuntime,
@@ -201,6 +202,13 @@ class ReportBuilder:
             {key: value for key, value in intent.items() if key in intent_fields}
             for intent in presentation.get("relevant_intents", [])
         ]
+        repair_verification = presentation.get("repair_verification")
+        if repair_verification is not None:
+            presentation["repair_verification"] = {
+                key: value
+                for key, value in repair_verification.items()
+                if key in ReportRepairVerification.model_fields
+            }
         snapshot = ReportPresentation.model_validate_json(
             json.dumps(
                 presentation,

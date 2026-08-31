@@ -57,7 +57,7 @@ jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
 
 1. `claimed_paths` 仍是受限相对路径线索，绝对路径、父目录跳转和空路径段继续拒绝。
 2. 真实 diff 只由两份服务端快照计算；mtime、Agent 声明和 Git 状态不参与。
-3. 没有基线、源码再次漂移、权限 revision 漂移或 binding 非 CURRENT 时 fail closed。
+3. 没有基线、源码再次漂移、权限规则版本漂移或实现绑定非 CURRENT 时 fail closed。
 4. Agent rebind 只形成 `IntentProposal`；只有 GUI 批准事务可以把 binding 恢复为 CURRENT，且纯重绑不推进 `policy_epoch`。
 5. `check_prepare` 与 `check_run` 只接受可选 `change_id`，不新增选择权限、Case、Effect、Profile 或文件范围的参数。
 6. `ChangeVerificationContext` 保持嵌套对象，不单独增加 `schema_version`；公共执行请求变化后同步 checked-in Schema。

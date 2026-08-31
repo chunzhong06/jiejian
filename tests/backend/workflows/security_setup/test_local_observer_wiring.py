@@ -253,10 +253,27 @@ def test_compiler_publishes_local_observer_contract_and_profile_snapshot(tmp_pat
         assert canonical_web_execution_profile_json_bytes(profile) == Path(
             compiled.profile_path
         ).read_bytes()
-        assert set(contract.rules[0].required_observations) == {
-            profile.observer_bindings[0].requirement_id,
-            profile.observer_bindings[5].requirement_id,
-        }
+        export_action = next(
+            item
+            for item in contract.actions
+            if item.action_id == setup["export_action_id"]
+        )
+        export_effect_binding = next(
+            item
+            for item in profile.effect_bindings
+            if item.effect_id in export_action.effect_ids
+        )
+        export_rules = tuple(
+            item
+            for item in contract.rules
+            if item.action_id == setup["export_action_id"]
+        )
+        assert export_rules
+        assert all(
+            set(item.required_observations)
+            == set(export_effect_binding.required_channels)
+            for item in export_rules
+        )
         assert [item.observer_type for item in profile.observers] == [
             ObserverType.OWNER_API,
             ObserverType.READ_ONLY_SQLITE,
@@ -264,14 +281,20 @@ def test_compiler_publishes_local_observer_contract_and_profile_snapshot(tmp_pat
             ObserverType.ASYNC_TASK_STATUS,
             ObserverType.AZURE_QUEUE_PEEK,
             ObserverType.AZURE_BLOB_OBJECT,
+            ObserverType.OWNER_API,
         ]
-        assert set(profile.effect_bindings[0].required_channels) == set(
-            contract.rules[0].required_observations
-        )
-        assert profile.effect_bindings[0].corroborating_channels == tuple(
+        assert export_effect_binding.corroborating_channels == tuple(
             item.requirement_id for item in profile.observer_bindings[1:5]
         )
-        assert [item.required for item in profile.observers] == [True, False, False, False, False, True]
+        assert [item.required for item in profile.observers] == [
+            True,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+        ]
         async_binding = next(
             item.requirement_id
             for item in profile.observer_bindings
@@ -280,6 +303,7 @@ def test_compiler_publishes_local_observer_contract_and_profile_snapshot(tmp_pat
         target_step = next(
             step
             for workflow in profile.workflow_bindings
+            if workflow.action_id == setup["export_action_id"]
             for step in workflow.steps
             if step.purpose is WorkflowStepPurpose.TARGET
         )
@@ -295,8 +319,13 @@ def test_compiler_publishes_local_observer_contract_and_profile_snapshot(tmp_pat
             ObserverType.ASYNC_TASK_STATUS,
             ObserverType.AZURE_QUEUE_PEEK,
             ObserverType.AZURE_BLOB_OBJECT,
+            ObserverType.OWNER_API,
         ]
-        case = request.project_snapshot.plan.cases[0]
+        case = next(
+            item
+            for item in request.project_snapshot.plan.cases
+            if item.action_id == setup["export_action_id"]
+        )
         action = next(
             item
             for item in request.project_snapshot.contract.actions
@@ -310,8 +339,12 @@ def test_compiler_publishes_local_observer_contract_and_profile_snapshot(tmp_pat
                 for item in request.project_snapshot.effect_bindings
             },
         )
-        assert set(scheduled) == {
-            item.requirement_id
-            for item in request.project_snapshot.observer_bindings
+        export_requirements = {
+            requirement
+            for effect_id in action.effect_ids
+            for binding in request.project_snapshot.effect_bindings
+            if binding.effect_id == effect_id
+            for requirement in (*binding.required_channels, *binding.corroborating_channels)
         }
+        assert set(scheduled) == export_requirements
         assert len(scheduled) == 6

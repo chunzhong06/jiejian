@@ -85,19 +85,6 @@ export type PermissionIntentMatrixDto = {
   representative_gap_count: number
   compilable_action_count: number
 }
-export type SecuritySetupCompileResultDto = {
-  project_id: string
-  authority_fingerprint: string
-  contract_id: string
-  contract_version: number
-  contract_fingerprint: string
-  profile_id: string
-  profile_path: string
-  profile_sha256: string
-  covered_action_ids: string[]
-  reused: boolean
-}
-
 export const permissionIntentsApi = {
   matrix: (projectId: string) =>
     request<PermissionIntentMatrixDto>(`/api/projects/${projectId}/permission-intents`),
@@ -127,11 +114,6 @@ export const permissionIntentsApi = {
     }),
   rejectProposal: (projectId: string, proposalId: string) =>
     request<PermissionIntentProposalDto>(`/api/projects/${projectId}/permission-intent-proposals/${encodeURIComponent(proposalId)}/reject`, {
-      method: 'POST',
-      body: JSON.stringify({ schema_version: '1' }),
-    }),
-  compile: (projectId: string) =>
-    request<SecuritySetupCompileResultDto>(`/api/projects/${projectId}/security-setup/compile`, {
       method: 'POST',
       body: JSON.stringify({ schema_version: '1' }),
     }),

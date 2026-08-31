@@ -464,6 +464,16 @@ class WebTargetCaseSession:
                     ErrorCode.BASELINE_INVALID,
                     "唯一资源恢复流程缺少已确认清理步骤",
                 )
+        elif self.workflow.reset_strategy.kind.value == "NOT_REQUIRED":
+            if any(
+                step.purpose.value == "CLEANUP"
+                or step.request_template.method not in {"GET", "HEAD"}
+                for step in self.workflow.steps
+            ):
+                raise JiejianError(
+                    ErrorCode.BASELINE_INVALID,
+                    "无需恢复的工作流包含状态变化或清理请求",
+                )
         else:
             raise JiejianError(
                 ErrorCode.BASELINE_INVALID,
@@ -768,7 +778,7 @@ class WebTargetCaseSession:
             None,
         )
         owner_value = (
-            baseline.state.canonical_data
+            baseline.state.canonical_data.get("data")
             if baseline is not None and baseline.state is not None
             else None
         )

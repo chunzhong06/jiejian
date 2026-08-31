@@ -1,87 +1,97 @@
-// 连续流程导航：直接展示后端统一产品状态中的六步事实，route 只表示当前焦点。
+// 长期工作区导航：状态来自后端当前事实，页面位置只表示用户正在查看哪个区域。
 
-import { CheckCircleFilled, HomeOutlined, MenuOutlined } from '@ant-design/icons'
+import { CheckCircleFilled, ExclamationCircleFilled, LoadingOutlined, LockOutlined, MenuOutlined, MinusCircleOutlined } from '@ant-design/icons'
 import { Button, Drawer, Typography } from 'antd'
 import { useRef, useState } from 'react'
 import type { ProductStatusDto } from '../api/projects'
-import { processSteps, type AppRoute, type ProcessRoute, type ProcessStepState } from '../app/presentation'
+import { productAreas, type AppRoute, type ProductAreaRoute } from '../app/presentation'
 
-type ProductSteps = ProductStatusDto['steps'] | null
+type ProductAreas = ProductStatusDto['areas'] | null
+type AreaStatus = ProductStatusDto['areas'][number]['status']
 
-function processState(value: ProductStatusDto['steps'][number]['status'] | undefined): ProcessStepState {
-  if (value === 'COMPLETE') return 'complete'
-  if (value === 'CURRENT') return 'current'
-  return 'upcoming'
+function activeArea(route: AppRoute): ProductAreaRoute {
+  if (route === '/application') return '/workspace'
+  if (route === '/identities' || route === '/flows') return '/preparation'
+  if (route === '/verification' || route === '/history') return '/results'
+  return productAreas.some((area) => area.route === route) ? route as ProductAreaRoute : '/workspace'
 }
 
-function ProcessList({ route, steps, onNavigate }: {
+function AreaIcon({ status }: { status: AreaStatus }) {
+  if (status === 'READY' || status === 'AVAILABLE') return <CheckCircleFilled />
+  if (status === 'NEEDS_ATTENTION') return <ExclamationCircleFilled />
+  if (status === 'RUNNING') return <LoadingOutlined />
+  if (status === 'BLOCKED') return <LockOutlined />
+  return <MinusCircleOutlined />
+}
+
+function AreaList({ route, areas, onNavigate }: {
   route: AppRoute
-  steps: ProductSteps
+  areas: ProductAreas
   onNavigate: (path: AppRoute) => void
 }) {
-  return <>
-    <div className="process-workspace-group">
-      <Button className={`process-workspace-link${route === '/workspace' ? ' is-selected' : ''}`} type="text" icon={<HomeOutlined />} aria-current={route === '/workspace' ? 'page' : undefined} onClick={() => onNavigate('/workspace')}>工作台</Button>
-    </div>
-    <div className="process-flow-group">
-      <Typography.Text className="process-group-title">检查流程</Typography.Text>
-      <ol className="process-step-list">
-        {processSteps.map((step, index) => {
-          const backendStep = steps?.find((item) => item.route === step.route)
-          const state = processState(backendStep?.status ?? (index === 0 ? 'CURRENT' : undefined))
-          const selected = route === step.route
-          return <li className={`process-step is-${state}${selected ? ' is-selected' : ''}`} key={step.route}>
-            <button type="button" className="process-step-button" aria-current={selected ? 'page' : undefined} onClick={() => onNavigate(step.route)}>
-              <span className="process-step-marker" aria-hidden="true">{state === 'complete' ? <CheckCircleFilled /> : index + 1}</span>
-              <span className="process-step-copy"><span className="process-step-label">{step.label}</span><span className="process-step-state">{backendStep?.status_label ?? (state === 'current' ? '当前步骤' : '尚未开始')}</span></span>
-            </button>
-          </li>
-        })}
-      </ol>
-    </div>
-  </>
+  const selectedRoute = activeArea(route)
+  return <div className="process-flow-group">
+    <Typography.Text className="process-group-title">持续验证工作区</Typography.Text>
+    <ul className="process-step-list">
+      {productAreas.map((fallback) => {
+        const area = areas?.find((item) => item.route === fallback.route)
+        const status: AreaStatus = area?.status ?? (fallback.route === '/workspace' ? 'READY' : 'EMPTY')
+        const selected = selectedRoute === fallback.route
+        return <li className={`process-step is-${status.toLowerCase()}${selected ? ' is-selected' : ''}`} key={fallback.route}>
+          <button type="button" className="process-step-button" aria-current={selected ? 'page' : undefined} onClick={() => onNavigate(fallback.route)}>
+            <span className="process-step-marker" aria-hidden="true"><AreaIcon status={status} /></span>
+            <span className="process-step-copy">
+              <span className="process-step-label">{area?.label ?? fallback.label}</span>
+              <span className="process-step-state">{area?.status_label ?? (fallback.route === '/workspace' ? '可以开始' : '等待应用')}</span>
+            </span>
+          </button>
+        </li>
+      })}
+    </ul>
+  </div>
 }
 
-export function DesktopProcessNavigation({ route, steps, onNavigate }: {
+export function DesktopProcessNavigation({ route, areas, onNavigate }: {
   route: AppRoute
-  steps: ProductSteps
+  areas: ProductAreas
   onNavigate: (path: AppRoute) => void
 }) {
   return <aside className="process-navigation" aria-label="界鉴主导航">
-    <div className="product-brand"><strong>界鉴</strong><span>安全意图一致性验证</span></div>
-    <nav aria-label="安全检查流程"><ProcessList route={route} steps={steps} onNavigate={onNavigate} /></nav>
+    <div className="product-brand"><strong>界鉴</strong><span>持续权限验证</span></div>
+    <nav aria-label="持续验证工作区"><AreaList route={route} areas={areas} onNavigate={onNavigate} /></nav>
   </aside>
 }
 
-export function MobileProcessNavigation({ route, steps, onNavigate }: {
+export function MobileProcessNavigation({ route, areas, onNavigate }: {
   route: AppRoute
-  steps: ProductSteps
+  areas: ProductAreas
   onNavigate: (path: AppRoute) => void
 }) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const recommended = (steps?.find((step) => step.status === 'CURRENT')?.route ?? '/application') as ProcessRoute
-  const currentIndex = processSteps.findIndex((step) => step.route === (processSteps.some((item) => item.route === route) ? route : recommended))
-  const summary = route.startsWith('/settings/') ? '设置' : currentIndex >= 0 ? `第 ${currentIndex + 1}/6 步 · ${processSteps[currentIndex].label}` : '安全检查流程'
+  const selectedRoute = activeArea(route)
+  const selected = areas?.find((area) => area.route === selectedRoute)
+  const fallback = productAreas.find((area) => area.route === selectedRoute)
+  const summary = route.startsWith('/settings/') ? '设置' : selected?.label ?? fallback?.label ?? '持续验证工作区'
   const navigateFromDrawer = (path: AppRoute) => { setOpen(false); onNavigate(path) }
   return <>
     <div className="mobile-process-summary">
-      <Button ref={triggerRef} type="text" icon={<MenuOutlined />} aria-label="打开检查流程" onClick={() => setOpen(true)} />
-      <Typography.Text strong>{route === '/workspace' ? '工作台' : summary}</Typography.Text>
+      <Button ref={triggerRef} type="text" icon={<MenuOutlined />} aria-label="打开持续验证工作区" onClick={() => setOpen(true)} />
+      <Typography.Text strong>{summary}</Typography.Text>
     </div>
     <Drawer
       className="process-drawer"
-      title="界鉴检查流程"
+      title="界鉴持续验证工作区"
       placement="left"
       width={320}
       open={open}
       onClose={() => setOpen(false)}
       afterOpenChange={(isOpen) => {
-        if (isOpen) (document.querySelector('.process-drawer .process-step.is-current .process-step-button') as HTMLElement | null)?.focus()
+        if (isOpen) (document.querySelector('.process-drawer .process-step.is-selected .process-step-button') as HTMLElement | null)?.focus()
         else triggerRef.current?.focus()
       }}
     >
-      <nav aria-label="安全检查流程"><ProcessList route={route} steps={steps} onNavigate={navigateFromDrawer} /></nav>
+      <nav aria-label="持续验证工作区"><AreaList route={route} areas={areas} onNavigate={navigateFromDrawer} /></nav>
     </Drawer>
   </>
 }

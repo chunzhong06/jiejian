@@ -1,16 +1,16 @@
-// 验证 Human Approval 预览、Agent proposal、单一 Assistant 与 preview 失效门禁。
+// 验证权限规则与验证运行共享事实、分离任务，并保留 Agent 变化门禁。
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PermissionCheckPage } from './PermissionCheckPage'
 
 const api = vi.hoisted(() => ({
-  matrix: vi.fn(), proposals: vi.fn(), approve: vi.fn(), approveProposal: vi.fn(), rejectProposal: vi.fn(), compile: vi.fn(),
-  preview: vi.fn(), submit: vi.fn(),
+  matrix: vi.fn(), proposals: vi.fn(), approve: vi.fn(), approveProposal: vi.fn(), rejectProposal: vi.fn(),
+  preview: vi.fn(), prepare: vi.fn(), submit: vi.fn(),
   run: vi.fn(), progress: vi.fn(), cancel: vi.fn(),
 }))
-vi.mock('../../api/permissionIntents', () => ({ permissionIntentsApi: { matrix: api.matrix, proposals: api.proposals, approve: api.approve, approveProposal: api.approveProposal, rejectProposal: api.rejectProposal, compile: api.compile } }))
-vi.mock('../../api/checks', () => ({ checksApi: { preview: api.preview, submit: api.submit } }))
+vi.mock('../../api/permissionIntents', () => ({ permissionIntentsApi: { matrix: api.matrix, proposals: api.proposals, approve: api.approve, approveProposal: api.approveProposal, rejectProposal: api.rejectProposal } }))
+vi.mock('../../api/checks', () => ({ checksApi: { preview: api.preview, prepare: api.prepare, submit: api.submit } }))
 vi.mock('../../api/runs', () => ({ runsApi: { run: api.run, progress: api.progress, cancel: api.cancel } }))
 
 const actionId = `action_${'1'.repeat(32)}`
@@ -39,7 +39,7 @@ const readyPreview = {
 
 function renderPage(overrides: Record<string, unknown> = {}) {
   const props = {
-    project: { project_id: 'p1' }, runs: [], onRefresh: vi.fn(), onError: vi.fn(), onResolved: vi.fn(), onNavigate: vi.fn(), onBack: vi.fn(), onNext: vi.fn(),
+    mode: 'validation', project: { project_id: 'p1' }, runs: [], onRefresh: vi.fn(), onError: vi.fn(), onResolved: vi.fn(), onNavigate: vi.fn(), onBack: vi.fn(), onNext: vi.fn(),
     ...overrides,
   }
   render(<PermissionCheckPage {...props as any} />)
@@ -56,19 +56,20 @@ describe('PermissionCheckPage', () => {
     api.approve.mockResolvedValue(matrix)
     api.approveProposal.mockResolvedValue({})
     api.rejectProposal.mockResolvedValue({})
-    api.compile.mockResolvedValue({ project_id: 'p1', covered_action_ids: [actionId], reused: false })
+    api.prepare.mockResolvedValue(readyPreview)
     api.submit.mockResolvedValue({ schema_version: '1', run: { run_id: 'run-new', lifecycle: 'QUEUED', job: { job_id: 'job-new', state: 'QUEUED' } }, job: { job_id: 'job-new', state: 'QUEUED' } })
     api.run.mockResolvedValue({ run_id: 'run-current', lifecycle: 'RUNNING', job: { job_id: 'job-current', state: 'RUNNING' } })
     api.progress.mockResolvedValue({ job_id: 'job-current', attempt: 1, events: [] })
     api.cancel.mockResolvedValue({})
   })
 
-  it('用一条自然页面展示权限要求、准备、预览、进度和结果入口，不重复六步导航', async () => {
+  it('验证运行只展示准备、预览、进度和结果入口', async () => {
     renderPage()
 
-    for (const label of ['确认权限要求', '准备检查条件', '核对本次检查', '开始检查并查看进度']) expect((await screen.findAllByText(label)).length).toBeGreaterThan(0)
+    for (const label of ['准备检查条件', '核对本次检查', '开始检查并查看进度']) expect((await screen.findAllByText(label)).length).toBeGreaterThan(0)
+    expect(screen.queryByText('确认权限要求')).not.toBeInTheDocument()
     expect(screen.queryByRole('list', { name: '权限与检查进度' })).not.toBeInTheDocument()
-    expect(screen.getAllByText('修改测试文档')).toHaveLength(2)
+    expect(screen.getAllByText('修改测试文档').length).toBeGreaterThan(0)
     expect(screen.getAllByText('所有者账号').length).toBeGreaterThan(0)
     expect(screen.getAllByText('普通成员账号').length).toBeGreaterThan(0)
     expect(screen.getByText('应该允许')).toBeInTheDocument()
@@ -76,13 +77,19 @@ describe('PermissionCheckPage', () => {
     expect(screen.getByText('合法对照')).toBeInTheDocument()
     expect(screen.getByText('禁止实验')).toBeInTheDocument()
     expect(screen.getByText('真实业务后果')).toBeInTheDocument()
-    expect(screen.getAllByText('普通成员').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('不允许').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '开始真实检查' })).toBeEnabled()
     expect(screen.queryByText(/Profile|Contract|Observer|profile_id|contract_id/)).not.toBeInTheDocument()
   })
 
-  it('修复复验沿用普通 preview 和 submit，并传入服务端形成的 change_id', async () => {
+  it('权限规则只展示人确认与 Agent 建议，不混入运行按钮', async () => {
+    renderPage({ mode: 'permissions' })
+    expect(await screen.findByText('确认权限要求')).toBeInTheDocument()
+    expect(screen.queryByText('准备检查条件')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '开始真实检查' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '继续测试准备' })).toBeInTheDocument()
+  })
+
+  it('原考题复验沿用普通 preview 和 submit，并传入服务端形成的 change_id', async () => {
     const changeId = `chg_${'9'.repeat(32)}`
     renderPage({ changeId })
 
@@ -93,13 +100,9 @@ describe('PermissionCheckPage', () => {
   })
 
   it('点击 Segmented 只打开确认 Modal，确认后才保存并使旧 preview 失效', async () => {
-    let resolvePreview: (value: typeof readyPreview) => void = () => undefined
-    const newPreview = { ...readyPreview, case_count: 3 }
-    api.preview.mockResolvedValueOnce(readyPreview).mockImplementationOnce(() => new Promise((resolve) => { resolvePreview = resolve }))
-    renderPage()
+    renderPage({ mode: 'permissions' })
 
-    expect(await screen.findByRole('button', { name: '开始真实检查' })).toBeEnabled()
-    const ownerPermission = screen.getByLabelText('所有者权限组以自己的资源关系对修改测试文档的权限')
+    const ownerPermission = await screen.findByLabelText('所有者权限组以自己的资源关系对修改测试文档的权限')
     fireEvent.click(within(ownerPermission).getByText('拒绝'))
 
     expect(api.approve).not.toHaveBeenCalled()
@@ -110,7 +113,6 @@ describe('PermissionCheckPage', () => {
     expect(screen.getByText('确认后将从版本 2 推进到 3')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '确认权限变更' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '暂不变更' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '开始真实检查' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: '暂不变更' }))
     expect(api.approve).not.toHaveBeenCalled()
@@ -123,18 +125,22 @@ describe('PermissionCheckPage', () => {
       resource_owner_role_candidate_id: ownerRoleId,
       relation: 'OWNS',
     }, 'DENY'))
-    expect(screen.getByText('权限要求已经更新，旧检查预览已失效')).toBeInTheDocument()
     expect(api.submit).not.toHaveBeenCalled()
+    expect(api.prepare).not.toHaveBeenCalled()
+  })
 
-    fireEvent.click(await screen.findByRole('button', { name: '准备本次检查' }))
-    await waitFor(() => expect(api.compile).toHaveBeenCalledWith('p1'))
-    expect(api.preview).toHaveBeenCalledTimes(2)
-    expect(screen.queryByRole('button', { name: '开始真实检查' })).not.toBeInTheDocument()
-    expect(api.submit).not.toHaveBeenCalled()
+  it('权限要求保存完成前不能进入测试准备', async () => {
+    let finishSave!: (value: unknown) => void
+    api.approve.mockReturnValue(new Promise((resolve) => { finishSave = resolve }))
+    renderPage({ mode: 'permissions' })
 
-    resolvePreview(newPreview)
-    fireEvent.click(await screen.findByRole('button', { name: '开始真实检查' }))
-    await waitFor(() => expect(api.submit).toHaveBeenCalledWith('p1'))
+    const ownerPermission = await screen.findByLabelText('所有者权限组以自己的资源关系对修改测试文档的权限')
+    fireEvent.click(within(ownerPermission).getByText('拒绝'))
+    fireEvent.click(screen.getByRole('button', { name: '确认权限变更' }))
+
+    expect(await screen.findByRole('button', { name: '正在保存权限要求' })).toBeDisabled()
+    finishSave(matrix)
+    expect(await screen.findByRole('button', { name: '继续测试准备' })).toBeEnabled()
   })
 
   it('同一期望值复核只提示重新确认映射，Proposal 批准和拒绝按权威事实刷新', async () => {
@@ -142,7 +148,7 @@ describe('PermissionCheckPage', () => {
     const proposals = [{ proposal_id: 'proposal-semantic', project_id: 'p1', kind: 'SEMANTIC_CHANGE' as const, status: 'PENDING' as const, intent_id: matrix.actions[0].cells[0].intent_id, semantic_change: { effective_state: 'RETIRED' as const, subject_display_name: '所有者', action_display_name: '修改测试文档', resource_owner_display_name: '所有者', relation: 'OWNS' as const, expectation: 'ALLOW' as const, protected_effects: matrix.actions[0].cells[0].protected_effects }, implementation_rebind: null, proposed_by: 'Agent', reason: '建议收紧权限', created_at_us: 1, decided_at_us: null }, { proposal_id: 'proposal-rebind', project_id: 'p1', kind: 'IMPLEMENTATION_REBIND' as const, status: 'PENDING' as const, intent_id: matrix.actions[0].cells[0].intent_id, semantic_change: null, implementation_rebind: { action_candidate_id: actionId, subject_role_candidate_id: ownerRoleId, resource_owner_role_candidate_id: ownerRoleId, understanding_revision: 2, action_safety_setup_fingerprint: 'f'.repeat(64) }, proposed_by: 'Agent', reason: '实现映射需要复核', created_at_us: 2, decided_at_us: null }]
     api.matrix.mockResolvedValue(reviewMatrix)
     api.proposals.mockResolvedValue({ project_id: 'p1', proposals })
-    renderPage()
+    renderPage({ mode: 'permissions' })
     expect(await screen.findByText('Agent 建议等待确认')).toBeInTheDocument()
     expect(screen.getAllByText('当前值')).toHaveLength(2)
     expect(screen.getAllByText('Agent 建议')).toHaveLength(2)
@@ -153,9 +159,6 @@ describe('PermissionCheckPage', () => {
     expect(screen.getByText(/权限版本 1/)).toBeInTheDocument()
     expect(screen.getAllByText(/修订 1/)).toHaveLength(2)
     expect(screen.getByText(/实现映射可用/)).toBeInTheDocument()
-    expect(screen.getByText('权限要求复核')).toBeInTheDocument()
-    expect(screen.queryByText('观察与恢复说明')).not.toBeInTheDocument()
-    expect(screen.queryByText('本次检查范围')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '重新确认当前要求' }))
     expect(screen.getByText('当前要求：允许')).toBeInTheDocument()
@@ -185,7 +188,7 @@ describe('PermissionCheckPage', () => {
     expect(screen.queryByText('观察与恢复说明')).not.toBeInTheDocument()
   })
 
-  it('只读刷新不会确认权限、编译、提交或取消检查', async () => {
+  it('只读刷新不会确认权限、准备、提交或取消检查', async () => {
     renderPage()
     expect(await screen.findByRole('button', { name: /刷新当前状态/ })).toBeInTheDocument()
     vi.clearAllMocks()
@@ -199,9 +202,29 @@ describe('PermissionCheckPage', () => {
     expect(api.proposals).toHaveBeenCalledOnce()
     expect(api.preview).toHaveBeenCalledOnce()
     expect(api.approve).not.toHaveBeenCalled()
-    expect(api.compile).not.toHaveBeenCalled()
+    expect(api.prepare).not.toHaveBeenCalled()
     expect(api.submit).not.toHaveBeenCalled()
     expect(api.cancel).not.toHaveBeenCalled()
+  })
+
+  it('当前范围可编译且检查配置缺失时先准备，不被其他未确认关系送回权限页', async () => {
+    const onNavigate = vi.fn()
+    api.preview.mockResolvedValue({
+      ...readyPreview,
+      ready: false,
+      gaps: [
+        { code: 'PERMISSION_INTENT_UNCONFIRMED', message: '还有非代表关系未确认', next_path: '/permissions', next_label: '去确认权限规则' },
+        { code: 'GENERATED_PROFILE_MISSING', message: '尚未生成当前检查配置', next_path: '/validation', next_label: '去准备本次检查' },
+      ],
+      next_path: '/permissions',
+      next_label: '去确认权限规则',
+    })
+    renderPage({ onNavigate })
+
+    fireEvent.click(await screen.findByRole('button', { name: '准备本次检查' }))
+    await waitFor(() => expect(api.prepare).toHaveBeenCalledWith('p1', undefined))
+    expect(await screen.findByText('检查条件已经重新确认')).toBeInTheDocument()
+    expect(onNavigate).not.toHaveBeenCalled()
   })
 
   it('活动检查只能通过带后果说明的底部动作取消', async () => {

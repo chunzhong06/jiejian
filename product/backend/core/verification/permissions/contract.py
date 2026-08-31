@@ -171,6 +171,16 @@ class PermissionContract(PermissionModel):
             resource = resources[rule.resource_id]
             subject = subjects[rule.subject_id]
             action = actions[rule.action_id]
+            if not rule.coverage_dimensions and (
+                rule.expectation is not PermissionExpectation.ALLOW
+                or any(
+                    effects[effect_id].kind is not SecurityEffectKind.DATA_DISCLOSURE
+                    for effect_id in action.effect_ids
+                )
+            ):
+                raise ValueError(
+                    "only ALLOW data disclosure rules may omit coverage mutations"
+                )
             if CoverageDimension.WORKFLOW in rule.coverage_dimensions:
                 transition = action.workflow_transition
                 if transition is None:

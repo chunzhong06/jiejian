@@ -67,10 +67,6 @@ class PermissionIntentProposalDecisionRequest(ApiModel):
     schema_version: Literal["1"]
 
 
-class SecuritySetupCompileRequest(ApiModel):
-    schema_version: Literal["1"]
-
-
 def build_permission_intents_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
@@ -158,16 +154,6 @@ def build_permission_intents_router(context: ApplicationCore) -> APIRouter:
                 proposal_id,
             ).model_dump(mode="json")
         )
-
-    @router.post(
-        "/api/projects/{project_id}/security-setup/compile",
-        response_model=ApiResponse,
-    )
-    async def compile_security_setup(
-        project_id: str,
-        body: SecuritySetupCompileRequest,
-    ):
-        return data_response(context.security_setup.compile(project_id).model_dump(mode="json"))
 
     return router
 

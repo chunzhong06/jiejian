@@ -85,7 +85,7 @@ class SourceChangeView(BaseModel):
     no_direct_evidence_count: int = Field(ge=0)
     review_intent_ids: tuple[str, ...] = Field(default=(), max_length=1024)
     summary: str = Field(min_length=1, max_length=240)
-    next_path: Literal["/check"] | None = None
+    next_path: Literal["/permissions"] | None = None
 
     @field_validator(
         "claimed_paths",
@@ -234,6 +234,39 @@ class SourceChangeService:
         latest = self.latest(project_id)
         return None if latest is None else self._view(latest)
 
+    def list_views(
+        self,
+        project_id: str,
+        *,
+        limit: int = 50,
+    ) -> tuple[SourceChangeView, ...]:
+        """读取有界变化时间线；只返回产品摘要，不暴露源码正文或内部指纹。"""
+
+        bounded_limit = max(1, min(limit, 100))
+        with self._uow_factory() as work:
+            assessments = work.source_changes.list_assessments(
+                project_id,
+                limit=bounded_limit,
+            )
+            aggregates = tuple(
+                (
+                    work.source_changes.manifest(assessment.change_id),
+                    work.source_changes.change_set(assessment.change_id),
+                    assessment,
+                )
+                for assessment in assessments
+            )
+        if any(
+            manifest is None or change_set is None
+            for manifest, change_set, _ in aggregates
+        ):
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, "代码变化聚合数据不完整")
+        return tuple(
+            self._view((manifest, change_set, assessment))
+            for manifest, change_set, assessment in aggregates
+            if manifest is not None and change_set is not None
+        )
+
     def revalidation_plan(self, project_id: str, change_id: str) -> RevalidationPlan:
         """按当前 Human-approved binding 形成重验计划；语义或源码漂移时关闭执行。"""
 
@@ -287,7 +320,7 @@ class SourceChangeService:
             raise JiejianError(
                 ErrorCode.STATE_PRECONDITION,
                 "权限要求已经变化，请基于当前权限版本重新提交代码变化",
-                details={"change_id": change_id, "next_path": "/check"},
+                details={"change_id": change_id, "next_path": "/permissions"},
             )
 
         mapping_review: list[str] = []
@@ -318,7 +351,7 @@ class SourceChangeService:
                 "代码变化涉及的实现映射需要先由用户确认",
                 details={
                     "change_id": change_id,
-                    "next_path": "/check",
+                    "next_path": "/permissions",
                     "intent_ids": tuple(mapping_review),
                 },
             )
@@ -385,7 +418,7 @@ class SourceChangeService:
             no_direct_evidence_count=len(no_direct_evidence),
             review_intent_ids=tuple(item.intent_id for item in mapping_review),
             summary=summary,
-            next_path="/check" if mapping_review else None,
+            next_path="/permissions" if mapping_review else None,
         )
 
     @staticmethod

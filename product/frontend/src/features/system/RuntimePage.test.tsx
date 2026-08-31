@@ -20,7 +20,7 @@ const maintenanceStatus = {
 }
 
 const status: SystemStatus = {
-  version: '1.0.8',
+  version: '1.0.9',
   api: 'available',
   worker: 'running',
   browser: 'available',
@@ -60,7 +60,7 @@ describe('RuntimePage', () => {
 
     render(<RuntimePage status={status} profiles={[]} failed={false} />)
 
-    expect(screen.getByText('1.0.8')).toBeInTheDocument()
+    expect(screen.getByText('1.0.9')).toBeInTheDocument()
     expect(screen.getAllByText(/仅构建时需要/)).toHaveLength(2)
     expect(screen.getByText(/源码构建/)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('1.0 KiB')).toBeInTheDocument())

@@ -36,7 +36,7 @@ def _surface(*, fingerprint_seed: str = "one") -> ResolvedAssistantSurface:
                     AssistantFact(field="kind", value="START_CURRENT_CHECK"),
                     AssistantFact(field="reason_codes", value=("CURRENT_SCOPE_RUNNABLE",)),
                     AssistantFact(field="priority_tier", value="PRIMARY"),
-                    AssistantFact(field="route", value="/check"),
+                    AssistantFact(field="route", value="/validation"),
                 ),
             ),
         ),

@@ -45,14 +45,14 @@ const exactDiagnosis = (overrides: Record<string, unknown> = {}) => ({
 })
 
 describe('CheckResultsPage', () => {
-  it('只在调用方确认活跃导览结果后显示修复验证，并仍等待用户点击', () => {
+  it('只在调用方确认活跃官方示例结果后显示修复验证，并仍等待用户点击', () => {
     const run = { run_id: 'run-fix', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED' }
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-fix', verdict: 'BLOCK', headline: '发现权限问题' }))
     resultsApi.evidence.mockResolvedValue([])
     const verify = vi.fn()
     render(<CheckResultsPage run={run} onError={vi.fn()} canVerifyFix onVerifyFix={verify} />)
-    fireEvent.click(screen.getByRole('button', { name: '验证修复后的行为' }))
+    fireEvent.click(screen.getByRole('button', { name: '按原考题重新检查' }))
     expect(verify).toHaveBeenCalledOnce()
     expect(screen.queryByText(/预期.*通过/)).not.toBeInTheDocument()
   })
@@ -76,13 +76,12 @@ describe('CheckResultsPage', () => {
 
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
 
-    expect(await screen.findByRole('heading', { name: '发现权限问题' })).toBeInTheDocument()
+    expect((await screen.findAllByRole('heading', { name: '发现权限问题' })).length).toBeGreaterThan(0)
     expect(await screen.findByRole('heading', { name: '后端确认：禁止操作造成真实变化' })).toBeInTheDocument()
     expect(screen.getByText('成员账号 · 修改 · 文档 · 拥有')).toBeInTheDocument()
     expect(screen.getByText('真实资源已经发生变化')).toBeInTheDocument()
     expect(screen.getByText(/权限限制没有真正阻止修改/)).toBeInTheDocument()
-    expect(screen.getByText('计划使用的账号')).toBeInTheDocument()
-    expect(screen.getByText('成员 A')).toBeInTheDocument()
+    expect(screen.getByText(/计划使用的账号：成员 A/)).toBeInTheDocument()
     expect(screen.getByText('目标实际识别的账号')).toBeInTheDocument()
     expect(screen.getAllByText('Bob').length).toBeGreaterThan(0)
     expect(screen.queryByText(/不会把计划账号冒充为实际账号/)).not.toBeInTheDocument()
@@ -123,7 +122,7 @@ describe('CheckResultsPage', () => {
     resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-inconclusive', verdict: 'INCONCLUSIVE', headline: '证据不足', scope_statement: '操作已经执行，但真实资源最终状态无法可靠确认；这不代表安全，也不代表已经确认漏洞。', safe_count: 0, inconclusive_count: 1, execution_traces: [{ ...vulnerableTrace, complete: false, reason_codes: ['TRACE_AUDIT_INCOMPLETE'], events: vulnerableTrace.events.slice(0, 2) }], issues: [{ finding_id: 'finding-1', title: '读取文档的真实结果暂时无法确认', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', expectation: '按当前权限规则执行', surface_result: '表面结果无法确定', actual_result: '真实资源状态尚不能可靠确认', conclusion: '证据不足', explanation: '必需观察不完整或不可靠，当前证据不足以确认资源是否按权限规则变化。', planned_identity_id: 'member-a', planned_identity_label: null, actual_identity_status: 'UNAVAILABLE', actual_identity_id: null, actual_identity_label: null, severity: 'high', evidence_refs: [], evidence_sources: [{ observer_type: 'OWNER_API', label: '目标业务状态', role: 'KEY', status: 'UNAVAILABLE', evidence_refs: [] }], verdict: 'INCONCLUSIVE', occurrence_status: 'APPEARED' }], limitations: ['有 1 项因真实状态观察不完整或不可靠而证据不足。'] }))
     resultsApi.evidence.mockResolvedValue([])
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
-    expect(await screen.findByRole('heading', { name: '证据不足' })).toBeInTheDocument()
+    expect((await screen.findAllByRole('heading', { name: '证据不足' })).length).toBeGreaterThan(0)
     expect((await screen.findAllByText('证据不足')).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '完善真实结果确认方式' })).toBeInTheDocument()
     expect(screen.queryByText('检查执行未完整结束')).not.toBeInTheDocument()
@@ -208,13 +207,13 @@ describe('CheckResultsPage', () => {
     resultsApi.evidence.mockResolvedValue([])
     resultsApi.presentation.mockResolvedValue(basePresentation({
       run_id: 'run-repair',
-      repair_verification: { reference, verification_run_id: 'run-repair', status: 'VERIFIED', message: '原违规业务后果已被完整证明消失，合法功能保持。', reason_codes: ['REPAIR_REQUIREMENTS_SATISFIED'] },
+      repair_verification: { reference, verification_run_id: 'run-repair', status: 'VERIFIED', message: '原违规业务后果已被完整证明消失，合法功能保持。', reason_codes: ['REPAIR_REQUIREMENTS_SATISFIED'], path_results: [] },
       issues: [{ finding_id: 'finding-repair', title: '原权限问题', subject_group: '普通成员', action: '修改', resource: '文档', relation: '其他权限组', expectation: '不应允许', surface_result: '已拒绝', actual_result: '真实资源没有变化', conclusion: '符合预期', explanation: '真实业务后果符合原权限要求。', planned_identity_id: 'member-a', planned_identity_label: '成员 A', actual_identity_status: 'CONFIRMED', actual_identity_id: 'bob', actual_identity_label: 'Bob', severity: 'high', evidence_refs: [], evidence_sources: [], diagnosis: null, verdict: 'SAFE', occurrence_status: 'DISAPPEARED', repair_requirement: { reference, must_disappear: '普通成员造成的文档变化必须消失。', must_remain: '项目负责人仍能修改文档。', must_not_change: ['原拒绝权限', '关键证据要求'] } }],
     }))
 
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
 
-    expect(await screen.findByText('修复要求已验证')).toBeInTheDocument()
+    expect(await screen.findByText('原考题复验已通过')).toBeInTheDocument()
     expect(screen.getByText('普通成员造成的文档变化必须消失。')).toBeInTheDocument()
     expect(screen.getByText('项目负责人仍能修改文档。')).toBeInTheDocument()
     expect(screen.queryByText(reference.repair_fingerprint)).not.toBeInTheDocument()

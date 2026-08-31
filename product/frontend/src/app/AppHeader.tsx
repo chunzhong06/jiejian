@@ -79,7 +79,7 @@ export function AppHeader({
     <div className="topbar-left">
       <Typography.Text className="topbar-context">当前应用</Typography.Text>
       <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} onRemoveCurrent={onRemoveCurrent} />
-      {activeTask && <Button type="link" onClick={() => onNavigate(activeTask.kind === 'RUN' ? '/check' : '/flows')}>
+      {activeTask && <Button type="link" onClick={() => onNavigate(activeTask.kind === 'RUN' ? '/validation' : '/flows')}>
         {activeTask.kind === 'RUN' ? '正在检查 · 查看' : '正在录制 · 查看'}
       </Button>}
     </div>

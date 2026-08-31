@@ -185,7 +185,7 @@ APPLICATION_PAGE = r"""<!doctype html>
       <div>
         <p class="eyebrow">LOCAL COLLABORATION WORKSPACE</p>
         <h1>让项目资料始终清楚、完整、可交付。</h1>
-        <p class="lead">这里是“校园数字展馆”的协作空间。选择一个演示身份进入，查看成员、项目资料和完整资料包导出流程。</p>
+        <p class="lead">这里是“校园数字展馆”的协作空间。选择一个演示身份进入，查看日常协作资料和完整项目交付包导出流程。</p>
       </div>
       <div class="identity-panel">
         <h2>选择演示身份</h2>
@@ -217,7 +217,7 @@ APPLICATION_PAGE = r"""<!doctype html>
       <div id="project-view" hidden>
         <div class="project-toolbar"><button class="button button-secondary" id="back-button" type="button">← 返回项目目录</button><span class="role-chip" id="project-role-chip"></span></div>
         <div class="workspace-head">
-          <div><p class="eyebrow">项目工作台</p><h1>校园数字展馆</h1><p class="lead">集中整理展馆说明、展陈设计与项目记录，形成可交付的完整资料包。</p></div>
+          <div><p class="eyebrow">项目工作台</p><h1>校园数字展馆</h1><p class="lead">集中整理展馆说明、展陈设计、预算与评审记录，形成完整项目交付包。</p></div>
         </div>
         <div class="error-banner" id="error-banner" hidden></div>
         <div id="member-workspace" class="grid" hidden>
@@ -235,10 +235,10 @@ APPLICATION_PAGE = r"""<!doctype html>
             <article class="card"><p class="card-kicker">MATERIALS</p><h2>项目资料</h2><div class="material-list" id="material-list"></div></article>
           </div>
           <aside class="card export-card">
-            <p class="card-kicker">DELIVERY CENTER</p><h2>导出完整项目资料包</h2>
-            <p>汇总项目说明、成员清单、设计文件和历史记录，生成一个 ZIP 交付包。</p>
+            <p class="card-kicker">DELIVERY CENTER</p><h2>导出完整项目交付包</h2>
+            <p>汇总项目申报书、完整预算、成员信息、设计源文件和评审记录，生成一个 ZIP 交付包。</p>
             <div class="export-state"><span>当前导出状态</span><strong id="export-state">尚未创建</strong></div>
-            <button class="button button-light" id="export-button" type="button">生成完整资料包</button>
+            <button class="button button-light" id="export-button" type="button">生成完整交付包</button>
             <button class="button button-secondary" id="revoke-export-button" type="button" hidden>撤销本次导出</button>
             <div class="notice" id="export-notice" role="status" aria-live="polite"></div>
           </aside>
@@ -284,7 +284,7 @@ APPLICATION_PAGE = r"""<!doctype html>
       function messageFor(code) {
         var messages = {
           PROJECT_MEMBER_REQUIRED: '当前身份尚未加入该项目，无法访问项目资料。',
-          EXPORT_PERMISSION_REQUIRED: '当前账号没有导出完整项目资料包的权限。',
+          EXPORT_PERMISSION_REQUIRED: '当前账号没有导出完整项目交付包的权限。',
           EXPORT_NOT_READY_FOR_REVOKE: '资料包仍在生成，完成后才能撤销。',
           LOGIN_FAILED: '身份会话建立失败，请重新选择。',
           SESSION_REQUIRED: '会话已结束，请重新选择身份。'
@@ -341,7 +341,7 @@ APPLICATION_PAGE = r"""<!doctype html>
         document.getElementById('export-state').textContent = labels[state] || state;
         var status = document.getElementById('project-status');
         status.textContent = labels[state] || state; status.dataset.tone = tones[state] || 'neutral';
-        exportButton.textContent = state === 'REVOKED' ? '重新生成资料包' : '生成完整资料包';
+        exportButton.textContent = state === 'REVOKED' ? '重新生成交付包' : '生成完整交付包';
         show(exportButton, state !== 'READY' && state !== 'PROCESSING');
         show(revokeExportButton, state === 'READY' && Boolean(exportMarker));
       }
@@ -349,15 +349,17 @@ APPLICATION_PAGE = r"""<!doctype html>
       async function loadProject() {
         show(catalogView, false); show(projectView, true);
         setError(''); exportNotice.textContent = '';
-        var result = await request('/api/projects/' + projectId);
+        var result = await request('/api/projects/' + projectId + '/collaboration');
         if (result.status === 403) {
           show(memberWorkspace, false); setError(messageFor(result.data.code)); return;
         }
         if (!result.ok) { show(memberWorkspace, false); setError(messageFor(result.data.code)); return; }
         show(memberWorkspace, true);
-        var activeExport = result.data.active_export;
+        var status = await request('/api/projects/' + projectId);
+        if (!status.ok) { show(memberWorkspace, false); setError(messageFor(status.data.code)); return; }
+        var activeExport = status.data.active_export;
         exportMarker = activeExport && typeof activeExport.request_marker === 'string' ? activeExport.request_marker : null;
-        renderMembers(result.data.members || []); renderMaterials(result.data.materials || []); renderExportState(result.data.export_state);
+        renderMembers(result.data.members || []); renderMaterials(result.data.materials || []); renderExportState(status.data.export_state);
       }
 
       async function loadCatalog() {
@@ -401,7 +403,7 @@ APPLICATION_PAGE = r"""<!doctype html>
               + '?resource_id=' + encodeURIComponent('campus-digital-museum-package')
             );
             if (status.ok && status.data.export && status.data.export.state === 'SUCCESS') {
-              renderExportState('READY'); exportNotice.dataset.tone = 'success'; exportNotice.textContent = '完整项目资料包已生成。'; return;
+              renderExportState('READY'); exportNotice.dataset.tone = 'success'; exportNotice.textContent = '完整项目交付包已生成。'; return;
             }
             if (status.ok && status.data.export && status.data.export.state === 'FAILED') {
               renderExportState('FAILED'); exportNotice.dataset.tone = 'danger'; exportNotice.textContent = '资料包生成失败，请重新尝试。'; return;

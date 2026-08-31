@@ -1,13 +1,13 @@
-# 验证权限批准与编译请求不接受调用方伪造审批人。
+# 验证权限批准与检查准备请求不接受调用方伪造审批人。
 
 import pytest
 from pydantic import ValidationError
 
+from product.backend.api.routers.checks import CheckPrepareRequest
 from product.backend.api.routers.permission_intents import (
     PermissionIntentApprovalRequest,
     PermissionIntentProposalApprovalRequest,
     PermissionIntentProposalDecisionRequest,
-    SecuritySetupCompileRequest,
 )
 
 
@@ -35,6 +35,6 @@ def test_permission_requests_reject_arbitrary_actor_fields() -> None:
             {"schema_version": "1", "actor": "伪造审批人"}
         )
     with pytest.raises(ValidationError):
-        SecuritySetupCompileRequest.model_validate(
-            {"schema_version": "1", "actor": "伪造编译人"}
+        CheckPrepareRequest.model_validate(
+            {"schema_version": "1", "actor": "伪造准备人"}
         )

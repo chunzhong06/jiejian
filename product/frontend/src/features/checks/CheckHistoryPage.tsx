@@ -26,7 +26,7 @@ function statusColor(status: HistoryChangeDto['status']) {
 }
 
 function repairLabel(value: string | null) {
-  return ({ VERIFIED: '修复已验证', NOT_VERIFIED: '修复未通过', INCONCLUSIVE: '修复证据不足' } as Record<string, string>)[String(value)] ?? null
+  return ({ VERIFIED: '原考题复验通过', NOT_VERIFIED: '原考题复验未通过', INCONCLUSIVE: '原考题复验证据不足' } as Record<string, string>)[String(value)] ?? null
 }
 
 function IntentHistory({ intent }: { intent: ResultIntentHistoryDto }) {
@@ -79,7 +79,7 @@ export function CheckHistoryPage({ projectId, onError, onBack }: { projectId?: s
     {!projectId && <Alert type="info" showIcon message="先选择应用后才能查看历史变化。" />}
     {projectId && loading && <section className="history-section"><Typography.Paragraph type="secondary">正在读取后端整理的历史变化。</Typography.Paragraph></section>}
     {projectId && !loading && <section className="history-section" aria-labelledby="history-intent-title">
-      <div className="history-section-heading"><div><Typography.Title id="history-intent-title" level={3}>按权限要求查看</Typography.Title><Typography.Paragraph type="secondary">只有单条权限 revision 与 Run 完整匹配时，才把结论和诊断归到该权限要求；其他情况只标明它属于当轮策略。</Typography.Paragraph></div><Select allowClear placeholder="筛选权限要求" value={intentId} onChange={setIntentId} options={intents.map((item) => ({ value: item.intent_id, label: item.display_label }))} /></div>
+      <div className="history-section-heading"><div><Typography.Title id="history-intent-title" level={3}>按权限要求查看</Typography.Title><Typography.Paragraph type="secondary">只有单条权限规则版本与本轮检查完整匹配时，才把结论和诊断归到该权限要求；其他情况只标明它属于当轮规则集合。</Typography.Paragraph></div><Select allowClear placeholder="筛选权限要求" value={intentId} onChange={setIntentId} options={intents.map((item) => ({ value: item.intent_id, label: item.display_label }))} /></div>
       {visible.length === 0 && <Alert type="info" showIcon message="还没有可展示的权限要求历史。" />}
       <div className="history-intent-list">{visible.map((intent) => <IntentHistory intent={intent} key={intent.intent_id} />)}</div>
       {history && (intents.length === 0 ? <FindingSummary history={history} /> : <Collapse items={[{ key: 'finding-summary', label: '按权限问题查看次级聚合', children: <FindingSummary history={history} /> }]} />)}

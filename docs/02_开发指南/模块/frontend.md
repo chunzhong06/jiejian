@@ -16,12 +16,12 @@
 | --- | --- | --- |
 | `product/frontend/src/app/` | ControlShell、正式路由、项目切换、全局状态恢复、错误与通知 | 各业务页面内部实现、后端事实重算 |
 | `product/frontend/src/api/` | 当前 loopback DTO、request/envelope、资源 client | 浏览器存储秘密、兼容旧 DTO |
-| `product/frontend/src/features/` | access、workspace、identities、recording、permissions、checks、settings、system 用户任务 | 跨任务真源和通用基础设施 |
-| `product/frontend/src/components/` | 导航、页头、导览、通用状态与可访问组件 | 业务规则、API 写入副作用 |
+| `product/frontend/src/features/` | workspace、changes、access、preparation、identities、recording、checks、presentation、settings、system 用户任务 | 跨任务真源和通用基础设施 |
+| `product/frontend/src/components/` | 导航、页头、状态提示、通用状态与可访问组件 | 业务规则、API 写入副作用 |
 | `product/frontend/package.json`、`product/frontend/tsconfig*.json` | 源码依赖/类型/构建合同 | 产品版本真源、node_modules 或 dist |
 | `var/development/frontend/` | 受控 Node/pnpm、workspace、依赖与不可变 build | Git 管理源码、产品运行数据 |
 
-普通路由围绕 `/workspace /application /identities /flows /check /results /history`；系统与模型设置是明确辅助入口。`/check` 连续承载权限确认、准备、预览、开始、进度与完成，Report 是结果内视图，不建立平行流程。
+普通工作区围绕 `/workspace /changes /permissions /preparation /validation /results`；`/application /identities /flows /verification /history` 是区域内具体任务，系统与模型设置是明确辅助入口。权限规则与验证运行共享事实但分开用户任务，Report 是结果内视图，不建立平行流程。
 
 精确组件和类型见[前端自动代码参考](../../03_参考手册/代码/frontend.md)。
 
@@ -32,11 +32,13 @@
 | 修改产品壳、路由或恢复 | `product/frontend/src/app/ControlShell.tsx`、`presentation.ts` | [修改前端](../任务/修改前端.md)；`frontend-test src/app/ControlShell.test.tsx` |
 | 修改 API envelope、错误或请求基础层 | `product/frontend/src/api/http.ts` | `frontend-test src/api/http.test.ts`；再测一个直接消费者 |
 | 修改某类 API DTO/client | `product/frontend/src/api/*.ts` 与对应 `product/backend/api/routers/*.py` | 对应后端 Router 测试 + DTO 消费页测试 |
-| 修改工作台、下一步或评委导览 | `features/workspace/WorkbenchPage.tsx`、`components/JudgeGuideBar.tsx` | Workbench、JudgeGuideBar 与 ProductStatus/experience 测试 |
+| 修改工作台、官方示例准备或展示模式 | `features/workspace/WorkbenchPage.tsx`、`components/OfficialSampleSetupBar.tsx`、`features/presentation/PresentationMode.tsx` | Workbench、OfficialSampleSetupBar、PresentationMode 与 ControlShell 测试 |
 | 修改应用接入与理解 | `features/access/AccessPage.tsx`、`ApplicationSetup.tsx` | `frontend-test src/features/access`；onboarding/application-understanding API 测试 |
 | 修改测试身份 | `features/identities/TestIdentityPage.tsx` | [修改测试账号](../任务/修改测试账号.md)；`frontend-test src/features/identities` |
 | 修改录制与安全准备 | `features/recording/` | [修改 Recording](../任务/修改Recording.md)；`frontend-test src/features/recording` |
-| 修改权限确认 | `features/permissions/`、`features/checks/PermissionCheckPage.tsx` | [修改权限判断](../任务/修改权限判断.md)；两个所属组件测试 |
+| 修改 Agent 变化与待办 | `features/changes/ChangesPage.tsx`、`api/sourceChanges.ts` | [修改 Agent 变更影响](../任务/修改Agent变更影响.md)；Workbench、ControlShell 与后端 change 测试 |
+| 修改测试准备总览 | `features/preparation/PreparationPage.tsx` | 测试账号、Recording、Readiness 与 ControlShell 测试 |
+| 修改权限规则或验证运行 | `features/checks/PermissionCheckPage.tsx` | [修改权限判断](../任务/修改权限判断.md)；permissions/validation 两种 mode 与 ControlShell 测试 |
 | 修改结果、历史、Evidence 或报告 | `features/checks/CheckResultsPage.tsx`、`CheckHistoryPage.tsx`、`EvidenceTimeline.tsx`、`ReportPanel.tsx` | [修改结果与报告](../任务/修改结果与报告.md)；对应单文件测试 |
 | 修改模型或运行环境设置 | `features/settings/`、`features/system/` | settings/system 组件与对应 API 测试 |
 | 修改样式、响应式或可访问性 | 所属 feature CSS/TSX 与 `product/frontend/src/components/` | 定向 Vitest；生产 build；展示验收 |
@@ -44,7 +46,7 @@
 
 ## 事实与页面状态
 
-`ProjectReadiness` 决定六步完成状态和唯一下一步；Job/Run 决定运行生命周期；Runner progress 只提供可丢失的阶段展示；`ResultPresentation` 决定单次结果故事；`HistoryView` 决定跨次变化。前端可以保留当前选择的项目、页面和未提交表单，但不能把它们当作已确认后端事实。
+`ProductStatus` 决定长期区域状态、全部待办、最近 Agent 变化和最近可信结果；`ProjectReadiness` 提供当前准备事实；Job/Run 决定运行生命周期；Runner progress 只提供可丢失的阶段展示；`ResultPresentation` 决定单次结果故事；`HistoryView` 决定跨次变化。前端可以保留当前选择的项目、页面和未提交表单，但不能把它们当作已确认后端事实。
 
 所有写操作要有清楚的 busy、成功、失败和恢复路径。需要长时间的多阶段过程必须展示稳定阶段边界，服务端有进度时流式呈现；没有权威进度时说明当前阶段和静默上限，不伪造百分比。首个主错误保留，cleanup warning 单独展示。
 
@@ -53,7 +55,7 @@
 1. 从用户正在完成的任务和正式路由开始，不先从组件名称猜归属。
 2. 找到 `ControlShell.tsx` 实际装配的 feature，再找到该 feature 调用的 `src/api/*.ts`。
 3. 判断页面展示的是本地交互态还是后端权威事实；后者先核对对应 Router、DTO 和 workflow。
-4. 保持当前 design token、布局、文案层级和可访问性结构，在原组件内完成最小改动。
+4. 遵守当前 design token、2560×1440 主基准、展示用语层级和可访问性结构；旧交互若与持续验证合同冲突，应删除而不是保留兼容层。
 5. 先跑所属 Vitest；DTO 或路由变化再补后端直接测试和 ControlShell 测试；最后只在需要时做 production build 与展示验收。
 
 ## 必须保持的边界
@@ -62,10 +64,12 @@
 - 权限、Observer、ResultPresentation 与 History 由后端拥有；组件不按 HTTP 状态或文本正则自行判断安全。
 - 计划身份来自冻结请求；没有独立实际身份事实时显示无法确认，不用计划值冒充实际值。
 - 密码、Cookie、Token、API Key 不进 localStorage、普通 React state 日志、错误详情或 DOM 长期展示；临时 Key 成功失败后立即清空。
-- 普通用户先看到任务语言和唯一主动作，内部 ID、reason code、Schema、路径和原始 Evidence 进入高级信息。
+- 普通用户先看到任务语言和当前主动作，内部 ID、reason code、Schema、路径和原始 Evidence 只进入明确命名的证据、报告或 Machine 入口，不建立通用“高级信息”收纳箱。
 - 真正 `<button>`、label、dialog 和状态文本保持可访问；自动 L5 通过 UI Automation InvokePattern 操作正式按钮，不为测试增加隐藏入口。
 - `product/frontend` 只保存源码/配置，禁止 node_modules、dist、测试缓存和 tsbuildinfo。
-- Workbench 不常驻显示产品版本；1.0.8 只在系统设置等明确诊断位置展示。
+- Workbench 不常驻显示产品版本；1.0.9 只在系统设置等明确诊断位置展示。
+- 官方示例只有一个用户可见启动入口；内部 experience mode 不作为产品选择。准备工作留在正式持续工作区，状态条只投影 ProductStatus 待办，不生成示例专用步骤；展示模式只读取并重排当前正式事实，退出后恢复原项目与页面上下文。四页分别消费 ResultPresentation/History/源 Run 和净化 validation 汇总；缺失审批、源 Run 或非回归事实时显示不可用，不从页面文案推断。
+- 视觉验收以 2560×1440 为主基准，同时覆盖 1280px 与 600px；普通结果与展示模式复用同一事实链和颜色语义。
 
 ## 直接验证
 

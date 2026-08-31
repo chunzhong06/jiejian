@@ -247,7 +247,7 @@ export function RecordingPage({ project, onError, onBack, onNext }: { project: P
             : recording.state === 'COMPLETED' && safetySetup && !safetySetup.ready
               ? { label: '采用已识别的业务事实', submitForm: 'recording-safety-setup', loading: busy, disabled: safetySetup.resource_candidates.length === 0 || safetySetup.observation_candidates.length === 0 || (safetySetup.state_changing && safetySetup.recovery_candidates.length === 0) }
               : recording.state === 'COMPLETED' && safetySetup?.ready && onNext
-                ? { label: '继续确认权限与检查', onClick: onNext }
+                ? { label: '继续确认权限规则', onClick: onNext }
                 : undefined
   const restartAction = recording && !finishedStates.has(recording.state)
     ? {

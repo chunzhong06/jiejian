@@ -38,6 +38,7 @@ from product.backend.core.verification.permissions import (
     RelationType,
     ResourceDefinition,
     SecurityEffectDefinition,
+    SecurityEffectKind,
     SubjectDefinition,
 )
 from product.backend.infra.storage import ExecutionProfileRecord, StorageUnitOfWork
@@ -94,6 +95,7 @@ from product.protocols import (
 from product.protocols.recording_flow import Flow
 from product.protocols.web.workflow import (
     CASE_SUBJECT_IDENTITY,
+    ResetNotRequiredStrategy,
     UniqueResourceWorkflowResetStrategy,
 )
 
@@ -125,6 +127,7 @@ class ProfileBuilderMixin:
             self._execution_credentials.profile_identity(identity_by_id[item])
             for item in sorted(required_identity_ids)
         )
+        wired_action_id = None if local_wiring is None else local_wiring.action_id
         completion_binding = (
             next(
                 (
@@ -138,13 +141,23 @@ class ProfileBuilderMixin:
             else None
         )
         workflows = tuple(
-            self._workflow(action, completion_binding=completion_binding)
+            self._workflow(
+                action,
+                completion_binding=(
+                    completion_binding
+                    if action.action_id == wired_action_id
+                    else None
+                ),
+            )
             for action in facts.actions
         )
         observers = (
-            local_wiring.observers
-            if local_wiring is not None
-            else tuple(self._observer(action) for action in facts.actions)
+            *(local_wiring.observers if local_wiring is not None else ()),
+            *(
+                self._observer(action)
+                for action in facts.actions
+                if action.action_id != wired_action_id
+            ),
         )
         profile_id = _profile_id(facts.authority_fingerprint)
         return WebExecutionProfile(
@@ -164,32 +177,29 @@ class ProfileBuilderMixin:
                 for item in identities
             ),
             workflow_bindings=workflows,
-            effect_bindings=(
-                tuple(
-                    EffectBinding(
-                        effect_id=_effect_id(action.action_id),
-                        required_channels=local_wiring.required_channels,
-                        corroborating_channels=local_wiring.corroborating_channels,
-                        closure_policy=EffectClosurePolicy.IMMEDIATE,
-                        projection_version="v1",
-                    )
-                    for action in facts.actions
+            effect_bindings=tuple(
+                EffectBinding(
+                    effect_id=_effect_id(action.action_id),
+                    required_channels=(
+                        local_wiring.required_channels
+                        if local_wiring is not None
+                        and action.action_id == wired_action_id
+                        else (_observation_requirement(action.action_id),)
+                    ),
+                    corroborating_channels=(
+                        local_wiring.corroborating_channels
+                        if local_wiring is not None
+                        and action.action_id == wired_action_id
+                        else ()
+                    ),
+                    closure_policy=EffectClosurePolicy.IMMEDIATE,
+                    projection_version="v1",
                 )
-                if local_wiring is not None
-                else tuple(
-                    EffectBinding(
-                        effect_id=_effect_id(action.action_id),
-                        required_channels=(_observation_requirement(action.action_id),),
-                        closure_policy=EffectClosurePolicy.IMMEDIATE,
-                        projection_version="v1",
-                    )
-                    for action in facts.actions
-                )
+                for action in facts.actions
             ),
             observer_bindings=(
-                local_wiring.bindings
-                if local_wiring is not None
-                else tuple(
+                *(local_wiring.bindings if local_wiring is not None else ()),
+                *(
                     ObserverRequirementBinding(
                         requirement_id=_observation_requirement(action.action_id),
                         kind=ObserverRequirementKind.OBSERVER_SPEC,
@@ -203,7 +213,8 @@ class ProfileBuilderMixin:
                         ),
                     )
                     for action in facts.actions
-                )
+                    if action.action_id != wired_action_id
+                ),
             ),
             seed=int(facts.authority_fingerprint[:15], 16),
             case_budget=min(8192, max(8, sum(len(item.intents) for item in facts.actions) * 4)),
@@ -220,10 +231,10 @@ class ProfileBuilderMixin:
     ) -> HttpWorkflowBinding:
         setup = action.setup
         recovery = setup.recovery
-        if recovery is None or recovery.kind is not RecoveryBindingKind.RECORDED_REQUEST:
+        if recovery is None:
             raise JiejianError(
                 ErrorCode.STATE_PRECONDITION,
-                "当前动作没有可执行的已录制恢复请求",
+                "当前动作尚未确认恢复要求",
                 details={"action_id": action.action_id},
             )
         steps = [
@@ -244,33 +255,54 @@ class ProfileBuilderMixin:
             )
             for step in action.flow.steps
         ]
-        cleanup_id = f"cleanup-{hashlib.sha256(action.action_id.encode()).hexdigest()[:24]}"
-        cleanup_template = self._cleanup_template(recovery, cleanup_id)
-        steps.append(
-            HttpWorkflowStep(
-                id=cleanup_id,
-                purpose=WorkflowStepPurpose.CLEANUP,
-                identity_id=recovery.test_identity_id,
-                request_template=cleanup_template,
-                classifier=HttpOutcomeClassifier(
-                    accepted=(
-                        HttpPredicate(
-                            kind=HttpPredicateKind.STATUS_IN,
-                            statuses=(200, 201, 204),
-                        ),
-                    ),
-                    denied=(
-                        HttpPredicate(
-                            kind=HttpPredicateKind.STATUS_IN,
-                            statuses=(401, 403, 404),
-                        ),
-                    ),
-                ),
-                depends_on_step_ids=(action.flow.target_step_id,),
-                failure_policy=WorkflowFailurePolicy.STOP,
-            )
-        )
         workflow_id = f"workflow-{hashlib.sha256(action.action_id.encode()).hexdigest()[:24]}"
+        if recovery.kind is RecoveryBindingKind.RECORDED_REQUEST:
+            cleanup_id = f"cleanup-{hashlib.sha256(action.action_id.encode()).hexdigest()[:24]}"
+            cleanup_template = self._cleanup_template(recovery, cleanup_id)
+            steps.append(
+                HttpWorkflowStep(
+                    id=cleanup_id,
+                    purpose=WorkflowStepPurpose.CLEANUP,
+                    identity_id=recovery.test_identity_id,
+                    request_template=cleanup_template,
+                    classifier=HttpOutcomeClassifier(
+                        accepted=(
+                            HttpPredicate(
+                                kind=HttpPredicateKind.STATUS_IN,
+                                statuses=(200, 201, 204),
+                            ),
+                        ),
+                        denied=(
+                            HttpPredicate(
+                                kind=HttpPredicateKind.STATUS_IN,
+                                statuses=(401, 403, 404),
+                            ),
+                        ),
+                    ),
+                    depends_on_step_ids=(action.flow.target_step_id,),
+                    failure_policy=WorkflowFailurePolicy.STOP,
+                )
+            )
+            reset_strategy = UniqueResourceWorkflowResetStrategy(
+                workflow_id=workflow_id,
+            )
+        elif (
+            recovery.kind is RecoveryBindingKind.NOT_REQUIRED
+            and setup.effect is not None
+            and setup.effect.kind is SecurityEffectKind.DATA_DISCLOSURE
+            and all(
+                step.request_template.method in {"GET", "HEAD"}
+                for step in action.flow.steps
+            )
+        ):
+            # 只读披露动作仍保留基线和 Observer 校验，但不伪造业务恢复请求。
+            reset_strategy = ResetNotRequiredStrategy()
+        else:
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "当前动作没有可执行且与安全效果一致的恢复要求",
+                details={"action_id": action.action_id},
+            )
         return HttpWorkflowBinding(
             workflow_id=workflow_id,
             source_flow_id=action.flow.id,
@@ -286,9 +318,7 @@ class ProfileBuilderMixin:
                     integrity_mode=BaselineIntegrityMode.EXACT_RESTORE,
                 ),
             ),
-            reset_strategy=UniqueResourceWorkflowResetStrategy(
-                workflow_id=workflow_id,
-            ),
+            reset_strategy=reset_strategy,
         )
 
 

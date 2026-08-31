@@ -164,6 +164,7 @@ class ResultPresentationIssue(_PresentationModel):
     finding_id: str = Field(min_length=1, max_length=128)
     title: str = Field(min_length=1, max_length=200)
     subject_group: str = Field(min_length=1, max_length=160)
+    action_id: str = Field(min_length=1, max_length=160)
     action: str = Field(min_length=1, max_length=160)
     resource: str = Field(min_length=1, max_length=160)
     relation: str = Field(min_length=1, max_length=160)

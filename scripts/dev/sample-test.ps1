@@ -19,7 +19,7 @@ function Invoke-SampleTest($Toolchain) {
     Exit-PrepareLock
     $runRoot = Join-Path $script:VarDir ("test\sample-test\{0}" -f [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
-    Invoke-External "sample-test" @(
+    $arguments = @(
         $script:Python,
         "-B",
         (Join-Path $script:ProjectRoot "scripts\dev\sample_test\driver.py"),
@@ -30,4 +30,9 @@ function Invoke-SampleTest($Toolchain) {
         "--suite",
         $suite
     )
+    if ($suite -ne "official") {
+        $summaryPath = Join-Path $script:VarDir "audit\competition\latest-validation-summary.json"
+        $arguments += @("--publish-summary", $summaryPath)
+    }
+    Invoke-External "sample-test" $arguments
 }

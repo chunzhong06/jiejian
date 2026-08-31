@@ -25,6 +25,7 @@ _INITIAL_DOCUMENTS = {
     "document": {
         "resource_id": "document",
         "resource_subject_id": "member",
+        "workflow_state": "DRAFT",
         "value": "initial-document-value",
     }
 }

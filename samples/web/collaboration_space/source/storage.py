@@ -188,13 +188,36 @@ class CollaborationStorage:
         return {
             **summary,
             "active_export": active_export,
+            **self.collaboration_materials(members=members),
+            "export_action": "导出完整项目交付包",
+        }
+
+    def collaboration_materials(
+        self,
+        *,
+        members: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """返回项目成员均可查看的稳定协作资料，不混入导出任务状态。"""
+
+        if members is None:
+            with self.lock, self._connect() as connection:
+                members = [
+                    dict(row)
+                    for row in connection.execute(
+                        "SELECT user_id, role FROM members WHERE project_id = ? ORDER BY user_id",
+                        (PROJECT_ID,),
+                    )
+                ]
+        return {
+            "project_id": PROJECT_ID,
+            "name": PROJECT_NAME,
             "members": members,
             "materials": [
-                {"name": "展馆项目说明", "kind": "PROJECT_NOTE"},
-                {"name": "展陈设计占位稿", "kind": "DESIGN_PLACEHOLDER"},
+                {"name": "展馆项目申报说明", "kind": "APPLICATION_NOTE"},
+                {"name": "展陈视觉设计稿", "kind": "DESIGN_SOURCE"},
                 {"name": "项目预算摘要", "kind": "BUDGET_SUMMARY"},
+                {"name": "内部评审纪要", "kind": "REVIEW_NOTE"},
             ],
-            "export_action": "导出完整项目资料包",
         }
 
     def resource_state(self) -> dict[str, str]:
@@ -431,21 +454,63 @@ class CollaborationStorage:
         target = directory / "campus-digital-museum-package.zip"
         temporary = directory / ".campus-digital-museum-package.zip.tmp"
         files = {
-            "project.json": json.dumps(
-                {"project_id": PROJECT_ID, "name": PROJECT_NAME, "description": "校园数字展馆项目资料"},
+            "01-项目申报书.json": json.dumps(
+                {
+                    "project_id": PROJECT_ID,
+                    "name": PROJECT_NAME,
+                    "category": "数字文化创意（虚构示例）",
+                    "summary": "以校园历史、科研成果与师生记忆为主题的交互式数字展馆。",
+                    "delivery_scope": "Web 展馆、展陈视觉源文件与项目评审材料",
+                },
                 ensure_ascii=False,
                 sort_keys=True,
             ),
-            "members.json": json.dumps(
+            "02-完整预算.csv": (
+                "科目,金额（元）,说明\n"
+                "视觉设计,18000,展陈视觉与交互规范\n"
+                "前端实现,32000,数字展馆交互页面\n"
+                "内容整理,12000,虚构展项资料整理\n"
+                "测试与交付,8000,兼容性测试与交付归档\n"
+                "合计,70000,虚构预算数据\n"
+            ),
+            "03-成员信息.json": json.dumps(
                 [
-                    {"name": "Alice", "role": "项目负责人"},
-                    {"name": "Bob", "role": "普通成员"},
+                    {"name": "Alice（虚构）", "role": "项目负责人", "responsibility": "总体方案与交付审批"},
+                    {"name": "Bob（虚构）", "role": "普通成员", "responsibility": "协作资料整理"},
                 ],
                 ensure_ascii=False,
                 sort_keys=True,
             ),
-            "design/placeholder.txt": "虚构设计占位内容\n",
-            "history.json": json.dumps({"entries": ["项目创建", "展陈资料整理"]}, ensure_ascii=False, sort_keys=True),
+            "04-设计源文件/展馆首页线框.svg": (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">'
+                '<rect width="640" height="360" fill="#f3f0e8"/>'
+                '<rect x="40" y="48" width="560" height="72" rx="12" fill="#173f5f"/>'
+                '<rect x="40" y="144" width="360" height="168" rx="12" fill="#d9c6a5"/>'
+                '<rect x="424" y="144" width="176" height="168" rx="12" fill="#7aa6a1"/>'
+                '<text x="64" y="92" fill="white" font-size="24">校园数字展馆（虚构设计源文件）</text>'
+                '</svg>\n'
+            ),
+            "05-评审记录.json": json.dumps(
+                {
+                    "review_rounds": [
+                        {
+                            "round": 1,
+                            "date": "2027-01-12",
+                            "result": "修改后通过",
+                            "comments": ["补充预算口径", "明确交互展示范围"],
+                        },
+                        {
+                            "round": 2,
+                            "date": "2027-01-20",
+                            "result": "通过",
+                            "comments": ["交付材料齐全"],
+                        },
+                    ],
+                    "notice": "全部姓名、日期与结论均为演示用途的虚构数据。",
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
         }
         with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for name, content in files.items():

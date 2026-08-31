@@ -137,6 +137,107 @@ def test_start_product_invokes_root_start_cmd_and_owns_its_process_tree(
     assert str(captured["kwargs"]["tree_name"]).startswith("jiejian-sample-test-")
 
 
+def test_guided_experience_uses_the_single_official_sample_entry(tmp_path: Path) -> None:
+    events: list[tuple[str, str]] = []
+
+    class Control:
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+        def click(self) -> None:
+            events.append(("click", self.label))
+
+        def wait_for(self) -> None:
+            events.append(("wait", self.label))
+
+    class Response:
+        status = 200
+        url = "http://127.0.0.1:8765/api/experience/official-sample/start"
+
+        class Request:
+            method = "POST"
+
+        request = Request()
+
+    class Pending:
+        value = Response()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+    class Page:
+        def goto(self, url: str, *, wait_until: str) -> None:
+            events.append(("goto", f"{url}:{wait_until}"))
+
+        def get_by_role(self, role: str, *, name: str) -> Control:
+            assert role == "button"
+            return Control(name)
+
+        def get_by_text(self, text: str) -> Control:
+            return Control(text)
+
+        def expect_response(self, predicate, *, timeout: int) -> Pending:
+            assert timeout == 30_000
+            assert predicate(Response()) is True
+            return Pending()
+
+        def wait_for_url(self, url: str, *, timeout: int) -> None:
+            assert (url, timeout) == ("**/#/application", 30_000)
+
+        def get_by_label(self, label: str) -> Control:
+            return Control(label)
+
+        def screenshot(self, *, path: str, full_page: bool) -> None:
+            assert Path(path) == tmp_path / "guided-application.png"
+            assert full_page is True
+
+    class Client:
+        origin = "http://127.0.0.1:8765"
+
+        @staticmethod
+        def call(method: str, path: str):
+            assert (method, path) == ("GET", "/api/experience/official-sample")
+            return {
+                "active": True,
+                "experience_mode": "GUIDED",
+                "project_id": "project-demo",
+                "origin": "http://127.0.0.1:9000",
+            }
+
+    state = official.HarnessState(stage=2)
+    result = official._start_guided_experience(Page(), Client(), tmp_path, state)
+
+    assert result["project_id"] == "project-demo"
+    assert state.sample_started is True
+    assert ("click", "启动官方示例") in events
+    assert ("click", "同意并启动") in events
+    assert ("wait", "启动示例不会开始真实检查，也不会预先生成结论。") in events
+    assert ("wait", "官方示例状态") in events
+
+
+def test_fixed_case_submits_the_repair_change_through_the_formal_check_api() -> None:
+    calls: list[tuple[str, str]] = []
+
+    class Client:
+        @staticmethod
+        def call(method: str, path: str):
+            calls.append((method, path))
+            return {"repair_change_id": "chg_" + "4" * 32}
+
+    body = official._check_submission_body(
+        Client(),
+        name="fixed",
+        verification_run_id="run_vulnerable",
+    )
+
+    assert calls == [("GET", "/api/experience/official-sample")]
+    assert body["change_id"] == "chg_" + "4" * 32
+    assert str(body["idempotency_key"]).startswith("sample-fixed-")
+
+
 def test_sample_test_suite_keeps_no_argument_semantics_on_official(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -407,6 +508,19 @@ def test_validation_representatives_run_both_real_apps_without_public_oracle_lea
     assert summary["repeat_consistency"]["inconsistent_case_count"] == 0
     assert (tmp_path / "runtime" / "validation").is_dir()
 
+    presentation = validation.build_presentation_summary(summary)
+    assert presentation["case_count"] == 6
+    assert presentation["application_count"] == 2
+    assert presentation["mode_count"] == 1
+    assert presentation["state_count"] == 3
+    assert presentation["full_exact_match_count"] == 6
+    assert presentation["http_wrong_pass_per_matrix"] == 2
+    assert "results" not in presentation
+    assert "method_metrics" not in presentation
+    published_path = tmp_path / "published" / "latest-validation-summary.json"
+    suite_driver._publish_summary(published_path, summary)
+    assert json.loads(published_path.read_text(encoding="utf-8")) == presentation
+
 
 def test_start_waits_for_source_prepare_before_control_ready(
     tmp_path: Path,
@@ -562,12 +676,38 @@ def test_recording_ui_flow_uses_invoke_and_waits_for_revoked_state(
 
     assert events == [
         ("invoke", "进入项目"),
-        ("invoke", "生成完整资料包"),
-        ("Text", "完整项目资料包已生成。"),
+        ("invoke", "生成完整交付包"),
+        ("Text", "完整项目交付包已生成。"),
         ("invoke", "撤销本次导出"),
         ("invoke", "确认撤销"),
         ("Text", "已撤销"),
-        ("Button", "重新生成资料包"),
+        ("Button", "重新生成交付包"),
+    ]
+
+
+def test_recording_view_flow_invokes_project_and_waits_for_materials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    windows = windows_module
+    events: list[tuple[str, str]] = []
+    driver = windows.RecordingWindowDriver(frozenset(), Path(sys.executable))
+    driver._window = object()
+    monkeypatch.setattr(
+        windows,
+        "_invoke_button",
+        lambda _window, title, **_kwargs: events.append(("invoke", title)),
+    )
+    monkeypatch.setattr(
+        windows,
+        "_wait_text",
+        lambda _window, title, **_kwargs: events.append(("Text", title)),
+    )
+
+    driver.run_view_flow()
+
+    assert events == [
+        ("invoke", "进入项目"),
+        ("Text", "项目资料"),
     ]
 
 

@@ -11,7 +11,7 @@ from tests.fixtures.control_plane import TestClient, create_app
 pytestmark = pytest.mark.database
 
 
-def test_source_change_read_api_returns_bounded_latest_view(tmp_path: Path) -> None:
+def test_source_change_read_api_returns_bounded_timeline_and_views(tmp_path: Path) -> None:
     app = create_app(tmp_path / "var", start_worker=False)
     project_id = "change-api-project"
     view = SourceChangeView(
@@ -37,14 +37,21 @@ def test_source_change_read_api_returns_bounded_latest_view(tmp_path: Path) -> N
         view if selected == project_id else None
     )
     app.state.context.source_changes.view = lambda change_id: view
+    app.state.context.source_changes.list_views = lambda selected, *, limit: (
+        (view,) if selected == project_id and limit == 20 else ()
+    )
 
     with TestClient(app) as client:
+        timeline = client.get(
+            f"/api/projects/{project_id}/source-changes?limit=20"
+        )
         latest = client.get(f"/api/projects/{project_id}/source-changes/latest")
         shown = client.get(
             f"/api/projects/{project_id}/source-changes/{view.change_id}"
         )
 
-    assert latest.status_code == shown.status_code == 200
+    assert timeline.status_code == latest.status_code == shown.status_code == 200
+    assert timeline.json()["data"] == [latest.json()["data"]]
     assert latest.json()["data"] == shown.json()["data"]
     assert latest.json()["data"]["actual_changed_path_count"] == 2
     assert latest.json()["data"]["claimed_paths"] == ["product/agent.py"]

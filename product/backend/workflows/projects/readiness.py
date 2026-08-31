@@ -186,7 +186,8 @@ class ProjectReadinessService:
                 confirmed_roles=confirmed_roles,
                 confirmed_actions=confirmed_actions,
             )
-            if current_scope_runnable:
+            # 已有范围仍可运行时也不能遮住新发现候选；持续开发中的新增权限面必须先让人看见。
+            if current_scope_runnable and next_action != "REVIEW_DISCOVERY":
                 next_action = (
                     "OPEN_RESULT"
                     if latest_verified_run_id is not None

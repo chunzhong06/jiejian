@@ -13,6 +13,7 @@
 
 import { request } from './http'
 import type { DiscoveryResult } from './onboarding'
+import type { SourceChangeViewDto } from './sourceChanges'
 
 export type ProjectDto = {
   project_id: string
@@ -49,30 +50,31 @@ export type ProjectReadinessDto = {
   next_required_action: 'CONNECT_APPLICATION' | 'CONFIRM_TARGET' | 'AUTHORIZE_SOURCE_ANALYSIS' | 'REVIEW_DISCOVERY' | 'RECORD_FLOW' | 'REVIEW_PERMISSION' | 'RUN_CHECK' | 'OPEN_RESULT'
 }
 
-export type ProductNextActionDto = {
-  action: ProjectReadinessDto['next_required_action']
-  label: string
-  description: string
-  route: '/application' | '/identities' | '/flows' | '/check' | '/results'
-  cli_command: string
-}
-
 export type ProductStatusDto = {
   project: (ProjectDto & { target_type: 'WEB' }) | null
   readiness: ProjectReadinessDto | null
-  steps: Array<{
-    key: 'application' | 'account' | 'flow' | 'check' | 'result' | 'history'
+  areas: Array<{
+    key: 'overview' | 'changes' | 'permissions' | 'preparation' | 'validation' | 'results'
     label: string
-    route: '/application' | '/identities' | '/flows' | '/check' | '/results' | '/history'
-    status: 'COMPLETE' | 'CURRENT' | 'UPCOMING' | 'AVAILABLE' | 'EMPTY'
+    description: string
+    route: '/workspace' | '/changes' | '/permissions' | '/preparation' | '/validation' | '/results'
+    status: 'READY' | 'NEEDS_ATTENTION' | 'RUNNING' | 'AVAILABLE' | 'BLOCKED' | 'EMPTY'
     status_label: string
   }>
-  next_action: ProductNextActionDto
+  attention_items: Array<{
+    key: string
+    label: string
+    description: string
+    route: '/workspace' | '/application' | '/changes' | '/permissions' | '/preparation' | '/identities' | '/flows' | '/validation' | '/results' | '/verification' | '/history'
+    tone: 'ACTION' | 'WARNING' | 'INFO'
+  }>
+  latest_change: SourceChangeViewDto | null
   latest_result: {
     run_id: string
     verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE' | null
     headline: string
     scope_statement: string
+    verified_change_id: string | null
   } | null
 }
 

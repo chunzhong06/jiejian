@@ -1,4 +1,4 @@
-# 普通用户检查预览与无 Profile 参数提交 API；执行和判定仍由共享 ExecutionWorkflow 完成。
+# 持续验证的准备、预览与提交 API；执行和判定仍由共享 ExecutionWorkflow 完成。
 
 from __future__ import annotations
 
@@ -17,6 +17,11 @@ class CheckSubmitRequest(ApiModel):
     change_id: str | None = Field(default=None, pattern=r"^chg_[0-9a-f]{32}$")
 
 
+class CheckPrepareRequest(ApiModel):
+    schema_version: Literal["1"]
+    change_id: str | None = Field(default=None, pattern=r"^chg_[0-9a-f]{32}$")
+
+
 def build_checks_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
@@ -27,6 +32,18 @@ def build_checks_router(context: ApplicationCore) -> APIRouter:
     async def check_preview(project_id: str, change_id: str | None = None):
         return data_response(
             context.checks.preview(project_id, change_id=change_id).model_dump(mode="json")
+        )
+
+    @router.post(
+        "/api/projects/{project_id}/check-preparation",
+        response_model=ApiResponse,
+    )
+    async def prepare_check(project_id: str, body: CheckPrepareRequest):
+        return data_response(
+            context.checks.prepare(
+                project_id,
+                change_id=body.change_id,
+            ).model_dump(mode="json")
         )
 
     @router.post(

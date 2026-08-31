@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from typing import Any, Callable
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit
@@ -65,8 +66,16 @@ def _binding_candidates(
     )
     observations: list[ObservationCandidateView] = []
     recoveries: list[RecoveryCandidateView] = []
+    primary_steps = context.draft.steps[target_index + 1 :]
+    if (
+        context.target_step.method == "GET"
+        and context.action.risk_hint is ActionRiskHint.READ
+    ):
+        # 读取动作的目标响应本身就是受测主体实际取得的数据；复用同一
+        # GET 作为基线观察，才能用摘要证明 ALLOW 路径确实披露了协作资料。
+        primary_steps = context.draft.steps[target_index:]
     sources = (
-        (context.recording, context.draft, context.draft.steps[target_index + 1 :]),
+        (context.recording, context.draft, primary_steps),
         *(
             (recording, draft, draft.steps)
             for recording, draft in context.supplements
@@ -211,7 +220,40 @@ def _effect_candidates(
     method = str(context.target_step.method)
     if context.action.risk_hint is ActionRiskHint.ADMIN:
         return ()
-    if method in {"PATCH", "PUT", "DELETE"}:
+    protected_fields: tuple[str, ...] = ()
+    if method == "GET" and context.action.risk_hint is ActionRiskHint.READ:
+        response = next(
+            (
+                item
+                for item in context.recording.browser_events
+                if item.kind is RecordingEventKind.RESPONSE
+                and item.request_id == context.target_step.request_id
+            ),
+            None,
+        )
+        if (
+            response is None
+            or response.status_code is None
+            or not _SUCCESS_MIN <= response.status_code <= _SUCCESS_MAX
+            or response.truncated
+            or not response.body
+        ):
+            return ()
+        try:
+            payload = json.loads(response.body)
+        except (TypeError, ValueError):
+            return ()
+        if not isinstance(payload, dict) or not 1 <= len(payload) <= 16:
+            return ()
+        protected_fields = tuple(sorted(str(key) for key in payload))
+        if any(
+            re.fullmatch(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$", field) is None
+            for field in protected_fields
+        ):
+            return ()
+        kind = SecurityEffectKind.DATA_DISCLOSURE
+        label = "披露受保护的日常协作资料"
+    elif method in {"PATCH", "PUT", "DELETE"}:
         kind = SecurityEffectKind.STATE_MUTATION
         label = "修改受保护资源状态"
     elif method == "POST" and context.action.risk_hint is ActionRiskHint.WRITE:
@@ -226,6 +268,7 @@ def _effect_candidates(
             "action_candidate_id": context.action.candidate_id,
             "method": method,
             "kind": kind.value,
+            "protected_fields": protected_fields,
         },
     )
     return _dedupe_candidates((
@@ -233,6 +276,7 @@ def _effect_candidates(
             candidate_id=f"sfc_{digest[:32]}",
             kind=kind,
             label=label,
+            protected_fields=protected_fields,
         ),
     ), key=_effect_key)
 

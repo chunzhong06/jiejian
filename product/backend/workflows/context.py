@@ -69,6 +69,9 @@ from product.backend.workflows.control import (
     ProductStatusService,
 )
 from product.backend.workflows.official_sample import OfficialSampleExperience
+from product.backend.workflows.competition_validation import (
+    CompetitionValidationSummaryQuery,
+)
 
 
 class ApplicationCore:
@@ -92,6 +95,7 @@ class ApplicationCore:
 
         self.var_dir = var_dir.resolve()
         self.paths = RuntimePaths(self.var_dir).ensure_layout()
+        self.competition_validation = CompetitionValidationSummaryQuery(self.var_dir)
         self.runner_progress_reader = RunnerProgressReader(self.var_dir)
         self._base_environment = dict(environ if environ is not None else os.environ)
         self._base_environment.pop("JIEJIAN_CONTROL_ORIGIN", None)
@@ -251,6 +255,7 @@ class ApplicationCore:
             self.projects,
             self.project_readiness.get,
             self.result_presentation,
+            self.source_changes,
         )
         self.product_results = ProductResultQuery(
             self.product_status,

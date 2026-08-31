@@ -32,13 +32,13 @@ describe('CheckProgress', () => {
     const onNavigate = vi.fn()
     render(<CheckProgress run={{
       run_id: 'run-failed', lifecycle: 'FAILED', job: { job_id: 'job-failed', state: 'FAILED' },
-      execution_errors: [{ stage: '后台执行', message: 'Worker 在任务完成前异常退出', log_path: 'var/logs/workers/job-failed.log', recovery: '重新启动后再次检查。', copy_text: '诊断 run-failed', diagnosis: { route: '/check', headline: '隔离执行没有正常完成', short_message: '检查没有形成安全结论，请确认运行环境后重试。', cleanup_warnings: [] } }],
+      execution_errors: [{ stage: '后台执行', message: 'Worker 在任务完成前异常退出', log_path: 'var/logs/workers/job-failed.log', recovery: '重新启动后再次检查。', copy_text: '诊断 run-failed', diagnosis: { route: '/settings/system', headline: '隔离执行没有正常完成', short_message: '检查没有形成安全结论，请确认运行环境后重试。', cleanup_warnings: [] } }],
     } as any} onRefresh={vi.fn()} onError={vi.fn()} onNavigate={onNavigate} />)
 
     expect(screen.getByText('隔离执行没有正常完成')).toBeInTheDocument()
     expect(screen.getByText('检查没有形成安全结论，请确认运行环境后重试。')).toBeInTheDocument()
     screen.getByRole('button', { name: '前往处理页面' }).click()
-    expect(onNavigate).toHaveBeenCalledWith('/check')
+    expect(onNavigate).toHaveBeenCalledWith('/settings/system')
     expect(screen.queryByText('发现权限问题')).not.toBeInTheDocument()
     expect(screen.queryByText(/job-failed|workers\/job-failed|事件序列|任务标识|高级/)).not.toBeInTheDocument()
   })

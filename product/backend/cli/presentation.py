@@ -421,7 +421,7 @@ def _evidence_status_label(value: object) -> str:
 
 
 def emit_status(status: object) -> None:
-    """以与 Web 工作台相同的下一步文案展示统一状态 View。"""
+    """以与 Web 工作区相同的区域和待办展示统一状态 View。"""
 
     project = status.project
     typer.echo("界鉴工作台")
@@ -432,20 +432,21 @@ def emit_status(status: object) -> None:
         _emit_section("当前应用", [("名称", project.name, "")])
     typer.echo("")
     _emit_section(
-        "六步进度",
+        "持续验证工作区",
         [
-            (step.label, step.status_label, step.status)
-            for step in status.steps
+            (area.label, area.status_label, area.status)
+            for area in status.areas
         ],
     )
-    typer.echo("")
-    _emit_section(
-        "现在继续",
-        [
-            (status.next_action.label, status.next_action.description, "CURRENT"),
-            ("命令", status.next_action.cli_command, ""),
-        ],
-    )
+    if status.attention_items:
+        typer.echo("")
+        _emit_section(
+            "需要处理",
+            [
+                (item.label, item.description, item.tone)
+                for item in status.attention_items
+            ],
+        )
     if status.latest_result is not None:
         typer.echo("")
         _emit_section(

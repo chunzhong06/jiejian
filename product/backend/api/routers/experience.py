@@ -19,6 +19,15 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
     def official_sample_status():
         return data_response(context.official_experience.status().model_dump(mode="json"))
 
+    @router.get(
+        "/api/experience/official-sample/validation-summary",
+        response_model=ApiResponse,
+    )
+    def official_sample_validation_summary():
+        return data_response(
+            context.competition_validation.get().model_dump(mode="json")
+        )
+
     @router.post("/api/experience/official-sample/start", response_model=ApiResponse)
     def start_official_sample(body: OfficialSampleStartRequest):
         return data_response(

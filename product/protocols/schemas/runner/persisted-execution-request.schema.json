@@ -1391,6 +1391,7 @@
         "reset_strategy": {
           "discriminator": {
             "mapping": {
+              "NOT_REQUIRED": "#/$defs/ResetNotRequiredStrategy",
               "RESET_ENDPOINT": "#/$defs/ResetEndpointStrategy",
               "SNAPSHOT_PROVIDER": "#/$defs/SnapshotProviderResetStrategy",
               "UNIQUE_RESOURCE_WORKFLOW": "#/$defs/UniqueResourceWorkflowResetStrategy"
@@ -1406,6 +1407,9 @@
             },
             {
               "$ref": "#/$defs/SnapshotProviderResetStrategy"
+            },
+            {
+              "$ref": "#/$defs/ResetNotRequiredStrategy"
             }
           ],
           "title": "Reset Strategy"
@@ -2717,11 +2721,11 @@
           "$ref": "#/$defs/PermissionContext"
         },
         "coverage_dimensions": {
+          "default": [],
           "items": {
             "$ref": "#/$defs/CoverageDimension"
           },
           "maxItems": 6,
-          "minItems": 1,
           "title": "Coverage Dimensions",
           "type": "array"
         },
@@ -2780,8 +2784,7 @@
         "resource_id",
         "relation_path",
         "expectation",
-        "required_observations",
-        "coverage_dimensions"
+        "required_observations"
       ],
       "title": "PermissionRule",
       "type": "object"
@@ -3161,6 +3164,65 @@
       "title": "RepairIntentIdentity",
       "type": "object"
     },
+    "RepairRegressionControlIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "action_display_name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Action Display Name",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "case_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Case Fingerprint",
+          "type": "string"
+        },
+        "intent": {
+          "$ref": "#/$defs/RepairIntentIdentity"
+        },
+        "key_evidence": {
+          "$ref": "#/$defs/RepairEvidenceStandard"
+        },
+        "protected_effect_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Protected Effect Ids",
+          "type": "array"
+        },
+        "subject_display_name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Subject Display Name",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$",
+          "title": "Subject Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "action_id",
+        "subject_id",
+        "subject_display_name",
+        "action_display_name",
+        "case_fingerprint",
+        "protected_effect_ids",
+        "key_evidence"
+      ],
+      "title": "RepairRegressionControlIdentity",
+      "type": "object"
+    },
     "RepairVerificationContext": {
       "additionalProperties": false,
       "description": "随修复重验 Run 冻结原考题、受保护后果、ALLOW 控制和证据标准。",
@@ -3176,6 +3238,15 @@
         },
         "must_remain_allow_control": {
           "$ref": "#/$defs/RepairAllowControlIdentity"
+        },
+        "must_remain_regression_controls": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RepairRegressionControlIdentity"
+          },
+          "maxItems": 64,
+          "title": "Must Remain Regression Controls",
+          "type": "array"
         },
         "original_intents": {
           "items": {
@@ -3232,6 +3303,19 @@
         "path"
       ],
       "title": "ResetEndpointStrategy",
+      "type": "object"
+    },
+    "ResetNotRequiredStrategy": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "NOT_REQUIRED",
+          "default": "NOT_REQUIRED",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ResetNotRequiredStrategy",
       "type": "object"
     },
     "ResourceDefinition": {

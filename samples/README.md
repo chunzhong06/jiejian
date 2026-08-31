@@ -1,6 +1,6 @@
 # 官方 Sample
 
-`samples/web/collaboration_space` 是界鉴随源码提供的唯一 Web 演示应用：“协作空间——项目资料管理应用”。固定项目为“校园数字展馆”，Alice 是项目负责人，Bob 是普通成员；高价值业务动作是生成完整项目资料包。
+`samples/web/collaboration_space` 是界鉴随源码提供的唯一 Web 演示应用：“协作空间——项目资料管理应用”。固定项目为“校园数字展馆”，Alice 是项目负责人，Bob 是普通成员；Bob 可以查看日常协作资料，但不能导出完整项目交付包。
 
 同一个应用通过授权顺序和关键观察可用性形成漏洞、修复、观察受限三种事实。Sample 不包含预设 Verdict，最终 `BLOCK`、`PASS`、`INCONCLUSIVE` 只能由界鉴正式 Verification 和 Evidence 路径产生。
 
@@ -20,13 +20,11 @@ Sample Bundle 位于：
 samples/web/collaboration_space/
 ├── sample.json
 └── source/
+    ├── background.py
     ├── openapi.json
-    └── collaboration_space/
-        ├── __init__.py
-        ├── background.py
-        ├── page.py
-        ├── server.py
-        └── storage.py
+    ├── page.py
+    ├── server.py
+    └── storage.py
 ```
 
 每次体验把独立源码副本和状态写入当前实例 `var/runtime/official-samples/<experience-id>/source|state`；数据库、Task、Audit、Queue、Blob、ZIP 和环境描述符都位于 `state`，日志进入 `var/logs/official-samples`，不写回 Sample Bundle 或 `var/data`。结束体验、移除应用和 ApplicationCore 安全退出都会回收本次 source/state。
@@ -50,7 +48,7 @@ Alice 在资料包生成成功后可以执行：
 撤销本次导出
 → 确认撤销
 → 当前导出状态：已撤销
-→ 可以重新生成资料包
+→ 可以重新生成交付包
 ```
 
 这是正常业务撤销：
@@ -91,7 +89,7 @@ POST /reset
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 sample-test
 ```
 
-它从真实 `start.cmd` 启动 fresh `var/test/sample-test/<uuid>`，通过正式 Worker 和独立 Recording Process 创建 headed Chromium，再由 Windows UI Automation 的 InvokePattern 操作页面按钮。完整 L5 同时验证 capture 生命周期、真实 FlowDraft、三态 Runner、六面 Evidence、GUI/CLI/JSON 等价、Report、History 和安全退出。
+它从真实 `start.cmd` 启动 fresh `var/test/sample-test/<uuid>`，通过正式 Worker 和独立 Recording Process 创建 headed Chromium，再由 Windows UI Automation 的 InvokePattern 操作页面按钮。完整 L5 分别录制导出和日常查看，形成三条 Case 与一组导出孪生，并同时验证 capture 生命周期、真实 FlowDraft、三态 Runner、六面 Evidence、GUI/CLI/JSON 等价、Report、History 和安全退出。
 
 修改 Sample 后优先运行现有直接测试：
 

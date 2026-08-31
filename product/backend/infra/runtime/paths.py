@@ -126,6 +126,14 @@ class RuntimePaths:
         return self.logs / "official-samples"
 
     @property
+    def audit(self) -> Path:
+        return self.root / "audit"
+
+    @property
+    def competition_audit(self) -> Path:
+        return self.audit / "competition"
+
+    @property
     def temp(self) -> Path:
         return self.root / "temp"
 
@@ -165,6 +173,8 @@ class RuntimePaths:
             self.identity_preparation_logs,
             self.app_logs,
             self.official_sample_logs,
+            self.audit,
+            self.competition_audit,
             self.temp,
             self.process_gates,
             self.test,
