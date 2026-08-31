@@ -124,10 +124,9 @@ function ControlShellContent() {
     }
   }
   const activeRun = useMemo(() => runs[0], [runs])
-  const validationChangeId = experience?.repair_change_id ?? (
-    status?.latest_change?.change_id
-    && status.latest_change.change_id !== status.latest_result?.verified_change_id
-      ? status.latest_change.change_id
+  const currentCheckChangeId = experience?.repair_change_id ?? (
+    status?.revalidation?.status === 'READY'
+      ? status.revalidation.change_id ?? undefined
       : undefined
   )
   const canVerifyOfficialFix = Boolean(
@@ -223,6 +222,13 @@ function ControlShellContent() {
     if (location.pathname !== route) navigate(route, { replace: true })
   }, [location.pathname, navigate, route])
   useEffect(() => {
+    if (route !== '/validation' || experience?.repair_change_id || !status?.revalidation) return
+    if (['NO_CHANGE', 'READY'].includes(status.revalidation.status)) return
+    if (status.revalidation.next_path && status.revalidation.next_path !== '/validation') {
+      navigate(status.revalidation.next_path, { replace: true })
+    }
+  }, [experience?.repair_change_id, navigate, route, status?.revalidation])
+  useEffect(() => {
     if (
       presentationOpen
       && (!experience?.active || !selected?.project_id || experience.project_id !== selected.project_id)
@@ -259,7 +265,13 @@ function ControlShellContent() {
     if (route === '/flows') return <RecordingPage key={`recording-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/preparation')} onNext={() => navigate('/permissions')} />
     if (route === '/permissions') return <PermissionCheckPage mode="permissions" key={`permissions-${retryEpoch}`} project={selected} runs={runs} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/permissions'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/changes')} onNext={() => navigate('/preparation')} />
     if (route === '/preparation') return readiness ? <PreparationPage readiness={readiness} onPrepareSafe={prepareCurrentProject} onNavigate={(path) => navigate(normalizeRoute(path))} /> : <MissingApplication onNavigate={() => navigate('/application')} />
-    if (route === '/validation') return <PermissionCheckPage mode="validation" key={`validation-${retryEpoch}-${validationChangeId ?? 'baseline'}`} project={selected} runs={runs} changeId={validationChangeId} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/validation'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/preparation')} onNext={() => navigate('/results')} />
+    if (route === '/validation') {
+      if (!status) return <Result status="info" title="正在确认当前检查状态" subTitle="界鉴会先核对代码变化、权限规则和测试准备，再开放验证运行。" />
+      if (!experience?.repair_change_id && status.revalidation && !['NO_CHANGE', 'READY'].includes(status.revalidation.status)) {
+        return <Result status="info" title={status.revalidation.summary} subTitle="当前前置事项完成后，才能开始这次检查。" />
+      }
+      return <PermissionCheckPage mode="validation" key={`validation-${retryEpoch}-${currentCheckChangeId ?? 'baseline'}`} project={selected} runs={runs} changeId={currentCheckChangeId} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/validation'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/preparation')} onNext={() => navigate('/results')} />
+    }
     if (route === '/history') return <CheckHistoryPage projectId={selected.project_id} onError={notifyError} onBack={() => navigate('/results')} />
     if (route === '/verification') return <VerificationPage key={`verification-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/results')} onHistory={() => navigate('/history')} onRetest={canVerifyOfficialFix ? verifyOfficialFix : undefined} retestBusy={experienceBusy} onObservationGap={experience?.active && experience.experience_mode === 'GUIDED' && experience.project_id === selected.project_id ? runOfficialObservationGap : undefined} observationGapBusy={experienceBusy} />
     return <CheckResultsPage key={`results-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/validation')} onHistory={() => navigate('/history')} onVerification={() => navigate('/verification')} onNavigate={(path) => navigate(normalizeRoute(path))} canVerifyFix={canVerifyOfficialFix} verifyingFix={experienceBusy} onVerifyFix={verifyOfficialFix} />

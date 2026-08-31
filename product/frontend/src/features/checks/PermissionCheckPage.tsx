@@ -1,10 +1,10 @@
 /* 权限规则与验证运行共享同一事实读取；页面只按长期工作区拆分用户任务。 */
 
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Descriptions, List, Modal, Segmented, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Descriptions, Input, List, Modal, Segmented, Space, Tag, Typography } from 'antd'
 import { checksApi, type CheckPreviewDto } from '../../api/checks'
 import { ApiError } from '../../api/http'
-import { permissionIntentsApi, type PermissionIntentCellDto, type PermissionIntentExpectation, type PermissionIntentMatrixDto, type PermissionIntentProposalDto } from '../../api/permissionIntents'
+import { permissionIntentsApi, type PermissionDraftDto, type PermissionDraftSuggestionDto, type PermissionIntentCellDto, type PermissionIntentExpectation, type PermissionIntentMatrixDto, type PermissionIntentProposalDto } from '../../api/permissionIntents'
 import type { ProjectDto } from '../../api/projects'
 import { runsApi, type RunDto } from '../../api/runs'
 import { lifecycleLabel } from '../../app/presentation'
@@ -44,6 +44,11 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
   const [submitting, setSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [pendingChange, setPendingChange] = useState<PendingPermissionChange | null>(null)
+  const [draftInput, setDraftInput] = useState('')
+  const [draftSourceText, setDraftSourceText] = useState('')
+  const [draft, setDraft] = useState<PermissionDraftDto | null>(null)
+  const [drafting, setDrafting] = useState(false)
+  const [pendingDraftOptionId, setPendingDraftOptionId] = useState<string>()
   const [savingProposalId, setSavingProposalId] = useState<string>()
   const reconciledTerminalRun = useRef<string | null>(null)
   const readPreview = () => changeId
@@ -72,6 +77,10 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
     setRequiresCompile(false)
     setNeedsNewRun(false)
     setPreparedNow(false)
+    setDraftInput('')
+    setDraftSourceText('')
+    setDraft(null)
+    setPendingDraftOptionId(undefined)
     setRefreshing(true)
     void Promise.all([
       permissionIntentsApi.matrix(project.project_id),
@@ -137,9 +146,46 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
       }, expectation)
       await refreshPermissionFacts()
       await onRefresh()
+      if (pendingDraftOptionId) {
+        setDraft((current) => current ? {
+          ...current,
+          suggestions: current.suggestions.filter((item) => item.option_id !== pendingDraftOptionId),
+        } : current)
+      }
       setPendingChange(null)
+      setPendingDraftOptionId(undefined)
     } catch (error) { onError(error as ApiError) }
     finally { setSavingCell(undefined) }
+  }
+
+  const createDraft = async () => {
+    const text = draftInput.trim()
+    if (!text) return
+    setDrafting(true)
+    try {
+      const nextDraft = await permissionIntentsApi.draft(project.project_id, text)
+      setDraftSourceText(text)
+      setDraft(nextDraft)
+    } catch (error) { onError(error as ApiError) }
+    finally { setDrafting(false) }
+  }
+
+  const confirmDraftSuggestion = (suggestion: PermissionDraftSuggestionDto) => {
+    const cell = findDraftCell(suggestion, matrix)
+    if (!cell) return
+    setPendingDraftOptionId(suggestion.option_id)
+    setPendingChange({
+      actionId: suggestion.action_candidate_id,
+      cell,
+      expectation: suggestion.suggested_expectation,
+    })
+  }
+
+  const ignoreDraftSuggestion = (optionId: string) => {
+    setDraft((current) => current ? {
+      ...current,
+      suggestions: current.suggestions.filter((item) => item.option_id !== optionId),
+    } : current)
   }
 
   const decideProposal = async (proposal: PermissionIntentProposalDto, decision: 'approve' | 'reject') => {
@@ -236,11 +282,9 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
     preview?.gaps.some((gap) => gap.code === 'GENERATED_PROFILE_MISSING' || gap.code === 'GENERATED_PROFILE_STALE'),
   )
 
-  const assistantPanel = matrix && (matrix.unconfirmed_count > 0 || matrix.review_required_count > 0 || proposals.length > 0)
-    ? { surface: 'permission-review' as const, title: '权限要求复核', actionLabel: 'AI 帮我复核权限' }
-    : hasObservationGap(matrix, preview)
-      ? { surface: 'observation-recovery' as const, title: '观察与恢复说明', actionLabel: 'AI 解释为什么还不能可靠检查' }
-      : { surface: 'check-preview-explanation' as const, title: '本次检查范围', actionLabel: 'AI 解读本次检查' }
+  const assistantPanel = hasObservationGap(matrix, preview)
+    ? { surface: 'observation-recovery' as const, title: '观察与恢复说明', actionLabel: 'AI 解释为什么还不能可靠检查' }
+    : { surface: 'check-preview-explanation' as const, title: '本次检查范围', actionLabel: 'AI 解读本次检查' }
 
   const primary = activeRun
     ? undefined
@@ -278,7 +322,34 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
         : '按当前完整权限范围核对测试条件，并在受控环境中检查页面响应、后台任务和真实业务后果。'}
       status={mode === 'permissions' ? `${matrix?.confirmed_count ?? 0} 项已确认` : titleStatus}
     />
-    {mode === 'permissions' && <><section className="permission-check-section" aria-labelledby="permission-requirements-title">
+    {mode === 'permissions' && <><section className="permission-check-section permission-draft-section" aria-labelledby="permission-draft-title">
+      <div className="permission-check-heading"><div><Typography.Title level={3} id="permission-draft-title">用一句话描述权限要求</Typography.Title><Typography.Paragraph type="secondary">界鉴只会把你的原话整理成待确认建议，不会自动修改权限规则。</Typography.Paragraph></div><Tag>可选</Tag></div>
+      <Input.TextArea aria-label="权限要求原话" value={draftInput} maxLength={2000} showCount rows={4} placeholder="例如：普通成员可以查看自己的资料，但不能导出完整项目包。" onChange={(event) => setDraftInput(event.target.value)} />
+      <div><Button type="primary" loading={drafting} disabled={!draftInput.trim()} onClick={() => void createDraft()}>整理成待确认规则</Button></div>
+      {draft?.status === 'UNAVAILABLE' && <Alert type="warning" showIcon message="自然语言整理暂不可用" description="正式权限矩阵仍然完整可用，你可以直接在下方确认允许和拒绝。" />}
+      {draft?.status === 'PARTIAL' && <Alert type="info" showIcon message="还有部分内容无法可靠对应" description="已验证的建议仍可逐条确认；其余内容请人工查看下方权限矩阵。" />}
+      {draft && draft.status !== 'UNAVAILABLE' && <div className="permission-draft-results">
+        <div className="permission-draft-source"><Typography.Text strong>用户原话</Typography.Text><Typography.Paragraph>{draftSourceText}</Typography.Paragraph></div>
+        {draft.suggestions.map((suggestion) => {
+          const available = Boolean(findDraftCell(suggestion, matrix))
+          return <article className="permission-draft-card" key={suggestion.option_id}>
+            <div className="permission-draft-card-heading"><Typography.Text strong>{suggestion.subject_display_name} · {suggestion.action_display_name}</Typography.Text><Tag color="blue">待你确认</Tag></div>
+            <Descriptions size="small" column={1}>
+              <Descriptions.Item label="当前业务单元">{suggestion.subject_display_name}以{relationLabels[suggestion.relation]}关系，对{suggestion.resource_owner_display_name}的资源执行“{suggestion.action_display_name}”</Descriptions.Item>
+              <Descriptions.Item label="当前规则">{expectationLabel(suggestion.current_expectation)}</Descriptions.Item>
+              <Descriptions.Item label="AI 建议规则">{expectationLabel(suggestion.suggested_expectation)}</Descriptions.Item>
+              <Descriptions.Item label="原文依据">“{suggestion.source_quote}”</Descriptions.Item>
+            </Descriptions>
+            <Space><Button type="primary" disabled={!available || activeRun || Boolean(savingCell)} onClick={() => confirmDraftSuggestion(suggestion)}>确认这条</Button><Button disabled={Boolean(savingCell)} onClick={() => ignoreDraftSuggestion(suggestion.option_id)}>忽略</Button></Space>
+            {!available && <Typography.Text type="warning">当前权限矩阵已经变化，请重新整理后再确认。</Typography.Text>}
+          </article>
+        })}
+        {draft.issues.map((issue, index) => <Alert key={`${issue.code}-${index}`} type="info" showIcon message={issue.message} description={issue.source_quote ? `未可靠对应：“${issue.source_quote}”` : undefined} />)}
+        {draft.suggestions.length === 0 && <Typography.Text type="secondary">当前草稿没有待确认建议，请继续人工核对权限矩阵。</Typography.Text>}
+      </div>}
+    </section>
+
+    <section className="permission-check-section" aria-labelledby="permission-requirements-title">
       <div className="permission-check-heading"><div><Typography.Title level={3} id="permission-requirements-title">确认权限要求</Typography.Title><Typography.Paragraph type="secondary">为每个权限组和资源关系选择“允许”或“拒绝”。这里表达的是你的安全要求，不是界鉴自动作出的漏洞结论。</Typography.Paragraph></div><Tag>{matrix ? `已确认 ${matrix.confirmed_count} 项` : '正在读取'}</Tag></div>
       {matrix?.actions.length === 0 && <Alert type="info" showIcon message="还没有可确认的业务动作" description="请先完成业务流程录制，并确认测试资源、真实结果观察和恢复方式。" />}
       <div className="permission-requirement-list">
@@ -370,7 +441,7 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
           : { label: '继续测试准备', onClick: onNext }
         : primary}
     />
-    <Modal open={Boolean(pendingChange)} title="确认权限变更" okText="确认权限变更" cancelText="暂不变更" confirmLoading={Boolean(savingCell)} onOk={() => void approveChange()} onCancel={() => { if (!savingCell) setPendingChange(null) }}>
+    <Modal open={Boolean(pendingChange)} title="确认权限变更" okText="确认权限变更" cancelText="暂不变更" confirmLoading={Boolean(savingCell)} onOk={() => void approveChange()} onCancel={() => { if (!savingCell) { setPendingChange(null); setPendingDraftOptionId(undefined) } }}>
       {pendingChange && <Space direction="vertical" size="small">
         <Typography.Text>当前要求：{expectationLabel(pendingChange.cell.expectation)}</Typography.Text>
         <Typography.Text>准备变成：{expectationLabel(pendingChange.expectation)}</Typography.Text>
@@ -386,6 +457,16 @@ type PendingPermissionChange = { actionId: string; cell: PermissionIntentCellDto
 
 function permissionCellKey(actionId: string, cell: PermissionIntentCellDto) {
   return `${actionId}:${cell.subject_role_candidate_id}:${cell.resource_owner_role_candidate_id}:${cell.relation}`
+}
+
+function findDraftCell(suggestion: PermissionDraftSuggestionDto, matrix: PermissionIntentMatrixDto | null) {
+  return matrix?.actions
+    .find((action) => action.action_candidate_id === suggestion.action_candidate_id)
+    ?.cells.find((cell) => (
+      cell.subject_role_candidate_id === suggestion.subject_role_candidate_id
+      && cell.resource_owner_role_candidate_id === suggestion.resource_owner_role_candidate_id
+      && cell.relation === suggestion.relation
+    ))
 }
 
 function expectationLabel(value: PermissionIntentExpectation | null) {

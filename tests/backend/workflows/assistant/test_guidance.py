@@ -5,6 +5,7 @@ from __future__ import annotations
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.workflows.assistant import (
     GuidanceOptionKind,
+    GuidancePhase,
     GuidancePriorityTier,
     build_guidance_snapshot,
 )
@@ -120,3 +121,16 @@ def test_guidance_only_exposes_highest_blocking_tier_and_has_semantic_fingerprin
 
     assert {item.route for item in first.options} == {"/preparation"}
     assert first.state_fingerprint == second.state_fingerprint
+
+
+def test_guidance_routes_unified_change_review_to_changes_page() -> None:
+    readiness = _guidance_readiness(
+        runnable=False,
+        remaining_gap_count=1,
+    ).model_copy(update={"next_required_action": "REVIEW_CHANGE"})
+
+    snapshot = build_guidance_snapshot(readiness)
+
+    assert snapshot.phase is GuidancePhase.CHANGE_REVIEW
+    assert snapshot.options[0].kind is GuidanceOptionKind.REVIEW_CHANGE
+    assert snapshot.options[0].route == "/changes"

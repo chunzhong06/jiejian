@@ -175,3 +175,45 @@ def test_agent_proposal_requires_explicit_human_approval_or_rejection(
             ).json()["data"]["proposals"] == []
     finally:
         core.close()
+
+
+def test_permission_draft_api_is_explicit_non_activating_and_schema_bounded(
+    tmp_path: Path,
+) -> None:
+    core = _prepared_core(tmp_path)
+    app = FastAPI()
+    app.include_router(build_permission_intents_router(core))
+    try:
+        before = core.permission_intents.matrix(PROJECT_ID)
+        before_intents = tuple(
+            (item.intent_id, item.revision, item.intent_hash)
+            for item in core.permission_intents.current_intents(PROJECT_ID)
+        )
+        with TestClient(app) as client:
+            drafted = client.post(
+                f"/api/projects/{PROJECT_ID}/permission-drafts",
+                json={
+                    "schema_version": "1",
+                    "text": "所有者可以修改自己的资源。",
+                },
+            )
+            invalid = client.post(
+                f"/api/projects/{PROJECT_ID}/permission-drafts",
+                json={"schema_version": "1", "text": "越界字段", "apply": True},
+            )
+            assert client.post(
+                f"/api/projects/{PROJECT_ID}/permission-drafts/apply",
+                json={"schema_version": "1"},
+            ).status_code == 404
+
+        after = core.permission_intents.matrix(PROJECT_ID)
+        assert drafted.status_code == 200
+        assert drafted.json()["data"]["status"] == "UNAVAILABLE"
+        assert invalid.status_code == 422
+        assert after.policy_epoch == before.policy_epoch
+        assert tuple(
+            (item.intent_id, item.revision, item.intent_hash)
+            for item in core.permission_intents.current_intents(PROJECT_ID)
+        ) == before_intents
+    finally:
+        core.close()

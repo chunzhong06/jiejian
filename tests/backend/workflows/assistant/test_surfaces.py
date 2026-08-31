@@ -1,4 +1,4 @@
-# 验证九类 AI surface 只引用正式短事实与现有实体。
+# 验证八类 AI surface 只引用正式短事实与现有实体。
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from product.backend.core.application_understanding import (
     CandidateOrigin,
 )
 from product.backend.core.lifecycle import ProjectStatus, RunLifecycle, RunVerdict
-from product.backend.core.permission_intent import PermissionIntentRelation
 from product.backend.core.recording import RecordingState
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.workflows.assistant import (
@@ -20,7 +19,6 @@ from product.backend.workflows.assistant import (
     diagnose_error,
 )
 from product.backend.workflows.assistant.surfaces import AssistantSurfaceResolver
-from product.backend.workflows.permission_intents import PermissionIntentCellStatus
 from product.backend.workflows.projects.readiness import (
     ActionPermissionReadinessView,
     ProjectReadinessView,
@@ -142,29 +140,6 @@ def _resolver() -> AssistantSurfaceResolver:
             ),
         ),
     )
-    cell = SimpleNamespace(
-        subject_role_candidate_id=role_id,
-        subject_role_display_name="普通成员",
-        resource_owner_role_candidate_id=role_id,
-        resource_owner_role_display_name="普通成员",
-        relation=PermissionIntentRelation.OWNS,
-        expectation=None,
-        status=PermissionIntentCellStatus.UNCONFIRMED,
-        review_reasons=(),
-        execution_gap="TEST_IDENTITY_MISSING",
-    )
-    matrix = SimpleNamespace(
-        actions=(SimpleNamespace(
-            action_candidate_id=action_id,
-            action_display_name=action.display_name,
-            cells=(cell,),
-            gaps=("ALLOW_INTENT_MISSING",),
-        ),),
-        unconfirmed_count=1,
-        review_required_count=0,
-        representative_gap_count=1,
-        compilable_action_count=0,
-    )
     issue = SimpleNamespace(
         finding_id="finding_demo",
         title="普通成员不应导出完整资料包",
@@ -214,20 +189,18 @@ def _resolver() -> AssistantSurfaceResolver:
             recording=SimpleNamespace(state=RecordingState.PENDING_REVIEW),
             draft=draft,
         )),
-        permission_intents=SimpleNamespace(matrix=lambda project_id: matrix),
         check_preview=lambda project_id: preview,
         result_presentation=SimpleNamespace(build=lambda run_id: presentation),
     )
 
 
-def test_resolver_builds_all_nine_surfaces_with_stable_fingerprints() -> None:
+def test_resolver_builds_all_eight_surfaces_with_stable_fingerprints() -> None:
     resolver = _resolver()
     project_templates = (
         AssistantTemplateId.NEXT_STEP,
         AssistantTemplateId.CANDIDATE_REVIEW,
         AssistantTemplateId.IDENTITY_PREPARATION,
         AssistantTemplateId.RECORDING_REVIEW,
-        AssistantTemplateId.PERMISSION_REVIEW,
         AssistantTemplateId.OBSERVATION_RECOVERY,
         AssistantTemplateId.CHECK_PREVIEW_EXPLANATION,
     )

@@ -33,6 +33,12 @@
 .permission-proposal-list { display: grid; gap: var(--space-16); }
 .permission-proposal-card { border: 1px solid var(--color-border); border-radius: 12px; display: grid; gap: var(--space-12); padding: var(--space-20, 20px); }
 .permission-proposal-card .ant-descriptions { margin: 0; }
+.permission-draft-results { display: grid; gap: var(--space-16); }
+.permission-draft-source { background: var(--color-surface-subtle, #f7f8fa); border-radius: 10px; padding: var(--space-16); }
+.permission-draft-source .ant-typography:last-child { margin-bottom: 0; }
+.permission-draft-card { border: 1px solid var(--color-border); border-radius: 12px; display: grid; gap: var(--space-12); padding: var(--space-20, 20px); }
+.permission-draft-card-heading { align-items: center; display: flex; gap: var(--space-12); justify-content: space-between; }
+.permission-draft-card .ant-descriptions { margin: 0; }
 .permission-requirement-gaps { margin: var(--space-8) 0 0 !important; }
 .check-preview-summary { background: #f8fafc; border-radius: 10px; padding: 16px; }
 .check-scenario-grid { display: grid; gap: var(--space-12); grid-template-columns: repeat(3, minmax(0, 1fr)); }

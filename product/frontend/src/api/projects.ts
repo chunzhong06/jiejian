@@ -5,7 +5,7 @@
  *   接入页面与 Project HTTP 路由之间的前端能力适配器
  *
  * 职责
- *   建立应用连接｜确认 endpoint｜授权源码分析｜读取候选与 ProjectReadiness
+ *   建立应用连接｜确认 endpoint｜授权源码分析｜读取候选、ProjectReadiness 与 ProjectRevalidation
  *
  * 调用链
  *   Access / ControlShell → projectsApi → api/http
@@ -89,13 +89,25 @@ export type ProjectReadinessDto = {
   remaining_gap_count: number
   active_tasks: Array<{ kind: 'RUN' | 'RECORDING'; task_id: string; state: string }>
   latest_verified_run_id: string | null
-  next_required_action: 'CONNECT_APPLICATION' | 'CONFIRM_TARGET' | 'AUTHORIZE_SOURCE_ANALYSIS' | 'REVIEW_DISCOVERY' | 'RECORD_FLOW' | 'REVIEW_PERMISSION' | 'RUN_CHECK' | 'OPEN_RESULT'
+  next_required_action: 'CONNECT_APPLICATION' | 'CONFIRM_TARGET' | 'AUTHORIZE_SOURCE_ANALYSIS' | 'REVIEW_DISCOVERY' | 'RECORD_FLOW' | 'REVIEW_CHANGE' | 'REVIEW_PERMISSION' | 'RUN_CHECK' | 'OPEN_RESULT'
   preparation?: ProjectPreparationDto | null
 }
 
 export type ProductStatusDto = {
   project: (ProjectDto & { target_type: 'WEB' }) | null
   readiness: ProjectReadinessDto | null
+  revalidation: {
+    project_id: string
+    status: 'NO_CHANGE' | 'REVIEW_REQUIRED' | 'PREPARATION_REQUIRED' | 'READY' | 'VERIFIED' | 'STALE'
+    change_id: string | null
+    summary: string
+    next_path: '/changes' | '/permissions' | '/preparation' | '/validation' | '/results' | null
+    next_label: string | null
+    required_intent_count: number
+    reason_codes: string[]
+    verified_run_id: string | null
+    verified_change_id: string | null
+  } | null
   areas: Array<{
     key: 'overview' | 'changes' | 'permissions' | 'preparation' | 'validation' | 'results'
     label: string

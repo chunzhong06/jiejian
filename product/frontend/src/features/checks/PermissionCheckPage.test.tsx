@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PermissionCheckPage } from './PermissionCheckPage'
 
 const api = vi.hoisted(() => ({
-  matrix: vi.fn(), proposals: vi.fn(), approve: vi.fn(), approveProposal: vi.fn(), rejectProposal: vi.fn(),
+  matrix: vi.fn(), proposals: vi.fn(), draft: vi.fn(), approve: vi.fn(), approveProposal: vi.fn(), rejectProposal: vi.fn(),
   preview: vi.fn(), prepare: vi.fn(), submit: vi.fn(),
   run: vi.fn(), progress: vi.fn(), cancel: vi.fn(),
 }))
-vi.mock('../../api/permissionIntents', () => ({ permissionIntentsApi: { matrix: api.matrix, proposals: api.proposals, approve: api.approve, approveProposal: api.approveProposal, rejectProposal: api.rejectProposal } }))
+vi.mock('../../api/permissionIntents', () => ({ permissionIntentsApi: { matrix: api.matrix, proposals: api.proposals, draft: api.draft, approve: api.approve, approveProposal: api.approveProposal, rejectProposal: api.rejectProposal } }))
 vi.mock('../../api/checks', () => ({ checksApi: { preview: api.preview, prepare: api.prepare, submit: api.submit } }))
 vi.mock('../../api/runs', () => ({ runsApi: { run: api.run, progress: api.progress, cancel: api.cancel } }))
 
@@ -36,6 +36,14 @@ const readyPreview = {
     ],
   }],
 }
+const draftSuggestion = {
+  option_id: `opt_${'4'.repeat(32)}`, action_candidate_id: actionId,
+  subject_role_candidate_id: peerRoleId, resource_owner_role_candidate_id: ownerRoleId,
+  relation: 'OTHER_ROLE' as const, subject_display_name: '普通成员',
+  action_display_name: '修改测试文档', resource_owner_display_name: '所有者',
+  current_expectation: 'DENY' as const, suggested_expectation: 'ALLOW' as const,
+  source_quote: '普通成员可以修改所有者的测试文档',
+}
 
 function renderPage(overrides: Record<string, unknown> = {}) {
   const props = {
@@ -52,6 +60,7 @@ describe('PermissionCheckPage', () => {
     vi.clearAllMocks()
     api.matrix.mockResolvedValue(matrix)
     api.proposals.mockResolvedValue({ project_id: 'p1', proposals: [] })
+    api.draft.mockResolvedValue({ project_id: 'p1', status: 'READY_FOR_REVIEW', suggestions: [draftSuggestion], issues: [] })
     api.preview.mockResolvedValue(readyPreview)
     api.approve.mockResolvedValue(matrix)
     api.approveProposal.mockResolvedValue({})
@@ -81,12 +90,69 @@ describe('PermissionCheckPage', () => {
     expect(screen.queryByText(/Profile|Contract|Observer|profile_id|contract_id/)).not.toBeInTheDocument()
   })
 
-  it('权限规则只展示人确认与 Agent 建议，不混入运行按钮', async () => {
+  it('权限规则加载时不调用模型，也不保留旧权限复核入口', async () => {
     renderPage({ mode: 'permissions' })
     expect(await screen.findByText('确认权限要求')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '用一句话描述权限要求' })).toBeInTheDocument()
+    expect(api.draft).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /AI 帮我复核权限/ })).not.toBeInTheDocument()
     expect(screen.queryByText('准备检查条件')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '开始真实检查' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '继续测试准备' })).toBeInTheDocument()
+  })
+
+  it('用户明确点击后显示可核对草稿，确认单条仍走现有 Human approval', async () => {
+    renderPage({ mode: 'permissions' })
+    const input = await screen.findByLabelText('权限要求原话')
+    fireEvent.change(input, { target: { value: '普通成员可以修改所有者的测试文档' } })
+    expect(api.draft).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '整理成待确认规则' }))
+
+    await waitFor(() => expect(api.draft).toHaveBeenCalledWith('p1', '普通成员可以修改所有者的测试文档'))
+    expect(screen.getByText('用户原话')).toBeInTheDocument()
+    expect(screen.getByText('当前业务单元')).toBeInTheDocument()
+    expect(screen.getByText('当前规则')).toBeInTheDocument()
+    expect(screen.getByText('AI 建议规则')).toBeInTheDocument()
+    expect(screen.getByText('原文依据')).toBeInTheDocument()
+    expect(screen.getByText('待你确认')).toBeInTheDocument()
+    expect(screen.getAllByText(/普通成员可以修改所有者的测试文档/).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '确认这条' }))
+    expect(api.approve).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '确认权限变更' }))
+    await waitFor(() => expect(api.approve).toHaveBeenCalledWith('p1', {
+      action_candidate_id: actionId,
+      subject_role_candidate_id: peerRoleId,
+      resource_owner_role_candidate_id: ownerRoleId,
+      relation: 'OTHER_ROLE',
+    }, 'ALLOW'))
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+
+  it('PARTIAL 保留已验证建议，并提示人工查看正式矩阵', async () => {
+    api.draft.mockResolvedValue({
+      project_id: 'p1', status: 'PARTIAL', suggestions: [draftSuggestion],
+      issues: [{ code: 'UNRESOLVED_TEXT', message: '这段原文暂时无法映射到当前权限单元。', source_quote: '其他情况由管理员决定' }],
+    })
+    renderPage({ mode: 'permissions' })
+    fireEvent.change(await screen.findByLabelText('权限要求原话'), { target: { value: '普通成员可以修改所有者的测试文档，其他情况由管理员决定' } })
+    fireEvent.click(screen.getByRole('button', { name: '整理成待确认规则' }))
+
+    expect(await screen.findByText('还有部分内容无法可靠对应')).toBeInTheDocument()
+    expect(screen.getByText('待你确认')).toBeInTheDocument()
+    expect(screen.getByText(/未可靠对应.*其他情况由管理员决定/)).toBeInTheDocument()
+    expect(screen.getByText('确认权限要求')).toBeInTheDocument()
+  })
+
+  it('UNAVAILABLE 明确回退，正式权限矩阵仍可完整手工使用', async () => {
+    api.draft.mockResolvedValue({ project_id: 'p1', status: 'UNAVAILABLE', suggestions: [], issues: [{ code: 'MODEL_DISABLED', message: '自然语言整理尚未启用。', source_quote: null }] })
+    renderPage({ mode: 'permissions' })
+    fireEvent.change(await screen.findByLabelText('权限要求原话'), { target: { value: '普通成员不能修改所有者的测试文档' } })
+    fireEvent.click(screen.getByRole('button', { name: '整理成待确认规则' }))
+
+    expect(await screen.findByText('自然语言整理暂不可用')).toBeInTheDocument()
+    expect(screen.getByText('确认权限要求')).toBeInTheDocument()
+    expect(screen.getByLabelText('普通成员权限组以其他权限组的资源关系对修改测试文档的权限')).toBeInTheDocument()
   })
 
   it('原考题复验沿用普通 preview 和 submit，并传入服务端形成的 change_id', async () => {

@@ -153,7 +153,7 @@
 - `class ProductResultSummary`
 - `class ProductStatusView`
 - `class ProductStatusService`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.source_changes`, `product.protocols`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.source_changes`, `product.protocols`, `pydantic`, `typing`
 
 ### `product/backend/workflows/mcp_access.py`
 - `MCP_PAIRING_SECRET_REF`
@@ -205,6 +205,20 @@
 - `class OnboardingWorkflow`
 主要 import / dot-source：`__future__`, `collections.abc`, `json`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.environment`, `product.backend.workflows.onboarding.discovery`, `product.backend.workflows.onboarding.models`, `subprocess`, `threading`, `typing`
 
+### `product/backend/workflows/permission_drafting.py`
+- `_OPTION_ID_PATTERN`
+- `_MAX_OPTIONS`
+- `_MAX_SUGGESTIONS`
+- `_MAX_UNRESOLVED_QUOTES`
+- `_MAX_HUMAN_TEXT_CHARS`
+- `_MAX_QUOTE_CHARS`
+- `class PermissionDraftStatus`
+- `class PermissionDraftSuggestionView`
+- `class PermissionDraftIssueView`
+- `class PermissionDraftView`
+- `class PermissionDraftService`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `enum`, `json`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.llm.adapters.base`, `product.backend.infra.llm.profiles`, `product.backend.workflows.permission_intents`, `pydantic`, `re`, `uuid`
+
 ### `product/backend/workflows/permission_intents.py`
 - `_LOCAL_GUI_APPROVER`
 - `class PermissionIntentViewModel`
@@ -243,7 +257,7 @@
 - `_PREPARATION_GAPS`
 - `_APPLICATION_GAPS`
 - `class ProjectPreparationService`
-主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.permission_intents`, `product.backend.workflows.test_identities`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.permission_intents`, `product.backend.workflows.source_changes`, `product.backend.workflows.test_identities`, `pydantic`, `typing`
 
 ### `product/backend/workflows/projects/readiness.py`
 - `class ReadinessModel`
@@ -252,6 +266,12 @@
 - `class ProjectReadinessView`
 - `class ProjectReadinessService`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.projects.preparation`, `pydantic`, `typing`
+
+### `product/backend/workflows/projects/revalidation.py`
+- `class ProjectRevalidationStatus`
+- `class ProjectRevalidationView`
+- `class ProjectRevalidationService`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.workflows.projects.preparation`, `product.backend.workflows.source_changes`, `pydantic`, `typing`
 
 ### `product/backend/workflows/recording/__init__.py`
 主要 import / dot-source：`.credentials`
@@ -480,8 +500,10 @@
 
 ### `product/backend/workflows/source_changes.py`
 - `class SourceChangeView`
+- `class SourceRevalidationInspectionStatus`
+- `class SourceRevalidationInspection`
 - `class SourceChangeService`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.source_changes`, `product.backend.infra.storage`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.permission_intents`, `product.backend.workflows.results.repair`, `pydantic`, `time`, `typing`, `uuid`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.source_changes`, `product.backend.infra.storage`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.permission_intents`, `product.backend.workflows.results.repair`, `pydantic`, `time`, `typing`, `uuid`
 
 ### `product/backend/workflows/test_identities/__init__.py`
 主要 import / dot-source：`product.backend.workflows.test_identities.execution`, `product.backend.workflows.test_identities.preparation`, `product.backend.workflows.test_identities.service`

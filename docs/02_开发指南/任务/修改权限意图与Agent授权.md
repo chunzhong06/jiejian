@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-权限意图回答“哪类人对哪类业务资源执行什么动作应该允许或拒绝”。它是人类长期安全需求，不是当前源码候选、测试账号、HTTP 绑定或某次 Run 的临时配置。只有本机 GUI 的服务端批准事务可以改变这份真源；CLI、MCP、Machine、AI、Compiler、Check Prepare、Run 和 Recording 都只能读取、准备或提出不生效建议。
+权限意图回答“哪类人对哪类业务资源执行什么动作应该允许或拒绝”。它是人类长期安全需求，不是当前源码候选、测试账号、HTTP 绑定或某次 Run 的临时配置。只有本机 GUI 的服务端批准事务可以改变这份真源；CLI、MCP、Machine、AI、Compiler、Check Prepare、Run 和 Recording 都只能读取、准备或提出不生效建议。权限自然语言草稿也只是当前响应内的待审建议，不属于长期账本。
 
 ## 快速找到修改位置
 
@@ -12,6 +12,7 @@
 | --- | --- | --- |
 | Revision、Approval、Binding、Proposal 领域模型 | `product/backend/core/permission_intent.py` | `tests/backend/workflows/security_setup/test_permission_intent_ledger.py` |
 | 矩阵、批准事务、proposal 与运行快照 | `product/backend/workflows/permission_intents.py` | `tests/backend/api/test_permission_intent_human_approval.py`、`tests/backend/api/test_permission_oracle_invariant.py` |
+| 人类文本权限草稿 | `product/backend/workflows/permission_drafting.py` | `tests/backend/workflows/test_permission_drafting.py` |
 | Human-only HTTP API | `product/backend/api/routers/permission_intents.py` | `tests/backend/api/test_permission_intent_approval_boundary.py` |
 | MCP 权限意图工具 | `product/backend/api/mcp.py` | `tests/backend/api/test_mcp.py`、`tests/backend/api/test_permission_oracle_invariant.py` |
 | Compiler 与冻结执行请求 | `product/backend/workflows/security_setup/compiler.py`、`product/protocols/execution_request.py` | `tests/backend/workflows/security_setup/test_compiler.py` |
@@ -24,6 +25,8 @@
 `PermissionIntentRevision` 按稳定 `intent_id` 追加不可变 revision。语义包含 ACTIVE/RETIRED、主体/动作/资源所有者业务显示名、资源关系、ALLOW/DENY 和受保护效果；`intent_hash` 只覆盖这些语义，不包含审批人、candidate、测试账号、运行或时间。`ProjectPolicyState.policy_epoch` 从 0 开始，只有 Human GUI 批准真实语义变化时递增。对已有要求选择“未确认”表示追加 RETIRED revision，不是删除历史。
 
 `HumanApproval` 由服务端写入固定 `LOCAL_GUI` 身份、审批时间和原因。HTTP body 只接受 cell target、目标 expectation 和可选 reason，不接受自由 actor。批准事务在同一 UnitOfWork 中校验预期 epoch，追加 revision 与 binding，并更新项目 epoch；并发变化必须要求用户刷新后重试。
+
+`PermissionDraftService.draft(project_id, human_text)` 只在用户显式请求时读取当前矩阵，并为可审批 cell 生成本次 opaque option ID。模型只能返回 option ID、ALLOW/DENY 和人类原文中的精确引文；服务端拒绝未知 option、越界字段、非精确引文和冲突。返回的 READY_FOR_REVIEW 只表示草稿通过本地格式与引用校验，不表示完整、正确或已批准。草稿不写数据库/AssistantCache，也没有 apply/activate API；用户确认后仍走同一 Human Approval endpoint。
 
 ## 实现映射与重新分析
 
@@ -44,7 +47,7 @@ jiejian_intent_propose           PREPARE
 jiejian_intent_rebind_propose    PREPARE
 ```
 
-MCP 没有 approve/reject，也没有 permission_set 或 candidate_decide。无论 READ、PREPARE 还是 EXECUTE，MCP 允许的重分析、身份准备、Recording、检查准备、运行和取消都不能改变 active revision、`intent_hash` 或 `policy_epoch`；proposal 在人类批准前也不能生效。
+MCP 没有 approve/reject，也没有 permission_set、candidate_decide 或 permission draft。无论 READ、PREPARE 还是 EXECUTE，MCP 允许的重分析、身份准备、Recording、检查准备、运行和取消都不能改变 active revision、`intent_hash` 或 `policy_epoch`；proposal 在人类批准前也不能生效。
 
 修复入口只新增 READ 的 `jiejian_repair_contract_get`。它从已发布 BLOCK 与 Finding 重建权威要求；Agent 在 `jiejian_change_submit` 中只能回传服务端给出的引用，不能修改要求、批准权限或直接宣称修复通过。CLI 不提供修复合同、批准或修复专用运行命令。
 
@@ -59,7 +62,7 @@ MCP 没有 approve/reject，也没有 permission_set 或 candidate_decide。无�
 先按修改面运行最小直接测试，不为局部权限意图变化重复完整 L4/L5：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/test_permission_intent_human_approval.py tests/backend/api/test_permission_oracle_invariant.py tests/backend/workflows/security_setup/test_permission_intent_ledger.py tests/backend/workflows/results/test_repair_contracts.py tests/backend/workflows/results/test_result_presentation.py tests/backend/workflows/results/test_history.py tests/backend/workflows/results/test_reports.py
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/workflows/test_permission_drafting.py tests/backend/api/test_permission_intent_human_approval.py tests/backend/api/test_permission_oracle_invariant.py tests/backend/workflows/security_setup/test_permission_intent_ledger.py tests/backend/workflows/results/test_repair_contracts.py tests/backend/workflows/results/test_result_presentation.py tests/backend/workflows/results/test_history.py tests/backend/workflows/results/test_reports.py
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 frontend-test src/features/checks/PermissionCheckPage.test.tsx src/features/checks/CheckResultsPage.test.tsx src/features/checks/CheckHistoryPage.test.tsx
 ```
 

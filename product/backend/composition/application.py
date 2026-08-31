@@ -33,6 +33,7 @@ from product.backend.workflows.projects.catalog import ProjectCatalog
 from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
 from product.backend.workflows.projects.preparation import ProjectPreparationService
 from product.backend.workflows.projects.readiness import ProjectReadinessService
+from product.backend.workflows.projects.revalidation import ProjectRevalidationService
 from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
 from product.backend.workflows.recording.submission import RecordingSubmission
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
@@ -52,6 +53,7 @@ from product.backend.workflows.test_identities import (
     TestIdentityService,
 )
 from product.backend.workflows.permission_intents import PermissionIntentService
+from product.backend.workflows.permission_drafting import PermissionDraftService
 from product.backend.workflows.source_changes import SourceChangeService
 from product.backend.workflows.security_setup import CheckWorkflow, SecuritySetupCompiler
 from product.backend.workflows.security_setup.local_observer_registry import (
@@ -214,6 +216,7 @@ class ApplicationCore:
             repair_contracts=self.repair_contracts,
             clock_us=clock_us,
         )
+        self.project_revalidation = ProjectRevalidationService(self.source_changes)
         self.action_safety_setup.set_permission_binding_refresher(
             self.permission_intents.refresh_bindings
         )
@@ -266,6 +269,7 @@ class ApplicationCore:
             self.project_readiness.get,
             self.result_presentation,
             self.source_changes,
+            project_revalidation=self.project_revalidation,
         )
         self.product_results = ProductResultQuery(
             self.product_status,
@@ -331,6 +335,10 @@ class ApplicationCore:
             environ=environ,
             clock_us=clock_us,
         )
+        self.permission_drafts = PermissionDraftService(
+            permission_intents=self.permission_intents,
+            llm_profiles=self.llm_profiles,
+        )
         from product.backend.workflows.assistant.service import AssistantService
         from product.backend.workflows.assistant.surfaces import AssistantSurfaceResolver
 
@@ -343,7 +351,6 @@ class ApplicationCore:
                 project_readiness=self.project_readiness,
                 product_flows=self.product_flows,
                 recording_lifecycle=self.recording_lifecycle,
-                permission_intents=self.permission_intents,
                 check_preview=self.checks.preview,
                 result_presentation=self.result_presentation,
             ),

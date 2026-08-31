@@ -7,6 +7,7 @@ import ControlShell from './ControlShell'
 
 const mockApi = vi.hoisted(() => ({
   projects: vi.fn().mockResolvedValue([]), readiness: vi.fn(), runs: vi.fn().mockResolvedValue([]), run: vi.fn(),
+  projectRevalidation: vi.fn().mockReturnValue(null),
   prepareSafe: vi.fn().mockResolvedValue({}),
   removeProject: vi.fn().mockResolvedValue({ project_id: 'p1', status: 'ARCHIVED' }),
   llmProfiles: vi.fn().mockResolvedValue([]), settings: vi.fn().mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }), systemStatus: vi.fn().mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }), shutdown: vi.fn().mockResolvedValue({ status: 'stopping' }),
@@ -40,6 +41,7 @@ vi.mock('../api/projects', () => ({ projectsApi: {
     return {
       project: { project_id: projectId, name: '未命名应用', status: readiness.project_status, target_type: 'WEB' },
       readiness,
+      revalidation: mockApi.projectRevalidation(projectId),
       areas: [
         { key: 'overview', label: '工作台', description: '查看当前状态。', route: '/workspace', status: 'AVAILABLE', status_label: '持续更新' },
         { key: 'changes', label: 'Agent 变化', description: '查看代码变化。', route: '/changes', status: 'EMPTY', status_label: '暂无变化' },
@@ -73,7 +75,7 @@ vi.mock('../api/http', () => ({ ApiError: class extends Error {}, request: vi.fn
 
 describe('应用壳', () => {
   afterEach(() => cleanup())
-  beforeEach(() => { localStorage.clear(); window.location.hash = ''; vi.clearAllMocks(); mockApi.projects.mockResolvedValue([]); mockApi.readiness.mockResolvedValue({ project_id: 'p1', project_status: 'READY', application_connected: true, endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED', discovered_role_count: 1, confirmed_role_count: 1, discovered_action_count: 1, confirmed_action_count: 1, execution_profile_available: false, completed_flow_available: false, active_contract_available: false, permission_actions: [], current_scope_runnable: false, remaining_gap_count: 1, active_tasks: [], latest_verified_run_id: null, next_required_action: 'RECORD_FLOW' }); mockApi.runs.mockResolvedValue([]); mockApi.llmProfiles.mockResolvedValue([]); mockApi.settings.mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }); mockApi.mcpStatus.mockResolvedValue({ schema_version: '1', paired: false, accepting_connections: false, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null }); mockApi.systemStatus.mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.permissionMatrix.mockResolvedValue({ project_id: 'p1', actions: [], confirmed_count: 0, review_required_count: 0, unconfirmed_count: 0, executable_count: 0, representative_gap_count: 0, compilable_action_count: 0 }); mockApi.validationSummary.mockResolvedValue({ available: false, unavailable_reason: '尚未发布可展示的验证汇总', summary: null }); mockApi.presentation.mockResolvedValue({ run_id: 'run-current', project_id: 'p1', project_name: '演示应用', run_lifecycle: 'COMPLETED', verdict: 'BLOCK', policy_epoch: 1, policy_fingerprint: 'fingerprint', relevant_intents: [{ intent_id: 'intent-export', revision: 1, intent_hash: 'intent-hash', display_label: '权限 P-2027-01', expectation: 'DENY', business_statement: 'Bob 可以查看日常协作资料，但不能导出完整项目交付包。' }], change_verification: null, repair_verification: null, headline: '发现权限问题', scope_statement: '当前范围已检查。', checked_count: 1, safe_count: 0, problem_count: 1, inconclusive_count: 0, uncovered_count: 0, execution_problem: null, issues: [{ finding_id: 'finding-export', title: 'Bob 导出完整项目交付包', subject_group: '普通成员', action_id: 'export-package', action: 'export-package', resource: '完整项目交付包', relation: '项目成员', expectation: 'Bob 不得导出完整项目交付包', surface_result: 'HTTP 403 · 请求被拒绝', actual_result: '后台任务成功，ZIP 已生成', conclusion: '表面拒绝没有阻止真实后果', explanation: '权限判断发生过晚。', planned_identity_id: 'bob', planned_identity_label: 'Bob · 普通成员', actual_identity_status: 'CONFIRMED', actual_identity_id: 'bob', actual_identity_label: 'Bob · 普通成员', severity: 'high', evidence_refs: [], evidence_sources: [], diagnosis: null, claim_boundary: { surface_response_status: 'DENIED', business_effect_status: 'CONFIRMED', actual_identity_status: 'CONFIRMED', breakpoint_precision: null, repair_status: null, supported_statement: 'Bob 的请求虽然被拒绝，但完整项目交付包在本轮真实形成。', unsupported_statements: [] }, evidence_explanations: [], verdict: 'VULNERABLE', occurrence_status: 'APPEARED', repair_requirement: null }], limitations: [], execution_traces: [] }); mockApi.history.mockResolvedValue({ project_id: 'p1', intents: [], comparisons: [{ run_id: 'run-history', previous_run_id: null, checked_at_us: 1, changes: [{ finding_id: 'finding-1', title: '权限问题', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', status: 'NEW', status_label: '新发现', explanation: '首次确认。', severity: 'high', evidence_refs: [], current_verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }] }] }); mockApi.assistantProject.mockRejectedValue(new Error('assistant unavailable')); mockApi.assistantResult.mockRejectedValue(new Error('assistant unavailable')); mockApi.checkPreview.mockResolvedValue({ project_id: 'p1', ready: false, actions: [], gaps: [], next_path: null, next_label: null, case_count: 0, differential_pair_count: 0 }) })
+  beforeEach(() => { localStorage.clear(); window.location.hash = ''; vi.clearAllMocks(); mockApi.projects.mockResolvedValue([]); mockApi.projectRevalidation.mockReturnValue(null); mockApi.readiness.mockResolvedValue({ project_id: 'p1', project_status: 'READY', application_connected: true, endpoint_status: 'CONFIRMED', source_analysis_status: 'COMPLETED', discovered_role_count: 1, confirmed_role_count: 1, discovered_action_count: 1, confirmed_action_count: 1, execution_profile_available: false, completed_flow_available: false, active_contract_available: false, permission_actions: [], current_scope_runnable: false, remaining_gap_count: 1, active_tasks: [], latest_verified_run_id: null, next_required_action: 'RECORD_FLOW' }); mockApi.runs.mockResolvedValue([]); mockApi.llmProfiles.mockResolvedValue([]); mockApi.settings.mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 }); mockApi.mcpStatus.mockResolvedValue({ schema_version: '1', paired: false, accepting_connections: false, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null }); mockApi.systemStatus.mockResolvedValue({ api: 'available', worker: 'stopped', browser: 'unknown' }); mockApi.permissionMatrix.mockResolvedValue({ project_id: 'p1', actions: [], confirmed_count: 0, review_required_count: 0, unconfirmed_count: 0, executable_count: 0, representative_gap_count: 0, compilable_action_count: 0 }); mockApi.validationSummary.mockResolvedValue({ available: false, unavailable_reason: '尚未发布可展示的验证汇总', summary: null }); mockApi.presentation.mockResolvedValue({ run_id: 'run-current', project_id: 'p1', project_name: '演示应用', run_lifecycle: 'COMPLETED', verdict: 'BLOCK', policy_epoch: 1, policy_fingerprint: 'fingerprint', relevant_intents: [{ intent_id: 'intent-export', revision: 1, intent_hash: 'intent-hash', display_label: '权限 P-2027-01', expectation: 'DENY', business_statement: 'Bob 可以查看日常协作资料，但不能导出完整项目交付包。' }], change_verification: null, repair_verification: null, headline: '发现权限问题', scope_statement: '当前范围已检查。', checked_count: 1, safe_count: 0, problem_count: 1, inconclusive_count: 0, uncovered_count: 0, execution_problem: null, issues: [{ finding_id: 'finding-export', title: 'Bob 导出完整项目交付包', subject_group: '普通成员', action_id: 'export-package', action: 'export-package', resource: '完整项目交付包', relation: '项目成员', expectation: 'Bob 不得导出完整项目交付包', surface_result: 'HTTP 403 · 请求被拒绝', actual_result: '后台任务成功，ZIP 已生成', conclusion: '表面拒绝没有阻止真实后果', explanation: '权限判断发生过晚。', planned_identity_id: 'bob', planned_identity_label: 'Bob · 普通成员', actual_identity_status: 'CONFIRMED', actual_identity_id: 'bob', actual_identity_label: 'Bob · 普通成员', severity: 'high', evidence_refs: [], evidence_sources: [], diagnosis: null, claim_boundary: { surface_response_status: 'DENIED', business_effect_status: 'CONFIRMED', actual_identity_status: 'CONFIRMED', breakpoint_precision: null, repair_status: null, supported_statement: 'Bob 的请求虽然被拒绝，但完整项目交付包在本轮真实形成。', unsupported_statements: [] }, evidence_explanations: [], verdict: 'VULNERABLE', occurrence_status: 'APPEARED', repair_requirement: null }], limitations: [], execution_traces: [] }); mockApi.history.mockResolvedValue({ project_id: 'p1', intents: [], comparisons: [{ run_id: 'run-history', previous_run_id: null, checked_at_us: 1, changes: [{ finding_id: 'finding-1', title: '权限问题', subject_group: '普通用户账号', action: '读取', resource: '文档', relation: '拥有', status: 'NEW', status_label: '新发现', explanation: '首次确认。', severity: 'high', evidence_refs: [], current_verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }] }] }); mockApi.assistantProject.mockRejectedValue(new Error('assistant unavailable')); mockApi.assistantResult.mockRejectedValue(new Error('assistant unavailable')); mockApi.checkPreview.mockResolvedValue({ project_id: 'p1', ready: false, actions: [], gaps: [], next_path: null, next_label: null, case_count: 0, differential_pair_count: 0 }) })
   beforeEach(() => mockApi.permissionProposals.mockResolvedValue({ project_id: 'p1', proposals: [] }))
   beforeEach(() => mockApi.experienceStatus.mockResolvedValue({ available: false, display_name: '协作空间', unavailable_reason: '未配置官方示例目录', active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null }))
 
@@ -290,6 +292,34 @@ describe('应用壳', () => {
     expect(await screen.findByText('权限检查条件尚未准备好')).toBeInTheDocument()
     expect(screen.getByLabelText('全局通知')).toHaveTextContent('请返回权限规则页处理当前缺口。')
     expect(screen.queryByText('这一步没有完成')).not.toBeInTheDocument()
+  })
+
+  it('只有统一重验状态 READY 才把服务端 change_id 交给验证页', async () => {
+    const changeId = `chg_${'7'.repeat(32)}`
+    mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
+    mockApi.projectRevalidation.mockReturnValue({ status: 'READY', change_id: changeId, summary: '可以开始重新验证', next_path: '/validation', next_label: '开始重新验证' })
+    localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
+    window.location.hash = '#/validation'
+
+    render(<ControlShell />)
+
+    expect(await screen.findByText('核对本次检查')).toBeInTheDocument()
+    expect(mockApi.checkPreview).toHaveBeenCalledWith('p1', changeId)
+  })
+
+  it('重验前置状态阻止前端拼接 change_id，并导航到服务端指定区域', async () => {
+    const changeId = `chg_${'8'.repeat(32)}`
+    mockApi.projects.mockResolvedValue([{ project_id: 'p1', status: 'READY' }])
+    mockApi.projectRevalidation.mockReturnValue({ status: 'REVIEW_REQUIRED', change_id: changeId, summary: '需要重新确认实现映射', next_path: '/permissions', next_label: '确认权限实现' })
+    localStorage.setItem('jiejian.project', JSON.stringify({ project_id: 'p1' }))
+    window.location.hash = '#/validation'
+
+    render(<ControlShell />)
+
+    await waitFor(() => expect(window.location.hash).toBe('#/permissions'))
+    expect(await screen.findByRole('heading', { name: '权限规则', level: 2 })).toBeInTheDocument()
+    expect(mockApi.checkPreview).not.toHaveBeenCalledWith('p1', changeId)
+    expect(mockApi.checkSubmit).not.toHaveBeenCalled()
   })
 
   it('运行环境展示实际解释器与工具链来源', async () => {

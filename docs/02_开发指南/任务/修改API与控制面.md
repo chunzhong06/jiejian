@@ -17,7 +17,7 @@
 | API envelope、异常与 trace | `product/backend/api/envelope.py`、`product/backend/api/errors.py` | `tests/backend/api/test_control_plane.py` |
 | Host、session、Origin 控制 | `product/backend/api/local_control.py` | `tests/backend/api/test_control_plane.py` |
 | MCP Streamable HTTP、固定工具白名单 | `product/backend/api/mcp.py` | `tests/backend/api/test_mcp.py` |
-| Human GUI 权限审批与 Agent proposal 路由 | `product/backend/api/routers/permission_intents.py` | `tests/backend/api/test_permission_intent_human_approval.py` |
+| Human GUI 权限草稿、审批与 Agent proposal 路由 | `product/backend/api/routers/permission_intents.py` | `tests/backend/api/test_permission_intent_human_approval.py`、权限草稿 API 测试 |
 | MCP 长期配对与逐 Project 临时权限 | `product/backend/workflows/mcp_access.py`、`product/backend/api/routers/mcp_access.py` | `tests/backend/api/test_mcp.py` |
 | ApplicationCore 组合 | `product/backend/composition/application.py` | `tests/backend/composition/`、`tests/architecture/test_storage_composition.py` |
 | ProductStatus 区域、全部待办、最近变化与结果 | `product/backend/workflows/control.py` | `tests/backend/workflows/control/test_status.py` |
@@ -30,7 +30,9 @@
 
 本地 API 固定绑定 IPv4 loopback。GUI 根页面取得当前服务进程的 HttpOnly、SameSite=Strict control session；所有 `/api` 请求验证 Host 与 session，写请求再验证精确 Origin。`X-Forwarded-*` 等代理头不能扩大授权。错误必须通过稳定 `ErrorCode`、有界 details 和 trace 映射；异常正文、环境变量和秘密值不能进入响应。
 
-权限意图写入只走 `POST /api/projects/{project_id}/permission-intents/approvals` 和 proposal approve/reject。审批 body 不接受自由 actor，Router 只做严格 DTO 映射，正式 revision/binding/epoch 事务由 `PermissionIntentService` 拥有。对已有 cell 选择未确认必须追加 RETIRED revision，不能删除历史。对应交互和 Oracle 边界见[修改权限意图与 Agent 授权](修改权限意图与Agent授权.md)。
+权限意图写入只走 `POST /api/projects/{project_id}/permission-intents/approvals` 和 proposal approve/reject。`POST /api/projects/{project_id}/permission-drafts` 只接收用户明确提交的有限文本并返回当前响应草稿，不写 PermissionIntent、数据库或缓存，也没有 activate/apply 路由。审批 body 不接受自由 actor，Router 只做严格 DTO 映射，正式 revision/binding/epoch 事务由 `PermissionIntentService` 拥有。对已有 cell 选择未确认必须追加 RETIRED revision，不能删除历史。对应交互和 Oracle 边界见[修改权限意图与 Agent 授权](修改权限意图与Agent授权.md)。
+
+`ProductStatus.revalidation` 是当前代码变化的唯一项目级重验投影。API 只返回 `ProjectRevalidationService` 已组合的六态、当前 change ID、说明和下一路径；Router、GUI 与 CLI 都不能再按 mapping count、列表顺序或最近结果 change ID 复制判断。
 
 MCP 使用官方 Python SDK v2 的 Streamable HTTP，精确挂载在同一 FastAPI 服务的 `/mcp`，不提供 SSE 兼容入口，不创建第二个服务或 ApplicationCore。SDK 自身启用 Host/Origin 与 DNS rebinding 防护；transport 只接受当前配对 Bearer，不能使用 GUI control session Cookie。首次配对或轮换生成至少 256-bit 随机令牌，并只通过 `cred:jiejian/mcp-control/pairing` 的精确 SecretStore 操作保存；普通 status 永不返回正文。启动存在配对时自动恢复 READ，PREPARE/EXECUTE 只驻留当前 serve。暂停或 shutdown 清除活动会话与提升但保留配对，轮换替换旧令牌并清除提升，忘记连接才删除长期配对。
 

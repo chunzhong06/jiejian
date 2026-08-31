@@ -28,6 +28,12 @@ const areas: ProductStatusDto['areas'] = [
 const status: ProductStatusDto = {
   project: { project_id: 'p1', name: '演示应用', status: 'READY', target_type: 'WEB' },
   readiness,
+  revalidation: {
+    project_id: 'p1', status: 'REVIEW_REQUIRED', change_id: `chg_${'1'.repeat(32)}`,
+    summary: '有 1 条权限规则需要重新确认。', next_path: '/permissions', next_label: '确认权限实现',
+    required_intent_count: 1, reason_codes: ['MAPPING_REVIEW_REQUIRED'],
+    verified_run_id: null, verified_change_id: null,
+  },
   areas,
   attention_items: [
     { key: 'review-change-mapping', label: '重新确认权限规则与当前实现', description: '有 1 条规则需要确认。', route: '/permissions', tone: 'WARNING' },

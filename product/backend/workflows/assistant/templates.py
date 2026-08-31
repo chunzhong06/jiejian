@@ -1,5 +1,5 @@
 # =============================================================================
-# 九类受限 AI 模板与本地白名单协议
+# 八类受限 AI 模板与本地白名单协议
 #
 # 定位
 #   把服务端短事实转换为封闭实体建议，并在模型返回后执行最终本地校验。
@@ -26,7 +26,6 @@ class AssistantTemplateId(StrEnum):
     CANDIDATE_REVIEW = "jiejian.candidate_review"
     IDENTITY_PREPARATION = "jiejian.identity_preparation"
     RECORDING_REVIEW = "jiejian.recording_review"
-    PERMISSION_REVIEW = "jiejian.permission_review"
     OBSERVATION_RECOVERY = "jiejian.observation_recovery"
     CHECK_PREVIEW_EXPLANATION = "jiejian.check_preview_explanation"
     RESULT_EXPLANATION = "jiejian.result_explanation"
@@ -40,7 +39,6 @@ class AssistantEntityType(StrEnum):
     IDENTITY = "IDENTITY"
     ACTION = "ACTION"
     RECORDING_STEP = "RECORDING_STEP"
-    PERMISSION_CELL = "PERMISSION_CELL"
     CHECK_ACTION = "CHECK_ACTION"
     RESULT_ITEM = "RESULT_ITEM"
     ERROR = "ERROR"
@@ -57,10 +55,6 @@ class AssistantSuggestionKind(StrEnum):
     LIKELY_TARGET = "LIKELY_TARGET"
     LIKELY_QUERY = "LIKELY_QUERY"
     LIKELY_CLEANUP = "LIKELY_CLEANUP"
-    REVIEW_UNCONFIRMED = "REVIEW_UNCONFIRMED"
-    REVIEW_NO_DIFFERENCE = "REVIEW_NO_DIFFERENCE"
-    REVIEW_IDENTITY_GAP = "REVIEW_IDENTITY_GAP"
-    REVIEW_COVERAGE_GAP = "REVIEW_COVERAGE_GAP"
     OBSERVATION_GAP = "OBSERVATION_GAP"
     RECOVERY_GAP = "RECOVERY_GAP"
     EXPLANATION = "EXPLANATION"
@@ -201,15 +195,6 @@ ASSISTANT_TEMPLATES: dict[AssistantTemplateId, AssistantTemplateSpec] = {
         allowed_suggestion_kinds=frozenset({AssistantSuggestionKind.LIKELY_SETUP, AssistantSuggestionKind.LIKELY_TARGET, AssistantSuggestionKind.LIKELY_QUERY, AssistantSuggestionKind.LIKELY_CLEANUP}),
         max_entities=128,
         instruction="只解释现有录制步骤更像准备、核心目标、状态查询或清理；不能修改 TARGET 或生成新请求。",
-    ),
-    AssistantTemplateId.PERMISSION_REVIEW: AssistantTemplateSpec(
-        template_id=AssistantTemplateId.PERMISSION_REVIEW,
-        allowed_fact_fields=frozenset({"unconfirmed_count", "review_required_count", "representative_gap_count", "compilable_action_count"}),
-        allowed_entity_types=frozenset({AssistantEntityType.PERMISSION_CELL, AssistantEntityType.ACTION}),
-        allowed_entity_fact_fields=frozenset({"action_id", "subject_role", "resource_owner_role", "relation", "expectation", "status", "review_reasons", "execution_gap", "gap_codes"}),
-        allowed_suggestion_kinds=frozenset({AssistantSuggestionKind.REVIEW_UNCONFIRMED, AssistantSuggestionKind.REVIEW_NO_DIFFERENCE, AssistantSuggestionKind.REVIEW_IDENTITY_GAP, AssistantSuggestionKind.REVIEW_COVERAGE_GAP}),
-        max_entities=128,
-        instruction="解释现有权限矩阵和覆盖缺口为什么值得复核；输出中不得包含新的 ALLOW 或 DENY 字段。",
     ),
     AssistantTemplateId.OBSERVATION_RECOVERY: AssistantTemplateSpec(
         template_id=AssistantTemplateId.OBSERVATION_RECOVERY,

@@ -5,7 +5,7 @@
 #   中文权限矩阵与 PermissionIntent、确定性编译器之间的本地 HTTP 适配层。
 #
 # 职责
-#   读取逐动作矩阵与历史｜执行 human-only 审批｜审阅 Agent 建议｜显式生成内部检查配置。
+#   读取矩阵与历史｜生成不生效权限草稿｜执行 human-only 审批｜审阅 Agent 建议｜生成内部检查配置。
 #
 # 边界
 #   不接收 HTTP、秘密、Observer、Runner 或 PermissionContract 正文。
@@ -67,6 +67,18 @@ class PermissionIntentProposalDecisionRequest(ApiModel):
     schema_version: Literal["1"]
 
 
+class PermissionDraftRequest(ApiModel):
+    schema_version: Literal["1"]
+    text: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        if value != value.strip() or any(not char.isprintable() for char in value):
+            raise ValueError("text must be trimmed printable text")
+        return value
+
+
 def build_permission_intents_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
@@ -77,6 +89,21 @@ def build_permission_intents_router(context: ApplicationCore) -> APIRouter:
     async def get_permission_intents(project_id: str):
         return data_response(
             context.permission_intents.matrix(project_id).model_dump(mode="json")
+        )
+
+    @router.post(
+        "/api/projects/{project_id}/permission-drafts",
+        response_model=ApiResponse,
+    )
+    async def draft_permission_intents(
+        project_id: str,
+        body: PermissionDraftRequest,
+    ):
+        return data_response(
+            context.permission_drafts.draft(
+                project_id,
+                body.text,
+            ).model_dump(mode="json")
         )
 
     @router.post(
@@ -159,6 +186,7 @@ def build_permission_intents_router(context: ApplicationCore) -> APIRouter:
 
 
 __all__ = [
+    "PermissionDraftRequest",
     "PermissionIntentApprovalRequest",
     "PermissionIntentCellTarget",
     "PermissionIntentProposalApprovalRequest",

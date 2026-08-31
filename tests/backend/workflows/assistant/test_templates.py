@@ -1,4 +1,4 @@
-# 验证九类 AI surface 的不可信数据隔离与整体白名单拒绝。
+# 验证八类 AI surface 的不可信数据隔离与整体白名单拒绝。
 
 from __future__ import annotations
 
@@ -59,14 +59,13 @@ def _candidate_input(name: str = "导出项目"):
     )
 
 
-def test_templates_freeze_all_nine_surfaces_and_keep_prompt_injection_in_data() -> None:
+def test_templates_freeze_all_eight_surfaces_and_keep_prompt_injection_in_data() -> None:
     assert set(ASSISTANT_TEMPLATES) == set(AssistantTemplateId)
     assert {item.value for item in AssistantTemplateId} == {
         "jiejian.next_step",
         "jiejian.candidate_review",
         "jiejian.identity_preparation",
         "jiejian.recording_review",
-        "jiejian.permission_review",
         "jiejian.observation_recovery",
         "jiejian.check_preview_explanation",
         "jiejian.result_explanation",

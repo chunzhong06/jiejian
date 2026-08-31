@@ -1,4 +1,4 @@
-/* 九类 AI surface API；客户端只能选择封闭 surface，不能提交任意 prompt 或 facts。 */
+/* 八类 AI surface API；客户端只能选择封闭 surface，不能提交任意 prompt 或 facts。 */
 
 import { request } from './http'
 
@@ -7,7 +7,6 @@ export type ProjectAssistantSurface =
   | 'candidate-review'
   | 'identity-preparation'
   | 'recording-review'
-  | 'permission-review'
   | 'observation-recovery'
   | 'check-preview-explanation'
 

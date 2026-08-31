@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import pytest
+
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.infra.storage import ExecutionProfileRecord, ProjectRecord
 from product.backend.composition import ApplicationCore
+from product.backend.workflows.projects.preparation import (
+    PreparationExternalBlockerView,
+    ProjectPreparationView,
+)
 from product.backend.workflows.projects.readiness import ProjectReadinessService
 from product.protocols import TargetType
+from tests.backend.workflows.recording.test_action_safety_setup import PROJECT_ID
+from tests.backend.workflows.security_setup.test_checks import _prepared_core
 
 def _project(project_id: str, *, status: ProjectStatus) -> ProjectRecord:
     return ProjectRecord(
@@ -63,5 +71,48 @@ def test_generated_profile_cannot_replace_application_connection(tmp_path) -> No
         assert view.execution_profile_available is True
         assert view.current_scope_runnable is False
         assert view.next_required_action == "CONNECT_APPLICATION"
+    finally:
+        application.close()
+
+
+@pytest.mark.parametrize(
+    ("category", "expected_action", "next_path"),
+    (
+        ("SOURCE_CHANGE", "REVIEW_CHANGE", "/changes"),
+        ("PERMISSION", "REVIEW_PERMISSION", "/permissions"),
+    ),
+)
+def test_external_blockers_map_to_distinct_next_actions(
+    tmp_path,
+    category: str,
+    expected_action: str,
+    next_path: str,
+) -> None:
+    application = _prepared_core(tmp_path)
+    try:
+        blocker = PreparationExternalBlockerView(
+            key=f"{category.lower()}-blocker",
+            category=category,
+            label="需要用户处理",
+            description="当前事实尚未形成可运行状态。",
+            next_path=next_path,
+            next_label="去处理",
+            reason_codes=(f"{category}_BLOCKED",),
+        )
+        preparation = ProjectPreparationView(
+            project_id=PROJECT_ID,
+            ready=False,
+            items=(),
+            auto_action_count=0,
+            user_action_count=0,
+            blocked_count=0,
+            external_blockers=(blocker,),
+        )
+        application.project_readiness._preparation_resolver = lambda _project_id: preparation
+        application.project_readiness._endpoint_status_resolver = lambda _understanding: "CONFIRMED"
+
+        view = application.project_readiness.get(PROJECT_ID)
+
+        assert view.next_required_action == expected_action
     finally:
         application.close()

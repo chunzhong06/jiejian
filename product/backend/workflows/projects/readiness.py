@@ -5,7 +5,7 @@
 #   Project 与应用理解、执行配置、业务流程、权限规则和活动任务之间的控制面读模型
 #
 # 职责
-#   汇总权威事实｜计算下一项普通用户任务｜投影活动 Run/Recording
+#   汇总权威事实｜按既有门禁与统一外部 blocker 计算下一项任务｜投影活动 Run/Recording
 #
 # 边界
 #   不持久化 readiness，不生成权限预期，也不修改任何执行或安全结论。
@@ -42,6 +42,7 @@ NextRequiredAction = Literal[
     "AUTHORIZE_SOURCE_ANALYSIS",
     "REVIEW_DISCOVERY",
     "RECORD_FLOW",
+    "REVIEW_CHANGE",
     "REVIEW_PERMISSION",
     "RUN_CHECK",
     "OPEN_RESULT",
@@ -216,25 +217,28 @@ class ProjectReadinessService:
                 confirmed_roles=confirmed_roles,
                 confirmed_actions=confirmed_actions,
             )
+            preparation_categories = (
+                set()
+                if preparation is None
+                else {item.category for item in preparation.external_blockers}
+            )
+            # 变化和权限外部 blocker 是统一控制面事实，不能被旧范围仍可运行所遮住。
+            if (
+                next_action == "RECORD_FLOW"
+                and "SOURCE_CHANGE" in preparation_categories
+            ):
+                next_action = "REVIEW_CHANGE"
+            elif next_action == "RECORD_FLOW" and "PERMISSION" in preparation_categories:
+                next_action = "REVIEW_PERMISSION"
             # 已有范围仍可运行时也不能遮住新发现候选；持续开发中的新增权限面必须先让人看见。
-            if current_scope_runnable and next_action != "REVIEW_DISCOVERY":
+            elif current_scope_runnable and next_action != "REVIEW_DISCOVERY":
                 next_action = (
                     "OPEN_RESULT"
                     if latest_verified_run_id is not None
                     else "RUN_CHECK"
                 )
             elif next_action == "RECORD_FLOW" and permission_actions:
-                preparation_categories = (
-                    set()
-                    if preparation is None
-                    else {item.category for item in preparation.external_blockers}
-                )
-                if {
-                    "PERMISSION",
-                    "SOURCE_CHANGE",
-                } & preparation_categories:
-                    next_action = "REVIEW_PERMISSION"
-                elif preparation is not None and not preparation.ready:
+                if preparation is not None and not preparation.ready:
                     next_action = "RECORD_FLOW"
                 else:
                     next_action = "REVIEW_PERMISSION"

@@ -112,7 +112,7 @@ MCP 控制入口、Streamable HTTP、Bearer、工具权限
 
 模型服务、Guidance、ErrorDiagnosis、AI 辅助
 → docs/02_开发指南/任务/修改模型服务.md
-→ docs/05_设计依据/ADR-0041-确定性引导与受限AI辅助边界.md
+→ docs/05_设计依据/ADR-0042-权限草稿与受限模型辅助边界.md
 
 Target 扩展、TargetRuntimeRegistry、Target Kind
 → docs/02_开发指南/任务/扩展Target.md

@@ -19,7 +19,6 @@ class ProjectAssistantSurface(StrEnum):
     CANDIDATE_REVIEW = "candidate-review"
     IDENTITY_PREPARATION = "identity-preparation"
     RECORDING_REVIEW = "recording-review"
-    PERMISSION_REVIEW = "permission-review"
     OBSERVATION_RECOVERY = "observation-recovery"
     CHECK_PREVIEW_EXPLANATION = "check-preview-explanation"
 
@@ -29,7 +28,6 @@ _PROJECT_TEMPLATE = {
     ProjectAssistantSurface.CANDIDATE_REVIEW: AssistantTemplateId.CANDIDATE_REVIEW,
     ProjectAssistantSurface.IDENTITY_PREPARATION: AssistantTemplateId.IDENTITY_PREPARATION,
     ProjectAssistantSurface.RECORDING_REVIEW: AssistantTemplateId.RECORDING_REVIEW,
-    ProjectAssistantSurface.PERMISSION_REVIEW: AssistantTemplateId.PERMISSION_REVIEW,
     ProjectAssistantSurface.OBSERVATION_RECOVERY: AssistantTemplateId.OBSERVATION_RECOVERY,
     ProjectAssistantSurface.CHECK_PREVIEW_EXPLANATION: AssistantTemplateId.CHECK_PREVIEW_EXPLANATION,
 }

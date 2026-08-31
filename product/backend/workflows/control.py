@@ -5,7 +5,7 @@
 #   GUI 工作区、CLI status 与 Machine status 共同消费的产品状态投影。
 #
 # 职责
-#   业务流程列表｜结果选择｜组合准备度、代码变化、长期工作区与多项待办
+#   业务流程列表｜结果选择｜组合准备度、ProjectRevalidation、长期工作区与多项待办
 #
 # 边界
 #   不保存进度，不调用 AI，不编译或提交检查，也不重新解释安全结论。
@@ -20,6 +20,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus, RunVerdict
+from product.backend.workflows.projects.revalidation import (
+    ProjectRevalidationStatus,
+    ProjectRevalidationView,
+)
 from product.backend.workflows.projects.readiness import ProjectReadinessView
 from product.backend.workflows.source_changes import SourceChangeView
 from product.protocols import TargetType
@@ -170,6 +174,7 @@ class ProductResultSummary(_ControlModel):
 class ProductStatusView(_ControlModel):
     project: ProductProjectSummary | None = None
     readiness: ProjectReadinessView | None = None
+    revalidation: ProjectRevalidationView | None = None
     areas: tuple[ProductAreaView, ...]
     attention_items: tuple[ProductAttentionView, ...]
     latest_change: SourceChangeView | None = None
@@ -185,11 +190,13 @@ class ProductStatusService:
         readiness: Callable[[str], ProjectReadinessView],
         result_presentation,
         source_changes=None,
+        project_revalidation=None,
     ) -> None:
         self._projects = projects
         self._readiness = readiness
         self._result_presentation = result_presentation
         self._source_changes = source_changes
+        self._project_revalidation = project_revalidation
 
     def get(self, project_id: str | None = None) -> ProductStatusView:
         project = self._select_project(project_id)
@@ -212,6 +219,22 @@ class ProductStatusService:
             else self._source_changes.latest_view(project.project_id)
         )
         latest_result = self._latest_result(readiness)
+        revalidation = (
+            None
+            if self._project_revalidation is None
+            else self._project_revalidation.evaluate(
+                project.project_id,
+                preparation=readiness.preparation,
+                verified_run_id=(
+                    None if latest_result is None else latest_result.run_id
+                ),
+                verified_change_id=(
+                    None
+                    if latest_result is None
+                    else latest_result.verified_change_id
+                ),
+            )
+        )
         return ProductStatusView(
             project=ProductProjectSummary(
                 project_id=project.project_id,
@@ -220,10 +243,11 @@ class ProductStatusService:
                 target_type=project.target_type,
             ),
             readiness=readiness,
-            areas=_areas(readiness, latest_change, latest_result),
+            revalidation=revalidation,
+            areas=_areas(readiness, latest_change, revalidation),
             attention_items=_attention_items(
                 readiness,
-                latest_change,
+                revalidation,
                 latest_result,
             ),
             latest_change=latest_change,
@@ -270,7 +294,7 @@ class ProductStatusService:
 def _areas(
     readiness: ProjectReadinessView | None,
     latest_change: SourceChangeView | None,
-    latest_result: ProductResultSummary | None,
+    revalidation: ProjectRevalidationView | None,
 ) -> tuple[ProductAreaView, ...]:
     if readiness is None:
         states = {
@@ -284,13 +308,30 @@ def _areas(
     else:
         discovery_attention = readiness.source_analysis_status != "COMPLETED"
         change_attention = bool(
-            latest_change and latest_change.mapping_review_required_count > 0
+            revalidation
+            and revalidation.status
+            in {
+                ProjectRevalidationStatus.REVIEW_REQUIRED,
+                ProjectRevalidationStatus.STALE,
+            }
         )
         permission_attention = any(
             not action.compilable for action in readiness.permission_actions
+        ) or bool(
+            revalidation
+            and revalidation.status is ProjectRevalidationStatus.REVIEW_REQUIRED
         )
         preparation_ready = bool(
             readiness.preparation is not None and readiness.preparation.ready
+        )
+        # 变化重验不是前端附加标签；非 READY 前置态必须同步关闭工作台验证入口。
+        revalidation_allows_validation = bool(
+            revalidation is None
+            or revalidation.status
+            in {
+                ProjectRevalidationStatus.NO_CHANGE,
+                ProjectRevalidationStatus.READY,
+            }
         )
         run_active = any(task.kind == "RUN" for task in readiness.active_tasks)
         states = {
@@ -327,17 +368,17 @@ def _areas(
                 "RUNNING"
                 if run_active
                 else "READY"
-                if readiness.current_scope_runnable
+                if readiness.current_scope_runnable and revalidation_allows_validation
                 else "BLOCKED",
                 "正在检查"
                 if run_active
                 else "可以检查"
-                if readiness.current_scope_runnable
+                if readiness.current_scope_runnable and revalidation_allows_validation
                 else "等待准备",
             ),
             "results": (
-                "AVAILABLE" if latest_result else "EMPTY",
-                "已有可信结果" if latest_result else "暂无结果",
+                "AVAILABLE" if readiness.latest_verified_run_id else "EMPTY",
+                "已有可信结果" if readiness.latest_verified_run_id else "暂无结果",
             ),
         }
     definitions = (
@@ -363,7 +404,7 @@ def _areas(
 
 def _attention_items(
     readiness: ProjectReadinessView,
-    latest_change: SourceChangeView | None,
+    revalidation: ProjectRevalidationView | None,
     latest_result: ProductResultSummary | None,
 ) -> tuple[ProductAttentionView, ...]:
     items: list[ProductAttentionView] = []
@@ -416,13 +457,20 @@ def _attention_items(
                 tone="WARNING",
             )
         )
-    if latest_change and latest_change.mapping_review_required_count > 0:
+    if revalidation is not None and revalidation.status in {
+        ProjectRevalidationStatus.REVIEW_REQUIRED,
+        ProjectRevalidationStatus.STALE,
+    }:
         items.append(
             ProductAttentionView(
                 key="review-change-mapping",
-                label="重新确认权限规则与当前实现",
-                description=latest_change.summary,
-                route="/permissions",
+                label=(
+                    "重新确认权限规则与当前实现"
+                    if revalidation.status is ProjectRevalidationStatus.REVIEW_REQUIRED
+                    else "重新建立代码变化事实"
+                ),
+                description=revalidation.summary,
+                route=revalidation.next_path or "/changes",
                 tone="WARNING",
             )
         )
@@ -444,14 +492,11 @@ def _attention_items(
                 route="/preparation",
             )
         )
-    latest_change_unverified = bool(
-        latest_change
-        and (
-            latest_result is None
-            or latest_result.verified_change_id != latest_change.change_id
-        )
-    )
-    if readiness.current_scope_runnable and latest_change_unverified:
+    if (
+        readiness.current_scope_runnable
+        and revalidation is not None
+        and revalidation.status is ProjectRevalidationStatus.READY
+    ):
         items.append(
             ProductAttentionView(
                 key="verify-latest-change",
@@ -460,7 +505,14 @@ def _attention_items(
                 route="/validation",
             )
         )
-    elif readiness.current_scope_runnable and latest_result is None:
+    elif (
+        readiness.current_scope_runnable
+        and latest_result is None
+        and (
+            revalidation is None
+            or revalidation.status is ProjectRevalidationStatus.NO_CHANGE
+        )
+    ):
         items.append(
             ProductAttentionView(
                 key="run-current-scope",

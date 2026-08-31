@@ -85,9 +85,32 @@ export type PermissionIntentMatrixDto = {
   representative_gap_count: number
   compilable_action_count: number
 }
+export type PermissionDraftSuggestionDto = {
+  option_id: string
+  action_candidate_id: string
+  subject_role_candidate_id: string
+  resource_owner_role_candidate_id: string
+  relation: PermissionIntentCellDto['relation']
+  subject_display_name: string
+  action_display_name: string
+  resource_owner_display_name: string
+  current_expectation: PermissionIntentExpectation | null
+  suggested_expectation: PermissionIntentExpectation
+  source_quote: string
+}
+export type PermissionDraftDto = {
+  project_id: string
+  status: 'READY_FOR_REVIEW' | 'PARTIAL' | 'UNAVAILABLE'
+  suggestions: PermissionDraftSuggestionDto[]
+  issues: Array<{ code: string; message: string; source_quote: string | null }>
+}
 export const permissionIntentsApi = {
   matrix: (projectId: string) =>
     request<PermissionIntentMatrixDto>(`/api/projects/${projectId}/permission-intents`),
+  draft: (projectId: string, text: string) => request<PermissionDraftDto>(
+    `/api/projects/${projectId}/permission-drafts`,
+    { method: 'POST', body: JSON.stringify({ schema_version: '1', text }) },
+  ),
   approve: (
     projectId: string,
     target: {

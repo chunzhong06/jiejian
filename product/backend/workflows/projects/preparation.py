@@ -14,6 +14,7 @@ from product.backend.core.permission_intent import PermissionIntentRelation
 from product.backend.core.recording import RecordingPurpose, RecordingState
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.permission_intents import PermissionIntentCellStatus
+from product.backend.workflows.source_changes import SourceRevalidationInspectionStatus
 from product.backend.workflows.test_identities import TestIdentityStatus
 
 
@@ -432,23 +433,28 @@ class ProjectPreparationService:
     ) -> list[PreparationExternalBlockerView]:
         if self._source_changes is None:
             return []
-        latest = self._source_changes.latest_view(project_id)
-        if latest is None or (latest.complete and latest.mapping_review_required_count == 0):
+        latest = self._source_changes.latest(project_id)
+        if latest is None:
             return []
-        reasons = []
-        if not latest.complete:
-            reasons.append("SOURCE_CHANGE_NO_BASELINE")
-        if latest.mapping_review_required_count:
-            reasons.append("SOURCE_CHANGE_REVIEW_REQUIRED")
+        inspection = self._source_changes.inspect_revalidation(
+            project_id,
+            latest[0].change_id,
+        )
+        if inspection.status is SourceRevalidationInspectionStatus.READY:
+            return []
+        mapping_review = (
+            inspection.status
+            is SourceRevalidationInspectionStatus.MAPPING_REVIEW_REQUIRED
+        )
         return [
             _blocker(
                 "source-change-review",
                 "SOURCE_CHANGE",
                 "最近代码变化仍需审阅",
                 "代码变化的实现映射尚未形成当前可重验事实。",
-                latest.next_path or "/changes",
-                "去审阅代码变化",
-                tuple(reasons),
+                "/permissions" if mapping_review else "/changes",
+                "去确认权限实现" if mapping_review else "去审阅代码变化",
+                inspection.reason_codes,
             )
         ]
 

@@ -2,7 +2,7 @@
 # AI surface 服务端事实构造
 #
 # 定位
-#   从正式 workflow View 构造九类短事实，隔离页面输入与模型输入。
+#   从正式 workflow View 构造八类短事实，隔离页面输入与模型输入。
 #
 # 边界
 #   只读现有实体和确定性状态；不读取秘密、源码正文、Evidence 正文或日志。
@@ -35,7 +35,6 @@ PROJECT_ASSISTANT_TEMPLATES = frozenset(
         AssistantTemplateId.CANDIDATE_REVIEW,
         AssistantTemplateId.IDENTITY_PREPARATION,
         AssistantTemplateId.RECORDING_REVIEW,
-        AssistantTemplateId.PERMISSION_REVIEW,
         AssistantTemplateId.OBSERVATION_RECOVERY,
         AssistantTemplateId.CHECK_PREVIEW_EXPLANATION,
     }
@@ -50,7 +49,7 @@ class ResolvedAssistantSurface:
 
 
 class AssistantSurfaceResolver:
-    """九类 surface 只组合正式只读 View，不接受客户端提交任意事实。"""
+    """八类 surface 只组合正式只读 View，不接受客户端提交任意事实。"""
 
     def __init__(
         self,
@@ -61,7 +60,6 @@ class AssistantSurfaceResolver:
         project_readiness,
         product_flows,
         recording_lifecycle,
-        permission_intents,
         check_preview,
         result_presentation,
     ) -> None:
@@ -71,7 +69,6 @@ class AssistantSurfaceResolver:
         self._project_readiness = project_readiness
         self._product_flows = product_flows
         self._recording_lifecycle = recording_lifecycle
-        self._permission_intents = permission_intents
         self._check_preview = check_preview
         self._result_presentation = result_presentation
 
@@ -87,7 +84,6 @@ class AssistantSurfaceResolver:
             AssistantTemplateId.CANDIDATE_REVIEW: self._candidate_review,
             AssistantTemplateId.IDENTITY_PREPARATION: self._identity_preparation,
             AssistantTemplateId.RECORDING_REVIEW: self._recording_review,
-            AssistantTemplateId.PERMISSION_REVIEW: self._permission_review,
             AssistantTemplateId.OBSERVATION_RECOVERY: self._observation_recovery,
             AssistantTemplateId.CHECK_PREVIEW_EXPLANATION: self._check_preview_explanation,
         }[template_id]
@@ -365,56 +361,6 @@ class AssistantSurfaceResolver:
             entities,
         )
 
-    def _permission_review(self, project_id: str) -> ResolvedAssistantSurface:
-        matrix = self._permission_intents.matrix(project_id)
-        entities: list[AssistantEntity] = []
-        for action in matrix.actions:
-            if not action.cells:
-                entities.append(
-                    _entity(
-                        action.action_candidate_id,
-                        AssistantEntityType.ACTION,
-                        action.action_display_name,
-                        {"action_id": action.action_candidate_id, "gap_codes": action.gaps},
-                    )
-                )
-            for cell in action.cells:
-                cell_id = _stable_id(
-                    "permission",
-                    action.action_candidate_id,
-                    cell.subject_role_candidate_id,
-                    cell.resource_owner_role_candidate_id,
-                    cell.relation.value,
-                )
-                entities.append(
-                    _entity(
-                        cell_id,
-                        AssistantEntityType.PERMISSION_CELL,
-                        f"{cell.subject_role_display_name} · {action.action_display_name}",
-                        {
-                            "action_id": action.action_candidate_id,
-                            "subject_role": cell.subject_role_display_name,
-                            "resource_owner_role": cell.resource_owner_role_display_name,
-                            "relation": cell.relation.value,
-                            "expectation": _enum_value(cell.expectation) if cell.expectation is not None else "UNCONFIRMED",
-                            "status": cell.status.value,
-                            "review_reasons": cell.review_reasons,
-                            "execution_gap": cell.execution_gap or "NONE",
-                        },
-                    )
-                )
-        return _resolved(
-            AssistantTemplateId.PERMISSION_REVIEW,
-            project_id,
-            {
-                "unconfirmed_count": matrix.unconfirmed_count,
-                "review_required_count": matrix.review_required_count,
-                "representative_gap_count": matrix.representative_gap_count,
-                "compilable_action_count": matrix.compilable_action_count,
-            },
-            tuple(entities[:128]),
-        )
-
     def _observation_recovery(self, project_id: str) -> ResolvedAssistantSurface:
         preview = self._check_preview(project_id)
         entities = tuple(
@@ -527,11 +473,6 @@ def _unique_short(values) -> tuple[str, ...]:
 
 def _enum_value(value) -> str:
     return str(getattr(value, "value", value))
-
-
-def _stable_id(prefix: str, *parts: str) -> str:
-    digest = hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:32]
-    return f"{prefix}_{digest}"
 
 
 __all__ = [

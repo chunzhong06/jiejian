@@ -98,6 +98,7 @@
 - `class PermissionIntentApprovalRequest`
 - `class PermissionIntentProposalApprovalRequest`
 - `class PermissionIntentProposalDecisionRequest`
+- `class PermissionDraftRequest`
 - `build_permission_intents_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `pydantic`, `typing`
 

@@ -1,4 +1,4 @@
-# 验证九类 AI surface 共用的缓存、退避和并发 provider 边界。
+# 验证八类 AI surface 共用的缓存、退避和并发 provider 边界。
 
 from __future__ import annotations
 

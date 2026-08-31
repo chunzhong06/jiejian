@@ -4,7 +4,7 @@
 
 ## 职责
 
-前端负责 Web V1 产品壳、应用接入到结果查看的普通路径、loopback API DTO、响应式布局、可访问交互、错误恢复和比赛展示体验。它把 ProductStatus、ProjectReadiness、Job/Run、ResultPresentation 与 HistoryView 翻译为用户能理解的页面和操作。
+前端负责 Web V1 产品壳、应用接入到结果查看的普通路径、loopback API DTO、响应式布局、可访问交互、错误恢复和比赛展示体验。它把 ProductStatus、ProjectRevalidation、ProjectReadiness、Job/Run、ResultPresentation 与 HistoryView 翻译为用户能理解的页面和操作。
 
 ## 非职责
 
@@ -21,7 +21,7 @@
 | `product/frontend/package.json`、`product/frontend/tsconfig*.json` | 源码依赖/类型/构建合同 | 产品版本真源、node_modules 或 dist |
 | `var/development/frontend/` | 受控 Node/pnpm、workspace、依赖与不可变 build | Git 管理源码、产品运行数据 |
 
-普通工作区围绕 `/workspace /changes /permissions /preparation /validation /results`；`/application /identities /flows /verification /history` 是区域内具体任务，系统与模型设置是明确辅助入口。权限规则与验证运行共享事实但分开用户任务，Report 是结果内视图，不建立平行流程。
+普通工作区围绕 `/workspace /changes /permissions /preparation /validation /results`；`/application /identities /flows /verification /history` 是区域内具体任务，系统与模型设置是明确辅助入口。权限规则中的自然语言草稿是显式、临时且不生效的输入辅助；权限确认与验证运行共享后端事实但分开用户任务，Report 是结果内视图，不建立平行流程。
 
 精确组件和类型见[前端自动代码参考](../../03_参考手册/代码/frontend.md)。
 
@@ -46,7 +46,7 @@
 
 ## 事实与页面状态
 
-`ProductStatus` 决定长期区域状态、全部待办、最近 Agent 变化和最近可信结果；`ProjectPreparation` 提供七类准备清单、四态与下一项，`ProjectReadiness` 汇总当前可运行范围；Job/Run 决定运行生命周期；Runner progress 只提供可丢失的阶段展示；`ResultPresentation` 决定单次结果故事；`HistoryView` 决定跨次变化。前端可以保留当前选择的项目、页面和未提交表单，但不能把它们当作已确认后端事实。
+`ProductStatus` 决定长期区域状态、全部待办、最近 Agent 变化和最近可信结果，其中 `ProjectRevalidation` 是当前变化操作与路径的唯一来源；`ProjectPreparation` 提供七类准备清单、四态与下一项，`ProjectReadiness` 汇总当前可运行范围；Job/Run 决定运行生命周期；Runner progress 只提供可丢失的阶段展示；`ResultPresentation` 决定单次结果故事；`HistoryView` 决定跨次变化。前端可以保留当前选择的项目、页面、未提交文本和当前响应草稿，但不能把它们当作已确认后端事实。
 
 所有写操作要有清楚的 busy、成功、失败和恢复路径。需要长时间的多阶段过程必须展示稳定阶段边界，服务端有进度时流式呈现；没有权威进度时说明当前阶段和静默上限，不伪造百分比。首个主错误保留，cleanup warning 单独展示。
 
@@ -67,7 +67,7 @@
 - 普通用户先看到任务语言和当前主动作，内部 ID、reason code、Schema、路径和原始 Evidence 只进入明确命名的证据、报告或 Machine 入口，不建立通用“高级信息”收纳箱。
 - 真正 `<button>`、label、dialog 和状态文本保持可访问；自动 L5 通过 UI Automation InvokePattern 操作正式按钮，不为测试增加隐藏入口。
 - `product/frontend` 只保存源码/配置，禁止 node_modules、dist、测试缓存和 tsbuildinfo。
-- Workbench 不常驻显示产品版本；1.0.11 只在系统设置等明确诊断位置展示。
+- Workbench 不常驻显示产品版本；1.0.12 只在系统设置等明确诊断位置展示。
 - 官方示例只有一个用户可见启动入口；内部 experience mode 不作为产品选择。准备工作留在正式持续工作区，状态条只投影 ProductStatus 待办，不生成示例专用步骤；展示模式只读取并重排当前正式事实，退出后恢复原项目与页面上下文。四页分别消费 ResultPresentation/History/源 Run 和净化 validation 汇总；缺失审批、源 Run 或非回归事实时显示不可用，不从页面文案推断。
 - 视觉验收以 2560×1440 为主基准，同时覆盖 1280px 与 600px；普通结果与展示模式复用同一事实链和颜色语义。
 

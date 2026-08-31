@@ -20,6 +20,7 @@ from product.backend.core.application_understanding import (
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.permission_intent import IntentImplementationBindingStatus
 from product.backend.core.repair import RepairContractReference
+from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.core.source_changes import (
     ChangeManifest,
     SourceFileFingerprint,
@@ -32,6 +33,7 @@ from product.backend.workflows.application_understanding.endpoints import (
     EndpointProbeObservation,
     TargetEndpointDiscovery,
 )
+from product.backend.workflows.source_changes import SourceRevalidationInspectionStatus
 from product.backend.composition import ApplicationCore
 from tests.backend.workflows.recording.test_action_safety_setup import (
     ACTION_ID,
@@ -226,16 +228,21 @@ def test_first_change_without_baseline_is_incomplete_and_never_optimistic(
             project_id,
             revision=current.revision,
         )
-        _, change_set, assessment = core.source_changes.submit(
+        manifest, change_set, assessment = core.source_changes.submit(
             project_id,
             reason="首次提交变化",
             submitted_by="Agent",
+        )
+        inspection = core.source_changes.inspect_revalidation(
+            project_id,
+            manifest.change_id,
         )
         assert current.source_fingerprint is None
         assert change_set.status == "NO_BASELINE"
         assert change_set.changed_paths == ()
         assert assessment.complete is False
         assert assessment.reason_codes == ("NO_BASELINE",)
+        assert inspection.status is SourceRevalidationInspectionStatus.NO_BASELINE
         assert all(
             item.classification != "NO_DIRECT_EVIDENCE"
             for item in assessment.impacts
@@ -407,6 +414,14 @@ def test_current_manual_mapping_without_evidence_requires_review(tmp_path: Path)
             for item in assessment.impacts
         )
         before_epoch = core.permission_intents.matrix(PROJECT_ID).policy_epoch
+        inspection = core.source_changes.inspect_revalidation(
+            PROJECT_ID,
+            manifest.change_id,
+        )
+        assert (
+            inspection.status
+            is SourceRevalidationInspectionStatus.MAPPING_REVIEW_REQUIRED
+        )
         with pytest.raises(JiejianError) as blocked:
             core.source_changes.revalidation_plan(PROJECT_ID, manifest.change_id)
         assert blocked.value.code == ErrorCode.STATE_PRECONDITION.value
@@ -435,11 +450,112 @@ def test_current_manual_mapping_without_evidence_requires_review(tmp_path: Path)
                 reason="用户确认实现映射",
             )
         plan = core.source_changes.revalidation_plan(PROJECT_ID, manifest.change_id)
+        ready = core.source_changes.inspect_revalidation(PROJECT_ID, manifest.change_id)
 
         assert plan.required_intent_ids == tuple(
             sorted(revision.intent_id for revision in revisions)
         )
+        assert ready.status is SourceRevalidationInspectionStatus.READY
+        assert ready.required_intent_ids == plan.required_intent_ids
         assert core.permission_intents.matrix(PROJECT_ID).policy_epoch == before_epoch
+    finally:
+        core.close()
+
+
+def test_inspection_marks_source_stale_after_a_later_source_analysis(
+    tmp_path: Path,
+) -> None:
+    core = _prepared_core(tmp_path)
+    try:
+        baseline = _analysis_result()
+        core.application_understanding.analyzer = _StaticAnalyzer(baseline)
+        current = core.application_understanding.get(PROJECT_ID)
+        core.application_understanding.analyze_source(
+            PROJECT_ID,
+            revision=current.revision,
+        )
+        changed_hashes = {
+            item.relative_path: item.content_sha256 for item in baseline.files
+        }
+        changed_hashes["action.py"] = _sha("source-stale:first")
+        core.application_understanding.analyzer = _StaticAnalyzer(
+            _analysis_result(changed_hashes)
+        )
+        manifest, _, _ = core.source_changes.submit(
+            PROJECT_ID,
+            reason="第一次实现变化",
+            submitted_by="Agent",
+        )
+
+        changed_hashes["action.py"] = _sha("source-stale:later")
+        core.application_understanding.analyzer = _StaticAnalyzer(
+            _analysis_result(changed_hashes)
+        )
+        current = core.application_understanding.get(PROJECT_ID)
+        core.application_understanding.analyze_source(
+            PROJECT_ID,
+            revision=current.revision,
+        )
+
+        inspection = core.source_changes.inspect_revalidation(
+            PROJECT_ID,
+            manifest.change_id,
+        )
+        assert inspection.status is SourceRevalidationInspectionStatus.SOURCE_STALE
+    finally:
+        core.close()
+
+
+def test_inspection_marks_policy_stale_after_human_changes_permission(
+    tmp_path: Path,
+) -> None:
+    core = _prepared_core(tmp_path)
+    try:
+        baseline = _analysis_result()
+        core.application_understanding.analyzer = _StaticAnalyzer(baseline)
+        current = core.application_understanding.get(PROJECT_ID)
+        core.application_understanding.analyze_source(
+            PROJECT_ID,
+            revision=current.revision,
+        )
+        changed_hashes = {
+            item.relative_path: item.content_sha256 for item in baseline.files
+        }
+        changed_hashes["action.py"] = _sha("policy-stale")
+        core.application_understanding.analyzer = _StaticAnalyzer(
+            _analysis_result(changed_hashes)
+        )
+        manifest, _, _ = core.source_changes.submit(
+            PROJECT_ID,
+            reason="实现变化后等待重验",
+            submitted_by="Agent",
+        )
+        matrix = core.permission_intents.matrix(PROJECT_ID)
+        selected = next(
+            cell
+            for action in matrix.actions
+            for cell in action.cells
+            if cell.expectation is not None
+        )
+        core.permission_intents.confirm(
+            PROJECT_ID,
+            selected.action_candidate_id,
+            selected.subject_role_candidate_id,
+            selected.resource_owner_role_candidate_id,
+            selected.relation,
+            expectation=(
+                PermissionExpectation.DENY
+                if selected.expectation is PermissionExpectation.ALLOW
+                else PermissionExpectation.ALLOW
+            ),
+            reason="用户修改权限要求",
+        )
+
+        inspection = core.source_changes.inspect_revalidation(
+            PROJECT_ID,
+            manifest.change_id,
+        )
+        assert inspection.status is SourceRevalidationInspectionStatus.POLICY_STALE
     finally:
         core.close()
 
@@ -471,7 +587,10 @@ def test_change_revalidation_plan_freezes_into_run_without_narrowing_coverage(
         )
 
         before_epoch = core.permission_intents.matrix(PROJECT_ID).policy_epoch
+        inspection = core.source_changes.inspect_revalidation(PROJECT_ID, manifest.change_id)
         plan = core.source_changes.revalidation_plan(PROJECT_ID, manifest.change_id)
+        assert inspection.status is SourceRevalidationInspectionStatus.READY
+        assert inspection.required_intent_ids == plan.required_intent_ids
         assert plan.impact_fingerprint == assessment.impact_fingerprint
         assert len(plan.required_intent_ids) == 2
         assert plan.full_active_scope is True

@@ -5,7 +5,7 @@
 #   Agent 声明完成变更后，受控源码重分析与长期 PermissionIntent 之间的确定性编排层。
 #
 # 职责
-#   校验可选修复引用｜保存有界声明｜生成权威文件 diff｜刷新实现绑定｜评估逐 Intent 影响。
+#   校验可选修复引用｜保存有界声明｜生成权威文件 diff｜评估逐 Intent 影响｜形成唯一重验 inspection。
 #
 # 边界
 #   不信任 claimed paths，不复制 RepairContract，不读取 Git 或源码正文，不调用 LLM/Runner，也不修改权限真源。
@@ -19,6 +19,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable, Iterable
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -98,6 +99,35 @@ class SourceChangeView(BaseModel):
         """产品投影复用源码授权边界，不接受绝对路径或父目录跳转。"""
 
         return tuple(normalize_relative_source_path(value) for value in values)
+
+
+class SourceRevalidationInspectionStatus(StrEnum):
+    READY = "READY"
+    NO_BASELINE = "NO_BASELINE"
+    SOURCE_STALE = "SOURCE_STALE"
+    POLICY_STALE = "POLICY_STALE"
+    MAPPING_REVIEW_REQUIRED = "MAPPING_REVIEW_REQUIRED"
+
+
+class SourceRevalidationInspection(BaseModel):
+    """一次变化相对当前源码、权限版本和实现映射的唯一只读判定。"""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        hide_input_in_errors=True,
+    )
+
+    project_id: str
+    change_id: str = Field(pattern=r"^chg_[0-9a-f]{32}$")
+    status: SourceRevalidationInspectionStatus
+    reason_codes: tuple[str, ...] = Field(default=(), max_length=32)
+    impact_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    required_intent_ids: tuple[str, ...] = Field(default=(), max_length=4096)
+    review_intent_ids: tuple[str, ...] = Field(default=(), max_length=4096)
+    repair_reference: RepairContractReference | None = None
 
 
 class SourceChangeService:
@@ -267,8 +297,12 @@ class SourceChangeService:
             if manifest is not None and change_set is not None
         )
 
-    def revalidation_plan(self, project_id: str, change_id: str) -> RevalidationPlan:
-        """按当前 Human-approved binding 形成重验计划；语义或源码漂移时关闭执行。"""
+    def inspect_revalidation(
+        self,
+        project_id: str,
+        change_id: str,
+    ) -> SourceRevalidationInspection:
+        """只读核对变化是否仍匹配当前源码、权限版本和 Human-approved binding。"""
 
         with self._uow_factory() as work:
             manifest = work.source_changes.manifest(change_id)
@@ -296,16 +330,24 @@ class SourceChangeService:
         if current_snapshot is None or understanding is None:
             raise JiejianError(ErrorCode.STORAGE_FAILURE, "代码变化缺少可验证的源码版本")
         if not assessment.complete:
-            raise JiejianError(
-                ErrorCode.STATE_PRECONDITION,
-                "当前代码变化没有可比较基线，请重新提交变化说明",
-                details={"change_id": change_id, "reason_codes": assessment.reason_codes},
+            return SourceRevalidationInspection(
+                project_id=project_id,
+                change_id=change_id,
+                status=SourceRevalidationInspectionStatus.NO_BASELINE,
+                reason_codes=assessment.reason_codes,
+                impact_fingerprint=assessment.impact_fingerprint,
+                source_fingerprint=current_snapshot.source_fingerprint,
+                repair_reference=manifest.repair_reference,
             )
         if understanding.source_fingerprint != current_snapshot.source_fingerprint:
-            raise JiejianError(
-                ErrorCode.STATE_PRECONDITION,
-                "源码已经发生后续变化，请重新提交变化说明",
-                details={"change_id": change_id},
+            return SourceRevalidationInspection(
+                project_id=project_id,
+                change_id=change_id,
+                status=SourceRevalidationInspectionStatus.SOURCE_STALE,
+                reason_codes=("SOURCE_FINGERPRINT_STALE",),
+                impact_fingerprint=assessment.impact_fingerprint,
+                source_fingerprint=current_snapshot.source_fingerprint,
+                repair_reference=manifest.repair_reference,
             )
 
         revisions = {item.intent_id: item for item in latest}
@@ -317,10 +359,14 @@ class SourceChangeService:
             if item.intent_id in impacts
         )
         if policy_drift:
-            raise JiejianError(
-                ErrorCode.STATE_PRECONDITION,
-                "权限要求已经变化，请基于当前权限版本重新提交代码变化",
-                details={"change_id": change_id, "next_path": "/permissions"},
+            return SourceRevalidationInspection(
+                project_id=project_id,
+                change_id=change_id,
+                status=SourceRevalidationInspectionStatus.POLICY_STALE,
+                reason_codes=("PERMISSION_POLICY_STALE",),
+                impact_fingerprint=assessment.impact_fingerprint,
+                source_fingerprint=current_snapshot.source_fingerprint,
+                repair_reference=manifest.repair_reference,
             )
 
         mapping_review: list[str] = []
@@ -345,23 +391,65 @@ class SourceChangeService:
             }:
                 # 人工重绑完成后仍保守重验原先需要复核的权限，不把旧评估改写成安全结论。
                 required.append(intent_id)
-        if mapping_review:
+        status = (
+            SourceRevalidationInspectionStatus.MAPPING_REVIEW_REQUIRED
+            if mapping_review
+            else SourceRevalidationInspectionStatus.READY
+        )
+        return SourceRevalidationInspection(
+            project_id=project_id,
+            change_id=change_id,
+            status=status,
+            reason_codes=("MAPPING_REVIEW_REQUIRED",) if mapping_review else (),
+            impact_fingerprint=assessment.impact_fingerprint,
+            source_fingerprint=current_snapshot.source_fingerprint,
+            required_intent_ids=tuple(required),
+            review_intent_ids=tuple(mapping_review),
+            repair_reference=manifest.repair_reference,
+        )
+
+    def revalidation_plan(self, project_id: str, change_id: str) -> RevalidationPlan:
+        """只把 READY inspection 转成执行计划，其余状态沿用既有 fail-closed 错误。"""
+
+        inspection = self.inspect_revalidation(project_id, change_id)
+        if inspection.status is SourceRevalidationInspectionStatus.NO_BASELINE:
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "当前代码变化没有可比较基线，请重新提交变化说明",
+                details={
+                    "change_id": change_id,
+                    "reason_codes": inspection.reason_codes,
+                },
+            )
+        if inspection.status is SourceRevalidationInspectionStatus.SOURCE_STALE:
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "源码已经发生后续变化，请重新提交变化说明",
+                details={"change_id": change_id},
+            )
+        if inspection.status is SourceRevalidationInspectionStatus.POLICY_STALE:
+            raise JiejianError(
+                ErrorCode.STATE_PRECONDITION,
+                "权限要求已经变化，请基于当前权限版本重新提交代码变化",
+                details={"change_id": change_id, "next_path": "/permissions"},
+            )
+        if inspection.status is SourceRevalidationInspectionStatus.MAPPING_REVIEW_REQUIRED:
             raise JiejianError(
                 ErrorCode.STATE_PRECONDITION,
                 "代码变化涉及的实现映射需要先由用户确认",
                 details={
                     "change_id": change_id,
                     "next_path": "/permissions",
-                    "intent_ids": tuple(mapping_review),
+                    "intent_ids": inspection.review_intent_ids,
                 },
             )
         return RevalidationPlan(
             change_id=change_id,
             project_id=project_id,
-            impact_fingerprint=assessment.impact_fingerprint,
-            required_intent_ids=tuple(required),
-            source_fingerprint=current_snapshot.source_fingerprint,
-            repair_reference=manifest.repair_reference,
+            impact_fingerprint=inspection.impact_fingerprint,
+            required_intent_ids=inspection.required_intent_ids,
+            source_fingerprint=inspection.source_fingerprint,
+            repair_reference=inspection.repair_reference,
         )
 
     @staticmethod
@@ -656,4 +744,9 @@ class SourceChangeService:
         )
 
 
-__all__ = ["SourceChangeService", "SourceChangeView"]
+__all__ = [
+    "SourceChangeService",
+    "SourceChangeView",
+    "SourceRevalidationInspection",
+    "SourceRevalidationInspectionStatus",
+]

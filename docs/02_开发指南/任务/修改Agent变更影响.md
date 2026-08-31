@@ -18,7 +18,9 @@ jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
   → SourceRevisionSnapshot 前后比较
   → SourceChangeSet 记录真实增删改
   → ChangeImpactAssessment 关联当前权限实现证据
-  → RevalidationPlan
+  → SourceRevalidationInspection 核对当前源码/权限/binding
+  → ProjectRevalidation 组合准备度与可信结果
+  → READY inspection 形成 RevalidationPlan
   → jiejian_check_prepare / jiejian_check_run(change_id)
   → PersistedExecutionRequest.change_context
   → 可选 PersistedExecutionRequest.repair_context
@@ -33,7 +35,8 @@ jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
 | --- | --- | --- |
 | 快照、Manifest、diff、影响与重验模型 | `product/backend/core/source_changes.py` | `tests/backend/workflows/source_changes/test_source_changes.py` |
 | SQLite 聚合与 migration | `product/backend/infra/storage/source_changes.py`、`product/backend/migrations/versions/0005_source_change_impacts.py`、`0006_repair_contract_reference.py` | Storage 与 migration 测试 |
-| 重分析、影响评估与重验计划 | `product/backend/workflows/source_changes.py` | source changes workflow 测试 |
+| 重分析、影响评估与唯一重验 inspection | `product/backend/workflows/source_changes.py` | source changes workflow 测试 |
+| 项目重验状态 | `product/backend/workflows/projects/revalidation.py` | `tests/backend/workflows/projects/test_revalidation.py` |
 | MCP 与只读 API | `product/backend/api/mcp.py`、`product/backend/api/routers/source_changes.py` | `test_mcp.py`、`test_source_changes.py`、Oracle invariant |
 | 检查准备、提交和 Run 冻结 | `product/backend/workflows/security_setup/checks.py`、`product/backend/workflows/runs/execution.py`、`product/protocols/execution_request.py` | checks、request store、source changes 测试 |
 | 修复合同重建与复验 | `product/backend/workflows/results/repair.py`、`product/backend/core/repair.py` | `test_repair_contracts.py`、官方 Sample 修复编排测试 |
@@ -46,6 +49,8 @@ jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
 - `NO_DIRECT_EVIDENCE`：当前没有找到与已知权限实现直接相交的变化。这不是安全结论，产品文案必须保留“这不代表其他未建模影响一定不存在”。
 
 当前执行仍使用完整 ACTIVE/CURRENT Coverage，不根据影响结果裁剪 Runner 用例。`required_intent_ids` 只说明本次至少需要重验哪些权限，不能替代现有 Coverage、ALLOW 控制或 DifferentialPlan。
+
+`SourceRevalidationInspection` 固定只有 READY、NO_BASELINE、SOURCE_STALE、POLICY_STALE 和 MAPPING_REVIEW_REQUIRED。`revalidation_plan()` 必须先调用 inspection，只有 READY 才能形成计划，不能在计划入口复制第二套算法。`ProjectRevalidation` 再严格按“无变化、映射待审、stale、同变化可信结果、准备未完成、可重验”顺序形成 NO_CHANGE、REVIEW_REQUIRED、STALE、VERIFIED、PREPARATION_REQUIRED 或 READY；旧结果不能掩盖后续源码或权限漂移。
 
 ## 冻结与历史
 
@@ -63,6 +68,7 @@ jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
 6. `ChangeVerificationContext` 保持嵌套对象，不单独增加 `schema_version`；公共执行请求变化后同步 checked-in Schema。
 7. `RepairContractReference` 必须由服务端重建校验后才能持久化；后续 check prepare/run 继续复用同一 `change_id`，不增加修复专用运行入口。
 8. 工作台默认只显示有界业务摘要；展开变化明细时才显示 Agent 声明和界鉴实际确认的相对路径。结果和历史不显示 change ID、权限内部 ID 或指纹，并覆盖无基线、直接影响、映射待审和无直接证据四种情况。
+9. ProjectPreparation、ProjectReadiness、Guidance、ProductStatus、变化页和验证入口只消费 inspection/ProjectRevalidation，不按 `complete`、mapping count 或 change ID 比较另算状态。
 
 ## 最小验证
 
@@ -70,6 +76,7 @@ jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
 
 ```powershell
 .\scripts\dev.ps1 test tests/backend/workflows/source_changes/test_source_changes.py
+.\scripts\dev.ps1 test tests/backend/workflows/projects/test_revalidation.py tests/backend/workflows/projects/test_preparation.py tests/backend/workflows/control/test_status.py
 .\scripts\dev.ps1 test tests/backend/workflows/results/test_repair_contracts.py tests/backend/workflows/test_official_sample_repair.py
 .\scripts\dev.ps1 test tests/backend/api/test_mcp.py tests/backend/api/test_permission_oracle_invariant.py
 .\scripts\dev.ps1 test tests/backend/workflows/security_setup/test_checks.py tests/backend/workflows/results/test_result_presentation.py tests/backend/workflows/results/test_history.py

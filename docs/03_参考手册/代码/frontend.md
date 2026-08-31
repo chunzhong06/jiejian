@@ -67,6 +67,8 @@
 主要 import / dot-source：`./http`
 
 ### `product/frontend/src/api/permissionIntents.ts`
+- `PermissionDraftDto`
+- `PermissionDraftSuggestionDto`
 - `PermissionIntentActionDto`
 - `PermissionIntentCellDto`
 - `PermissionIntentExpectation`

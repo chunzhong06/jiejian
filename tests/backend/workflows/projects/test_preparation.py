@@ -23,6 +23,7 @@ from product.backend.workflows.projects.preparation import (
     PreparationItemStatus,
     ProjectPreparationService,
 )
+from product.backend.workflows.source_changes import SourceRevalidationInspectionStatus
 from product.backend.workflows.test_identities import (
     TestIdentityStatus as IdentityStatus,
     TestIdentityView as IdentityView,
@@ -445,13 +446,21 @@ class _SourceChanges:
     def __init__(self, *, blocked: bool):
         self._blocked = blocked
 
-    def latest_view(self, project_id):
+    def latest(self, project_id):
         if not self._blocked:
             return None
+        return (
+            SimpleNamespace(change_id="chg_" + "1" * 32),
+            object(),
+            object(),
+        )
+
+    def inspect_revalidation(self, project_id, change_id):
+        assert self._blocked
+        assert change_id == "chg_" + "1" * 32
         return SimpleNamespace(
-            complete=False,
-            mapping_review_required_count=0,
-            next_path=None,
+            status=SourceRevalidationInspectionStatus.NO_BASELINE,
+            reason_codes=("NO_BASELINE",),
         )
 
 

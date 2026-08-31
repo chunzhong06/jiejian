@@ -36,6 +36,7 @@ from product.backend.workflows.security_setup.checks import CheckPreview, CheckP
 GuidanceRoute = Literal[
     "/workspace",
     "/application",
+    "/changes",
     "/permissions",
     "/preparation",
     "/validation",
@@ -48,6 +49,7 @@ class GuidancePhase(StrEnum):
     APPLICATION_UNDERSTANDING = "APPLICATION_UNDERSTANDING"
     IDENTITY_PREPARATION = "IDENTITY_PREPARATION"
     RECORDING = "RECORDING"
+    CHANGE_REVIEW = "CHANGE_REVIEW"
     PERMISSION_REVIEW = "PERMISSION_REVIEW"
     CHECK_READY = "CHECK_READY"
     CHECK_RUNNING = "CHECK_RUNNING"
@@ -61,6 +63,7 @@ class GuidanceOptionKind(StrEnum):
     REVIEW_DISCOVERY = "REVIEW_DISCOVERY"
     PREPARE_IDENTITY = "PREPARE_IDENTITY"
     RECORD_ACTION = "RECORD_ACTION"
+    REVIEW_CHANGE = "REVIEW_CHANGE"
     REVIEW_PERMISSION = "REVIEW_PERMISSION"
     RESOLVE_COVERAGE_GAP = "RESOLVE_COVERAGE_GAP"
     START_CURRENT_CHECK = "START_CURRENT_CHECK"
@@ -133,13 +136,15 @@ class GuidanceQueryService:
 
 _ROUTE_RANK: dict[str, int] = {
     "/application": 0,
-    "/permissions": 1,
-    "/preparation": 2,
-    "/validation": 3,
+    "/changes": 1,
+    "/permissions": 2,
+    "/preparation": 3,
+    "/validation": 4,
 }
 
 _ROUTE_PRESENTATION: dict[str, tuple[GuidanceOptionKind, str]] = {
     "/application": (GuidanceOptionKind.REVIEW_DISCOVERY, "完善应用与权限组信息"),
+    "/changes": (GuidanceOptionKind.REVIEW_CHANGE, "审阅最近代码变化"),
     "/permissions": (GuidanceOptionKind.REVIEW_PERMISSION, "确认权限规则与覆盖"),
     "/preparation": (GuidanceOptionKind.RESOLVE_COVERAGE_GAP, "完善测试账号、业务流程与真实结果确认"),
     "/validation": (GuidanceOptionKind.RESOLVE_COVERAGE_GAP, "重新准备本次检查"),
@@ -178,6 +183,12 @@ _NEXT_ACTION: dict[
         GuidanceOptionKind.RECORD_ACTION,
         "准备测试账号并录制业务操作",
         "/preparation",
+    ),
+    "REVIEW_CHANGE": (
+        GuidancePhase.CHANGE_REVIEW,
+        GuidanceOptionKind.REVIEW_CHANGE,
+        "审阅最近代码变化",
+        "/changes",
     ),
     "REVIEW_PERMISSION": (
         GuidancePhase.PERMISSION_REVIEW,

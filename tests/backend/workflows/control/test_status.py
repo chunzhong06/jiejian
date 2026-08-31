@@ -18,6 +18,10 @@ from product.backend.workflows.projects.preparation import (
     PreparationItemView,
     ProjectPreparationView,
 )
+from product.backend.workflows.projects.revalidation import (
+    ProjectRevalidationStatus,
+    ProjectRevalidationView,
+)
 from product.backend.workflows.source_changes import SourceChangeView
 from product.protocols import TargetType
 
@@ -125,18 +129,36 @@ def test_status_reuses_exact_readiness_and_presentation_reference() -> None:
         change_verification=SimpleNamespace(change_id=f"chg_{'1' * 32}"),
     )
     change = _change()
+    revalidation = ProjectRevalidationView(
+        project_id="project_demo",
+        status=ProjectRevalidationStatus.REVIEW_REQUIRED,
+        change_id=change.change_id,
+        summary="最近变化的实现映射需要重新确认。",
+        next_path="/permissions",
+        next_label="确认权限实现",
+        required_intent_count=1,
+        reason_codes=("MAPPING_REVIEW_REQUIRED",),
+        verified_run_id="run_demo",
+        verified_change_id=change.change_id,
+    )
     service = ProductStatusService(
         SimpleNamespace(list=lambda: (project,), get=lambda _project_id: project),
         lambda _project_id: readiness,
         SimpleNamespace(build=lambda _run_id: presentation),
         SimpleNamespace(latest_view=lambda _project_id: change),
+        project_revalidation=SimpleNamespace(
+            evaluate=lambda *_args, **_kwargs: revalidation
+        ),
     )
 
     status = service.get("project_demo")
 
     assert status.readiness is readiness
+    assert status.revalidation is revalidation
     assert status.latest_change is change
     assert status.areas[1].status == "NEEDS_ATTENTION"
+    assert status.areas[2].status == "NEEDS_ATTENTION"
+    assert status.areas[4].status == "BLOCKED"
     assert any(item.key == "review-change-mapping" for item in status.attention_items)
     assert status.latest_result is not None
     assert status.latest_result.run_id == readiness.latest_verified_run_id
