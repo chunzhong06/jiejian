@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.recording.credentials import RuntimeSecretVault
 
 

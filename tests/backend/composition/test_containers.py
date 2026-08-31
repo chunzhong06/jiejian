@@ -1,12 +1,12 @@
-# 验证应用工作流中的应用容器组装。
+# 验证 Backend 两个独立组合根的装配合同。
 
 from __future__ import annotations
 
 import inspect
 
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.infra.runtime.jobs.targets import JobTargetType
-from product.backend.worker_container import WorkerContainer
+from product.backend.composition import WorkerContainer
 
 
 def test_application_and_worker_containers_are_independent_and_complete(tmp_path) -> None:

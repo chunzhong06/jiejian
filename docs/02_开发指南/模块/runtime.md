@@ -15,7 +15,8 @@ Runtime 把 ApplicationCore 创建的冻结执行请求交给独立 Worker，再
 | 位置 | 负责什么 | 不负责什么 |
 | --- | --- | --- |
 | `product/backend/infra/runtime/jobs/` | Job、request、claim、attempt、lease/fencing、取消与 reconciliation | 目标请求和安全结论 |
-| `product/backend/infra/runtime/worker/` | LocalWorkerSupervisor、Worker process/container、dispatcher 与 handler factory | ApplicationCore 复用、测试专用 runner |
+| `product/backend/composition/worker.py` | 独立 WorkerContainer 与 HandlerFactory 装配 | ApplicationCore 复用、运行时进程监督 |
+| `product/backend/infra/runtime/worker/` | LocalWorkerSupervisor、Worker process、dispatcher 与 handler 执行 | 组合根、测试专用 runner |
 | `product/backend/infra/runtime/runner/` | 独立 Runner、Case 编排、Observer 调度、staging、progress 与 result | API/GUI 展示和 publication 接受 |
 | `product/backend/infra/runtime/process/` | Python 身份、角色环境、子进程启动与进程树 | 业务请求内容、秘密长期保存 |
 | `product/backend/infra/runtime/paths.py` | 当前 VarDir 的 data/runtime/cache/logs/temp/test 边界 | 开发工具缓存和源码路径 |

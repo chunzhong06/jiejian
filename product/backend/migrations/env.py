@@ -21,8 +21,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from product.backend.infra.storage.base import Base
 from product.backend.infra.storage.db import configure_sqlite_engine
-from product.backend.infra.storage import Base
+from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
 
 config = context.config
 if config.config_file_name is not None and config.attributes.get(
@@ -30,6 +31,7 @@ if config.config_file_name is not None and config.attributes.get(
 ):
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
+load_storage_orm_mappings()
 target_metadata = Base.metadata
 
 

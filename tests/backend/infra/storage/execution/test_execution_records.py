@@ -14,6 +14,7 @@ pytestmark = pytest.mark.database
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
+from product.backend.core.recording import Recording, RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import STAGED_ARTIFACT_MAX_BYTES
 from product.backend.infra.runtime.logging import configure_logging
@@ -23,6 +24,7 @@ from product.backend.infra.storage import (
     JobEventRecord,
     JobRecord,
     ProjectRecord,
+    RecordingRecord,
     RunRecord,
     StorageUnitOfWork,
     create_session_factory,
@@ -31,8 +33,13 @@ from product.backend.infra.storage import (
     upgrade_database,
 )
 from product.backend.infra.storage.db import _migration_resource_root
-from product.backend.infra.storage import Base, EvidenceIndexRow, JobRow, ProjectRow, RunRow
+from product.backend.infra.storage import Base
+from product.backend.infra.storage.execution.jobs import JobRow
+from product.backend.infra.storage.execution.runs import RunRow
+from product.backend.infra.storage.projects import ProjectRow
+from product.backend.infra.storage.results.evidence import EvidenceIndexRow
 PROJECT_ID = "storage-project"
+RECORDING_ID = "rec_" + "0" * 32
 RUN_ID = "run_" + "1" * 32
 JOB_ID = "job_" + "2" * 32
 SHA256 = "a" * 64
@@ -73,6 +80,19 @@ def _run(**changes: Any) -> RunRecord:
         "finished_at_us": NOW_US + 4,
     }
     return RunRecord(**(values | changes))
+
+def _recording() -> RecordingRecord:
+    return RecordingRecord.from_domain(
+        Recording(
+            recording_id=RECORDING_ID,
+            project_id=PROJECT_ID,
+            state=RecordingState.CREATED,
+            created_at_us=NOW_US + 2,
+            updated_at_us=NOW_US + 2,
+        ),
+        flow_id="document-export",
+        browser_events=(),
+    )
 
 def _job(**changes: Any) -> JobRecord:
     values = {
@@ -149,12 +169,14 @@ def test_committed_records_survive_engine_restart_with_exact_values(
 ) -> None:
     path, engine, factory = migrated_storage
     expected_project = _project()
+    expected_recording = _recording()
     expected_run = _run()
     expected_job = _job()
     expected_event = _event(1)
     expected_evidence = _evidence()
     with StorageUnitOfWork(factory) as work:
         work.projects.add(expected_project)
+        work.recordings.add(expected_recording)
         work.runs.add(expected_run)
         work.jobs.add(expected_job)
         work.job_events.append(expected_event)
@@ -166,6 +188,7 @@ def test_committed_records_survive_engine_restart_with_exact_values(
     try:
         with StorageUnitOfWork(create_session_factory(restarted)) as work:
             assert work.projects.get(PROJECT_ID) == expected_project
+            assert work.recordings.get(RECORDING_ID) == expected_recording
             assert work.runs.get(RUN_ID) == expected_run
             assert work.jobs.get(JOB_ID) == expected_job
             assert work.jobs.get_by_idempotency(
@@ -247,6 +270,7 @@ def test_idempotency_scope_is_unique_and_constraint_error_is_stable(
     assert ".db" not in serialized_error
     with StorageUnitOfWork(factory) as reader:
         assert reader.runs.get(second_run_id) is None
+        assert reader.jobs.get(second_job_id) is None
 
 @pytest.mark.parametrize("changes", [{"request_hash": "A" * 64}, {"attempt": 4, "max_attempts": 3}, {"fencing_token": -1}, {"fencing_token": 0}, {"available_at_us": -1}, {"lease_expires_at_us": None}, {"state": "RUNNING", "lease_owner": None, "lease_expires_at_us": None}])
 def test_job_database_checks_reject_invalid_protocol_fields(

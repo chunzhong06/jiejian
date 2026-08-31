@@ -33,6 +33,8 @@ from sqlalchemy.pool import NullPool
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.paths import RuntimePaths
+from product.backend.infra.storage.base import Base
+from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 _CURRENT_MIGRATION_REVISION = "0006_repair_contract_reference"
@@ -217,8 +219,7 @@ def _check_database_compatibility(
                 return
             if revision != _CURRENT_MIGRATION_REVISION:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
-            from product.backend.infra.storage import Base
-
+            load_storage_orm_mappings()
             metadata_tables = dict(Base.metadata.tables)
             expected_tables = set(metadata_tables) | {"alembic_version"}
             if tables != expected_tables:

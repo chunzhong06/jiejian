@@ -15,7 +15,7 @@ from product.backend.core.test_identity import (
     TestIdentityAuthMethod as IdentityAuthMethod,
 )
 from product.backend.core.verification.permissions import PermissionExpectation
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.protocols import HttpPredicateKind
 from product.protocols.web.profile import parse_web_execution_profile
 from tests.backend.workflows.recording.test_action_safety_setup import (

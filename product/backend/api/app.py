@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from product.backend import __version__
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.core.errors import JiejianError
 from product.backend.api.errors import jiejian_error_handler, request_validation_error_handler, validation_error_handler

@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from product.backend import __version__
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.infra.runtime.diagnostics import runtime_environment_details
 from product.backend.core.errors import ErrorCode, JiejianError

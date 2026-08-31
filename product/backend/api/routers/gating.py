@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
 

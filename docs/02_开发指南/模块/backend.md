@@ -12,12 +12,13 @@
 
 ## 稳定入口与分层边界
 
-GUI/CLI/API 的组合根是 `product/backend/workflows/context.py` 的 `ApplicationCore`；独立 Worker 的组合根是 `product/backend/worker_container.py` 的 `WorkerContainer`。新增控制面能力前先确认它属于哪个 workflow；入口层不能绕过组合根直接拼 Repository 或 Adapter，Infra 也不能反向创建具体 Workflow Service。
+GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `ApplicationCore`；独立 Worker 的组合根是 `product/backend/composition/worker.py` 的 `WorkerContainer`。新增控制面能力前先确认它属于哪个 workflow；入口层不能绕过组合根直接拼 Repository 或 Adapter，Infra 也不能反向创建具体 Workflow Service。
 
 | 位置 | 负责什么 | 不负责什么 |
 | --- | --- | --- |
 | `product/backend/core/` | 领域模型、Contract/Coverage、Verification、Finding/Gate 纯规则、稳定错误 | FastAPI、SQLAlchemy、HTTP、Playwright、进程和文件 I/O |
-| `product/backend/workflows/` | ApplicationCore、事务用例、Readiness、Recording、安全编译、结果最终化 | 目标适配细节、跨进程 wire 格式定义 |
+| `product/backend/composition/` | ApplicationCore、WorkerContainer 与系统级依赖注入 | 新业务规则、Repository 查询或目标执行细节 |
+| `product/backend/workflows/` | 事务用例、Readiness、Recording、安全编译、结果最终化 | 目标适配细节、跨进程 wire 格式定义 |
 | `product/backend/infra/` | Storage、SecretStore、Job、Worker/Runner、Observer、Recording Process、发布与外部 adapter | 用户交互设计、权限意图和 Verdict 规则 |
 | `product/backend/api/` | loopback Router、strict DTO、LocalControl、envelope、错误/trace 映射 | 第二套业务编排、目标请求和秘密读取 |
 | `product/backend/cli/` | Human/Verbose/Machine 投影、普通任务命令和高级维护入口 | 独立状态、daemon、HTTP 旁路和安全结论重算 |
@@ -31,7 +32,7 @@ GUI/CLI/API 的组合根是 `product/backend/workflows/context.py` 的 `Applicat
 | --- | --- | --- |
 | 修改权限合同、事实或三态 | `core/verification/permissions/`、`facts.py`、`gating.py` | [修改权限判断](../任务/修改权限判断.md)；`test_contract.py`、`test_evaluation.py`、`test_gating.py` |
 | 修改项目、接入或准备状态 | `workflows/projects/`、`onboarding/`、`application_understanding/` | 所属任务 Guide；`tests/backend/workflows/projects/`、`onboarding/`、`application_understanding/` |
-| 新增或修改应用用例 | 对应 `product/backend/workflows/` 子目录、`workflows/context.py` | 对应 `tests/backend/workflows/` 子目录；若暴露控制面再加 Router/CLI 测试 |
+| 新增或修改应用用例 | 对应 `product/backend/workflows/` 子目录、`product/backend/composition/application.py` | 对应 `tests/backend/workflows/` 子目录；若改变装配再加 `tests/backend/composition/` |
 | 修改 API/CLI 控制面 | `product/backend/api/routers/`、`product/backend/cli/commands/` | [修改 API 与控制面](../任务/修改API与控制面.md)；`test_control_plane.py`、`test_control.py` |
 | 修改数据库或事务 | `infra/storage/`、`migrations/versions/` | [修改数据库](../任务/修改数据库.md)；storage/migration 直接测试 |
 | 修改 Worker/Runner/Job | `infra/runtime/jobs/`、`worker/`、`runner/`、`process/` | [修改 Worker 与 Runner](../任务/修改Worker与Runner.md)；所属 runtime 目录测试 |
@@ -44,7 +45,7 @@ GUI/CLI/API 的组合根是 `product/backend/workflows/context.py` 的 `Applicat
 
 1. 先用一句话写清要改变的产品事实及其唯一所有者；如果答案是页面、Router 或数据库字段，通常还没有找到真正所有者。
 2. 纯判断放 `core/`；涉及事务和多个端口的用例放 `workflows/`；I/O、进程和供应商细节放 `infra/`。
-3. `ApplicationCore` 只装配已经存在的端口和服务。新增能力先完成所属 workflow，再把同一能力投影到 API、CLI 和 GUI。
+3. `ApplicationCore` 和 `WorkerContainer` 只装配已经存在的端口和服务。新增能力先完成所属 workflow，再按控制面或执行面的真实消费者接入对应组合根。
 4. 机器根文档先由 `product/protocols` 定义；Storage 只持久化当前业务事实，artifact publication 只发布已校验结果。
 5. 从 owner 单测开始，再补一个直接消费者；只有越过进程、协议或数据库边界时才追加相应门禁。
 
@@ -52,6 +53,7 @@ GUI/CLI/API 的组合根是 `product/backend/workflows/context.py` 的 `Applicat
 
 - `core` 不导入 workflows、infra、API、CLI 或具体 Web Runtime；纯规则必须可以在无 I/O 条件下测试。
 - API、CLI 和 GUI 复用 ApplicationCore，不各自复制事务、Readiness、ResultPresentation 或 History 逻辑。
+- WorkerContainer 独立于 ApplicationCore；两个组合根只从 `product.backend.composition` 暴露，不在 Workflow 或 Infra 中建立第二个装配入口。
 - API 进程只管理控制面与 Worker 生命周期；目标请求、浏览器和高风险观察进入 Worker/Runner 或独立 Recording Process。
 - 当前生产 Target 只有 Web。新增 Target 必须先形成独立架构/协议决策，不能在现有枚举里预留空值。
 - 秘密只通过 SecretStore 引用和角色化最小环境注入；普通数据库、协议、日志、异常、Evidence 和报告不保存秘密正文。

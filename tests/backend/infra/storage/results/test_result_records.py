@@ -31,7 +31,11 @@ from product.backend.infra.storage import (
     upgrade_database,
 )
 from product.backend.infra.storage.db import _migration_resource_root
-from product.backend.infra.storage import Base, EvidenceIndexRow, JobRow, ProjectRow, RunRow
+from product.backend.infra.storage import Base
+from product.backend.infra.storage.execution.jobs import JobRow
+from product.backend.infra.storage.execution.runs import RunRow
+from product.backend.infra.storage.projects import ProjectRow
+from product.backend.infra.storage.results.evidence import EvidenceIndexRow
 PROJECT_ID = "storage-project"
 RUN_ID = "run_" + "1" * 32
 JOB_ID = "job_" + "2" * 32

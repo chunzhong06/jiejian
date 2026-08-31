@@ -11,7 +11,7 @@ from pydantic import Field
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.workflows.assistant.diagnosis import ErrorDiagnosisContext, diagnose_error
 from product.backend.workflows.assistant.templates import AssistantTemplateId
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 
 
 class ProjectAssistantSurface(StrEnum):

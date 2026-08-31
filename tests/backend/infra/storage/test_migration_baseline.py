@@ -14,7 +14,7 @@ from alembic.config import Config
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import Base, default_database_path, upgrade_database
 from product.backend.infra.storage.db import _migration_resource_root
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 
 pytestmark = [pytest.mark.database, pytest.mark.essential]
 ROOT = Path(__file__).resolve().parents[4]

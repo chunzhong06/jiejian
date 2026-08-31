@@ -9,7 +9,7 @@ import pytest
 
 from product.backend.core.errors import JiejianError
 from product.backend.core.verification.permissions import PermissionContract
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.protocols import (
     PreparedCookieCredential,
     PreparedCookieSessionIdentityBinding,

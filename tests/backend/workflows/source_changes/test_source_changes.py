@@ -32,7 +32,7 @@ from product.backend.workflows.application_understanding.endpoints import (
     EndpointProbeObservation,
     TargetEndpointDiscovery,
 )
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from tests.backend.workflows.recording.test_action_safety_setup import (
     ACTION_ID,
     NOW_US,
@@ -161,6 +161,58 @@ def test_actual_diff_reports_add_modify_remove_and_ignores_manifest_omission(
         assert assessment.impacts == ()
     finally:
         core.close()
+
+
+def test_persisted_source_change_rehydrates_long_lived_product_status(
+    tmp_path: Path,
+) -> None:
+    core, project_id, source = _connected_core(tmp_path)
+    source_file = source / "app.py"
+    source_file.write_text(
+        "roles = ['owner']\n@app.get('/documents')\ndef documents(): return []\n",
+        encoding="utf-8",
+    )
+    try:
+        _authorize_and_analyze(core, project_id)
+        source_file.write_text(
+            "roles = ['owner']\n@app.get('/documents')\ndef documents(): return ['updated']\n",
+            encoding="utf-8",
+        )
+        manifest, _, _ = core.source_changes.submit(
+            project_id,
+            reason="更新文档列表实现",
+            submitted_by="Agent",
+        )
+    finally:
+        core.close()
+
+    reopened = ApplicationCore(tmp_path / "var", environ={})
+    try:
+        latest = reopened.source_changes.latest_view(project_id)
+        status = reopened.product_status.get(project_id)
+
+        assert latest is not None
+        assert latest.change_id == manifest.change_id
+        assert latest.modified_paths == ("app.py",)
+        assert status.latest_change == latest
+        change_area = next(area for area in status.areas if area.key == "changes")
+        expected_area_status = (
+            "NEEDS_ATTENTION"
+            if status.readiness is not None
+            and (
+                status.readiness.source_analysis_status != "COMPLETED"
+                or latest.mapping_review_required_count > 0
+            )
+            else "AVAILABLE"
+        )
+        assert change_area.status == expected_area_status
+        assert status.attention_items
+        assert len({item.key for item in status.attention_items}) == len(
+            status.attention_items
+        )
+        assert all(item.route.startswith("/") for item in status.attention_items)
+    finally:
+        reopened.close()
 
 
 def test_first_change_without_baseline_is_incomplete_and_never_optimistic(

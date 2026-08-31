@@ -26,7 +26,7 @@ from product.backend.infra.storage import (
     ProjectRecord,
     RecordingRecord,
 )
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.workflows.recording.processing import FlowDraftProcessor
 from product.backend.workflows.recording.review import FlowDraftReviewer

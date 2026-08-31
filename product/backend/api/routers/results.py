@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.results.published import PublishedResultReader
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse

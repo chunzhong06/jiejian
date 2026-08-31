@@ -1,4 +1,4 @@
-# 界鉴 JIEJIAN 1.0.9
+# 界鉴 JIEJIAN 1.0.10
 
 > 面向 Vibe Coding 的权限意图持续验证与断裂诊断系统。
 

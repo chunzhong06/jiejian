@@ -46,7 +46,7 @@ def application_scope(
     settings = runtime_settings(context)
     from product.backend.core.errors import ErrorCode
     from product.backend.infra.runtime.serve_lock import ServeLock
-    from product.backend.workflows.context import ApplicationCore
+    from product.backend.composition import ApplicationCore
 
     ownership = ServeLock.acquire(
         settings.var_dir,

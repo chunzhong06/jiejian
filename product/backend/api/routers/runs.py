@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter
 from pydantic import Field
 
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.results.published import PublishedResultReader
 from product.backend.core.lifecycle import RunLifecycle
 from product.backend.core.errors import ErrorCode, JiejianError

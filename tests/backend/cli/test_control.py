@@ -486,7 +486,7 @@ def test_gui_lock_rejects_cli_before_application_core_is_created(tmp_path, monke
     var_dir = tmp_path / "var"
     owner = ServeLock.acquire(var_dir)
     monkeypatch.setattr(
-        "product.backend.workflows.context.ApplicationCore",
+        "product.backend.composition.ApplicationCore",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("不应创建第二个 ApplicationCore")),
     )
     try:

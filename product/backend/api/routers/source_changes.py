@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query
 
 from product.backend.api.envelope import ApiResponse, data_response
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 
 
 def build_source_changes_router(context: ApplicationCore) -> APIRouter:

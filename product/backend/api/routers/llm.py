@@ -6,7 +6,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import Field, SecretStr, field_validator, model_validator
 
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
 from product.backend.infra.llm.catalog import LLMModelCatalog

@@ -18,7 +18,7 @@ from product.backend.workflows.application_understanding.endpoints import (
     EndpointProbeObservation,
     TargetEndpointDiscovery,
 )
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 
 
 def _reachable_discovery(endpoint: str) -> TargetEndpointDiscovery:

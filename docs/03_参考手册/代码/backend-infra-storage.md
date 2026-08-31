@@ -40,7 +40,7 @@
 - `create_sqlite_engine(database_path) -> Engine`
 - `create_session_factory(engine) -> sessionmaker[Session]`
 - `upgrade_database(database_path) -> None`
-主要 import / dot-source：`__future__`, `alembic`, `alembic.config`, `collections`, `collections.abc`, `contextlib`, `importlib.resources`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `sqlalchemy.pool`, `sqlite3`, `tempfile`
+主要 import / dot-source：`__future__`, `alembic`, `alembic.config`, `collections`, `collections.abc`, `contextlib`, `importlib.resources`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.storage.base`, `product.backend.infra.storage.orm_registry`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `sqlalchemy.pool`, `sqlite3`, `tempfile`
 
 ### `product/backend/infra/storage/execution/job_control.py`
 - `_NONTERMINAL_RUNS`
@@ -54,13 +54,13 @@
 - `class JobEventRecord`
 - `class JobRepository`
 - `class JobEventRepository`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.evidence`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
 
 ### `product/backend/infra/storage/execution/runs.py`
 - `class RunRow`
 - `class RunRecord`
 - `class RunRepository`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.evidence`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
 
 ### `product/backend/infra/storage/execution_profiles.py`
 - `class ExecutionProfileRow`
@@ -75,11 +75,16 @@
 - `class AIAssistanceSettingsRepository`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.llm.config`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
 
+### `product/backend/infra/storage/orm_registry.py`
+- `_STORAGE_ORM_MODULES`
+- `load_storage_orm_mappings() -> None`
+主要 import / dot-source：`__future__`, `importlib`
+
 ### `product/backend/infra/storage/projects.py`
 - `class ProjectRow`
 - `class ProjectRecord`
 - `class ProjectRepository`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.evidence`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
 
 ### `product/backend/infra/storage/recordings.py`
 - `class RecordingRow`
@@ -88,13 +93,13 @@
 - `class FlowDraftRevisionRecord`
 - `class RecordingRepository`
 - `class FlowDraftRevisionRepository`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.results.evidence`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
 
 ### `product/backend/infra/storage/results/evidence.py`
 - `class EvidenceIndexRow`
 - `class EvidenceIndexRecord`
 - `class EvidenceIndexRepository`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
 
 ### `product/backend/infra/storage/results/finalizations.py`
 - `class FindingFinalizationState`

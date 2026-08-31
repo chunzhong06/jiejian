@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.infra.storage import ExecutionProfileRecord, ProjectRecord
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.projects.readiness import ProjectReadinessService
 from product.protocols import TargetType
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter
 from pydantic import Field
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 
 
 class CheckSubmitRequest(ApiModel):

@@ -20,7 +20,7 @@ from product.backend.core.lifecycle import ProjectStatus
 from product.backend.infra.identity.browser import IdentityPreparationBrowserAdapter
 from product.backend.infra.secrets import WindowsCredentialManagerSecretStore
 from product.backend.infra.storage import ProjectRecord
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.test_identities import PreparedLoginState, TestIdentityStatus as IdentityStatus
 from product.backend.core.test_identity import TestIdentityCookie as IdentityCookie
 from product.protocols import IdentityPreparationRequest, IdentityPreparationResultType

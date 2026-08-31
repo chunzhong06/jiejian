@@ -7,7 +7,7 @@ import json
 import time
 from fastapi import APIRouter
 
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.application_understanding import CandidateDecision
 from product.backend.core.lifecycle import JobState

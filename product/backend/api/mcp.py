@@ -44,7 +44,7 @@ from product.backend.core.verification.permissions import (
 from product.backend.infra.runtime.diagnostics import runtime_environment_details
 from product.backend.infra.runtime.jobs.models import RequestCancellation
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.mcp_access import MCPAccessController, MCPAccessLevel
 from product.backend.workflows.official_sample import OfficialExperienceMode
 

@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import StreamingResponse
 
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.core.lifecycle import JobState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import redact

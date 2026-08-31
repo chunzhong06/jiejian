@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.mcp_access import MCPAccessController, MCPAccessLevel
 
 

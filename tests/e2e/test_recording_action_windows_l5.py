@@ -28,7 +28,7 @@ from product.backend.infra.recording.browser import (
 )
 from product.backend.infra.secrets import WindowsCredentialManagerSecretStore
 from product.backend.infra.storage import ProjectRecord
-from product.backend.workflows.context import ApplicationCore
+from product.backend.composition import ApplicationCore
 from product.backend.workflows.recording.processing import FlowDraftProcessor
 from product.backend.workflows.recording.review import FlowDraftReviewer
 from product.backend.workflows.test_identities import PreparedLoginState
