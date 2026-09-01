@@ -1,6 +1,6 @@
-/* AI 工具一级页面：集中呈现 MCP 连接、客户端指引、授权与连接管理。 */
+/* AI 工具一级页面：以新手步骤完成客户端连接，再管理逐应用的本次允许范围。 */
 
-import { Space, Typography } from 'antd'
+import { Space } from 'antd'
 import type { MCPAccessView } from '../../api/mcp'
 import type { ProjectDto } from '../../api/projects'
 import type { ApiError } from '../../api/http'
@@ -15,8 +15,7 @@ export function ToolsPage({
   onStatusChange?: (view: MCPAccessView) => void
 }) {
   return <Space direction="vertical" size="large" className="full-width tools-page">
-    <PageTaskHeader title="AI 工具" description="把 Codex、DSH 或其他 MCP 客户端连接到界鉴，并按应用授予本次会话权限。" status="MCP 连接与授权" />
-    <Typography.Paragraph>连接分三步：准备长期凭据、显式配置一次客户端、等待客户端完成 initialize。界鉴不会自动修改客户端配置。</Typography.Paragraph>
+    <PageTaskHeader title="AI 工具连接" description="选择你使用的工具，按页面上的 5 个步骤完成首次连接；连接成功后，再决定它这次可以为每个应用做到哪一步。" status="连接与使用范围" />
     <MCPAccessCard open projects={projects} onError={onError} onStatusChange={onStatusChange} />
   </Space>
 }

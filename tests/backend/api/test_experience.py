@@ -8,6 +8,7 @@ from pathlib import Path
 from product.backend.core.test_identity import (
     TestIdentityAuthMethod as IdentityAuthMethod,
 )
+from product.backend.core.lifecycle import ProjectStatus
 from tests.fixtures.collaboration_golden import InMemorySecretStore
 from tests.fixtures.control_plane import TestClient, create_app
 from tests.fixtures.runtime_environment import runtime_identity_environment
@@ -30,12 +31,11 @@ def _app(tmp_path: Path, *, sample_root: Path | None = _SAMPLE_ROOT):
     return app, store
 
 
-def _start(client: TestClient, mode: str):
+def _start(client: TestClient):
     return client.post(
         "/api/experience/official-sample/start",
         json={
             "schema_version": "1",
-            "experience_mode": mode,
             "consent": True,
         },
     )
@@ -78,12 +78,12 @@ def test_unavailable_installation_keeps_product_alive_and_requires_consent(
             "unavailable_reason": "未配置官方示例目录",
             "active": False,
             "experience_id": None,
-            "experience_mode": None,
             "project_id": None,
             "origin": None,
-            "identities_ready": False,
-            "authorization_order": None,
-            "blob_observation": None,
+            "scenario_prepared": False,
+            "scenario_version": None,
+            "scenario_changed_at_us": None,
+            "vulnerable_change_id": None,
             "repair_change_id": None,
         }
         assert client.get("/ready").status_code == 200
@@ -91,7 +91,6 @@ def test_unavailable_installation_keeps_product_alive_and_requires_consent(
             "/api/experience/official-sample/start",
             json={
                 "schema_version": "1",
-                "experience_mode": "FULL",
                 "consent": False,
             },
         )
@@ -142,16 +141,18 @@ def test_validation_summary_reads_only_the_stable_sanitized_receipt(
         assert invalid.json()["data"]["summary"] is None
 
 
-def test_full_experience_creates_formal_project_and_keeps_behavior_mechanical(
+def test_start_creates_agent_regression_on_top_of_a_safe_source_baseline(
     tmp_path: Path,
 ) -> None:
     app, _ = _app(tmp_path)
     with TestClient(app) as client:
-        response = _start(client, "FULL")
+        response = _start(client)
         assert response.status_code == 200, response.text
         started = response.json()["data"]
         assert started["active"] is True
-        assert started["experience_mode"] == "FULL"
+        assert started["scenario_version"] == "VULNERABLE"
+        assert started["scenario_prepared"] is False
+        assert started["vulnerable_change_id"] is None
         assert started["origin"].startswith("http://127.0.0.1:")
         assert "source" not in started
         assert "secret" not in response.text.casefold()
@@ -159,28 +160,13 @@ def test_full_experience_creates_formal_project_and_keeps_behavior_mechanical(
         core = app.state.context
         understanding = core.application_understanding.get(started["project_id"])
         assert understanding.confirmed_endpoint == started["origin"]
-        assert understanding.source_analysis_authorized is False
+        assert understanding.source_analysis_authorized is True
+        assert understanding.source_fingerprint is not None
         assert core.local_observer_environments.resolve(
             understanding.source_root,
             understanding.confirmed_endpoint,
         ) == str(core.official_samples.active.descriptor_path)
         experience_root = core.official_samples.active.experience_root
-
-        changed = client.post(
-            "/api/experience/official-sample/behavior",
-            json={
-                "schema_version": "1",
-                "authorization_order": "AUTHORIZE_BEFORE_ENQUEUE",
-                "blob_observation": "AVAILABLE",
-            },
-        )
-        assert changed.status_code == 200, changed.text
-        assert (
-            changed.json()["data"]["authorization_order"]
-            == "AUTHORIZE_BEFORE_ENQUEUE"
-        )
-        assert changed.json()["data"]["origin"] == started["origin"]
-        assert changed.json()["data"]["project_id"] == started["project_id"]
 
         stopped = client.post("/api/experience/official-sample/stop")
         assert stopped.status_code == 200
@@ -190,14 +176,34 @@ def test_full_experience_creates_formal_project_and_keeps_behavior_mechanical(
             understanding.confirmed_endpoint,
         ) is None
         assert not experience_root.exists()
+        assert core.projects.get(started["project_id"]).status is ProjectStatus.ARCHIVED
+        assert all(
+            item.project_id != started["project_id"]
+            for item in core.projects.list()
+        )
 
 
-def test_guided_experience_analyzes_without_deciding_then_prepares_real_identities(
+def test_starting_a_new_official_sample_archives_the_previous_sample_project(
+    tmp_path: Path,
+) -> None:
+    app, _ = _app(tmp_path)
+    with TestClient(app) as client:
+        first = _start(client).json()["data"]
+        second_response = _start(client)
+
+        assert second_response.status_code == 200, second_response.text
+        second = second_response.json()["data"]
+        assert second["project_id"] != first["project_id"]
+        assert app.state.context.projects.get(first["project_id"]).status is ProjectStatus.ARCHIVED
+        assert [item.project_id for item in app.state.context.projects.list()] == [second["project_id"]]
+
+
+def test_one_click_prepare_applies_public_scenario_contract_without_publishing_a_result(
     tmp_path: Path,
 ) -> None:
     app, store = _app(tmp_path)
     with TestClient(app) as client:
-        response = _start(client, "GUIDED")
+        response = _start(client)
         assert response.status_code == 200, response.text
         started = response.json()["data"]
         project_id = started["project_id"]
@@ -217,29 +223,16 @@ def test_guided_experience_analyzes_without_deciding_then_prepares_real_identiti
             for candidate in (*understanding.role_candidates, *understanding.action_candidates)
         )
 
-        before_confirmation = client.post(
-            "/api/experience/official-sample/identities"
-        )
-        assert before_confirmation.status_code == 400
-        assert before_confirmation.json()["error"]["code"] == "STATE_PRECONDITION"
-
-        revision = understanding.revision
-        for candidate in understanding.role_candidates:
-            decided = client.put(
-                f"/api/projects/{project_id}/roles/{candidate.candidate_id}",
-                json={
-                    "schema_version": "1",
-                    "decision": "CONFIRMED",
-                    "display_name": candidate.display_name,
-                    "revision": revision,
-                },
-            )
-            assert decided.status_code == 200, decided.text
-            revision = decided.json()["data"]["revision"]
-
-        prepared = client.post("/api/experience/official-sample/identities")
+        prepared = client.post("/api/experience/official-sample/prepare")
         assert prepared.status_code == 200, prepared.text
-        assert prepared.json()["data"]["identities_ready"] is True
+        prepared_data = prepared.json()["data"]
+        assert prepared_data["scenario_prepared"] is True
+        assert prepared_data["vulnerable_change_id"].startswith("chg_")
+        manifest, change_set, _ = app.state.context.source_changes.get(
+            prepared_data["vulnerable_change_id"]
+        )
+        assert change_set.modified_paths == ("authorization_policy.py",)
+        assert manifest.submitted_by == "MCP · Codex"
         assert "session-" not in prepared.text
         identities = app.state.context.test_identities.list(project_id)
         assert {item.label for item in identities} == {
@@ -251,8 +244,26 @@ def test_guided_experience_analyzes_without_deciding_then_prepares_real_identiti
             for item in identities
         )
         assert len(store.values) == 2
+        flows = app.state.context.product_flows.list(project_id)
+        assert len(flows) == 2
+        assert all(item["state"] == "COMPLETED" for item in flows)
+        assert all(item["job"]["state"] == "SUCCEEDED" for item in flows)
+        assert all(item["job"]["attempt"] == 1 for item in flows)
+        preview = client.get(f"/api/projects/{project_id}/check-preview")
+        assert preview.status_code == 200, preview.text
+        assert preview.json()["data"]["ready"] is True
+        assert preview.json()["data"]["case_count"] == 3
+        assert preview.json()["data"]["differential_pair_count"] == 1
+        assert app.state.context.product_status.get(project_id).latest_result is None
 
-        repeated = client.post("/api/experience/official-sample/identities")
+        repeated = client.post("/api/experience/official-sample/prepare")
         assert repeated.status_code == 200
         assert len(app.state.context.test_identities.list(project_id)) == 2
         assert len(store.values) == 2
+
+        limited = client.post(
+            "/api/experience/official-sample/version",
+            json={"schema_version": "1", "version": "EVIDENCE_LIMITED", "source_run_id": None},
+        )
+        assert limited.status_code == 200, limited.text
+        assert limited.json()["data"]["scenario_version"] == "EVIDENCE_LIMITED"

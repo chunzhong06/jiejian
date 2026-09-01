@@ -90,6 +90,22 @@ describe('PermissionCheckPage', () => {
     expect(screen.queryByText(/Profile|Contract|Observer|profile_id|contract_id/)).not.toBeInTheDocument()
   })
 
+  it('业务动作已经可检查时把局部缺口说明为未纳入组合，不再称整个动作未覆盖', async () => {
+    api.preview.mockResolvedValue({
+      ...readyPreview,
+      actions: [{
+        ...readyPreview.actions[0],
+        gaps: [{ code: 'PERMISSION_INTENT_UNCONFIRMED', message: '另一个非代表权限组合尚未确认', next_path: '/permissions', next_label: '查看权限' }],
+      }],
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('这个动作可以检查；另有部分权限组合未纳入')).toBeInTheDocument()
+    expect(screen.queryByText('这个动作暂未覆盖')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '开始真实检查' })).toBeEnabled()
+  })
+
   it('权限规则加载时不调用模型，也不保留旧权限复核入口', async () => {
     renderPage({ mode: 'permissions' })
     expect(await screen.findByText('确认权限要求')).toBeInTheDocument()

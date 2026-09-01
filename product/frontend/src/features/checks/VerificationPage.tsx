@@ -17,23 +17,12 @@ import { Alert, Button, Collapse, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { resultsApi, type ExecutionTraceDto, type ResultDiagnosisDto, type ResultPresentationDto, type ResultPresentationIssueDto } from '../../api/results'
 import { runsApi, type RunDto } from '../../api/runs'
-import { expectationLabel } from '../../app/presentation'
+import { expectationLabel, traceEventLabel } from '../../app/presentation'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { EvidenceExplanationDrawer } from './EvidenceExplanationDrawer'
 import './checks.css'
-
-const eventLabels: Record<string, string> = {
-  ENTRY: '请求进入目标应用',
-  IDENTITY: '目标应用识别账号',
-  AUTHORIZATION: '应用作出权限判断',
-  PERSISTENT_EFFECT: '业务状态发生变化',
-  MESSAGE: '任务进入消息链路',
-  DELEGATION: '后台任务继续处理',
-  FINAL_EFFECT: '最终业务结果形成',
-  RECOVERY: '测试现场得到恢复',
-}
 
 function claimValue(value: string | null) {
   return ({
@@ -48,6 +37,22 @@ function claimValue(value: string | null) {
 function traceFor(issue: ResultPresentationIssueDto, presentation: ResultPresentationDto) {
   if (!issue.diagnosis) return undefined
   return presentation.execution_traces.find((item) => item.case_id === issue.diagnosis?.case_id && item.action_id === issue.diagnosis?.action_id)
+}
+
+function focusedTrace(trace?: ExecutionTraceDto): ExecutionTraceDto | undefined {
+  if (!trace) return undefined
+  const preferredFinalEffect = trace.events.some((event) => event.semantic_key === 'archive_generated')
+    ? 'archive_generated'
+    : trace.events.find((event) => event.kind === 'FINAL_EFFECT')?.semantic_key
+  let keptFinalEffect = false
+  const events = trace.events.filter((event) => {
+    if (event.kind === 'ENTRY' || event.kind === 'RECOVERY') return false
+    if (event.kind !== 'FINAL_EFFECT') return true
+    if (keptFinalEffect || event.semantic_key !== preferredFinalEffect) return false
+    keptFinalEffect = true
+    return true
+  })
+  return { ...trace, events }
 }
 
 function eventState(issue: ResultPresentationIssueDto, diagnosis: ResultDiagnosisDto | null, trace: ExecutionTraceDto, eventId: string) {
@@ -76,9 +81,9 @@ function VerificationPath({ issue, trace, compact = false, onEvidence }: { issue
       <ol className="verification-path-list">{trace.events.map((event, index) => <li className={eventState(issue, diagnosis, trace, event.event_id)} key={event.event_id}>
         <span className="verification-path-edge" aria-hidden="true" />
         {onEvidence
-          ? <button type="button" className="verification-path-node" aria-label={`查看“${eventLabels[event.kind] ?? '已发布业务节点'}”证据`} onClick={onEvidence}><span aria-hidden="true">{index + 1}</span></button>
+          ? <button type="button" className="verification-path-node" aria-label={`查看“${traceEventLabel(event)}”证据`} onClick={onEvidence}><span aria-hidden="true">{index + 1}</span></button>
           : <span className="verification-path-node" aria-hidden="true"><span>{index + 1}</span></span>}
-        <div><Typography.Text strong>{eventLabels[event.kind] ?? '已发布业务节点'}</Typography.Text></div>
+        <div><Typography.Text strong>{traceEventLabel(event)}</Typography.Text><Typography.Text type="secondary">{event.source_component} · {event.source_location}</Typography.Text></div>
       </li>)}</ol>
     </>}
   </section>
@@ -187,31 +192,43 @@ export function VerificationPage({
     return sourcePresentation?.issues.find((item) => item.finding_id === sourceFinding)
   }, [presentation, sourcePresentation])
   const openEvidence = () => setDrawerOpen(true)
-  const focusLimitations = () => document.getElementById('verification-limitations')?.focus()
 
   if (!run) return <Space direction="vertical" size="large" className="full-width verification-page">
-    <PageTaskHeader title="现场验证" description="把权限考题、实际路径和证据边界放到同一现场核对。" status="等待一次检查" />
+    <PageTaskHeader title="现场验证" description="先看表面结果与真实后果的矛盾，再按需展开完整依据。" status="等待一次检查" />
     <Alert type="info" showIcon message="先完成一次检查" description="现场验证只展示真实 Run 已发布的结果，不提供演示占位数据。" />
     <TaskActionBar back={onBack ? { label: '返回检查结果', onClick: onBack } : undefined} />
   </Space>
 
   return <Space direction="vertical" size="large" className="full-width verification-page">
-    <PageTaskHeader title="现场验证" description="把权限考题、实际路径和证据边界放到同一现场核对。" status={presentation?.headline ?? unavailableReason ?? '正在读取已发布结果'} />
+    <PageTaskHeader title="现场验证" description="先看表面结果与真实后果的矛盾，再按需展开完整依据。" status={presentation?.headline ?? unavailableReason ?? '正在读取已发布结果'} />
     {presentation && <Space wrap><Tag>当前应用：{presentation.project_name}</Tag><Collapse ghost items={[{ key: 'run', label: '查看本次检查标识', children: <Typography.Text code>{presentation.run_id}</Typography.Text> }]} /></Space>}
     {!loading && unavailableReason && <Alert type="warning" showIcon message="当前没有可用于现场验证的发布结果" description={unavailableReason} />}
     {presentation && presentation.issues.length > 1 && <Space wrap>{presentation.issues.map((item, index) => <Button type={index === selectedIndex ? 'primary' : 'default'} key={item.finding_id} onClick={() => setSelectedIndex(index)}>检查项 {index + 1}</Button>)}</Space>}
     {presentation && !issue && <Alert type="info" showIcon message="本次检查没有需要单独展示的现场问题" description={presentation.scope_statement} />}
     {presentation && issue && <>
       {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message="证据不足，现场不标记红色断裂点" description={issue.explanation} />}
-      <section className={`verification-board is-${issue.verdict.toLowerCase()}`} aria-label="现场验证三栏视图">
-        <PermissionExam presentation={presentation} />
-        <ActualPathColumn issue={issue} presentation={presentation} onEvidence={openEvidence} />
-        <ClaimBoundary issue={issue} />
+      <section className={`verification-focus is-${issue.verdict.toLowerCase()}`} aria-labelledby="verification-focus-title">
+        <header><div><Typography.Text className="verification-kicker">本轮核心矛盾</Typography.Text><Typography.Title id="verification-focus-title" level={2}>{issue.title}</Typography.Title></div><Tag color={issue.verdict === 'VULNERABLE' ? 'red' : issue.verdict === 'SAFE' ? 'green' : 'gold'}>{issue.conclusion}</Tag></header>
+        <div className="verification-contrast" aria-label="表面结果与真实业务后果对照">
+          <article><Typography.Text>表面看到</Typography.Text><strong>{issue.surface_result}</strong></article>
+          <span aria-hidden="true">但是</span>
+          <article className="is-actual"><Typography.Text>独立观察到</Typography.Text><strong>{issue.actual_result}</strong></article>
+        </div>
+        <Alert type={issue.verdict === 'VULNERABLE' ? 'error' : issue.verdict === 'SAFE' ? 'success' : 'warning'} showIcon message="因此得出" description={issue.explanation} />
       </section>
-      <section className="verification-evidence-actions">
-        <div><Typography.Title level={3}>证据说明</Typography.Title><Typography.Paragraph type="secondary">来源、步骤、可证明和不可证明边界按固定顺序展示。</Typography.Paragraph></div>
-        <Space wrap><Button onClick={openEvidence}>查看为什么</Button><Button onClick={focusLimitations}>查看限制</Button></Space>
+      <section className="verification-decisive-path" aria-labelledby="verification-path-title">
+        <div className="verification-section-heading"><div><Typography.Title id="verification-path-title" level={3}>关键执行链</Typography.Title><Typography.Paragraph type="secondary">只保留解释矛盾所需的节点；每个节点同时给出发生位置。</Typography.Paragraph></div><Button onClick={openEvidence}>查看依据</Button></div>
+        <VerificationPath compact issue={issue} trace={focusedTrace(traceFor(issue, presentation))} onEvidence={openEvidence} />
       </section>
+      <section className="verification-evidence-basis" aria-labelledby="verification-evidence-basis-title">
+        <div className="verification-section-heading"><div><Typography.Title id="verification-evidence-basis-title" level={3}>结论依据</Typography.Title><Typography.Paragraph type="secondary">先说明在哪里看到了什么，再说明它支持哪一部分判断。</Typography.Paragraph></div><Button onClick={openEvidence}>查看全部与边界</Button></div>
+        <div className="verification-evidence-basis-list">{issue.evidence_explanations.slice(0, 4).map((item, index) => <article key={`${item.source}-${index}`}><span>{item.source}{item.component ? ` · ${item.component}` : ''}</span><strong>{item.label}</strong><p>{item.proves}</p></article>)}</div>
+      </section>
+      <Collapse className="verification-details" items={[
+        { key: 'permission', label: '查看本次锁定的权限规则', children: <PermissionExam presentation={presentation} /> },
+        { key: 'path', label: '查看完整预期与实际路径', children: <ActualPathColumn issue={issue} presentation={presentation} onEvidence={openEvidence} /> },
+        { key: 'boundary', label: '查看当前结论能说到哪里', children: <ClaimBoundary issue={issue} /> },
+      ]} />
       {presentation.repair_verification && <section className="verification-repair" aria-labelledby="verification-repair-title">
         <Typography.Title id="verification-repair-title" level={3}>修复前后沿同一业务路径核对</Typography.Title>
         {issue.repair_requirement && <ul><li>必须消失：{issue.repair_requirement.must_disappear}</li><li>必须保留：{issue.repair_requirement.must_remain}</li><li>不能改变：{issue.repair_requirement.must_not_change.join('、')}</li></ul>}

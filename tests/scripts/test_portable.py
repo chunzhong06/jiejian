@@ -23,7 +23,7 @@ from scripts.dev.sample_test import official
 ROOT = Path(__file__).parents[2]
 BUILDER_PATH = ROOT / "scripts" / "build" / "portable.py"
 ARTIFACT_ROOT = ROOT / "var" / "development" / "release" / "artifacts"
-RELEASE_NAME = "JieJian-WebV1-1.0.14-Windows-x64"
+RELEASE_NAME = "JieJian-WebV1-1.0.15-Windows-x64"
 
 
 def _load_module(path: Path, name: str) -> ModuleType:
@@ -47,7 +47,7 @@ def _driver() -> ModuleType:
 def test_portable_launcher_is_relative_offline_and_uses_installed_product() -> None:
     builder = _builder()
 
-    assert builder.RELEASE_VERSION == "1.0.14"
+    assert builder.RELEASE_VERSION == "1.0.15"
     assert builder.RELEASE_NAME == RELEASE_NAME
     assert "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" in builder._START_CMD
     assert "%~dp0" in builder._START_CMD
@@ -85,7 +85,7 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
         base,
         {
             "python_version": "3.13.13",
-            "wheel_version": "1.0.14",
+            "wheel_version": "1.0.15",
             "playwright_version": "1.58.0",
             "chromium_revision": "1228",
         },
@@ -101,8 +101,8 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
     assert release == {
         "schema_version": "1",
         "product": "JieJian Web V1",
-        "version": "1.0.14",
-        "package_version": "1.0.14",
+        "version": "1.0.15",
+        "package_version": "1.0.15",
         "platform": "windows",
         "architecture": "x64",
         "runtime_layout_version": "1",
@@ -148,7 +148,7 @@ def test_portable_tree_rejects_repository_paths_and_local_wheel_metadata(tmp_pat
         builder._validate_tree_content(base, ROOT)
 
     leaked.unlink()
-    direct_url = site_packages / "jiejian-1.0.14.dist-info" / "direct_url.json"
+    direct_url = site_packages / "jiejian-1.0.15.dist-info" / "direct_url.json"
     direct_url.parent.mkdir()
     direct_url.write_text("{}", encoding="ascii")
     with pytest.raises(RuntimeError, match="direct_url"):
@@ -164,7 +164,7 @@ def test_portable_runtime_prunes_dependency_tests_and_generated_python_artifacts
     dependency_tests = site_packages / "dependency" / "tests"
     dependency_tests.mkdir(parents=True)
     (dependency_tests / "test_runtime.py").write_text("raise AssertionError", encoding="utf-8")
-    metadata = site_packages / "jiejian-1.0.14.dist-info"
+    metadata = site_packages / "jiejian-1.0.15.dist-info"
     metadata.mkdir()
     (metadata / "direct_url.json").write_text("{}", encoding="ascii")
     cache = site_packages / "dependency" / "__pycache__"
@@ -214,21 +214,8 @@ def _portable_environment() -> dict[str, str]:
     return environment
 
 
-def _portable_chromium(release: Path) -> Path:
-    """只接受发行包内唯一 headed Chromium，供 Recording UIA 校验进程身份。"""
-
-    candidates = tuple(
-        path
-        for path in (release / "runtime" / "playwright").rglob("chrome.exe")
-        if "chromium-" in path.as_posix() and "chrome-win" in path.as_posix()
-    )
-    assert len(candidates) == 1, candidates
-    return candidates[0]
-
-
 def _accept_full_delivery(
     driver: ModuleType,
-    release: Path,
     page,
     client,
     audit_dir: Path,
@@ -237,60 +224,29 @@ def _accept_full_delivery(
 ) -> int:
     """在 full Portable 内完成持续验证主流程和一次真实 BLOCK 代表性检查。"""
 
-    experience = driver._start_guided_experience(page, client, audit_dir, state)
+    experience = driver._start_official_experience(page, client, audit_dir, state)
     project_id = str(experience["project_id"])
     sample_port = int(str(experience["origin"]).rsplit(":", 1)[1])
-    role_ids, action_ids = driver._confirm_understanding(client, project_id)
-    page.goto(client.origin + "/#/application", wait_until="networkidle")
-    page.get_by_role("heading", name="应用接入").wait_for()
-
     # 身份一经写入 Credential Manager 就同步给外层，后续任意首错都能走正式 reset 清理。
-    identities.update(driver._prepare_identities(client, project_id))
-    page.goto(client.origin + "/#/identities", wait_until="networkidle")
-    page.get_by_role("heading", name="测试账号").wait_for()
-
-    page.goto(client.origin + "/#/flows", wait_until="networkidle")
-    page.get_by_role("heading", name="业务流程").wait_for()
-    recording_id = driver._record_flow(
-        client,
-        project_id,
-        action_ids[driver.EXPORT_ACTION_KEY],
-        identities["project_owner"],
-        _portable_chromium(release),
-        state,
-    )
-    driver._confirm_safety(client, recording_id)
-    view_recording_id = driver._record_flow(
-        client,
-        project_id,
-        action_ids[driver.VIEW_ACTION_KEY],
-        identities["project_owner"],
-        _portable_chromium(release),
-        state,
-        flow_kind="view",
-    )
-    driver._confirm_safety(client, view_recording_id, flow_kind="view")
-
-    driver._confirm_permissions(
+    prepared_identities, action_ids, vulnerable_change_id = driver._prepare_official_scenario(
         page,
         client,
         audit_dir,
         project_id,
-        action_ids,
-        role_ids,
     )
-    page.get_by_role("heading", name="验证运行").wait_for()
+    identities.update(prepared_identities)
+    page.goto(client.origin + "/#/tests", wait_until="networkidle")
+    page.get_by_role("heading", name="测试", exact=True).wait_for()
     result = driver._run_case(
         client,
         project_id,
         identities,
         state,
         name="portable-vulnerable",
-        authorization_order="ENQUEUE_BEFORE_AUTHORIZE",
-        blob_observation="AVAILABLE",
         expected_verdict="BLOCK",
         expected_issue="VULNERABLE",
         action_ids=action_ids,
+        change_id=vulnerable_change_id,
     )
 
     page.goto(client.origin + "/#/results", wait_until="networkidle")
@@ -351,7 +307,6 @@ def _smoke_archive(driver: ModuleType, archive: Path, root: Path, *, samples: bo
         if samples:
             sample_port = _accept_full_delivery(
                 driver,
-                release,
                 page,
                 client,
                 root,

@@ -133,9 +133,12 @@ function CandidateSection({ title, candidates, kind, variant, loading, onDecide,
   </section>
 }
 
-export function ApplicationSetup({ selected, endpointStatus, onConnected, onChanged, onBack, onContinue }: {
+export function ApplicationSetup({ selected, endpointStatus, officialSampleAvailable, officialSampleBusy, onStartOfficialSample, onConnected, onChanged, onBack, onContinue }: {
   selected: ProjectDto | null
   endpointStatus?: ProjectReadinessDto['endpoint_status']
+  officialSampleAvailable?: boolean
+  officialSampleBusy?: boolean
+  onStartOfficialSample?: () => Promise<boolean>
   onConnected: (project: ProjectDto) => void
   onChanged: () => void
   onBack: () => void
@@ -299,6 +302,17 @@ export function ApplicationSetup({ selected, endpointStatus, onConnected, onChan
   const pendingRoles = understanding?.role_candidates.filter((candidate) => candidate.decision !== 'REJECTED' && (candidate.decision !== 'CONFIRMED' || candidate.stale)) ?? []
   const pendingActions = understanding?.action_candidates.filter((candidate) => candidate.decision !== 'REJECTED' && (candidate.decision !== 'CONFIRMED' || candidate.stale)) ?? []
   const pendingUnderstandingCount = pendingRoles.length + pendingActions.length
+  const noReachableEndpoint = Boolean(endpoints && !endpoints.candidates.some((candidate) => candidate.reachable))
+  const officialSampleStart = officialSampleAvailable && onStartOfficialSample
+    ? <Alert
+      className="application-official-start"
+      type="info"
+      showIcon
+      message="体验协作空间不需要手工启动命令"
+      description="界鉴会复制受控样例、使用动态本机端口启动并自动连接；它与普通应用接入使用同一产品能力，但额外提供固定故事的一键配置。"
+      action={<Button loading={officialSampleBusy} onClick={() => { void onStartOfficialSample() }}>由界鉴启动官方示例</Button>}
+    />
+    : null
   const sequence = ['选择应用目录', '确认本地地址', '授权只读分析', '审阅权限组和业务动作']
   const primaryAction = currentStep === 1
     ? { label: '选择应用文件夹', onClick: () => void chooseFolder(), loading }
@@ -348,7 +362,9 @@ export function ApplicationSetup({ selected, endpointStatus, onConnected, onChan
     {message && <Alert showIcon type="info" message={message} closable onClose={() => setMessage('')} />}
     {error && <Alert showIcon type="error" message={error.message} closable onClose={() => setError(null)} />}
     {!understanding && <Card className="application-step" title="选择应用文件夹">
-      <Typography.Paragraph>界鉴先读取少量配置识别应用；不会启动项目、安装依赖或读取秘密。</Typography.Paragraph>
+      <Alert type="info" showIcon message="接入前，请先在本机启动应用" description="界鉴连接的是正在运行的本地 Web 应用。选择目录后，界鉴会读取少量配置推测启动方式，并在 127.0.0.1 的有限候选地址中寻找已经响应的应用；当前不会替你执行未知启动命令。" />
+      <Typography.Paragraph>如果应用已经启动，直接选择它的源码文件夹。界鉴不会安装依赖、读取秘密或扫描任意端口。</Typography.Paragraph>
+      {officialSampleStart}
       <Collapse ghost items={[{ key: 'manual-path', label: '目录选择器不可用？', children: <Space.Compact className="application-manual-path"><Input aria-label="应用文件夹绝对路径" value={manualPath} onChange={(event) => setManualPath(event.target.value)} placeholder="输入应用文件夹绝对路径" /><Button loading={loading} onClick={() => void connectPath(manualPath)}>连接这个目录</Button></Space.Compact> }]} />
     </Card>}
     {understanding && !endpointReady && <Card className="application-step" title="确认本地访问地址">
@@ -358,6 +374,7 @@ export function ApplicationSetup({ selected, endpointStatus, onConnected, onChan
         {discovery.start_candidates.length > 0 && <Typography.Text type="secondary">可能启动方式：{discovery.start_candidates.map((item) => item.label).join('、')}（只作提示，不会执行）</Typography.Text>}
       </div>}
       <Typography.Paragraph>界鉴只探测 127.0.0.1 的少量配置候选，不扫描任意端口。自动发现不等于授权。</Typography.Paragraph>
+      {noReachableEndpoint && officialSampleStart}
       <Radio.Group className="endpoint-list" value={endpoint} onChange={(event) => setEndpoint(event.target.value)}>
         <Space direction="vertical">
           {endpoints?.candidates.map((candidate) => <Radio key={candidate.endpoint} value={candidate.endpoint} disabled={!candidate.reachable}>{candidate.endpoint} · {candidate.source} · {candidate.reachable ? '已响应' : candidate.probe_detail}</Radio>)}

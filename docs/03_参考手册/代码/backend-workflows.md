@@ -159,6 +159,7 @@
 ### `product/backend/workflows/mcp_access.py`
 - `MCP_PAIRING_SECRET_REF`
 - `class MCPAccessLevel`
+- `class MCPConnectionState`
 - `_LEVEL_ORDER`
 - `class MCPProjectGrant`
 - `class MCPAccessView`
@@ -167,11 +168,19 @@
 主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `hmac`, `product.backend.core.errors`, `product.backend.infra.secrets`, `pydantic`, `secrets`, `threading`, `time`, `typing`
 
 ### `product/backend/workflows/official_sample.py`
-- `class OfficialExperienceMode`
+- `class OfficialScenarioVersion`
 - `class OfficialExperienceView`
 - `_IDENTITY_MAPPING`
 - `class OfficialSampleExperience`
-主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.test_identity`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.control`, `product.backend.workflows.results.repair`, `product.backend.workflows.security_setup.local_observer_registry`, `product.backend.workflows.source_changes`, `product.backend.workflows.test_identities`, `pydantic`, `threading`, `time`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.test_identity`, `product.backend.core.verification.permissions`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.control`, `product.backend.workflows.official_scenario`, `product.backend.workflows.permission_intents`, `product.backend.workflows.projects.preparation`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.results.repair`, `product.backend.workflows.security_setup.local_observer_registry`, `product.backend.workflows.source_changes`, `product.backend.workflows.test_identities`, `pydantic`, `threading`, `time`
+
+### `product/backend/workflows/official_scenario.py`
+- `SAMPLE_PROJECT_ID`
+- `SAMPLE_RESOURCE_ID`
+- `EXPORT_ACTION_KEY`
+- `VIEW_ACTION_KEY`
+- `class OfficialScenarioInstaller`
+主要 import / dot-source：`__future__`, `collections.abc`, `itertools`, `json`, `pathlib`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.models`, `product.backend.workflows.recording.credentials`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.recording.project_submission`, `product.backend.workflows.recording.submission`, `product.protocols`
 
 ### `product/backend/workflows/onboarding/discovery.py`
 - `_ALLOWED_NAMES`
@@ -413,6 +422,7 @@
 - `_SOURCE_STEPS`
 - `_SOURCE_LIMITS`
 - `_SOURCE_FOUND_FACTS`
+- `_SOURCE_SUPPORTED_CLAIMS`
 主要 import / dot-source：`.models`, `__future__`, `product.backend.core.lifecycle`, `product.backend.core.repair`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.facts`, `product.backend.core.verification.trace`, `product.protocols.execution_request`, `product.protocols.observer`, `typing`
 
 ### `product/backend/workflows/results/presentation/models.py`

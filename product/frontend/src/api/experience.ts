@@ -2,7 +2,7 @@
 
 import { request } from './http'
 
-export type OfficialExperienceMode = 'GUIDED' | 'FULL'
+export type OfficialScenarioVersion = 'VULNERABLE' | 'EVIDENCE_LIMITED' | 'FIXED'
 
 export type OfficialExperienceDto = {
   available: boolean
@@ -10,12 +10,12 @@ export type OfficialExperienceDto = {
   unavailable_reason: string | null
   active: boolean
   experience_id: string | null
-  experience_mode: OfficialExperienceMode | null
   project_id: string | null
   origin: string | null
-  identities_ready: boolean
-  authorization_order: 'ENQUEUE_BEFORE_AUTHORIZE' | 'AUTHORIZE_BEFORE_ENQUEUE' | null
-  blob_observation: 'AVAILABLE' | 'UNAVAILABLE' | null
+  scenario_prepared: boolean
+  scenario_version: OfficialScenarioVersion | null
+  scenario_changed_at_us?: number | null
+  vulnerable_change_id: string | null
   repair_change_id: string | null
 }
 
@@ -50,21 +50,20 @@ export type CompetitionValidationSummaryViewDto = {
 export const experienceApi = {
   status: () => request<OfficialExperienceDto>('/api/experience/official-sample'),
   validationSummary: () => request<CompetitionValidationSummaryViewDto>('/api/experience/official-sample/validation-summary'),
-  start: (experienceMode: OfficialExperienceMode) =>
+  start: () =>
     request<OfficialExperienceDto>('/api/experience/official-sample/start', {
       method: 'POST',
-      body: JSON.stringify({ schema_version: '1', experience_mode: experienceMode, consent: true }),
+      body: JSON.stringify({ schema_version: '1', consent: true }),
     }),
-  prepareIdentities: () =>
-    request<OfficialExperienceDto>('/api/experience/official-sample/identities', { method: 'POST' }),
-  useUnavailableObservation: (authorizationOrder: 'ENQUEUE_BEFORE_AUTHORIZE' | 'AUTHORIZE_BEFORE_ENQUEUE') =>
-    request<OfficialExperienceDto>('/api/experience/official-sample/behavior', {
+  prepare: () =>
+    request<OfficialExperienceDto>('/api/experience/official-sample/prepare', { method: 'POST' }),
+  switchVersion: (version: OfficialScenarioVersion, sourceRunId?: string) =>
+    request<OfficialExperienceDto>('/api/experience/official-sample/version', {
       method: 'POST',
       body: JSON.stringify({
         schema_version: '1',
-        authorization_order: authorizationOrder,
-        blob_observation: 'UNAVAILABLE',
-        verification_run_id: null,
+        version,
+        source_run_id: sourceRunId ?? null,
       }),
     }),
   stop: () => request<OfficialExperienceDto>('/api/experience/official-sample/stop', { method: 'POST' }),

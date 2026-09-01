@@ -5,6 +5,7 @@ export type AppRoute =
   | '/application'
   | '/changes'
   | '/permissions'
+  | '/tests'
   | '/preparation'
   | '/identities'
   | '/flows'
@@ -16,20 +17,18 @@ export type AppRoute =
   | '/settings/models'
   | '/settings/system'
 
-export type ProductAreaRoute = '/workspace' | '/changes' | '/permissions' | '/preparation' | '/validation' | '/results'
+export type ProductAreaRoute = '/workspace' | '/changes' | '/permissions' | '/tests'
 
 export const productAreas = [
-  { route: '/workspace', label: '项目概览', shortLabel: '概览' },
-  { route: '/changes', label: '变化与待办', shortLabel: '变化' },
-  { route: '/permissions', label: '权限规则', shortLabel: '规则' },
-  { route: '/preparation', label: '测试准备', shortLabel: '准备' },
-  { route: '/validation', label: '验证运行', shortLabel: '验证' },
-  { route: '/results', label: '结果与历史', shortLabel: '结果' },
+  { route: '/workspace', label: '工作台', shortLabel: '工作台' },
+  { route: '/changes', label: '变化', shortLabel: '变化' },
+  { route: '/permissions', label: '权限', shortLabel: '权限' },
+  { route: '/tests', label: '测试', shortLabel: '测试' },
 ] as const
 
 export function normalizeRoute(pathname: string): AppRoute {
   if (productAreas.some((area) => area.route === pathname)) return pathname as ProductAreaRoute
-  if (pathname === '/application' || pathname === '/identities' || pathname === '/flows' || pathname === '/verification' || pathname === '/history') return pathname
+  if (pathname === '/application' || pathname === '/identities' || pathname === '/flows' || pathname === '/preparation' || pathname === '/validation' || pathname === '/results' || pathname === '/verification' || pathname === '/history') return pathname
   if (pathname === '/tools' || pathname === '/settings/models' || pathname === '/settings/system') return pathname
   return '/workspace'
 }
@@ -140,4 +139,33 @@ export function formatTimestamp(value: unknown) {
     ? new Date(numeric > 10_000_000_000_000 ? numeric / 1000 : numeric > 10_000_000_000 ? numeric : numeric * 1000)
     : new Date(String(value))
   return Number.isNaN(date.getTime()) ? '时间未提供' : new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
+const traceSemanticLabels: Record<string, string> = {
+  request_received: '请求进入目标应用',
+  server_identity_resolved: '目标应用识别出实际账号',
+  authorization_decided: '目标应用作出权限判断',
+  export_request_created: '后台导出任务已经创建',
+  export_message_sent: '导出消息进入后台链路',
+  feature_export_entered: '请求进入导出功能',
+  service_authority_expanded: '后台服务获得继续执行权限',
+  denied_request_dispatched: '被拒绝的请求仍被派发',
+  export_job_started: '后台 Worker 开始导出',
+  archive_generated: '完整项目交付包已经生成',
+  export_job_completed: '后台导出任务已经完成',
+}
+
+const traceKindLabels: Record<string, string> = {
+  ENTRY: '请求进入目标应用',
+  IDENTITY: '目标应用识别实际账号',
+  AUTHORIZATION: '应用作出权限判断',
+  PERSISTENT_EFFECT: '业务状态发生变化',
+  MESSAGE: '任务进入消息链路',
+  DELEGATION: '后台任务继续处理',
+  FINAL_EFFECT: '最终业务结果形成',
+  RECOVERY: '测试现场得到恢复',
+}
+
+export function traceEventLabel(event: { kind: string; semantic_key?: string }) {
+  return traceSemanticLabels[String(event.semantic_key ?? '')] ?? traceKindLabels[event.kind] ?? '记录到一个业务执行节点'
 }

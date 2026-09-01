@@ -137,7 +137,7 @@ def test_start_product_invokes_root_start_cmd_and_owns_its_process_tree(
     assert str(captured["kwargs"]["tree_name"]).startswith("jiejian-sample-test-")
 
 
-def test_guided_experience_uses_the_single_official_sample_entry(tmp_path: Path) -> None:
+def test_official_experience_enters_the_agent_written_problem_version(tmp_path: Path) -> None:
     events: list[tuple[str, str]] = []
 
     class Control:
@@ -147,7 +147,9 @@ def test_guided_experience_uses_the_single_official_sample_entry(tmp_path: Path)
         def click(self) -> None:
             events.append(("click", self.label))
 
-        def wait_for(self) -> None:
+        def wait_for(self, *, timeout: int | None = None) -> None:
+            if timeout is not None:
+                assert timeout == 30_000
             events.append(("wait", self.label))
 
     class Response:
@@ -172,8 +174,15 @@ def test_guided_experience_uses_the_single_official_sample_entry(tmp_path: Path)
         def goto(self, url: str, *, wait_until: str) -> None:
             events.append(("goto", f"{url}:{wait_until}"))
 
-        def get_by_role(self, role: str, *, name: str) -> Control:
+        def get_by_role(
+            self,
+            role: str,
+            *,
+            name: str,
+            exact: bool | None = None,
+        ) -> Control:
             assert role == "button"
+            assert exact in {None, True}
             return Control(name)
 
         def get_by_text(self, text: str) -> Control:
@@ -185,13 +194,13 @@ def test_guided_experience_uses_the_single_official_sample_entry(tmp_path: Path)
             return Pending()
 
         def wait_for_url(self, url: str, *, timeout: int) -> None:
-            assert (url, timeout) == ("**/#/application", 30_000)
+            assert (url, timeout) == ("**/#/workspace", 30_000)
 
         def get_by_label(self, label: str) -> Control:
             return Control(label)
 
         def screenshot(self, *, path: str, full_page: bool) -> None:
-            assert Path(path) == tmp_path / "guided-application.png"
+            assert Path(path) == tmp_path / "official-problem-version.png"
             assert full_page is True
 
     class Client:
@@ -199,23 +208,27 @@ def test_guided_experience_uses_the_single_official_sample_entry(tmp_path: Path)
 
         @staticmethod
         def call(method: str, path: str):
-            assert (method, path) == ("GET", "/api/experience/official-sample")
-            return {
-                "active": True,
-                "experience_mode": "GUIDED",
-                "project_id": "project-demo",
-                "origin": "http://127.0.0.1:9000",
-            }
+            assert method == "GET"
+            if path == "/api/experience/official-sample":
+                return {
+                    "active": True,
+                    "scenario_version": "VULNERABLE",
+                    "scenario_prepared": False,
+                    "project_id": "project-demo",
+                    "origin": "http://127.0.0.1:9000",
+                }
+            assert path == "/api/projects/project-demo/runs"
+            return []
 
     state = official.HarnessState(stage=2)
-    result = official._start_guided_experience(Page(), Client(), tmp_path, state)
+    result = official._start_official_experience(Page(), Client(), tmp_path, state)
 
     assert result["project_id"] == "project-demo"
     assert state.sample_started is True
     assert ("click", "启动官方示例") in events
-    assert ("click", "同意并启动") in events
+    assert ("click", "启动问题版") in events
     assert ("wait", "启动示例不会开始真实检查，也不会预先生成结论。") in events
-    assert ("wait", "官方示例状态") in events
+    assert ("wait", "一键应用样例配置") in events
 
 
 def test_fixed_case_submits_the_repair_change_through_the_formal_check_api() -> None:
@@ -742,61 +755,30 @@ def test_text_wait_accepts_repeated_state_without_relaxing_buttons() -> None:
     assert criteria.pop() == {"title": "确认撤销", "control_type": "Button"}
 
 
-def test_failure_cleanup_uses_public_stop_cancel_and_shutdown_without_overwriting_primary(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_failure_cleanup_uses_public_identity_sample_and_shutdown_endpoints() -> None:
     driver = official
-    state = driver.HarnessState(
-        stage=4,
-        recording_id="rec_0123456789abcdef0123456789abcdef",
-        recording_job_id="job_0123456789abcdef0123456789abcdef",
-        sample_started=True,
-        product_ready=True,
-    )
+    state = driver.HarnessState(stage=4, sample_started=True, product_ready=True)
 
     class Client:
         def __init__(self) -> None:
-            self.capture_phase = "CAPTURING"
-            self.job_state = "RUNNING"
             self.actions: list[str] = []
 
         def call(self, method: str, path: str, body=None, **_kwargs):
-            if method == "GET":
-                return {
-                    "capture_phase": self.capture_phase,
-                    "recording": {"state": "RECORDING" if self.job_state == "RUNNING" else "CANCELLED"},
-                    "job": {"state": self.job_state},
-                }
+            assert method == "POST"
             self.actions.append(path)
-            if path.endswith("/capture/stop"):
-                self.capture_phase = "FINISHED"
-            elif path.endswith("/cancel"):
-                self.job_state = "CANCELLED"
             return {"status": "NOT_PREPARED"}
 
     client = Client()
-    monkeypatch.setattr(
-        driver,
-        "_wait_recording_job_terminal",
-        lambda _client, _state, **_kwargs: driver._recording_snapshot(_client, _state),
-    )
-    primary = driver.WindowsL5Error("RECORDING_UI_NOT_READY")
     report = driver._cleanup_after_failure(client, state, {"project_owner": "identity-1"})
 
     assert client.actions == [
-        f"/api/recordings/{state.recording_id}/capture/stop",
-        f"/api/jobs/{state.recording_job_id}/cancel",
         "/api/test-identities/identity-1/reset",
         "/api/experience/official-sample/stop",
         "/api/system/shutdown",
     ]
-    assert report["before"]["capture_phase"] == "CAPTURING"
-    assert report["after"] == {
-        "capture_phase": "FINISHED",
-        "recording_state": "CANCELLED",
-        "job_state": "CANCELLED",
-    }
-    assert driver._failure_identity(primary) == ("RECORDING_UI_NOT_READY", "RECORDING_UI_NOT_READY")
+    assert report["state_closed"] is True
+    assert report["shutdown_requested"] is True
+
 
 
 def test_occupied_default_port_writes_failure_without_touching_the_existing_control(
@@ -820,56 +802,6 @@ def test_occupied_default_port_writes_failure_without_touching_the_existing_cont
     assert failure["failure_code"] == "L5_CONTROL_PORT_OCCUPIED"
     assert failure["cleanup"]["actions"] == []
     assert failure["resources"]["control_port_closed"] is False
-
-
-def test_recording_driver_failure_remains_the_primary_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    driver = official
-    state = driver.HarnessState(stage=4)
-
-    class Client:
-        def __init__(self) -> None:
-            self.capturing = False
-
-        def call(self, method: str, path: str, body=None, **_kwargs):
-            if path.endswith("/recordings"):
-                return {
-                    "recording": {"recording_id": "rec_0123456789abcdef0123456789abcdef"},
-                    "job": {"job_id": "job_0123456789abcdef0123456789abcdef"},
-                }
-            if method == "GET":
-                return {"capture_phase": "CAPTURING" if self.capturing else "AWAITING_CAPTURE"}
-            if path.endswith("/capture/start"):
-                self.capturing = True
-                return {}
-            raise AssertionError(path)
-
-    class FailingDriver:
-        def __init__(self, before, chromium):
-            assert before == frozenset({10})
-            assert chromium == Path(sys.executable)
-
-        def wait_until_ready(self, *, timeout: float) -> None:
-            assert timeout == 30
-
-        def run_business_flow(self) -> None:
-            raise driver.WindowsL5Error("RECORDING_UI_NOT_READY")
-
-    monkeypatch.setattr(driver, "window_snapshot", lambda: frozenset({10}))
-    monkeypatch.setattr(driver, "RecordingWindowDriver", FailingDriver)
-
-    with pytest.raises(driver.WindowsL5Error, match="RECORDING_UI_NOT_READY"):
-        driver._record_flow(
-            Client(),
-            "project-public",
-            "action-public",
-            "identity-public",
-            Path(sys.executable),
-            state,
-        )
-    assert state.recording_id == "rec_0123456789abcdef0123456789abcdef"
-    assert state.recording_job_id == "job_0123456789abcdef0123456789abcdef"
 
 
 def test_runtime_lock_receipts_do_not_count_as_active_locks(
@@ -902,42 +834,27 @@ def test_failure_artifact_separates_primary_error_and_cleanup_facts(tmp_path: Pa
     audit.mkdir()
     driver._write_failure(
         audit,
-        driver.WindowsL5Error("RECORDING_UI_NOT_READY"),
+        driver.SampleTestError("L5_RUN_RESULT_UNAVAILABLE"),
         driver.HarnessState(
             stage=6,
-            recording_id="recording-public",
-            recording_job_id="recording-job-public",
             active_run_id="run-public",
             active_run_job_id="run-job-public",
         ),
-        {"actions": ["capture.stop", "job.cancel"], "after": {"job_state": "CANCELLED"}},
+        {"actions": ["official-sample.stop", "system.shutdown"], "state_closed": True},
         control_closed=True,
         sample_closed=True,
         process_tree_closed=True,
     )
 
     failure = json.loads((audit / "failure.json").read_text(encoding="utf-8"))
-    assert failure["failure_code"] == "RECORDING_UI_NOT_READY"
-    assert failure["primary_failure"] == "RECORDING_UI_NOT_READY"
-    assert failure["recording_job_id"] == "recording-job-public"
+    assert failure["failure_code"] == "L5_RUN_RESULT_UNAVAILABLE"
+    assert failure["primary_failure"] == "L5_RUN_RESULT_UNAVAILABLE"
     assert failure["active_run_id"] == "run-public"
     assert failure["active_run_job_id"] == "run-job-public"
-    assert "job_id" not in failure
-    assert failure["cleanup"]["after"]["job_state"] == "CANCELLED"
+    assert "recording_id" not in failure
+    assert failure["cleanup"]["state_closed"] is True
     assert set(failure["resources"].values()) == {True}
     assert "password" not in json.dumps(failure).casefold()
-
-
-def test_completed_recording_is_a_closed_cleanup_state() -> None:
-    driver = official
-
-    assert driver._recording_state_closed(
-        {
-            "capture_phase": "FINISHED",
-            "recording_state": "COMPLETED",
-            "job_state": "SUCCEEDED",
-        }
-    ) is True
 
 
 def test_unavailable_run_result_has_stable_failure_identity(
@@ -1156,52 +1073,21 @@ def test_real_uia_capability_invokes_html_button_and_reads_status(tmp_path: Path
 
 @pytest.mark.skipif(
     os.name != "nt" or os.environ.get("JIEJIAN_RUN_WINDOWS_L5") != "1",
-    reason="真实 Windows Recording 局部闭环只在明确授权的交互用户环境运行",
+    reason="真实官方样例准备只在明确授权的交互用户环境运行",
 )
-def test_real_recording_ui_automation_closes_before_full_l5() -> None:
+def test_real_official_scenario_setup_closes_before_full_l5() -> None:
     driver = official
     run_dir = _fresh_real_probe_dir()
 
-    driver.run(ROOT, run_dir, stop_after_recording=True)
+    driver.run(ROOT, run_dir, stop_after_setup=True, verify_workspace_ui=True)
 
     summary = json.loads(
         (run_dir / "audit" / "sample-test" / "sample-test-summary.json").read_text(encoding="utf-8")
     )
-    assert summary["recording_probe"] == "passed"
+    assert summary["scenario_setup_probe"] == "passed"
+    assert summary["case_count"] == 3
+    assert summary["differential_pair_count"] == 1
+    assert summary["workspace_ui_probe"] == "passed"
     assert summary["control_port_closed"] is True
     assert summary["sample_port_closed"] is True
     assert summary["owned_process_tree_closed"] is True
-
-
-@pytest.mark.skipif(
-    os.name != "nt" or os.environ.get("JIEJIAN_RUN_WINDOWS_L5") != "1",
-    reason="真实 Windows Recording 故障收口只在明确授权的交互用户环境运行",
-)
-def test_real_recording_driver_failure_keeps_primary_error_and_closes_resources(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    driver = official
-    run_dir = _fresh_real_probe_dir()
-
-    def fail_driver(_self) -> None:
-        raise driver.WindowsL5Error("TEST_UI_DRIVER_FAILURE")
-
-    monkeypatch.setattr(driver.RecordingWindowDriver, "run_business_flow", fail_driver)
-    with pytest.raises(driver.WindowsL5Error, match="TEST_UI_DRIVER_FAILURE"):
-        driver.run(ROOT, run_dir, stop_after_recording=True)
-
-    failure = json.loads((run_dir / "audit" / "sample-test" / "failure.json").read_text(encoding="utf-8"))
-    assert failure["failure_code"] == "TEST_UI_DRIVER_FAILURE"
-    assert failure["cleanup"]["state_closed"] is True
-    assert failure["cleanup"]["after"]["job_state"] in {"SUCCEEDED", "FAILED", "CANCELLED"}
-    assert failure["cleanup"]["after"]["recording_state"] in {
-        "PENDING_REVIEW",
-        "FAILED",
-        "CANCELLED",
-        "SAFETY_STOPPED",
-    }
-    assert failure["resources"] == {
-        "control_port_closed": True,
-        "sample_port_closed": True,
-        "owned_process_tree_closed": True,
-    }

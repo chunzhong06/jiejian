@@ -6,6 +6,7 @@ export type SourceChangeViewDto = {
   change_id: string
   project_id: string
   reason: string
+  submitted_by: string
   created_at_us: number
   status: 'COMPARABLE' | 'NO_BASELINE'
   complete: boolean

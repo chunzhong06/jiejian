@@ -52,6 +52,7 @@ AuthorizationOrder = Literal[
     "AUTHORIZE_BEFORE_ENQUEUE",
 ]
 BlobObservation = Literal["AVAILABLE", "UNAVAILABLE"]
+OwnerObservation = Literal["AVAILABLE", "UNAVAILABLE"]
 
 _MANIFEST_FIELDS = {
     "schema_version",
@@ -85,6 +86,7 @@ _PATH_SECRET_NAMES = (
     "JIEJIAN_SAMPLE_SQLITE_DATABASE",
     "JIEJIAN_SAMPLE_AUDIT_ROOT",
 )
+_AUTHORIZATION_POLICY_FILE = "authorization_policy.py"
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,11 +163,16 @@ class OfficialSampleManager:
         *,
         experience_id: str | None = None,
         authorization_order: AuthorizationOrder = "ENQUEUE_BEFORE_AUTHORIZE",
+        owner_observation: OwnerObservation = "AVAILABLE",
         blob_observation: BlobObservation = "AVAILABLE",
     ) -> OfficialSampleRuntime:
         """复制官方源码并以动态端口启动；任一步失败都回收已创建进程。"""
 
-        _validate_behavior(authorization_order, blob_observation)
+        _validate_behavior(
+            authorization_order,
+            owner_observation,
+            blob_observation,
+        )
         with self._lock:
             if self.active is not None:
                 raise JiejianError(
@@ -194,10 +201,19 @@ class OfficialSampleManager:
                     "官方示例体验目录已经存在",
                 )
             _copy_source(installation.source, source_root)
+            _write_authorization_policy(
+                source_root / _AUTHORIZATION_POLICY_FILE,
+                authorization_order,
+            )
             runtime_root.mkdir(parents=True, exist_ok=False)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             control_path = runtime_root / "control.json"
-            _write_control(control_path, authorization_order, blob_observation)
+            _write_control(
+                control_path,
+                authorization_order,
+                owner_observation,
+                blob_observation,
+            )
             secret_values = _new_secret_values(runtime_root)
             child_environment = dict(self._environment)
             child_environment.update(
@@ -290,13 +306,20 @@ class OfficialSampleManager:
         experience_id: str,
         *,
         authorization_order: AuthorizationOrder,
+        owner_observation: OwnerObservation,
         blob_observation: BlobObservation,
     ) -> OfficialSampleRuntime:
         """先重置当前副作用，再原子切换机械行为；origin 与源码快照保持不变。"""
 
-        _validate_behavior(authorization_order, blob_observation)
+        _validate_behavior(
+            authorization_order,
+            owner_observation,
+            blob_observation,
+        )
         with self._lock:
             runtime = self._require_active(experience_id)
+            policy_path = runtime.source_root / _AUTHORIZATION_POLICY_FILE
+            previous_policy = policy_path.read_text(encoding="utf-8")
             try:
                 with httpx.Client(trust_env=False, follow_redirects=False) as client:
                     response = client.post(
@@ -305,12 +328,18 @@ class OfficialSampleManager:
                         timeout=2.0,
                     )
                     response.raise_for_status()
+                _write_authorization_policy(policy_path, authorization_order)
                 _write_control(
                     runtime.control_path,
                     authorization_order,
+                    owner_observation,
                     blob_observation,
                 )
             except (httpx.HTTPError, OSError) as exc:
+                try:
+                    _write_text_atomic(policy_path, previous_policy)
+                except OSError:
+                    pass
                 raise JiejianError(
                     ErrorCode.OFFICIAL_SAMPLE_START_FAILED,
                     "官方示例行为切换失败",
@@ -485,12 +514,16 @@ def _new_secret_values(runtime_root: Path) -> dict[str, str]:
 
 def _validate_behavior(
     authorization_order: str,
+    owner_observation: str,
     blob_observation: str,
 ) -> None:
     if authorization_order not in {
         "ENQUEUE_BEFORE_AUTHORIZE",
         "AUTHORIZE_BEFORE_ENQUEUE",
-    } or blob_observation not in {"AVAILABLE", "UNAVAILABLE"}:
+    } or owner_observation not in {"AVAILABLE", "UNAVAILABLE"} or blob_observation not in {
+        "AVAILABLE",
+        "UNAVAILABLE",
+    }:
         raise JiejianError(
             ErrorCode.STATE_PRECONDITION,
             "官方示例行为参数无效",
@@ -500,11 +533,13 @@ def _validate_behavior(
 def _write_control(
     path: Path,
     authorization_order: AuthorizationOrder,
+    owner_observation: OwnerObservation,
     blob_observation: BlobObservation,
 ) -> None:
     payload = {
         "schema_version": "1",
         "authorization_order": authorization_order,
+        "owner_observation": owner_observation,
         "blob_observation": blob_observation,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -513,6 +548,40 @@ def _write_control(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
         encoding="utf-8",
     )
+    os.replace(temporary, path)
+
+
+def _write_authorization_policy(
+    path: Path,
+    authorization_order: AuthorizationOrder,
+) -> None:
+    """只改官方源码中唯一的机械顺序，让运行行为与源码 diff 保持一致。"""
+
+    source = f'''# 协作空间导出动作的授权顺序；官方样例会修改本文件来形成可核验的真实源码变化。
+
+from typing import Literal
+
+
+AuthorizationOrder = Literal[
+    "ENQUEUE_BEFORE_AUTHORIZE",
+    "AUTHORIZE_BEFORE_ENQUEUE",
+]
+
+
+def export_authorization_order() -> AuthorizationOrder:
+    """返回当前导出实现采用的授权与后台任务顺序。"""
+
+    return "{authorization_order}"
+'''
+    _write_text_atomic(path, source)
+
+
+def _write_text_atomic(path: Path, content: str) -> None:
+    """原子替换单个受控文本文件，避免 Sample 读取到半写入源码。"""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp-{uuid4().hex}")
+    temporary.write_text(content, encoding="utf-8")
     os.replace(temporary, path)
 
 
@@ -583,6 +652,7 @@ def _append_event(
 __all__ = [
     "AuthorizationOrder",
     "BlobObservation",
+    "OwnerObservation",
     "OfficialSampleInstallation",
     "OfficialSampleManager",
     "OfficialSampleRuntime",

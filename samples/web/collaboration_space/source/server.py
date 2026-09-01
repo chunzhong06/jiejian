@@ -8,6 +8,7 @@ import base64
 import hmac
 import json
 import os
+import runpy
 import secrets
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -30,6 +31,7 @@ else:
 
 AuthorizationOrder = Literal["ENQUEUE_BEFORE_AUTHORIZE", "AUTHORIZE_BEFORE_ENQUEUE"]
 BlobObservation = Literal["AVAILABLE", "UNAVAILABLE"]
+OwnerObservation = Literal["AVAILABLE", "UNAVAILABLE"]
 ValidationBreakMode = Literal[
     "object_tenant_check_missing",
     "new_entry_inheritance",
@@ -109,10 +111,12 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
         address: tuple[str, int],
         *,
         authorization_order: AuthorizationOrder = "AUTHORIZE_BEFORE_ENQUEUE",
+        owner_observation: OwnerObservation = "AVAILABLE",
         blob_observation: BlobObservation = "AVAILABLE",
         validation_mode: ValidationBreakMode | None = None,
         validation_implementation: ValidationImplementation | None = None,
         runtime_root: str | Path | None = None,
+        authorization_policy_path: str | Path | None = None,
         passwords: Mapping[str, str] | None = None,
         session_material: Mapping[str, str] | None = None,
         queue_sas: str | None = None,
@@ -124,6 +128,8 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
             raise ValueError("collaboration sample only binds to 127.0.0.1")
         if authorization_order not in {"ENQUEUE_BEFORE_AUTHORIZE", "AUTHORIZE_BEFORE_ENQUEUE"}:
             raise ValueError("invalid authorization order")
+        if owner_observation not in {"AVAILABLE", "UNAVAILABLE"}:
+            raise ValueError("invalid owner observation mode")
         if blob_observation not in {"AVAILABLE", "UNAVAILABLE"}:
             raise ValueError("invalid blob observation mode")
         if (validation_mode is None) != (validation_implementation is None):
@@ -142,11 +148,18 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
         self.task_bearer = task_bearer or os.environ.get("JIEJIAN_SAMPLE_TASK_BEARER")
         self.owner_observer = owner_observer or os.environ.get(_OWNER_OBSERVER_ENV)
         self.runtime_root = Path(runtime_root or os.environ.get("JIEJIAN_SAMPLE_RUNTIME_ROOT", "var/runtime/samples/collaboration-space")).resolve()
+        self._authorization_policy_path = Path(
+            authorization_policy_path or Path(__file__).with_name("authorization_policy.py")
+        ).resolve()
         super().__init__(address, CollaborationRequestHandler)
         self.storage = CollaborationStorage(self.runtime_root)
         self._control_path = self.runtime_root / "control.json"
         if not self._control_path.is_file():
-            self._write_control(authorization_order, blob_observation)
+            self._write_control(
+                authorization_order,
+                owner_observation,
+                blob_observation,
+            )
         self._read_control()
         self.worker = ExportWorker(self.storage)
         self._case_actors: dict[str, str] = {}
@@ -234,8 +247,10 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
         temporary.write_text(json.dumps(descriptor, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
         os.replace(temporary, path)
 
-    def _read_control(self) -> tuple[AuthorizationOrder, BlobObservation]:
-        """读取被测应用自己的机械行为配置；该事实不进入 Observer descriptor。"""
+    def _read_control(
+        self,
+    ) -> tuple[AuthorizationOrder, OwnerObservation, BlobObservation]:
+        """读取源码中的授权顺序和两项关键观察开关；这些控制项不进入 Observer descriptor。"""
 
         try:
             value = json.loads(self._control_path.read_text(encoding="utf-8"))
@@ -244,28 +259,47 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
         if type(value) is not dict or set(value) != {
             "schema_version",
             "authorization_order",
+            "owner_observation",
             "blob_observation",
         } or value["schema_version"] != "1":
             raise ValueError("sample control has invalid fields")
-        authorization_order = value["authorization_order"]
+        authorization_order = self._read_authorization_policy()
+        owner_observation = value["owner_observation"]
         blob_observation = value["blob_observation"]
+        if value["authorization_order"] != authorization_order:
+            raise ValueError("sample control and source authorization order differ")
+        if owner_observation not in {"AVAILABLE", "UNAVAILABLE"}:
+            raise ValueError("invalid owner observation mode")
+        if blob_observation not in {"AVAILABLE", "UNAVAILABLE"}:
+            raise ValueError("invalid blob observation mode")
+        return authorization_order, owner_observation, blob_observation
+
+    def _read_authorization_policy(self) -> AuthorizationOrder:
+        """每次执行前读取受控源码，使 Agent 修改真实决定当前业务顺序。"""
+
+        try:
+            namespace = runpy.run_path(str(self._authorization_policy_path))
+            resolve = namespace["export_authorization_order"]
+            authorization_order = resolve()
+        except (OSError, KeyError, TypeError, ValueError) as exc:
+            raise ValueError("sample authorization source is unavailable") from exc
         if authorization_order not in {
             "ENQUEUE_BEFORE_AUTHORIZE",
             "AUTHORIZE_BEFORE_ENQUEUE",
         }:
             raise ValueError("invalid authorization order")
-        if blob_observation not in {"AVAILABLE", "UNAVAILABLE"}:
-            raise ValueError("invalid blob observation mode")
-        return authorization_order, blob_observation
+        return authorization_order
 
     def _write_control(
         self,
         authorization_order: AuthorizationOrder,
+        owner_observation: OwnerObservation,
         blob_observation: BlobObservation,
     ) -> None:
         payload = {
             "schema_version": "1",
             "authorization_order": authorization_order,
+            "owner_observation": owner_observation,
             "blob_observation": blob_observation,
         }
         self.runtime_root.mkdir(parents=True, exist_ok=True)
@@ -281,8 +315,12 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
         return self._read_control()[0]
 
     @property
-    def blob_observation(self) -> BlobObservation:
+    def owner_observation(self) -> OwnerObservation:
         return self._read_control()[1]
+
+    @property
+    def blob_observation(self) -> BlobObservation:
+        return self._read_control()[2]
 
     def reset(self) -> None:
         self.worker.stop()
@@ -331,6 +369,18 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 self.server.owner_observer,
                 code="OWNER_OBSERVER_ACCESS_DENIED",
             ):
+                return
+            marker = self.headers.get("X-Jiejian-Case-ID", "")
+            # 初始面与 BEFORE 面尚未记录主体，仍返回可靠基线；Bob 的目标请求到达后，
+            # 证据受限版才关闭只读业务状态，让结论诚实停留在“证据不足”。
+            if (
+                self.server.owner_observation == "UNAVAILABLE"
+                and self.server.case_actor(marker) == "bob"
+            ):
+                self._json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"code": "OWNER_OBSERVER_UNAVAILABLE"},
+                )
                 return
             self._json(HTTPStatus.OK, self.server.storage.resource_state())
             return
@@ -1039,10 +1089,12 @@ def create_collaboration_space_server(
     *,
     port: int = 0,
     authorization_order: AuthorizationOrder = "AUTHORIZE_BEFORE_ENQUEUE",
+    owner_observation: OwnerObservation = "AVAILABLE",
     blob_observation: BlobObservation = "AVAILABLE",
     validation_mode: ValidationBreakMode | None = None,
     validation_implementation: ValidationImplementation | None = None,
     runtime_root: str | Path | None = None,
+    authorization_policy_path: str | Path | None = None,
     passwords: Mapping[str, str] | None = None,
     session_material: Mapping[str, str] | None = None,
     queue_sas: str | None = None,
@@ -1055,10 +1107,12 @@ def create_collaboration_space_server(
     return CollaborationSpaceServer(
         ("127.0.0.1", port),
         authorization_order=authorization_order,
+        owner_observation=owner_observation,
         blob_observation=blob_observation,
         validation_mode=validation_mode,
         validation_implementation=validation_implementation,
         runtime_root=runtime_root,
+        authorization_policy_path=authorization_policy_path,
         passwords=passwords,
         session_material=session_material,
         queue_sas=queue_sas,

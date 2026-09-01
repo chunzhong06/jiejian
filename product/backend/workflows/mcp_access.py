@@ -36,6 +36,15 @@ class MCPAccessLevel(StrEnum):
     EXECUTE = "EXECUTE"
 
 
+class MCPConnectionState(StrEnum):
+    DISABLED = "DISABLED"
+    CREDENTIAL_READY = "CREDENTIAL_READY"
+    AUTHENTICATED = "AUTHENTICATED"
+    CONNECTED = "CONNECTED"
+    CREDENTIAL_REJECTED = "CREDENTIAL_REJECTED"
+    PAUSED = "PAUSED"
+
+
 _LEVEL_ORDER = {
     MCPAccessLevel.READ: 0,
     MCPAccessLevel.PREPARE: 1,
@@ -68,6 +77,9 @@ class MCPAccessView(_MCPAccessModel):
     client_name: str | None = Field(default=None, max_length=128)
     client_version: str | None = Field(default=None, max_length=128)
     last_seen_at_us: int | None = Field(default=None, ge=0)
+    connection_state: MCPConnectionState
+    last_authenticated_at_us: int | None = Field(default=None, ge=0)
+    last_auth_failure_at_us: int | None = Field(default=None, ge=0)
 
 
 class MCPAccessCredentialView(MCPAccessView):
@@ -98,6 +110,9 @@ class MCPAccessController:
         self._client_name: str | None = None
         self._client_version: str | None = None
         self._last_seen_at_us: int | None = None
+        self._last_authenticated_at_us: int | None = None
+        self._last_auth_failure_at_us: int | None = None
+        self._last_auth_succeeded: bool | None = None
         self._lock = RLock()
 
     def view(self) -> MCPAccessView:
@@ -120,7 +135,7 @@ class MCPAccessController:
             if self._token is None:
                 raise JiejianError(
                     ErrorCode.MCP_DISABLED,
-                    "尚未建立 MCP 配对，请先在 AI 工具连接面板中完成首次配对。",
+                    "尚未创建 MCP 连接凭据，请先在 AI 工具连接页面开始连接。",
                 )
             token = secrets.token_urlsafe(32)
             self._secret_store.write(MCP_PAIRING_SECRET_REF, token)
@@ -129,12 +144,23 @@ class MCPAccessController:
             self._clear_session_locked()
             return self._credential_view_locked()
 
+    def resume(self) -> MCPAccessView:
+        with self._lock:
+            if self._token is None:
+                raise JiejianError(
+                    ErrorCode.MCP_DISABLED,
+                    "尚未创建 MCP 连接凭据，请先在 AI 工具连接页面开始连接。",
+                )
+            self._accepting_connections = True
+            self._clear_session_locked()
+            return self._view_locked()
+
     def reveal(self) -> MCPAccessCredentialView:
         with self._lock:
             if self._token is None:
                 raise JiejianError(
                     ErrorCode.MCP_DISABLED,
-                    "尚未建立 MCP 配对，请先在 AI 工具连接面板中完成首次配对。",
+                    "尚未创建 MCP 连接凭据，请先在 AI 工具连接页面开始连接。",
                 )
             return self._credential_view_locked()
 
@@ -209,13 +235,18 @@ class MCPAccessController:
         client_name: str | None,
         client_version: str | None,
     ) -> None:
-        """记录 SDK 已验证连接的有界身份和最近活动，不保存请求正文。"""
+        """记录 SDK 已处理的请求和可选客户端身份，不保存请求正文。"""
 
         with self._lock:
             if self._token is None or not self._accepting_connections:
                 return
-            self._client_name = self._bounded_client_value(client_name)
-            self._client_version = self._bounded_client_value(client_version)
+            bounded_name = self._bounded_client_value(client_name)
+            bounded_version = self._bounded_client_value(client_version)
+            # 后续无状态请求缺少 initialize 身份时，不能擦除此前已经确认的客户端信息。
+            if bounded_name is not None:
+                self._client_name = bounded_name
+            if bounded_version is not None:
+                self._client_version = bounded_version
             self._last_seen_at_us = self._clock_us()
 
     def _authorize_locked(self, authorization: str | None) -> None:
@@ -231,10 +262,14 @@ class MCPAccessController:
             or not presented
             or not compare_digest(presented, self._token)
         ):
+            self._last_auth_failure_at_us = self._clock_us()
+            self._last_auth_succeeded = False
             raise JiejianError(
                 ErrorCode.MCP_AUTH_REQUIRED,
                 "MCP Bearer 令牌缺失或已经失效，请复制当前令牌后重试。",
             )
+        self._last_authenticated_at_us = self._clock_us()
+        self._last_auth_succeeded = True
 
     def _view_locked(self) -> MCPAccessView:
         return MCPAccessView(
@@ -249,6 +284,9 @@ class MCPAccessController:
             client_name=self._client_name,
             client_version=self._client_version,
             last_seen_at_us=self._last_seen_at_us,
+            connection_state=self._connection_state_locked(),
+            last_authenticated_at_us=self._last_authenticated_at_us,
+            last_auth_failure_at_us=self._last_auth_failure_at_us,
         )
 
     def _credential_view_locked(self) -> MCPAccessCredentialView:
@@ -263,6 +301,22 @@ class MCPAccessController:
         self._client_name = None
         self._client_version = None
         self._last_seen_at_us = None
+        self._last_authenticated_at_us = None
+        self._last_auth_failure_at_us = None
+        self._last_auth_succeeded = None
+
+    def _connection_state_locked(self) -> MCPConnectionState:
+        if self._token is None:
+            return MCPConnectionState.DISABLED
+        if not self._accepting_connections:
+            return MCPConnectionState.PAUSED
+        if self._last_seen_at_us is not None:
+            return MCPConnectionState.CONNECTED
+        if self._last_auth_succeeded is False:
+            return MCPConnectionState.CREDENTIAL_REJECTED
+        if self._last_auth_succeeded is True:
+            return MCPConnectionState.AUTHENTICATED
+        return MCPConnectionState.CREDENTIAL_READY
 
     @staticmethod
     def _bounded_client_value(value: str | None) -> str | None:
@@ -277,6 +331,7 @@ __all__ = [
     "MCPAccessCredentialView",
     "MCPAccessLevel",
     "MCPAccessView",
+    "MCPConnectionState",
     "MCP_PAIRING_SECRET_REF",
     "MCPProjectGrant",
 ]

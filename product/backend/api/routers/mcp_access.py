@@ -38,6 +38,10 @@ def build_mcp_access_router(
     async def rotate_mcp_access():
         return data_response(access.rotate().model_dump(mode="json"))
 
+    @router.post("/api/mcp/access/resume", response_model=ApiResponse)
+    async def resume_mcp_access():
+        return data_response(access.resume().model_dump(mode="json"))
+
     @router.post("/api/mcp/access/pause", response_model=ApiResponse)
     async def pause_mcp_access():
         return data_response(access.pause().model_dump(mode="json"))

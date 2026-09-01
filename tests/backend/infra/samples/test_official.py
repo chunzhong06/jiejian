@@ -159,6 +159,9 @@ def test_official_sample_runs_from_copied_source_with_dynamic_port_and_no_secret
         assert runtime.origin.startswith("http://127.0.0.1:")
         assert not runtime.origin.endswith(":8865")
         assert (runtime.source_root / "server.py").is_file()
+        assert "ENQUEUE_BEFORE_AUTHORIZE" in (
+            runtime.source_root / "authorization_policy.py"
+        ).read_text(encoding="utf-8").rsplit("return ", 1)[-1]
         assert not (runtime.source_root / "collaboration_space").exists()
         assert runtime.descriptor_path.is_file()
         descriptor = json.loads(runtime.descriptor_path.read_text(encoding="utf-8"))
@@ -208,6 +211,7 @@ def test_behavior_switch_keeps_origin_and_source_but_resets_sample_state(
         switched = manager.switch_behavior(
             runtime.experience_id,
             authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
+            owner_observation="UNAVAILABLE",
             blob_observation="UNAVAILABLE",
         )
         assert switched.origin == runtime.origin
@@ -215,7 +219,12 @@ def test_behavior_switch_keeps_origin_and_source_but_resets_sample_state(
         assert json.loads(runtime.control_path.read_text(encoding="utf-8")) == {
             "schema_version": "1",
             "authorization_order": "AUTHORIZE_BEFORE_ENQUEUE",
+            "owner_observation": "UNAVAILABLE",
             "blob_observation": "UNAVAILABLE",
         }
+        policy = (runtime.source_root / "authorization_policy.py").read_text(
+            encoding="utf-8"
+        )
+        assert policy.rsplit("return ", 1)[-1].strip() == '"AUTHORIZE_BEFORE_ENQUEUE"'
     finally:
         manager.stop()

@@ -1,7 +1,8 @@
 /* 正式报告面板测试：确认已发布 HTML view、打开链接和导出菜单复用同一报告选择。 */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ProductThemeProvider } from '../../app/ThemeContext'
 import { ReportPanel } from './ReportPanel'
 
 const reportsApi = vi.hoisted(() => ({
@@ -15,6 +16,8 @@ vi.mock('../../api/results', () => ({ resultsApi: reportsApi }))
 vi.mock('../../api/runs', () => ({ runsApi }))
 
 describe('ReportPanel', () => {
+  afterEach(() => localStorage.removeItem('jiejian.theme'))
+
   it('使用同一编码后的 view URL、沙箱 iframe 和四项导出菜单', async () => {
     const runId = 'run/with space'
     const reportId = 'report/with space'
@@ -56,5 +59,21 @@ describe('ReportPanel', () => {
     expect(screen.getByText('SARIF')).toBeInTheDocument()
     expect(screen.getByText('JUnit')).toBeInTheDocument()
     expect(screen.queryByText('JSON.stringify')).not.toBeInTheDocument()
+  })
+
+  it('暗色主题为内嵌报告和新窗口链接选择同一暗色视图', async () => {
+    localStorage.setItem('jiejian.theme', 'dark')
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    })
+    runsApi.run.mockResolvedValue({ run_id: 'run-dark', result_integrity: 'VERIFIED' })
+    reportsApi.reports.mockResolvedValue([{ report_id: 'report-dark' }])
+
+    render(<ProductThemeProvider><ReportPanel run={{ run_id: 'run-dark' }} onError={vi.fn()} /></ProductThemeProvider>)
+
+    const expected = '/api/runs/run-dark/reports/report-dark/view#dark-theme'
+    expect(await screen.findByTitle('界鉴权限安全检查报告')).toHaveAttribute('src', expected)
+    expect(screen.getByRole('link', { name: '在新窗口打开' })).toHaveAttribute('href', expected)
   })
 })

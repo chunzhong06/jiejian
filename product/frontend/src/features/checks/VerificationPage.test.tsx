@@ -48,7 +48,7 @@ function issue(overrides: Record<string, unknown> = {}) {
     planned_identity_id: 'member', planned_identity_label: 'Bob · 成员', actual_identity_status: 'CONFIRMED', actual_identity_id: 'bob', actual_identity_label: 'Bob', severity: 'critical',
     evidence_refs: ['evidence-1'], evidence_sources: [], diagnosis: diagnosis(),
     claim_boundary: { surface_response_status: 'DENIED', business_effect_status: 'CONFIRMED', actual_identity_status: 'CONFIRMED', breakpoint_precision: 'EXACT', repair_status: null, supported_statement: 'Bob 凭据的实验中，完整资料包已经生成。', unsupported_statements: ['不能宣称所有导出路径都存在同一问题。'] },
-    evidence_explanations: [{ label: '最终资料包观察', source: '目标业务状态', step: '最终业务结果形成', proves: '完整资料包在本次实验中已经生成。', does_not_prove: '不能单独证明所有导出入口。', relevance: '来自当前 Run 的已发布观察事实。', evidence_refs: ['evidence-1'], component: 'collaboration-server', observed_at_us: 1_003 }],
+    evidence_explanations: [{ label: '最终资料包观察', source: '目标业务状态', step: '最终业务结果形成', proves: '完整资料包在本次实验中已经生成。', does_not_prove: '不能单独证明所有导出入口。', relevance: '来自当前 Run 的已发布观察事实。', evidence_refs: ['evidence-1'], component: 'collaboration-server', location: '目标应用接口 /api/projects/package/export', observer_id: 'owner-export-observer', observation_phase: 'EVENTUAL', provenance_type: 'OWNER_API', adapter_version: 'owner-api-1', source_sha256: 'c'.repeat(64), observed_at_us: 1_003 }],
     verdict: 'VULNERABLE', occurrence_status: 'APPEARED', repair_requirement: null,
     ...overrides,
   }
@@ -71,29 +71,39 @@ describe('VerificationPage', () => {
     expect(resultsApi.presentation).not.toHaveBeenCalled()
   })
 
-  it('在三栏中锁定权限考题、画唯一红边，并使用共用证据抽屉', async () => {
+  it('先展示矛盾、关键链和事实依据，再按需展开完整边界', async () => {
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(presentation())
     render(<VerificationPage run={run} onError={vi.fn()} />)
 
-    expect(await screen.findByText('权限考题已锁定')).toBeInTheDocument()
-    expect(screen.getAllByText('成员 Bob 不可以导出项目负责人的完整资料包。')).toHaveLength(2)
-    expect(screen.getByText('预期与实际业务路径')).toBeInTheDocument()
-    expect(document.querySelectorAll('.verification-board > .verification-column')).toHaveLength(3)
+    expect(await screen.findByText('本轮核心矛盾')).toBeInTheDocument()
+    expect(screen.getByText('表面看到')).toBeInTheDocument()
+    expect(screen.getByText('页面显示已拒绝')).toBeInTheDocument()
+    expect(screen.getByText('独立观察到')).toBeInTheDocument()
+    expect(screen.getAllByText('完整资料包已经生成').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: '关键执行链' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '结论依据' })).toBeInTheDocument()
+    expect(screen.queryByText('权限考题已锁定')).not.toBeInTheDocument()
     expect(document.querySelectorAll('.is-exact-break')).toHaveLength(1)
-    expect(screen.getByText('Bob 凭据的实验中，完整资料包已经生成。')).toBeInTheDocument()
-    expect(document.querySelector('.verification-orphan-card')).toHaveTextContent('完整资料包已经生成')
     expect(screen.queryByText('internal-effect-id')).not.toBeInTheDocument()
-    expect(screen.queryByText('collaboration-server')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/collaboration-server/).length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: '查看“请求进入目标应用”证据' }))
+    fireEvent.click(screen.getByRole('button', { name: '查看“目标应用识别实际账号”证据' }))
     expect(await screen.findByText('证据说明 · 成员不应导出完整项目资料包')).toBeInTheDocument()
-    for (const label of ['发生了什么', '证据来源', '发生步骤', '可以证明', '不能证明', '为什么属于本轮', '责任组件', '采集时间']) expect(screen.getByText(label)).toBeInTheDocument()
-    expect(screen.getByText('collaboration-server')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /查看技术细节/ }))
+    for (const label of ['在哪里看到', '看到什么', '因此支持']) expect(screen.getByText(label)).toBeInTheDocument()
+    expect(screen.getByText('目标应用接口 /api/projects/package/export')).toBeInTheDocument()
+    expect(screen.queryByText('这条证据不能单独说明')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /查看观察者与原始引用/ }))
+    for (const label of ['具体观察者', '责任组件', '观察时点', '采集来源', '适配器版本', '核对方式', '为什么属于本轮', '采集时间', '源数据摘要', '证据引用']) expect(screen.getByText(label)).toBeInTheDocument()
+    expect(screen.getByText('owner-export-observer')).toBeInTheDocument()
     expect(screen.getByText('evidence-1')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '查看限制' }))
-    expect(document.getElementById('verification-limitations')).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: /本轮证据边界/ }))
+    expect(screen.getByText('不能单独证明所有导出入口。')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByText('查看本次锁定的权限规则'))
+    expect(await screen.findByText('权限考题已锁定')).toBeInTheDocument()
+    expect(screen.getByText('成员 Bob 不可以导出项目负责人的完整资料包。')).toBeInTheDocument()
   })
 
   it('RANGE 只画两个区间边界，不宣称唯一断点', async () => {
@@ -116,6 +126,7 @@ describe('VerificationPage', () => {
     resultsApi.presentation.mockResolvedValue(presentation({ verdict: 'INCONCLUSIVE', issues: [issue({ verdict: 'INCONCLUSIVE', conclusion: '证据不足', actual_identity_status: 'UNAVAILABLE', diagnosis: diagnosis(), claim_boundary: { ...issue().claim_boundary, actual_identity_status: 'UNAVAILABLE' } })] }))
     render(<VerificationPage run={{ ...run, run_id: 'run-inconclusive', verdict: 'INCONCLUSIVE' }} onError={vi.fn()} />)
     expect(await screen.findByText('证据不足，现场不标记红色断裂点')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('查看当前结论能说到哪里'))
     expect(screen.getByText('实际执行身份无法独立确认')).toBeInTheDocument()
     expect(document.querySelectorAll('.is-exact-break')).toHaveLength(0)
   })

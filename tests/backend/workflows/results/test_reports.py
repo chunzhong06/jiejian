@@ -479,6 +479,8 @@ def test_html_uses_presentation_snapshot_and_escapes_dynamic_content() -> None:
     )
     document = render_html(_base(verdict="BLOCK", presentation=presentation)).decode("utf-8")
     assert "界鉴 · 权限安全检查报告" in document
+    assert '<html lang="zh-CN" id="dark-theme">' in document
+    assert ":root:target{color-scheme:dark" in document
     assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &quot;quoted&quot;" in document
     assert '<div class="summary-item"><span>检查项</span><strong>1</strong>' in document
     assert '<div class="summary-item"><span>未覆盖</span><strong>2</strong>' in document

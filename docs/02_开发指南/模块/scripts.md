@@ -24,10 +24,10 @@
 | `scripts/dev/commands.ps1` | start/test/schema/docs/frontend-test/cli/shell 的能力组合 | 重复实现各模块已有能力 |
 | `scripts/dev/sample-test.ps1` | 自动 L5 的 PowerShell 入口、独立运行目录、Harness 调用与净化汇总发布位置 | 产品 prepare、UIA 或十阶段编排实现 |
 | `scripts/dev/sample_test/driver.py` | `official/validation/competition/all` 参数解析、suite 分派与成功汇总原子发布 | 十阶段编排、30 Case 实现或 Windows UIA |
-| `scripts/dev/sample_test/official.py` | 从真实 `start.cmd` 开始的十阶段自动 L5、错误保真和资源收口 | Windows UI Automation 细节、生产领域语义 |
+| `scripts/dev/sample_test/official.py` | 从真实 `start.cmd` 开始验证问题版、一键合同、Agent 修复、三态结果与资源收口 | 普通应用 Recording UIA 细节、生产领域语义 |
 | `scripts/dev/sample_test/validation.py` | 30 Case 编排与正式 Continuity/Breakpoint 算法调用 | private oracle 定义或 Domain Model 重写 |
 | `scripts/dev/sample_test/adapter.py`、`registry.py`、`oracle.py` | 公开事实适配、public registry 与 private oracle 外层验收 | 产品 Verdict 或目标授权输入 |
-| `scripts/dev/sample_test/windows.py` | Windows UIA 窗口证明、InvokePattern 与可访问性状态等待 | 前台激活、物理输入、CDP 或浏览器测试开关 |
+| `scripts/dev/sample_test/windows.py` | 普通应用 headed Recording 的 Windows UIA 能力探针 | 官方样例一键配置、前台激活、物理输入、CDP 或浏览器测试开关 |
 | `scripts/dev/package.ps1` | Windows x64 Portable 的工具准备、内部 Wheel 与固定 artifacts 总编排 | Base Tree/ZIP 细节、产品领域语义 |
 | `scripts/build/` | Hatch 前端映射与 Portable Base Tree、双 ZIP、校验和组装 | 开发命令分派、源码运行准备和产品领域逻辑 |
 | `scripts/start.ps1`、`scripts/startup/` | 六阶段 Windows 产品启动、展示、运行状态、源码回执消费和产品入口 | 开发命令总控、第二套 prepare |
@@ -57,10 +57,10 @@
 - `start.cmd → start.ps1 → dev.ps1 prepare → serve` 是唯一产品启动路线；`dev.ps1 start` 不提前取得 prepare lock。
 - `docs` 只定位已有且符合要求的受控 CPython 3.13，不为文档检查执行完整 uv 同步。
 - `package` 准备冻结 CPython、生产依赖、前端与 Chromium，只从一个 Base Tree 生成 full/nosamples；正式产物只进入 `var/development/release/artifacts`。
-- `scripts/dev.ps1` 只做总控；sample-test 的 PowerShell、Python Harness 和 Windows UIA 实现都留在 `scripts/dev/`，不回填总入口或 `commands.ps1`。
+- `scripts/dev.ps1` 只做总控；sample-test 的 PowerShell、Python Harness 和独立 Recording UIA 探针都留在 `scripts/dev/`，不回填总入口或 `commands.ps1`。
 - `sample-test` 必须从真实 `start.cmd` 启动默认 GUI 控制面；不能改成直接 `serve`、`create_app()` 或 TestClient，也不能提前替产品完成前端、数据库和 source receipt 准备。
 - validation 类 suite 只有在外层验收成功后才原子替换 `var/audit/competition/latest-validation-summary.json`；展示副本只含聚合计数与来源元数据，失败运行、逐 Case 结果和 private oracle 都不能覆盖或进入该文件。
-- UIA 依赖只属于 dev dependency，`product/**` 不得导入 `pywinauto`；Recording 必须由正式 Worker 和独立 Recording Process 创建 headed Chromium。
+- UIA 依赖只属于 dev dependency，`product/**` 不得导入 `pywinauto`；普通应用 Recording 仍由正式 Worker 和独立 Recording Process 创建 headed Chromium，官方样例不得为此恢复旧逐项录制导览。
 - `-Update`、`-ForcePrepare` 和位置参数按入口合同显式允许，非法组合在锁和其他副作用前失败。
 - 脚本设置的环境变量、控制台编码、当前目录和 prepare lock 在成功、失败与提前退出时都必须恢复。
 - 前端 `node_modules`、构建输出、缓存、测试临时目录、下载和工具安装只进入 `var/`。

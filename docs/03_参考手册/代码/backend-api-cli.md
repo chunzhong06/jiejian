@@ -60,7 +60,7 @@
 ### `product/backend/api/routers/experience.py`
 - `build_experience_router(context) -> APIRouter`
 - `class OfficialSampleStartRequest`
-- `class OfficialSampleBehaviorRequest`
+- `class OfficialSampleVersionRequest`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.workflows.official_sample`, `pydantic`, `typing`
 
 ### `product/backend/api/routers/gating.py`

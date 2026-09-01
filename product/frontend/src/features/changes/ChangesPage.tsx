@@ -1,6 +1,6 @@
 // 代码变化页按新到旧展示 Agent 修改和权限影响，不把 Agent 声明当成真实差异。
 
-import { Alert, Button, Card, Empty, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Space, Spin, Tag, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import type { ApiError } from '../../api/http'
 import type { ProductStatusDto, ProjectDto } from '../../api/projects'
@@ -29,19 +29,39 @@ export function ChangesPage({ project, status, onError, onNavigate }: {
     return () => { active = false }
   }, [onError, project.project_id])
 
+  const revalidation = status?.revalidation ?? null
+  const currentTitle = loading
+    ? '正在读取当前代码变化。'
+    : revalidation?.status === 'NO_CHANGE' || changes.length === 0
+      ? '当前没有需要重新核对的代码变化。'
+      : revalidation
+        ? revalidationLabel(revalidation.status)
+        : `已记录 ${changes.length} 次 Agent 变化，等待确认本轮影响。`
+
   return <div className="changes-page">
-    <PageTaskHeader title="变化与待办" description="每次 Agent 修改都与上一份源码快照比较，并重新核对权限规则、测试准备和当前安全基线。" status={changes.length ? `${changes.length} 次变化` : '等待 Agent 代码变化'} />
-    <Alert type="info" showIcon message="人的权限决定会被保留" description="界鉴会加入新发现并标记失效内容，但不会让 Agent 自动批准、删除或改写权限规则。" />
-    {status?.revalidation?.status === 'NO_CHANGE' && <Alert type="success" showIcon message="无待处理变化" description={status.revalidation.summary} />}
-    {loading && <div className="page-loading"><Spin /></div>}
-    {!loading && changes.length === 0 && <Empty description="当前还没有 Agent 代码变化记录" />}
+    <PageTaskHeader title="变化" description="查看 Agent 提交了什么、界鉴实际发现了什么，以及哪些权限需要重新核对。" status={changes.length ? `${changes.length} 次变化` : '等待后续变化'} />
+    <section className={`changes-overview${!loading && changes.length === 0 ? ' is-idle' : ''}`} aria-labelledby="changes-current-title" aria-busy={loading}>
+      <div className="changes-overview-copy">
+        <span className="changes-overview-eyebrow">当前变化判断</span>
+        <Typography.Title id="changes-current-title" level={3}>{currentTitle}</Typography.Title>
+        <Typography.Paragraph>
+          人确认的权限规则保持不变。Agent 通过 MCP 提交变化后，界鉴会核对真实文件差异，并指出需要重新确认或检查的规则。
+        </Typography.Paragraph>
+      </div>
+      {loading
+        ? <div className="changes-overview-loading"><Spin /><Typography.Text type="secondary">正在读取应用源码与变化记录</Typography.Text></div>
+        : <div className="changes-overview-state">
+          <Typography.Text strong>{revalidation?.summary ?? '等待 Agent 提交下一次代码变化。'}</Typography.Text>
+          <Typography.Text type="secondary">Agent 可以提交变化和发起获准检查，但不能批准、删除或改写人的权限决定。</Typography.Text>
+        </div>}
+    </section>
     <div className="change-timeline">{changes.map((change) => {
       const current = status?.revalidation?.change_id === change.change_id ? status.revalidation : null
       const latest = changes[0]?.change_id === change.change_id
       const verified = current?.status === 'VERIFIED'
       return <Card key={change.change_id} className={`change-card${latest ? ' is-latest' : ''}`}>
         <div className="change-card-heading">
-          <div><Space wrap><Typography.Title level={4}>{change.reason}</Typography.Title>{latest && <Tag color="blue">最近变化</Tag>}{verified && <Tag color="green">已纳入当前安全基线</Tag>}</Space><Typography.Text type="secondary">{formatTimestamp(change.created_at_us)}</Typography.Text></div>
+          <div className="change-card-copy"><Space wrap><Typography.Title level={4}>{change.reason}</Typography.Title>{latest && <Tag color="blue">最近变化</Tag>}{verified && <Tag color="green">已纳入当前安全基线</Tag>}</Space><div className="change-card-meta"><span>{change.submitted_by}</span><span aria-hidden="true">·</span><span>{formatTimestamp(change.created_at_us)}</span></div></div>
           <Space wrap>{current?.next_path && <Button type={current.status === 'READY' ? 'primary' : 'default'} onClick={() => onNavigate(current.next_path ?? '/changes')}>{current.next_label ?? '继续处理'}</Button>}</Space>
         </div>
         <Typography.Paragraph>{change.summary}</Typography.Paragraph>

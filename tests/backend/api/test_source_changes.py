@@ -18,6 +18,7 @@ def test_source_change_read_api_returns_bounded_timeline_and_views(tmp_path: Pat
         change_id="chg_" + "1" * 32,
         project_id=project_id,
         reason="完成权限实现修复",
+        submitted_by="MCP · Codex",
         created_at_us=10,
         status="COMPARABLE",
         complete=True,
@@ -54,6 +55,7 @@ def test_source_change_read_api_returns_bounded_timeline_and_views(tmp_path: Pat
     assert timeline.json()["data"] == [latest.json()["data"]]
     assert latest.json()["data"] == shown.json()["data"]
     assert latest.json()["data"]["actual_changed_path_count"] == 2
+    assert latest.json()["data"]["submitted_by"] == "MCP · Codex"
     assert latest.json()["data"]["claimed_paths"] == ["product/agent.py"]
     assert latest.json()["data"]["added_paths"] == ["product/new.py"]
     assert latest.json()["data"]["modified_paths"] == ["product/agent.py"]

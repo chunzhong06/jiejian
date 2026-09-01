@@ -1,4 +1,4 @@
-// 验证普通 AI 辅助设置、秘密清理与高级模型字段折叠边界。
+// 验证单一 AI 辅助连接、模型发现和秘密清理边界。
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,8 +8,8 @@ const mockApi = vi.hoisted(() => ({
   discoverModels: vi.fn(), refreshModels: vi.fn(), saveDefault: vi.fn(), create: vi.fn(), settings: vi.fn(), patchSettings: vi.fn(), update: vi.fn(), profile: vi.fn(), test: vi.fn(),
 }))
 const mockMcpApi = vi.hoisted(() => ({
-  status: vi.fn().mockResolvedValue({ schema_version: '1', paired: false, accepting_connections: false, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null }),
-  pair: vi.fn(), reveal: vi.fn(), rotate: vi.fn(), pause: vi.fn(), forget: vi.fn(), setProjectAccess: vi.fn(),
+  status: vi.fn().mockResolvedValue({ schema_version: '1', paired: false, accepting_connections: false, endpoint: 'http://127.0.0.1:8765/mcp', default_level: 'READ', project_grants: [], client_connected: false, client_name: null, client_version: null, last_seen_at_us: null, connection_state: 'DISABLED', last_authenticated_at_us: null, last_auth_failure_at_us: null }),
+  pair: vi.fn(), reveal: vi.fn(), rotate: vi.fn(), resume: vi.fn(), pause: vi.fn(), forget: vi.fn(), setProjectAccess: vi.fn(),
 }))
 
 vi.mock('../../api/llm', async () => {
@@ -36,11 +36,14 @@ const catalog = {
 describe('LLMSettingsDrawer', () => {
   afterEach(() => { cleanup(); vi.clearAllMocks() })
 
-  it('ordinary settings hide advanced developer fields until expanded', () => {
+  it('只呈现普通用户需要的单一模型连接', () => {
     render(<LLMSettingsDrawer open profiles={[profile]} onClose={vi.fn()} onChanged={vi.fn()} onError={vi.fn()} />)
     expect(screen.getByText('AI 只在系统确定事实之上提供辅助，不能决定权限要求或检查结论。')).toBeInTheDocument()
+    expect(screen.getByText('连接模型服务')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /高级设置/ })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('profile_name')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Base URL')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('推理强度')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '获取当前账号可用模型' })).not.toHaveClass('ant-btn-primary')
     expect(document.querySelector('.llm-settings-fields-pair')).not.toBeInTheDocument()
     expect(document.querySelectorAll('.llm-settings-section .ant-btn-primary')).toHaveLength(1)
@@ -58,7 +61,7 @@ describe('LLMSettingsDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: '获取当前账号可用模型' }))
     await waitFor(() => expect(mockApi.discoverModels).toHaveBeenCalledWith({ provider: 'openai', secret: 'temporary-key' }))
     expect(screen.getByText('GPT 5.6（gpt-5.6）')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '保存并测试' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存并检查连接' }))
     await waitFor(() => expect(mockApi.saveDefault).toHaveBeenCalledWith(expect.objectContaining({ provider: 'openai', model: 'gpt-5.6', reasoning_effort: null, secret: 'temporary-key' })))
     expect(password).toHaveValue('')
     expect(onChanged).toHaveBeenCalled()
@@ -76,7 +79,7 @@ describe('LLMSettingsDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: '获取当前账号可用模型' }))
     await waitFor(() => expect(mockApi.refreshModels).toHaveBeenCalledWith('local'))
     expect(mockApi.discoverModels).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '保存并测试' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存并检查连接' }))
     await waitFor(() => expect(mockApi.saveDefault).toHaveBeenCalled())
     expect(mockApi.update).not.toHaveBeenCalled()
   })
@@ -103,7 +106,7 @@ describe('LLMSettingsDrawer', () => {
     fireEvent.change(password, { target: { value: 'temporary-key' } })
     fireEvent.click(screen.getByRole('button', { name: '获取当前账号可用模型' }))
     await waitFor(() => expect(mockApi.discoverModels).toHaveBeenCalled())
-    fireEvent.click(screen.getByRole('button', { name: '保存并测试' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存并检查连接' }))
     await waitFor(() => expect(onError).toHaveBeenCalled())
     expect(password).toHaveValue('')
     fireEvent.change(password, { target: { value: 'temporary-key' } })
@@ -113,57 +116,4 @@ describe('LLMSettingsDrawer', () => {
     expect(screen.queryByLabelText('API Key（只写入，不回显）')).not.toBeInTheDocument()
   })
 
-  it('keeps explicit connection testing in the advanced section', async () => {
-    mockApi.test.mockResolvedValue({ ...profile, connection_status: 'available' })
-    render(<LLMSettingsDrawer open profiles={[profile]} onClose={vi.fn()} onChanged={vi.fn()} onError={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }))
-    fireEvent.click(screen.getByRole('button', { name: /编\s*辑/ }))
-    expect(screen.getByLabelText('API Key（只写入，不回显）')).toHaveValue('')
-    fireEvent.click(screen.getByRole('button', { name: '测试连接' }))
-    await waitFor(() => expect(mockApi.test).toHaveBeenCalledWith('local'))
-  })
-
-  it('creates a compatible advanced profile with manual model fallback and keeps the ordinary default isolated', async () => {
-    const compatibleCatalog = { ...catalog, provider: 'openai_compatible' as const, models: [], manual_model_allowed: true }
-    const compatibleProfile = {
-      ...profile,
-      profile_name: 'advanced-profile', provider: 'openai_compatible' as const, model: 'manual-model',
-      base_url: 'https://example.test/v1', secret_ref: 'env:MODEL_KEY',
-    }
-    mockApi.discoverModels.mockResolvedValue(compatibleCatalog)
-    mockApi.create.mockResolvedValue(compatibleProfile)
-    mockApi.settings.mockResolvedValue({ enabled: false, default_profile_name: null, updated_at_us: 0 })
-    render(<LLMSettingsDrawer open profiles={[]} onClose={vi.fn()} onChanged={vi.fn()} onError={vi.fn()} />)
-
-    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }))
-    expect(screen.queryByText('普通设置')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('API Key（只写入，不回显）'), { target: { value: 'temporary-key' } })
-    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://example.test/v1' } })
-    fireEvent.change(screen.getByLabelText('env: secret_ref'), { target: { value: 'env:MODEL_KEY' } })
-    fireEvent.click(screen.getByRole('button', { name: '获取当前账号可用模型' }))
-    await waitFor(() => expect(mockApi.discoverModels).toHaveBeenCalledWith({
-      provider: 'openai_compatible', secret: 'temporary-key', base_url: 'https://example.test/v1', allow_local_http: false,
-    }))
-    fireEvent.change(screen.getByLabelText('model'), { target: { value: 'manual-model' } })
-    fireEvent.click(screen.getByRole('button', { name: '创建高级 profile' }))
-    await waitFor(() => expect(mockApi.create).toHaveBeenCalledWith(expect.objectContaining({
-      profile_name: 'advanced-profile', provider: 'openai_compatible', model: 'manual-model',
-      base_url: 'https://example.test/v1', secret_ref: 'env:MODEL_KEY',
-    })))
-    expect(mockApi.create.mock.calls[0][0]).not.toHaveProperty('secret')
-    expect(mockApi.saveDefault).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: '保存高级配置' })).toBeInTheDocument()
-    expect(screen.getByLabelText('API Key（只写入，不回显）')).toHaveValue('')
-  })
-
-  it('restores the ordinary default when advanced mode is folded', () => {
-    render(<LLMSettingsDrawer open profiles={[profile]} aiSettings={{ enabled: false, default_profile_name: 'local', updated_at_us: 2 }} onClose={vi.fn()} onChanged={vi.fn()} onError={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }))
-    fireEvent.click(screen.getByRole('button', { name: '新增高级 profile' }))
-    expect(screen.queryByText('普通设置')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }))
-    expect(screen.getByText('普通设置')).toBeInTheDocument()
-    expect(screen.getByText('gpt-test')).toBeInTheDocument()
-    expect(screen.getByText('已配置')).toBeInTheDocument()
-  })
 })

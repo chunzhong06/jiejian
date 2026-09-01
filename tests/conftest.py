@@ -93,6 +93,13 @@ def collaboration_space_factory(request: pytest.FixtureRequest, tmp_path: Path) 
         authorization_order: str = "AUTHORIZE_BEFORE_ENQUEUE",
         blob_observation: str = "AVAILABLE",
     ) -> Any:
+        policy_path = tmp_path / f"authorization-policy-{len(running)}.py"
+        policy_path.write_text(
+            "# 测试实例使用独立源码策略，避免并发用例改写仓库中的官方样例。\n\n"
+            "def export_authorization_order():\n"
+            f'    return "{authorization_order}"\n',
+            encoding="utf-8",
+        )
         credentials = {
             "passwords": {
                 "alice": f"test-alice-{token_urlsafe(18)}",
@@ -112,6 +119,7 @@ def collaboration_space_factory(request: pytest.FixtureRequest, tmp_path: Path) 
             authorization_order=authorization_order,
             blob_observation=blob_observation,
             runtime_root=tmp_path / f"runtime-{len(running)}",
+            authorization_policy_path=policy_path,
             **credentials,
         )
         thread = Thread(target=server.serve_forever, daemon=True)

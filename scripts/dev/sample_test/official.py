@@ -29,8 +29,6 @@ from product.backend.infra.runtime.process.tree import (
     terminate_process_tree,
 )
 from product.backend.infra.runtime.process.identity import require_python_environment
-from product.protocols import FlowDraftVariableSource, flow_draft_source_choice_id
-from .windows import RecordingWindowDriver, WindowsL5Error, window_snapshot
 
 
 PROJECT_KEY = "campus-digital-museum"
@@ -40,13 +38,13 @@ VIEW_ACTION_KEY = "GET /api/projects/{project_id}/collaboration"
 CONTROL_PORT = 8765
 PHASE_TITLES = {
     1: "界鉴真实启动",
-    2: "官方示例与应用理解",
-    3: "测试身份",
-    4: "真实 Recording 与安全恢复",
-    5: "权限要求与检查准备",
-    6: "漏洞行为检查",
-    7: "修复行为检查",
-    8: "观察受限检查",
+    2: "进入 Agent 写错的问题版",
+    3: "一键应用公开样例合同",
+    4: "三条权限路径与检查准备",
+    5: "问题版真实检查",
+    6: "Agent 获取修复合同并修改代码",
+    7: "修复版独立复验",
+    8: "证据受限实验检查",
     9: "GUI / CLI / JSON 等价",
     10: "Report / History / Evidence / Resource Cleanup",
 }
@@ -85,8 +83,6 @@ class HarnessState:
     """保存失败清理所需的最小公开身份与当前十阶段。"""
 
     stage: int = 0
-    recording_id: str | None = None
-    recording_job_id: str | None = None
     active_run_id: str | None = None
     active_run_job_id: str | None = None
     sample_started: bool = False
@@ -421,12 +417,14 @@ def _wait_product_ready(
     raise SampleTestError("L5_CONTROL_READY_TIMEOUT")
 
 
-def _start_guided_experience(
+def _start_official_experience(
     page: Page,
     client: ApiClient,
     audit_dir: Path,
     state: HarnessState,
 ) -> dict[str, object]:
+    """从未接入工作台进入问题版；UI 提示先讲矛盾，启动本身不产生检查结论。"""
+
     page.goto(client.origin, wait_until="networkidle")
     page.get_by_role("button", name="启动官方示例").click()
     page.get_by_text("启动示例不会开始真实检查，也不会预先生成结论。").wait_for()
@@ -435,7 +433,7 @@ def _start_guided_experience(
         and response.url.endswith("/api/experience/official-sample/start"),
         timeout=30_000,
     ) as pending:
-        page.get_by_role("button", name="同意并启动").click()
+        page.get_by_role("button", name="启动问题版").click()
     response = pending.value
     if response.status != 200:
         try:
@@ -444,76 +442,76 @@ def _start_guided_experience(
             payload = {}
         error = payload.get("error") if isinstance(payload, dict) else None
         code = error.get("code") if isinstance(error, dict) else "请求失败"
-        page.screenshot(path=str(audit_dir / "guided-start-failed.png"), full_page=True)
+        page.screenshot(path=str(audit_dir / "official-start-failed.png"), full_page=True)
         raise SampleTestError(f"官方示例启动返回 {response.status}: {code}")
     state.sample_started = True
-    page.wait_for_url("**/#/application", timeout=30_000)
-    page.get_by_label("官方示例状态").wait_for()
-    page.screenshot(path=str(audit_dir / "guided-application.png"), full_page=True)
+    page.wait_for_url("**/#/workspace", timeout=30_000)
+    page.get_by_role(
+        "button",
+        name="一键应用样例配置",
+        exact=True,
+    ).wait_for(timeout=30_000)
+    page.screenshot(path=str(audit_dir / "official-problem-version.png"), full_page=True)
     status = client.call("GET", "/api/experience/official-sample")
-    if not status.get("active") or status.get("experience_mode") != "GUIDED":
-        raise SampleTestError("官方示例没有形成活跃的 GUIDED 体验")
+    if (
+        not status.get("active")
+        or status.get("scenario_version") != "VULNERABLE"
+        or status.get("scenario_prepared") is not False
+    ):
+        raise SampleTestError("官方示例没有形成等待配置的问题版体验")
+    if _project_run_ids(client, str(status["project_id"])):
+        raise SampleTestError("启动问题版时不应预先生成检查记录")
     return status
 
 
-def _confirm_understanding(
+def _prepare_official_scenario(
+    page: Page,
     client: ApiClient,
+    audit_dir: Path,
     project_id: str,
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], str]:
+    """通过唯一一键入口应用公开合同，再从正式产品查询结果核对全部输入事实。"""
+
+    before_prepare = _project_run_ids(client, project_id)
+    with page.expect_response(
+        lambda response: response.request.method == "POST"
+        and response.url.endswith("/api/experience/official-sample/prepare"),
+        timeout=30_000,
+    ) as pending:
+        page.get_by_role("button", name="一键应用样例配置").click()
+    if pending.value.status != 200:
+        raise SampleTestError(f"一键样例配置返回 {pending.value.status}")
+    if _project_run_ids(client, project_id) != before_prepare:
+        raise SampleTestError("一键样例配置不应创建检查记录")
+    page.get_by_role("button", name="检查问题版").wait_for(timeout=30_000)
+    page.screenshot(path=str(audit_dir / "official-contract-ready.png"), full_page=True)
+    status = client.call("GET", "/api/experience/official-sample")
+    change_id = status.get("vulnerable_change_id")
+    if (
+        status.get("scenario_prepared") is not True
+        or status.get("scenario_version") != "VULNERABLE"
+        or not isinstance(change_id, str)
+        or re.fullmatch(r"chg_[0-9a-f]{32}", change_id) is None
+    ):
+        raise SampleTestError("一键样例配置没有形成问题版合同与真实代码变化")
+
     understanding = client.call("GET", f"/api/projects/{project_id}/application-understanding")
-    revision = int(understanding["revision"])
-    role_ids: dict[str, str] = {}
-    for role in understanding["role_candidates"]:
-        key = str(role["canonical_key"]).casefold()
-        if key not in ROLE_LABELS:
-            continue
-        understanding = client.call(
-            "PUT",
-            f"/api/projects/{project_id}/roles/{role['candidate_id']}",
-            {
-                "schema_version": "1",
-                "decision": "CONFIRMED",
-                "display_name": ROLE_LABELS[key],
-                "revision": revision,
-            },
-        )
-        revision = int(understanding["revision"])
-        role_ids[key] = role["candidate_id"]
-    if set(role_ids) != set(ROLE_LABELS):
-        raise SampleTestError("官方示例未发现精确的两个权限组候选")
-    action_ids: dict[str, str] = {}
-    action_labels = {
-        EXPORT_ACTION_KEY: "导出完整项目交付包",
-        VIEW_ACTION_KEY: "查看日常协作资料",
+    role_ids = {
+        str(role["canonical_key"]).casefold(): str(role["candidate_id"])
+        for role in understanding["role_candidates"]
+        if role.get("decision") == "CONFIRMED"
+        and str(role["canonical_key"]).casefold() in ROLE_LABELS
     }
-    for action in understanding["action_candidates"]:
-        canonical_key = str(action["canonical_key"])
-        selected = canonical_key in action_labels
-        understanding = client.call(
-            "PUT",
-            f"/api/projects/{project_id}/actions/{action['candidate_id']}",
-            {
-                "schema_version": "1",
-                "decision": "CONFIRMED" if selected else "REJECTED",
-                "display_name": action_labels.get(canonical_key, action["display_name"]),
-                "revision": revision,
-            },
-        )
-        revision = int(understanding["revision"])
-        if selected:
-            action_ids[canonical_key] = action["candidate_id"]
-    if set(action_ids) != set(action_labels):
-        raise SampleTestError("官方示例未发现导出与查看两个正式动作候选")
-    return role_ids, action_ids
-
-
-def _prepare_identities(
-    client: ApiClient,
-    project_id: str,
-) -> dict[str, str]:
-    prepared = client.call("POST", "/api/experience/official-sample/identities", {"schema_version": "1"})
-    if not prepared.get("identities_ready"):
-        raise SampleTestError("官方示例测试账号未全部准备完成")
+    if set(role_ids) != set(ROLE_LABELS):
+        raise SampleTestError("一键合同没有确认 Alice 与 Bob 对应的两个权限组")
+    action_ids = {
+        str(action["canonical_key"]): str(action["candidate_id"])
+        for action in understanding["action_candidates"]
+        if action.get("decision") == "CONFIRMED"
+        and str(action["canonical_key"]) in {EXPORT_ACTION_KEY, VIEW_ACTION_KEY}
+    }
+    if set(action_ids) != {EXPORT_ACTION_KEY, VIEW_ACTION_KEY}:
+        raise SampleTestError("一键合同没有确认导出与日常资料查看两个业务动作")
     identities = client.call("GET", f"/api/projects/{project_id}/test-identities")
     by_role = {
         str(item["role_canonical_key"]).casefold(): item
@@ -521,319 +519,34 @@ def _prepare_identities(
         if item.get("status") == "PREPARED"
     }
     if set(ROLE_LABELS) - set(by_role):
-        raise SampleTestError("测试账号与三个已确认权限组不一致")
-    return {key: str(by_role[key]["identity_id"]) for key in ROLE_LABELS}
+        raise SampleTestError("一键合同没有准备 Alice 与 Bob 的测试账号")
+    return (
+        {key: str(by_role[key]["identity_id"]) for key in ROLE_LABELS},
+        action_ids,
+        change_id,
+    )
 
 
-def _record_flow(
+def _switch_official_version(
     client: ApiClient,
-    project_id: str,
-    action_id: str,
-    alice_id: str,
-    chromium_executable: Path,
-    state: HarnessState,
+    version: str,
     *,
-    flow_kind: str = "export",
-) -> str:
-    before = window_snapshot()
-    created = client.call(
+    source_run_id: str | None = None,
+) -> dict[str, object]:
+    """只切换样例实现或观察能力；调用方仍须独立创建 Run。"""
+
+    status = client.call(
         "POST",
-        f"/api/projects/{project_id}/recordings",
+        "/api/experience/official-sample/version",
         {
             "schema_version": "1",
-            "action_candidate_id": action_id,
-            "test_identity_id": alice_id,
-            "duration_seconds": 90,
-            "idempotency_key": f"sample-recording-{uuid4().hex}",
+            "version": version,
+            "source_run_id": source_run_id,
         },
-        accepted=(202,),
     )
-    recording_id = str(created["recording"]["recording_id"])
-    state.recording_id = recording_id
-    state.recording_job_id = str(created["job"]["job_id"])
-    _wait_for(
-        lambda: client.call("GET", f"/api/recordings/{recording_id}"),
-        lambda view: view.get("capture_phase") == "AWAITING_CAPTURE",
-        timeout=45,
-        label="录制浏览器准备",
-    )
-    driver = RecordingWindowDriver(before, chromium_executable)
-    driver.wait_until_ready(timeout=30)
-    client.call("POST", f"/api/recordings/{recording_id}/capture/start", {"schema_version": "1"})
-    _wait_for(
-        lambda: client.call("GET", f"/api/recordings/{recording_id}"),
-        lambda view: view.get("capture_phase") == "CAPTURING",
-        timeout=15,
-        label="录制开始",
-    )
-    if flow_kind == "export":
-        driver.run_business_flow()
-    elif flow_kind == "view":
-        driver.run_view_flow()
-    else:
-        raise SampleTestError(f"未知的官方 Recording 类型: {flow_kind}")
-    client.call("POST", f"/api/recordings/{recording_id}/capture/stop", {"schema_version": "1"})
-    view = _wait_for(
-        lambda: client.call("GET", f"/api/recordings/{recording_id}"),
-        lambda item: (item.get("recording") or {}).get("state") in {"PENDING_REVIEW", "FAILED", "SAFETY_STOPPED"},
-        timeout=45,
-        label="录制处理完成",
-    )
-    recording_state = (view.get("recording") or {}).get("state")
-    if recording_state != "PENDING_REVIEW" or (view.get("job") or {}).get("state") != "SUCCEEDED":
-        raise SampleTestError(f"真实 Recording 未进入审阅成功状态: {recording_state}")
-    draft = view.get("draft") or {}
-    for variable in draft.get("variables") or []:
-        if variable.get("status") == "CONFIRMED":
-            continue
-        source = variable["candidate_sources"][0]
-        view = client.call(
-            "POST",
-            f"/api/recordings/{recording_id}/review",
-            {
-                "schema_version": "1",
-                "command": {
-                    "schema_version": "1",
-                    "operation": "CONFIRM_VARIABLE_CHOICE",
-                    "variable_name": variable["name"],
-                    "choice_id": flow_draft_source_choice_id(
-                        FlowDraftVariableSource.model_validate(source)
-                    ),
-                },
-            },
-        )
-        draft = view["draft"]
-    target_method = "POST" if flow_kind == "export" else "GET"
-    target_suffix = "/exports" if flow_kind == "export" else "/collaboration"
-    target = next(
-        (
-            step
-            for step in draft["steps"]
-            if step.get("method") == target_method
-            and str(step.get("path") or "").split("?", 1)[0].endswith(target_suffix)
-        ),
-        None,
-    )
-    if target is None:
-        raise SampleTestError(f"真实 Recording 没有形成 {flow_kind} 目标步骤")
-    if flow_kind == "export":
-        recovery = next(
-            (
-                step
-                for step in draft["steps"]
-                if step.get("method") == "DELETE"
-                and str(step.get("path") or "").split("?", 1)[0].endswith("/exports")
-            ),
-            None,
-        )
-        if recovery is None:
-            raise SampleTestError("真实 Recording 没有形成导出撤销步骤")
-    view = client.call(
-        "POST",
-        f"/api/recordings/{recording_id}/review",
-        {"schema_version": "1", "command": {"schema_version": "1", "operation": "CONFIRM_TARGET_STEP", "step_id": target["id"]}},
-    )
-    draft = view["draft"]
-    target = next(step for step in draft["steps"] if step["id"] == target["id"])
-    resource = next(
-        (
-            item
-            for item in target["resource_candidates"]
-            if (
-                item["consumer"] == "JSON_BODY"
-                and item["location"] == "$.resource_id"
-                if flow_kind == "export"
-                else item["consumer"] == "PATH" and item["location"] == "path[3]"
-            )
-        ),
-        None,
-    )
-    if resource is None:
-        raise SampleTestError(f"真实 Recording 没有形成 {flow_kind} 资源候选")
-    client.call(
-        "POST",
-        f"/api/recordings/{recording_id}/review",
-        {"schema_version": "1", "command": {"schema_version": "1", "operation": "CONFIRM_RESOURCE_SLOT", "candidate_id": resource["candidate_id"]}},
-    )
-    client.call("POST", f"/api/recordings/{recording_id}/finalize", {"schema_version": "1"})
-    return recording_id
-
-
-def _confirm_safety(
-    client: ApiClient,
-    recording_id: str,
-    *,
-    flow_kind: str = "export",
-) -> None:
-    view = client.call("GET", f"/api/recordings/{recording_id}/safety-setup")
-    resource_id = RESOURCE_ID if flow_kind == "export" else "collaboration"
-    consumer = "JSON_BODY" if flow_kind == "export" else "PATH"
-    resource = next(
-        (
-            item
-            for item in view["resource_candidates"]
-            if item["actual_resource_id"] == resource_id and item["consumer"] == consumer
-        ),
-        None,
-    )
-    observation = next((item for item in view["observation_candidates"] if item["method"] == "GET"), None)
-    effect_kind = "OBJECT_CREATION" if flow_kind == "export" else "DATA_DISCLOSURE"
-    effect = next(
-        (item for item in view["security_effect_candidates"] if item["kind"] == effect_kind),
-        None,
-    )
-    recovery = next(
-        (item for item in view["recovery_candidates"] if item["method"] == "DELETE"),
-        None,
-    )
-    if not all((resource, observation, effect)) or (flow_kind == "export" and recovery is None):
-        raise SampleTestError("真实业务流程没有形成完整的资源、观察、恢复与副作用候选")
-    if flow_kind == "view" and effect.get("protected_fields") != [
-        "materials",
-        "members",
-        "name",
-        "project_id",
-    ]:
-        raise SampleTestError("查看流程没有冻结日常协作资料的受保护字段")
-    body = {
-        "schema_version": "1",
-        "resource_candidate_id": resource["candidate_id"],
-        "logical_name": (
-            "校园数字展馆完整项目交付包"
-            if flow_kind == "export"
-            else "校园数字展馆日常协作资料"
-        ),
-        "resource_type": "项目资料包" if flow_kind == "export" else "项目",
-        "observation_candidate_id": observation["candidate_id"],
-    }
-    if recovery is not None and flow_kind == "export":
-        body["recovery_candidate_id"] = recovery["candidate_id"]
-    confirmed = client.call(
-        "PUT",
-        f"/api/recordings/{recording_id}/safety-setup",
-        body,
-    )
-    if confirmed.get("automatic_execution_allowed") is not True:
-        raise SampleTestError("完整安全恢复设置未允许自动执行")
-
-
-def _confirm_permissions(
-    page: Page,
-    client: ApiClient,
-    audit_dir: Path,
-    project_id: str,
-    action_ids: dict[str, str],
-    role_ids: dict[str, str],
-) -> None:
-    """只通过普通权限页面确认考题，并核对生成后的正式检查预览。"""
-
-    owner_id = role_ids["project_owner"]
-    page.goto(client.origin + "/#/permissions", wait_until="networkidle")
-    page.get_by_role("heading", name="权限规则", exact=True).wait_for(timeout=30_000)
-    matrix = client.call("GET", f"/api/projects/{project_id}/permission-intents")
-    actions = {item["action_candidate_id"]: item for item in matrix["actions"]}
-    if set(action_ids.values()) - set(actions):
-        raise SampleTestError("权限页面没有形成官方示例的两个业务动作")
-    relation_labels = {
-        "OWNS": "自己的资源",
-        "SAME_ROLE_OTHER_ACCOUNT": "同权限组其他用户的资源",
-        "OTHER_ROLE": "其他权限组的资源",
-    }
-    for selected_action_id, subject, relation, expectation in (
-        (action_ids[EXPORT_ACTION_KEY], owner_id, "OWNS", "ALLOW"),
-        (action_ids[EXPORT_ACTION_KEY], role_ids["member"], "OTHER_ROLE", "DENY"),
-        (action_ids[VIEW_ACTION_KEY], role_ids["member"], "OTHER_ROLE", "ALLOW"),
-    ):
-        action = actions[selected_action_id]
-        cell = next(
-            (
-                item
-                for item in action["cells"]
-                if item["subject_role_candidate_id"] == subject
-                and item["resource_owner_role_candidate_id"] == owner_id
-                and item["relation"] == relation
-            ),
-            None,
-        )
-        if cell is None:
-            raise SampleTestError(f"权限页面缺少官方示例的 {relation} 权限单元格")
-        label = (
-            f"{cell['subject_role_display_name']}权限组以"
-            f"{relation_labels[relation]}关系对{action['action_display_name']}的权限"
-        )
-        page.get_by_label(label).get_by_text(
-            "允许" if expectation == "ALLOW" else "拒绝",
-            exact=True,
-        ).click()
-        with page.expect_response(
-            lambda response: response.request.method == "POST"
-            and response.url.endswith(
-                f"/api/projects/{project_id}/permission-intents/approvals"
-            ),
-            timeout=30_000,
-        ) as pending:
-            page.get_by_role(
-                "button", name="确认权限变更", exact=True
-            ).click()
-        if pending.value.status != 200:
-            raise SampleTestError(
-                f"权限页面审批 {relation} 返回非预期状态 {pending.value.status}"
-            )
-        page.get_by_role("dialog", name="确认权限变更").wait_for(
-            state="hidden",
-            timeout=30_000,
-        )
-
-    navigation_step = "从权限规则进入测试准备"
-    try:
-        page.get_by_role("button", name="继续准备", exact=True).click()
-        page.wait_for_url("**/#/preparation", timeout=30_000)
-        page.get_by_role("heading", name="测试准备", exact=True).wait_for(
-            timeout=30_000
-        )
-        navigation_step = "在测试准备页执行安全机械动作"
-        with page.expect_response(
-            lambda response: response.request.method == "POST"
-            and response.url.endswith(
-                f"/api/projects/{project_id}/preparation/prepare-safe"
-            ),
-            timeout=30_000,
-        ) as pending_prepare_safe:
-            page.get_by_role(
-                "button", name="自动完成这一步", exact=True
-            ).click()
-        if pending_prepare_safe.value.status != 200:
-            raise SampleTestError(
-                "测试准备页执行安全机械动作返回非预期状态 "
-                f"{pending_prepare_safe.value.status}"
-            )
-        navigation_step = "从测试准备进入验证运行"
-        page.get_by_role(
-            "button", name="前往验证运行", exact=True
-        ).last.click()
-        page.wait_for_url("**/#/validation", timeout=30_000)
-        page.get_by_role("heading", name="验证运行", exact=True).wait_for(
-            timeout=30_000
-        )
-    except PlaywrightError as error:
-        page.screenshot(
-            path=str(audit_dir / "permission-preparation-failed.png"),
-            full_page=True,
-        )
-        raise SampleTestError(
-            f"{navigation_step}失败：{error}"
-        ) from error
-    page.get_by_text(
-        "当前检查条件已经准备好",
-        exact=True,
-    ).wait_for(timeout=30_000)
-    preview = client.call("GET", f"/api/projects/{project_id}/check-preview")
-    if (
-        preview.get("ready") is not True
-        or preview.get("case_count") != 3
-        or preview.get("differential_pair_count") != 1
-    ):
-        raise SampleTestError("检查预览未形成三条正式路径与一组导出差分孪生")
+    if status.get("scenario_version") != version:
+        raise SampleTestError(f"官方示例没有切换到 {version}")
+    return status
 
 
 def _wait_for_published_result(
@@ -891,7 +604,8 @@ def _check_submission_body(
     client: ApiClient,
     *,
     name: str,
-    verification_run_id: str | None,
+    change_id: str | None = None,
+    verification_run_id: str | None = None,
 ) -> dict[str, object]:
     """让自动验收与正式检查页使用同一个修复变化上下文。"""
 
@@ -899,15 +613,18 @@ def _check_submission_body(
         "schema_version": "1",
         "idempotency_key": f"sample-{name}-{uuid4().hex}",
     }
-    if verification_run_id is None:
-        return body
-    status = client.call("GET", "/api/experience/official-sample")
-    repair_change_id = status.get("repair_change_id")
-    if not isinstance(repair_change_id, str) or re.fullmatch(
-        r"chg_[0-9a-f]{32}", repair_change_id
-    ) is None:
-        raise SampleTestError(f"{name} 没有形成可用于正式重验的修复变化")
-    body["change_id"] = repair_change_id
+    if verification_run_id is not None:
+        status = client.call("GET", "/api/experience/official-sample")
+        repair_change_id = status.get("repair_change_id")
+        if not isinstance(repair_change_id, str) or re.fullmatch(
+            r"chg_[0-9a-f]{32}", repair_change_id
+        ) is None:
+            raise SampleTestError(f"{name} 没有形成可用于正式重验的修复变化")
+        if change_id is not None and change_id != repair_change_id:
+            raise SampleTestError(f"{name} 指定的变化不是当前权威修复变化")
+        change_id = repair_change_id
+    if change_id is not None:
+        body["change_id"] = change_id
     return body
 
 
@@ -918,26 +635,17 @@ def _run_case(
     state: HarnessState,
     *,
     name: str,
-    authorization_order: str,
-    blob_observation: str,
     expected_verdict: str,
     expected_issue: str,
     action_ids: dict[str, str],
+    change_id: str | None = None,
     verification_run_id: str | None = None,
-    configure_behavior: bool = True,
+    expected_source_statuses: dict[str, str] | None = None,
 ) -> dict[str, object]:
-    behavior: dict[str, object] = {
-        "schema_version": "1",
-        "authorization_order": authorization_order,
-        "blob_observation": blob_observation,
-        "verification_run_id": verification_run_id,
-    }
-    if configure_behavior:
-        client.call("POST", "/api/experience/official-sample/behavior", behavior)
     client.call(
         "POST",
         f"/api/projects/{project_id}/check-preparation",
-        {"schema_version": "1", "change_id": None},
+        {"schema_version": "1", "change_id": change_id},
     )
     submitted = client.call(
         "POST",
@@ -945,6 +653,7 @@ def _run_case(
         _check_submission_body(
             client,
             name=name,
+            change_id=change_id,
             verification_run_id=verification_run_id,
         ),
         accepted=(202,),
@@ -1013,6 +722,19 @@ def _run_case(
         raise SampleTestError(f"{name} 缺少普通成员结果投影")
     if [(item["observer_type"], item["label"], item["role"]) for item in issue["evidence_sources"]] != list(SOURCE_LABELS):
         raise SampleTestError(f"{name} 的六来源角色投影不正确")
+    for observer_type, expected_status in (expected_source_statuses or {}).items():
+        actual_status = next(
+            (
+                item.get("status")
+                for item in issue["evidence_sources"]
+                if item.get("observer_type") == observer_type
+            ),
+            None,
+        )
+        if actual_status != expected_status:
+            raise SampleTestError(
+                f"{name} 的 {observer_type} 状态不是 {expected_status}"
+            )
     if verification_run_id is not None:
         repair = presentation.get("repair_verification") or {}
         path_results = repair.get("path_results") or []
@@ -1053,6 +775,15 @@ def _assert_history(client: ApiClient, project_id: str, runs: list[dict[str, obj
     if "FIXED" in statuses[2]:
         raise SampleTestError("后续证据不足被错误显示为已解决")
     return history
+
+
+def _project_run_ids(client: ApiClient, project_id: str) -> list[str]:
+    """读取当前应用的正式检查记录，用于证明准备与版本切换没有暗中生成结论。"""
+
+    runs = client.call("GET", f"/api/projects/{project_id}/runs")
+    if not isinstance(runs, list):
+        raise SampleTestError("当前应用的检查记录不是公共列表")
+    return [str(item["run_id"]) for item in runs]
 
 
 def _assert_history_view(
@@ -1169,123 +900,89 @@ def _assert_verification_view(
             raise SampleTestError(f"{name} 的{interaction_step}交互失败") from error
 
 
-def _prepare_official_repair_verification(
+def _switch_official_version_through_ui(
     page: Page,
     client: ApiClient,
-    project_id: str,
-    source_run_id: str,
-) -> None:
-    """Sample 只负责形成真实修复变化，后续入口必须服从普通 ProjectRepair。"""
+    audit_dir: Path,
+    version: str,
+    *,
+    source_run_id: str | None = None,
+) -> dict[str, object]:
+    """核对版本说明后从真实按钮切换；切换完成仍不创建 Run 或写入 Verdict。"""
 
-    switched = client.call(
-        "POST",
-        "/api/experience/official-sample/behavior",
-        {
-            "schema_version": "1",
-            "authorization_order": "AUTHORIZE_BEFORE_ENQUEUE",
-            "blob_observation": "AVAILABLE",
-            "verification_run_id": source_run_id,
-        },
-    )
-    repair_change_id = switched.get("repair_change_id")
-    if not isinstance(repair_change_id, str):
-        raise SampleTestError("官方示例没有形成正式修复变化")
-    status = client.call("GET", f"/api/projects/{project_id}/status")
-    repair = status.get("repair") or {}
-    if repair.get("status") == "CHANGE_SUBMITTED":
-        if repair.get("next_path") != "/preparation":
-            raise SampleTestError(
-                "官方示例修复变化需要超出 fixture 权限的人工处理："
-                f"{repair.get('next_path')} {repair.get('reason_codes')}"
-            )
-        try:
-            page.goto(client.origin + "/#/results", wait_until="networkidle")
-            page.get_by_text("Agent 已提交代码变化", exact=True).wait_for(
-                timeout=30_000
-            )
-            page.get_by_role(
-                "button", name=str(repair.get("next_label")), exact=True
-            ).click()
-            page.wait_for_url(re.compile(r"#/preparation$"), timeout=30_000)
-        except PlaywrightError as error:
-            raise SampleTestError(
-                f"普通 ProjectRepair 没有进入修复准备：{error}"
-            ) from error
-
-        for _ in range(4):
-            readiness = status.get("readiness") or {}
-            preparation = readiness.get("preparation") or {}
-            next_key = preparation.get("next_item_key")
-            next_item = next(
-                (
-                    item
-                    for item in preparation.get("items") or []
-                    if item.get("key") == next_key
-                ),
-                None,
-            )
-            if repair.get("status") == "READY_TO_VERIFY":
-                break
-            if next_item is None or next_item.get("status") != "AUTO":
-                raise SampleTestError(
-                    "官方示例修复准备不能由安全机械动作完成："
-                    f"{preparation.get('next_path')} {repair.get('reason_codes')}"
-                )
-            try:
-                with page.expect_response(
-                    lambda response: response.request.method == "POST"
-                    and response.url.endswith(
-                        f"/api/projects/{project_id}/preparation/prepare-safe"
-                    ),
-                    timeout=30_000,
-                ) as pending_prepare:
-                    page.get_by_role(
-                        "button",
-                        name=str(preparation.get("next_label")),
-                        exact=True,
-                    ).click()
-                if pending_prepare.value.status != 200:
-                    raise SampleTestError(
-                        "修复准备安全机械动作返回非预期状态 "
-                        f"{pending_prepare.value.status}"
-                    )
-                status = client.call("GET", f"/api/projects/{project_id}/status")
-                repair = status.get("repair") or {}
-                page.reload(wait_until="networkidle")
-            except PlaywrightError as error:
-                raise SampleTestError(
-                    f"修复准备页安全机械动作失败：{error}"
-                ) from error
-
-    tasks = repair.get("tasks") or []
-    if repair.get("status") != "READY_TO_VERIFY" or not any(
-        task.get("linked_change_id") == repair_change_id for task in tasks
-    ):
-        raise SampleTestError(
-            "官方示例修复变化没有进入 ProjectRepair READY_TO_VERIFY："
-            f"{repair.get('status')} {repair.get('reason_codes')}"
-        )
-
-    try:
-        page.goto(client.origin + "/#/results", wait_until="networkidle")
-        page.get_by_text(
-            "当前修复已经可以独立复验", exact=True
-        ).wait_for(timeout=30_000)
-        page.get_by_role(
-            "button", name="复验这次修复", exact=True
-        ).click()
-        page.wait_for_url(re.compile(r"#/validation$"), timeout=30_000)
-        page.get_by_role("heading", name="验证运行", exact=True).wait_for(
-            timeout=30_000
-        )
-    except PlaywrightError as error:
-        raise SampleTestError(
-            f"普通 ProjectRepair 没有进入正式复验页：{error}"
-        ) from error
+    controls = {
+        "VULNERABLE": (
+            "问题版",
+            "进入 Agent 写错的问题版？",
+            "模拟 Vibe Coding Agent 为缩短导出等待",
+            "确认切换",
+            "workspace",
+            "official-switched-vulnerable.png",
+        ),
+        "EVIDENCE_LIMITED": (
+            "证据受限实验",
+            "进入证据受限实验？",
+            "模拟两条关键业务结果观察暂时不可用",
+            "确认切换",
+            "workspace",
+            "official-switched-evidence-limited.png",
+        ),
+        "FIXED": (
+            "交给 Agent 修复",
+            "把界鉴修复意见交给 Agent？",
+            "Codex 通过 MCP 读取界鉴",
+            "生成修改并切换",
+            "workspace",
+            "official-switched-fixed.png",
+        ),
+    }
+    if version not in controls:
+        raise SampleTestError(f"未知官方示例版本：{version}")
+    current = client.call("GET", "/api/experience/official-sample")
+    project_id = current.get("project_id")
+    if not isinstance(project_id, str):
+        raise SampleTestError("官方示例缺少当前应用")
+    before_switch = _project_run_ids(client, project_id)
+    button_label, title, explanation, confirm_label, route, filename = controls[version]
+    page.goto(client.origin + "/#/workspace", wait_until="networkidle")
+    button = page.get_by_role("button", name=button_label, exact=True)
+    button.wait_for(timeout=30_000)
+    if button.is_disabled():
+        raise SampleTestError(f"官方示例当前不能进入{button_label}")
+    button.click()
+    page.get_by_role("dialog", name=title, exact=True).wait_for(timeout=30_000)
+    page.get_by_text(explanation, exact=False).wait_for(timeout=30_000)
+    if version == "FIXED":
+        if source_run_id is None:
+            raise SampleTestError("修复版缺少来源 BLOCK 检查")
+        page.get_by_text(source_run_id, exact=False).wait_for(timeout=30_000)
+        page.get_by_text("authorization_policy.py", exact=False).wait_for(timeout=30_000)
+    with page.expect_response(
+        lambda response: response.request.method == "POST"
+        and response.url.endswith("/api/experience/official-sample/version"),
+        timeout=30_000,
+    ) as pending:
+        page.get_by_role("button", name=confirm_label, exact=True).click()
+    if pending.value.status != 200:
+        raise SampleTestError(f"官方示例切换 {version} 返回 {pending.value.status}")
+    if _project_run_ids(client, project_id) != before_switch:
+        raise SampleTestError("版本切换不应创建检查记录")
+    page.wait_for_url(re.compile(rf"#/{route}$"), timeout=30_000)
+    status = client.call("GET", "/api/experience/official-sample")
+    if status.get("scenario_version") != version:
+        raise SampleTestError(f"官方示例没有切换到 {version}")
+    if version == "FIXED":
+        repair_change_id = status.get("repair_change_id")
+        if not isinstance(repair_change_id, str) or re.fullmatch(
+            r"chg_[0-9a-f]{32}", repair_change_id
+        ) is None:
+            raise SampleTestError("Agent 修复没有形成真实代码变化")
+    page.screenshot(path=str(audit_dir / filename), full_page=True)
+    return status
 
 
 def _assert_workspace_viewports(page: Page, origin: str, audit_dir: Path) -> None:
-    """核对 2.5K 主展示与 1280/600 响应式入口，不从截图反推产品事实。"""
+    """核对亮暗 2.5K、响应式入口和测试页随滚动可用的操作栏。"""
 
     def assert_no_horizontal_overflow(label: str) -> None:
         overflow = page.evaluate(
@@ -1325,32 +1022,46 @@ def _assert_workspace_viewports(page: Page, origin: str, audit_dir: Path) -> Non
 
     page.set_viewport_size({"width": 2560, "height": 1440})
     for route, heading in (
-        ("workspace", "项目概览"),
-        ("changes", "变化与待办"),
-        ("permissions", "权限规则"),
-        ("preparation", "测试准备"),
-        ("validation", "验证运行"),
-        ("results", "检查结果"),
+        ("workspace", "工作台"),
+        ("changes", "变化"),
+        ("permissions", "权限"),
+        ("tests", "测试"),
     ):
         page.goto(origin + f"/#/{route}", wait_until="networkidle")
         page.get_by_role("heading", name=heading, exact=True).first.wait_for(
             timeout=30_000
         )
     page.goto(origin + "/#/workspace", wait_until="networkidle")
-    if not page.locator(".process-navigation").is_visible():
-        raise SampleTestError("2560×1440 下持续验证工作区导航不可见")
+    if not page.locator(".module-navigation").is_visible():
+        raise SampleTestError("2560×1440 下四模块导航不可见")
     assert_no_horizontal_overflow("2560×1440 工作区")
     page.screenshot(path=str(audit_dir / "workspace-2560x1440.png"), full_page=True)
 
+    theme_button = page.get_by_label(re.compile("切换界面主题"))
+    theme_button.click()
+    page.get_by_text("暗色主题", exact=True).click()
+    page.wait_for_function("document.documentElement.dataset.theme === 'dark'")
+    page.locator(".ant-dropdown:not(.ant-dropdown-hidden)").wait_for(state="hidden")
+    if page.evaluate("getComputedStyle(document.body).backgroundColor") != "rgb(13, 17, 23)":
+        raise SampleTestError("暗色主题没有使用正式产品背景色")
+    if page.locator(".topbar-tools .ant-btn").first.evaluate("element => getComputedStyle(element).color") != "rgb(242, 245, 248)":
+        raise SampleTestError("暗色主题顶部即时状态的文字对比度不足")
+    assert_no_horizontal_overflow("2560×1440 暗色工作区")
+    page.screenshot(path=str(audit_dir / "workspace-2560x1440-dark.png"), full_page=True)
+    page.get_by_label("切换界面主题，当前：暗色").click()
+    page.get_by_text("亮色主题", exact=True).click()
+    page.wait_for_function("document.documentElement.dataset.theme === 'light'")
+    page.locator(".ant-dropdown:not(.ant-dropdown-hidden)").wait_for(state="hidden")
+
     page.set_viewport_size({"width": 1280, "height": 900})
-    if not page.locator(".process-navigation").is_visible():
-        raise SampleTestError("1280px 下桌面工作区导航不可见")
+    if not page.locator(".module-navigation").is_visible():
+        raise SampleTestError("1280px 下桌面四模块导航不可见")
     assert_no_horizontal_overflow("1280×900 工作区")
     page.screenshot(path=str(audit_dir / "workspace-1280x900.png"), full_page=True)
 
     page.set_viewport_size({"width": 600, "height": 900})
-    if page.locator(".process-navigation").is_visible():
-        raise SampleTestError("600px 下仍显示桌面工作区导航")
+    if page.locator(".module-navigation").is_visible():
+        raise SampleTestError("600px 下仍显示桌面四模块导航")
     trigger = page.get_by_label("打开持续验证工作区")
     trigger.wait_for(timeout=30_000)
     assert_no_horizontal_overflow("600×900 工作区")
@@ -1360,7 +1071,60 @@ def _assert_workspace_viewports(page: Page, origin: str, audit_dir: Path) -> Non
     mobile_navigation.last.wait_for(timeout=30_000)
     page.screenshot(path=str(audit_dir / "workspace-600x900-navigation.png"), full_page=True)
     page.keyboard.press("Escape")
+    mobile_navigation.last.wait_for(state="hidden", timeout=30_000)
+
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(origin + "/#/validation", wait_until="networkidle")
+    page.get_by_role("heading", name="验证运行", exact=True).wait_for(timeout=30_000)
+    action_bar = page.locator(".task-action-bar")
+    action_bar.wait_for(timeout=30_000)
+    for scroll_ratio in (0, 0.5, 1):
+        state = page.evaluate(
+            """(ratio) => {
+                const maximum = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+                window.scrollTo(0, maximum * ratio);
+                const rect = document.querySelector('.task-action-bar')?.getBoundingClientRect();
+                return rect ? { top: rect.top, bottom: rect.bottom, viewport: window.innerHeight, maximum } : null;
+            }""",
+            scroll_ratio,
+        )
+        if not state or state["top"] < -1 or state["bottom"] > state["viewport"] + 1:
+            raise SampleTestError(f"验证运行页底部操作栏没有随页面滚动保持可用：{state}")
+    page.screenshot(path=str(audit_dir / "validation-actions-1280x900.png"))
     page.set_viewport_size({"width": 2560, "height": 1440})
+
+
+def _assert_presentation_mode(page: Page, origin: str, audit_dir: Path) -> None:
+    """从正式工作台进入一例四幕，证明展示只重排当前官方样例事实。"""
+
+    page.set_viewport_size({"width": 2560, "height": 1440})
+    page.goto(origin + "/#/workspace", wait_until="networkidle")
+    page.get_by_role("button", name="进入完整展示", exact=True).click()
+    navigation = page.get_by_role("navigation", name="展示章节")
+    navigation.wait_for(timeout=30_000)
+    acts = (
+        ("发现矛盾", "403 与 ZIP 的矛盾", "presentation-01-conflict.png"),
+        ("回看变化", "人的规则、提交变化与界鉴核对", "presentation-02-change.png"),
+        ("展开证据", "权限要求、实际执行与真实后果", "presentation-03-evidence.png"),
+        ("验证修复", "修复合同", "presentation-04-repair.png"),
+    )
+    for label, fact_region, filename in acts:
+        button = navigation.get_by_role("button", name=re.compile(label))
+        button.click()
+        if button.get_attribute("aria-current") != "step":
+            raise SampleTestError(f"展示章节没有切换到：{label}")
+        heading = page.locator(".presentation-page-heading h2")
+        heading.wait_for(timeout=30_000)
+        if not heading.inner_text().strip():
+            raise SampleTestError(f"展示章节缺少主结论：{label}")
+        page.get_by_label(fact_region, exact=True).wait_for(timeout=30_000)
+        if page.locator(".presentation-content .ant-skeleton").count() != 0:
+            raise SampleTestError(f"展示章节仍在加载正式事实：{label}")
+        page.screenshot(path=str(audit_dir / filename), full_page=True)
+    page.get_by_role("button", name="返回工作台", exact=True).click()
+    page.get_by_role("heading", name="工作台", exact=True).first.wait_for(
+        timeout=30_000
+    )
 
 
 def _run_cli(
@@ -1420,7 +1184,7 @@ def _write_summary(audit_dir: Path, payload: dict[str, object]) -> None:
 def _failure_identity(error: Exception) -> tuple[str, str]:
     """把主错误压缩成稳定、无秘密的审计字段。"""
 
-    if isinstance(error, (SampleTestError, WindowsL5Error)):
+    if isinstance(error, SampleTestError):
         summary = str(error)
         token = summary.split(":", 1)[0]
         code = token if re.fullmatch(r"[A-Z][A-Z0-9_]+", token) else type(error).__name__.upper()
@@ -1430,63 +1194,12 @@ def _failure_identity(error: Exception) -> tuple[str, str]:
     return type(error).__name__.upper(), "自动 L5 出现未分类失败"
 
 
-def _recording_snapshot(client: ApiClient, state: HarnessState) -> dict[str, object] | None:
-    if state.recording_id is None:
-        return None
-    view = client.call("GET", f"/api/recordings/{state.recording_id}")
-    recording = view.get("recording") or {}
-    job = view.get("job") or {}
-    return {
-        "capture_phase": view.get("capture_phase"),
-        "recording_state": recording.get("state"),
-        "job_state": job.get("state"),
-    }
-
-
-def _recording_state_closed(snapshot: Mapping[str, object] | None) -> bool:
-    if snapshot is None:
-        return True
-    job_state = snapshot.get("job_state")
-    recording_state = snapshot.get("recording_state")
-    job_terminal = job_state in {"SUCCEEDED", "FAILED", "CANCELLED"}
-    recording_terminal = recording_state in {
-        "PENDING_REVIEW",
-        "COMPLETED",
-        "FAILED",
-        "CANCELLED",
-        "SAFETY_STOPPED",
-    }
-    return job_terminal and recording_terminal
-
-
-def _wait_recording_job_terminal(
-    client: ApiClient,
-    state: HarnessState,
-    *,
-    timeout: float,
-) -> dict[str, object] | None:
-    """给正式 Recording 收口留出有界时间，超时后由调用方决定是否取消 Job。"""
-
-    deadline = time.monotonic() + timeout
-    latest: dict[str, object] | None = None
-    while time.monotonic() < deadline:
-        try:
-            latest = _recording_snapshot(client, state)
-        except SampleTestError:
-            time.sleep(0.2)
-            continue
-        if latest is None or latest.get("job_state") in {"SUCCEEDED", "FAILED", "CANCELLED"}:
-            return latest
-        time.sleep(0.2)
-    return latest
-
-
 def _cleanup_after_failure(
     client: ApiClient,
     state: HarnessState,
     identities: Mapping[str, str],
 ) -> dict[str, object]:
-    """按公开 API 收口 Recording、身份、Sample 和控制面，不覆盖主错误。"""
+    """按公开 API 收口身份、Sample 和控制面，不覆盖首个失败。"""
 
     report: dict[str, object] = {"actions": []}
     actions = report["actions"]
@@ -1494,55 +1207,12 @@ def _cleanup_after_failure(
     if not state.product_ready:
         report.update(
             {
-                "before": None,
-                "after": None,
                 "state_closed": True,
                 "shutdown_requested": False,
             }
         )
         return report
-    try:
-        before = _recording_snapshot(client, state)
-        report["before"] = before
-        if before is not None and before.get("capture_phase") == "CAPTURING":
-            client.call(
-                "POST",
-                f"/api/recordings/{state.recording_id}/capture/stop",
-                {"schema_version": "1"},
-            )
-            actions.append("capture.stop")
-            before = _wait_recording_job_terminal(
-                client,
-                state,
-                timeout=15,
-            )
-        if (
-            before is not None
-            and state.recording_job_id is not None
-            and before.get("job_state") not in {"SUCCEEDED", "FAILED", "CANCELLED"}
-        ):
-            client.call("POST", f"/api/jobs/{state.recording_job_id}/cancel")
-            actions.append("job.cancel")
-            _wait_for(
-                lambda: _recording_snapshot(client, state),
-                lambda item: item is not None and item.get("job_state") in {"SUCCEEDED", "FAILED", "CANCELLED"},
-                timeout=20,
-                label="失败后的录制作业终态",
-            )
-        report["after"] = _wait_for(
-            lambda: _recording_snapshot(client, state),
-            _recording_state_closed,
-            timeout=15,
-            label="失败后的 Recording 状态收口",
-        )
-        report["state_closed"] = True
-    except Exception as error:
-        report["recording_cleanup_error"] = type(error).__name__
-        try:
-            report["after"] = _recording_snapshot(client, state)
-        except Exception:
-            report["after"] = None
-        report["state_closed"] = _recording_state_closed(report["after"])
+    report["state_closed"] = True
     for identity_id in identities.values():
         try:
             client.call(
@@ -1588,8 +1258,6 @@ def _write_failure(
             "l5_stage": state.stage,
             "failure_code": code,
             "primary_failure": summary,
-            "recording_id": state.recording_id,
-            "recording_job_id": state.recording_job_id,
             "active_run_id": state.active_run_id,
             "active_run_job_id": state.active_run_job_id,
             "cleanup": dict(cleanup),
@@ -1664,7 +1332,8 @@ def run(
     root: Path,
     var_dir: Path,
     *,
-    stop_after_recording: bool = False,
+    stop_after_setup: bool = False,
+    verify_workspace_ui: bool = False,
 ) -> None:
     root = root.resolve()
     var_dir = var_dir.resolve()
@@ -1731,36 +1400,37 @@ def run(
         client.bind_page(page)
 
         _phase(state, 2)
-        experience = _start_guided_experience(page, client, audit_dir, state)
+        experience = _start_official_experience(page, client, audit_dir, state)
         project_id = str(experience["project_id"])
         origin = str(experience["origin"])
         sample_port = int(origin.rsplit(":", 1)[1])
-        role_ids, action_ids = _confirm_understanding(client, project_id)
 
         _phase(state, 3)
-        identities = _prepare_identities(client, project_id)
+        identities, action_ids, vulnerable_change_id = _prepare_official_scenario(
+            page,
+            client,
+            audit_dir,
+            project_id,
+        )
 
         _phase(state, 4)
-        export_recording_id = _record_flow(
-            client,
-            project_id,
-            action_ids[EXPORT_ACTION_KEY],
-            identities["project_owner"],
-            source_runtime.playwright_executable,
-            state,
-        )
-        _confirm_safety(client, export_recording_id)
-        view_recording_id = _record_flow(
-            client,
-            project_id,
-            action_ids[VIEW_ACTION_KEY],
-            identities["project_owner"],
-            source_runtime.playwright_executable,
-            state,
-            flow_kind="view",
-        )
-        _confirm_safety(client, view_recording_id, flow_kind="view")
-        if stop_after_recording:
+        preview = client.call("GET", f"/api/projects/{project_id}/check-preview")
+        if (
+            preview.get("ready") is not True
+            or preview.get("case_count") != 3
+            or preview.get("differential_pair_count") != 1
+        ):
+            raise SampleTestError("公开样例合同没有形成三条权限路径与一组导出对照")
+        page.goto(client.origin + "/#/tests", wait_until="networkidle")
+        page.get_by_role("heading", name="测试", exact=True).wait_for(timeout=30_000)
+        page.get_by_text(
+            "当前权限规则和测试条件已经可以开始检查。",
+            exact=True,
+        ).wait_for(timeout=30_000)
+        page.screenshot(path=str(audit_dir / "official-three-paths-ready.png"), full_page=True)
+        if stop_after_setup:
+            if verify_workspace_ui:
+                _assert_workspace_viewports(page, client.origin, audit_dir)
             _shutdown_owned_runtime(
                 client,
                 state,
@@ -1779,8 +1449,10 @@ def run(
                 audit_dir,
                 {
                     "schema_version": "1",
-                    "recording_ids": [export_recording_id, view_recording_id],
-                    "recording_probe": "passed",
+                    "scenario_setup_probe": "passed",
+                    "case_count": 3,
+                    "differential_pair_count": 1,
+                    "workspace_ui_probe": "passed" if verify_workspace_ui else "not-run",
                     "control_port_closed": True,
                     "sample_port_closed": True,
                     "owned_process_tree_closed": True,
@@ -1789,27 +1461,16 @@ def run(
             return
 
         _phase(state, 5)
-        _confirm_permissions(
-            page,
-            client,
-            audit_dir,
-            project_id,
-            action_ids,
-            role_ids,
-        )
-
-        _phase(state, 6)
         vulnerable = _run_case(
             client,
             project_id,
             identities,
             state,
             name="vulnerable",
-            authorization_order="ENQUEUE_BEFORE_AUTHORIZE",
-            blob_observation="AVAILABLE",
             expected_verdict="BLOCK",
             expected_issue="VULNERABLE",
             action_ids=action_ids,
+            change_id=vulnerable_change_id,
         )
         _assert_verification_view(
             page,
@@ -1819,11 +1480,14 @@ def run(
             name="block",
             verify_interactions=True,
         )
-        _prepare_official_repair_verification(
+
+        _phase(state, 6)
+        _switch_official_version_through_ui(
             page,
             client,
-            project_id,
-            str(vulnerable["run_id"]),
+            audit_dir,
+            "FIXED",
+            source_run_id=str(vulnerable["run_id"]),
         )
 
         _phase(state, 7)
@@ -1833,13 +1497,10 @@ def run(
             identities,
             state,
             name="fixed",
-            authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
-            blob_observation="AVAILABLE",
             expected_verdict="PASS",
             expected_issue="SAFE",
             action_ids=action_ids,
             verification_run_id=str(vulnerable["run_id"]),
-            configure_behavior=False,
         )
         _assert_verification_view(
             page,
@@ -1848,19 +1509,32 @@ def run(
             audit_dir,
             name="repair-verified",
         )
+        _assert_presentation_mode(page, client.origin, audit_dir)
 
         _phase(state, 8)
+        evidence_limited_status = _switch_official_version_through_ui(
+            page,
+            client,
+            audit_dir,
+            "EVIDENCE_LIMITED",
+        )
+        evidence_change_id = evidence_limited_status.get("vulnerable_change_id")
+        if not isinstance(evidence_change_id, str):
+            raise SampleTestError("证据受限版没有形成当前问题代码变化")
         inconclusive = _run_case(
             client,
             project_id,
             identities,
             state,
             name="observation-limited",
-            authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
-            blob_observation="UNAVAILABLE",
             expected_verdict="INCONCLUSIVE",
             expected_issue="INCONCLUSIVE",
             action_ids=action_ids,
+            change_id=evidence_change_id,
+            expected_source_statuses={
+                "OWNER_API": "UNAVAILABLE",
+                "AZURE_BLOB_OBJECT": "UNAVAILABLE",
+            },
         )
         _assert_verification_view(
             page,
@@ -1928,7 +1602,7 @@ def run(
             {
                 "schema_version": "1",
                 "project_id": project_id,
-                "recording_ids": [export_recording_id, view_recording_id],
+                "scenario_versions": ["VULNERABLE", "FIXED", "EVIDENCE_LIMITED"],
                 "runs": [{"run_id": item["run_id"], "verdict": item["verdict"]} for item in runs],
                 "control_port_closed": True,
                 "sample_port_closed": True,

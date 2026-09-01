@@ -1,4 +1,4 @@
-# 验证官方 Sample 的“验证修复”只编排 RepairContract、代码变化与既有检查链。
+# 验证官方 Sample 切换修复版只编排 RepairContract 与源码变化，不替代后续检查。
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from product.backend.core.repair import RepairContractReference
 from product.backend.workflows.official_sample import (
-    OfficialExperienceMode,
+    OfficialScenarioVersion,
     OfficialSampleExperience,
     _Experience,
 )
@@ -29,10 +29,19 @@ class _Manager:
             display_name="协作空间",
             reason=None,
         )
-        self.switches: list[tuple[str, str]] = []
+        self.switches: list[tuple[str, str, str]] = []
 
-    def switch_behavior(self, _experience_id, *, authorization_order, blob_observation):
-        self.switches.append((authorization_order, blob_observation))
+    def switch_behavior(
+        self,
+        _experience_id,
+        *,
+        authorization_order,
+        owner_observation,
+        blob_observation,
+    ):
+        self.switches.append(
+            (authorization_order, owner_observation, blob_observation)
+        )
 
 
 class _SourceChanges:
@@ -44,7 +53,7 @@ class _SourceChanges:
         return SimpleNamespace(change_id="chg_" + "4" * 32), None, None
 
 
-def test_verify_fixed_creates_authoritative_repair_change_before_existing_check() -> None:
+def test_fixed_version_creates_authoritative_repair_change_without_running_check() -> None:
     runtime = SimpleNamespace(experience_id="exp_" + "5" * 32, origin="http://127.0.0.1:1")
     manager = _Manager(runtime)
     source_changes = _SourceChanges()
@@ -65,30 +74,36 @@ def test_verify_fixed_creates_authoritative_repair_change_before_existing_check(
         SimpleNamespace(),
         SimpleNamespace(),
         SimpleNamespace(get=lambda _project_id: status),
+        scenario_installer=SimpleNamespace(),
+        action_safety_setup=SimpleNamespace(),
+        permission_intents=SimpleNamespace(),
+        project_preparation=SimpleNamespace(status=lambda _project_id: SimpleNamespace(ready=True)),
         repair_contracts=repairs,
         source_changes=source_changes,
     )
     experience._current = _Experience(
         runtime=runtime,
-        mode=OfficialExperienceMode.GUIDED,
         project_id=PROJECT_ID,
+        scenario_prepared=True,
     )
 
-    view = experience.switch_behavior(
-        authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
-        blob_observation="AVAILABLE",
-        verification_run_id=RUN_ID,
+    view = experience.switch_version(
+        version=OfficialScenarioVersion.FIXED,
+        source_run_id=RUN_ID,
     )
 
-    assert manager.switches == [("AUTHORIZE_BEFORE_ENQUEUE", "AVAILABLE")]
+    assert manager.switches == [
+        ("AUTHORIZE_BEFORE_ENQUEUE", "AVAILABLE", "AVAILABLE")
+    ]
     assert source_changes.calls == [
         (
             PROJECT_ID,
             {
-                "reason": "按已发布权限问题验证修复后的官方示例行为",
-                "submitted_by": "Official Sample",
+                "reason": "Codex 按界鉴修复合同把权限判断移动到后台任务创建之前",
+                "submitted_by": "MCP · Codex",
                 "repair_reference": REFERENCE,
             },
         )
     ]
     assert view.repair_change_id == "chg_" + "4" * 32
+    assert view.scenario_version is OfficialScenarioVersion.FIXED

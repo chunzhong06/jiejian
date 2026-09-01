@@ -11,6 +11,7 @@ vi.mock('../../api/mcp', () => ({
     pair: vi.fn(),
     reveal: vi.fn(),
     rotate: vi.fn(),
+    resume: vi.fn(),
     pause: vi.fn(),
     forget: vi.fn(),
     setProjectAccess: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock('../../api/mcp', () => ({
 describe('ToolsPage', () => {
   afterEach(() => cleanup())
 
-  it('展示 Codex、DSH、其他客户端和固定 Oracle 提示', async () => {
+  it('展示五类正式客户端和固定 Oracle 提示', async () => {
     status.mockResolvedValue({
       schema_version: '1',
       paired: true,
@@ -32,15 +33,18 @@ describe('ToolsPage', () => {
       client_name: null,
       client_version: null,
       last_seen_at_us: null,
+      connection_state: 'CREDENTIAL_READY',
+      last_authenticated_at_us: null,
+      last_auth_failure_at_us: null,
     })
 
     render(<ToolsPage projects={[{ project_id: 'project-demo', name: '演示应用', status: 'READY' }]} onError={vi.fn()} />)
 
-    expect(await screen.findByRole('heading', { name: 'AI 工具' })).toBeInTheDocument()
-    expect(screen.getByText('Codex', { selector: '.ant-card-head-title' })).toBeInTheDocument()
-    expect(screen.getByText('DSH', { selector: '.ant-card-head-title' })).toBeInTheDocument()
-    expect(screen.getByText('其他 MCP 客户端', { selector: '.ant-card-head-title' })).toBeInTheDocument()
-    expect(screen.getByText(/不能批准权限变化、退休人的权限要求或改变安全结论/)).toBeInTheDocument()
-    expect(document.querySelector('.process-navigation')).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'AI 工具连接' })).toBeInTheDocument()
+    for (const label of ['Codex', 'TRAE', 'Qoder', 'CodeBuddy', 'DSH']) {
+      expect(screen.getByText(label, { selector: '.ant-segmented-item-label' })).toBeInTheDocument()
+    }
+    expect(screen.getByText(/不能确认或更改权限规则，也不能改变界鉴的检查结论/)).toBeInTheDocument()
+    expect(document.querySelector('.module-navigation')).not.toBeInTheDocument()
   })
 })

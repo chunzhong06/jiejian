@@ -97,6 +97,7 @@ export type EvidenceDto = {
 
 export type ResultEvidenceSourceDto = {
   observer_type: 'OWNER_API' | 'READ_ONLY_SQLITE' | 'STRUCTURED_AUDIT_LOG' | 'ASYNC_TASK_STATUS' | 'AZURE_QUEUE_PEEK' | 'AZURE_BLOB_OBJECT'
+  observer_id?: string | null
   label: string
   role: 'KEY' | 'SUPPORTING'
   status: 'FOUND' | 'NOT_FOUND' | 'UNAVAILABLE'
@@ -200,6 +201,12 @@ export type ResultEvidenceExplanationDto = {
   relevance: string
   evidence_refs: string[]
   component: string | null
+  location: string | null
+  observer_id: string | null
+  observation_phase: 'BASELINE' | 'BEFORE' | 'AFTER' | 'EVENTUAL' | null
+  provenance_type: string | null
+  adapter_version: string | null
+  source_sha256: string | null
   observed_at_us: number | null
 }
 

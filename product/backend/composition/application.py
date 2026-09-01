@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import os
+import time
 from functools import partial
 from pathlib import Path
 from collections.abc import Mapping
@@ -74,6 +75,7 @@ from product.backend.workflows.control import (
     ProductStatusService,
 )
 from product.backend.workflows.official_sample import OfficialSampleExperience
+from product.backend.workflows.official_scenario import OfficialScenarioInstaller
 from product.backend.workflows.competition_validation import (
     CompetitionValidationSummaryQuery,
 )
@@ -295,34 +297,12 @@ class ApplicationCore:
             self.result_history,
         )
         self.product_flows = ProductFlowQuery(self.projects, factory)
-        self.official_experience = OfficialSampleExperience(
-            self.official_samples,
-            self.application_understanding,
-            self.test_identities,
-            self.secret_store,
-            self.local_observer_environments,
-            self.product_status,
-            repair_contracts=self.repair_contracts,
-            source_changes=self.source_changes,
-            clock_us=clock_us,
-        )
-        self.project_lifecycle = ProjectLifecycleService(
-            factory,
-            self.test_identities,
-            stop_official_sample=self.official_experience.stop_project,
-            clock_us=clock_us,
-        )
-        from product.backend.workflows.assistant import GuidanceQueryService
-
-        self.assistant_guidance = GuidanceQueryService(
-            self.project_readiness.get,
-            self.checks.preview,
-        )
+        self.recording_lifecycle = RecordingLifecycle(factory, var_dir=self.var_dir)
         self.recording_submission = RecordingSubmission(
             factory,
             self.recording_request_store,
+            attempts=self.job_attempts,
         )
-        self.recording_lifecycle = RecordingLifecycle(factory, var_dir=self.var_dir)
         self.project_recordings = ProjectRecordingService(
             self.application_understanding,
             self.test_identities,
@@ -332,6 +312,45 @@ class ApplicationCore:
             request_store=self.recording_request_store,
             projects=self.projects,
             clock_us=clock_us,
+        )
+        self.official_scenario = OfficialScenarioInstaller(
+            self.project_recordings,
+            self.recording_submission,
+            self.job_attempts,
+            var_dir=self.var_dir,
+            recording_credentials=self.recording_credentials,
+            lifecycle=self.recording_lifecycle,
+            clock_us=clock_us or (lambda: time.time_ns() // 1_000),
+        )
+        # ProjectLifecycle 通过延迟回调停止当前体验；随后 Experience 可以在
+        # 用户结束样例或应用关闭时复用同一正式归档边界。
+        self.project_lifecycle = ProjectLifecycleService(
+            factory,
+            self.test_identities,
+            stop_official_sample=lambda project_id: self.official_experience.stop_project(project_id),
+            clock_us=clock_us,
+        )
+        self.official_experience = OfficialSampleExperience(
+            self.official_samples,
+            self.application_understanding,
+            self.test_identities,
+            self.secret_store,
+            self.local_observer_environments,
+            self.product_status,
+            scenario_installer=self.official_scenario,
+            action_safety_setup=self.action_safety_setup,
+            permission_intents=self.permission_intents,
+            project_preparation=self.project_preparation,
+            repair_contracts=self.repair_contracts,
+            source_changes=self.source_changes,
+            archive_project=self.project_lifecycle.archive,
+            clock_us=clock_us,
+        )
+        from product.backend.workflows.assistant import GuidanceQueryService
+
+        self.assistant_guidance = GuidanceQueryService(
+            self.project_readiness.get,
+            self.checks.preview,
         )
         self.onboarding = OnboardingWorkflow(
             folder_selector

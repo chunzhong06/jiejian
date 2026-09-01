@@ -1,11 +1,11 @@
-// 验证 MCP 配对、凭据展示、连接向导、活动状态与逐应用临时授权边界。
+// 验证五类 MCP 客户端共享新手向导和真实状态机，秘密不在页面正文出现。
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MCPAccessCard from './MCPAccessCard'
 
 const mockApi = vi.hoisted(() => ({
-  status: vi.fn(), pair: vi.fn(), reveal: vi.fn(), rotate: vi.fn(), pause: vi.fn(), forget: vi.fn(), setProjectAccess: vi.fn(),
+  status: vi.fn(), pair: vi.fn(), reveal: vi.fn(), rotate: vi.fn(), resume: vi.fn(), pause: vi.fn(), forget: vi.fn(), setProjectAccess: vi.fn(),
 }))
 
 vi.mock('../../api/mcp', () => ({ mcpAccessApi: mockApi }))
@@ -15,8 +15,19 @@ const unpaired = {
   schema_version: '1' as const, paired: false, accepting_connections: false, endpoint,
   default_level: 'READ' as const, project_grants: [], client_connected: false,
   client_name: null, client_version: null, last_seen_at_us: null,
+  connection_state: 'DISABLED' as const, last_authenticated_at_us: null, last_auth_failure_at_us: null,
 }
-const waiting = { ...unpaired, paired: true, accepting_connections: true }
+const waiting = { ...unpaired, paired: true, accepting_connections: true, connection_state: 'CREDENTIAL_READY' as const }
+const rejected = { ...waiting, connection_state: 'CREDENTIAL_REJECTED' as const, last_auth_failure_at_us: 10 }
+const connected = {
+  ...waiting,
+  client_connected: true,
+  client_name: 'Codex',
+  client_version: '1.2.3',
+  last_seen_at_us: 1_735_689_600_000_000,
+  connection_state: 'CONNECTED' as const,
+  last_authenticated_at_us: 1_735_689_599_000_000,
+}
 const credential = { ...waiting, access_token: 'mcp-secret-token' }
 
 function renderCard(projects: { project_id: string; name?: string }[] = []) {
@@ -25,10 +36,15 @@ function renderCard(projects: { project_id: string; name?: string }[] = []) {
 
 describe('MCPAccessCard', () => {
   beforeEach(() => {
-    mockApi.status.mockResolvedValue(unpaired)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    mockApi.status.mockReset().mockResolvedValue(unpaired)
     mockApi.pair.mockReset()
     mockApi.reveal.mockReset()
     mockApi.rotate.mockReset()
+    mockApi.resume.mockReset()
     mockApi.pause.mockReset()
     mockApi.forget.mockReset()
     mockApi.setProjectAccess.mockReset()
@@ -36,152 +52,94 @@ describe('MCPAccessCard', () => {
 
   afterEach(() => cleanup())
 
-  it('pairs once and keeps the returned credential masked', async () => {
+  it('按五个明确步骤引导首次连接，创建凭据后仍不冒充连接成功', async () => {
     mockApi.pair.mockResolvedValue(credential)
     renderCard()
 
-    fireEvent.click(await screen.findByRole('button', { name: '首次配对 AI 工具' }))
-    fireEvent.click(await screen.findByRole('button', { name: '管理连接' }))
-    const token = await screen.findByLabelText('MCP 连接凭据')
-    expect(token).toHaveValue('mcp-secret-token')
-    expect(token).toHaveAttribute('type', 'password')
-    expect(mockApi.pair).toHaveBeenCalledOnce()
-  })
-
-  it('does not put a token in the DOM after ordinary status', async () => {
-    mockApi.status.mockResolvedValue(waiting)
-    renderCard()
-
-    await screen.findByText('已配对，正在等待客户端完成 initialize。默认权限为只读。')
-    expect(screen.queryByLabelText('MCP 连接凭据')).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '跟着 5 步完成连接' })).toBeInTheDocument()
+    expect(screen.getByText(/按 Win \+ R，输入 %USERPROFILE%/)).toBeInTheDocument()
+    expect(screen.getByText(/打开“开始”菜单，搜索 Windows PowerShell/)).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: '准备本机连接' }))
+    expect(await screen.findByText('下一步：在 AI 工具中添加 jiejian')).toBeInTheDocument()
+    expect(screen.getAllByText('界鉴已准备好')).toHaveLength(2)
+    expect(screen.queryByText('连接成功')).not.toBeInTheDocument()
     expect(screen.queryByText('mcp-secret-token')).not.toBeInTheDocument()
   })
 
-  it('keeps all client guides available before the first pairing', async () => {
+  it('用一个紧凑选择器提供 Codex、TRAE、Qoder、CodeBuddy 和 DSH', async () => {
     renderCard()
 
-    expect(await screen.findByText('Codex', { selector: '.ant-card-head-title' })).toBeInTheDocument()
-    expect(screen.getByText('DSH', { selector: '.ant-card-head-title' })).toBeInTheDocument()
-    expect(screen.getByText('其他 MCP 客户端', { selector: '.ant-card-head-title' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看 Codex 三步连接' })).toBeInTheDocument()
+    await screen.findByText('跟着 5 步完成连接')
+    for (const label of ['Codex', 'TRAE', 'Qoder', 'CodeBuddy', 'DSH']) {
+      expect(screen.getByText(label, { selector: '.ant-segmented-item-label' })).toBeInTheDocument()
+    }
+    expect(document.querySelectorAll('.mcp-beginner-guide')).toHaveLength(1)
   })
 
-  it('reveals only after the explicit action while keeping the input masked', async () => {
+  it('对需要本机凭据的客户端分开复制第 3 步配置和第 4 步凭据', async () => {
     mockApi.status.mockResolvedValue(waiting)
     mockApi.reveal.mockResolvedValue(credential)
     renderCard()
 
-    fireEvent.click(await screen.findByRole('button', { name: '管理连接' }))
-    fireEvent.click(screen.getByRole('button', { name: '显示连接凭据' }))
-    const token = await screen.findByLabelText('MCP 连接凭据')
-    expect(mockApi.reveal).toHaveBeenCalledOnce()
-    expect(token).toHaveValue('mcp-secret-token')
-    expect(token).toHaveAttribute('type', 'password')
+    fireEvent.click(await screen.findByText('TRAE', { selector: '.ant-segmented-item-label' }))
+    expect(screen.getByText(/进入“设置 → MCP → 手动添加”/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '复制第 3 步内容' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制第 4 步内容' }))
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Bearer mcp-secret-token'))
+    expect(screen.queryByText('mcp-secret-token')).not.toBeInTheDocument()
   })
 
-  it('shows the three connection guides without embedding a real token', async () => {
+  it('检查连接时能区分客户端未请求与凭据被拒绝', async () => {
     mockApi.status.mockResolvedValue(waiting)
     renderCard()
+    await screen.findByText('下一步：在 AI 工具中添加 jiejian')
+    mockApi.status.mockResolvedValue(rejected)
 
-    await screen.findByText('Codex', { selector: '.ant-card-head-title' })
-    fireEvent.click(screen.getByRole('button', { name: '查看 Codex 三步连接' }))
-    expect(screen.getByText('1. 准备长期凭据')).toBeInTheDocument()
-    expect(screen.getByText('2. 一次性配置客户端')).toBeInTheDocument()
-    expect(screen.getByText('3. 等待 initialize 成功')).toBeInTheDocument()
-    expect(screen.getByText(/codex mcp add jiejian/)).toBeInTheDocument()
-    expect(screen.getByText(/SetEnvironmentVariable/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-    fireEvent.click(screen.getByRole('button', { name: '查看 DSH 三步连接' }))
-    expect(screen.getAllByText(/@deepseek-ai\/dsh-mcp-client/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/!!js/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-    fireEvent.click(screen.getByRole('button', { name: '查看其他 MCP 客户端连接说明' }))
-    expect(screen.getByText(/Streamable HTTP endpoint/)).toBeInTheDocument()
-    expect(screen.getByText(/PREPARE\/EXECUTE 必须回界鉴当前会话授权/)).toBeInTheDocument()
-    expect(screen.getByText(/以后启动界鉴会自动恢复只读连接/)).toBeInTheDocument()
-    expect(screen.getByText(/轮换后只需更新客户端读取的 JIEJIAN_MCP_TOKEN/)).toBeInTheDocument()
-    expect(screen.getByText(/忘记此连接.*彻底删除长期配对/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '检查连接' }))
+    expect(await screen.findByText('客户端已访问界鉴，但使用的连接凭据无效。请更新凭据后重新连接。')).toBeInTheDocument()
+    expect(screen.getByText('客户端已经找到界鉴，但使用了失效凭据')).toBeInTheDocument()
   })
 
-  it('shows connected client activity and the safe fallback identity', async () => {
-    mockApi.status.mockResolvedValue({ ...waiting, client_connected: true, client_name: 'Codex', client_version: '1.2.3', last_seen_at_us: 1_735_689_600_000_000 })
-    renderCard()
-    expect(await screen.findByText('已连接')).toBeInTheDocument()
-    expect(screen.getByText('客户端：Codex · 版本：1.2.3')).toBeInTheDocument()
-    expect(screen.getByText(/最近活动：/)).toBeInTheDocument()
-
-    cleanup()
-    mockApi.status.mockResolvedValue({ ...waiting, client_connected: true, client_name: null, client_version: null, last_seen_at_us: 1_735_689_600_000_000 })
-    renderCard()
-    expect(await screen.findByText('已认证客户端已连接')).toBeInTheDocument()
-    expect(screen.queryByText(/客户端名称未提供/)).not.toBeInTheDocument()
-  })
-
-  it('pauses and clears the temporary credential, then confirms rotate and forget', async () => {
-    mockApi.status.mockResolvedValue(waiting)
-    mockApi.reveal.mockResolvedValue(credential)
-    mockApi.pause.mockResolvedValue({ ...waiting, accepting_connections: false })
-    mockApi.rotate.mockResolvedValue({ ...waiting, access_token: 'rotated-token' })
-    mockApi.forget.mockResolvedValue(unpaired)
-    renderCard()
-
-    fireEvent.click(await screen.findByRole('button', { name: '管理连接' }))
-    fireEvent.click(screen.getByRole('button', { name: '显示连接凭据' }))
-    await screen.findByLabelText('MCP 连接凭据')
-    fireEvent.click(screen.getByRole('button', { name: '暂停本次连接' }))
-    await waitFor(() => expect(mockApi.pause).toHaveBeenCalledOnce())
-    expect(screen.queryByLabelText('MCP 连接凭据')).not.toBeInTheDocument()
-    expect(await screen.findByText('本次连接已暂停；长期配对仍保留，下次启动界鉴会自动恢复只读连接。当前 serve 不提供恢复按钮。')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '恢复连接' })).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '重新生成连接凭据' }))
-    fireEvent.click(await screen.findByRole('button', { name: /确\s*认/ }))
-    await waitFor(() => expect(mockApi.rotate).toHaveBeenCalledOnce())
-    expect(await screen.findByLabelText('MCP 连接凭据')).toHaveValue('rotated-token')
-
-    fireEvent.click(screen.getByRole('button', { name: '忘记此连接' }))
-    fireEvent.click(await screen.findByRole('button', { name: /确\s*认/ }))
-    await waitFor(() => expect(mockApi.forget).toHaveBeenCalledOnce())
-    expect(await screen.findByText('尚未配对。首次配对会把长期连接凭据安全保存到 Windows Credential Manager；默认只读。')).toBeInTheDocument()
-  })
-
-  it('changes a project grant only while the serve accepts connections', async () => {
-    mockApi.status.mockResolvedValue(waiting)
-    mockApi.setProjectAccess.mockResolvedValue({ ...waiting, project_grants: [{ project_id: 'proj-1', level: 'PREPARE' as const }] })
+  it('只有 SDK 成功处理请求后才显示客户端事实和逐应用权限', async () => {
+    mockApi.status.mockResolvedValue(connected)
+    mockApi.setProjectAccess.mockResolvedValue({
+      ...connected,
+      project_grants: [{ project_id: 'proj-1', level: 'PREPARE' as const }],
+    })
     renderCard([{ project_id: 'proj-1', name: '示例应用' }])
 
-    fireEvent.click(await screen.findByRole('button', { name: '调整权限' }))
-    expect(screen.getByText(/本次确认不会永久保存/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '确认临时权限' }))
+    expect(await screen.findByRole('heading', { name: 'Codex 已连接到界鉴' })).toBeInTheDocument()
+    expect(screen.getByText('Codex · 1.2.3')).toBeInTheDocument()
+    expect(screen.getByText('AI 工具这次可以做什么')).toBeInTheDocument()
+    expect(screen.getByText('一次登记整批变化')).toBeInTheDocument()
+    expect(screen.getByText(/不会在每次保存或修改单个文件后打断你/)).toBeInTheDocument()
+    expect(screen.queryByText('跟着 5 步完成连接')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '复制协作任务' }))
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringMatching(/一个完整的用户任务已经完成/)))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringMatching(/jiejian_change_submit/))
+
+    fireEvent.click(screen.getByRole('button', { name: '调整这次允许范围' }))
+    expect(screen.getByRole('dialog', { name: '这次允许 AI 工具做到哪一步？' })).toBeInTheDocument()
+    expect(screen.getByText(/完成一个用户任务后登记整批代码变化/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保存这次允许范围' }))
     await waitFor(() => expect(mockApi.setProjectAccess).toHaveBeenCalledWith('proj-1', 'PREPARE'))
   })
 
-  it('does not write a stale status response after the drawer closes', async () => {
-    let resolveStatus!: (value: typeof waiting) => void
-    mockApi.status.mockReturnValue(new Promise((resolve) => { resolveStatus = resolve }))
-    const view = render(<MCPAccessCard open projects={[]} onError={vi.fn()} />)
-    view.rerender(<MCPAccessCard open={false} projects={[]} onError={vi.fn()} />)
-    resolveStatus(waiting)
-    await Promise.resolve()
-    expect(screen.queryByText('已配对，正在等待客户端完成 initialize。默认权限为只读。')).not.toBeInTheDocument()
-  })
-
-  it('does not write a stale credential response into a reopened drawer', async () => {
+  it('暂停后可在同一连接管理页恢复，不要求重新创建凭据', async () => {
     mockApi.status.mockResolvedValue(waiting)
-    let resolveReveal!: (value: typeof credential) => void
-    mockApi.reveal.mockReturnValue(new Promise((resolve) => { resolveReveal = resolve }))
-    const onError = vi.fn()
-    const view = render(<MCPAccessCard open projects={[]} onError={onError} />)
+    mockApi.pause.mockResolvedValue({ ...waiting, accepting_connections: false, connection_state: 'PAUSED' as const })
+    mockApi.resume.mockResolvedValue(waiting)
+    renderCard()
 
     fireEvent.click(await screen.findByRole('button', { name: '管理连接' }))
-    fireEvent.click(screen.getByRole('button', { name: '显示连接凭据' }))
-    view.rerender(<MCPAccessCard open={false} projects={[]} onError={onError} />)
-    view.rerender(<MCPAccessCard open projects={[]} onError={onError} />)
-    await screen.findByText('已配对，正在等待客户端完成 initialize。默认权限为只读。')
-    resolveReveal(credential)
-    await Promise.resolve()
+    fireEvent.click(screen.getByRole('button', { name: '暂停本次连接' }))
+    expect(await screen.findByText('界鉴暂时不接受 AI 工具连接')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '恢复接受连接' }))
 
-    expect(screen.queryByLabelText('MCP 连接凭据')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('MCP 连接凭据')).not.toBeInTheDocument()
+    await waitFor(() => expect(mockApi.resume).toHaveBeenCalledOnce())
+    expect(await screen.findByText('下一步：在 AI 工具中添加 jiejian')).toBeInTheDocument()
+    expect(mockApi.pair).not.toHaveBeenCalled()
   })
 })

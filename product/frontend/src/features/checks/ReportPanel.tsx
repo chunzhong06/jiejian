@@ -7,6 +7,7 @@ import { ApiError } from '../../api/http'
 import { resultsApi, type ReportDto } from '../../api/results'
 import { runsApi, type RunDto } from '../../api/runs'
 import { gateDecisionLabel } from '../../app/presentation'
+import { useThemeMode } from '../../app/ThemeContext'
 
 const exportFormats = [
   ['html', 'HTML'],
@@ -16,6 +17,7 @@ const exportFormats = [
 ] as const
 
 export function ReportPanel({ run, onError }: { run?: RunDto; onError: (error: ApiError) => void }) {
+  const { resolved } = useThemeMode()
   const [authoritative, setAuthoritative] = useState<RunDto | undefined>(run)
   const [reports, setReports] = useState<ReportDto[]>([])
   const [selectedId, setSelectedId] = useState<string>()
@@ -42,6 +44,7 @@ export function ReportPanel({ run, onError }: { run?: RunDto; onError: (error: A
   if (!run?.run_id) return <Card title="完整报告"><Alert type="info" showIcon message="尚未选择可查看的检查结果。" /></Card>
   if (authoritative?.result_integrity !== 'VERIFIED') return <Card title="完整报告"><Alert type="info" showIcon message="结果尚未通过完整性校验，暂不提供报告。" /></Card>
   const viewUrl = selectedId ? resultsApi.reportView(String(run.run_id), selectedId) : undefined
+  const themedViewUrl = viewUrl && resolved === 'dark' ? `${viewUrl}#dark-theme` : viewUrl
   const exportItems = exportFormats.map(([format, label]) => ({
     key: format,
     label: <a href={resultsApi.reportFormat(String(run.run_id), String(selectedId), format)} target="_blank" rel="noopener noreferrer">{label}</a>,
@@ -52,12 +55,12 @@ export function ReportPanel({ run, onError }: { run?: RunDto; onError: (error: A
     {!selectedId && <Typography.Paragraph type="secondary">已发布结果，但没有可读取的统一报告。</Typography.Paragraph>}
     {viewUrl && <Space direction="vertical" className="full-width">
       <Space wrap>
-        <Button href={viewUrl} target="_blank" rel="noopener noreferrer">在新窗口打开</Button>
+        <Button href={themedViewUrl} target="_blank" rel="noopener noreferrer">在新窗口打开</Button>
         <Dropdown menu={{ items: exportItems }} trigger={['click']}>
           <Button>导出 <DownOutlined /></Button>
         </Dropdown>
       </Space>
-      <iframe title="界鉴权限安全检查报告" src={viewUrl} sandbox="" style={{ width: '100%', minHeight: 720, border: '1px solid #e5e7eb', borderRadius: 8 }} />
+      <iframe title="界鉴权限安全检查报告" src={themedViewUrl} sandbox="" className="report-frame" />
     </Space>}
   </Card>
 }

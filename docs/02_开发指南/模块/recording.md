@@ -64,7 +64,7 @@ Job 说明后台执行是否完成，Recording 状态说明录制业务生命周
 - 登录准备不采集，Cookie/Bearer 正文只从 SecretStore 最小注入独立 BrowserContext；事件落盘前限长脱敏。
 - Recording 根据录制事实自动采用唯一且可执行的业务解释；只有多个同级业务解释并存时，用户才在业务动作、有限资源值或来源步骤之间选择。Flow 继续保留内部 TARGET、变量与资源绑定，但不保存 ALLOW/DENY、Observer 或 reset 默认。
 - 失败先保存 primary failure，再正式 stop/cancel/shutdown；cleanup issue 不能覆盖主错误，数据库不能手工改终态。
-- 测试不得构造 RecordingEvent、预制 FlowDraft、直接访问 Sample HTTP 代替真实页面按钮。
+- 普通 Recording 测试不得构造 RecordingEvent、预制 FlowDraft、直接访问 Sample HTTP 代替真实页面按钮；官方样例只能按其任务指南冻结的受控轨迹例外走完整 application service 链，不能直写 Storage。
 
 ## 直接验证
 

@@ -11,6 +11,7 @@ const change = {
   change_id: `chg_${'1'.repeat(32)}`,
   project_id: 'p1',
   reason: 'Agent 增加了批量导出入口',
+  submitted_by: 'MCP · Codex',
   created_at_us: 1,
   status: 'COMPARABLE' as const,
   complete: true,
@@ -48,10 +49,11 @@ describe('ChangesPage', () => {
     />)
 
     expect(await screen.findByText('Agent 增加了批量导出入口')).toBeInTheDocument()
+    expect(screen.getAllByText(/MCP · Codex/).length).toBeGreaterThan(0)
     expect(api.list).toHaveBeenCalledWith('p1')
     expect(screen.getAllByText('app/export_job.py').length).toBeGreaterThan(0)
     expect(screen.getAllByText('app/permissions.py').length).toBeGreaterThan(0)
-    expect(screen.getByText('需要重新确认实现映射')).toBeInTheDocument()
+    expect(screen.getAllByText('需要重新确认实现映射').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: '确认权限实现' }))
     expect(onNavigate).toHaveBeenNthCalledWith(1, '/permissions')
@@ -100,7 +102,7 @@ describe('ChangesPage', () => {
     api.list.mockResolvedValue([])
     render(<ChangesPage project={{ project_id: 'p1' }} status={null} onError={vi.fn()} onNavigate={vi.fn()} />)
 
-    await waitFor(() => expect(screen.getByText('当前还没有 Agent 代码变化记录')).toBeInTheDocument())
-    expect(screen.getByText('等待 Agent 代码变化')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('当前没有需要重新核对的代码变化。')).toBeInTheDocument())
+    expect(screen.getByText('等待 Agent 提交下一次代码变化。')).toBeInTheDocument()
   })
 })

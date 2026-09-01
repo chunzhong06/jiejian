@@ -132,8 +132,8 @@
 - `class SourceRuntime`
 - `class HarnessState`
 - `class ApiClient`
-- `run(root, var_dir, stop_after_recording) -> None`
-主要 import / dot-source：`.windows`, `__future__`, `collections.abc`, `dataclasses`, `json`, `os`, `pathlib`, `playwright.sync_api`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.identity`, `product.backend.infra.runtime.process.lock`, `product.backend.infra.runtime.process.tree`, `product.protocols`, `re`, `socket`, `subprocess`, `sys`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
+- `run(root, var_dir, stop_after_setup, verify_workspace_ui) -> None`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `json`, `os`, `pathlib`, `playwright.sync_api`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.identity`, `product.backend.infra.runtime.process.lock`, `product.backend.infra.runtime.process.tree`, `re`, `socket`, `subprocess`, `sys`, `time`, `typing`, `urllib.error`, `urllib.request`, `uuid`
 
 ### `scripts/dev/sample_test/oracle.py`
 - `_ORACLE_KEYS`

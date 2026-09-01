@@ -90,6 +90,15 @@ _SOURCE_FOUND_FACTS = {
     ),
 }
 
+_SOURCE_SUPPORTED_CLAIMS = {
+    ObserverType.OWNER_API: "这项观察可以直接支持本轮目标业务状态的判断。",
+    ObserverType.READ_ONLY_SQLITE: "这项观察支持本轮相关持久化状态已经形成。",
+    ObserverType.STRUCTURED_AUDIT_LOG: "这项观察支持本轮相关过程节点确实发生。",
+    ObserverType.ASYNC_TASK_STATUS: "这项观察支持本轮后台任务已经进入对应状态。",
+    ObserverType.AZURE_QUEUE_PEEK: "这项观察支持本轮消息已经进入后台通道。",
+    ObserverType.AZURE_BLOB_OBJECT: "这项观察可以直接支持本轮最终文件或对象是否存在的判断。",
+}
+
 def _business_effect_label(
     snapshot: Any,
     policy: PermissionPolicySnapshot,
@@ -199,6 +208,7 @@ def _claim_boundary_with_repair(
 def _evidence_explanations(
     evidence: Any | None,
     *,
+    snapshot: Any,
     sources: tuple[ResultEvidenceSource, ...],
     trace: ExecutionTrace | None,
     diagnosis: ResultDiagnosis | None,
@@ -208,6 +218,9 @@ def _evidence_explanations(
         return ()
     evidence_id = str(getattr(evidence, "evidence_id", "") or "")
     outcome = _execution_outcome(evidence)
+    surface_event = trace.events[0] if trace is not None and trace.events else None
+    execution_fact = getattr(evidence, "execution_fact", None)
+    output_hash = str(getattr(execution_fact, "output_hash", "") or "")
     explanations = [
         ResultEvidenceExplanation(
             label=_surface_result(evidence),
@@ -222,6 +235,15 @@ def _evidence_explanations(
             does_not_prove="不能单独证明后台副作用或最终业务后果是否发生。",
             relevance="来自当前 Run 的已发布 Evidence，并关联到本次检查项。",
             evidence_refs=(evidence_id,) if evidence_id else (),
+            component=(surface_event.source_component if surface_event is not None else None),
+            location=(
+                f"{surface_event.source_component} · {surface_event.source_location}"
+                if surface_event is not None
+                else "本轮目标执行结果记录"
+            ),
+            provenance_type="EXECUTION_FACT",
+            source_sha256=(output_hash if len(output_hash) == 64 else None),
+            observed_at_us=(surface_event.recorded_at_us if surface_event is not None else None),
         )
     ]
     for source in sources:
@@ -232,29 +254,49 @@ def _evidence_explanations(
             "NOT_FOUND": "该已发布来源在完整、可靠、相关且闭合的范围内未观察到相关业务变化。",
             "UNAVAILABLE": "该来源未形成足以支持业务结论的完整可靠事实。",
         }[source.status]
+        observer = _observer_context(
+            snapshot,
+            evidence,
+            source.observer_type,
+            observer_id=source.observer_id,
+        )
+        supported_claim = {
+            "FOUND": _SOURCE_SUPPORTED_CLAIMS[source.observer_type],
+            "NOT_FOUND": "在该来源完整、可靠、相关且闭合的范围内，可以支持“未观察到相关变化”。",
+            "UNAVAILABLE": "只能确认该观察位置本轮不可用，不能据此推断业务后果不存在。",
+        }[source.status]
         explanations.append(
             ResultEvidenceExplanation(
-                label=source.label,
-                source=source.observer_type.value,
-                step=_SOURCE_STEPS[source.observer_type],
-                proves=state_detail,
+                label=state_detail,
+                source=source.label,
+                step=f"在“{source.label}”中{_SOURCE_STEPS[source.observer_type]}",
+                proves=supported_claim,
                 does_not_prove=_SOURCE_LIMITS[source.observer_type],
-                relevance="该观察来源由当前 ResultPresentation 的已发布 Evidence 引用。",
+                relevance="该观察由本次检查发布，并通过同一证据引用关联到当前账号与业务动作。",
                 evidence_refs=source.evidence_refs,
+                location=observer["location"],
+                observer_id=observer["observer_id"],
+                observation_phase=observer["observation_phase"],
+                provenance_type=observer["provenance_type"],
+                adapter_version=observer["adapter_version"],
+                source_sha256=observer["source_sha256"],
+                observed_at_us=observer["observed_at_us"],
             )
         )
     identity_event = _identity_trace_event(trace)
     if identity_event is not None:
         explanations.append(
             ResultEvidenceExplanation(
-                label="实际身份",
-                source="ExecutionTrace",
+                label="目标应用识别出的实际账号",
+                source="实际执行身份",
                 step="确认目标服务器实际主体",
                 proves=f"本轮已发布 Trace 确认实际主体为 {identity_event.subject_id}。",
                 does_not_prove="不能单独证明最终业务后果已经发生或权限检查位置。",
                 relevance="来自当前 Run 同一检查项的已发布 ExecutionTrace。",
                 evidence_refs=identity_event.evidence_refs,
                 component=identity_event.source_component,
+                location=f"{identity_event.source_component} · {identity_event.source_location}",
+                provenance_type="EXECUTION_TRACE",
                 observed_at_us=identity_event.recorded_at_us,
             )
         )
@@ -263,7 +305,7 @@ def _evidence_explanations(
         explanations.append(
             ResultEvidenceExplanation(
                 label="权限断裂",
-                source="BreakpointLocator",
+                source="权限断裂定位",
                 step="定位权限断裂",
                 proves=diagnosis.summary,
                 does_not_prove={
@@ -274,10 +316,119 @@ def _evidence_explanations(
                 relevance="由当前 Run 同一检查项的已发布 ResultDiagnosis 形成。",
                 evidence_refs=diagnosis.evidence_refs,
                 component=(breakpoint_event.source_component if breakpoint_event is not None else None),
+                location=(
+                    f"{breakpoint_event.source_component} · {breakpoint_event.source_location}"
+                    if breakpoint_event is not None
+                    else "本轮已发布执行路径"
+                ),
+                provenance_type="BREAKPOINT_LOCATOR",
                 observed_at_us=(breakpoint_event.recorded_at_us if breakpoint_event is not None else None),
             )
         )
     return tuple(explanations)
+
+
+def _observer_context(
+    snapshot: Any,
+    evidence: Any,
+    observer_type: ObserverType,
+    *,
+    observer_id: str | None,
+) -> dict[str, Any]:
+    """按冻结 Binding 精确匹配 Observer，并公开无秘密的位置与采集来源。"""
+
+    specs = tuple(
+        item
+        for item in getattr(snapshot, "observers", ())
+        if getattr(item, "observer_type", None) is observer_type
+        and (
+            observer_id is None
+            or str(getattr(item, "observer_id", "") or "") == observer_id
+        )
+    )
+    if len(specs) != 1:
+        return _empty_observer_context()
+    spec = specs[0]
+    resolved_observer_id = str(getattr(spec, "observer_id", "") or "")
+    observations = tuple(
+        item
+        for item in getattr(evidence, "observations", ())
+        if str(getattr(item, "observer_id", "") or "") == resolved_observer_id
+    )
+    observation = max(observations, key=_observation_sort_key, default=None)
+    provenance = getattr(observation, "provenance", None)
+    phase = _value(getattr(observation, "phase", None)) if observation is not None else None
+    observed_at_us = getattr(getattr(observation, "window", None), "finished_at_us", None)
+    source_sha256 = str(getattr(provenance, "source_sha256", "") or "")
+    return {
+        "location": _observer_location(spec, observation),
+        "observer_id": resolved_observer_id or None,
+        "observation_phase": phase or None,
+        "provenance_type": _value(getattr(provenance, "provenance_type", None)) or None,
+        "adapter_version": str(getattr(provenance, "adapter_version", "") or "") or None,
+        "source_sha256": source_sha256 if len(source_sha256) == 64 else None,
+        "observed_at_us": observed_at_us,
+    }
+
+
+def _empty_observer_context() -> dict[str, Any]:
+    return {
+        "location": None,
+        "observer_id": None,
+        "observation_phase": None,
+        "provenance_type": None,
+        "adapter_version": None,
+        "source_sha256": None,
+        "observed_at_us": None,
+    }
+
+
+def _observation_sort_key(observation: Any) -> tuple[int, int]:
+    priority = {"BASELINE": 0, "BEFORE": 1, "AFTER": 2, "EVENTUAL": 3}
+    phase = _value(getattr(observation, "phase", None))
+    finished_at_us = int(getattr(getattr(observation, "window", None), "finished_at_us", 0) or 0)
+    return priority.get(phase, -1), finished_at_us
+
+
+def _observer_location(spec: Any, observation: Any | None) -> str | None:
+    """把冻结 Locator 投影为可核验位置，同时排除所有凭据引用。"""
+
+    target = getattr(spec, "target", None)
+    locator = getattr(target, "locator", None)
+    if locator is None:
+        return None
+    locator_type = str(getattr(locator, "locator_type", "") or "")
+    correlation = getattr(observation, "correlation", None)
+    resource_id = str(getattr(correlation, "resource_id", "") or "")
+    request_marker = str(getattr(correlation, "request_marker", "") or "")
+    if locator_type == "OWNER_API":
+        path = str(getattr(locator, "relative_path_template", "") or "")
+        return f"目标应用接口 {path.replace('{resource_id}', resource_id or '{resource_id}')}"
+    if locator_type == "READ_ONLY_SQLITE":
+        table = str(getattr(locator, "table_or_view", "") or "")
+        query = str(getattr(locator, "query_template_id", "") or "")
+        return f"SQLite 表或视图 {table} · 查询模板 {query}"
+    if locator_type == "STRUCTURED_AUDIT_LOG":
+        pattern = str(getattr(locator, "relative_file_pattern", "") or "")
+        return f"结构化审计文件 {pattern}"
+    if locator_type == "ASYNC_TASK_STATUS":
+        base_url = str(getattr(locator, "base_url", "") or "").rstrip("/")
+        path = str(getattr(locator, "relative_path_template", "") or "")
+        return f"任务状态接口 {base_url}{path.replace('{request_marker}', request_marker or '{request_marker}')}"
+    if locator_type == "AZURE_QUEUE_PEEK":
+        service_url = str(getattr(locator, "service_url", "") or "").rstrip("/")
+        queue_name = str(getattr(locator, "queue_name", "") or "")
+        return f"只读队列 {service_url}/{queue_name}"
+    if locator_type == "AZURE_BLOB_OBJECT":
+        service_url = str(getattr(locator, "service_url", "") or "").rstrip("/")
+        container = str(getattr(locator, "container_name", "") or "")
+        prefix = str(getattr(locator, "prefix_template", "") or "").replace(
+            "{request_marker}",
+            request_marker or "{request_marker}",
+        )
+        return f"对象存储 {service_url}/{container}/{prefix}"
+    target_id = str(getattr(target, "target_id", "") or "")
+    return f"观察目标 {target_id}" if target_id else None
 
 def _execution_outcome(evidence: Any | None) -> ExecutionOutcome:
     value = _value(getattr(getattr(evidence, "execution_fact", None), "outcome", None))

@@ -39,6 +39,7 @@ class ResultEvidenceSource(_PresentationModel):
     """把单个已发布观察来源投影为只读、可解释状态。"""
 
     observer_type: ObserverType
+    observer_id: str | None = Field(default=None, min_length=1, max_length=160)
     label: str = Field(min_length=1, max_length=80)
     role: Literal["KEY", "SUPPORTING"]
     status: Literal["FOUND", "NOT_FOUND", "UNAVAILABLE"]
@@ -158,6 +159,15 @@ class ResultEvidenceExplanation(_PresentationModel):
     relevance: str = Field(min_length=1, max_length=320)
     evidence_refs: tuple[str, ...] = Field(default=(), max_length=128)
     component: str | None = Field(default=None, min_length=1, max_length=160)
+    location: str | None = Field(default=None, min_length=1, max_length=1024)
+    observer_id: str | None = Field(default=None, min_length=1, max_length=160)
+    observation_phase: str | None = Field(
+        default=None,
+        pattern=r"^(?:BASELINE|BEFORE|AFTER|EVENTUAL)$",
+    )
+    provenance_type: str | None = Field(default=None, min_length=1, max_length=80)
+    adapter_version: str | None = Field(default=None, min_length=1, max_length=80)
+    source_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     observed_at_us: int | None = Field(default=None, ge=0)
 
 class ResultPresentationIssue(_PresentationModel):

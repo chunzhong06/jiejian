@@ -1,6 +1,6 @@
-// 验证项目概览展示持续安全基线、并行待办和官方示例入口。
+// 验证工作台突出后端指定的主任务，并连接变化、权限、测试三个独立模块。
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ProductStatusDto, ProjectReadinessDto } from '../../api/projects'
 import { WorkbenchPage } from './WorkbenchPage'
@@ -15,17 +15,16 @@ const readiness: ProjectReadinessDto = {
   discovered_action_count: 4, confirmed_action_count: 3,
   execution_profile_available: true, completed_flow_available: true,
   active_contract_available: true, current_scope_runnable: true,
+  confirmed_permission_requirement_count: 2, permission_representative_gap_count: 0,
   remaining_gap_count: 0, active_tasks: [], latest_verified_run_id: 'run-current',
   next_required_action: 'OPEN_RESULT',
 }
 
 const areas: ProductStatusDto['areas'] = [
-  { key: 'overview', label: '项目概览', description: '查看基线', route: '/workspace', status: 'READY', status_label: '当前概览' },
-  { key: 'changes', label: '变化与待办', description: '查看变化', route: '/changes', status: 'NEEDS_ATTENTION', status_label: '需要处理' },
-  { key: 'permissions', label: '权限规则', description: '维护规则', route: '/permissions', status: 'NEEDS_ATTENTION', status_label: '需要确认' },
-  { key: 'preparation', label: '测试准备', description: '准备条件', route: '/preparation', status: 'READY', status_label: '测试条件可用' },
-  { key: 'validation', label: '验证运行', description: '运行检查', route: '/validation', status: 'READY', status_label: '可以检查' },
-  { key: 'results', label: '结果与历史', description: '查看结果', route: '/results', status: 'AVAILABLE', status_label: '已有可信结果' },
+  { key: 'overview', label: '工作台', description: '查看全局状态', route: '/workspace', status: 'READY', status_label: '持续更新' },
+  { key: 'changes', label: '变化', description: '核对 Agent 修改', route: '/changes', status: 'NEEDS_ATTENTION', status_label: '需要处理' },
+  { key: 'permissions', label: '权限', description: '维护权限边界', route: '/permissions', status: 'NEEDS_ATTENTION', status_label: '需要确认' },
+  { key: 'tests', label: '测试', description: '准备、运行与结果', route: '/tests', status: 'AVAILABLE', status_label: '已有可信结果' },
 ]
 
 const status: ProductStatusDto = {
@@ -38,12 +37,13 @@ const status: ProductStatusDto = {
     verified_run_id: null, verified_change_id: null,
   },
   areas,
+  primary_attention_key: 'review-change-mapping',
   attention_items: [
     { key: 'review-change-mapping', label: '重新确认权限规则与当前实现', description: '有 1 条规则需要确认。', route: '/permissions', tone: 'WARNING' },
     { key: 'verify-latest-change', label: '检查最近一次代码变化', description: '按完整权限范围运行。', route: '/validation', tone: 'ACTION' },
   ],
   latest_change: {
-    change_id: `chg_${'1'.repeat(32)}`, project_id: 'p1', reason: 'Agent 增加导出能力', created_at_us: 1,
+    change_id: `chg_${'1'.repeat(32)}`, project_id: 'p1', reason: 'Agent 增加导出能力', submitted_by: 'MCP · Codex', created_at_us: 1,
     status: 'COMPARABLE', complete: true, actual_changed_path_count: 2,
     added_count: 1, modified_count: 1, removed_count: 0, claimed_paths: [],
     added_paths: ['app/export.py'], modified_paths: ['app/permissions.py'], removed_paths: [],
@@ -55,7 +55,7 @@ const status: ProductStatusDto = {
   repair: null,
 }
 
-const officialExperience = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, experience_mode: null, project_id: null, origin: null, identities_ready: false, authorization_order: null, blob_observation: null, repair_change_id: null }
+const officialExperience = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, project_id: null, origin: null, scenario_prepared: false, scenario_version: null, vulnerable_change_id: null, repair_change_id: null }
 
 const common = {
   runs: [],
@@ -63,27 +63,53 @@ const common = {
   experience: officialExperience,
   experienceBusy: false,
   onStartExperience: vi.fn().mockResolvedValue(true),
+  onPrepareExperience: vi.fn(),
+  onRunExperience: vi.fn(),
+  onSwitchExperience: vi.fn(),
 }
 
 describe('WorkbenchPage', () => {
-  it('同时展示全部待办，不再生成唯一下一步', () => {
+  it('只突出后端显式指定的主任务，不从待办列表位置另猜优先级', () => {
     const onNavigate = vi.fn()
     render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} onError={vi.fn()} />)
-    expect(screen.getByText('项目概览')).toBeInTheDocument()
-    expect(screen.getByText('重新确认权限规则与当前实现')).toBeInTheDocument()
-    expect(screen.getByText('检查最近一次代码变化')).toBeInTheDocument()
-    expect(screen.queryByText('唯一下一步')).not.toBeInTheDocument()
-    fireEvent.click(screen.getAllByRole('button', { name: /打\s*开/ })[0])
+    expect(screen.getByText('工作台')).toBeInTheDocument()
+    expect(screen.getByText('有 1 条规则需要确认。')).toBeInTheDocument()
+    expect(screen.queryByText('检查最近一次代码变化')).not.toBeInTheDocument()
+    expect(screen.getByText('另有 1 项状态已归入下方对应区域。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重新确认权限规则与当前实现' }))
     expect(onNavigate).toHaveBeenCalledWith('/permissions')
   })
 
-  it('展示最近变化并进入完整变化记录', () => {
+  it('把变化、权限和检查作为并列领域，并删除普通应用中的示例与重复 AI 入口', () => {
     const onNavigate = vi.fn()
     render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} onError={vi.fn()} />)
     expect(screen.getByText('Agent 增加导出能力')).toBeInTheDocument()
-    expect(screen.getByText(/实际确认 2 个文件变化/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '查看变化记录' }))
+    expect(screen.getByText('2 个文件发生变化')).toBeInTheDocument()
+    expect(screen.getByText('2 条已确认规则')).toBeInTheDocument()
+    expect(screen.getByText('变化')).toBeInTheDocument()
+    expect(screen.getByText('权限')).toBeInTheDocument()
+    expect(screen.getByText('测试')).toBeInTheDocument()
+    const trustedResult = screen.getByLabelText('最近可信结果')
+    expect(within(trustedResult).getByRole('heading', { name: '发现权限问题' })).toBeInTheDocument()
+    expect(within(trustedResult).getByText('当前范围已检查。')).toBeInTheDocument()
+    expect(screen.queryByText('AI 工具')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '启动官方示例' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '进入变化' }))
     expect(onNavigate).toHaveBeenCalledWith('/changes')
+  })
+
+  it('主任务引用失配时停止生成导航动作', () => {
+    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={{ ...status, primary_attention_key: 'missing' }} onNavigate={vi.fn()} onError={vi.fn()} />)
+    expect(screen.getByText('当前主任务无法与待办事实对应，请刷新后重试。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重新确认权限规则与当前实现' })).not.toBeInTheDocument()
+  })
+
+  it('当前应用确为官方示例且有可信结果时才提供一键完整展示', () => {
+    const onEnterPresentation = vi.fn()
+    const activeExperience = { ...officialExperience, active: true, experience_id: `exp_${'a'.repeat(32)}`, project_id: 'p1', scenario_prepared: true, scenario_version: 'VULNERABLE' as const, scenario_changed_at_us: 1 }
+    render(<WorkbenchPage {...common} runs={[{ run_id: 'run-current', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED', created_at_us: 2 }]} experience={activeExperience} selected={{ project_id: 'p1', name: '协作空间' }} readiness={readiness} status={status} onEnterPresentation={onEnterPresentation} onNavigate={vi.fn()} onError={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '进入完整展示' }))
+    expect(onEnterPresentation).toHaveBeenCalledOnce()
   })
 
   it('空工作区说明持续基线而不是六步接入', () => {
@@ -96,7 +122,7 @@ describe('WorkbenchPage', () => {
   it('官方示例仍由用户明确同意后启动', () => {
     render(<WorkbenchPage {...common} selected={null} readiness={null} status={null} onNavigate={vi.fn()} onError={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: '启动官方示例' }))
-    expect(screen.getByText('启动官方示例？')).toBeInTheDocument()
+    expect(screen.getByText('进入 Agent 写错的问题版？')).toBeInTheDocument()
     expect(screen.getByText(/不会开始真实检查/)).toBeInTheDocument()
   })
 

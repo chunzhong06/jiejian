@@ -45,8 +45,8 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
     }
   }, [onError, selectProject])
 
-  const refreshCurrent = useCallback(async () => {
-    if (!selected?.project_id) {
+  const refreshCurrent = useCallback(async (project: ProjectDto | null = selected) => {
+    if (!project?.project_id) {
       setStatus(null)
       setReadiness(null)
       setRuns([])
@@ -54,8 +54,8 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
     }
     try {
       const [nextStatus, nextRuns] = await Promise.all([
-        projectsApi.status(selected.project_id),
-        runsApi.runs(selected.project_id),
+        projectsApi.status(project.project_id),
+        runsApi.runs(project.project_id),
       ])
       setStatus(nextStatus)
       setReadiness(nextStatus.readiness)
@@ -65,7 +65,7 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
       onError(error as ApiError)
       return undefined
     }
-  }, [onError, selected?.project_id])
+  }, [onError, selected])
 
   useEffect(() => { void refreshProjects() }, [refreshProjects])
   useEffect(() => { void refreshCurrent() }, [refreshCurrent])

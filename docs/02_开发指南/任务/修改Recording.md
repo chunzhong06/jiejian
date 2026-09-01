@@ -38,7 +38,7 @@ Recording 应根据录制顺序自动采用唯一且可执行的业务解释；�
 - 普通 Recording 必须经过正式 API、Worker、独立 Recording Process 和 `BrowserRecordingAdapter`；测试 `controlled_runner` 只服务 L1～L4，不得进入自动 L5。
 - start/stop 标记必须绑定当前 recording/job/attempt，原子写入、严格解析且不携带用户输入或秘密。
 - Recording 失败先保存主错误，再执行 stop/cancel/进程回收；cleanup issue 不能覆盖 primary failure。
-- 不直接构造 RecordingEvent、FlowDraft 或调用 processor 伪造成功；不通过测试专用 API、环境变量或 CDP 暴露浏览器控制面。
+- 普通应用和测试不得直接构造 RecordingEvent、FlowDraft 或调用 processor 伪造成功；不通过测试专用 API、环境变量或 CDP 暴露浏览器控制面。官方样例只能按[官方示例与整链验收](修改官方示例与整链验收.md)冻结的例外，把受控确定性轨迹送入正式 Recording 提交、Job attempt、结果消费与生命周期服务，仍不得直写 Storage。
 - FlowDraft revision 冲突、目标范围漂移或回放校验失败必须停止，不猜测兼容。
 
 ## 怎么验证

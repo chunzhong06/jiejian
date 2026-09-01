@@ -22,6 +22,7 @@ from product.backend.workflows.mcp_access import (
     MCP_PAIRING_SECRET_REF,
     MCPAccessController,
     MCPAccessLevel,
+    MCPConnectionState,
 )
 from tests.fixtures.control_plane import TEST_CONTROL_ORIGIN, TestClient, create_app
 
@@ -75,9 +76,8 @@ EXPECTED_MCP_TOOLS = {
     "jiejian_intent_propose",
     "jiejian_intent_rebind_propose",
     "jiejian_intent_show",
-    "jiejian_official_sample_start",
+    "jiejian_official_sample_apply_fix",
     "jiejian_official_sample_stop",
-    "jiejian_official_sample_verify_fixed",
     "jiejian_product_status",
     "jiejian_project_list",
     "jiejian_project_show",
@@ -131,15 +131,45 @@ def _token_bytes(token: str) -> bytes:
     return base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
 
 
+def test_mcp_server_instructions_use_one_completed_user_task_as_change_boundary(
+    tmp_path: Path,
+) -> None:
+    app = create_app(
+        tmp_path / "var",
+        start_worker=False,
+        secret_store=_MemorySecretStore(),
+    )
+    instructions = app.state.mcp_server.instructions
+
+    assert "跨任务保留已确认的权限基线和历史" in instructions
+    assert "不必因每次保存或单个文件修改反复调用界鉴" in instructions
+    assert "一个完整的用户任务已经完成后" in instructions
+    assert "调用一次 jiejian_change_submit 登记整批变化" in instructions
+
+
 def test_mcp_access_controller_restores_pairing_without_restoring_grants() -> None:
     store = _MemorySecretStore()
     access = MCPAccessController("http://127.0.0.1:8765/mcp", store)
     assert access.view().paired is False
+    assert access.view().connection_state is MCPConnectionState.DISABLED
     first = access.pair()
+    assert first.connection_state is MCPConnectionState.CREDENTIAL_READY
     assert first.access_token is not None
     assert len(_token_bytes(first.access_token)) == 32
     assert "access_token" not in access.view().model_dump()
     access.authorize(f"Bearer {first.access_token}")
+    assert access.view().connection_state is MCPConnectionState.AUTHENTICATED
+    access.note_activity(None, None)
+    metadata_free_activity = access.view()
+    assert metadata_free_activity.connection_state is MCPConnectionState.CONNECTED
+    assert metadata_free_activity.client_connected is True
+    assert metadata_free_activity.client_name is None
+    assert metadata_free_activity.client_version is None
+    assert metadata_free_activity.last_seen_at_us is not None
+    access.note_activity("Codex", "1.2.3")
+    access.note_activity(None, None)
+    assert access.view().client_name == "Codex"
+    assert access.view().client_version == "1.2.3"
     assert access.level_for("proj_a") is MCPAccessLevel.READ
 
     access.set_level("proj_a", MCPAccessLevel.EXECUTE)
@@ -147,7 +177,9 @@ def test_mcp_access_controller_restores_pairing_without_restoring_grants() -> No
     assert restarted.view().paired is True
     assert restarted.view().accepting_connections is True
     assert restarted.view().project_grants == ()
+    assert restarted.view().connection_state is MCPConnectionState.CREDENTIAL_READY
     restarted.authorize(f"Bearer {first.access_token}")
+    assert restarted.view().connection_state is MCPConnectionState.AUTHENTICATED
     assert restarted.level_for("proj_a") is MCPAccessLevel.READ
 
     second = restarted.rotate()
@@ -156,11 +188,14 @@ def test_mcp_access_controller_restores_pairing_without_restoring_grants() -> No
     with pytest.raises(JiejianError) as old_token:
         restarted.authorize(f"Bearer {first.access_token}")
     assert old_token.value.code == ErrorCode.MCP_AUTH_REQUIRED.value
+    assert restarted.view().connection_state is MCPConnectionState.CREDENTIAL_REJECTED
 
     restarted.pause()
+    assert restarted.view().connection_state is MCPConnectionState.PAUSED
     with pytest.raises(JiejianError) as disabled:
         restarted.authorize(f"Bearer {second.access_token}")
     assert disabled.value.code == ErrorCode.MCP_DISABLED.value
+    assert restarted.resume().connection_state is MCPConnectionState.CREDENTIAL_READY
     assert store.values[MCP_PAIRING_SECRET_REF] == second.access_token
 
 
@@ -182,10 +217,14 @@ def test_mcp_gui_access_api_controls_credentials_and_restores_after_shutdown(
             "client_name": None,
             "client_version": None,
             "last_seen_at_us": None,
+            "connection_state": "DISABLED",
+            "last_authenticated_at_us": None,
+            "last_auth_failure_at_us": None,
         }
         paired = client.post("/api/mcp/access/pair").json()["data"]
         token = paired["access_token"]
         assert len(_token_bytes(token)) == 32
+        assert paired["connection_state"] == "CREDENTIAL_READY"
         status = client.get("/api/mcp/access")
         assert "access_token" not in status.json()["data"]
         assert token not in status.text
@@ -208,6 +247,10 @@ def test_mcp_gui_access_api_controls_credentials_and_restores_after_shutdown(
         assert rotated["project_grants"] == []
         current_token = rotated["access_token"]
         assert client.post("/api/mcp/access/reveal").json()["data"]["access_token"] == current_token
+        paused = client.post("/api/mcp/access/pause").json()["data"]
+        assert paused["connection_state"] == "PAUSED"
+        resumed = client.post("/api/mcp/access/resume").json()["data"]
+        assert resumed["connection_state"] == "CREDENTIAL_READY"
 
     assert app.state.mcp_access.view().paired is False
     with pytest.raises(JiejianError) as stopped:
@@ -219,10 +262,13 @@ def test_mcp_gui_access_api_controls_credentials_and_restores_after_shutdown(
         assert restored.paired is True
         assert restored.accepting_connections is True
         assert restored.project_grants == ()
+        assert restored.connection_state is MCPConnectionState.CREDENTIAL_READY
         restarted.state.mcp_access.authorize(f"Bearer {current_token}")
+        assert restarted.state.mcp_access.view().connection_state is MCPConnectionState.AUTHENTICATED
         forgotten = client.post("/api/mcp/access/forget").json()["data"]
         assert forgotten["paired"] is False
         assert forgotten["accepting_connections"] is False
+        assert forgotten["connection_state"] == "DISABLED"
         assert MCP_PAIRING_SECRET_REF not in store.values
         with pytest.raises(JiejianError) as forgotten_token:
             restarted.state.mcp_access.authorize(f"Bearer {current_token}")
@@ -357,6 +403,7 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                     assert activity.client_name
                     assert activity.client_version
                     assert activity.last_seen_at_us is not None
+                    assert activity.connection_state is MCPConnectionState.CONNECTED
                     status = await client.call_tool(
                         "jiejian_product_status",
                         {"project_id": project_id},
@@ -500,7 +547,7 @@ def test_official_mcp_client_reads_same_status_and_enforces_prepare(
                             project_id,
                             "完成实现修复",
                             ("app.py",),
-                            "MCP Agent",
+                            f"MCP · {activity.client_name}",
                             repair_reference,
                         )
                     ]

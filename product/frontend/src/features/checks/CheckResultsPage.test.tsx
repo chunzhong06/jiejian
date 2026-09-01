@@ -117,10 +117,11 @@ describe('CheckResultsPage', () => {
     fireEvent.click(traceToggle)
     expect(traceToggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('请求进入目标应用')).toBeInTheDocument()
-    expect(screen.getByText('服务器识别实际账号')).toBeInTheDocument()
-    expect(screen.getByText('应用作出权限判断')).toBeInTheDocument()
-    expect(screen.getByText('任务进入消息链路')).toBeInTheDocument()
-    expect(screen.getAllByText('最终业务结果形成').length).toBeGreaterThan(0)
+    expect(screen.getByText('目标应用识别出实际账号')).toBeInTheDocument()
+    expect(screen.getByText('目标应用作出权限判断')).toBeInTheDocument()
+    expect(screen.getByText('导出消息进入后台链路')).toBeInTheDocument()
+    expect(screen.getByText('完整项目交付包已经生成')).toBeInTheDocument()
+    expect(screen.getByText('后台导出任务已经完成')).toBeInTheDocument()
     expect(screen.queryByText('case-bob')).not.toBeInTheDocument()
     expect(screen.queryByText('EXPLICIT_PARENT')).not.toBeInTheDocument()
     expect(screen.queryByText('成员账号不应对文档执行修改')).not.toBeInTheDocument()
@@ -238,11 +239,20 @@ describe('CheckResultsPage', () => {
     resultsApi.evidence.mockResolvedValue([])
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
     expect(await screen.findByText('本次检查由最近一次代码修改触发')).toBeInTheDocument()
-    expect(screen.getByText('使用你之前确认的 1 条权限要求重新检查')).toBeInTheDocument()
+    expect(screen.getByText('这次变化直接关联 1 条已确认权限要求')).toBeInTheDocument()
     expect(screen.queryByText(`chg_${'e'.repeat(32)}`)).not.toBeInTheDocument()
     expect(screen.queryByText('P-001')).not.toBeInTheDocument()
     expect(screen.queryByText(intentId)).not.toBeInTheDocument()
     expect(screen.queryByText('f'.repeat(64))).not.toBeInTheDocument()
+  })
+
+  it('变化未直接关联单条规则时说明仍检查完整权限范围', async () => {
+    const run = { run_id: 'run-full-scope', lifecycle: 'COMPLETED', verdict: 'PASS', result_integrity: 'VERIFIED' }
+    runsApi.run.mockResolvedValue(run)
+    resultsApi.presentation.mockResolvedValue(basePresentation({ run_id: 'run-full-scope', change_verification: { change_id: `chg_${'a'.repeat(32)}`, required_intents: [] } }))
+    resultsApi.evidence.mockResolvedValue([])
+    render(<CheckResultsPage run={run} onError={vi.fn()} />)
+    expect(await screen.findByText('这次变化未直接关联单条权限要求；仍按当前完整权限范围检查')).toBeInTheDocument()
   })
 
   it('用自然语言展示修复要求与独立复验三态，不暴露修复指纹', async () => {

@@ -46,7 +46,7 @@ from product.backend.infra.runtime.jobs.models import RequestCancellation
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.composition import ApplicationCore
 from product.backend.workflows.mcp_access import MCPAccessController, MCPAccessLevel
-from product.backend.workflows.official_sample import OfficialExperienceMode
+from product.backend.workflows.official_sample import OfficialScenarioVersion
 
 
 _T = TypeVar("_T")
@@ -323,18 +323,27 @@ def build_mcp_control(
         call_next: Callable[[ServerRequestContext[Any, Any]], Any],
     ) -> HandlerResult:
         result = await call_next(request)
-        # initialize 成功后的下一条 SDK 消息会携带已经验证的 client_params。
+        # 无状态 HTTP 客户端未必在后续请求中保留 initialize 身份；
+        # SDK 已成功处理请求本身足以证明连接，名称和版本只作为可选补充。
         params = request.session.client_params
-        if params is not None:
-            access.note_activity(
-                params.client_info.name,
-                params.client_info.version,
-            )
+        access.note_activity(
+            None if params is None else params.client_info.name,
+            None if params is None else params.client_info.version,
+        )
         return result
 
     server = MCPServer(
         "界鉴 JIEJIAN",
         description="界鉴本地 Web 产品控制入口；结论仍由确定性 Verification 形成。",
+        instructions=(
+            "你正在连接用户本机的界鉴。先调用 jiejian_product_status 获取当前应用、当前判断和下一项工作，"
+            "再按返回的项目标识使用其他工具。界鉴会跨任务保留已确认的权限基线和历史，新任务不重建权限规则。"
+            "处理任务期间不必因每次保存或单个文件修改反复调用界鉴；"
+            "当一个完整的用户任务已经完成后，再调用一次 jiejian_change_submit 登记整批变化。"
+            "READ 只读取已形成事实；PREPARE 只能提交建议、整批变化和检查准备；"
+            "EXECUTE 只能启动用户已授权的受控任务。你不能批准或退休权限规则，不能改变 PASS、BLOCK、"
+            "INCONCLUSIVE 结论，也不能把 HTTP 响应当成最终业务结果。需要更高权限或人工确认时，明确告诉用户回到界鉴完成。"
+        ),
         version=__version__,
         middleware=[record_client_activity],
     )
@@ -609,15 +618,21 @@ def build_mcp_control(
         claimed_paths: tuple[str, ...] = (),
         repair_reference: MCPRepairContractReferenceInput | None = None,
     ) -> dict[str, Any]:
-        """声明 Agent 已完成变更；真实文件变化和权限影响由服务端重算。"""
+        """完成一个用户任务后登记整批变化；真实差异和权限影响由服务端重算。"""
 
         require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
+        client_name = access.view().client_name
+        submitted_by = (
+            "MCP Agent"
+            if client_name is None
+            else f"MCP · {client_name}"[:128].rstrip()
+        )
         manifest, _, _ = _invoke(
             lambda: context.source_changes.submit(
                 project_id,
                 reason=reason,
                 claimed_paths=claimed_paths,
-                submitted_by="MCP Agent",
+                submitted_by=submitted_by,
                 **(
                     {}
                     if repair_reference is None
@@ -802,33 +817,6 @@ def build_mcp_control(
             )
         )
 
-    @server.tool(name="jiejian_official_sample_start", structured_output=True)
-    def official_sample_start(
-        ctx: Context,
-        project_id: str,
-        experience_mode: Literal["GUIDED", "FULL"],
-        consent: Literal[True],
-    ) -> dict[str, Any]:
-        """为已存在且已授权的官方 Sample Project 启动正式体验。"""
-
-        require_mcp_level(access, ctx, MCPAccessLevel.EXECUTE, project_id=project_id)
-        _invoke(lambda: context.projects.get(project_id))
-        started = _invoke(
-            lambda: context.official_experience.start(
-                OfficialExperienceMode(experience_mode),
-                consent=consent,
-            )
-        )
-        if started.project_id != project_id:
-            context.official_experience.stop()
-            raise _as_mcp_error(
-                JiejianError(
-                    ErrorCode.OFFICIAL_SAMPLE_CONFLICT,
-                    "启动后的官方示例不属于已授权 Project，已安全停止。",
-                )
-            )
-        return _json(started)
-
     @server.tool(name="jiejian_official_sample_stop", structured_output=True)
     def official_sample_stop(ctx: Context, project_id: str) -> dict[str, Any]:
         """停止属于当前已授权 Project 的官方 Sample。"""
@@ -839,13 +827,13 @@ def build_mcp_control(
             raise _as_mcp_error(JiejianError(ErrorCode.OFFICIAL_SAMPLE_CONFLICT, "官方示例不属于当前应用"))
         return _json(_invoke(context.official_experience.stop))
 
-    @server.tool(name="jiejian_official_sample_verify_fixed", structured_output=True)
-    def official_sample_verify_fixed(
+    @server.tool(name="jiejian_official_sample_apply_fix", structured_output=True)
+    def official_sample_apply_fix(
         ctx: Context,
         project_id: str,
-        verification_run_id: str,
+        source_run_id: str,
     ) -> dict[str, Any]:
-        """按既有官方体验合同切换到修复后行为，不代替后续检查。"""
+        """按界鉴发布的修复合同修改官方 Sample；后续仍需独立复验。"""
 
         require_mcp_level(access, ctx, MCPAccessLevel.EXECUTE, project_id=project_id)
         status = _invoke(context.official_experience.status)
@@ -853,10 +841,9 @@ def build_mcp_control(
             raise _as_mcp_error(JiejianError(ErrorCode.OFFICIAL_SAMPLE_CONFLICT, "官方示例不属于当前应用"))
         return _json(
             _invoke(
-                lambda: context.official_experience.switch_behavior(
-                    authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
-                    blob_observation="AVAILABLE",
-                    verification_run_id=verification_run_id,
+                lambda: context.official_experience.switch_version(
+                    version=OfficialScenarioVersion.FIXED,
+                    source_run_id=source_run_id,
                 )
             )
         )

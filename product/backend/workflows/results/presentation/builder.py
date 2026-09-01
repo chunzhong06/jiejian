@@ -444,6 +444,7 @@ def _issue(
         claim_boundary=claim_boundary,
         evidence_explanations=_evidence_explanations(
             evidence,
+            snapshot=snapshot,
             sources=evidence_sources,
             trace=trace,
             diagnosis=diagnosis,
@@ -529,6 +530,7 @@ def _evidence_sources(
         sources.append(
             ResultEvidenceSource(
                 observer_type=observer_type,
+                observer_id=str(getattr(binding, "observer_id", "") or "") or None,
                 label=label,
                 role=role,
                 status=_evidence_source_status(

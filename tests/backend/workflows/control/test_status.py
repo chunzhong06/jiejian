@@ -88,6 +88,7 @@ def _change(*, review_count: int = 1) -> SourceChangeView:
         change_id=f"chg_{'1' * 32}",
         project_id="project_demo",
         reason="Agent 新增了完整包导出入口",
+        submitted_by="MCP · Codex",
         created_at_us=1,
         status="COMPARABLE",
         complete=True,
@@ -114,13 +115,14 @@ def test_empty_workspace_offers_long_lived_areas_and_connect_attention() -> None
 
     assert status.project is None
     assert status.readiness is None
+    assert status.primary_attention_key == "connect-application"
     assert status.attention_items[0].key == "connect-application"
     assert status.attention_items[0].route == "/application"
     assert [area.key for area in status.areas] == [
-        "overview", "changes", "permissions", "preparation", "validation", "results",
+        "overview", "changes", "permissions", "tests",
     ]
     assert status.areas[0].status == "READY"
-    assert status.areas[-1].status == "EMPTY"
+    assert status.areas[-1].status == "BLOCKED"
 
 
 def test_status_reuses_exact_readiness_and_presentation_reference() -> None:
@@ -168,7 +170,8 @@ def test_status_reuses_exact_readiness_and_presentation_reference() -> None:
     assert status.latest_change is change
     assert status.areas[1].status == "NEEDS_ATTENTION"
     assert status.areas[2].status == "NEEDS_ATTENTION"
-    assert status.areas[4].status == "BLOCKED"
+    assert status.areas[3].status == "AVAILABLE"
+    assert status.primary_attention_key == "review-change-mapping"
     assert any(item.key == "review-change-mapping" for item in status.attention_items)
     assert status.latest_result is not None
     assert status.latest_result.run_id == readiness.latest_verified_run_id
@@ -269,6 +272,7 @@ def test_recording_task_and_preparation_gaps_route_back_to_preparation() -> None
     preparation = next(
         item for item in status.attention_items if item.key == "complete-preparation"
     )
+    assert status.primary_attention_key == active.key
     assert active.route == "/preparation"
     assert active.label == "查看正在录制的业务流程"
     assert preparation.route == "/preparation"

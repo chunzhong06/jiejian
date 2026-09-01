@@ -70,6 +70,7 @@ class SourceChangeView(BaseModel):
     change_id: str = Field(pattern=r"^chg_[0-9a-f]{32}$")
     project_id: str
     reason: str
+    submitted_by: str = Field(min_length=1, max_length=128)
     created_at_us: int = Field(ge=0)
     status: Literal["COMPARABLE", "NO_BASELINE"]
     complete: bool
@@ -573,6 +574,7 @@ class SourceChangeService:
             change_id=manifest.change_id,
             project_id=manifest.project_id,
             reason=manifest.reason,
+            submitted_by=manifest.submitted_by,
             created_at_us=manifest.created_at_us,
             status=change_set.status,
             complete=assessment.complete,

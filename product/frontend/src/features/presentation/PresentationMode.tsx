@@ -1,49 +1,35 @@
-// 展示模式只重排当前正式事实与净化验证汇总；页面切换不创建 Run、Verdict 或演示数据。
+// 展示模式把同一官方样例的正式权限、变化、证据和修复历史重排为四幕，不创建演示结论。
 
 import { Alert, Button, Empty, Skeleton, Tag, Typography } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import {
-  experienceApi,
-  type CompetitionValidationSummaryViewDto,
-  type OfficialExperienceDto,
-} from '../../api/experience'
+import type { OfficialExperienceDto } from '../../api/experience'
 import {
   resultsApi,
   type ExecutionTraceDto,
   type HistoryViewDto,
+  type ResultDiagnosisDto,
   type ResultEvidenceExplanationDto,
   type ResultIntentHistoryDto,
   type ResultPresentationDto,
   type ResultPresentationIssueDto,
   type ResultRelevantIntentDto,
-  type TraceEventDto,
 } from '../../api/results'
 import type { RunDto } from '../../api/runs'
-import { expectationLabel, formatTimestamp, integrityLabel, lifecycleLabel, verdictLabel } from '../../app/presentation'
+import { sourceChangesApi, type SourceChangeViewDto } from '../../api/sourceChanges'
+import { expectationLabel, formatTimestamp, integrityLabel, lifecycleLabel, traceEventLabel, verdictLabel } from '../../app/presentation'
 import { EvidenceExplanationDrawer } from '../checks/EvidenceExplanationDrawer'
-import { ResultFactChain } from '../checks/ResultFactChain'
 import './PresentationMode.css'
 
-type PresentationPage = 'conclusion' | 'live' | 'comparison' | 'boundaries'
+type PresentationAct = 'conflict' | 'change' | 'evidence' | 'repair'
+type ProductRoute = '/changes' | '/results' | '/verification' | '/validation'
 type EvidenceDrawerState = { title: string; explanations: ResultEvidenceExplanationDto[] } | null
 
-const pages: Array<{ key: PresentationPage; index: string; label: string; summary: string }> = [
-  { key: 'conclusion', index: '01', label: '项目结论', summary: '一眼看懂权限与后果' },
-  { key: 'live', index: '02', label: '现场验证', summary: '看清本轮因果与证据' },
-  { key: 'comparison', index: '03', label: '修复前后', summary: '证明修复没有关闭功能' },
-  { key: 'boundaries', index: '04', label: '数据与边界', summary: '区分产品事实与验证范围' },
+const acts: Array<{ key: PresentationAct; index: string; label: string; summary: string; title: string }> = [
+  { key: 'conflict', index: '01', label: '发现矛盾', summary: '403 与 ZIP 同时成立', title: 'Bob 收到 403，完整项目交付包却仍在后台生成' },
+  { key: 'change', index: '02', label: '回看变化', summary: '核对提交来源与真实文件变化', title: '执行方式发生了变化，但人的权限规则没有改变' },
+  { key: 'evidence', index: '03', label: '展开证据', summary: '定位首个可证明断裂', title: '403 只说明表面拒绝，证据链才说明真实后果' },
+  { key: 'repair', index: '04', label: '验证修复', summary: '用原考题检查三条路径', title: '修复不是关闭功能，而是让同一权限规则重新贯穿执行链' },
 ]
-
-const traceLabels: Record<TraceEventDto['kind'], string> = {
-  ENTRY: '请求进入',
-  IDENTITY: '识别实际账号',
-  AUTHORIZATION: '执行权限判断',
-  PERSISTENT_EFFECT: '业务状态发生变化',
-  MESSAGE: '消息进入后台链路',
-  DELEGATION: '后台 Worker 继续执行',
-  FINAL_EFFECT: '最终业务效果形成',
-  RECOVERY: '执行业务恢复',
-}
 
 function verdictTone(verdict: unknown) {
   if (['PASS', 'SAFE'].includes(String(verdict ?? ''))) return 'success'
@@ -91,33 +77,39 @@ function permissionStatement(intent: ResultRelevantIntentDto | null, issue: Resu
     || '本次结果没有发布可展示的业务权限句子。'
 }
 
-function presentationHeadline(presentation: ResultPresentationDto | null, issue: ResultPresentationIssueDto | null) {
-  if (presentation?.verdict === 'BLOCK' && issue?.claim_boundary.business_effect_status === 'CONFIRMED') {
-    return 'Bob 收到 403，但完整项目交付包仍在后台生成'
+function breakpointLabel(value: ResultDiagnosisDto['breakpoint_type'] | undefined) {
+  const labels: Record<string, string> = {
+    AUTHORIZATION_MISSING: '没有执行权限判断',
+    AUTHORIZATION_LATE: '权限判断发生过晚',
+    AUTHORIZATION_BYPASS: '绕过了权限判断',
+    IDENTITY_SUBSTITUTION: '实际账号发生替换',
+    AUTHORITY_EXPANSION: '后台权限范围被扩大',
+    COMPENSATION_MASKING: '后续补偿掩盖了前序后果',
   }
-  if (presentation?.verdict === 'PASS') return '修复成立，必须同时证明违规后果消失与合法功能保留'
-  if (presentation?.verdict === 'INCONCLUSIVE') return '收到 403，但关键观察不可用，仍不能宣称安全'
-  return '从权限要求，到真实业务后果'
+  return value ? labels[value] ?? '断裂类型未识别' : '未发布'
 }
 
-export function PresentationMode({
-  experience,
-  projectName,
-  runs,
-  onExit,
-  onOpenProductRoute,
-}: {
+function precisionLabel(value: ResultDiagnosisDto['precision'] | undefined) {
+  return value === 'EXACT' ? '精确到单一节点' : value === 'RANGE' ? '只能定位到一段路径' : value === 'VIOLATION_ONLY' ? '仅确认存在断裂' : '未发布'
+}
+
+function continuityLabel(value: ResultDiagnosisDto['continuity_state'] | undefined) {
+  return value === 'INTACT' ? '权限规则保持贯穿' : value === 'ORPHAN_EFFECT_CONFIRMED' ? '已确认存在未受权限约束的后果' : value === 'UNKNOWN' ? '现有证据不足以确认' : '未发布'
+}
+
+export function PresentationMode({ experience, projectName, runs, onExit, onOpenProductRoute }: {
   experience: OfficialExperienceDto
   projectName: string
   runs: RunDto[]
   onExit: () => void
-  onOpenProductRoute: (path: '/results' | '/verification') => void
+  onOpenProductRoute: (path: ProductRoute) => void
 }) {
-  const [page, setPage] = useState<PresentationPage>('conclusion')
+  const [act, setAct] = useState<PresentationAct>('conflict')
   const [presentation, setPresentation] = useState<ResultPresentationDto | null>(null)
   const [sourcePresentation, setSourcePresentation] = useState<ResultPresentationDto | null>(null)
+  const [storyChange, setStoryChange] = useState<SourceChangeViewDto | null>(null)
+  const [repairChange, setRepairChange] = useState<SourceChangeViewDto | null>(null)
   const [history, setHistory] = useState<HistoryViewDto | null>(null)
-  const [validation, setValidation] = useState<CompetitionValidationSummaryViewDto | null>(null)
   const [factsLoading, setFactsLoading] = useState(false)
   const [factsError, setFactsError] = useState<string | null>(null)
   const [retryEpoch, setRetryEpoch] = useState(0)
@@ -126,20 +118,13 @@ export function PresentationMode({
     () => runs.find((item) => item.run_id && item.result_integrity === 'VERIFIED') ?? runs.find((item) => item.run_id),
     [runs],
   )
-  const issue = mainIssue(presentation)
-  const intent = denyIntent(presentation)
+  const failurePresentation = sourcePresentation ?? (presentation?.verdict === 'BLOCK' ? presentation : null)
+  const failureIssue = mainIssue(failurePresentation ?? presentation)
+  const currentIssue = mainIssue(presentation)
+  const intent = denyIntent(failurePresentation ?? presentation)
   const approval = approvalFor(intent, history)
-  const current = pages.find((item) => item.key === page) ?? pages[0]
-
-  useEffect(() => {
-    let active = true
-    void experienceApi.validationSummary().then((value) => {
-      if (active) setValidation(value)
-    }).catch(() => {
-      if (active) setValidation({ available: false, unavailable_reason: '无法读取公开验证汇总', summary: null })
-    })
-    return () => { active = false }
-  }, [retryEpoch])
+  const current = acts.find((item) => item.key === act) ?? acts[0]
+  const currentIndex = acts.findIndex((item) => item.key === act)
 
   useEffect(() => {
     const runId = latest?.run_id
@@ -147,6 +132,8 @@ export function PresentationMode({
     if (!runId || !projectId) {
       setPresentation(null)
       setSourcePresentation(null)
+      setStoryChange(null)
+      setRepairChange(null)
       setHistory(null)
       setFactsError(null)
       setFactsLoading(false)
@@ -162,25 +149,36 @@ export function PresentationMode({
           resultsApi.history(projectId),
         ])
         if (!active) return
-        setPresentation(currentPresentation)
-        setHistory(currentHistory)
+        let source: ResultPresentationDto | null = null
         const sourceRunId = currentPresentation.repair_verification?.reference.source_run_id
         if (sourceRunId && sourceRunId !== runId) {
           try {
-            const source = await resultsApi.presentation(sourceRunId)
-            if (active) setSourcePresentation(source)
+            source = await resultsApi.presentation(sourceRunId)
           } catch {
-            if (active) setSourcePresentation(null)
+            source = null
           }
-        } else {
-          setSourcePresentation(null)
         }
+        const failure = source ?? (currentPresentation.verdict === 'BLOCK' ? currentPresentation : null)
+        const storyChangeId = failure?.change_verification?.change_id
+        const repairChangeId = currentPresentation.repair_verification ? currentPresentation.change_verification?.change_id : null
+        const [loadedStoryChange, loadedRepairChange] = await Promise.all([
+          storyChangeId ? sourceChangesApi.show(projectId, storyChangeId).catch(() => null) : Promise.resolve(null),
+          repairChangeId ? sourceChangesApi.show(projectId, repairChangeId).catch(() => null) : Promise.resolve(null),
+        ])
+        if (!active) return
+        setPresentation(currentPresentation)
+        setSourcePresentation(source)
+        setStoryChange(loadedStoryChange)
+        setRepairChange(loadedRepairChange)
+        setHistory(currentHistory)
       } catch {
         if (active) {
           setPresentation(null)
           setSourcePresentation(null)
+          setStoryChange(null)
+          setRepairChange(null)
           setHistory(null)
-          setFactsError('无法读取当前 Run 的正式展示事实。')
+          setFactsError('无法读取这个故事所需的正式权限、变化和运行事实。')
         }
       } finally {
         if (active) setFactsLoading(false)
@@ -189,155 +187,117 @@ export function PresentationMode({
     return () => { active = false }
   }, [experience.project_id, latest?.run_id, retryEpoch])
 
-  const openEvidence = (title: string, explanations: ResultEvidenceExplanationDto[]) => {
-    setDrawer({ title, explanations })
-  }
+  const openEvidence = (title: string, explanations: ResultEvidenceExplanationDto[]) => setDrawer({ title, explanations })
+  const goTo = (index: number) => setAct(acts[Math.max(0, Math.min(acts.length - 1, index))].key)
 
   return <div className="presentation-mode">
     <header className="presentation-header">
       <div>
-        <Typography.Text className="presentation-brand">界鉴 · 展示模式</Typography.Text>
-        <Typography.Title level={1}>{presentationHeadline(presentation, issue)}</Typography.Title>
+        <Typography.Text className="presentation-brand">界鉴 · 一例四幕</Typography.Text>
+        <Typography.Title level={1}>校园数字展馆：一次权限断裂的完整复验</Typography.Title>
         <Typography.Text>{experience.display_name?.trim() || projectName} · 当前正式产品上下文</Typography.Text>
       </div>
-      <div className="presentation-header-actions">
-        <Tag className="presentation-data-tag">只读取正式产品数据</Tag>
-        <Button onClick={onExit}>退出展示模式</Button>
-      </div>
+      <div className="presentation-header-actions"><Tag className="presentation-data-tag">只读取正式事实</Tag><Button onClick={onExit}>返回工作台</Button></div>
     </header>
 
     <div className="presentation-shell">
-      <nav className="presentation-navigation" aria-label="展示页面">
-        {pages.map((item) => <button
-          aria-current={page === item.key ? 'page' : undefined}
-          className={page === item.key ? 'is-active' : undefined}
-          id={`presentation-tab-${item.key}`}
-          key={item.key}
-          onClick={() => setPage(item.key)}
-          type="button"
-        >
-          <span>{item.index}</span>
-          <strong>{item.label}</strong>
-          <small>{item.summary}</small>
+      <nav className="presentation-navigation" aria-label="展示章节">
+        {acts.map((item) => <button aria-current={act === item.key ? 'step' : undefined} className={act === item.key ? 'is-active' : undefined} id={`presentation-tab-${item.key}`} key={item.key} onClick={() => setAct(item.key)} type="button">
+          <span>{item.index}</span><strong>{item.label}</strong><small>{item.summary}</small>
         </button>)}
       </nav>
-
-      <main aria-labelledby={`presentation-tab-${page}`} className="presentation-content" id={`presentation-panel-${page}`}>
-        <div className="presentation-page-heading">
-          <Typography.Text className="presentation-kicker">{current.index} / {pages.length.toString().padStart(2, '0')}</Typography.Text>
-          <Typography.Title level={2}>{current.label}</Typography.Title>
-          <Typography.Paragraph>{current.summary}</Typography.Paragraph>
+      <main aria-labelledby={`presentation-tab-${act}`} className="presentation-content" id={`presentation-panel-${act}`}>
+        <div className="presentation-page-heading"><Typography.Text className="presentation-kicker">{current.index} / 04</Typography.Text><Typography.Title level={2}>{current.title}</Typography.Title><Typography.Paragraph>{current.summary}</Typography.Paragraph></div>
+        {factsLoading && <Skeleton active paragraph={{ rows: 7 }} />}
+        {!factsLoading && factsError && <Alert action={<Button onClick={() => setRetryEpoch((value) => value + 1)}>重新读取</Button>} message={factsError} showIcon type="error" />}
+        {!factsLoading && !factsError && act === 'conflict' && <ConflictAct run={sourcePresentation ? runs.find((item) => item.run_id === sourcePresentation.run_id) ?? latest : latest} presentation={failurePresentation ?? presentation} issue={failureIssue} intent={intent} approval={approval} onEvidence={openEvidence} />}
+        {!factsLoading && !factsError && act === 'change' && <ChangeAct change={storyChange} intent={intent} issue={failureIssue} approval={approval} onOpen={() => onOpenProductRoute('/changes')} />}
+        {!factsLoading && !factsError && act === 'evidence' && <EvidenceAct presentation={failurePresentation ?? presentation} issue={failureIssue} intent={intent} onEvidence={openEvidence} onOpen={() => onOpenProductRoute('/verification')} />}
+        {!factsLoading && !factsError && act === 'repair' && <RepairAct presentation={presentation} sourcePresentation={sourcePresentation} issue={currentIssue} repairChange={repairChange} onEvidence={openEvidence} onOpenValidation={() => onOpenProductRoute('/validation')} />}
+        <div className="presentation-act-actions" aria-label="展示章节操作">
+          <Button disabled={currentIndex === 0} onClick={() => goTo(currentIndex - 1)}>上一幕</Button>
+          <Typography.Text type="secondary">{current.label} · {currentIndex + 1}/{acts.length}</Typography.Text>
+          {currentIndex < acts.length - 1 ? <Button type="primary" onClick={() => goTo(currentIndex + 1)}>下一幕：{acts[currentIndex + 1].label}</Button> : <Button type="primary" onClick={onExit}>返回正式工作台</Button>}
         </div>
-        {page !== 'boundaries' && factsLoading && <Skeleton active paragraph={{ rows: 7 }} />}
-        {page !== 'boundaries' && !factsLoading && factsError && <Alert
-          action={<Button onClick={() => setRetryEpoch((value) => value + 1)}>重新读取</Button>}
-          message={factsError}
-          showIcon
-          type="error"
-        />}
-        {page === 'conclusion' && !factsLoading && !factsError && <ConclusionPage
-          experience={experience}
-          run={latest}
-          presentation={presentation}
-          issue={issue}
-          intent={intent}
-          approval={approval}
-        />}
-        {page === 'live' && !factsLoading && !factsError && <LivePage
-          presentation={presentation}
-          issue={issue}
-          intent={intent}
-          approval={approval}
-          onEvidence={openEvidence}
-          onOpen={() => onOpenProductRoute('/verification')}
-        />}
-        {page === 'comparison' && !factsLoading && !factsError && <ComparisonPage
-          presentation={presentation}
-          sourcePresentation={sourcePresentation}
-          issue={issue}
-          onEvidence={openEvidence}
-        />}
-        {page === 'boundaries' && <BoundariesPage latest={latest} validation={validation} onOpen={() => onOpenProductRoute('/results')} />}
       </main>
     </div>
     <EvidenceExplanationDrawer open={drawer !== null} title={drawer?.title} explanations={drawer?.explanations ?? []} onClose={() => setDrawer(null)} />
   </div>
 }
 
-function ConclusionPage({ experience, run, presentation, issue, intent, approval }: {
-  experience: OfficialExperienceDto
+function ConflictAct({ run, presentation, issue, intent, approval, onEvidence }: {
   run?: RunDto
   presentation: ResultPresentationDto | null
   issue: ResultPresentationIssueDto | null
   intent: ResultRelevantIntentDto | null
   approval: ResultIntentHistoryDto['revisions'][number] | null
+  onEvidence: (title: string, explanations: ResultEvidenceExplanationDto[]) => void
 }) {
-  if (!run || !presentation) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前官方示例尚无正式检查结果；请退出展示模式，在正式产品中完成准备与检查。" />
-  const trace = traceFor(issue, presentation)
+  if (!run || !presentation || !issue) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前官方示例还没有形成可展示的正式问题 Run。" />
   return <div className="presentation-page-body">
     <section className="presentation-permission-banner" aria-label="人确认的权限规则">
-      <div><Typography.Text>人确认的业务规则</Typography.Text><Typography.Title level={3}>{permissionStatement(intent, issue)}</Typography.Title></div>
-      <div className="presentation-permission-meta">
-        <Tag color="red">{intent?.expectation ? expectationLabel(intent.expectation) : '预期未发布'}</Tag>
-        <strong>{intentLabel(intent)} · 第 {intent?.revision ?? '—'} 版</strong>
-        <span>{approval ? `${approval.approved_by} 已确认 · ${formatTimestamp(approval.approved_at_us)}` : '审批记录未随本次展示发布'}</span>
-      </div>
+      <div><Typography.Text>人确认的权限考题</Typography.Text><Typography.Title level={3}>{permissionStatement(intent, issue)}</Typography.Title></div>
+      <div className="presentation-permission-meta"><Tag color="red">{intent?.expectation ? expectationLabel(intent.expectation) : '预期未发布'}</Tag><strong>{intentLabel(intent)} · 第 {intent?.revision ?? '—'} 版</strong><span>{approval ? `${approval.approved_by} 已确认 · ${formatTimestamp(approval.approved_at_us)}` : '审批记录未随本次展示发布'}</span></div>
     </section>
-    {issue ? <ResultFactChain issue={issue} presentation /> : <Alert message="当前结果没有发布可展示的检查项" type="warning" showIcon />}
-    <Typography.Text type="secondary">检查时间：{formatTimestamp(run.created_at_us ?? run.created_at)} · {lifecycleLabel(run.lifecycle ?? run.state)} · {integrityLabel(run.result_integrity)}</Typography.Text>
-    <div className="presentation-fact-grid" aria-label="当次验证数字">
-      <div><span>本轮覆盖权限项</span><strong>{presentation.checked_count}</strong></div>
-      <div><span>已发布证据来源</span><strong>{issue?.evidence_sources.length ?? 0}</strong></div>
-      <div><span>关联执行链节点</span><strong>{trace?.events.length ?? 0}</strong></div>
-    </div>
-    <Alert message={experience.active ? '这些内容来自当前官方示例的正式 Run。' : '官方示例已经停止，页面保留的是当前工作区正式事实。'} type="info" showIcon />
+    <section className="presentation-conflict" aria-label="403 与 ZIP 的矛盾">
+      <article><span>页面回应</span><strong>{issue.surface_result}</strong><p>用户看到请求已经被拒绝。</p></article>
+      <div aria-hidden="true"><span>但是</span></div>
+      <article className="is-danger"><span>后台真实后果</span><strong>{issue.actual_result}</strong><p>{issue.claim_boundary.supported_statement}</p></article>
+    </section>
+    <div className="presentation-conflict-conclusion"><Tag color={verdictTone(presentation.verdict)}>{verdictLabel(presentation.verdict ?? issue.verdict)}</Tag><Typography.Title level={3}>{issue.conclusion}</Typography.Title><Button type="primary" onClick={() => onEvidence('ZIP 为什么属于本轮', issue.evidence_explanations)}>为什么确定 ZIP 属于本轮？</Button></div>
+    <Typography.Text type="secondary">{formatTimestamp(run.created_at_us ?? run.created_at)} · {lifecycleLabel(run.lifecycle ?? run.state)} · {integrityLabel(run.result_integrity)}</Typography.Text>
   </div>
 }
 
-function LivePage({ presentation, issue, intent, approval, onEvidence, onOpen }: {
+function ChangeAct({ change, intent, issue, approval, onOpen }: {
+  change: SourceChangeViewDto | null
+  intent: ResultRelevantIntentDto | null
+  issue: ResultPresentationIssueDto | null
+  approval: ResultIntentHistoryDto['revisions'][number] | null
+  onOpen: () => void
+}) {
+  if (!change) return <div className="presentation-page-body"><Alert message="当前问题 Run 没有可读取的关联变化" description="界鉴不会把最近一条无关变化拼接到这个故事中。" type="warning" showIcon /><Button onClick={onOpen}>查看正式变化记录</Button></div>
+  const actualPaths = [...change.added_paths.map((path) => ({ label: '新增', path })), ...change.modified_paths.map((path) => ({ label: '修改', path })), ...change.removed_paths.map((path) => ({ label: '删除', path }))]
+  const submittedThroughMcp = change.submitted_by.startsWith('MCP')
+  return <div className="presentation-page-body">
+    <section className="presentation-change-flow" aria-label="人的规则、提交变化与界鉴核对">
+      <article><span>人的权限基线</span><strong>{permissionStatement(intent, issue)}</strong><small>{approval ? `${approval.approved_by} 已确认` : '审批记录未发布'}</small></article><div aria-hidden="true">→</div>
+      <article className="is-agent"><span>变化提交记录</span><strong>{change.reason}</strong><small>{change.submitted_by} · {formatTimestamp(change.created_at_us)}</small></article><div aria-hidden="true">→</div>
+      <article className="is-system"><span>界鉴独立核对</span><strong>实际变化 {change.actual_changed_path_count} 个文件</strong><small>直接影响 {change.directly_affected_count} 条权限规则</small></article>
+    </section>
+    <section className="presentation-change-receipt" aria-label="变化来源、回执与检查关联">
+      <div><span>提交来源</span><strong>{change.submitted_by}</strong></div>
+      <div><span>{submittedThroughMcp ? 'MCP 提交回执' : '变化登记回执'}</span><strong>界鉴已登记这次变化</strong><small>{change.change_id}</small></div>
+      <div><span>检查关联</span><strong>由本次问题检查精确引用</strong><small>不使用“最近一条变化”推测</small></div>
+    </section>
+    <Alert type="info" showIcon message={change.summary} description="Agent 说明只解释修改意图；文件数量、真实路径和权限影响来自界鉴重新读取源码后的结果。" />
+    <section className="presentation-change-detail" aria-label="声明变化与实际变化">
+      <article><Typography.Text strong>Agent 声明会修改</Typography.Text>{change.claimed_paths.length ? <ul>{change.claimed_paths.map((path) => <li key={path}><Typography.Text code>{path}</Typography.Text></li>)}</ul> : <Typography.Paragraph type="secondary">Agent 没有声明具体路径。</Typography.Paragraph>}</article>
+      <article><Typography.Text strong>界鉴实际确认</Typography.Text>{actualPaths.length ? <ul>{actualPaths.map((item) => <li key={`${item.label}:${item.path}`}><span>{item.label}</span><Typography.Text code>{item.path}</Typography.Text></li>)}</ul> : <Typography.Paragraph type="secondary">当前变化没有形成可比较的文件差异。</Typography.Paragraph>}</article>
+    </section>
+    <div className="presentation-actions"><Tag color={submittedThroughMcp ? 'blue' : 'default'}>{change.submitted_by}</Tag><Button onClick={onOpen}>查看完整变化记录</Button></div>
+  </div>
+}
+
+function EvidenceAct({ presentation, issue, intent, onEvidence, onOpen }: {
   presentation: ResultPresentationDto | null
   issue: ResultPresentationIssueDto | null
   intent: ResultRelevantIntentDto | null
-  approval: ResultIntentHistoryDto['revisions'][number] | null
   onEvidence: (title: string, explanations: ResultEvidenceExplanationDto[]) => void
   onOpen: () => void
 }) {
-  if (!presentation || !issue) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前还没有可供现场验证的完整正式结果。" />
+  if (!presentation || !issue) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前还没有可展开的正式证据链。" />
   const trace = traceFor(issue, presentation)
   const relevance = issue.evidence_explanations.find((item) => item.relevance)?.relevance
   return <div className="presentation-page-body">
-    <div className="presentation-live-grid">
-      <section className="presentation-live-column" aria-labelledby="live-permission-title">
-        <Typography.Text className="presentation-column-kicker">01 · 权限要求</Typography.Text>
-        <Typography.Title id="live-permission-title" level={3}>{intentLabel(intent)}</Typography.Title>
-        <Tag color="red">{intent?.expectation ? expectationLabel(intent.expectation) : '预期未发布'} · 第 {intent?.revision ?? '—'} 版</Tag>
-        <Typography.Paragraph>{permissionStatement(intent, issue)}</Typography.Paragraph>
-        <Typography.Text type="secondary">{approval ? `${approval.approved_by} 于 ${formatTimestamp(approval.approved_at_us)} 确认` : '本次展示未取得审批记录'}</Typography.Text>
-      </section>
-      <section className="presentation-live-column is-path" aria-labelledby="live-path-title">
-        <Typography.Text className="presentation-column-kicker">02 · 实际执行</Typography.Text>
-        <Typography.Title id="live-path-title" level={3}>403 之外，后台继续发生了什么</Typography.Title>
-        <div className="presentation-surface-track"><span>表面响应轨</span><strong>{issue.surface_result}</strong></div>
-        {trace ? <TracePath trace={trace} issue={issue} onEvidence={() => onEvidence('ZIP 为什么属于本轮', issue.evidence_explanations)} /> : <Alert message="当前结果没有发布完整执行链" type="warning" showIcon />}
-      </section>
-      <section className="presentation-live-column is-outcome" aria-labelledby="live-outcome-title">
-        <Typography.Text className="presentation-column-kicker">03 · 真实后果</Typography.Text>
-        <Typography.Title id="live-outcome-title" level={3}>{issue.actual_result}</Typography.Title>
-        <Tag color={verdictTone(presentation.verdict)}>{verdictLabel(presentation.verdict ?? issue.verdict)}</Tag>
-        <Typography.Paragraph>{issue.claim_boundary.supported_statement}</Typography.Paragraph>
-        <dl className="presentation-diagnosis">
-          <div><dt>断裂类型</dt><dd>{issue.diagnosis?.breakpoint_type ?? '未发布'}</dd></div>
-          <div><dt>定位精度</dt><dd>{issue.diagnosis?.precision ?? '未发布'}</dd></div>
-          <div><dt>授权连续性</dt><dd>{issue.diagnosis?.continuity_state ?? '未发布'}</dd></div>
-        </dl>
-      </section>
-    </div>
-    <Alert message="为什么 ZIP 属于本轮" description={relevance || '本次结果没有发布可展示的关联说明。'} type={relevance ? 'info' : 'warning'} showIcon />
-    <div className="presentation-actions">
-      <Button type="primary" onClick={() => onEvidence('ZIP 为什么属于本轮', issue.evidence_explanations)}>查看 ZIP 为什么属于本轮</Button>
-      <Button onClick={onOpen}>进入正式产品核对完整结果</Button>
-    </div>
-    <Alert message="页面响应、后台任务、Worker 或 ZIP 都不能单独决定安全结论。" type="warning" showIcon />
+    <section className="presentation-evidence-grid" aria-label="权限要求、实际执行与真实后果">
+      <article><Typography.Text className="presentation-column-kicker">预期路径</Typography.Text><Typography.Title level={3}>识别 Bob → 权限拒绝 → 停止</Typography.Title><Tag color="red">{intent?.expectation ? expectationLabel(intent.expectation) : '预期未发布'}</Tag><Typography.Paragraph>{permissionStatement(intent, issue)}</Typography.Paragraph></article>
+      <article className="is-path"><Typography.Text className="presentation-column-kicker">实际路径</Typography.Text><div className="presentation-surface-track"><span>表面响应轨</span><strong>{issue.surface_result}</strong></div>{trace ? <TracePath trace={trace} issue={issue} onEvidence={() => onEvidence('本轮证据怎样关联', issue.evidence_explanations)} /> : <Alert message="当前结果没有发布完整执行链" type="warning" showIcon />}</article>
+      <article className="is-outcome"><Typography.Text className="presentation-column-kicker">真实后果</Typography.Text><Typography.Title level={3}>{issue.actual_result}</Typography.Title><Tag color={verdictTone(presentation.verdict)}>{verdictLabel(presentation.verdict ?? issue.verdict)}</Tag><dl className="presentation-diagnosis"><div><dt>断裂类型</dt><dd>{breakpointLabel(issue.diagnosis?.breakpoint_type)}</dd></div><div><dt>定位精度</dt><dd>{precisionLabel(issue.diagnosis?.precision)}</dd></div><div><dt>权限规则是否贯穿</dt><dd>{continuityLabel(issue.diagnosis?.continuity_state)}</dd></div></dl></article>
+    </section>
+    <Alert message="为什么这些事实属于本轮" description={relevance || '本次结果没有发布可展示的关联说明。'} type={relevance ? 'info' : 'warning'} showIcon />
+    <div className="presentation-actions"><Button type="primary" onClick={() => onEvidence('本轮证据怎样关联', issue.evidence_explanations)}>展开每种证据能证明什么</Button><Button onClick={onOpen}>在正式产品中挑战证据不足</Button></div>
+    <Typography.Text type="secondary">页面响应、后台任务、Worker 或 ZIP 都不能单独决定安全结论。</Typography.Text>
   </div>
 }
 
@@ -349,70 +309,38 @@ function TracePath({ trace, issue, onEvidence }: { trace: ExecutionTraceDto; iss
     {trace.events.map((event, index) => {
       const exact = event.event_id === diagnosis?.first_violation_event_id
       const ranged = diagnosis?.precision === 'RANGE' && start >= 0 && end >= start && index >= start && index <= end
-      return <li className={exact ? 'is-breakpoint' : ranged ? 'is-range' : undefined} key={event.event_id}>
-        <button type="button" aria-label={`查看“${traceLabels[event.kind]}”证据`} onClick={onEvidence}><span>{index + 1}</span></button>
-        <div><strong>{traceLabels[event.kind]}</strong><small>{event.source_component}{event.authorization_decision ? ` · ${event.authorization_decision}` : ''}</small>{exact && <Tag color="red">首个可证明断裂</Tag>}{ranged && !exact && <Tag color="gold">断裂范围</Tag>}</div>
-      </li>
+      return <li className={exact ? 'is-breakpoint' : ranged ? 'is-range' : undefined} key={event.event_id}><button type="button" aria-label={`查看“${traceEventLabel(event)}”证据`} onClick={onEvidence}><span>{index + 1}</span></button><div><strong>{traceEventLabel(event)}</strong><small>{event.source_component}{event.authorization_decision ? ` · ${event.authorization_decision}` : ''}</small>{exact && <Tag color="red">首个可证明断裂</Tag>}{ranged && !exact && <Tag color="gold">断裂范围</Tag>}</div></li>
     })}
     {!trace.complete && <li className="is-incomplete"><span>?</span><div><strong>后续路径未完整发布</strong><small>页面不会补画未知节点</small></div></li>}
   </ol>
 }
 
-function ComparisonPage({ presentation, sourcePresentation, issue, onEvidence }: {
+function RepairAct({ presentation, sourcePresentation, issue, repairChange, onEvidence, onOpenValidation }: {
   presentation: ResultPresentationDto | null
   sourcePresentation: ResultPresentationDto | null
   issue: ResultPresentationIssueDto | null
+  repairChange: SourceChangeViewDto | null
   onEvidence: (title: string, explanations: ResultEvidenceExplanationDto[]) => void
+  onOpenValidation: () => void
 }) {
   if (!presentation) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前还没有正式的原考题复验结果。" />
   const verification = presentation.repair_verification
-  if (!verification) return <div className="presentation-page-body"><Alert message="尚未形成原考题复验记录" description="本页不会根据一次问题检查推断修复已经完成。" type="warning" showIcon /><RepairResponsibilities /></div>
+  if (!verification) return <div className="presentation-page-body"><Alert message="尚未形成原考题复验记录" description="本幕不会根据一次问题检查推断修复已经完成。" type="warning" showIcon /><RepairResponsibilities /><Button type="primary" onClick={onOpenValidation}>进入正式产品准备复验</Button></div>
   const sourceIssue = sourcePresentation?.issues.find((item) => item.finding_id === verification.reference.source_finding_id) ?? sourcePresentation?.issues[0] ?? null
   const requirement = issue?.repair_requirement
-  const sameIntent = presentation.relevant_intents.some((currentIntent) => sourcePresentation?.relevant_intents.some((sourceIntent) => (
-    sourceIntent.intent_id === currentIntent.intent_id && sourceIntent.revision === currentIntent.revision && sourceIntent.intent_hash === currentIntent.intent_hash
-  )))
+  const sameIntent = presentation.relevant_intents.some((currentIntent) => sourcePresentation?.relevant_intents.some((sourceIntent) => sourceIntent.intent_id === currentIntent.intent_id && sourceIntent.revision === currentIntent.revision && sourceIntent.intent_hash === currentIntent.intent_hash))
   const verified = verification.status === 'VERIFIED'
-  const orderedPaths = [
-    'DENY_EFFECT_REMOVAL',
-    'ALLOW_CONTROL',
-    'REGRESSION_CONTROL',
-  ].flatMap((kind) => verification.path_results.filter((item) => item.kind === kind))
+  const orderedPaths = ['DENY_EFFECT_REMOVAL', 'ALLOW_CONTROL', 'REGRESSION_CONTROL'].flatMap((kind) => verification.path_results.filter((item) => item.kind === kind))
   return <div className="presentation-page-body">
-    <section className="presentation-repair-contract" aria-label="修复合同">
-      <article><span>必须消失</span><strong>{requirement?.must_disappear || '原违规后果必须消失'}</strong></article>
-      <article><span>必须保留</span><strong>{requirement?.must_remain || '合法业务能力必须保留'}</strong></article>
-      <article><span>不能改变</span><strong>{requirement?.must_not_change.join('、') || '原权限和关键观察标准'}</strong></article>
-    </section>
-    <div className="presentation-before-after">
-      <RepairRunCard label="修复前" presentation={sourcePresentation} issue={sourceIssue} />
-      <div className="presentation-repair-arrow" aria-hidden="true">→</div>
-      <RepairRunCard label="修复后" presentation={presentation} issue={issue} />
-    </div>
-    <section aria-labelledby="repair-paths-title">
-      <Typography.Title id="repair-paths-title" level={3}>三条路径分别核对</Typography.Title>
-      <div className="presentation-repair-paths">
-        {orderedPaths.length > 0 ? orderedPaths.map((path) => (
-          <RepairPath
-            key={`${path.kind}:${path.action_id}:${path.subject_id}`}
-            title={`${path.subject_display_name} ${path.action_display_name}`}
-            status={path.status}
-            detail={path.message}
-          />
-        )) : <>
-          <RepairPath title="Bob 导出完整项目交付包" status={verification.status} detail={verified ? '原违规业务后果已被完整证明消失。' : verification.message} />
-          <RepairPath title="Alice 导出完整项目交付包" status={verification.status} detail={verified ? 'Alice 的合法导出仍然正常完成。' : '当前复验尚未证明合法导出保持正常。'} />
-          <RepairPath title="Bob 查看日常协作资料" status="PENDING" detail="旧结果没有发布这条独立非回归事实。" />
-        </>}
-      </div>
-    </section>
-    <div className="presentation-consistency-grid" aria-label="修复前后一致性">
-      <div><span>权限规则版本</span><strong>{sameIntent ? '保持一致' : '未能确认一致'}</strong></div>
-      <div><span>身份关系</span><strong>{verified ? '由修复合同保持' : '尚未确认'}</strong></div>
-      <div><span>关键观察标准</span><strong>{verified ? '未降低' : '尚未确认'}</strong></div>
-    </div>
+    {repairChange && <div className="presentation-repair-change"><span>修复变化</span><strong>{repairChange.reason}</strong><small>{repairChange.submitted_by} · 实际修改 {repairChange.actual_changed_path_count} 个文件</small></div>}
+    <section className="presentation-repair-contract" aria-label="修复合同"><article><span>必须消失</span><strong>{requirement?.must_disappear || '原违规后果必须消失'}</strong></article><article><span>必须保留</span><strong>{requirement?.must_remain || '合法业务能力必须保留'}</strong></article><article><span>不能改变</span><strong>{requirement?.must_not_change.join('、') || '原权限和关键观察标准'}</strong></article></section>
+    <div className="presentation-before-after"><RepairRunCard label="修复前" presentation={sourcePresentation} issue={sourceIssue} /><div className="presentation-repair-arrow" aria-hidden="true">→</div><RepairRunCard label="修复后" presentation={presentation} issue={issue} /></div>
+    <section aria-labelledby="repair-paths-title"><Typography.Title id="repair-paths-title" level={3}>三条路径分别核对</Typography.Title><div className="presentation-repair-paths">
+      {orderedPaths.length > 0 ? orderedPaths.map((path) => <RepairPath key={`${path.kind}:${path.action_id}:${path.subject_id}`} title={`${path.subject_display_name} ${path.action_display_name}`} status={path.status} detail={path.message} />) : <><RepairPath title="Bob 导出完整项目交付包" status={verification.status} detail={verified ? '原违规业务后果已被完整证明消失。' : verification.message} /><RepairPath title="Alice 导出完整项目交付包" status={verification.status} detail={verified ? 'Alice 的合法导出仍然正常完成。' : '当前复验尚未证明合法导出保持正常。'} /><RepairPath title="Bob 查看日常协作资料" status="PENDING" detail="旧结果没有发布这条独立非回归事实。" /></>}
+    </div></section>
+    <div className="presentation-consistency-grid" aria-label="修复前后一致性"><div><span>权限规则版本</span><strong>{sameIntent ? '保持一致' : '未能确认一致'}</strong></div><div><span>身份关系</span><strong>{verified ? '由修复合同保持' : '尚未确认'}</strong></div><div><span>关键观察标准</span><strong>{verified ? '未降低' : '尚未确认'}</strong></div></div>
     <Alert message={repairStatusLabel(verification.status)} description={verification.message} type={verified ? 'success' : verification.status === 'NOT_VERIFIED' ? 'error' : 'warning'} showIcon />
-    {issue && <Button onClick={() => onEvidence('原考题复验证据', [...(sourceIssue?.evidence_explanations ?? []), ...issue.evidence_explanations])}>查看为什么这次通过不是因为关闭功能</Button>}
+    <div className="presentation-actions">{issue && <Button onClick={() => onEvidence('原考题复验证据', [...(sourceIssue?.evidence_explanations ?? []), ...issue.evidence_explanations])}>查看为什么这次通过不是因为关闭功能</Button>}<Button type="primary" onClick={onOpenValidation}>重新验证当前修复</Button></div>
   </div>
 }
 
@@ -426,48 +354,9 @@ function RepairRunCard({ label, presentation, issue }: { label: string; presenta
 
 function RepairPath({ title, status, detail }: { title: string; status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | 'PENDING'; detail: string }) {
   const tone = status === 'VERIFIED' ? 'success' : status === 'NOT_VERIFIED' ? 'error' : 'warning'
-  const label = repairStatusLabel(status)
-  return <article><div><strong>{title}</strong><Tag color={tone}>{label}</Tag></div><p>{detail}</p></article>
+  return <article><div><strong>{title}</strong><Tag color={tone}>{repairStatusLabel(status)}</Tag></div><p>{detail}</p></article>
 }
 
 function repairStatusLabel(status: 'VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | 'PENDING') {
   return status === 'VERIFIED' ? '已验证' : status === 'NOT_VERIFIED' ? '未通过' : status === 'INCONCLUSIVE' ? '证据不足' : '尚未证明'
-}
-
-function BoundariesPage({ latest, validation, onOpen }: { latest?: RunDto; validation: CompetitionValidationSummaryViewDto | null; onOpen: () => void }) {
-  const summary = validation?.summary
-  const fullWrong = summary ? summary.full_wrong_pass_vulnerable + summary.full_wrong_pass_evidence_gap : 0
-  const httpWrong = summary ? summary.http_wrong_pass_vulnerable + summary.http_wrong_pass_evidence_gap : 0
-  return <div className="presentation-page-body">
-    <div className="presentation-source-strip" aria-label="两类数据来源">
-      <div><span>官方样例事实</span><strong>{latest?.run_id ? '当前正式 Run' : '尚无正式 Run'}</strong></div>
-      <div><span>方法验证数据</span><strong>{summary ? `sample-test ${summary.suite}` : '尚未发布'}</strong></div>
-    </div>
-    {!summary && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={validation?.unavailable_reason || '正在读取公开验证汇总'} />}
-    {summary && <>
-      <div className="presentation-fact-grid" aria-label="公开验证关键数字">
-        <div><span>固定验证矩阵</span><strong>{summary.case_count} Case</strong></div>
-        <div><span>完整方法与预期一致</span><strong>{summary.full_exact_match_count}/{summary.case_run_count}</strong></div>
-        <div><span>HTTP-only 每轮 wrong PASS</span><strong>{summary.http_wrong_pass_per_matrix}</strong></div>
-      </div>
-      <section className="presentation-method-comparison" aria-labelledby="method-comparison-title">
-        <Typography.Title id="method-comparison-title" level={3}>完整方法与只看 HTTP 的差别</Typography.Title>
-        <div>
-          <article className="is-safe"><span>界鉴完整方法</span><strong>{summary.full_exact_match_count}/{summary.case_run_count} 匹配</strong><p>漏洞错判 PASS：{summary.full_wrong_pass_vulnerable}；证据缺口错判 PASS：{summary.full_wrong_pass_evidence_gap}。</p></article>
-          <article className="is-danger"><span>HTTP-only 基线</span><strong>{summary.http_exact_match_count}/{summary.case_run_count} 匹配</strong><p>共 {httpWrong} 个 wrong PASS：漏洞 {summary.http_wrong_pass_vulnerable}，证据缺口 {summary.http_wrong_pass_evidence_gap}。</p></article>
-        </div>
-        {fullWrong === 0 && <Alert message="完整方法没有把本矩阵中的漏洞或证据缺口判成 PASS。" type="success" showIcon />}
-      </section>
-      <section className="presentation-validation-scope" aria-labelledby="validation-scope-title">
-        <Typography.Title id="validation-scope-title" level={3}>这些数字只适用于什么范围</Typography.Title>
-        <p>{summary.application_count} 个应用 × {summary.mode_count} 种权限断裂模式 × {summary.state_count} 种状态；独立执行 {summary.repetitions} 轮，共 {summary.case_run_count} 次 Case 运行。</p>
-        <p>生成时间：{formatTimestamp(summary.generated_at_us)} · 代码来源：{summary.source_revision ? summary.source_revision.slice(0, 12) : '未取得 Git 版本'}{summary.source_dirty === true ? '（含未提交改动）' : summary.source_dirty === false ? '（工作树干净）' : ''}</p>
-      </section>
-    </>}
-    <section className="presentation-boundaries" aria-labelledby="boundaries-title">
-      <Typography.Title id="boundaries-title" level={3}>不能据此宣称</Typography.Title>
-      <ul><li>不能代表任意 Web 应用的漏洞检出率或现实世界漏洞发生比例。</li><li>不能证明所有权限漏洞、未知失效模式或未来 Target 都能被发现。</li><li>tests-only 应用不是生产应用；验证矩阵也不是 Coding Agent 的现实漏洞率。</li><li>不能宣称模型安全完全没有进步；这里只证明功能能力不能替代独立安全验证。</li></ul>
-    </section>
-    {latest && <Button onClick={onOpen}>返回正式产品查看完整结果</Button>}
-  </div>
 }

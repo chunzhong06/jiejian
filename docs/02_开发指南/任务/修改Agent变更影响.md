@@ -30,7 +30,7 @@ jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
   → ResultPresentation / HistoryView / report.json
 ```
 
-`jiejian_change_show` 是 READ 工具，返回变化数量、影响计数、待复核权限、安全文案，以及 Agent 声明和界鉴实际确认的新增/修改/删除相对路径。路径只允许位于已授权源码根下；工具不返回绝对路径、源码正文、diff、hash、Git 信息或命令输出。GUI 默认只显示数量，用户展开“查看变化明细”后才显示这些相对路径。修复型变化只保存 `RepairContractReference`，不复制合同，也不接受文件、函数、行号或补丁建议；提交与后续检查都会从已发布事实重新校验引用。
+`jiejian_change_show` 是 READ 工具，返回变化数量、影响计数、待复核权限、安全文案，以及提交来源、Agent 声明和界鉴实际确认的新增/修改/删除相对路径。MCP 提交时，服务端把当前已验证客户端名称记为 `MCP · <client_name>`；无法取得名称时只记为 `MCP Agent`，不由前端猜测来源。路径只允许位于已授权源码根下；工具不返回绝对路径、源码正文、diff、hash、Git 信息或命令输出。GUI 默认只显示数量，用户展开“查看变化明细”后才显示这些相对路径。展示模式只能用结果中冻结的 change ID 读取对应记录，并把该记录作为登记回执；不能用 latest API 猜测 Agent/MCP 与 Run 的关系。修复型变化只保存 `RepairContractReference`，不复制合同，也不接受文件、函数、行号或补丁建议；提交与后续检查都会从已发布事实重新校验引用。
 
 普通产品的修复续接只读取 `ProjectRepair`。当状态为 READY_TO_VERIFY 时，验证入口优先使用该修复任务关联的 change ID；没有正式修复任务时，才使用普通 `ProjectRevalidation=READY` 的 change ID。Official Sample 编排中的 repair ID 不进入这项选择。工作台的 Delivery Check 只能由用户显式点击触发，每次重新读取 live 服务端事实，前端不保存上次结论。
 
@@ -74,7 +74,7 @@ jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
 5. `check_prepare` 与 `check_run` 只接受可选 `change_id`，不新增选择权限、Case、Effect、Profile 或文件范围的参数。
 6. `ChangeVerificationContext` 保持嵌套对象，不单独增加 `schema_version`；公共执行请求变化后同步 checked-in Schema。
 7. `RepairContractReference` 必须由服务端重建校验后才能持久化；后续 check prepare/run 继续复用同一 `change_id`，不增加修复专用运行入口。
-8. 工作台默认只显示有界业务摘要；展开变化明细时才显示 Agent 声明和界鉴实际确认的相对路径。结果和历史不显示 change ID、权限内部 ID 或指纹，并覆盖无基线、直接影响、映射待审和无直接证据四种情况。
+8. 工作台默认只显示有界业务摘要和已验证的提交来源；展开变化明细时才显示 Agent 声明和界鉴实际确认的相对路径。结果和历史不显示 change ID、权限内部 ID 或指纹；展示模式只在说明精确 Run 关联的回执层显示 change ID，并覆盖无基线、直接影响、映射待审和无直接证据四种情况。
 9. ProjectPreparation、ProjectReadiness、Guidance、ProductStatus、变化页和验证入口只消费 inspection/ProjectRevalidation，不按 `complete`、mapping count 或 change ID 比较另算状态。
 10. `ProjectRepair` 只投影已发布修复要求、关联变化、ProjectRevalidation 与复验事实；`DeliveryCheck` 按 live 源码、当前权限身份、修复/重验状态和最近可信结果形成一次只读、fail-closed 的交付证明。
 

@@ -146,18 +146,19 @@ export type ProductStatusDto = {
   } | null
   repair: ProjectRepairDto | null
   areas: Array<{
-    key: 'overview' | 'changes' | 'permissions' | 'preparation' | 'validation' | 'results'
+    key: 'overview' | 'changes' | 'permissions' | 'tests'
     label: string
     description: string
-    route: '/workspace' | '/changes' | '/permissions' | '/preparation' | '/validation' | '/results'
+    route: '/workspace' | '/changes' | '/permissions' | '/tests'
     status: 'READY' | 'NEEDS_ATTENTION' | 'RUNNING' | 'AVAILABLE' | 'BLOCKED' | 'EMPTY'
     status_label: string
   }>
+  primary_attention_key: string | null
   attention_items: Array<{
     key: string
     label: string
     description: string
-    route: '/workspace' | '/application' | '/changes' | '/permissions' | '/preparation' | '/identities' | '/flows' | '/validation' | '/results' | '/verification' | '/history'
+    route: '/workspace' | '/application' | '/changes' | '/permissions' | '/tests' | '/preparation' | '/identities' | '/flows' | '/validation' | '/results' | '/verification' | '/history'
     tone: 'ACTION' | 'WARNING' | 'INFO'
   }>
   latest_change: SourceChangeViewDto | null

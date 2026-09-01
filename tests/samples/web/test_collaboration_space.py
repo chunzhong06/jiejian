@@ -579,6 +579,7 @@ def test_reset_loopback_cleanup_and_runtime_files_contain_no_injected_secret(col
     assert control == {
         "schema_version": "1",
         "authorization_order": "ENQUEUE_BEFORE_AUTHORIZE",
+        "owner_observation": "AVAILABLE",
         "blob_observation": "AVAILABLE",
     }
 

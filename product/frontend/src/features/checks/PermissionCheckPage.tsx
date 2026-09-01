@@ -317,13 +317,16 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
 
   return <div className="permission-check-page">
     <PageTaskHeader
-      title={mode === 'permissions' ? '权限规则' : '验证运行'}
+      title={mode === 'permissions' ? '权限' : '验证运行'}
       description={mode === 'permissions'
         ? '确认谁可以执行哪些业务动作。Agent 可以提出建议，但只有人能批准权限规则和实现对应关系。'
         : '按当前完整权限范围核对测试条件，并在受控环境中检查页面响应、后台任务和真实业务后果。'}
       status={mode === 'permissions' ? `${matrix?.confirmed_count ?? 0} 项已确认` : titleStatus}
     />
-    {mode === 'permissions' && <><section className="permission-check-section permission-draft-section" aria-labelledby="permission-draft-title">
+    {mode === 'permissions' && <><section className="permission-module-links" aria-label="权限模块基础事实">
+      <div><Typography.Text className="workbench-secondary-label">测试账号</Typography.Text><Typography.Title level={4}>谁代表不同权限组执行真实操作</Typography.Title><Typography.Paragraph type="secondary">准备并确认用于允许路径和禁止路径的独立账号。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/identities')}>管理测试账号</Button></div>
+      <div><Typography.Text className="workbench-secondary-label">业务流程</Typography.Text><Typography.Title level={4}>怎样真实执行这项业务动作</Typography.Title><Typography.Paragraph type="secondary">录制允许路径，并确认要观察和恢复的业务结果。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/flows')}>管理业务流程</Button></div>
+    </section><section className="permission-check-section permission-draft-section" aria-labelledby="permission-draft-title">
       <div className="permission-check-heading"><div><Typography.Title level={3} id="permission-draft-title">用一句话描述权限要求</Typography.Title><Typography.Paragraph type="secondary">界鉴只会把你的原话整理成待确认建议，不会自动修改权限规则。</Typography.Paragraph></div><Tag>可选</Tag></div>
       <Input.TextArea aria-label="权限要求原话" value={draftInput} maxLength={2000} showCount rows={4} placeholder="例如：普通成员可以查看自己的资料，但不能导出完整项目包。" onChange={(event) => setDraftInput(event.target.value)} />
       <div><Button type="primary" loading={drafting} disabled={!draftInput.trim()} onClick={() => void createDraft()}>整理成待确认规则</Button></div>
@@ -397,14 +400,14 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
     </section>
 
     <section className="permission-check-section" aria-labelledby="check-preview-title">
-      <div className="permission-check-heading"><div><Typography.Title level={3} id="check-preview-title">核对本次检查</Typography.Title><Typography.Paragraph type="secondary">确认本次会使用哪些测试账号、验证哪些允许/拒绝对照，以及哪些权限要求尚未覆盖。</Typography.Paragraph></div>{previewFresh && preview && <Tag color={preview.ready ? 'success' : 'warning'}>{preview.ready ? '可以检查' : '仍有缺项'}</Tag>}</div>
+      <div className="permission-check-heading"><div><Typography.Title level={3} id="check-preview-title">核对本次检查</Typography.Title><Typography.Paragraph type="secondary">确认本次会使用哪些测试账号、验证哪些允许/拒绝对照，以及哪些业务动作尚未纳入本轮。</Typography.Paragraph></div>{previewFresh && preview && <Tag color={preview.ready ? 'success' : 'warning'}>{preview.ready ? '可以检查' : '仍有缺项'}</Tag>}</div>
       {!previewFresh && <Typography.Text type="secondary">{requiresCompile ? '等待重新准备检查条件。' : '正在读取当前检查范围……'}</Typography.Text>}
       {previewFresh && preview && <>
         <Descriptions className="check-preview-summary" column={{ xs: 1, sm: 2, md: 4 }}>
           <Descriptions.Item label="可检查业务动作">{executableActionCount}</Descriptions.Item>
           <Descriptions.Item label="测试账号用例">{preview.case_count}</Descriptions.Item>
           <Descriptions.Item label="应该允许 / 应该拒绝">{allowCount} / {denyCount}</Descriptions.Item>
-          <Descriptions.Item label="暂未覆盖业务动作">{uncoveredActionCount}</Descriptions.Item>
+          <Descriptions.Item label="未纳入本轮的业务动作">{uncoveredActionCount}</Descriptions.Item>
         </Descriptions>
         <div className="check-scenario-grid" aria-label="真实检查范围">
           <article className="check-scenario-card is-allow"><Typography.Text className="check-scenario-kicker">合法对照</Typography.Text><Typography.Title level={4}>确认应当成功的正常路径</Typography.Title>{allowChecks.length > 0 ? <ul>{allowChecks.map((item, index) => <li key={`allow-${item.action}-${item.subject_label}-${index}`}><strong>{item.subject_label}</strong> 应能完成“{item.action}”</li>)}</ul> : <Typography.Text type="secondary">尚未形成可执行的允许对照。</Typography.Text>}</article>
@@ -413,12 +416,12 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
         </div>
         <div className="check-preview-actions">
           {preview.actions.map((action) => <article className="check-preview-action" key={action.action_candidate_id}>
-            <div className="check-preview-action-title"><div><Typography.Title level={4}>{action.action_display_name}</Typography.Title>{action.resource_logical_name && <Typography.Text type="secondary">测试资源：{action.resource_logical_name}</Typography.Text>}</div><Tag color={action.ready ? 'success' : 'warning'}>{action.ready ? '纳入本次检查' : '暂未覆盖'}</Tag></div>
-            {action.gaps.length > 0 && <Alert type="warning" showIcon message="这个动作暂未覆盖" description={action.gaps.map((gap) => gap.message).join('；')} />}
+            <div className="check-preview-action-title"><div><Typography.Title level={4}>{action.action_display_name}</Typography.Title>{action.resource_logical_name && <Typography.Text type="secondary">测试资源：{action.resource_logical_name}</Typography.Text>}</div><Tag color={action.ready ? 'success' : 'warning'}>{action.ready ? '纳入本次检查' : '尚不能检查'}</Tag></div>
+            {action.gaps.length > 0 && <Alert type={action.ready ? 'info' : 'warning'} showIcon message={action.ready ? '这个动作可以检查；另有部分权限组合未纳入' : '这个动作尚不能纳入本次检查'} description={action.gaps.map((gap) => gap.message).join('；')} />}
             <List className="check-preview-list" dataSource={action.checks} locale={{ emptyText: '尚无账号检查项' }} renderItem={(item) => <List.Item extra={<Tag color={item.expectation === 'ALLOW' ? 'green' : item.expectation === 'DENY' ? 'red' : 'default'}>{item.expectation === 'ALLOW' ? '应该允许' : item.expectation === 'DENY' ? '应该拒绝' : '尚未确认'}</Tag>}><List.Item.Meta title={item.subject_label} description={`${item.subject_role_display_name} · ${relationLabels[item.relation] ?? '当前资源关系'}${item.gaps.length ? ` · ${item.gaps.map((gap) => gap.message).join('、')}` : ''}`} /></List.Item>} />
           </article>)}
         </div>
-        {preview.ready && <Alert type="success" showIcon message={`将执行 ${preview.case_count} 个检查用例，形成 ${preview.differential_pair_count} 组允许/拒绝对照${uncoveredActionCount > 0 ? `；另有 ${uncoveredActionCount} 个动作暂未覆盖` : ''}。`} description="开始后只根据正式运行事实形成结论；页面不会把 HTTP 拒绝或事件流状态当作安全结果。" />}
+        {preview.ready && <Alert type="success" showIcon message={`将执行 ${preview.case_count} 个检查用例，形成 ${preview.differential_pair_count} 组允许/拒绝对照${uncoveredActionCount > 0 ? `；另有 ${uncoveredActionCount} 个业务动作未纳入本轮` : ''}。`} description="开始后只根据正式运行事实形成结论；页面不会把 HTTP 拒绝或事件流状态当作安全结果。" />}
         {!preview.ready && preview.gaps.length > 0 && <Alert type="warning" showIcon message="当前还不能开始检查" description={preview.gaps.map((gap) => gap.message).join('；')} />}
       </>}
     </section>
@@ -433,7 +436,7 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
     </section></>}
 
     <TaskActionBar
-      back={{ label: mode === 'permissions' ? '返回变化与待办' : '返回测试准备', onClick: onBack }}
+      back={{ label: mode === 'permissions' ? '返回工作台' : '返回测试', onClick: onBack }}
       refresh={{ label: '刷新当前状态', onClick: () => void refreshFacts(), loading: refreshing }}
       restart={mode === 'validation' ? restart : undefined}
       primary={mode === 'permissions'

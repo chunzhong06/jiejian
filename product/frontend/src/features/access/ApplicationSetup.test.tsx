@@ -110,6 +110,16 @@ describe('ApplicationSetup', () => {
     expect(onConnected).toHaveBeenCalledWith(expect.objectContaining({ project_id: 'app-demo' }))
   })
 
+  it('未启动普通应用时提供由界鉴启动官方示例的明确入口', async () => {
+    const onStartOfficialSample = vi.fn().mockResolvedValue(true)
+    render(<ApplicationSetup selected={null} officialSampleAvailable onStartOfficialSample={onStartOfficialSample} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '由界鉴启动官方示例' }))
+
+    expect(onStartOfficialSample).toHaveBeenCalledOnce()
+    expect(screen.getByText(/不需要手工启动命令/)).toBeInTheDocument()
+  })
+
   it('重新打开页面时从后端事实恢复候选并保存人工决定', async () => {
     const restored = { ...baseUnderstanding, confirmed_endpoint: 'http://127.0.0.1:5173', endpoint_source_fingerprint: 'c'.repeat(64), endpoint_confirmed_at_us: 2, endpoint_last_checked_at_us: 2, endpoint_reachable: true, source_analysis_authorized: true, source_analysis_authorized_at_us: 3, source_fingerprint: 'd'.repeat(64), analysis_completed_at_us: 4, role_candidates: [role], action_candidates: [action], revision: 3 }
     mockProjects.understanding.mockResolvedValue(restored)

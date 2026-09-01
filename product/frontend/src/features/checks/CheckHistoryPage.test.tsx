@@ -17,7 +17,7 @@ describe('CheckHistoryPage', () => {
     expect(screen.queryByText('已修复')).not.toBeInTheDocument()
     expect(screen.queryByText(/权限版本 6/)).not.toBeInTheDocument()
     expect(screen.getByText('本次检查由最近一次代码修改触发')).toBeInTheDocument()
-    expect(screen.getByText('使用你之前确认的 1 条权限要求重新检查')).toBeInTheDocument()
+    expect(screen.getByText('这次变化直接关联 1 条已确认权限要求')).toBeInTheDocument()
     expect(screen.queryByText(`chg_${'f'.repeat(32)}`)).not.toBeInTheDocument()
     expect(screen.queryByText('P-001')).not.toBeInTheDocument()
     expect(screen.queryByText(`pin_${'e'.repeat(32)}`)).not.toBeInTheDocument()
@@ -25,6 +25,13 @@ describe('CheckHistoryPage', () => {
     expect(screen.queryByText(`pin_${'e'.repeat(32)}@2:${'e'.repeat(64)}`)).not.toBeInTheDocument()
     expect(history).toHaveBeenCalledTimes(1)
     expect(history).toHaveBeenCalledWith('project-demo')
+  })
+
+  it('历史中的全范围检查不把零条直接关联写成零条权限要求', async () => {
+    history.mockResolvedValue({ project_id: 'project-demo', intents: [], comparisons: [{ run_id: 'run-3', previous_run_id: 'run-2', checked_at_us: 3, policy_epoch: 6, policy_fingerprint: 'd'.repeat(64), relevant_intents: [], change_verification: { change_id: `chg_${'a'.repeat(32)}`, required_intents: [] }, changes: [{ finding_id: 'finding-2', title: '权限问题已解决', subject_group: '普通用户账号', action: '导出', resource: '项目包', relation: '其他权限组', status: 'FIXED', status_label: '已解决', explanation: '原违规后果已经消失。', severity: 'high', evidence_refs: [], current_verdict: 'SAFE', occurrence_status: 'DISAPPEARED' }] }] })
+    render(<CheckHistoryPage projectId="project-demo" onError={vi.fn()} />)
+    expect(await screen.findByText('这次变化未直接关联单条权限要求；仍按当前完整权限范围检查')).toBeInTheDocument()
+    expect(screen.queryByText(/确认的 0 条权限要求/)).not.toBeInTheDocument()
   })
 
   it('默认按权限要求区分可靠关联与策略成员关系', async () => {

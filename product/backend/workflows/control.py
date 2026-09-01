@@ -5,7 +5,7 @@
 #   GUI 工作区、CLI status 与 Machine status 共同消费的产品状态投影。
 #
 # 职责
-#   业务流程列表｜结果选择｜组合准备度、ProjectRevalidation、长期工作区与多项待办
+#   业务流程列表｜结果选择｜组合准备度、ProjectRevalidation、长期工作区与主待办
 #
 # 边界
 #   不保存进度，不调用 AI，不编译或提交检查，也不重新解释安全结论。
@@ -37,6 +37,7 @@ ProductRoute = Literal[
     "/application",
     "/changes",
     "/permissions",
+    "/tests",
     "/preparation",
     "/identities",
     "/flows",
@@ -131,9 +132,7 @@ class ProductAreaView(_ControlModel):
         "overview",
         "changes",
         "permissions",
-        "preparation",
-        "validation",
-        "results",
+        "tests",
     ]
     label: str = Field(min_length=1, max_length=32)
     description: str = Field(min_length=1, max_length=160)
@@ -141,9 +140,7 @@ class ProductAreaView(_ControlModel):
         "/workspace",
         "/changes",
         "/permissions",
-        "/preparation",
-        "/validation",
-        "/results",
+        "/tests",
     ]
     status: Literal[
         "READY",
@@ -189,6 +186,11 @@ class ProductStatusView(_ControlModel):
     revalidation: ProjectRevalidationView | None = None
     repair: ProjectRepairView | None = None
     areas: tuple[ProductAreaView, ...]
+    primary_attention_key: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+    )
     attention_items: tuple[ProductAttentionView, ...]
     latest_change: SourceChangeView | None = None
     latest_result: ProductResultSummary | None = None
@@ -219,16 +221,16 @@ class ProductStatusService:
     def get(self, project_id: str | None = None) -> ProductStatusView:
         project = self._select_project(project_id)
         if project is None:
+            connect_application = ProductAttentionView(
+                key="connect-application",
+                label="接入第一个应用",
+                description="选择本地 Web 应用，建立持续验证的初始安全基线。",
+                route="/application",
+            )
             return ProductStatusView(
                 areas=_areas(None, None, None),
-                attention_items=(
-                    ProductAttentionView(
-                        key="connect-application",
-                        label="接入第一个应用",
-                        description="选择本地 Web 应用，建立持续验证的初始安全基线。",
-                        route="/application",
-                    ),
-                ),
+                primary_attention_key=connect_application.key,
+                attention_items=(connect_application,),
             )
         readiness = self._readiness(project.project_id)
         latest_change = (
@@ -274,6 +276,13 @@ class ProductStatusService:
             )
         )
         repair = _repair_with_inconclusive_recovery(repair, inconclusive_recovery)
+        attention_items = _attention_items(
+            readiness,
+            revalidation,
+            latest_result,
+            inconclusive_recovery,
+            repair,
+        )
         return ProductStatusView(
             project=ProductProjectSummary(
                 project_id=project.project_id,
@@ -285,13 +294,9 @@ class ProductStatusService:
             revalidation=revalidation,
             repair=repair,
             areas=_areas(readiness, latest_change, revalidation),
-            attention_items=_attention_items(
-                readiness,
-                revalidation,
-                latest_result,
-                inconclusive_recovery,
-                repair,
-            ),
+            # 主待办由服务端显式引用，前端不能再从数组位置猜优先级。
+            primary_attention_key=(attention_items[0].key if attention_items else None),
+            attention_items=attention_items,
             latest_change=latest_change,
             latest_result=latest_result,
             inconclusive_recovery=inconclusive_recovery,
@@ -418,9 +423,7 @@ def _areas(
             "overview": ("READY", "可以开始"),
             "changes": ("EMPTY", "尚无应用"),
             "permissions": ("BLOCKED", "尚未建立"),
-            "preparation": ("BLOCKED", "尚未建立"),
-            "validation": ("BLOCKED", "尚未建立"),
-            "results": ("EMPTY", "暂无结果"),
+            "tests": ("BLOCKED", "等待应用"),
         }
     else:
         discovery_attention = readiness.source_analysis_status != "COMPLETED"
@@ -477,34 +480,32 @@ def _areas(
                 if readiness.active_contract_available
                 else "尚未建立",
             ),
-            "preparation": (
-                "READY" if preparation_ready else "NEEDS_ATTENTION",
-                "测试条件可用" if preparation_ready else "需要补充",
-            ),
-            "validation": (
+            "tests": (
                 "RUNNING"
                 if run_active
                 else "READY"
                 if readiness.current_scope_runnable and revalidation_allows_validation
+                else "AVAILABLE"
+                if readiness.latest_verified_run_id and preparation_ready
+                else "NEEDS_ATTENTION"
+                if readiness.preparation is not None
                 else "BLOCKED",
                 "正在检查"
                 if run_active
                 else "可以检查"
                 if readiness.current_scope_runnable and revalidation_allows_validation
-                else "等待准备",
-            ),
-            "results": (
-                "AVAILABLE" if readiness.latest_verified_run_id else "EMPTY",
-                "已有可信结果" if readiness.latest_verified_run_id else "暂无结果",
+                else "已有可信结果"
+                if readiness.latest_verified_run_id and preparation_ready
+                else "需要补充"
+                if readiness.preparation is not None
+                else "等待权限",
             ),
         }
     definitions = (
-        ("overview", "项目概览", "查看当前安全基线、覆盖范围和待处理事项", "/workspace"),
-        ("changes", "变化与待办", "跟踪 Agent 修改、新发现和需要重新确认的内容", "/changes"),
-        ("permissions", "权限规则", "维护由人确认且不会被 Agent 改写的权限要求", "/permissions"),
-        ("preparation", "测试准备", "补齐测试账号、业务流程、结果确认和现场恢复", "/preparation"),
-        ("validation", "验证运行", "核对当前范围并检查真实业务后果", "/validation"),
-        ("results", "结果与历史", "查看结论、完整链路、证据和历次变化", "/results"),
+        ("overview", "工作台", "查看当前判断、唯一主任务和最近可信结果", "/workspace"),
+        ("changes", "变化", "查看 Agent 修改、真实文件变化与修复状态", "/changes"),
+        ("permissions", "权限", "维护权限规则、测试账号和业务流程", "/permissions"),
+        ("tests", "测试", "准备条件、运行检查并查看结果与历史", "/tests"),
     )
     return tuple(
         ProductAreaView(
@@ -637,8 +638,11 @@ def _attention_items(
         items.append(
             ProductAttentionView(
                 key="complete-preparation",
-                label="补齐新增或失效的测试准备",
-                description="只处理当前缺少的测试账号、业务流程、结果确认或现场恢复。",
+                label="补齐当前检查条件",
+                description=(
+                    "还需准备测试账号、业务流程、真实结果观察或安全恢复；"
+                    "只处理本次缺少的内容。"
+                ),
                 route="/preparation",
             )
         )

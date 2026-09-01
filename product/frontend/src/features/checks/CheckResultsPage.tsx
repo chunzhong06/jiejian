@@ -15,7 +15,7 @@ import { ApiError } from '../../api/http'
 import type { ProductStatusDto } from '../../api/projects'
 import { resultsApi, type EvidenceDto, type ExecutionTraceDto, type ResultDiagnosisDto, type ResultEvidenceSourceDto, type ResultPresentationDto, type ResultPresentationIssueDto } from '../../api/results'
 import { runsApi, type RunDto } from '../../api/runs'
-import { occurrenceStatusLabel, severityLabel } from '../../app/presentation'
+import { occurrenceStatusLabel, severityLabel, traceEventLabel } from '../../app/presentation'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { TaskActionBar } from '../../components/TaskActionBar'
@@ -123,7 +123,9 @@ export function CheckResultsPage({
       {presentation && <Space direction="vertical" size={2}>
         {presentation.change_verification && <>
           <Typography.Text>本次检查由最近一次代码修改触发</Typography.Text>
-          <Typography.Text>使用你之前确认的 {presentation.change_verification.required_intents.length} 条权限要求重新检查</Typography.Text>
+          <Typography.Text>{presentation.change_verification.required_intents.length > 0
+            ? `这次变化直接关联 ${presentation.change_verification.required_intents.length} 条已确认权限要求`
+            : '这次变化未直接关联单条权限要求；仍按当前完整权限范围检查'}</Typography.Text>
         </>}
       </Space>}
       </div>
@@ -199,13 +201,12 @@ function ProjectRepairPanel({ repair, onNavigate, showRequirements }: { repair: 
 }
 
 function ExecutionPaths({ traces }: { traces: ExecutionTraceDto[] }) {
-  const eventLabel = (kind: string) => ({ ENTRY: '请求进入目标应用', IDENTITY: '服务器识别实际账号', AUTHORIZATION: '应用作出权限判断', PERSISTENT_EFFECT: '业务状态发生变化', MESSAGE: '任务进入消息链路', DELEGATION: '后台任务继续处理', FINAL_EFFECT: '最终业务结果形成', RECOVERY: '测试现场得到恢复' } as Record<string, string>)[kind] ?? '记录到一个业务执行节点'
   return <section className="result-section" aria-labelledby="execution-path-title">
     <div className="result-section-heading"><div><Typography.Title id="execution-path-title" level={3}>执行路径</Typography.Title><Typography.Paragraph type="secondary">界鉴只从已发布证据还原实际发生的节点；这里的顺序不会改变后端安全结论。</Typography.Paragraph></div></div>
     <Collapse destroyOnHidden items={[{ key: 'execution-paths', label: '查看完整执行路径', children: <div className="execution-paths">{traces.map((trace, traceIndex) => <article className="execution-path" key={`${trace.case_id}-${trace.action_id}`} aria-label={traces.length > 1 ? `执行路径 ${traceIndex + 1}` : '执行路径详情'}>
       {!trace.complete && <Alert type="warning" showIcon message="当前只能确认部分执行路径" />}
       {trace.events.length > 0
-        ? <ol className="execution-path-list">{trace.events.map((event) => <li key={event.event_id}><span className="execution-path-dot" aria-hidden="true" /><Typography.Text strong>{eventLabel(event.kind)}</Typography.Text></li>)}</ol>
+        ? <ol className="execution-path-list">{trace.events.map((event) => <li key={event.event_id}><span className="execution-path-dot" aria-hidden="true" /><Typography.Text strong>{traceEventLabel(event)}</Typography.Text></li>)}</ol>
         : <Typography.Text type="secondary">已发布证据暂时没有可展示的路径节点。</Typography.Text>}
     </article>)}</div> }]} />
   </section>

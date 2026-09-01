@@ -3,20 +3,14 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 from pathlib import Path
-from threading import Thread
 
 import pytest
 
-from samples.web.collaboration_space.source.server import (
-    create_collaboration_space_server,
-)
 from tests.fixtures.collaboration_golden import (
     InMemorySecretStore,
-    prepare_formal_project,
-    reachable_discovery,
-    sample_credentials,
 )
 from tests.fixtures.control_plane import TestClient, create_app
 from tests.fixtures.runtime_environment import runtime_identity_environment
@@ -33,232 +27,265 @@ SOURCE_LABELS = (
     ("AZURE_BLOB_OBJECT", "最终对象/文件", "KEY"),
 )
 SOURCE_TYPES = {item[0] for item in SOURCE_LABELS}
+SAMPLE_ROOT = Path(__file__).resolve().parents[2] / "samples" / "web" / "collaboration_space"
 
 
-def test_three_state_golden_uses_real_sample_observers_and_published_results(
+def test_official_sample_workflow_forms_block_pass_and_inconclusive_results(
     tmp_path: Path,
 ) -> None:
     var_dir = tmp_path / "var"
-    runtime_root = var_dir / "runtime" / "samples" / "collaboration-space"
-    credentials = sample_credentials()
-    sample = create_collaboration_space_server(
-        port=0,
-        runtime_root=runtime_root,
-        authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
-        blob_observation="AVAILABLE",
-        **credentials,
-    )
-    sample_thread = Thread(target=sample.serve_forever, daemon=True)
-    sample_thread.start()
-    endpoint = f"http://127.0.0.1:{sample.server_port}"
     store = InMemorySecretStore()
-    environment = runtime_identity_environment(
-        var_dir,
-        extra={
-            "JIEJIAN_SAMPLE_SQLITE_DATABASE": str(
-                runtime_root / "database" / "collaboration-space.sqlite3"
-            ),
-            "JIEJIAN_SAMPLE_AUDIT_ROOT": str(runtime_root / "audit"),
-            "JIEJIAN_SAMPLE_QUEUE_SAS": credentials["queue_sas"],
-            "JIEJIAN_SAMPLE_BLOB_SAS": credentials["blob_sas"],
-            "JIEJIAN_SAMPLE_TASK_BEARER": credentials["task_bearer"],
-            "JIEJIAN_SAMPLE_OWNER_OBSERVER": credentials["owner_observer"],
-            "PYTHONNOUSERSITE": "1",
-        },
-    )
     app = create_app(
         var_dir,
         start_worker=True,
         secret_store=store,
-        environ=environment,
+        environ=runtime_identity_environment(
+            var_dir,
+            extra={"PYTHONNOUSERSITE": "1"},
+        ),
+        official_sample_root=SAMPLE_ROOT,
     )
-    app.state.context.application_understanding.endpoint_discovery = (
-        reachable_discovery(endpoint)
-    )
-    try:
-        with TestClient(app) as client:
-            setup = prepare_formal_project(
-                client,
-                app.state.context,
-                store,
-                endpoint=endpoint,
-                observer_descriptor_path=runtime_root / "environment.json",
-                sessions=credentials["session_material"],
-            )
-            runs: list[dict[str, object]] = []
-            cases = (
-                (
-                    "vulnerable",
-                    "ENQUEUE_BEFORE_AUTHORIZE",
-                    "AVAILABLE",
-                    "BLOCK",
-                    "VULNERABLE",
-                ),
-                (
-                    "fixed",
-                    "AUTHORIZE_BEFORE_ENQUEUE",
-                    "AVAILABLE",
-                    "PASS",
-                    "SAFE",
-                ),
-                (
-                    "inconclusive",
-                    "AUTHORIZE_BEFORE_ENQUEUE",
-                    "UNAVAILABLE",
-                    "INCONCLUSIVE",
-                    "INCONCLUSIVE",
-                ),
-            )
-            for (
-                variant,
-                authorization_order,
-                blob_observation,
-                expected_run_verdict,
-                expected_bob_verdict,
-            ) in cases:
-                # 与正式 Official Sample 管理链一致：先清理上一轮测试基线，
-                # 再原子切换只读行为控制文件，不给业务属性增加测试 setter。
-                sample.reset()
-                sample._write_control(authorization_order, blob_observation)
-                compiled = client.post(
-                    f"/api/projects/{setup['project_id']}/check-preparation",
-                    json={"schema_version": "1", "change_id": None},
-                )
-                assert compiled.status_code == 200, compiled.text
-                preview = client.get(
-                    f"/api/projects/{setup['project_id']}/check-preview"
-                )
-                assert preview.status_code == 200, preview.text
-                preview_data = preview.json()["data"]
-                assert preview_data["ready"] is True
-                assert preview_data["case_count"] == 3, preview_data
-                assert preview_data["differential_pair_count"] == 1, preview_data
-                submitted = client.post(
-                    f"/api/projects/{setup['project_id']}/checks",
+    with TestClient(app) as client:
+        started_response = client.post(
+            "/api/experience/official-sample/start",
+            json={"schema_version": "1", "consent": True},
+        )
+        assert started_response.status_code == 200, started_response.text
+        started = started_response.json()["data"]
+        assert started["scenario_version"] == "VULNERABLE"
+        assert started["scenario_prepared"] is False
+        assert _project_run_ids(client, started["project_id"]) == []
+
+        prepared_response = client.post("/api/experience/official-sample/prepare")
+        assert prepared_response.status_code == 200, prepared_response.text
+        prepared = prepared_response.json()["data"]
+        assert prepared["scenario_prepared"] is True
+        setup = _official_setup(client, started["project_id"])
+        runtime = app.state.context.official_samples.active
+        assert runtime is not None
+        experience_root = runtime.experience_root
+
+        runs: list[dict[str, object]] = []
+        block_run_id: str | None = None
+        cases = (
+            ("vulnerable", None, "ENQUEUE_BEFORE_AUTHORIZE", "AVAILABLE", "AVAILABLE", "BLOCK", "VULNERABLE"),
+            ("fixed", "FIXED", "AUTHORIZE_BEFORE_ENQUEUE", "AVAILABLE", "AVAILABLE", "PASS", "SAFE"),
+            ("inconclusive", "EVIDENCE_LIMITED", "ENQUEUE_BEFORE_AUTHORIZE", "UNAVAILABLE", "UNAVAILABLE", "INCONCLUSIVE", "INCONCLUSIVE"),
+        )
+        for (
+            variant,
+            requested_version,
+            authorization_order,
+            owner_observation,
+            blob_observation,
+            expected_run_verdict,
+            expected_bob_verdict,
+        ) in cases:
+            before_switch = _project_run_ids(client, setup["project_id"])
+            if requested_version is None:
+                version = prepared
+            else:
+                switched = client.post(
+                    "/api/experience/official-sample/version",
                     json={
                         "schema_version": "1",
-                        "idempotency_key": f"collaboration-golden-{variant}",
+                        "version": requested_version,
+                        "source_run_id": block_run_id if requested_version == "FIXED" else None,
                     },
                 )
-                assert submitted.status_code == 202, submitted.text
-                run_id = submitted.json()["data"]["run"]["run_id"]
-                detail = _wait_for_final_result(client, run_id)
-                assert detail["lifecycle"] == "COMPLETED", _failure_summary(detail)
-                assert detail["result_integrity"] == "VERIFIED", detail
-                evidence = _load_evidence(client, run_id)
-                assert detail["verdict"] == expected_run_verdict, (
-                    json.dumps(
-                        _verdict_failure_summary(detail, evidence),
-                        ensure_ascii=False,
-                        sort_keys=True,
-                    )
-                )
-                assert len(evidence) == 3, evidence
-                alice = _evidence_for_case(
-                    evidence,
-                    setup["alice_id"],
-                    setup["export_action_id"],
-                )
-                bob = _evidence_for_case(
-                    evidence,
-                    setup["bob_id"],
-                    setup["export_action_id"],
-                )
-                bob_view = _evidence_for_case(
-                    evidence,
-                    setup["bob_id"],
-                    setup["view_action_id"],
-                )
-                assert alice["case_snapshot"]["expectations"] == ["ALLOW"]
-                assert alice["execution_fact"]["outcome"] == "ACCEPTED"
-                assert alice["verdict"] == "SAFE"
-                assert bob["case_snapshot"]["expectations"] == ["DENY"]
-                assert bob["execution_fact"]["outcome"] == "DENIED"
-                assert bob["verdict"] == expected_bob_verdict
-                assert bob_view["case_snapshot"]["expectations"] == ["ALLOW"]
-                assert bob_view["execution_fact"]["outcome"] == "ACCEPTED"
-                assert bob_view["verdict"] == "SAFE"
-                assert bob_view["security_effect_facts"][0]["kind"] == "DATA_DISCLOSURE"
-                assert bob_view["security_effect_facts"][0]["state"] == "CONFIRMED"
-                for item in (alice, bob):
-                    _assert_six_sources_published(item)
-
-                presentation_response = client.get(
-                    f"/api/runs/{run_id}/presentation"
-                )
-                assert presentation_response.status_code == 200, (
-                    presentation_response.text
-                )
-                presentation = presentation_response.json()["data"]
-                assert presentation["verdict"] == expected_run_verdict
-                bob_issue = next(
-                    item
-                    for item in presentation["issues"]
-                    if item["planned_identity_id"] == setup["bob_id"]
-                    and item["action_id"] == setup["export_action_id"]
-                )
-                assert [
-                    (item["observer_type"], item["label"], item["role"])
-                    for item in bob_issue["evidence_sources"]
-                ] == list(SOURCE_LABELS)
-                if variant == "vulnerable":
-                    assert bob_issue["surface_result"] == "页面或接口显示已拒绝"
-                    assert bob_issue["actual_result"] == "真实资源已经发生变化"
-                    assert _source_status(
-                        bob_issue,
-                        "AZURE_BLOB_OBJECT",
-                    ) == "FOUND"
-                elif variant == "fixed":
-                    assert bob_issue["actual_result"] == "真实资源没有发生变化"
-                    assert _source_status(bob_issue, "OWNER_API") == "NOT_FOUND"
-                    assert _source_status(
-                        bob_issue,
-                        "AZURE_BLOB_OBJECT",
-                    ) == "NOT_FOUND"
-                else:
-                    assert _source_status(bob_issue, "OWNER_API") == "NOT_FOUND"
-                    assert _source_status(
-                        bob_issue,
-                        "AZURE_BLOB_OBJECT",
-                    ) == "UNAVAILABLE"
-                    assert presentation["headline"] == "证据不足"
-                    assert "不代表安全" in presentation["scope_statement"]
-
-                reports = client.get(f"/api/runs/{run_id}/reports")
-                assert reports.status_code == 200, reports.text
-                report_id = reports.json()["data"][0]["report_id"]
-                report = client.get(f"/api/runs/{run_id}/reports/{report_id}")
-                assert report.status_code == 200, report.text
-                report_data = report.json()["data"]
-                assert report_data["run_id"] == run_id
-                assert report_data["presentation"]["verdict"] == expected_run_verdict
-                assert "evidence_sources" not in json.dumps(
-                    report_data["presentation"],
-                    ensure_ascii=False,
-                )
-
-                case_ids = {
-                    item["case_snapshot"]["case_id"] for item in evidence
-                }
-                _assert_sample_recovered(sample, case_ids)
-                runs.append({"run_id": run_id, "verdict": expected_run_verdict})
-
-            history = client.get(
-                f"/api/projects/{setup['project_id']}/results/history"
+                assert switched.status_code == 200, switched.text
+                version = switched.json()["data"]
+                assert version["scenario_version"] == requested_version
+                assert _project_run_ids(client, setup["project_id"]) == before_switch
+            change_id = (
+                version["repair_change_id"]
+                if requested_version == "FIXED"
+                else version["vulnerable_change_id"]
             )
-            assert history.status_code == 200, history.text
-            comparisons = history.json()["data"]["comparisons"]
-            assert [item["run_id"] for item in comparisons] == [
-                item["run_id"] for item in runs
-            ]
-            assert {item["run_id"] for item in comparisons} == {
-                item["run_id"] for item in runs
+            assert isinstance(change_id, str) and change_id.startswith("chg_")
+            assert json.loads(runtime.control_path.read_text(encoding="utf-8")) == {
+                "schema_version": "1",
+                "authorization_order": authorization_order,
+                "owner_observation": owner_observation,
+                "blob_observation": blob_observation,
             }
-    finally:
-        sample.shutdown()
-        sample.server_close()
-        sample_thread.join(timeout=5)
-    assert not sample_thread.is_alive()
+
+            compiled = client.post(
+                f"/api/projects/{setup['project_id']}/check-preparation",
+                json={"schema_version": "1", "change_id": change_id},
+            )
+            assert compiled.status_code == 200, compiled.text
+            preview = client.get(
+                f"/api/projects/{setup['project_id']}/check-preview"
+            )
+            assert preview.status_code == 200, preview.text
+            preview_data = preview.json()["data"]
+            assert preview_data["ready"] is True
+            assert preview_data["case_count"] == 3, preview_data
+            assert preview_data["differential_pair_count"] == 1, preview_data
+            submitted = client.post(
+                f"/api/projects/{setup['project_id']}/checks",
+                json={
+                    "schema_version": "1",
+                    "idempotency_key": f"collaboration-golden-{variant}",
+                    "change_id": change_id,
+                },
+            )
+            assert submitted.status_code == 202, submitted.text
+            run_id = submitted.json()["data"]["run"]["run_id"]
+            detail = _wait_for_final_result(client, run_id)
+            assert detail["lifecycle"] == "COMPLETED", _failure_summary(detail)
+            assert detail["result_integrity"] == "VERIFIED", detail
+            evidence = _load_evidence(client, run_id)
+            assert detail["verdict"] == expected_run_verdict, (
+                json.dumps(
+                    _verdict_failure_summary(detail, evidence),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+            assert len(evidence) == 3, evidence
+            alice = _evidence_for_case(
+                evidence,
+                setup["alice_id"],
+                setup["export_action_id"],
+            )
+            bob = _evidence_for_case(
+                evidence,
+                setup["bob_id"],
+                setup["export_action_id"],
+            )
+            bob_view = _evidence_for_case(
+                evidence,
+                setup["bob_id"],
+                setup["view_action_id"],
+            )
+            assert alice["case_snapshot"]["expectations"] == ["ALLOW"]
+            assert alice["execution_fact"]["outcome"] == "ACCEPTED"
+            assert alice["verdict"] == "SAFE"
+            assert bob["case_snapshot"]["expectations"] == ["DENY"]
+            assert bob["execution_fact"]["outcome"] == "DENIED"
+            assert bob["verdict"] == expected_bob_verdict
+            assert bob_view["case_snapshot"]["expectations"] == ["ALLOW"]
+            assert bob_view["execution_fact"]["outcome"] == "ACCEPTED"
+            assert bob_view["verdict"] == "SAFE"
+            assert bob_view["security_effect_facts"][0]["kind"] == "DATA_DISCLOSURE"
+            assert bob_view["security_effect_facts"][0]["state"] == "CONFIRMED"
+            for item in (alice, bob):
+                _assert_six_sources_published(item)
+
+            presentation_response = client.get(
+                f"/api/runs/{run_id}/presentation"
+            )
+            assert presentation_response.status_code == 200, (
+                presentation_response.text
+            )
+            presentation = presentation_response.json()["data"]
+            assert presentation["verdict"] == expected_run_verdict
+            bob_issue = next(
+                item
+                for item in presentation["issues"]
+                if item["planned_identity_id"] == setup["bob_id"]
+                and item["action_id"] == setup["export_action_id"]
+            )
+            assert [
+                (item["observer_type"], item["label"], item["role"])
+                for item in bob_issue["evidence_sources"]
+            ] == list(SOURCE_LABELS)
+            if variant == "vulnerable":
+                assert bob_issue["surface_result"] == "页面或接口显示已拒绝"
+                assert bob_issue["actual_result"] == "真实资源已经发生变化"
+                assert _source_status(
+                    bob_issue,
+                    "AZURE_BLOB_OBJECT",
+                ) == "FOUND"
+            elif variant == "fixed":
+                assert bob_issue["actual_result"] == "真实资源没有发生变化"
+                assert _source_status(bob_issue, "OWNER_API") == "NOT_FOUND"
+                assert _source_status(
+                    bob_issue,
+                    "AZURE_BLOB_OBJECT",
+                ) == "NOT_FOUND"
+            else:
+                assert _source_status(bob_issue, "OWNER_API") == "UNAVAILABLE"
+                assert _source_status(
+                    bob_issue,
+                    "AZURE_BLOB_OBJECT",
+                ) == "UNAVAILABLE"
+                assert presentation["headline"] == "证据不足"
+                assert "不代表安全" in presentation["scope_statement"]
+
+            reports = client.get(f"/api/runs/{run_id}/reports")
+            assert reports.status_code == 200, reports.text
+            report_id = reports.json()["data"][0]["report_id"]
+            report = client.get(f"/api/runs/{run_id}/reports/{report_id}")
+            assert report.status_code == 200, report.text
+            report_data = report.json()["data"]
+            assert report_data["run_id"] == run_id
+            assert report_data["presentation"]["verdict"] == expected_run_verdict
+            assert "evidence_sources" not in json.dumps(
+                report_data["presentation"],
+                ensure_ascii=False,
+            )
+
+            case_ids = {
+                item["case_snapshot"]["case_id"] for item in evidence
+            }
+            _assert_sample_recovered(runtime.runtime_root, case_ids)
+            runs.append({"run_id": run_id, "verdict": expected_run_verdict})
+            if variant == "vulnerable":
+                block_run_id = run_id
+
+        history = client.get(
+            f"/api/projects/{setup['project_id']}/results/history"
+        )
+        assert history.status_code == 200, history.text
+        comparisons = history.json()["data"]["comparisons"]
+        assert [item["run_id"] for item in comparisons] == [
+            item["run_id"] for item in runs
+        ]
+        assert {item["run_id"] for item in comparisons} == {
+            item["run_id"] for item in runs
+        }
+
+        stopped = client.post("/api/experience/official-sample/stop")
+        assert stopped.status_code == 200, stopped.text
+        assert stopped.json()["data"]["active"] is False
+        assert not experience_root.exists()
+
+
+def _official_setup(client: TestClient, project_id: str) -> dict[str, object]:
+    understanding_response = client.get(
+        f"/api/projects/{project_id}/application-understanding"
+    )
+    assert understanding_response.status_code == 200, understanding_response.text
+    understanding = understanding_response.json()["data"]
+    action_ids = {
+        item["canonical_key"]: item["candidate_id"]
+        for item in understanding["action_candidates"]
+        if item["decision"] == "CONFIRMED"
+    }
+    identities_response = client.get(f"/api/projects/{project_id}/test-identities")
+    assert identities_response.status_code == 200, identities_response.text
+    identities = {
+        item["role_canonical_key"]: item["identity_id"]
+        for item in identities_response.json()["data"]
+        if item["status"] == "PREPARED"
+    }
+    assert set(identities) == {"project_owner", "member"}
+    return {
+        "project_id": project_id,
+        "alice_id": identities["project_owner"],
+        "bob_id": identities["member"],
+        "export_action_id": action_ids["POST /api/projects/{project_id}/exports"],
+        "view_action_id": action_ids["GET /api/projects/{project_id}/collaboration"],
+    }
+
+
+def _project_run_ids(client: TestClient, project_id: str) -> list[str]:
+    response = client.get(f"/api/projects/{project_id}/runs")
+    assert response.status_code == 200, response.text
+    return [item["run_id"] for item in response.json()["data"]]
 
 
 def _wait_for_final_result(client: TestClient, run_id: str) -> dict[str, object]:
@@ -397,42 +424,56 @@ def _load_evidence(client: TestClient, run_id: str) -> list[dict[str, object]]:
     return documents
 
 
-def _assert_sample_recovered(sample, case_ids: set[str]) -> None:
+def _assert_sample_recovered(runtime_root: Path, case_ids: set[str]) -> None:
     """验收 Recovery 撤销当前交付物，同时保留已发生的业务历史。"""
 
-    audit_path = sample.runtime_root / "audit" / "events.jsonl"
+    audit_path = runtime_root / "audit" / "events.jsonl"
     audit = (
         [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
         if audit_path.is_file()
         else []
     )
-    queued = sample.storage.queue_records()
-    visible_blobs = {item["name"] for item in sample.storage.blob_objects()}
-    for case_id in case_ids:
-        job = sample.storage.find_job(case_id)
-        if job is None:
-            assert sample.storage.task_for_marker(case_id) is None
-            continue
-        assert job["state"] == "REVOKED"
-        assert sample.storage.task_for_marker(case_id)["state"] == "REVOKED"
-        audit_events = [
-            item["event_type"]
-            for item in audit
-            if item.get("case_tag") == case_id
-        ]
-        assert "export_request_created" in audit_events
-        assert "export_job_started" in audit_events
-        assert "archive_generated" in audit_events
-        assert "export_job_completed" in audit_events
-        assert audit_events[-1] == "EXPORT_REVOKED"
-        assert [
-            item["event_type"] for item in queued if item.get("case_tag") == case_id
-        ] == ["EXPORT_ENQUEUED", "TASK_RUNNING", "EXPORT_READY", "EXPORT_REVOKED"]
-        assert all(not name.startswith(f"{case_id}/") for name in visible_blobs)
-        assert (
-            sample.runtime_root
-            / "blob"
-            / case_id
-            / "campus-digital-museum-package.zip"
-        ).is_file()
-    assert sample.storage.resource_state()["workflow_state"] == "ABSENT"
+    queue_path = runtime_root / "queue" / "messages.jsonl"
+    queued = (
+        [json.loads(line) for line in queue_path.read_text(encoding="utf-8").splitlines()]
+        if queue_path.is_file()
+        else []
+    )
+    database_path = runtime_root / "database" / "collaboration-space.sqlite3"
+    with sqlite3.connect(database_path) as database:
+        for case_id in case_ids:
+            job = database.execute(
+                "SELECT state FROM export_jobs WHERE case_id = ?",
+                (case_id,),
+            ).fetchone()
+            task_path = runtime_root / "tasks" / f"{case_id}.json"
+            if job is None:
+                assert not task_path.exists()
+                continue
+            assert job == ("REVOKED",)
+            assert json.loads(task_path.read_text(encoding="utf-8"))["state"] == "REVOKED"
+            audit_events = [
+                item["event_type"]
+                for item in audit
+                if item.get("case_tag") == case_id
+            ]
+            assert "export_request_created" in audit_events
+            assert "export_job_started" in audit_events
+            assert "archive_generated" in audit_events
+            assert "export_job_completed" in audit_events
+            assert audit_events[-1] == "EXPORT_REVOKED"
+            assert [
+                item["event_type"]
+                for item in queued
+                if item.get("case_tag") == case_id
+            ] == ["EXPORT_ENQUEUED", "TASK_RUNNING", "EXPORT_READY", "EXPORT_REVOKED"]
+            assert (
+                runtime_root
+                / "blob"
+                / case_id
+                / "campus-digital-museum-package.zip"
+            ).is_file()
+        resource = database.execute(
+            "SELECT workflow_state, value FROM resource_state"
+        ).fetchone()
+    assert resource == ("ABSENT", "")

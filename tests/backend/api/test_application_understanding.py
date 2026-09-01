@@ -107,9 +107,11 @@ def test_application_connection_confirms_endpoint_without_profile(
         assert "schema_version" not in readiness
         assert readiness["endpoint_status"] == "CONFIRMED"
         assert readiness["next_required_action"] == "AUTHORIZE_SOURCE_ANALYSIS"
-        assert (
-            product_status.json()["data"]["attention_items"][0]["key"]
-            == "authorize-source-analysis"
+        assert product_status.json()["data"]["primary_attention_key"] == (
+            "authorize-source-analysis"
+        )
+        assert product_status.json()["data"]["attention_items"][0]["key"] == (
+            "authorize-source-analysis"
         )
 
         authorized = client.put(

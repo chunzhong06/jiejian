@@ -9,7 +9,7 @@ from pydantic import Field
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
-from product.backend.workflows.official_sample import OfficialExperienceMode
+from product.backend.workflows.official_sample import OfficialScenarioVersion
 
 
 def build_experience_router(context: ApplicationCore) -> APIRouter:
@@ -32,30 +32,28 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
     def start_official_sample(body: OfficialSampleStartRequest):
         return data_response(
             context.official_experience.start(
-                OfficialExperienceMode(body.experience_mode),
                 consent=body.consent,
             ).model_dump(mode="json")
         )
 
     @router.post(
-        "/api/experience/official-sample/identities",
+        "/api/experience/official-sample/prepare",
         response_model=ApiResponse,
     )
-    def prepare_official_sample_identities():
+    def prepare_official_sample():
         return data_response(
-            context.official_experience.prepare_identities().model_dump(mode="json")
+            context.official_experience.prepare().model_dump(mode="json")
         )
 
     @router.post(
-        "/api/experience/official-sample/behavior",
+        "/api/experience/official-sample/version",
         response_model=ApiResponse,
     )
-    def switch_official_sample_behavior(body: OfficialSampleBehaviorRequest):
+    def switch_official_sample_version(body: OfficialSampleVersionRequest):
         return data_response(
-            context.official_experience.switch_behavior(
-                authorization_order=body.authorization_order,
-                blob_observation=body.blob_observation,
-                verification_run_id=body.verification_run_id,
+            context.official_experience.switch_version(
+                version=OfficialScenarioVersion(body.version),
+                source_run_id=body.source_run_id,
             ).model_dump(mode="json")
         )
 
@@ -68,18 +66,13 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
 
 class OfficialSampleStartRequest(ApiModel):
     schema_version: Literal["1"]
-    experience_mode: Literal["GUIDED", "FULL"]
     consent: Literal[True]
 
 
-class OfficialSampleBehaviorRequest(ApiModel):
+class OfficialSampleVersionRequest(ApiModel):
     schema_version: Literal["1"]
-    authorization_order: Literal[
-        "ENQUEUE_BEFORE_AUTHORIZE",
-        "AUTHORIZE_BEFORE_ENQUEUE",
-    ]
-    blob_observation: Literal["AVAILABLE", "UNAVAILABLE"]
-    verification_run_id: str | None = Field(
+    version: Literal["VULNERABLE", "EVIDENCE_LIMITED", "FIXED"]
+    source_run_id: str | None = Field(
         default=None,
         pattern=r"^run_[0-9a-f]{32}$",
     )

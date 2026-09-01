@@ -42,7 +42,13 @@ from product.backend.workflows.results.presentation import (
     ResultPresentationBuilder,
     build_result_presentation,
 )
-from product.protocols import ObservationCompleteness, ObserverOutcomeStatus, ObserverType
+from product.protocols import (
+    ObservationCompleteness,
+    ObservationPhase,
+    ObserverOutcomeStatus,
+    ObserverType,
+    ProvenanceType,
+)
 from product.protocols.execution_request import (
     ChangeVerificationContext,
     PermissionPolicySnapshotEntry,
@@ -171,6 +177,19 @@ def _snapshot(*, include_binding: bool = True):
                 requirement_id=REQUIREMENT_ID,
                 observer_id=OBSERVER_ID,
                 observer_type=ObserverType.OWNER_API,
+            ),
+        ),
+        observers=(
+            SimpleNamespace(
+                observer_id=OBSERVER_ID,
+                observer_type=ObserverType.OWNER_API,
+                target=SimpleNamespace(
+                    target_id="owner-target",
+                    locator=SimpleNamespace(
+                        locator_type="OWNER_API",
+                        relative_path_template="/documents/{resource_id}",
+                    ),
+                ),
             ),
         ),
         identities=(
@@ -378,10 +397,79 @@ def test_block_presentation_preserves_403_with_real_change_as_permission_problem
     owner = next(
         item
         for item in result.issues[0].evidence_explanations
-        if item.source == ObserverType.OWNER_API.value
+        if item.source == "目标业务状态"
     )
-    assert "负责人文档已被修改" in owner.proves
+    assert "负责人文档已被修改" in owner.label
+    assert "目标业务状态" in owner.proves
     assert owner.component is owner.observed_at_us is None
+    assert owner.location == "目标应用接口 /documents/{resource_id}"
+
+
+def test_evidence_explanation_exposes_frozen_location_and_published_provenance() -> None:
+    view = _view(
+        RunVerdict.BLOCK,
+        CaseVerdict.VULNERABLE,
+        outcome=ExecutionOutcome.DENIED,
+        effect=ObservedEffect.CONFIRMED,
+    )
+    evidence = view.publication.result.evidence[0]
+    evidence.observations = (
+        SimpleNamespace(
+            observer_id=OBSERVER_ID,
+            observer_type=ObserverType.OWNER_API,
+            phase=ObservationPhase.EVENTUAL,
+            correlation=SimpleNamespace(
+                resource_id=RESOURCE_ID,
+                request_marker="request-export-1",
+            ),
+            window=SimpleNamespace(finished_at_us=2_000),
+            provenance=SimpleNamespace(
+                provenance_type=ProvenanceType.OWNER_API,
+                adapter_version="owner-api-1",
+                source_sha256="a" * 64,
+            ),
+        ),
+    )
+
+    snapshot = _snapshot()
+    snapshot.observers = snapshot.observers + (
+        SimpleNamespace(
+            observer_id="another-owner-observer",
+            observer_type=ObserverType.OWNER_API,
+            target=SimpleNamespace(
+                target_id="unrelated-owner-target",
+                locator=SimpleNamespace(
+                    locator_type="OWNER_API",
+                    relative_path_template="/unrelated/{resource_id}",
+                ),
+            ),
+        ),
+    )
+
+    result = build_result_presentation(
+        view,
+        snapshot,
+        _finding(CaseVerdict.VULNERABLE),
+    )
+
+    owner = next(
+        item
+        for item in result.issues[0].evidence_explanations
+        if item.source == "目标业务状态"
+    )
+    source = next(
+        item
+        for item in result.issues[0].evidence_sources
+        if item.observer_type is ObserverType.OWNER_API
+    )
+    assert source.observer_id == OBSERVER_ID
+    assert owner.location == "目标应用接口 /documents/owner-document"
+    assert owner.observer_id == OBSERVER_ID
+    assert owner.observation_phase == "EVENTUAL"
+    assert owner.provenance_type == "OWNER_API"
+    assert owner.adapter_version == "owner-api-1"
+    assert owner.source_sha256 == "a" * 64
+    assert owner.observed_at_us == 2_000
 
 
 def test_repair_status_only_strengthens_claim_boundary_after_formal_verification() -> None:
@@ -619,9 +707,10 @@ def test_six_sources_use_frozen_roles_stable_order_and_published_fact_status() -
     queue = next(
         item
         for item in result.issues[0].evidence_explanations
-        if item.source == ObserverType.AZURE_QUEUE_PEEK.value
+        if item.source == "消息通道"
     )
-    assert "与本轮关联的队列消息" in queue.proves
+    assert "与本轮关联的队列消息" in queue.label
+    assert "消息已经进入后台通道" in queue.proves
     assert "负责人文档已被修改" not in queue.proves
     assert "不能单独证明 Worker 已执行" in queue.does_not_prove
     assert "最终对象已经生成" in queue.does_not_prove
@@ -790,16 +879,18 @@ def test_published_audit_trace_exposes_unified_identity_and_diagnosis(
     identity_explanation = next(
         item
         for item in result.issues[0].evidence_explanations
-        if item.source == "ExecutionTrace"
+        if item.source == "实际执行身份"
     )
     assert identity_explanation.component == "collaboration-server"
+    assert identity_explanation.location == "collaboration-server · api:/projects/export"
     assert identity_explanation.observed_at_us == 1_002
     breakpoint_explanation = next(
         item
         for item in result.issues[0].evidence_explanations
-        if item.source == "BreakpointLocator"
+        if item.source == "权限断裂定位"
     )
     assert breakpoint_explanation.component == "collaboration-server"
+    assert breakpoint_explanation.location == "collaboration-server · api:/projects/export"
     assert breakpoint_explanation.observed_at_us == 1_003
 
     evidence = view.publication.result.evidence[0]

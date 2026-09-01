@@ -3,40 +3,53 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApplicationSwitcher } from './ApplicationSwitcher'
-import { DesktopProcessNavigation, MobileProcessNavigation } from './ProcessNavigation'
+import { DesktopModuleNavigation, MobileModuleNavigation } from './ModuleNavigation'
 import { TaskActionBar } from './TaskActionBar'
 
 const areas = [
-  { key: 'overview' as const, label: '项目概览', description: '查看基线', route: '/workspace' as const, status: 'READY' as const, status_label: '当前概览' },
-  { key: 'changes' as const, label: '变化与待办', description: '查看变化', route: '/changes' as const, status: 'NEEDS_ATTENTION' as const, status_label: '需要处理' },
-  { key: 'permissions' as const, label: '权限规则', description: '维护规则', route: '/permissions' as const, status: 'READY' as const, status_label: '规则已建立' },
-  { key: 'preparation' as const, label: '测试准备', description: '准备条件', route: '/preparation' as const, status: 'READY' as const, status_label: '测试条件可用' },
-  { key: 'validation' as const, label: '验证运行', description: '运行检查', route: '/validation' as const, status: 'RUNNING' as const, status_label: '正在检查' },
-  { key: 'results' as const, label: '结果与历史', description: '查看结果', route: '/results' as const, status: 'AVAILABLE' as const, status_label: '已有可信结果' },
+  { key: 'overview' as const, label: '工作台', description: '查看全局状态', route: '/workspace' as const, status: 'READY' as const, status_label: '持续更新' },
+  { key: 'changes' as const, label: '变化', description: '核对 Agent 修改', route: '/changes' as const, status: 'NEEDS_ATTENTION' as const, status_label: '需要处理' },
+  { key: 'permissions' as const, label: '权限', description: '维护权限边界', route: '/permissions' as const, status: 'READY' as const, status_label: '规则已建立' },
+  { key: 'tests' as const, label: '测试', description: '准备、运行与结果', route: '/tests' as const, status: 'RUNNING' as const, status_label: '正在检查' },
 ]
 
 describe('Web V1 产品壳共享组件', () => {
   it('区域状态来自统一产品状态，当前 route 只标记页面焦点', () => {
-    render(<DesktopProcessNavigation route="/flows" areas={areas} onNavigate={vi.fn()} />)
-    expect(screen.getByText('持续验证工作区')).toBeInTheDocument()
+    render(<DesktopModuleNavigation route="/flows" areas={areas} aiLabel="AI辅助 · 未开启" onNavigate={vi.fn()} onOpenAI={vi.fn()} onRequestShutdown={vi.fn()} />)
+    expect(screen.getByText('专项工作')).toBeInTheDocument()
+    expect(document.querySelector('.module-workbench-group')).toContainElement(screen.getByRole('button', { name: /工作台.*持续更新/ }))
     expect(screen.queryByText('辅助工具')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /AI 工具/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /运行环境/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /测试准备/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('button', { name: /变化与待办.*需要处理/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '打开 AI 辅助设置，当前：AI辅助 · 未开启' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '退出界鉴' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '切换界面主题，当前：跟随系统' })).toBeInTheDocument()
+    expect(Array.from(document.querySelectorAll('.module-navigation-utilities button')).map((button) => button.getAttribute('aria-label'))).toEqual([
+      '打开 AI 辅助设置，当前：AI辅助 · 未开启',
+      '切换界面主题，当前：跟随系统',
+      '退出界鉴',
+    ])
+    expect(screen.getByRole('button', { name: /权限.*规则已建立/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: /变化.*需要处理/ })).toBeInTheDocument()
     expect(screen.queryByText(/第 .* 步/)).not.toBeInTheDocument()
   })
 
   it('窄屏抽屉关闭后把焦点还给流程按钮', async () => {
     const onNavigate = vi.fn()
-    render(<MobileProcessNavigation route="/validation" areas={areas} onNavigate={onNavigate} />)
+    render(<MobileModuleNavigation route="/validation" areas={areas} aiLabel="AI辅助 · 未开启" onNavigate={onNavigate} onOpenAI={vi.fn()} onRequestShutdown={vi.fn()} />)
     const trigger = screen.getByRole('button', { name: '打开持续验证工作区' })
     trigger.focus()
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByRole('button', { name: /验证运行/ })).toHaveFocus())
-    fireEvent.click(await screen.findByRole('button', { name: /结果与历史/ }))
-    expect(onNavigate).toHaveBeenCalledWith('/results')
+    await waitFor(() => expect(screen.getByRole('button', { name: /测试.*正在检查/ })).toHaveFocus())
+    fireEvent.click(await screen.findByRole('button', { name: /变化.*需要处理/ }))
+    expect(onNavigate).toHaveBeenCalledWith('/changes')
     await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
+  it('窄屏位于工作台时把抽屉焦点交给独立主入口', async () => {
+    render(<MobileModuleNavigation route="/workspace" areas={areas} aiLabel="AI辅助 · 未开启" onNavigate={vi.fn()} onOpenAI={vi.fn()} onRequestShutdown={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '打开持续验证工作区' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /工作台.*持续更新/ })).toHaveFocus())
   })
 
   it('应用切换只返回服务端列表中的应用，并保留接入新应用入口', async () => {

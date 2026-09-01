@@ -42,6 +42,7 @@ export function ApplicationSwitcher({
         }
       },
     }}
+    destroyOnHidden
     trigger={['click']}
   >
     <Button className="application-switcher" aria-label={`切换应用，当前：${selected ? currentLabel : '尚未选择'}`}>

@@ -130,6 +130,15 @@ def test_infrastructure_does_not_construct_concrete_workflow_services() -> None:
         ), path
 
 
+def test_official_scenario_uses_services_instead_of_storage_records() -> None:
+    installer = BACKEND / "workflows" / "official_scenario.py"
+
+    assert not _forbidden_imports(
+        installer,
+        ("product.backend.infra.storage",),
+    )
+
+
 def test_worker_runner_and_recording_process_boundaries_are_explicit() -> None:
     assert (BACKEND / "infra" / "runtime" / "runner" / "__main__.py").is_file()
     assert (BACKEND / "infra" / "runtime" / "worker" / "process.py").is_file()
@@ -205,6 +214,7 @@ def test_samples_are_one_way_test_data_not_product_dependencies() -> None:
     assert (collaboration / "sample.json").is_file()
     assert (source / "openapi.json").is_file()
     assert {path.name for path in source.iterdir() if path.is_file()} == {
+        "authorization_policy.py",
         "server.py",
         "page.py",
         "storage.py",
@@ -241,7 +251,7 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
         (frontend / "package.json").read_text(encoding="utf-8")
     )
     assert "version" not in frontend_manifest
-    assert __version__ == "1.0.14"
+    assert __version__ == "1.0.15"
 
 
 def test_frontend_source_tree_contains_no_generated_install_or_build_artifacts() -> None:

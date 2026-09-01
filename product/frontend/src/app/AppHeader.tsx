@@ -1,7 +1,7 @@
 /* 全局顶部栏：呈现当前应用、活动任务和结构化系统工具入口。 */
 
 import { Button, Layout, Space, Typography } from 'antd'
-import { ApiOutlined, LogoutOutlined, RobotOutlined, CloudServerOutlined } from '@ant-design/icons'
+import { ApiOutlined, CloudServerOutlined } from '@ant-design/icons'
 import type { LLMProfile, AIAssistanceSettings } from '../api/llm'
 import type { MCPAccessView } from '../api/mcp'
 import type { ProjectDto } from '../api/projects'
@@ -32,9 +32,13 @@ export function systemStatusLabel(status: SystemStatus) {
 export function mcpStatusLabel(status: MCPAccessView | null, failed: boolean) {
   if (failed) return 'AI 工具 · 状态未知'
   if (!status) return 'AI 工具 · 正在读取'
-  if (!status.paired) return 'AI 工具 · 未连接'
-  if (status.client_connected) return `AI 工具 · ${status.client_name?.trim() || '已连接'}`
-  if (status.accepting_connections) return 'AI 工具 · 等待连接'
+  const state = status.connection_state
+    ?? (!status.paired ? 'DISABLED' : !status.accepting_connections ? 'PAUSED' : status.client_connected ? 'CONNECTED' : 'CREDENTIAL_READY')
+  if (state === 'DISABLED') return 'AI 工具 · 未准备'
+  if (state === 'CREDENTIAL_READY') return 'AI 工具 · 等待连接'
+  if (state === 'AUTHENTICATED') return 'AI 工具 · 正在确认连接'
+  if (state === 'CREDENTIAL_REJECTED') return 'AI 工具 · 凭据需更新'
+  if (state === 'CONNECTED') return `AI 工具 · ${status.client_name?.trim() || '已连接'}`
   return 'AI 工具 · 已暂停'
 }
 
@@ -42,10 +46,6 @@ type AppHeaderProps = {
   projects: ProjectDto[]
   selected: ProjectDto | null
   activeTask?: { kind?: string }
-  profiles: LLMProfile[]
-  aiSettings: AIAssistanceSettings
-  profilesFailed: boolean
-  settingsFailed: boolean
   mcpStatus: MCPAccessView | null
   mcpStatusFailed: boolean
   systemStatus: SystemStatus
@@ -53,18 +53,12 @@ type AppHeaderProps = {
   onConnectNew: () => void
   onRemoveCurrent: () => void
   onNavigate: (path: string) => void
-  onOpenAI: () => void
-  onRequestShutdown: () => void
 }
 
 export function AppHeader({
   projects,
   selected,
   activeTask,
-  profiles,
-  aiSettings,
-  profilesFailed,
-  settingsFailed,
   mcpStatus,
   mcpStatusFailed,
   systemStatus,
@@ -72,8 +66,6 @@ export function AppHeader({
   onConnectNew,
   onRemoveCurrent,
   onNavigate,
-  onOpenAI,
-  onRequestShutdown,
 }: AppHeaderProps) {
   return <Layout.Header className="topbar">
     <div className="topbar-left">
@@ -85,9 +77,7 @@ export function AppHeader({
     </div>
     <Space className="topbar-tools" size="small">
       <Button type="text" icon={<ApiOutlined />} aria-label="打开 AI 工具" onClick={() => onNavigate('/tools')}>{mcpStatusLabel(mcpStatus, mcpStatusFailed)}</Button>
-      <Button type="text" icon={<RobotOutlined />} aria-label="打开 AI 辅助设置" onClick={onOpenAI}>{aiStatusLabel(profiles, aiSettings, profilesFailed, settingsFailed)}</Button>
       <Button type="text" icon={<CloudServerOutlined />} aria-label={systemStatusLabel(systemStatus)} onClick={() => onNavigate('/settings/system')}>{systemStatusLabel(systemStatus)}</Button>
-      <Button type="text" aria-label="退出界鉴" icon={<LogoutOutlined />} onClick={onRequestShutdown}>退出界鉴</Button>
     </Space>
   </Layout.Header>
 }
