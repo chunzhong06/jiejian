@@ -1,6 +1,6 @@
 // 测试模块汇总条件、运行和结果；三个入口共享后端事实，但不组成强制步骤条。
 
-import { Button, Tag, Typography } from 'antd'
+import { Button, Typography } from 'antd'
 import type { ProductStatusDto, ProjectReadinessDto } from '../../api/projects'
 import type { RunDto } from '../../api/runs'
 import { formatTimestamp, lifecycleLabel, verdictLabel } from '../../app/presentation'
@@ -20,7 +20,7 @@ export function TestingPage({ status, readiness, runs, latestResult = status.lat
 
   return <div className="testing-page">
     <PageTaskHeader
-      title="测试"
+      title="检查与结果"
       description="围绕同一份权限规则准备真实条件、运行检查并查看结果；可以直接进入任一区域。"
       status={area?.status_label ?? '正在读取测试状态'}
     />
@@ -40,19 +40,19 @@ export function TestingPage({ status, readiness, runs, latestResult = status.lat
     <section className="testing-area-panel" aria-label="测试模块三个区域">
       <div className="testing-area-grid">
         <article>
-          <div><Typography.Text className="workbench-secondary-label">测试条件</Typography.Text><Tag color={preparationReady ? 'green' : 'gold'}>{preparationReady ? '当前可用' : '需要补充'}</Tag></div>
+          <div><Typography.Text className="workbench-secondary-label">测试条件</Typography.Text><span className={`semantic-state ${preparationReady ? 'is-safe' : 'is-warning'}`}>{preparationReady ? '当前可用' : '需要补充'}</span></div>
           <Typography.Title level={3}>{preparationReady ? '身份、流程与观察条件已准备' : `仍有 ${readiness.remaining_gap_count} 项条件需要处理`}</Typography.Title>
           <Typography.Paragraph type="secondary">核对测试账号、业务流程、真实结果观察和安全恢复。</Typography.Paragraph>
           <Button type="link" onClick={() => onNavigate('/preparation')}>管理测试条件</Button>
         </article>
         <article>
-          <div><Typography.Text className="workbench-secondary-label">运行检查</Typography.Text><Tag color={activeRun ? 'blue' : readiness.current_scope_runnable ? 'green' : 'default'}>{activeRun ? '正在运行' : readiness.current_scope_runnable ? '可以开始' : '等待条件'}</Tag></div>
+          <div><Typography.Text className="workbench-secondary-label">运行检查</Typography.Text><span className={`semantic-state ${activeRun ? 'is-current' : readiness.current_scope_runnable ? 'is-safe' : ''}`}>{activeRun ? '正在运行' : readiness.current_scope_runnable ? '可以开始' : '等待条件'}</span></div>
           <Typography.Title level={3}>{activeRun ? '当前检查正在形成事实' : '核对范围并发起独立检查'}</Typography.Title>
           <Typography.Paragraph type="secondary">先验证合法路径，再尝试不应允许的操作，并观察真实业务后果。</Typography.Paragraph>
           <Button type="link" onClick={() => onNavigate('/validation')}>{activeRun ? '查看检查进度' : '进入运行检查'}</Button>
         </article>
         <article>
-          <div><Typography.Text className="workbench-secondary-label">结果与历史</Typography.Text>{latestResult && <Tag>{verdictLabel(latestResult.verdict)}</Tag>}</div>
+          <div><Typography.Text className="workbench-secondary-label">结果与历史</Typography.Text>{latestResult && <span className="semantic-state">{verdictLabel(latestResult.verdict)}</span>}</div>
           <Typography.Title level={3}>{latestResult?.headline ?? '当前版本还没有检查结果'}</Typography.Title>
           <Typography.Paragraph type="secondary">{latestRun ? `${lifecycleLabel(latestRun.lifecycle)} · ${formatTimestamp(latestRun.created_at_us ?? latestRun.created_at)}` : '检查完成后，这里会保留结论、证据和历次变化。'}</Typography.Paragraph>
           <Button type="link" onClick={() => onNavigate('/results')}>查看结果与历史</Button>

@@ -22,6 +22,7 @@ import { AssistantPanel } from '../../components/AssistantPanel'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { EvidenceExplanationDrawer } from './EvidenceExplanationDrawer'
+import { ResultDecisionNarrative } from './ResultDecisionNarrative'
 import './checks.css'
 
 function claimValue(value: string | null) {
@@ -206,23 +207,10 @@ export function VerificationPage({
     {presentation && presentation.issues.length > 1 && <Space wrap>{presentation.issues.map((item, index) => <Button type={index === selectedIndex ? 'primary' : 'default'} key={item.finding_id} onClick={() => setSelectedIndex(index)}>检查项 {index + 1}</Button>)}</Space>}
     {presentation && !issue && <Alert type="info" showIcon message="本次检查没有需要单独展示的现场问题" description={presentation.scope_statement} />}
     {presentation && issue && <>
-      {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message="证据不足，现场不标记红色断裂点" description={issue.explanation} />}
-      <section className={`verification-focus is-${issue.verdict.toLowerCase()}`} aria-labelledby="verification-focus-title">
-        <header><div><Typography.Text className="verification-kicker">本轮核心矛盾</Typography.Text><Typography.Title id="verification-focus-title" level={2}>{issue.title}</Typography.Title></div><Tag color={issue.verdict === 'VULNERABLE' ? 'red' : issue.verdict === 'SAFE' ? 'green' : 'gold'}>{issue.conclusion}</Tag></header>
-        <div className="verification-contrast" aria-label="表面结果与真实业务后果对照">
-          <article><Typography.Text>表面看到</Typography.Text><strong>{issue.surface_result}</strong></article>
-          <span aria-hidden="true">但是</span>
-          <article className="is-actual"><Typography.Text>独立观察到</Typography.Text><strong>{issue.actual_result}</strong></article>
-        </div>
-        <Alert type={issue.verdict === 'VULNERABLE' ? 'error' : issue.verdict === 'SAFE' ? 'success' : 'warning'} showIcon message="因此得出" description={issue.explanation} />
-      </section>
+      <ResultDecisionNarrative issue={issue} contextLabel="本轮核心矛盾" onEvidence={openEvidence} />
       <section className="verification-decisive-path" aria-labelledby="verification-path-title">
         <div className="verification-section-heading"><div><Typography.Title id="verification-path-title" level={3}>关键执行链</Typography.Title><Typography.Paragraph type="secondary">只保留解释矛盾所需的节点；每个节点同时给出发生位置。</Typography.Paragraph></div><Button onClick={openEvidence}>查看依据</Button></div>
         <VerificationPath compact issue={issue} trace={focusedTrace(traceFor(issue, presentation))} onEvidence={openEvidence} />
-      </section>
-      <section className="verification-evidence-basis" aria-labelledby="verification-evidence-basis-title">
-        <div className="verification-section-heading"><div><Typography.Title id="verification-evidence-basis-title" level={3}>结论依据</Typography.Title><Typography.Paragraph type="secondary">先说明在哪里看到了什么，再说明它支持哪一部分判断。</Typography.Paragraph></div><Button onClick={openEvidence}>查看全部与边界</Button></div>
-        <div className="verification-evidence-basis-list">{issue.evidence_explanations.slice(0, 4).map((item, index) => <article key={`${item.source}-${index}`}><span>{item.source}{item.component ? ` · ${item.component}` : ''}</span><strong>{item.label}</strong><p>{item.proves}</p></article>)}</div>
       </section>
       <Collapse className="verification-details" items={[
         { key: 'permission', label: '查看本次锁定的权限规则', children: <PermissionExam presentation={presentation} /> },

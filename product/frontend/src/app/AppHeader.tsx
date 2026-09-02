@@ -1,12 +1,13 @@
 /* 全局顶部栏：呈现当前应用、活动任务和结构化系统工具入口。 */
 
-import { Button, Layout, Space, Typography } from 'antd'
-import { ApiOutlined, CloudServerOutlined } from '@ant-design/icons'
+import { Button, Dropdown, Layout, Space } from 'antd'
+import { ApiOutlined, BgColorsOutlined, CloudServerOutlined, LogoutOutlined, MoreOutlined, RobotOutlined } from '@ant-design/icons'
 import type { LLMProfile, AIAssistanceSettings } from '../api/llm'
 import type { MCPAccessView } from '../api/mcp'
 import type { ProjectDto } from '../api/projects'
 import type { SystemStatus } from '../api/system'
 import { ApplicationSwitcher } from '../components/ApplicationSwitcher'
+import { useThemeMode, type ThemeMode } from './ThemeContext'
 
 export function aiStatusLabel(
   profiles: LLMProfile[],
@@ -53,6 +54,9 @@ type AppHeaderProps = {
   onConnectNew: () => void
   onRemoveCurrent: () => void
   onNavigate: (path: string) => void
+  aiLabel: string
+  onOpenAI: () => void
+  onRequestShutdown: () => void
 }
 
 export function AppHeader({
@@ -66,18 +70,54 @@ export function AppHeader({
   onConnectNew,
   onRemoveCurrent,
   onNavigate,
+  aiLabel,
+  onOpenAI,
+  onRequestShutdown,
 }: AppHeaderProps) {
+  const { mode, setMode } = useThemeMode()
+  const themeLabels: Record<ThemeMode, string> = { system: '跟随系统', light: '亮色', dark: '暗色' }
+  const mcpLabel = mcpStatusLabel(mcpStatus, mcpStatusFailed)
+  const mcpConnected = mcpStatus?.connection_state === 'CONNECTED' || mcpStatus?.client_connected === true
+  const compactMcpLabel = mcpConnected ? mcpStatus?.client_name?.trim() || 'AI 工具' : 'AI 工具'
+  const systemLabel = systemStatusLabel(systemStatus)
   return <Layout.Header className="topbar">
     <div className="topbar-left">
-      <Typography.Text className="topbar-context">当前应用</Typography.Text>
       <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} onRemoveCurrent={onRemoveCurrent} />
       {activeTask && <Button type="link" onClick={() => onNavigate(activeTask.kind === 'RUN' ? '/validation' : '/flows')}>
         {activeTask.kind === 'RUN' ? '正在检查 · 查看' : '正在录制 · 查看'}
       </Button>}
     </div>
     <Space className="topbar-tools" size="small">
-      <Button type="text" icon={<ApiOutlined />} aria-label="打开 AI 工具" onClick={() => onNavigate('/tools')}>{mcpStatusLabel(mcpStatus, mcpStatusFailed)}</Button>
-      <Button type="text" icon={<CloudServerOutlined />} aria-label={systemStatusLabel(systemStatus)} onClick={() => onNavigate('/settings/system')}>{systemStatusLabel(systemStatus)}</Button>
+      <Button type="text" icon={<ApiOutlined />} aria-label={`${mcpLabel}，打开 AI 工具`} onClick={() => onNavigate('/tools')}><span>{compactMcpLabel}</span><i className={`topbar-status-dot${mcpConnected ? ' is-connected' : ''}`} aria-hidden="true" /></Button>
+      <Dropdown
+        destroyOnHidden
+        placement="bottomRight"
+        trigger={['click']}
+        menu={{
+          items: [
+            { key: 'ai', icon: <RobotOutlined />, label: `AI 辅助 · ${aiLabel.replace(/^AI辅助 · /, '')}` },
+            { key: 'system', icon: <CloudServerOutlined />, label: systemLabel },
+            { type: 'divider' },
+            {
+              key: 'theme', icon: <BgColorsOutlined />, label: `主题 · ${themeLabels[mode]}`, children: [
+                { key: 'theme:system', label: '跟随系统' },
+                { key: 'theme:light', label: '亮色主题' },
+                { key: 'theme:dark', label: '暗色主题' },
+              ],
+            },
+            { type: 'divider' },
+            { key: 'shutdown', danger: true, icon: <LogoutOutlined />, label: '退出界鉴' },
+          ],
+          onClick: ({ key }) => {
+            if (key === 'ai') onOpenAI()
+            else if (key === 'system') onNavigate('/settings/system')
+            else if (key === 'shutdown') onRequestShutdown()
+            else if (key.startsWith('theme:')) setMode(key.slice('theme:'.length) as ThemeMode)
+          },
+        }}
+      >
+        <Button type="text" icon={<MoreOutlined />} aria-label={`设置与更多，${systemLabel}`}><i className={`topbar-status-dot${systemLabel === '系统正常' ? ' is-connected' : ' is-warning'}`} aria-hidden="true" /></Button>
+      </Dropdown>
     </Space>
   </Layout.Header>
 }

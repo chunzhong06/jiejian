@@ -20,7 +20,6 @@ import { ChangesPage } from '../features/changes/ChangesPage'
 import { PreparationPage } from '../features/preparation/PreparationPage'
 import { RecordingPage } from '../features/recording/RecordingPage'
 import { PresentationMode } from '../features/presentation/PresentationMode'
-import { ModelServicePage } from '../features/settings/ModelServicePage'
 import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
 import { RuntimePage } from '../features/system/RuntimePage'
 import { TestingPage } from '../features/testing/TestingPage'
@@ -134,6 +133,14 @@ function ControlShellContent() {
     await workspace.refreshCurrent()
   }, [workspace.refreshCurrent])
   const retryCurrentPage = () => { clearError(); setRetryEpoch((epoch) => epoch + 1); void workspace.refreshProjects(); void workspace.refreshCurrent() }
+  const navigateRecoveryTarget = useCallback((path: string) => {
+    if (path === '/settings/models') {
+      setSettingsOpen(true)
+      navigate('/workspace')
+      return
+    }
+    navigate(normalizeRoute(path))
+  }, [navigate])
   const requestShutdown = () => setShutdownConfirmOpen(true)
   const removeCurrentProject = async () => {
     if (!selected) return
@@ -264,6 +271,11 @@ function ControlShellContent() {
     }
   }
   useEffect(() => {
+    if (location.pathname === '/settings/models') {
+      setSettingsOpen(true)
+      navigate('/workspace', { replace: true })
+      return
+    }
     if (location.pathname !== route) navigate(route, { replace: true })
   }, [location.pathname, navigate, route])
   useEffect(() => {
@@ -303,7 +315,6 @@ function ControlShellContent() {
     if (route === '/workspace') return <WorkbenchPage selected={selected} readiness={readiness} status={status} runs={runs} systemStatus={systemStatus} experience={experience} experienceBusy={experienceBusy} onStartExperience={startOfficialExperience} onPrepareExperience={() => { void prepareOfficialScenario() }} onRunExperience={() => navigate('/validation')} onSwitchExperience={(version, sourceRunId) => { void switchOfficialVersion(version, sourceRunId) }} onStopExperience={stopOfficialExperience} onEnterPresentation={enterPresentation} onNavigate={(path) => navigate(path)} onError={notifyError} />
     if (route === '/tools') return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={readiness?.endpoint_status} officialSampleAvailable={experience?.available === true} officialSampleBusy={experienceBusy} onStartOfficialSample={startOfficialExperience} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspace.refreshCurrent() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
-    if (route === '/settings/models') return <ModelServicePage profiles={llmProfiles} onManage={() => setSettingsOpen(true)} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/changes') return <ChangesPage project={selected} status={status} onError={notifyError} onNavigate={(path) => navigate(normalizeRoute(path))} />
@@ -335,13 +346,13 @@ function ControlShellContent() {
     onOpenProductRoute={(path) => { setPresentationOpen(false); navigate(path) }}
   />
   return <Layout className="app-shell">
-    <DesktopModuleNavigation route={route} areas={status?.areas ?? null} aiLabel={assistantStatus} onNavigate={navigateTo} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={requestShutdown} />
+    <DesktopModuleNavigation route={route} areas={status?.areas ?? null} onNavigate={navigateTo} />
     <Layout className="product-main">
-      <MobileModuleNavigation route={route} areas={status?.areas ?? null} aiLabel={assistantStatus} onNavigate={navigateTo} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={requestShutdown} />
-      <AppHeader projects={projects} selected={selected} activeTask={readiness?.active_tasks[0]} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onRemoveCurrent={() => setRemoveConfirmOpen(true)} onNavigate={navigate} />
-      <Layout.Content className="content"><div className="content-frame">{error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigate(normalizeRoute(path)) }} onClose={clearError} />}{content()}</div></Layout.Content>
+      <MobileModuleNavigation route={route} areas={status?.areas ?? null} onNavigate={navigateTo} />
+      <AppHeader projects={projects} selected={selected} activeTask={readiness?.active_tasks[0]} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onRemoveCurrent={() => setRemoveConfirmOpen(true)} onNavigate={navigate} aiLabel={assistantStatus} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={requestShutdown} />
+      <Layout.Content className="content"><div className="content-frame">{error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigateRecoveryTarget(path) }} onClose={clearError} />}{content()}</div></Layout.Content>
     </Layout>
-    <NotificationCenter items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigate(path) }} />
+    <NotificationCenter items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigateRecoveryTarget(path) }} />
     <Modal
       open={removeConfirmOpen}
       title="移除当前应用？"

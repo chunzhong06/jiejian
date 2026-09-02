@@ -14,22 +14,21 @@ export type AppRoute =
   | '/verification'
   | '/history'
   | '/tools'
-  | '/settings/models'
   | '/settings/system'
 
 export type ProductAreaRoute = '/workspace' | '/changes' | '/permissions' | '/tests'
 
 export const productAreas = [
   { route: '/workspace', label: '工作台', shortLabel: '工作台' },
-  { route: '/changes', label: '变化', shortLabel: '变化' },
-  { route: '/permissions', label: '权限', shortLabel: '权限' },
-  { route: '/tests', label: '测试', shortLabel: '测试' },
+  { route: '/changes', label: '变化与修复', shortLabel: '变化' },
+  { route: '/permissions', label: '权限边界', shortLabel: '权限' },
+  { route: '/tests', label: '检查与结果', shortLabel: '检查' },
 ] as const
 
 export function normalizeRoute(pathname: string): AppRoute {
   if (productAreas.some((area) => area.route === pathname)) return pathname as ProductAreaRoute
   if (pathname === '/application' || pathname === '/identities' || pathname === '/flows' || pathname === '/preparation' || pathname === '/validation' || pathname === '/results' || pathname === '/verification' || pathname === '/history') return pathname
-  if (pathname === '/tools' || pathname === '/settings/models' || pathname === '/settings/system') return pathname
+  if (pathname === '/tools' || pathname === '/settings/system') return pathname
   return '/workspace'
 }
 

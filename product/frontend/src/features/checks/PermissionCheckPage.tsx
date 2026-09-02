@@ -317,7 +317,7 @@ export function PermissionCheckPage({ mode, project, runs, onRefresh, onError, o
 
   return <div className="permission-check-page">
     <PageTaskHeader
-      title={mode === 'permissions' ? '权限' : '验证运行'}
+      title={mode === 'permissions' ? '权限边界' : '验证运行'}
       description={mode === 'permissions'
         ? '确认谁可以执行哪些业务动作。Agent 可以提出建议，但只有人能批准权限规则和实现对应关系。'
         : '按当前完整权限范围核对测试条件，并在受控环境中检查页面响应、后台任务和真实业务后果。'}

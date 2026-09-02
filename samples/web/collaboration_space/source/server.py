@@ -527,9 +527,10 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.BAD_REQUEST, {"code": "REQUEST_MARKER_INVALID"})
             return
         self.server.record_case_actor(marker, account)
+        # 任务尚未创建时只保留请求 marker；task_id 留空，避免把一次请求误认成两个后台任务。
         request_event_id = self.server.storage.append_audit(
             marker=marker,
-            task_id=marker,
+            task_id="",
             event_type="request_received",
             sequence=1,
             result="received",
@@ -544,7 +545,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         )
         identity_event_id = self.server.storage.append_audit(
             marker=marker,
-            task_id=marker,
+            task_id="",
             event_type="server_identity_resolved",
             sequence=2,
             result="resolved",
@@ -553,7 +554,8 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             kind="IDENTITY",
             semantic_key="server_identity_resolved",
             subject_id=account,
-            actor_id="collaboration-server",
+            # actor_id 表示本次动作沿用的权限主体；实际执行组件由 source_component 单独记录。
+            actor_id=account,
             credential_source="session-cookie",
             source_component="collaboration-server",
             source_location="session:account",
@@ -568,7 +570,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         if account == "bob" and self.server.authorization_order == "AUTHORIZE_BEFORE_ENQUEUE":
             self.server.storage.append_audit(
                 marker=marker,
-                task_id=marker,
+                task_id="",
                 event_type="authorization_decided",
                 sequence=3,
                 result="denied",
@@ -577,7 +579,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 kind="AUTHORIZATION",
                 semantic_key="authorization_decided",
                 subject_id=account,
-                actor_id="authorization-policy",
+                actor_id=account,
                 authorization_decision="DENY",
                 source_component="collaboration-server",
                 source_location="policy:project-owner",
@@ -612,7 +614,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             kind="PERSISTENT_EFFECT",
             semantic_key="export_request_created",
             subject_id=account,
-            actor_id="collaboration-server",
+            actor_id=account,
             source_component="collaboration-server",
             source_location="storage:export-job",
         )
@@ -628,7 +630,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             kind="AUTHORIZATION",
             semantic_key="authorization_decided",
             subject_id=account,
-            actor_id="authorization-policy",
+            actor_id=account,
             authorization_decision=decision,
             source_component="collaboration-server",
             source_location="policy:project-owner",
@@ -644,7 +646,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             kind="MESSAGE",
             semantic_key="export_message_sent",
             subject_id=account,
-            actor_id="collaboration-server",
+            actor_id=account,
             origin_authorization_event_id=decision_event_id,
             source_component="collaboration-server",
             source_location="queue:export-events",
@@ -679,7 +681,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         if account == "alice":
             authorization_id = self.server.storage.append_audit(
                 marker=marker,
-                task_id=marker,
+                task_id="",
                 event_type="authorization_decided",
                 sequence=3,
                 result="allow",
@@ -688,7 +690,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 kind="AUTHORIZATION",
                 semantic_key="authorization_decided",
                 subject_id=account,
-                actor_id="authorization-policy",
+                actor_id=account,
                 authorization_decision="ALLOW",
                 source_component="collaboration-server",
                 source_location="policy:project-owner",
@@ -713,7 +715,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         if implementation == "MODE_GUARD_ACTIVE":
             self.server.storage.append_audit(
                 marker=marker,
-                task_id=marker,
+                task_id="",
                 event_type="authorization_decided",
                 sequence=3,
                 result="denied",
@@ -722,7 +724,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 kind="AUTHORIZATION",
                 semantic_key="authorization_decided",
                 subject_id=account,
-                actor_id="authorization-policy",
+                actor_id=account,
                 authorization_decision="DENY",
                 source_component="collaboration-server",
                 source_location=f"policy:{mode}",
@@ -750,7 +752,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
 
         authorization_id = self.server.storage.append_audit(
             marker=marker,
-            task_id=marker,
+            task_id="",
             event_type="authorization_decided",
             sequence=3,
             result="denied",
@@ -759,7 +761,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             kind="AUTHORIZATION",
             semantic_key="authorization_decided",
             subject_id=account,
-            actor_id="authorization-policy",
+            actor_id=account,
             authorization_decision="DENY",
             source_component="collaboration-server",
             source_location=f"policy:{mode}",
@@ -769,7 +771,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         if mode == "feature_authorization_bypass":
             parent_id = self.server.storage.append_audit(
                 marker=marker,
-                task_id=marker,
+                task_id="",
                 event_type="feature_export_entered",
                 sequence=4,
                 result="continued",
@@ -778,7 +780,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 kind="MESSAGE",
                 semantic_key="feature_export_entered",
                 subject_id=account,
-                actor_id="collaboration-server",
+                actor_id=account,
                 origin_authorization_event_id=authorization_id,
                 source_component="collaboration-server",
                 source_location="feature:quick-export",
@@ -787,7 +789,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         elif mode == "delegation_authority_expansion":
             parent_id = self.server.storage.append_audit(
                 marker=marker,
-                task_id=marker,
+                task_id="",
                 event_type="service_authority_expanded",
                 sequence=4,
                 result="delegated",
@@ -806,7 +808,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         elif mode == "deny_async_consequence":
             parent_id = self.server.storage.append_audit(
                 marker=marker,
-                task_id=marker,
+                task_id="",
                 event_type="denied_request_dispatched",
                 sequence=4,
                 result="queued",
@@ -815,7 +817,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 kind="MESSAGE",
                 semantic_key="denied_request_dispatched",
                 subject_id=account,
-                actor_id="collaboration-server",
+                actor_id=account,
                 origin_authorization_event_id=authorization_id,
                 source_component="collaboration-server",
                 source_location="queue:denied-export",
@@ -856,7 +858,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             kind="PERSISTENT_EFFECT",
             semantic_key="export_request_created",
             subject_id=account,
-            actor_id="collaboration-server",
+            actor_id=account,
             source_component="collaboration-server",
             source_location="storage:export-job",
         )
@@ -871,7 +873,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             kind="MESSAGE",
             semantic_key="export_message_sent",
             subject_id=account,
-            actor_id="collaboration-server",
+            actor_id=account,
             origin_authorization_event_id=origin_authorization_event_id,
             source_component="collaboration-server",
             source_location="queue:export-events",

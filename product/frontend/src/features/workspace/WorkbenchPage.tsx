@@ -1,6 +1,6 @@
 // 工作台突出后端指定的主待办，并保留可自由进入的变化、权限和测试模块。
 
-import { Alert, Button, Divider, Modal, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Divider, Modal, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../../api/http'
 import type { OfficialExperienceDto, OfficialScenarioVersion } from '../../api/experience'
@@ -15,6 +15,17 @@ function endpointLabel(readiness: ProjectReadinessDto) {
   if (readiness.endpoint_status === 'CONFIRMED') return '应用连接已确认'
   if (readiness.endpoint_status === 'UNAVAILABLE') return '应用当前不可达'
   return '应用连接待确认'
+}
+
+function changeStatusLabel(status: ProductStatusDto | null) {
+  const value = status?.revalidation?.status
+  if (value === 'NO_CHANGE') return '当前代码已同步'
+  if (value === 'REVIEW_REQUIRED') return '有代码变化待确认'
+  if (value === 'PREPARATION_REQUIRED') return '变化需要补齐测试准备'
+  if (value === 'READY') return '变化已经可以复验'
+  if (value === 'VERIFIED') return '当前变化已经验证'
+  if (value === 'STALE') return '变化记录已失效'
+  return '正在读取代码状态'
 }
 
 export function WorkbenchPage({
@@ -124,12 +135,10 @@ export function WorkbenchPage({
     ? attentionItems.filter((item) => item.key !== primaryItem.key).length
     : 0
   return <div className="workbench-page">
-    <PageTaskHeader title="工作台" description="先看当前判断，再进入变化、权限或测试模块处理具体问题；Agent 每次修改后都从现有基线继续。" status={!status ? '正在读取当前状态' : primaryReferenceMissing ? '当前主任务不可用' : primaryItem ? '已定位当前主任务' : '当前没有待处理事项'} />
-
     <section className="workbench-primary-panel" aria-labelledby="workbench-current-app">
       <div className="workbench-project-heading">
-        <div><Typography.Text className="workbench-eyebrow">当前应用</Typography.Text><Typography.Title id="workbench-current-app" level={2}>{selected.name?.trim() || '未命名应用'}</Typography.Title>{readiness && <Space wrap size={12}><Tag>{endpointLabel(readiness)}</Tag><Tag color={readiness.current_scope_runnable ? 'green' : 'default'}>{readiness.current_scope_runnable ? '当前范围可以检查' : '当前范围仍需准备'}</Tag></Space>}</div>
-        {activeSampleSelected && <div className="workbench-sample-controls"><Tag color="blue">官方示例</Tag>{presentationReady && <Button type="primary" disabled={experienceBusy} onClick={onEnterPresentation}>进入完整展示</Button>}<Button disabled={experienceBusy} onClick={() => { void onStopExperience?.() }}>结束示例</Button></div>}
+        <div><Typography.Text className="workbench-eyebrow">当前应用</Typography.Text><Typography.Title id="workbench-current-app" level={2}>{selected.name?.trim() || '未命名应用'}</Typography.Title>{readiness && <div className="workbench-project-status"><span>{endpointLabel(readiness)}</span><span>{changeStatusLabel(status)}</span><span className={readiness.current_scope_runnable ? 'is-ready' : ''}>{readiness.current_scope_runnable ? '当前范围可以检查' : '当前范围仍需准备'}</span></div>}</div>
+        {activeSampleSelected && <div className="workbench-sample-controls"><span className="workbench-inline-label">官方示例</span>{presentationReady && <Button type="primary" disabled={experienceBusy} onClick={onEnterPresentation}>进入完整展示</Button>}<Button disabled={experienceBusy} onClick={() => { void onStopExperience?.() }}>结束示例</Button></div>}
       </div>
       {activeSampleSelected && !presentationReady && <Alert className="workbench-presentation-readiness" type="info" showIcon message="完整展示尚未准备好" description="先形成一条可信正式检查结果；界鉴不会用演示占位数据补齐四幕。" />}
       {activeSampleSelected ? <OfficialSampleSetupBar
@@ -168,7 +177,7 @@ export function WorkbenchPage({
         <aside className={`workbench-trusted-result${latestResult?.verdict ? ` is-${latestResult.verdict.toLowerCase()}` : ''}`} aria-label="最近可信结果">
           <Typography.Text className="workbench-eyebrow">最近可信结果</Typography.Text>
           {latestResult ? <>
-            <Tag>{latestResult.verdict ? verdictLabel(latestResult.verdict) : '尚无安全结论'}</Tag>
+            <span className="workbench-result-verdict">{latestResult.verdict ? verdictLabel(latestResult.verdict) : '尚无安全结论'}</span>
             <Typography.Title level={3}>{latestResult.headline}</Typography.Title>
             <Typography.Paragraph type="secondary">{latestResult.scope_statement}</Typography.Paragraph>
             <Typography.Text type="secondary">{trustedRun ? `形成于 ${formatTimestamp(trustedRun.created_at_us ?? trustedRun.created_at)}` : '来自已发布的可信检查事实'}</Typography.Text>
@@ -181,12 +190,11 @@ export function WorkbenchPage({
       {systemIssue && <Button type="link" className="workbench-system-link" onClick={() => onNavigate('/settings/system')}>运行环境中有服务暂不可用，查看详情</Button>}
     </section>
 
-    <section className="workbench-domain-panel" aria-labelledby="workbench-domain-title">
-      <div className="workbench-secondary-heading"><Typography.Title id="workbench-domain-title" level={3}>专项工作</Typography.Title><Typography.Text type="secondary">按需要进入，不构成固定步骤。</Typography.Text></div>
+    <section className="workbench-domain-panel" aria-label="当前专项摘要">
       <div className="workbench-domain-grid">
-        <article><Typography.Text className="workbench-secondary-label">变化</Typography.Text><Typography.Title level={3}>{latestChange ? `${latestChange.actual_changed_path_count} 个文件发生变化` : '尚无变化记录'}</Typography.Title><Typography.Paragraph type="secondary">{latestChange ? `${latestChange.submitted_by}：${latestChange.reason}` : 'Agent 提交变化后，界鉴会核对真实磁盘差异和修复状态。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/changes')}>进入变化</Button></article>
-        <article><Typography.Text className="workbench-secondary-label">权限</Typography.Text><Typography.Title level={3}>{readiness?.confirmed_permission_requirement_count ?? 0} 条已确认规则</Typography.Title><Typography.Paragraph type="secondary">{readiness?.permission_representative_gap_count ? `${readiness.permission_representative_gap_count} 条规则缺少可代表的测试路径。` : '在这里维护权限规则、测试账号和业务流程。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/permissions')}>进入权限</Button></article>
-        <article><Typography.Text className="workbench-secondary-label">测试</Typography.Text><Typography.Title level={3}>{latestResult?.verdict ? verdictLabel(latestResult.verdict) : '尚无可信结果'}</Typography.Title><Typography.Paragraph type="secondary">{latestResult ? latestResult.headline : '准备条件、运行检查和结果历史集中在同一模块。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/tests')}>进入测试</Button></article>
+        <article><Typography.Text className="workbench-secondary-label">变化与修复</Typography.Text><Typography.Title level={3}>{latestChange ? `${latestChange.actual_changed_path_count} 个文件发生变化` : '尚无变化记录'}</Typography.Title><Typography.Paragraph type="secondary">{latestChange ? `${latestChange.submitted_by}：${latestChange.reason}` : 'Agent 提交变化后，界鉴会核对真实磁盘差异和修复状态。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/changes')}>进入变化与修复</Button></article>
+        <article><Typography.Text className="workbench-secondary-label">权限边界</Typography.Text><Typography.Title level={3}>{readiness?.confirmed_permission_requirement_count ?? 0} 条已确认规则</Typography.Title><Typography.Paragraph type="secondary">{readiness?.permission_representative_gap_count ? `${readiness.permission_representative_gap_count} 条规则缺少可代表的测试路径。` : '在这里维护权限规则、测试账号和业务流程。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/permissions')}>进入权限边界</Button></article>
+        <article><Typography.Text className="workbench-secondary-label">检查与结果</Typography.Text><Typography.Title level={3}>{latestResult?.verdict ? verdictLabel(latestResult.verdict) : '尚无可信结果'}</Typography.Title><Typography.Paragraph type="secondary">{latestResult ? latestResult.headline : '准备条件、运行检查和结果历史集中在同一模块。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/tests')}>进入检查与结果</Button></article>
       </div>
     </section>
 

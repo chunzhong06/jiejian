@@ -372,6 +372,42 @@ def test_locates_authorization_late_for_representative_sample_fact(
     assert authorization.event_id in result.downstream_event_ids
 
 
+def test_target_local_identity_does_not_become_false_identity_substitution(
+    frozen_context: FrozenContext,
+) -> None:
+    local_subject = "bob"
+    entry, identity = _base_events(
+        frozen_context,
+        actual_subject=local_subject,
+    )
+    effect = _protected(
+        frozen_context,
+        identity.event_id,
+        subject_id=local_subject,
+        actor_id=local_subject,
+    )
+    authorization = _authorization(
+        frozen_context,
+        effect.event_id,
+        decision=TraceAuthorizationDecision.DENY,
+        subject_id=local_subject,
+    )
+
+    result = _locate(
+        frozen_context,
+        _trace(
+            frozen_context,
+            allow=False,
+            events=(authorization, effect, entry, identity),
+        ),
+    )
+
+    assert result is not None
+    assert result.breakpoint_type is BreakpointType.AUTHORIZATION_LATE
+    assert result.precision is BreakpointPrecision.EXACT
+    assert result.first_violation_event_id == effect.event_id
+
+
 def test_locates_authorization_bypass(frozen_context: FrozenContext) -> None:
     entry, identity = _base_events(frozen_context)
     authorization = _authorization(

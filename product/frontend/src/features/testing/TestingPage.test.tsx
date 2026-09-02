@@ -21,7 +21,7 @@ describe('TestingPage', () => {
     const onNavigate = vi.fn()
     render(<TestingPage status={status as never} readiness={readiness as never} runs={[]} onNavigate={onNavigate} />)
 
-    expect(screen.getByRole('heading', { name: '测试', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '检查与结果', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '身份、流程与观察条件已准备' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '核对范围并发起独立检查' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '发现权限问题' })).toBeInTheDocument()

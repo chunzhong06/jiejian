@@ -493,6 +493,7 @@ def _collect_candidates(
 ) -> tuple[_Candidate, ...]:
     found: dict[tuple[BreakpointType, str], _Candidate] = {}
     reliable_subject = _reliable_actual_subject(trace)
+    contract_subject_ids = {subject.subject_id for subject in contract.subjects}
     legal_actions, legal_resources = _legal_scope(
         contract, trace.planned_subject_id
     )
@@ -541,7 +542,13 @@ def _collect_candidates(
                 effect_tuple,
             )
 
-        if reliable_subject is not None and reliable_subject != trace.planned_subject_id:
+        # 目标应用账号与界鉴测试身份可能使用不同命名空间；只有双方都属于冻结合同
+        # 的 subject 集合时才允许比较，避免把同一身份的本地账号误判为身份替换。
+        if (
+            reliable_subject is not None
+            and reliable_subject in contract_subject_ids
+            and reliable_subject != trace.planned_subject_id
+        ):
             identity_events = tuple(
                 event
                 for event in graph.by_id.values()

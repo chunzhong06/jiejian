@@ -15,20 +15,15 @@ const areas = [
 
 describe('Web V1 产品壳共享组件', () => {
   it('区域状态来自统一产品状态，当前 route 只标记页面焦点', () => {
-    render(<DesktopModuleNavigation route="/flows" areas={areas} aiLabel="AI辅助 · 未开启" onNavigate={vi.fn()} onOpenAI={vi.fn()} onRequestShutdown={vi.fn()} />)
+    render(<DesktopModuleNavigation route="/flows" areas={areas} onNavigate={vi.fn()} />)
     expect(screen.getByText('专项工作')).toBeInTheDocument()
     expect(document.querySelector('.module-workbench-group')).toContainElement(screen.getByRole('button', { name: /工作台.*持续更新/ }))
     expect(screen.queryByText('辅助工具')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /AI 工具/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /运行环境/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '打开 AI 辅助设置，当前：AI辅助 · 未开启' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '退出界鉴' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '切换界面主题，当前：跟随系统' })).toBeInTheDocument()
-    expect(Array.from(document.querySelectorAll('.module-navigation-utilities button')).map((button) => button.getAttribute('aria-label'))).toEqual([
-      '打开 AI 辅助设置，当前：AI辅助 · 未开启',
-      '切换界面主题，当前：跟随系统',
-      '退出界鉴',
-    ])
+    expect(document.querySelector('.module-navigation-utilities')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /AI 辅助/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '退出界鉴' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /权限.*规则已建立/ })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: /变化.*需要处理/ })).toBeInTheDocument()
     expect(screen.queryByText(/第 .* 步/)).not.toBeInTheDocument()
@@ -36,18 +31,18 @@ describe('Web V1 产品壳共享组件', () => {
 
   it('窄屏抽屉关闭后把焦点还给流程按钮', async () => {
     const onNavigate = vi.fn()
-    render(<MobileModuleNavigation route="/validation" areas={areas} aiLabel="AI辅助 · 未开启" onNavigate={onNavigate} onOpenAI={vi.fn()} onRequestShutdown={vi.fn()} />)
+    render(<MobileModuleNavigation route="/validation" areas={areas} onNavigate={onNavigate} />)
     const trigger = screen.getByRole('button', { name: '打开持续验证工作区' })
     trigger.focus()
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByRole('button', { name: /测试.*正在检查/ })).toHaveFocus())
-    fireEvent.click(await screen.findByRole('button', { name: /变化.*需要处理/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /检查与结果.*正在检查/ })).toHaveFocus())
+    fireEvent.click(await screen.findByRole('button', { name: /变化与修复.*需要处理/ }))
     expect(onNavigate).toHaveBeenCalledWith('/changes')
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
   it('窄屏位于工作台时把抽屉焦点交给独立主入口', async () => {
-    render(<MobileModuleNavigation route="/workspace" areas={areas} aiLabel="AI辅助 · 未开启" onNavigate={vi.fn()} onOpenAI={vi.fn()} onRequestShutdown={vi.fn()} />)
+    render(<MobileModuleNavigation route="/workspace" areas={areas} onNavigate={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: '打开持续验证工作区' }))
     await waitFor(() => expect(screen.getByRole('button', { name: /工作台.*持续更新/ })).toHaveFocus())
   })

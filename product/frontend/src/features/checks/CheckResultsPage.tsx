@@ -10,49 +10,25 @@
  * ============================================================================= */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Collapse, Segmented, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Collapse, Segmented, Space, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import type { ProductStatusDto } from '../../api/projects'
-import { resultsApi, type EvidenceDto, type ExecutionTraceDto, type ResultDiagnosisDto, type ResultEvidenceSourceDto, type ResultPresentationDto, type ResultPresentationIssueDto } from '../../api/results'
+import { resultsApi, type EvidenceDto, type ExecutionTraceDto, type ResultPresentationDto, type ResultPresentationIssueDto } from '../../api/results'
 import { runsApi, type RunDto } from '../../api/runs'
-import { occurrenceStatusLabel, severityLabel, traceEventLabel } from '../../app/presentation'
+import { traceEventLabel } from '../../app/presentation'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { EvidenceTimeline } from './EvidenceTimeline'
 import { EvidenceExplanationDrawer } from './EvidenceExplanationDrawer'
 import { ReportPanel } from './ReportPanel'
-import { ResultFactChain } from './ResultFactChain'
+import { ResultDecisionNarrative } from './ResultDecisionNarrative'
 import './checks.css'
 
 function fallbackHeadline(run: RunDto | undefined) {
   if (!run) return '等待检查结果'
   if (String(run.result_integrity) === 'VERIFIED') return '正在读取检查结果'
   return ['FAILED', 'CANCELLED'].includes(String(run.lifecycle)) ? '检查未完整结束' : '等待检查结果'
-}
-
-function resultTone(verdict: ResultPresentationIssueDto['verdict']) {
-  return verdict === 'VULNERABLE' ? 'danger' : verdict === 'INCONCLUSIVE' ? 'warning' : 'safe'
-}
-
-function resultTagColor(verdict: ResultPresentationIssueDto['verdict']) {
-  return verdict === 'VULNERABLE' ? 'red' : verdict === 'INCONCLUSIVE' ? 'gold' : 'green'
-}
-
-function plannedIdentityLabel(issue: ResultPresentationIssueDto) {
-  return issue.planned_identity_label || '已安排一个测试账号'
-}
-
-function sourceRoleLabel(role: ResultEvidenceSourceDto['role']) {
-  return role === 'KEY' ? '关键来源' : '佐证来源'
-}
-
-function sourceStatusLabel(status: ResultEvidenceSourceDto['status']) {
-  return ({ FOUND: '已发现', NOT_FOUND: '未发现', UNAVAILABLE: '无法确认' } as const)[status]
-}
-
-function sourceStatusColor(status: ResultEvidenceSourceDto['status']) {
-  return status === 'FOUND' ? 'green' : status === 'UNAVAILABLE' ? 'gold' : 'blue'
 }
 
 export function CheckResultsPage({
@@ -78,7 +54,8 @@ export function CheckResultsPage({
   const [presentation, setPresentation] = useState<ResultPresentationDto | null>(null)
   const [evidence, setEvidence] = useState<EvidenceDto[]>([])
   const [view, setView] = useState<'results' | 'report'>('results')
-  const [selectedIssue, setSelectedIssue] = useState<ResultPresentationIssueDto | undefined>()
+  const [activeIssueIndex, setActiveIssueIndex] = useState(0)
+  const [drawerIssue, setDrawerIssue] = useState<ResultPresentationIssueDto | undefined>()
   const [refreshEpoch, setRefreshEpoch] = useState(0)
   const [loading, setLoading] = useState(false)
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false)
@@ -87,7 +64,8 @@ export function CheckResultsPage({
     setCurrent(run)
     setPresentation(null)
     setEvidence([])
-    setSelectedIssue(undefined)
+    setActiveIssueIndex(0)
+    setDrawerIssue(undefined)
     setView('results')
     if (!run?.run_id) return
     let active = true
@@ -103,12 +81,12 @@ export function CheckResultsPage({
       if (!active) return
       setPresentation(resultView)
       setEvidence(publishedEvidence)
-      setSelectedIssue(resultView.issues[0])
     }).catch((error) => { if (active) onError(error as ApiError) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [run?.run_id, refreshEpoch])
 
-  const preferredEvidence = useMemo(() => selectedIssue?.evidence_refs ?? [], [selectedIssue])
+  const activeIssue = presentation?.issues[activeIssueIndex] ?? presentation?.issues[0]
+  const preferredEvidence = useMemo(() => activeIssue?.evidence_refs ?? [], [activeIssue])
   const headline = presentation?.headline ?? fallbackHeadline(current)
   const verified = String(current?.result_integrity) === 'VERIFIED'
 
@@ -129,12 +107,11 @@ export function CheckResultsPage({
         </>}
       </Space>}
       </div>
-      {presentation && <dl className="result-count-grid">
-        <div><dt>实际检查</dt><dd>{presentation.checked_count} 项</dd></div>
-        <div><dt>符合预期</dt><dd>{presentation.safe_count} 项</dd></div>
-        <div><dt>权限问题</dt><dd>{presentation.problem_count} 项</dd></div>
-        <div><dt>证据不足</dt><dd>{presentation.inconclusive_count} 项</dd></div>
-        <div><dt>未覆盖</dt><dd>{presentation.uncovered_count} 项</dd></div>
+      {presentation && <dl className="result-count-summary">
+        <div><dt>已检查</dt><dd>{presentation.checked_count} 项</dd></div>
+        <div><dt>符合规则</dt><dd>{presentation.safe_count} 项</dd></div>
+        <div><dt>需要处理</dt><dd>{presentation.problem_count + presentation.inconclusive_count} 项</dd></div>
+        {presentation.uncovered_count > 0 && <div><dt>未覆盖</dt><dd>{presentation.uncovered_count} 项</dd></div>}
       </dl>}
       {presentation?.execution_problem && <Alert type="error" showIcon message="检查执行未完整结束" description={presentation.execution_problem} />}
       {presentation?.repair_verification && <Alert
@@ -155,24 +132,31 @@ export function CheckResultsPage({
     {repair && repair.status !== 'NONE' && <ProjectRepairPanel repair={repair} onNavigate={onNavigate} showRequirements={!presentation?.issues.some((issue) => issue.repair_requirement)} />}
     {current && <Segmented className="result-view-switch" value={view} onChange={(value) => setView(value as 'results' | 'report')} options={[{ label: '结论与证据', value: 'results' }, { label: '完整报告', value: 'report' }]} />}
     {view === 'results' && current && <>
-      {presentation && presentation.execution_traces.length > 0 && <ExecutionPaths traces={presentation.execution_traces} />}
       <section className="result-section" aria-labelledby="result-stories-title">
-        <div className="result-section-heading"><div><Typography.Title id="result-stories-title" level={3}>{presentation?.issues.some((issue) => issue.verdict !== 'SAFE') ? '需要处理的检查项' : '检查项说明'}</Typography.Title><Typography.Paragraph type="secondary">每一项都按照同一顺序展示权限预期、执行表象、真实影响和后端结论。</Typography.Paragraph></div></div>
-        {presentation?.issues.length
-          ? <div className="result-story-list">{presentation.issues.map((issue, index) => <ResultStory key={issue.finding_id} issue={issue} index={index} onEvidence={() => { setSelectedIssue(issue); setEvidenceDrawerOpen(true) }} />)}</div>
+        <div className="result-section-heading"><div><Typography.Title id="result-stories-title" level={3}>{presentation?.issues.length === 1 ? '关键发现' : '本次检查项'}</Typography.Title><Typography.Paragraph type="secondary">最终判定只在页面顶部出现一次；这里说明决定判定的事实、位置和定位结果。</Typography.Paragraph></div></div>
+        {presentation && presentation.issues.length > 1 && <div className="result-issue-switcher" role="group" aria-label="选择检查项">{presentation.issues.map((issue, index) => <Button key={issue.finding_id} type={index === activeIssueIndex ? 'primary' : 'default'} onClick={() => setActiveIssueIndex(index)}>检查项 {index + 1}</Button>)}</div>}
+        {activeIssue
+          ? <ResultDecisionNarrative issue={activeIssue} onEvidence={() => { setDrawerIssue(activeIssue); setEvidenceDrawerOpen(true) }} />
           : <div className="result-empty">{verified ? '当前结果没有需要单独说明的检查项。' : '结果尚未可用。'}</div>}
       </section>
-      {presentation && presentation.limitations.length > 0 && <section className="result-section result-limitations" aria-labelledby="result-limitations-title"><Typography.Title id="result-limitations-title" level={3}>本次范围与限制</Typography.Title><ul>{presentation.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>}
-      <section id="published-evidence" className="result-evidence-section" aria-labelledby="result-evidence-title">
-        <div className="result-section-heading"><div><Typography.Title id="result-evidence-title" level={3}>证据怎样支持结论</Typography.Title><Typography.Paragraph type="secondary">这里只展开已经发布的执行与观察事实；“已发现、未发现、无法确认”不会改变后端形成的结论。</Typography.Paragraph></div>{selectedIssue && <Tag>{selectedIssue.title}</Tag>}</div>
-        <EvidenceTimeline runId={String(current.run_id)} evidence={evidence} preferredIds={preferredEvidence} onError={onError} />
-      </section>
+      <Collapse className="result-audit-details" destroyOnHidden items={[{
+        key: 'audit',
+        label: '查看完整执行路径、已发布证据与本次范围',
+        children: <div className="result-audit-content">
+          {presentation && presentation.execution_traces.length > 0 && <ExecutionPaths traces={presentation.execution_traces} />}
+          <section id="published-evidence" className="result-evidence-section" aria-labelledby="result-evidence-title">
+            <div className="result-section-heading"><div><Typography.Title id="result-evidence-title" level={3}>全部已发布证据</Typography.Title><Typography.Paragraph type="secondary">这里保留完整执行与观察事实，不根据列表数量重新计算安全结论。</Typography.Paragraph></div>{activeIssue && <span className="semantic-state">{activeIssue.title}</span>}</div>
+            <EvidenceTimeline runId={String(current.run_id)} evidence={evidence} preferredIds={preferredEvidence} onError={onError} />
+          </section>
+          {presentation && presentation.limitations.length > 0 && <section className="result-limitations" aria-labelledby="result-limitations-title"><Typography.Title id="result-limitations-title" level={3}>本次范围与限制</Typography.Title><ul>{presentation.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>}
+        </div>,
+      }]} />
       {presentation && <section className="verification-ai-boundary"><Typography.Text type="secondary">仅辅助解释，不参与安全判定</Typography.Text><AssistantPanel runId={String(current.run_id)} title="这个结果的因果说明" actionLabel="AI 解读这个结果" /></section>}
     </>}
     {view === 'report' && <ReportPanel run={current} onError={onError} />}
     {presentation && onHistory && <Button className="result-history-link" onClick={onHistory}>查看历史变化</Button>}
     <TaskActionBar back={onBack ? { label: '返回验证运行', onClick: onBack } : undefined} refresh={current ? { label: '刷新已发布结果', onClick: () => setRefreshEpoch((value) => value + 1), loading } : undefined} primary={presentation && onVerification ? { label: '进入现场验证', onClick: onVerification } : undefined} />
-    <EvidenceExplanationDrawer open={evidenceDrawerOpen} title={selectedIssue?.title} explanations={selectedIssue?.evidence_explanations ?? []} onClose={() => setEvidenceDrawerOpen(false)} />
+    <EvidenceExplanationDrawer open={evidenceDrawerOpen} title={drawerIssue?.title} explanations={drawerIssue?.evidence_explanations ?? []} onClose={() => setEvidenceDrawerOpen(false)} />
   </Space>
 }
 
@@ -201,7 +185,7 @@ function ProjectRepairPanel({ repair, onNavigate, showRequirements }: { repair: 
 }
 
 function ExecutionPaths({ traces }: { traces: ExecutionTraceDto[] }) {
-  return <section className="result-section" aria-labelledby="execution-path-title">
+  return <section className="result-execution-paths" aria-labelledby="execution-path-title">
     <div className="result-section-heading"><div><Typography.Title id="execution-path-title" level={3}>执行路径</Typography.Title><Typography.Paragraph type="secondary">界鉴只从已发布证据还原实际发生的节点；这里的顺序不会改变后端安全结论。</Typography.Paragraph></div></div>
     <Collapse destroyOnHidden items={[{ key: 'execution-paths', label: '查看完整执行路径', children: <div className="execution-paths">{traces.map((trace, traceIndex) => <article className="execution-path" key={`${trace.case_id}-${trace.action_id}`} aria-label={traces.length > 1 ? `执行路径 ${traceIndex + 1}` : '执行路径详情'}>
       {!trace.complete && <Alert type="warning" showIcon message="当前只能确认部分执行路径" />}
@@ -209,38 +193,5 @@ function ExecutionPaths({ traces }: { traces: ExecutionTraceDto[] }) {
         ? <ol className="execution-path-list">{trace.events.map((event) => <li key={event.event_id}><span className="execution-path-dot" aria-hidden="true" /><Typography.Text strong>{traceEventLabel(event)}</Typography.Text></li>)}</ol>
         : <Typography.Text type="secondary">已发布证据暂时没有可展示的路径节点。</Typography.Text>}
     </article>)}</div> }]} />
-  </section>
-}
-
-function ResultStory({ issue, index, onEvidence }: { issue: ResultPresentationIssueDto; index: number; onEvidence: () => void }) {
-  return <article className={`result-story result-story-${resultTone(issue.verdict)}`} aria-labelledby={`result-story-${index}`}>
-    <header className="result-story-header"><div><Typography.Text className="result-context" type="secondary">{issue.subject_group} · {issue.action} · {issue.resource} · {issue.relation}</Typography.Text><Typography.Title id={`result-story-${index}`} level={4}>{issue.title}</Typography.Title></div><Space wrap><Tag color={resultTagColor(issue.verdict)}>{issue.conclusion}</Tag><Tag>{severityLabel(issue.severity)}</Tag></Space></header>
-    <Typography.Paragraph type="secondary">计划使用的账号：{plannedIdentityLabel(issue)}。计划账号只说明本次安排，不代替目标实际识别的账号。</Typography.Paragraph>
-    <ResultFactChain issue={issue} />
-    <section className="result-source-summary" aria-label="真实结果证据来源">
-      <div className="result-source-summary-copy"><Typography.Text strong>真实结果证据来源</Typography.Text><Typography.Paragraph type="secondary">关键来源共同约束真实结果能否确认；佐证来源补充执行过程，但不会单独改变结论。</Typography.Paragraph></div>
-      {issue.evidence_sources.length > 0
-        ? <ul className="result-source-list">{issue.evidence_sources.map((source) => <li key={`${source.observer_type}-${source.label}`}><div><Typography.Text strong>{source.label}</Typography.Text><Typography.Text type="secondary">{sourceRoleLabel(source.role)}</Typography.Text></div><Tag color={sourceStatusColor(source.status)}>{sourceStatusLabel(source.status)}</Tag></li>)}</ul>
-        : <Typography.Text type="secondary">本次发布结果没有可展示的观察来源。</Typography.Text>}
-    </section>
-    {issue.diagnosis && <ResultDiagnosis diagnosis={issue.diagnosis} />}
-    {issue.repair_requirement && <section className="result-repair-requirement" aria-label="修复要求">
-      <Typography.Text strong>修复后必须满足</Typography.Text>
-      <ul>
-        <li>{issue.repair_requirement.must_disappear}</li>
-        <li>{issue.repair_requirement.must_remain}</li>
-        {issue.repair_requirement.must_not_change.map((item) => <li key={item}>{item}不能改变。</li>)}
-      </ul>
-    </section>}
-    {issue.verdict === 'INCONCLUSIVE' && <Alert type="warning" showIcon message={issue.conclusion} description={issue.explanation} />}
-    <div className="result-story-actions"><Button type="link" onClick={onEvidence}>查看对应证据</Button><Tag>{occurrenceStatusLabel(issue.occurrence_status)}</Tag></div>
-  </article>
-}
-
-function ResultDiagnosis({ diagnosis }: { diagnosis: ResultDiagnosisDto }) {
-  return <section className="result-diagnosis" aria-label="诊断">
-    <div className="result-diagnosis-summary"><Typography.Text strong>问题出在哪里</Typography.Text><Typography.Paragraph>{diagnosis.summary}</Typography.Paragraph></div>
-    <div><Typography.Text strong>为什么这样判断</Typography.Text><ol className="result-diagnosis-witness">{diagnosis.minimal_witness.map((witness, index) => <li key={`${witness.kind}-${index}`}><span className="result-story-step-index" aria-hidden="true">{index + 1}</span><div className="result-diagnosis-witness-copy"><Typography.Text type="secondary">{witness.label}</Typography.Text><Typography.Text strong>{witness.detail}</Typography.Text></div></li>)}</ol></div>
-    {diagnosis.confirmed_impacts.length > 0 && <div><Typography.Text strong>已确认影响</Typography.Text><ul className="result-diagnosis-impact-list">{diagnosis.confirmed_impacts.map((impact) => <li key={impact.event_id}><Typography.Text strong>{impact.summary}</Typography.Text></li>)}</ul></div>}
   </section>
 }

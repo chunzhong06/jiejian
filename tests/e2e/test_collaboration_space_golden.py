@@ -195,6 +195,32 @@ def test_official_sample_workflow_forms_block_pass_and_inconclusive_results(
             if variant == "vulnerable":
                 assert bob_issue["surface_result"] == "页面或接口显示已拒绝"
                 assert bob_issue["actual_result"] == "真实资源已经发生变化"
+                assert bob_issue["diagnosis"]["breakpoint_type"] == "AUTHORIZATION_LATE"
+                assert bob_issue["diagnosis"]["precision"] == "EXACT"
+                breakpoint_event_id = bob_issue["diagnosis"][
+                    "first_violation_event_id"
+                ]
+                assert breakpoint_event_id is not None
+                breakpoint_witness = next(
+                    item
+                    for item in bob_issue["diagnosis"]["minimal_witness"]
+                    if item["kind"] == "BREAKPOINT"
+                )
+                assert breakpoint_witness["event_id"] == breakpoint_event_id
+                bob_trace = next(
+                    item
+                    for item in presentation["execution_traces"]
+                    if item["case_id"] == bob["case_snapshot"]["case_id"]
+                )
+                assert bob_trace["complete"] is True
+                breakpoint_event = next(
+                    item
+                    for item in bob_trace["events"]
+                    if item["event_id"] == breakpoint_event_id
+                )
+                assert breakpoint_event["semantic_key"] == "export_request_created"
+                assert breakpoint_event["source_component"] == "collaboration-server"
+                assert breakpoint_event["source_location"] == "storage:export-job"
                 assert _source_status(
                     bob_issue,
                     "AZURE_BLOB_OBJECT",

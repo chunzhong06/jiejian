@@ -21,7 +21,7 @@ ApplicationCore / Published facts
 
 `ProductStatus` 只读汇总当前项目、主控工作台、当前辅助模块、全部待办、当前主待办引用、最近 Agent 变化、`ProjectRevalidation`、`ProjectRepair` 和最近可信结果，不保存独立向导进度。当前辅助模块是变化、权限和测试，但它们不与工作台同级。`primary_attention_key` 只显式引用本次 `attention_items` 中的一项，Workbench 据此突出一个主任务；全部待办仍然存在于对应模块。`ProjectRevalidation` 只从 SourceChange inspection、准备度与可信结果形成 NO_CHANGE、REVIEW_REQUIRED、PREPARATION_REQUIRED、READY、VERIFIED 或 STALE；`ProjectRepair` 只从已发布修复要求、关联变化、项目重验和独立复验形成当前修复状态。GUI 按服务端状态、主待办引用、change ID 和路径投影当前操作，不能按待办数组位置、变化列表位置、Sample repair ID、mapping count 或最近结果重新推导。模块状态只表达当前事实是否可用、需处理、运行中、已有结果或暂无数据；多个缺口可以并列。详细任务路由只归入对应模块，不重新成为一级导航。浏览器本地状态只记当前选择、页面、未提交权限文本和当前响应草稿；刷新后由 API 恢复权威事实。Workbench 不常驻显示产品版本，产品版本在 `/settings/system` 等明确诊断位置展示。
 
-GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.15。
+GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.16。
 
 `ProjectPreparation` 顶层 `next_path/next_label` 是准备续接的唯一导航合同，item 只用于定位 AUTO 动作。详细页完成本地写入后通过工作区刷新取得新的 `{status, readiness, runs}`，不能携带进入页面前固定的下一步。权限矩阵以 `can_confirm`、`requires_human_confirmation`、`confirmation_blockers` 和 `required_confirmation_count` 明确发布操作性，GUI 不从 review reason 或数量关系推导。
 

@@ -1,6 +1,6 @@
 // 代码变化页按新到旧展示 Agent 修改和权限影响，不把 Agent 声明当成真实差异。
 
-import { Alert, Button, Card, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Spin, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import type { ApiError } from '../../api/http'
 import type { ProductStatusDto, ProjectDto } from '../../api/projects'
@@ -39,7 +39,7 @@ export function ChangesPage({ project, status, onError, onNavigate }: {
         : `已记录 ${changes.length} 次 Agent 变化，等待确认本轮影响。`
 
   return <div className="changes-page">
-    <PageTaskHeader title="变化" description="查看 Agent 提交了什么、界鉴实际发现了什么，以及哪些权限需要重新核对。" status={changes.length ? `${changes.length} 次变化` : '等待后续变化'} />
+    <PageTaskHeader title="变化与修复" description="查看 Agent 提交了什么、界鉴实际发现了什么，以及哪些权限需要重新核对。" status={changes.length ? `${changes.length} 次变化` : '等待后续变化'} />
     <section className={`changes-overview${!loading && changes.length === 0 ? ' is-idle' : ''}`} aria-labelledby="changes-current-title" aria-busy={loading}>
       <div className="changes-overview-copy">
         <span className="changes-overview-eyebrow">当前变化判断</span>
@@ -55,21 +55,25 @@ export function ChangesPage({ project, status, onError, onNavigate }: {
           <Typography.Text type="secondary">Agent 可以提交变化和发起获准检查，但不能批准、删除或改写人的权限决定。</Typography.Text>
         </div>}
     </section>
-    <div className="change-timeline">{changes.map((change) => {
+    <ol className="change-timeline">{changes.map((change) => {
       const current = status?.revalidation?.change_id === change.change_id ? status.revalidation : null
       const latest = changes[0]?.change_id === change.change_id
       const verified = current?.status === 'VERIFIED'
-      return <Card key={change.change_id} className={`change-card${latest ? ' is-latest' : ''}`}>
+      return <li key={change.change_id} className={`change-event${latest ? ' is-latest' : ''}`}>
+        <div className="change-event-time"><time>{formatTimestamp(change.created_at_us)}</time><span>{change.submitted_by}</span></div>
+        <div className="change-event-rail" aria-hidden="true"><i /></div>
+        <article className="change-event-content">
         <div className="change-card-heading">
-          <div className="change-card-copy"><Space wrap><Typography.Title level={4}>{change.reason}</Typography.Title>{latest && <Tag color="blue">最近变化</Tag>}{verified && <Tag color="green">已纳入当前安全基线</Tag>}</Space><div className="change-card-meta"><span>{change.submitted_by}</span><span aria-hidden="true">·</span><span>{formatTimestamp(change.created_at_us)}</span></div></div>
-          <Space wrap>{current?.next_path && <Button type={current.status === 'READY' ? 'primary' : 'default'} onClick={() => onNavigate(current.next_path ?? '/changes')}>{current.next_label ?? '继续处理'}</Button>}</Space>
+          <div className="change-card-copy"><div className="change-event-title"><Typography.Title level={4}>{change.reason}</Typography.Title>{latest && <span className="semantic-state is-current">最近变化</span>}{verified && <span className="semantic-state is-safe">已纳入当前安全基线</span>}</div></div>
+          {current?.next_path && <Button type={current.status === 'READY' ? 'primary' : 'default'} onClick={() => onNavigate(current.next_path ?? '/changes')}>{current.next_label ?? '继续处理'}</Button>}
         </div>
         <Typography.Paragraph>{change.summary}</Typography.Paragraph>
         {current && <Alert type={verified ? 'success' : current.status === 'STALE' ? 'warning' : 'info'} showIcon message={revalidationLabel(current.status)} description={current.summary} />}
         <div className="change-metrics"><span>实际变化 <strong>{change.actual_changed_path_count}</strong> 个文件</span><span>直接影响 <strong>{change.directly_affected_count}</strong> 条规则</span><span>待重新确认 <strong>{change.mapping_review_required_count}</strong> 条</span></div>
         <ChangePaths change={change} />
-      </Card>
-    })}</div>
+        </article>
+      </li>
+    })}</ol>
   </div>
 }
 

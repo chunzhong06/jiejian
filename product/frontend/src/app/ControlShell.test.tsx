@@ -86,14 +86,16 @@ describe('应用壳', () => {
     render(<ControlShell />)
     expect(await screen.findByText('建立第一份权限安全基线')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '切换应用，当前：尚未选择' })).toBeInTheDocument()
-    for (const item of ['工作台', '变化', '权限', '测试']) expect(screen.getAllByText(item).length).toBeGreaterThan(0)
+    for (const item of ['工作台', '变化与修复', '权限边界', '检查与结果']) expect(screen.getAllByText(item).length).toBeGreaterThan(0)
     expect(document.querySelectorAll('.module-navigation .module-workbench-button, .module-navigation .module-navigation-button')).toHaveLength(4)
     expect(document.querySelector('.module-navigation')).toBeInTheDocument()
-    expect(screen.getByText('AI辅助 · 未开启')).toBeInTheDocument()
-    expect(screen.getByText('AI 工具 · 未准备')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '系统需处理' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '设置与更多' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '退出界鉴' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /AI 工具 · 未准备/ })).toBeInTheDocument()
+    const more = screen.getByRole('button', { name: /设置与更多，系统需处理/ })
+    fireEvent.click(more)
+    expect(await screen.findByText('AI 辅助 · 未开启')).toBeInTheDocument()
+    expect(screen.queryByText('模型服务')).not.toBeInTheDocument()
+    expect(screen.getByText('系统需处理')).toBeInTheDocument()
+    expect(screen.getByText('退出界鉴')).toBeInTheDocument()
     expect(document.querySelector('.phase-steps')).not.toBeInTheDocument()
   })
 
@@ -172,14 +174,15 @@ describe('应用壳', () => {
       .mockResolvedValue({ ...waiting, client_connected: true, client_name: 'Codex', connection_state: 'CONNECTED' })
 
     render(<ControlShell />)
-    expect(await screen.findByText('AI 工具 · 等待连接')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /AI 工具 · 等待连接/ })).toBeInTheDocument()
 
-    expect(await screen.findByText('AI 工具 · Codex', {}, { timeout: 3_000 })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /AI 工具 · Codex/ }, { timeout: 3_000 })).toBeInTheDocument()
   })
 
   it('通过明确确认入口请求安全退出', async () => {
     render(<ControlShell />)
-    fireEvent.click(await screen.findByRole('button', { name: '退出界鉴' }))
+    fireEvent.click(await screen.findByRole('button', { name: /设置与更多/ }))
+    fireEvent.click(await screen.findByText('退出界鉴'))
     expect(await screen.findByText('退出界鉴？')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: '继续使用' })).toHaveFocus())
     fireEvent.click(screen.getByRole('button', { name: '安全退出' }))
@@ -205,9 +208,10 @@ describe('应用壳', () => {
 
   it('关闭退出确认后把焦点还给触发按钮', async () => {
     render(<ControlShell />)
-    const trigger = await screen.findByRole('button', { name: '退出界鉴' })
+    const trigger = await screen.findByRole('button', { name: /设置与更多/ })
     trigger.focus()
     fireEvent.click(trigger)
+    fireEvent.click(await screen.findByText('退出界鉴'))
     const cancel = await screen.findByRole('button', { name: '继续使用' })
     await waitFor(() => expect(cancel).toHaveFocus())
     fireEvent.click(cancel)
@@ -261,7 +265,7 @@ describe('应用壳', () => {
     window.location.hash = '#/permissions'
     render(<ControlShell />)
 
-    expect(await screen.findByRole('heading', { name: '权限', level: 2 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '权限边界', level: 2 })).toBeInTheDocument()
     const beforeReturn = mockApi.readiness.mock.calls.length
     window.location.hash = '#/preparation'
     window.dispatchEvent(new HashChangeEvent('hashchange'))
@@ -276,7 +280,7 @@ describe('应用壳', () => {
     window.location.hash = '#/permissions'
     render(<ControlShell />)
 
-    expect(await screen.findByRole('heading', { name: '权限', level: 2 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '权限边界', level: 2 })).toBeInTheDocument()
     mockApi.readiness.mockClear()
     mockApi.readiness.mockResolvedValue({
       project_id: 'p1', project_status: 'READY', application_connected: true,
@@ -298,12 +302,12 @@ describe('应用壳', () => {
     expect(await screen.findByText('核对本次检查')).toBeInTheDocument()
   })
 
-  it('没有应用时模型服务和运行环境仍可访问', async () => {
+  it('模型恢复深链直接打开 AI 辅助设置，且没有应用时运行环境仍可访问', async () => {
     window.location.hash = '#/settings/models'
     const models = render(<ControlShell />)
-    expect((await screen.findAllByText('AI 辅助')).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: '打开 AI 辅助设置' }).length).toBeGreaterThan(0)
-    expect(screen.getByRole('table', { name: 'AI参与范围' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'AI 辅助' })).toBeInTheDocument()
+    await waitFor(() => expect(window.location.hash).toBe('#/workspace'))
+    expect(screen.queryByRole('table', { name: 'AI参与范围' })).not.toBeInTheDocument()
     models.unmount()
     window.location.hash = '#/settings/system'
     render(<ControlShell />)
@@ -392,7 +396,7 @@ describe('应用壳', () => {
     render(<ControlShell />)
 
     await waitFor(() => expect(window.location.hash).toBe('#/permissions'))
-    expect(await screen.findByRole('heading', { name: '权限', level: 2 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '权限边界', level: 2 })).toBeInTheDocument()
     expect(mockApi.checkPreview).not.toHaveBeenCalledWith('p1', changeId)
     expect(mockApi.checkSubmit).not.toHaveBeenCalled()
   })
@@ -435,7 +439,7 @@ describe('应用壳', () => {
 
     expect(await screen.findByRole('button', { name: '切换应用，当前：未命名应用' })).toBeInTheDocument()
     await waitFor(() => expect(mockApi.runs).toHaveBeenCalledTimes(1))
-    fireEvent.click(screen.getByRole('button', { name: '进入测试' }))
+    fireEvent.click(screen.getByRole('button', { name: '进入检查与结果' }))
     await waitFor(() => expect(mockApi.runs).toHaveBeenCalledTimes(2))
     fireEvent.click(await screen.findByRole('button', { name: '查看结果与历史' }))
     await waitFor(() => expect(mockApi.runs).toHaveBeenCalledTimes(3))
@@ -467,7 +471,7 @@ describe('应用壳', () => {
     expect(await screen.findByText('核对本次检查')).toBeInTheDocument()
     expect(screen.queryByLabelText('选择执行配置')).not.toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '查看检查结果' }))
-    expect(await screen.findByText('检查对象')).toBeInTheDocument()
+    expect(await screen.findByText('决定性证明链')).toBeInTheDocument()
     fireEvent.click(screen.getByText('完整报告'))
     fireEvent.click(await screen.findByRole('button', { name: /导出/ }))
     expect(await screen.findByRole('link', { name: 'JSON' })).toBeInTheDocument()

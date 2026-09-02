@@ -214,6 +214,11 @@ def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory
         assert tuple(record["kind"] for record in records) == TRACE_KINDS
         assert [record["sequence"] for record in records] == list(range(1, 9))
         assert records[0]["subject_id"] == records[0]["actor_id"] == "alice"
+        assert all(record["task_id"] == "" for record in records[:2])
+        real_task_id = records[2]["task_id"]
+        assert real_task_id.startswith("task-")
+        assert all(record["task_id"] == real_task_id for record in records[2:])
+        assert all(record["actor_id"] == "alice" for record in records[:5])
         assert records[3]["authorization_decision"] == "ALLOW"
         assert records[5]["subject_id"] == "alice"
         assert records[5]["actor_id"] == "export-worker"
@@ -345,6 +350,15 @@ def test_bob_order_boundary_preserves_surface_denial_and_real_effect(collaborati
         )
         assert tuple(record["kind"] for record in records) == expected_kinds
         assert records[0]["subject_id"] == records[0]["actor_id"] == "bob"
+        if order == "ENQUEUE_BEFORE_AUTHORIZE":
+            assert all(record["task_id"] == "" for record in records[:2])
+            real_task_id = records[2]["task_id"]
+            assert real_task_id.startswith("task-")
+            assert all(record["task_id"] == real_task_id for record in records[2:])
+            assert all(record["actor_id"] == "bob" for record in records[:5])
+        else:
+            assert all(record["task_id"] == "" for record in records)
+            assert all(record["actor_id"] == "bob" for record in records)
         assert next(
             record for record in records if record["semantic_key"] == "authorization_decided"
         )["authorization_decision"] == "DENY"

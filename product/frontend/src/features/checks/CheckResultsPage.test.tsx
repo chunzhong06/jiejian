@@ -1,6 +1,6 @@
 // 验证检查结果页直接消费后端 ResultPresentation 与 ExecutionTrace，并保留证据入口。
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { CheckResultsPage } from './CheckResultsPage'
 
@@ -44,6 +44,12 @@ const exactDiagnosis = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+const evidenceExplanations = [
+  { label: '页面或接口显示已拒绝', source: '执行表面响应', step: '目标响应', proves: '目标在本轮返回了拒绝响应。', does_not_prove: '不能单独证明后台副作用。', relevance: '来自本轮已发布事实。', evidence_refs: ['ev-block'], component: 'collaboration-server', location: 'collaboration-server · api:/projects/export', observer_id: null, observation_phase: null, provenance_type: 'EXECUTION_FACT', adapter_version: null, source_sha256: null, observed_at_us: 1001 },
+  { label: '本次请求对应的完整项目交付包已经生成。', source: '最终对象/文件', step: '核对最终对象', proves: '可以确认本轮受保护业务后果已经发生。', does_not_prove: '不能单独证明权限判断位置。', relevance: '来自本轮已发布观察。', evidence_refs: ['ev-block'], component: null, location: '对象存储 http://127.0.0.1:4277/deliveries/request-demo.zip', observer_id: 'archive-observer', observation_phase: 'EVENTUAL', provenance_type: 'AZURE_BLOB_OBJECT', adapter_version: 'sample-1', source_sha256: 'c'.repeat(64), observed_at_us: 1007 },
+  { label: '权限断裂', source: '权限断裂定位', step: '定位权限断裂', proves: '权限决定发生过晚。', does_not_prove: '不能扩大到其他运行。', relevance: '来自本轮已发布诊断。', evidence_refs: ['ev-block'], component: 'collaboration-server', location: 'collaboration-server · api:/projects/export', observer_id: null, observation_phase: null, provenance_type: 'BREAKPOINT_LOCATOR', adapter_version: null, source_sha256: null, observed_at_us: 1005 },
+]
+
 describe('CheckResultsPage', () => {
   it('只按正式 ProjectRepair 展示修复入口，不保留 Sample 专用复验按钮', () => {
     const run = { run_id: 'run-fix', lifecycle: 'COMPLETED', verdict: 'BLOCK', result_integrity: 'VERIFIED' }
@@ -74,44 +80,47 @@ describe('CheckResultsPage', () => {
     runsApi.run.mockResolvedValue(run)
     resultsApi.presentation.mockResolvedValue(basePresentation({
       run_id: 'run-block', verdict: 'BLOCK', headline: '发现权限问题', problem_count: 1, safe_count: 0, execution_traces: [vulnerableTrace],
-      issues: [{ finding_id: 'finding-block', title: '后端确认：禁止操作造成真实变化', subject_group: '成员账号', action: '修改', resource: '文档', relation: '拥有', expectation: '不应允许这次操作，资源也不应发生变化', surface_result: '页面或接口显示已拒绝', actual_result: '真实资源已经发生变化', conclusion: '发现权限问题', explanation: '页面或接口虽然显示已拒绝，但外部可信观察确认真实资源已经变化；权限限制没有真正阻止修改，表面拒绝没有阻止真实副作用。', planned_identity_id: 'member-a', planned_identity_label: '成员 A', actual_identity_status: 'CONFIRMED', actual_identity_id: 'bob', actual_identity_label: 'Bob', severity: 'critical', evidence_refs: ['ev-block'], evidence_sources: [
+      issues: [{ finding_id: 'finding-block', title: '后端确认：禁止操作造成真实变化', subject_group: '成员账号', action_id: 'export-package', action: '修改', resource: '文档', relation: '拥有', expectation: '不应允许这次操作，资源也不应发生变化', surface_result: '页面或接口显示已拒绝', actual_result: '真实资源已经发生变化', conclusion: '发现权限问题', explanation: '页面或接口虽然显示已拒绝，但外部可信观察确认真实资源已经变化；权限限制没有真正阻止修改，表面拒绝没有阻止真实副作用。', planned_identity_id: 'member-a', planned_identity_label: '成员 A', actual_identity_status: 'CONFIRMED', actual_identity_id: 'bob', actual_identity_label: 'Bob', severity: 'critical', evidence_refs: ['ev-block'], evidence_sources: [
         { observer_type: 'OWNER_API', label: '目标业务状态', role: 'KEY', status: 'FOUND', evidence_refs: ['ev-block'] },
         { observer_type: 'READ_ONLY_SQLITE', label: '只读数据库', role: 'SUPPORTING', status: 'NOT_FOUND', evidence_refs: ['ev-block'] },
         { observer_type: 'STRUCTURED_AUDIT_LOG', label: '结构化审计记录', role: 'SUPPORTING', status: 'FOUND', evidence_refs: ['ev-block'] },
         { observer_type: 'ASYNC_TASK_STATUS', label: '后台任务', role: 'SUPPORTING', status: 'FOUND', evidence_refs: ['ev-block'] },
         { observer_type: 'AZURE_QUEUE_PEEK', label: '消息通道', role: 'SUPPORTING', status: 'UNAVAILABLE', evidence_refs: ['ev-block'] },
         { observer_type: 'AZURE_BLOB_OBJECT', label: '最终对象/文件', role: 'KEY', status: 'FOUND', evidence_refs: ['ev-block'] },
-      ], diagnosis: exactDiagnosis(), verdict: 'VULNERABLE', occurrence_status: 'APPEARED' }],
+      ], diagnosis: exactDiagnosis(), claim_boundary: { surface_response_status: 'DENIED', business_effect_status: 'CONFIRMED', actual_identity_status: 'CONFIRMED', breakpoint_precision: 'EXACT', repair_status: null, supported_statement: '页面拒绝了操作，但真实资源仍然发生变化。', unsupported_statements: ['不能宣称所有修改入口都存在同一问题。'] }, evidence_explanations: evidenceExplanations, verdict: 'VULNERABLE', occurrence_status: 'APPEARED', repair_requirement: null }],
     }))
     resultsApi.evidence.mockResolvedValue([{ evidence_id: 'ev-block' }])
     resultsApi.evidenceDetail.mockResolvedValue({ evidence_id: 'ev-block', case_snapshot: { subject_id: 'member', action_id: 'modify', resource_ids: ['owner-document'], expectations: ['DENY'], required_observations: ['resource_state'] }, twin_role: 'DENY_VARIANT', allow_control_valid: true, baseline_integrity: true, execution_fact: { outcome: 'DENIED' }, observation_facts: [{ requirement_id: 'resource_state', resource_id: 'owner-document', effect: 'CONFIRMED', complete: true, reliable: true }], security_effect_facts: [{ kind: 'STATE_MUTATION', state: 'CONFIRMED', temporal_closure: 'CLOSED', baseline_integrity: true, complete: true, reliable: true, correlated: true }], verdict: 'VULNERABLE' })
 
     render(<CheckResultsPage run={run} onError={vi.fn()} />)
 
-    expect((await screen.findAllByRole('heading', { name: '发现权限问题' })).length).toBeGreaterThan(0)
+    expect(await screen.findByRole('heading', { name: '发现权限问题' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: '后端确认：禁止操作造成真实变化' })).toBeInTheDocument()
     expect(screen.getByText('成员账号 · 修改 · 文档 · 拥有')).toBeInTheDocument()
     expect(screen.getByText('真实资源已经发生变化')).toBeInTheDocument()
-    expect(screen.getByText(/权限限制没有真正阻止修改/)).toBeInTheDocument()
-    expect(screen.getByText(/计划使用的账号：成员 A/)).toBeInTheDocument()
-    expect(screen.getByText('目标实际识别的账号')).toBeInTheDocument()
-    expect(screen.getAllByText('Bob').length).toBeGreaterThan(0)
-    expect(screen.queryByText(/不会把计划账号冒充为实际账号/)).not.toBeInTheDocument()
-    expect(screen.getByText('真实结果证据来源')).toBeInTheDocument()
-    expect(screen.getByText(/佐证来源补充执行过程/)).toBeInTheDocument()
-    expect(screen.getByText('问题出在哪里')).toBeInTheDocument()
-    expect(screen.getByText('为什么这样判断')).toBeInTheDocument()
-    expect(screen.getByText(/首个可证明断裂：权限决定发生过晚/)).toBeInTheDocument()
-    expect(['权限要求', '实际身份', '本不该发生的业务后果', '合法授权来源', '首个可证明断裂', '后续扩大影响的行为', '最终业务影响'].map((label) => screen.getByText(label))).toHaveLength(7)
-    expect(screen.getByText('已确认：最终后果')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '决定性证明链' })).toBeInTheDocument()
+    expect(screen.getAllByText('在哪里看到')).toHaveLength(3)
+    expect(screen.getByText('对象存储 http://127.0.0.1:4277/deliveries/request-demo.zip')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '首个可证明断裂' })).toBeInTheDocument()
+    expect(screen.getByText('权限决定发生过晚')).toBeInTheDocument()
+    expect(screen.getAllByText('collaboration-server · api:/projects/export').length).toBeGreaterThan(0)
+    const diagnosisToggle = screen.getByRole('button', { name: /查看完整诊断、来源状态与可说明范围/ })
+    expect(diagnosisToggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(diagnosisToggle)
+    for (const label of ['权限要求', '实际身份', '本不该发生的业务后果', '合法授权来源', '首个可证明断裂', '后续扩大影响的行为', '最终业务影响']) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0)
+    }
     expect(screen.getAllByText('关键来源')).toHaveLength(2)
     expect(screen.getAllByText('佐证来源')).toHaveLength(4)
     expect(['目标业务状态', '只读数据库', '结构化审计记录', '后台任务', '消息通道', '最终对象/文件'].map((label) => screen.getByText(label))).toHaveLength(6)
     expect(screen.getAllByText('已发现')).toHaveLength(4)
     expect(screen.getByText('未发现')).toBeInTheDocument()
     expect(screen.getAllByText('无法确认')).toHaveLength(1)
+    const auditToggle = screen.getByRole('button', { name: /查看完整执行路径、已发布证据与本次范围/ })
+    expect(auditToggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(auditToggle)
     expect(screen.getByRole('heading', { name: '执行路径' })).toBeInTheDocument()
-    const traceToggle = screen.getByRole('button', { name: /查看完整执行路径/ })
+    const traceToggle = within(screen.getByRole('region', { name: '执行路径' })).getByRole('button', { name: /查看完整执行路径/ })
     expect(traceToggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('request_received')).not.toBeInTheDocument()
     fireEvent.click(traceToggle)
@@ -125,8 +134,8 @@ describe('CheckResultsPage', () => {
     expect(screen.queryByText('case-bob')).not.toBeInTheDocument()
     expect(screen.queryByText('EXPLICIT_PARENT')).not.toBeInTheDocument()
     expect(screen.queryByText('成员账号不应对文档执行修改')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('查看对应证据'))
-    expect(await screen.findByText('证据时间线')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看全部证据与边界' }))
+    expect(await screen.findByText('证据说明 · 后端确认：禁止操作造成真实变化')).toBeInTheDocument()
   })
 
   it('INCONCLUSIVE 使用后端说明且不显示执行失败', async () => {
@@ -144,7 +153,8 @@ describe('CheckResultsPage', () => {
     expect(onNavigate).toHaveBeenCalledWith('/preparation')
     expect(screen.queryByRole('button', { name: '重新检查原权限考题' })).not.toBeInTheDocument()
     expect(screen.queryByText('检查执行未完整结束')).not.toBeInTheDocument()
-    const traceToggle = screen.getByRole('button', { name: /查看完整执行路径/ })
+    fireEvent.click(screen.getByRole('button', { name: /查看完整执行路径、已发布证据与本次范围/ }))
+    const traceToggle = within(screen.getByRole('region', { name: '执行路径' })).getByRole('button', { name: /查看完整执行路径/ })
     expect(traceToggle).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(traceToggle)
     expect(screen.getByText('当前只能确认部分执行路径')).toBeInTheDocument()
@@ -215,6 +225,7 @@ describe('CheckResultsPage', () => {
     expect(screen.getByText(/不代表应用绝对安全/)).toBeInTheDocument()
     expect(screen.getByText('未覆盖')).toBeInTheDocument()
     expect(screen.getAllByText('2 项')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: /查看完整执行路径、已发布证据与本次范围/ }))
     expect(screen.getByText(/本次结论只适用于实际执行范围/)).toBeInTheDocument()
   })
 
