@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.workflows.assistant.diagnosis import ErrorDiagnosisContext, diagnose_error
 
 
 def _status_for(code: str) -> int:
@@ -25,6 +24,7 @@ def _status_for(code: str) -> int:
         ErrorCode.LLM_PROFILE_NOT_FOUND.value,
         ErrorCode.EXECUTION_PROFILE_NOT_FOUND.value,
         ErrorCode.RESULT_FINALIZATION_NOT_FOUND.value,
+        ErrorCode.BOUNDARY_PROPOSAL_NOT_FOUND.value,
     }:
         return 404
     if code in {
@@ -43,6 +43,10 @@ def _status_for(code: str) -> int:
         ErrorCode.RESULT_FINALIZATION_FAILED.value,
         ErrorCode.RESULT_FINALIZATION_CONFLICT.value,
         ErrorCode.RESULT_FINALIZATION_BLOCKED.value,
+        ErrorCode.BOUNDARY_PROPOSAL_ALREADY_DECIDED.value,
+        ErrorCode.BOUNDARY_PROPOSAL_FINGERPRINT_MISMATCH.value,
+        ErrorCode.BOUNDARY_PROPOSAL_SOURCE_STALE.value,
+        ErrorCode.BOUNDARY_REVISION_CONFLICT.value,
     }:
         return 409
     if code in {
@@ -87,9 +91,6 @@ def _status_for(code: str) -> int:
 
 async def jiejian_error_handler(request: Request, exc: JiejianError) -> JSONResponse:
     error = exc.to_dict()
-    error["diagnosis"] = diagnose_error(
-        ErrorDiagnosisContext(error_code=exc.code)
-    ).model_dump(mode="json")
     return JSONResponse(
         status_code=_status_for(exc.code),
         content={

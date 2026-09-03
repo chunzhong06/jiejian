@@ -14,9 +14,6 @@ import click
 import typer
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.workflows.results.presentation import ResultPresentation
-
-
 _configured_presentation = "auto"
 _configured_machine_only = False
 
@@ -288,7 +285,7 @@ def emit_doctor(report: object) -> None:
         _emit_section("如何解决", [("", _doctor_recovery(check.name), "")])
 
 
-def emit_result_presentation(presentation: ResultPresentation) -> None:
+def emit_result_presentation(presentation: object) -> None:
     """直接展示后端结果投影；CLI 不从 Evidence 重新推导业务结论。"""
 
     marker, color = _marker(

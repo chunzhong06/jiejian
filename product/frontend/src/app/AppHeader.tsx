@@ -25,7 +25,9 @@ export function aiStatusLabel(
 }
 
 export function systemStatusLabel(status: SystemStatus) {
-  return status.api === 'available' && status.worker === 'running' && status.browser === 'available'
+  return status.api === 'available'
+    && (status.worker === 'running' || status.worker === 'unavailable')
+    && status.browser === 'available'
     ? '系统正常'
     : '系统需处理'
 }

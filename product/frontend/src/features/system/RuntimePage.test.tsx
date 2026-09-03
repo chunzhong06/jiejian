@@ -20,9 +20,9 @@ const maintenanceStatus = {
 }
 
 const status: SystemStatus = {
-  version: '1.0.16',
+  version: '1.1.0',
   api: 'available',
-  worker: 'running',
+  worker: 'unavailable',
   browser: 'available',
   environment: {
     runtime_mode: 'development',
@@ -60,7 +60,9 @@ describe('RuntimePage', () => {
 
     render(<RuntimePage status={status} profiles={[]} failed={false} />)
 
-    expect(screen.getByText('1.0.16')).toBeInTheDocument()
+    expect(screen.getByText('1.1.0')).toBeInTheDocument()
+    expect(screen.getByText('完整检查 Worker 尚未重新接入当前业务边界架构。')).toBeInTheDocument()
+    expect(screen.getByText('尚未接入')).toBeInTheDocument()
     expect(screen.getAllByText(/仅构建时需要/)).toHaveLength(2)
     expect(screen.getByText(/源码构建/)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('1.0 KiB')).toBeInTheDocument())

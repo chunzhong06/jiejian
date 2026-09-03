@@ -4,7 +4,7 @@
 
 ## 职责
 
-前端负责 Web V1 产品壳、应用接入到结果查看的普通路径、loopback API DTO、响应式布局、可访问交互、错误恢复和比赛展示体验。它把 ProductStatus、ProjectRevalidation、ProjectReadiness、Job/Run、ResultPresentation 与 HistoryView 翻译为用户能理解的页面和操作。
+前端负责 1.1.0 Web 产品壳、应用接入、Business Boundary Human Approval、loopback API DTO、响应式布局、可访问交互和错误恢复。它把 BoundaryWorkspaceStatus、BusinessBoundaryView 与 pending Proposal 翻译为用户能理解的页面和操作；保留结果组件不代表完整新检查主链已接回。
 
 ## 非职责
 
@@ -21,7 +21,7 @@
 | `product/frontend/package.json`、`product/frontend/tsconfig*.json` | 源码依赖/类型/构建合同 | 产品版本真源、node_modules 或 dist |
 | `var/development/frontend/` | 受控 Node/pnpm、workspace、依赖与不可变 build | Git 管理源码、产品运行数据 |
 
-普通工作区以 `/workspace` 为主控工作台，当前由 `/changes /permissions /tests` 三个辅助模块支撑；`/application` 下沉到工作台，`/identities /flows` 下沉到权限，`/preparation /validation /results /verification /history` 下沉到测试，系统与模型设置是明确的全局工具入口。辅助模块可以随稳定业务职责演进，但不能把详细任务重新提升成线性主流程。权限规则中的自然语言草稿是显式、临时且不生效的输入辅助；权限确认与验证运行共享后端事实但分开用户任务，Report 是结果内视图，不建立平行流程。
+普通工作区以 `/workspace` 为主控工作台，保留 `/changes /permissions /tests` 三个辅助模块的 1.0.16 视觉层级。1.1.0 只有 `/permissions` 接入 `BusinessBoundaryPage`；`/changes` 与 `/tests` 明确不可用，不调用旧 writer。`/application` 仍是工作台内的接入任务；其他保留路由不表示当前能力。
 
 精确组件和类型见[前端自动代码参考](../../03_参考手册/代码/frontend.md)。
 
@@ -35,12 +35,13 @@
 | 修改某类 API DTO/client | `product/frontend/src/api/*.ts` 与对应 `product/backend/api/routers/*.py` | 对应后端 Router 测试 + DTO 消费页测试 |
 | 修改工作台、官方示例准备或展示模式 | `features/workspace/WorkbenchPage.tsx`、`components/OfficialSampleSetupBar.tsx`、`features/presentation/PresentationMode.tsx` | Workbench、OfficialSampleSetupBar、PresentationMode 与 ControlShell 测试 |
 | 修改应用接入与理解 | `features/access/AccessPage.tsx`、`ApplicationSetup.tsx` | `frontend-test src/features/access`；onboarding/application-understanding API 测试 |
+| 修改 Business Boundary 提案与审批 | `features/boundaries/`、`api/businessBoundaries.ts` | [修改业务边界、权限意图与 Agent 授权](../任务/修改权限意图与Agent授权.md)；BusinessBoundaryPage 与 ControlShell 测试 |
 | 修改测试身份 | `features/identities/TestIdentityPage.tsx` | [修改测试账号](../任务/修改测试账号.md)；`frontend-test src/features/identities` |
 | 修改录制与安全准备 | `features/recording/` | [修改 Recording](../任务/修改Recording.md)；`frontend-test src/features/recording` |
 | 修改 Agent 变化与待办 | `features/changes/ChangesPage.tsx`、`api/sourceChanges.ts` | [修改 Agent 变更影响](../任务/修改Agent变更影响.md)；Workbench、ControlShell 与后端 change 测试 |
 | 修改测试模块总览 | `features/testing/TestingPage.tsx` | TestingPage 与 ControlShell 路由测试；再按实际修改核对测试条件、运行或结果页面 |
 | 修改测试准备总览 | `features/preparation/PreparationPage.tsx`、`api/projects.ts` | ProjectPreparation、Readiness、页面直接测试与 ControlShell 权威刷新测试 |
-| 修改权限规则或验证运行 | `features/checks/PermissionCheckPage.tsx` | [修改权限判断](../任务/修改权限判断.md)；permissions/validation 两种 mode 与 ControlShell 测试 |
+| 修改保留的验证/结果组件 | `features/checks/` | 先确认当前路由是否接入；不得把旧 permissions mode 恢复为 Human Approval 入口 |
 | 修改结果、历史、Evidence 或报告 | `features/checks/CheckResultsPage.tsx`、`CheckHistoryPage.tsx`、`EvidenceTimeline.tsx`、`ReportPanel.tsx` | [修改结果与报告](../任务/修改结果与报告.md)；对应单文件测试 |
 | 修改模型或运行环境设置 | `features/settings/`、`features/system/` | settings/system 组件与对应 API 测试 |
 | 修改样式、响应式或可访问性 | 所属 feature CSS/TSX 与 `product/frontend/src/components/` | 定向 Vitest；生产 build；展示验收 |
@@ -48,7 +49,7 @@
 
 ## 事实与页面状态
 
-`ProductStatus` 决定长期区域状态、全部待办、显式主待办引用、最近 Agent 变化和最近可信结果，其中 `primary_attention_key` 只引用当前待办中的一项，`ProjectRevalidation` 是当前变化操作与路径的唯一来源；`ProjectPreparation` 提供七类准备清单、四态与下一项，`ProjectReadiness` 汇总当前可运行范围；Job/Run 决定运行生命周期；Runner progress 只提供可丢失的阶段展示；`ResultPresentation` 决定单次结果故事；`HistoryView` 决定跨次变化。前端可以保留当前选择的项目、页面、未提交文本和当前响应草稿，但不能把它们当作已确认后端事实，也不能从数组位置另选主任务。
+`BoundaryWorkspaceStatusService` 决定 1.1.0 当前区域状态和唯一主待办；`BusinessBoundaryView` 决定正式 Actor/Action/Effect/Permission 与 binding 状态；`BoundaryProposalView` 决定待审正文和 Decision。前端可以保留当前项目、页面和未提交 Boundary 草稿，但正式事实必须刷新 API。保留的 Job/Run、ResultPresentation 与 HistoryView 仍拥有旧发布事实，不属于当前检查入口。
 
 所有写操作要有清楚的 busy、成功、失败和恢复路径。需要长时间的多阶段过程必须展示稳定阶段边界，服务端有进度时流式呈现；没有权威进度时说明当前阶段和静默上限，不伪造百分比。首个主错误保留，cleanup warning 单独展示。
 
@@ -69,9 +70,9 @@
 - 普通用户先看到任务语言和当前主动作，内部 ID、reason code、Schema、路径和原始 Evidence 只进入明确命名的证据、报告或 Machine 入口，不建立通用“高级信息”收纳箱。
 - 真正 `<button>`、label、dialog 和状态文本保持可访问；自动 L5 通过 UI Automation InvokePattern 操作正式按钮，不为测试增加隐藏入口。
 - `product/frontend` 只保存源码/配置，禁止 node_modules、dist、测试缓存和 tsbuildinfo。
-- Workbench 不常驻显示产品版本；1.0.16 只在系统设置等明确诊断位置展示。
+- Workbench 不常驻显示产品版本；1.1.0 只在系统设置等明确诊断位置展示。
 - 桌面侧栏固定 224px，只承载四个产品区域；顶部固定 52px，承载应用切换、活动任务、AI 工具连接和“设置与更多”。AI 辅助、系统状态、模型、主题与安全退出都位于该菜单，退出是最后一项；菜单关闭后不得保留撑宽文档的旧浮层。
-- 官方示例只有一个启动语义：未接入工作台和应用接入页可以通向同一个由界鉴管理的启动动作，启动确认后直接进入 Agent 写错的问题版；一键配置继续调用正式角色、动作、身份、流程、权限和变化服务，但不生成 Run 或结论。活动样例的当前版本、当前版本结果、检查主动作和版本切换只在工作台统一控制器出现，不跨变化、权限和测试页面重复常驻。版本切换记录服务端时间并回到工作台；前端只有在可信 Run 形成于本次切换之后，才把结果显示为当前版本结论。展示模式只读取并重排当前正式事实，退出后恢复原项目与页面上下文。
+- 1.1.0 普通 Boundary 页面不展示或应用官方业务合同。官方 recipe 只作为后端内部冻结资产保留，等待未来正式 Sample context 通过普通 Proposal 与用户批准流程复用；不得按项目名猜 Sample，也不得把入口移到其他普通页面。
 - 视觉验收以 2560×1440、浏览器 100% 为主基准，工作台第一屏必须容纳应用、当前判断、唯一主任务、最近可信结果与三项摘要；同时核对原生亮色与暗色，并覆盖 1280px、600px 和长页面滚动时内容框架内粘滞的 `TaskActionBar`。普通结果与展示模式复用同一事实链和颜色语义。
 
 ## 直接验证

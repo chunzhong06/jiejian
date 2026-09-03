@@ -5,7 +5,7 @@ import { request } from './http'
 export type SystemStatus = {
   version?: string
   api: 'available' | 'unknown'
-  worker: 'running' | 'stopped' | 'unknown'
+  worker: 'running' | 'stopped' | 'unavailable' | 'unknown'
   browser: 'available' | 'unavailable' | 'unknown'
   recovered_jobs?: number
   environment?: {

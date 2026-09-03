@@ -2,10 +2,10 @@
 # 测试身份领域模型
 #
 # 定位
-#   已确认角色、受限登录状态元数据与后续安全配置编译之间的项目级事实。
+#   稳定 BusinessActor revision 与受限登录状态元数据之间的项目级事实。
 #
 # 职责
-#   表达测试账号归属｜约束 Cookie/Bearer 非秘密元数据｜维护准备时间与秘密引用。
+#   表达测试账号业务主体｜约束 Cookie/Bearer 非秘密元数据｜维护准备时间与秘密引用。
 #
 # 边界
 #   不等同 Contract Subject、WebExecutionIdentity 或运行时 Cookie Jar；不包含秘密正文。
@@ -20,14 +20,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from product.backend.core.identifiers import (
-    PROJECT_ID_PATTERN,
-    SHA256_PATTERN,
-    TEST_IDENTITY_ID_PATTERN,
-)
+from product.backend.core.business_boundary import ACTOR_ID_PATTERN
+from product.backend.core.identifiers import PROJECT_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
 
 
-_ROLE_CANDIDATE_ID_PATTERN = r"^role_[0-9a-f]{32}$"
 _SECRET_REF_PATTERN = (
     r"^cred:jiejian/test-identity/"
     r"[a-z][a-z0-9_-]{0,63}/tid_[0-9a-f]{32}/"
@@ -71,13 +67,9 @@ class TestIdentityCookie(TestIdentityModel):
 class TestIdentity(TestIdentityModel):
     identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    role_candidate_id: str = Field(pattern=_ROLE_CANDIDATE_ID_PATTERN)
-    role_canonical_key: str = Field(min_length=1, max_length=128)
-    role_display_name: str = Field(min_length=1, max_length=128)
+    actor_id: str = Field(pattern=ACTOR_ID_PATTERN)
+    actor_revision: int = Field(ge=1)
     label: str = Field(min_length=1, max_length=128)
-    confirmed_endpoint: str = Field(min_length=1, max_length=2048)
-    endpoint_source_fingerprint: str = Field(pattern=SHA256_PATTERN)
-    understanding_revision: int = Field(ge=0, le=1_000_000)
     auth_method: TestIdentityAuthMethod | None = None
     cookies: tuple[TestIdentityCookie, ...] = Field(default=(), max_length=32)
     bearer_secret_ref: str | None = Field(

@@ -7,6 +7,7 @@ from importlib import import_module
 
 _STORAGE_ORM_MODULES = (
     "product.backend.infra.storage.application_understanding",
+    "product.backend.infra.storage.business_boundaries",
     "product.backend.infra.storage.contracts",
     "product.backend.infra.storage.execution.jobs",
     "product.backend.infra.storage.execution.runs",

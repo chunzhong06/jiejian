@@ -5,7 +5,7 @@
 #   TestIdentity 非秘密元数据与 SQLite 关系记录之间的 Repository 边界。
 #
 # 职责
-#   持久化账号、角色和端点绑定｜保存 Cookie 元数据与秘密引用｜精确替换和删除。
+#   持久化账号与稳定 Actor revision 关联｜保存 Cookie 元数据与秘密引用｜精确替换和删除。
 #
 # 边界
 #   绝不保存 Cookie/Token 正文；秘密删除由应用服务先行完成，Repository 不访问 SecretStore。
@@ -23,6 +23,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -50,6 +51,11 @@ from product.backend.infra.storage.base import (
 class TestIdentityRow(Base):
     __tablename__ = "test_identities"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["actor_id", "actor_revision"],
+            ["business_actor_revisions.actor_id", "business_actor_revisions.revision"],
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "length(identity_id) = 36 AND identity_id GLOB 'tid_[0-9a-f]*'",
             name="test_identity_id_format",
@@ -69,13 +75,9 @@ class TestIdentityRow(Base):
     project_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("projects.project_id"), nullable=False
     )
-    role_candidate_id: Mapped[str] = mapped_column(String(37), nullable=False)
-    role_canonical_key: Mapped[str] = mapped_column(String(128), nullable=False)
-    role_display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    actor_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
-    confirmed_endpoint: Mapped[str] = mapped_column(String(2048), nullable=False)
-    endpoint_source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
-    understanding_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     auth_method: Mapped[str | None] = mapped_column(String(32), nullable=True)
     bearer_secret_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     prepared_at_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -175,13 +177,9 @@ class TestIdentityRepository:
         return {
             "identity_id": record.identity_id,
             "project_id": record.project_id,
-            "role_candidate_id": record.role_candidate_id,
-            "role_canonical_key": record.role_canonical_key,
-            "role_display_name": record.role_display_name,
+            "actor_id": record.actor_id,
+            "actor_revision": record.actor_revision,
             "label": record.label,
-            "confirmed_endpoint": record.confirmed_endpoint,
-            "endpoint_source_fingerprint": record.endpoint_source_fingerprint,
-            "understanding_revision": record.understanding_revision,
             "auth_method": record.auth_method.value if record.auth_method else None,
             "bearer_secret_ref": record.bearer_secret_ref,
             "prepared_at_us": record.prepared_at_us,
@@ -213,13 +211,9 @@ class TestIdentityRepository:
             {
                 "identity_id": row.identity_id,
                 "project_id": row.project_id,
-                "role_candidate_id": row.role_candidate_id,
-                "role_canonical_key": row.role_canonical_key,
-                "role_display_name": row.role_display_name,
+                "actor_id": row.actor_id,
+                "actor_revision": row.actor_revision,
                 "label": row.label,
-                "confirmed_endpoint": row.confirmed_endpoint,
-                "endpoint_source_fingerprint": row.endpoint_source_fingerprint,
-                "understanding_revision": row.understanding_revision,
                 "auth_method": (
                     TestIdentityAuthMethod(row.auth_method)
                     if row.auth_method is not None

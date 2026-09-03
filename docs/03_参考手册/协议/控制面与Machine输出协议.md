@@ -4,28 +4,30 @@
 
 ## 先理解：多个入口只有一套产品状态
 
-界鉴可以从 GUI、CLI 或自动化脚本进入，但这些入口不能各自维护业务进度。`ProductStatusService` 从 Project、Readiness、活动 Job/Run 和最近可信结果形成统一工作台状态；GUI 与 CLI `status` 都消费这份投影。检查完成后，`ResultPresentation` 从已发布 Run/Evidence/Finding 形成可读结果；GUI 结果页与 CLI result 命令分别渲染同一个对象。
+界鉴可以从 GUI、CLI 或自动化脚本进入，但这些入口不能各自维护业务进度。1.1.0 当前 GUI 状态由 `BoundaryWorkspaceStatusService` 从 Project、ApplicationUnderstanding、正式 Business Boundary 与 pending Proposal 形成；保留的已发布结果读取仍由 `ResultPresentation` 负责，但完整新检查主链尚未重新接入当前产品入口。
 
 ```text
 ApplicationCore / Published facts
-  → ProductStatus / ProjectReadiness / ResultPresentation / HistoryView
+  → BoundaryWorkspaceStatus / BusinessBoundaryView
   → loopback API envelope → GUI
   → CLI Human / Machine v1
   → MCP Streamable HTTP → 固定工具白名单
-  → Report publication（独立不可变交付物）
+  → 保留的 ResultPresentation / Report publication（只读已发布事实）
 ```
 
 页面文案、终端颜色或 JSON 格式都不能反向改变事实。Report 是独立不可变交付物，也不由 CLI stdout 代替。
 
 ## ProductStatus 与 GUI
 
-`ProductStatus` 只读汇总当前项目、主控工作台、当前辅助模块、全部待办、当前主待办引用、最近 Agent 变化、`ProjectRevalidation`、`ProjectRepair` 和最近可信结果，不保存独立向导进度。当前辅助模块是变化、权限和测试，但它们不与工作台同级。`primary_attention_key` 只显式引用本次 `attention_items` 中的一项，Workbench 据此突出一个主任务；全部待办仍然存在于对应模块。`ProjectRevalidation` 只从 SourceChange inspection、准备度与可信结果形成 NO_CHANGE、REVIEW_REQUIRED、PREPARATION_REQUIRED、READY、VERIFIED 或 STALE；`ProjectRepair` 只从已发布修复要求、关联变化、项目重验和独立复验形成当前修复状态。GUI 按服务端状态、主待办引用、change ID 和路径投影当前操作，不能按待办数组位置、变化列表位置、Sample repair ID、mapping count 或最近结果重新推导。模块状态只表达当前事实是否可用、需处理、运行中、已有结果或暂无数据；多个缺口可以并列。详细任务路由只归入对应模块，不重新成为一级导航。浏览器本地状态只记当前选择、页面、未提交权限文本和当前响应草稿；刷新后由 API 恢复权威事实。Workbench 不常驻显示产品版本，产品版本在 `/settings/system` 等明确诊断位置展示。
+1.1.0 沿用既有 ProductStatus DTO 形状作为 UI 过渡，但其当前服务只投影本版事实：应用未连接、源码未授权、存在 Candidate 且尚无 Boundary、存在 pending Proposal、或已经确认 Boundary。它不从旧 Permission/Preparation writer 读取状态，不发布 tests ready、check runnable 或 delivery ready。变化与测试区域明确为 `BLOCKED`；浏览器本地状态只保存当前选择、页面和未提交 Boundary 草稿，正式 Proposal、Decision 与业务边界均从 API 恢复。
 
-GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.0.16。
+Business Boundary API 位于 `/api/projects/{project_id}/business-boundaries`，只提供 current、preview 与 Proposal 列表/创建/读取/批准/拒绝。写请求只允许 Proposal create 和 Human Decision；没有 official recipe 普通路由、PATCH Proposal、旧 matrix cell writer、candidate decide 或自动 approve。Approve body 只含预期 `proposal_fingerprint` 与 reason，服务端从路径取得 proposal/project，并固定审批渠道。current 响应只含精确匹配当前 ACTIVE Actor/Action revision 与 Effect catalog 的 latest ACTIVE Permission；历史 revision 仍由历史读取入口保存。
 
-`ProjectPreparation` 顶层 `next_path/next_label` 是准备续接的唯一导航合同，item 只用于定位 AUTO 动作。详细页完成本地写入后通过工作区刷新取得新的 `{status, readiness, runs}`，不能携带进入页面前固定的下一步。权限矩阵以 `can_confirm`、`requires_human_confirmation`、`confirmation_blockers` 和 `required_confirmation_count` 明确发布操作性，GUI 不从 review reason 或数量关系推导。
+GUI 通过固定 loopback API 读取 envelope。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.1.0。
 
-Delivery Check 是独立的显式 GUI/API 查询，不进入 ProductStatus 常规读取。每次 `POST /api/projects/{project_id}/delivery-check` 都重新核对 live 源码、当前权限身份、ProjectRepair、ProjectRevalidation 与最近可信完整结果，返回 READY、BLOCKED 或 INCONCLUSIVE 及可选下一步；不持久化、不缓存，也不提供 CLI/MCP 写入口。
+保留的 `ProjectPreparation`、权限矩阵和 CheckPreview DTO 不属于 1.1.0 current 写链。GUI 不得因为这些类型仍存在就重新注册旧权限审批或检查入口。
+
+Delivery Check 在 1.1.0 当前 GUI 明确不可用；不得用旧 API 查询结果替代 Business Boundary 状态或伪造本版可交付结论。
 
 ## CLI Human 与 Machine
 
@@ -48,11 +50,11 @@ CLI `--version` 直接输出 `product.backend.__version__` 并退出，它是产
 
 CLI 与 Machine 输出是控制和投影通道，不是审批人。公开命令树不提供 PermissionIntent ALLOW/DENY 写入，也不提供角色/动作候选的确认、拒绝或手工创建；自动化只能准备既有事实、执行已冻结操作或读取结果。
 
-普通命令只围绕 `status / serve`、`application list/show/remove`、`check preview/prepare/run/cancel`、`result show/report`、`history` 与 `system doctor/repair/clean` 组织。首次目录接入、账号与登录、业务流程录制、MCP 配对、模型密钥和各类人工审批只在 GUI 中完成；Agent 自动化使用 MCP。
+普通命令当前只公开 `serve`、产品版本与 `system doctor/repair/clean`。`status`、`application`、`change`、`check`、`result` 和 `history` 在 1.1.0 暂不公开；Business Boundary 创建与 Proposal 决定只在 GUI/loopback Human API 完成，Agent 自动化不能取得审批能力。
 
 ## MCP Streamable HTTP 与工具输出
 
-MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。首次创建的 Authorization Bearer 只经精确 SecretStore 引用长期保存，后续启动自动恢复 READ。GUI control session Cookie、模型 Provider Key 和其他 SecretStore 引用都不能替代该令牌；SDK 继续独立校验 Host 与 Origin。
+MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。1.1.0 当前没有装配完整执行 Worker，System、`/ready` 与 `jiejian_system_status` 统一报告 `worker=unavailable`、`recovered_jobs=0`，但控制面仍可 ready。首次创建的 Authorization Bearer 只经精确 SecretStore 引用长期保存，后续启动自动恢复 READ。GUI control session Cookie、模型 Provider Key 和其他 SecretStore 引用都不能替代该令牌；SDK 继续独立校验 Host 与 Origin。
 
 GUI 读取的 `MCPAccessView` 明确区分凭据与连接：`DISABLED → CREDENTIAL_READY → AUTHENTICATED → CONNECTED` 是正常建立过程，认证失败投影为 `CREDENTIAL_REJECTED`，人工暂停投影为 `PAUSED`。`last_authenticated_at_us` 只证明 Bearer 通过，`last_seen_at_us` 才代表 SDK 已观测到完成 initialize 的客户端活动；状态页面不能把凭据生成、配置复制或客户端自报当成连接成功。恢复、轮换、暂停和 shutdown 都清除旧活动与逐 Project 提升，避免上一客户端或上一 serve 冒充当前连接。
 

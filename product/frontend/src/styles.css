@@ -17,6 +17,60 @@
   --motion-instant: 90ms; --motion-fast: 140ms; --motion-normal: 180ms; --motion-slow: 220ms; --motion-emphasis: 280ms;
   --ease-standard: cubic-bezier(.2, 0, 0, 1);
 }
+
+/* 业务边界沿用现有卡片、语义状态与响应式节奏，不建立新的视觉体系。 */
+.boundary-page { display: grid; gap: 20px; }
+.boundary-loading { min-height: 220px; display: grid; place-content: center; justify-items: center; gap: 12px; }
+.boundary-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.boundary-section-heading .ant-typography { margin-bottom: 0; }
+.current-boundary,
+.current-boundary-empty,
+.boundary-editor,
+.boundary-review,
+.boundary-new-proposal { border: 1px solid var(--color-border); border-radius: var(--radius-large); background: var(--color-surface); padding: 22px; }
+.current-boundary-actors { margin: 16px 0; display: flex; gap: 12px; align-items: baseline; }
+.current-boundary-actions,
+.boundary-editor-list { display: grid; gap: 14px; }
+.current-boundary-action,
+.boundary-editor-card { border: 1px solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-surface); padding: 18px; display: grid; gap: 12px; }
+.current-boundary-action .ant-typography { margin-bottom: 0; }
+.current-boundary-effects ul,
+.current-boundary-permissions ul,
+.boundary-review-grid ul { margin: 8px 0 0; padding-left: 20px; }
+.current-boundary-effects li,
+.current-boundary-permissions li,
+.boundary-review-grid li { margin: 7px 0; }
+.current-boundary-effects li span,
+.current-boundary-permissions li span,
+.boundary-review-grid li span { display: block; color: var(--color-secondary); margin-top: 2px; }
+.boundary-candidate-basis { border-radius: var(--radius-medium); background: var(--color-surface-subtle); padding: 16px; display: grid; gap: 10px; }
+.boundary-candidate-basis > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.boundary-candidate-chip { display: inline-flex; flex-direction: column; gap: 2px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface); padding: 7px 12px; }
+.boundary-candidate-chip small { color: var(--color-secondary); }
+.boundary-editor-row,
+.boundary-effect-editor,
+.boundary-permission-editor { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(180px, .6fr); gap: 10px; }
+.boundary-effect-editor,
+.boundary-permission-editor { border-left: 3px solid var(--color-border-strong); padding: 12px 0 12px 14px; }
+.boundary-effect-editor .ant-input-textarea,
+.boundary-permission-editor .ant-checkbox-group { grid-column: 1 / -1; }
+.boundary-editor-submit,
+.boundary-new-proposal { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.boundary-review { display: grid; gap: 16px; }
+.boundary-review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.boundary-review-grid article { border: 1px solid var(--color-border); border-radius: var(--radius-medium); padding: 16px; background: var(--color-surface); }
+.boundary-review-actions { justify-content: flex-end; }
+
+@media (max-width: 760px) {
+  .boundary-section-heading,
+  .boundary-new-proposal { align-items: stretch; flex-direction: column; }
+  .boundary-editor-row,
+  .boundary-effect-editor,
+  .boundary-permission-editor,
+  .boundary-review-grid { grid-template-columns: 1fr; }
+  .boundary-effect-editor .ant-input-textarea,
+  .boundary-permission-editor .ant-checkbox-group { grid-column: auto; }
+}
 :root[data-theme='dark'] {
   --color-bg: #0e1214; --color-surface: #151a1d; --color-surface-subtle: #1b2226; --color-surface-hover: #222b30; --color-text: #f2f4f5; --color-secondary: #a5afb3; --color-tertiary: #768389;
   --color-border: #293237; --color-border-strong: #38434a; --color-primary: #6bb5bc; --color-primary-light: #183338;

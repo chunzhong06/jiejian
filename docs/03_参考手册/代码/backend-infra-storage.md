@@ -24,6 +24,18 @@
 - `ensure_storage_payload_safe(value, known_secrets) -> None`
 主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.errors`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `typing`
 
+### `product/backend/infra/storage/business_boundaries.py`
+- `class BusinessActorRevisionRow`
+- `class BusinessActorRow`
+- `class BusinessActionRevisionRow`
+- `class BusinessActionRow`
+- `class BoundaryProposalRow`
+- `class BoundaryProposalDecisionRow`
+- `class ActorImplementationBindingRow`
+- `class ActionImplementationBindingRow`
+- `class BusinessBoundaryRepository`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.boundary_proposal`, `product.backend.core.business_boundary`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
+
 ### `product/backend/infra/storage/contracts.py`
 - `class ContractVersionRow`
 - `class ContractVersionRepository`
@@ -32,7 +44,7 @@
 ### `product/backend/infra/storage/db.py`
 - `SQLITE_BUSY_TIMEOUT_MS`
 - `_CURRENT_MIGRATION_REVISION`
-- `_UPGRADEABLE_MIGRATION_REVISIONS`
+- `_LEGACY_1_X_MIGRATION_REVISIONS`
 - `_INCOMPATIBLE_DATABASE_MESSAGE`
 - `_EXPECTED_TRIGGER_SQL`
 - `default_database_path(var_dir) -> Path`
@@ -40,7 +52,7 @@
 - `create_sqlite_engine(database_path) -> Engine`
 - `create_session_factory(engine) -> sessionmaker[Session]`
 - `upgrade_database(database_path) -> None`
-主要 import / dot-source：`__future__`, `alembic`, `alembic.config`, `collections`, `collections.abc`, `contextlib`, `importlib.resources`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.storage.base`, `product.backend.infra.storage.orm_registry`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `sqlalchemy.pool`, `sqlite3`, `tempfile`
+主要 import / dot-source：`__future__`, `alembic`, `alembic.config`, `collections`, `collections.abc`, `contextlib`, `importlib.resources`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.storage.base`, `product.backend.infra.storage.orm_registry`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `sqlalchemy.pool`, `sqlite3`
 
 ### `product/backend/infra/storage/execution/job_control.py`
 - `_NONTERMINAL_RUNS`
@@ -131,10 +143,8 @@
 ### `product/backend/infra/storage/setup/permission_intents.py`
 - `class PermissionIntentRevisionRow`
 - `class ProjectPolicyStateRow`
-- `class IntentImplementationBindingRow`
-- `class IntentProposalRow`
 - `class PermissionIntentRepository`
-主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
+主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.permission_intent`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
 
 ### `product/backend/infra/storage/setup/test_identities.py`
 - `class TestIdentityRow`
@@ -160,6 +170,6 @@
 
 ### `product/backend/infra/storage/unit_of_work.py`
 - `class StorageUnitOfWork`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.storage.application_understanding`, `product.backend.infra.storage.contracts`, `product.backend.infra.storage.execution.job_control`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.execution_profiles`, `product.backend.infra.storage.llm`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.evidence`, `product.backend.infra.storage.results.finalizations`, `product.backend.infra.storage.results.findings`, `product.backend.infra.storage.results.gating`, `product.backend.infra.storage.setup`, `product.backend.infra.storage.source_changes`, `sqlalchemy.exc`, `sqlalchemy.orm`, `types`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.storage.application_understanding`, `product.backend.infra.storage.business_boundaries`, `product.backend.infra.storage.contracts`, `product.backend.infra.storage.execution.job_control`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.execution_profiles`, `product.backend.infra.storage.llm`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.evidence`, `product.backend.infra.storage.results.finalizations`, `product.backend.infra.storage.results.findings`, `product.backend.infra.storage.results.gating`, `product.backend.infra.storage.setup`, `product.backend.infra.storage.source_changes`, `sqlalchemy.exc`, `sqlalchemy.orm`, `types`
 
 <!-- GENERATED:END -->

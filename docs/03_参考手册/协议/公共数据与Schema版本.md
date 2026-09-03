@@ -45,7 +45,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 ## 兼容规则
 
-当前不兼容旧开发数据库、Profile、Evidence、Artifact、Report 或任意旧 wire format。除已发布 `PersistedExecutionRequest` 格式 1 的严格只读历史入口外，每个根只接受上表当前格式，不提供 fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库从签入的 `0001_web_v1` 正式基线经显式 migration 升级到当前 head；数据库 revision 与根文档版本不能互相替代。
+当前不兼容旧开发数据库、Profile、Evidence、Artifact、Report 或任意旧 wire format。除已发布 `PersistedExecutionRequest` 格式 1 的严格只读历史入口外，每个根只接受上表当前格式，不提供 fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库只接受签入的 `0001_business_boundary_v2` fresh 基线与精确结构；旧 1.x revision 只读拒绝。数据库 revision 与根文档版本不能互相替代。
 
 ## 版本规则与 Schema 真源
 

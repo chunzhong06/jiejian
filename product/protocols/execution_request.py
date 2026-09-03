@@ -23,7 +23,14 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.identifiers import (
@@ -31,7 +38,7 @@ from product.backend.core.identifiers import (
     SHA256_PATTERN,
     TEST_IDENTITY_ID_PATTERN,
 )
-from product.backend.core.permission_intent import PermissionIntentRelation, ProtectedEffect
+from product.backend.core.permission_intent import PermissionIntentRelation
 from product.backend.core.repair import (
     RepairAllowControlIdentity,
     RepairContractReference,
@@ -39,13 +46,57 @@ from product.backend.core.repair import (
     RepairIntentIdentity,
     RepairRegressionControlIdentity,
 )
-from product.backend.core.verification.permissions import PermissionExpectation
+from product.backend.core.verification.permissions import (
+    PermissionExpectation,
+    SecurityEffectKind,
+)
 from product.protocols.execution import ExecutionBudget
 from product.protocols.runner import RUNNER_INPUT_MAX_BYTES
 from product.protocols.web.profile import (
     WebExecutionSnapshot,
     required_web_secret_refs,
 )
+
+
+_PROJECTION_PATH = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
+
+
+class ProtectedEffect(BaseModel):
+    """已发布执行请求内冻结的效果摘要；不属于 Permission v2 领域真源。"""
+
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, strict=True, hide_input_in_errors=True
+    )
+
+    kind: SecurityEffectKind
+    resource_type: str = Field(min_length=1, max_length=128)
+    business_label: str = Field(min_length=1, max_length=256)
+    protected_fields: tuple[str, ...] = Field(default=(), max_length=64)
+
+    @field_validator("resource_type", "business_label")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        if value != value.strip() or any(ord(char) < 32 for char in value):
+            raise ValueError("protected effect text must be trimmed and printable")
+        return value
+
+    @field_validator("protected_fields")
+    @classmethod
+    def validate_fields(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(values)) != len(values) or any(
+            _PROJECTION_PATH.fullmatch(value) is None for value in values
+        ):
+            raise ValueError("protected fields must be unique bounded projections")
+        return values
+
+    @model_validator(mode="after")
+    def validate_kind_fields(self) -> ProtectedEffect:
+        if self.kind is SecurityEffectKind.DATA_DISCLOSURE:
+            if not self.protected_fields:
+                raise ValueError("data disclosure effect requires protected fields")
+        elif self.protected_fields:
+            raise ValueError("protected fields apply only to data disclosure")
+        return self
 
 
 class PermissionPolicySnapshotEntry(BaseModel):

@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError } from '../api/http'
 import { projectsApi, type ProductStatusDto, type ProjectDto, type ProjectReadinessDto } from '../api/projects'
-import { runsApi, type RunDto } from '../api/runs'
+import type { RunDto } from '../api/runs'
 import { browserState } from './browserState'
 
 export type WorkspaceSnapshot = {
@@ -53,10 +53,8 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
       return undefined
     }
     try {
-      const [nextStatus, nextRuns] = await Promise.all([
-        projectsApi.status(project.project_id),
-        runsApi.runs(project.project_id),
-      ])
+      const nextStatus = await projectsApi.status(project.project_id)
+      const nextRuns: RunDto[] = []
       setStatus(nextStatus)
       setReadiness(nextStatus.readiness)
       setRuns(nextRuns)

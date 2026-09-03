@@ -1,10 +1,10 @@
 // 工作台突出后端指定的主待办，并保留可自由进入的变化、权限和测试模块。
 
 import { Alert, Button, Divider, Modal, Typography } from 'antd'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ApiError } from '../../api/http'
 import type { OfficialExperienceDto, OfficialScenarioVersion } from '../../api/experience'
-import { projectsApi, type DeliveryCheckDto, type ProductStatusDto, type ProjectDto, type ProjectReadinessDto } from '../../api/projects'
+import type { ProductStatusDto, ProjectDto, ProjectReadinessDto } from '../../api/projects'
 import type { RunDto } from '../../api/runs'
 import type { SystemStatus } from '../../api/system'
 import { formatTimestamp, verdictLabel } from '../../app/presentation'
@@ -62,9 +62,6 @@ export function WorkbenchPage({
   onError: (error: ApiError) => void
 }) {
   const [startConfirmOpen, setStartConfirmOpen] = useState(false)
-  const [deliveryBusy, setDeliveryBusy] = useState(false)
-  const [delivery, setDelivery] = useState<DeliveryCheckDto | null>(null)
-  useEffect(() => { setDelivery(null) }, [selected?.project_id])
   const latestResult = status?.latest_result ?? null
   const trustedRun = latestResult ? runs.find((item) => item.run_id === latestResult.run_id) : undefined
   const latestChange = status?.latest_change ?? null
@@ -94,18 +91,7 @@ export function WorkbenchPage({
     <Typography.Paragraph>启动后可一键应用公开样例配置，不需要逐项填写角色、流程和权限表。</Typography.Paragraph>
     <Typography.Paragraph strong>启动示例不会开始真实检查，也不会预先生成结论。</Typography.Paragraph>
   </Modal>
-  const checkDelivery = async () => {
-    if (!selected?.project_id) return
-    setDeliveryBusy(true)
-    try {
-      setDelivery(await projectsApi.deliveryCheck(selected.project_id))
-    } catch (error) {
-      setDelivery(null)
-      onError(error as ApiError)
-    } finally {
-      setDeliveryBusy(false)
-    }
-  }
+  void onError
 
   if (!selected) return <div className="workbench-page">
     <PageTaskHeader title="工作台" description="接入应用后，界鉴会持续跟踪权限、测试条件、代码变化与可信结果。" status="等待接入应用" />
@@ -193,23 +179,15 @@ export function WorkbenchPage({
     <section className="workbench-domain-panel" aria-label="当前专项摘要">
       <div className="workbench-domain-grid">
         <article><Typography.Text className="workbench-secondary-label">变化与修复</Typography.Text><Typography.Title level={3}>{latestChange ? `${latestChange.actual_changed_path_count} 个文件发生变化` : '尚无变化记录'}</Typography.Title><Typography.Paragraph type="secondary">{latestChange ? `${latestChange.submitted_by}：${latestChange.reason}` : 'Agent 提交变化后，界鉴会核对真实磁盘差异和修复状态。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/changes')}>进入变化与修复</Button></article>
-        <article><Typography.Text className="workbench-secondary-label">权限边界</Typography.Text><Typography.Title level={3}>{readiness?.confirmed_permission_requirement_count ?? 0} 条已确认规则</Typography.Title><Typography.Paragraph type="secondary">{readiness?.permission_representative_gap_count ? `${readiness.permission_representative_gap_count} 条规则缺少可代表的测试路径。` : '在这里维护权限规则、测试账号和业务流程。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/permissions')}>进入权限边界</Button></article>
+        <article><Typography.Text className="workbench-secondary-label">权限边界</Typography.Text><Typography.Title level={3}>{readiness?.confirmed_permission_requirement_count ?? 0} 条已确认规则</Typography.Title><Typography.Paragraph type="secondary">{readiness?.confirmed_permission_requirement_count ? '业务权限已经独立确认；测试实现可以后续准备。' : '在这里建立稳定业务主体、动作、结果与允许/拒绝规则。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/permissions')}>进入权限边界</Button></article>
         <article><Typography.Text className="workbench-secondary-label">检查与结果</Typography.Text><Typography.Title level={3}>{latestResult?.verdict ? verdictLabel(latestResult.verdict) : '尚无可信结果'}</Typography.Title><Typography.Paragraph type="secondary">{latestResult ? latestResult.headline : '准备条件、运行检查和结果历史集中在同一模块。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/tests')}>进入检查与结果</Button></article>
       </div>
     </section>
 
     <section className="workbench-secondary-panel" aria-label="交付与最近事实">
       <div className="workbench-delivery-row">
-        <div><Typography.Text className="workbench-eyebrow">交付前检查</Typography.Text><Typography.Paragraph type="secondary">需要交付时，再核对当前源码、权限规则与最近可信检查是否属于同一版本。</Typography.Paragraph></div>
-        <Button loading={deliveryBusy} onClick={() => void checkDelivery()}>交付前检查</Button>
-        {delivery && <Alert
-          className="workbench-delivery-result"
-          type={delivery.decision === 'READY' ? 'success' : delivery.decision === 'BLOCKED' ? 'warning' : 'error'}
-          showIcon
-          message={delivery.decision === 'READY' ? '可以交付' : delivery.decision === 'BLOCKED' ? '暂不能交付' : '当前无法可靠完成交付检查'}
-          description={delivery.decision === 'READY' ? '当前磁盘源码、权限规则和最新可信完整检查属于同一版本。' : delivery.summary}
-          action={delivery.decision === 'BLOCKED' && delivery.next_path ? <Button onClick={() => onNavigate(delivery.next_path!)}>{delivery.next_label ?? '继续处理'}</Button> : undefined}
-        />}
+        <div><Typography.Text className="workbench-eyebrow">交付前检查</Typography.Text><Typography.Paragraph type="secondary">稳定业务边界已经可以确认；新的检查与交付主链尚未重新接入。</Typography.Paragraph></div>
+        <Alert type="info" showIcon message="当前版本暂不执行交付检查" description="1.1.0 不会用旧 Permission 适配器伪装测试或交付已经就绪。" />
       </div>
       <Divider />
       <div className="workbench-activity-section" aria-labelledby="workbench-activity-title">

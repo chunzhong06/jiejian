@@ -7,7 +7,7 @@ import { MaintenanceOperation, MaintenanceOperationResult, MaintenanceStatus, sy
 
 function label(value: unknown) {
   const raw = String(value ?? 'unknown')
-  return raw === 'available' || raw === 'running' ? '可用' : raw === 'stopped' || raw === 'unavailable' ? '不可用' : '未知'
+  return raw === 'available' || raw === 'running' ? '可用' : raw === 'unavailable' ? '尚未接入' : raw === 'stopped' ? '不可用' : '未知'
 }
 
 function bytes(value: number | undefined) {
@@ -72,6 +72,7 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       <Typography.Paragraph type="secondary">以下信息来自当前服务进程，用于确认界鉴没有误用用户级 Python 包或另一套工具链。</Typography.Paragraph>
       {python?.user_site_on_sys_path && <Alert type="error" showIcon message="检测到用户级 Python 包来源" description="请退出界鉴并重新运行 start.cmd，让启动器恢复项目环境隔离。" />}
       {issues.length > 0 && <Alert style={{ marginTop: 12 }} type="warning" showIcon message="运行环境存在异常" description={issues.join('；')} />}
+      {status.worker === 'unavailable' && <Alert style={{ marginTop: 12 }} type="info" showIcon message="完整检查 Worker 尚未重新接入当前业务边界架构。" description="控制面仍可用；正式 Worker、录制与检查运行将在后续版本重新接回。" />}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} sm={12} lg={6}><Statistic title="服务" value={label(status.api)} /></Col>
         <Col xs={24} sm={12} lg={6}><Statistic title="执行" value={label(status.worker)} /></Col>

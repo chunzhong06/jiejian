@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import sqlite3
-import tempfile
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -37,18 +36,19 @@ from product.backend.infra.storage.base import Base
 from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-_CURRENT_MIGRATION_REVISION = "0006_repair_contract_reference"
-_UPGRADEABLE_MIGRATION_REVISIONS = frozenset(
+_CURRENT_MIGRATION_REVISION = "0001_business_boundary_v2"
+_LEGACY_1_X_MIGRATION_REVISIONS = frozenset(
     {
         "0001_web_v1",
         "0002_remove_contract_workbench",
         "0003_permission_intent_ledger",
         "0004_recording_supplements",
         "0005_source_change_impacts",
+        "0006_repair_contract_reference",
     }
 )
 _INCOMPATIBLE_DATABASE_MESSAGE = (
-    "旧开发数据库或当前数据库结构与 Web V1 基线不兼容，请备份后重新初始化 var"
+    "当前运行数据属于界鉴 1.x 开发模型；1.1 使用新的业务边界模型，请创建新的运行数据目录。"
 )
 _EXPECTED_TRIGGER_SQL = {
     "projects_governed_binding_insert": (
@@ -177,7 +177,9 @@ def _check_database_compatibility(
     *,
     resource_root: Path | None = None,
 ) -> None:
-    """只读核验当前 head 或已签入的精确可升级基线。"""
+    """在任何 Alembic 写连接前只读核验 fresh/current 数据库并拒绝旧 1.x。"""
+
+    _ = resource_root
 
     if not path.exists():
         return
@@ -205,18 +207,8 @@ def _check_database_compatibility(
             if len(revisions) != 1:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
             revision = revisions[0]
-            if revision in _UPGRADEABLE_MIGRATION_REVISIONS:
-                if resource_root is None or not _matches_migration_revision(
-                    connection,
-                    revision,
-                    resource_root,
-                    path.parent,
-                ):
-                    raise JiejianError(
-                        ErrorCode.STORAGE_MIGRATION,
-                        _INCOMPATIBLE_DATABASE_MESSAGE,
-                    )
-                return
+            if revision in _LEGACY_1_X_MIGRATION_REVISIONS:
+                raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
             if revision != _CURRENT_MIGRATION_REVISION:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
             load_storage_orm_mappings()
@@ -266,42 +258,6 @@ def _check_database_compatibility(
         raise
     except (OSError, sqlite3.DatabaseError):
         raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE) from None
-
-
-def _matches_migration_revision(
-    connection: sqlite3.Connection,
-    revision: str,
-    resource_root: Path,
-    temporary_parent: Path,
-) -> bool:
-    """用同一签入 migration 构造参考结构，拒绝伪装成旧 revision 的漂移数据库。"""
-
-    handle = tempfile.NamedTemporaryFile(
-        prefix="jiejian-migration-reference-",
-        suffix=".db",
-        dir=temporary_parent,
-        delete=False,
-    )
-    reference_path = Path(handle.name)
-    handle.close()
-    try:
-        config = Config(str(resource_root / "alembic.ini"))
-        config.attributes["configure_logger"] = False
-        config.set_main_option(
-            "sqlalchemy.url",
-            f"sqlite+pysqlite:///{reference_path.as_posix()}",
-        )
-        command.upgrade(config, revision)
-        reference = sqlite3.connect(
-            f"file:{reference_path.as_posix()}?mode=ro",
-            uri=True,
-        )
-        try:
-            return _sqlite_schema_signature(connection) == _sqlite_schema_signature(reference)
-        finally:
-            reference.close()
-    finally:
-        reference_path.unlink(missing_ok=True)
 
 
 def _sqlite_schema_signature(

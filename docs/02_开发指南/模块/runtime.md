@@ -2,6 +2,8 @@
 
 > 状态：CURRENT。`product/backend/infra/runtime` 拥有持久 Job、attempt/lease/fencing、角色化子进程、Worker/Runner 生命周期、staging、恢复和运行诊断。
 
+1.1.0 当前控制面没有装配完整执行 Worker/Runner；System、`/ready` 与 MCP 明确报告 Worker `unavailable`。本模块说明保留实现及未来重新接入时仍必须满足的安全边界，不表示当前 GUI 可以运行检查。
+
 ## 职责
 
 Runtime 把 ApplicationCore 创建的冻结执行请求交给独立 Worker，再由 Worker 启动独立 Runner/Recording Process。它确保只有当前 attempt 和 fencing token 能完成 Job、过期执行不能覆盖发布事实、主错误与 cleanup 分离、进程和锁可以证明回收。

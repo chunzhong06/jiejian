@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage.execution.job_control import JobControlRepository
 from product.backend.infra.storage.application_understanding import ApplicationUnderstandingRepository
+from product.backend.infra.storage.business_boundaries import BusinessBoundaryRepository
 from product.backend.infra.storage.contracts import ContractVersionRepository
 from product.backend.infra.storage.llm import AIAssistanceSettingsRepository, LLMProfileRepository
 from product.backend.infra.storage.execution_profiles import ExecutionProfileRepository
@@ -49,6 +50,7 @@ class StorageUnitOfWork:
 
     projects: ProjectRepository
     application_understanding: ApplicationUnderstandingRepository
+    business_boundaries: BusinessBoundaryRepository
     contract_versions: ContractVersionRepository
     runs: RunRepository
     recordings: RecordingRepository
@@ -90,6 +92,10 @@ class StorageUnitOfWork:
         self._committed = False
         self.projects = ProjectRepository(session, self._known_secrets)
         self.application_understanding = ApplicationUnderstandingRepository(
+            session,
+            self._known_secrets,
+        )
+        self.business_boundaries = BusinessBoundaryRepository(
             session,
             self._known_secrets,
         )

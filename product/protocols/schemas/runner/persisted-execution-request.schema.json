@@ -2899,6 +2899,7 @@
     },
     "ProtectedEffect": {
       "additionalProperties": false,
+      "description": "已发布执行请求内冻结的效果摘要；不属于 Permission v2 领域真源。",
       "properties": {
         "business_label": {
           "maxLength": 256,

@@ -1,35 +1,9 @@
-# 项目能力区，公开项目生命周期、准备投影和就绪状态服务。
+# 项目能力区当前只公开 1.1.0 已装配的目录与归档生命周期。
 
-from .preparation import (
-    PreparationAutoAction,
-    PreparationExternalBlockerView,
-    PreparationItemKind,
-    PreparationItemStatus,
-    PreparationItemView,
-    ProjectPreparationService,
-    ProjectPreparationView,
-)
-from .repair import (
-    ProjectRepairService,
-    ProjectRepairStatus,
-    ProjectRepairView,
-    RepairTaskView,
-)
-from .delivery import DeliveryCheckService, DeliveryCheckView, DeliveryDecision
+from .catalog import ProjectCatalog
+from .lifecycle import ProjectLifecycleService
 
 __all__ = [
-    "PreparationAutoAction",
-    "PreparationExternalBlockerView",
-    "PreparationItemKind",
-    "PreparationItemStatus",
-    "PreparationItemView",
-    "ProjectPreparationService",
-    "ProjectPreparationView",
-    "ProjectRepairService",
-    "ProjectRepairStatus",
-    "ProjectRepairView",
-    "RepairTaskView",
-    "DeliveryCheckService",
-    "DeliveryCheckView",
-    "DeliveryDecision",
+    "ProjectCatalog",
+    "ProjectLifecycleService",
 ]

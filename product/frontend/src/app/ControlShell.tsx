@@ -11,18 +11,17 @@ import { systemApi } from '../api/system'
 import { ErrorRecovery } from '../components/ErrorRecovery'
 import { DesktopModuleNavigation, MobileModuleNavigation } from '../components/ModuleNavigation'
 import { AccessPage } from '../features/access/AccessPage'
+import { BusinessBoundaryPage } from '../features/boundaries/BusinessBoundaryPage'
 import { TestIdentityPage } from '../features/identities/TestIdentityPage'
 import { CheckHistoryPage } from '../features/checks/CheckHistoryPage'
 import { PermissionCheckPage } from '../features/checks/PermissionCheckPage'
 import { CheckResultsPage } from '../features/checks/CheckResultsPage'
 import { VerificationPage } from '../features/checks/VerificationPage'
-import { ChangesPage } from '../features/changes/ChangesPage'
 import { PreparationPage } from '../features/preparation/PreparationPage'
 import { RecordingPage } from '../features/recording/RecordingPage'
 import { PresentationMode } from '../features/presentation/PresentationMode'
 import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
 import { RuntimePage } from '../features/system/RuntimePage'
-import { TestingPage } from '../features/testing/TestingPage'
 import { ToolsPage } from '../features/tools/ToolsPage'
 import { WorkbenchPage } from '../features/workspace/WorkbenchPage'
 import { aiStatusLabel, AppHeader } from './AppHeader'
@@ -34,6 +33,10 @@ import '../styles.css'
 
 function MissingApplication({ onNavigate }: { onNavigate: () => void }) {
   return <Result status="info" title="先选择要检查的应用" subTitle="选择应用后才能查看这里的内容。" extra={<Button type="primary" onClick={onNavigate}>去应用接入</Button>} />
+}
+
+function CurrentUnavailableArea({ title, description, onBack }: { title: string; description: string; onBack: () => void }) {
+  return <Result status="info" title={title} subTitle={description} extra={<Button onClick={onBack}>返回工作台</Button>} />
 }
 
 export default function ControlShell() { return <HashRouter><ControlShellContent /></HashRouter> }
@@ -317,11 +320,11 @@ function ControlShellContent() {
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={readiness?.endpoint_status} officialSampleAvailable={experience?.available === true} officialSampleBusy={experienceBusy} onStartOfficialSample={startOfficialExperience} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspace.refreshCurrent() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
-    if (route === '/changes') return <ChangesPage project={selected} status={status} onError={notifyError} onNavigate={(path) => navigate(normalizeRoute(path))} />
+    if (route === '/changes') return <CurrentUnavailableArea title="变化与修复当前暂不可用" description="1.1.0 先建立稳定业务边界；完整 Agent 变化与重验主链将在后续版本重新接入。" onBack={() => navigate('/workspace')} />
     if (route === '/identities') return <TestIdentityPage key={`identities-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/permissions')} onStateChanged={workspace.refreshCurrent} onContinuePreparation={continuePreparation} />
     if (route === '/flows') return <RecordingPage key={`recording-${retryEpoch}`} project={selected} onError={notifyError} onBack={() => navigate('/permissions')} onStateChanged={workspace.refreshCurrent} onContinuePreparation={continuePreparation} />
-    if (route === '/permissions') return <PermissionCheckPage mode="permissions" key={`permissions-${retryEpoch}`} project={selected} runs={scenarioRuns} onRefresh={refreshRuns} onError={notifyError} onResolved={() => resolveRouteErrors(['/permissions'])} onNavigate={(path) => navigate(normalizeRoute(path))} onBack={() => navigate('/workspace')} onContinuePreparation={continuePreparation} />
-    if (route === '/tests') return status && readiness ? <TestingPage status={status} readiness={readiness} runs={scenarioRuns} latestResult={currentLatestResult} onNavigate={(path) => navigate(path)} /> : <MissingApplication onNavigate={() => navigate('/application')} />
+    if (route === '/permissions') return <BusinessBoundaryPage key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onStateChanged={workspace.refreshCurrent} onBack={() => navigate('/workspace')} />
+    if (route === '/tests') return <CurrentUnavailableArea title="当前不可检查" description="稳定业务权限已经可以独立确认；新的测试、执行与证据主链尚未重新接入，本版不会恢复旧权限写入口。" onBack={() => navigate('/workspace')} />
     if (route === '/preparation') return readiness ? <PreparationPage readiness={readiness} onPrepareSafe={prepareCurrentProject} onNavigate={(path) => navigate(normalizeRoute(path))} /> : <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/validation') {
       if (!status) return <Result status="info" title="正在确认当前检查状态" subTitle="界鉴会先核对代码变化、权限规则和测试准备，再开放验证运行。" />
@@ -337,7 +340,7 @@ function ControlShellContent() {
     if (route === '/verification') return <VerificationPage key={`verification-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/results')} onHistory={() => navigate('/history')} />
     return <CheckResultsPage key={`results-${retryEpoch}`} run={activeRun} onError={notifyError} onBack={() => navigate('/tests')} onHistory={() => navigate('/history')} onVerification={() => navigate('/verification')} onNavigate={(path) => navigate(normalizeRoute(path))} repair={status?.repair} inconclusiveRecovery={status?.inconclusive_recovery} />
   }
-  if (shutdownRequested) return <Result status="success" title="界鉴正在安全退出" subTitle="服务、Worker 和受控浏览器清理完成后，可以关闭此页面；下次启动会自动检查异常中断记录。" />
+  if (shutdownRequested) return <Result status="success" title="界鉴正在安全退出" subTitle="服务和受控浏览器清理完成后，可以关闭此页面；下次启动会自动检查异常中断记录。" />
   if (presentationOpen && experience?.active && selected && experience.project_id === selected.project_id) return <PresentationMode
     experience={experience}
     projectName={selected.name?.trim() || experience.display_name}
@@ -383,7 +386,7 @@ function ControlShellContent() {
         }
       }}
     >
-      界鉴会先停止服务、Worker 和受控浏览器，并保留可恢复的任务记录。
+      界鉴会先停止服务和受控浏览器，并保留可恢复的任务记录。
     </Modal>
     <LLMSettingsDrawer open={settingsOpen} profiles={llmProfiles} aiSettings={aiSettings} onClose={() => setSettingsOpen(false)} onChanged={systemState.setProfiles} onSettingsChanged={setAiSettings} onError={notifyError} />
   </Layout>

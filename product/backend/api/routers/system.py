@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 
 from product.backend import __version__
 from product.backend.composition import ApplicationCore
-from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.infra.runtime.diagnostics import runtime_environment_details
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import default_database_path
@@ -19,7 +18,6 @@ from product.backend.api.envelope import ApiResponse, data_response
 
 def build_system_router(
     context: ApplicationCore,
-    workers: LocalWorkerSupervisor,
     *,
     shutdown_callback=None,
 ) -> APIRouter:
@@ -37,7 +35,7 @@ def build_system_router(
         return {
             "schema_version": "1",
             "status": "ready",
-            "worker": "running" if workers.is_running() else "stopped",
+            "worker": "unavailable",
         }
 
     @router.get("/api/system/status", response_model=ApiResponse)
@@ -47,10 +45,10 @@ def build_system_router(
             {
                 "version": __version__,
                 "api": "available",
-                "worker": "running" if workers.is_running() else "stopped",
+                "worker": "unavailable",
                 "browser": environment["playwright"]["status"],
                 "environment": environment,
-                "recovered_jobs": workers.recovered_jobs,
+                "recovered_jobs": 0,
             }
         )
 
@@ -140,7 +138,7 @@ class HealthResponse(ApiModel):
 class ReadyResponse(ApiModel):
     schema_version: Literal["1"] = "1"
     status: Literal["ready"]
-    worker: Literal["running", "stopped"]
+    worker: Literal["running", "stopped", "unavailable"]
 
 
 class MaintenanceOperationRequest(ApiModel):

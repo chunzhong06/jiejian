@@ -59,7 +59,7 @@ const officialExperience = { available: true, display_name: '协作空间', unav
 
 const common = {
   runs: [],
-  systemStatus: { api: 'available' as const, worker: 'running' as const, browser: 'available' as const },
+  systemStatus: { api: 'available' as const, worker: 'unavailable' as const, browser: 'available' as const },
   experience: officialExperience,
   experienceBusy: false,
   onStartExperience: vi.fn().mockResolvedValue(true),
@@ -94,6 +94,7 @@ describe('WorkbenchPage', () => {
     expect(within(trustedResult).getByText('当前范围已检查。')).toBeInTheDocument()
     expect(screen.queryByText('AI 工具')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '启动官方示例' })).not.toBeInTheDocument()
+    expect(screen.queryByText('运行环境中有服务暂不可用，查看详情')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '进入变化与修复' }))
     expect(onNavigate).toHaveBeenCalledWith('/changes')
   })
@@ -126,19 +127,12 @@ describe('WorkbenchPage', () => {
     expect(screen.getByText(/不会开始真实检查/)).toBeInTheDocument()
   })
 
-  it('交付前检查只在用户点击时读取后端结论', async () => {
-    api.deliveryCheck.mockResolvedValue({
-      project_id: 'p1', decision: 'BLOCKED', summary: '当前磁盘源码尚未完成独立检查。',
-      reason_codes: ['CURRENT_SOURCE_NOT_VERIFIED'], next_path: '/validation', next_label: '检查当前源码', verified_run_id: null,
-    })
-    const onNavigate = vi.fn()
-    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={onNavigate} onError={vi.fn()} />)
+  it('明确说明新检查与交付主链当前不可用，不调用旧交付入口', () => {
+    render(<WorkbenchPage {...common} selected={{ project_id: 'p1', name: '演示应用' }} readiness={readiness} status={status} onNavigate={vi.fn()} onError={vi.fn()} />)
 
     expect(api.deliveryCheck).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '交付前检查' }))
-    await waitFor(() => expect(api.deliveryCheck).toHaveBeenCalledWith('p1'))
-    expect(screen.getByText('暂不能交付')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '检查当前源码' }))
-    expect(onNavigate).toHaveBeenCalledWith('/validation')
+    expect(screen.getByText('当前版本暂不执行交付检查')).toBeInTheDocument()
+    expect(screen.getByText(/不会用旧 Permission 适配器/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '交付前检查' })).not.toBeInTheDocument()
   })
 })

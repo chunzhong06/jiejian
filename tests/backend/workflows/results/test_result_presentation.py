@@ -8,7 +8,7 @@ import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
-from product.backend.core.permission_intent import PermissionIntentRelation, ProtectedEffect
+from product.backend.core.permission_intent import PermissionIntentRelation
 from product.backend.core.repair import (
     RepairContractReference,
     RepairRequirementView,
@@ -52,6 +52,7 @@ from product.protocols import (
 from product.protocols.execution_request import (
     ChangeVerificationContext,
     PermissionPolicySnapshotEntry,
+    ProtectedEffect,
     build_permission_policy_snapshot,
 )
 

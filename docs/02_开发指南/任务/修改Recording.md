@@ -1,5 +1,7 @@
 # 修改 Recording
 
+> 1.1.0 CURRENT：普通 Recording 与完整 Worker 主链尚未接回当前产品入口；以下内容约束保留实现，不表示当前 GUI 可录制或运行检查。
+
 > 状态：CURRENT。用于修改真实业务流程录制、capture 控制、FlowDraft 审阅、Flow 编译和 Recording 失败收口。
 
 ## 这是什么

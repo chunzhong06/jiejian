@@ -1,80 +1,96 @@
-# 修改权限意图与 Agent 授权
+# 修改业务边界、权限意图与 Agent 授权
 
-> 状态：CURRENT。用于修改长期权限意图、Human Approval、实现映射、Agent proposal、MCP Oracle 边界和 Run 权限策略快照。
+> 状态：CURRENT。用于修改 1.1.0 Business Boundary、Permission v2、Human Approval、实现绑定和 Agent/自动化只读边界。
 
 ## 这是什么
 
-权限意图回答“哪类人对哪类业务资源执行什么动作应该允许或拒绝”。它是人类长期安全需求，不是当前源码候选、测试账号、HTTP 绑定或某次 Run 的临时配置。只有本机 GUI 的服务端批准事务可以改变这份真源；CLI、MCP、Machine、AI、Compiler、Check Prepare、Run 和 Recording 都只能读取、准备或提出不生效建议。权限自然语言草稿也只是当前响应内的待审建议，不属于长期账本。
+1.1.0 把权限真源拆成稳定业务语义与当前代码定位：
+
+```text
+ApplicationUnderstanding Candidate
+  → 仅用于发现和 implementation binding
+
+BusinessActor + BusinessAction + Effect catalog
+  → 人确认的稳定业务边界
+
+PermissionIntentRevision
+  → 谁对谁的资源执行什么动作，应 ALLOW 或 DENY，保护哪些 Effect
+```
+
+Candidate、测试账号、Flow、HTTP 绑定或某次 Run 都不能成为业务权限真源。只有本机 GUI 发起、服务端固定为 `LOCAL_GUI` 的 Proposal 决定事务可以改变正式语义；CLI、MCP、Machine、AI、Compiler、Worker 和 Runner 都不是审批人。
 
 ## 快速找到修改位置
 
 | 要改什么 | 先看哪里 | 直接测试 |
 | --- | --- | --- |
-| Revision、Approval、Binding、Proposal 领域模型 | `product/backend/core/permission_intent.py` | `tests/backend/workflows/security_setup/test_permission_intent_ledger.py` |
-| 矩阵、批准事务、proposal 与运行快照 | `product/backend/workflows/permission_intents.py` | `tests/backend/api/test_permission_intent_human_approval.py`、`tests/backend/api/test_permission_oracle_invariant.py` |
-| 人类文本权限草稿 | `product/backend/workflows/permission_drafting.py` | `tests/backend/workflows/test_permission_drafting.py` |
-| Human-only HTTP API | `product/backend/api/routers/permission_intents.py` | `tests/backend/api/test_permission_intent_approval_boundary.py` |
-| MCP 权限意图工具 | `product/backend/api/mcp.py` | `tests/backend/api/test_mcp.py`、`tests/backend/api/test_permission_oracle_invariant.py` |
-| Compiler 与冻结执行请求 | `product/backend/workflows/security_setup/compiler.py`、`product/protocols/execution_request.py` | `tests/backend/workflows/security_setup/test_compiler.py` |
-| 结果、历史与报告快照摘要 | `product/backend/workflows/results/presentation/`、`product/protocols/report.py` | `tests/backend/workflows/results/test_result_presentation.py`、`tests/backend/workflows/results/test_history.py`、`tests/backend/workflows/results/test_reports.py` |
-| 修复要求与同考题复验 | `product/backend/core/repair.py`、`product/backend/workflows/results/repair.py` | `tests/backend/workflows/results/test_repair_contracts.py` |
-| 权限确认与 proposal 页面 | `product/frontend/src/features/checks/PermissionCheckPage.tsx`、`product/frontend/src/api/permissionIntents.ts` | `product/frontend/src/features/checks/PermissionCheckPage.test.tsx` |
+| Actor、Action、Effect 与 implementation binding | `product/backend/core/business_boundary.py` | `tests/backend/core/test_business_boundary.py` |
+| 不可变 Proposal、指纹与 Decision | `product/backend/core/boundary_proposal.py` | `tests/backend/workflows/business_boundaries/` |
+| Permission v2 revision 与 policy state | `product/backend/core/permission_intent.py` | `tests/backend/workflows/business_boundaries/` |
+| Proposal/Approval 原子事务 | `product/backend/workflows/business_boundaries/service.py` | `tests/backend/api/test_business_boundaries.py` |
+| Storage 与数据库结构 | `product/backend/infra/storage/business_boundaries.py`、`product/backend/infra/storage/setup/permission_intents.py` | `tests/backend/infra/storage/test_migration_baseline.py` |
+| Human-only loopback API | `product/backend/api/routers/business_boundaries.py` | `tests/backend/api/test_business_boundaries.py` |
+| 当前权限页面 | `product/frontend/src/features/boundaries/`、`product/frontend/src/api/businessBoundaries.ts` | `product/frontend/src/features/boundaries/BusinessBoundaryPage.test.tsx` |
+| Agent/MCP 不变量 | `product/backend/api/mcp.py` | `tests/backend/api/test_permission_oracle_invariant.py`、`tests/architecture/test_business_boundary_v2.py` |
 
-## 长期账本怎样工作
+## Candidate 的责任
 
-`PermissionIntentRevision` 按稳定 `intent_id` 追加不可变 revision。语义包含 ACTIVE/RETIRED、主体/动作/资源所有者业务显示名、资源关系、ALLOW/DENY 和受保护效果；`intent_hash` 只覆盖这些语义，不包含审批人、candidate、测试账号、运行或时间。`ProjectPolicyState.policy_epoch` 从 0 开始，只有 Human GUI 批准真实语义变化时递增。对已有要求选择“未确认”表示追加 RETIRED revision，不是删除历史。
+`preview_from_discovery()` 读取 ApplicationUnderstanding 的角色与动作 Candidate，只输出未 stale 且没有被用户明确 `REJECTED` 的候选。HIGH/MEDIUM 只可作为前端默认建议，LOW 只列出而不自动采用。多个 Candidate 合并为一个业务主体或动作必须由用户明确操作；名称相似不构成合并依据。
 
-`HumanApproval` 由服务端写入固定 `LOCAL_GUI` 身份、审批时间和原因。HTTP body 只接受 cell target、目标 expectation 和可选 reason，不接受自由 actor。批准事务在同一 UnitOfWork 中校验预期 epoch，追加 revision 与 binding，并更新项目 epoch；并发变化必须要求用户刷新后重试。
+正式 Actor、Action、Effect 和 Permission 不保存 Candidate ID。Candidate ID 只进入 `ActorImplementationBinding` 或 `ActionImplementationBinding`；手工业务语义使用 `MISSING` binding，仍可 ACTIVE，页面必须同时说明“业务边界已确认”和“当前代码中还没有可靠定位”。
 
-矩阵 cell 的可操作性由服务端明确发布：`can_confirm` 决定当前是否允许确认，`requires_human_confirmation` 说明该 cell 尚未确认或已有正式规则需要复核，`confirmation_blockers` 给出缺失前置事实。矩阵顶层 `required_confirmation_count` 只统计补齐当前可运行范围或逐条复核既有正式规则所需的最少确认数；已经形成 ALLOW/DENY 范围后，仍可确认但未被用户选择的 cell 不重新阻断准备链。前端只消费这些字段，不读取 `review_reasons` 推导按钮状态，也不能把“存在 action 但没有可确认 cell”显示为仍需确认。权限写入或 proposal 处理完成后，页面刷新矩阵和整个工作区，再按最新准备投影继续。
+## Business Boundary revision
 
-`PermissionDraftService.draft(project_id, human_text)` 只在用户显式请求时读取当前矩阵，并为可审批 cell 生成本次 opaque option ID。模型只能返回 option ID、ALLOW/DENY 和人类原文中的精确引文；服务端拒绝未知 option、越界字段、非精确引文和冲突。返回的 READY_FOR_REVIEW 只表示草稿通过本地格式与引用校验，不表示完整、正确或已批准。草稿不写数据库/AssistantCache，也没有 apply/activate API；用户确认后仍走同一 Human Approval endpoint。
+`BusinessActorRevision` 和 `BusinessActionRevision` 按稳定 ID 追加不可变 revision。Action revision 拥有完整 Effect catalog；Effect 表达真正业务结果，例如对象形成、状态变化或受保护数据披露，不能用 request、task、queue 或 worker 节点代替。
 
-## 实现映射与重新分析
+Permission v2 引用稳定 Actor/Action revision，语义包含资源关系、`ALLOW/DENY` 和受保护 effect IDs。`PermissionIntentRevision` 不包含 Candidate、TestIdentity、Flow、Observer、Profile 或运行信息。
 
-`IntentImplementationBinding` 把人类 revision 映射到当前 action/role candidate、ApplicationUnderstanding revision 和安全准备 fingerprint。源码重新分析、候选变化或安全准备变化只能把 binding 降为 NEEDS_REVIEW/UNRESOLVED，不能删除、退休或修改人类规则。重新确认同一语义只更新 binding，不推进 `policy_epoch`。
+普通 `BusinessBoundaryView` 只投影每个 intent_id 的 latest revision 中仍为 ACTIVE、且精确匹配当前 ACTIVE subject actor、resource owner actor、Action revision 与当前 Effect catalog 的权限。RETIRED、旧 Actor/Action revision 和失效 Effect 引用继续留在 history，但不进入当前权限计数或 Workbench 完成判断；当前 Action 没有有效权限时，页面区分“从未确认”与“历史权限需要按新 revision 重新确认”。本版不自动迁移旧权限。
 
-`SecuritySetupCompiler` 只消费 ACTIVE latest + CURRENT binding。任何 ACTIVE revision 缺少 CURRENT binding 都必须 fail closed；测试账号或代表变化形成 coverage gap 或新的生成配置，不能静默缩小权限范围。
+## Proposal 与 Human Approval
 
-## Agent proposal 与 Oracle 边界
+编辑页只保存浏览器内草稿。用户点击“生成待审业务边界”后，服务端冻结 `BoundaryProposalBundle`、来源快照和 `proposal_fingerprint`；待审正文没有 PATCH 入口。返回修改以旧 Proposal 初始化新的本地草稿，最终创建新的 Proposal；放弃形成 `REJECTED` Decision。
 
-`IntentProposal` 只有 SEMANTIC_CHANGE 和 IMPLEMENTATION_REBIND 两类，创建后保持 PENDING，直到 Human GUI 批准或拒绝。前端只显示当前值、Agent 建议和原因，不能自行构造 revision；批准语义建议进入正式 Human Approval transaction，批准 rebind 只更新 binding。
-
-MCP 权限工具固定为：
+批准请求只包含路径中的 `proposal_id`、预期 `proposal_fingerprint` 和原因。服务端重新校验 Proposal 未决定、指纹一致、来源没有漂移且没有 unresolved question，然后在同一 Unit of Work 中提交：
 
 ```text
-jiejian_intent_list              READ
-jiejian_intent_show              READ
-jiejian_intent_propose           PREPARE
-jiejian_intent_rebind_propose    PREPARE
+BusinessActor / BusinessAction revisions
++ Actor / Action implementation bindings
++ PermissionIntent revisions
++ ProjectPolicyState
++ APPROVED Decision
 ```
 
-MCP 没有 approve/reject，也没有 permission_set、candidate_decide 或 permission draft。无论 READ、PREPARE 还是 EXECUTE，MCP 允许的重分析、身份准备、Recording、检查准备、运行和取消都不能改变 active revision、`intent_hash` 或 `policy_epoch`；proposal 在人类批准前也不能生效。
+任何一步失败都不允许留下部分正式事实。前端不能提交 `approved_by` 或审批渠道冒充其他主体。
 
-修复入口只新增 READ 的 `jiejian_repair_contract_get`。它从已发布 BLOCK 与 Finding 重建权威要求；Agent 在 `jiejian_change_submit` 中只能回传服务端给出的引用，不能修改要求、批准权限或直接宣称修复通过。CLI 不提供修复合同、批准或修复专用运行命令。
+## policy_epoch
 
-## Run 权限策略快照
+`ProjectPolicyState.policy_epoch` 从 0 开始。第一次批准正式业务语义进入 1；后续只有 Actor、Action、Effect 或 Permission 语义真实变化时推进。纯 Candidate 重新绑定、相同语义重试或读取操作不推进 epoch。批准事务必须从当前正式状态计算下一 epoch，并通过 revision、fingerprint 与唯一 Decision 约束拒绝并发旧写。
 
-提交 Run 前把 `project_id`、`policy_epoch`、`policy_fingerprint` 以及每条 ACTIVE revision 的语义身份和实现映射冻结进 `PermissionPolicySnapshot` 和持久执行请求。代码变化重验还冻结独立 `ChangeVerificationContext`，但不能用它裁剪完整 Coverage。修复重验再冻结 `RepairVerificationContext`：原要求的 revision/hash 必须精确不变；纯实现重绑只要未改变 `policy_epoch` 和 `intent_hash` 可以继续。删除受保护效果、降低原关键证据要求或破坏 ALLOW 控制都不能得到 `VERIFIED`。ResultPresentation、History 和 report.json 只从该冻结请求复制摘要，不读取 live Ledger 改写旧结果。普通页面显示“本次检查依据权限版本 X”和可选重验数量，不显示内部指纹或 intent 标识。
+## Agent 与自动化边界
 
-如果提交修复重验前发现任一原要求身份变化，服务端固定失败为“原权限要求已经改变，请按新权限重新形成检查。”，不得把改变考题当作修复。修复复验的 `VERIFIED / NOT_VERIFIED / INCONCLUSIVE` 独立于 Verification Verdict，只说明同一考题下的修复要求是否被证明满足。
+Agent 可以读取正式业务边界、提交源码变化或提出待审建议，但不能 approve/reject、直接写 Actor/Action/Permission、修改 `policy_epoch`、选择验证考题或形成 Verdict。MCP、CLI 与 Machine 输出不提供旧 Permission writer；API 路由也不能保留旧 matrix approve、candidate decide 或 compatibility wrapper。
+
+当前完整新检查主链尚未重新接入。不要为了让旧 CheckPreview、Compiler 或 L5 继续工作而把 Permission v2 转写回旧表；1.1.0 的 `/tests` 与 `/changes` 可以明确不可用，但不能 dual write。
+
+## 官方 recipe 内部资产
+
+`OfficialBoundaryRecipe` 是有限、公开的样例材料，只生成普通 Proposal command，不是业务 Core model，也不自动批准。1.1.0 保留该纯函数和 unit test，但普通 Router、service 便捷入口、前端 API 与页面 CTA 均不暴露它。未来只有正式 Sample context 可以把 recipe 送入普通 create-proposal + approve 路径；不得根据 project name 猜 Sample。
 
 ## 怎么验证
 
-先按修改面运行最小直接测试，不为局部权限意图变化重复完整 L4/L5：
+优先运行当前直接测试：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/workflows/test_permission_drafting.py tests/backend/api/test_permission_intent_human_approval.py tests/backend/api/test_permission_oracle_invariant.py tests/backend/workflows/security_setup/test_permission_intent_ledger.py tests/backend/workflows/results/test_repair_contracts.py tests/backend/workflows/results/test_result_presentation.py tests/backend/workflows/results/test_history.py tests/backend/workflows/results/test_reports.py
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 frontend-test src/features/checks/PermissionCheckPage.test.tsx src/features/checks/CheckResultsPage.test.tsx src/features/checks/CheckHistoryPage.test.tsx
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/core/test_business_boundary.py tests/backend/workflows/business_boundaries tests/backend/api/test_business_boundaries.py tests/architecture/test_business_boundary_v2.py
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 frontend-test src/features/boundaries/BusinessBoundaryPage.test.tsx src/app/ControlShell.test.tsx
 ```
 
-公共执行请求或报告字段变化时再运行 `dev.ps1 schema -Update` 和 `dev.ps1 schema`；文档变化运行 `dev.ps1 docs -Update` 后再运行 `dev.ps1 docs`。最终仍要检查 MCP tool inventory 中不存在 mutator/approve/reject，并证明结果与历史来自 Run 的冻结 policy snapshot。
+同时检查 Proposal 不可变、Approval 原子、正式 Permission 不含 Candidate、TestIdentity 只引用 Actor revision、旧数据库只读拒绝、旧 writer 路由未注册。公共 Schema 或生成参考发生真实漂移时才使用 `dev.ps1 schema -Update` 或 `docs -Update`；否则只运行只读检查。
 
 ## 相关真源
 
-- [安全意图与验证架构](../../01_系统地图/权限验证与结果.md)
 - [应用接入与检查主流程](../../01_系统地图/应用接入与检查主流程.md)
-- [修改 Agent 变更影响](修改Agent变更影响.md)
-- [权限契约与执行计划](../../03_参考手册/协议/权限契约与执行计划.md)
+- [数据与持久化](../../01_系统地图/数据与持久化.md)
+- [权限验证与结果](../../01_系统地图/权限验证与结果.md)
 - [控制面与 Machine 输出协议](../../03_参考手册/协议/控制面与Machine输出协议.md)
 - [验证与测试](../../04_工程约束/验证与测试.md)

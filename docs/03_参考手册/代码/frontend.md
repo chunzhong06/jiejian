@@ -14,6 +14,27 @@
 - `assistantApi`
 主要 import / dot-source：`./http`
 
+### `product/frontend/src/api/businessBoundaries.ts`
+- `BoundaryCandidateDto`
+- `BoundaryConfidence`
+- `BoundaryDecisionDto`
+- `BoundaryDraftViewDto`
+- `BoundaryProposalCommandDto`
+- `BoundaryProposalDto`
+- `BoundaryProposalListDto`
+- `BoundaryProposalViewDto`
+- `BusinessActionRevisionDto`
+- `BusinessActorRevisionDto`
+- `BusinessBoundaryViewDto`
+- `BusinessEffectKind`
+- `PermissionIntentRevisionDto`
+- `ProposedActionDto`
+- `ProposedActorDto`
+- `ProposedEffectDto`
+- `ProposedPermissionDto`
+- `businessBoundariesApi`
+主要 import / dot-source：`./http`
+
 ### `product/frontend/src/api/checks.ts`
 - `CheckPreviewActionDto`
 - `CheckPreviewDto`
@@ -215,7 +236,7 @@
 
 ### `product/frontend/src/app/ControlShell.tsx`
 - `ControlShell`
-主要 import / dot-source：`../api/experience`, `../api/http`, `../api/mcp`, `../api/projects`, `../api/system`, `../components/ErrorRecovery`, `../components/ModuleNavigation`, `../features/access/AccessPage`, `../features/changes/ChangesPage`, `../features/checks/CheckHistoryPage`, `../features/checks/CheckResultsPage`, `../features/checks/PermissionCheckPage`, `../features/checks/VerificationPage`, `../features/identities/TestIdentityPage`, `../features/preparation/PreparationPage`, `../features/presentation/PresentationMode`, `../features/recording/RecordingPage`, `../features/settings/LLMSettingsDrawer`, `../features/system/RuntimePage`, `../features/testing/TestingPage`, `../features/tools/ToolsPage`, `../features/workspace/WorkbenchPage`, `./AppHeader`, `./NotificationCenter`, `./presentation`, `./useProjectWorkspace`, `./useSystemStatus`, `antd`, `react`, `react-router-dom`
+主要 import / dot-source：`../api/experience`, `../api/http`, `../api/mcp`, `../api/projects`, `../api/system`, `../components/ErrorRecovery`, `../components/ModuleNavigation`, `../features/access/AccessPage`, `../features/boundaries/BusinessBoundaryPage`, `../features/checks/CheckHistoryPage`, `../features/checks/CheckResultsPage`, `../features/checks/PermissionCheckPage`, `../features/checks/VerificationPage`, `../features/identities/TestIdentityPage`, `../features/preparation/PreparationPage`, `../features/presentation/PresentationMode`, `../features/recording/RecordingPage`, `../features/settings/LLMSettingsDrawer`, `../features/system/RuntimePage`, `../features/tools/ToolsPage`, `../features/workspace/WorkbenchPage`, `./AppHeader`, `./NotificationCenter`, `./presentation`, `./useProjectWorkspace`, `./useSystemStatus`, `antd`, `react`, `react-router-dom`
 
 ### `product/frontend/src/app/NotificationCenter.test.tsx`
 主要 import / dot-source：`../api/http`, `./NotificationCenter`, `@testing-library/react`, `vitest`
@@ -334,6 +355,28 @@
 ### `product/frontend/src/features/access/ApplicationSetup.tsx`
 - `ApplicationSetup`
 主要 import / dot-source：`../../api/http`, `../../api/onboarding`, `../../api/projects`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `antd`, `react`
+
+### `product/frontend/src/features/boundaries/boundaryLabels.ts`
+- `confidenceLabels`
+- `effectKindLabels`
+- `expectationLabels`
+- `relationLabels`
+主要 import / dot-source：`../../api/businessBoundaries`
+
+### `product/frontend/src/features/boundaries/BoundaryProposalEditor.tsx`
+- `BoundaryProposalEditor`
+主要 import / dot-source：`../../api/businessBoundaries`, `./boundaryLabels`, `antd`, `react`
+
+### `product/frontend/src/features/boundaries/BoundaryProposalReview.tsx`
+- `BoundaryProposalReview`
+主要 import / dot-source：`../../api/businessBoundaries`, `./boundaryLabels`, `antd`, `react`
+
+### `product/frontend/src/features/boundaries/BusinessBoundaryPage.test.tsx`
+主要 import / dot-source：`./BusinessBoundaryPage`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/boundaries/BusinessBoundaryPage.tsx`
+- `BusinessBoundaryPage`
+主要 import / dot-source：`../../api/businessBoundaries`, `../../api/http`, `../../api/projects`, `../../components/PageTaskHeader`, `./BoundaryProposalEditor`, `./BoundaryProposalReview`, `./boundaryLabels`, `antd`, `react`
 
 ### `product/frontend/src/features/changes/ChangesPage.test.tsx`
 主要 import / dot-source：`./ChangesPage`, `@testing-library/react`, `vitest`

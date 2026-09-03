@@ -1,88 +1,43 @@
 # =============================================================================
 # ApplicationCore 组合根
 #
-# 定位
-#   API、CLI 与 GUI 共用的完整应用能力装配边界
-#
 # 职责
-#   连接 Storage 与应用服务｜集中运行时依赖注入
+#   组装 1.1.0 当前启动、项目接入、Business Boundary、TestIdentity 与只读结果基础能力。
 #
 # 边界
-#   只负责控制面装配；Worker 使用独立 WorkerContainer，高风险动作仍由 Worker/Runner 执行。
-#
-# 调用链
-#   API / CLI / GUI → ApplicationCore → capability services
+#   旧 Permission writer、Preparation、Check、SourceChange、Recording 和 Run 不注册为 CURRENT。
 # =============================================================================
 
 from __future__ import annotations
 
 import os
-import time
+from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from collections.abc import Mapping
 from typing import Callable
 
-from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
-from product.backend.infra.runtime.jobs.attempts import JobAttempts
-from product.backend.infra.runtime.jobs.queue import JobQueue
-from product.backend.workflows.runs.submission import RunSubmission
-from product.backend.workflows.runs.execution import ExecutionWorkflow
-from product.backend.infra.runtime.jobs.targets import JobTargetType, default_run_job_targets
-from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
-from product.backend.workflows.projects.catalog import ProjectCatalog
-from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
-from product.backend.workflows.projects.preparation import ProjectPreparationService
-from product.backend.workflows.projects.readiness import ProjectReadinessService
-from product.backend.workflows.projects.revalidation import ProjectRevalidationService
-from product.backend.workflows.projects.repair import ProjectRepairService
-from product.backend.workflows.projects.delivery import DeliveryCheckService
-from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
-from product.backend.workflows.recording.submission import RecordingSubmission
-from product.backend.workflows.recording.lifecycle import RecordingLifecycle
-from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.maintenance import LocalMaintenanceService
-from product.backend.infra.samples import OfficialSampleManager
-from product.backend.infra.runtime.runner.progress import RunnerProgressReader
-from product.backend.infra.recording.request_store import RecordingRequestStore
-from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.infra.llm.adapters.httpx_transport import HttpxLLMTransport
 from product.backend.infra.llm.profiles import LLMProfileRegistry
+from product.backend.infra.runtime.jobs.attempts import JobAttempts
+from product.backend.infra.runtime.jobs.queue import JobQueue
+from product.backend.infra.runtime.jobs.targets import default_run_job_targets
+from product.backend.infra.runtime.maintenance import LocalMaintenanceService
+from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.secrets import SecretStore as LLMSecretStore
 from product.backend.infra.secrets import SecretStore, default_secret_store
-from product.backend.workflows.test_identities import (
-    IdentityPreparationManager,
-    TestIdentityExecutionCredentials,
-    TestIdentityService,
-)
-from product.backend.workflows.permission_intents import PermissionIntentService
-from product.backend.workflows.permission_drafting import PermissionDraftService
-from product.backend.workflows.source_changes import SourceChangeService
-from product.backend.workflows.security_setup import CheckWorkflow, SecuritySetupCompiler
-from product.backend.workflows.security_setup.local_observer_registry import (
-    LocalObserverEnvironmentRegistry,
-)
+from product.backend.infra.storage import StorageUnitOfWork
+from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
+from product.backend.workflows.business_boundaries import BusinessBoundaryService
+from product.backend.workflows.business_boundaries.status import BoundaryWorkspaceStatusService
 from product.backend.workflows.onboarding.workflow import FolderSelector, OnboardingWorkflow, SystemFolderSelector
-from product.backend.workflows.recording.credentials import RuntimeSecretVault
-from product.backend.workflows.recording.run_service import RecordingRunService
-from product.backend.workflows.recording.project_submission import ProjectRecordingService
-from product.backend.workflows.recording.credentials import RecordingCredentialProvider
-from product.backend.workflows.recording.safety_setup import ActionSafetySetupService
-from product.backend.workflows.results.services import build_result_services
-from product.backend.workflows.control import (
-    ProductFlowQuery,
-    ProductResultQuery,
-    ProductStatusService,
-)
-from product.backend.workflows.official_sample import OfficialSampleExperience
-from product.backend.workflows.official_scenario import OfficialScenarioInstaller
-from product.backend.workflows.competition_validation import (
-    CompetitionValidationSummaryQuery,
-)
+from product.backend.workflows.permission_intents import PermissionIntentService
+from product.backend.workflows.projects.catalog import ProjectCatalog
+from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
+from product.backend.workflows.test_identities import TestIdentityService
 
 
 class ApplicationCore:
-    """创建基础设施并注册各能力区的应用服务。"""
+    """创建 fresh 1.1.0 基础设施并只注册已经切换到稳定业务边界的能力。"""
 
     def __init__(
         self,
@@ -98,64 +53,31 @@ class ApplicationCore:
         control_origin: str | None = None,
         official_sample_root: Path | None = None,
     ) -> None:
-        from product.backend.infra.storage import create_session_factory, create_sqlite_engine, default_database_path, upgrade_database
+        from product.backend.infra.storage import (
+            create_session_factory,
+            create_sqlite_engine,
+            default_database_path,
+            upgrade_database,
+        )
 
+        _ = official_sample_root
         self.var_dir = var_dir.resolve()
         self.paths = RuntimePaths(self.var_dir).ensure_layout()
-        self.competition_validation = CompetitionValidationSummaryQuery(self.var_dir)
-        self.runner_progress_reader = RunnerProgressReader(self.var_dir)
         self._base_environment = dict(environ if environ is not None else os.environ)
         self._base_environment.pop("JIEJIAN_CONTROL_ORIGIN", None)
         if control_origin is not None:
-            # 该值只来自 Serve 已规范化的实际监听 origin，供 Worker/Runner 拒绝自检。
             self._base_environment["JIEJIAN_CONTROL_ORIGIN"] = control_origin
-        self.local_observer_environments = LocalObserverEnvironmentRegistry()
-        self.official_samples = OfficialSampleManager(
-            self.var_dir,
-            official_sample_root,
-            self._base_environment,
-        )
         database_path = default_database_path(self.var_dir)
         upgrade_database(database_path)
         self.engine = create_sqlite_engine(database_path)
         factory = partial(StorageUnitOfWork, create_session_factory(self.engine))
         self.uow_factory = factory
         self.secret_store = secret_store or llm_secret_store or default_secret_store()
+
+        # Worker 生命周期仍需要现有 Job/Result 基础表；控制面不重新开放旧 Run writer。
         self.job_targets = default_run_job_targets()
-        self.job_targets.register(
-            JobTargetType.RECORDING,
-            RecordingJobTargetHandler(),
-        )
         self.job_attempts = JobAttempts(factory, targets=self.job_targets)
         self.job_queue = JobQueue(factory, targets=self.job_targets)
-        self.execution_request_store = ExecutionRequestStore(self.var_dir)
-        self.result_services = build_result_services(
-            self.var_dir,
-            self.uow_factory,
-            clock_us=clock_us,
-        )
-        self.results = self.result_services.reader
-        self.finding_materializer = self.result_services.materializer
-        self.findings = self.result_services.queries
-        self.gating = self.result_services.gate
-        self.result_presentation = self.result_services.presentation
-        self.repair_contracts = self.result_services.repair
-        self.result_history = self.result_services.history
-        self.reports = self.result_services.reports
-        self.result_finalizer = self.result_services.finalizer
-        self.secret_vault = RuntimeSecretVault()
-        self.execution_submission = RunSubmission(
-            factory,
-            self.execution_request_store,
-            queue=self.job_queue,
-        )
-        self.execution = ExecutionWorkflow(
-            factory,
-            self.execution_request_store,
-            self.execution_submission,
-            environment_provider=self.environment_for_secret_names,
-            clock_us=clock_us,
-        )
         self.projects = ProjectCatalog(factory)
         self.application_understanding = ApplicationUnderstandingService(
             factory,
@@ -163,207 +85,33 @@ class ApplicationCore:
             reserved_control_origin=control_origin,
             clock_us=clock_us,
         )
+        self.business_boundaries = BusinessBoundaryService(factory, clock_us=clock_us)
+        self.product_status = BoundaryWorkspaceStatusService(
+            factory,
+            self.business_boundaries,
+        )
+        self.permission_intents = PermissionIntentService(factory)
         self.test_identities = TestIdentityService(
             factory,
             secret_store=self.secret_store,
             clock_us=clock_us,
         )
-        self.recording_credentials = RecordingCredentialProvider(
-            self.test_identities,
-            self.secret_store,
-            self.secret_vault,
-        )
-        self.identity_preparations = IdentityPreparationManager(
-            self.var_dir,
-            self.test_identities,
-            self.secret_store,
-            self._base_environment,
-        )
-        self.maintenance = LocalMaintenanceService(
-            self.var_dir,
-            active_runtime_paths=lambda: (
-                *self.identity_preparations.active_runtime_paths(),
-                *(
-                    (active.experience_root,)
-                    if (active := self.official_samples.active) is not None
-                    else ()
-                ),
-            ),
-        )
-        from product.backend.workflows.contracts.governance import ContractGovernance
-
-        self.contracts = ContractGovernance(
-            factory,
-            observer_resolver=self.projects.current_observations,
-        )
-        self.recording_request_store = RecordingRequestStore(self.var_dir)
-        self.action_safety_setup = ActionSafetySetupService(
-            factory,
-            var_dir=self.var_dir,
-            request_store=self.recording_request_store,
-            test_identities=self.test_identities,
-            clock_us=clock_us,
-        )
-        self.permission_intents = PermissionIntentService(
-            factory,
-            test_identities=self.test_identities,
-            action_safety_setup=self.action_safety_setup,
-            clock_us=clock_us,
-        )
-        self.application_understanding.set_permission_binding_refresher(
-            self.permission_intents.refresh_bindings
-        )
-        self.source_changes = SourceChangeService(
-            factory,
-            application_understanding=self.application_understanding,
-            permission_intents=self.permission_intents,
-            repair_contracts=self.repair_contracts,
-            clock_us=clock_us,
-        )
-        self.project_revalidation = ProjectRevalidationService(self.source_changes)
-        self.project_repair = ProjectRepairService(
-            factory,
-            self.repair_contracts,
-            self.source_changes,
-            self.project_revalidation,
-            self.result_presentation,
-        )
-        self.action_safety_setup.set_permission_binding_refresher(
-            self.permission_intents.refresh_bindings
-        )
-        self.execution.set_permission_policy_snapshot_resolver(
-            self.permission_intents.policy_snapshot
-        )
-        self.test_identity_execution = TestIdentityExecutionCredentials(
-            self.test_identities,
-            self.secret_store,
-        )
-        self.security_setup = SecuritySetupCompiler(
-            factory,
-            var_dir=self.var_dir,
-            permission_intents=self.permission_intents,
-            execution_credentials=self.test_identity_execution,
-            contracts=self.contracts,
-            execution=self.execution,
-            local_observer_environment_resolver=(
-                self.local_observer_environments.resolve
-            ),
-        )
-        self.execution.set_generated_profile_validator(
-            self.security_setup.validate_generated_profile
-        )
-        self.checks = CheckWorkflow(
-            permission_intents=self.permission_intents,
-            security_setup=self.security_setup,
-            execution=self.execution,
-            source_changes=self.source_changes,
-            repair_contracts=self.repair_contracts,
-        )
-        self.project_preparation = ProjectPreparationService(
-            factory,
-            test_identities=self.test_identities,
-            permission_intents=self.permission_intents,
-            action_safety_setup=self.action_safety_setup,
-            checks=self.checks,
-            source_changes=self.source_changes,
-        )
-        self.project_readiness = ProjectReadinessService(
-            factory,
-            result_reader=self.results,
-            endpoint_status_resolver=self.application_understanding.endpoint_status,
-            permission_matrix_resolver=self.permission_intents.matrix,
-            check_preview_resolver=self.checks.preview,
-            preparation_resolver=self.project_preparation.status,
-        )
-        self.product_status = ProductStatusService(
-            self.projects,
-            self.project_readiness.get,
-            self.result_presentation,
-            self.source_changes,
-            project_revalidation=self.project_revalidation,
-            project_repair=self.project_repair,
-            current_permission_intents=self.permission_intents.current_intents,
-        )
-        self.delivery_check = DeliveryCheckService(
-            source_changes=self.source_changes,
-            permission_intents=self.permission_intents,
-            product_status=self.product_status,
-            result_presentation=self.result_presentation,
-            published_reader=self.results,
-        )
-        self.product_results = ProductResultQuery(
-            self.product_status,
-            self.result_presentation,
-            self.result_history,
-        )
-        self.product_flows = ProductFlowQuery(self.projects, factory)
-        self.recording_lifecycle = RecordingLifecycle(factory, var_dir=self.var_dir)
-        self.recording_submission = RecordingSubmission(
-            factory,
-            self.recording_request_store,
-            attempts=self.job_attempts,
-        )
-        self.project_recordings = ProjectRecordingService(
-            self.application_understanding,
-            self.test_identities,
-            self.recording_credentials,
-            self.recording_submission,
-            uow_factory=factory,
-            request_store=self.recording_request_store,
-            projects=self.projects,
-            clock_us=clock_us,
-        )
-        self.official_scenario = OfficialScenarioInstaller(
-            self.project_recordings,
-            self.recording_submission,
-            self.job_attempts,
-            var_dir=self.var_dir,
-            recording_credentials=self.recording_credentials,
-            lifecycle=self.recording_lifecycle,
-            clock_us=clock_us or (lambda: time.time_ns() // 1_000),
-        )
-        # ProjectLifecycle 通过延迟回调停止当前体验；随后 Experience 可以在
-        # 用户结束样例或应用关闭时复用同一正式归档边界。
         self.project_lifecycle = ProjectLifecycleService(
             factory,
             self.test_identities,
-            stop_official_sample=lambda project_id: self.official_experience.stop_project(project_id),
+            stop_official_sample=lambda _project_id: False,
             clock_us=clock_us,
         )
-        self.official_experience = OfficialSampleExperience(
-            self.official_samples,
-            self.application_understanding,
-            self.test_identities,
-            self.secret_store,
-            self.local_observer_environments,
-            self.product_status,
-            scenario_installer=self.official_scenario,
-            action_safety_setup=self.action_safety_setup,
-            permission_intents=self.permission_intents,
-            project_preparation=self.project_preparation,
-            repair_contracts=self.repair_contracts,
-            source_changes=self.source_changes,
-            archive_project=self.project_lifecycle.archive,
-            clock_us=clock_us,
-        )
-        from product.backend.workflows.assistant import GuidanceQueryService
-
-        self.assistant_guidance = GuidanceQueryService(
-            self.project_readiness.get,
-            self.checks.preview,
+        self.maintenance = LocalMaintenanceService(
+            self.var_dir,
+            active_runtime_paths=lambda: (),
         )
         self.onboarding = OnboardingWorkflow(
             folder_selector
             or SystemFolderSelector(
                 environment=self._base_environment,
                 var_dir=self.var_dir,
-            ),
-        )
-        self.recording_runs = RecordingRunService(
-            self.var_dir,
-            self.uow_factory,
-            self.recording_submission,
-            self.environment_for_secret_names,
+            )
         )
         self.llm_profiles = LLMProfileRegistry(
             factory,
@@ -372,38 +120,12 @@ class ApplicationCore:
             environ=environ,
             clock_us=clock_us,
         )
-        self.permission_drafts = PermissionDraftService(
-            permission_intents=self.permission_intents,
-            llm_profiles=self.llm_profiles,
-        )
-        from product.backend.workflows.assistant.service import AssistantService
-        from product.backend.workflows.assistant.surfaces import AssistantSurfaceResolver
 
-        self.assistant_service = AssistantService(
-            self.var_dir,
-            surfaces=AssistantSurfaceResolver(
-                guidance=self.assistant_guidance,
-                application_understanding=self.application_understanding,
-                test_identities=self.test_identities,
-                project_readiness=self.project_readiness,
-                product_flows=self.product_flows,
-                recording_lifecycle=self.recording_lifecycle,
-                check_preview=self.checks.preview,
-                result_presentation=self.result_presentation,
-            ),
-            llm_profiles=self.llm_profiles,
-            clock_us=clock_us,
-        )
     def close(self) -> None:
-        self.identity_preparations.close()
-        self.official_experience.close()
-        self.secret_vault.clear()
+        """释放组合根独占的 Engine；没有启动的旧能力无需补偿关闭。"""
+
         self.engine.dispose()
 
     def environment_for_secret_names(self, names) -> dict[str, str]:
-        environment = dict(self._base_environment)
-        environment.update(self.secret_vault.resolve(names))
-        environment.update(self.official_samples.resolve_secret_names(names))
-        if hasattr(self, "test_identity_execution"):
-            environment.update(self.test_identity_execution.resolve(names))
-        return environment
+        _ = names
+        return dict(self._base_environment)

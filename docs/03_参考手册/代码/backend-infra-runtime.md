@@ -279,6 +279,10 @@
 - `_EXPORTS`
 主要 import / dot-source：`importlib`
 
+### `product/backend/infra/runtime/worker/current.py`
+- `class CurrentWorkerSupervisor`
+主要 import / dot-source：`__future__`
+
 ### `product/backend/infra/runtime/worker/lifetime.py`
 - `worker_lifetime_path(var_dir, job_id) -> Path`
 - `worker_tree_identity_path(var_dir, job_id) -> Path`

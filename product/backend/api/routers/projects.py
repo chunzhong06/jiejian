@@ -1,5 +1,5 @@
-# 项目 API 路由：暴露应用接入、理解候选与当前权限合同的受控 HTTP 边界。
-# 适配 Project 接入和当前 PermissionContract 读取，不在路由层推断治理结论。
+# 项目 API 路由：暴露应用接入、发现候选与来源理解的受控 HTTP 边界。
+# 正式业务边界由独立 Business Boundary Router 承担，本路由不写权限事实。
 
 from __future__ import annotations
 
@@ -41,42 +41,18 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
     async def get_project(project_id: str):
         return data_response(context.projects.get(project_id).model_dump(mode="json"))
 
+    @router.get("/api/projects/{project_id}/status", response_model=ApiResponse)
+    async def get_project_status(project_id: str):
+        """沿用 Workbench 投影形状，只组合 1.1.0 已注册的当前事实。"""
+
+        return data_response(context.product_status.get(project_id).model_dump(mode="json"))
+
     @router.delete("/api/projects/{project_id}", response_model=ApiResponse)
     async def archive_project(project_id: str):
         """移除普通应用视图，保留 Project 及全部历史结果。"""
 
         return data_response(
             context.project_lifecycle.archive(project_id).model_dump(mode="json")
-        )
-
-    @router.get("/api/projects/{project_id}/status", response_model=ApiResponse)
-    async def get_product_status(project_id: str):
-        """返回 GUI、CLI 与 Machine 共用的项目工作台只读投影。"""
-
-        return data_response(
-            context.product_status.get(project_id).model_dump(mode="json")
-        )
-
-    @router.post(
-        "/api/projects/{project_id}/delivery-check",
-        response_model=ApiResponse,
-    )
-    async def check_project_delivery(project_id: str):
-        """显式扫描当前源码并返回无持久副作用的交付证明。"""
-
-        return data_response(
-            context.delivery_check.check(project_id).model_dump(mode="json")
-        )
-
-    @router.post(
-        "/api/projects/{project_id}/preparation/prepare-safe",
-        response_model=ApiResponse,
-    )
-    async def prepare_project_safely(project_id: str):
-        """只执行测试准备白名单中的确定性机械动作。"""
-
-        return data_response(
-            context.project_preparation.prepare_safe(project_id).model_dump(mode="json")
         )
 
     @router.get(

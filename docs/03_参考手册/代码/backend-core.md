@@ -20,6 +20,52 @@
 - `class ApplicationUnderstanding`
 主要 import / dot-source：`__future__`, `enum`, `hashlib`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
 
+### `product/backend/core/approval.py`
+- `class HumanApprovalChannel`
+- `class HumanApproval`
+主要 import / dot-source：`__future__`, `enum`, `pydantic`
+
+### `product/backend/core/boundary_proposal.py`
+- `PROPOSAL_ID_PATTERN`
+- `DECISION_ID_PATTERN`
+- `ACTOR_ITEM_ID_PATTERN`
+- `ACTION_ITEM_ID_PATTERN`
+- `EFFECT_ITEM_ID_PATTERN`
+- `PERMISSION_ITEM_ID_PATTERN`
+- `INTENT_ID_PATTERN`
+- `class ProposalWriteMode`
+- `class ProposalCandidateKind`
+- `class BoundaryDecisionKind`
+- `class CandidateSourceSnapshot`
+- `class BoundarySourceSnapshot`
+- `class ProposedEffectItem`
+- `class ProposedActorItem`
+- `class ProposedActionItem`
+- `class ProposedPermissionItem`
+- `class BoundaryProposalBundle`
+- `class BoundaryProposalDecision`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`
+
+### `product/backend/core/business_boundary.py`
+- `ACTOR_ID_PATTERN`
+- `ACTION_ID_PATTERN`
+- `EFFECT_ID_PATTERN`
+- `_PROJECTION_PATH`
+- `_REASON_CODE`
+- `class BoundaryModel`
+- `class BusinessRevisionState`
+- `class BusinessActionOperationKind`
+- `class ImplementationBindingStatus`
+- `boundary_sha256(payload) -> str`
+- `class BusinessEffectDefinition`
+- `class BusinessActor`
+- `class BusinessActorRevision`
+- `class BusinessAction`
+- `class BusinessActionRevision`
+- `class ActorImplementationBinding`
+- `class ActionImplementationBinding`
+主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.approval`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`
+
 ### `product/backend/core/contracts/execution_binding.py`
 - `resolve_execution_contract(record, governed) -> PermissionContract`
 主要 import / dot-source：`__future__`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `typing`
@@ -75,29 +121,15 @@
 主要 import / dot-source：`__future__`, `enum`, `pydantic`, `typing`
 
 ### `product/backend/core/permission_intent.py`
-- `_ACTION_ID_PATTERN`
-- `_ROLE_ID_PATTERN`
 - `_INTENT_ID_PATTERN`
-- `_PROPOSAL_ID_PATTERN`
-- `_PROJECTION_PATH`
 - `class PermissionIntentModel`
 - `class PermissionIntentRelation`
 - `class PermissionIntentEffectiveState`
-- `class HumanApprovalChannel`
-- `class IntentImplementationBindingStatus`
-- `class IntentProposalKind`
-- `class IntentProposalStatus`
 - `permission_intent_sha256(payload) -> str`
-- `class ProtectedEffect`
-- `class HumanApproval`
 - `class PermissionIntentSemantic`
 - `class PermissionIntentRevision`
 - `class ProjectPolicyState`
-- `implementation_binding_sha256(payload) -> str`
-- `class IntentImplementationBinding`
-- `class ProposedImplementationBinding`
-- `class IntentProposal`
-主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.approval`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/recording.py`
 - `_REASON_CODE`
@@ -180,13 +212,12 @@
 主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.identifiers`, `product.backend.core.repair`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/test_identity.py`
-- `_ROLE_CANDIDATE_ID_PATTERN`
 - `_SECRET_REF_PATTERN`
 - `class TestIdentityModel`
 - `class TestIdentityAuthMethod`
 - `class TestIdentityCookie`
 - `class TestIdentity`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.identifiers`, `pydantic`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `pydantic`
 
 ### `product/backend/core/test_setup.py`
 - `_ACTION_ID_PATTERN`

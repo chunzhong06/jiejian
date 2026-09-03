@@ -11,7 +11,7 @@
 
 ### `product/backend/api/app.py`
 - `create_app(var_dir, control_origin, control_session_token, frontend_dir, start_worker, llm_transport, llm_secret_store, secret_store, environ, clock_us, folder_selector, shutdown_callback, official_sample_root) -> FastAPI`
-主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.checks`, `product.backend.api.routers.experience`, `product.backend.api.routers.gating`, `product.backend.api.routers.jobs`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_intents`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.source_changes`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.business_boundaries`, `product.backend.api.routers.current_experience`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.projects`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/api/envelope.py`
 - `class ApiModel`
@@ -23,7 +23,7 @@
 - `jiejian_error_handler(request, exc) -> JSONResponse`
 - `request_validation_error_handler(request, exc) -> JSONResponse`
 - `validation_error_handler(request, exc) -> JSONResponse`
-主要 import / dot-source：`__future__`, `fastapi`, `fastapi.exceptions`, `fastapi.responses`, `product.backend.core.errors`, `product.backend.workflows.assistant.diagnosis`, `pydantic`
+主要 import / dot-source：`__future__`, `fastapi`, `fastapi.exceptions`, `fastapi.responses`, `product.backend.core.errors`, `pydantic`
 
 ### `product/backend/api/local_control.py`
 - `class LocalControlDecision`
@@ -33,15 +33,12 @@
 ### `product/backend/api/mcp.py`
 - `_T`
 - `_ACCESS_ERROR_CODES`
-- `class MCPProtectedEffectInput`
-- `class MCPPermissionIntentSemanticInput`
-- `class MCPRepairContractReferenceInput`
 - `require_mcp_level(access, ctx, required_level, project_id) -> None`
 - `class MCPBearerGuard`
 - `class MCPPathAdapter`
 - `class MCPControl`
-- `build_mcp_control(context, workers, access, control_origin, control_host) -> MCPControl`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.verification.permissions`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.workflows.mcp_access`, `product.backend.workflows.official_sample`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `time`, `typing`
+- `build_mcp_control(context, access, control_origin, control_host) -> MCPControl`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `product.backend.workflows.mcp_access`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `typing`
 
 ### `product/backend/api/routers/assistant.py`
 - `class ProjectAssistantSurface`
@@ -51,11 +48,21 @@
 - `build_assistant_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `enum`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.workflows.assistant.diagnosis`, `product.backend.workflows.assistant.templates`, `pydantic`, `typing`
 
+### `product/backend/api/routers/business_boundaries.py`
+- `class BoundaryProposalCreateRequest`
+- `class BoundaryDecisionRequest`
+- `build_business_boundaries_router(context) -> APIRouter`
+主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.boundary_proposal`, `product.backend.workflows.business_boundaries`, `pydantic`, `typing`
+
 ### `product/backend/api/routers/checks.py`
 - `class CheckSubmitRequest`
 - `class CheckPrepareRequest`
 - `build_checks_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `pydantic`, `typing`
+
+### `product/backend/api/routers/current_experience.py`
+- `build_current_experience_router() -> APIRouter`
+主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`
 
 ### `product/backend/api/routers/experience.py`
 - `build_experience_router(context) -> APIRouter`
@@ -136,15 +143,15 @@
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.errors`
 
 ### `product/backend/api/routers/system.py`
-- `build_system_router(context, workers, shutdown_callback) -> APIRouter`
+- `build_system_router(context, shutdown_callback) -> APIRouter`
 - `class HealthResponse`
 - `class ReadyResponse`
 - `class MaintenanceOperationRequest`
-主要 import / dot-source：`__future__`, `fastapi`, `fastapi.responses`, `product.backend`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.worker.supervisor`, `product.backend.infra.storage`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `fastapi.responses`, `product.backend`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.storage`, `typing`
 
 ### `product/backend/api/routers/test_identities.py`
 - `class TestIdentityCreateRequest`
-- `class IdentityPreparationCommand`
+- `class TestIdentityResetRequest`
 - `build_test_identities_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `pydantic`, `typing`
 
@@ -157,7 +164,7 @@
 ### `product/backend/cli/app.py`
 - `root(context, var_dir, json_output, version) -> None`
 - `main() -> None`
-主要 import / dot-source：`__future__`, `pathlib`, `product.backend`, `product.backend.cli.bootstrap`, `product.backend.cli.commands.control`, `product.backend.cli.commands.system`, `product.backend.cli.localization`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.infra.runtime.process.identity`, `sys`, `typer`, `uuid`
+主要 import / dot-source：`__future__`, `pathlib`, `product.backend`, `product.backend.cli.bootstrap`, `product.backend.cli.commands.system`, `product.backend.cli.localization`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.infra.runtime.process.identity`, `sys`, `typer`, `uuid`
 
 ### `product/backend/cli/bootstrap.py`
 - `class CliOptions`
@@ -213,6 +220,6 @@
 - `emit_json(payload) -> None`
 - `fail(error) -> NoReturn`
 - `human_wait(message)`
-主要 import / dot-source：`__future__`, `click`, `collections.abc`, `contextlib`, `json`, `product.backend.core.errors`, `product.backend.workflows.results.presentation`, `threading`, `typer`, `typing`, `uuid`
+主要 import / dot-source：`__future__`, `click`, `collections.abc`, `contextlib`, `json`, `product.backend.core.errors`, `threading`, `typer`, `typing`, `uuid`
 
 <!-- GENERATED:END -->

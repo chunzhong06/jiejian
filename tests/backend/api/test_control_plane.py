@@ -59,14 +59,13 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         assert status.json()["schema_version"] == "1"
         assert status.json()["data"]["version"] == __version__
         assert status.json()["data"]["api"] == "available"
-        assert status.json()["data"]["worker"] == "stopped"
+        assert status.json()["data"]["worker"] == "unavailable"
         assert status.json()["data"]["browser"] in {"available", "unavailable", "unknown"}
         assert status.json()["data"]["environment"]["python"]["executable"]
         assert status.json()["data"]["recovered_jobs"] == 0
         openapi = client.get("/openapi.json")
         assert openapi.status_code == 200
         assert "ApiResponse" in openapi.json()["components"]["schemas"]
-        assert "202" in openapi.json()["paths"]["/api/projects/{project_id}/runs"]["post"]["responses"]
         project_path, _ = write_web_test_profile(tmp_path / "inputs")
         project_id = str(seed_project_from_generated_profile(app, project_path)["project_id"])
         assert client.get(f"/api/projects/{project_id}").status_code == 200
@@ -154,8 +153,9 @@ def test_ready_does_not_wait_for_blocked_local_maintenance(tmp_path: Path) -> No
         assert response.json() == {
             "schema_version": "1",
             "status": "ready",
-            "worker": "stopped",
+            "worker": "unavailable",
         }
+        assert not hasattr(app.state, "worker_supervisor")
         assert app.state.local_maintenance_task.done() is False
         release.set()
 

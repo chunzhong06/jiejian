@@ -71,10 +71,8 @@ def test_official_mcp_execute_cannot_change_permission_oracle(
     core = _prepared_core(tmp_path)
     store = _MemorySecretStore()
     access = MCPAccessController(f"{CONTROL_ORIGIN}/mcp", store)
-    workers = SimpleNamespace(is_running=lambda: False, recovered_jobs=0)
     control = build_mcp_control(
         core,
-        workers,
         access,
         control_origin=CONTROL_ORIGIN,
         control_host="127.0.0.1:8765",
