@@ -66,7 +66,7 @@ describe('WorkbenchPage', () => {
   it('不读取 dormant Run 伪造结果，并汇总动作级复核状态', () => {
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用' }} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={vi.fn()} />)
 
-    expect(within(screen.getByLabelText('最近可信结果')).getByText('新的检查结果尚未重新接入')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('最近可信结果')).getByText('当前没有正式检查结果')).toBeInTheDocument()
     expect(screen.getByText('1 项当前业务动作')).toBeInTheDocument()
     expect(screen.getByText('1 项需要确认当前权限或代码实现。')).toBeInTheDocument()
     expect(screen.getByText('当前不可检查')).toBeInTheDocument()

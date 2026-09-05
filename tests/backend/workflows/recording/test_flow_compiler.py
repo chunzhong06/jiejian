@@ -8,27 +8,10 @@ from product.backend.core.errors import JiejianError
 from product.backend.workflows.recording.processing import FlowDraftProcessor
 from product.backend.workflows.recording.flow_compiler import FlowDraftCompiler
 from product.backend.workflows.recording.review import FlowDraftReviewer
-from product.protocols import (
-    ConfirmFlowDraftResource,
-    ConfirmFlowDraftTarget,
-    ConfirmFlowDraftVariableChoice,
-    FlowDraft,
-    FlowDraftResourceCandidate,
-    FlowDraftStep,
-    FlowDraftVariable,
-    FlowDraftVariableSource,
-    FlowDraftVariableStatus,
-    RecordingEvent,
-    RecordingEventKind,
-    RecordingHeader,
-    canonical_flow_draft_json_bytes,
-    flow_draft_review_command_schema,
-    parse_flow_draft,
-    flow_draft_source_choice_id,
-)
+from product.protocols import ConfirmFlowDraftResource, ConfirmFlowDraftTarget, ConfirmFlowDraftVariableChoice, FlowDraft, FlowDraftResourceCandidate, FlowDraftStep, FlowDraftVariable, FlowDraftVariableSource, FlowDraftVariableStatus, RecordingEvent, RecordingEventKind, RecordingHeader, flow_draft_source_choice_id
 from product.protocols.web.workflow import ValueSlotConsumer, ValueSlotSource, WorkflowStepPurpose
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
-ACTION_CANDIDATE_ID = "action_0123456789abcdef0123456789abcdef"
+BUSINESS_ACTION_ID = "bac_0123456789abcdef0123456789abcdef"
 
 def recorded_events() -> tuple[RecordingEvent, ...]:
     common = {
@@ -127,7 +110,9 @@ def build_draft() -> FlowDraft:
     return FlowDraftProcessor().build(
         recording_id="rec_0123456789abcdef0123456789abcdef",
         flow_id="recorded-flow",
-        action_candidate_id=ACTION_CANDIDATE_ID,
+        business_action_id=BUSINESS_ACTION_ID,
+        action_revision=1,
+        test_identity_id="tid_0123456789abcdef0123456789abcdef",
         events=recorded_events(),
     )
 
@@ -181,8 +166,8 @@ def test_review_requires_explicit_target_and_recorded_resource_confirmation() ->
     assert ready.revision >= draft.revision
     assert all(item.status is FlowDraftVariableStatus.CONFIRMED for item in ready.variables)
     flow = compiler.compile(ready)
-    assert flow.schema_version == "1"
-    assert flow.action_candidate_id == ACTION_CANDIDATE_ID
+    assert flow.schema_version == "2"
+    assert flow.business_action_id == BUSINESS_ACTION_ID
     assert flow.target_step_id == reviewed.target_step_id
     assert flow.steps[-1].purpose is WorkflowStepPurpose.TARGET
     assert flow.steps[-1].request_template.path == "/resources/{case_resource_id}"
@@ -224,7 +209,9 @@ def test_compile_drops_extractors_used_only_by_steps_after_target() -> None:
     draft = FlowDraft(
         recording_id="rec_0123456789abcdef0123456789abcdef",
         flow_id="recorded-flow",
-        action_candidate_id=ACTION_CANDIDATE_ID,
+        business_action_id=BUSINESS_ACTION_ID,
+        action_revision=1,
+        test_identity_id="tid_0123456789abcdef0123456789abcdef",
         revision=1,
         steps=(
             FlowDraftStep(

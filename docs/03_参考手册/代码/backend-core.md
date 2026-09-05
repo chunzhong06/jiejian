@@ -6,6 +6,23 @@
 
 <!-- 此区域由 scripts/docs/generate.py 从 product/backend/core/ 读取。 -->
 
+### `product/backend/core/action_preparation.py`
+- `_UNSAFE_TEXT`
+- `_SECRET_KEY`
+- `class ResourceInjectionKind`
+- `class ActionEvidenceKind`
+- `class ResourceInjection`
+- `class RecordedRequestTemplate`
+- `contains_resource_slot(value) -> bool`
+- `class RegisteredObserverReference`
+- `class ActionExecutionBinding`
+- `class ActionResourceBinding`
+- `class ActionEvidenceBinding`
+- `class ActionRecoveryBinding`
+- `binding_fingerprint(model_type, values) -> str`
+- `seal_binding(model_type, **values)`
+主要 import / dot-source：`__future__`, `enum`, `json`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.redaction`, `pydantic`, `re`, `typing`, `urllib.parse`
+
 ### `product/backend/core/application_understanding.py`
 - `canonical_role_key(value) -> str`
 - `candidate_id(kind, canonical_key) -> str`
@@ -24,6 +41,21 @@
 - `class HumanApprovalChannel`
 - `class HumanApproval`
 主要 import / dot-source：`__future__`, `enum`, `pydantic`
+
+### `product/backend/core/assurance.py`
+- `class AllocationMode`
+- `class AssuranceStatus`
+- `class PermissionIdentity`
+- `class IdentityRequirementSlot`
+- `class PermissionIdentitySlots`
+- `class IdentityRequirementPlan`
+- `class ActionResourceRequirement`
+- `class EffectEvidenceRequirement`
+- `class AllowControlRequirement`
+- `class ActionAssuranceContract`
+- `class IdentityRequirementPlanner`
+- `compile_action_assurance(action, permissions) -> ActionAssuranceContract`
+主要 import / dot-source：`__future__`, `collections`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.permission_intent`, `product.backend.core.permission_semantics`, `pydantic`
 
 ### `product/backend/core/boundary_proposal.py`
 - `PROPOSAL_ID_PATTERN`
@@ -44,7 +76,7 @@
 - `class ProposedPermissionItem`
 - `class BoundaryProposalBundle`
 - `class BoundaryProposalDecision`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.permission_intent`, `product.backend.core.permission_semantics`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/business_boundary.py`
 - `ACTOR_ID_PATTERN`
@@ -65,7 +97,7 @@
 - `class BusinessActionRevision`
 - `class ActorImplementationBinding`
 - `class ActionImplementationBinding`
-主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.approval`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.approval`, `product.backend.core.identifiers`, `product.backend.core.permission_semantics`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/contracts/execution_binding.py`
 - `resolve_execution_contract(record, governed) -> PermissionContract`
@@ -126,11 +158,17 @@
 - `class PermissionIntentModel`
 - `class PermissionIntentRelation`
 - `class PermissionIntentEffectiveState`
+- `permission_relation_consistent(relation, subject, owner) -> bool`
 - `permission_intent_sha256(payload) -> str`
 - `class PermissionIntentSemantic`
 - `class PermissionIntentRevision`
 - `class ProjectPolicyState`
-主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.approval`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.approval`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.permission_semantics`, `pydantic`, `re`, `typing`
+
+### `product/backend/core/permission_semantics.py`
+- `class PermissionExpectation`
+- `class BusinessEffectKind`
+主要 import / dot-source：`enum`
 
 ### `product/backend/core/recording.py`
 - `_REASON_CODE`
@@ -143,7 +181,7 @@
 - `class Recording`
 - `_TRANSITIONS`
 - `transition_recording_state(recording, target, operator, occurred_at_us, reason_code, pending_terminal_state) -> Recording`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/recording_sanitization.py`
 - `_MAX_STRUCTURED_DEPTH`
@@ -219,31 +257,6 @@
 - `class TestIdentityCookie`
 - `class TestIdentity`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `pydantic`
-
-### `product/backend/core/test_setup.py`
-- `_ACTION_ID_PATTERN`
-- `_TEST_RESOURCE_ID_PATTERN`
-- `_OBSERVATION_BINDING_ID_PATTERN`
-- `_RECOVERY_BINDING_ID_PATTERN`
-- `_EFFECT_CONFIRMATION_ID_PATTERN`
-- `_FLOW_ID_PATTERN`
-- `_STEP_ID_PATTERN`
-- `_RESOURCE_VALUE`
-- `_RESOURCE_TYPE`
-- `_PROJECTION_PATH`
-- `_UNSAFE_TEXT`
-- `class TestSetupModel`
-- `class TestResourceRelation`
-- `class ResourceValueConsumer`
-- `class ObservationBindingKind`
-- `class RecoveryBindingKind`
-- `test_setup_sha256(kind, payload) -> str`
-- `class TestResource`
-- `class ObservationBinding`
-- `class RecoveryBinding`
-- `class SecurityEffectConfirmation`
-- `class ActionSafetySetup`
-主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.identifiers`, `product.backend.core.redaction`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`, `urllib.parse`
 
 ### `product/backend/core/verification/behavior_differential.py`
 - `class BehaviorDifferentialModel`
@@ -382,8 +395,6 @@
 - `_SECRET_OR_URL`
 - `class PermissionModel`
 - `class RelationType`
-- `class PermissionExpectation`
-- `class SecurityEffectKind`
 - `class SecurityEffectDefinition`
 - `class CoverageDimension`
 - `class BatchAuthorizationMode`
@@ -397,7 +408,7 @@
 - `class PermissionRule`
 - `class BatchResourceExpectation`
 - `class BatchPermissionRule`
-主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `hashlib`, `json`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `hashlib`, `json`, `product.backend.core.permission_semantics`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/verification/trace.py`
 - `_PUBLIC_ID`

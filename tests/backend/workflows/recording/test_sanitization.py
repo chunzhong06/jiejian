@@ -1,9 +1,12 @@
 # 验证录制工作流中的录制数据清洗。
 
 from __future__ import annotations
+import json
+import pytest
 
 from product.backend.core.recording_sanitization import RecordingSanitizer
 from product.protocols import RecordingBudget
+from product.protocols import RecordingEvent, RecordingEventKind
 
 
 def _sanitizer(secret: str) -> RecordingSanitizer:
@@ -60,3 +63,24 @@ def test_unsafe_or_over_budget_body_never_returns_raw_content() -> None:
     assert (unsafe, unsafe_omitted) == (None, True)
     assert (oversized, oversized_omitted) == (None, True)
     assert (invalid_json, invalid_json_omitted) == (None, True)
+
+
+@pytest.mark.parametrize("content_type,body", [
+    ("text/plain", "password=unknown-inline-canary"),
+    ("text/html", '<script>const payload = {password:"unknown-inline-canary"};</script>'),
+])
+def test_unknown_inline_secret_body_is_omitted_without_event_failure(content_type, body):
+    sanitized, truncated = _sanitizer("different-known-secret").sanitize_body(body, content_type)
+    assert (sanitized, truncated) == (None, True)
+    event = RecordingEvent(sequence=1, occurred_at_us=1, kind=RecordingEventKind.RESPONSE,
+        identity_id="owner", body=sanitized, truncated=truncated)
+    assert "unknown-inline-canary" not in event.model_dump_json()
+
+
+def test_safe_text_and_json_keep_existing_redaction_contract():
+    sanitizer = _sanitizer("known-canary")
+    assert sanitizer.sanitize_body("业务完成", "text/plain") == ("业务完成", False)
+    body, truncated = sanitizer.sanitize_body(
+        '{"password":"unknown-canary","title":"保留业务字段","note":"known-canary"}', "application/json")
+    assert truncated is False
+    assert json.loads(body) == {"password": "[REDACTED]", "title": "保留业务字段", "note": "[REDACTED]"}

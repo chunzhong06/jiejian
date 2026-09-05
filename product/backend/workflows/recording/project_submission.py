@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from uuid import uuid4
 
-from product.backend.core.application_understanding import ActionCandidate, CandidateDecision
+from product.backend.core.business_boundary import BusinessActionRevision, ImplementationBindingStatus
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.core.recording import RecordingPurpose, RecordingState
@@ -28,6 +28,8 @@ from product.backend.workflows.recording.submission import (
     recording_target_scope,
 )
 from product.backend.workflows.test_identities import TestIdentityView
+from product.backend.workflows.test_identities.service import TestIdentityStatus
+from product.backend.workflows.recording.source import recording_source_fingerprint
 from product.protocols import RecordingBudget, RecordingRunnerRequest
 
 
@@ -37,7 +39,7 @@ class ProjectRecordingSubmission:
 
     request: RecordingRunnerRequest
     result: RecordingSubmissionResult
-    action: ActionCandidate
+    action: BusinessActionRevision
     test_identity: TestIdentityView
 
 
@@ -51,12 +53,14 @@ class ProjectRecordingService:
         recording_credentials,
         recording_submission: RecordingSubmission,
         *,
+        business_boundaries,
         uow_factory=None,
         request_store=None,
         projects=None,
         clock_us=None,
     ) -> None:
         self._application_understanding = application_understanding
+        self._business_boundaries = business_boundaries
         self._test_identities = test_identities
         self._recording_credentials = recording_credentials
         self._recording_submission = recording_submission
@@ -69,12 +73,14 @@ class ProjectRecordingService:
         self,
         project_id: str,
         *,
-        action_candidate_id: str,
+        business_action_id: str,
+        action_revision: int,
         test_identity_id: str,
         duration_seconds: int,
         idempotency_key: str,
         purpose: RecordingPurpose = RecordingPurpose.TARGET,
         parent_recording_id: str | None = None,
+        effect_id: str | None = None,
         headless: bool = False,
     ) -> ProjectRecordingSubmission:
         """校验项目式输入并提交；异常时精确清理本次短期会话。"""
@@ -83,6 +89,8 @@ class ProjectRecordingService:
             raise JiejianError(ErrorCode.INPUT_INVALID, "录制时长必须在 1 到 3600 秒之间")
         if (purpose is RecordingPurpose.TARGET) != (parent_recording_id is None):
             raise JiejianError(ErrorCode.INPUT_INVALID, "补录必须关联原业务录制")
+        if (purpose is RecordingPurpose.OBSERVATION) != (effect_id is not None):
+            raise JiejianError(ErrorCode.INPUT_INVALID, "结果证明必须指定已确认的业务效果")
         if parent_recording_id is not None:
             if self._uow_factory is None:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "补录服务尚未装配")
@@ -104,8 +112,9 @@ class ProjectRecordingService:
                 expected_hash=parent_job.request_hash,
             )
             if (
-                parent_request.action_candidate_id != action_candidate_id
-                or parent_request.sessions[0].test_identity_id != test_identity_id
+                parent_request.business_action_id != business_action_id
+                or parent_request.action_revision != action_revision
+                or parent_request.test_identity_id != test_identity_id
             ):
                 raise JiejianError(
                     ErrorCode.INPUT_INVALID,
@@ -120,21 +129,43 @@ class ProjectRecordingService:
                 "已移除应用不能创建新的录制任务，请先重新接入应用",
             )
         understanding = self._application_understanding.get(project_id)
+        boundary = self._business_boundaries.view(project_id)
         action = next(
             (
                 item
-                for item in understanding.action_candidates
-                if item.candidate_id == action_candidate_id
-                and item.decision is CandidateDecision.CONFIRMED
-                and not item.stale
+                for item in boundary.actions
+                if item.action_id == business_action_id and item.revision == action_revision
             ),
             None,
         )
         if action is None:
             raise JiejianError(ErrorCode.INPUT_INVALID, "录制动作尚未确认或已经失效")
+        if not any(
+            item.action_id == business_action_id and item.action_revision == action_revision
+            and item.status is ImplementationBindingStatus.CURRENT
+            for item in boundary.action_bindings
+        ):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "请先确认业务动作的当前实现")
+        if effect_id is not None and effect_id not in {item.effect_id for item in action.effect_catalog}:
+            raise JiejianError(ErrorCode.INPUT_INVALID, "结果证明引用的业务效果不属于当前动作")
+        if purpose is RecordingPurpose.RECOVERY and not action.state_changing:
+            raise JiejianError(ErrorCode.INPUT_INVALID, "只读业务动作不需要录制恢复方式")
         if understanding.confirmed_endpoint is None:
             raise JiejianError(ErrorCode.APPLICATION_ENDPOINT_INVALID, "请先确认应用运行地址")
         identity = self._test_identities.get(test_identity_id)
+        if (
+            identity.project_id != project_id or identity.status is not TestIdentityStatus.PREPARED
+            or not any(
+                item.actor_id == identity.actor_id and item.revision == identity.actor_revision
+                for item in boundary.actors
+            )
+            or not any(
+                item.actor_id == identity.actor_id and item.actor_revision == identity.actor_revision
+                and item.status is ImplementationBindingStatus.CURRENT
+                for item in boundary.actor_bindings
+            )
+        ):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "录制需要本应用当前角色下已登录的测试账号")
         now_us = self._clock_us()
         recording_id = f"rec_{uuid4().hex}"
         duration_us = duration_seconds * 1_000_000
@@ -146,25 +177,33 @@ class ProjectRecordingService:
             now_us=now_us,
             expires_at_us=now_us + duration_us,
         )
-        request = RecordingRunnerRequest(
-            schema_version="1",
-            recording_id=recording_id,
-            project_id=project_id,
-            action_candidate_id=action.candidate_id,
-            created_at_us=now_us,
-            target_scope=recording_target_scope(understanding.confirmed_endpoint),
-            sessions=(session,),
-            budget=RecordingBudget(max_duration_us=duration_us, max_contexts=1),
-            headless=headless,
-            trace_enabled=False,
-        )
         try:
+            request = RecordingRunnerRequest(
+                schema_version="2",
+                recording_id=recording_id,
+                project_id=project_id,
+                business_action_id=action.action_id,
+                action_revision=action.revision,
+                test_identity_id=test_identity_id,
+                preparation_source_fingerprint=recording_source_fingerprint(
+                    action, identity, understanding,
+                    next(item for item in boundary.action_bindings if item.action_id == action.action_id),
+                    next(item for item in boundary.actor_bindings if item.actor_id == identity.actor_id),
+                ),
+                purpose=purpose,
+                parent_recording_id=parent_recording_id,
+                effect_id=effect_id,
+                created_at_us=now_us,
+                target_scope=recording_target_scope(understanding.confirmed_endpoint),
+                sessions=(session,),
+                budget=RecordingBudget(max_duration_us=duration_us, max_contexts=1),
+                headless=headless,
+                trace_enabled=False,
+            )
             result = self._recording_submission.submit(
                 SubmitRecording(
                     request=request,
-                    flow_id=f"flow-{action.candidate_id.removeprefix('action_')}",
-                    purpose=purpose,
-                    parent_recording_id=parent_recording_id,
+                    flow_id=f"flow-{action.action_id.removeprefix('bac_')}-r{action.revision}",
                     idempotency_key=idempotency_key,
                     now_us=now_us,
                     available_at_us=now_us,

@@ -139,7 +139,7 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack 
   const permissionsComplete = boundary.actions.length > 0
     && boundary.permission_statuses.every((item) => item.permission_semantics_confirmed)
   return <div className="boundary-page">
-    <PageTaskHeader title="业务边界" description="先确认稳定业务语义，再按需追加 revision、沿用权限或重新绑定当前代码实现。" status={proposalView ? '等待人工确认' : permissionsComplete ? '业务权限状态 已确认' : '需要确认当前权限'} />
+    <PageTaskHeader title="业务边界" description="先确认稳定业务语义，再按需追加业务版本、沿用权限或重新绑定当前代码实现。" status={proposalView ? '等待人工确认' : permissionsComplete ? '业务权限状态 已确认' : '需要确认当前权限'} />
     {success && <Alert type="success" showIcon message={success} />}
     <CurrentBoundary boundary={boundary} />
 
@@ -149,7 +149,7 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack 
         ? <BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} />
         : editing === 'MAINTENANCE' && maintenanceDraft
           ? <BoundaryMaintenanceEditor key={editorKey} draft={maintenanceDraft} initialCommand={initialMaintenanceCommand} busy={busy} onSubmit={(command) => void createMaintenanceProposal(command)} />
-          : <div className="boundary-new-proposal"><Typography.Text type="secondary">调整会从 current stable IDs/revisions 开始，并形成新的不可变提案；现有正式边界不会被原地改写。</Typography.Text><Button onClick={() => { setInitialMaintenanceCommand(undefined); setEditorKey((value) => value + 1); setEditing(boundary.actors.length ? 'MAINTENANCE' : 'INITIAL') }}>{boundary.actors.length ? '调整当前业务边界' : '建立业务边界'}</Button></div>}
+          : <div className="boundary-new-proposal"><Typography.Text type="secondary">调整会从当前已确认的业务对象开始，并形成新的不可变提案；现有正式边界不会被原地改写。</Typography.Text><Button onClick={() => { setInitialMaintenanceCommand(undefined); setEditorKey((value) => value + 1); setEditing(boundary.actors.length ? 'MAINTENANCE' : 'INITIAL') }}>{boundary.actors.length ? '调整当前业务边界' : '建立业务边界'}</Button></div>}
   </div>
 }
 

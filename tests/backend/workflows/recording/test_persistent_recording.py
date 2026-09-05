@@ -1,59 +1,26 @@
 # 验证 Recording workflow 生命周期与当前 attempt 的持久化接线。
 
 from __future__ import annotations
-import sqlite3
-from functools import partial
-from io import BytesIO, StringIO
+from uuid import uuid4
 from pathlib import Path
 import pytest
-from product.backend.core.lifecycle import JobState, ProjectStatus
-from product.backend.core.recording import RecordingState, RecordingStateEvent
-from product.protocols.web.target import WebTargetScope
+from product.backend.core.lifecycle import JobState
+from product.backend.core.recording import RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols import (
-    ConfirmFlowDraftResource,
-    ConfirmFlowDraftTarget,
-    RecordingAuthMethod,
-    RecordingBudget,
-    RecordingCleanupStatus,
-    RecordingEventKind,
-    RecordingEvent,
-    RecordingHeader,
-    RecordingRunnerRequest,
-    RecordingRunnerResultType,
-    RecordingRunnerResult,
-    RecordingSessionRef,
-    canonical_recording_json_bytes,
-    parse_recording_result,
-)
-from product.backend.workflows.recording.submission import (
-    RecordingSubmission,
-    SubmitRecording,
-)
-from product.backend.infra.recording.request_store import RecordingRequestStore
+from product.protocols import RecordingEventKind, RecordingRunnerResultType
+from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.infra.recording.control import (
     control_paths_for_attempt,
     write_control_marker,
 )
-from product.backend.infra.recording.process import execute_recording_runner
 from product.backend.infra.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
-from product.backend.infra.storage import (
-    ProjectRecord,
-    StorageUnitOfWork,
-    create_session_factory,
-    create_sqlite_engine,
-    upgrade_database,
-)
 from product.backend.infra.runtime.jobs.recording import RecordingJobHandler
-from product.backend.infra.runtime.jobs.attempts import JobAttempts
-from product.backend.infra.runtime.jobs.models import ClaimJob, WaitingFatalFailure
+from product.backend.infra.runtime.jobs.models import ClaimJob
 from product.backend.infra.runtime.jobs.models import RequestCancellation
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
-from product.backend.infra.runtime.jobs.targets import JobTargetType, default_run_job_targets
-from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
-from tests.backend.infra.recording.test_browser_boundary import COOKIE_ENV_NAME, TEST_IDENTITY_ID, browser_server, recording_request
+from tests.fixtures.recording import COOKIE_ENV_NAME, browser_server, recording_request, RecordingContext as _Context, runner_request as _request
 pytestmark = pytest.mark.database
 NOW_US = 1_820_000_000_000_000
 PROJECT_ID = "recording-project"
@@ -68,7 +35,7 @@ def test_recording_lifecycle_controls_current_attempt_and_capture_phases(
         )
         submission = context.application.submit(
             SubmitRecording(
-                request=request,
+                request=context.bind_request(request),
                 flow_id=PROJECT_ID,
                 idempotency_key="recording-control-phases",
                 available_at_us=NOW_US,
@@ -134,7 +101,7 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
             request = request.model_copy(
                 update={
                     "recording_id": "rec_" + "a" * 32,
-                    "project_id": PROJECT_ID,
+                    "project_id": context.project_id,
                     "created_at_us": NOW_US,
                     "sessions": (
                         request.sessions[0].model_copy(
@@ -145,13 +112,14 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
                     ),
                 }
             )
+            request = context.bind_request(request)
             signals = {"start": False, "stop": False}
 
             def interact(session: RecordingBrowserSession) -> None:
-                page = session.new_page(TEST_IDENTITY_ID)
+                page = session.new_page(request.test_identity_id)
                 page.goto(server.url("/ui"))
                 signals["start"] = True
-                assert session.wait_for_capture_start(page, TEST_IDENTITY_ID)
+                assert session.wait_for_capture_start(page, request.test_identity_id)
                 page.fill("input[name='password']", sentinel)
                 page.click("button[data-testid='submit']")
                 page.wait_for_timeout(250)
@@ -172,7 +140,7 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
         assert result.result_type is RecordingRunnerResultType.CAPTURED
         submission = context.application.submit(
             SubmitRecording(
-                request=request,
+                request=context.bind_request(request),
                 flow_id=PROJECT_ID,
                 idempotency_key="controlled-captured-consumption",
                 available_at_us=NOW_US,
@@ -205,7 +173,9 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
             and "/echo" in (event.url or "")
             for event in result.events
         )
-        assert all("/ui" not in (event.url or "") for event in result.events)
+        assert all("/ui" not in (event.url or "") for event in result.events), [
+            (event.kind.value, event.url) for event in result.events if "/ui" in (event.url or "")
+        ]
         with context.uow_factory() as work:
             persisted = work.recordings.get(request.recording_id)
             drafts = work.flow_drafts.list_for_recording(request.recording_id)
@@ -224,6 +194,7 @@ def test_cancelled_result_is_consumed_without_flow_draft(tmp_path: Path) -> None
         request = _request("rec_" + "b" * 32).model_copy(
             update={"created_at_us": NOW_US}
         )
+        request = context.bind_request(request)
         cancelled = BrowserRecordingAdapter().run(
             request,
             lambda _session: pytest.fail("cancelled recording must not interact"),
@@ -234,7 +205,7 @@ def test_cancelled_result_is_consumed_without_flow_draft(tmp_path: Path) -> None
         assert cancelled.result_type is RecordingRunnerResultType.CANCELLED
         submission = context.application.submit(
             SubmitRecording(
-                request=request,
+                request=context.bind_request(request),
                 flow_id=PROJECT_ID,
                 idempotency_key="cancelled-consumption",
                 available_at_us=NOW_US,
@@ -280,72 +251,101 @@ def test_cancelled_result_is_consumed_without_flow_draft(tmp_path: Path) -> None
     finally:
         context.engine.dispose()
 
-class _Context:
-    def __init__(self, tmp_path: Path) -> None:
-        self.var_dir = tmp_path / "var"
-        self.database_path = self.var_dir / "data" / "jiejian.db"
-        upgrade_database(self.database_path)
-        self.engine = create_sqlite_engine(self.database_path)
-        factory = create_session_factory(self.engine)
-        self.uow_factory = partial(StorageUnitOfWork, factory)
-        with self.uow_factory() as work:
-            work.projects.add(
-                ProjectRecord(
-                    project_id=PROJECT_ID,
-                    name="录制项目",
-                    status=ProjectStatus.READY,
-                    created_at_us=NOW_US - 1,
-                    updated_at_us=NOW_US - 1,
-                )
-            )
-            work.commit()
-        self.request_store = RecordingRequestStore(self.var_dir)
-        self.job_targets = default_run_job_targets()
-        self.job_targets.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
-        self.attempts = JobAttempts(
-            self.uow_factory,
-            jitter_source=lambda _: 0,
-            targets=self.job_targets,
-        )
-        self.application = RecordingSubmission(
-            self.uow_factory,
-            self.request_store,
-            attempts=self.attempts,
-        )
-
 def _context(tmp_path: Path) -> _Context:
     return _Context(tmp_path)
 
-def _request(
-    recording_id: str,
-    *,
-    secret_refs: tuple[str, ...] = ("env:RECORDING_SECRET",),
-) -> RecordingRunnerRequest:
-    return RecordingRunnerRequest(
-        schema_version="1",
-        recording_id=recording_id,
-        project_id=PROJECT_ID,
-        action_candidate_id="action_0123456789abcdef0123456789abcdef",
-        created_at_us=NOW_US if recording_id.endswith("1" * 32) else NOW_US + 100,
-        target_scope=WebTargetScope(
-            base_url="http://127.0.0.1:18080",
-            allowed_origins=("http://127.0.0.1:18080",),
-            allowed_hosts=("127.0.0.1",),
-            allowed_ports=(18080,),
-            allow_private_network=True,
-        ),
-        sessions=(
-            RecordingSessionRef(
-                test_identity_id="tid_0123456789abcdef0123456789abcdef",
-                session_ref="session_" + "5" * 32,
-                auth_method=RecordingAuthMethod.BEARER,
-                bearer_ref=secret_refs[0],
-                expires_at_us=NOW_US + 1_000_000,
-            ),
-        ),
-        budget=RecordingBudget(
-            max_duration_us=1_000_000,
-        ),
-        headless=True,
-        trace_enabled=False,
-    )
+
+@pytest.mark.parametrize("name,value", [
+    ("timeout_seconds", 2.0), ("timeout_seconds", 5.0),
+    ("max_requests", 32), ("max_requests", 64),
+    ("max_response_bytes", 65_536), ("max_response_bytes", 262_144),
+])
+def test_submission_allows_only_equal_or_narrower_budgets(tmp_path, name, value):
+    context = _context(tmp_path)
+    try:
+        request = context.bind_request(_request("rec_" + uuid4().hex))
+        request = request.model_copy(update={"target_scope": request.target_scope.model_copy(update={name: value})})
+        job_id = "job_" + uuid4().hex
+        submitted = context.application.submit(SubmitRecording(request=request, flow_id="budget-flow",
+            idempotency_key=uuid4().hex, available_at_us=request.created_at_us,
+            now_us=request.created_at_us, job_id=job_id))
+        assert submitted.created is True
+        stored = context.request_store.load(job_id, expected_hash=submitted.job.request_hash)
+        assert getattr(stored.target_scope, name) == value
+    finally:
+        context.harness.close()
+
+
+@pytest.mark.parametrize("scope_change", [
+    {"timeout_seconds": 6.0}, {"max_requests": 65}, {"max_response_bytes": 262_145},
+    {"allowed_origins": ("http://127.0.0.1:18080", "http://127.0.0.1:18081")},
+    {"allowed_hosts": ("127.0.0.1", "127.0.0.2")},
+    {"allowed_ports": (18080, 18081)},
+    {"base_url": "http://127.0.0.1:18081", "allowed_origins": ("http://127.0.0.1:18081",), "allowed_ports": (18081,)},
+    {"follow_redirects": True},
+])
+def test_submission_rejects_scope_expansion_without_orphaned_state(tmp_path, scope_change):
+    context = _context(tmp_path)
+    try:
+        request = context.bind_request(_request("rec_" + uuid4().hex))
+        request = request.model_copy(update={"target_scope": request.target_scope.model_copy(update=scope_change)})
+        job_id = "job_" + uuid4().hex
+        with pytest.raises(JiejianError) as error:
+            context.application.submit(SubmitRecording(request=request, flow_id="scope-flow",
+                idempotency_key=uuid4().hex, available_at_us=request.created_at_us,
+                now_us=request.created_at_us, job_id=job_id))
+        assert error.value.code == "RECORD_STATE_PRECONDITION"
+        with context.uow_factory() as work:
+            assert work.recordings.get(request.recording_id) is None
+            assert work.jobs.get(job_id) is None
+        assert not context.request_store.path_for(job_id).exists()
+    finally:
+        context.harness.close()
+
+
+@pytest.mark.parametrize("source", ["deleted", "foreign"])
+def test_new_recording_rejects_missing_or_foreign_identity(tmp_path, source):
+    context = _context(tmp_path)
+    try:
+        request = context.bind_request(_request("rec_" + uuid4().hex))
+        if source == "deleted":
+            context.harness.core.test_identities.delete(request.test_identity_id)
+        else:
+            from product.backend.core.business_boundary import BusinessActor, boundary_sha256
+            from product.backend.infra.storage import ProjectRecord
+            from product.backend.core.lifecycle import ProjectStatus
+            from product.backend.workflows.test_identities import PreparedLoginState
+            from product.backend.core.test_identity import TestIdentityAuthMethod
+            from tests.fixtures.assurance import actor
+            # 使用同一数据库中真实存在且已准备的外项目身份，隔离项目所有权拒绝原因。
+            revision = actor(actor_id="bar_" + "9" * 32).model_copy(update={"project_id": "foreign-project"})
+            revision = revision.model_copy(update={"semantic_fingerprint": boundary_sha256(revision.semantic_payload())})
+            with context.uow_factory() as work:
+                work.projects.add(ProjectRecord(project_id="foreign-project", name="外项目",
+                    status=ProjectStatus.READY, created_at_us=1, updated_at_us=1))
+                work.business_boundaries.add_actor_revision(revision)
+                work.business_boundaries.add_actor(BusinessActor(actor_id=revision.actor_id,
+                    project_id="foreign-project", current_revision=1, created_at_us=1, updated_at_us=1))
+                work.commit()
+            core = context.harness.core
+            foreign_id = core.test_identities.create("foreign-project",
+                actor_id=revision.actor_id, actor_revision=1, label="外来账号")
+            reference = f"cred:jiejian/test-identity/foreign-project/{foreign_id.identity_id}/bearer"
+            core.secret_store.write(reference, "foreign-test-secret")
+            core.test_identities.save_prepared_state(foreign_id.identity_id, PreparedLoginState(
+                auth_method=TestIdentityAuthMethod.BEARER, bearer_secret_ref=reference,
+                prepared_at_us=foreign_id.updated_at_us + 1))
+            request = request.model_copy(update={"test_identity_id": foreign_id.identity_id,
+                "sessions": (request.sessions[0].model_copy(update={"test_identity_id": foreign_id.identity_id}),)})
+        job_id = "job_" + uuid4().hex
+        with pytest.raises(JiejianError) as error:
+            context.application.submit(SubmitRecording(request=request, flow_id="identity-flow",
+                idempotency_key=uuid4().hex, available_at_us=request.created_at_us,
+                now_us=request.created_at_us, job_id=job_id))
+        assert error.value.code == "RECORD_STATE_PRECONDITION"
+        with context.uow_factory() as work:
+            assert work.recordings.get(request.recording_id) is None
+            assert work.jobs.get(job_id) is None
+        assert not context.request_store.path_for(job_id).exists()
+    finally:
+        context.harness.close()

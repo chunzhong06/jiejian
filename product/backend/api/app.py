@@ -27,6 +27,10 @@ from product.backend.api.routers.business_boundaries import build_business_bound
 from product.backend.api.routers.current_experience import build_current_experience_router
 from product.backend.api.routers.mcp_access import build_mcp_access_router
 from product.backend.api.routers.workspace import build_workspace_router
+from product.backend.api.routers.recordings import build_recordings_router
+from product.backend.api.routers.preparation import build_preparation_router
+from product.backend.api.routers.assistant import build_assistant_router
+from product.backend.api.routers.permission_drafts import build_permission_drafts_router
 from product.backend.api.local_control import LocalControlGuard
 from product.backend.api.mcp import build_mcp_control
 from product.backend.workflows.mcp_access import MCPAccessController
@@ -66,8 +70,6 @@ def create_app(
         folder_selector=folder_selector,
         official_sample_root=official_sample_root,
     )
-    # 参数暂留给既有调用方；1.1.0 没有可启动的完整执行 Worker。
-    del start_worker
     mcp_access = MCPAccessController(
         f"{local_control_guard.origin}/mcp",
         context.secret_store,
@@ -115,6 +117,10 @@ def create_app(
     app.include_router(build_workspace_router(context))
     app.include_router(build_current_experience_router())
     app.include_router(build_test_identities_router(context))
+    app.include_router(build_recordings_router(context))
+    app.include_router(build_preparation_router(context))
+    app.include_router(build_assistant_router(context))
+    app.include_router(build_permission_drafts_router(context))
     app.include_router(build_mcp_access_router(context, mcp_access))
     app.include_router(build_llm_router(context))
     app.include_router(build_onboarding_router(context))
@@ -124,6 +130,8 @@ def create_app(
         ready_started = perf_counter()
         app.state.mcp_lifespan = mcp_control.server.session_manager.run()
         await app.state.mcp_lifespan.__aenter__()
+        if start_worker:
+            context.worker.start()
         _log_startup_timing("ready_total", ready_started)
         # 可重建运行数据维护不属于产品可用性的前置条件，放到 ready 后的受控后台线程。
         app.state.local_maintenance_task = asyncio.create_task(
@@ -132,6 +140,7 @@ def create_app(
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
+        await asyncio.to_thread(context.worker.stop)
         mcp_access.close()
         mcp_lifespan = getattr(app.state, "mcp_lifespan", None)
         if mcp_lifespan is not None:

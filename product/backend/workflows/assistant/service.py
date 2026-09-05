@@ -1,5 +1,5 @@
 # =============================================================================
-# 八类 AI surface 通用执行内核
+# AI surface 通用执行内核；CURRENT 事实与 dormant 算法共用执行边界。
 #
 # 定位
 #   服务端事实 resolver 与可选模型 Provider 之间的唯一应用服务边界。
@@ -54,6 +54,7 @@ class AssistantSurfaceView(BaseModel):
     subject_id: str
     state_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     entities: tuple[AssistantEntity, ...]
+    can_generate: bool = True
     suggestions: tuple[AssistantSuggestion, ...] = Field(default=(), max_length=3)
     retry_after_us: int | None = Field(default=None, ge=0)
 
@@ -78,8 +79,12 @@ class AssistantService:
         self._inflight: set[str] = set()
         self._lock = threading.Lock()
 
-    def get_project(self, project_id: str, template_id: AssistantTemplateId) -> AssistantSurfaceView:
-        return self._get(self._surfaces.resolve_project(project_id, template_id))
+    def get_project(self, project_id: str, template_id: AssistantTemplateId, *,
+                    business_actor_id: str | None = None, business_action_id: str | None = None,
+                    recording_id: str | None = None) -> AssistantSurfaceView:
+        focus = {key: value for key, value in {"business_actor_id": business_actor_id,
+            "business_action_id": business_action_id, "recording_id": recording_id}.items() if value is not None}
+        return self._get(self._surfaces.resolve_project(project_id, template_id, **focus))
 
     def generate_project(
         self,
@@ -87,8 +92,13 @@ class AssistantService:
         template_id: AssistantTemplateId,
         *,
         retry: bool = False,
+        business_actor_id: str | None = None,
+        business_action_id: str | None = None,
+        recording_id: str | None = None,
     ) -> AssistantSurfaceView:
-        return self._generate_explicit(self._surfaces.resolve_project(project_id, template_id), retry=retry)
+        focus = {key: value for key, value in {"business_actor_id": business_actor_id,
+            "business_action_id": business_action_id, "recording_id": recording_id}.items() if value is not None}
+        return self._generate_explicit(self._surfaces.resolve_project(project_id, template_id, **focus), retry=retry)
 
     def get_result(self, run_id: str) -> AssistantSurfaceView:
         return self._get(self._surfaces.resolve_result(run_id))
@@ -111,6 +121,8 @@ class AssistantService:
     def _get(self, resolved: ResolvedAssistantSurface) -> AssistantSurfaceView:
         if not self._configured():
             return self._view(AssistantStatus.DISABLED, resolved)
+        if not resolved.can_generate:
+            return self._view(AssistantStatus.READY, resolved)
         key = self._key(resolved)
         with self._lock:
             if key in self._inflight:
@@ -135,6 +147,8 @@ class AssistantService:
     ) -> AssistantSurfaceView:
         if not self._configured():
             return self._view(AssistantStatus.DISABLED, resolved)
+        if not resolved.can_generate:
+            return self._view(AssistantStatus.READY, resolved)
         cached = self._cache.read(
             resolved.subject_id,
             resolved.surface_input.template_id,
@@ -219,6 +233,7 @@ class AssistantService:
             subject_id=resolved.subject_id,
             state_fingerprint=resolved.state_fingerprint,
             entities=resolved.surface_input.entities,
+            can_generate=resolved.can_generate,
             suggestions=suggestions,
             retry_after_us=retry_after_us,
         )

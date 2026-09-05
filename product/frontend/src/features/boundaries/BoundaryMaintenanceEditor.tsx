@@ -12,6 +12,9 @@ import type {
   ProposedEffectDto,
 } from '../../api/businessBoundaries'
 import { confidenceLabels, effectKindLabels, expectationLabels, relationLabels } from './boundaryLabels'
+import { AssistantPanel } from '../../components/AssistantPanel'
+import { PermissionDraftAssist } from './PermissionDraftAssist'
+import type { PermissionDraftSuggestion } from '../../api/permissionDrafts'
 
 type DraftEffect = Omit<ProposedEffectDto, 'effect_kind'> & { effect_kind?: BusinessEffectKind }
 type DraftAction = Omit<BoundaryMaintenanceActionDto, 'effects'> & { effects: DraftEffect[] }
@@ -27,6 +30,40 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
   const [actions, setActions] = useState<DraftAction[]>(initial.actions)
   const [permissions, setPermissions] = useState<BoundaryMaintenancePermissionDto[]>(initial.permissions)
   const [error, setError] = useState<string>()
+
+  const applySuggestions = (suggestions: PermissionDraftSuggestion[]) => {
+    let next = permissions
+    for (const suggestion of suggestions) {
+      const subject = actors.find((item) => item.actor_id === suggestion.subject_actor_id && item.expected_current_revision === suggestion.subject_actor_revision)
+      const owner = actors.find((item) => item.actor_id === suggestion.resource_owner_actor_id && item.expected_current_revision === suggestion.resource_owner_actor_revision)
+      const action = actions.find((item) => item.action_id === suggestion.business_action_id && item.expected_current_revision === suggestion.action_revision)
+      // AI 只理解正式业务；本地已修改的主体/动作不能借旧 revision 接收建议。
+      if (!subject || !owner || !action || [subject, owner].some((item) => item.effective_state !== 'ACTIVE'
+        || JSON.stringify(item) !== JSON.stringify(draft.actors.find((value) => value.item_id === item.item_id)))
+        || action.effective_state !== 'ACTIVE' || JSON.stringify(action) !== JSON.stringify(draft.actions.find((value) => value.item_id === action.item_id))) {
+        setError('建议引用的主体或动作已在草稿中修改，请手工核对这些规则。'); return
+      }
+      const effects = action.effects.filter((item) => item.effect_id && suggestion.protected_effect_ids.includes(item.effect_id)).map((item) => item.item_id)
+      if (!effects.length || effects.length !== suggestion.protected_effect_ids.length) { setError('建议的业务结果已变化，请手工核对。'); return }
+      const matches = (item: BoundaryMaintenancePermissionDto) => item.effective_state === 'ACTIVE' && item.subject_actor_item_id === subject.item_id
+        && item.resource_owner_actor_item_id === owner.item_id && item.business_action_item_id === action.item_id && item.relation === suggestion.relation
+      const exact = next.find((item) => matches(item) && item.protected_effect_item_ids.length === effects.length && effects.every((id) => item.protected_effect_item_ids.includes(id)))
+      if (exact) next = next.map((item) => item === exact ? { ...item, expectation: suggestion.suggested_expectation } : item)
+      else {
+        // 部分业务结果被新建议覆盖时保留原规则的其他结果，不覆盖无关手工输入。
+        next = next.flatMap((item) => {
+          if (!matches(item)) return [item]
+          const remaining = item.protected_effect_item_ids.filter((id) => !effects.includes(id))
+          if (remaining.length === item.protected_effect_item_ids.length) return [item]
+          return remaining.length ? [{ ...item, protected_effect_item_ids: remaining }] : item.intent_id ? [{ ...item, effective_state: 'RETIRED' as const }] : []
+        })
+        next = [...next, { item_id: localId('pperm'), intent_id: null, expected_current_revision: null, effective_state: 'ACTIVE',
+          subject_actor_item_id: subject.item_id, business_action_item_id: action.item_id, resource_owner_actor_item_id: owner.item_id,
+          relation: suggestion.relation, expectation: suggestion.suggested_expectation, protected_effect_item_ids: effects }]
+      }
+    }
+    setPermissions(next); setError(undefined)
+  }
 
   const addPermission = () => {
     const actor = actors.find((item) => item.effective_state === 'ACTIVE')
@@ -71,7 +108,7 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
   return <section className="boundary-editor" aria-labelledby="boundary-maintenance-title">
     <div className="boundary-section-heading"><div>
       <Typography.Title level={3} id="boundary-maintenance-title">调整当前业务边界</Typography.Title>
-      <Typography.Paragraph type="secondary">当前主体、动作和权限会完整保留。修改只会先形成一份不可变提案，批准后才追加正式 revision 或更新实现映射。</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">当前主体、动作和权限会完整保留。修改只会先形成一份不可变提案，批准后才追加正式业务版本 或更新实现映射。</Typography.Paragraph>
     </div></div>
 
     <Divider orientation="left">谁在使用应用</Divider>
@@ -116,6 +153,8 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
     <Button onClick={() => setActions((items) => [...items, manualAction()])}>新增业务动作</Button>
 
     <Divider orientation="left">谁可以做什么</Divider>
+    <PermissionDraftAssist projectId={draft.project_id} boundaryFingerprint={draft.boundary_state_fingerprint}
+      draftKey={JSON.stringify([actors, actions, permissions])} disabled={busy} onApply={applySuggestions} />
     <div className="boundary-editor-list">{permissions.map((permission) => {
       const action = actions.find((item) => item.item_id === permission.business_action_item_id)
       return <article key={permission.item_id} className="boundary-editor-card boundary-permission-editor">
@@ -167,6 +206,7 @@ function ImplementationSelector({ kind, item, draft, onChange }: {
       placeholder="尚未选择可验证的代码实现"
     />
     {missingEvidence && <Alert type="info" showIcon message="这条线索没有可验证源码证据，只能帮助描述业务，不能证明当前代码实现。" />}
+    {identity && <AssistantPanel projectId={draft.project_id} surface="implementation-mapping" focus={kind === 'ROLE' ? { business_actor_id: identity } : { business_action_id: identity }} title="理解当前代码实现候选" actionLabel="解释候选" />}
   </details>
 }
 

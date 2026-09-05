@@ -62,6 +62,9 @@ def _candidate_input(name: str = "导出项目"):
 def test_templates_freeze_all_eight_surfaces_and_keep_prompt_injection_in_data() -> None:
     assert set(ASSISTANT_TEMPLATES) == set(AssistantTemplateId)
     assert {item.value for item in AssistantTemplateId} == {
+        "jiejian.implementation_mapping",
+        "jiejian.business_recording_review",
+        "jiejian.preparation_explanation",
         "jiejian.next_step",
         "jiejian.candidate_review",
         "jiejian.identity_preparation",

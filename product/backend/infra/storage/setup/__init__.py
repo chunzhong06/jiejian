@@ -2,24 +2,12 @@
 
 from .permission_intents import PermissionIntentRepository, PermissionIntentRevisionRow, ProjectPolicyStateRow
 from .test_identities import TestIdentityCookieRow, TestIdentityRepository, TestIdentityRow
-from .test_setup import (
-    ActionSafetySetupRepository,
-    ObservationBindingRow,
-    RecoveryBindingRow,
-    SecurityEffectConfirmationRow,
-    TestResourceRow,
-)
 
 __all__ = [
-    "ActionSafetySetupRepository",
-    "ObservationBindingRow",
     "PermissionIntentRepository",
     "PermissionIntentRevisionRow",
     "ProjectPolicyStateRow",
-    "RecoveryBindingRow",
-    "SecurityEffectConfirmationRow",
     "TestIdentityCookieRow",
     "TestIdentityRepository",
     "TestIdentityRow",
-    "TestResourceRow",
 ]

@@ -1,6 +1,6 @@
 # =============================================================================
 # 定位
-#   1.1.1 当前动作级工作区的只读模型合同。
+#   当前动作级工作区的只读模型合同。
 #
 # 职责
 #   统一承载项目连接、业务主体、业务动作、权限、实时实现检查和唯一主任务。
@@ -81,8 +81,15 @@ PrimaryTaskKind = Literal[
     "REVIEW_BOUNDARY_PROPOSAL",
     "ESTABLISH_BUSINESS_BOUNDARY",
     "REVIEW_PERMISSION_REVISION",
+    "COMPLETE_ALLOW_CONTROL",
     "REVIEW_ACTOR_IMPLEMENTATION",
     "REVIEW_ACTION_IMPLEMENTATION",
+    "REVIEW_RECORDING",
+    "PREPARE_TEST_IDENTITY",
+    "DEMONSTRATE_ACTION",
+    "PREPARE_ACTION_RESOURCE",
+    "COMPLETE_EFFECT_EVIDENCE",
+    "COMPLETE_RECOVERY",
 ]
 
 
@@ -91,11 +98,18 @@ class PrimaryTaskView(WorkspaceModel):
     task_kind: PrimaryTaskKind
     business_action_id: str | None = None
     business_actor_id: str | None = None
+    action_revision: int | None = Field(default=None, ge=1)
+    identity_slot_id: str | None = None
+    test_identity_id: str | None = None
+    recording_id: str | None = None
+    recording_purpose: Literal["TARGET", "OBSERVATION", "RECOVERY"] | None = None
+    parent_recording_id: str | None = None
+    effect_id: str | None = None
     title: str = Field(min_length=1, max_length=256)
     why_now: str = Field(min_length=1, max_length=1024)
     user_responsibility: str = Field(min_length=1, max_length=1024)
     system_will_do: str = Field(min_length=1, max_length=1024)
-    route: Literal["/application", "/permissions"]
+    route: Literal["/application", "/permissions", "/tests"]
     can_execute: bool
     stale_fingerprint: str = Field(pattern=SHA256_PATTERN)
 

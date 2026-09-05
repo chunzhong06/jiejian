@@ -5,7 +5,7 @@
 #   WorkerContainer 内的 Job Handler 组合边界。
 #
 # 职责
-#   注入同一 ResultServices｜注册 Run/Recording/Artifact Check Handler。
+#   只注册真实 Recording Handler，并注入录制结果接受服务。
 #
 # 边界
 #   不创建 ApplicationCore，不拥有 GUI/Onboarding/LLM/Cache 服务。
@@ -17,8 +17,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
-from product.backend.infra.artifacts.scan_job import ArtifactCheckJobHandler
-from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.handlers import JobHandlerRegistry
 from product.backend.infra.runtime.jobs.recording import (
@@ -26,10 +24,6 @@ from product.backend.infra.runtime.jobs.recording import (
     RecordingSubmissionPort,
 )
 from product.backend.infra.runtime.jobs.targets import JobTargetType
-from product.backend.infra.runtime.jobs.verification import (
-    ResultFinalizerPort,
-    VerificationRunJobHandler,
-)
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.storage import StorageUnitOfWork
 
@@ -42,21 +36,13 @@ class WorkerHandlerFactory:
         var_dir: Path,
         uow_factory: Callable[..., StorageUnitOfWork],
         attempts: JobAttempts,
-        request_store: ExecutionRequestStore,
-        result_finalizer: ResultFinalizerPort,
         recording_store: RecordingRequestStore,
         recording_submission_factory: Callable[[], RecordingSubmissionPort],
-        publication_service,
-        reconciliation_service,
     ) -> None:
         self._var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
         self._attempts = attempts
-        self._request_store = request_store
-        self._result_finalizer = result_finalizer
         self._recording_submission_factory = recording_submission_factory
-        self._publication = publication_service
-        self._reconciliation = reconciliation_service
         self._recording_store = recording_store
 
     def build_registry(
@@ -64,22 +50,9 @@ class WorkerHandlerFactory:
         lease_owner: str,
         environ: Mapping[str, str],
     ) -> JobHandlerRegistry:
-        """创建当前 Worker 的三类 Handler，并共享同一个 ResultFinalizer。"""
+        """创建只含录制能力的 Handler；不装配 Run 或安全检查。"""
 
         registry = JobHandlerRegistry()
-
-        def build_run_handler() -> VerificationRunJobHandler:
-            return VerificationRunJobHandler(
-                var_dir=self._var_dir,
-                lease_owner=lease_owner,
-                uow_factory=self._uow_factory,
-                attempt_service=self._attempts,
-                request_store=self._request_store,
-                publication_service=self._publication,
-                reconciliation_service=self._reconciliation,
-                result_finalizer=self._result_finalizer,
-                environ=environ,
-            )
 
         def build_recording_handler() -> RecordingJobHandler:
             return RecordingJobHandler(
@@ -93,12 +66,5 @@ class WorkerHandlerFactory:
                 environ=environ,
             )
 
-        registry.register(JobTargetType.RUN, build_run_handler)
         registry.register(JobTargetType.RECORDING, build_recording_handler)
-        registry.register_auxiliary("ARTIFACT_CHECK", self.build_artifact_check_handler)
         return registry
-
-    def build_artifact_check_handler(self) -> ArtifactCheckJobHandler:
-        """构造 Worker 专属的 Artifact Check Handler。"""
-
-        return ArtifactCheckJobHandler(self._var_dir)

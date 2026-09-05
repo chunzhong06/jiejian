@@ -483,3 +483,8 @@ code, pre, kbd, samp { font-family: var(--font-mono); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* 权限文字建议与人工规则在同一表单中排列；窄屏内容保持可换行。 */
+.boundary-permission-assist { display: grid; gap: var(--space-16); min-width: 0; margin-bottom: var(--space-24); }
+.boundary-permission-assist > .ant-btn { justify-self: start; }
+.boundary-permission-assist .boundary-editor-card { margin-block: var(--space-16); overflow-wrap: anywhere; }

@@ -1,35 +1,28 @@
-# AI 辅助路由；项目和结果 GET 只读缓存，所有模型生成都要求显式 POST。
-
+# 仅注册三个 CURRENT AI 入口；GET 冷读取，POST 显式生成，焦点由服务端复核。
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import Field
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
-from product.backend.workflows.assistant.diagnosis import ErrorDiagnosisContext, diagnose_error
+from product.backend.core.business_boundary import ACTION_ID_PATTERN, ACTOR_ID_PATTERN
+from product.backend.core.identifiers import RECORDING_ID_PATTERN
 from product.backend.workflows.assistant.templates import AssistantTemplateId
-from product.backend.composition import ApplicationCore
 
 
 class ProjectAssistantSurface(StrEnum):
-    NEXT_STEP = "next-step"
-    CANDIDATE_REVIEW = "candidate-review"
-    IDENTITY_PREPARATION = "identity-preparation"
+    IMPLEMENTATION_MAPPING = "implementation-mapping"
     RECORDING_REVIEW = "recording-review"
-    OBSERVATION_RECOVERY = "observation-recovery"
-    CHECK_PREVIEW_EXPLANATION = "check-preview-explanation"
+    PREPARATION_EXPLANATION = "preparation-explanation"
 
 
 _PROJECT_TEMPLATE = {
-    ProjectAssistantSurface.NEXT_STEP: AssistantTemplateId.NEXT_STEP,
-    ProjectAssistantSurface.CANDIDATE_REVIEW: AssistantTemplateId.CANDIDATE_REVIEW,
-    ProjectAssistantSurface.IDENTITY_PREPARATION: AssistantTemplateId.IDENTITY_PREPARATION,
-    ProjectAssistantSurface.RECORDING_REVIEW: AssistantTemplateId.RECORDING_REVIEW,
-    ProjectAssistantSurface.OBSERVATION_RECOVERY: AssistantTemplateId.OBSERVATION_RECOVERY,
-    ProjectAssistantSurface.CHECK_PREVIEW_EXPLANATION: AssistantTemplateId.CHECK_PREVIEW_EXPLANATION,
+    ProjectAssistantSurface.IMPLEMENTATION_MAPPING: AssistantTemplateId.IMPLEMENTATION_MAPPING,
+    ProjectAssistantSurface.RECORDING_REVIEW: AssistantTemplateId.BUSINESS_RECORDING_REVIEW,
+    ProjectAssistantSurface.PREPARATION_EXPLANATION: AssistantTemplateId.PREPARATION_EXPLANATION,
 }
 
 
@@ -38,72 +31,27 @@ class AssistantGenerateRequest(ApiModel):
     retry: bool = False
 
 
-class ErrorAssistantRequest(ApiModel):
-    schema_version: Literal["1"]
-    error_code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,95}$")
-    retry: bool = False
+class AssistantFocus(ApiModel):
+    business_actor_id: str | None = Field(default=None, pattern=ACTOR_ID_PATTERN)
+    business_action_id: str | None = Field(default=None, pattern=ACTION_ID_PATTERN)
+    recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
 
 
-def build_assistant_router(context: ApplicationCore) -> APIRouter:
+def build_assistant_router(context) -> APIRouter:
     router = APIRouter()
 
-    @router.get(
-        "/api/projects/{project_id}/assistant/{surface}",
-        response_model=ApiResponse,
-    )
-    async def get_project_assistant(project_id: str, surface: ProjectAssistantSurface):
-        return data_response(
-            context.assistant_service.get_project(
-                project_id,
-                _PROJECT_TEMPLATE[surface],
-            ).model_dump(mode="json")
-        )
+    @router.get("/api/projects/{project_id}/assistant/{surface}", response_model=ApiResponse)
+    async def get_project_assistant(project_id: str, surface: ProjectAssistantSurface, focus: Annotated[AssistantFocus, Query()]):
+        return data_response(context.assistant_service.get_project(project_id, _PROJECT_TEMPLATE[surface],
+            **focus.model_dump()).model_dump(mode="json"))
 
-    @router.post(
-        "/api/projects/{project_id}/assistant/{surface}",
-        response_model=ApiResponse,
-    )
-    async def generate_project_assistant(
-        project_id: str,
-        surface: ProjectAssistantSurface,
-        body: AssistantGenerateRequest,
-    ):
-        return data_response(
-            context.assistant_service.generate_project(
-                project_id,
-                _PROJECT_TEMPLATE[surface],
-                retry=body.retry,
-            ).model_dump(mode="json")
-        )
-
-    @router.get("/api/runs/{run_id}/assistant/result", response_model=ApiResponse)
-    async def get_result_assistant(run_id: str):
-        return data_response(context.assistant_service.get_result(run_id).model_dump(mode="json"))
-
-    @router.post("/api/runs/{run_id}/assistant/result", response_model=ApiResponse)
-    async def generate_result_assistant(run_id: str, body: AssistantGenerateRequest):
-        return data_response(
-            context.assistant_service.generate_result(run_id, retry=body.retry).model_dump(mode="json")
-        )
-
-    @router.post("/api/assistant/error", response_model=ApiResponse)
-    async def generate_error_assistant(body: ErrorAssistantRequest):
-        # 浏览器只回传稳定错误码；诊断事实必须在服务端重新形成，不能信任客户端回传的字段。
-        diagnosis = diagnose_error(ErrorDiagnosisContext(error_code=body.error_code))
-        return data_response(
-            context.assistant_service.generate_error(
-                body.error_code,
-                diagnosis,
-                retry=body.retry,
-            ).model_dump(mode="json")
-        )
+    @router.post("/api/projects/{project_id}/assistant/{surface}", response_model=ApiResponse)
+    async def generate_project_assistant(project_id: str, surface: ProjectAssistantSurface,
+            body: AssistantGenerateRequest, focus: Annotated[AssistantFocus, Query()]):
+        return data_response(context.assistant_service.generate_project(project_id, _PROJECT_TEMPLATE[surface],
+            retry=body.retry, **focus.model_dump()).model_dump(mode="json"))
 
     return router
 
 
-__all__ = [
-    "AssistantGenerateRequest",
-    "ErrorAssistantRequest",
-    "ProjectAssistantSurface",
-    "build_assistant_router",
-]
+__all__ = ["AssistantGenerateRequest", "ProjectAssistantSurface", "build_assistant_router"]

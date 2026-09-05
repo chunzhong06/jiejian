@@ -240,9 +240,11 @@ class FlowDraftCompiler:
                     sensitive_fields=step.sensitive_fields,
                 ))
             return Flow(
-                schema_version="1",
+                schema_version="2",
                 id=draft.flow_id,
-                action_candidate_id=draft.action_candidate_id,
+                business_action_id=draft.business_action_id,
+                action_revision=draft.action_revision,
+                test_identity_id=draft.test_identity_id,
                 target_step_id=draft.target_step_id,
                 steps=tuple(steps),
             )

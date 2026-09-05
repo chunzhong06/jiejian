@@ -21,16 +21,16 @@ import json
 import re
 from collections.abc import Callable
 from enum import StrEnum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from product.backend.core.errors import JiejianError
-from product.backend.workflows.projects.readiness import (
-    NextRequiredAction,
-    ProjectReadinessView,
-)
-from product.backend.workflows.security_setup.checks import CheckPreview, CheckPreviewGap
+
+# 纯投影只消费调用方已有事实；类型标注不能在导入时装配尚未开放的执行链。
+if TYPE_CHECKING:
+    from product.backend.workflows.projects.readiness import NextRequiredAction, ProjectReadinessView
+    from product.backend.workflows.security_setup.checks import CheckPreview, CheckPreviewGap
 
 
 GuidanceRoute = Literal[

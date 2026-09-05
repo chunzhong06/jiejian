@@ -45,8 +45,15 @@ export type PrimaryTaskKind =
   | 'REVIEW_BOUNDARY_PROPOSAL'
   | 'ESTABLISH_BUSINESS_BOUNDARY'
   | 'REVIEW_PERMISSION_REVISION'
+  | 'COMPLETE_ALLOW_CONTROL'
   | 'REVIEW_ACTOR_IMPLEMENTATION'
   | 'REVIEW_ACTION_IMPLEMENTATION'
+  | 'REVIEW_RECORDING'
+  | 'PREPARE_TEST_IDENTITY'
+  | 'DEMONSTRATE_ACTION'
+  | 'PREPARE_ACTION_RESOURCE'
+  | 'COMPLETE_EFFECT_EVIDENCE'
+  | 'COMPLETE_RECOVERY'
 
 export type PrimaryTaskDto = {
   task_id: string
@@ -57,9 +64,16 @@ export type PrimaryTaskDto = {
   why_now: string
   user_responsibility: string
   system_will_do: string
-  route: '/application' | '/permissions'
+  route: '/application' | '/permissions' | '/tests'
   can_execute: boolean
   stale_fingerprint: string
+  action_revision?: number | null
+  identity_slot_id?: string | null
+  test_identity_id?: string | null
+  recording_id?: string | null
+  recording_purpose?: 'TARGET' | 'OBSERVATION' | 'RECOVERY' | null
+  parent_recording_id?: string | null
+  effect_id?: string | null
 }
 
 export type WorkspaceAreaDto = {

@@ -98,7 +98,7 @@ class PermissionIntentService:
     def policy_snapshot(self, project_id: str):
         raise JiejianError(
             ErrorCode.STATE_PRECONDITION,
-            "1.1.0 尚未把 Business Boundary Permission v2 接回检查执行链",
+            "当前尚不支持根据业务边界权限运行检查",
             details={"project_id": project_id},
         )
 

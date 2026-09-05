@@ -1,4 +1,4 @@
-/* 延期检查链 DTO：仅供未注册旧组件继续编译，不属于 1.1.1 CURRENT Workspace API。 */
+/* 延期检查链 DTO：仅供未注册旧组件继续编译，不属于 当前 Workspace API。 */
 
 import type { ProjectDto } from './projects'
 import type { SourceChangeViewDto } from './sourceChanges'

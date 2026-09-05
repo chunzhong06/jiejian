@@ -68,6 +68,7 @@ class JobAttempts:
                 lease_owner=request.lease_owner,
                 now_us=request.now_us,
                 lease_expires_at_us=lease_expires_at_us,
+                target_types=self._targets.target_types,
             )
             if job is None:
                 if request.job_id is None:

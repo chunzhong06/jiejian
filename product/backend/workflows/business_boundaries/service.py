@@ -10,6 +10,9 @@
 
 from __future__ import annotations
 
+from product.backend.core.assurance import compile_action_assurance
+from product.backend.core.permission_intent import permission_relation_consistent
+
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -667,6 +670,19 @@ class BusinessBoundaryService:
         command: BoundaryProposalCommand,
         understanding: ApplicationUnderstanding,
     ) -> BoundaryProposalBundle:
+        # 只在新写入入口校验；已持久 Proposal/revision 仍可原样读取和人工审查。
+        actor_items = {item.item_id: item for item in command.proposed_actors}
+        for permission in command.proposed_permissions:
+            subject = actor_items.get(permission.subject_actor_item_id)
+            owner = actor_items.get(permission.resource_owner_actor_item_id)
+            if subject is None or owner is None:
+                self._raise(ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID, "权限引用的业务主体不存在")
+            subject_key = (subject.actor_id or subject.item_id, (subject.expected_current_revision or 1)
+                           + int(subject.write_mode is ProposalWriteMode.APPEND_REVISION))
+            owner_key = (owner.actor_id or owner.item_id, (owner.expected_current_revision or 1)
+                         + int(owner.write_mode is ProposalWriteMode.APPEND_REVISION))
+            if not permission_relation_consistent(permission.relation, subject_key, owner_key):
+                self._raise(ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID, "权限资源关系与业务主体不一致")
         source_snapshot = self._source_snapshot(understanding, command)
         proposal_id = f"bpr_{uuid4().hex}"
         created_at_us = self._clock_us()
@@ -995,6 +1011,10 @@ class BusinessBoundaryService:
         for item in proposal.proposed_permissions:
             subject = actor_by_item[item.subject_actor_item_id]
             owner = actor_by_item[item.resource_owner_actor_item_id]
+            if not permission_relation_consistent(
+                item.relation, (subject.actor_id, subject.revision), (owner.actor_id, owner.revision)
+            ):
+                self._raise(ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID, "权限资源关系与业务主体不一致")
             action_plan = action_by_item[item.business_action_item_id]
             action = action_plan.revision
             protected_ids = tuple(action_plan.effect_ids[value] for value in item.protected_effect_item_ids)
@@ -1218,15 +1238,11 @@ class BusinessBoundaryService:
             and item.business_action_id == action.action_id
             and item.action_revision == action.revision
         )
-        allows = tuple(item for item in active if item.expectation.value == "ALLOW")
-        denies = tuple(item for item in active if item.expectation.value == "DENY")
+        contract = compile_action_assurance(action, active)
         related_stale = tuple(
             item for item in stale_intents if item.business_action_id == action.action_id
         )
-        allow_control = bool(allows) and all(
-            any(set(deny.protected_effect_ids) <= set(allow.protected_effect_ids) for allow in allows)
-            for deny in denies
-        )
+        allow_control = "ALLOW_CONTROL_REQUIRED" not in contract.reason_codes
         reasons: list[str] = []
         if not active:
             reasons.append(
@@ -1234,9 +1250,8 @@ class BusinessBoundaryService:
                 if related_stale
                 else "PERMISSION_SEMANTICS_REQUIRED"
             )
-        if not allow_control:
-            reasons.append("ALLOW_CONTROL_REQUIRED")
-        reasons.append("VALIDATION_PIPELINE_DEFERRED_TO_1_1_3")
+        reasons.extend(reason for reason in contract.reason_codes
+                       if reason != "PERMISSION_SEMANTICS_REQUIRED" and reason not in reasons)
         return PermissionBoundaryStatus(
             action_id=action.action_id,
             action_revision=action.revision,
@@ -1244,7 +1259,6 @@ class BusinessBoundaryService:
             active_permission_count=len(active),
             stale_permission_count=len(related_stale),
             allow_control_available=allow_control,
-            validation_contract_complete=False,
             reason_codes=tuple(reasons),
         )
 

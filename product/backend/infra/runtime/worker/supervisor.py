@@ -38,6 +38,7 @@ from product.backend.infra.runtime.jobs.models import (
     WaitingFatalFailure,
 )
 from product.backend.infra.runtime.jobs.queue import JobQueue
+from product.backend.infra.runtime.jobs.targets import JobTargetRegistry, default_run_job_targets
 from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, required_secret_names
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.protocols import required_recording_secret_names
@@ -61,12 +62,14 @@ class LocalWorkerSupervisor:
         recovery_service: JobRecovery | None = None,
         environment_provider=None,
         clock_us=None,
+        targets: JobTargetRegistry | None = None,
     ) -> None:
         self.var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
-        self._job_queue = job_queue or JobQueue(uow_factory)
-        self._attempts = attempt_service or JobAttempts(uow_factory)
-        self._recovery = recovery_service or JobRecovery(uow_factory)
+        self._targets = targets if targets is not None else default_run_job_targets()
+        self._job_queue = job_queue or JobQueue(uow_factory, targets=self._targets)
+        self._attempts = attempt_service or JobAttempts(uow_factory, targets=self._targets)
+        self._recovery = recovery_service or JobRecovery(uow_factory, targets=self._targets)
         self._environment_provider = environment_provider or (lambda names: {})
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
         self._stop = threading.Event()
@@ -82,12 +85,18 @@ class LocalWorkerSupervisor:
 
         if self._thread is not None and self._thread.is_alive():
             return
+        if self._process is not None:
+            raise JiejianError(ErrorCode.PROCESS_TREE_FAILED, "上次 Worker 资源尚未完成关闭")
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, name="jiejian-worker-supervisor", daemon=True)
         self._thread.start()
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def capabilities(self) -> tuple[str, ...]:
+        return tuple(item.value for item in self._targets.target_types)
 
     @property
     def recovered_jobs(self) -> int:
@@ -98,7 +107,10 @@ class LocalWorkerSupervisor:
 
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(timeout=2.0)
+            self._thread.join(timeout=timeout)
+            if self._thread.is_alive():
+                # 仍活跃的调度者可能持有启动责任，不能清空句柄或释放其数据库。
+                raise JiejianError(ErrorCode.PROCESS_TREE_FAILED, "Worker 调度线程未在有界时间内退出")
         process = self._process
         stopping_job_id = self._job_id
         stopping_lease_owner = self._lease_owner
@@ -203,6 +215,7 @@ class LocalWorkerSupervisor:
     def _start_job(self, job) -> None:
         """建立启动责任并完成 request、secret 与进程准备；失败时结束仍匹配的 waiting Job。"""
 
+        self._targets.resolve(job)
         self._job_id = job.job_id
         self._lease_owner = f"serve-worker-{uuid4().hex}"
         try:
@@ -417,4 +430,4 @@ class LocalWorkerSupervisor:
 
     def _next_job(self):
         with self._uow_factory() as work:
-            return work.jobs.next_pending()
+            return work.jobs.next_pending(self._clock_us(), target_types=self._targets.target_types)

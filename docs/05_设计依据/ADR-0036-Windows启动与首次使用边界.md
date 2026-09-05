@@ -30,13 +30,13 @@ Node/pnpm 只在 `var/runtime/frontend` 缺失或源码输入、配置、固定�
 
 `serve` 只在 `/ready` 返回 HTTP 200、根版本 1 且 `status=ready` 后认定服务可用。等待约 10 秒只产生一次“启动时间较长，仍在准备”软提示并继续探测，不代表失败，也不得尝试浏览器；serve 在 ready 前退出形成独立启动失败。ready 成立后才尝试 `webbrowser.open()`，浏览器调用失败只表示需要手工访问已经立即可用的地址。Python 产生 `still-starting`、`ready-browser-opened`、`ready-browser-open-failed`、`startup-failed` 稳定事件，PowerShell 只负责展示。ready 成立后必须立即停止“正在启动界面”动画，并在终端提示网页退出入口和 `Ctrl+C`。
 
-1.1.0 readiness 关键路径创建 ApplicationCore 并建立 MCP/control 生命周期，不执行 Run 恢复、结果最终化或 Worker 启动；System、`/ready` 与 MCP 明确报告 Worker `unavailable`。只处理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留的 startup maintenance 位于 ready 后的受控后台任务。该任务由应用生命周期持有，关闭时明确等待，失败只进入现有启动诊断且不撤销 ready。完整 pnpm store、uv cache 等预算统计和 prune 只在用户查看状态或显式维护时执行。
+readiness 关键路径创建 ApplicationCore、MCP/control 和仅录制 Worker 生命周期，不执行 Run 恢复或结果最终化；System、`/ready` 与 MCP 共享真实 Worker 状态，明确 CHECK 不可用。只处理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留的 startup maintenance 位于 ready 后的受控后台任务。该任务由应用生命周期持有，关闭时明确等待，失败只进入现有启动诊断且不撤销 ready。完整 pnpm store、uv cache 等预算统计和 prune 只在用户查看状态或显式维护时执行。
 
-GUI 退出请求复用由根页面取得的当前 control session，并由统一门禁验证真实 `Host` 与精确同源 `Origin` 后进入 Uvicorn/FastAPI shutdown；不再使用可重放的静态控制头。1.1.0 当前链关闭 MCP/control 生命周期、受控浏览器与 ApplicationCore，没有可停止的 Worker/Runner。未来执行链恢复后仍须沿 owner token、系统锁和进程树规则安全退出；遗留 PID 文件不能阻塞启动或决定锁是否有效。
+GUI 退出请求复用由根页面取得的当前 control session，并由统一门禁验证真实 `Host` 与精确同源 `Origin` 后进入 Uvicorn/FastAPI shutdown；不再使用可重放的静态控制头。当前链关闭 MCP/control、仅录制 Supervisor、受控 Runner/浏览器、身份准备 Manager 与 ApplicationCore；沿 owner token、系统锁和进程树规则安全退出，清理失败保留控制器与引擎；遗留 PID 文件不能阻塞启动或决定锁是否有效。
 
 自动化和重定向输入场景必须显式选择 GUI、CLI 或 prepare 模式，不能依赖菜单。显式 CLI 模式直接进入普通命令行，不读取键盘。CLI 子会话直接调用启动时解析出的 Python 绝对路径，不为每条命令重复执行 Conda 或 uv wrapper；运行环境只影响该子进程，不永久写入 `PATH`、PowerShell profile 或系统环境变量。不保留旧 `PrepareOnly` 兼容参数，自动化使用 `-Mode Prepare`。
 
-1.1.0 CLI 只公开 `serve`、版本和系统诊断/维护，不保存第二套产品进度；Business Boundary 的创建与批准只在 Web GUI 完成。完整 Execution、Recording、Result 与官方 Sample 三版本链当前未接回，保留实现不能通过 CLI 菜单或普通项目页面冒充可用。未来 Sample 恢复时仍须沿普通 Contract、Job、真实 Worker/Runner 与已发布结果链运行，产品不得根据变体或 truth 特判结论。
+CLI 只公开 `serve`、版本和系统诊断/维护，不保存第二套产品进度；Business Boundary 的创建与批准只在 Web GUI 完成。完整检查 Execution、Result 与官方 Sample 链当前未接回；Recording 已通过仅录制 Worker 与正式 API 装配，保留实现不能通过 CLI 菜单或普通项目页面冒充可用。未来 Sample 恢复时仍须沿普通 Contract、Job、真实 Worker/Runner 与已发布结果链运行，产品不得根据变体或 truth 特判结论。
 
 CLI 的人类结果、机器结果和运行日志分开：Human 只在终端展示任务结果与恢复建议；`--json` 的 stdout 只有一个稳定 JSON 对象；CI 保持机器模式和既有退出码；脱敏结构化日志写入 `VarDir/logs/jiejian.log`。普通 CLI 命令不把 INFO 日志写到 stderr，Worker、Runner 和 serve 仍保留所需日志。Human 不显示内部标识和复杂技术字段；完整结构使用 `--json`，运行环境诊断使用 `system doctor`。
 

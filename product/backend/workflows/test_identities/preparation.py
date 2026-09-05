@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import threading
@@ -31,6 +32,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.business_boundary import BusinessRevisionState, boundary_sha256
 from product.backend.core.test_identity import TestIdentityCookie
 from product.backend.infra.identity.control import (
     IdentityPreparationControlPaths,
@@ -97,6 +99,10 @@ class _ActivePreparation:
     process: subprocess.Popen[bytes]
     controls: IdentityPreparationControlPaths
     log_path: Path
+    source_fingerprint: str
+    startup_failed: bool = False
+    result_read: bool = False
+    result: IdentityPreparationResult | None = None
 
 
 class IdentityPreparationManager:
@@ -109,9 +115,14 @@ class IdentityPreparationManager:
         secret_store: SecretStore,
         environment: dict[str, str],
         process_launcher: Callable[..., subprocess.Popen[bytes]] = spawn_python_module,
+        *,
+        application_understanding,
+        business_boundaries,
     ) -> None:
         self._paths = RuntimePaths(var_dir).ensure_layout()
         self._identities = identities
+        self._application_understanding = application_understanding
+        self._business_boundaries = business_boundaries
         self._secret_store = secret_store
         self._environment = dict(environment)
         self._process_launcher = process_launcher
@@ -127,7 +138,6 @@ class IdentityPreparationManager:
             return tuple(
                 active.controls.root
                 for active in self._active.values()
-                if active.process.poll() is None
             )
 
     def start(self, identity_id: str) -> IdentityPreparationView:
@@ -143,6 +153,8 @@ class IdentityPreparationManager:
                     ErrorCode.TEST_IDENTITY_CONFLICT,
                     "该测试账号已经在准备登录状态",
                 )
+            endpoint, source_fingerprint = self._source(view)
+            scope = self._scope(endpoint)
             preparation_id = f"prep_{uuid4().hex}"
             attempt_dir = self._paths.identity_preparations / preparation_id
             attempt_dir.mkdir(parents=False, exist_ok=False)
@@ -152,7 +164,7 @@ class IdentityPreparationManager:
                 preparation_id=preparation_id,
                 project_id=view.project_id,
                 identity_id=identity_id,
-                target_scope=self._scope(view.confirmed_endpoint),
+                target_scope=scope,
             )
             log_path = self._paths.identity_preparation_logs / f"{preparation_id}.log"
             process: subprocess.Popen[bytes] | None = None
@@ -171,30 +183,30 @@ class IdentityPreparationManager:
                         stderr=stderr,
                         tree_name=f"identity-preparation-{preparation_id}",
                     )
+                    # 取得进程立即纳入监督；日志句柄或 stdin 关闭失败也不能遗失所有权。
+                    active = _ActivePreparation(request, process, controls, log_path, source_fingerprint)
+                    self._active[preparation_id] = active
                 assert process.stdin is not None
                 process.stdin.write(canonical_identity_preparation_json_bytes(request))
                 process.stdin.close()
             except Exception:
                 if process is not None:
+                    active.startup_failed = True
                     try:
                         if process.poll() is None:
                             terminate_process_tree(process, 2.0)
-                        else:
-                            release_process_tree(process, 2.0)
-                    except JiejianError:
+                        if process.poll() is not None:
+                            self._finalize(preparation_id, active)
+                    except (JiejianError, OSError, subprocess.TimeoutExpired):
+                        # 对外仍返回脱敏启动失败，active 和目录保留以便 close/status 重试。
                         pass
-                shutil.rmtree(attempt_dir, ignore_errors=True)
+                else:
+                    shutil.rmtree(attempt_dir, ignore_errors=True)
                 raise JiejianError(
                     ErrorCode.IDENTITY_PREPARATION_FAILED,
                     "测试账号登录浏览器启动失败",
                     details={"log_path": str(log_path)},
                 ) from None
-            self._active[preparation_id] = _ActivePreparation(
-                request=request,
-                process=process,
-                controls=controls,
-                log_path=log_path,
-            )
             return self._view(
                 request,
                 IdentityPreparationStatus.STARTING,
@@ -270,23 +282,16 @@ class IdentityPreparationManager:
     def close(self) -> None:
         with self._lock:
             for preparation_id, active in tuple(self._active.items()):
-                try:
-                    if active.process.poll() is None:
-                        write_identity_preparation_marker(
-                            active.controls.cancel,
-                            root=active.controls.root,
-                        )
-                        try:
-                            active.process.wait(timeout=2.0)
-                        except subprocess.TimeoutExpired:
-                            terminate_process_tree(active.process, 2.0)
-                    self._finalize(preparation_id, active)
-                except JiejianError:
-                    if active.process.poll() is None:
-                        try:
-                            terminate_process_tree(active.process, 2.0)
-                        except JiejianError:
-                            pass
+                if active.process.poll() is None:
+                    write_identity_preparation_marker(active.controls.cancel, root=active.controls.root)
+                    try:
+                        active.process.wait(timeout=2.0)
+                    except subprocess.TimeoutExpired:
+                        terminate_process_tree(active.process, 2.0)
+                if active.process.poll() is None:
+                    raise JiejianError(ErrorCode.IDENTITY_PREPARATION_FAILED, "登录状态准备失败，请查看日志后重试")
+                # 回收失败保留 active 与进程句柄；调用方不可提前释放数据库。
+                self._finalize(preparation_id, active)
 
     def _finalize(
         self,
@@ -294,27 +299,27 @@ class IdentityPreparationManager:
         active: _ActivePreparation,
     ) -> IdentityPreparationView:
         process = active.process
-        try:
-            assert process.stdout is not None
-            raw = process.stdout.read(IDENTITY_PREPARATION_RESULT_MAX_BYTES + 1)
-            result = (
-                parse_identity_preparation_result(raw)
-                if process.returncode == 0
-                else None
-            )
-        except (OSError, ValueError):
-            result = None
-        try:
-            release_process_tree(process, 2.0)
-        except JiejianError:
-            result = None
+        # 残留后代可能继承 stdout；先有界回收整棵树，避免读取结果等待不到 EOF。
+        release_process_tree(process, 2.0)
+        if not active.result_read:
+            try:
+                raw = b"" if process.stdout is None else process.stdout.read(IDENTITY_PREPARATION_RESULT_MAX_BYTES + 1)
+                active.result = parse_identity_preparation_result(raw) if process.returncode == 0 else None
+            except (OSError, ValueError):
+                active.result = None
+            active.result_read = True
+        # 结果只消费一次；后续处理重试仍使用已解析的非秘密结果。
+        result = active.result
 
         if (
-            result is None
+            active.startup_failed
+            or result is None
             or result.preparation_id != preparation_id
             or result.project_id != active.request.project_id
             or result.identity_id != active.request.identity_id
         ):
+            if result is not None:
+                self._cleanup_result_secrets(result, active.request)
             view = self._view(
                 active.request,
                 IdentityPreparationStatus.FAILED,
@@ -322,7 +327,7 @@ class IdentityPreparationManager:
                 error_code=ErrorCode.IDENTITY_PREPARATION_FAILED.value,
             )
         elif result.result_type is IdentityPreparationResultType.PREPARED:
-            view = self._commit_result(active.request, result)
+            view = self._commit_result(active, result)
         elif result.result_type is IdentityPreparationResultType.UNSUPPORTED:
             view = self._view(
                 active.request,
@@ -342,18 +347,24 @@ class IdentityPreparationManager:
                 "登录状态准备失败，请查看日志后重试",
                 error_code=result.error_code,
             )
+        cleanup_complete = self._cleanup_journal(active.controls.root, active.request)
         self._active.pop(preparation_id, None)
         self._terminal[preparation_id] = view
-        if view.status is not IdentityPreparationStatus.FAILED:
+        if view.status is not IdentityPreparationStatus.FAILED and cleanup_complete:
             shutil.rmtree(active.controls.root, ignore_errors=True)
         return view
 
     def _commit_result(
         self,
-        request: IdentityPreparationRequest,
+        active: _ActivePreparation,
         result: IdentityPreparationResult,
     ) -> IdentityPreparationView:
+        request = active.request
         try:
+            current = self._identities.get(request.identity_id)
+            if (current.status is not TestIdentityStatus.NOT_PREPARED
+                    or self._source(current)[1] != active.source_fingerprint):
+                raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY, "测试账号当前不能开始登录准备，请先处理复核或重置状态")
             assert result.auth_method is not None
             assert result.prepared_at_us is not None
             self._identities.save_prepared_state(
@@ -374,7 +385,7 @@ class IdentityPreparationManager:
                 "测试账号登录状态已安全保存",
             )
         except (JiejianError, ValueError):
-            cleanup_complete = self._cleanup_result_secrets(result)
+            cleanup_complete = self._cleanup_result_secrets(result, request)
             return self._view(
                 request,
                 IdentityPreparationStatus.FAILED,
@@ -386,45 +397,99 @@ class IdentityPreparationManager:
                 error_code=ErrorCode.IDENTITY_PREPARATION_FAILED.value,
             )
 
-    def _cleanup_result_secrets(self, result: IdentityPreparationResult) -> bool:
+    def _cleanup_result_secrets(self, result: IdentityPreparationResult, request: IdentityPreparationRequest) -> bool:
         refs = tuple(cookie.value_secret_ref for cookie in result.cookies)
         if result.bearer_secret_ref:
             refs += (result.bearer_secret_ref,)
         complete = True
+        try:
+            committed = set(self._identities.get_record(request.identity_id).secret_refs)
+        except JiejianError as exc:
+            if exc.code != ErrorCode.TEST_IDENTITY_NOT_FOUND.value:
+                return False
+            committed = set()
         for secret_ref in refs:
+            if not secret_ref.startswith(f"cred:jiejian/test-identity/{request.project_id}/{request.identity_id}/"):
+                complete = False
+                continue
+            if secret_ref in committed:
+                continue
             try:
                 self._secret_store.delete(secret_ref)
             except (JiejianError, OSError, RuntimeError, ValueError):
                 complete = False
         return complete
 
+    def _cleanup_journal(self, root: Path, request: IdentityPreparationRequest | None = None) -> bool:
+        """只回收本次 journal 的合法引用；已提交及无关账号引用绝不删除。"""
+        journal = root / "secret-refs.json"
+        if not journal.is_file():
+            return True
+        try:
+            with journal.open("rb") as stream:
+                raw = stream.read(65_537)
+            if len(raw) > 65_536:
+                return False
+            payload = json.loads(raw)
+            if (not isinstance(payload, dict) or set(payload) != {"schema_version", "identity_id", "secret_refs"}
+                    or payload["schema_version"] != "1" or not isinstance(payload["identity_id"], str)
+                    or not re.fullmatch(r"tid_[0-9a-f]{32}", payload["identity_id"])
+                    or not isinstance(payload["secret_refs"], list)):
+                return False
+            identity_id = payload["identity_id"]
+            if request is not None and identity_id != request.identity_id:
+                return False
+            try:
+                record = self._identities.get_record(identity_id)
+            except JiejianError as exc:
+                if exc.code != ErrorCode.TEST_IDENTITY_NOT_FOUND.value:
+                    return False
+                record = None
+            committed = set() if record is None else set(record.secret_refs)
+            project_id = request.project_id if request is not None else None if record is None else record.project_id
+            complete = True
+            for value in payload["secret_refs"]:
+                try:
+                    ref = validate_credential_secret_ref(value)
+                    parts = ref.split("/")
+                    if (len(parts) < 5 or parts[:2] != ["cred:jiejian", "test-identity"]
+                            or parts[3] != identity_id or project_id is not None and parts[2] != project_id):
+                        complete = False
+                        continue
+                    if ref not in committed:
+                        self._secret_store.delete(ref)
+                except (JiejianError, OSError, RuntimeError, TypeError, ValueError):
+                    complete = False
+            return complete
+        except (JiejianError, OSError, RuntimeError, TypeError, ValueError):
+            return False
+
+    def _source(self, identity) -> tuple[str, str]:
+        """登录尝试只冻结非秘密来源；updated_at 仅识别本次尝试期间的重置。"""
+        boundary = self._business_boundaries.view(identity.project_id)
+        actor = next((item for item in boundary.actors
+            if item.actor_id == identity.actor_id and item.project_id == identity.project_id
+            and item.revision == identity.actor_revision
+            and item.effective_state is BusinessRevisionState.ACTIVE), None)
+        if actor is None:
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY,
+                "测试账号当前不能开始登录准备，请先处理复核或重置状态")
+        understanding = self._application_understanding.get(identity.project_id)
+        if (understanding.confirmed_endpoint is None or not understanding.endpoint_reachable
+                or understanding.endpoint_confirmed_at_us is None
+                or understanding.endpoint_source_fingerprint is None):
+            raise JiejianError(ErrorCode.APPLICATION_ENDPOINT_INVALID, "应用运行地址无效")
+        facts = {name: getattr(identity, name) for name in (
+            "project_id", "identity_id", "actor_id", "actor_revision", "created_at_us", "updated_at_us")}
+        facts.update({name: getattr(understanding, name) for name in (
+            "confirmed_endpoint", "endpoint_source_fingerprint", "source_fingerprint")})
+        return understanding.confirmed_endpoint, boundary_sha256(facts)
+
     def _reconcile_orphaned_attempts(self) -> None:
         for attempt_dir in self._paths.identity_preparations.iterdir():
             if not attempt_dir.is_dir():
                 continue
-            journal = attempt_dir / "secret-refs.json"
-            keep_for_retry = False
-            if journal.is_file():
-                try:
-                    payload = json.loads(journal.read_text(encoding="utf-8"))
-                    if set(payload) != {"schema_version", "identity_id", "secret_refs"}:
-                        raise ValueError("invalid journal fields")
-                    identity_id = payload["identity_id"]
-                    refs = tuple(
-                        validate_credential_secret_ref(item)
-                        for item in payload["secret_refs"]
-                    )
-                    try:
-                        record = self._identities.get_record(identity_id)
-                        committed = set(record.secret_refs) == set(refs) and bool(refs)
-                    except JiejianError:
-                        committed = False
-                    if not committed:
-                        for secret_ref in refs:
-                            self._secret_store.delete(secret_ref)
-                except (JiejianError, OSError, RuntimeError, TypeError, ValueError):
-                    keep_for_retry = True
-            if not keep_for_retry:
+            if self._cleanup_journal(attempt_dir):
                 shutil.rmtree(attempt_dir, ignore_errors=True)
 
     def _require_active(self, preparation_id: str) -> _ActivePreparation:

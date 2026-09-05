@@ -6,6 +6,7 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -18,6 +19,18 @@ from product.backend.infra.storage.base import Base
 class RecordingRow(Base):
     __tablename__ = "recordings"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["business_action_id", "action_revision"],
+            ["business_action_revisions.action_id", "business_action_revisions.revision"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("action_revision >= 1", name="action_revision_positive"),
+        CheckConstraint(
+            "(purpose = 'TARGET' AND parent_recording_id IS NULL AND effect_id IS NULL) OR "
+            "(purpose = 'OBSERVATION' AND parent_recording_id IS NOT NULL AND effect_id IS NOT NULL) OR "
+            "(purpose = 'RECOVERY' AND parent_recording_id IS NOT NULL AND effect_id IS NULL)",
+            name="purpose_context_matrix",
+        ),
         CheckConstraint(
             "length(recording_id) = 36 AND substr(recording_id, 1, 4) = 'rec_' "
             "AND substr(recording_id, 5) NOT GLOB '*[^0-9a-f]*'",
@@ -71,8 +84,18 @@ class RecordingRow(Base):
         ForeignKey("projects.project_id", ondelete="RESTRICT"),
         nullable=False,
     )
+    business_action_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    preparation_source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    test_identity_id: Mapped[str] = mapped_column(
+        # 保留录制时的身份来源；账号可被删除，实时可用性由 preparation 检查。
+        String(36), nullable=False,
+    )
     purpose: Mapped[str] = mapped_column(String(16), nullable=False)
-    parent_recording_id: Mapped[str | None] = mapped_column(String(36))
+    parent_recording_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("recordings.recording_id", ondelete="RESTRICT"),
+    )
+    effect_id: Mapped[str | None] = mapped_column(String(36))
     flow_id: Mapped[str] = mapped_column(String(64), nullable=False)
     state: Mapped[str] = mapped_column(String(32), nullable=False)
     created_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -156,6 +179,8 @@ from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle
 from product.backend.core.lifecycle import ContractStatus
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.core.recording import Recording, RecordingPurpose, RecordingState, RecordingStateEvent, RecordingTerminalState
+from product.backend.core.business_boundary import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.core.identifiers import TEST_IDENTITY_ID_PATTERN
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import STAGED_ARTIFACT_MAX_BYTES, FlowDraft, RecordingEventKind, RecordingEvent, RecordingHeader, StagedArtifact, canonical_flow_draft_json_bytes
 from product.backend.infra.storage.base import MetadataValue, StorageRecord, _METADATA_KEY, _SENSITIVE_METADATA_KEY, _canonical_json, _flush, _scalar, _scalars, ensure_storage_payload_safe
@@ -163,8 +188,13 @@ from product.backend.infra.storage.base import MetadataValue, StorageRecord, _ME
 class RecordingRecord(StorageRecord):
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
+    action_revision: int = Field(ge=1)
+    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    preparation_source_fingerprint: str = Field(pattern=SHA256_PATTERN)
     purpose: RecordingPurpose = RecordingPurpose.TARGET
     parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
+    effect_id: str | None = Field(default=None, pattern=EFFECT_ID_PATTERN)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
     state: RecordingState
     created_at_us: int = Field(ge=0)
@@ -190,6 +220,11 @@ class RecordingRecord(StorageRecord):
         return Recording(
             recording_id=self.recording_id,
             project_id=self.project_id,
+            business_action_id=self.business_action_id,
+            action_revision=self.action_revision,
+            test_identity_id=self.test_identity_id,
+            preparation_source_fingerprint=self.preparation_source_fingerprint,
+            effect_id=self.effect_id,
             purpose=self.purpose,
             parent_recording_id=self.parent_recording_id,
             state=self.state,
@@ -213,6 +248,11 @@ class RecordingRecord(StorageRecord):
         return cls(
             recording_id=recording.recording_id,
             project_id=recording.project_id,
+            business_action_id=recording.business_action_id,
+            action_revision=recording.action_revision,
+            test_identity_id=recording.test_identity_id,
+            preparation_source_fingerprint=recording.preparation_source_fingerprint,
+            effect_id=recording.effect_id,
             purpose=recording.purpose,
             parent_recording_id=recording.parent_recording_id,
             flow_id=flow_id,
@@ -270,6 +310,11 @@ class RecordingRepository:
         )
         if row is None:
             raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "录制对象不存在")
+        # 生命周期更新不能顺带更换已提交的业务来源。
+        for name in ("project_id", "business_action_id", "action_revision", "test_identity_id",
+                     "purpose", "parent_recording_id", "effect_id", "flow_id", "preparation_source_fingerprint"):
+            if getattr(row, name) != getattr(record, name):
+                raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "录制来源不可更换")
         values = self._row_values(record)
         for name, value in values.items():
             setattr(row, name, value)
@@ -296,6 +341,11 @@ class RecordingRepository:
         return RecordingRow(
             recording_id=record.recording_id,
             project_id=record.project_id,
+            business_action_id=record.business_action_id,
+            action_revision=record.action_revision,
+            test_identity_id=record.test_identity_id,
+            preparation_source_fingerprint=record.preparation_source_fingerprint,
+            effect_id=record.effect_id,
             flow_id=record.flow_id,
             purpose=record.purpose.value,
             parent_recording_id=record.parent_recording_id,
@@ -329,6 +379,11 @@ class RecordingRepository:
         return RecordingRecord(
             recording_id=row.recording_id,
             project_id=row.project_id,
+            business_action_id=row.business_action_id,
+            action_revision=row.action_revision,
+            test_identity_id=row.test_identity_id,
+            preparation_source_fingerprint=row.preparation_source_fingerprint,
+            effect_id=row.effect_id,
             purpose=RecordingPurpose(row.purpose),
             parent_recording_id=row.parent_recording_id,
             flow_id=row.flow_id,

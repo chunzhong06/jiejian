@@ -29,12 +29,12 @@ describe('AssistantPanel', () => {
       suggestions: [{ kind: 'PRIORITIZE', entity_ids: ['task:check'], explanation: '先完成当前可以执行的检查。' }],
     })
 
-    render(<AssistantPanel projectId="p1" surface="next-step" title="下一步建议" actionLabel="生成 AI 建议" />)
+    render(<AssistantPanel projectId="p1" surface="preparation-explanation" focus={{ business_action_id: 'a1' }} title="下一步建议" actionLabel="生成 AI 建议" />)
 
     expect(await screen.findByText('尚未生成建议，点击按钮后才会连接模型服务。')).toBeInTheDocument()
     expect(mockAssistant.generateProject).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '生成 AI 建议' }))
-    await waitFor(() => expect(mockAssistant.generateProject).toHaveBeenCalledWith('p1', 'next-step', false))
+    await waitFor(() => expect(mockAssistant.generateProject).toHaveBeenCalledWith('p1', 'preparation-explanation', false, { business_action_id: 'a1' }))
     expect(await screen.findByText('先完成当前可以执行的检查。')).toBeInTheDocument()
     expect(screen.getByText('开始权限检查')).toBeInTheDocument()
   })
@@ -60,4 +60,23 @@ describe('AssistantPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI 解读这个结果' }))
     await waitFor(() => expect(mockAssistant.generateResult).toHaveBeenCalledWith('run-1', false))
   })
+  it('唯一确定的事实不展示生成按钮或调用模型', async () => {
+    mockAssistant.project.mockResolvedValue({ ...coldView, status: 'READY', can_generate: false })
+    render(<AssistantPanel projectId="p1" surface="implementation-mapping" focus={{ business_actor_id: 'u1' }} title="候选解释" actionLabel="解释候选" />)
+    await waitFor(() => expect(screen.queryByRole('button', { name: '解释候选' })).not.toBeInTheDocument())
+    expect(mockAssistant.generateProject).not.toHaveBeenCalled()
+  })
+  it('切换焦点后丢弃旧生成结果', async () => {
+    let finish!: (value: unknown) => void
+    mockAssistant.project.mockResolvedValue(coldView)
+    mockAssistant.generateProject.mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    const { rerender } = render(<AssistantPanel projectId="p1" surface="implementation-mapping" focus={{ business_actor_id: 'u1' }} title="候选解释" actionLabel="解释候选" />)
+    await waitFor(() => expect(screen.getByRole('button', { name: '解释候选' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: '解释候选' }))
+    rerender(<AssistantPanel projectId="p1" surface="implementation-mapping" focus={{ business_actor_id: 'u2' }} title="候选解释" actionLabel="解释候选" />)
+    finish({ ...coldView, status: 'READY', suggestions: [{ kind: 'PRIORITIZE', entity_ids: [], explanation: '旧主体的建议' }] })
+    await waitFor(() => expect(mockAssistant.project).toHaveBeenCalledWith('p1', 'implementation-mapping', { business_actor_id: 'u2' }))
+    expect(screen.queryByText('旧主体的建议')).not.toBeInTheDocument()
+  })
+
 })

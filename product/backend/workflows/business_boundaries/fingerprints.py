@@ -39,7 +39,7 @@ def legacy_candidate_source_snapshot(
     kind: ProposalCandidateKind,
     candidate: RoleCandidate | ActionCandidate,
 ) -> CandidateSourceSnapshot:
-    """按 1.1.0 算法重算旧 Proposal 快照，不能用新算法改写历史审批条件。"""
+    """按历史指纹算法重算旧 Proposal 快照，不能用新算法改写历史审批条件。"""
 
     return CandidateSourceSnapshot(
         candidate_kind=kind,

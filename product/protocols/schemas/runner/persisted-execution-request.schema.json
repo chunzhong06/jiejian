@@ -623,6 +623,18 @@
       "title": "BlobObjectScanBudget",
       "type": "object"
     },
+    "BusinessEffectKind": {
+      "enum": [
+        "STATE_MUTATION",
+        "DATA_DISCLOSURE",
+        "OBJECT_CREATION",
+        "EXTERNAL_DISPATCH",
+        "RESTRICTED_FUNCTION_INVOCATION",
+        "CREDENTIAL_ACCESS"
+      ],
+      "title": "BusinessEffectKind",
+      "type": "string"
+    },
     "ChangeVerificationContext": {
       "additionalProperties": false,
       "description": "一次代码变化重验随 Run 冻结的最小事实，不携带文件清单或源码内容。",
@@ -2908,7 +2920,7 @@
           "type": "string"
         },
         "kind": {
-          "$ref": "#/$defs/SecurityEffectKind"
+          "$ref": "#/$defs/BusinessEffectKind"
         },
         "protected_fields": {
           "default": [],
@@ -3532,7 +3544,7 @@
           "title": "Expected State"
         },
         "kind": {
-          "$ref": "#/$defs/SecurityEffectKind"
+          "$ref": "#/$defs/BusinessEffectKind"
         },
         "protected_fields": {
           "default": [],
@@ -3556,18 +3568,6 @@
       ],
       "title": "SecurityEffectDefinition",
       "type": "object"
-    },
-    "SecurityEffectKind": {
-      "enum": [
-        "STATE_MUTATION",
-        "DATA_DISCLOSURE",
-        "OBJECT_CREATION",
-        "EXTERNAL_DISPATCH",
-        "RESTRICTED_FUNCTION_INVOCATION",
-        "CREDENTIAL_ACCESS"
-      ],
-      "title": "SecurityEffectKind",
-      "type": "string"
     },
     "SnapshotProviderResetStrategy": {
       "additionalProperties": false,

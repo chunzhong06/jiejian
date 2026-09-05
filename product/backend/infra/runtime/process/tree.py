@@ -170,10 +170,10 @@ class ProcessTreeController:
     def close(self) -> None:
         if self._closed:
             return
-        self._closed = True
         if os.name == "nt" and self._job_handle is not None:
             _close_handle(self._job_handle)
             self._job_handle = None
+        self._closed = True
 
 
 def spawn_managed_process(
@@ -214,34 +214,36 @@ def controller_for(process: subprocess.Popen[Any]) -> ProcessTreeController | No
 
 
 def release_process_tree(process: subprocess.Popen[Any], timeout: float = 2.0) -> None:
-    controller = _CONTROLLERS.pop(process, None)
+    controller = _CONTROLLERS.get(process)
     if controller is None:
         return
     try:
         controller.release(timeout)
+        controller.close()
     except Exception as exc:
         raise JiejianError(
             ErrorCode.PROCESS_TREE_FAILED,
             "子进程树未能在有界时间内完成释放",
         ) from exc
-    finally:
-        controller.close()
+    # 只有清理与句柄关闭全部成功才撤销所有权，失败保留同一控制器供调用方重试。
+    _CONTROLLERS.pop(process, None)
 
 
 def terminate_process_tree(process: subprocess.Popen[Any], timeout: float) -> None:
-    controller = _CONTROLLERS.pop(process, None)
+    controller = _CONTROLLERS.get(process)
     if controller is None:
         # 未经本模块启动的进程没有可证明的 Job/session 所有权，只能退回根进程回收。
         controller = ProcessTreeController(process)
+        _CONTROLLERS[process] = controller
     try:
         controller.terminate(timeout)
+        controller.close()
     except Exception as exc:
         raise JiejianError(
             ErrorCode.PROCESS_TREE_FAILED,
             "子进程树未能在有界时间内终止",
         ) from exc
-    finally:
-        controller.close()
+    _CONTROLLERS.pop(process, None)
 
 
 def process_tree_has_exited(process: subprocess.Popen[Any]) -> bool:

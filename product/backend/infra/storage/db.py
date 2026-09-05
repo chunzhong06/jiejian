@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sqlite3
 import tempfile
+import json
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -38,7 +39,8 @@ from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 _BASE_MIGRATION_REVISION = "0001_business_boundary_v2"
-_CURRENT_MIGRATION_REVISION = "0002_business_boundary_maintenance"
+_MAINTENANCE_MIGRATION_REVISION = "0002_business_boundary_maintenance"
+_CURRENT_MIGRATION_REVISION = "0003_action_assurance_recording"
 _LEGACY_1_X_MIGRATION_REVISIONS = frozenset(
     {
         "0001_web_v1",
@@ -174,6 +176,14 @@ def upgrade_database(database_path: Path) -> None:
         ) from None
 
 
+def require_current_database(database_path: Path) -> None:
+    """Worker 只读验证控制面已经完成升级的库，不创建空库或运行 migration。"""
+    path = database_path.resolve()
+    if not path.is_file() or path.stat().st_size == 0:
+        raise JiejianError(ErrorCode.STORAGE_MIGRATION, "Worker 需要控制面已准备的数据库")
+    _check_database_compatibility(path)
+
+
 def _check_database_compatibility(
     path: Path,
     *,
@@ -209,14 +219,22 @@ def _check_database_compatibility(
             revision = revisions[0]
             if revision in _LEGACY_1_X_MIGRATION_REVISIONS:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
-            if revision == _BASE_MIGRATION_REVISION and resource_root is not None:
+            if revision in {_BASE_MIGRATION_REVISION, _MAINTENANCE_MIGRATION_REVISION} and resource_root is not None:
                 if _sqlite_schema_signature(connection) != _legacy_schema_signature(
-                    resource_root
+                    resource_root, revision
                 ):
                     raise JiejianError(
                         ErrorCode.STORAGE_MIGRATION,
                         _INCOMPATIBLE_DATABASE_MESSAGE,
                     )
+                # 原库尚未打开写连接，旧准备数据无法映射时原位停留在其既有 revision。
+                for table in ("recordings", "flow_draft_revisions", "test_resources", "observation_bindings",
+                              "recovery_bindings", "security_effect_confirmations"):
+                    if connection.execute(f'SELECT 1 FROM "{table}" LIMIT 1').fetchone() is not None:
+                        raise JiejianError(ErrorCode.STORAGE_MIGRATION,
+                                           "存在旧录制或安全准备数据，需要人工处理；数据库未修改")
+                if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, "既有数据库引用关系无效；数据库未修改")
                 return
             if revision != _CURRENT_MIGRATION_REVISION:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
@@ -278,7 +296,7 @@ def _sqlite_schema_signature(
                 str(row[0]),
                 str(row[1]),
                 str(row[2]),
-                _normalize_sql(str(row[3])),
+                _normalize_table_sql(str(row[3])) if row[0] == "table" else _normalize_sql(str(row[3])),
             )
             for row in connection.execute(
                 "SELECT type, name, tbl_name, sql FROM sqlite_master "
@@ -289,8 +307,8 @@ def _sqlite_schema_signature(
     )
 
 
-def _legacy_schema_signature(resource_root: Path) -> tuple[tuple[str, str, str, str], ...]:
-    """用不可改写的 0001 migration 构造临时参考，不猜测旧正式结构。"""
+def _legacy_schema_signature(resource_root: Path, revision: str = _BASE_MIGRATION_REVISION) -> tuple[tuple[str, str, str, str], ...]:
+    """用签入的历史 migration 构造精确参考，不猜测原数据库结构。"""
 
     with tempfile.TemporaryDirectory(prefix="jiejian-schema-") as directory:
         reference = Path(directory) / "business-boundary-v2.db"
@@ -300,12 +318,55 @@ def _legacy_schema_signature(resource_root: Path) -> tuple[tuple[str, str, str, 
             "sqlalchemy.url",
             f"sqlite+pysqlite:///{reference.as_posix()}",
         )
-        command.upgrade(config, _BASE_MIGRATION_REVISION)
+        command.upgrade(config, revision)
         connection = sqlite3.connect(reference)
         try:
             return _sqlite_schema_signature(connection)
         finally:
             connection.close()
+
+
+def _normalize_table_sql(statement: str) -> str:
+    """只消除具名表约束排列差异；列序、约束正文及表选项仍逐项比较。"""
+
+    start = statement.find("(")
+    if start < 0:
+        return _normalize_sql(statement)
+    clauses = []
+    segment = start + 1
+    depth = 1
+    quote = None
+    index = segment
+    while index < len(statement):
+        char = statement[index]
+        if quote is not None:
+            if char == quote:
+                if quote != "]" and index + 1 < len(statement) and statement[index + 1] == quote:
+                    index += 2
+                    continue
+                quote = None
+        elif char in "'\"`[":
+            quote = "]" if char == "[" else char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                clauses.append(_normalize_sql(statement[segment:index]))
+                break
+        elif char == "," and depth == 1:
+            clauses.append(_normalize_sql(statement[segment:index]))
+            segment = index + 1
+        index += 1
+    if depth or quote is not None:
+        raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
+    # Alembic batch 从集合反射约束，生成顺序可能变化；不排序列或丢弃任何约束。
+    constraints = sorted(clause for clause in clauses if clause.startswith("CONSTRAINT "))
+    columns = [clause for clause in clauses if not clause.startswith("CONSTRAINT ")]
+    return json.dumps(
+        (_normalize_sql(statement[:start]), columns, constraints, _normalize_sql(statement[index + 1:])),
+        ensure_ascii=False, separators=(",", ":"),
+    )
 
 
 def _quote_sqlite_identifier(identifier: str) -> str:

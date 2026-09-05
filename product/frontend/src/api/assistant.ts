@@ -3,6 +3,8 @@
 import { request } from './http'
 
 export type ProjectAssistantSurface =
+  | 'implementation-mapping'
+  | 'preparation-explanation'
   | 'next-step'
   | 'candidate-review'
   | 'identity-preparation'
@@ -32,15 +34,22 @@ export type AssistantSurfaceView = {
   entities: AssistantEntity[]
   suggestions: AssistantSuggestion[]
   retry_after_us: number | null
+  can_generate?: boolean
+}
+
+export type AssistantFocus = { business_actor_id?: string; business_action_id?: string; recording_id?: string }
+const focusQuery = (focus?: AssistantFocus) => {
+  const query = new URLSearchParams(Object.entries(focus ?? {}).filter((entry): entry is [string, string] => Boolean(entry[1])))
+  return query.size ? `?${query}` : ''
 }
 
 const generateBody = (retry: boolean) => JSON.stringify({ schema_version: '1', retry })
 
 export const assistantApi = {
-  project: (projectId: string, surface: ProjectAssistantSurface) =>
-    request<AssistantSurfaceView>(`/api/projects/${encodeURIComponent(projectId)}/assistant/${surface}`),
-  generateProject: (projectId: string, surface: ProjectAssistantSurface, retry = false) =>
-    request<AssistantSurfaceView>(`/api/projects/${encodeURIComponent(projectId)}/assistant/${surface}`, {
+  project: (projectId: string, surface: ProjectAssistantSurface, focus?: AssistantFocus) =>
+    request<AssistantSurfaceView>(`/api/projects/${encodeURIComponent(projectId)}/assistant/${surface}${focusQuery(focus)}`),
+  generateProject: (projectId: string, surface: ProjectAssistantSurface, retry = false, focus?: AssistantFocus) =>
+    request<AssistantSurfaceView>(`/api/projects/${encodeURIComponent(projectId)}/assistant/${surface}${focusQuery(focus)}`, {
       method: 'POST',
       body: generateBody(retry),
     }),

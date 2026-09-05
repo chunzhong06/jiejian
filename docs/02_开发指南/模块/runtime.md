@@ -2,7 +2,7 @@
 
 > 状态：CURRENT。`product/backend/infra/runtime` 拥有持久 Job、attempt/lease/fencing、角色化子进程、Worker/Runner 生命周期、staging、恢复和运行诊断。
 
-1.1.1 当前控制面没有装配完整执行 Worker/Runner；System、`/ready` 与 MCP 明确报告 Worker `unavailable`。无生产消费者的 `infra/runtime/worker/current.py` 已删除，保留的真实 Worker/Runner 仍只用于未来接回与直接回归。本模块不表示当前 GUI 可以运行检查。
+当前 ApplicationCore 在服务生命周期启动真实 LocalWorkerSupervisor，WorkerContainer 与 Queue 仅接受 RECORDING；RUN/CHECK 不 claim、不执行。System、/ready 与 MCP 按真实线程状态报告 running/stopped 和 capability，CHECK 始终 unavailable。API 只监督调度，浏览器仍进入独立 Recording Runner。
 
 ## 职责
 

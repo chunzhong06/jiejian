@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pytest
 
 from product.backend.composition import ApplicationCore
+from product.backend.core.errors import JiejianError
 from product.backend.workflows.recording.credentials import RuntimeSecretVault
+from tests.fixtures.action_preparation import MemorySecretStore
 
 
 def test_runtime_secret_vault_is_opaque_and_clears_by_session() -> None:
@@ -28,17 +31,20 @@ def test_application_context_combines_base_environment_and_vault_then_clears(
             "BASE_ONLY": "base",
             "JIEJIAN_CONTROL_ORIGIN": "http://127.0.0.1:9000",
         },
+        secret_store=MemorySecretStore(),
     )
-    context.secret_vault.put("onb_1", {"ONBOARDING_ONLY": "opaque"})
+    context.runtime_secrets.put("onb_1", {"ONBOARDING_ONLY": "opaque"})
 
-    assert context.environment_for_secret_names(("BASE_ONLY", "ONBOARDING_ONLY")) == {
+    assert context.environment_for_secret_names(("ONBOARDING_ONLY",)) == {
         "BASE_ONLY": "base",
         "ONBOARDING_ONLY": "opaque",
     }
-    assert "JIEJIAN_CONTROL_ORIGIN" not in context.environment_for_secret_names(
-        ("JIEJIAN_CONTROL_ORIGIN",)
-    )
+    for names in (("BASE_ONLY", "ONBOARDING_ONLY"), ("JIEJIAN_CONTROL_ORIGIN",)):
+        with pytest.raises(JiejianError) as error:
+            context.environment_for_secret_names(names)
+        assert error.value.code == "TEST_IDENTITY_NOT_READY"
     context.close()
-    assert context.environment_for_secret_names(("BASE_ONLY", "ONBOARDING_ONLY")) == {
-        "BASE_ONLY": "base",
-    }
+    assert context.runtime_secrets.model_dump() == {"session_count": 0}
+    with pytest.raises(JiejianError) as error:
+        context.environment_for_secret_names(("ONBOARDING_ONLY",))
+    assert error.value.code == "TEST_IDENTITY_NOT_READY"

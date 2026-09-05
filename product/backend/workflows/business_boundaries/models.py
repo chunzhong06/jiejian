@@ -32,7 +32,7 @@ from product.backend.core.permission_intent import (
     PermissionIntentRelation,
     PermissionIntentRevision,
 )
-from product.backend.core.verification.permissions import PermissionExpectation
+from product.backend.core.permission_semantics import PermissionExpectation
 from product.backend.workflows.business_boundaries.inspection import (
     ActionImplementationInspection,
     ActorImplementationInspection,
@@ -266,7 +266,6 @@ class PermissionBoundaryStatus(BoundaryWorkflowModel):
     active_permission_count: int = Field(ge=0)
     stale_permission_count: int = Field(ge=0)
     allow_control_available: bool
-    validation_contract_complete: bool
     reason_codes: tuple[str, ...] = ()
 
 

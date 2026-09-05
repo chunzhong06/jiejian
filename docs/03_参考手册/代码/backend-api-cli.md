@@ -11,7 +11,7 @@
 
 ### `product/backend/api/app.py`
 - `create_app(var_dir, control_origin, control_session_token, frontend_dir, start_worker, llm_transport, llm_secret_store, secret_store, environ, clock_us, folder_selector, shutdown_callback, official_sample_root) -> FastAPI`
-主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.business_boundaries`, `product.backend.api.routers.current_experience`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.projects`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.api.routers.workspace`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.business_boundaries`, `product.backend.api.routers.current_experience`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_drafts`, `product.backend.api.routers.preparation`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.api.routers.workspace`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/api/envelope.py`
 - `class ApiModel`
@@ -44,9 +44,9 @@
 - `class ProjectAssistantSurface`
 - `_PROJECT_TEMPLATE`
 - `class AssistantGenerateRequest`
-- `class ErrorAssistantRequest`
+- `class AssistantFocus`
 - `build_assistant_router(context) -> APIRouter`
-主要 import / dot-source：`__future__`, `enum`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.workflows.assistant.diagnosis`, `product.backend.workflows.assistant.templates`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `fastapi`, `product.backend.api.envelope`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.workflows.assistant.templates`, `pydantic`, `typing`
 
 ### `product/backend/api/routers/business_boundaries.py`
 - `class BoundaryProposalCreateRequest`
@@ -101,6 +101,11 @@
 - `build_onboarding_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `pydantic`, `typing`
 
+### `product/backend/api/routers/permission_drafts.py`
+- `class PermissionDraftRequest`
+- `build_permission_drafts_router(context) -> APIRouter`
+主要 import / dot-source：`fastapi`, `product.backend.api.envelope`, `pydantic`, `typing`
+
 ### `product/backend/api/routers/permission_intents.py`
 - `class PermissionIntentCellTarget`
 - `class PermissionIntentApprovalRequest`
@@ -109,6 +114,10 @@
 - `class PermissionDraftRequest`
 - `build_permission_intents_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `pydantic`, `typing`
+
+### `product/backend/api/routers/preparation.py`
+- `build_preparation_router(context) -> APIRouter`
+主要 import / dot-source：`fastapi`, `product.backend.api.envelope`
 
 ### `product/backend/api/routers/projects.py`
 - `build_projects_router(context) -> APIRouter`
@@ -126,8 +135,7 @@
 - `class RecordingCreateRequest`
 - `class ReviewRequest`
 - `class FinalizeRequest`
-- `class ActionSafetySetupConfirmRequest`
-主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.test_identities`, `product.protocols`, `pydantic`, `time`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.runtime.jobs.models`, `product.backend.workflows.test_identities`, `product.protocols`, `pydantic`, `time`, `typing`
 
 ### `product/backend/api/routers/results.py`
 - `class GateReportRequest`

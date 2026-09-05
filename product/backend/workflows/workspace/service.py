@@ -1,6 +1,6 @@
 # =============================================================================
 # 定位
-#   1.1.1 CURRENT 工作台的单一服务端读模型服务。
+#   工作台的单一服务端读模型服务。
 #
 # 职责
 #   从项目、应用理解、业务边界、权限和实时实现检查形成 WorkspaceView，按固定优先级
@@ -24,6 +24,10 @@ from product.backend.core.business_boundary import (
     boundary_sha256,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.permission_semantics import PermissionExpectation
+from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.workflows.preparation.models import PreparationStatus
+from product.backend.workflows.recording.source import require_recording_source
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.business_boundaries.models import BusinessBoundaryView
 from product.backend.workflows.business_boundaries.service import BusinessBoundaryService
@@ -46,9 +50,12 @@ class WorkspaceService:
         self,
         uow_factory: Callable[..., StorageUnitOfWork],
         business_boundaries: BusinessBoundaryService,
+        *,
+        preparation,
     ) -> None:
         self._uow_factory = uow_factory
         self._business_boundaries = business_boundaries
+        self._preparation = preparation
 
     def get(self, project_id: str) -> WorkspaceView:
         with self._uow_factory() as work:
@@ -113,12 +120,16 @@ class WorkspaceService:
             boundary,
             pending,
         )
+        preparation = self._preparation.get(project_id)
+        if primary_task is None:
+            primary_task = self._preparation_task(boundary, preparation, understanding)
         boundary_attention = bool(
             pending
             or not boundary.actors
             or not boundary.actions
             or any(
                 not item.permission_status.permission_semantics_confirmed
+                or bool(item.permission_status.reason_codes)
                 or item.implementation.status is not ImplementationBindingStatus.CURRENT
                 and item.implementation.binding_exists
                 or item.actor_implementation_issue_count
@@ -141,8 +152,120 @@ class WorkspaceService:
             actors=actor_views,
             actions=action_views,
             primary_task=primary_task,
-            areas=self._areas(boundary_attention),
+            areas=self._areas(boundary_attention, preparation.preparation_complete),
         )
+
+    def _preparation_task(self, boundary, preparation, understanding):
+        """先按任务类别跨动作排序；只定位现有来源，不复制准备检查或写入事实。"""
+        candidates = []
+        texts = {
+            "PREPARE_TEST_IDENTITY": ("准备真实测试账号", "当前权限需要独立的真实账号。", "为指定业务主体创建账号记录，并在独立浏览器中登录。", "界鉴只安全保存当前目标所需的登录状态。"),
+            "DEMONSTRATE_ACTION": ("演示一次业务动作", "当前动作还缺少可复用的业务演示。", "使用指定的正常账号完成一次业务操作。", "界鉴从实际操作中整理执行步骤与资源位置。"),
+            "PREPARE_ACTION_RESOURCE": ("准备具体测试资源", "当前权限仍缺少指定账号拥有的资源。", "使用指定账号演示一次对本人资源的操作。", "界鉴保留各账号各自的资源材料。"),
+            "COMPLETE_EFFECT_EVIDENCE": ("演示如何确认业务结果", "当前业务结果还缺少可观察的证明。", "演示平时在哪里确认这项业务结果。", "界鉴只关联已经确认的业务结果，不生成新请求。"),
+            "COMPLETE_RECOVERY": ("演示如何恢复业务状态", "这项业务操作需要明确的恢复方式。", "演示如何恢复本次操作改变的状态。", "界鉴保存恢复材料，不运行正式安全检查。"),
+        }
+        with self._uow_factory() as work:
+            recordings = work.recordings.list_for_project(preparation.project_id)
+            for action in sorted(preparation.actions, key=lambda item: item.action_id):
+                slots = sorted(action.identity_requirements.slots, key=lambda item: (item.requirement.ordinal, item.requirement.slot_id))
+                slots_by_id = {item.requirement.slot_id: item for item in slots}
+                prepared_ids = {item.test_identity_id for item in slots if item.status is PreparationStatus.SATISFIED}
+                current_recordings = sorted((item for item in recordings
+                    if item.business_action_id == action.action_id and item.action_revision == action.action_revision),
+                    key=lambda item: (item.created_at_us, item.recording_id))
+                facts = {"preparation": action.model_dump(mode="json"),
+                         "source": [understanding.confirmed_endpoint, understanding.endpoint_source_fingerprint, understanding.source_fingerprint, understanding.revision],
+                         "action_bindings": [item.model_dump(mode="json") for item in boundary.action_bindings if item.action_id == action.action_id],
+                         "actor_bindings": [item.model_dump(mode="json") for item in boundary.actor_bindings if item.actor_id in {slot.requirement.actor_id for slot in slots}],
+                         "recordings": [item.model_dump(mode="json", include={"recording_id", "state", "updated_at_us", "test_identity_id", "preparation_source_fingerprint"}) for item in current_recordings]}
+                action_current = any(item.action_id == action.action_id and item.action_revision == action.action_revision
+                    and item.status is ImplementationBindingStatus.CURRENT for item in boundary.action_bindings)
+
+                def add(priority, kind, *, slot=None, can_execute=True, text=None, **context):
+                    title, why, responsibility, system = text or texts[kind]
+                    actor_current = slot is None or any(item.actor_id == slot.requirement.actor_id
+                        and item.actor_revision == slot.requirement.actor_revision
+                        and item.status is ImplementationBindingStatus.CURRENT for item in boundary.actor_bindings)
+                    if not action_current or not actor_current:
+                        can_execute = False
+                        responsibility = "请先在业务边界中确认当前实现位置。"
+                    if slot is not None and slot.status is PreparationStatus.STALE:
+                        can_execute = False
+                        responsibility = "请先在业务边界中复核账号所属的业务主体。"
+                    context = {"action_revision": action.action_revision,
+                        "identity_slot_id": None if slot is None else slot.requirement.slot_id,
+                        "test_identity_id": None if slot is None else slot.test_identity_id, **context}
+                    task = self._task(kind, business_action_id=action.action_id,
+                        business_actor_id=None if slot is None else slot.requirement.actor_id,
+                        title=title, why_now=why, user_responsibility=responsibility, system_will_do=system,
+                        route="/tests", facts=facts, can_execute=can_execute, **context)
+                    candidates.append(((priority, action.action_id,
+                        0 if slot is None else slot.requirement.ordinal, context.get("effect_id") or "",
+                        context.get("recording_id") or ""), task))
+
+                for recording in current_recordings:
+                    if (recording.state not in {RecordingState.CREATED, RecordingState.STARTING, RecordingState.RECORDING,
+                            RecordingState.CLEANING, RecordingState.PROCESSING, RecordingState.PENDING_REVIEW}
+                            or recording.test_identity_id not in prepared_ids):
+                        continue
+                    try:
+                        require_recording_source(work, recording)
+                    except JiejianError:
+                        continue
+                    pending = recording.state is RecordingState.PENDING_REVIEW
+                    text = ("确认业务演示", "已有业务演示等待确认。", "核对业务动作、资源和结果证明。", "界鉴只保存你确认的演示材料。") if pending else (
+                        "继续业务演示", "已有业务演示正在进行。", "回到当前演示窗口完成采集。", "界鉴继续跟踪这次演示，不重复创建任务。")
+                    add(0, "REVIEW_RECORDING", text=text,
+                        slot=next(item for item in slots if item.test_identity_id == recording.test_identity_id),
+                        recording_id=recording.recording_id, recording_purpose=recording.purpose.value,
+                        parent_recording_id=recording.parent_recording_id, effect_id=recording.effect_id)
+                for slot in slots:
+                    if slot.status is not PreparationStatus.SATISFIED:
+                        add(1, "PREPARE_TEST_IDENTITY", slot=slot)
+                if action.execution.status is not PreparationStatus.SATISFIED:
+                    allow_ids = {item.intent_id for item in boundary.permission_intents
+                        if item.business_action_id == action.action_id and item.action_revision == action.action_revision
+                        and item.expectation is PermissionExpectation.ALLOW}
+                    choices = sorted((item for item in action.assurance_contract.identity_requirements.permissions
+                        if item.permission.intent_id in allow_ids), key=lambda item: item.permission.intent_id)
+                    subject = next((slots_by_id[item.subject_slot_id] for item in choices
+                        if slots_by_id[item.subject_slot_id].status is PreparationStatus.SATISFIED), None)
+                    add(2, "DEMONSTRATE_ACTION", slot=subject, can_execute=subject is not None, recording_purpose="TARGET")
+                for resource in action.resources:
+                    if resource.status is not PreparationStatus.SATISFIED and action.execution.status is PreparationStatus.SATISFIED:
+                        slot = slots_by_id[resource.owner_slot_id]
+                        add(3, "PREPARE_ACTION_RESOURCE", slot=slot,
+                            can_execute=slot.status is PreparationStatus.SATISFIED, recording_purpose="TARGET")
+
+                parent = None
+                for resource in sorted(action.resources, key=lambda item: item.owner_slot_id):
+                    if resource.status is not PreparationStatus.SATISFIED or resource.owner_test_identity_id is None:
+                        continue
+                    binding = work.action_preparation.resource(action.action_id, action.action_revision, resource.owner_test_identity_id)
+                    if binding is None or binding.binding_fingerprint != resource.binding_fingerprint:
+                        continue
+                    candidate = work.recordings.get(binding.source_recording_id)
+                    if (candidate is None or candidate.state is not RecordingState.COMPLETED
+                            or candidate.purpose is not RecordingPurpose.TARGET
+                            or candidate.test_identity_id != resource.owner_test_identity_id):
+                        continue
+                    try:
+                        require_recording_source(work, candidate)
+                    except JiejianError:
+                        continue
+                    parent = candidate
+                    break
+                parent_slot = None if parent is None else next((item for item in slots if item.test_identity_id == parent.test_identity_id), None)
+                for effect in sorted(action.effect_evidence, key=lambda item: item.effect_id):
+                    if effect.status is not PreparationStatus.SATISFIED:
+                        add(4, "COMPLETE_EFFECT_EVIDENCE", slot=parent_slot, can_execute=parent is not None,
+                            parent_recording_id=None if parent is None else parent.recording_id,
+                            recording_purpose="OBSERVATION", effect_id=effect.effect_id)
+                if action.recovery.status not in {PreparationStatus.SATISFIED, PreparationStatus.NOT_REQUIRED}:
+                    add(5, "COMPLETE_RECOVERY", slot=parent_slot, can_execute=parent is not None,
+                        parent_recording_id=None if parent is None else parent.recording_id, recording_purpose="RECOVERY")
+        return min(candidates, key=lambda item: item[0])[1] if candidates else None
 
     @staticmethod
     def _action_view(
@@ -285,8 +408,8 @@ class WorkspaceService:
             (
                 item
                 for item in boundary.actions
-                if "PERMISSION_REVISION_REVIEW_REQUIRED"
-                in status_by_action[item.action_id].reason_codes
+                if {"PERMISSION_REVISION_REVIEW_REQUIRED", "PERMISSION_RELATION_REVIEW_REQUIRED"}
+                & set(status_by_action[item.action_id].reason_codes)
             ),
             None,
         )
@@ -294,9 +417,9 @@ class WorkspaceService:
             return cls._task(
                 "REVIEW_PERMISSION_REVISION",
                 business_action_id=permission_review.action_id,
-                title=f"确认“{permission_review.display_name}”当前 revision 的权限",
-                why_now="业务动作已经形成新 revision，旧权限完整保留为历史，但不能自动成为新 revision 的权限。",
-                user_responsibility="确认旧权限是否继续适用于当前业务动作。",
+                title=f"重新确认“{permission_review.display_name}”的权限关系",
+                why_now="已有权限的业务版本或资源关系需要复核，历史规则仍完整保留。",
+                user_responsibility="确认操作人、资源所有者及其关系是否适用于当前业务动作。",
                 system_will_do="你确认后，界鉴才写新的 Permission revision；旧规则继续保留用于历史追溯。",
                 route="/permissions",
                 facts={
@@ -306,6 +429,20 @@ class WorkspaceService:
                         permission_review.action_id
                     ].reason_codes,
                 },
+            )
+        allow_missing = next((item for item in boundary.actions
+                              if "ALLOW_CONTROL_REQUIRED" in status_by_action[item.action_id].reason_codes), None)
+        if allow_missing is not None:
+            return cls._task(
+                "COMPLETE_ALLOW_CONTROL", business_action_id=allow_missing.action_id,
+                title=f"补充“{allow_missing.display_name}”的正常允许权限",
+                why_now="准备拒绝权限的真实测试前，需要明确谁在什么资源关系下应当被允许。",
+                user_responsibility="在业务边界中补充覆盖受保护业务结果的 ALLOW 权限并审阅批准。",
+                system_will_do="界鉴据此编译对照身份与测试材料，不会替你猜测允许权限。",
+                route="/permissions",
+                facts={"action_id": allow_missing.action_id, "action_revision": allow_missing.revision,
+                       "permissions": [item.model_dump(mode="json") for item in boundary.permission_intents
+                                       if item.business_action_id == allow_missing.action_id]},
             )
         actor_issue = next(
             (
@@ -369,6 +506,8 @@ class WorkspaceService:
         facts: dict,
         business_action_id: str | None = None,
         business_actor_id: str | None = None,
+        can_execute: bool = True,
+        **context,
     ) -> PrimaryTaskView:
         payload = {
             "task_kind": task_kind,
@@ -376,6 +515,8 @@ class WorkspaceService:
             "business_actor_id": business_actor_id,
             "route": route,
             "facts": facts,
+            "context": context,
+            "can_execute": can_execute,
         }
         fingerprint = boundary_sha256(payload)
         return PrimaryTaskView(
@@ -388,8 +529,9 @@ class WorkspaceService:
             user_responsibility=user_responsibility,
             system_will_do=system_will_do,
             route=route,
-            can_execute=True,
+            can_execute=can_execute,
             stale_fingerprint=fingerprint,
+            **context,
         )
 
     @staticmethod
@@ -405,7 +547,7 @@ class WorkspaceService:
         return "COMPLETED" if understanding.analysis_completed_at_us is not None else "PENDING"
 
     @staticmethod
-    def _areas(boundary_attention: bool) -> tuple[WorkspaceAreaView, ...]:
+    def _areas(boundary_attention: bool, preparation_complete: bool) -> tuple[WorkspaceAreaView, ...]:
         return (
             WorkspaceAreaView(
                 key="overview",
@@ -426,7 +568,7 @@ class WorkspaceService:
             WorkspaceAreaView(
                 key="changes",
                 label="变化与修复",
-                description="完整变化与重验主链将在后续版本重新接入。",
+                description="当前不提供代码变化检查与修复执行。",
                 route="/changes",
                 status="BLOCKED",
                 status_label="当前暂不可用",
@@ -434,10 +576,10 @@ class WorkspaceService:
             WorkspaceAreaView(
                 key="tests",
                 label="检查与结果",
-                description="新的检查、执行与证据主链尚未重新接入。",
+                description="准备真实账号、业务演示与结果证明；正式检查尚未接入。",
                 route="/tests",
-                status="BLOCKED",
-                status_label="当前不可检查",
+                status="READY" if preparation_complete else "NEEDS_ATTENTION",
+                status_label="材料已准备" if preparation_complete else "需要准备",
             ),
         )
 

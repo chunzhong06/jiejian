@@ -188,7 +188,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, or_, func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -384,13 +384,24 @@ class JobRepository:
         )
         return tuple(self._record(row) for row in rows)
 
-    def next_pending(self, now_us: int | None = None) -> JobRecord | None:
+    def next_pending(
+        self, now_us: int | None = None, *, target_types: Sequence[str] = ("RUN", "RECORDING"),
+    ) -> JobRecord | None:
         current = time.time_ns() // 1_000 if now_us is None else now_us
         row = _scalar(
             self._session,
             select(JobRow)
-            .where(JobRow.state == JobState.PENDING.value, JobRow.available_at_us <= current)
-            .order_by(JobRow.created_at_us, JobRow.job_id)
+            .where(
+                JobRow.state.in_((JobState.PENDING.value, JobState.RETRY_WAIT.value)),
+                JobRow.available_at_us <= current,
+                JobRow.cancel_requested_at_us.is_(None),
+                JobRow.lease_owner.is_(None),
+                JobRow.lease_expires_at_us.is_(None),
+                JobRow.attempt < JobRow.max_attempts,
+                or_(and_("RUN" in target_types, JobRow.run_id.is_not(None)),
+                    and_("RECORDING" in target_types, JobRow.recording_id.is_not(None))),
+            )
+            .order_by(JobRow.available_at_us, JobRow.created_at_us, JobRow.job_id)
             .limit(1),
         )
         if row is None:

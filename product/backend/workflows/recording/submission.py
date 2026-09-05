@@ -35,6 +35,7 @@ from product.backend.infra.runtime.jobs.events import append_job_event
 from product.backend.infra.runtime.jobs.handlers import JobAttemptPort
 from product.backend.infra.runtime.jobs.models import CompleteCancellation, FatalFailureCode, FatalFailure, JobEventType, RetryableFailureCode, RetryableFailure
 from product.backend.workflows.recording.processing import FlowDraftProcessor
+from product.backend.workflows.recording.source import require_recording_source
 from product.backend.infra.recording.request_store import RecordingRequestStore
 
 
@@ -50,8 +51,6 @@ class RecordingApplicationModel(BaseModel):
 class SubmitRecording(RecordingApplicationModel):
     request: RecordingRunnerRequest
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    purpose: RecordingPurpose = RecordingPurpose.TARGET
-    parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
     idempotency_key: str = Field(min_length=1, max_length=128)
     max_attempts: int = Field(default=3, ge=1, le=1_000)
     available_at_us: int = Field(ge=0)
@@ -99,11 +98,13 @@ class RecordingSubmission:
         *,
         attempts: JobAttemptPort | None = None,
         processor: FlowDraftProcessor | None = None,
+        finalize_recording: Callable | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._request_store = request_store
         self._attempts = attempts
         self._processor = processor or FlowDraftProcessor()
+        self._finalize_recording = finalize_recording
 
     def submit(
         self,
@@ -164,7 +165,7 @@ class RecordingSubmission:
             RecordingRunnerResultType.CAPTURED,
             RecordingRunnerResultType.SAFETY_STOPPED,
         }:
-            return self._persist_success(
+            completion = self._persist_success(
                 job_id=job_id,
                 lease_owner=lease_owner,
                 fencing_token=fencing_token,
@@ -172,6 +173,13 @@ class RecordingSubmission:
                 now_us=now_us,
                 known_secrets=known_secrets,
             )
+            if (completion.recording.state is RecordingState.PENDING_REVIEW
+                    and result.result_type is RecordingRunnerResultType.CAPTURED
+                    and self._finalize_recording is not None):
+                accepted = self._finalize_recording(completion.recording.recording_id, now_us=now_us)
+                if accepted is not None:
+                    completion = completion.model_copy(update={"recording": accepted.recording})
+            return completion
         # --- 阶段：非成功结果只更新 Job/Recording 生命周期 ---
         if result.result_type is RecordingRunnerResultType.CANCELLED:
             mutation = attempts.complete_cancellation(
@@ -235,11 +243,24 @@ class RecordingSubmission:
                 return self._existing(work, existing, request_hash)
             if work.projects.get(command.request.project_id) is None:
                 raise JiejianError(ErrorCode.JOB_PERSISTENCE, "录制所属项目不存在")
+            _, _, understanding = require_recording_source(work, command.request)
+            scope = command.request.target_scope
+            authorized = recording_target_scope(understanding.confirmed_endpoint)
+            budgets = {"timeout_seconds", "max_requests", "max_response_bytes"}
+            # 目标授权必须一致；调用方只能收紧运行预算，不能扩大源地址或任何网络权限。
+            if (scope.model_dump(exclude=budgets) != authorized.model_dump(exclude=budgets)
+                    or any(getattr(scope, name) > getattr(authorized, name) for name in budgets)):
+                raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制目标范围已变化")
             domain = Recording(
                 recording_id=command.request.recording_id,
                 project_id=command.request.project_id,
-                purpose=command.purpose,
-                parent_recording_id=command.parent_recording_id,
+                business_action_id=command.request.business_action_id,
+                action_revision=command.request.action_revision,
+                test_identity_id=command.request.test_identity_id,
+                preparation_source_fingerprint=command.request.preparation_source_fingerprint,
+                purpose=command.request.purpose,
+                parent_recording_id=command.request.parent_recording_id,
+                effect_id=command.request.effect_id,
                 created_at_us=command.now_us,
                 updated_at_us=command.now_us,
             )
@@ -322,10 +343,25 @@ class RecordingSubmission:
                     expected_hash=job.request_hash,
                     known_secrets=known_secrets,
                 )
+                if (
+                    request.business_action_id, request.action_revision, request.test_identity_id,
+                    request.purpose, request.parent_recording_id, request.effect_id,
+                    request.preparation_source_fingerprint,
+                ) != (
+                    existing.business_action_id, existing.action_revision, existing.test_identity_id,
+                    existing.purpose, existing.parent_recording_id, existing.effect_id,
+                    existing.preparation_source_fingerprint,
+                ):
+                    raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制请求与持久来源不一致")
                 draft = self._processor.build(
                     recording_id=result.recording_id,
                     flow_id=existing.flow_id,
-                    action_candidate_id=request.action_candidate_id,
+                    business_action_id=request.business_action_id,
+                    action_revision=request.action_revision,
+                    test_identity_id=request.test_identity_id,
+                    purpose=request.purpose,
+                    parent_recording_id=request.parent_recording_id,
+                    effect_id=request.effect_id,
                     events=result.events,
                     known_secrets=known_secrets,
                 )
@@ -459,8 +495,13 @@ class RecordingSubmission:
         domain = Recording(
             recording_id=existing.recording_id,
             project_id=existing.project_id,
+            business_action_id=existing.business_action_id,
+            action_revision=existing.action_revision,
+            test_identity_id=existing.test_identity_id,
+            preparation_source_fingerprint=existing.preparation_source_fingerprint,
             purpose=existing.purpose,
             parent_recording_id=existing.parent_recording_id,
+            effect_id=existing.effect_id,
             state=result.recording_state,
             created_at_us=existing.created_at_us,
             updated_at_us=last_event_at,

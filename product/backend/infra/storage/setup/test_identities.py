@@ -8,7 +8,7 @@
 #   持久化账号与稳定 Actor revision 关联｜保存 Cookie 元数据与秘密引用｜精确替换和删除。
 #
 # 边界
-#   绝不保存 Cookie/Token 正文；秘密删除由应用服务先行完成，Repository 不访问 SecretStore。
+#   绝不保存 Cookie/Token 正文；Repository 在事务内验证删除，应用服务清理秘密后才提交。
 #
 # 调用链
 #   TestIdentityService → TestIdentityRepository → SQLite

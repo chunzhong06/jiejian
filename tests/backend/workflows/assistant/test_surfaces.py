@@ -19,17 +19,6 @@ from product.backend.workflows.assistant import (
     diagnose_error,
 )
 from product.backend.workflows.assistant.surfaces import AssistantSurfaceResolver
-from product.backend.workflows.projects.readiness import (
-    ActionPermissionReadinessView,
-    ProjectReadinessView,
-)
-from product.backend.workflows.results.presentation import PresentedCaseVerdict
-from product.backend.workflows.security_setup.checks import (
-    CheckPreview,
-    CheckPreviewAction,
-    CheckPreviewGap,
-    CheckPreviewItem,
-)
 from product.protocols import FlowDraft, FlowDraftStep
 
 
@@ -66,22 +55,22 @@ def _resolver() -> AssistantSurfaceResolver:
         role_candidates=(role,),
         action_candidates=(action,),
     )
-    gap = CheckPreviewGap(
+    gap = SimpleNamespace(
         code="OBSERVATION_UNCONFIRMED",
         message="可信观察方式未确认",
         next_path="/preparation",
         next_label="去确认观察方式",
     )
-    preview = CheckPreview(
+    preview = SimpleNamespace(
         project_id="app_demo",
         ready=False,
         actions=(
-            CheckPreviewAction(
+            SimpleNamespace(
                 action_candidate_id=action_id,
                 action_display_name=action.display_name,
                 ready=False,
                 checks=(
-                    CheckPreviewItem(
+                    SimpleNamespace(
                         subject_label="Bob",
                         subject_role_display_name="普通成员",
                         relation="OTHER_ROLE",
@@ -99,7 +88,7 @@ def _resolver() -> AssistantSurfaceResolver:
         case_count=1,
         differential_pair_count=0,
     )
-    readiness = ProjectReadinessView(
+    readiness = SimpleNamespace(
         project_id="app_demo",
         project_status=ProjectStatus.READY,
         application_connected=True,
@@ -113,7 +102,7 @@ def _resolver() -> AssistantSurfaceResolver:
         completed_flow_available=False,
         active_contract_available=False,
         permission_actions=(
-            ActionPermissionReadinessView(
+            SimpleNamespace(
                 action_candidate_id=action_id,
                 action_display_name=action.display_name,
                 compilable=False,
@@ -123,14 +112,18 @@ def _resolver() -> AssistantSurfaceResolver:
         current_scope_runnable=False,
         remaining_gap_count=2,
         next_required_action="RECORD_FLOW",
+        active_tasks=(),
+        latest_verified_run_id=None,
     )
     guidance = build_guidance_snapshot(readiness, preview)
     recording_id = "rec_33333333333333333333333333333333"
     draft = FlowDraft(
-        schema_version="1",
+        schema_version="2",
         recording_id=recording_id,
         flow_id="flow-demo",
-        action_candidate_id=action_id,
+        business_action_id="bac_" + "2" * 32,
+        action_revision=1,
+        test_identity_id="tid_" + "1" * 32,
         revision=1,
         steps=(
             FlowDraftStep(
@@ -147,7 +140,7 @@ def _resolver() -> AssistantSurfaceResolver:
         surface_result="页面显示拒绝",
         actual_result="后台仍生成资料包",
         conclusion="发现权限问题",
-        verdict=PresentedCaseVerdict.VULNERABLE,
+        verdict=SimpleNamespace(value="VULNERABLE"),
         evidence_sources=(SimpleNamespace(role="KEY", status="FOUND", label="后台任务"),),
         diagnosis=SimpleNamespace(
             breakpoint_type=SimpleNamespace(value="AUTHORIZATION_LATE"),
@@ -213,7 +206,10 @@ def test_resolver_builds_all_eight_surfaces_with_stable_fingerprints() -> None:
         )
     )
 
-    assert {item.surface_input.template_id for item in resolved} == set(AssistantTemplateId)
+    assert {item.surface_input.template_id for item in resolved} == set(AssistantTemplateId) - {
+        AssistantTemplateId.IMPLEMENTATION_MAPPING, AssistantTemplateId.BUSINESS_RECORDING_REVIEW,
+        AssistantTemplateId.PREPARATION_EXPLANATION,
+    }
     assert all(len(item.state_fingerprint) == 64 for item in resolved)
     assert all(item.surface_input.entities for item in resolved)
     assert all(

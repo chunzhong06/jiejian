@@ -42,6 +42,7 @@ vi.mock('./useSystemStatus', () => ({ useSystemStatus: () => ({
   setAiSettings: vi.fn(), aiSettingsFailed: false,
   status: { api: 'available', worker: 'unavailable', browser: 'available' }, refresh: vi.fn(),
 }) }))
+vi.mock('../api/preparation', () => ({ preparationApi: { get: vi.fn().mockResolvedValue({ project_id: 'p1', actions: [], preparation_complete: false }) } }))
 vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus } }))
 vi.mock('../api/mcp', () => ({ mcpAccessApi: { status: mockApi.mcpStatus } }))
 vi.mock('../api/projects', () => ({ projectsApi: { remove: mockApi.remove } }))
@@ -88,7 +89,8 @@ describe('CURRENT 应用壳', () => {
     view.unmount()
     window.location.hash = '#/tests'
     render(<ControlShell />)
-    expect(await screen.findByText('当前不可检查')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '检查准备' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /开始检查|验证运行/ })).not.toBeInTheDocument()
   })
 
   it('历史 Run 与 Result 深链不会恢复旧状态机', async () => {
@@ -96,7 +98,7 @@ describe('CURRENT 应用壳', () => {
     render(<ControlShell />)
 
     expect(await screen.findByText('此历史入口当前不可用')).toBeInTheDocument()
-    expect(screen.getByText(/Recording、Run、Result/)).toBeInTheDocument()
+    expect(screen.getByText(/请从工作台进入当前可用的业务边界或检查准备/)).toBeInTheDocument()
   })
 
   it('只通过明确确认请求安全退出', async () => {

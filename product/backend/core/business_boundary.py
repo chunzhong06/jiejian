@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from product.backend.core.approval import HumanApproval
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
-from product.backend.core.verification.permissions import SecurityEffectKind
+from product.backend.core.permission_semantics import BusinessEffectKind
 
 
 ACTOR_ID_PATTERN = r"^bar_[0-9a-f]{32}$"
@@ -50,7 +50,7 @@ class BusinessActionOperationKind(StrEnum):
     CUSTOM = "CUSTOM"
 
 
-# B1 卡使用的短名与 A1 冻结枚举指向同一真源。
+# 业务效果短名与基础枚举指向同一真源。
 BoundaryEffectiveState = BusinessRevisionState
 BusinessOperationKind = BusinessActionOperationKind
 
@@ -88,7 +88,7 @@ def _trimmed_text(value: str, field_name: str) -> str:
 class BusinessEffectDefinition(BoundaryModel):
     effect_id: str = Field(pattern=EFFECT_ID_PATTERN)
     business_label: str = Field(min_length=1, max_length=256)
-    effect_kind: SecurityEffectKind
+    effect_kind: BusinessEffectKind
     resource_concept: str = Field(min_length=1, max_length=128)
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
     protected_projection: tuple[str, ...] = Field(default=(), max_length=64)
@@ -110,7 +110,7 @@ class BusinessEffectDefinition(BoundaryModel):
 
     @model_validator(mode="after")
     def validate_effect_kind(self) -> BusinessEffectDefinition:
-        if self.effect_kind is SecurityEffectKind.DATA_DISCLOSURE:
+        if self.effect_kind is BusinessEffectKind.DATA_DISCLOSURE:
             if not self.protected_projection:
                 raise ValueError("DATA_DISCLOSURE requires protected projection")
         elif self.protected_projection:

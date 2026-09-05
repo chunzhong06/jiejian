@@ -18,6 +18,7 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [string]$VarDir = "",
+    [ValidateRange(1, 65535)][int]$Port = 8765,
     [ValidateSet("Interactive", "Gui", "Cli", "Prepare")]
     [string]$Mode = "Interactive",
     [switch]$ForcePrepare,
@@ -230,7 +231,7 @@ try {
     Write-Stage "serve" "启动本地控制面"
     Invoke-Package @(
         "--var-dir", $script:VarDir,
-        "serve", "--open",
+        "serve", "--open", "--port", [string]$Port,
         "--frontend-dir", $script:FrontendDist,
         "--official-sample-root", (Join-Path $script:ProjectRoot "samples\web\collaboration_space")
     ) "serve" 50

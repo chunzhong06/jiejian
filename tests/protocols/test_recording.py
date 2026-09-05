@@ -37,10 +37,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def recording_request() -> RecordingRunnerRequest:
     return RecordingRunnerRequest(
-        schema_version="1",
+        schema_version="2",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
-        action_candidate_id="action_0123456789abcdef0123456789abcdef",
+        business_action_id="bac_0123456789abcdef0123456789abcdef",
+        action_revision=1,
+        test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        preparation_source_fingerprint="a" * 64,
         created_at_us=1_000_000,
         target_scope=WebTargetScope(
             base_url="http://127.0.0.1:8765",
@@ -127,6 +130,33 @@ def test_recording_protocols_are_strict_frozen_and_round_trip() -> None:
     assert RecordingRunnerResult.model_config["frozen"] is True
     with pytest.raises(ValidationError):
         request.project_id = "changed"
+
+
+@pytest.mark.parametrize("updates", [
+    {"schema_version": "1"},
+    {"action_candidate_id": "action_" + "1" * 32},
+    {"business_action_id": "action_" + "1" * 32},
+    {"action_revision": 0},
+    {"test_identity_id": "tid_" + "9" * 32},
+    {"purpose": "OBSERVATION"},
+    {"purpose": "OBSERVATION", "parent_recording_id": "rec_" + "2" * 32},
+    {"purpose": "OBSERVATION", "effect_id": "bef_" + "1" * 32},
+    {"parent_recording_id": "rec_" + "2" * 32},
+    {"purpose": "RECOVERY", "parent_recording_id": "rec_" + "2" * 32,
+     "effect_id": "bef_" + "1" * 32},
+])
+def test_request_rejects_legacy_identity_and_invalid_purpose(updates) -> None:
+    document = recording_request().model_dump(mode="json") | updates
+    with pytest.raises(JiejianError) as error:
+        parse_recording_request(json.dumps(document).encode())
+    assert error.value.code == "RECORD_PROTOCOL_INVALID"
+
+
+def test_request_requires_exactly_one_session_for_its_identity() -> None:
+    document = recording_request().model_dump(mode="json")
+    document["sessions"] *= 2
+    with pytest.raises(ValidationError):
+        RecordingRunnerRequest.model_validate(document)
 
 
 @pytest.mark.parametrize(

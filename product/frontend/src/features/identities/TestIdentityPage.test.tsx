@@ -2,20 +2,20 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { projectsApi } from '../../api/projects'
+import { businessBoundariesApi } from '../../api/businessBoundaries'
 import { testIdentitiesApi } from '../../api/testIdentities'
 import { TestIdentityPage } from './TestIdentityPage'
 
-vi.mock('../../api/projects', () => ({ projectsApi: { understanding: vi.fn() } }))
+vi.mock('../../api/businessBoundaries', () => ({ businessBoundariesApi: { current: vi.fn() } }))
 vi.mock('../../api/testIdentities', () => ({ testIdentitiesApi: {
   list: vi.fn(), create: vi.fn(), reset: vi.fn(), delete: vi.fn(),
   startPreparation: vi.fn(), preparation: vi.fn(), confirmPreparation: vi.fn(), cancelPreparation: vi.fn(),
 } }))
 
-const role = { candidate_id: `role_${'a'.repeat(32)}`, canonical_key: 'member', display_name: '普通用户', confidence: 'HIGH', decision: 'CONFIRMED', origin: 'MANUAL', stale: false, evidence: [] }
+const role = { revision: 1, effective_state: 'ACTIVE', actor_id: `role_${'a'.repeat(32)}`, canonical_key: 'member', display_name: '普通用户', confidence: 'HIGH', decision: 'CONFIRMED', origin: 'MANUAL', stale: false, evidence: [] }
 const identity = {
-  identity_id: `tid_${'b'.repeat(32)}`, project_id: 'sample-project', role_candidate_id: role.candidate_id,
-  role_canonical_key: 'member', role_display_name: '普通用户', label: '普通用户A',
+  identity_id: `tid_${'b'.repeat(32)}`, project_id: 'sample-project', actor_id: role.actor_id, actor_revision: 1,
+  actor_display_name: '普通用户', label: '普通用户A',
   confirmed_endpoint: 'http://127.0.0.1:8865', auth_method: null, status: 'NOT_PREPARED',
   review_reasons: [], cookie_count: 0, prepared_at_us: null, refreshed_at_us: null, created_at_us: 1, updated_at_us: 1,
 }
@@ -33,7 +33,7 @@ function pageProps() {
 describe('TestIdentityPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(projectsApi.understanding).mockResolvedValue({ role_candidates: [role] } as never)
+    vi.mocked(businessBoundariesApi.current).mockResolvedValue({ actors: [role] } as never)
     vi.mocked(testIdentitiesApi.list).mockResolvedValue([identity] as never)
     vi.mocked(testIdentitiesApi.preparation).mockResolvedValue({
       preparation_id: `prep_poll_${'e'.repeat(28)}`, identity_id: identity.identity_id,
@@ -46,7 +46,7 @@ describe('TestIdentityPage', () => {
     render(<TestIdentityPage {...pageProps()} />)
     expect(await screen.findByRole('heading', { name: '测试账号' })).toBeInTheDocument()
     expect(screen.getByText(/独立窗口中自行完成密码/)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '按权限组准备' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '按业务主体准备' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '普通用户' })).toBeInTheDocument()
     expect(screen.getByText('普通用户A')).toBeInTheDocument()
     expect(screen.getByText(/用于验证“普通用户”在合法路径和禁止路径中的真实权限边界/)).toBeInTheDocument()
@@ -77,7 +77,7 @@ describe('TestIdentityPage', () => {
     await waitFor(() => expect(testIdentitiesApi.confirmPreparation).toHaveBeenCalledWith(`prep_${'c'.repeat(32)}`))
     expect(await screen.findByText('登录状态已准备；界鉴没有保存你的密码')).toBeInTheDocument()
     const header = screen.getByRole('region', { name: '测试账号' })
-    expect(screen.getByRole('button', { name: '继续准备' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看下一项准备' })).toBeInTheDocument()
     expect(props.onStateChanged).toHaveBeenCalled()
     expect(header).not.toHaveTextContent('完成当前登录准备')
     expect(header).not.toHaveTextContent('继续准备')
@@ -104,13 +104,13 @@ describe('TestIdentityPage', () => {
     const props = pageProps()
     render(<TestIdentityPage {...props} />)
     expect(await screen.findByText('普通用户A')).toBeInTheDocument()
-    vi.mocked(projectsApi.understanding).mockClear()
+    vi.mocked(businessBoundariesApi.current).mockClear()
     vi.mocked(testIdentitiesApi.list).mockClear()
 
     fireEvent.click(screen.getByRole('button', { name: '刷新账号状态' }))
 
     await waitFor(() => expect(testIdentitiesApi.list).toHaveBeenCalledOnce())
-    expect(projectsApi.understanding).toHaveBeenCalledOnce()
+    expect(businessBoundariesApi.current).toHaveBeenCalledOnce()
     expect(testIdentitiesApi.create).not.toHaveBeenCalled()
     expect(testIdentitiesApi.startPreparation).not.toHaveBeenCalled()
     expect(testIdentitiesApi.reset).not.toHaveBeenCalled()

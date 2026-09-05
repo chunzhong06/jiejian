@@ -1,5 +1,5 @@
 # =============================================================================
-# 八类受限 AI 模板与本地白名单协议
+# 受限 AI 模板与本地白名单协议；CURRENT 三类与 dormant 模板共享校验内核。
 #
 # 定位
 #   把服务端短事实转换为封闭实体建议，并在模型返回后执行最终本地校验。
@@ -22,6 +22,9 @@ from product.backend.core.errors import ErrorCode, JiejianError
 
 
 class AssistantTemplateId(StrEnum):
+    IMPLEMENTATION_MAPPING = "jiejian.implementation_mapping"
+    BUSINESS_RECORDING_REVIEW = "jiejian.business_recording_review"
+    PREPARATION_EXPLANATION = "jiejian.preparation_explanation"
     NEXT_STEP = "jiejian.next_step"
     CANDIDATE_REVIEW = "jiejian.candidate_review"
     IDENTITY_PREPARATION = "jiejian.identity_preparation"
@@ -33,6 +36,9 @@ class AssistantTemplateId(StrEnum):
 
 
 class AssistantEntityType(StrEnum):
+    ACTOR = "ACTOR"
+    RESOURCE_CANDIDATE = "RESOURCE_CANDIDATE"
+    PREPARATION_ITEM = "PREPARATION_ITEM"
     OPTION = "OPTION"
     CANDIDATE = "CANDIDATE"
     ROLE = "ROLE"
@@ -45,6 +51,7 @@ class AssistantEntityType(StrEnum):
 
 
 class AssistantSuggestionKind(StrEnum):
+    LIKELY_RESOURCE = "LIKELY_RESOURCE"
     NEXT_STEP = "NEXT_STEP"
     POSSIBLE_DUPLICATE = "POSSIBLE_DUPLICATE"
     CONFIDENCE_EXPLANATION = "CONFIDENCE_EXPLANATION"
@@ -86,6 +93,8 @@ class AssistantFact(_AssistantModel):
 
     @model_validator(mode="after")
     def validate_safe_value(self) -> AssistantFact:
+        if self.field == "target_step_id" and self.value == "":
+            return self
         _validate_safe_fact_value(self.value)
         return self
 
@@ -160,6 +169,33 @@ ASSISTANT_SAFETY_INSTRUCTIONS = """你是界鉴的受限 AI 理解辅助。必�
 
 
 ASSISTANT_TEMPLATES: dict[AssistantTemplateId, AssistantTemplateSpec] = {
+    AssistantTemplateId.IMPLEMENTATION_MAPPING: AssistantTemplateSpec(
+        template_id=AssistantTemplateId.IMPLEMENTATION_MAPPING,
+        allowed_fact_fields=frozenset({"business_kind", "business_revision", "candidate_count", "candidates_truncated"}),
+        allowed_entity_types=frozenset({AssistantEntityType.ACTOR, AssistantEntityType.ACTION, AssistantEntityType.CANDIDATE}),
+        allowed_entity_fact_fields=frozenset({"revision", "description", "candidate_type", "canonical_key", "confidence", "decision", "detectors", "relative_paths", "symbols"}),
+        allowed_suggestion_kinds=frozenset({AssistantSuggestionKind.CONFIDENCE_EXPLANATION, AssistantSuggestionKind.LIKELY_TECHNICAL_NOT_BUSINESS, AssistantSuggestionKind.POSSIBLE_DUPLICATE}),
+        max_entities=128,
+        instruction="只解释哪些现有代码候选符合已确认的业务对象，或可能只是技术步骤、重复实现；不能选择、确认或写入实现映射。",
+    ),
+    AssistantTemplateId.BUSINESS_RECORDING_REVIEW: AssistantTemplateSpec(
+        template_id=AssistantTemplateId.BUSINESS_RECORDING_REVIEW,
+        allowed_fact_fields=frozenset({"business_action_id", "action_revision", "recording_id", "recording_state", "purpose", "target_step_id", "draft_revision"}),
+        allowed_entity_types=frozenset({AssistantEntityType.ACTION, AssistantEntityType.RECORDING_STEP, AssistantEntityType.RESOURCE_CANDIDATE}),
+        allowed_entity_fact_fields=frozenset({"revision", "description", "method", "path", "depends_on_step_ids", "is_current_target", "is_recommended_target", "step_id", "consumer", "location"}),
+        allowed_suggestion_kinds=frozenset({AssistantSuggestionKind.LIKELY_SETUP, AssistantSuggestionKind.LIKELY_TARGET, AssistantSuggestionKind.LIKELY_QUERY, AssistantSuggestionKind.LIKELY_CLEANUP, AssistantSuggestionKind.LIKELY_RESOURCE}),
+        max_entities=128,
+        instruction="只解释现有业务演示中的准备、目标、查询、清理步骤及资源候选；不能生成请求、修改目标或写入任何准备绑定。",
+    ),
+    AssistantTemplateId.PREPARATION_EXPLANATION: AssistantTemplateSpec(
+        template_id=AssistantTemplateId.PREPARATION_EXPLANATION,
+        allowed_fact_fields=frozenset({"action_revision", "preparation_complete", "gap_count"}),
+        allowed_entity_types=frozenset({AssistantEntityType.ACTION, AssistantEntityType.PREPARATION_ITEM}),
+        allowed_entity_fact_fields=frozenset({"revision", "description", "category", "status", "reason_codes", "actor_display_name", "ordinal", "required_count", "effect_display_name"}),
+        allowed_suggestion_kinds=frozenset({AssistantSuggestionKind.EXPLANATION, AssistantSuggestionKind.PREPARE_FIRST, AssistantSuggestionKind.OBSERVATION_GAP, AssistantSuggestionKind.RECOVERY_GAP}),
+        max_entities=128,
+        instruction="只根据确定的权限考题与准备缺口解释账号数量、资源、业务结果证明和恢复要求；不能改变要求或跳过缺口。",
+    ),
     AssistantTemplateId.NEXT_STEP: AssistantTemplateSpec(
         template_id=AssistantTemplateId.NEXT_STEP,
         allowed_fact_fields=frozenset({"phase", "current_scope_runnable", "remaining_gap_count"}),
@@ -357,12 +393,26 @@ def parse_assistant_result(
         if len(result.suggestions) > spec.max_suggestions:
             raise ValueError("assistant suggestion count exceeds template limit")
         allowed_ids = {item.entity_id for item in surface_input.entities}
+        entities = {item.entity_id: item for item in surface_input.entities}
         seen: set[tuple[str, tuple[str, ...]]] = set()
         for suggestion in result.suggestions:
             if suggestion.kind not in spec.allowed_suggestion_kinds:
                 raise ValueError("assistant suggestion kind is not allowed")
             if any(entity_id not in allowed_ids for entity_id in suggestion.entity_ids):
                 raise ValueError("assistant suggestion references an unknown entity")
+            selected = [entities[entity_id] for entity_id in suggestion.entity_ids]
+            if surface_input.template_id is AssistantTemplateId.IMPLEMENTATION_MAPPING:
+                if any(item.entity_type is not AssistantEntityType.CANDIDATE for item in selected):
+                    raise ValueError("mapping suggestions require candidates")
+            elif surface_input.template_id is AssistantTemplateId.BUSINESS_RECORDING_REVIEW:
+                expected = AssistantEntityType.RESOURCE_CANDIDATE if suggestion.kind is AssistantSuggestionKind.LIKELY_RESOURCE else AssistantEntityType.RECORDING_STEP
+                if any(item.entity_type is not expected for item in selected):
+                    raise ValueError("recording suggestion type mismatch")
+            elif surface_input.template_id is AssistantTemplateId.PREPARATION_EXPLANATION:
+                category = {AssistantSuggestionKind.OBSERVATION_GAP: "effect", AssistantSuggestionKind.RECOVERY_GAP: "recovery"}.get(suggestion.kind)
+                if category is not None and any(item.entity_type is not AssistantEntityType.PREPARATION_ITEM or
+                        dict((fact.field, fact.value) for fact in item.facts).get("category") != category for item in selected):
+                    raise ValueError("preparation suggestion category mismatch")
             required_range = (2, 3) if suggestion.kind is AssistantSuggestionKind.POSSIBLE_DUPLICATE else (1, 1)
             if not required_range[0] <= len(suggestion.entity_ids) <= required_range[1]:
                 raise ValueError("assistant suggestion entity cardinality is invalid")

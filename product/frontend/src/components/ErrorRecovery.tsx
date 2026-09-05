@@ -2,7 +2,6 @@
 
 import { Alert, Button, Collapse, Space, Typography } from 'antd'
 import { ApiError } from '../api/http'
-import { AssistantPanel } from './AssistantPanel'
 
 export function ErrorRecovery({ error, onRetry, onNavigate, onClose }: { error: ApiError; onRetry: () => void; onNavigate: (path: string) => void; onClose?: () => void }) {
   const diagnosis = error.diagnosis
@@ -22,7 +21,6 @@ export function ErrorRecovery({ error, onRetry, onNavigate, onClose }: { error: 
       <div><Typography.Text strong>现在怎么做：</Typography.Text> {shortMessage}</div>
       {diagnosis?.cleanup_warnings.map((warning) => <div key={warning}><Typography.Text type="warning">附加提示：{warning}</Typography.Text></div>)}
       <Space wrap><Button size="small" onClick={onRetry}>刷新状态并重试</Button><Button size="small" onClick={() => onNavigate(route)}>前往处理页面</Button></Space>
-      {diagnosis && <AssistantPanel error={{ code: error.code, diagnosis }} title="错误说明" actionLabel="AI 解释这个错误" />}
       <Collapse ghost items={[{ key: 'diagnostic', label: '诊断信息', children: <Space direction="vertical"><Typography.Text code>错误码：{error.code}</Typography.Text>{error.traceId && <Typography.Text code>trace_id：{error.traceId}</Typography.Text>}</Space> }]} />
     </Space>}
   />

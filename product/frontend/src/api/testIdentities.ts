@@ -19,11 +19,10 @@ export type TestIdentityAuthMethod = 'COOKIE_SESSION' | 'BEARER'
 export type TestIdentityDto = {
   identity_id: string
   project_id: string
-  role_candidate_id: string
-  role_canonical_key: string
-  role_display_name: string
+  actor_id: string
+  actor_revision: number
+  actor_display_name: string
   label: string
-  confirmed_endpoint: string
   auth_method: TestIdentityAuthMethod | null
   status: TestIdentityStatus
   review_reasons: string[]
@@ -57,10 +56,10 @@ const command = { schema_version: '1' as const }
 
 export const testIdentitiesApi = {
   list: (projectId: string) => request<TestIdentityDto[]>(`/api/projects/${projectId}/test-identities`),
-  create: (projectId: string, roleCandidateId: string, label: string) =>
+  create: (projectId: string, actorId: string, actorRevision: number, label: string) =>
     request<TestIdentityDto>(`/api/projects/${projectId}/test-identities`, {
       method: 'POST',
-      body: JSON.stringify({ schema_version: '1', role_candidate_id: roleCandidateId, label }),
+      body: JSON.stringify({ schema_version: '1', actor_id: actorId, actor_revision: actorRevision, label }),
     }),
   reset: (identityId: string) => request<TestIdentityDto>(`/api/test-identities/${identityId}/reset`, {
     method: 'POST', body: JSON.stringify(command),

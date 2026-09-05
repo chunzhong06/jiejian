@@ -46,6 +46,7 @@ class ResolvedAssistantSurface:
     subject_id: str
     state_fingerprint: str
     surface_input: AssistantSurfaceInput
+    can_generate: bool = True
 
 
 class AssistantSurfaceResolver:

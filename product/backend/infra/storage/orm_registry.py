@@ -8,6 +8,7 @@ from importlib import import_module
 _STORAGE_ORM_MODULES = (
     "product.backend.infra.storage.application_understanding",
     "product.backend.infra.storage.business_boundaries",
+    "product.backend.infra.storage.action_preparation",
     "product.backend.infra.storage.contracts",
     "product.backend.infra.storage.execution.jobs",
     "product.backend.infra.storage.execution.runs",
@@ -21,7 +22,6 @@ _STORAGE_ORM_MODULES = (
     "product.backend.infra.storage.results.gating",
     "product.backend.infra.storage.setup.permission_intents",
     "product.backend.infra.storage.setup.test_identities",
-    "product.backend.infra.storage.setup.test_setup",
     "product.backend.infra.storage.source_changes",
 )
 

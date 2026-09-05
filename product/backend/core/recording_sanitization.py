@@ -22,7 +22,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from product.protocols.recording import RecordingBudget, RecordingHeader
+from product.protocols.recording import RecordingBudget, RecordingEvent, RecordingHeader
 from product.backend.core.redaction import REDACTED, redact_known_secrets
 
 _MAX_STRUCTURED_DEPTH = 16
@@ -193,8 +193,13 @@ class RecordingSanitizer:
         value: str,
         *,
         already_limited: bool,
-    ) -> tuple[str, bool]:
+    ) -> tuple[str | None, bool]:
         safe = str(redact_known_secrets(value, self.known_secrets))
+        # 页面脚本和自由文本可能含未登记的内联秘密；复用协议规则，丢弃正文而非让采集回调抛错。
+        try:
+            RecordingEvent.reject_inline_secret_text(safe)
+        except ValueError:
+            return None, True
         encoded = safe.encode("utf-8")
         truncated = already_limited or len(encoded) > self.budget.max_body_bytes
         limited = encoded[: self.budget.max_body_bytes].decode("utf-8", errors="ignore")

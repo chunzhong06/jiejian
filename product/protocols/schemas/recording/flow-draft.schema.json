@@ -244,6 +244,15 @@
       "title": "FlowDraftVariableStatus",
       "type": "string"
     },
+    "RecordingPurpose": {
+      "enum": [
+        "TARGET",
+        "OBSERVATION",
+        "RECOVERY"
+      ],
+      "title": "RecordingPurpose",
+      "type": "string"
+    },
     "ValueSlotConsumer": {
       "enum": [
         "PATH",
@@ -259,15 +268,50 @@
   },
   "additionalProperties": false,
   "properties": {
-    "action_candidate_id": {
-      "pattern": "^action_[0-9a-f]{32}$",
-      "title": "Action Candidate Id",
+    "action_revision": {
+      "minimum": 1,
+      "title": "Action Revision",
+      "type": "integer"
+    },
+    "business_action_id": {
+      "pattern": "^bac_[0-9a-f]{32}$",
+      "title": "Business Action Id",
       "type": "string"
+    },
+    "effect_id": {
+      "anyOf": [
+        {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effect Id"
     },
     "flow_id": {
       "pattern": "^[a-z][a-z0-9_-]{0,63}$",
       "title": "Flow Id",
       "type": "string"
+    },
+    "parent_recording_id": {
+      "anyOf": [
+        {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Recording Id"
+    },
+    "purpose": {
+      "$ref": "#/$defs/RecordingPurpose",
+      "default": "TARGET"
     },
     "recommended_target_step_id": {
       "anyOf": [
@@ -306,8 +350,8 @@
       "type": "integer"
     },
     "schema_version": {
-      "const": "1",
-      "default": "1",
+      "const": "2",
+      "default": "2",
       "title": "Schema Version",
       "type": "string"
     },
@@ -333,6 +377,11 @@
       "default": null,
       "title": "Target Step Id"
     },
+    "test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Test Identity Id",
+      "type": "string"
+    },
     "variables": {
       "default": [],
       "items": {
@@ -346,7 +395,9 @@
   "required": [
     "recording_id",
     "flow_id",
-    "action_candidate_id",
+    "business_action_id",
+    "action_revision",
+    "test_identity_id",
     "revision",
     "steps"
   ],
