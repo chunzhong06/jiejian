@@ -1,12 +1,12 @@
 // 验证业务边界页面只使用当前权限投影，并支持普通不可变提案与人工批准。
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BusinessBoundaryPage } from './BusinessBoundaryPage'
 
 const mockApi = vi.hoisted(() => ({
   current: vi.fn(), preview: vi.fn(), proposals: vi.fn(), createProposal: vi.fn(),
-  approve: vi.fn(), reject: vi.fn(),
+  maintenanceDraft: vi.fn(), createMaintenanceProposal: vi.fn(), approve: vi.fn(), reject: vi.fn(),
 }))
 
 vi.mock('../../api/businessBoundaries', () => ({ businessBoundariesApi: mockApi }))
@@ -66,6 +66,10 @@ describe('业务边界页面', () => {
     mockApi.current.mockResolvedValue(emptyBoundary)
     mockApi.preview.mockResolvedValue(preview)
     mockApi.proposals.mockResolvedValue({ project_id: 'app_demo', proposals: [] })
+    mockApi.maintenanceDraft.mockResolvedValue({
+      project_id: 'app_demo', boundary_state_fingerprint: 'f'.repeat(64),
+      actors: [], actions: [], permissions: [], candidate_options: [],
+    })
   })
 
   it('只把 Candidate 当识别依据，并要求用户填写真实业务结果', async () => {
@@ -126,5 +130,46 @@ describe('业务边界页面', () => {
     expect((await screen.findAllByText('权限语义已确认，验证合同暂不完整')).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/缺少覆盖同一业务结果的允许对照/).length).toBeGreaterThan(0)
     expect(screen.queryByText('当前权限尚未确认')).not.toBeInTheDocument()
+  })
+
+  it('已有正式边界时进入维护编辑器并提交 desired state', async () => {
+    mockApi.current.mockResolvedValue(approvedBoundary)
+    mockApi.maintenanceDraft.mockResolvedValue({
+      project_id: 'app_demo', boundary_state_fingerprint: 'f'.repeat(64),
+      actors: [{ item_id: 'pactr_existing', actor_id: approvedBoundary.actors[0].actor_id, expected_current_revision: 1, display_name: '项目负责人', description: '负责项目交付', effective_state: 'ACTIVE', source_candidate_ids: [] }],
+      actions: [{ item_id: 'pactn_existing', action_id: approvedBoundary.actions[0].action_id, expected_current_revision: 1, display_name: '导出完整项目交付包', description: '形成交付包', primary_resource_concept: '项目交付空间', operation_kind: 'EXPORT', state_changing: true, effects: [{ item_id: 'peff_existing', effect_id: approvedBoundary.actions[0].effect_catalog[0].effect_id, business_label: '完整项目交付包真实形成', effect_kind: 'OBJECT_CREATION', resource_concept: '项目交付包', expected_state: null, protected_projection: [], description: '交付包已经形成' }], effective_state: 'ACTIVE', source_candidate_ids: [] }],
+      permissions: [{ item_id: 'pperm_existing', intent_id: `pin_${'7'.repeat(32)}`, expected_current_revision: 1, effective_state: 'ACTIVE', subject_actor_item_id: 'pactr_existing', business_action_item_id: 'pactn_existing', resource_owner_actor_item_id: 'pactr_existing', relation: 'OWNS', expectation: 'ALLOW', protected_effect_item_ids: ['peff_existing'] }],
+      candidate_options: [], implementation_inspections: [],
+    })
+    mockApi.createMaintenanceProposal.mockReturnValue(new Promise(() => {}))
+
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: '调整当前业务边界' }))
+    expect(await screen.findByRole('heading', { name: '调整当前业务边界' })).toBeInTheDocument()
+    expect(screen.queryByText(/write_mode/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '生成待审调整提案' }))
+
+    await waitFor(() => expect(mockApi.createMaintenanceProposal).toHaveBeenCalledOnce())
+    expect(JSON.stringify(mockApi.createMaintenanceProposal.mock.calls[0][1])).not.toContain('write_mode')
+  })
+
+  it('待审维护提案展示服务端生成的变更摘要', async () => {
+    mockApi.proposals.mockResolvedValue({ project_id: 'app_demo', proposals: [{
+      proposal, decision: null,
+      change_summary: {
+        new_actor_count: 1, new_action_count: 0,
+        business_revision_updates: ['导出完整项目交付包'], retirements: [],
+        permission_updates: [], permission_carry_forwards: ['负责人允许导出'], permission_retirements: [],
+        implementation_rebinds: ['导出完整项目交付包'], unresolved_count: 0,
+        change_codes: ['BUSINESS_REVISION_APPENDED', 'IMPLEMENTATION_REBOUND'],
+      },
+    }] })
+
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
+
+    expect(await screen.findByText('新增 1 个业务主体')).toBeInTheDocument()
+    expect(screen.getByText('导出完整项目交付包 → 新 revision')).toBeInTheDocument()
+    expect(screen.getByText('负责人允许导出 → 沿用到新 revision')).toBeInTheDocument()
+    expect(screen.getByText('导出完整项目交付包 → 重新绑定到当前源码证据')).toBeInTheDocument()
   })
 })

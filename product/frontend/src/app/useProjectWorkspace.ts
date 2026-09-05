@@ -1,32 +1,19 @@
-/* 项目工作区状态
- * 以后端 ProductStatus 和 Run 为权威事实恢复当前应用、Readiness 与活动任务。
- * browserState 只提供上次查看提示，后端不存在的项目不会被本地状态复活。
- */
+/* 当前项目工作区状态：只恢复 Project 选择与服务端动作级 WorkspaceView。 */
 
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError } from '../api/http'
-import { projectsApi, type ProductStatusDto, type ProjectDto, type ProjectReadinessDto } from '../api/projects'
-import type { RunDto } from '../api/runs'
+import { projectsApi, type ProjectDto } from '../api/projects'
+import { workspaceApi, type WorkspaceViewDto } from '../api/workspace'
 import { browserState } from './browserState'
-
-export type WorkspaceSnapshot = {
-  status: ProductStatusDto
-  readiness: ProjectReadinessDto | null
-  runs: RunDto[]
-}
 
 export function useProjectWorkspace(onError: (error: ApiError) => void) {
   const [projects, setProjects] = useState<ProjectDto[]>([])
   const [selected, setSelected] = useState<ProjectDto | null>(null)
-  const [status, setStatus] = useState<ProductStatusDto | null>(null)
-  const [readiness, setReadiness] = useState<ProjectReadinessDto | null>(null)
-  const [runs, setRuns] = useState<RunDto[]>([])
+  const [workspace, setWorkspace] = useState<WorkspaceViewDto | null>(null)
 
   const selectProject = useCallback((project: ProjectDto | null) => {
     setSelected(project)
-    setStatus(null)
-    setReadiness(null)
-    setRuns([])
+    setWorkspace(null)
     if (project) browserState.writeProject(project)
     else browserState.clearProject()
   }, [])
@@ -45,20 +32,15 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
     }
   }, [onError, selectProject])
 
-  const refreshCurrent = useCallback(async (project: ProjectDto | null = selected) => {
+  const refreshCurrentWorkspace = useCallback(async (project: ProjectDto | null = selected) => {
     if (!project?.project_id) {
-      setStatus(null)
-      setReadiness(null)
-      setRuns([])
+      setWorkspace(null)
       return undefined
     }
     try {
-      const nextStatus = await projectsApi.status(project.project_id)
-      const nextRuns: RunDto[] = []
-      setStatus(nextStatus)
-      setReadiness(nextStatus.readiness)
-      setRuns(nextRuns)
-      return { status: nextStatus, readiness: nextStatus.readiness, runs: nextRuns }
+      const current = await workspaceApi.current(project.project_id)
+      setWorkspace(current)
+      return current
     } catch (error) {
       onError(error as ApiError)
       return undefined
@@ -66,16 +48,14 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
   }, [onError, selected])
 
   useEffect(() => { void refreshProjects() }, [refreshProjects])
-  useEffect(() => { void refreshCurrent() }, [refreshCurrent])
+  useEffect(() => { void refreshCurrentWorkspace() }, [refreshCurrentWorkspace])
 
   return {
     projects,
     selected,
-    status,
-    readiness,
-    runs,
+    workspace,
     selectProject,
     refreshProjects,
-    refreshCurrent,
+    refreshCurrentWorkspace,
   }
 }

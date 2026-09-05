@@ -14,7 +14,7 @@ import hashlib
 import json
 import re
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -26,8 +26,8 @@ from product.backend.core.verification.permissions import SecurityEffectKind
 ACTOR_ID_PATTERN = r"^bar_[0-9a-f]{32}$"
 ACTION_ID_PATTERN = r"^bac_[0-9a-f]{32}$"
 EFFECT_ID_PATTERN = r"^bef_[0-9a-f]{32}$"
+SOURCE_PROPOSAL_ID_PATTERN = r"^bpr_[0-9a-f]{32}$"
 _PROJECTION_PATH = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
-_REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,127}$")
 
 
 class BoundaryModel(BaseModel):
@@ -38,7 +38,6 @@ class BoundaryModel(BaseModel):
 
 class BusinessRevisionState(StrEnum):
     ACTIVE = "ACTIVE"
-    SUPERSEDED = "SUPERSEDED"
     RETIRED = "RETIRED"
 
 
@@ -61,6 +60,12 @@ class ImplementationBindingStatus(StrEnum):
     STALE = "STALE"
     MISSING = "MISSING"
     AMBIGUOUS = "AMBIGUOUS"
+
+
+class ImplementationCandidateSnapshot(BoundaryModel):
+    candidate_id: str = Field(pattern=r"^(role|action)_[0-9a-f]{32}$")
+    candidate_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    evidence_fingerprint: str = Field(pattern=SHA256_PATTERN)
 
 
 def boundary_sha256(payload: dict[str, Any]) -> str:
@@ -245,29 +250,39 @@ class BusinessActionRevision(BoundaryModel):
 class _ImplementationBinding(BoundaryModel):
     understanding_revision: int = Field(ge=0, le=1_000_000)
     source_fingerprint: str | None = Field(default=None, pattern=SHA256_PATTERN)
-    status: ImplementationBindingStatus
-    reason_codes: tuple[str, ...] = Field(default=(), max_length=32)
+    basis_version: Literal[1, 2]
+    source_proposal_id: str | None = Field(
+        default=None, pattern=SOURCE_PROPOSAL_ID_PATTERN
+    )
+    confirmed_at_us: int | None = Field(default=None, ge=0)
+    candidate_snapshots: tuple[ImplementationCandidateSnapshot, ...] = Field(
+        default=(), max_length=64
+    )
     binding_fingerprint: str = Field(pattern=SHA256_PATTERN)
     updated_at_us: int = Field(ge=0)
 
-    @field_validator("reason_codes")
+    @field_validator("candidate_snapshots")
     @classmethod
-    def normalize_reason_codes(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        if len(set(values)) != len(values) or any(
-            _REASON_CODE.fullmatch(value) is None for value in values
-        ):
-            raise ValueError("binding reason codes must be unique uppercase tokens")
-        return tuple(sorted(values))
+    def normalize_candidate_snapshots(
+        cls, values: tuple[ImplementationCandidateSnapshot, ...]
+    ) -> tuple[ImplementationCandidateSnapshot, ...]:
+        candidate_ids = tuple(item.candidate_id for item in values)
+        if len(set(candidate_ids)) != len(candidate_ids):
+            raise ValueError("binding candidate snapshots must be unique")
+        return tuple(sorted(values, key=lambda item: item.candidate_id))
 
-    def _validate_status(self, candidate_ids: tuple[str, ...]) -> None:
-        if self.status is ImplementationBindingStatus.CURRENT and self.reason_codes:
-            raise ValueError("CURRENT binding cannot contain reasons")
-        if self.status is not ImplementationBindingStatus.CURRENT and not self.reason_codes:
-            raise ValueError("non-CURRENT binding requires reasons")
-        if self.status is ImplementationBindingStatus.MISSING and candidate_ids:
-            raise ValueError("MISSING binding cannot select candidates")
-        if self.source_fingerprint is None and self.status is not ImplementationBindingStatus.MISSING:
-            raise ValueError("unanalyzed source can only produce MISSING binding")
+    def _validate_basis(self, candidate_ids: tuple[str, ...]) -> None:
+        snapshot_ids = tuple(item.candidate_id for item in self.candidate_snapshots)
+        if self.basis_version == 1:
+            if snapshot_ids or self.source_proposal_id is not None or self.confirmed_at_us is not None:
+                raise ValueError("legacy binding cannot invent approval provenance")
+            return
+        if snapshot_ids != candidate_ids:
+            raise ValueError("v2 binding snapshots must match selected candidates")
+        if self.source_proposal_id is None or self.confirmed_at_us is None:
+            raise ValueError("v2 binding requires approval provenance")
+        if self.confirmed_at_us != self.updated_at_us:
+            raise ValueError("binding confirmation time must match its approved update")
 
 
 class ActorImplementationBinding(_ImplementationBinding):
@@ -286,17 +301,30 @@ class ActorImplementationBinding(_ImplementationBinding):
 
     @model_validator(mode="after")
     def validate_binding(self) -> ActorImplementationBinding:
-        self._validate_status(self.role_candidate_ids)
-        payload = {
+        if any(not item.candidate_id.startswith("role_") for item in self.candidate_snapshots):
+            raise ValueError("actor binding snapshots must reference role candidates")
+        self._validate_basis(self.role_candidate_ids)
+        payload = self._fingerprint_payload()
+        if self.binding_fingerprint != boundary_sha256(payload):
+            raise ValueError("actor binding fingerprint is inconsistent")
+        return self
+
+    def _fingerprint_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "actor_id": self.actor_id,
             "actor_revision": self.actor_revision,
             "understanding_revision": self.understanding_revision,
             "source_fingerprint": self.source_fingerprint,
             "role_candidate_ids": list(self.role_candidate_ids),
         }
-        if self.binding_fingerprint != boundary_sha256(payload):
-            raise ValueError("actor binding fingerprint is inconsistent")
-        return self
+        if self.basis_version == 2:
+            payload["basis_version"] = self.basis_version
+            payload["source_proposal_id"] = self.source_proposal_id
+            payload["confirmed_at_us"] = self.confirmed_at_us
+            payload["candidate_snapshots"] = [
+                item.model_dump(mode="json") for item in self.candidate_snapshots
+            ]
+        return payload
 
 
 class ActionImplementationBinding(_ImplementationBinding):
@@ -315,24 +343,38 @@ class ActionImplementationBinding(_ImplementationBinding):
 
     @model_validator(mode="after")
     def validate_binding(self) -> ActionImplementationBinding:
-        self._validate_status(self.action_candidate_ids)
-        payload = {
+        if any(not item.candidate_id.startswith("action_") for item in self.candidate_snapshots):
+            raise ValueError("action binding snapshots must reference action candidates")
+        self._validate_basis(self.action_candidate_ids)
+        payload = self._fingerprint_payload()
+        if self.binding_fingerprint != boundary_sha256(payload):
+            raise ValueError("action binding fingerprint is inconsistent")
+        return self
+
+    def _fingerprint_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "action_id": self.action_id,
             "action_revision": self.action_revision,
             "understanding_revision": self.understanding_revision,
             "source_fingerprint": self.source_fingerprint,
             "action_candidate_ids": list(self.action_candidate_ids),
         }
-        if self.binding_fingerprint != boundary_sha256(payload):
-            raise ValueError("action binding fingerprint is inconsistent")
-        return self
+        if self.basis_version == 2:
+            payload["basis_version"] = self.basis_version
+            payload["source_proposal_id"] = self.source_proposal_id
+            payload["confirmed_at_us"] = self.confirmed_at_us
+            payload["candidate_snapshots"] = [
+                item.model_dump(mode="json") for item in self.candidate_snapshots
+            ]
+        return payload
 
 
 __all__ = [
     "ACTION_ID_PATTERN", "ACTOR_ID_PATTERN", "EFFECT_ID_PATTERN",
+    "SOURCE_PROPOSAL_ID_PATTERN",
     "ActionImplementationBinding", "ActorImplementationBinding",
     "BoundaryEffectiveState", "BusinessAction", "BusinessActionOperationKind",
     "BusinessActionRevision", "BusinessActor", "BusinessActorRevision",
     "BusinessEffectDefinition", "BusinessOperationKind", "BusinessRevisionState",
-    "ImplementationBindingStatus", "boundary_sha256",
+    "ImplementationBindingStatus", "ImplementationCandidateSnapshot", "boundary_sha256",
 ]

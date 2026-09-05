@@ -11,7 +11,7 @@ import { ApiError } from '../../api/http'
 import { recordingsApi, type ActionSafetySetupViewDto, type ConfirmActionSafetySetupInput, type FlowDraftDto, type RecordingActionDto, type RecordingDto, type RecordingReviewCommand, type RecordingTestIdentityDto, type RecordingViewDto } from '../../api/recordings'
 import { runsApi } from '../../api/runs'
 import type { ProjectDto } from '../../api/projects'
-import type { WorkspaceSnapshot } from '../../app/useProjectWorkspace'
+import type { WorkspaceViewDto } from '../../api/workspace'
 import { browserState } from '../../app/browserState'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { AssistantPanel } from '../../components/AssistantPanel'
@@ -31,7 +31,7 @@ async function sourceChoiceId(value: string) {
   return `choice-${Array.from(new Uint8Array(digest)).map((item) => item.toString(16).padStart(2, '0')).join('').slice(0, 16)}`
 }
 
-export function RecordingPage({ project, onError, onBack, onStateChanged, onContinuePreparation }: { project: ProjectDto; onError: (error: ApiError) => void; onBack: () => void; onStateChanged: () => Promise<WorkspaceSnapshot | undefined>; onContinuePreparation: () => Promise<void> | void }) {
+export function RecordingPage({ project, onError, onBack, onStateChanged, onContinuePreparation }: { project: ProjectDto; onError: (error: ApiError) => void; onBack: () => void; onStateChanged: () => Promise<WorkspaceViewDto | undefined>; onContinuePreparation: () => Promise<void> | void }) {
   const [recording, setRecording] = useState<RecordingDto | null>(null)
   const [actionOptions, setActionOptions] = useState<RecordingActionDto[]>([])
   const [actionId, setActionId] = useState<string>()

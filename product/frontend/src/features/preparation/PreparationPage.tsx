@@ -5,7 +5,7 @@ import { Alert, Button, Card, Tag, Typography } from 'antd'
 import type {
   PreparationItemStatus,
   ProjectReadinessDto,
-} from '../../api/projects'
+} from '../../api/deferredChecks'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 
 const statusPresentation: Record<PreparationItemStatus, { label: string; color: string }> = {

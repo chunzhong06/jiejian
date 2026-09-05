@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import type { WorkspaceSnapshot } from '../../app/useProjectWorkspace'
+import type { WorkspaceViewDto } from '../../api/workspace'
 import { projectsApi, type ProjectDto, type RoleCandidateDto } from '../../api/projects'
 import {
   testIdentitiesApi,
@@ -44,7 +44,7 @@ export function TestIdentityPage({ project, onError, onBack, onStateChanged, onC
   project: ProjectDto
   onError: (error: ApiError) => void
   onBack: () => void
-  onStateChanged: () => Promise<WorkspaceSnapshot | undefined>
+  onStateChanged: () => Promise<WorkspaceViewDto | undefined>
   onContinuePreparation: () => Promise<void> | void
 }) {
   const [roles, setRoles] = useState<RoleCandidateDto[]>([])

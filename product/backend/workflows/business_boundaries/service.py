@@ -17,10 +17,8 @@ from uuid import uuid4
 
 from product.backend.core.approval import HumanApproval, HumanApprovalChannel
 from product.backend.core.application_understanding import (
-    ActionCandidate,
     ApplicationUnderstanding,
     CandidateDecision,
-    RoleCandidate,
 )
 from product.backend.core.boundary_proposal import (
     BoundaryDecisionKind,
@@ -44,7 +42,7 @@ from product.backend.core.business_boundary import (
     BusinessActorRevision,
     BusinessEffectDefinition,
     BusinessRevisionState,
-    ImplementationBindingStatus,
+    ImplementationCandidateSnapshot,
     boundary_sha256,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
@@ -56,9 +54,27 @@ from product.backend.core.permission_intent import (
     permission_intent_sha256,
 )
 from product.backend.infra.storage import StorageUnitOfWork
+from product.backend.workflows.business_boundaries.fingerprints import (
+    candidate_source_snapshot,
+    implementation_candidate_snapshot,
+    legacy_candidate_source_snapshot,
+)
+from product.backend.workflows.business_boundaries.inspection import (
+    ActionImplementationInspection,
+    ActorImplementationInspection,
+    inspect_action_binding,
+    inspect_actor_binding,
+)
+from product.backend.workflows.business_boundaries.maintenance import (
+    build_maintenance_draft,
+    maintenance_to_proposal_command,
+    proposal_change_summary,
+)
 from product.backend.workflows.business_boundaries.models import (
     BoundaryDraftCandidate,
     BoundaryDraftView,
+    BoundaryMaintenanceCommand,
+    BoundaryMaintenanceDraftView,
     BoundaryProposalCommand,
     BoundaryProposalListView,
     BoundaryProposalView,
@@ -72,7 +88,9 @@ class _ActorPlan:
     item: ProposedActorItem
     root: BusinessActor
     revision: BusinessActorRevision
+    binding: ActorImplementationBinding | None
     write_revision: bool
+    write_binding: bool
     create_root: bool
 
 
@@ -82,7 +100,9 @@ class _ActionPlan:
     root: BusinessAction
     revision: BusinessActionRevision
     effect_ids: dict[str, str]
+    binding: ActionImplementationBinding | None
     write_revision: bool
+    write_binding: bool
     create_root: bool
 
 
@@ -93,6 +113,21 @@ class _PermissionPlan:
     intent_id: str
     revision: int
     write_revision: bool
+
+
+@dataclass(frozen=True)
+class _MaintenanceFacts:
+    actor_roots: tuple[BusinessActor, ...]
+    action_roots: tuple[BusinessAction, ...]
+    actors: tuple[BusinessActorRevision, ...]
+    actions: tuple[BusinessActionRevision, ...]
+    permissions: tuple[PermissionIntentRevision, ...]
+    actor_bindings: tuple[ActorImplementationBinding, ...]
+    action_bindings: tuple[ActionImplementationBinding, ...]
+    actor_inspections: tuple[ActorImplementationInspection, ...]
+    action_inspections: tuple[ActionImplementationInspection, ...]
+    understanding: ApplicationUnderstanding
+    policy_epoch: int
 
 
 class BusinessBoundaryService:
@@ -152,8 +187,100 @@ class BusinessBoundaryService:
             understanding = self._understanding(work, project_id)
             proposal = self._build_proposal(project_id, command, understanding)
             work.business_boundaries.add_proposal(proposal)
+            view = self._proposal_view(work, proposal)
             work.commit()
-        return BoundaryProposalView(proposal=proposal)
+        return view
+
+    def create_initial_proposal(
+        self,
+        project_id: str,
+        command: BoundaryProposalCommand,
+    ) -> BoundaryProposalView:
+        """HTTP 首次建立入口；已有正式 identity 后必须进入 maintenance。"""
+
+        with self._uow_factory() as work:
+            if (
+                work.business_boundaries.list_actors(project_id)
+                or work.business_boundaries.list_actions(project_id)
+            ):
+                self._raise(
+                    ErrorCode.BOUNDARY_MAINTENANCE_REQUIRED,
+                    "项目已有正式业务边界，请使用维护流程",
+                )
+            understanding = self._understanding(work, project_id)
+            proposal = self._build_proposal(project_id, command, understanding)
+            work.business_boundaries.add_proposal(proposal)
+            view = self._proposal_view(work, proposal)
+            work.commit()
+        return view
+
+    def maintenance_draft(self, project_id: str) -> BoundaryMaintenanceDraftView:
+        with self._uow_factory() as work:
+            facts = self._maintenance_facts(work, project_id)
+        return build_maintenance_draft(
+            project_id,
+            facts.actor_roots,
+            facts.action_roots,
+            facts.actors,
+            facts.actions,
+            facts.permissions,
+            facts.actor_inspections,
+            facts.action_inspections,
+            facts.understanding,
+            facts.policy_epoch,
+        )
+
+    def create_maintenance_proposal(
+        self,
+        project_id: str,
+        command: BoundaryMaintenanceCommand,
+    ) -> BoundaryProposalView:
+        """在同一事务中防 pending、防并发，并把 desired state 冻结为 Proposal。"""
+
+        with self._uow_factory() as work:
+            facts = self._maintenance_facts(work, project_id)
+            pending = next(
+                (
+                    item
+                    for item in work.business_boundaries.list_proposals(project_id)
+                    if work.business_boundaries.decision_for_proposal(item.proposal_id)
+                    is None
+                ),
+                None,
+            )
+            if pending is not None:
+                raise JiejianError(
+                    ErrorCode.BOUNDARY_PROPOSAL_PENDING,
+                    "项目已有待审业务边界提案",
+                    details={"proposal_id": pending.proposal_id},
+                )
+            proposal_command = maintenance_to_proposal_command(
+                project_id,
+                command,
+                facts.actor_roots,
+                facts.action_roots,
+                facts.actors,
+                facts.actions,
+                facts.permissions,
+                facts.policy_epoch,
+            )
+            proposal = self._build_proposal(
+                project_id,
+                proposal_command,
+                facts.understanding,
+            )
+            work.business_boundaries.add_proposal(proposal)
+            view = BoundaryProposalView(
+                proposal=proposal,
+                change_summary=proposal_change_summary(
+                    proposal,
+                    facts.permissions,
+                    facts.actor_bindings,
+                    facts.action_bindings,
+                ),
+            )
+            work.commit()
+        return view
 
     def proposals(
         self,
@@ -165,12 +292,7 @@ class BusinessBoundaryService:
 
         with self._uow_factory() as work:
             values = tuple(
-                BoundaryProposalView(
-                    proposal=proposal,
-                    decision=work.business_boundaries.decision_for_proposal(
-                        proposal.proposal_id
-                    ),
-                )
+                self._proposal_view(work, proposal)
                 for proposal in work.business_boundaries.list_proposals(project_id)
             )
         if pending_only:
@@ -182,8 +304,8 @@ class BusinessBoundaryService:
             proposal = work.business_boundaries.get_proposal(proposal_id)
             if proposal is None or proposal.project_id != project_id:
                 self._raise(ErrorCode.BOUNDARY_PROPOSAL_NOT_FOUND, "业务边界提案不存在")
-            decision = work.business_boundaries.decision_for_proposal(proposal_id)
-        return BoundaryProposalView(proposal=proposal, decision=decision)
+            view = self._proposal_view(work, proposal)
+        return view
 
     def approve(
         self,
@@ -217,8 +339,20 @@ class BusinessBoundaryService:
             )
 
             # 先完整构造并交叉校验全部写入对象，随后才按固定顺序触碰 Repository。
-            actor_plans = self._plan_actors(work, proposal, approval, now_us)
-            action_plans = self._plan_actions(work, proposal, approval, now_us)
+            actor_plans = self._plan_actors(
+                work,
+                proposal,
+                approval,
+                understanding,
+                now_us,
+            )
+            action_plans = self._plan_actions(
+                work,
+                proposal,
+                approval,
+                understanding,
+                now_us,
+            )
             permission_plans = self._plan_permissions(
                 work,
                 proposal,
@@ -260,15 +394,13 @@ class BusinessBoundaryService:
                     )
                     work.permission_intents.add_revision(revision)
             for plan in actor_plans:
-                if plan.write_revision:
-                    work.business_boundaries.replace_actor_binding(
-                        self._actor_binding(plan, proposal, understanding, now_us)
-                    )
+                if plan.write_binding:
+                    assert plan.binding is not None
+                    work.business_boundaries.replace_actor_binding(plan.binding)
             for plan in action_plans:
-                if plan.write_revision:
-                    work.business_boundaries.replace_action_binding(
-                        self._action_binding(plan, proposal, understanding, now_us)
-                    )
+                if plan.write_binding:
+                    assert plan.binding is not None
+                    work.business_boundaries.replace_action_binding(plan.binding)
             if permission_changed:
                 work.permission_intents.replace_policy_state(
                     ProjectPolicyState(
@@ -316,8 +448,9 @@ class BusinessBoundaryService:
                 reason=clean_reason,
             )
             work.business_boundaries.add_decision(decision)
+            view = self._proposal_view(work, proposal)
             work.commit()
-        return BoundaryProposalView(proposal=proposal, decision=decision)
+        return view
 
     def view(self, project_id: str) -> BusinessBoundaryView:
         with self._uow_factory() as work:
@@ -345,23 +478,28 @@ class BusinessBoundaryService:
             )
             latest_intents = work.permission_intents.list_latest(project_id)
             state = work.permission_intents.policy_state(project_id)
+            understanding = self._understanding(work, project_id)
             actor_bindings = tuple(
-                binding
-                for actor in actors
-                if (
-                    binding := work.business_boundaries.actor_binding(
+                inspect_actor_binding(
+                    actor.actor_id,
+                    actor.revision,
+                    work.business_boundaries.actor_binding(
                         actor.actor_id, actor.revision
-                    )
-                ) is not None
+                    ),
+                    understanding,
+                )
+                for actor in actors
             )
             action_bindings = tuple(
-                binding
-                for action in actions
-                if (
-                    binding := work.business_boundaries.action_binding(
+                inspect_action_binding(
+                    action.action_id,
+                    action.revision,
+                    work.business_boundaries.action_binding(
                         action.action_id, action.revision
-                    )
-                ) is not None
+                    ),
+                    understanding,
+                )
+                for action in actions
             )
         intents, stale_intents = self._current_permission_intents(
             latest_intents,
@@ -381,6 +519,146 @@ class BusinessBoundaryService:
             action_bindings=tuple(sorted(action_bindings, key=lambda item: item.action_id)),
             permission_intents=intents,
             permission_statuses=statuses,
+        )
+
+    def _maintenance_facts(
+        self,
+        work: StorageUnitOfWork,
+        project_id: str,
+    ) -> _MaintenanceFacts:
+        actor_roots = work.business_boundaries.list_actors(project_id)
+        action_roots = work.business_boundaries.list_actions(project_id)
+        if not actor_roots and not action_roots:
+            self._raise(
+                ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID,
+                "项目尚未建立正式业务边界",
+            )
+        actors = tuple(
+            work.business_boundaries.actor_revision(
+                root.actor_id,
+                root.current_revision,
+            )
+            for root in actor_roots
+        )
+        actions = tuple(
+            work.business_boundaries.action_revision(
+                root.action_id,
+                root.current_revision,
+            )
+            for root in action_roots
+        )
+        if any(item is None for item in (*actors, *actions)):
+            self._raise(
+                ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID,
+                "业务边界 root 指向不存在的 revision",
+            )
+        current_actors = tuple(item for item in actors if item is not None)
+        current_actions = tuple(item for item in actions if item is not None)
+        permissions = work.permission_intents.list_latest(project_id)
+        state = work.permission_intents.policy_state(project_id)
+        understanding = self._understanding(work, project_id)
+        actor_bindings = tuple(
+            binding
+            for item in current_actors
+            if (
+                binding := work.business_boundaries.actor_binding(
+                    item.actor_id,
+                    item.revision,
+                )
+            )
+            is not None
+        )
+        action_bindings = tuple(
+            binding
+            for item in current_actions
+            if (
+                binding := work.business_boundaries.action_binding(
+                    item.action_id,
+                    item.revision,
+                )
+            )
+            is not None
+        )
+        actor_binding_by_key = {
+            (item.actor_id, item.actor_revision): item for item in actor_bindings
+        }
+        action_binding_by_key = {
+            (item.action_id, item.action_revision): item for item in action_bindings
+        }
+        actor_inspections = tuple(
+            inspect_actor_binding(
+                item.actor_id,
+                item.revision,
+                actor_binding_by_key.get((item.actor_id, item.revision)),
+                understanding,
+            )
+            for item in current_actors
+        )
+        action_inspections = tuple(
+            inspect_action_binding(
+                item.action_id,
+                item.revision,
+                action_binding_by_key.get((item.action_id, item.revision)),
+                understanding,
+            )
+            for item in current_actions
+        )
+        return _MaintenanceFacts(
+            actor_roots=actor_roots,
+            action_roots=action_roots,
+            actors=current_actors,
+            actions=current_actions,
+            permissions=permissions,
+            actor_bindings=actor_bindings,
+            action_bindings=action_bindings,
+            actor_inspections=actor_inspections,
+            action_inspections=action_inspections,
+            understanding=understanding,
+            policy_epoch=0 if state is None else state.policy_epoch,
+        )
+
+    @staticmethod
+    def _proposal_view(
+        work: StorageUnitOfWork,
+        proposal: BoundaryProposalBundle,
+    ) -> BoundaryProposalView:
+        actor_bindings = tuple(
+            binding
+            for item in proposal.proposed_actors
+            if item.actor_id is not None
+            and item.expected_current_revision is not None
+            and (
+                binding := work.business_boundaries.actor_binding(
+                    item.actor_id,
+                    item.expected_current_revision,
+                )
+            )
+            is not None
+        )
+        action_bindings = tuple(
+            binding
+            for item in proposal.proposed_actions
+            if item.action_id is not None
+            and item.expected_current_revision is not None
+            and (
+                binding := work.business_boundaries.action_binding(
+                    item.action_id,
+                    item.expected_current_revision,
+                )
+            )
+            is not None
+        )
+        return BoundaryProposalView(
+            proposal=proposal,
+            decision=work.business_boundaries.decision_for_proposal(
+                proposal.proposal_id
+            ),
+            change_summary=proposal_change_summary(
+                proposal,
+                work.permission_intents.list_latest(proposal.project_id),
+                actor_bindings,
+                action_bindings,
+            ),
         )
 
     def _build_proposal(
@@ -459,6 +737,7 @@ class BusinessBoundaryService:
         work: StorageUnitOfWork,
         proposal: BoundaryProposalBundle,
         approval: HumanApproval,
+        understanding: ApplicationUnderstanding,
         now_us: int,
     ) -> tuple[_ActorPlan, ...]:
         plans: list[_ActorPlan] = []
@@ -534,7 +813,32 @@ class BusinessBoundaryService:
                     )
                     create_root = True
                 write_revision = True
-            plans.append(_ActorPlan(item, root, revision, write_revision, create_root))
+            replacement = self._actor_binding(
+                item,
+                revision,
+                proposal.proposal_id,
+                understanding,
+                now_us,
+            )
+            stored_binding = work.business_boundaries.actor_binding(
+                revision.actor_id,
+                revision.revision,
+            )
+            write_binding = write_revision or self._binding_changed(
+                stored_binding,
+                replacement,
+            )
+            plans.append(
+                _ActorPlan(
+                    item,
+                    root,
+                    revision,
+                    replacement if write_binding else None,
+                    write_revision,
+                    write_binding,
+                    create_root,
+                )
+            )
         return tuple(plans)
 
     def _plan_actions(
@@ -542,6 +846,7 @@ class BusinessBoundaryService:
         work: StorageUnitOfWork,
         proposal: BoundaryProposalBundle,
         approval: HumanApproval,
+        understanding: ApplicationUnderstanding,
         now_us: int,
     ) -> tuple[_ActionPlan, ...]:
         plans: list[_ActionPlan] = []
@@ -628,7 +933,33 @@ class BusinessBoundaryService:
                     )
                     create_root = True
                 write_revision = True
-            plans.append(_ActionPlan(item, root, revision, effect_ids, write_revision, create_root))
+            replacement = self._action_binding(
+                item,
+                revision,
+                proposal.proposal_id,
+                understanding,
+                now_us,
+            )
+            stored_binding = work.business_boundaries.action_binding(
+                revision.action_id,
+                revision.revision,
+            )
+            write_binding = write_revision or self._binding_changed(
+                stored_binding,
+                replacement,
+            )
+            plans.append(
+                _ActionPlan(
+                    item,
+                    root,
+                    revision,
+                    effect_ids,
+                    replacement if write_binding else None,
+                    write_revision,
+                    write_binding,
+                    create_root,
+                )
+            )
         return tuple(plans)
 
     def _resolve_effects(
@@ -717,78 +1048,129 @@ class BusinessBoundaryService:
 
     def _actor_binding(
         self,
-        plan: _ActorPlan,
-        proposal: BoundaryProposalBundle,
+        item: ProposedActorItem,
+        revision: BusinessActorRevision,
+        source_proposal_id: str,
         understanding: ApplicationUnderstanding,
         now_us: int,
     ) -> ActorImplementationBinding:
-        status, reasons = self._binding_status(plan.item.source_candidate_ids, understanding)
+        snapshots = self._implementation_snapshots(
+            ProposalCandidateKind.ROLE,
+            item.source_candidate_ids,
+            understanding,
+        )
         payload = {
-            "actor_id": plan.revision.actor_id,
-            "actor_revision": plan.revision.revision,
+            "actor_id": revision.actor_id,
+            "actor_revision": revision.revision,
             "understanding_revision": understanding.revision,
             "source_fingerprint": understanding.source_fingerprint,
-            "role_candidate_ids": list(plan.item.source_candidate_ids),
+            "role_candidate_ids": list(item.source_candidate_ids),
+            "basis_version": 2,
+            "source_proposal_id": source_proposal_id,
+            "confirmed_at_us": now_us,
+            "candidate_snapshots": [
+                item.model_dump(mode="json") for item in snapshots
+            ],
         }
         return ActorImplementationBinding(
-            actor_id=plan.revision.actor_id,
-            actor_revision=plan.revision.revision,
+            actor_id=revision.actor_id,
+            actor_revision=revision.revision,
             understanding_revision=understanding.revision,
             source_fingerprint=understanding.source_fingerprint,
-            role_candidate_ids=plan.item.source_candidate_ids,
-            status=status,
-            reason_codes=reasons,
+            basis_version=2,
+            source_proposal_id=source_proposal_id,
+            confirmed_at_us=now_us,
+            role_candidate_ids=item.source_candidate_ids,
+            candidate_snapshots=snapshots,
             binding_fingerprint=boundary_sha256(payload),
             updated_at_us=now_us,
         )
 
     def _action_binding(
         self,
-        plan: _ActionPlan,
-        proposal: BoundaryProposalBundle,
+        item: ProposedActionItem,
+        revision: BusinessActionRevision,
+        source_proposal_id: str,
         understanding: ApplicationUnderstanding,
         now_us: int,
     ) -> ActionImplementationBinding:
-        status, reasons = self._binding_status(plan.item.source_candidate_ids, understanding)
+        snapshots = self._implementation_snapshots(
+            ProposalCandidateKind.ACTION,
+            item.source_candidate_ids,
+            understanding,
+        )
         payload = {
-            "action_id": plan.revision.action_id,
-            "action_revision": plan.revision.revision,
+            "action_id": revision.action_id,
+            "action_revision": revision.revision,
             "understanding_revision": understanding.revision,
             "source_fingerprint": understanding.source_fingerprint,
-            "action_candidate_ids": list(plan.item.source_candidate_ids),
+            "action_candidate_ids": list(item.source_candidate_ids),
+            "basis_version": 2,
+            "source_proposal_id": source_proposal_id,
+            "confirmed_at_us": now_us,
+            "candidate_snapshots": [
+                item.model_dump(mode="json") for item in snapshots
+            ],
         }
         return ActionImplementationBinding(
-            action_id=plan.revision.action_id,
-            action_revision=plan.revision.revision,
+            action_id=revision.action_id,
+            action_revision=revision.revision,
             understanding_revision=understanding.revision,
             source_fingerprint=understanding.source_fingerprint,
-            action_candidate_ids=plan.item.source_candidate_ids,
-            status=status,
-            reason_codes=reasons,
+            basis_version=2,
+            source_proposal_id=source_proposal_id,
+            confirmed_at_us=now_us,
+            action_candidate_ids=item.source_candidate_ids,
+            candidate_snapshots=snapshots,
             binding_fingerprint=boundary_sha256(payload),
             updated_at_us=now_us,
         )
 
     @staticmethod
-    def _binding_status(
+    def _implementation_snapshots(
+        kind: ProposalCandidateKind,
         candidate_ids: tuple[str, ...],
         understanding: ApplicationUnderstanding,
-    ) -> tuple[ImplementationBindingStatus, tuple[str, ...]]:
-        if not candidate_ids:
-            reason = "SOURCE_NOT_ANALYZED" if understanding.source_fingerprint is None else "NO_CANDIDATE_SELECTED"
-            return ImplementationBindingStatus.MISSING, (reason,)
-        all_candidates = {
-            item.candidate_id: item
-            for item in (*understanding.role_candidates, *understanding.action_candidates)
-        }
-        if all(
-            (candidate := all_candidates.get(candidate_id)) is not None
-            and candidate.decision is CandidateDecision.CONFIRMED
-            and not candidate.stale
+    ) -> tuple[ImplementationCandidateSnapshot, ...]:
+        candidates = (
+            understanding.role_candidates
+            if kind is ProposalCandidateKind.ROLE
+            else understanding.action_candidates
+        )
+        by_id = {item.candidate_id: item for item in candidates}
+        return tuple(
+            implementation_candidate_snapshot(
+                candidate_source_snapshot(kind, by_id[candidate_id])
+            )
             for candidate_id in candidate_ids
+        )
+
+    @staticmethod
+    def _binding_changed(
+        stored: ActorImplementationBinding | ActionImplementationBinding | None,
+        replacement: ActorImplementationBinding | ActionImplementationBinding,
+    ) -> bool:
+        """只比较批准技术来源；新 Proposal/time 本身不制造 rebind。"""
+
+        if stored is None or stored.basis_version != 2:
+            return True
+        if isinstance(stored, ActorImplementationBinding) and isinstance(
+            replacement,
+            ActorImplementationBinding,
         ):
-            return ImplementationBindingStatus.CURRENT, ()
-        return ImplementationBindingStatus.STALE, ("CANDIDATE_NOT_CONFIRMED",)
+            return (
+                stored.role_candidate_ids != replacement.role_candidate_ids
+                or stored.candidate_snapshots != replacement.candidate_snapshots
+            )
+        if isinstance(stored, ActionImplementationBinding) and isinstance(
+            replacement,
+            ActionImplementationBinding,
+        ):
+            return (
+                stored.action_candidate_ids != replacement.action_candidate_ids
+                or stored.candidate_snapshots != replacement.candidate_snapshots
+            )
+        raise TypeError("implementation binding kind changed")
 
     @staticmethod
     def _current_permission_intents(
@@ -886,15 +1268,24 @@ class BusinessBoundaryService:
         snapshots: list[CandidateSourceSnapshot] = []
         for candidate_id in sorted(requested_roles):
             candidate = role_by_id.get(candidate_id)
-            if candidate is None or candidate.stale:
+            if (
+                candidate is None
+                or candidate.stale
+                or candidate.decision is CandidateDecision.REJECTED
+            ):
                 self._raise(ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID, "角色来源候选不存在或已过期")
-            snapshots.append(self._candidate_snapshot(ProposalCandidateKind.ROLE, candidate))
+            snapshots.append(candidate_source_snapshot(ProposalCandidateKind.ROLE, candidate))
         for candidate_id in sorted(requested_actions):
             candidate = action_by_id.get(candidate_id)
-            if candidate is None or candidate.stale:
+            if (
+                candidate is None
+                or candidate.stale
+                or candidate.decision is CandidateDecision.REJECTED
+            ):
                 self._raise(ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID, "动作来源候选不存在或已过期")
-            snapshots.append(self._candidate_snapshot(ProposalCandidateKind.ACTION, candidate))
+            snapshots.append(candidate_source_snapshot(ProposalCandidateKind.ACTION, candidate))
         return BoundarySourceSnapshot(
+            basis_version=2,
             application_understanding_revision=understanding.revision,
             source_fingerprint=self._source_fingerprint(understanding),
             candidates=tuple(snapshots),
@@ -905,7 +1296,7 @@ class BusinessBoundaryService:
         snapshot: BoundarySourceSnapshot,
         understanding: ApplicationUnderstanding,
     ) -> None:
-        if (
+        if snapshot.basis_version == 1 and (
             snapshot.application_understanding_revision != understanding.revision
             or snapshot.source_fingerprint != self._source_fingerprint(understanding)
         ):
@@ -914,27 +1305,22 @@ class BusinessBoundaryService:
         actions = {item.candidate_id: item for item in understanding.action_candidates}
         for expected in snapshot.candidates:
             candidate = (roles if expected.candidate_kind is ProposalCandidateKind.ROLE else actions).get(expected.candidate_id)
-            if candidate is None or candidate.stale or self._candidate_snapshot(expected.candidate_kind, candidate) != expected:
+            actual = (
+                None
+                if candidate is None
+                else (
+                    legacy_candidate_source_snapshot(expected.candidate_kind, candidate)
+                    if snapshot.basis_version == 1
+                    else candidate_source_snapshot(expected.candidate_kind, candidate)
+                )
+            )
+            if (
+                candidate is None
+                or candidate.stale
+                or candidate.decision is CandidateDecision.REJECTED
+                or actual != expected
+            ):
                 self._raise(ErrorCode.BOUNDARY_PROPOSAL_SOURCE_STALE, "业务边界提案的候选来源已变化")
-
-    @staticmethod
-    def _candidate_snapshot(
-        kind: ProposalCandidateKind,
-        candidate: RoleCandidate | ActionCandidate,
-    ) -> CandidateSourceSnapshot:
-        evidence = sorted(
-            (item.model_dump(mode="json") for item in candidate.evidence),
-            key=lambda item: (
-                item["relative_path"], item["line_start"], item["line_end"],
-                item["symbol"] or "", item["detector"], item["content_sha256"],
-            ),
-        )
-        return CandidateSourceSnapshot(
-            candidate_kind=kind,
-            candidate_id=candidate.candidate_id,
-            candidate_fingerprint=boundary_sha256(candidate.model_dump(mode="json")),
-            evidence_fingerprint=boundary_sha256({"evidence": evidence}),
-        )
 
     @staticmethod
     def _source_fingerprint(understanding: ApplicationUnderstanding) -> str:

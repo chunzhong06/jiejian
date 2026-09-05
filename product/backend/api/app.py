@@ -26,6 +26,7 @@ from product.backend.api.routers.test_identities import build_test_identities_ro
 from product.backend.api.routers.business_boundaries import build_business_boundaries_router
 from product.backend.api.routers.current_experience import build_current_experience_router
 from product.backend.api.routers.mcp_access import build_mcp_access_router
+from product.backend.api.routers.workspace import build_workspace_router
 from product.backend.api.local_control import LocalControlGuard
 from product.backend.api.mcp import build_mcp_control
 from product.backend.workflows.mcp_access import MCPAccessController
@@ -111,6 +112,7 @@ def create_app(
     app.include_router(build_system_router(context, shutdown_callback=shutdown_callback))
     app.include_router(build_projects_router(context))
     app.include_router(build_business_boundaries_router(context))
+    app.include_router(build_workspace_router(context))
     app.include_router(build_current_experience_router())
     app.include_router(build_test_identities_router(context))
     app.include_router(build_mcp_access_router(context, mcp_access))

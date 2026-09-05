@@ -1,4 +1,4 @@
-# 验证 1.1.0 Business Boundary HTTP 决策链与旧写入口退役事实。
+# 验证 1.1.1 Business Boundary 首次建立、持续维护与决策 HTTP 边界。
 
 from __future__ import annotations
 
@@ -149,3 +149,84 @@ def test_old_write_surfaces_are_not_registered(tmp_path: Path) -> None:
             "/api/projects/sample-project/business-boundaries/official-recipe/proposal",
         ):
             assert client.post(path, json={"schema_version": "1"}).status_code == 404
+
+
+def test_business_boundary_maintenance_api_uses_desired_state_not_write_modes(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    app = create_app(tmp_path / "var", start_worker=False, environ={})
+
+    with TestClient(app) as client:
+        connected = client.post(
+            "/api/applications/connect",
+            json={
+                "schema_version": "1",
+                "source_root": str(source),
+                "project_name": "业务边界维护 API 测试",
+            },
+        )
+        project_id = connected.json()["data"]["project"]["project_id"]
+        initial = client.post(
+            f"/api/projects/{project_id}/business-boundaries/proposals",
+            json=_proposal_payload(),
+        ).json()["data"]["proposal"]
+        approved = client.post(
+            f"/api/projects/{project_id}/business-boundaries/proposals/"
+            f"{initial['proposal_id']}/approve",
+            json={
+                "schema_version": "1",
+                "expected_fingerprint": initial["proposal_fingerprint"],
+                "reason": "确认首次业务边界",
+            },
+        )
+        assert approved.status_code == 200
+
+        draft_response = client.get(
+            f"/api/projects/{project_id}/business-boundaries/maintenance-draft"
+        )
+        assert draft_response.status_code == 200, draft_response.text
+        draft = draft_response.json()["data"]
+        assert "write_mode" not in draft["actors"][0]
+        assert draft["actors"][0]["actor_id"] is not None
+        draft["actors"][0]["description"] += "，包含 API 维护"
+        created = client.post(
+            f"/api/projects/{project_id}/business-boundaries/maintenance-proposals",
+            json={
+                "schema_version": "1",
+                "expected_boundary_state_fingerprint": draft[
+                    "boundary_state_fingerprint"
+                ],
+                "actors": draft["actors"],
+                "actions": draft["actions"],
+                "permissions": draft["permissions"],
+                "provenance": "本机用户通过维护 API 提交",
+            },
+        )
+        assert created.status_code == 201, created.text
+        proposal_view = created.json()["data"]
+        assert proposal_view["proposal"]["proposed_actors"][0]["write_mode"] == (
+            "APPEND_REVISION"
+        )
+        assert proposal_view["change_summary"]["business_revision_updates"]
+
+        initial_again = client.post(
+            f"/api/projects/{project_id}/business-boundaries/proposals",
+            json=_proposal_payload(),
+        )
+        assert initial_again.status_code == 409
+        assert initial_again.json()["error"]["code"] == "BOUNDARY_MAINTENANCE_REQUIRED"
+
+        proposal = proposal_view["proposal"]
+        maintenance_approved = client.post(
+            f"/api/projects/{project_id}/business-boundaries/proposals/"
+            f"{proposal['proposal_id']}/approve",
+            json={
+                "schema_version": "1",
+                "expected_fingerprint": proposal["proposal_fingerprint"],
+                "reason": "确认维护提案",
+            },
+        )
+        assert maintenance_approved.status_code == 200, maintenance_approved.text
+        assert maintenance_approved.json()["data"]["actors"][0]["revision"] == 2

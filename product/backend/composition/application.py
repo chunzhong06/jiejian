@@ -2,7 +2,7 @@
 # ApplicationCore 组合根
 #
 # 职责
-#   组装 1.1.0 当前启动、项目接入、Business Boundary、TestIdentity 与只读结果基础能力。
+#   组装 1.1.1 当前启动、项目接入、动作级 Workspace、Business Boundary 与 TestIdentity。
 #
 # 边界
 #   旧 Permission writer、Preparation、Check、SourceChange、Recording 和 Run 不注册为 CURRENT。
@@ -28,16 +28,16 @@ from product.backend.infra.secrets import SecretStore, default_secret_store
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
 from product.backend.workflows.business_boundaries import BusinessBoundaryService
-from product.backend.workflows.business_boundaries.status import BoundaryWorkspaceStatusService
 from product.backend.workflows.onboarding.workflow import FolderSelector, OnboardingWorkflow, SystemFolderSelector
 from product.backend.workflows.permission_intents import PermissionIntentService
 from product.backend.workflows.projects.catalog import ProjectCatalog
 from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
 from product.backend.workflows.test_identities import TestIdentityService
+from product.backend.workflows.workspace import WorkspaceService
 
 
 class ApplicationCore:
-    """创建 fresh 1.1.0 基础设施并只注册已经切换到稳定业务边界的能力。"""
+    """创建 1.1.1 基础设施并只注册动作级工作区已经接线的能力。"""
 
     def __init__(
         self,
@@ -86,7 +86,7 @@ class ApplicationCore:
             clock_us=clock_us,
         )
         self.business_boundaries = BusinessBoundaryService(factory, clock_us=clock_us)
-        self.product_status = BoundaryWorkspaceStatusService(
+        self.workspace = WorkspaceService(
             factory,
             self.business_boundaries,
         )

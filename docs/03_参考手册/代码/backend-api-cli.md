@@ -11,7 +11,7 @@
 
 ### `product/backend/api/app.py`
 - `create_app(var_dir, control_origin, control_session_token, frontend_dir, start_worker, llm_transport, llm_secret_store, secret_store, environ, clock_us, folder_selector, shutdown_callback, official_sample_root) -> FastAPI`
-主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.business_boundaries`, `product.backend.api.routers.current_experience`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.projects`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.business_boundaries`, `product.backend.api.routers.current_experience`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.projects`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.api.routers.workspace`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.workflows.mcp_access`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/api/envelope.py`
 - `class ApiModel`
@@ -51,6 +51,7 @@
 ### `product/backend/api/routers/business_boundaries.py`
 - `class BoundaryProposalCreateRequest`
 - `class BoundaryDecisionRequest`
+- `class BoundaryMaintenanceCreateRequest`
 - `build_business_boundaries_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.boundary_proposal`, `product.backend.workflows.business_boundaries`, `pydantic`, `typing`
 
@@ -154,6 +155,10 @@
 - `class TestIdentityResetRequest`
 - `build_test_identities_router(context) -> APIRouter`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `pydantic`, `typing`
+
+### `product/backend/api/routers/workspace.py`
+- `build_workspace_router(context) -> APIRouter`
+主要 import / dot-source：`fastapi`, `product.backend.api.envelope`, `product.backend.composition`
 
 ### `product/backend/cli/__init__.py`
 主要 import / dot-source：`.app`

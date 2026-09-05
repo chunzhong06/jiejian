@@ -2,6 +2,13 @@
 
 from .models import (
     BoundaryDraftView,
+    BoundaryMaintenanceActionItem,
+    BoundaryMaintenanceActorItem,
+    BoundaryMaintenanceCandidateOption,
+    BoundaryMaintenanceCommand,
+    BoundaryMaintenanceDraftView,
+    BoundaryMaintenancePermissionItem,
+    BoundaryProposalChangeSummary,
     BoundaryProposalCommand,
     BoundaryProposalListView,
     BoundaryProposalView,
@@ -12,7 +19,11 @@ from .models import (
 from .service import BusinessBoundaryService
 
 __all__ = [
-    "BoundaryDraftView", "BoundaryProposalCommand", "BoundaryProposalListView",
+    "BoundaryDraftView", "BoundaryMaintenanceActionItem",
+    "BoundaryMaintenanceActorItem", "BoundaryMaintenanceCandidateOption",
+    "BoundaryMaintenanceCommand", "BoundaryMaintenanceDraftView",
+    "BoundaryMaintenancePermissionItem", "BoundaryProposalChangeSummary",
+    "BoundaryProposalCommand", "BoundaryProposalListView",
     "BoundaryProposalView", "BusinessBoundaryService", "BusinessBoundaryView",
     "OfficialBoundaryRecipe", "PermissionBoundaryStatus",
 ]

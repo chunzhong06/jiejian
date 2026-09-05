@@ -16,7 +16,13 @@ from product.backend.core.boundary_proposal import (
     ProposedActorItem,
     ProposedPermissionItem,
 )
-from product.backend.workflows.business_boundaries import BoundaryProposalCommand
+from product.backend.workflows.business_boundaries import (
+    BoundaryMaintenanceActionItem,
+    BoundaryMaintenanceActorItem,
+    BoundaryMaintenanceCommand,
+    BoundaryMaintenancePermissionItem,
+    BoundaryProposalCommand,
+)
 
 
 class BoundaryProposalCreateRequest(ApiModel):
@@ -64,6 +70,39 @@ class BoundaryDecisionRequest(ApiModel):
     reason: str = Field(min_length=1, max_length=512)
 
 
+class BoundaryMaintenanceCreateRequest(ApiModel):
+    schema_version: Literal["1"]
+    expected_boundary_state_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    actors: list[dict[str, object]] = Field(max_length=256)
+    actions: list[dict[str, object]] = Field(max_length=512)
+    permissions: list[dict[str, object]] = Field(max_length=1024)
+    provenance: str = Field(min_length=1, max_length=512)
+
+    def to_command(self) -> BoundaryMaintenanceCommand:
+        """只传 desired state；write_mode 始终由服务端维护规划器决定。"""
+
+        return BoundaryMaintenanceCommand(
+            expected_boundary_state_fingerprint=(
+                self.expected_boundary_state_fingerprint
+            ),
+            actors=tuple(
+                BoundaryMaintenanceActorItem.model_validate_json(_item_json(item))
+                for item in self.actors
+            ),
+            actions=tuple(
+                BoundaryMaintenanceActionItem.model_validate_json(_item_json(item))
+                for item in self.actions
+            ),
+            permissions=tuple(
+                BoundaryMaintenancePermissionItem.model_validate_json(
+                    _item_json(item)
+                )
+                for item in self.permissions
+            ),
+            provenance=self.provenance,
+        )
+
+
 def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
     """构造唯一正式 Boundary API；Approve/Reject 身份始终由服务端固定。"""
 
@@ -83,7 +122,35 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
     @router.post(f"{prefix}/proposals", response_model=ApiResponse, status_code=201)
     def create_proposal(project_id: str, body: BoundaryProposalCreateRequest):
         return data_response(
-            context.business_boundaries.create_proposal(project_id, body.to_command()).model_dump(mode="json"),
+            context.business_boundaries.create_initial_proposal(
+                project_id,
+                body.to_command(),
+            ).model_dump(mode="json"),
+            status_code=201,
+        )
+
+    @router.get(f"{prefix}/maintenance-draft", response_model=ApiResponse)
+    def maintenance_draft(project_id: str):
+        return data_response(
+            context.business_boundaries.maintenance_draft(project_id).model_dump(
+                mode="json"
+            )
+        )
+
+    @router.post(
+        f"{prefix}/maintenance-proposals",
+        response_model=ApiResponse,
+        status_code=201,
+    )
+    def create_maintenance_proposal(
+        project_id: str,
+        body: BoundaryMaintenanceCreateRequest,
+    ):
+        return data_response(
+            context.business_boundaries.create_maintenance_proposal(
+                project_id,
+                body.to_command(),
+            ).model_dump(mode="json"),
             status_code=201,
         )
 
@@ -128,5 +195,6 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
 
 
 __all__ = [
-    "BoundaryDecisionRequest", "BoundaryProposalCreateRequest", "build_business_boundaries_router",
+    "BoundaryDecisionRequest", "BoundaryMaintenanceCreateRequest",
+    "BoundaryProposalCreateRequest", "build_business_boundaries_router",
 ]

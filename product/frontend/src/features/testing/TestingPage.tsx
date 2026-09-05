@@ -1,7 +1,7 @@
 // 测试模块汇总条件、运行和结果；三个入口共享后端事实，但不组成强制步骤条。
 
 import { Button, Typography } from 'antd'
-import type { ProductStatusDto, ProjectReadinessDto } from '../../api/projects'
+import type { ProductStatusDto, ProjectReadinessDto } from '../../api/deferredChecks'
 import type { RunDto } from '../../api/runs'
 import { formatTimestamp, lifecycleLabel, verdictLabel } from '../../app/presentation'
 import { PageTaskHeader } from '../../components/PageTaskHeader'

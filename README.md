@@ -1,14 +1,14 @@
-# 界鉴 JIEJIAN 1.1.0
+# 界鉴 JIEJIAN 1.1.1
 
 > 面向 Vibe Coding 的权限意图持续验证与断裂诊断系统。
 
 界鉴记住人已经确认的权限要求。Agent 可以继续修改代码和提出建议，但不能把原来的权限考题改简单；界鉴会独立检查真实业务结果，并定位当前证据能够证明的最早权限断裂。
 
-## 1.1.0 当前能力边界
+## 1.1.1 当前能力边界
 
-1.1.0 先把“谁、做什么、会产生什么真实业务结果、应该允许还是拒绝”建立为独立且可持久化的业务真源。源码分析得到的角色和动作 Candidate 只用于发现与实现绑定，不会自动成为正式业务语义；用户在 `/permissions` 查看完整提案并明确批准后，`BusinessActor`、`BusinessAction`、业务 Effect 与 Permission v2 才同时生效。手工建立的业务语义即使还没有可靠代码绑定，也可以先确认，并明确显示当前尚不可验证。
+1.1.1 在稳定业务真源上增加持续维护与动作级工作区。源码分析得到的角色和动作 Candidate 仍只用于发现与实现绑定；用户可以从完整 current 边界修改、停用或新增 Actor、Action、Effect 与 Permission，前端只提交 desired state，服务端决定沿用、追加 revision、重绑或停用。每次修改先冻结为不可变 Proposal，只有本机用户明确批准后才原子推进正式事实与 `policy_epoch`。
 
-本版本保留既有工作台、导航、主题和结果表达，但完整的新检查执行主链尚未重新接入；“变化与修复”和“检查与结果”会明确显示当前不可用，不提供旧权限矩阵写入口，也不把测试账号、Flow、Observer 或执行配置当作权限审批前置条件。
+工作台只读取服务端 `WorkspaceView`：它按固定优先级提供唯一 `PrimaryTask`，并为每项当前业务动作汇总权限与实时实现映射。没有 Binding row 的手工业务语义不会被强制判为缺失；已有 Binding 漂移时才要求重绑。完整的新检查执行主链尚未重新接入，“变化与修复”和“检查与结果”明确不可用。
 
 ## 为什么代码改对了，权限仍可能被悄悄改坏
 
@@ -50,7 +50,7 @@ Vibe Coding 让功能迭代变快，也让后续修改更容易绕开原来的�
 
 GUI 顶部的“AI 工具”进入独立 `/tools` 页面，可连接 Codex、DSH 或其他 MCP 客户端。长期凭据只保存在 SecretStore/Windows Credential Manager；界鉴不会写 `token.json`，也不会自动修改 Codex 配置。
 
-权限分为 `READ / PREPARE / EXECUTE`。`PREPARE` 可重新分析源码、提交建议并准备已经批准的检查；`EXECUTE` 可启动或停止受控任务。两者都不能批准权限变化。
+1.1.1 当前只开放固定的 `READ` 工具，用于读取项目、应用理解、业务边界、权限要求、测试账号与系统状态。`PREPARE / EXECUTE` 及变化提交、检查运行等能力仅保留为后续恢复边界，当前连接不能借此修改权限或启动任务。
 
 Codex 使用固定端点 `http://127.0.0.1:8765/mcp` 和用户显式配置的 `JIEJIAN_MCP_TOKEN`：
 
@@ -71,7 +71,9 @@ Agent 提交变化说明
 → 在结果与历史中标记代码变化重验
 ```
 
-## 完成一次检查
+## 后续恢复的完整检查链
+
+以下步骤描述保留的完整产品方向，不是 1.1.1 当前可操作范围；本版本在业务边界维护与动作级工作区完成后停止。
 
 1. 选择应用目录，确认本地地址并授权只读源码分析。
 2. 确认业务权限组和关键业务动作。
@@ -95,7 +97,7 @@ Agent 提交变化说明
 
 ## 官方 Sample
 
-仓库只保留一个官方 Web Sample：“协作空间：项目资料管理应用”。同一导出动作会呈现问题版、修复版、证据受限版三种状态，Bob 的日常查看则作为修复后必须保持的独立合法路径；Sample 不预制 Verdict。普通用户可从未接入工作台启动问题版，一键应用公开样例合同，再逐次运行真实检查；开发说明见 [Samples 说明](samples/README.md)。
+仓库保留一个官方 Web Sample：“协作空间：项目资料管理应用”，用于后续版本恢复执行链及开发验证。1.1.1 普通工作台不启动 Sample、不暴露公开合同 CTA，也不运行问题版、修复版或证据受限版；开发资产说明见 [Samples 说明](samples/README.md)。
 
 ## 30 Case 方法验证
 
@@ -117,24 +119,18 @@ Windows 源码仓库在项目根目录运行：
 
 ## CLI 与 Machine 自动化
 
-CLI 只保留有独立非交互价值的控制任务：
+1.1.1 CLI 只保留服务启动、产品版本和系统诊断/维护：
 
 ```text
-status / serve
-application list/show/remove
-check preview/prepare/run/cancel
-result show/report
-history
+serve / --version
 system doctor/repair/clean
 ```
 
 示例：
 
 ```powershell
-jiejian status
-jiejian check preview <project_id>
-jiejian result show --project <project_id>
-jiejian --json status
+jiejian --version
+jiejian system doctor
 ```
 
 人类模式只输出业务语言；完整稳定结构使用 `--json`；诊断使用 `system doctor`。首次应用接入、登录与 Recording 只在 GUI 完成，Agent 自动化使用 MCP。

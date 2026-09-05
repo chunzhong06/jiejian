@@ -3,11 +3,11 @@
 import { AppstoreOutlined, DiffOutlined, ExperimentOutlined, MenuOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { Button, Drawer, Typography } from 'antd'
 import { useRef, useState } from 'react'
-import type { ProductStatusDto } from '../api/projects'
+import type { WorkspaceAreaDto } from '../api/workspace'
 import { productAreas, type AppRoute, type ProductAreaRoute } from '../app/presentation'
 
-type ProductAreas = ProductStatusDto['areas'] | null
-type AreaStatus = ProductStatusDto['areas'][number]['status']
+type ProductAreas = WorkspaceAreaDto[] | null
+type AreaStatus = WorkspaceAreaDto['status'] | 'EMPTY'
 
 function activeArea(route: AppRoute): ProductAreaRoute {
   if (route === '/application') return '/workspace'

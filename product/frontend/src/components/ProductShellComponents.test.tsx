@@ -10,7 +10,7 @@ const areas = [
   { key: 'overview' as const, label: '工作台', description: '查看全局状态', route: '/workspace' as const, status: 'READY' as const, status_label: '持续更新' },
   { key: 'changes' as const, label: '变化', description: '核对 Agent 修改', route: '/changes' as const, status: 'NEEDS_ATTENTION' as const, status_label: '需要处理' },
   { key: 'permissions' as const, label: '权限', description: '维护权限边界', route: '/permissions' as const, status: 'READY' as const, status_label: '规则已建立' },
-  { key: 'tests' as const, label: '测试', description: '准备、运行与结果', route: '/tests' as const, status: 'RUNNING' as const, status_label: '正在检查' },
+  { key: 'tests' as const, label: '测试', description: '准备、运行与结果', route: '/tests' as const, status: 'BLOCKED' as const, status_label: '当前不可检查' },
 ]
 
 describe('Web V1 产品壳共享组件', () => {
@@ -35,7 +35,7 @@ describe('Web V1 产品壳共享组件', () => {
     const trigger = screen.getByRole('button', { name: '打开持续验证工作区' })
     trigger.focus()
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByRole('button', { name: /检查与结果.*正在检查/ })).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('button', { name: /检查与结果.*当前不可检查/ })).toHaveFocus())
     fireEvent.click(await screen.findByRole('button', { name: /变化与修复.*需要处理/ }))
     expect(onNavigate).toHaveBeenCalledWith('/changes')
     await waitFor(() => expect(trigger).toHaveFocus())

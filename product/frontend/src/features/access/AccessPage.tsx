@@ -2,7 +2,8 @@
 
 import { ApplicationSetup } from './ApplicationSetup'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
-import type { ProjectDto, ProjectReadinessDto } from '../../api/projects'
+import type { ProjectDto } from '../../api/projects'
+import type { WorkspaceConnectionDto } from '../../api/workspace'
 import './access.css'
 
 export function AccessPage({
@@ -17,7 +18,7 @@ export function AccessPage({
   onContinue,
 }: {
   selected: ProjectDto | null
-  endpointStatus?: ProjectReadinessDto['endpoint_status']
+  endpointStatus?: WorkspaceConnectionDto['endpoint_status']
   officialSampleAvailable?: boolean
   officialSampleBusy?: boolean
   onStartOfficialSample?: () => Promise<boolean>

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -36,7 +37,8 @@ from product.backend.infra.storage.base import Base
 from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-_CURRENT_MIGRATION_REVISION = "0001_business_boundary_v2"
+_BASE_MIGRATION_REVISION = "0001_business_boundary_v2"
+_CURRENT_MIGRATION_REVISION = "0002_business_boundary_maintenance"
 _LEGACY_1_X_MIGRATION_REVISIONS = frozenset(
     {
         "0001_web_v1",
@@ -179,8 +181,6 @@ def _check_database_compatibility(
 ) -> None:
     """在任何 Alembic 写连接前只读核验 fresh/current 数据库并拒绝旧 1.x。"""
 
-    _ = resource_root
-
     if not path.exists():
         return
     try:
@@ -209,6 +209,15 @@ def _check_database_compatibility(
             revision = revisions[0]
             if revision in _LEGACY_1_X_MIGRATION_REVISIONS:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
+            if revision == _BASE_MIGRATION_REVISION and resource_root is not None:
+                if _sqlite_schema_signature(connection) != _legacy_schema_signature(
+                    resource_root
+                ):
+                    raise JiejianError(
+                        ErrorCode.STORAGE_MIGRATION,
+                        _INCOMPATIBLE_DATABASE_MESSAGE,
+                    )
+                return
             if revision != _CURRENT_MIGRATION_REVISION:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
             load_storage_orm_mappings()
@@ -278,6 +287,25 @@ def _sqlite_schema_signature(
             )
         )
     )
+
+
+def _legacy_schema_signature(resource_root: Path) -> tuple[tuple[str, str, str, str], ...]:
+    """用不可改写的 0001 migration 构造临时参考，不猜测旧正式结构。"""
+
+    with tempfile.TemporaryDirectory(prefix="jiejian-schema-") as directory:
+        reference = Path(directory) / "business-boundary-v2.db"
+        config = Config(str(resource_root / "alembic.ini"))
+        config.attributes["configure_logger"] = False
+        config.set_main_option(
+            "sqlalchemy.url",
+            f"sqlite+pysqlite:///{reference.as_posix()}",
+        )
+        command.upgrade(config, _BASE_MIGRATION_REVISION)
+        connection = sqlite3.connect(reference)
+        try:
+            return _sqlite_schema_signature(connection)
+        finally:
+            connection.close()
 
 
 def _quote_sqlite_identifier(identifier: str) -> str:

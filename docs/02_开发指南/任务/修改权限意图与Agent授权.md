@@ -64,7 +64,7 @@ BusinessActor / BusinessAction revisions
 
 ## policy_epoch
 
-`ProjectPolicyState.policy_epoch` 从 0 开始。第一次批准正式业务语义进入 1；后续只有 Actor、Action、Effect 或 Permission 语义真实变化时推进。纯 Candidate 重新绑定、相同语义重试或读取操作不推进 epoch。批准事务必须从当前正式状态计算下一 epoch，并通过 revision、fingerprint 与唯一 Decision 约束拒绝并发旧写。
+`ProjectPolicyState.policy_epoch` 从 0 开始。批准事务只有实际写入一条或多条新的 `PermissionIntentRevision` 时才推进一次；同一 Proposal 中 carry-forward 三条权限也只推进一次。只有 Actor/Action/Effect revision 而没有权限 revision、纯 Candidate 重新绑定、相同语义重试或读取操作都不推进 epoch。批准事务必须从当前正式状态计算下一 epoch，并通过 revision、`boundary_state_fingerprint`、Proposal fingerprint 与唯一 Decision 约束拒绝并发旧写。
 
 ## Agent 与自动化边界
 

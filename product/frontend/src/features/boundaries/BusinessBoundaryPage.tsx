@@ -4,13 +4,17 @@ import { Alert, Button, Result, Spin, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import {
   businessBoundariesApi,
+  type BoundaryMaintenanceCommandDto,
+  type BoundaryMaintenanceDraftDto,
   type BoundaryProposalCommandDto,
   type BoundaryProposalDto,
+  type BoundaryProposalViewDto,
   type BusinessBoundaryViewDto,
 } from '../../api/businessBoundaries'
 import type { ApiError } from '../../api/http'
 import type { ProjectDto } from '../../api/projects'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
+import { BoundaryMaintenanceEditor } from './BoundaryMaintenanceEditor'
 import { BoundaryProposalEditor } from './BoundaryProposalEditor'
 import { BoundaryProposalReview } from './BoundaryProposalReview'
 import { effectKindLabels, expectationLabels, relationLabels } from './boundaryLabels'
@@ -23,10 +27,12 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack 
 }) {
   const [boundary, setBoundary] = useState<BusinessBoundaryViewDto>()
   const [preview, setPreview] = useState<Awaited<ReturnType<typeof businessBoundariesApi.preview>>>()
-  const [proposal, setProposal] = useState<BoundaryProposalDto>()
+  const [maintenanceDraft, setMaintenanceDraft] = useState<BoundaryMaintenanceDraftDto>()
+  const [proposalView, setProposalView] = useState<BoundaryProposalViewDto>()
   const [initialCommand, setInitialCommand] = useState<BoundaryProposalCommandDto>()
+  const [initialMaintenanceCommand, setInitialMaintenanceCommand] = useState<BoundaryMaintenanceCommandDto>()
   const [editorKey, setEditorKey] = useState(0)
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState<'INITIAL' | 'MAINTENANCE' | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [success, setSuccess] = useState<string>()
@@ -38,12 +44,17 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack 
       businessBoundariesApi.current(project.project_id),
       businessBoundariesApi.preview(project.project_id),
       businessBoundariesApi.proposals(project.project_id, true),
-    ]).then(([current, draft, pending]) => {
+    ]).then(async ([current, draft, pending]) => {
+      if (!active) return
+      const maintenance = current.actors.length
+        ? await businessBoundariesApi.maintenanceDraft(project.project_id)
+        : undefined
       if (!active) return
       setBoundary(current)
       setPreview(draft)
-      setProposal(pending.proposals.at(-1)?.proposal)
-      setEditing(current.actors.length === 0 && pending.proposals.length === 0)
+      setMaintenanceDraft(maintenance)
+      setProposalView(pending.proposals.at(-1))
+      setEditing(pending.proposals.length ? null : current.actors.length ? null : 'INITIAL')
     }).catch((error) => { if (active) onError(error as ApiError) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [onError, project.project_id])
@@ -53,46 +64,74 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack 
     setSuccess(undefined)
     try {
       const created = await businessBoundariesApi.createProposal(project.project_id, command)
-      setProposal(created.proposal)
-      setEditing(false)
+      setProposalView(created)
+      setEditing(null)
     } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
-  const approve = async (target: BoundaryProposalDto, reason: string) => {
+  const createMaintenanceProposal = async (command: BoundaryMaintenanceCommandDto) => {
+    setBusy(true)
+    setSuccess(undefined)
+    try {
+      const created = await businessBoundariesApi.createMaintenanceProposal(project.project_id, command)
+      setProposalView(created)
+      setEditing(null)
+    } catch (error) { onError(error as ApiError) }
+    finally { setBusy(false) }
+  }
+  const approve = async (target: BoundaryProposalViewDto['proposal'], reason: string) => {
     const current = await businessBoundariesApi.approve(project.project_id, target, reason)
     setBoundary(current)
-    setProposal(undefined)
+    setMaintenanceDraft(await businessBoundariesApi.maintenanceDraft(project.project_id))
+    setProposalView(undefined)
     setInitialCommand(undefined)
-    setEditing(false)
-    setSuccess('业务边界已经由你确认。测试实现可以后续准备；Coding Agent 无权直接改写这些规则。')
+    setInitialMaintenanceCommand(undefined)
+    setEditing(null)
+    setSuccess('当前业务边界已经由你确认。界鉴只应用本次提案中的 revision、权限或实现映射变化。')
     await onStateChanged()
   }
   const approveCurrent = async (reason: string) => {
-    if (!proposal) return
+    if (!proposalView) return
     setBusy(true)
-    try { await approve(proposal, reason) }
+    try { await approve(proposalView.proposal, reason) }
     catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
   const rejectCurrent = async (reason: string) => {
-    if (!proposal) return
+    if (!proposalView) return
     setBusy(true)
     try {
-      await businessBoundariesApi.reject(project.project_id, proposal, reason)
-      setProposal(undefined)
+      await businessBoundariesApi.reject(project.project_id, proposalView.proposal, reason)
+      setProposalView(undefined)
       setInitialCommand(undefined)
-      setEditing(true)
+      setInitialMaintenanceCommand(undefined)
+      setEditing(boundary?.actors.length ? 'MAINTENANCE' : 'INITIAL')
       setSuccess('这组提案已放弃；正式业务边界没有被改写。')
       await onStateChanged()
     } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
-  const returnToEdit = () => {
-    if (!proposal) return
-    setInitialCommand(commandFromProposal(proposal))
-    setEditing(true)
-    setProposal(undefined)
-    setEditorKey((value) => value + 1)
+  const returnToEdit = async () => {
+    if (!proposalView) return
+    setBusy(true)
+    try {
+      await businessBoundariesApi.reject(
+        project.project_id,
+        proposalView.proposal,
+        '用户返回修改，保留正式边界并放弃当前不可变提案',
+      )
+      if (boundary?.actors.length && maintenanceDraft) {
+        setInitialMaintenanceCommand(commandFromMaintenanceProposal(proposalView.proposal, maintenanceDraft))
+        setEditing('MAINTENANCE')
+      } else {
+        setInitialCommand(commandFromProposal(proposalView.proposal))
+        setEditing('INITIAL')
+      }
+      setProposalView(undefined)
+      setEditorKey((value) => value + 1)
+      await onStateChanged()
+    } catch (error) { onError(error as ApiError) }
+    finally { setBusy(false) }
   }
   if (loading) return <div className="boundary-page"><PageTaskHeader title="业务边界" description="建立稳定业务主体、动作、结果与权限。" status="正在读取" /><div className="boundary-loading"><Spin /><Typography.Text type="secondary">正在读取当前业务边界和待审提案</Typography.Text></div></div>
   if (!boundary || !preview) return <Result status="warning" title="当前业务边界事实暂时不可用" subTitle="请刷新后重试；界鉴不会回退到旧权限表。" extra={<Button onClick={onBack}>返回工作台</Button>} />
@@ -100,11 +139,17 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack 
   const permissionsComplete = boundary.actions.length > 0
     && boundary.permission_statuses.every((item) => item.permission_semantics_confirmed)
   return <div className="boundary-page">
-    <PageTaskHeader title="业务边界" description="先确认稳定的业务主体、动作、真实结果和允许/拒绝规则；测试实现可以后续准备。" status={permissionsComplete ? '业务权限状态 已确认' : proposal ? '等待人工确认' : '需要确认当前权限'} />
+    <PageTaskHeader title="业务边界" description="先确认稳定业务语义，再按需追加 revision、沿用权限或重新绑定当前代码实现。" status={proposalView ? '等待人工确认' : permissionsComplete ? '业务权限状态 已确认' : '需要确认当前权限'} />
     {success && <Alert type="success" showIcon message={success} />}
     <CurrentBoundary boundary={boundary} />
 
-    {proposal ? <BoundaryProposalReview proposal={proposal} busy={busy} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={returnToEdit} onReject={(reason) => void rejectCurrent(reason)} /> : editing ? <BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} /> : <div className="boundary-new-proposal"><Typography.Text type="secondary">需要调整时会形成新的不可变提案；现有正式业务边界不会被原地修改。</Typography.Text><Button onClick={() => { setInitialCommand(undefined); setEditorKey((value) => value + 1); setEditing(true) }}>建立新的业务边界提案</Button></div>}
+    {proposalView
+      ? <BoundaryProposalReview proposalView={proposalView} busy={busy} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
+      : editing === 'INITIAL'
+        ? <BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} />
+        : editing === 'MAINTENANCE' && maintenanceDraft
+          ? <BoundaryMaintenanceEditor key={editorKey} draft={maintenanceDraft} initialCommand={initialMaintenanceCommand} busy={busy} onSubmit={(command) => void createMaintenanceProposal(command)} />
+          : <div className="boundary-new-proposal"><Typography.Text type="secondary">调整会从 current stable IDs/revisions 开始，并形成新的不可变提案；现有正式边界不会被原地改写。</Typography.Text><Button onClick={() => { setInitialMaintenanceCommand(undefined); setEditorKey((value) => value + 1); setEditing(boundary.actors.length ? 'MAINTENANCE' : 'INITIAL') }}>{boundary.actors.length ? '调整当前业务边界' : '建立业务边界'}</Button></div>}
   </div>
 }
 
@@ -140,4 +185,48 @@ function CurrentBoundary({ boundary }: { boundary: BusinessBoundaryViewDto }) {
 
 function commandFromProposal(proposal: BoundaryProposalDto): BoundaryProposalCommandDto {
   return { proposed_actors: proposal.proposed_actors, proposed_actions: proposal.proposed_actions, proposed_permissions: proposal.proposed_permissions, unresolved_questions: proposal.unresolved_questions, provenance: proposal.provenance }
+}
+
+function commandFromMaintenanceProposal(
+  proposal: BoundaryProposalDto,
+  draft: BoundaryMaintenanceDraftDto,
+): BoundaryMaintenanceCommandDto {
+  return {
+    expected_boundary_state_fingerprint: draft.boundary_state_fingerprint,
+    actors: proposal.proposed_actors.map((item) => ({
+      item_id: item.item_id,
+      actor_id: item.actor_id ?? null,
+      expected_current_revision: item.expected_current_revision ?? null,
+      display_name: item.display_name,
+      description: item.description,
+      effective_state: item.effective_state,
+      source_candidate_ids: item.source_candidate_ids ?? [],
+    })),
+    actions: proposal.proposed_actions.map((item) => ({
+      item_id: item.item_id,
+      action_id: item.action_id ?? null,
+      expected_current_revision: item.expected_current_revision ?? null,
+      display_name: item.display_name,
+      description: item.description,
+      primary_resource_concept: item.primary_resource_concept,
+      operation_kind: item.operation_kind,
+      state_changing: item.state_changing,
+      effects: item.effect_catalog,
+      effective_state: item.effective_state,
+      source_candidate_ids: item.source_candidate_ids ?? [],
+    })),
+    permissions: proposal.proposed_permissions.map((item) => ({
+      item_id: item.item_id,
+      intent_id: item.intent_id ?? null,
+      expected_current_revision: item.expected_current_revision ?? null,
+      effective_state: item.effective_state,
+      subject_actor_item_id: item.subject_actor_item_id,
+      business_action_item_id: item.business_action_item_id,
+      resource_owner_actor_item_id: item.resource_owner_actor_item_id,
+      relation: item.relation,
+      expectation: item.expectation,
+      protected_effect_item_ids: item.protected_effect_item_ids,
+    })),
+    provenance: proposal.provenance,
+  }
 }

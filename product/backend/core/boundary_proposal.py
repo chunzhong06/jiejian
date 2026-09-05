@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -86,6 +86,7 @@ class CandidateSourceSnapshot(BoundaryModel):
 
 
 class BoundarySourceSnapshot(BoundaryModel):
+    basis_version: Literal[1, 2] = 1
     application_understanding_revision: int = Field(ge=0, le=1_000_000)
     source_fingerprint: str = Field(pattern=SHA256_PATTERN)
     candidates: tuple[CandidateSourceSnapshot, ...] = Field(default=(), max_length=768)
@@ -277,7 +278,12 @@ class BoundaryProposalBundle(BoundaryModel):
         return _text(value, "provenance")
 
     def fingerprint_payload(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", exclude={"proposal_fingerprint"})
+        payload = self.model_dump(mode="json", exclude={"proposal_fingerprint"})
+        if self.source_snapshot.basis_version == 1:
+            # 1.1.0 已持久 Proposal 的 fingerprint 中没有 basis_version；
+            # 读取兼容不能反过来让不可变 Proposal 看似被修改。
+            payload["source_snapshot"].pop("basis_version", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_bundle(self) -> BoundaryProposalBundle:

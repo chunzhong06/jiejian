@@ -41,12 +41,6 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
     async def get_project(project_id: str):
         return data_response(context.projects.get(project_id).model_dump(mode="json"))
 
-    @router.get("/api/projects/{project_id}/status", response_model=ApiResponse)
-    async def get_project_status(project_id: str):
-        """沿用 Workbench 投影形状，只组合 1.1.0 已注册的当前事实。"""
-
-        return data_response(context.product_status.get(project_id).model_dump(mode="json"))
-
     @router.delete("/api/projects/{project_id}", response_model=ApiResponse)
     async def archive_project(project_id: str):
         """移除普通应用视图，保留 Project 及全部历史结果。"""

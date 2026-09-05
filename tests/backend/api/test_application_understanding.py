@@ -1,4 +1,4 @@
-# 验证普通用户应用连接、地址发现、确认与 readiness API 共用同一项目事实。
+# 验证普通用户应用连接、地址发现、确认与 Workspace API 共用同一项目事实。
 
 from __future__ import annotations
 
@@ -13,6 +13,9 @@ from product.backend.workflows.application_understanding.endpoints import (
 from product.backend.core.test_identity import TestIdentityAuthMethod, TestIdentityCookie
 from product.backend.infra.secrets import credential_ref
 from product.backend.workflows.test_identities import PreparedLoginState
+from product.backend.workflows.business_boundaries.official_recipe import (
+    official_boundary_recipe,
+)
 from tests.fixtures.collaboration_golden import InMemorySecretStore
 
 
@@ -101,18 +104,18 @@ def test_application_connection_confirms_endpoint_without_profile(
         assert "schema_version" not in understanding.json()["data"]
         assert understanding.json()["data"]["confirmed_endpoint"] == endpoint
 
-        product_status = client.get(f"/api/projects/{project_id}/status")
-        assert product_status.status_code == 200
-        readiness = product_status.json()["data"]["readiness"]
-        assert "schema_version" not in readiness
-        assert readiness["endpoint_status"] == "CONFIRMED"
-        assert readiness["next_required_action"] == "AUTHORIZE_SOURCE_ANALYSIS"
-        assert product_status.json()["data"]["primary_attention_key"] == (
-            "authorize-source-analysis"
+        workspace = client.get(f"/api/projects/{project_id}/workspace")
+        assert workspace.status_code == 200
+        workspace_data = workspace.json()["data"]
+        assert "schema_version" not in workspace_data
+        assert workspace_data["connection"]["endpoint_status"] == "CONFIRMED"
+        assert workspace_data["connection"]["source_analysis_status"] == (
+            "NOT_AUTHORIZED"
         )
-        assert product_status.json()["data"]["attention_items"][0]["key"] == (
-            "authorize-source-analysis"
+        assert workspace_data["primary_task"]["task_kind"] == (
+            "AUTHORIZE_SOURCE_ANALYSIS"
         )
+        assert workspace_data["primary_task"]["route"] == "/application"
 
         authorized = client.put(
             f"/api/projects/{project_id}/source-analysis-authorization",
@@ -154,13 +157,13 @@ def test_application_connection_confirms_endpoint_without_profile(
             },
         )
         assert decided_action.status_code == 200
-        delivery = client.post(f"/api/projects/{project_id}/delivery-check")
-        assert delivery.status_code == 200
-        assert delivery.json()["data"]["decision"] == "BLOCKED"
-        assert delivery.json()["data"]["reason_codes"] == [
-            "TRUSTED_RESULT_MISSING"
-        ]
-        assert delivery.json()["data"]["next_path"] == "/validation"
+        workspace_after_analysis = client.get(
+            f"/api/projects/{project_id}/workspace"
+        )
+        assert workspace_after_analysis.status_code == 200
+        assert workspace_after_analysis.json()["data"]["primary_task"][
+            "task_kind"
+        ] == "ESTABLISH_BUSINESS_BOUNDARY"
         manual_role = client.post(
             f"/api/projects/{project_id}/roles",
             json={"schema_version": "1", "display_name": "访客", "revision": 5},
@@ -348,9 +351,24 @@ def test_remove_application_archives_history_cleans_secrets_and_same_source_rest
             f"/api/projects/{project_id}/roles/{role['candidate_id']}",
             json={"schema_version": "1", "decision": "CONFIRMED", "display_name": "负责人", "revision": analyzed["revision"]},
         ).json()["data"]
+        recipe = official_boundary_recipe()
+        proposal = app.state.context.business_boundaries.create_initial_proposal(
+            project_id,
+            recipe.proposal_command,
+        ).proposal
+        boundary = app.state.context.business_boundaries.approve(
+            project_id,
+            proposal.proposal_id,
+            expected_fingerprint=proposal.proposal_fingerprint,
+            reason="为历史账号建立 stable actor",
+        )
+        actor = next(
+            item for item in boundary.actors if item.display_name == "项目负责人"
+        )
         identity = app.state.context.test_identities.create(
             project_id,
-            role_candidate_id=confirmed_role["role_candidates"][0]["candidate_id"],
+            actor_id=actor.actor_id,
+            actor_revision=actor.revision,
             label="历史账号",
         )
         identity_id = identity.identity_id

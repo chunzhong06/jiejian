@@ -3,7 +3,7 @@
 import { Button, Modal, Space, Tag, Typography } from 'antd'
 import { useState } from 'react'
 import type { OfficialExperienceDto, OfficialScenarioVersion } from '../api/experience'
-import type { ProductStatusDto } from '../api/projects'
+import type { ProductStatusDto } from '../api/deferredChecks'
 import type { RunDto } from '../api/runs'
 import { verdictLabel } from '../app/presentation'
 

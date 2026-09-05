@@ -43,6 +43,7 @@
 
 ### `product/backend/infra/storage/db.py`
 - `SQLITE_BUSY_TIMEOUT_MS`
+- `_BASE_MIGRATION_REVISION`
 - `_CURRENT_MIGRATION_REVISION`
 - `_LEGACY_1_X_MIGRATION_REVISIONS`
 - `_INCOMPATIBLE_DATABASE_MESSAGE`
@@ -52,7 +53,7 @@
 - `create_sqlite_engine(database_path) -> Engine`
 - `create_session_factory(engine) -> sessionmaker[Session]`
 - `upgrade_database(database_path) -> None`
-主要 import / dot-source：`__future__`, `alembic`, `alembic.config`, `collections`, `collections.abc`, `contextlib`, `importlib.resources`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.storage.base`, `product.backend.infra.storage.orm_registry`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `sqlalchemy.pool`, `sqlite3`
+主要 import / dot-source：`__future__`, `alembic`, `alembic.config`, `collections`, `collections.abc`, `contextlib`, `importlib.resources`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.backend.infra.storage.base`, `product.backend.infra.storage.orm_registry`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `sqlalchemy.pool`, `sqlite3`, `tempfile`
 
 ### `product/backend/infra/storage/execution/job_control.py`
 - `_NONTERMINAL_RUNS`

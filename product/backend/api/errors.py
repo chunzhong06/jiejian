@@ -47,6 +47,9 @@ def _status_for(code: str) -> int:
         ErrorCode.BOUNDARY_PROPOSAL_FINGERPRINT_MISMATCH.value,
         ErrorCode.BOUNDARY_PROPOSAL_SOURCE_STALE.value,
         ErrorCode.BOUNDARY_REVISION_CONFLICT.value,
+        ErrorCode.BOUNDARY_MAINTENANCE_REQUIRED.value,
+        ErrorCode.BOUNDARY_EFFECT_MAPPING_REQUIRED.value,
+        ErrorCode.BOUNDARY_PROPOSAL_PENDING.value,
     }:
         return 409
     if code in {

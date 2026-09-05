@@ -6,7 +6,7 @@ import type {
   PreparationItemDto,
   ProjectPreparationDto,
   ProjectReadinessDto,
-} from '../../api/projects'
+} from '../../api/deferredChecks'
 import { PreparationPage } from './PreparationPage'
 
 function preparationItem(

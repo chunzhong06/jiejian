@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Collapse, Segmented, Space, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import type { ProductStatusDto } from '../../api/projects'
+import type { ProductStatusDto } from '../../api/deferredChecks'
 import { resultsApi, type EvidenceDto, type ExecutionTraceDto, type ResultPresentationDto, type ResultPresentationIssueDto } from '../../api/results'
 import { runsApi, type RunDto } from '../../api/runs'
 import { traceEventLabel } from '../../app/presentation'

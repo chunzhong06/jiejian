@@ -51,7 +51,7 @@ class BusinessActorRevisionRow(Base):
     __table_args__ = (
         CheckConstraint("revision >= 1", name="revision_positive"),
         CheckConstraint(
-            "effective_state IN ('ACTIVE', 'SUPERSEDED', 'RETIRED')",
+            "effective_state IN ('ACTIVE', 'RETIRED')",
             name="effective_state_value",
         ),
         Index("ix_business_actor_revisions_project", "project_id", "created_at_us"),
@@ -102,7 +102,7 @@ class BusinessActionRevisionRow(Base):
     __table_args__ = (
         CheckConstraint("revision >= 1", name="revision_positive"),
         CheckConstraint(
-            "effective_state IN ('ACTIVE', 'SUPERSEDED', 'RETIRED')",
+            "effective_state IN ('ACTIVE', 'RETIRED')",
             name="effective_state_value",
         ),
         CheckConstraint(
@@ -200,19 +200,21 @@ class ActorImplementationBindingRow(Base):
             ["business_actor_revisions.actor_id", "business_actor_revisions.revision"],
             ondelete="CASCADE",
         ),
-        CheckConstraint(
-            "status IN ('CURRENT', 'STALE', 'MISSING', 'AMBIGUOUS')",
-            name="status_value",
-        ),
+        CheckConstraint("basis_version IN (1, 2)", name="basis_version_value"),
     )
 
     actor_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     actor_revision: Mapped[int] = mapped_column(Integer, primary_key=True)
     understanding_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     source_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    basis_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_proposal_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("boundary_proposals.proposal_id", ondelete="RESTRICT"),
+    )
+    confirmed_at_us: Mapped[int | None] = mapped_column(BigInteger)
     role_candidate_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False)
-    reason_codes_json: Mapped[str] = mapped_column(Text, nullable=False)
+    candidate_snapshots_json: Mapped[str] = mapped_column(Text, nullable=False)
     binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
@@ -225,19 +227,21 @@ class ActionImplementationBindingRow(Base):
             ["business_action_revisions.action_id", "business_action_revisions.revision"],
             ondelete="CASCADE",
         ),
-        CheckConstraint(
-            "status IN ('CURRENT', 'STALE', 'MISSING', 'AMBIGUOUS')",
-            name="status_value",
-        ),
+        CheckConstraint("basis_version IN (1, 2)", name="basis_version_value"),
     )
 
     action_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     action_revision: Mapped[int] = mapped_column(Integer, primary_key=True)
     understanding_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     source_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    basis_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_proposal_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("boundary_proposals.proposal_id", ondelete="RESTRICT"),
+    )
+    confirmed_at_us: Mapped[int | None] = mapped_column(BigInteger)
     action_candidate_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False)
-    reason_codes_json: Mapped[str] = mapped_column(Text, nullable=False)
+    candidate_snapshots_json: Mapped[str] = mapped_column(Text, nullable=False)
     binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
@@ -371,9 +375,9 @@ class BusinessBoundaryRepository:
 
     def _upsert_binding(self, row_type, conditions, values: dict[str, object], candidate_field: str) -> None:
         candidates = values.pop(candidate_field)
-        reasons = values.pop("reason_codes")
+        snapshots = values.pop("candidate_snapshots")
         values[f"{candidate_field}_json"] = _canonical_json(list(candidates))
-        values["reason_codes_json"] = _canonical_json(list(reasons))
+        values["candidate_snapshots_json"] = _canonical_json(list(snapshots))
         row = _scalar(self._session, select(row_type).where(*conditions))
         if row is None:
             self._add(row_type, values)
@@ -424,7 +428,9 @@ class BusinessBoundaryRepository:
 
         values = BusinessBoundaryRepository._columns(row)
         values[candidate_field] = json.loads(values.pop(f"{candidate_field}_json"))
-        values["reason_codes"] = json.loads(values.pop("reason_codes_json"))
+        values["candidate_snapshots"] = json.loads(
+            values.pop("candidate_snapshots_json")
+        )
         return model_type.model_validate_json(_canonical_json(values))
 
 

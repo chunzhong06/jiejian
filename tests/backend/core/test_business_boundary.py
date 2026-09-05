@@ -6,11 +6,14 @@ import pytest
 from pydantic import ValidationError
 
 from product.backend.core.approval import HumanApproval, HumanApprovalChannel
+from product.backend.core.boundary_proposal import BoundarySourceSnapshot
 from product.backend.core.business_boundary import (
+    ActorImplementationBinding,
     BusinessActionOperationKind,
     BusinessActionRevision,
     BusinessEffectDefinition,
     BusinessRevisionState,
+    ImplementationCandidateSnapshot,
     boundary_sha256,
 )
 from product.backend.core.verification.permissions import SecurityEffectKind
@@ -121,4 +124,72 @@ def test_human_approval_identity_is_server_controlled() -> None:
             approved_by="客户端自述用户",
             approved_at_us=10,
             reason="尝试自述身份",
+        )
+
+
+def test_legacy_source_snapshot_defaults_to_basis_one() -> None:
+    snapshot = BoundarySourceSnapshot.model_validate_json(
+        '{"application_understanding_revision":1,"source_fingerprint":"'
+        + "a" * 64
+        + '","candidates":[]}'
+    )
+
+    assert snapshot.basis_version == 1
+
+
+def test_binding_basis_preserves_legacy_hash_and_requires_exact_v2_snapshots() -> None:
+    actor_id = "bar_" + "2" * 32
+    candidate_id = "role_" + "3" * 32
+    legacy_payload = {
+        "actor_id": actor_id,
+        "actor_revision": 1,
+        "understanding_revision": 2,
+        "source_fingerprint": "b" * 64,
+        "role_candidate_ids": [candidate_id],
+    }
+    legacy = ActorImplementationBinding(
+        actor_id=actor_id,
+        actor_revision=1,
+        understanding_revision=2,
+        source_fingerprint="b" * 64,
+        basis_version=1,
+        role_candidate_ids=(candidate_id,),
+        binding_fingerprint=boundary_sha256(legacy_payload),
+        updated_at_us=10,
+    )
+    assert legacy.candidate_snapshots == ()
+    assert legacy.source_proposal_id is None
+    assert legacy.confirmed_at_us is None
+
+    snapshot = ImplementationCandidateSnapshot(
+        candidate_id=candidate_id,
+        candidate_fingerprint="c" * 64,
+        evidence_fingerprint="d" * 64,
+    )
+    v2_payload = legacy_payload | {
+        "basis_version": 2,
+        "source_proposal_id": "bpr_" + "4" * 32,
+        "confirmed_at_us": 10,
+        "candidate_snapshots": [snapshot.model_dump(mode="json")],
+    }
+    current = legacy.model_copy(
+        update={
+            "basis_version": 2,
+            "source_proposal_id": "bpr_" + "4" * 32,
+            "confirmed_at_us": 10,
+            "candidate_snapshots": (snapshot,),
+            "binding_fingerprint": boundary_sha256(v2_payload),
+        }
+    )
+    current = ActorImplementationBinding.model_validate(current.model_dump())
+    assert current.basis_version == 2
+
+    with pytest.raises(ValidationError, match="snapshots must match"):
+        ActorImplementationBinding.model_validate(
+            current.model_dump() | {"candidate_snapshots": ()}
+        )
+
+    with pytest.raises(ValidationError, match="approval provenance"):
+        ActorImplementationBinding.model_validate(
+            current.model_dump() | {"source_proposal_id": None}
         )

@@ -23,9 +23,9 @@ import {
   type ApplicationUnderstandingDto,
   type EndpointDiscoveryDto,
   type ProjectDto,
-  type ProjectReadinessDto,
   type RoleCandidateDto,
 } from '../../api/projects'
+import type { WorkspaceConnectionDto } from '../../api/workspace'
 
 const FOLDER_SELECTOR_TIMEOUT_MS = 125_000
 
@@ -135,7 +135,7 @@ function CandidateSection({ title, candidates, kind, variant, loading, onDecide,
 
 export function ApplicationSetup({ selected, endpointStatus, officialSampleAvailable, officialSampleBusy, onStartOfficialSample, onConnected, onChanged, onBack, onContinue }: {
   selected: ProjectDto | null
-  endpointStatus?: ProjectReadinessDto['endpoint_status']
+  endpointStatus?: WorkspaceConnectionDto['endpoint_status']
   officialSampleAvailable?: boolean
   officialSampleBusy?: boolean
   onStartOfficialSample?: () => Promise<boolean>

@@ -50,12 +50,13 @@
 - `ACTOR_ID_PATTERN`
 - `ACTION_ID_PATTERN`
 - `EFFECT_ID_PATTERN`
+- `SOURCE_PROPOSAL_ID_PATTERN`
 - `_PROJECTION_PATH`
-- `_REASON_CODE`
 - `class BoundaryModel`
 - `class BusinessRevisionState`
 - `class BusinessActionOperationKind`
 - `class ImplementationBindingStatus`
+- `class ImplementationCandidateSnapshot`
 - `boundary_sha256(payload) -> str`
 - `class BusinessEffectDefinition`
 - `class BusinessActor`
