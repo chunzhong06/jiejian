@@ -100,7 +100,7 @@ Execution Case
 
 ## 版本与 Schema
 
-`ObserverInvocation` 与 `ObservationEnvelope` 是独立根文档，当前 `schema_version` 均为字符串 `"1"`；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复根版本。结构化 Audit 的可选 Trace 字段仍属于现有根文档，不另建 Schema 版本。Schema 版本描述机器格式，不表示产品 1.1.0。字段、required、枚举、大小和 canonical 以代码与已签入 Schema 为准，旧开发格式不猜测读取。
+`ObserverInvocation` 与 `ObservationEnvelope` 是独立根文档，当前 `schema_version` 均为字符串 `"1"`；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复根版本。结构化 Audit 的可选 Trace 字段仍属于现有根文档，不另建 Schema 版本。Schema 版本描述机器格式，不表示产品版本。字段、required、枚举、大小和 canonical 以代码与已签入 Schema 为准，旧开发格式不猜测读取。
 
 ## 相关真源
 

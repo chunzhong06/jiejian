@@ -1,6 +1,6 @@
 # =============================================================================
 # 定位
-#   1.1.1 CURRENT 工作台的单一服务端读模型服务。
+#   工作台的单一服务端读模型服务。
 #
 # 职责
 #   从项目、应用理解、业务边界、权限和实时实现检查形成 WorkspaceView，按固定优先级
@@ -119,6 +119,7 @@ class WorkspaceService:
             or not boundary.actions
             or any(
                 not item.permission_status.permission_semantics_confirmed
+                or bool(item.permission_status.reason_codes)
                 or item.implementation.status is not ImplementationBindingStatus.CURRENT
                 and item.implementation.binding_exists
                 or item.actor_implementation_issue_count
@@ -285,8 +286,8 @@ class WorkspaceService:
             (
                 item
                 for item in boundary.actions
-                if "PERMISSION_REVISION_REVIEW_REQUIRED"
-                in status_by_action[item.action_id].reason_codes
+                if {"PERMISSION_REVISION_REVIEW_REQUIRED", "PERMISSION_RELATION_REVIEW_REQUIRED"}
+                & set(status_by_action[item.action_id].reason_codes)
             ),
             None,
         )
@@ -294,9 +295,9 @@ class WorkspaceService:
             return cls._task(
                 "REVIEW_PERMISSION_REVISION",
                 business_action_id=permission_review.action_id,
-                title=f"确认“{permission_review.display_name}”当前 revision 的权限",
-                why_now="业务动作已经形成新 revision，旧权限完整保留为历史，但不能自动成为新 revision 的权限。",
-                user_responsibility="确认旧权限是否继续适用于当前业务动作。",
+                title=f"重新确认“{permission_review.display_name}”的权限关系",
+                why_now="已有权限的业务版本或资源关系需要复核，历史规则仍完整保留。",
+                user_responsibility="确认操作人、资源所有者及其关系是否适用于当前业务动作。",
                 system_will_do="你确认后，界鉴才写新的 Permission revision；旧规则继续保留用于历史追溯。",
                 route="/permissions",
                 facts={
@@ -306,6 +307,20 @@ class WorkspaceService:
                         permission_review.action_id
                     ].reason_codes,
                 },
+            )
+        allow_missing = next((item for item in boundary.actions
+                              if "ALLOW_CONTROL_REQUIRED" in status_by_action[item.action_id].reason_codes), None)
+        if allow_missing is not None:
+            return cls._task(
+                "COMPLETE_ALLOW_CONTROL", business_action_id=allow_missing.action_id,
+                title=f"补充“{allow_missing.display_name}”的正常允许权限",
+                why_now="准备拒绝权限的真实测试前，需要明确谁在什么资源关系下应当被允许。",
+                user_responsibility="在业务边界中补充覆盖受保护业务结果的 ALLOW 权限并审阅批准。",
+                system_will_do="界鉴据此编译对照身份与测试材料，不会替你猜测允许权限。",
+                route="/permissions",
+                facts={"action_id": allow_missing.action_id, "action_revision": allow_missing.revision,
+                       "permissions": [item.model_dump(mode="json") for item in boundary.permission_intents
+                                       if item.business_action_id == allow_missing.action_id]},
             )
         actor_issue = next(
             (

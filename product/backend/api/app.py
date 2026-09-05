@@ -66,7 +66,7 @@ def create_app(
         folder_selector=folder_selector,
         official_sample_root=official_sample_root,
     )
-    # 参数暂留给既有调用方；1.1.0 没有可启动的完整执行 Worker。
+    # 参数暂留给既有调用方；当前没有可启动的完整执行 Worker。
     del start_worker
     mcp_access = MCPAccessController(
         f"{local_control_guard.origin}/mcp",

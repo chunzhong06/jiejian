@@ -75,7 +75,7 @@ Job 说明后台执行是否完成，Recording 状态说明录制业务生命周
 .\scripts\dev.ps1 frontend-test src/features/recording/RecordingPage.test.tsx
 ```
 
-按实际修改缩小范围。只有浏览器/进程/UIA 边界变化才运行局部真实 Recording 探针；完整 `dev.ps1 sample-test` 是阶段收口的唯一自动 L5，人工只做展示验收。
+按实际修改缩小范围。只有浏览器/进程/UIA 边界变化才运行局部真实 Recording 探针；完整 `dev.ps1 sample-test` 是最终验收的唯一自动 L5，人工只做展示验收。
 
 ## 首错定位
 

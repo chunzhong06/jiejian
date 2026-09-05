@@ -4,7 +4,7 @@
 
 ## 先理解：多个入口只有一套产品状态
 
-界鉴可以从 GUI、CLI 或自动化脚本进入，但这些入口不能各自维护业务进度。1.1.1 当前 GUI 状态由 `WorkspaceService` 从 Project、ApplicationUnderstanding、正式 Business Boundary、Permission、pending Proposal 与实时 implementation inspection 形成；保留的已发布结果读取仍由 `ResultPresentation` 负责，但完整新检查主链尚未重新接入当前产品入口。
+界鉴可以从 GUI、CLI 或自动化脚本进入，但这些入口不能各自维护业务进度。当前 GUI 状态由 `WorkspaceService` 从 Project、ApplicationUnderstanding、正式 Business Boundary、Permission、pending Proposal 与实时 implementation inspection 形成；保留的已发布结果读取仍由 `ResultPresentation` 负责，但完整新检查主链尚未重新接入当前产品入口。
 
 ```text
 ApplicationCore / Published facts
@@ -19,15 +19,15 @@ ApplicationCore / Published facts
 
 ## WorkspaceView 与 GUI
 
-1.1.1 使用独立 `WorkspaceView` 作为 GUI 唯一工作区 DTO。它包含当前项目与连接、Actor/Action 动作级视图、current Permission、实时 implementation inspection、四个长期区域，以及服务端按固定优先级选出的唯一 `PrimaryTask`。稳定 task ID 与 stale fingerprint 由服务端事实生成；前端不得重算优先级、binding currentness 或权限状态。
+使用独立 `WorkspaceView` 作为 GUI 唯一工作区 DTO。它包含当前项目与连接、Actor/Action 动作级视图、current Permission、实时 implementation inspection、四个长期区域，以及服务端按固定优先级选出的唯一 `PrimaryTask`。稳定 task ID 与 stale fingerprint 由服务端事实生成；前端不得重算优先级、binding currentness 或权限状态。
 
 Business Boundary API 位于 `/api/projects/{project_id}/business-boundaries`。无正式边界时，`preview` 与首次 Proposal create 建立稳定 identity；已有边界后，普通 create 返回 `BOUNDARY_MAINTENANCE_REQUIRED`，客户端改用 `maintenance-draft` 和唯一 `maintenance-proposals` desired-state 写入口。客户端不提交 `write_mode`，服务端用 `boundary_state_fingerprint` 校验并发后自动形成 CREATE/REFERENCE/APPEND Proposal；Proposal 列表/读取/批准/拒绝继续复用，Approve body 只含预期 `proposal_fingerprint` 与 reason，审批身份和渠道固定为 `LOCAL_GUI`。没有 official recipe 普通路由、PATCH Proposal、旧 matrix cell writer、candidate decide 或自动 approve。current 响应只含精确匹配当前 ACTIVE Actor/Action revision 与 Effect catalog 的 latest ACTIVE Permission；历史 revision 仍由历史读取入口保存。
 
-GUI 通过固定 loopback API 读取 envelope。当前工作区入口只有 `GET /api/projects/{project_id}/workspace`，旧 `/status` 返回 404。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本 1.1.1。
+GUI 通过固定 loopback API 读取 envelope。当前工作区入口只有 `GET /api/projects/{project_id}/workspace`，旧 `/status` 返回 404。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本。
 
-保留的 `ProductStatus`、`ProjectReadiness`、`ProjectPreparation`、权限矩阵和 CheckPreview DTO 不属于 1.1.1 current 写链。GUI 不得因为这些类型仍存在就重新注册旧权限审批或检查入口。
+保留的 `ProductStatus`、`ProjectReadiness`、`ProjectPreparation`、权限矩阵和 CheckPreview DTO 不属于 current 写链。GUI 不得因为这些类型仍存在就重新注册旧权限审批或检查入口。
 
-Delivery Check 在 1.1.1 当前 GUI 与 projects API 明确不可用；不得用旧服务查询结果替代 Workspace 或伪造本版可交付结论。
+Delivery Check 在 当前 GUI 与 projects API 明确不可用；不得用旧服务查询结果替代 Workspace 或伪造本版可交付结论。
 
 ## CLI Human 与 Machine
 
@@ -50,17 +50,17 @@ CLI `--version` 直接输出 `product.backend.__version__` 并退出，它是产
 
 CLI 与 Machine 输出是控制和投影通道，不是审批人。公开命令树不提供 PermissionIntent ALLOW/DENY 写入，也不提供角色/动作候选的确认、拒绝或手工创建；自动化只能准备既有事实、执行已冻结操作或读取结果。
 
-普通命令当前只公开 `serve`、产品版本与 `system doctor/repair/clean`。`status`、`application`、`change`、`check`、`result` 和 `history` 在 1.1.1 暂不公开；Business Boundary 创建与 Proposal 决定只在 GUI/loopback Human API 完成，Agent 自动化不能取得审批能力。
+普通命令当前只公开 `serve`、产品版本与 `system doctor/repair/clean`。`status`、`application`、`change`、`check`、`result` 和 `history` 在当前 暂不公开；Business Boundary 创建与 Proposal 决定只在 GUI/loopback Human API 完成，Agent 自动化不能取得审批能力。
 
 ## MCP Streamable HTTP 与工具输出
 
-MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。1.1.1 当前没有装配完整执行 Worker，System、`/ready` 与 `jiejian_system_status` 统一报告 `worker=unavailable`、`recovered_jobs=0`，但控制面仍可 ready。首次创建的 Authorization Bearer 只经精确 SecretStore 引用长期保存，后续启动自动恢复 READ。
+MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。当前没有装配完整执行 Worker，System、`/ready` 与 `jiejian_system_status` 统一报告 `worker=unavailable`、`recovered_jobs=0`，但控制面仍可 ready。首次创建的 Authorization Bearer 只经精确 SecretStore 引用长期保存，后续启动自动恢复 READ。
 
 GUI 读取的 `MCPAccessView` 明确区分凭据与连接：`DISABLED → CREDENTIAL_READY → AUTHENTICATED → CONNECTED` 是正常建立过程，认证失败投影为 `CREDENTIAL_REJECTED`，人工暂停投影为 `PAUSED`。`last_authenticated_at_us` 只证明 Bearer 通过，`last_seen_at_us` 才代表 SDK 已观测到完成 initialize 的客户端活动；状态页面不能把凭据生成、配置复制或客户端自报当成连接成功。恢复、轮换、暂停和 shutdown 都清除旧活动与逐 Project 提升，避免上一客户端或上一 serve 冒充当前连接。
 
-MCP 工具不套用 API envelope 或 CLI Machine envelope，而按 SDK 协议返回现有 Pydantic View 的 structured content 或有界轻量投影。根 View 自身已有 `schema_version` 时保持原值；不能为每个嵌套 DTO 重复制造版本，也不能把 MCP 协议版本当作产品版本。1.1.1 当前 MCP 不暴露 Workspace 写操作、Proposal 决定或执行能力。
+MCP 工具不套用 API envelope 或 CLI Machine envelope，而按 SDK 协议返回现有 Pydantic View 的 structured content 或有界轻量投影。根 View 自身已有 `schema_version` 时保持原值；不能为每个嵌套 DTO 重复制造版本，也不能把 MCP 协议版本当作产品版本。当前 MCP 不暴露 Workspace 写操作、Proposal 决定或执行能力。
 
-1.1.1 长期配对只恢复 `READ`，current 工具白名单固定为 Project、ApplicationUnderstanding、Business Boundary、Intent、TestIdentity 与 System 的只读查询；`PREPARE / EXECUTE`、repair、change submit/show 与 check prepare/run 均未装配。工具清单也不含 permission_set、candidate_decide、approve 或 reject，不能接收源码正文、diff、Git 命令、补丁建议或客户端自报权限范围。暂停和 shutdown 撤销活动会话但保留配对；轮换立即废止旧令牌并保存新令牌；忘记连接删除配对。普通状态不返回明文令牌，访问边界只使用 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED` 三个稳定错误；权限不足 details 只允许 `required_level` 和 `project_id`。未来恢复更高 level 时必须另行扩展正式协议与验收，不能依赖现有保留代码自行生效。
+长期配对只恢复 `READ`，current 工具白名单固定为 Project、ApplicationUnderstanding、Business Boundary、Intent、TestIdentity 与 System 的只读查询；`PREPARE / EXECUTE`、repair、change submit/show 与 check prepare/run 均未装配。工具清单也不含 permission_set、candidate_decide、approve 或 reject，不能接收源码正文、diff、Git 命令、补丁建议或客户端自报权限范围。暂停和 shutdown 撤销活动会话但保留配对；轮换立即废止旧令牌并保存新令牌；忘记连接删除配对。普通状态不返回明文令牌，访问边界只使用 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED` 三个稳定错误；权限不足 details 只允许 `required_level` 和 `project_id`。未来恢复更高 level 时必须另行扩展正式协议与验收，不能依赖现有保留代码自行生效。
 
 ## ResultPresentation 与 Evidence
 
@@ -78,7 +78,7 @@ GUI serve 与会创建 ApplicationCore 的 CLI 命令共享 `ServeLock`。同一
 
 ## 状态、错误与长时过程
 
-控制面显示的状态必须来源明确：当前 Workspace/PrimaryTask 是动作工作区事实，Job/Run 是保留生命周期，Runner progress 是非权威展示旁路，ResultPresentation 是已发布结果。1.1.1 当前页面不能把后三者接回 Workspace 或伪造最近可信结果。
+控制面显示的状态必须来源明确：当前 Workspace/PrimaryTask 是动作工作区事实，Job/Run 是保留生命周期，Runner progress 是非权威展示旁路，ResultPresentation 是已发布结果。当前页面不能把后三者接回 Workspace 或伪造最近可信结果。
 
 发生错误时先保留第一主错误及 trace，再执行正式 cleanup。cleanup warning 单独展示，不覆盖 primary failure。安全 BLOCK/INCONCLUSIVE 不是控制面执行错误，不能被 ErrorRecovery 当作异常页面。
 

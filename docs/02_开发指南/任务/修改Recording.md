@@ -1,6 +1,6 @@
 # 修改 Recording
 
-> 1.1.0 CURRENT：普通 Recording 与完整 Worker 主链尚未接回当前产品入口；以下内容约束保留实现，不表示当前 GUI 可录制或运行检查。
+> 当前适用范围：普通 Recording 与完整 Worker 主链尚未接回当前产品入口；以下内容约束保留实现，不表示当前 GUI 可录制或运行检查。
 
 > 状态：CURRENT。用于修改真实业务流程录制、capture 控制、FlowDraft 审阅、Flow 编译和 Recording 失败收口。
 
@@ -45,7 +45,7 @@ Recording 应根据录制顺序自动采用唯一且可执行的业务解释；�
 
 ## 怎么验证
 
-先运行修改点的 workflow/protocol/infra 直接测试。涉及 API 控制再补 recordings Router；涉及页面只跑对应前端文件。真实 Worker、Recording Process、headed Chromium、UI Automation 和事件闭环只由唯一自动 L5 `dev.ps1 sample-test` 在阶段收口验证，不为普通修改连续反复运行。
+先运行修改点的 workflow/protocol/infra 直接测试。涉及 API 控制再补 recordings Router；涉及页面只跑对应前端文件。真实 Worker、Recording Process、headed Chromium、UI Automation 和事件闭环只由唯一自动 L5 `dev.ps1 sample-test` 在最终验收验证，不为普通修改连续反复运行。
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/workflows/recording tests/backend/infra/recording tests/backend/api/test_recordings.py tests/protocols/test_recording.py

@@ -2,7 +2,7 @@
 # ApplicationCore 组合根
 #
 # 职责
-#   组装 1.1.1 当前启动、项目接入、动作级 Workspace、Business Boundary 与 TestIdentity。
+#   组装 当前启动、项目接入、动作级 Workspace、Business Boundary 与 TestIdentity。
 #
 # 边界
 #   旧 Permission writer、Preparation、Check、SourceChange、Recording 和 Run 不注册为 CURRENT。
@@ -37,7 +37,7 @@ from product.backend.workflows.workspace import WorkspaceService
 
 
 class ApplicationCore:
-    """创建 1.1.1 基础设施并只注册动作级工作区已经接线的能力。"""
+    """创建基础设施并只注册动作级工作区已经接线的能力。"""
 
     def __init__(
         self,

@@ -1,4 +1,4 @@
-# 验证 1.1.0 CLI 只公开 Web 启动、系统诊断与维护入口。
+# 验证 CLI 只公开 Web 启动、系统诊断与维护入口。
 
 from __future__ import annotations
 

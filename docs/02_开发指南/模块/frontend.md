@@ -4,7 +4,7 @@
 
 ## 职责
 
-前端负责 1.1.1 Web 产品壳、应用接入、Business Boundary 首次建立与持续维护、loopback API DTO、响应式布局、可访问交互和错误恢复。它把 `WorkspaceView`、`BusinessBoundaryView`、维护草稿与服务端 Proposal 变更摘要翻译为用户能理解的页面和操作；不重算 `PrimaryTask` 或 implementation currentness。
+前端负责 Web 产品壳、应用接入、Business Boundary 首次建立与持续维护、loopback API DTO、响应式布局、可访问交互和错误恢复。它把 `WorkspaceView`、`BusinessBoundaryView`、维护草稿与服务端 Proposal 变更摘要翻译为用户能理解的页面和操作；不重算 `PrimaryTask` 或 implementation currentness。
 
 ## 非职责
 
@@ -21,7 +21,7 @@
 | `product/frontend/package.json`、`product/frontend/tsconfig*.json` | 源码依赖/类型/构建合同 | 产品版本真源、node_modules 或 dist |
 | `var/development/frontend/` | 受控 Node/pnpm、workspace、依赖与不可变 build | Git 管理源码、产品运行数据 |
 
-普通工作区以 `/workspace` 为主控工作台，保留 `/changes /permissions /tests` 三个辅助模块的视觉层级。1.1.1 只有 `/permissions` 接入 `BusinessBoundaryPage` 与 `BoundaryMaintenanceEditor`；`/changes` 与 `/tests` 明确不可用，不调用旧 writer。历史 Recording/Run/Result 深链只显示能力边界。
+普通工作区以 `/workspace` 为主控工作台，保留 `/changes /permissions /tests` 三个辅助模块的视觉层级。只有 `/permissions` 接入 `BusinessBoundaryPage` 与 `BoundaryMaintenanceEditor`；`/changes` 与 `/tests` 明确不可用，不调用旧 writer。历史 Recording/Run/Result 深链只显示能力边界。
 
 精确组件和类型见[前端自动代码参考](../../03_参考手册/代码/frontend.md)。
 
@@ -49,7 +49,7 @@
 
 ## 事实与页面状态
 
-`WorkspaceService` 决定 1.1.1 当前区域状态、动作级摘要和唯一 `PrimaryTask`；`BusinessBoundaryView` 决定正式 Actor/Action/Effect/Permission，维护草稿完整保留 stable identity，`BoundaryProposalView.change_summary` 决定待审变化说明。前端可以保留当前项目、页面和未提交草稿，但正式事实必须刷新 API。保留的 Job/Run、ResultPresentation 与 HistoryView 不属于当前检查入口。
+`WorkspaceService` 决定 当前区域状态、动作级摘要和唯一 `PrimaryTask`；`BusinessBoundaryView` 决定正式 Actor/Action/Effect/Permission，维护草稿完整保留 stable identity，`BoundaryProposalView.change_summary` 决定待审变化说明。前端可以保留当前项目、页面和未提交草稿，但正式事实必须刷新 API。保留的 Job/Run、ResultPresentation 与 HistoryView 不属于当前检查入口。
 
 所有写操作要有清楚的 busy、成功、失败和恢复路径。需要长时间的多阶段过程必须展示稳定阶段边界，服务端有进度时流式呈现；没有权威进度时说明当前阶段和静默上限，不伪造百分比。首个主错误保留，cleanup warning 单独展示。
 
@@ -70,9 +70,9 @@
 - 普通用户先看到任务语言和当前主动作，内部 ID、reason code、Schema、路径和原始 Evidence 只进入明确命名的证据、报告或 Machine 入口，不建立通用“高级信息”收纳箱。
 - 真正 `<button>`、label、dialog 和状态文本保持可访问；自动 L5 通过 UI Automation InvokePattern 操作正式按钮，不为测试增加隐藏入口。
 - `product/frontend` 只保存源码/配置，禁止 node_modules、dist、测试缓存和 tsbuildinfo。
-- Workbench 不常驻显示产品版本；1.1.1 只在系统设置等明确诊断位置展示。
+- Workbench 不常驻显示产品版本；只在系统设置等明确诊断位置展示。
 - 桌面侧栏固定 224px，只承载四个产品区域；顶部固定 52px，承载应用切换、活动任务、AI 工具连接和“设置与更多”。AI 辅助、系统状态、模型、主题与安全退出都位于该菜单，退出是最后一项；菜单关闭后不得保留撑宽文档的旧浮层。
-- 1.1.1 普通 Boundary 页面不展示或应用官方业务合同。官方 recipe 只作为后端内部冻结资产保留，等待未来正式 Sample context 通过普通 Proposal 与用户批准流程复用；不得按项目名猜 Sample，也不得把入口移到其他普通页面。
+- 普通 Boundary 页面不展示或应用官方业务合同。官方 recipe 只作为后端内部冻结资产保留，等待未来正式 Sample context 通过普通 Proposal 与用户批准流程复用；不得按项目名猜 Sample，也不得把入口移到其他普通页面。
 - 视觉验收以 2560×1440、浏览器 100% 为主基准，工作台第一屏必须容纳应用、当前判断、唯一主任务、最近可信结果与三项摘要；同时核对原生亮色与暗色，并覆盖 1280px、600px 和长页面滚动时内容框架内粘滞的 `TaskActionBar`。普通结果与展示模式复用同一事实链和颜色语义。
 
 ## 直接验证
@@ -85,7 +85,7 @@
 .\scripts\dev.ps1 prepare -ForcePrepare
 ```
 
-普通 TS/TSX/CSS 变化先跑所属测试文件；跨 DTO/路由才补相邻 API/ControlShell。生产源码变化在收口前跑一次 TypeScript + Vite build；视觉、窗口节奏和文案由展示验收判断。自动 L5 只在阶段最终收口运行，不为每个组件改动重复启动。
+普通 TS/TSX/CSS 变化先跑所属测试文件；跨 DTO/路由才补相邻 API/ControlShell。生产源码变化在收口前跑一次 TypeScript + Vite build；视觉、窗口节奏和文案由展示验收判断。自动 L5 只在最终验收运行，不为每个组件改动重复启动。
 
 ## 首错定位
 

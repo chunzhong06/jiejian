@@ -32,7 +32,7 @@
 
 `LocalMaintenanceService` 只处理 AI 辅助缓存、历史运行日志、临时运行文件和可证明损坏的运行时。自动日志保留按每类最近 20 份且最长 14 天执行；手工日志清理保护当前 serve 会话，临时清理保护当前 Worker、Recording、Identity、Sample 与 ServeLock 路径。`clear-all` 不触发运行时修复，也不得触碰 `var/data`、`var/development`、Evidence、报告或凭据。GUI、CLI 和 API 复用 ApplicationCore 下同一服务，写操作先预览再确认；数据重置不进入该入口。
 
-完整缓存统计和预算 prune 只在用户查看状态或显式维护时执行，不属于普通启动。1.1.0 在 ApplicationCore 与 MCP/control 生命周期成立后即可对外 ready，不启动 Worker；生命周期持有的后台任务随后清理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留。按需维护用一个目录快照同时得到字节数、文件数、预算和递归 partial 候选；只有外部 prune 实际改变目录后才再扫描一次。无安全、并发或身份消费者的 cache digest 不计算。启动维护失败只记录诊断，不反向改变服务可用状态。
+完整缓存统计和预算 prune 只在用户查看状态或显式维护时执行，不属于普通启动。在 ApplicationCore 与 MCP/control 生命周期成立后即可对外 ready，不启动 Worker；生命周期持有的后台任务随后清理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留。按需维护用一个目录快照同时得到字节数、文件数、预算和递归 partial 候选；只有外部 prune 实际改变目录后才再扫描一次。无安全、并发或身份消费者的 cache digest 不计算。启动维护失败只记录诊断，不反向改变服务可用状态。
 
 ### 6. 同一解释器和内核进程树是恢复前提
 

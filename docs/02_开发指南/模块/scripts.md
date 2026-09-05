@@ -42,7 +42,7 @@
 | 修改 Python/Conda/uv 或依赖同步 | `environment.yml`、`uv.lock`、`scripts/dev/python.ps1` | `dev.ps1 test tests/scripts/test_dev_script.py`；按需 `bootstrap` / `sync` / `prepare` |
 | 修改 Node/pnpm、前端工作区或 build | `scripts/dev/frontend.ps1`、`product/frontend/package.json`、`product/frontend/pnpm-lock.yaml` | `dev.ps1 frontend-test`；`dev.ps1 prepare -ForcePrepare` |
 | 新增或调整开发命令 | `scripts/dev.ps1`、`scripts/dev/commands.ps1` 和唯一所属模块 | `dev.ps1 test tests/scripts/test_dev_script.py`；直接运行目标命令 |
-| 修改自动 L5 | `scripts/dev/sample-test.ps1`、`scripts/dev/sample_test/` | `dev.ps1 test tests/scripts/test_sample_test.py tests/scripts/test_dev_script.py`；阶段收口时运行一次 `dev.ps1 sample-test` |
+| 修改自动 L5 | `scripts/dev/sample-test.ps1`、`scripts/dev/sample_test/` | `dev.ps1 test tests/scripts/test_sample_test.py tests/scripts/test_dev_script.py`；最终验收时运行一次 `dev.ps1 sample-test` |
 | 修改 prepare 的 Chromium、数据库或源码回执 | `scripts/dev/prepare.ps1` | `dev.ps1 prepare`；相关脚本测试 |
 | 修改 Windows Banner、菜单、阶段或动画 | `scripts/start.ps1`、`scripts/startup/presentation.ps1`、`scripts/startup/runtime.ps1` | `dev.ps1 test tests/scripts/test_start_script.py`；自动 L5 与展示验收 |
 | 修改启动对源码回执的校验 | `scripts/startup/source.ps1`、`scripts/dev/prepare.ps1` | 启动脚本测试；`dev.ps1 prepare` |
@@ -77,4 +77,4 @@
 .\scripts\dev.ps1 schema
 ```
 
-涉及真实工具准备或 Portable 时，再分别执行 `dev.ps1 prepare`、`dev.ps1 package`。发行路线见[修改发布与便携版](../任务/修改发布与便携版.md)。阶段收口的唯一自动 L5 入口是 `dev.ps1 sample-test`；人工只做展示验收。PowerShell 改动还要确认 Windows PowerShell 5.1 解析与项目规定的 UTF-8 BOM，最终运行 `git diff --check`。
+涉及真实工具准备或 Portable 时，再分别执行 `dev.ps1 prepare`、`dev.ps1 package`。发行路线见[修改发布与便携版](../任务/修改发布与便携版.md)。最终验收的唯一自动 L5 入口是 `dev.ps1 sample-test`；人工只做展示验收。PowerShell 改动还要确认 Windows PowerShell 5.1 解析与项目规定的 UTF-8 BOM，最终运行 `git diff --check`。

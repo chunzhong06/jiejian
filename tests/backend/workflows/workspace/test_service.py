@@ -98,6 +98,8 @@ def _proposal(
     *,
     actor_source_ids=(),
     action_source_ids=(),
+    expectation=PermissionExpectation.ALLOW,
+    relation=PermissionIntentRelation.OWNS,
 ):
     actor_id = "pactr_1111111111111111"
     action_id = "pactn_1111111111111111"
@@ -145,8 +147,8 @@ def _proposal(
                     subject_actor_item_id=actor_id,
                     business_action_item_id=action_id,
                     resource_owner_actor_item_id=actor_id,
-                    relation=PermissionIntentRelation.OWNS,
-                    expectation=PermissionExpectation.ALLOW,
+                    relation=relation,
+                    expectation=expectation,
                     protected_effect_item_ids=(effect_id,),
                 ),
             ),
@@ -391,5 +393,66 @@ def test_permission_revision_review_precedes_stale_binding(tmp_path: Path) -> No
         )
         assert task is not None
         assert task.task_kind == "REVIEW_PERMISSION_REVISION"
+    finally:
+        core.close()
+
+
+def test_deny_only_prioritizes_allow_control_and_preparation_reads_real_identity(tmp_path: Path) -> None:
+    from product.backend.workflows.preparation import PreparationService
+
+    core, project_id = _core(tmp_path)
+    try:
+        _ready_understanding(core, project_id)
+        proposal = _proposal(core, project_id, expectation=PermissionExpectation.DENY)
+        boundary = core.business_boundaries.approve(
+            project_id, proposal.proposal_id,
+            expected_fingerprint=proposal.proposal_fingerprint, reason="确认拒绝权限",
+        )
+        workspace = core.workspace.get(project_id)
+        assert workspace.primary_task.task_kind == "COMPLETE_ALLOW_CONTROL"
+        assert workspace.primary_task.route == "/permissions"
+        assert workspace.areas[1].status == "NEEDS_ATTENTION"
+        service = PreparationService(core.business_boundaries, core.test_identities)
+        first = service.get(project_id).actions[0]
+        actor = boundary.actors[0]
+        identity = core.test_identities.create(project_id, actor_id=actor.actor_id,
+                                               actor_revision=actor.revision, label="负责人账号")
+        second = service.get(project_id).actions[0]
+        assert first.identity_requirements.slots[0].test_identity_id is None
+        assert second.identity_requirements.slots[0].test_identity_id == identity.identity_id
+        assert second.assurance_contract_fingerprint == first.assurance_contract_fingerprint
+        assert second.preparation_complete is False
+        assert core.business_boundaries.view(project_id) == boundary
+    finally:
+        core.close()
+
+
+def test_new_initial_and_maintenance_relation_writes_are_rejected_without_side_effects(tmp_path: Path) -> None:
+    from product.backend.core.errors import JiejianError
+    from product.backend.workflows.business_boundaries import BoundaryMaintenanceCommand
+
+    core, project_id = _core(tmp_path)
+    try:
+        _ready_understanding(core, project_id)
+        with pytest.raises(JiejianError, match="权限资源关系"):
+            _proposal(core, project_id, relation=PermissionIntentRelation.OTHER_ROLE)
+        assert core.business_boundaries.proposals(project_id).proposals == ()
+        proposal = _proposal(core, project_id)
+        before = core.business_boundaries.approve(
+            project_id, proposal.proposal_id,
+            expected_fingerprint=proposal.proposal_fingerprint, reason="确认合法权限",
+        )
+        draft = core.business_boundaries.maintenance_draft(project_id)
+        command = BoundaryMaintenanceCommand(
+            expected_boundary_state_fingerprint=draft.boundary_state_fingerprint,
+            actors=draft.actors, actions=draft.actions,
+            permissions=tuple(item.model_copy(update={"relation": PermissionIntentRelation.OTHER_ROLE})
+                              for item in draft.permissions),
+            provenance="校验同一业务主体不能声明不同角色关系",
+        )
+        with pytest.raises(JiejianError, match="权限资源关系"):
+            core.business_boundaries.create_maintenance_proposal(project_id, command)
+        assert core.business_boundaries.view(project_id) == before
+        assert core.business_boundaries.proposals(project_id, pending_only=True).proposals == ()
     finally:
         core.close()

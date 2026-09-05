@@ -1,6 +1,6 @@
 # 修改 Worker 与 Runner
 
-> 1.1.1 CURRENT：控制面不装配 Worker/Runner，`worker=unavailable` 是已知能力边界；已删除无生产消费者的 `CurrentWorkerSupervisor` 占位实现。本指南用于维护保留的真实 Worker/Runner 和未来接回时的硬约束，不授权恢复旧检查主链。
+> CURRENT：控制面不装配 Worker/Runner，`worker=unavailable` 是已知能力边界；已删除无生产消费者的 `CurrentWorkerSupervisor` 占位实现。本指南用于维护保留的真实 Worker/Runner 和未来接回时的硬约束，不授权恢复旧检查主链。
 
 > 状态：CURRENT。适用于 Job 生命周期、Worker 租约与 fencing、Runner 子进程、Case 编排、目标执行、Observer 调度、清理、结果封装和发布。
 
@@ -130,7 +130,7 @@ SETUP、TARGET、CLEANUP 使用 Runner 注入的 Case marker 关联本次副作�
 
 正式 E2E 的失败报告使用公开 API 返回的 run/job/result/evidence 有界摘要。临时调查可以只读检查 attempt，但定位完成后必须删除这种依赖；测试不能靠读取 progress 文件、Runner 私有目录、反向导入其他测试模块或重建生产聚合逻辑才能判断成功。
 
-自动 L5 与 L4 分开：阶段收口运行一次 `dev.ps1 sample-test`，检查 GUI 启动、Worker/Runner 生命周期、真实 Sample、页面结果、取消/退出和进程回收；人工只做展示验收。不要为 L5 调整全局沙箱、降低凭据持久性或放宽安全边界。
+自动 L5 与 L4 分开：最终验收运行一次 `dev.ps1 sample-test`，检查 GUI 启动、Worker/Runner 生命周期、真实 Sample、页面结果、取消/退出和进程回收；人工只做展示验收。不要为 L5 调整全局沙箱、降低凭据持久性或放宽安全边界。
 
 ## 常见失败怎样定位
 

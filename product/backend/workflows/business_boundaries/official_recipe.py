@@ -17,9 +17,9 @@ from product.backend.core.permission_intent import (
     PermissionIntentEffectiveState,
     PermissionIntentRelation,
 )
-from product.backend.core.verification.permissions import (
+from product.backend.core.permission_semantics import (
     PermissionExpectation,
-    SecurityEffectKind,
+    BusinessEffectKind,
 )
 from product.backend.workflows.business_boundaries.models import (
     BoundaryProposalCommand,
@@ -63,7 +63,7 @@ def official_boundary_recipe() -> OfficialBoundaryRecipe:
     export_effect = ProposedEffectItem(
         item_id=_EXPORT_EFFECT,
         business_label="完整项目交付包真实形成",
-        effect_kind=SecurityEffectKind.OBJECT_CREATION,
+        effect_kind=BusinessEffectKind.OBJECT_CREATION,
         resource_concept="项目交付包",
         expected_state="完整项目交付包已经生成",
         description="形成包含项目正式交付材料的完整文件包",
@@ -71,7 +71,7 @@ def official_boundary_recipe() -> OfficialBoundaryRecipe:
     view_effect = ProposedEffectItem(
         item_id=_VIEW_EFFECT,
         business_label="日常协作资料的有限内容可见",
-        effect_kind=SecurityEffectKind.DATA_DISCLOSURE,
+        effect_kind=BusinessEffectKind.DATA_DISCLOSURE,
         resource_concept="日常协作资料",
         expected_state="只展示获准的日常协作字段",
         protected_projection=(

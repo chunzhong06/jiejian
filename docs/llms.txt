@@ -69,6 +69,10 @@ Recording、FlowDraft、业务流程
 → docs/02_开发指南/任务/修改安全准备.md
 → docs/01_系统地图/应用接入与检查主流程.md
 
+权限考题编译、ActionAssuranceContract、IdentityRequirementPlanner、动作准备投影
+→ docs/02_开发指南/任务/修改权限意图与Agent授权.md
+→ docs/01_系统地图/应用接入与检查主流程.md
+
 应用接入、ApplicationUnderstanding、Readiness、普通检查主流程
 → docs/01_系统地图/应用接入与检查主流程.md
 → docs/02_开发指南/任务/修改API与控制面.md

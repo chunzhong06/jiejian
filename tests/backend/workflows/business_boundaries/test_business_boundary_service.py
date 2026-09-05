@@ -212,10 +212,8 @@ def test_bundle_approval_creates_stable_boundary_once_and_test_identity_uses_act
         assert len(boundary.permission_intents) == 2
         assert {item.policy_epoch for item in boundary.permission_intents} == {1}
         assert boundary.permission_statuses[0].allow_control_available is True
-        assert boundary.permission_statuses[0].validation_contract_complete is False
-        assert boundary.permission_statuses[0].reason_codes == (
-            "VALIDATION_PIPELINE_DEFERRED_TO_1_1_3",
-        )
+        assert "validation_contract_complete" not in type(boundary.permission_statuses[0]).model_fields
+        assert boundary.permission_statuses[0].reason_codes == ()
 
         actor = next(item for item in boundary.actors if item.display_name == "项目负责人")
         identity = core.test_identities.create(
@@ -552,7 +550,6 @@ def test_current_permission_projection_excludes_noncurrent_latest_revisions(
             assert status.reason_codes == (
                 "PERMISSION_REVISION_REVIEW_REQUIRED",
                 "ALLOW_CONTROL_REQUIRED",
-                "VALIDATION_PIPELINE_DEFERRED_TO_1_1_3",
             )
     finally:
         core.close()

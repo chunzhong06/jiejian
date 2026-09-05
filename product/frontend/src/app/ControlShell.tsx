@@ -161,8 +161,8 @@ function ControlShellContent() {
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/permissions') return <BusinessBoundaryPage key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onBack={() => navigate('/workspace')} />
-    if (route === '/changes') return <CurrentUnavailableArea title="变化与修复当前暂不可用" description="1.1.1 已建立动作级工作区；完整 Agent 变化、修复与重验主链将在 1.1.3 重新接入。" onBack={() => navigate('/workspace')} />
-    if (route === '/tests') return <CurrentUnavailableArea title="当前不可检查" description="稳定业务权限和实现映射可以维护；Assurance、Recording 与真实 Worker 将从 1.1.2 开始恢复。" onBack={() => navigate('/workspace')} />
+    if (route === '/changes') return <CurrentUnavailableArea title="变化与修复当前暂不可用" description="当前尚不支持代码变化分析、修复与复验。可返回工作台查看当前待办。" onBack={() => navigate('/workspace')} />
+    if (route === '/tests') return <CurrentUnavailableArea title="当前不可检查" description="可维护业务权限和实现映射；当前尚不支持准备测试材料或运行权限检查。" onBack={() => navigate('/workspace')} />
     return <CurrentUnavailableArea title="此历史入口当前不可用" description="该页面属于尚未接回的 Recording、Run、Result 或修复主链。" onBack={() => navigate('/workspace')} />
   }
 

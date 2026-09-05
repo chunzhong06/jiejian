@@ -26,6 +26,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from product.backend.core.permission_semantics import (
+    BusinessEffectKind as SecurityEffectKind,
+    PermissionExpectation,
+)
+
 _ID_PATTERN = r"^[a-z][a-z0-9_-]{0,63}$"
 _TEXT_PATTERN = r"^[a-z][a-z0-9_.:-]{0,127}$"
 _STATE_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]{0,63}$"
@@ -49,20 +54,6 @@ class RelationType(StrEnum):
     MANAGES = "MANAGES"
     PARENT_OF = "PARENT_OF"
     INHERITS = "INHERITS"
-
-
-class PermissionExpectation(StrEnum):
-    ALLOW = "ALLOW"
-    DENY = "DENY"
-
-
-class SecurityEffectKind(StrEnum):
-    STATE_MUTATION = "STATE_MUTATION"
-    DATA_DISCLOSURE = "DATA_DISCLOSURE"
-    OBJECT_CREATION = "OBJECT_CREATION"
-    EXTERNAL_DISPATCH = "EXTERNAL_DISPATCH"
-    RESTRICTED_FUNCTION_INVOCATION = "RESTRICTED_FUNCTION_INVOCATION"
-    CREDENTIAL_ACCESS = "CREDENTIAL_ACCESS"
 
 
 # Contract 中的安全效果只表达业务意图，不携带 Observer 或传输实现细节。

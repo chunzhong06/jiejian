@@ -5,7 +5,7 @@
 #   复用同一 ApplicationCore 暴露项目、应用理解、Business Boundary、身份与系统只读事实。
 #
 # 边界
-#   1.1.0 不注册旧 Permission/Check/Recording/Run writer，也不能构造 LOCAL_GUI approval。
+#   不注册旧 Permission/Check/Recording/Run writer，也不能构造 LOCAL_GUI approval。
 # =============================================================================
 
 from __future__ import annotations
@@ -156,7 +156,7 @@ def build_mcp_control(
     control_origin: str,
     control_host: str,
 ) -> MCPControl:
-    """注册 1.1.0 只读白名单，并绑定当前 loopback origin。"""
+    """注册只读白名单，并绑定当前 loopback origin。"""
 
     async def record_client_activity(
         request: ServerRequestContext[Any, Any],
@@ -172,7 +172,7 @@ def build_mcp_control(
 
     server = MCPServer(
         "界鉴 JIEJIAN",
-        description="界鉴本地 1.1.0 只读控制入口；Business Boundary 只能由本机 GUI 批准。",
+        description="界鉴本地只读控制入口；Business Boundary 只能由本机 GUI 批准。",
         instructions=(
             "READ 只能读取已经形成的项目、应用理解、业务边界、权限 revision 和测试身份事实。"
             "本版本 MCP 不提供业务边界批准、权限写入、检查、录制或运行工具；需要人类决定时请用户回到界鉴。"

@@ -25,7 +25,7 @@ from product.backend.core.business_boundary import (
     EFFECT_ID_PATTERN,
 )
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
-from product.backend.core.verification.permissions import PermissionExpectation
+from product.backend.core.permission_semantics import PermissionExpectation
 
 
 _INTENT_ID_PATTERN = r"^pin_[0-9a-f]{32}$"
@@ -46,6 +46,21 @@ class PermissionIntentRelation(StrEnum):
 class PermissionIntentEffectiveState(StrEnum):
     ACTIVE = "ACTIVE"
     RETIRED = "RETIRED"
+
+
+def permission_relation_consistent(
+    relation: PermissionIntentRelation,
+    subject: tuple[str, int],
+    owner: tuple[str, int],
+) -> bool:
+    """校验业务身份关系；历史模型读取不调用写入门禁，编译时仍须关闭非法关系。"""
+
+    if relation in (
+        PermissionIntentRelation.OWNS,
+        PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT,
+    ):
+        return subject == owner
+    return relation is PermissionIntentRelation.OTHER_ROLE and subject[0] != owner[0]
 
 
 def permission_intent_sha256(payload: dict[str, Any]) -> str:
@@ -125,5 +140,5 @@ class ProjectPolicyState(PermissionIntentModel):
 __all__ = [
     "HumanApproval", "HumanApprovalChannel", "PermissionIntentEffectiveState",
     "PermissionIntentRelation", "PermissionIntentRevision", "PermissionIntentSemantic",
-    "ProjectPolicyState", "permission_intent_sha256",
+    "ProjectPolicyState", "permission_intent_sha256", "permission_relation_consistent",
 ]

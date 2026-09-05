@@ -1,4 +1,4 @@
-# 1.1.0 官方体验只读状态：完整 Sample 运行链暂不注册，公开合同由 Boundary API 提供。
+# 官方体验只读状态：完整 Sample 运行链暂不注册，公开合同由 Boundary API 提供。
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def build_current_experience_router() -> APIRouter:
         return data_response(
             {
                 "available": False,
-                "unavailable_reason": "1.1.0 不运行 validation 或 competition",
+                "unavailable_reason": "当前不运行 validation 或 competition",
                 "summary": None,
             }
         )

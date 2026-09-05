@@ -85,7 +85,7 @@ export function WorkbenchPage({
         <aside className="workbench-trusted-result" aria-label="最近可信结果">
           <Typography.Text className="workbench-eyebrow">最近可信结果</Typography.Text>
           <Typography.Title level={3}>新的检查结果尚未重新接入</Typography.Title>
-          <Typography.Paragraph type="secondary">1.1.1 只建立动作级工作区与业务边界维护；不会读取 dormant Run/Result 伪造当前结果。</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">可在权限页维护业务边界，并按工作台提示处理当前待办。</Typography.Paragraph>
         </aside>
       </div>
       {systemIssue && <Button type="link" className="workbench-system-link" onClick={() => onNavigate('/settings/system')}>运行环境中有服务暂不可用，查看详情</Button>}
@@ -94,8 +94,8 @@ export function WorkbenchPage({
     <section className="workbench-domain-panel" aria-label="当前专项摘要">
       <div className="workbench-domain-grid">
         <article><Typography.Text className="workbench-secondary-label">业务边界</Typography.Text><Typography.Title level={3}>{workspace?.actions.length ?? 0} 项当前业务动作</Typography.Title><Typography.Paragraph type="secondary">{reviewCount ? `${reviewCount} 项需要确认当前权限或代码实现。` : '当前动作、权限与实现状态由服务端实时投影。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/permissions')}>进入业务边界</Button></article>
-        <article><Typography.Text className="workbench-secondary-label">变化与修复</Typography.Text><Typography.Title level={3}>当前暂不可用</Typography.Title><Typography.Paragraph type="secondary">完整变化、修复与重验主链将在 1.1.3 接回。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/changes')}>查看当前说明</Button></article>
-        <article><Typography.Text className="workbench-secondary-label">检查与结果</Typography.Text><Typography.Title level={3}>当前不可检查</Typography.Title><Typography.Paragraph type="secondary">Assurance、Recording 与真实 Worker 将从 1.1.2 开始恢复。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/tests')}>查看当前说明</Button></article>
+        <article><Typography.Text className="workbench-secondary-label">变化与修复</Typography.Text><Typography.Title level={3}>当前暂不可用</Typography.Title><Typography.Paragraph type="secondary">当前尚不支持代码变化分析、修复与复验。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/changes')}>查看当前说明</Button></article>
+        <article><Typography.Text className="workbench-secondary-label">检查与结果</Typography.Text><Typography.Title level={3}>当前不可检查</Typography.Title><Typography.Paragraph type="secondary">当前尚不支持准备测试材料或运行权限检查。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/tests')}>查看当前说明</Button></article>
       </div>
     </section>
     <section className="workbench-secondary-panel" aria-label="当前能力边界">

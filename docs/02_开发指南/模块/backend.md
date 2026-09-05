@@ -31,7 +31,8 @@ GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `Ap
 | 任务 | 主要位置 | 先读与直接验证 |
 | --- | --- | --- |
 | 修改权限合同、事实或三态 | `core/verification/permissions/`、`facts.py`、`gating.py` | [修改权限判断](../任务/修改权限判断.md)；`test_contract.py`、`test_evaluation.py`、`test_gating.py` |
-| 修改项目、接入或准备状态 | `workflows/projects/`、`onboarding/`、`application_understanding/` | 准备清单先看 `workflows/projects/preparation.py`，就绪汇总看 `workflows/projects/readiness.py`；直接验证 `tests/backend/workflows/projects/` |
+| 从正式权限编译测试需要 | `core/permission_semantics.py`、`core/assurance.py`、`workflows/preparation/` | [修改业务边界与权限意图](../任务/修改权限意图与Agent授权.md)；`tests/backend/core/test_assurance.py`、`tests/backend/workflows/preparation/` |
+| 修改项目、接入或工作区状态 | `workflows/projects/`、`onboarding/`、`application_understanding/`、`workflows/workspace/` | 当前主任务先看 Workspace；旧 `projects/preparation.py` 与 `projects/readiness.py` 仅作迁移资产，不得接回当前产品；直接验证 `tests/backend/workflows/workspace/` |
 | 新增或修改应用用例 | 对应 `product/backend/workflows/` 子目录、`product/backend/composition/application.py` | 对应 `tests/backend/workflows/` 子目录；若改变装配再加 `tests/backend/composition/` |
 | 修改 API/CLI 控制面 | `product/backend/api/routers/`、`product/backend/cli/commands/` | [修改 API 与控制面](../任务/修改API与控制面.md)；`test_control_plane.py`、`test_control.py` |
 | 修改数据库或事务 | `infra/storage/`、`migrations/versions/` | [修改数据库](../任务/修改数据库.md)；storage/migration 直接测试 |
@@ -53,7 +54,7 @@ GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `Ap
 
 - `core` 不导入 workflows、infra、API、CLI 或具体 Web Runtime；纯规则必须可以在无 I/O 条件下测试。
 - API、CLI 和 GUI 复用 ApplicationCore，不各自复制事务、Readiness、ResultPresentation 或 History 逻辑。
-- `ProjectPreparationService` 只在 ApplicationCore 装配并实时读取既有事实；不得进入 WorkerContainer、建立准备进度表，或依赖 LLM、Playwright、Runner 和 ORM Row。
+- 旧 `ProjectPreparationService`、ProjectReadiness 与 ActionSafetySetup 仅为仓库保留的迁移资产，不在当前 ApplicationCore 装配；不得建立准备进度表或把旧权限矩阵接回业务边界。
 - WorkerContainer 独立于 ApplicationCore；两个组合根只从 `product.backend.composition` 暴露，不在 Workflow 或 Infra 中建立第二个装配入口。
 - API 进程只管理控制面与 Worker 生命周期；目标请求、浏览器和高风险观察进入 Worker/Runner 或独立 Recording Process。
 - 当前生产 Target 只有 Web。新增 Target 必须先形成独立架构/协议决策，不能在现有枚举里预留空值。
@@ -73,7 +74,7 @@ GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `Ap
 .\scripts\dev.ps1 test tests/architecture/test_dependencies.py
 ```
 
-公共协议或数据库变化分别追加 Schema/migration 门禁；跨 Worker/Runner 进程时才升级到对应 process 测试。完整 L4 和自动 L5 只按[验证与测试](../../04_工程约束/验证与测试.md)在阶段收口执行。最终对变更 Python 做 AST 与职责头检查，并运行 `git diff --check`。
+公共协议或数据库变化分别追加 Schema/migration 门禁；跨 Worker/Runner 进程时才升级到对应 process 测试。完整 L4 和自动 L5 只按[验证与测试](../../04_工程约束/验证与测试.md)在最终验收执行。最终对变更 Python 做 AST 与职责头检查，并运行 `git diff --check`。
 
 ## 首错定位
 

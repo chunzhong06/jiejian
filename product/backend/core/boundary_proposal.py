@@ -30,9 +30,9 @@ from product.backend.core.permission_intent import (
     PermissionIntentEffectiveState,
     PermissionIntentRelation,
 )
-from product.backend.core.verification.permissions import (
+from product.backend.core.permission_semantics import (
     PermissionExpectation,
-    SecurityEffectKind,
+    BusinessEffectKind,
 )
 
 
@@ -106,7 +106,7 @@ class ProposedEffectItem(BoundaryModel):
     item_id: str = Field(pattern=EFFECT_ITEM_ID_PATTERN)
     effect_id: str | None = Field(default=None, pattern=EFFECT_ID_PATTERN)
     business_label: str = Field(min_length=1, max_length=256)
-    effect_kind: SecurityEffectKind
+    effect_kind: BusinessEffectKind
     resource_concept: str = Field(min_length=1, max_length=128)
     expected_state: str | None = Field(default=None, min_length=1, max_length=512)
     protected_projection: tuple[str, ...] = Field(default=(), max_length=64)
@@ -129,7 +129,7 @@ class ProposedEffectItem(BoundaryModel):
 
     @model_validator(mode="after")
     def validate_projection_kind(self) -> ProposedEffectItem:
-        if self.effect_kind is SecurityEffectKind.DATA_DISCLOSURE:
+        if self.effect_kind is BusinessEffectKind.DATA_DISCLOSURE:
             if not self.protected_projection:
                 raise ValueError("DATA_DISCLOSURE requires protected projection")
         elif self.protected_projection:
@@ -280,7 +280,7 @@ class BoundaryProposalBundle(BoundaryModel):
     def fingerprint_payload(self) -> dict[str, Any]:
         payload = self.model_dump(mode="json", exclude={"proposal_fingerprint"})
         if self.source_snapshot.basis_version == 1:
-            # 1.1.0 已持久 Proposal 的 fingerprint 中没有 basis_version；
+            # 历史已持久 Proposal 的 fingerprint 中没有 basis_version；
             # 读取兼容不能反过来让不可变 Proposal 看似被修改。
             payload["source_snapshot"].pop("basis_version", None)
         return payload

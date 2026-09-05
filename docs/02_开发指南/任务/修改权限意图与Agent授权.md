@@ -1,10 +1,10 @@
 # 修改业务边界、权限意图与 Agent 授权
 
-> 状态：CURRENT。用于修改 1.1.0 Business Boundary、Permission v2、Human Approval、实现绑定和 Agent/自动化只读边界。
+> 状态：CURRENT。用于修改 Business Boundary 持续维护、Permission v2、Human Approval、实现绑定和 Agent/自动化只读边界。
 
 ## 这是什么
 
-1.1.0 把权限真源拆成稳定业务语义与当前代码定位：
+当前权限真源拆成稳定业务语义与当前代码定位：
 
 ```text
 ApplicationUnderstanding Candidate
@@ -24,6 +24,8 @@ Candidate、测试账号、Flow、HTTP 绑定或某次 Run 都不能成为业务
 | 要改什么 | 先看哪里 | 直接测试 |
 | --- | --- | --- |
 | Actor、Action、Effect 与 implementation binding | `product/backend/core/business_boundary.py` | `tests/backend/core/test_business_boundary.py` |
+| 稳定权限词、权限考题与身份规划 | `product/backend/core/permission_semantics.py`、`product/backend/core/assurance.py` | `tests/backend/core/test_assurance.py` |
+| 动作准备实时投影 | `product/backend/workflows/preparation/` | `tests/backend/workflows/preparation/` |
 | 不可变 Proposal、指纹与 Decision | `product/backend/core/boundary_proposal.py` | `tests/backend/workflows/business_boundaries/` |
 | Permission v2 revision 与 policy state | `product/backend/core/permission_intent.py` | `tests/backend/workflows/business_boundaries/` |
 | Proposal/Approval 原子事务 | `product/backend/workflows/business_boundaries/service.py` | `tests/backend/api/test_business_boundaries.py` |
@@ -48,6 +50,10 @@ Permission v2 引用稳定 Actor/Action revision，语义包含资源关系、`A
 
 ## Proposal 与 Human Approval
 
+新 Proposal 与批准事务必须校验资源关系：OWNS 和 SAME_ROLE_OTHER_ACCOUNT 的 subject/owner 必须是相同 Actor revision，OTHER_ROLE 必须是不同 Actor。不要把该校验放进历史 revision 的读取模型而使旧数据无法打开；历史不一致由 Assurance 合同阻断并要求复核。PermissionExpectation 与 BusinessEffectKind 的唯一真源是 `core/permission_semantics.py`；旧 Verification 只临时 re-export 同一枚举对象，持久字符串不变。
+
+持续维护读取完整 current 边界，在浏览器内保存 desired state；客户端不指定 write mode。服务端根据稳定 ID、预期 revision 与 boundary state fingerprint 决定 `REFERENCE / APPEND_REVISION / CREATE`、权限沿用、停用和实现重绑。纯 rebind 不改变业务或 Permission revision，也不推进 policy_epoch。
+
 编辑页只保存浏览器内草稿。用户点击“生成待审业务边界”后，服务端冻结 `BoundaryProposalBundle`、来源快照和 `proposal_fingerprint`；待审正文没有 PATCH 入口。返回修改以旧 Proposal 初始化新的本地草稿，最终创建新的 Proposal；放弃形成 `REJECTED` Decision。
 
 批准请求只包含路径中的 `proposal_id`、预期 `proposal_fingerprint` 和原因。服务端重新校验 Proposal 未决定、指纹一致、来源没有漂移且没有 unresolved question，然后在同一 Unit of Work 中提交：
@@ -68,13 +74,13 @@ BusinessActor / BusinessAction revisions
 
 ## Agent 与自动化边界
 
-Agent 可以读取正式业务边界、提交源码变化或提出待审建议，但不能 approve/reject、直接写 Actor/Action/Permission、修改 `policy_epoch`、选择验证考题或形成 Verdict。MCP、CLI 与 Machine 输出不提供旧 Permission writer；API 路由也不能保留旧 matrix approve、candidate decide 或 compatibility wrapper。
+当前 Agent/MCP 只读取正式事实，没有源码变化、检查或修复 writer；不能 approve/reject、直接写 Actor/Action/Permission、修改 `policy_epoch`、选择验证考题或形成 Verdict。MCP、CLI 与 Machine 输出不提供旧 Permission writer；API 路由也不能保留旧 matrix approve、candidate decide 或 compatibility wrapper。
 
-当前完整新检查主链尚未重新接入。不要为了让旧 CheckPreview、Compiler 或 L5 继续工作而把 Permission v2 转写回旧表；1.1.0 的 `/tests` 与 `/changes` 可以明确不可用，但不能 dual write。
+当前完整新检查主链尚未重新接入。不要为了让旧 CheckPreview、Compiler 或 L5 继续工作而把 Permission v2 转写回旧表；检查能力未接入时 `/tests` 与 `/changes` 必须如实显示边界，不能 dual write。
 
 ## 官方 recipe 内部资产
 
-`OfficialBoundaryRecipe` 是有限、公开的样例材料，只生成普通 Proposal command，不是业务 Core model，也不自动批准。1.1.0 保留该纯函数和 unit test，但普通 Router、service 便捷入口、前端 API 与页面 CTA 均不暴露它。未来只有正式 Sample context 可以把 recipe 送入普通 create-proposal + approve 路径；不得根据 project name 猜 Sample。
+`OfficialBoundaryRecipe` 是有限、公开的样例材料，只生成普通 Proposal command，不是业务 Core model，也不自动批准。仓库保留该纯函数和 unit test，但普通 Router、service 便捷入口、前端 API 与页面 CTA 均不暴露它。未来只有正式 Sample context 可以把 recipe 送入普通 create-proposal + approve 路径；不得根据 project name 猜 Sample。
 
 ## 怎么验证
 

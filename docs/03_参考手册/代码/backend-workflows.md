@@ -176,7 +176,7 @@
 - `class OfficialBoundaryRecipe`
 - `class PermissionBoundaryStatus`
 - `class BusinessBoundaryView`
-主要 import / dot-source：`__future__`, `product.backend.core.boundary_proposal`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.workflows.business_boundaries.inspection`, `pydantic`
+主要 import / dot-source：`__future__`, `product.backend.core.boundary_proposal`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.permission_intent`, `product.backend.core.permission_semantics`, `product.backend.workflows.business_boundaries.inspection`, `pydantic`
 
 ### `product/backend/workflows/business_boundaries/official_recipe.py`
 - `OFFICIAL_BOUNDARY_PROVENANCE`
@@ -187,11 +187,11 @@
 - `_EXPORT_EFFECT`
 - `_VIEW_EFFECT`
 - `official_boundary_recipe() -> OfficialBoundaryRecipe`
-主要 import / dot-source：`__future__`, `product.backend.core.boundary_proposal`, `product.backend.core.business_boundary`, `product.backend.core.permission_intent`, `product.backend.core.verification.permissions`, `product.backend.workflows.business_boundaries.models`
+主要 import / dot-source：`__future__`, `product.backend.core.boundary_proposal`, `product.backend.core.business_boundary`, `product.backend.core.permission_intent`, `product.backend.core.permission_semantics`, `product.backend.workflows.business_boundaries.models`
 
 ### `product/backend/workflows/business_boundaries/service.py`
 - `class BusinessBoundaryService`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `product.backend.core.application_understanding`, `product.backend.core.approval`, `product.backend.core.boundary_proposal`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.infra.storage`, `product.backend.workflows.business_boundaries.fingerprints`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.business_boundaries.maintenance`, `product.backend.workflows.business_boundaries.models`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `product.backend.core.application_understanding`, `product.backend.core.approval`, `product.backend.core.assurance`, `product.backend.core.boundary_proposal`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.infra.storage`, `product.backend.workflows.business_boundaries.fingerprints`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.business_boundaries.maintenance`, `product.backend.workflows.business_boundaries.models`, `time`, `uuid`
 
 ### `product/backend/workflows/competition_validation.py`
 - `_SUMMARY_FILE`
@@ -299,6 +299,28 @@
 - `class PermissionIntentHistoryView`
 - `class PermissionIntentService`
 主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.infra.storage`, `pydantic`
+
+### `product/backend/workflows/preparation/__init__.py`
+主要 import / dot-source：`product.backend.workflows.preparation.service`
+
+### `product/backend/workflows/preparation/models.py`
+- `class PreparationStatus`
+- `class PreparationItemView`
+- `class IdentitySlotPreparationView`
+- `class IdentityPreparationView`
+- `class ResourcePreparationView`
+- `class EffectEvidencePreparationView`
+- `class ActionTechnicalPreparationView`
+- `class ActionPreparationView`
+- `class PreparationView`
+主要 import / dot-source：`enum`, `product.backend.core.assurance`, `product.backend.core.business_boundary`, `pydantic`
+
+### `product/backend/workflows/preparation/service.py`
+- `class BoundaryReader`
+- `class IdentityReader`
+- `class PreparationBindingReader`
+- `class PreparationService`
+主要 import / dot-source：`__future__`, `product.backend.core.assurance`, `product.backend.core.business_boundary`, `product.backend.workflows.business_boundaries.models`, `product.backend.workflows.preparation.models`, `product.backend.workflows.test_identities.service`, `typing`
 
 ### `product/backend/workflows/projects/__init__.py`
 主要 import / dot-source：`.catalog`, `.lifecycle`

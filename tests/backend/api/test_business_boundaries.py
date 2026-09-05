@@ -1,4 +1,4 @@
-# 验证 1.1.1 Business Boundary 首次建立、持续维护与决策 HTTP 边界。
+# 验证 Business Boundary 首次建立、持续维护与决策 HTTP 边界。
 
 from __future__ import annotations
 

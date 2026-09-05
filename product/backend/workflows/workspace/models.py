@@ -1,6 +1,6 @@
 # =============================================================================
 # 定位
-#   1.1.1 当前动作级工作区的只读模型合同。
+#   当前动作级工作区的只读模型合同。
 #
 # 职责
 #   统一承载项目连接、业务主体、业务动作、权限、实时实现检查和唯一主任务。
@@ -81,6 +81,7 @@ PrimaryTaskKind = Literal[
     "REVIEW_BOUNDARY_PROPOSAL",
     "ESTABLISH_BUSINESS_BOUNDARY",
     "REVIEW_PERMISSION_REVISION",
+    "COMPLETE_ALLOW_CONTROL",
     "REVIEW_ACTOR_IMPLEMENTATION",
     "REVIEW_ACTION_IMPLEMENTATION",
 ]
