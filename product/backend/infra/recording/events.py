@@ -402,6 +402,10 @@ class RecordingEventCollector:
         )
 
     def _request_finished(self, identity_id: str, request: Request) -> None:
+        # response.body() 会让出浏览器事件循环；准备期回调必须在读取正文前退出，
+        # 否则开始采集后恢复的回调会把准备期响应误记为业务事件。
+        if not self._capture_enabled:
+            return
         if request in self._discarded_requests:
             # requestfinished 可能在开始采集后才到达；不能让准备期响应伪装成录制事件。
             self._discarded_requests.discard(request)

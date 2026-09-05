@@ -98,6 +98,7 @@ class JobQueue:
                     created_at_us=request.now_us,
                     updated_at_us=request.now_us,
                 )
+                self._targets.resolve(job)
                 work.runs.add(run)
                 work.jobs.add(job)
                 append_job_event(
@@ -127,6 +128,7 @@ class JobQueue:
         validate_control_request(request, known_secrets)
         with self._new_uow(known_secrets) as work:
             initial = self._require_job(work, request.job_id)
+            self._targets.resolve(initial)
             if initial.state in _TERMINAL_JOB_STATES:
                 if (
                     initial.state is JobState.CANCELLED

@@ -34,7 +34,9 @@ from pydantic import (
     model_validator,
 )
 
-from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN
+from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
+from product.backend.core.business_boundary import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.core.recording import RecordingPurpose
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import REDACTED
 from product.protocols.web.workflow import ValueSlotConsumer
@@ -206,10 +208,15 @@ class FlowDraftStep(FlowDraftProtocolModel):
 
 # Recording 事件生成的版本化审阅对象；未确认变量和绑定保持显式状态。
 class FlowDraft(FlowDraftProtocolModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["2"] = "2"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    action_candidate_id: str = Field(pattern=r"^action_[0-9a-f]{32}$")
+    business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
+    action_revision: int = Field(ge=1)
+    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    purpose: RecordingPurpose = RecordingPurpose.TARGET
+    parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
+    effect_id: str | None = Field(default=None, pattern=EFFECT_ID_PATTERN)
     revision: int = Field(ge=1)
     steps: tuple[FlowDraftStep, ...] = Field(min_length=1, max_length=2_000)
     variables: tuple[FlowDraftVariable, ...] = Field(default=(), max_length=2_000)
@@ -225,6 +232,12 @@ class FlowDraft(FlowDraftProtocolModel):
 
     @model_validator(mode="after")
     def validate_draft_graph(self) -> FlowDraft:
+        if (self.purpose is RecordingPurpose.TARGET) != (self.parent_recording_id is None):
+            raise ValueError("supplemental draft requires its target recording parent")
+        if self.parent_recording_id == self.recording_id:
+            raise ValueError("draft cannot reference itself as parent")
+        if (self.purpose is RecordingPurpose.OBSERVATION) != (self.effect_id is not None):
+            raise ValueError("observation draft must bind a confirmed business effect")
         step_ids = tuple(step.id for step in self.steps)
         if len(set(step_ids)) != len(step_ids):
             raise ValueError("flow draft step IDs must be unique")
@@ -352,7 +365,7 @@ def parse_flow_draft(
     known_secrets: Sequence[str] = (),
 ) -> FlowDraft:
     parsed = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, known_secrets)
-    if parsed.get("schema_version") != "1":
+    if parsed.get("schema_version") != "2":
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 草稿版本不受支持")
     try:
         return FlowDraft.model_validate_json(raw, strict=True)

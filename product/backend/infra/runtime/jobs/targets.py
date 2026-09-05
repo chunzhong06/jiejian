@@ -74,6 +74,11 @@ class JobTargetRegistry:
     def __init__(self) -> None:
         self._handlers: dict[JobTargetType, JobTargetHandler] = {}
 
+    @property
+    def target_types(self) -> tuple[JobTargetType, ...]:
+        """返回实际登记的能力，供领取前的数据库过滤使用。"""
+        return tuple(sorted(self._handlers, key=lambda item: item.value))
+
     def register(
         self,
         target_type: JobTargetType,
@@ -166,4 +171,13 @@ class RunJobTargetHandler:
 def default_run_job_targets() -> JobTargetRegistry:
     registry = JobTargetRegistry()
     registry.register(JobTargetType.RUN, RunJobTargetHandler())
+    return registry
+
+
+def recording_job_targets() -> JobTargetRegistry:
+    """构造当前录制能力；不隐式登记检查或其他后台任务。"""
+    from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
+
+    registry = JobTargetRegistry()
+    registry.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
     return registry

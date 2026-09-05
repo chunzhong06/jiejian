@@ -145,6 +145,18 @@
       "title": "BatchResourceExpectation",
       "type": "object"
     },
+    "BusinessEffectKind": {
+      "enum": [
+        "STATE_MUTATION",
+        "DATA_DISCLOSURE",
+        "OBJECT_CREATION",
+        "EXTERNAL_DISPATCH",
+        "RESTRICTED_FUNCTION_INVOCATION",
+        "CREDENTIAL_ACCESS"
+      ],
+      "title": "BusinessEffectKind",
+      "type": "string"
+    },
     "CoverageDimension": {
       "enum": [
         "ROLE",
@@ -453,7 +465,7 @@
           "title": "Expected State"
         },
         "kind": {
-          "$ref": "#/$defs/SecurityEffectKind"
+          "$ref": "#/$defs/BusinessEffectKind"
         },
         "protected_fields": {
           "default": [],
@@ -477,18 +489,6 @@
       ],
       "title": "SecurityEffectDefinition",
       "type": "object"
-    },
-    "SecurityEffectKind": {
-      "enum": [
-        "STATE_MUTATION",
-        "DATA_DISCLOSURE",
-        "OBJECT_CREATION",
-        "EXTERNAL_DISPATCH",
-        "RESTRICTED_FUNCTION_INVOCATION",
-        "CREDENTIAL_ACCESS"
-      ],
-      "title": "SecurityEffectKind",
-      "type": "string"
     },
     "SubjectDefinition": {
       "additionalProperties": false,

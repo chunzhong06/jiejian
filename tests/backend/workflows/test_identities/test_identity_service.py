@@ -6,6 +6,7 @@ import io
 import json
 from functools import partial
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -19,6 +20,8 @@ from product.backend.core.application_understanding import (
 )
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
+from product.backend.core.business_boundary import BusinessActor, boundary_sha256
+from tests.fixtures.assurance import actor
 from product.backend.core.test_identity import (
     TestIdentityAuthMethod as IdentityAuthMethod,
     TestIdentityCookie as IdentityCookie,
@@ -33,12 +36,11 @@ from product.backend.infra.storage import (
     upgrade_database,
 )
 from product.backend.workflows.test_identities import (
-    IdentityPreparationManager,
-    IdentityPreparationStatus,
     PreparedLoginState,
     TestIdentityService as IdentityService,
     TestIdentityStatus as IdentityStatus,
 )
+from product.backend.workflows.test_identities.preparation import IdentityPreparationManager, IdentityPreparationStatus
 from product.protocols import (
     IdentityPreparationResult,
     IdentityPreparationResultType,
@@ -50,6 +52,7 @@ from product.protocols import (
 
 PROJECT_ID = "sample-project"
 ROLE_ID = candidate_id("role", "owner")
+ACTOR_ID = "bar_" + "1" * 32
 ENDPOINT = "http://127.0.0.1:8865"
 FINGERPRINT = "a" * 64
 
@@ -134,6 +137,11 @@ def _service(tmp_path: Path) -> tuple[IdentityService, FakeSecretStore, object]:
             )
         )
         work.application_understanding.add(_understanding())
+        revision = actor().model_copy(update={"project_id": PROJECT_ID, "display_name": "所有者"})
+        revision = revision.model_copy(update={"semantic_fingerprint": boundary_sha256(revision.semantic_payload())})
+        work.business_boundaries.add_actor_revision(revision)
+        work.business_boundaries.add_actor(BusinessActor(actor_id=ACTOR_ID, project_id=PROJECT_ID,
+            current_revision=1, created_at_us=1, updated_at_us=1))
         work.commit()
     store = FakeSecretStore()
     service = IdentityService(
@@ -148,7 +156,7 @@ def _prepare(
     service: IdentityService,
     store: FakeSecretStore,
 ) -> tuple[str, str]:
-    created = service.create(PROJECT_ID, role_candidate_id=ROLE_ID, label="所有者账号")
+    created = service.create(PROJECT_ID, actor_id=ACTOR_ID, actor_revision=1, label="所有者账号")
     secret_ref = credential_ref(
         "test-identity", PROJECT_ID, created.identity_id, "cookie-00"
     )
@@ -187,7 +195,7 @@ def test_login_secret_never_enters_sqlite_or_public_view(tmp_path: Path) -> None
     assert secret_ref.encode("utf-8") in database_bytes
 
 
-def test_endpoint_change_marks_prepared_identity_for_review(tmp_path: Path) -> None:
+def test_endpoint_change_preserves_actor_bound_identity(tmp_path: Path) -> None:
     service, store, factory = _service(tmp_path)
     identity_id, _ = _prepare(service, store)
     with StorageUnitOfWork(factory) as work:
@@ -197,16 +205,17 @@ def test_endpoint_change_marks_prepared_identity_for_review(tmp_path: Path) -> N
         work.commit()
 
     changed = service.get(identity_id)
-    assert changed.status is IdentityStatus.NEEDS_REVIEW
-    assert changed.review_reasons == ("ENDPOINT_CHANGED",)
+    assert changed.status is IdentityStatus.PREPARED
+    assert changed.review_reasons == ()
+    assert (changed.actor_id, changed.actor_revision) == (ACTOR_ID, 1)
 
     reset = service.reset(identity_id)
     assert reset.status is IdentityStatus.NOT_PREPARED
-    assert reset.confirmed_endpoint == "http://127.0.0.1:8877"
+    assert (reset.actor_id, reset.actor_revision) == (ACTOR_ID, 1)
     assert reset.review_reasons == ()
 
 
-def test_role_name_change_marks_bound_identity_for_review(tmp_path: Path) -> None:
+def test_candidate_role_name_change_does_not_rewrite_frozen_actor_identity(tmp_path: Path) -> None:
     service, store, factory = _service(tmp_path)
     identity_id, _ = _prepare(service, store)
     changed_understanding = _understanding(revision=4)
@@ -222,8 +231,9 @@ def test_role_name_change_marks_bound_identity_for_review(tmp_path: Path) -> Non
         work.commit()
 
     changed = service.get(identity_id)
-    assert changed.status is IdentityStatus.NEEDS_REVIEW
-    assert changed.review_reasons == ("ROLE_NEEDS_REVIEW",)
+    assert changed.status is IdentityStatus.PREPARED
+    assert changed.review_reasons == ()
+    assert (changed.actor_id, changed.actor_revision, changed.actor_display_name) == (ACTOR_ID, 1, "所有者")
 
 
 def test_delete_failure_keeps_metadata_then_success_removes_exact_secret(
@@ -247,9 +257,30 @@ def test_delete_failure_keeps_metadata_then_success_removes_exact_secret(
     assert missing.value.code == ErrorCode.TEST_IDENTITY_NOT_FOUND.value
 
 
+def test_repository_delete_rejection_keeps_metadata_and_never_deletes_secret(tmp_path, monkeypatch):
+    service, store, factory = _service(tmp_path)
+    identity_id, secret_ref = _prepare(service, store)
+    with StorageUnitOfWork(factory) as work:
+        repository_type = type(work.test_identities)
+    delete_secret = Mock(wraps=store.delete)
+    monkeypatch.setattr(store, "delete", delete_secret)
+
+    def reject(_repository, _identity_id):
+        raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "注入 repository 删除拒绝")
+
+    # 注入点是 repository 边界；真实 FK 结构由 migration 用例单独证明。
+    monkeypatch.setattr(repository_type, "delete", reject)
+    with pytest.raises(JiejianError) as error:
+        service.delete(identity_id)
+    assert error.value.code == ErrorCode.STORAGE_CONSTRAINT.value
+    delete_secret.assert_not_called()
+    assert service.get(identity_id).status is IdentityStatus.PREPARED
+    assert store.read(secret_ref) == "session-secret-value"
+
+
 def test_preparation_manager_commits_only_non_secret_child_result(tmp_path: Path) -> None:
     service, store, _ = _service(tmp_path)
-    created = service.create(PROJECT_ID, role_candidate_id=ROLE_ID, label="所有者账号")
+    created = service.create(PROJECT_ID, actor_id=ACTOR_ID, actor_revision=1, label="所有者账号")
     fake_process = FakePreparationProcess()
 
     def launch(*_args, **_kwargs):
@@ -309,7 +340,7 @@ def test_preparation_manager_retries_orphaned_secret_cleanup_on_next_start(
     tmp_path: Path,
 ) -> None:
     service, store, _ = _service(tmp_path)
-    created = service.create(PROJECT_ID, role_candidate_id=ROLE_ID, label="所有者账号")
+    created = service.create(PROJECT_ID, actor_id=ACTOR_ID, actor_revision=1, label="所有者账号")
     secret_ref = credential_ref(
         "test-identity",
         PROJECT_ID,

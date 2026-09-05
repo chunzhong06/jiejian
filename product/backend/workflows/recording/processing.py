@@ -25,6 +25,7 @@ from typing import Any
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.recording import RecordingPurpose
 from product.protocols.flow_draft import (
     FlowDraft,
     FlowDraftResourceCandidate,
@@ -98,8 +99,13 @@ class FlowDraftProcessor:
         *,
         recording_id: str,
         flow_id: str,
-        action_candidate_id: str,
+        business_action_id: str,
+        action_revision: int,
+        test_identity_id: str,
         events: Sequence[RecordingEvent],
+        purpose: RecordingPurpose = RecordingPurpose.TARGET,
+        parent_recording_id: str | None = None,
+        effect_id: str | None = None,
         known_secrets: Sequence[str] = (),
     ) -> FlowDraft:
         """把连续、已脱敏事件确定性整理为只保留业务歧义的首个 revision。"""
@@ -153,6 +159,9 @@ class FlowDraftProcessor:
         # --- 阶段：构造草稿并执行 canonical 安全校验 ---
         recommended_target = self._recommend_target(draft_steps, directly_triggered_requests)
         target_step_id = self._automatic_target(draft_steps, directly_triggered_requests)
+        # 补录按开始前的业务目的在技术绑定边界筛选，通用 TARGET 排名不代替补录确认。
+        if purpose is not RecordingPurpose.TARGET:
+            target_step_id = None
         target = next((step for step in draft_steps if step.id == target_step_id), None)
         resource_candidate_id = (
             target.resource_candidates[0].candidate_id
@@ -160,10 +169,15 @@ class FlowDraftProcessor:
             else None
         )
         draft = FlowDraft(
-            schema_version="1",
+            schema_version="2",
             recording_id=recording_id,
             flow_id=flow_id,
-            action_candidate_id=action_candidate_id,
+            business_action_id=business_action_id,
+            action_revision=action_revision,
+            test_identity_id=test_identity_id,
+            purpose=purpose,
+            parent_recording_id=parent_recording_id,
+            effect_id=effect_id,
             revision=1,
             steps=draft_steps,
             variables=draft_variables,

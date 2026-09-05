@@ -18,7 +18,7 @@
 | `product/backend/workflows/recording/lifecycle.py`、`run_service.py` | Recording 状态、capture start/stop、等待与错误保真 | 伪造 Job 终态或直接改数据库 |
 | `product/backend/workflows/recording/processing.py` | 正式 result 到 FlowDraft | 页面候选自动确认 |
 | `product/backend/workflows/recording/review.py`、`flow_compiler.py` | revision 审阅与 Flow 编译 | 权限意图和 Observer 编译 |
-| `product/backend/workflows/recording/safety_candidates.py`、`safety_setup.py` | 后续资源/观察/恢复候选与确认 | RecordingEvent 采集 |
+| `product/backend/workflows/preparation/recording_candidates.py`、`product/backend/workflows/preparation/bindings.py` | 后续资源/观察/恢复候选与确认 | RecordingEvent 采集 |
 | `product/backend/infra/recording/` | 请求存储、原子控制标记、浏览器、事件、独立进程 | ApplicationCore 事务和权限结论 |
 | `product/protocols/recording.py`、`flow_draft.py`、`recording_flow.py` | 严格机器根文档 | 浏览器实现和数据库生命周期 |
 | `product/frontend/src/features/recording/` | 正式业务流程页面与用户确认 | 后端状态机和秘密存储 |
@@ -35,14 +35,14 @@
 | 修改事件采集、网络关联或脱敏 | `infra/recording/events.py`、`ui_capture.py`、`transport.py` | infra recording 直接测试 + `test_sanitization.py` |
 | 修改 FlowDraft 候选/revision | `workflows/recording/processing.py`、`review.py`、`product/protocols/flow_draft.py` | `test_flow_draft_review.py`、`tests/protocols/test_recording.py` |
 | 修改 Flow 编译 | `workflows/recording/flow_compiler.py`、`product/protocols/recording_flow.py` | `test_flow_compiler.py`、Recording protocol 测试 |
-| 修改资源、观察或恢复准备 | `safety_candidates.py`、`safety_setup.py`、`workflows/security_setup/` | [修改安全准备](../任务/修改安全准备.md)及两个 workflow 直接测试 |
+| 修改资源、观察或恢复准备 | `workflows/preparation/recording_candidates.py`、`workflows/preparation/bindings.py` | [修改安全准备](../任务/修改安全准备.md)及两个 workflow 直接测试 |
 | 修改页面业务流程 | `product/frontend/src/features/recording/` | 对应 Vitest；必要时展示验收 |
 | 修改真实浏览器自动验收 | `scripts/dev/sample_test/windows.py` | 低成本 UIA/Recording 局部探针；最终一次 sample-test |
 
 ## 正式生命周期与事实产物
 
 ```text
-已确认 action + 已准备测试身份
+正式 BusinessAction revision + 已准备测试身份
   → POST recordings 创建 Job / Recording
   → Worker 启动独立 Recording Process
   → BrowserRecordingAdapter 恢复会话并发布 capture.ready
@@ -51,7 +51,7 @@
   → capture.stop → result 原子完成
   → RecordingSubmission.consume_result
   → FlowDraft → revision review → Flow
-  → SafetySetup 确认资源、Observer 与 Recovery
+  → 按录制目的形成 ActionExecution/Resource/Evidence/RecoveryBinding
 ```
 
 Job 说明后台执行是否完成，Recording 状态说明录制业务生命周期，`capture_phase` 说明当前采集握手，FlowDraft/Flow 是后续用户确认产物。四类事实不能互相代替；某个进程退出也不能直接推断另三类已经收口。

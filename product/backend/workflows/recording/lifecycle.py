@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from product.backend.core.lifecycle import JobState
 from product.backend.core.recording import RecordingPurpose, RecordingState, transition_recording_state
@@ -81,11 +81,13 @@ class RecordingLifecycle:
         var_dir: Path | None = None,
         reviewer: FlowDraftReviewer | None = None,
         compiler: FlowDraftCompiler | None = None,
+        bindings=None,
     ) -> None:
         self._uow_factory = uow_factory
         self._var_dir = var_dir.resolve() if var_dir is not None else None
         self._reviewer = reviewer or FlowDraftReviewer()
         self._compiler = compiler or FlowDraftCompiler()
+        self._bindings = bindings
 
     def status(self, recording_id: str) -> RecordingStatusView:
         with self._uow_factory() as work:
@@ -223,7 +225,12 @@ class RecordingLifecycle:
         var_dir: Path,
         now_us: int,
     ) -> RecordingFinalizationView:
-        """目标录制发布 Flow；补录只完成来源事实，不创建第二条业务 Flow。"""
+        """原子接受录制和技术绑定；目标录制发布 Flow，补录只形成明确目的的模板。"""
+
+        from product.backend.workflows.preparation.bindings import PreparationBindingService
+        from product.backend.workflows.recording.source import require_recording_source
+
+        bindings = self._bindings or PreparationBindingService(self._uow_factory, var_dir)
 
         # --- 阶段：读取并编译明确记录的最新草稿 revision ---
         with self._uow_factory() as work:
@@ -242,48 +249,49 @@ class RecordingLifecycle:
                     "录制当前状态不允许最终化",
                 )
             draft = draft_record.draft
-            if recording.purpose is not RecordingPurpose.TARGET:
-                if recording.state is RecordingState.PENDING_REVIEW:
-                    completed = transition_recording_state(
-                        recording.to_domain(),
-                        RecordingState.COMPLETED,
-                        operator="LOCAL_GUI",
-                        occurred_at_us=now_us,
-                        reason_code="REVIEW_COMPLETED",
-                    )
-                    recording = RecordingRecord.from_domain(
-                        completed,
-                        flow_id=recording.flow_id,
-                        browser_events=recording.browser_events,
-                    )
-                    work.recordings.replace(recording)
-                    work.commit()
-                return RecordingFinalizationView(recording=recording)
-            flow = self._compiler.compile(draft)
-            path = self.flow_path(var_dir, recording)
-            encoded = _canonical_flow_bytes(flow)
-            # --- 阶段：先原子发布文件，再提交数据库完成态 ---
-            self._publish_flow(path, encoded)
-            if recording.state is RecordingState.PENDING_REVIEW:
-                completed = transition_recording_state(
-                    recording.to_domain(),
-                    RecordingState.COMPLETED,
-                    operator="CLI_REVIEW",
-                    occurred_at_us=now_us,
-                    reason_code="REVIEW_COMPLETED",
+            path = self.flow_path(var_dir, recording) if recording.purpose is RecordingPurpose.TARGET else None
+            if recording.state is RecordingState.COMPLETED:
+                # 重复接受不能把当前技术绑定回退到较早的演示。
+                return RecordingFinalizationView(
+                    recording=recording, flow=self.load_final_flow(path) if path is not None else None,
+                    flow_path=str(path) if path is not None else None,
                 )
-                recording = RecordingRecord.from_domain(
-                    completed,
-                    flow_id=recording.flow_id,
-                    browser_events=recording.browser_events,
-                )
-                work.recordings.replace(recording)
-                work.commit()
+            require_recording_source(work, recording)
+            flow = self._compiler.compile(draft) if path is not None else None
+            if flow is not None:
+                # 文件先原子发布；数据库失败时保留不可变文件，重试按同一内容验证。
+                self._publish_flow(path, _canonical_flow_bytes(flow))
+            completed = transition_recording_state(
+                recording.to_domain(), RecordingState.COMPLETED, operator="RECORDING_SERVICE",
+                occurred_at_us=now_us, reason_code="REVIEW_COMPLETED",
+            )
+            recording = RecordingRecord.from_domain(completed, flow_id=recording.flow_id,
+                                                   browser_events=recording.browser_events)
+            work.recordings.replace(recording)
+            try:
+                bindings.accept_recording(work, recording, draft_record, flow=flow, now_us=now_us)
+            except ValidationError:
+                raise JiejianError(ErrorCode.RECORD_DRAFT_UNCONFIRMED, "录制中的资源或请求不能形成受限技术绑定") from None
+            work.commit()
             return RecordingFinalizationView(
                 recording=recording,
                 flow=flow,
-                flow_path=str(path),
+                flow_path=str(path) if path is not None else None,
             )
+
+    def finalize_if_unambiguous(self, recording_id: str, *, now_us: int):
+        """仅在结果消费后的显式写路径自动接受唯一事实，歧义与陈旧来源留待处理。"""
+        if self._var_dir is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "录制最终化运行目录未装配")
+        try:
+            return self.finalize(recording_id, var_dir=self._var_dir, now_us=now_us)
+        except JiejianError as error:
+            if error.code in {
+                ErrorCode.RECORD_DRAFT_UNCONFIRMED, ErrorCode.RECORD_DRAFT_REFERENCE,
+                ErrorCode.RECORD_DRAFT_COMPILE, ErrorCode.RECORD_STATE_PRECONDITION,
+            }:
+                return None
+            raise
 
     @staticmethod
     def flow_path(var_dir: Path, recording: RecordingRecord) -> Path:
@@ -298,7 +306,7 @@ class RecordingLifecycle:
         try:
             raw = path.read_bytes()
             parsed = json.loads(raw, object_pairs_hook=_unique_json_object)
-            if not isinstance(parsed, dict) or parsed.get("schema_version") != "1":
+            if not isinstance(parsed, dict) or parsed.get("schema_version") != "2":
                 raise ValueError("unsupported flow schema version")
             return Flow.model_validate_json(raw, strict=True)
         except (OSError, ValueError):

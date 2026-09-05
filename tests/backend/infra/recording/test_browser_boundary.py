@@ -1,219 +1,30 @@
 # 验证录制基础设施中的浏览器录制边界。
 
 from __future__ import annotations
+from unittest.mock import Mock
+from product.backend.infra.recording.events import RecordingEventCollector
 
-import json
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from threading import Thread
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import quote
 
 import pytest
 
-from product.protocols.web.target import WebTargetScope
-from product.protocols import (
-    RecordingAuthMethod,
-    RecordingBudget,
-    RecordingCookieRef,
-    RecordingEventKind,
-    RecordingRunnerRequest,
-    RecordingRunnerResultType,
-    RecordingSessionRef,
-    canonical_recording_json_bytes,
-)
+from product.protocols import RecordingEventKind, RecordingRunnerResultType, canonical_recording_json_bytes
 from product.backend.infra.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
 
 pytestmark = [pytest.mark.browser, pytest.mark.slow]
 
-TEST_IDENTITY_ID = "tid_0123456789abcdef0123456789abcdef"
-COOKIE_ENV_NAME = "JIEJIAN_RECORDING_TEST_COOKIE"
+from tests.fixtures.recording import COOKIE_ENV_NAME, TEST_IDENTITY_ID, browser_server, recording_request
 
 
-class LocalBrowserServer(ThreadingHTTPServer):
-    daemon_threads = True
-
-    def __init__(self, secret: str) -> None:
-        self.secret = secret
-        self.paths: list[str] = []
-        self.request_semantics: list[dict[str, bool | str]] = []
-        super().__init__(("127.0.0.1", 0), LocalBrowserHandler)
-
-    def url(self, path: str = "/") -> str:
-        return f"http://127.0.0.1:{self.server_port}{path}"
-
-
-class LocalBrowserHandler(BaseHTTPRequestHandler):
-    server: LocalBrowserServer
-
-    def do_GET(self) -> None:
-        self.server.paths.append(self.path)
-        parsed = urlsplit(self.path)
-        query = parse_qs(parsed.query)
-        if parsed.path == "/redirect":
-            self.send_response(302)
-            self.send_header("Location", query["target"][0])
-            self.end_headers()
-            return
-        if parsed.path == "/secret":
-            body = json.dumps(
-                {"password": self.server.secret, "note": self.server.secret}
-            ).encode()
-            self._send(
-                body,
-                "application/json",
-                headers={
-                    "Set-Cookie": f"session={self.server.secret}; Path=/",
-                    "X-Visible": self.server.secret,
-                },
-            )
-            return
-        if parsed.path == "/stream":
-            self._send(b"data: bounded\n\n", "text/event-stream")
-            return
-        if parsed.path == "/no-length":
-            body = b"bounded but length is unspecified"
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        if parsed.path == "/page":
-            body = (
-                "<!doctype html><iframe src='/frame'></iframe>"
-                "<a id='popup' target='_blank' href='/popup'>popup</a>"
-            ).encode()
-            self._send(body, "text/html; charset=utf-8")
-            return
-        if parsed.path == "/ui":
-            body = (
-                "<!doctype html><form id='resource-form'>"
-                "<input name='password' type='password'>"
-                "<button data-testid='submit' type='submit'>submit</button></form>"
-                "<script>document.querySelector('form').addEventListener('submit', e => {"
-                "e.preventDefault(); fetch('/echo', {method:'POST', headers:{"
-                "'Content-Type':'application/json','X-Method-Probe':'probe'},"
-                "body:JSON.stringify({password:'ui-secret',value:'probe'})});});</script>"
-            ).encode()
-            self._send(body, "text/html; charset=utf-8")
-            return
-        if parsed.path == "/slow":
-            time.sleep(0.25)
-            self._send(b"slow preparation response", "text/plain")
-            return
-        if parsed.path in {"/frame", "/popup"}:
-            self._send(b"<!doctype html><p>ok</p>", "text/html; charset=utf-8")
-            return
-        if parsed.path in {"/blocked-iframe", "/blocked-popup"}:
-            target = query["target"][0]
-            element = (
-                f"<iframe src='{target}'></iframe>"
-                if parsed.path.endswith("iframe")
-                else f"<a id='blocked' target='_blank' href='{target}'>blocked</a>"
-            )
-            self._send(element.encode(), "text/html; charset=utf-8")
-            return
-        self._send(b"<!doctype html><p>root</p>", "text/html; charset=utf-8")
-
-    def do_POST(self) -> None:
-        self.server.paths.append(self.path)
-        length = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(length)
-        self.server.request_semantics.append(
-            {
-                "method": self.command,
-                "body": body == json.dumps(
-                    {"password": self.server.secret, "value": "probe"},
-                    separators=(",", ":"),
-                ).encode(),
-                "header": self.headers.get("X-Method-Probe") == "probe",
-                "authorization": self.headers.get("Authorization")
-                == f"Bearer {self.server.secret}",
-                "cookie": f"identity={self.server.secret}" in self.headers.get("Cookie", ""),
-            }
-        )
-        self._send(b'{"ok":true}', "application/json")
-
-    def _send(
-        self,
-        body: bytes,
-        content_type: str,
-        *,
-        headers: dict[str, str] | None = None,
-    ) -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        for name, value in (headers or {}).items():
-            self.send_header(name, value)
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, _format: str, *_args: object) -> None:
-        return
-
-
-@contextmanager
-def browser_server(secret: str) -> Iterator[LocalBrowserServer]:
-    server = LocalBrowserServer(secret)
-    thread = Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield server
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
-
-
-def recording_request(port: int) -> RecordingRunnerRequest:
-    created_at_us = time.time_ns() // 1_000
-    return RecordingRunnerRequest(
-        schema_version="1",
-        recording_id="rec_0123456789abcdef0123456789abcdef",
-        project_id="ownership-recording",
-        action_candidate_id="action_0123456789abcdef0123456789abcdef",
-        created_at_us=created_at_us,
-        target_scope=WebTargetScope(
-            base_url=f"http://127.0.0.1:{port}",
-            allowed_origins=(f"http://127.0.0.1:{port}",),
-            allowed_hosts=("127.0.0.1",),
-            allowed_ports=(port,),
-            allow_private_network=True,
-            timeout_seconds=5,
-            max_requests=64,
-            max_response_bytes=65_536,
-        ),
-        sessions=(
-            RecordingSessionRef(
-                test_identity_id=TEST_IDENTITY_ID,
-                session_ref="session_0123456789abcdef0123456789abcdef",
-                auth_method=RecordingAuthMethod.COOKIE_SESSION,
-                cookies=(
-                    RecordingCookieRef(
-                        name="identity",
-                        domain="127.0.0.1",
-                        path="/",
-                        secure=False,
-                        http_only=True,
-                        same_site="LAX",
-                        value_ref=f"env:{COOKIE_ENV_NAME}",
-                    ),
-                ),
-                expires_at_us=created_at_us + 60_000_000,
-            ),
-        ),
-        budget=RecordingBudget(
-            max_duration_us=30_000_000,
-            max_events=256,
-            max_pages=8,
-            max_contexts=1,
-            max_field_chars=1_024,
-            max_body_bytes=16_384,
-            max_total_payload_bytes=262_144,
-        ),
-    )
+def test_preparation_request_finished_never_reads_response_or_body():
+    request = recording_request(8765)
+    collector = RecordingEventCollector(request.target_scope, request.budget, (), lambda: 1, started_at_us=1)
+    callback_request = Mock()
+    callback_request.response.side_effect = AssertionError("准备期不可读取 response/body")
+    collector._request_finished(TEST_IDENTITY_ID, callback_request)
+    callback_request.response.assert_not_called()
+    assert collector.events == ()
 
 
 def test_browser_contexts_isolate_identity_state_and_redact_before_result(

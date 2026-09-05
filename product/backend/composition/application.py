@@ -5,7 +5,7 @@
 #   组装 当前启动、项目接入、动作级 Workspace、Business Boundary 与 TestIdentity。
 #
 # 边界
-#   旧 Permission writer、Preparation、Check、SourceChange、Recording 和 Run 不注册为 CURRENT。
+#   只装配业务准备与录制 Worker；不开放旧 Permission writer、Check、SourceChange 或 Run。
 # =============================================================================
 
 from __future__ import annotations
@@ -20,7 +20,9 @@ from product.backend.infra.llm.adapters.httpx_transport import HttpxLLMTransport
 from product.backend.infra.llm.profiles import LLMProfileRegistry
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.queue import JobQueue
-from product.backend.infra.runtime.jobs.targets import default_run_job_targets
+from product.backend.infra.runtime.jobs.targets import recording_job_targets
+from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
+from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.runtime.maintenance import LocalMaintenanceService
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.secrets import SecretStore as LLMSecretStore
@@ -34,6 +36,13 @@ from product.backend.workflows.projects.catalog import ProjectCatalog
 from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
 from product.backend.workflows.test_identities import TestIdentityService
 from product.backend.workflows.workspace import WorkspaceService
+from product.backend.workflows.preparation.bindings import PreparationBindingService
+from product.backend.workflows.preparation.service import PreparationService
+from product.backend.workflows.recording.credentials import RecordingCredentialProvider, RuntimeSecretVault
+from product.backend.workflows.recording.lifecycle import RecordingLifecycle
+from product.backend.workflows.recording.project_submission import ProjectRecordingService
+from product.backend.workflows.recording.submission import RecordingSubmission
+from product.backend.core.errors import ErrorCode, JiejianError
 
 
 class ApplicationCore:
@@ -74,8 +83,7 @@ class ApplicationCore:
         self.uow_factory = factory
         self.secret_store = secret_store or llm_secret_store or default_secret_store()
 
-        # Worker 生命周期仍需要现有 Job/Result 基础表；控制面不重新开放旧 Run writer。
-        self.job_targets = default_run_job_targets()
+        self.job_targets = recording_job_targets()
         self.job_attempts = JobAttempts(factory, targets=self.job_targets)
         self.job_queue = JobQueue(factory, targets=self.job_targets)
         self.projects = ProjectCatalog(factory)
@@ -96,6 +104,35 @@ class ApplicationCore:
             secret_store=self.secret_store,
             clock_us=clock_us,
         )
+        self.preparation_bindings = PreparationBindingService(
+            factory, self.var_dir, test_identities=self.test_identities,
+        )
+        self.preparation = PreparationService(
+            self.business_boundaries, self.test_identities, bindings=self.preparation_bindings,
+        )
+        self.runtime_secrets = RuntimeSecretVault()
+        self.recording_credentials = RecordingCredentialProvider(
+            self.test_identities, self.secret_store, self.runtime_secrets,
+        )
+        self.recording_request_store = RecordingRequestStore(self.var_dir)
+        self.recording_lifecycle = RecordingLifecycle(
+            factory, var_dir=self.var_dir, bindings=self.preparation_bindings,
+        )
+        self.recording_submission = RecordingSubmission(
+            factory, self.recording_request_store, attempts=self.job_attempts,
+            finalize_recording=self.recording_lifecycle.finalize_if_unambiguous,
+        )
+        self.project_recordings = ProjectRecordingService(
+            self.application_understanding, self.test_identities, self.recording_credentials,
+            self.recording_submission, business_boundaries=self.business_boundaries,
+            uow_factory=factory, request_store=self.recording_request_store,
+            projects=self.projects, clock_us=clock_us,
+        )
+        self.worker = LocalWorkerSupervisor(
+            self.var_dir, factory, self.job_queue, self.job_attempts,
+            targets=self.job_targets, environment_provider=self.environment_for_secret_names,
+            clock_us=clock_us,
+        )
         self.project_lifecycle = ProjectLifecycleService(
             factory,
             self.test_identities,
@@ -104,7 +141,9 @@ class ApplicationCore:
         )
         self.maintenance = LocalMaintenanceService(
             self.var_dir,
-            active_runtime_paths=lambda: (),
+            active_runtime_paths=lambda: (
+                self.paths.runtime, self.paths.worker_logs, self.paths.recording_logs,
+            ) if self.worker.is_running() else (),
         )
         self.onboarding = OnboardingWorkflow(
             folder_selector
@@ -122,10 +161,27 @@ class ApplicationCore:
         )
 
     def close(self) -> None:
-        """释放组合根独占的 Engine；没有启动的旧能力无需补偿关闭。"""
+        """先证明录制进程与调度线程退出，再清空短期秘密和释放数据库。"""
 
+        self.worker.stop()
+        self.runtime_secrets.clear()
         self.engine.dispose()
 
     def environment_for_secret_names(self, names) -> dict[str, str]:
-        _ = names
-        return dict(self._base_environment)
+        values = self.runtime_secrets.resolve(names)
+        if any(name not in values for name in names):
+            raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_READY, "录制会话已失效，请重新准备测试账号")
+        environment = {key: value for key, value in self._base_environment.items()
+                       if not key.startswith("JIEJIAN_RECORDING_")}
+        environment.update(values)
+        return environment
+
+    def worker_status(self) -> dict[str, object]:
+        """控制面与 MCP 共享实际线程及已装配能力事实，不据线程存活推断检查可用。"""
+        capabilities = self.worker.capabilities
+        return {
+            "worker": "running" if self.worker.is_running() and "RECORDING" in capabilities else "stopped",
+            "worker_capabilities": capabilities,
+            "check": "unavailable",
+            "recovered_jobs": self.worker.recovered_jobs,
+        }

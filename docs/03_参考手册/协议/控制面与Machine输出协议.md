@@ -54,7 +54,7 @@ CLI 与 Machine 输出是控制和投影通道，不是审批人。公开命令�
 
 ## MCP Streamable HTTP 与工具输出
 
-MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。当前没有装配完整执行 Worker，System、`/ready` 与 `jiejian_system_status` 统一报告 `worker=unavailable`、`recovered_jobs=0`，但控制面仍可 ready。首次创建的 Authorization Bearer 只经精确 SecretStore 引用长期保存，后续启动自动恢复 READ。
+MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。当前只装配录制 Worker；System、`/ready` 与 `jiejian_system_status` 共享真实 `worker`、`worker_capabilities`、检查可用性和恢复计数。只有实际线程存活且仅录制能力装配才报告 running；CHECK 不可用。首次创建的 Authorization Bearer 只经精确 SecretStore 引用长期保存，后续启动自动恢复 READ。
 
 GUI 读取的 `MCPAccessView` 明确区分凭据与连接：`DISABLED → CREDENTIAL_READY → AUTHENTICATED → CONNECTED` 是正常建立过程，认证失败投影为 `CREDENTIAL_REJECTED`，人工暂停投影为 `PAUSED`。`last_authenticated_at_us` 只证明 Bearer 通过，`last_seen_at_us` 才代表 SDK 已观测到完成 initialize 的客户端活动；状态页面不能把凭据生成、配置复制或客户端自报当成连接成功。恢复、轮换、暂停和 shutdown 都清除旧活动与逐 Project 提升，避免上一客户端或上一 serve 冒充当前连接。
 

@@ -35,7 +35,7 @@
 
 ### `product/backend/infra/runtime/jobs/factory.py`
 - `class WorkerHandlerFactory`
-主要 import / dot-source：`__future__`, `collections.abc`, `pathlib`, `product.backend.infra.artifacts.run_packages`, `product.backend.infra.artifacts.scan_job`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.recording`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.jobs.verification`, `product.backend.infra.storage`
+主要 import / dot-source：`__future__`, `collections.abc`, `pathlib`, `product.backend.infra.artifacts.run_packages`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.recording`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.storage`
 
 ### `product/backend/infra/runtime/jobs/handlers.py`
 - `class JobHandler`
@@ -111,6 +111,7 @@
 - `class JobTargetRegistry`
 - `class RunJobTargetHandler`
 - `default_run_job_targets() -> JobTargetRegistry`
+- `recording_job_targets() -> JobTargetRegistry`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.storage`, `typing`
 
 ### `product/backend/infra/runtime/jobs/verification.py`
@@ -293,6 +294,6 @@
 
 ### `product/backend/infra/runtime/worker/supervisor.py`
 - `class LocalWorkerSupervisor`
-主要 import / dot-source：`__future__`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.dispatch`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.queue`, `product.backend.infra.runtime.jobs.recovery`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.runtime.worker.lifetime`, `product.backend.infra.storage`, `product.protocols`, `threading`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.dispatch`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.queue`, `product.backend.infra.runtime.jobs.recovery`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.runtime.worker.lifetime`, `product.backend.infra.storage`, `product.protocols`, `threading`, `time`, `uuid`
 
 <!-- GENERATED:END -->

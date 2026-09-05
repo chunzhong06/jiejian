@@ -185,6 +185,13 @@ class BrowserRecordingAdapter:
         recording = Recording(
             recording_id=request.recording_id,
             project_id=request.project_id,
+            business_action_id=request.business_action_id,
+            action_revision=request.action_revision,
+            test_identity_id=request.test_identity_id,
+            preparation_source_fingerprint=request.preparation_source_fingerprint,
+            purpose=request.purpose,
+            parent_recording_id=request.parent_recording_id,
+            effect_id=request.effect_id,
             created_at_us=request.created_at_us,
             updated_at_us=request.created_at_us,
         )

@@ -26,6 +26,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage.execution.job_control import JobControlRepository
 from product.backend.infra.storage.application_understanding import ApplicationUnderstandingRepository
 from product.backend.infra.storage.business_boundaries import BusinessBoundaryRepository
+from product.backend.infra.storage.action_preparation import ActionPreparationRepository
 from product.backend.infra.storage.contracts import ContractVersionRepository
 from product.backend.infra.storage.llm import AIAssistanceSettingsRepository, LLMProfileRepository
 from product.backend.infra.storage.execution_profiles import ExecutionProfileRepository
@@ -39,7 +40,6 @@ from product.backend.infra.storage.recordings import FlowDraftRevisionRepository
 from product.backend.infra.storage.source_changes import SourceChangeRepository
 from product.backend.infra.storage.execution.runs import RunRepository
 from product.backend.infra.storage.setup import (
-    ActionSafetySetupRepository,
     PermissionIntentRepository,
     TestIdentityRepository,
 )
@@ -51,6 +51,7 @@ class StorageUnitOfWork:
     projects: ProjectRepository
     application_understanding: ApplicationUnderstandingRepository
     business_boundaries: BusinessBoundaryRepository
+    action_preparation: ActionPreparationRepository
     contract_versions: ContractVersionRepository
     runs: RunRepository
     recordings: RecordingRepository
@@ -66,7 +67,6 @@ class StorageUnitOfWork:
     finalizations: RunFinalizationRepository
     gating: GatingRepository
     test_identities: TestIdentityRepository
-    action_safety_setups: ActionSafetySetupRepository
     permission_intents: PermissionIntentRepository
     source_changes: SourceChangeRepository
 
@@ -99,6 +99,7 @@ class StorageUnitOfWork:
             session,
             self._known_secrets,
         )
+        self.action_preparation = ActionPreparationRepository(session, self._known_secrets)
         self.contract_versions = ContractVersionRepository(
             session, self._known_secrets
         )
@@ -121,10 +122,6 @@ class StorageUnitOfWork:
         self.finalizations = RunFinalizationRepository(session, self._known_secrets)
         self.gating = GatingRepository(session, self._known_secrets)
         self.test_identities = TestIdentityRepository(session, self._known_secrets)
-        self.action_safety_setups = ActionSafetySetupRepository(
-            session,
-            self._known_secrets,
-        )
         self.permission_intents = PermissionIntentRepository(
             session,
             self._known_secrets,

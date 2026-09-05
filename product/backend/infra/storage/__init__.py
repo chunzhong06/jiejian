@@ -2,6 +2,7 @@
 
 from .base import Base, MetadataValue, NAMING_CONVENTION, StorageRecord, ensure_storage_payload_safe
 from .application_understanding import ApplicationUnderstandingRepository
+from .action_preparation import ActionPreparationRepository
 from .contracts import ContractVersionRepository
 from .results.evidence import EvidenceIndexRecord, EvidenceIndexRepository
 from .results.findings import FindingOccurrenceRecord, FindingRecord, FindingRepository
@@ -15,7 +16,6 @@ from .recordings import FlowDraftRevisionRecord, FlowDraftRevisionRepository, Re
 from .source_changes import SourceChangeRepository
 from .execution.runs import RunRecord, RunRepository
 from .setup import (
-    ActionSafetySetupRepository,
     PermissionIntentRepository,
     TestIdentityRepository,
 )
@@ -33,6 +33,6 @@ __all__ = [
     "FlowDraftRevisionRecord", "FlowDraftRevisionRepository", "RecordingRecord", "RecordingRepository",
     "RunRecord", "RunRepository", "SQLITE_BUSY_TIMEOUT_MS", "create_session_factory",
     "create_sqlite_engine", "default_database_path", "upgrade_database", "StorageUnitOfWork",
-    "TestIdentityRepository", "ActionSafetySetupRepository", "PermissionIntentRepository",
+    "TestIdentityRepository", "ActionPreparationRepository", "PermissionIntentRepository",
     "SourceChangeRepository",
 ]

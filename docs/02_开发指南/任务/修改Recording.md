@@ -1,12 +1,12 @@
 # 修改 Recording
 
-> 当前适用范围：普通 Recording 与完整 Worker 主链尚未接回当前产品入口；以下内容约束保留实现，不表示当前 GUI 可录制或运行检查。
+> 当前适用范围：Recording 后端与仅录制 Worker 已装配；普通 Recording 路由与页面尚未开放，CHECK 不可用。
 
 > 状态：CURRENT。用于修改真实业务流程录制、capture 控制、FlowDraft 审阅、Flow 编译和 Recording 失败收口。
 
 ## 这是什么
 
-Recording 把“用户在已登录网页里完成一次真实业务动作”转换为可审阅的 `FlowDraft`。它不是浏览器宏录制器，也不会把登录、导航和偶然请求自动宣布为安全测试流程。普通入口只接受一个已确认 action 和一个已准备 TestIdentity；服务端解析 endpoint、目标范围和非秘密身份元数据，独立 Worker 再启动独立 Recording Process 与有头 Chromium。
+Recording 把“用户在已登录网页里完成一次真实业务动作”转换为可审阅的 `FlowDraft`。它不是浏览器宏录制器，也不会把登录、导航和偶然请求自动宣布为安全测试流程。提交服务只接受正式 BusinessAction ID/revision 和一个已准备 TestIdentity；服务端解析 endpoint、目标范围和非秘密身份元数据，独立 Worker 再启动独立 Recording Process 与有头 Chromium。
 
 持久 Recording 生命周期、Job 生命周期和 capture 控制阶段是三套不同事实。`STARTING/RECORDING/PROCESSING/PENDING_REVIEW` 表达业务对象状态；Job 表达调度与执行；`capture_phase` 从当前 attempt 的 ready/start/started/stop 标记投影。FlowDraft 只在正式 Recording result 经 `RecordingSubmission.consume_result → FlowDraftProcessor` 后形成。
 
@@ -30,7 +30,7 @@ Recording 把“用户在已登录网页里完成一次真实业务动作”转�
 
 Recording 应根据录制顺序自动采用唯一且可执行的业务解释；只有多个同级业务解释并存时，页面才让用户在业务动作、有限资源值或来源步骤之间选择。编译后的 Flow 仍保留必要 SETUP 与唯一 TARGET，通过 `CASE_SUBJECT`、`CASE_RESOURCE_ID` 在运行时注入差分事实，但 HTTP method、path 位置、JSONPath、step ID 和 candidate ID 不进入普通审阅。业务资源、真实结果、独立观察和恢复方式在安全准备中形成；权限要求只能由 Human Approval 改变，不能塞回 Recording 或 Flow。
 
-`ActionSafetySetupService.inspect_action()` 是 Recording、FlowDraft 与 ActionSafetySetup 当前事实的只读检查入口，统一形成 FLOW/RESOURCE/OBSERVATION/RECOVERY/EFFECT 的 CURRENT/MISSING/STALE 结果。它只读取已保存的非秘密事实，不访问目标应用、不恢复浏览器会话、不读取 secret 正文，也不写入确认。`ProjectPreparation` 只消费这份检查结果并组合独立的 TestIdentity 状态；缺 Flow、观察或恢复时，准备页只能把用户导航到现有 `/flows` 与确认流程，`prepare-safe` 不创建 Recording、不生成 FlowDraft，也不静默确认唯一候选。
+`PreparationBindingService.inspect()` 按当前 Action、实现、endpoint、身份、Recording/Draft 与 Flow 指纹检查四类技术绑定；`PreparationService` 将其与 Assurance 身份和资源需求现场组合。TARGET 最终化保存唯一 Flow 和当前 owner 的资源，OBSERVATION 针对已确认 effect，RECOVERY 只用于改变状态的动作。唯一候选按确定性规则采用，歧义仍需审阅，不通过 HTTP method 猜测业务结果。
 
 页面在最终 Flow 或安全准备事实保存成功后，先刷新 Recording 本地事实，再刷新项目工作区；底部“继续准备”只按这次工作区刷新返回的准备投影续接。Recording 生命周期轮询只更新本页状态，不能在每个 tick 刷新整个工作区。工作区同步失败不回滚已经成立的保存结果，但必须显示可恢复提示。
 

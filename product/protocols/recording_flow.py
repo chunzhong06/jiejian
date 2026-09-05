@@ -8,7 +8,7 @@
 # 表达动作步骤与变量来源｜校验唯一 TARGET｜约束主体和资源运行时 slot
 #
 # 边界
-# 不属于 Verification Core 或 Execution Profile，不携带具体身份、资源、secret 或观察/恢复实现。
+# 来源绑定正式业务动作版本与录制身份；步骤只保留运行时 slot，不携带秘密或观察/恢复实现。
 #
 # 调用链
 # FlowDraftReviewer → Flow → Contract candidate / replay boundaries
@@ -20,7 +20,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from product.backend.core.identifiers import PROJECT_ID_PATTERN
+from product.backend.core.identifiers import PROJECT_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
+from product.backend.core.business_boundary import ACTION_ID_PATTERN
 from product.protocols.web.workflow import (
     HttpOutcomeClassifier,
     HttpRequestTemplate,
@@ -75,9 +76,11 @@ class FlowStep(RecordingFlowModel):
 
 # 已确认、无环且不含秘密的录制流程；变量只能引用先前步骤。
 class Flow(RecordingFlowModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["2"] = "2"
     id: str = Field(pattern=PROJECT_ID_PATTERN)
-    action_candidate_id: str = Field(pattern=r"^action_[0-9a-f]{32}$")
+    business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
+    action_revision: int = Field(ge=1)
+    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     target_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
     steps: tuple[FlowStep, ...] = Field(min_length=1)
 

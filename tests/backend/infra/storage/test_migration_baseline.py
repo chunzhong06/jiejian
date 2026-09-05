@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -12,12 +13,14 @@ from alembic.config import Config
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import Base, default_database_path, upgrade_database
+from product.backend.infra.storage.db import _normalize_table_sql
 
 
 pytestmark = [pytest.mark.database, pytest.mark.essential]
 ROOT = Path(__file__).resolve().parents[4]
 BASE_REVISION = "0001_business_boundary_v2"
-CURRENT_REVISION = "0002_business_boundary_maintenance"
+MAINTENANCE_REVISION = "0002_business_boundary_maintenance"
+CURRENT_REVISION = "0003_action_assurance_recording"
 LEGACY_REVISIONS = (
     "0001_web_v1",
     "0002_remove_contract_workbench",
@@ -29,6 +32,7 @@ LEGACY_REVISIONS = (
 INCOMPATIBLE_MESSAGE = (
     "当前运行数据属于界鉴 1.x 开发模型；1.1 使用新的业务边界模型，请创建新的运行数据目录。"
 )
+LEGACY_PREPARATION_MESSAGE = "存在旧录制或安全准备数据，需要人工处理；数据库未修改"
 BOUNDARY_TABLES = {
     "business_actor_revisions",
     "business_actors",
@@ -48,17 +52,46 @@ FORBIDDEN_TABLES = {
     "role_candidates",
     "action_candidates",
 }
+LEGACY_PREPARATION_TABLES = {
+    "recordings",
+    "flow_draft_revisions",
+    "test_resources",
+    "observation_bindings",
+    "recovery_bindings",
+    "security_effect_confirmations",
+}
+NEW_PREPARATION_TABLES = {
+    "action_execution_bindings",
+    "action_resource_bindings",
+    "action_evidence_bindings",
+    "action_recovery_bindings",
+}
+PRESERVED_BUSINESS_TABLES = (
+    "projects",
+    "application_understanding",
+    "business_actors",
+    "business_actor_revisions",
+    "business_actions",
+    "business_action_revisions",
+    "actor_implementation_bindings",
+    "action_implementation_bindings",
+    "boundary_proposals",
+    "boundary_proposal_decisions",
+    "permission_intent_revisions",
+    "project_policy_states",
+    "test_identities",
+)
 
 
 def _revision(database: Path) -> str:
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     assert row is not None
     return str(row[0])
 
 
 def _tables(database: Path) -> set[str]:
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         return {
             str(row[0])
             for row in connection.execute(
@@ -76,30 +109,70 @@ def _sidecars(database: Path) -> dict[str, bytes | None]:
     return result
 
 
+def _database_state(connection: sqlite3.Connection) -> tuple[tuple[tuple[object, ...], ...], dict[str, tuple[tuple[str, ...], tuple[tuple[object, ...], ...]]]]:
+    schema = tuple(
+        connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master "
+            "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        ).fetchall()
+    )
+    tables = {
+        str(row[0])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        )
+    }
+    rows: dict[str, tuple[tuple[str, ...], tuple[tuple[object, ...], ...]]] = {}
+    for table in sorted(tables):
+        columns = tuple(
+            str(row[1])
+            for row in connection.execute(f'PRAGMA table_info("{table}")')
+        )
+        order = ", ".join(f'"{column}"' for column in columns)
+        values = tuple(
+            connection.execute(f'SELECT * FROM "{table}" ORDER BY {order}').fetchall()
+        )
+        rows[table] = (columns, values)
+    return schema, rows
+
+
+def _table_snapshots(
+    connection: sqlite3.Connection,
+    tables: tuple[str, ...],
+) -> dict[str, tuple[tuple[str, ...], tuple[tuple[object, ...], ...]]]:
+    all_rows = _database_state(connection)[1]
+    return {table: all_rows[table] for table in tables}
+
+
 def _assert_rejected_without_modification(
     database: Path,
     *,
     check_sidecars: bool = True,
+    expected_message: str = INCOMPATIBLE_MESSAGE,
 ) -> None:
     before = database.read_bytes()
     sidecars_before = _sidecars(database)
+    with closing(sqlite3.connect(database)) as connection:
+        database_state_before = _database_state(connection)
     with pytest.raises(JiejianError) as raised:
         upgrade_database(database)
     assert raised.value.code == ErrorCode.STORAGE_MIGRATION.value
-    assert raised.value.to_dict()["message"] == INCOMPATIBLE_MESSAGE
+    assert raised.value.to_dict()["message"] == expected_message
     assert database.read_bytes() == before
+    with closing(sqlite3.connect(database)) as connection:
+        assert _database_state(connection) == database_state_before
     if check_sidecars:
         assert _sidecars(database) == sidecars_before
 
 
-def _upgrade_to_110(database: Path) -> None:
+def _upgrade_to_revision(database: Path, revision: str = MAINTENANCE_REVISION) -> None:
     config = Config(str(ROOT / "product" / "backend" / "alembic.ini"))
     config.attributes["configure_logger"] = False
     config.set_main_option(
         "sqlalchemy.url",
         f"sqlite+pysqlite:///{database.resolve().as_posix()}",
     )
-    command.upgrade(config, BASE_REVISION)
+    command.upgrade(config, revision)
 
 
 def test_fresh_database_reaches_111_head_idempotently(tmp_path: Path) -> None:
@@ -139,7 +212,7 @@ def test_each_legacy_1x_revision_is_rejected_read_only(
     revision: str,
 ) -> None:
     database = tmp_path / f"legacy-{revision}.db"
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         connection.execute("CREATE TABLE marker (value TEXT NOT NULL)")
         connection.execute(
             "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"
@@ -150,14 +223,14 @@ def test_each_legacy_1x_revision_is_rejected_read_only(
 
     _assert_rejected_without_modification(database)
 
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         assert connection.execute("SELECT value FROM marker").fetchone() == ("keep",)
 
 
 def test_current_revision_with_schema_drift_is_rejected_unchanged(tmp_path: Path) -> None:
     database = tmp_path / "drift.db"
     upgrade_database(database)
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         connection.execute("DROP TABLE actor_implementation_bindings")
         connection.commit()
 
@@ -165,17 +238,18 @@ def test_current_revision_with_schema_drift_is_rejected_unchanged(tmp_path: Path
     _assert_rejected_without_modification(database, check_sidecars=False)
 
 
-def test_repository_contains_frozen_110_and_incremental_111_migrations() -> None:
+def test_repository_contains_frozen_110_111_and_incremental_112_migrations() -> None:
     versions = ROOT / "product" / "backend" / "migrations" / "versions"
     assert sorted(path.name for path in versions.glob("*.py")) == [
         "0001_business_boundary_v2.py",
         "0002_business_boundary_maintenance.py",
+        "0003_action_assurance_recording.py",
     ]
 
 
-def test_official_110_business_data_upgrades_in_place(tmp_path: Path) -> None:
+def test_0002_business_data_upgrades_in_place_and_preserves_rows(tmp_path: Path) -> None:
     database = tmp_path / "upgrade-110.db"
-    _upgrade_to_110(database)
+    _upgrade_to_revision(database)
     actor_id = "bar_" + "1" * 32
     action_id = "bac_" + "2" * 32
     intent_id = "pin_" + "3" * 32
@@ -195,7 +269,7 @@ def test_official_110_business_data_upgrades_in_place(tmp_path: Path) -> None:
         + '","candidates":[]}'
     )
 
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute(
             "INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -234,11 +308,19 @@ def test_official_110_business_data_upgrades_in_place(tmp_path: Path) -> None:
             (action_id, "migration-case", 10, 10),
         )
         connection.execute(
-            "INSERT INTO actor_implementation_bindings VALUES (?, 1, 1, ?, ?, 'CURRENT', '[]', ?, ?)",
+            "INSERT INTO actor_implementation_bindings "
+            "(actor_id, actor_revision, understanding_revision, source_fingerprint, "
+            "role_candidate_ids_json, basis_version, source_proposal_id, confirmed_at_us, "
+            "candidate_snapshots_json, binding_fingerprint, updated_at_us) "
+            "VALUES (?, 1, 1, ?, ?, 1, NULL, NULL, '[]', ?, ?)",
             (actor_id, source_fingerprint, f'["{role_id}"]', "c" * 64, 10),
         )
         connection.execute(
-            "INSERT INTO action_implementation_bindings VALUES (?, 1, 1, ?, ?, 'CURRENT', '[]', ?, ?)",
+            "INSERT INTO action_implementation_bindings "
+            "(action_id, action_revision, understanding_revision, source_fingerprint, "
+            "action_candidate_ids_json, basis_version, source_proposal_id, confirmed_at_us, "
+            "candidate_snapshots_json, binding_fingerprint, updated_at_us) "
+            "VALUES (?, 1, 1, ?, ?, 1, NULL, NULL, '[]', ?, ?)",
             (
                 action_id,
                 source_fingerprint,
@@ -287,10 +369,24 @@ def test_official_110_business_data_upgrades_in_place(tmp_path: Path) -> None:
         )
         connection.commit()
 
+    with closing(sqlite3.connect(database)) as connection:
+        preserved_before = _table_snapshots(connection, PRESERVED_BUSINESS_TABLES)
+
     upgrade_database(database)
 
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         assert _revision(database) == CURRENT_REVISION
+        assert _table_snapshots(connection, PRESERVED_BUSINESS_TABLES) == preserved_before
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        tables = _tables(database)
+        assert {
+            "test_resources",
+            "observation_bindings",
+            "recovery_bindings",
+            "security_effect_confirmations",
+        }.isdisjoint(tables)
+        assert {"recordings", "flow_draft_revisions"} <= tables
+        assert NEW_PREPARATION_TABLES <= tables
         for table in (
             "business_actors",
             "business_actions",
@@ -330,11 +426,109 @@ def test_official_110_business_data_upgrades_in_place(tmp_path: Path) -> None:
         ).fetchone() == (source_snapshot,)
 
 
+def _seed_legacy_preparation_database(database: Path, table: str) -> None:
+    _upgrade_to_revision(database)
+    actor_id = "bar_" + "1" * 32
+    identity_id = "tid_" + "2" * 32
+    recording_id = "rec_" + "3" * 32
+    resource_id = "trs_" + "4" * 32
+    with closing(sqlite3.connect(database)) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("legacy-case", "旧准备事实", "DRAFT", "WEB", None, None, 1, 1),
+        )
+        connection.execute(
+            "INSERT INTO business_actor_revisions VALUES (?, 1, ?, ?, ?, ?, 'ACTIVE', '{}', ?)",
+            (actor_id, "legacy-case", "协作成员", "迁移测试身份", "a" * 64, 1),
+        )
+        connection.execute(
+            "INSERT INTO business_actors VALUES (?, ?, 1, ?, ?)",
+            (actor_id, "legacy-case", 1, 1),
+        )
+        connection.execute(
+            "INSERT INTO test_identities VALUES (?, ?, ?, 1, ?, NULL, NULL, NULL, NULL, ?, ?)",
+            (identity_id, "legacy-case", actor_id, "旧测试账号", 1, 1),
+        )
+        connection.execute(
+            "INSERT INTO recordings VALUES (?, ?, 'TARGET', NULL, ?, 'COMPLETED', ?, ?, ?, ?, ?, NULL, ?, ?, ?)",
+            (recording_id, "legacy-case", "legacy-flow", 1, 1, 1, 1, 1, "[]", "[]", "[]"),
+        )
+        if table == "recordings":
+            pass
+        elif table == "flow_draft_revisions":
+            connection.execute(
+                "INSERT INTO flow_draft_revisions VALUES (?, 1, ?, '{}', ?, 1)",
+                (recording_id, "legacy-flow", "b" * 64),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO test_resources VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OWNS', 'PATH', ?, ?, ?, 1, ?, ?, 1, 1)",
+                (
+                    resource_id,
+                    "legacy-case",
+                    "action_" + "5" * 32,
+                    recording_id,
+                    "legacy-flow",
+                    "旧资源",
+                    "document",
+                    "resource-1",
+                    identity_id,
+                    "role_" + "6" * 32,
+                    "path[1]",
+                    "c" * 64,
+                    "d" * 64,
+                    "e" * 64,
+                    "f" * 64,
+                ),
+            )
+            if table == "test_resources":
+                pass
+            elif table == "observation_bindings":
+                connection.execute(
+                    "INSERT INTO observation_bindings VALUES (?, ?, ?, 'OWNER_READ', ?, ?, 'GET', ?, 1, ?, 1)",
+                    ("obs_" + "7" * 32, resource_id, identity_id, recording_id, "step-1", "/items/{case_resource_id}", "8" * 64),
+                )
+            elif table == "recovery_bindings":
+                connection.execute(
+                    "INSERT INTO recovery_bindings VALUES (?, ?, ?, 'RECORDED_REQUEST', ?, ?, 'POST', ?, '{}', ?, 1)",
+                    ("rcv_" + "9" * 32, resource_id, identity_id, recording_id, "step-1", "/items/{case_resource_id}", "a" * 64),
+                )
+            elif table == "security_effect_confirmations":
+                connection.execute(
+                    "INSERT INTO security_effect_confirmations VALUES (?, ?, ?, ?, ?, ?, 1)",
+                    ("efc_" + "a" * 32, resource_id, "action_" + "b" * 32, "STATE_MUTATION", "[]", "c" * 64),
+                )
+        connection.commit()
+
+
+@pytest.mark.parametrize("legacy_table", sorted(LEGACY_PREPARATION_TABLES))
+def test_each_nonempty_legacy_preparation_source_is_rejected_read_only(
+    tmp_path: Path,
+    legacy_table: str,
+) -> None:
+    database = tmp_path / f"legacy-preparation-{legacy_table}.db"
+    _seed_legacy_preparation_database(database, legacy_table)
+
+    with closing(sqlite3.connect(database)) as connection:
+        assert connection.execute(f'SELECT 1 FROM "{legacy_table}" LIMIT 1').fetchone() is not None
+        assert _revision(database) == MAINTENANCE_REVISION
+
+    _assert_rejected_without_modification(
+        database,
+        expected_message=LEGACY_PREPARATION_MESSAGE,
+    )
+
+    with closing(sqlite3.connect(database)) as connection:
+        assert _revision(database) == MAINTENANCE_REVISION
+        assert connection.execute(f'SELECT 1 FROM "{legacy_table}" LIMIT 1').fetchone() is not None
+
+
 def test_current_superseded_revision_fails_closed(tmp_path: Path) -> None:
     database = tmp_path / "invalid-current.db"
-    _upgrade_to_110(database)
+    _upgrade_to_revision(database, BASE_REVISION)
     actor_id = "bar_" + "a" * 32
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         connection.execute(
             "INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("invalid-current", "异常迁移", "DRAFT", "WEB", None, None, 1, 1),
@@ -354,7 +548,7 @@ def test_current_superseded_revision_fails_closed(tmp_path: Path) -> None:
 
     assert raised.value.code == ErrorCode.STORAGE_MIGRATION.value
     assert _revision(database) == BASE_REVISION
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         assert connection.execute(
             "SELECT effective_state FROM business_actor_revisions"
         ).fetchone() == ("SUPERSEDED",)
@@ -362,10 +556,10 @@ def test_current_superseded_revision_fails_closed(tmp_path: Path) -> None:
 
 def test_historical_superseded_revisions_normalize_to_active(tmp_path: Path) -> None:
     database = tmp_path / "historical-superseded.db"
-    _upgrade_to_110(database)
+    _upgrade_to_revision(database, BASE_REVISION)
     actor_id = "bar_" + "b" * 32
     action_id = "bac_" + "c" * 32
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         connection.execute(
             "INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("historical-case", "历史迁移", "DRAFT", "WEB", None, None, 1, 2),
@@ -411,7 +605,7 @@ def test_historical_superseded_revisions_normalize_to_active(tmp_path: Path) -> 
 
     upgrade_database(database)
 
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         assert connection.execute(
             "SELECT revision, effective_state FROM business_actor_revisions "
             "ORDER BY revision"
@@ -431,10 +625,51 @@ def test_historical_superseded_revisions_normalize_to_active(tmp_path: Path) -> 
 def test_business_tables_do_not_carry_nested_schema_versions(tmp_path: Path) -> None:
     database = tmp_path / "columns.db"
     upgrade_database(database)
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         for table in Base.metadata.tables:
             columns = {
                 str(row[1])
                 for row in connection.execute(f'PRAGMA table_info("{table}")')
             }
             assert "schema_version" not in columns
+
+
+def test_table_signature_ignores_only_named_constraint_order() -> None:
+    first = "CREATE TABLE t (a TEXT DEFAULT 'x, CONSTRAINT fake', b INTEGER, CONSTRAINT pk PRIMARY KEY(a, b), CONSTRAINT positive CHECK(b >= 1))"
+    reordered = "CREATE TABLE t (a TEXT DEFAULT 'x, CONSTRAINT fake', b INTEGER, CONSTRAINT positive CHECK(b >= 1), CONSTRAINT pk PRIMARY KEY(a, b))"
+    assert _normalize_table_sql(first) == _normalize_table_sql(reordered)
+    for changed in (
+        reordered.replace("b >= 1", "b >= 0"),
+        reordered.replace("PRIMARY KEY(a, b)", "PRIMARY KEY(b, a)"),
+        reordered.replace("x, CONSTRAINT fake", "y, CONSTRAINT fake"),
+        reordered.replace("a TEXT", "a BLOB"),
+    ):
+        assert _normalize_table_sql(first) != _normalize_table_sql(changed)
+
+
+def test_predecessor_with_extra_index_is_rejected_unchanged(tmp_path: Path) -> None:
+    database = tmp_path / "predecessor-drift.db"
+    _upgrade_to_revision(database)
+    with closing(sqlite3.connect(database)) as connection:
+        connection.execute("CREATE INDEX unexpected_project_identity ON projects(project_id)")
+        connection.commit()
+    _assert_rejected_without_modification(database)
+
+
+def test_recording_identity_is_historical_while_business_and_draft_foreign_keys_remain(tmp_path):
+    database = tmp_path / "identity-history.db"
+    upgrade_database(database)
+    with closing(sqlite3.connect(database)) as connection:
+        for table in ("recordings", *sorted(NEW_PREPARATION_TABLES)):
+            keys = connection.execute(f'PRAGMA foreign_key_list("{table}")').fetchall()
+            referenced = {row[2] for row in keys}
+            assert "test_identities" not in referenced
+            assert {"projects", "business_action_revisions"} <= referenced
+            if table != "recordings":
+                assert "flow_draft_revisions" in referenced
+            columns = {row[1]: row for row in connection.execute(f'PRAGMA table_info("{table}")')}
+            assert columns["test_identity_id"][3] == 1
+        resource_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE name='action_resource_bindings'").fetchone()[0]
+        assert "owner_test_identity_id = test_identity_id" in resource_sql
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []

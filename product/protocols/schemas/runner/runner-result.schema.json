@@ -9,6 +9,18 @@
       "title": "BatchAuthorizationMode",
       "type": "string"
     },
+    "BusinessEffectKind": {
+      "enum": [
+        "STATE_MUTATION",
+        "DATA_DISCLOSURE",
+        "OBJECT_CREATION",
+        "EXTERNAL_DISPATCH",
+        "RESTRICTED_FUNCTION_INVOCATION",
+        "CREDENTIAL_ACCESS"
+      ],
+      "title": "BusinessEffectKind",
+      "type": "string"
+    },
     "CaseVerdict": {
       "enum": [
         "SAFE",
@@ -1230,7 +1242,7 @@
           "type": "string"
         },
         "kind": {
-          "$ref": "#/$defs/SecurityEffectKind"
+          "$ref": "#/$defs/BusinessEffectKind"
         },
         "reason_codes": {
           "default": [],
@@ -1280,18 +1292,6 @@
       ],
       "title": "SecurityEffectFact",
       "type": "object"
-    },
-    "SecurityEffectKind": {
-      "enum": [
-        "STATE_MUTATION",
-        "DATA_DISCLOSURE",
-        "OBJECT_CREATION",
-        "EXTERNAL_DISPATCH",
-        "RESTRICTED_FUNCTION_INVOCATION",
-        "CREDENTIAL_ACCESS"
-      ],
-      "title": "SecurityEffectKind",
-      "type": "string"
     },
     "StagedArtifact": {
       "additionalProperties": false,

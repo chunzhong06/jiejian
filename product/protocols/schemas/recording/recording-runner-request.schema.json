@@ -135,6 +135,15 @@
       "title": "RecordingCookieRef",
       "type": "object"
     },
+    "RecordingPurpose": {
+      "enum": [
+        "TARGET",
+        "OBSERVATION",
+        "RECOVERY"
+      ],
+      "title": "RecordingPurpose",
+      "type": "string"
+    },
     "RecordingSessionRef": {
       "additionalProperties": false,
       "properties": {
@@ -262,28 +271,68 @@
   },
   "additionalProperties": false,
   "properties": {
-    "action_candidate_id": {
-      "pattern": "^action_[0-9a-f]{32}$",
-      "title": "Action Candidate Id",
-      "type": "string"
+    "action_revision": {
+      "minimum": 1,
+      "title": "Action Revision",
+      "type": "integer"
     },
     "budget": {
       "$ref": "#/$defs/RecordingBudget"
+    },
+    "business_action_id": {
+      "pattern": "^bac_[0-9a-f]{32}$",
+      "title": "Business Action Id",
+      "type": "string"
     },
     "created_at_us": {
       "minimum": 0,
       "title": "Created At Us",
       "type": "integer"
     },
+    "effect_id": {
+      "anyOf": [
+        {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effect Id"
+    },
     "headless": {
       "default": true,
       "title": "Headless",
       "type": "boolean"
     },
+    "parent_recording_id": {
+      "anyOf": [
+        {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Recording Id"
+    },
+    "preparation_source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Preparation Source Fingerprint",
+      "type": "string"
+    },
     "project_id": {
       "pattern": "^[a-z][a-z0-9_-]{0,63}$",
       "title": "Project Id",
       "type": "string"
+    },
+    "purpose": {
+      "$ref": "#/$defs/RecordingPurpose",
+      "default": "TARGET"
     },
     "recording_id": {
       "pattern": "^rec_[0-9a-f]{32}$",
@@ -291,8 +340,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "1",
-      "default": "1",
+      "const": "2",
+      "default": "2",
       "title": "Schema Version",
       "type": "string"
     },
@@ -308,6 +357,11 @@
     "target_scope": {
       "$ref": "#/$defs/WebTargetScope"
     },
+    "test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Test Identity Id",
+      "type": "string"
+    },
     "trace_enabled": {
       "const": false,
       "default": false,
@@ -318,7 +372,10 @@
   "required": [
     "recording_id",
     "project_id",
-    "action_candidate_id",
+    "business_action_id",
+    "action_revision",
+    "test_identity_id",
+    "preparation_source_fingerprint",
     "created_at_us",
     "target_scope",
     "sessions",

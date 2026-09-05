@@ -52,6 +52,7 @@ class JobControlRepository:
         lease_owner: str,
         now_us: int,
         lease_expires_at_us: int,
+        target_types: Sequence[str] = ("RUN", "RECORDING"),
     ) -> JobRecord | None:
         """原子领取一个可运行 Job，并同时递增 attempt 与 fencing token。"""
 
@@ -74,11 +75,13 @@ class JobControlRepository:
                 JobRow.updated_at_us <= now_us,
                 or_(
                     and_(
+                        "RUN" in target_types,
                         JobRow.run_id.is_not(None),
                         RunRow.lifecycle.in_(_NONTERMINAL_RUNS),
                         RunRow.verdict.is_(None),
                     ),
                     and_(
+                        "RECORDING" in target_types,
                         JobRow.recording_id.is_not(None),
                         RecordingRow.state.in_(("CREATED", "STARTING")),
                     ),
@@ -268,13 +271,17 @@ class JobControlRepository:
         )
         return self._jobs.get(changed_id) if changed_id is not None else None
 
-    def list_expired_running(self, now_us: int, limit: int) -> tuple[JobRecord, ...]:
+    def list_expired_running(
+        self, now_us: int, limit: int, *, target_types: Sequence[str] = ("RUN", "RECORDING"),
+    ) -> tuple[JobRecord, ...]:
         rows = _scalars(
             self._session,
             select(JobRow.job_id)
             .where(
                 JobRow.state == JobState.RUNNING.value,
                 JobRow.lease_expires_at_us <= now_us,
+                or_(and_("RUN" in target_types, JobRow.run_id.is_not(None)),
+                    and_("RECORDING" in target_types, JobRow.recording_id.is_not(None))),
             )
             .order_by(JobRow.lease_expires_at_us, JobRow.created_at_us, JobRow.job_id)
             .limit(limit),

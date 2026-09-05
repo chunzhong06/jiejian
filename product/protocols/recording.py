@@ -38,7 +38,8 @@ from product.backend.core.identifiers import (
     RECORDING_ID_PATTERN,
     TEST_IDENTITY_ID_PATTERN,
 )
-from product.backend.core.recording import RecordingState, RecordingStateEvent
+from product.backend.core.business_boundary import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.core.recording import RecordingPurpose, RecordingState, RecordingStateEvent
 from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import REDACTED
@@ -178,10 +179,16 @@ class RecordingSessionRef(RecordingProtocolModel):
 
 # Worker 交给 Recording Runner 的冻结目标、身份引用、范围与预算。
 class RecordingRunnerRequest(RecordingProtocolModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["2"] = "2"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    action_candidate_id: str = Field(pattern=r"^action_[0-9a-f]{32}$")
+    business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
+    action_revision: int = Field(ge=1)
+    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    preparation_source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    purpose: RecordingPurpose = RecordingPurpose.TARGET
+    parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
+    effect_id: str | None = Field(default=None, pattern=EFFECT_ID_PATTERN)
     created_at_us: int = Field(ge=0)
     target_scope: WebTargetScope
     sessions: tuple[RecordingSessionRef, ...] = Field(min_length=1, max_length=1)
@@ -191,7 +198,15 @@ class RecordingRunnerRequest(RecordingProtocolModel):
 
     @model_validator(mode="after")
     def validate_request_boundary(self) -> RecordingRunnerRequest:
+        if (self.purpose is RecordingPurpose.TARGET) != (self.parent_recording_id is None):
+            raise ValueError("supplemental recording request requires its target parent")
+        if self.parent_recording_id == self.recording_id:
+            raise ValueError("recording request cannot reference itself")
+        if (self.purpose is RecordingPurpose.OBSERVATION) != (self.effect_id is not None):
+            raise ValueError("observation request must bind a confirmed business effect")
         identity_ids = {session.test_identity_id for session in self.sessions}
+        if identity_ids != {self.test_identity_id}:
+            raise ValueError("recording source identity must match its single session")
         session_refs = {session.session_ref for session in self.sessions}
         if len(identity_ids) != len(self.sessions):
             raise ValueError("recording identity IDs must be unique")
@@ -488,7 +503,7 @@ def _parse_recording_json(
             object_pairs_hook=_unique_object,
             parse_constant=_reject_non_finite,
         )
-        expected_version = "1"
+        expected_version = "2" if model is RecordingRunnerRequest else "1"
         if not isinstance(parsed, dict) or parsed.get("schema_version") != expected_version:
             raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制协议版本不受支持")
         _reject_known_secret_material(parsed, known_secrets)

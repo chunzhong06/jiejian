@@ -59,7 +59,9 @@ class JobRecovery:
 
         validate_control_request(request, known_secrets)
         with self._new_uow(known_secrets) as work:
-            jobs = work.job_control.list_expired_running(request.now_us, request.limit)
+            jobs = work.job_control.list_expired_running(
+                request.now_us, request.limit, target_types=self._targets.target_types,
+            )
             return tuple(
                 RecoveryCandidate(
                     job_id=job.job_id,
@@ -86,6 +88,7 @@ class JobRecovery:
         validate_control_request(request, known_secrets)
         with self._new_uow(known_secrets) as work:
             current = self._require_recovery_fence(work, request)
+            self._targets.resolve(current)
             # 恢复动作沿用正常重试预算，不能借崩溃恢复绕过最大尝试次数。
             cancelled = current.cancel_requested_at_us is not None
             exhausted = current.attempt >= current.max_attempts

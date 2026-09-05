@@ -23,7 +23,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN
+from product.backend.core.business_boundary import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
 
 _REASON_CODE = r"^[A-Z][A-Z0-9_]{0,127}$"
 
@@ -88,8 +89,13 @@ class RecordingStateEvent(RecordingModel):
 class Recording(RecordingModel):
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
+    action_revision: int = Field(ge=1)
+    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    preparation_source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     purpose: RecordingPurpose = RecordingPurpose.TARGET
     parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
+    effect_id: str | None = Field(default=None, pattern=EFFECT_ID_PATTERN)
     state: RecordingState = RecordingState.CREATED
     created_at_us: int = Field(ge=0)
     updated_at_us: int = Field(ge=0)
@@ -104,6 +110,8 @@ class Recording(RecordingModel):
     def validate_lifecycle_times(self) -> Recording:
         if (self.purpose is RecordingPurpose.TARGET) != (self.parent_recording_id is None):
             raise ValueError("only supplemental recordings reference a parent recording")
+        if (self.purpose is RecordingPurpose.OBSERVATION) != (self.effect_id is not None):
+            raise ValueError("only observation recordings bind a confirmed business effect")
         if self.parent_recording_id == self.recording_id:
             raise ValueError("recording cannot reference itself as parent")
         if self.updated_at_us < self.created_at_us:

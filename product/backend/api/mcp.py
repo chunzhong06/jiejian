@@ -219,9 +219,8 @@ def build_mcp_control(
             "schema_version": "1",
             "version": __version__,
             "api": "available",
-            "worker": "unavailable",
+            **context.worker_status(),
             "browser": environment["playwright"]["status"],
-            "recovered_jobs": 0,
         }
 
     sdk_app = server.streamable_http_app(

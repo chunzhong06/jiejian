@@ -867,9 +867,14 @@
   },
   "additionalProperties": false,
   "properties": {
-    "action_candidate_id": {
-      "pattern": "^action_[0-9a-f]{32}$",
-      "title": "Action Candidate Id",
+    "action_revision": {
+      "minimum": 1,
+      "title": "Action Revision",
+      "type": "integer"
+    },
+    "business_action_id": {
+      "pattern": "^bac_[0-9a-f]{32}$",
+      "title": "Business Action Id",
       "type": "string"
     },
     "id": {
@@ -878,8 +883,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "1",
-      "default": "1",
+      "const": "2",
+      "default": "2",
       "title": "Schema Version",
       "type": "string"
     },
@@ -895,11 +900,18 @@
       "pattern": "^[a-z][a-z0-9_-]{0,63}$",
       "title": "Target Step Id",
       "type": "string"
+    },
+    "test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Test Identity Id",
+      "type": "string"
     }
   },
   "required": [
     "id",
-    "action_candidate_id",
+    "business_action_id",
+    "action_revision",
+    "test_identity_id",
     "target_step_id",
     "steps"
   ],

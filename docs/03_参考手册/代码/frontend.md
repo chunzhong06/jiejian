@@ -141,14 +141,10 @@
 主要 import / dot-source：`./http`, `./onboarding`
 
 ### `product/frontend/src/api/recordings.ts`
-- `ActionSafetySetupDto`
-- `ActionSafetySetupViewDto`
-- `ConfirmActionSafetySetupInput`
 - `FlowDraftDto`
 - `FlowDraftStepDto`
 - `FlowDraftVariableDto`
 - `FlowDraftVariableSourceDto`
-- `ObservationCandidateDto`
 - `RecordingActionDto`
 - `RecordingDto`
 - `RecordingJobDto`
@@ -156,9 +152,6 @@
 - `RecordingSetupDto`
 - `RecordingTestIdentityDto`
 - `RecordingViewDto`
-- `RecoveryCandidateDto`
-- `SecurityEffectCandidateDto`
-- `TestResourceCandidateDto`
 - `recordingsApi`
 主要 import / dot-source：`./http`
 
@@ -493,10 +486,6 @@
 - `PresentationMode`
 主要 import / dot-source：`../../api/experience`, `../../api/results`, `../../api/runs`, `../../api/sourceChanges`, `../../app/presentation`, `../checks/EvidenceExplanationDrawer`, `antd`, `react`
 
-### `product/frontend/src/features/recording/ActionSafetySetupCard.tsx`
-- `ActionSafetySetupCard`
-主要 import / dot-source：`../../api/recordings`, `antd`, `react`
-
 ### `product/frontend/src/features/recording/FlowDraftReview.tsx`
 - `FlowDraftReview`
 主要 import / dot-source：`../../api/recordings`, `antd`
@@ -511,7 +500,7 @@
 
 ### `product/frontend/src/features/recording/RecordingPage.tsx`
 - `RecordingPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/recordings`, `../../api/runs`, `../../api/workspace`, `../../app/browserState`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./ActionSafetySetupCard`, `./FlowDraftReview`, `./RecordingCaptureCard`, `./RecordingSetupCard`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/recordings`, `../../api/runs`, `../../api/workspace`, `../../app/browserState`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./FlowDraftReview`, `./RecordingCaptureCard`, `./RecordingSetupCard`, `antd`, `react`
 
 ### `product/frontend/src/features/recording/RecordingSetupCard.tsx`
 - `RecordingSetupCard`

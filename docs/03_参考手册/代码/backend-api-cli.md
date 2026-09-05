@@ -126,8 +126,7 @@
 - `class RecordingCreateRequest`
 - `class ReviewRequest`
 - `class FinalizeRequest`
-- `class ActionSafetySetupConfirmRequest`
-主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.test_identities`, `product.protocols`, `pydantic`, `time`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.workflows.test_identities`, `product.protocols`, `pydantic`, `time`, `typing`
 
 ### `product/backend/api/routers/results.py`
 - `class GateReportRequest`

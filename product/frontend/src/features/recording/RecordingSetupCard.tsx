@@ -14,21 +14,21 @@ export function RecordingSetupCard({ actions, identities, actionId, testIdentity
   onIdentityChange: (value: string) => void
   onDurationChange: (value: number) => void
 }) {
-  const action = actions.find((item) => item.action_candidate_id === actionId)
+  const action = actions.find((item) => item.business_action_id === actionId)
   const identity = identities.find((item) => item.test_identity_id === testIdentityId)
   return <Card className="recording-setup-card" title="演示一个真实业务动作">
     {actions.length === 0 || identities.length === 0
-      ? <Alert type="info" showIcon message="还不能开始录制" description={actions.length === 0 ? '请先在应用接入中确认至少一个业务动作。' : '请先准备一个通常能够成功完成该动作的测试账号。'} />
+      ? <Alert type="info" showIcon message="还不能开始录制" description={actions.length === 0 ? '请先在权限边界中确认业务动作及其实现位置。' : '请先准备一个通常能够成功完成该动作的测试账号。'} />
       : <>
         <div className="recording-instruction" aria-live="polite">
           <Typography.Text type="secondary">请使用</Typography.Text>
-          <Typography.Title level={4}>{identity ? `${identity.label} · ${identity.role_display_name}` : '一个已准备的测试账号'}</Typography.Title>
+          <Typography.Title level={4}>{identity ? `${identity.label} · ${identity.actor_display_name}` : '一个已准备的测试账号'}</Typography.Title>
           <Typography.Text type="secondary">演示一次：</Typography.Text>
           <Typography.Title level={3}>“{action?.display_name ?? '选择一个业务动作'}”</Typography.Title>
         </div>
         <div className="recording-setup-grid">
-          <label><Typography.Text strong>业务动作</Typography.Text><Select aria-label="选择业务动作" value={actionId} disabled={disabled} onChange={onActionChange} options={actions.map((item) => ({ value: item.action_candidate_id, label: item.display_name }))} /></label>
-          <label><Typography.Text strong>测试账号</Typography.Text><Select aria-label="选择测试账号" placeholder="选择一个已准备账号" value={testIdentityId} disabled={disabled} onChange={onIdentityChange} options={identities.map((item) => ({ value: item.test_identity_id, label: <Space><Typography.Text strong>{item.label}</Typography.Text><Typography.Text type="secondary">{item.role_display_name}</Typography.Text></Space> }))} /></label>
+          <label><Typography.Text strong>业务动作</Typography.Text><Select aria-label="选择业务动作" value={actionId} disabled={disabled} onChange={onActionChange} options={actions.map((item) => ({ value: item.business_action_id, label: item.display_name }))} /></label>
+          <label><Typography.Text strong>测试账号</Typography.Text><Select aria-label="选择测试账号" placeholder="选择一个已准备账号" value={testIdentityId} disabled={disabled} onChange={onIdentityChange} options={identities.map((item) => ({ value: item.test_identity_id, label: <Space><Typography.Text strong>{item.label}</Typography.Text><Typography.Text type="secondary">{item.actor_display_name}</Typography.Text></Space> }))} /></label>
         </div>
       </>}
   </Card>

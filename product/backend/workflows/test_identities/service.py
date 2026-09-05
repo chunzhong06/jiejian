@@ -184,8 +184,9 @@ class TestIdentityService:
             current = work.test_identities.get(identity_id)
             if current is None:
                 raise JiejianError(ErrorCode.TEST_IDENTITY_NOT_FOUND, "测试账号不存在")
-            self._delete_secrets(current)
+            # 先在未提交事务中验证数据库删除；约束拒绝时不能提前破坏仍在使用的登录状态。
             work.test_identities.delete(identity_id)
+            self._delete_secrets(current)
             work.commit()
 
     def remove_project_credentials(self, project_id: str) -> int:

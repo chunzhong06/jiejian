@@ -6,6 +6,23 @@
 
 <!-- 此区域由 scripts/docs/generate.py 从 product/backend/core/ 读取。 -->
 
+### `product/backend/core/action_preparation.py`
+- `_UNSAFE_TEXT`
+- `_SECRET_KEY`
+- `class ResourceInjectionKind`
+- `class ActionEvidenceKind`
+- `class ResourceInjection`
+- `class RecordedRequestTemplate`
+- `contains_resource_slot(value) -> bool`
+- `class RegisteredObserverReference`
+- `class ActionExecutionBinding`
+- `class ActionResourceBinding`
+- `class ActionEvidenceBinding`
+- `class ActionRecoveryBinding`
+- `binding_fingerprint(model_type, values) -> str`
+- `seal_binding(model_type, **values)`
+主要 import / dot-source：`__future__`, `enum`, `json`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.redaction`, `pydantic`, `re`, `typing`, `urllib.parse`
+
 ### `product/backend/core/application_understanding.py`
 - `canonical_role_key(value) -> str`
 - `candidate_id(kind, canonical_key) -> str`
@@ -164,7 +181,7 @@
 - `class Recording`
 - `_TRANSITIONS`
 - `transition_recording_state(recording, target, operator, occurred_at_us, reason_code, pending_terminal_state) -> Recording`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/recording_sanitization.py`
 - `_MAX_STRUCTURED_DEPTH`
@@ -240,31 +257,6 @@
 - `class TestIdentityCookie`
 - `class TestIdentity`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `pydantic`
-
-### `product/backend/core/test_setup.py`
-- `_ACTION_ID_PATTERN`
-- `_TEST_RESOURCE_ID_PATTERN`
-- `_OBSERVATION_BINDING_ID_PATTERN`
-- `_RECOVERY_BINDING_ID_PATTERN`
-- `_EFFECT_CONFIRMATION_ID_PATTERN`
-- `_FLOW_ID_PATTERN`
-- `_STEP_ID_PATTERN`
-- `_RESOURCE_VALUE`
-- `_RESOURCE_TYPE`
-- `_PROJECTION_PATH`
-- `_UNSAFE_TEXT`
-- `class TestSetupModel`
-- `class TestResourceRelation`
-- `class ResourceValueConsumer`
-- `class ObservationBindingKind`
-- `class RecoveryBindingKind`
-- `test_setup_sha256(kind, payload) -> str`
-- `class TestResource`
-- `class ObservationBinding`
-- `class RecoveryBinding`
-- `class SecurityEffectConfirmation`
-- `class ActionSafetySetup`
-主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.identifiers`, `product.backend.core.redaction`, `product.backend.core.verification.permissions`, `pydantic`, `re`, `typing`, `urllib.parse`
 
 ### `product/backend/core/verification/behavior_differential.py`
 - `class BehaviorDifferentialModel`

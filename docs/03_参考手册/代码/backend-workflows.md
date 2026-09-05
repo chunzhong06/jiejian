@@ -303,6 +303,11 @@
 ### `product/backend/workflows/preparation/__init__.py`
 主要 import / dot-source：`product.backend.workflows.preparation.service`
 
+### `product/backend/workflows/preparation/bindings.py`
+- `class RegisteredObserverReader`
+- `class PreparationBindingService`
+主要 import / dot-source：`__future__`, `hashlib`, `json`, `pathlib`, `product.backend.core.action_preparation`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.preparation.models`, `product.backend.workflows.preparation.recording_candidates`, `product.backend.workflows.recording.source`, `product.backend.workflows.test_identities.service`, `typing`
+
 ### `product/backend/workflows/preparation/models.py`
 - `class PreparationStatus`
 - `class PreparationItemView`
@@ -314,6 +319,15 @@
 - `class ActionPreparationView`
 - `class PreparationView`
 主要 import / dot-source：`enum`, `product.backend.core.assurance`, `product.backend.core.business_boundary`, `pydantic`
+
+### `product/backend/workflows/preparation/recording_candidates.py`
+- `class RecordedPreparationCandidate`
+- `request_event(recording, step)`
+- `resource_value(event, candidate) -> str`
+- `flow_resource_injection(flow, candidate) -> ResourceInjection`
+- `supplement_candidates(recording, draft, actual_resource_id) -> tuple[RecordedPreparationCandidate, ...]`
+- `choose_supplement_candidate(recording, draft, actual_resource_id)`
+主要 import / dot-source：`__future__`, `json`, `product.backend.core.action_preparation`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.recording`, `product.protocols.recording`, `product.protocols.web.workflow`, `pydantic`, `re`, `typing`, `urllib.parse`
 
 ### `product/backend/workflows/preparation/service.py`
 - `class BoundaryReader`
@@ -401,12 +415,12 @@
 - `_SENSITIVE_FIELD`
 - `_OPAQUE_BUSINESS_VALUE`
 - `class FlowDraftProcessor`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.redaction`, `product.protocols.flow_draft`, `product.protocols.recording`, `product.protocols.web.workflow`, `re`, `typing`, `urllib.parse`
+主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.core.redaction`, `product.protocols.flow_draft`, `product.protocols.recording`, `product.protocols.web.workflow`, `re`, `typing`, `urllib.parse`
 
 ### `product/backend/workflows/recording/project_submission.py`
 - `class ProjectRecordingSubmission`
 - `class ProjectRecordingService`
-主要 import / dot-source：`__future__`, `dataclasses`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.workflows.recording.submission`, `product.backend.workflows.test_identities`, `product.protocols`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `dataclasses`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.workflows.recording.source`, `product.backend.workflows.recording.submission`, `product.backend.workflows.test_identities`, `product.backend.workflows.test_identities.service`, `product.protocols`, `time`, `uuid`
 
 ### `product/backend/workflows/recording/review.py`
 - `class FlowDraftReviewer`
@@ -416,29 +430,12 @@
 - `class RecordingRunService`
 主要 import / dot-source：`__future__`, `collections.abc`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.jobs.dispatch`, `product.backend.infra.storage`, `product.backend.workflows.recording.submission`, `product.protocols`, `time`
 
-### `product/backend/workflows/recording/safety_candidates.py`
-- `_MUTATING_METHODS`
-- `_SUCCESS_MIN`
-- `_SUCCESS_MAX`
-主要 import / dot-source：`__future__`, `collections`, `json`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `product.protocols`, `product.protocols.recording`, `product.protocols.web.workflow`, `pydantic`, `re`, `typing`, `urllib.parse`
-
-### `product/backend/workflows/recording/safety_setup.py`
-- `_MUTATING_METHODS`
-- `_SUCCESS_MIN`
-- `_SUCCESS_MAX`
-- `class SafetySetupModel`
-- `class ActionSafetyAssetKind`
-- `class ActionSafetyAssetStatus`
-- `class ActionSafetyAssetInspection`
-- `class ActionSafetySetupInspection`
-- `class TestResourceCandidateView`
-- `class ObservationCandidateView`
-- `class RecoveryCandidateView`
-- `class SecurityEffectCandidateView`
-- `class ConfirmActionSafetySetup`
-- `class ActionSafetySetupView`
-- `class ActionSafetySetupService`
-主要 import / dot-source：`.safety_candidates`, `__future__`, `collections.abc`, `dataclasses`, `enum`, `pathlib`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.core.test_setup`, `product.backend.core.verification.permissions`, `product.backend.infra.recording.request_store`, `product.backend.infra.storage`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.test_identities`, `product.protocols`, `product.protocols.recording`, `product.protocols.recording_flow`, `pydantic`, `time`, `typing`
+### `product/backend/workflows/recording/source.py`
+- `identity_source_fingerprint(identity)`
+- `recording_endpoint_fingerprint(understanding)`
+- `recording_source_fingerprint(action, identity, understanding, action_binding, actor_binding)`
+- `require_recording_source(work, request)`
+主要 import / dot-source：`product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.workflows.business_boundaries.inspection`
 
 ### `product/backend/workflows/recording/submission.py`
 - `class RecordingApplicationModel`
@@ -447,7 +444,7 @@
 - `class RecordingCompletionResult`
 - `recording_target_scope(endpoint) -> WebTargetScope`
 - `class RecordingSubmission`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.events`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.storage`, `product.backend.workflows.recording.processing`, `product.protocols`, `product.protocols.web.target`, `pydantic`, `typing`, `urllib.parse`, `uuid`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.events`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.storage`, `product.backend.workflows.recording.processing`, `product.backend.workflows.recording.source`, `product.protocols`, `product.protocols.web.target`, `pydantic`, `typing`, `urllib.parse`, `uuid`
 
 ### `product/backend/workflows/results/__init__.py`
 主要 import / dot-source：`.history`, `.presentation`

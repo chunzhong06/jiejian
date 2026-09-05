@@ -7,12 +7,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SERVICE = ROOT / "product/backend/workflows/projects/preparation.py"
-SAFETY_SETUP = ROOT / "product/backend/workflows/recording/safety_setup.py"
+SERVICE = ROOT / "product/backend/workflows/preparation/service.py"
+BINDINGS = ROOT / "product/backend/workflows/preparation/bindings.py"
 APPLICATION = ROOT / "product/backend/composition/application.py"
 WORKER = ROOT / "product/backend/composition/worker.py"
 STORAGE = ROOT / "product/backend/infra/storage"
-FRONTEND = ROOT / "product/frontend/src/features/preparation/PreparationPage.tsx"
 
 
 def _imports(path: Path) -> set[str]:
@@ -46,8 +45,9 @@ def test_preparation_is_only_composed_in_application_core_and_not_persisted() ->
     worker = WORKER.read_text(encoding="utf-8")
     storage = "\n".join(path.read_text(encoding="utf-8") for path in STORAGE.rglob("*.py"))
 
-    assert "ProjectPreparationService(" in application
-    assert "ProjectPreparationService" not in worker
+    assert "PreparationService(" in application
+    assert "PreparationService(" not in worker
+    assert "ProjectPreparationService" not in application
     for forbidden in (
         "PreparationPlan",
         "PreparationProgress",
@@ -61,20 +61,21 @@ def test_preparation_is_only_composed_in_application_core_and_not_persisted() ->
         assert forbidden not in storage
 
 
-def test_prepare_safe_does_not_call_human_confirmation_or_run_submission() -> None:
+def test_preparation_read_does_not_confirm_submit_or_persist() -> None:
     tree = ast.parse(SERVICE.read_text(encoding="utf-8"), filename=str(SERVICE))
-    prepare_safe = next(
+    read_preparation = next(
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "prepare_safe"
+        if isinstance(node, ast.FunctionDef) and node.name == "get"
     )
     called_attributes = {
         node.func.attr
-        for node in ast.walk(prepare_safe)
+        for node in ast.walk(read_preparation)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
     }
     assert "confirm" not in called_attributes
     assert "submit" not in called_attributes
+    assert not {"commit", "add", "replace"} & called_attributes
 
 
 def test_preparation_consumes_action_asset_inspection_without_storage_internals() -> None:
@@ -86,7 +87,7 @@ def test_preparation_consumes_action_asset_inspection_without_storage_internals(
         if isinstance(node, ast.Attribute)
     }
 
-    assert "inspect_action" in accessed
+    assert "inspect" in accessed
     assert not {"recordings", "flow_drafts", "action_safety_setups"} & accessed
     assert not any(
         isinstance(node, ast.Call)
@@ -98,8 +99,8 @@ def test_preparation_consumes_action_asset_inspection_without_storage_internals(
     )
 
 
-def test_action_safety_inspection_has_no_runtime_observer_llm_or_health_storage() -> None:
-    imports = _imports(SAFETY_SETUP)
+def test_binding_inspection_has_no_runtime_observer_llm_or_health_storage() -> None:
+    imports = _imports(BINDINGS)
     assert not any(
         name.startswith(
             (
@@ -124,13 +125,17 @@ def test_action_safety_inspection_has_no_runtime_observer_llm_or_health_storage(
         assert forbidden not in storage
 
 
-def test_preparation_page_does_not_reconstruct_backend_gap_semantics() -> None:
-    source = FRONTEND.read_text(encoding="utf-8")
-    for forbidden in (
-        "permission_actions",
-        "startsWith(",
-        "MISSING_SUBJECT",
-        "TEST_IDENTITY_",
-        "reason_codes.map",
+def test_current_preparation_has_one_binding_owner_and_no_legacy_safety_shell() -> None:
+    for relative in (
+        "product/backend/core/test_setup.py",
+        "product/backend/workflows/recording/safety_setup.py",
+        "product/backend/workflows/recording/safety_candidates.py",
+        "product/backend/infra/storage/setup/test_setup.py",
     ):
-        assert forbidden not in source
+        assert not (ROOT / relative).exists()
+    for path in (APPLICATION, WORKER, SERVICE, BINDINGS):
+        assert not any(
+            name.startswith("product.backend.workflows.projects.preparation")
+            or name.endswith("safety_setup") or name.endswith("core.test_setup")
+            for name in _imports(path)
+        )

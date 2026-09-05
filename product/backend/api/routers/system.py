@@ -28,14 +28,14 @@ def build_system_router(
         return {"schema_version": "1", "status": "ok"}
 
     @router.get("/ready", operation_id="ready", response_model=ReadyResponse)
-    async def ready() -> dict[str, str]:
+    async def ready() -> dict[str, object]:
         database = default_database_path(context.var_dir)
         if not database.is_file():
             raise JiejianError(ErrorCode.API_NOT_READY, "数据库尚未准备完成")
         return {
             "schema_version": "1",
             "status": "ready",
-            "worker": "unavailable",
+            **context.worker_status(),
         }
 
     @router.get("/api/system/status", response_model=ApiResponse)
@@ -45,10 +45,9 @@ def build_system_router(
             {
                 "version": __version__,
                 "api": "available",
-                "worker": "unavailable",
+                **context.worker_status(),
                 "browser": environment["playwright"]["status"],
                 "environment": environment,
-                "recovered_jobs": 0,
             }
         )
 
@@ -139,6 +138,9 @@ class ReadyResponse(ApiModel):
     schema_version: Literal["1"] = "1"
     status: Literal["ready"]
     worker: Literal["running", "stopped", "unavailable"]
+    worker_capabilities: tuple[Literal["RECORDING"], ...]
+    check: Literal["unavailable"]
+    recovered_jobs: int
 
 
 class MaintenanceOperationRequest(ApiModel):

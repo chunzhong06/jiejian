@@ -66,8 +66,6 @@ def create_app(
         folder_selector=folder_selector,
         official_sample_root=official_sample_root,
     )
-    # 参数暂留给既有调用方；当前没有可启动的完整执行 Worker。
-    del start_worker
     mcp_access = MCPAccessController(
         f"{local_control_guard.origin}/mcp",
         context.secret_store,
@@ -124,6 +122,8 @@ def create_app(
         ready_started = perf_counter()
         app.state.mcp_lifespan = mcp_control.server.session_manager.run()
         await app.state.mcp_lifespan.__aenter__()
+        if start_worker:
+            context.worker.start()
         _log_startup_timing("ready_total", ready_started)
         # 可重建运行数据维护不属于产品可用性的前置条件，放到 ready 后的受控后台线程。
         app.state.local_maintenance_task = asyncio.create_task(
@@ -132,6 +132,7 @@ def create_app(
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
+        await asyncio.to_thread(context.worker.stop)
         mcp_access.close()
         mcp_lifespan = getattr(app.state, "mcp_lifespan", None)
         if mcp_lifespan is not None:

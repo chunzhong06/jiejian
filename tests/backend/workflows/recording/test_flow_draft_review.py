@@ -3,8 +3,6 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-import pytest
-from product.backend.core.errors import JiejianError
 from product.backend.workflows.recording.processing import FlowDraftProcessor
 from product.protocols import (
     FlowDraft,
@@ -17,7 +15,7 @@ from product.protocols import (
     parse_flow_draft,
 )
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
-ACTION_CANDIDATE_ID = "action_0123456789abcdef0123456789abcdef"
+BUSINESS_ACTION_ID = "bac_0123456789abcdef0123456789abcdef"
 
 def recorded_events() -> tuple[RecordingEvent, ...]:
     common = {
@@ -116,7 +114,9 @@ def build_draft() -> FlowDraft:
     return FlowDraftProcessor().build(
         recording_id="rec_0123456789abcdef0123456789abcdef",
         flow_id="recorded-flow",
-        action_candidate_id=ACTION_CANDIDATE_ID,
+        business_action_id=BUSINESS_ACTION_ID,
+        action_revision=1,
+        test_identity_id="tid_0123456789abcdef0123456789abcdef",
         events=recorded_events(),
     )
 
@@ -125,8 +125,8 @@ def test_events_build_action_centered_draft_and_current_schemas() -> None:
     second = build_draft()
 
     assert first == second
-    assert first.schema_version == "1"
-    assert first.action_candidate_id == ACTION_CANDIDATE_ID
+    assert first.schema_version == "2"
+    assert first.business_action_id == BUSINESS_ACTION_ID
     assert first.recommended_target_step_id == "step-000002"
     assert first.target_step_id is None
     assert first.steps[1].path == "/resources/{resource_id}"
@@ -211,7 +211,9 @@ def test_direct_user_request_outranks_later_automatic_recovery() -> None:
     draft = FlowDraftProcessor().build(
         recording_id="rec_abcdefabcdefabcdefabcdefabcdefab",
         flow_id="recorded-flow",
-        action_candidate_id=ACTION_CANDIDATE_ID,
+        business_action_id=BUSINESS_ACTION_ID,
+        action_revision=1,
+        test_identity_id="tid_0123456789abcdef0123456789abcdef",
         events=events,
     )
 
