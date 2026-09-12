@@ -116,7 +116,8 @@ def build_draft() -> FlowDraft:
         flow_id="recorded-flow",
         business_action_id=BUSINESS_ACTION_ID,
         action_revision=1,
-        test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        subject_test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        resource_owner_test_identity_id="tid_0123456789abcdef0123456789abcdef",
         events=recorded_events(),
     )
 
@@ -125,7 +126,7 @@ def test_events_build_action_centered_draft_and_current_schemas() -> None:
     second = build_draft()
 
     assert first == second
-    assert first.schema_version == "2"
+    assert first.schema_version == "3"
     assert first.business_action_id == BUSINESS_ACTION_ID
     assert first.recommended_target_step_id == "step-000002"
     assert first.target_step_id is None
@@ -213,7 +214,8 @@ def test_direct_user_request_outranks_later_automatic_recovery() -> None:
         flow_id="recorded-flow",
         business_action_id=BUSINESS_ACTION_ID,
         action_revision=1,
-        test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        subject_test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        resource_owner_test_identity_id="tid_0123456789abcdef0123456789abcdef",
         events=events,
     )
 

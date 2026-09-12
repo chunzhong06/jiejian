@@ -354,12 +354,16 @@ class JobControlRepository:
         verdict: RunVerdict | None,
         completed_at_us: int,
         require_active_lease: bool,
+        request_hash: str | None = None,
+        published_at_us: int | None = None,
     ) -> tuple[JobRecord, RunRecord] | None:
         """仅为已发布结果执行 fenced Job/Run 完成态条件更新。"""
 
         if lifecycle not in {RunLifecycle.COMPLETED, RunLifecycle.SAFETY_STOPPED}:
             raise JiejianError(ErrorCode.STORAGE_STATE, "发布结果运行终态无效")
-        if (lifecycle is RunLifecycle.COMPLETED) != (verdict is not None):
+        if (lifecycle is RunLifecycle.COMPLETED and verdict is None) or (
+            lifecycle is RunLifecycle.SAFETY_STOPPED and verdict not in (None, RunVerdict.BLOCK, RunVerdict.INCONCLUSIVE)
+        ):
             raise JiejianError(ErrorCode.STORAGE_STATE, "发布结果结论矩阵无效")
         job_conditions = [
             JobRow.job_id == job_id,
@@ -370,7 +374,18 @@ class JobControlRepository:
             JobRow.fencing_token == fencing_token,
             JobRow.updated_at_us <= completed_at_us,
         ]
-        if require_active_lease:
+        if request_hash is not None:
+            # 当前 CHECK 不能在取消或租约丢失后发布；hash 与 operation 同 CAS 核对。
+            if verdict is None:
+                raise JiejianError(ErrorCode.STORAGE_STATE, "发布结果结论矩阵无效")
+            job_conditions.extend((JobRow.request_hash == request_hash,
+                JobRow.operation_type == "CHECK", JobRow.cancel_requested_at_us.is_(None)))
+        if published_at_us is not None:
+            if request_hash is None or not 0 <= published_at_us <= completed_at_us:
+                raise JiejianError(ErrorCode.STORAGE_STATE, "发布结果结论矩阵无效")
+            # 恢复只补交已在原租约内形成的不可变发布；仍要求当前 attempt/fence 未被替换。
+            job_conditions.append(JobRow.lease_expires_at_us > published_at_us)
+        if require_active_lease or (request_hash is not None and published_at_us is None):
             job_conditions.append(JobRow.lease_expires_at_us > completed_at_us)
         changed_job_id = _scalar_value(
             self._session,

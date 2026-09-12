@@ -91,7 +91,8 @@ class Recording(RecordingModel):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
     action_revision: int = Field(ge=1)
-    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    subject_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    resource_owner_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     preparation_source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     purpose: RecordingPurpose = RecordingPurpose.TARGET
     parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)

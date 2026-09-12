@@ -10,6 +10,7 @@ from product.backend.core.assurance import (
     IdentityRequirementSlot,
 )
 from product.backend.core.business_boundary import BoundaryModel
+from product.backend.core.permission_intent import PermissionIntentRevision
 
 
 class PreparationStatus(StrEnum):
@@ -62,6 +63,7 @@ class ActionPreparationView(ActionTechnicalPreparationView):
     identity_requirements: IdentityPreparationView
     preparation_complete: bool
     reason_codes: tuple[str, ...]
+    permissions: tuple[PermissionIntentRevision, ...] = ()
 
 
 class PreparationView(BoundaryModel):

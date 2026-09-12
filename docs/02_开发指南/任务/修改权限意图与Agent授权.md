@@ -34,6 +34,12 @@ Candidate、测试账号、Flow、HTTP 绑定或某次 Run 都不能成为业务
 | 当前权限页面 | `product/frontend/src/features/boundaries/`、`product/frontend/src/api/businessBoundaries.ts` | `product/frontend/src/features/boundaries/BusinessBoundaryPage.test.tsx` |
 | Agent/MCP 不变量 | `product/backend/api/mcp.py` | `tests/backend/api/test_permission_oracle_invariant.py`、`tests/architecture/test_business_boundary_v2.py` |
 
+## 正式语义与技术选择
+
+DENY 的整组 effects 必须有单条完整 ALLOW 覆盖，不能拼接半截权限。PermissionBoundaryStatus 只表达正式语义缺失、revision/relation 复核和完整 ALLOW 不存在；allow_control_available 表示完整候选存在，不表示技术选择或可运行性。等价候选选择、distinct 身份和 Twin 对齐缺口由 Preparation 负责。
+
+GUI 技术选择通过严格格式 1 的 preparation/allow-control 入口提交当前有限候选身份与候选指纹；同事务校验后只替换 ActionAllowControlBinding。它不追加 Permission revision、Approval 或 policy_epoch，不向 CLI/MCP/AI 开放。
+
 ## Candidate 的责任
 
 `preview_from_discovery()` 读取 ApplicationUnderstanding 的角色与动作 Candidate，只输出未 stale 且没有被用户明确 `REJECTED` 的候选。HIGH/MEDIUM 只可作为前端默认建议，LOW 只列出而不自动采用。多个 Candidate 合并为一个业务主体或动作必须由用户明确操作；名称相似不构成合并依据。
@@ -74,13 +80,13 @@ BusinessActor / BusinessAction revisions
 
 ## Agent 与自动化边界
 
-当前 Agent/MCP 只读取正式事实，没有源码变化、检查或修复 writer；不能 approve/reject、直接写 Actor/Action/Permission、修改 `policy_epoch`、选择验证考题或形成 Verdict。MCP、CLI 与 Machine 输出不提供旧 Permission writer；API 路由也不能保留旧 matrix approve、candidate decide 或 compatibility wrapper。
+Agent/MCP 按当前项目临时 PREPARE/EXECUTE 授权登记代码变化声明、提交完整检查或取消本项目检查；服务端重新扫描真实源码。Agent 不能 approve/reject、直接写 Actor/Action/Permission、修改 `policy_epoch`、选择 Case/Effect 或形成 Verdict。只有普通 LOCAL_GUI Proposal 决定事务可以修改权限；旧 Contract/Profile/Permission writer 不回接。
 
-当前完整新检查主链尚未重新接入。不要为了让旧 CheckPreview、Compiler 或 L5 继续工作而把 Permission v2 转写回旧表；检查能力未接入时 `/tests` 与 `/changes` 必须如实显示边界，不能 dual write。
+当前检查使用完整 Permission、CheckPlan、v3 请求与独立 CHECK Worker/Runner；`/tests` 展示已发布 ResultStory，`/changes` 登记真实变化并续接原题复验。不得将当前 Permission 转写回旧表、裁剪完整考题或维护第二套安全结论。
 
 ## 官方 recipe 内部资产
 
-`OfficialBoundaryRecipe` 是有限、公开的样例材料，只生成普通 Proposal command，不是业务 Core model，也不自动批准。仓库保留该纯函数和 unit test，但普通 Router、service 便捷入口、前端 API 与页面 CTA 均不暴露它。未来只有正式 Sample context 可以把 recipe 送入普通 create-proposal + approve 路径；不得根据 project name 猜 Sample。
+`OfficialBoundaryRecipe` 是有限、公开的示例材料，只生成普通 Proposal command，不是业务 Core model，也不自动批准。真实活动 OfficialSampleExperience 可以把固定配方送入普通提案审阅，经 Human Approval 后由用户显式准备；普通项目没有 Sample 专用审批入口，不按项目名称识别 Sample，prepare 不自动创建 Run。
 
 ## 怎么验证
 

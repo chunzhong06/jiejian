@@ -1,6 +1,7 @@
 /* 全局顶部栏：呈现当前应用、活动任务和结构化系统工具入口。 */
 
 import { Button, Dropdown, Layout, Space } from 'antd'
+import { useEffect, useState } from 'react'
 import { ApiOutlined, BgColorsOutlined, CloudServerOutlined, LogoutOutlined, MoreOutlined, RobotOutlined } from '@ant-design/icons'
 import type { LLMProfile, AIAssistanceSettings } from '../api/llm'
 import type { MCPAccessView } from '../api/mcp'
@@ -77,6 +78,14 @@ export function AppHeader({
   onRequestShutdown,
 }: AppHeaderProps) {
   const { mode, setMode } = useThemeMode()
+  const [menuOpen, setMenuOpen] = useState(false)
+  // 主题或视口变化后关闭旧浮层；再次打开时由组件按当前布局定位。
+  useEffect(() => { setMenuOpen(false) }, [mode])
+  useEffect(() => {
+    const close = () => setMenuOpen(false)
+    window.addEventListener('resize', close)
+    return () => window.removeEventListener('resize', close)
+  }, [])
   const themeLabels: Record<ThemeMode, string> = { system: '跟随系统', light: '亮色', dark: '暗色' }
   const mcpLabel = mcpStatusLabel(mcpStatus, mcpStatusFailed)
   const mcpConnected = mcpStatus?.connection_state === 'CONNECTED' || mcpStatus?.client_connected === true
@@ -92,10 +101,13 @@ export function AppHeader({
     <Space className="topbar-tools" size="small">
       <Button type="text" icon={<ApiOutlined />} aria-label={`${mcpLabel}，打开 AI 工具`} onClick={() => onNavigate('/tools')}><span>{compactMcpLabel}</span><i className={`topbar-status-dot${mcpConnected ? ' is-connected' : ''}`} aria-hidden="true" /></Button>
       <Dropdown
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
         destroyOnHidden
         placement="bottomRight"
         trigger={['click']}
         menu={{
+          triggerSubMenuAction: 'click',
           items: [
             { key: 'ai', icon: <RobotOutlined />, label: `AI 辅助 · ${aiLabel.replace(/^AI辅助 · /, '')}` },
             { key: 'system', icon: <CloudServerOutlined />, label: systemLabel },
@@ -110,7 +122,8 @@ export function AppHeader({
             { type: 'divider' },
             { key: 'shutdown', danger: true, icon: <LogoutOutlined />, label: '退出界鉴' },
           ],
-          onClick: ({ key }) => {
+            onClick: ({ key }) => {
+              setMenuOpen(false)
             if (key === 'ai') onOpenAI()
             else if (key === 'system') onNavigate('/settings/system')
             else if (key === 'shutdown') onRequestShutdown()

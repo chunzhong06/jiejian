@@ -86,6 +86,10 @@ def _recording() -> RecordingRecord:
         Recording(
             recording_id=RECORDING_ID,
             project_id=PROJECT_ID,
+            business_action_id="bac_" + "1" * 32, action_revision=1,
+            subject_test_identity_id="tid_" + "1" * 32,
+            resource_owner_test_identity_id="tid_" + "2" * 32,
+            preparation_source_fingerprint="a" * 64,
             state=RecordingState.CREATED,
             created_at_us=NOW_US + 2,
             updated_at_us=NOW_US + 2,
@@ -176,6 +180,13 @@ def test_committed_records_survive_engine_restart_with_exact_values(
     expected_evidence = _evidence()
     with StorageUnitOfWork(factory) as work:
         work.projects.add(expected_project)
+        from tests.fixtures.assurance import action
+        from product.backend.core.business_boundary import BusinessAction, boundary_sha256
+        revision = action().model_copy(update={"project_id": PROJECT_ID})
+        revision = revision.model_copy(update={"semantic_fingerprint": boundary_sha256(revision.semantic_payload())})
+        work.business_boundaries.add_action_revision(revision)
+        work.business_boundaries.add_action(BusinessAction(action_id=revision.action_id, project_id=PROJECT_ID,
+            current_revision=1, created_at_us=NOW_US, updated_at_us=NOW_US))
         work.recordings.add(expected_recording)
         work.runs.add(expected_run)
         work.jobs.add(expected_job)

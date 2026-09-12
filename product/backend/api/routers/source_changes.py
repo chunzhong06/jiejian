@@ -1,18 +1,38 @@
-# 代码变化只读 API；仅返回有界产品摘要，不暴露源码路径、内容或内部指纹。
+# 当前代码变化登记与只读查询 API；来源固定本机 GUI，业务服务重扫并核对项目归属。
 
 from __future__ import annotations
+from typing import Literal
 
 from fastapi import APIRouter, Query
 
-from product.backend.api.envelope import ApiResponse, data_response
+from pydantic import Field
+from product.backend.api.envelope import ApiModel, ApiResponse, data_response
+from product.backend.core.check_repair import CurrentRepairReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.composition import ApplicationCore
 
 
+class SourceChangeCreateRequest(ApiModel):
+    schema_version: Literal["1"]
+    reason: str = Field(min_length=1,max_length=512)
+    claimed_paths: list[str] = Field(default_factory=list,max_length=128)
+    repair_reference: CurrentRepairReference | None = None
+
+
 def build_source_changes_router(context: ApplicationCore) -> APIRouter:
-    """组合最近变化和指定变化两个只读入口。"""
+    """本机 GUI 登记变化声明，业务服务自行重扫；读取始终按项目核对归属。"""
 
     router = APIRouter()
+
+    @router.post("/api/projects/{project_id}/source-changes",response_model=ApiResponse,status_code=201)
+    def create_source_change(project_id: str, body: SourceChangeCreateRequest):
+        view = context.source_changes.submit(project_id,reason=body.reason,claimed_paths=body.claimed_paths,
+            repair_reference=body.repair_reference,submitted_by="LOCAL_GUI")
+        return data_response(view.model_dump(mode="json"),status_code=201)
+
+    @router.get("/api/projects/{project_id}/repair",response_model=ApiResponse)
+    def project_repair(project_id: str):
+        return data_response(context.project_repair.evaluate(project_id).model_dump(mode="json"))
 
     @router.get(
         "/api/projects/{project_id}/source-changes",
@@ -22,7 +42,7 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
         project_id: str,
         limit: int = Query(default=50, ge=1, le=100),
     ):
-        views = context.source_changes.list_views(project_id, limit=limit)
+        views = context.source_changes.list(project_id, limit=limit)
         return data_response([view.model_dump(mode="json") for view in views])
 
     @router.get(
@@ -30,7 +50,7 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
         response_model=ApiResponse,
     )
     async def latest_source_change(project_id: str):
-        latest = context.source_changes.latest_view(project_id)
+        latest = context.source_changes.latest(project_id)
         return data_response(None if latest is None else latest.model_dump(mode="json"))
 
     @router.get(
@@ -38,9 +58,7 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
         response_model=ApiResponse,
     )
     async def source_change(project_id: str, change_id: str):
-        view = context.source_changes.view(change_id)
-        if view.project_id != project_id:
-            raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "代码变化不属于当前应用")
+        view = context.source_changes.view(project_id,change_id)
         return data_response(view.model_dump(mode="json"))
 
     return router

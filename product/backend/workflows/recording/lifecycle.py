@@ -257,7 +257,7 @@ class RecordingLifecycle:
         """原子接受录制和技术绑定；目标录制发布 Flow，补录只形成明确目的的模板。"""
 
         from product.backend.workflows.preparation.bindings import PreparationBindingService
-        from product.backend.workflows.recording.source import require_recording_source
+        from product.backend.workflows.recording.source import require_persisted_recording_source
 
         bindings = self._bindings or PreparationBindingService(self._uow_factory, var_dir)
 
@@ -285,7 +285,7 @@ class RecordingLifecycle:
                     recording=recording, flow=self.load_final_flow(path) if path is not None else None,
                     flow_path=str(path) if path is not None else None,
                 )
-            require_recording_source(work, recording)
+            require_persisted_recording_source(work, recording, var_dir)
             flow = self._compiler.compile(draft) if path is not None else None
             if flow is not None:
                 # 文件先原子发布；数据库失败时保留不可变文件，重试按同一内容验证。
@@ -331,13 +331,22 @@ class RecordingLifecycle:
         return path
 
     @staticmethod
-    def load_final_flow(path: Path) -> Flow:
+    def load_final_flow(path: Path, *, expected_hash: str | None = None) -> Flow:
         try:
             raw = path.read_bytes()
-            parsed = json.loads(raw, object_pairs_hook=_unique_json_object)
-            if not isinstance(parsed, dict) or parsed.get("schema_version") != "2":
+            from product.protocols.flow_draft import _strict_json, FLOW_DRAFT_MAX_BYTES
+            parsed = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, ())
+            if expected_hash is not None and hashlib.sha256(raw).hexdigest() != expected_hash:
+                raise ValueError("flow hash mismatch")
+            if isinstance(parsed, dict) and parsed.get("schema_version") == "2":
+                from product.protocols.recording_legacy import read_legacy_document
+                return read_legacy_document(raw, "flow", expected_hash=expected_hash)
+            if not isinstance(parsed, dict) or parsed.get("schema_version") != "3":
                 raise ValueError("unsupported flow schema version")
-            return Flow.model_validate_json(raw, strict=True)
+            flow = Flow.model_validate_json(raw, strict=True)
+            if _canonical_flow_bytes(flow) != raw:
+                raise ValueError("flow must be canonical")
+            return flow
         except (OSError, ValueError):
             raise JiejianError(
                 ErrorCode.RECORD_FLOW_PUBLISH,

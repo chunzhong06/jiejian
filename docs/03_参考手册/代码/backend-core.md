@@ -52,10 +52,11 @@
 - `class ActionResourceRequirement`
 - `class EffectEvidenceRequirement`
 - `class AllowControlRequirement`
+- `class ActionAllowControlBinding`
 - `class ActionAssuranceContract`
 - `class IdentityRequirementPlanner`
-- `compile_action_assurance(action, permissions) -> ActionAssuranceContract`
-主要 import / dot-source：`__future__`, `collections`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.permission_intent`, `product.backend.core.permission_semantics`, `pydantic`
+- `compile_action_assurance(action, permissions, allow_control_bindings) -> ActionAssuranceContract`
+主要 import / dot-source：`__future__`, `collections`, `enum`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.permission_intent`, `product.backend.core.permission_semantics`, `pydantic`
 
 ### `product/backend/core/boundary_proposal.py`
 - `PROPOSAL_ID_PATTERN`
@@ -98,6 +99,33 @@
 - `class ActorImplementationBinding`
 - `class ActionImplementationBinding`
 主要 import / dot-source：`__future__`, `enum`, `hashlib`, `json`, `product.backend.core.approval`, `product.backend.core.identifiers`, `product.backend.core.permission_semantics`, `pydantic`, `re`, `typing`
+
+### `product/backend/core/check_plan.py`
+- `class RegisteredEffectProofCapability`
+- `class PreparedIdentityAssignment`
+- `class CheckPlanGap`
+- `class CheckCase`
+- `class CheckTwin`
+- `class ActionCheckPlan`
+- `class ProjectCheckPlan`
+- `class PreparedActionInput`
+- `classify_http_resource_presence(status, same_resource, same_run, redirected)`
+- `derive_effect_proof(effect, binding, resource_id, capabilities)`
+- `compile_project_check_plan(project_id, source_fingerprint, policy_epoch, engine_version, config_fingerprint, actions)`
+主要 import / dot-source：`__future__`, `product.backend.core.action_preparation`, `product.backend.core.assurance`, `product.backend.core.business_boundary`, `product.backend.core.permission_intent`, `product.protocols.execution_v3`, `pydantic`, `typing`, `urllib.parse`
+
+### `product/backend/core/check_repair.py`
+- `class CurrentRepairReference`
+- `class RepairCaseIdentity`
+- `repair_case_identity(action, case) -> RepairCaseIdentity`
+- `repair_evidence_standards(action, case, bundle) -> tuple[str, ...]`
+- `class RepairCaseRequirement`
+- `class CurrentRepairContract`
+- `repair_context(contract) -> RepairContext`
+- `current_request_permissions(request) -> tuple[PermissionReference, ...]`
+- `class CurrentRepairVerification`
+- `verify_current_repair(contract, request, bundle, result, evidence, expected_change_context) -> CurrentRepairVerification`
+主要 import / dot-source：`__future__`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.checks`, `product.protocols.execution_v3`, `pydantic`, `typing`
 
 ### `product/backend/core/contracts/execution_binding.py`
 - `resolve_execution_contract(record, governed) -> PermissionContract`
@@ -248,7 +276,12 @@
 - `class RevalidationPlan`
 - `source_change_fingerprint(payload) -> str`
 - `change_impact_fingerprint(payload) -> str`
-主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.identifiers`, `product.backend.core.repair`, `pydantic`, `re`, `typing`
+- `class CurrentChangeManifest`
+- `class CurrentActionChangeImpact`
+- `class CurrentChangeAssessmentPayload`
+- `class CurrentChangeAssessment`
+- `build_current_change_set(manifest, baseline, current) -> SourceChangeSet`
+主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.check_repair`, `product.backend.core.identifiers`, `product.backend.core.repair`, `product.protocols.execution_v3`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/test_identity.py`
 - `_SECRET_REF_PATTERN`
@@ -277,7 +310,17 @@
 - `class BreakpointPrecision`
 - `class BreakpointResult`
 - `class BreakpointLocator`
-主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.verification.continuity`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.trace`, `pydantic`, `re`
+主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.verification.checks`, `product.backend.core.verification.continuity`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.trace`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `pydantic`, `re`
+
+### `product/backend/core/verification/checks.py`
+- `class CheckEffectFact`
+- `class CheckProofObservation`
+- `project_check_effect_facts(case, observations) -> tuple[CheckEffectFact, ...]`
+- `class CheckDecisionInput`
+- `class CheckDecision`
+- `evaluate_check_case(facts) -> CheckDecision`
+- `aggregate_check_verdict(verdicts, planned_case_count, has_gaps) -> RunVerdict`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.lifecycle`, `product.protocols.execution_v3`, `pydantic`, `typing`
 
 ### `product/backend/core/verification/continuity.py`
 - `_PUBLIC_ID`
@@ -285,8 +328,9 @@
 - `class AuthorizationContinuityState`
 - `class AuthorizationEffectReference`
 - `class AuthorizationContinuityAssessment`
+- `assess_check_authorization_continuity(action, facts) -> AuthorizationContinuityAssessment`
 - `assess_authorization_continuity(contract, twin, effect_facts) -> AuthorizationContinuityAssessment`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `pydantic`, `re`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.verification.checks`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.protocols.execution_v3`, `pydantic`, `re`
 
 ### `product/backend/core/verification/differential.py`
 - `class TwinPlanGapCode`

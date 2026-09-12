@@ -82,7 +82,8 @@ class PreparationHarness:
 
 
 def build_preparation_harness(tmp_path: Path, *, identity_count: int = 1, state_changing: bool = True,
-                              endpoint: str = "http://127.0.0.1:8765", core: ApplicationCore | None = None) -> PreparationHarness:
+                              endpoint: str = "http://127.0.0.1:8765", core: ApplicationCore | None = None,
+                              second_actor: bool = False) -> PreparationHarness:
     """建立 loopback 应用理解、当前实现绑定、权限事实和已准备身份。"""
 
     var_dir = tmp_path / "var"
@@ -213,7 +214,7 @@ def build_preparation_harness(tmp_path: Path, *, identity_count: int = 1, state_
             TestIdentity(
                 identity_id=identity_id,
                 project_id=project_id,
-                actor_id=actor_revision.actor_id,
+                actor_id=assurance.OTHER_ACTOR if second_actor and ordinal == 1 else actor_revision.actor_id,
                 actor_revision=1,
                 label=f"测试账号 {ordinal + 1}",
                 auth_method=TestIdentityAuthMethod.BEARER,
@@ -235,6 +236,16 @@ def build_preparation_harness(tmp_path: Path, *, identity_count: int = 1, state_
         work.business_boundaries.add_action(action_root)
         work.business_boundaries.replace_actor_binding(actor_binding)
         work.business_boundaries.replace_action_binding(action_binding)
+        if second_actor:
+            other = assurance.actor(assurance.OTHER_ACTOR).model_copy(update={"project_id": project_id})
+            other = other.model_copy(update={"semantic_fingerprint": boundary_sha256(other.semantic_payload())})
+            work.business_boundaries.add_actor_revision(other)
+            work.business_boundaries.add_actor(actor_root.model_copy(update={"actor_id": other.actor_id}))
+            other_values = actor_binding_values | {"actor_id": other.actor_id}
+            work.business_boundaries.replace_actor_binding(ActorImplementationBinding(**other_values,
+                basis_version=1, binding_fingerprint=boundary_sha256(other_values), updated_at_us=now_us))
+            work.permission_intents.add_revision(assurance.permission(2, subject=other.actor_id, owner=other.actor_id)
+                .model_copy(update={"project_id": project_id}))
         work.permission_intents.add_revision(permission)
         work.permission_intents.replace_policy_state(
             ProjectPolicyState(project_id=project_id, policy_epoch=1, updated_at_us=now_us)
@@ -257,6 +268,7 @@ def add_recording(
     harness: PreparationHarness,
     *,
     identity_index: int = 0,
+    owner_identity_index: int | None = None,
     purpose: RecordingPurpose = RecordingPurpose.TARGET,
     parent_recording_id: str | None = None,
     effect_id: str | None = None,
@@ -268,6 +280,7 @@ def add_recording(
     """把受控脱敏事件和当前 revision 的 FlowDraft 以真实记录形式落库。"""
 
     identity = harness.identities[identity_index]
+    owner = harness.identities[identity_index if owner_identity_index is None else owner_identity_index]
     recorded_action_revision = action_revision or harness.action.revision
     with harness.core.uow_factory() as work:
         action = work.business_boundaries.action_revision(harness.action.action_id, harness.action.revision)
@@ -275,10 +288,12 @@ def add_recording(
         understanding = work.application_understanding.get(harness.project_id)
         action_binding = work.business_boundaries.action_binding(harness.action.action_id, 1)
         actor_binding = work.business_boundaries.actor_binding(identity.actor_id, identity.actor_revision)
+        owner_binding = work.business_boundaries.actor_binding(owner.actor_id, owner.actor_revision)
         assert action is not None and current_identity is not None and understanding is not None
         assert action_binding is not None and actor_binding is not None
         source_fingerprint = recording_source_fingerprint(
-            action, current_identity, understanding, action_binding, actor_binding
+            action, current_identity, understanding, action_binding, actor_binding,
+            owner=work.test_identities.get(owner.identity_id), owner_actor_binding=owner_binding,
         )
     recording_id = f"rec_{uuid4().hex}"
     flow_id = f"flow_{uuid4().hex}"
@@ -355,7 +370,8 @@ def add_recording(
         flow_id=flow_id,
         business_action_id=harness.action.action_id,
         action_revision=recorded_action_revision,
-        test_identity_id=identity.identity_id,
+        subject_test_identity_id=identity.identity_id,
+        resource_owner_test_identity_id=owner.identity_id,
         purpose=purpose,
         parent_recording_id=parent_recording_id,
         effect_id=effect_id,
@@ -369,7 +385,8 @@ def add_recording(
         project_id=harness.project_id,
         business_action_id=harness.action.action_id,
         action_revision=recorded_action_revision,
-        test_identity_id=identity.identity_id,
+        subject_test_identity_id=identity.identity_id,
+        resource_owner_test_identity_id=owner.identity_id,
         preparation_source_fingerprint=source_fingerprint,
         purpose=purpose,
         parent_recording_id=parent_recording_id,
@@ -391,8 +408,35 @@ def add_recording(
         draft_sha256=hashlib.sha256(draft_bytes).hexdigest(),
         created_at_us=3,
     )
+    # 同步保存不可变请求和 Job hash，使审阅走真实来源 reader，而非绕过生产检查。
+    from tests.fixtures.recording import runner_request
+    from product.backend.infra.recording.request_store import RecordingRequestStore
+    from product.backend.infra.storage import JobRecord
+    from product.backend.core.lifecycle import JobState
+    from product.backend.workflows.recording.submission import recording_target_scope
+    from product.protocols.recording import RecordingRunnerRequest
+    request = runner_request(recording_id)
+    slots = harness.core.preparation.get(harness.project_id).actions[0].identity_requirements.slots
+    subject_slot = next((slot.requirement.slot_id for slot in slots if slot.test_identity_id == identity.identity_id), "isl_"+"0"*32)
+    owner_slot = next((slot.requirement.slot_id for slot in slots if slot.test_identity_id == owner.identity_id), "isl_"+"0"*32)
+    request = RecordingRunnerRequest.model_validate(request.model_dump() | {
+        "project_id": harness.project_id, "business_action_id": harness.action.action_id,
+        "action_revision": recorded_action_revision, "subject_test_identity_id": identity.identity_id,
+        "resource_owner_test_identity_id": owner.identity_id, "subject_slot_id": subject_slot,
+        "resource_owner_slot_id": owner_slot, "resource_owner_confirmed": identity.identity_id != owner.identity_id,
+        "preparation_source_fingerprint": source_fingerprint, "purpose": purpose,
+        "parent_recording_id": parent_recording_id, "effect_id": effect_id,
+        "target_scope": recording_target_scope(understanding.confirmed_endpoint),
+        "sessions": (request.sessions[0].model_copy(update={"test_identity_id": identity.identity_id}),),
+    })
+    job_id = "job_"+uuid4().hex
+    request_hash, _ = RecordingRequestStore(harness.core.var_dir).write(job_id, request)
     with harness.core.uow_factory() as work:
         work.recordings.add(record)
+        work.jobs.add(JobRecord(job_id=job_id, project_id=harness.project_id, recording_id=recording_id,
+            operation_type="BROWSER_RECORDING", state=JobState.SUCCEEDED, idempotency_key=recording_id,
+            request_hash=request_hash, attempt=1, max_attempts=1, fencing_token=1,
+            available_at_us=1, created_at_us=1, updated_at_us=3))
         work.flow_drafts.add(draft_record)
         work.commit()
     return record

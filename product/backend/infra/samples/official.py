@@ -120,6 +120,10 @@ class OfficialSampleRuntime:
     process: subprocess.Popen[Any] = field(repr=False, compare=False)
     secrets: dict[str, str] = field(repr=False, compare=False)
 
+    @property
+    def check_descriptor_path(self) -> Path:
+        return self.runtime_root / "check-environment.json"
+
 
 ProcessLauncher = Callable[..., subprocess.Popen[Any]]
 
@@ -242,6 +246,7 @@ class OfficialSampleManager:
                     runtime_root,
                     installation.health_path or "/health",
                 )
+                _write_check_descriptor(descriptor_path, runtime_root, origin)
                 active = OfficialSampleRuntime(
                     experience_id=clean_id,
                     sample_id=installation.sample_id,
@@ -309,7 +314,7 @@ class OfficialSampleManager:
         owner_observation: OwnerObservation,
         blob_observation: BlobObservation,
     ) -> OfficialSampleRuntime:
-        """先重置当前副作用，再原子切换机械行为；origin 与源码快照保持不变。"""
+        """只切换真实代码和观察开关；业务恢复由原资源撤销完成，不清除历史。"""
 
         _validate_behavior(
             authorization_order,
@@ -321,13 +326,6 @@ class OfficialSampleManager:
             policy_path = runtime.source_root / _AUTHORIZATION_POLICY_FILE
             previous_policy = policy_path.read_text(encoding="utf-8")
             try:
-                with httpx.Client(trust_env=False, follow_redirects=False) as client:
-                    response = client.post(
-                        f"{runtime.origin}/reset",
-                        headers={"X-Jiejian-Test-Mode": "1"},
-                        timeout=2.0,
-                    )
-                    response.raise_for_status()
                 _write_authorization_policy(policy_path, authorization_order)
                 _write_control(
                     runtime.control_path,
@@ -359,6 +357,16 @@ class OfficialSampleManager:
             for name, value in runtime.secrets.items()
             if name in requested
         }
+
+    def bind_effects(self, experience_id: str, *, export_effect_id: str, view_effect_id: str) -> None:
+        """仅活动体验在正式批准后写入公开效果映射，不更改源码或观察标准。"""
+        with self._lock:
+            runtime=self._require_active(experience_id)
+            if any(re.fullmatch(r"bef_[0-9a-f]{32}",value) is None for value in (export_effect_id,view_effect_id)):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,"官方示例效果映射无效")
+            payload=json.loads(runtime.control_path.read_text(encoding="utf-8"))
+            payload.update(export_effect_id=export_effect_id,view_effect_id=view_effect_id)
+            _write_text_atomic(runtime.control_path,json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(",",":")))
 
     def stop(self, experience_id: str | None = None) -> None:
         """回收当前 Sample 进程树和会话目录；只保留独立历史日志。"""
@@ -507,7 +515,7 @@ def _new_secret_values(runtime_root: Path) -> dict[str, str]:
         "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=rl&sr=c"
         f"&sig={secrets.token_urlsafe(32)}"
     )
-    values["JIEJIAN_SAMPLE_SQLITE_DATABASE"] = str(runtime_root / "collaboration.db")
+    values["JIEJIAN_SAMPLE_SQLITE_DATABASE"] = str(runtime_root / "database" / "collaboration-space.sqlite3")
     values["JIEJIAN_SAMPLE_AUDIT_ROOT"] = str(runtime_root / "audit")
     return values
 
@@ -542,6 +550,14 @@ def _write_control(
         "owner_observation": owner_observation,
         "blob_observation": blob_observation,
     }
+    if path.is_file():
+        previous=json.loads(path.read_text(encoding="utf-8"))
+        for name in ("export_effect_id","view_effect_id"):
+            value=previous.get(name)
+            if value is not None:
+                if not isinstance(value,str) or re.fullmatch(r"bef_[0-9a-f]{32}",value) is None:
+                    raise ValueError("invalid sample effect mapping")
+                payload[name]=value
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp-{uuid4().hex}")
     temporary.write_text(
@@ -583,6 +599,36 @@ def _write_text_atomic(path: Path, content: str) -> None:
     temporary = path.with_name(f".{path.name}.tmp-{uuid4().hex}")
     temporary.write_text(content, encoding="utf-8")
     os.replace(temporary, path)
+
+
+def _write_check_descriptor(descriptor_path: Path, runtime_root: Path, origin: str) -> None:
+    """只派生本实例受控环境的 Cookie 观察入口，原六来源描述保持不变。"""
+    if descriptor_path.resolve() != (runtime_root / "environment.json").resolve() or descriptor_path.is_symlink():
+        raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_START_FAILED, "官方示例描述路径无效")
+    raw = descriptor_path.read_bytes()
+    if len(raw) > 262_144:
+        raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_START_FAILED, "官方示例描述超过预算")
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_START_FAILED, "官方示例描述字段重复")
+            value[key] = item
+        return value
+    descriptor = json.loads(raw, object_pairs_hook=unique)
+    if (set(descriptor) != {"application", "owner_api", "sqlite", "audit", "task", "queue", "blob"}
+            or _descriptor_origin(descriptor) != origin
+            or descriptor["application"] != {"origin": origin, "project_id": "campus-digital-museum", "resource_id": "campus-digital-museum-package"}
+            or descriptor["owner_api"] != {"origin": origin, "relative_path_template": "/api/observer/resources/{resource_id}",
+                "credential_ref": "env:JIEJIAN_SAMPLE_OWNER_OBSERVER"}):
+        raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_START_FAILED, "官方示例描述不匹配")
+    descriptor["owner_api"] = {"origin": origin,
+        "relative_path_template": "/api/projects/campus-digital-museum/resources/{resource_id}/state",
+        "credential_ref": "env:JIEJIAN_SAMPLE_ALICE_SESSION"}
+    # 注册前仍由完整严格 loader 校验全部六来源与实际文件 hash。
+    path = runtime_root / "check-environment.json"
+    with path.open("x", encoding="utf-8") as stream:
+        json.dump(descriptor, stream, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _descriptor_origin(descriptor: Any) -> str:

@@ -21,6 +21,13 @@ const action = { business_action_id: `bac_${'1'.repeat(32)}`, display_name: '修
 const identity = { test_identity_id: `tid_${'2'.repeat(32)}`, label: '普通成员账号 A', actor_display_name: '普通成员' }
 const target = { recording_id: `rec_${'3'.repeat(32)}`, project_id: 'p1', flow_id: 'flow-1', purpose: 'TARGET' as const, parent_recording_id: null, state: 'COMPLETED', action, test_identity: identity }
 const originalEventSource = globalThis.EventSource
+const demonstrationTask = (patch: Partial<PrimaryTaskDto> = {}): PrimaryTaskDto => ({
+  task_id: 'task-demo', task_kind: 'DEMONSTRATE_ACTION', business_action_id: action.business_action_id,
+  business_actor_id: null, title: '演示业务操作', why_now: '需要正常业务演示', user_responsibility: '确认测试资源归属',
+  system_will_do: '记录这次操作', route: '/tests', can_execute: true, stale_fingerprint: 'f', action_revision: 3,
+  subject_test_identity_id: identity.test_identity_id, resource_owner_test_identity_id: identity.test_identity_id,
+  subject_slot_id: 'slot-a', resource_owner_slot_id: 'slot-a', recording_purpose: 'TARGET', ...patch,
+})
 
 function pageProps() {
   return {
@@ -52,19 +59,25 @@ describe('RecordingPage', () => {
   it('用业务动作与已准备账号创建受控录制', async () => {
     api.createRecording.mockResolvedValue({ recording: { ...target, state: 'CREATED' }, job: { job_id: 'job-1', state: 'QUEUED' }, action, test_identity: identity })
     const props = pageProps()
-    render(<RecordingPage {...props} />)
-    expect(await screen.findByText('请使用')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '普通成员账号 A · 普通成员' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '“修改资源”' })).toBeInTheDocument()
+    const task = demonstrationTask(); props.onStateChanged.mockResolvedValue({ primary_task: task })
+    render(<RecordingPage {...props} task={task} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: '打开浏览器并开始准备' })).toBeEnabled())
+    expect(screen.getByText('谁执行')).toBeInTheDocument()
+    expect(screen.getByText('资源属于谁')).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '打开浏览器并开始准备' }))
-    await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', action.business_action_id, action.action_revision, identity.test_identity_id, 600, 'TARGET', undefined, undefined))
-    await waitFor(() => expect(props.onStateChanged).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', {
+      business_action_id: action.business_action_id, action_revision: 3,
+      subject_test_identity_id: identity.test_identity_id, resource_owner_test_identity_id: identity.test_identity_id,
+      subject_slot_id: 'slot-a', resource_owner_slot_id: 'slot-a', resource_owner_confirmed: true,
+      duration_seconds: 600, purpose: 'TARGET', parent_recording_id: null, effect_id: null,
+    }))
+    await waitFor(() => expect(props.onStateChanged).toHaveBeenCalledTimes(2))
     expect(screen.queryByRole('list', { name: '业务流程准备进度' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Profile|JSONPath|TARGET|高级/)).not.toBeInTheDocument()
   })
 
   it('只展示业务歧义选择，不提供重命名、删除、合并或技术路径编辑', async () => {
-    const draft = { schema_version: '2' as const, action_revision: action.action_revision, test_identity_id: identity.test_identity_id, recording_id: target.recording_id, flow_id: 'flow-1', business_action_id: action.business_action_id, revision: 1, recommended_target_step_id: 'step-2', target_step_id: null, resource_candidate_id: null, variables: [], steps: [
+    const draft = { schema_version: '3' as const, action_revision: action.action_revision, subject_test_identity_id: identity.test_identity_id, resource_owner_test_identity_id: identity.test_identity_id, subject_slot_id: 'slot-a', resource_owner_slot_id: 'slot-a', recording_id: target.recording_id, flow_id: 'flow-1', business_action_id: action.business_action_id, revision: 1, recommended_target_step_id: 'step-2', target_step_id: null, resource_candidate_id: null, variables: [], steps: [
       { id: 'step-1', name: '提交修改', method: 'PATCH', path: '/projects/project-1', resource_candidates: [{ candidate_id: 'resource-1111111111111111', consumer: 'PATH', location: 'path[1]', label: 'project-1，看起来是当前项目' }] },
       { id: 'step-2', name: '确认更新', method: 'POST', path: '/projects/project-1/confirm', resource_candidates: [] },
     ] }
@@ -105,7 +118,7 @@ describe('RecordingPage', () => {
     expect(api.cancel).not.toHaveBeenCalled()
   })
   it('有待审主任务时只恢复指定录制，不采用项目最新记录', async () => {
-    const task: PrimaryTaskDto = { task_id: 'task-review', task_kind: 'REVIEW_RECORDING', business_action_id: action.business_action_id, business_actor_id: null, title: '审阅当前演示', why_now: '当前有待审内容', user_responsibility: '核对这次演示', system_will_do: '只保存确认的材料', route: '/tests', can_execute: true, stale_fingerprint: 'f', recording_id: target.recording_id, test_identity_id: identity.test_identity_id, action_revision: 3 }
+    const task: PrimaryTaskDto = { task_id: 'task-review', task_kind: 'REVIEW_RECORDING', business_action_id: action.business_action_id, business_actor_id: null, title: '审阅当前演示', why_now: '当前有待审内容', user_responsibility: '核对这次演示', system_will_do: '只保存确认的材料', route: '/tests', can_execute: true, stale_fingerprint: 'f', recording_id: target.recording_id, subject_test_identity_id: identity.test_identity_id, resource_owner_test_identity_id: identity.test_identity_id, subject_slot_id: 'slot-a', resource_owner_slot_id: 'slot-a', action_revision: 3 }
     api.recordings.mockResolvedValue([{ ...target, recording_id: 'unrelated-latest' }])
     api.recording.mockResolvedValue({ recording: target })
     render(<RecordingPage {...pageProps()} task={task} />)
@@ -114,7 +127,7 @@ describe('RecordingPage', () => {
     expect(api.createRecording).not.toHaveBeenCalled()
   })
   it('观察补录先说明具体业务结果，并固定 effect、来源录制与账号', async () => {
-    const task: PrimaryTaskDto = { task_id: 'task-observation', task_kind: 'COMPLETE_EFFECT_EVIDENCE', business_action_id: action.business_action_id, business_actor_id: null, title: '演示如何确认业务结果', why_now: '缺少证明', user_responsibility: '演示在哪里确认结果', system_will_do: '关联已有结果', route: '/tests', can_execute: true, stale_fingerprint: 'f', recording_purpose: 'OBSERVATION', parent_recording_id: target.recording_id, effect_id: 'effect-package', test_identity_id: identity.test_identity_id, action_revision: 3 }
+    const task: PrimaryTaskDto = { task_id: 'task-observation', task_kind: 'COMPLETE_EFFECT_EVIDENCE', business_action_id: action.business_action_id, business_actor_id: null, title: '演示如何确认业务结果', why_now: '缺少证明', user_responsibility: '演示在哪里确认结果', system_will_do: '关联已有结果', route: '/tests', can_execute: true, stale_fingerprint: 'f', recording_purpose: 'OBSERVATION', parent_recording_id: target.recording_id, effect_id: 'effect-package', subject_test_identity_id: identity.test_identity_id, resource_owner_test_identity_id: identity.test_identity_id, subject_slot_id: 'slot-a', resource_owner_slot_id: 'slot-a', action_revision: 3 }
     api.recordings.mockResolvedValue([target])
     api.createRecording.mockResolvedValue({ recording: { ...target, recording_id: 'new-observation', purpose: 'OBSERVATION', state: 'CREATED' } })
     const props = pageProps(); props.onStateChanged.mockResolvedValue({ primary_task: task })
@@ -124,11 +137,14 @@ describe('RecordingPage', () => {
     await waitFor(() => expect(button).toBeEnabled())
     expect(api.recording).not.toHaveBeenCalled()
     fireEvent.click(button)
-    await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', action.business_action_id, 3, identity.test_identity_id, 600, 'OBSERVATION', target.recording_id, 'effect-package'))
+    await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', expect.objectContaining({
+      business_action_id: action.business_action_id, action_revision: 3, subject_test_identity_id: identity.test_identity_id,
+      resource_owner_test_identity_id: identity.test_identity_id, purpose: 'OBSERVATION', parent_recording_id: target.recording_id, effect_id: 'effect-package',
+    })))
   })
 
   it('补录歧义只展示服务端候选，选择后刷新事实才能保存', async () => {
-    const draft = { schema_version: '2' as const, recording_id: target.recording_id, flow_id: 'f', business_action_id: action.business_action_id, action_revision: 3, test_identity_id: identity.test_identity_id, revision: 1, target_step_id: null, steps: [] }
+    const draft = { schema_version: '3' as const, recording_id: target.recording_id, flow_id: 'f', business_action_id: action.business_action_id, action_revision: 3, subject_test_identity_id: identity.test_identity_id, resource_owner_test_identity_id: identity.test_identity_id, subject_slot_id: 'slot-a', resource_owner_slot_id: 'slot-a', revision: 1, target_step_id: null, steps: [] }
     const view = { recording: { ...target, state: 'PENDING_REVIEW', purpose: 'OBSERVATION' as const }, draft,
       supplement_choices: [{ step_id: 'step-good1', label: '查看交付包列表' }, { step_id: 'step-good2', label: '查看交付详情' }] }
     api.recordings.mockResolvedValue([view.recording]); api.recording.mockResolvedValue(view)
@@ -144,7 +160,7 @@ describe('RecordingPage', () => {
     expect(api.finalizeRecording).not.toHaveBeenCalled()
   })
   it('没有补录候选时禁止保存，但可以明确放弃并刷新主任务', async () => {
-    const draft = { schema_version: '2' as const, recording_id: target.recording_id, flow_id: 'f', business_action_id: action.business_action_id, action_revision: 3, test_identity_id: identity.test_identity_id, revision: 1, target_step_id: null, steps: [] }
+    const draft = { schema_version: '3' as const, recording_id: target.recording_id, flow_id: 'f', business_action_id: action.business_action_id, action_revision: 3, subject_test_identity_id: identity.test_identity_id, resource_owner_test_identity_id: identity.test_identity_id, subject_slot_id: 'slot-a', resource_owner_slot_id: 'slot-a', revision: 1, target_step_id: null, steps: [] }
     const view = { recording: { ...target, state: 'PENDING_REVIEW', purpose: 'RECOVERY' as const }, draft, supplement_choices: [] }
     api.recordings.mockResolvedValue([view.recording]); api.recording.mockResolvedValue(view)
     api.discard.mockImplementation(async () => { const next = { ...view, recording: { ...view.recording, state: 'CANCELLED' } }; api.recording.mockResolvedValue(next); return next })
@@ -158,4 +174,36 @@ describe('RecordingPage', () => {
     await waitFor(() => expect(props.onStateChanged.mock.calls.length).toBeGreaterThan(1))
   })
 
+  it.each(['普通成员', '项目经理'])('不同账号演示明确确认资源所有者：%s', async (actorName) => {
+    const owner = { test_identity_id: 'tid-owner', label: '资源所有者账号', actor_display_name: actorName }
+    api.setup.mockResolvedValue({ action_options: [action], test_identity_options: [owner, identity] })
+    const task = demonstrationTask({ resource_owner_test_identity_id: owner.test_identity_id, resource_owner_slot_id: 'slot-owner' })
+    const props = pageProps(); props.onStateChanged.mockResolvedValue({ primary_task: task })
+    api.createRecording.mockResolvedValue({ recording: { ...target, state: 'CREATED' } })
+    render(<RecordingPage {...props} task={task} />)
+    const checkbox = await screen.findByRole('checkbox', { name: '我确认本次演示的测试资源属于“资源所有者账号”' })
+    const button = screen.getByRole('button', { name: '打开浏览器并开始准备' })
+    expect(checkbox).not.toBeChecked(); expect(button).toBeDisabled()
+    fireEvent.click(checkbox); fireEvent.click(button)
+    await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', expect.objectContaining({
+      subject_test_identity_id: identity.test_identity_id, resource_owner_test_identity_id: owner.test_identity_id,
+      subject_slot_id: 'slot-a', resource_owner_slot_id: 'slot-owner', resource_owner_confirmed: true,
+    })))
+    expect(api.createRecording).toHaveBeenCalledOnce()
+  })
+  it('任务身份已经变化时不使用旧组合启动录制', async () => {
+    const task = demonstrationTask()
+    const props = pageProps(); props.onStateChanged.mockResolvedValue({ primary_task: demonstrationTask({ resource_owner_test_identity_id: 'changed' }) })
+    render(<RecordingPage {...props} task={task} />)
+    const button = screen.getByRole('button', { name: '打开浏览器并开始准备' })
+    await waitFor(() => expect(button).toBeEnabled()); fireEvent.click(button)
+    expect(await screen.findByText(/准备要求已变化/)).toBeInTheDocument()
+    expect(api.createRecording).not.toHaveBeenCalled()
+  })
+  it('没有主任务时不从账号列表猜测演示身份', async () => {
+    render(<RecordingPage {...pageProps()} />)
+    expect(await screen.findByText(/要准备新的业务演示/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '打开浏览器并开始准备' })).not.toBeInTheDocument()
+    expect(api.createRecording).not.toHaveBeenCalled()
+  })
 })

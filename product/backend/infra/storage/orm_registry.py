@@ -17,6 +17,7 @@ _STORAGE_ORM_MODULES = (
     "product.backend.infra.storage.projects",
     "product.backend.infra.storage.recordings",
     "product.backend.infra.storage.results.evidence",
+    "product.backend.infra.storage.results.check_publications",
     "product.backend.infra.storage.results.finalizations",
     "product.backend.infra.storage.results.findings",
     "product.backend.infra.storage.results.gating",

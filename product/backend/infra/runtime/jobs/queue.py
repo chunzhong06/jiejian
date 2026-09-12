@@ -24,7 +24,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord, RunRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.events import append_job_event
 from product.backend.infra.runtime.jobs.models import CancellationResult, JobEventType, JobSubmissionResult, RequestCancellation, SubmitJob, validate_control_request
-from product.backend.infra.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry, default_run_job_targets
+from product.backend.infra.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry, current_check_and_recording_targets
 
 _TERMINAL_JOB_STATES = {
     JobState.SUCCEEDED,
@@ -43,13 +43,14 @@ class JobQueue:
         targets: JobTargetRegistry | None = None,
     ) -> None:
         self._uow_factory = uow_factory
-        self._targets = targets or default_run_job_targets()
+        self._targets = targets or current_check_and_recording_targets()
 
     def submit(
         self,
         request: SubmitJob,
         *,
         known_secrets: Sequence[str] = (),
+        precondition: Callable[[StorageUnitOfWork], None] | None = None,
     ) -> JobSubmissionResult:
         """幂等地创建排队任务及其执行目标；重复键返回原提交而不复制副作用。"""
 
@@ -68,11 +69,15 @@ class JobQueue:
                     return self._existing_submission(work, existing, request)
                 if work.projects.get(request.project_id) is None:
                     raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务所属项目不存在")
+                if precondition is not None:
+                    precondition(work)
                 run = RunRecord(
                     run_id=run_id,
                     project_id=request.project_id,
-                    contract_id=request.contract_id,
-                    contract_version=request.contract_version,
+                    request_hash=request.request_hash,
+                    plan_fingerprint=request.plan_fingerprint,
+                    source_fingerprint=request.source_fingerprint,
+                    policy_epoch=request.policy_epoch,
                     engine_version=request.engine_version,
                     lifecycle=RunLifecycle.QUEUED,
                     verdict=None,

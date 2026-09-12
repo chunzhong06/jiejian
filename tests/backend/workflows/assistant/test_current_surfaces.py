@@ -201,4 +201,4 @@ def test_deterministic_post_skips_provider_and_cache(harness, monkeypatch):
     view = service.generate_project(harness.project_id, Template.IMPLEMENTATION_MAPPING, business_action_id=harness.action.action_id)
     assert view.status.value == "READY" and not view.can_generate and view.suggestions == ()
     forbidden.assert_not_called()
-    assert CURRENT_ASSISTANT_TEMPLATES == {Template.IMPLEMENTATION_MAPPING, Template.BUSINESS_RECORDING_REVIEW, Template.PREPARATION_EXPLANATION}
+    assert CURRENT_ASSISTANT_TEMPLATES == {Template.IMPLEMENTATION_MAPPING, Template.BUSINESS_RECORDING_REVIEW, Template.PREPARATION_EXPLANATION, Template.RESULT_EXPLANATION}

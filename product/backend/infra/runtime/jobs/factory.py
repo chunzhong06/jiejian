@@ -5,7 +5,7 @@
 #   WorkerContainer 内的 Job Handler 组合边界。
 #
 # 职责
-#   只注册真实 Recording Handler，并注入录制结果接受服务。
+#   显式注册真实 CHECK/Recording Handler，并注入各自的窄依赖。
 #
 # 边界
 #   不创建 ApplicationCore，不拥有 GUI/Onboarding/LLM/Cache 服务。
@@ -50,7 +50,7 @@ class WorkerHandlerFactory:
         lease_owner: str,
         environ: Mapping[str, str],
     ) -> JobHandlerRegistry:
-        """创建只含录制能力的 Handler；不装配 Run 或安全检查。"""
+        """创建当前检查和录制 Handler；只在对应 Job 被选择时装配。"""
 
         registry = JobHandlerRegistry()
 
@@ -67,4 +67,9 @@ class WorkerHandlerFactory:
             )
 
         registry.register(JobTargetType.RECORDING, build_recording_handler)
+        def build_check_handler():
+            from product.backend.infra.runtime.check_runner.supervisor import CheckJobHandler
+            return CheckJobHandler(self._var_dir, lease_owner=lease_owner, uow_factory=self._uow_factory,
+                attempts=self._attempts, environ=environ)
+        registry.register(JobTargetType.RUN, build_check_handler, operation_types=frozenset({"CHECK"}))
         return registry

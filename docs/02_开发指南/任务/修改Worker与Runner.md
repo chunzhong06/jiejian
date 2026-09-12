@@ -1,8 +1,12 @@
 # 修改 Worker 与 Runner
 
-> CURRENT：当前 ApplicationCore 在服务生命周期启动真实 LocalWorkerSupervisor，WorkerContainer 与 Queue 仅接受 RECORDING；RUN/CHECK 不 claim、不执行。System、/ready 与 MCP 按真实线程状态报告 running/stopped 和 capability，CHECK 始终 unavailable。API 只监督调度，浏览器仍进入独立 Recording Runner。
+> CURRENT：ApplicationCore 与 WorkerContainer 显式装配 CHECK + RECORDING；CHECK 使用独立 check_runner，复用既有租约、进程树、角色环境和取消边界。旧 Contract Runner 不作为 fallback。
 
 > 状态：CURRENT。适用于 Job 生命周期、Worker 租约与 fencing、Runner 子进程、Case 编排、目标执行、Observer 调度、清理、结果封装和发布。
+
+## 当前 CHECK 修改入口
+
+监督器与入口在 `infra/runtime/check_runner/`；真实 Case 编排在 `infra/execution/check_executor.py`；观察桥在 `infra/observers/check_runtime.py`；发布在 `infra/artifacts/check_publication.py`。v3 request 与 Check 根模型见 `product/protocols/`。运行中旁路为严格 `CheckRunnerProgress` 的 `attempt/progress.json`，只供展示。以下旧 runner 模块表仅用于保留实现，不能恢复其 CURRENT 装配。
 
 ## Worker 与 Runner 解决什么问题
 

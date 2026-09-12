@@ -16,8 +16,9 @@
 - `class ActionRecoveryBindingRow`
 - `_ROWS`
 - `_JSON_FIELDS`
+- `class ActionAllowControlBindingRow`
 - `class ActionPreparationRepository`
-主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.action_preparation`, `product.backend.core.errors`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
+主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.action_preparation`, `product.backend.core.assurance`, `product.backend.core.errors`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
 
 ### `product/backend/infra/storage/application_understanding.py`
 - `class ApplicationUnderstandingRow`
@@ -120,6 +121,12 @@
 - `class FlowDraftRevisionRepository`
 主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
 
+### `product/backend/infra/storage/results/check_publications.py`
+- `class CheckPublicationRow`
+- `class CheckPublicationRecord`
+- `class CheckPublicationRepository`
+主要 import / dot-source：`product.backend.infra.storage.base`, `pydantic`, `sqlalchemy`, `sqlalchemy.orm`
+
 ### `product/backend/infra/storage/results/evidence.py`
 - `class EvidenceIndexRow`
 - `class EvidenceIndexRecord`
@@ -175,6 +182,6 @@
 
 ### `product/backend/infra/storage/unit_of_work.py`
 - `class StorageUnitOfWork`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.storage.action_preparation`, `product.backend.infra.storage.application_understanding`, `product.backend.infra.storage.business_boundaries`, `product.backend.infra.storage.contracts`, `product.backend.infra.storage.execution.job_control`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.execution_profiles`, `product.backend.infra.storage.llm`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.evidence`, `product.backend.infra.storage.results.finalizations`, `product.backend.infra.storage.results.findings`, `product.backend.infra.storage.results.gating`, `product.backend.infra.storage.setup`, `product.backend.infra.storage.source_changes`, `sqlalchemy.exc`, `sqlalchemy.orm`, `types`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.storage.action_preparation`, `product.backend.infra.storage.application_understanding`, `product.backend.infra.storage.business_boundaries`, `product.backend.infra.storage.contracts`, `product.backend.infra.storage.execution.job_control`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.execution_profiles`, `product.backend.infra.storage.llm`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.check_publications`, `product.backend.infra.storage.results.evidence`, `product.backend.infra.storage.results.finalizations`, `product.backend.infra.storage.results.findings`, `product.backend.infra.storage.results.gating`, `product.backend.infra.storage.setup`, `product.backend.infra.storage.source_changes`, `sqlalchemy.exc`, `sqlalchemy.orm`, `types`
 
 <!-- GENERATED:END -->

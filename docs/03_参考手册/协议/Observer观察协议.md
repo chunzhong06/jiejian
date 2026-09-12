@@ -1,8 +1,24 @@
 # Observer 观察协议
 
-> 状态：CURRENT。本文先解释为什么需要真实观察以及六类来源怎样形成证据，再给出查询入口；完整字段以 `product/protocols/observer/` 与 Observer Schema 为准。
+> 状态：CURRENT。当前 CHECK 入口见首节；其后保留实现单独标明适用范围。
 
-## 先用 Bob 导出故事理解 Observer
+## 当前 CHECK 消费者与数据流
+
+Observer 公共模型仍由 `product/protocols/observer/` 定义，独立 Invocation/Envelope 根格式为字符串 `"1"`；嵌套 Spec、locator、scope 不增加版本。六类真实 adapter 复用，但当前来源等级由 `CheckRuntimeBundle` 的主证明及辅助注册冻结，不按 Sample 来源名自动赋予权威性。
+
+`PersistedExecutionRequestV3 + CheckRuntimeBundle → CHECK Worker → Check Runner/CheckExecutor → CheckObserverRuntime → adapter → ObservationEnvelope → EffectProjector.project_check → CheckObservation/CheckEvidence → fenced publication → CheckResultReader/ResultStory` 是当前链。`VERDICT_REQUIRED` 进入唯一 `core/verification/checks.py`；`SUPPORTING / DIAGNOSIS_REQUIRED` 不替代主证明。实际身份独立验证，Trace 不兜底身份或决定 Verdict。
+
+`StructuredAuditLogLocator.allowed_fields` 是 25 个已命名字段的封闭集合，原六个必需字段不变。可选 `allowed_action_ids` 与 `allowed_resource_ids` 是唯一允许的数组值，每组 0～64 个唯一严格字符串，每项 1～160 字符且匹配 `^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$`，同时拒绝既有内联秘密模式。null、标量、布尔、数值、对象、嵌套、重复、超长或超量均使整个事件成为 `AUDIT_EVENT_INVALID` 并保留不完整，不能截断或过滤为完整结果。
+
+出现范围键必须同时满足既有完整 Trace 必需字段。缺失保持缺失，空数组保持空数组；两者均不证明授权范围。记录 canonical、冲突检测和 provenance hash 保留源数组顺序，经校验投影到 `TraceAuthorityScope` 后集合才规范排序。不改原始日志或旧发布文件，无新增字段的字节规则不变。行、文件、字节、时间、游标、关联和闭合预算不变，Trace 仍最多 512 事件、256 KiB。
+
+合法委托只能由显式因果 `AUTHORIZATION/ALLOW` 祖先、非空来源范围、范围子集、实际动作/资源覆盖及凭据一致性证明；不能从角色、actor、资源名称或 ALLOW 结果补范围。定位与效果判定分离：诊断不足或合法委托不能抹去独立权威来源已确认的 DENY 禁止效果。相关真源为 `infra/observers/audit_log.py`、`check_trace.py`、`core/verification/trace.py` 和 `breakpoints.py`（均位于 `product/backend/`）。
+
+## 保留实现参考（不适用于当前 CHECK 入口）
+
+以下为旧执行、Sample 和历史结果消费者的保留说明。其中 Contract、旧 Runner、ResultPresentation、Report、History、Gate、CLI/MCP 和前端路径仅描述该保留链，不声明当前 CHECK 已接通这些能力；维护当前链应使用首节入口。
+
+### 先用 Bob 导出故事理解 Observer
 
 协作空间的项目资料只应由负责人 Alice 导出。界鉴让 Bob 执行“生成完整项目资料包”时，页面或接口可能返回 403，但 403 只能证明表面请求被拒绝，不能证明后台没有排队、任务没有运行、数据库没有改变、Blob 没有生成。
 
@@ -21,7 +37,7 @@ Azure Queue      对应消息生命周期是否真实发生
 
 Observer 的价值不是“多看几个日志”，而是让安全结论依赖真实系统事实，而不是 HTTP 表面或模型猜测。
 
-## 六个来源分别证明什么
+### 六个来源分别证明什么
 
 | 来源 | 当前职责 | 能证明 | 不能单独证明 |
 | --- | --- | --- | --- |
@@ -38,7 +54,7 @@ Owner API 与 Blob 是当前 OBJECT_CREATION 的关键来源，因为一个代�
 
 业务撤销尤其说明了这种区别：撤销后 Audit、Queue、Task 与 export history 保留 `REVOKED` 历史，Owner API 和 Blob 当前投影为 ABSENT/NOT_FOUND。恢复当前副作用不等于删除历史证据。
 
-## required、corroborating 与 KEY、SUPPORTING
+### required、corroborating 与 KEY、SUPPORTING
 
 冻结 EffectBinding 使用 required channel 与 corroborating channel 描述执行和充分性。两类来源都进入实际调度、投影、Evidence 和 CaseResult，并进行角色校验，不存在“supporting 只写配置但不运行”的路径。
 
@@ -46,13 +62,13 @@ Owner API 与 Blob 是当前 OBJECT_CREATION 的关键来源，因为一个代�
 
 `ResultPresentation` 再把冻结角色翻译为用户可读的 KEY/SUPPORTING，并把来源状态翻译为 FOUND/NOT_FOUND/UNAVAILABLE。KEY/SUPPORTING 是展示投影，不是第二套 Verification 规则。
 
-## 为什么 NOT_FOUND 必须等待闭合
+### 为什么 NOT_FOUND 必须等待闭合
 
 “暂时没有看到”不是“确定不存在”。异步导出可能仍在 Queue、Task 运行或最终一致窗口中；Blob list 也可能只读到部分分页。只有满足 EffectBinding 的闭合策略、观察预算与关联条件后，NOT_FOUND 才能参与 ABSENT 证明。
 
 闭合策略包括 IMMEDIATE、TERMINAL_STATE、BOUNDED_QUIESCENCE 与 EXCLUSIVE_CHANNEL_WINDOW。EVENTUAL-only 运行只适用于 AsyncTask 与 Queue，不扩展为全部 Observer 的通用语义。任务仍运行、终态冲突、观察窗口未闭合、分页/字节预算耗尽、部分尾行或关联不唯一，都只能形成 UNKNOWN/INCONCLUSIVE。
 
-## 关联、完整性与只读边界
+### 关联、完整性与只读边界
 
 每次调用由 `ObserverSpec`、`ObserverInvocation` 和 `ObservationEnvelope` 绑定 phase、case、task、sequence、逻辑资源、window 与 correlation。只接受显式关联，不使用“时间接近”“标题相似”或资源名称猜测补链。缺失、冲突、重复或交错关联必须作为限制保留。
 
@@ -60,7 +76,7 @@ Queue 使用只读 Peek、固定 scope 和有界消息数，不改变 dequeue co
 
 原始读取先形成有界 `ObservationEnvelope` 和 provenance；独立 `EffectProjector` 再按 `effect_id + projection_version` 投影 ObservationFact/SecurityEffectFact。Coordinator 不解释业务效果，Projector 不回读目标、不使用 whole-state hash。Observer 与 Projector 都不写 Verdict、Finding 或 Gate，也不直接修改目标。
 
-## 失败为什么只能 INCONCLUSIVE
+### 失败为什么只能 INCONCLUSIVE
 
 关键 Observer 缺失、读取异常、来源不完整、预算超限、correlation 冲突、可靠性不足或窗口未闭合时，系统不知道“副作用不存在”，只知道“当前证据不能证明”。因此它们只能支持 INCONCLUSIVE，不能被默认值、空列表或异常吞掉后解释为安全。
 
@@ -68,7 +84,7 @@ Queue 使用只读 Peek、固定 scope 和有界消息数，不改变 dequeue co
 
 Evidence 一经发布便永久只读。关键观察缺失后，系统只能完善当前 Observer/Recovery 准备并发起新的 Run；不能为旧 Run 追加 ObservationEnvelope、延长旧窗口、补写 Evidence，或把旧 INCONCLUSIVE 改成 PASS/BLOCK。产品恢复入口只说明下一步去哪里，不参与 Observer 调度和 Verification。
 
-## 生命周期与查询入口
+### 生命周期与查询入口
 
 ```text
 Execution Case
@@ -98,11 +114,11 @@ Execution Case
 - outcome/INCONCLUSIVE 直接测试：`tests/protocols/observer/test_observer_result.py`、`tests/backend/core/verification/permissions/test_evaluation.py`
 - 协作空间六面 Golden：`tests/fixtures/collaboration_golden.py`
 
-## 版本与 Schema
+### 版本与 Schema
 
 `ObserverInvocation` 与 `ObservationEnvelope` 是独立根文档，当前 `schema_version` 均为字符串 `"1"`；`ObserverSpec`、`ObserverOutcome` 等嵌套 DTO 不重复根版本。结构化 Audit 的可选 Trace 字段仍属于现有根文档，不另建 Schema 版本。Schema 版本描述机器格式，不表示产品版本。字段、required、枚举、大小和 canonical 以代码与已签入 Schema 为准，旧开发格式不猜测读取。
 
-## 相关真源
+### 相关真源
 
 - [执行与观察](../../01_系统地图/执行与观察.md)
 - [权限验证与结果](../../01_系统地图/权限验证与结果.md)

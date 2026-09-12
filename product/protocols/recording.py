@@ -179,12 +179,16 @@ class RecordingSessionRef(RecordingProtocolModel):
 
 # Worker 交给 Recording Runner 的冻结目标、身份引用、范围与预算。
 class RecordingRunnerRequest(RecordingProtocolModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["3"] = "3"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
     action_revision: int = Field(ge=1)
-    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    subject_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    resource_owner_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    subject_slot_id: str = Field(pattern=r"^isl_[0-9a-f]{32}$")
+    resource_owner_slot_id: str = Field(pattern=r"^isl_[0-9a-f]{32}$")
+    resource_owner_confirmed: bool = False
     preparation_source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     purpose: RecordingPurpose = RecordingPurpose.TARGET
     parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
@@ -205,7 +209,7 @@ class RecordingRunnerRequest(RecordingProtocolModel):
         if (self.purpose is RecordingPurpose.OBSERVATION) != (self.effect_id is not None):
             raise ValueError("observation request must bind a confirmed business effect")
         identity_ids = {session.test_identity_id for session in self.sessions}
-        if identity_ids != {self.test_identity_id}:
+        if identity_ids != {self.subject_test_identity_id}:
             raise ValueError("recording source identity must match its single session")
         session_refs = {session.session_ref for session in self.sessions}
         if len(identity_ids) != len(self.sessions):
@@ -503,7 +507,7 @@ def _parse_recording_json(
             object_pairs_hook=_unique_object,
             parse_constant=_reject_non_finite,
         )
-        expected_version = "2" if model is RecordingRunnerRequest else "1"
+        expected_version = "3" if model is RecordingRunnerRequest else "1"
         if not isinstance(parsed, dict) or parsed.get("schema_version") != expected_version:
             raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制协议版本不受支持")
         _reject_known_secret_material(parsed, known_secrets)

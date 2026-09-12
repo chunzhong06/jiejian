@@ -11,7 +11,9 @@ import { systemApi } from '../api/system'
 import { DesktopModuleNavigation, MobileModuleNavigation } from '../components/ModuleNavigation'
 import { ErrorRecovery } from '../components/ErrorRecovery'
 import { AccessPage } from '../features/access/AccessPage'
-import { PreparationPage } from '../features/preparation/PreparationPage'
+import { CurrentTestsPage } from '../features/testing/CurrentTestsPage'
+import { ChangesPage } from '../features/changes/ChangesPage'
+import { OfficialSamplePanel } from '../features/workspace/OfficialSamplePanel'
 import { BusinessBoundaryPage } from '../features/boundaries/BusinessBoundaryPage'
 import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
 import { RuntimePage } from '../features/system/RuntimePage'
@@ -138,7 +140,8 @@ function ControlShellContent() {
       navigate('/workspace')
       return
     }
-    navigate(normalizeRoute(path))
+    const [pathname, query] = path.split('?')
+    navigate(normalizeRoute(pathname) + (query ? `?${query}` : ''))
   }, [navigate])
   const removeCurrentProject = async () => {
     if (!selected) return
@@ -156,14 +159,19 @@ function ControlShellContent() {
   }
 
   const content = () => {
-    if (route === '/workspace') return <WorkbenchPage selected={selected} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={(path) => navigate(path)} />
+    if (route === '/workspace') return <WorkbenchPage selected={selected} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={(path) => navigate(path)} samplePanel={<OfficialSamplePanel value={experience} onError={notifyError} onNavigate={navigate} onChanged={async (value) => {
+      setExperience(value)
+      const items = await workspaceState.refreshProjects()
+      const project = value.active ? items.find(item => item.project_id === value.project_id) : null
+      if (project) { workspaceState.selectProject(project); await workspaceState.refreshCurrentWorkspace(project) }
+    }} />} />
     if (route === '/tools') return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspaceState.refreshCurrentWorkspace() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/permissions') return <BusinessBoundaryPage key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onBack={() => navigate('/workspace')} />
-    if (route === '/changes') return <CurrentUnavailableArea title="变化与修复当前暂不可用" description="当前尚不支持代码变化分析、修复与复验。可返回工作台查看当前待办。" onBack={() => navigate('/workspace')} />
-    if (route === '/tests') return <PreparationPage key={`tests-${selected.project_id}-${retryEpoch}`} project={selected} workspace={workspace} onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onNavigate={navigateRecoveryTarget} />
+    if (route === '/changes') return <ChangesPage key={`changes-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigate} onStateChanged={workspaceState.refreshCurrentWorkspace} requestedRepair={new URLSearchParams(location.search).get('repair_reference')} />
+    if (route === '/tests') return <CurrentTestsPage key={`tests-${selected.project_id}-${retryEpoch}-${new URLSearchParams(location.search).get('change_id') ?? ''}`} project={selected} workspace={workspace} onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onNavigate={navigateRecoveryTarget} requestedRunId={new URLSearchParams(location.search).get('run_id')} changeId={new URLSearchParams(location.search).get('change_id')} />
     return <CurrentUnavailableArea title="此历史入口当前不可用" description="请从工作台进入当前可用的业务边界或检查准备。" onBack={() => navigate('/workspace')} />
   }
 

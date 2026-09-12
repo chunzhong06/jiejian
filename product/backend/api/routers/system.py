@@ -138,8 +138,8 @@ class ReadyResponse(ApiModel):
     schema_version: Literal["1"] = "1"
     status: Literal["ready"]
     worker: Literal["running", "stopped", "unavailable"]
-    worker_capabilities: tuple[Literal["RECORDING"], ...]
-    check: Literal["unavailable"]
+    worker_capabilities: tuple[Literal["CHECK", "RECORDING"], ...]
+    check: Literal["available", "unavailable"]
     recovered_jobs: int
 
 

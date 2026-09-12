@@ -95,6 +95,7 @@ class TraceEvent(_TraceModel):
     authority_scope: TraceAuthorityScope = Field(default_factory=TraceAuthorityScope)
     authorization_decision: TraceAuthorizationDecision | None = None
     effect_id: str | None = Field(default=None, pattern=_PUBLIC_ID)
+    dispatch_effect_ids: tuple[str, ...] = Field(default=(), max_length=16, exclude_if=lambda value: not value)
     source_component: str = Field(pattern=_PUBLIC_ID)
     source_location: str = Field(pattern=_PUBLIC_ID)
     correlation_kind: TraceCorrelationKind
@@ -103,6 +104,14 @@ class TraceEvent(_TraceModel):
 
     @model_validator(mode="after")
     def validate_event(self) -> TraceEvent:
+        # 派发只表示工作已被接受，不能同时声称后果发生；空字段省略以保持旧证据字节。
+        if self.dispatch_effect_ids:
+            if self.kind not in {TraceEventKind.MESSAGE,TraceEventKind.DELEGATION} or self.effect_id is not None:
+                raise ValueError("dispatch is distinct from a realized effect")
+            if len(set(self.dispatch_effect_ids)) != len(self.dispatch_effect_ids) or any(
+                re.fullmatch(_PUBLIC_ID,value) is None or _INLINE_SECRET.search(value) for value in self.dispatch_effect_ids):
+                raise ValueError("invalid dispatch effect identifiers")
+            object.__setattr__(self,"dispatch_effect_ids",tuple(sorted(self.dispatch_effect_ids)))
         if self.event_id in self.parent_event_ids:
             raise ValueError("trace event cannot reference itself as a parent")
         if len(set(self.parent_event_ids)) != len(self.parent_event_ids):

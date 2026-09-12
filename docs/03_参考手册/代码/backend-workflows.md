@@ -198,6 +198,82 @@
 - `class BusinessBoundaryService`
 主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `product.backend.core.application_understanding`, `product.backend.core.approval`, `product.backend.core.assurance`, `product.backend.core.boundary_proposal`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.infra.storage`, `product.backend.workflows.business_boundaries.fingerprints`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.business_boundaries.maintenance`, `product.backend.workflows.business_boundaries.models`, `time`, `uuid`
 
+### `product/backend/workflows/changes/__init__.py`
+主要 import / dot-source：`.service`
+
+### `product/backend/workflows/changes/service.py`
+- `class SourceRevalidationInspection`
+- `class CurrentChangeView`
+- `permission_refs(boundary)`
+- `class CurrentSourceChangeService`
+主要 import / dot-source：`__future__`, `product.backend.core.check_plan`, `product.backend.core.check_repair`, `product.backend.core.errors`, `product.backend.core.source_changes`, `product.protocols.execution_v3`, `pydantic`, `threading`, `time`, `typing`, `uuid`
+
+### `product/backend/workflows/checks/local_observer_wiring.py`
+- `_MAX_DESCRIPTOR_BYTES`
+- `_SECRET_REF`
+- `_ID`
+- `_AZURE_ACCOUNT`
+- `class LocalObserverWiring`
+- `load_local_observer_wiring(descriptor_path, var_dir, action_id, expected_origin, expected_resource_id, resource_mismatch_is_disabled) -> LocalObserverWiring | None`
+主要 import / dot-source：`__future__`, `dataclasses`, `hashlib`, `json`, `pathlib`, `product.backend.core.errors`, `product.protocols`, `re`, `typing`, `urllib.parse`
+
+### `product/backend/workflows/checks/registry.py`
+- `class RegisteredCheckIdentity`
+- `class RegisteredResourceWindow`
+- `class RegisteredAuxiliarySource`
+- `class RegisteredCheckProof`
+- `class CheckRuntimeRegistration`
+- `class CheckRuntimeRegistry`
+主要 import / dot-source：`__future__`, `product.backend.core.action_preparation`, `product.backend.core.business_boundary`, `product.backend.core.check_plan`, `product.backend.core.errors`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `product.protocols.observer`, `product.protocols.web.target`, `pydantic`, `threading`
+
+### `product/backend/workflows/checks/repair.py`
+- `build_current_repair_contract(package, source_case_id, breakpoint)`
+- `class CurrentRepairService`
+主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.protocols.execution_v3`
+
+### `product/backend/workflows/checks/repair_text.py`
+- `REPAIR_STATUS_LABELS`
+- `CHANGE_IMPACT_LABELS`
+- `REPAIR_REQUIREMENTS`
+- `CURRENT_TASK_TEXT`
+
+### `product/backend/workflows/checks/results.py`
+- `class CheckRunView`
+- `class CheckJobView`
+- `class CheckProgressView`
+- `class CheckRunStatus`
+- `class CheckResultReader`
+主要 import / dot-source：`__future__`, `hashlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.artifacts.check_packages`, `product.backend.infra.runtime.paths`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
+
+### `product/backend/workflows/checks/runtime_bundle.py`
+- `recorded_request_template(template) -> HttpRequestTemplate`
+- `class CheckRuntimeBuilder`
+- `derive_target_classifiers(config, specs, identities)`
+主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.action_preparation`, `product.backend.core.check_plan`, `product.backend.core.errors`, `product.backend.infra.artifacts.check_packages`, `product.backend.infra.recording.request_store`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.recording.source`, `product.protocols.check_runtime`, `product.protocols.flow_draft`, `product.protocols.observer`, `product.protocols.recording_flow`, `product.protocols.web.request`, `product.protocols.web.response`, `urllib.parse`
+
+### `product/backend/workflows/checks/service.py`
+- `class CheckPreview`
+- `class CheckService`
+主要 import / dot-source：`__future__`, `hashlib`, `json`, `logging`, `product.backend.core.check_plan`, `product.backend.core.errors`, `product.backend.infra.artifacts.check_validation`, `product.backend.infra.runtime.jobs.check_requests`, `product.backend.infra.runtime.jobs.models`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `pydantic`, `threading`, `time`, `uuid`
+
+### `product/backend/workflows/checks/story.py`
+- `class StoryIdentity`
+- `class StoryEffect`
+- `class StoryControl`
+- `class FactComparison`
+- `class EvidenceExplanation`
+- `class ActionResultStory`
+- `class ResultStory`
+- `class CheckStoryBuilder`
+主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.checks`, `product.backend.workflows.checks.story_text`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
+
+### `product/backend/workflows/checks/story_text.py`
+- `JUDGEMENTS`
+- `EXECUTION_LABELS`
+- `EFFECT_LABELS`
+- `PRECISION_LABELS`
+- `CLAIM_BOUNDARIES`
+
 ### `product/backend/workflows/competition_validation.py`
 - `_SUMMARY_FILE`
 - `_MAX_SUMMARY_BYTES`
@@ -236,9 +312,8 @@
 ### `product/backend/workflows/official_sample.py`
 - `class OfficialScenarioVersion`
 - `class OfficialExperienceView`
-- `_IDENTITY_MAPPING`
 - `class OfficialSampleExperience`
-主要 import / dot-source：`__future__`, `collections.abc`, `dataclasses`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.test_identity`, `product.backend.core.verification.permissions`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.control`, `product.backend.workflows.official_scenario`, `product.backend.workflows.permission_intents`, `product.backend.workflows.projects.preparation`, `product.backend.workflows.recording.safety_setup`, `product.backend.workflows.results.repair`, `product.backend.workflows.security_setup.local_observer_registry`, `product.backend.workflows.source_changes`, `product.backend.workflows.test_identities`, `pydantic`, `threading`, `time`
+主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `json`, `product.backend.core.action_preparation`, `product.backend.core.check_repair`, `product.backend.core.errors`, `product.backend.core.test_identity`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.workflows.business_boundaries.official_recipe`, `product.backend.workflows.checks.local_observer_wiring`, `product.backend.workflows.checks.registry`, `product.backend.workflows.official_scenario`, `product.backend.workflows.test_identities`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `product.protocols.observer`, `pydantic`, `threading`, `time`
 
 ### `product/backend/workflows/official_scenario.py`
 - `SAMPLE_PROJECT_ID`
@@ -246,7 +321,7 @@
 - `EXPORT_ACTION_KEY`
 - `VIEW_ACTION_KEY`
 - `class OfficialScenarioInstaller`
-主要 import / dot-source：`__future__`, `collections.abc`, `itertools`, `json`, `pathlib`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.models`, `product.backend.workflows.recording.credentials`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.recording.project_submission`, `product.backend.workflows.recording.submission`, `product.protocols`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `itertools`, `json`, `pathlib`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.models`, `product.backend.workflows.recording.credentials`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.recording.project_submission`, `product.backend.workflows.recording.submission`, `product.protocols`
 
 ### `product/backend/workflows/onboarding/discovery.py`
 - `_ALLOWED_NAMES`
@@ -308,8 +383,14 @@
 
 ### `product/backend/workflows/preparation/bindings.py`
 - `class RegisteredObserverReader`
+- `class RegisteredEffectProofReader`
 - `class PreparationBindingService`
-主要 import / dot-source：`__future__`, `hashlib`, `json`, `pathlib`, `product.backend.core.action_preparation`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.preparation.models`, `product.backend.workflows.preparation.recording_candidates`, `product.backend.workflows.recording.source`, `product.backend.workflows.test_identities.service`, `typing`
+主要 import / dot-source：`__future__`, `contextlib`, `hashlib`, `json`, `pathlib`, `product.backend.core.action_preparation`, `product.backend.core.business_boundary`, `product.backend.core.check_plan`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.preparation.models`, `product.backend.workflows.preparation.recording_candidates`, `product.backend.workflows.recording.source`, `product.backend.workflows.test_identities.service`, `typing`
+
+### `product/backend/workflows/preparation/demonstrations.py`
+- `class LegalActionDemonstration`
+- `legal_demonstrations(contract, permissions, identities)`
+主要 import / dot-source：`product.backend.core.assurance`, `product.backend.core.business_boundary`, `product.backend.core.permission_semantics`, `product.backend.workflows.preparation.models`
 
 ### `product/backend/workflows/preparation/models.py`
 - `class PreparationStatus`
@@ -321,7 +402,11 @@
 - `class ActionTechnicalPreparationView`
 - `class ActionPreparationView`
 - `class PreparationView`
-主要 import / dot-source：`enum`, `product.backend.core.assurance`, `product.backend.core.business_boundary`, `pydantic`
+主要 import / dot-source：`enum`, `product.backend.core.assurance`, `product.backend.core.business_boundary`, `product.backend.core.permission_intent`, `pydantic`
+
+### `product/backend/workflows/preparation/planning.py`
+- `current_plan(service, project_id, engine_version, config_fingerprint)`
+主要 import / dot-source：`product.backend.core.check_plan`, `product.backend.core.errors`, `product.backend.workflows.preparation.models`, `product.backend.workflows.recording.source`
 
 ### `product/backend/workflows/preparation/recording_candidates.py`
 - `class RecordedPreparationCandidate`
@@ -337,7 +422,7 @@
 - `class IdentityReader`
 - `class PreparationBindingReader`
 - `class PreparationService`
-主要 import / dot-source：`__future__`, `product.backend.core.assurance`, `product.backend.core.business_boundary`, `product.backend.workflows.business_boundaries.models`, `product.backend.workflows.preparation.models`, `product.backend.workflows.test_identities.service`, `typing`
+主要 import / dot-source：`__future__`, `product.backend.core.assurance`, `product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.workflows.business_boundaries.models`, `product.backend.workflows.preparation.models`, `product.backend.workflows.test_identities.service`, `time`, `typing`
 
 ### `product/backend/workflows/projects/__init__.py`
 主要 import / dot-source：`.catalog`, `.lifecycle`
@@ -381,11 +466,10 @@
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.storage`, `product.backend.workflows.projects.preparation`, `pydantic`, `typing`
 
 ### `product/backend/workflows/projects/repair.py`
-- `class ProjectRepairStatus`
-- `class RepairTaskView`
-- `class ProjectRepairView`
-- `class ProjectRepairService`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.repair`, `product.backend.workflows.projects.preparation`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.results.presentation`, `pydantic`, `typing`
+- `class CurrentRepairTask`
+- `class ProjectRepair`
+- `class CurrentProjectRepairService`
+主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.lifecycle`, `product.protocols.execution_v3`, `pydantic`, `typing`
 
 ### `product/backend/workflows/projects/revalidation.py`
 - `class ProjectRevalidationStatus`
@@ -436,8 +520,9 @@
 ### `product/backend/workflows/recording/source.py`
 - `identity_source_fingerprint(identity)`
 - `recording_endpoint_fingerprint(understanding)`
-- `recording_source_fingerprint(action, identity, understanding, action_binding, actor_binding)`
-- `require_recording_source(work, request)`
+- `recording_source_fingerprint(action, identity, understanding, action_binding, actor_binding, owner, owner_actor_binding)`
+- `require_recording_source(work, request, historical_source)`
+- `require_persisted_recording_source(work, recording, var_dir)`
 主要 import / dot-source：`product.backend.core.business_boundary`, `product.backend.core.errors`, `product.backend.core.recording`, `product.backend.workflows.business_boundaries.inspection`
 
 ### `product/backend/workflows/recording/submission.py`
@@ -447,7 +532,7 @@
 - `class RecordingCompletionResult`
 - `recording_target_scope(endpoint) -> WebTargetScope`
 - `class RecordingSubmission`
-主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.events`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.storage`, `product.backend.workflows.recording.processing`, `product.backend.workflows.recording.source`, `product.protocols`, `product.protocols.web.target`, `pydantic`, `typing`, `urllib.parse`, `uuid`
+主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.events`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.storage`, `product.backend.workflows.recording.processing`, `product.backend.workflows.recording.source`, `product.protocols`, `product.protocols.web.target`, `pydantic`, `time`, `typing`, `urllib.parse`, `uuid`
 
 ### `product/backend/workflows/results/__init__.py`
 主要 import / dot-source：`.history`, `.presentation`
@@ -584,13 +669,7 @@
 主要 import / dot-source：`__future__`, `dataclasses`, `pathlib`, `product.backend.core.errors`, `re`, `threading`, `urllib.parse`
 
 ### `product/backend/workflows/security_setup/local_observer_wiring.py`
-- `_MAX_DESCRIPTOR_BYTES`
-- `_SECRET_REF`
-- `_ID`
-- `_AZURE_ACCOUNT`
-- `class LocalObserverWiring`
-- `load_local_observer_wiring(descriptor_path, var_dir, action_id, expected_origin, expected_resource_id, resource_mismatch_is_disabled) -> LocalObserverWiring | None`
-主要 import / dot-source：`__future__`, `dataclasses`, `hashlib`, `json`, `pathlib`, `product.backend.core.errors`, `product.backend.workflows.security_setup.models`, `product.protocols`, `re`, `typing`, `urllib.parse`
+主要 import / dot-source：`product.backend.workflows.checks.local_observer_wiring`
 
 ### `product/backend/workflows/security_setup/models.py`
 - `_CONTRACT_RESOURCE_ID`
@@ -647,8 +726,10 @@
 - `class ActionWorkspaceView`
 - `class PrimaryTaskView`
 - `class WorkspaceAreaView`
+- `class WorkspaceLatestResult`
+- `class WorkspaceSourceChange`
 - `class WorkspaceView`
-主要 import / dot-source：`__future__`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.business_boundaries.models`, `product.protocols`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.business_boundaries.models`, `product.backend.workflows.projects.repair`, `product.protocols`, `pydantic`, `typing`
 
 ### `product/backend/workflows/workspace/service.py`
 - `class WorkspaceService`

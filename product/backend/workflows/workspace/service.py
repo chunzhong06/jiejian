@@ -27,7 +27,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.permission_semantics import PermissionExpectation
 from product.backend.core.recording import RecordingPurpose, RecordingState
 from product.backend.workflows.preparation.models import PreparationStatus
-from product.backend.workflows.recording.source import require_recording_source
+from product.backend.workflows.recording.source import require_persisted_recording_source
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.business_boundaries.models import BusinessBoundaryView
 from product.backend.workflows.business_boundaries.service import BusinessBoundaryService
@@ -52,10 +52,16 @@ class WorkspaceService:
         business_boundaries: BusinessBoundaryService,
         *,
         preparation,
+        var_dir=None,
     ) -> None:
         self._uow_factory = uow_factory
         self._business_boundaries = business_boundaries
         self._preparation = preparation
+        self._var_dir = var_dir
+        self._current_checks = None
+
+    def set_current_checks(self, *, checks, reader, changes, repairs, source_inspector):
+        self._current_checks = (checks,reader,changes,repairs,source_inspector)
 
     def get(self, project_id: str) -> WorkspaceView:
         with self._uow_factory() as work:
@@ -141,6 +147,43 @@ class WorkspaceService:
                 for item in actor_views
             )
         )
+        latest_result,source_change,repair = None,None,None
+        if self._current_checks is not None:
+            from product.backend.workflows.workspace.models import WorkspaceLatestResult, WorkspaceSourceChange
+            from product.backend.workflows.checks.repair_text import CURRENT_TASK_TEXT
+            from product.backend.workflows.checks.story_text import JUDGEMENTS
+            checks,reader,changes,repairs,source_inspector = self._current_checks
+            change = changes.latest(project_id)
+            if change is not None:
+                source_change = WorkspaceSourceChange(change_id=change.manifest.change_id,
+                    revalidation_status=change.revalidation.status,can_execute=change.revalidation.can_execute,
+                    reason=change.manifest.reason,created_at_us=change.manifest.created_at_us)
+            repair = repairs.evaluate(project_id)
+            for entry in reader.list_for_project(project_id):
+                if entry.result_integrity != "VALID" or entry.run.policy_epoch != boundary.policy_epoch:
+                    continue
+                package = reader.package(entry.run.run_id,project_id=project_id)
+                if package.request.source_fingerprint == understanding.source_fingerprint:
+                    latest_result = WorkspaceLatestResult(run_id=entry.run.run_id,verdict=entry.run.verdict.value,
+                        policy_epoch=entry.run.policy_epoch,created_at_us=entry.run.created_at_us,
+                        summary=JUDGEMENTS[entry.run.verdict.value])
+                    break
+            if primary_task is None:
+                task = next((item for item in repair.tasks if item.task_reference==repair.primary_task_reference),None)
+                try:
+                    drifted = understanding.source_analysis_authorized and source_inspector(project_id)!=understanding.source_fingerprint
+                except (JiejianError,OSError):
+                    drifted = True
+                kind = ("VERIFY_REPAIR" if task is not None and task.status=="READY_TO_VERIFY" else
+                    "REGISTER_SOURCE_CHANGE" if drifted else "RUN_CURRENT_CHECK" if latest_result is None and checks.preview(project_id).can_execute else
+                    "VIEW_CURRENT_RESULT" if latest_result is not None else None)
+                if kind is not None:
+                    title,why,responsibility = CURRENT_TASK_TEXT[kind]
+                    change_id = task.change_id if kind=="VERIFY_REPAIR" else None
+                    run_id = latest_result.run_id if kind=="VIEW_CURRENT_RESULT" else None
+                    primary_task = self._task(kind,title=title,why_now=why,user_responsibility=responsibility,
+                        system_will_do=why,route="/changes" if kind=="REGISTER_SOURCE_CHANGE" else "/tests",
+                        change_id=change_id,run_id=run_id,facts=dict(change_id=change_id,run_id=run_id))
         return WorkspaceView(
             project=WorkspaceProjectView(
                 project_id=project.project_id,
@@ -153,15 +196,27 @@ class WorkspaceService:
             actions=action_views,
             primary_task=primary_task,
             areas=self._areas(boundary_attention, preparation.preparation_complete),
+            latest_result=latest_result,source_change=source_change,repair=repair,
         )
 
     def _preparation_task(self, boundary, preparation, understanding):
         """先按任务类别跨动作排序；只定位现有来源，不复制准备检查或写入事实。"""
+        selection = next((item for item in sorted(preparation.actions, key=lambda item: item.action_id)
+                          if "ALLOW_CONTROL_SELECTION_REQUIRED" in item.reason_codes), None)
+        if selection is not None:
+            return self._task(
+                "SELECT_ALLOW_CONTROL", business_action_id=selection.action_id,
+                action_revision=selection.action_revision, title="选择合法对照",
+                why_now="这条权限有多个同等合适的合法对照。",
+                user_responsibility="选择用于比较的合法操作。",
+                system_will_do="界鉴将使用同一资源和业务结果进行比较。",
+                route="/tests", facts=selection.model_dump(mode="json"),
+            )
         candidates = []
         texts = {
             "PREPARE_TEST_IDENTITY": ("准备真实测试账号", "当前权限需要独立的真实账号。", "为指定业务主体创建账号记录，并在独立浏览器中登录。", "界鉴只安全保存当前目标所需的登录状态。"),
             "DEMONSTRATE_ACTION": ("演示一次业务动作", "当前动作还缺少可复用的业务演示。", "使用指定的正常账号完成一次业务操作。", "界鉴从实际操作中整理执行步骤与资源位置。"),
-            "PREPARE_ACTION_RESOURCE": ("准备具体测试资源", "当前权限仍缺少指定账号拥有的资源。", "使用指定账号演示一次对本人资源的操作。", "界鉴保留各账号各自的资源材料。"),
+            "PREPARE_ACTION_RESOURCE": ("准备具体测试资源", "当前权限仍缺少指定账号拥有的资源。", "使用指定账号演示一次对指定资源的操作。", "界鉴保留各账号各自的资源材料。"),
             "COMPLETE_EFFECT_EVIDENCE": ("演示如何确认业务结果", "当前业务结果还缺少可观察的证明。", "演示平时在哪里确认这项业务结果。", "界鉴只关联已经确认的业务结果，不生成新请求。"),
             "COMPLETE_RECOVERY": ("演示如何恢复业务状态", "这项业务操作需要明确的恢复方式。", "演示如何恢复本次操作改变的状态。", "界鉴保存恢复材料，不运行正式安全检查。"),
         }
@@ -178,11 +233,11 @@ class WorkspaceService:
                          "source": [understanding.confirmed_endpoint, understanding.endpoint_source_fingerprint, understanding.source_fingerprint, understanding.revision],
                          "action_bindings": [item.model_dump(mode="json") for item in boundary.action_bindings if item.action_id == action.action_id],
                          "actor_bindings": [item.model_dump(mode="json") for item in boundary.actor_bindings if item.actor_id in {slot.requirement.actor_id for slot in slots}],
-                         "recordings": [item.model_dump(mode="json", include={"recording_id", "state", "updated_at_us", "test_identity_id", "preparation_source_fingerprint"}) for item in current_recordings]}
+                         "recordings": [item.model_dump(mode="json", include={"recording_id", "state", "updated_at_us", "subject_test_identity_id", "resource_owner_test_identity_id", "preparation_source_fingerprint"}) for item in current_recordings]}
                 action_current = any(item.action_id == action.action_id and item.action_revision == action.action_revision
                     and item.status is ImplementationBindingStatus.CURRENT for item in boundary.action_bindings)
 
-                def add(priority, kind, *, slot=None, can_execute=True, text=None, **context):
+                def add(priority, kind, *, slot=None, can_execute=True, text=None, route="/tests", **context):
                     title, why, responsibility, system = text or texts[kind]
                     actor_current = slot is None or any(item.actor_id == slot.requirement.actor_id
                         and item.actor_revision == slot.requirement.actor_revision
@@ -199,7 +254,7 @@ class WorkspaceService:
                     task = self._task(kind, business_action_id=action.action_id,
                         business_actor_id=None if slot is None else slot.requirement.actor_id,
                         title=title, why_now=why, user_responsibility=responsibility, system_will_do=system,
-                        route="/tests", facts=facts, can_execute=can_execute, **context)
+                        route=route, facts=facts, can_execute=can_execute, **context)
                     candidates.append(((priority, action.action_id,
                         0 if slot is None else slot.requirement.ordinal, context.get("effect_id") or "",
                         context.get("recording_id") or ""), task))
@@ -207,36 +262,42 @@ class WorkspaceService:
                 for recording in current_recordings:
                     if (recording.state not in {RecordingState.CREATED, RecordingState.STARTING, RecordingState.RECORDING,
                             RecordingState.CLEANING, RecordingState.PROCESSING, RecordingState.PENDING_REVIEW}
-                            or recording.test_identity_id not in prepared_ids):
+                            or recording.subject_test_identity_id not in prepared_ids):
                         continue
                     try:
-                        require_recording_source(work, recording)
+                        require_persisted_recording_source(work, recording, self._var_dir)
                     except JiejianError:
                         continue
                     pending = recording.state is RecordingState.PENDING_REVIEW
                     text = ("确认业务演示", "已有业务演示等待确认。", "核对业务动作、资源和结果证明。", "界鉴只保存你确认的演示材料。") if pending else (
                         "继续业务演示", "已有业务演示正在进行。", "回到当前演示窗口完成采集。", "界鉴继续跟踪这次演示，不重复创建任务。")
                     add(0, "REVIEW_RECORDING", text=text,
-                        slot=next(item for item in slots if item.test_identity_id == recording.test_identity_id),
+                        slot=next(item for item in slots if item.test_identity_id == recording.subject_test_identity_id),
+                        subject_test_identity_id=recording.subject_test_identity_id,
+                        resource_owner_test_identity_id=recording.resource_owner_test_identity_id,
+                        subject_slot_id=next(item.requirement.slot_id for item in slots if item.test_identity_id == recording.subject_test_identity_id),
+                        resource_owner_slot_id=next(item.requirement.slot_id for item in slots if item.test_identity_id == recording.resource_owner_test_identity_id),
                         recording_id=recording.recording_id, recording_purpose=recording.purpose.value,
                         parent_recording_id=recording.parent_recording_id, effect_id=recording.effect_id)
                 for slot in slots:
                     if slot.status is not PreparationStatus.SATISFIED:
                         add(1, "PREPARE_TEST_IDENTITY", slot=slot)
+                from product.backend.workflows.preparation.demonstrations import legal_demonstrations
+                demonstrations = legal_demonstrations(action.assurance_contract, boundary.permission_intents, action.identity_requirements)
+
+                def demonstrate(priority, kind, owner_slot_id=None):
+                    choices = tuple(item for item in demonstrations if owner_slot_id is None or item.resource_owner_slot_id == owner_slot_id)
+                    chosen = next((item for item in choices if item.can_execute), choices[0] if choices else None)
+                    context = {} if chosen is None else chosen.model_dump(exclude={"permission", "can_execute"})
+                    subject = None if chosen is None else slots_by_id[chosen.subject_slot_id]
+                    add(priority, kind, slot=subject, can_execute=chosen is not None and chosen.can_execute,
+                        route="/permissions" if not choices else "/tests", recording_purpose="TARGET", **context)
+
                 if action.execution.status is not PreparationStatus.SATISFIED:
-                    allow_ids = {item.intent_id for item in boundary.permission_intents
-                        if item.business_action_id == action.action_id and item.action_revision == action.action_revision
-                        and item.expectation is PermissionExpectation.ALLOW}
-                    choices = sorted((item for item in action.assurance_contract.identity_requirements.permissions
-                        if item.permission.intent_id in allow_ids), key=lambda item: item.permission.intent_id)
-                    subject = next((slots_by_id[item.subject_slot_id] for item in choices
-                        if slots_by_id[item.subject_slot_id].status is PreparationStatus.SATISFIED), None)
-                    add(2, "DEMONSTRATE_ACTION", slot=subject, can_execute=subject is not None, recording_purpose="TARGET")
+                    demonstrate(2, "DEMONSTRATE_ACTION")
                 for resource in action.resources:
                     if resource.status is not PreparationStatus.SATISFIED and action.execution.status is PreparationStatus.SATISFIED:
-                        slot = slots_by_id[resource.owner_slot_id]
-                        add(3, "PREPARE_ACTION_RESOURCE", slot=slot,
-                            can_execute=slot.status is PreparationStatus.SATISFIED, recording_purpose="TARGET")
+                        demonstrate(3, "PREPARE_ACTION_RESOURCE", resource.owner_slot_id)
 
                 parent = None
                 for resource in sorted(action.resources, key=lambda item: item.owner_slot_id):
@@ -248,22 +309,29 @@ class WorkspaceService:
                     candidate = work.recordings.get(binding.source_recording_id)
                     if (candidate is None or candidate.state is not RecordingState.COMPLETED
                             or candidate.purpose is not RecordingPurpose.TARGET
-                            or candidate.test_identity_id != resource.owner_test_identity_id):
+                            or candidate.resource_owner_test_identity_id != resource.owner_test_identity_id):
                         continue
                     try:
-                        require_recording_source(work, candidate)
+                        require_persisted_recording_source(work, candidate, self._var_dir)
                     except JiejianError:
                         continue
                     parent = candidate
                     break
-                parent_slot = None if parent is None else next((item for item in slots if item.test_identity_id == parent.test_identity_id), None)
+                parent_slot = None if parent is None else next((item for item in slots if item.test_identity_id == parent.subject_test_identity_id), None)
+                parent_owner_slot = None if parent is None else next((item for item in slots if item.test_identity_id == parent.resource_owner_test_identity_id), None)
+                parent_context = {} if parent_slot is None or parent_owner_slot is None else {
+                    "subject_test_identity_id": parent.subject_test_identity_id,
+                    "resource_owner_test_identity_id": parent.resource_owner_test_identity_id,
+                    "subject_slot_id": parent_slot.requirement.slot_id,
+                    "resource_owner_slot_id": parent_owner_slot.requirement.slot_id,
+                }
                 for effect in sorted(action.effect_evidence, key=lambda item: item.effect_id):
                     if effect.status is not PreparationStatus.SATISFIED:
-                        add(4, "COMPLETE_EFFECT_EVIDENCE", slot=parent_slot, can_execute=parent is not None,
+                        add(4, "COMPLETE_EFFECT_EVIDENCE", slot=parent_slot, can_execute=parent is not None, **parent_context,
                             parent_recording_id=None if parent is None else parent.recording_id,
                             recording_purpose="OBSERVATION", effect_id=effect.effect_id)
                 if action.recovery.status not in {PreparationStatus.SATISFIED, PreparationStatus.NOT_REQUIRED}:
-                    add(5, "COMPLETE_RECOVERY", slot=parent_slot, can_execute=parent is not None,
+                    add(5, "COMPLETE_RECOVERY", slot=parent_slot, can_execute=parent is not None, **parent_context,
                         parent_recording_id=None if parent is None else parent.recording_id, recording_purpose="RECOVERY")
         return min(candidates, key=lambda item: item[0])[1] if candidates else None
 
@@ -548,6 +616,7 @@ class WorkspaceService:
 
     @staticmethod
     def _areas(boundary_attention: bool, preparation_complete: bool) -> tuple[WorkspaceAreaView, ...]:
+        from product.backend.workflows.checks.repair_text import CURRENT_TASK_TEXT
         return (
             WorkspaceAreaView(
                 key="overview",
@@ -568,15 +637,15 @@ class WorkspaceService:
             WorkspaceAreaView(
                 key="changes",
                 label="变化与修复",
-                description="当前不提供代码变化检查与修复执行。",
+                description=CURRENT_TASK_TEXT["REGISTER_SOURCE_CHANGE"][1],
                 route="/changes",
-                status="BLOCKED",
-                status_label="当前暂不可用",
+                status="NEEDS_ATTENTION" if boundary_attention else "READY",
+                status_label="需要处理" if boundary_attention else "当前已确认",
             ),
             WorkspaceAreaView(
                 key="tests",
                 label="检查与结果",
-                description="准备真实账号、业务演示与结果证明；正式检查尚未接入。",
+                description=CURRENT_TASK_TEXT["RUN_CURRENT_CHECK"][1],
                 route="/tests",
                 status="READY" if preparation_complete else "NEEDS_ATTENTION",
                 status_label="材料已准备" if preparation_complete else "需要准备",

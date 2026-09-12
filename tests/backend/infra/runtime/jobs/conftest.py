@@ -40,11 +40,12 @@ class WorkerServices:
     def submit_request(self, **changes: Any) -> SubmitJob:
         values = {
             "project_id": PROJECT_ID,
-            "operation_type": "ACTIVE_RUN",
+            "operation_type": "CHECK",
             "idempotency_key": "request-1",
             "request_hash": "a" * 64,
-            "contract_id": "ownership-contract",
-            "contract_version": 3,
+            "plan_fingerprint": "b" * 64,
+            "source_fingerprint": "c" * 64,
+            "policy_epoch": 3,
             "engine_version": "0.1.0",
             "max_attempts": 3,
             "available_at_us": NOW_US,

@@ -53,8 +53,8 @@ export const assistantApi = {
       method: 'POST',
       body: generateBody(retry),
     }),
-  result: (runId: string) => request<AssistantSurfaceView>(`/api/runs/${encodeURIComponent(runId)}/assistant/result`),
-  generateResult: (runId: string, retry = false) => request<AssistantSurfaceView>(`/api/runs/${encodeURIComponent(runId)}/assistant/result`, {
+  result: (runId: string) => request<AssistantSurfaceView>(`/api/runs/${encodeURIComponent(runId)}/assistant/result-explanation`),
+  generateResult: (runId: string, retry = false) => request<AssistantSurfaceView>(`/api/runs/${encodeURIComponent(runId)}/assistant/result-explanation`, {
     method: 'POST',
     body: generateBody(retry),
   }),

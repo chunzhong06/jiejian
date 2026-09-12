@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.lifecycle import JobState
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.handlers import JobAttemptPort
 from product.backend.infra.runtime.jobs.models import RenewLease, checked_time_add
@@ -90,6 +91,12 @@ class AttemptProcessControl:
         while process.poll() is None:
             current_time = self._monotonic()
             current_job = self.read_job(job.job_id)
+            if (current_job.state, current_job.lease_owner, current_job.fencing_token) != (
+                JobState.RUNNING, self._lease_owner, job.fencing_token
+            ):
+                raise JiejianError(ErrorCode.JOB_LEASE_MISMATCH, "任务租约不匹配")
+            if current_job.lease_expires_at_us is None or current_job.lease_expires_at_us <= self._utc_now_us():
+                raise JiejianError(ErrorCode.JOB_LEASE_EXPIRED, "任务租约已过期")
             if current_job.cancel_requested_at_us is not None:
                 if cancellation_started is None:
                     cancel_path.write_text("cancel\n", encoding="utf-8")
@@ -102,10 +109,10 @@ class AttemptProcessControl:
                     current_time - cancellation_started
                     >= self._termination_grace_seconds
                 ):
-                    self._terminate(process)
+                    self._terminate(process, reason_code=ErrorCode.EXEC_CANCELLED)
                     return False, True
             if current_time >= deadline:
-                self._terminate(process)
+                self._terminate(process, reason_code=ErrorCode.RUNNER_TIMEOUT)
                 return True, False
             if current_time >= next_renew:
                 self.renew(job)
@@ -135,7 +142,7 @@ class AttemptProcessControl:
                 raise JiejianError(ErrorCode.JOB_NOT_FOUND, "任务不存在")
             return job
 
-    def _terminate(self, process: subprocess.Popen[Any]) -> None:
+    def _terminate(self, process: subprocess.Popen[Any], *, reason_code: ErrorCode | None = None) -> None:
         """沿受控 Job/session 结束整棵树；根进程退出不能代替后代退出证明。"""
 
         logger.warning(
@@ -150,6 +157,7 @@ class AttemptProcessControl:
                 extra={"component": "process_control", "event_code": "PROCESS_TREE_TERMINATION_FAILED"},
             )
             raise JiejianError(
-                ErrorCode.PROCESS_TREE_FAILED,
+                reason_code or ErrorCode.PROCESS_TREE_FAILED,
                 "Runner 进程树无法在有界时间内终止",
+                details={"cleanup_error_code": ErrorCode.PROCESS_TREE_FAILED.value},
             ) from None

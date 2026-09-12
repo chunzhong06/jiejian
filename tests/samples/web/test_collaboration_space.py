@@ -26,8 +26,8 @@ TRACE_SEMANTIC_KEYS = (
     "request_received",
     "server_identity_resolved",
     "export_request_created",
-    "authorization_decided",
     "export_message_sent",
+    "authorization_decided",
     "export_job_started",
     "archive_generated",
     "export_job_completed",
@@ -36,8 +36,8 @@ TRACE_KINDS = (
     "ENTRY",
     "IDENTITY",
     "PERSISTENT_EFFECT",
-    "AUTHORIZATION",
     "MESSAGE",
+    "AUTHORIZATION",
     "DELEGATION",
     "FINAL_EFFECT",
     "FINAL_EFFECT",
@@ -69,6 +69,70 @@ def _audit_records(runtime_root: Path, marker: str) -> list[dict]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if (record := json.loads(line))["case_tag"] == marker
     ]
+
+
+def test_current_dispatch_is_accepted_before_authorization_and_zip_waits_for_response(collaboration_space_factory,monkeypatch):
+    sample=collaboration_space_factory("ENQUEUE_BEFORE_AUTHORIZE")
+    effect_id="bef_"+"1"*32
+    control=sample.server._control_path
+    payload=json.loads(control.read_text(encoding="utf-8"))
+    payload.update(export_effect_id=effect_id,view_effect_id="bef_"+"2"*32)
+    control.write_text(json.dumps(payload),encoding="utf-8")
+    order=[]
+    release=[]
+    enqueue=sample.server.worker.enqueue
+    append=sample.server.storage.append_audit
+    archive=sample.server.storage.create_archive
+    def accepted(job,**kwargs):
+        result=enqueue(job,**kwargs)
+        if result:
+            order.append("accepted")
+            release.append(kwargs["response_complete"])
+        return result
+    def audit(**kwargs):
+        if kwargs.get("kind")=="AUTHORIZATION":
+            order.append("authorization")
+        return append(**kwargs)
+    def create(marker):
+        assert release[0].is_set()
+        order.append("archive")
+        return archive(marker)
+    monkeypatch.setattr(sample.server.worker,"enqueue",accepted)
+    monkeypatch.setattr(sample.server.storage,"append_audit",audit)
+    monkeypatch.setattr(sample.server.storage,"create_archive",create)
+    with httpx.Client(base_url=sample.base_url,trust_env=False) as client:
+        _login(client,"bob",sample.passwords["bob"])
+        marker="current-dispatch-marker"
+        response=client.post(f"/api/projects/{PROJECT_ID}/exports",json={"resource_id":RESOURCE_ID},
+            headers={"X-Jiejian-Case-ID":"independent-case","X-Jiejian-Request-ID":marker})
+        assert response.status_code==403
+        assert _wait_task(client,sample.base_url,marker,sample.task_bearer)["state"]=="SUCCESS"
+    assert order==["accepted","authorization","archive"]
+    records=_audit_records(sample.server.runtime_root,marker)
+    assert [row["sequence"] for row in records]==list(range(1,9))
+    by_key={row["semantic_key"]:row for row in records}
+    dispatch=by_key["export_message_sent"]
+    assert dispatch["dispatch_effect_ids"]==[effect_id] and "effect_id" not in dispatch
+    assert by_key["authorization_decided"]["parent_event_id"]==dispatch["event_id"]
+    assert by_key["export_job_started"]["parent_event_id"]==dispatch["event_id"]
+    assert "origin_authorization_event_id" not in by_key["export_job_started"]
+    assert [row["semantic_key"] for row in records if "effect_id" in row]==["archive_generated"]
+    assert by_key["archive_generated"]["effect_id"]==effect_id
+
+
+def test_failed_enqueue_has_no_dispatch_fact(collaboration_space_factory,monkeypatch):
+    import queue
+    sample=collaboration_space_factory("ENQUEUE_BEFORE_AUTHORIZE")
+    def full(_item):
+        raise queue.Full
+    monkeypatch.setattr(sample.server.worker._pending,"put_nowait",full)
+    with httpx.Client(base_url=sample.base_url,trust_env=False) as client:
+        _login(client,"bob",sample.passwords["bob"])
+        marker="failed-dispatch"
+        response=client.post(f"/api/projects/{PROJECT_ID}/exports",json={"resource_id":RESOURCE_ID},headers={"X-Jiejian-Case-ID":marker})
+        assert response.status_code==503
+    records=_audit_records(sample.server.runtime_root,marker)
+    assert not any(row.get("dispatch_effect_ids") or row.get("semantic_key")=="export_message_sent" for row in records)
 
 
 def test_product_page_supports_two_real_demo_sessions(
@@ -210,16 +274,16 @@ def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory
         assert '"effect":"READY"' in audit
         assert "password" not in audit.casefold()
         records = _audit_records(sample.server.runtime_root, marker)
-        assert tuple(record["semantic_key"] for record in records) == TRACE_SEMANTIC_KEYS
-        assert tuple(record["kind"] for record in records) == TRACE_KINDS
+        assert tuple(record["semantic_key"] for record in records) == TRACE_SEMANTIC_KEYS[:2] + ("authorization_decided", "export_request_created", "export_message_sent") + TRACE_SEMANTIC_KEYS[5:]
+        assert tuple(record["kind"] for record in records) == TRACE_KINDS[:2] + ("AUTHORIZATION", "PERSISTENT_EFFECT", "MESSAGE") + TRACE_KINDS[5:]
         assert [record["sequence"] for record in records] == list(range(1, 9))
         assert records[0]["subject_id"] == records[0]["actor_id"] == "alice"
-        assert all(record["task_id"] == "" for record in records[:2])
-        real_task_id = records[2]["task_id"]
+        assert all(record["task_id"] == "" for record in records[:3])
+        real_task_id = records[3]["task_id"]
         assert real_task_id.startswith("task-")
-        assert all(record["task_id"] == real_task_id for record in records[2:])
+        assert all(record["task_id"] == real_task_id for record in records[3:])
         assert all(record["actor_id"] == "alice" for record in records[:5])
-        assert records[3]["authorization_decision"] == "ALLOW"
+        assert records[2]["authorization_decision"] == "ALLOW"
         assert records[5]["subject_id"] == "alice"
         assert records[5]["actor_id"] == "export-worker"
         assert all(
@@ -228,9 +292,10 @@ def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory
             if index > 0
         )
         assert all(
-            record.get("origin_authorization_event_id") == records[3]["event_id"]
+            record.get("origin_authorization_event_id") == records[2]["event_id"]
             for record in records[4:]
         )
+        assert records[5]["parent_event_id"] == records[4]["event_id"]
         assert records[5]["delegated_from_event_id"] == records[4]["event_id"]
         assert records[6]["delegated_from_event_id"] == records[5]["event_id"]
         assert records[7]["delegated_from_event_id"] == records[6]["event_id"]
@@ -303,6 +368,25 @@ def test_export_status_request_exposes_resource_for_recording(
         assert invalid.json() == {"code": "EXPORT_RESOURCE_INVALID"}
 
 
+def test_current_owner_cookie_endpoint_is_scoped_and_read_only(collaboration_space_factory):
+    sample = collaboration_space_factory()
+    path = f"/api/projects/{PROJECT_ID}/resources/{RESOURCE_ID}/state"
+    before = sample.server.storage.resource_state()
+    with httpx.Client(base_url=sample.base_url, trust_env=False) as client:
+        assert client.get(path).status_code == 401
+        assert client.get(path, headers={"Authorization": f"Bearer {sample.owner_observer}"}).status_code == 401
+        assert client.get(path, headers={"Cookie": "jiejian_sample_session=wrong"}).status_code == 401
+        _login(client, "bob", sample.passwords["bob"])
+        assert client.get(path).status_code == 403
+        _login(client, "alice", sample.passwords["alice"])
+        assert client.get(path).json() == before
+        assert client.get(path.replace(PROJECT_ID, "other-project", 1)).status_code == 404
+        assert client.get(path.replace(RESOURCE_ID, "other-resource")).status_code == 404
+        assert client.get(f"/api/observer/resources/{RESOURCE_ID}").status_code == 401
+    assert sample.server.storage.resource_state() == before
+    assert not tuple((sample.server.runtime_root / "blob").rglob("*.zip"))
+
+
 def test_owner_api_requires_its_independent_read_only_credential(
     collaboration_space_factory,
 ) -> None:
@@ -354,7 +438,8 @@ def test_bob_order_boundary_preserves_surface_denial_and_real_effect(collaborati
             assert all(record["task_id"] == "" for record in records[:2])
             real_task_id = records[2]["task_id"]
             assert real_task_id.startswith("task-")
-            assert all(record["task_id"] == real_task_id for record in records[2:])
+            assert all(record["task_id"] == real_task_id for record in (*records[2:4], *records[5:]))
+            assert records[4]["task_id"] == ""
             assert all(record["actor_id"] == "bob" for record in records[:5])
         else:
             assert all(record["task_id"] == "" for record in records)

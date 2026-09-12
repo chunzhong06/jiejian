@@ -24,6 +24,13 @@ def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
+def test_cmd_requires_powershell7_without_unverified_fallback() -> None:
+    text = START_CMD.read_bytes().decode("ascii")
+    assert "where pwsh.exe" in text and 'set "START_EXIT=3"' in text
+    assert "winget install --id Microsoft.PowerShell" in text
+    assert 'set "POWERSHELL_EXE=powershell' not in text
+
+
 def _powershell_literal(value: Path) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 

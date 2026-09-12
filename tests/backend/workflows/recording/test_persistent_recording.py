@@ -116,10 +116,10 @@ def test_controlled_captured_result_is_consumed_into_pending_review_draft(
             signals = {"start": False, "stop": False}
 
             def interact(session: RecordingBrowserSession) -> None:
-                page = session.new_page(request.test_identity_id)
+                page = session.new_page(request.subject_test_identity_id)
                 page.goto(server.url("/ui"))
                 signals["start"] = True
-                assert session.wait_for_capture_start(page, request.test_identity_id)
+                assert session.wait_for_capture_start(page, request.subject_test_identity_id)
                 page.fill("input[name='password']", sentinel)
                 page.click("button[data-testid='submit']")
                 page.wait_for_timeout(250)
@@ -309,7 +309,7 @@ def test_new_recording_rejects_missing_or_foreign_identity(tmp_path, source):
     try:
         request = context.bind_request(_request("rec_" + uuid4().hex))
         if source == "deleted":
-            context.harness.core.test_identities.delete(request.test_identity_id)
+            context.harness.core.test_identities.delete(request.subject_test_identity_id)
         else:
             from product.backend.core.business_boundary import BusinessActor, boundary_sha256
             from product.backend.infra.storage import ProjectRecord
@@ -335,7 +335,7 @@ def test_new_recording_rejects_missing_or_foreign_identity(tmp_path, source):
             core.test_identities.save_prepared_state(foreign_id.identity_id, PreparedLoginState(
                 auth_method=TestIdentityAuthMethod.BEARER, bearer_secret_ref=reference,
                 prepared_at_us=foreign_id.updated_at_us + 1))
-            request = request.model_copy(update={"test_identity_id": foreign_id.identity_id,
+            request = request.model_copy(update={"subject_test_identity_id": foreign_id.identity_id,
                 "sessions": (request.sessions[0].model_copy(update={"test_identity_id": foreign_id.identity_id}),)})
         job_id = "job_" + uuid4().hex
         with pytest.raises(JiejianError) as error:

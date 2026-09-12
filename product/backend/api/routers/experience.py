@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter
-from pydantic import Field
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
 from product.backend.workflows.official_sample import OfficialScenarioVersion
+from product.backend.core.check_repair import CurrentRepairReference
 
 
 def build_experience_router(context: ApplicationCore) -> APIRouter:
@@ -25,7 +25,7 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
     )
     def official_sample_validation_summary():
         return data_response(
-            context.competition_validation.get().model_dump(mode="json")
+            {"available": False, "unavailable_reason": "当前不运行 validation 或 competition", "summary": None}
         )
 
     @router.post("/api/experience/official-sample/start", response_model=ApiResponse)
@@ -45,6 +45,10 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
             context.official_experience.prepare().model_dump(mode="json")
         )
 
+    @router.post("/api/experience/official-sample/boundary-proposal", response_model=ApiResponse)
+    def official_boundary_proposal():
+        return data_response(context.official_experience.boundary_proposal().model_dump(mode="json"))
+
     @router.post(
         "/api/experience/official-sample/version",
         response_model=ApiResponse,
@@ -53,7 +57,7 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
         return data_response(
             context.official_experience.switch_version(
                 version=OfficialScenarioVersion(body.version),
-                source_run_id=body.source_run_id,
+                repair_reference=body.repair_reference,
             ).model_dump(mode="json")
         )
 
@@ -72,10 +76,7 @@ class OfficialSampleStartRequest(ApiModel):
 class OfficialSampleVersionRequest(ApiModel):
     schema_version: Literal["1"]
     version: Literal["VULNERABLE", "EVIDENCE_LIMITED", "FIXED"]
-    source_run_id: str | None = Field(
-        default=None,
-        pattern=r"^run_[0-9a-f]{32}$",
-    )
+    repair_reference: CurrentRepairReference | None = None
 
 
 __all__ = ["build_experience_router"]

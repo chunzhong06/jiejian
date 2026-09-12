@@ -32,17 +32,40 @@ from product.protocols import (
 
 pytestmark = pytest.mark.essential
 
+
+def test_v2_request_is_history_only_and_retains_original_hash():
+    import hashlib
+    from product.protocols.recording_legacy import read_legacy_document
+    from product.backend.core.errors import JiejianError
+    payload = recording_request().model_dump(mode="json")
+    payload["schema_version"] = "2"
+    payload["test_identity_id"] = payload.pop("subject_test_identity_id")
+    for key in ("resource_owner_test_identity_id", "subject_slot_id", "resource_owner_slot_id", "resource_owner_confirmed"):
+        payload.pop(key)
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    history = read_legacy_document(raw, "request", expected_hash=hashlib.sha256(raw).hexdigest())
+    assert history.subject_test_identity_id == history.resource_owner_test_identity_id == payload["test_identity_id"]
+    with pytest.raises(JiejianError):
+        parse_recording_request(raw)
+    with pytest.raises(JiejianError):
+        read_legacy_document(raw, "request", expected_hash="f"*64)
+    with pytest.raises(JiejianError):
+        read_legacy_document(raw+b"\n", "request")
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def recording_request() -> RecordingRunnerRequest:
     return RecordingRunnerRequest(
-        schema_version="2",
+        schema_version="3",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         business_action_id="bac_0123456789abcdef0123456789abcdef",
         action_revision=1,
-        test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        subject_test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        resource_owner_test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        subject_slot_id="isl_" + "1" * 32,
+        resource_owner_slot_id="isl_" + "1" * 32,
         preparation_source_fingerprint="a" * 64,
         created_at_us=1_000_000,
         target_scope=WebTargetScope(

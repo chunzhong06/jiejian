@@ -22,14 +22,14 @@ def harness(tmp_path):
 
 
 def _job(h, recording, state):
-    job = JobRecord(job_id="job_" + uuid4().hex, project_id=h.project_id,
-        recording_id=recording.recording_id, operation_type="RECORDING", state=state,
-        idempotency_key=recording.recording_id, request_hash="a" * 64,
-        attempt=0, max_attempts=1, available_at_us=1, fencing_token=0,
-        created_at_us=1, updated_at_us=3)
+    from sqlalchemy import update
+    from product.backend.infra.storage.execution.jobs import JobRow
+    # fixture 已有来源 Job；仅构造本测试需要的终态，保留原请求 hash 与唯一录制关联。
+    with h.core.engine.begin() as connection:
+        connection.execute(update(JobRow).where(JobRow.recording_id == recording.recording_id).values(state=state.value))
     with h.core.uow_factory() as work:
-        work.jobs.add(job)
-        work.commit()
+        job = work.jobs.get_by_recording(recording.recording_id)
+        assert job is not None
     return job
 
 

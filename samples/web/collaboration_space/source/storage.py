@@ -210,6 +210,8 @@ class CollaborationStorage:
                 ]
         return {
             "project_id": PROJECT_ID,
+            "resource_id": PROJECT_ID,
+            "collaboration_material": {"title": PROJECT_NAME,"summary":"展馆项目申报说明、展陈视觉设计稿、项目预算摘要、内部评审纪要"},
             "name": PROJECT_NAME,
             "members": members,
             "materials": [
@@ -342,6 +344,8 @@ class CollaborationStorage:
         actor_id: str | None = None,
         credential_source: str | None = None,
         effect_id: str | None = None,
+        resource_id: str = RESOURCE_ID,
+        dispatch_effect_ids: tuple[str, ...] = (),
         origin_authorization_event_id: str | None = None,
         delegated_from_event_id: str | None = None,
         authorization_decision: str | None = None,
@@ -355,7 +359,7 @@ class CollaborationStorage:
             "task_id": task_id,
             "event_type": event_type,
             "sequence": sequence,
-            "resource_id": RESOURCE_ID,
+            "resource_id": resource_id,
             "result": result,
             "effect": effect,
         }
@@ -383,6 +387,8 @@ class CollaborationStorage:
             ):
                 if value is not None:
                     record[field] = value
+            if dispatch_effect_ids:
+                record["dispatch_effect_ids"] = list(dispatch_effect_ids)
         self._append_record_once(self.audit_dir / "events.jsonl", record)
         return event_id
 

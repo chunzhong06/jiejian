@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from collections.abc import Callable, Sequence
 from typing import Literal
 from urllib.parse import urlsplit
@@ -33,7 +34,7 @@ from product.protocols.web.target import WebTargetScope
 from product.backend.infra.storage import FlowDraftRevisionRecord, JobRecord, RecordingRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.events import append_job_event
 from product.backend.infra.runtime.jobs.handlers import JobAttemptPort
-from product.backend.infra.runtime.jobs.models import CompleteCancellation, FatalFailureCode, FatalFailure, JobEventType, RetryableFailureCode, RetryableFailure
+from product.backend.infra.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailureCode, FatalFailure, JobEventType, RetryableFailureCode, RetryableFailure
 from product.backend.workflows.recording.processing import FlowDraftProcessor
 from product.backend.workflows.recording.source import require_recording_source
 from product.backend.infra.recording.request_store import RecordingRequestStore
@@ -144,6 +145,86 @@ class RecordingSubmission:
                 self._request_store.remove_if_matches(job_id, request_hash)
             raise
 
+    @staticmethod
+    def captured_request_facts(request: RecordingRunnerRequest) -> dict:
+        """固定配方重入只排除新会话、创建时刻与随机录制标识；其他输入必须一致。"""
+        return request.model_dump(mode="json", exclude={"recording_id", "created_at_us", "sessions"})
+
+    def captured_existing(self, project_id: str, idempotency_key: str):
+        """读取持久固定配方结果；不领取旧任务，也不保留任何登录秘密。"""
+        with self._new_uow(()) as work:
+            job = work.jobs.get_by_idempotency(project_id, "BROWSER_RECORDING", idempotency_key)
+            if job is None:
+                return None
+            request = self._request_store.load_history(job.job_id, expected_hash=job.request_hash)
+            result = self._existing(work, job, job.request_hash)
+            if job.state is not JobState.SUCCEEDED or result.recording.state not in {
+                RecordingState.PENDING_REVIEW, RecordingState.COMPLETED,
+            }:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "固定流程需要人工处理既有任务",
+                    details={"reason": "EXISTING_RECORDING_REQUIRES_REVIEW"})
+            return request, result
+
+    def submit_captured(self, command: SubmitRecording, result: RecordingRunnerResult, *,
+                        known_secrets: Sequence[str] = ()) -> RecordingSubmissionResult:
+        """仅物化受控无目标操作配方；创建、真实领取与消费在同一事务一次提交。"""
+        result = RecordingRunnerResult.model_validate_json(result.model_dump_json(), strict=True)
+        if (self._attempts is None or result.result_type is not RecordingRunnerResultType.CAPTURED
+                or result.recording_id != command.request.recording_id
+                or result.project_id != command.request.project_id or command.max_attempts != 1
+                or command.available_at_us != command.now_us or command.request.created_at_us != command.now_us):
+            raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "固定流程请求不一致")
+        canonical_recording_json_bytes(result, known_secrets=known_secrets)
+        job_id = command.job_id or f"job_{uuid4().hex}"
+        request_hash, snapshot_created = self._request_store.write(job_id, command.request, known_secrets=known_secrets)
+        try:
+            with self._new_uow(known_secrets) as work:
+                existing = work.jobs.get_by_idempotency(command.request.project_id, "BROWSER_RECORDING", command.idempotency_key)
+                if existing is not None:
+                    # 唯一键获胜者必须以原快照核实；不把新随机 request 当成旧请求。
+                    prior = self._request_store.load_history(existing.job_id, expected_hash=existing.request_hash)
+                    if self.captured_request_facts(prior) != self.captured_request_facts(command.request):
+                        raise JiejianError(ErrorCode.JOB_IDEMPOTENCY_CONFLICT, "固定流程输入已变化")
+                    accepted = self._existing(work, existing, existing.request_hash)
+                    if existing.state is not JobState.SUCCEEDED or accepted.recording.state not in {RecordingState.PENDING_REVIEW, RecordingState.COMPLETED}:
+                        raise JiejianError(ErrorCode.STATE_PRECONDITION, "固定流程需要人工处理既有任务")
+                else:
+                    self._submit_transaction_in_work(work, command, job_id, request_hash, known_secrets)
+                    claim_time = time.time_ns() // 1000
+                    claimed = self._attempts.claim_in_work(work, ClaimJob(job_id=job_id,
+                        lease_owner=f"fixed-recording:{command.request.recording_id}", now_us=claim_time,
+                        lease_duration_us=60_000_000), known_secrets=known_secrets)
+                    assert claimed is not None
+                    captured_at = time.time_ns() // 1000
+                    # 这些是配方物化事件，统一采用真实物化时刻；顺序只由 sequence 表达。
+                    result = RecordingRunnerResult.model_validate_json(result.model_copy(update={
+                        "events": tuple(event.model_copy(update={"occurred_at_us": captured_at}) for event in result.events),
+                        "state_events": tuple(event.model_copy(update={"occurred_at_us": captured_at}) for event in result.state_events),
+                        "finished_at_us": captured_at,
+                    }).model_dump_json(), strict=True)
+                    canonical_recording_json_bytes(result, known_secrets=known_secrets)
+                    completed = self._persist_success_in_work(work, job_id=job_id,
+                        lease_owner=claimed.job.lease_owner, fencing_token=claimed.job.fencing_token,
+                        result=result, now_us=time.time_ns() // 1000, known_secrets=known_secrets)
+                    work.commit()
+                    accepted = RecordingSubmissionResult(created=True, job=completed.job, recording=completed.recording)
+            return accepted
+        except JiejianError:
+            prior = self.captured_existing(command.request.project_id, command.idempotency_key)
+            if prior is None:
+                raise
+            prior_request, accepted = prior
+            if self.captured_request_facts(prior_request) != self.captured_request_facts(command.request):
+                raise JiejianError(ErrorCode.JOB_IDEMPOTENCY_CONFLICT, "固定流程输入已变化") from None
+            return accepted
+        finally:
+            # commit 回应不明确时先回读；已有引用或回读失败都不能盲删快照。
+            if snapshot_created:
+                with self._new_uow(known_secrets) as work:
+                    referenced = work.jobs.get(job_id)
+                if referenced is None:
+                    self._request_store.remove_if_matches(job_id, request_hash)
+
     def consume_result(
         self,
         *,
@@ -234,76 +315,82 @@ class RecordingSubmission:
         """在一个 UoW 内解析幂等性、创建 Recording 与 Job，并提交初始事件。"""
 
         with self._new_uow(known_secrets) as work:
-            existing = work.jobs.get_by_idempotency(
-                command.request.project_id,
-                "BROWSER_RECORDING",
-                command.idempotency_key,
-            )
-            if existing is not None:
-                return self._existing(work, existing, request_hash)
-            if work.projects.get(command.request.project_id) is None:
-                raise JiejianError(ErrorCode.JOB_PERSISTENCE, "录制所属项目不存在")
-            _, _, understanding = require_recording_source(work, command.request)
-            scope = command.request.target_scope
-            authorized = recording_target_scope(understanding.confirmed_endpoint)
-            budgets = {"timeout_seconds", "max_requests", "max_response_bytes"}
-            # 目标授权必须一致；调用方只能收紧运行预算，不能扩大源地址或任何网络权限。
-            if (scope.model_dump(exclude=budgets) != authorized.model_dump(exclude=budgets)
-                    or any(getattr(scope, name) > getattr(authorized, name) for name in budgets)):
-                raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制目标范围已变化")
-            domain = Recording(
-                recording_id=command.request.recording_id,
-                project_id=command.request.project_id,
-                business_action_id=command.request.business_action_id,
-                action_revision=command.request.action_revision,
-                test_identity_id=command.request.test_identity_id,
-                preparation_source_fingerprint=command.request.preparation_source_fingerprint,
-                purpose=command.request.purpose,
-                parent_recording_id=command.request.parent_recording_id,
-                effect_id=command.request.effect_id,
-                created_at_us=command.now_us,
-                updated_at_us=command.now_us,
-            )
-            recording = RecordingRecord.from_domain(
-                domain,
-                flow_id=command.flow_id,
-            )
-            job = JobRecord(
-                job_id=job_id,
-                project_id=command.request.project_id,
-                run_id=None,
-                recording_id=command.request.recording_id,
-                operation_type="BROWSER_RECORDING",
-                state=JobState.PENDING,
-                idempotency_key=command.idempotency_key,
-                request_hash=request_hash,
-                attempt=0,
-                max_attempts=command.max_attempts,
-                available_at_us=command.available_at_us,
-                lease_owner=None,
-                fencing_token=0,
-                lease_expires_at_us=None,
-                cancel_requested_at_us=None,
-                created_at_us=command.now_us,
-                updated_at_us=command.now_us,
-            )
-            work.recordings.add(recording)
-            work.jobs.add(job)
-            append_job_event(
-                work,
-                job=job,
-                event_type=JobEventType.JOB_SUBMITTED,
-                source_state=None,
-                target_state=JobState.PENDING,
-                occurred_at_us=command.now_us,
-                metadata={"attempt": 0, "target_type": "RECORDING"},
-            )
+            result = self._submit_transaction_in_work(work, command, job_id, request_hash, known_secrets)
             work.commit()
-            return RecordingSubmissionResult(
-                created=True,
-                job=job,
-                recording=recording,
-            )
+            return result
+
+    def _submit_transaction_in_work(self, work: StorageUnitOfWork, command: SubmitRecording, job_id: str, request_hash: str, known_secrets: Sequence[str]):
+        """复用调用方事务的正式持久化算法，不自行提交。"""
+        existing = work.jobs.get_by_idempotency(
+            command.request.project_id,
+            "BROWSER_RECORDING",
+            command.idempotency_key,
+        )
+        if existing is not None:
+            return self._existing(work, existing, request_hash)
+        if work.projects.get(command.request.project_id) is None:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "录制所属项目不存在")
+        _, _, understanding = require_recording_source(work, command.request)
+        scope = command.request.target_scope
+        authorized = recording_target_scope(understanding.confirmed_endpoint)
+        budgets = {"timeout_seconds", "max_requests", "max_response_bytes"}
+        # 目标授权必须一致；调用方只能收紧运行预算，不能扩大源地址或任何网络权限。
+        if (scope.model_dump(exclude=budgets) != authorized.model_dump(exclude=budgets)
+                or any(getattr(scope, name) > getattr(authorized, name) for name in budgets)):
+            raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制目标范围已变化")
+        domain = Recording(
+            recording_id=command.request.recording_id,
+            project_id=command.request.project_id,
+            business_action_id=command.request.business_action_id,
+            action_revision=command.request.action_revision,
+            subject_test_identity_id=command.request.subject_test_identity_id,
+            resource_owner_test_identity_id=command.request.resource_owner_test_identity_id,
+            preparation_source_fingerprint=command.request.preparation_source_fingerprint,
+            purpose=command.request.purpose,
+            parent_recording_id=command.request.parent_recording_id,
+            effect_id=command.request.effect_id,
+            created_at_us=command.now_us,
+            updated_at_us=command.now_us,
+        )
+        recording = RecordingRecord.from_domain(
+            domain,
+            flow_id=command.flow_id,
+        )
+        job = JobRecord(
+            job_id=job_id,
+            project_id=command.request.project_id,
+            run_id=None,
+            recording_id=command.request.recording_id,
+            operation_type="BROWSER_RECORDING",
+            state=JobState.PENDING,
+            idempotency_key=command.idempotency_key,
+            request_hash=request_hash,
+            attempt=0,
+            max_attempts=command.max_attempts,
+            available_at_us=command.available_at_us,
+            lease_owner=None,
+            fencing_token=0,
+            lease_expires_at_us=None,
+            cancel_requested_at_us=None,
+            created_at_us=command.now_us,
+            updated_at_us=command.now_us,
+        )
+        work.recordings.add(recording)
+        work.jobs.add(job)
+        append_job_event(
+            work,
+            job=job,
+            event_type=JobEventType.JOB_SUBMITTED,
+            source_state=None,
+            target_state=JobState.PENDING,
+            occurred_at_us=command.now_us,
+            metadata={"attempt": 0, "target_type": "RECORDING"},
+        )
+        return RecordingSubmissionResult(
+            created=True,
+            job=job,
+            recording=recording,
+        )
 
     def _persist_success(
         self,
@@ -318,109 +405,115 @@ class RecordingSubmission:
         """把已捕获事件编译为 FlowDraft，并与 fenced Job 完成态原子提交。"""
 
         with self._new_uow(known_secrets) as work:
-            job = work.jobs.get(job_id)
-            if (
-                job is None
-                or job.recording_id != result.recording_id
-                or job.run_id is not None
-                or job.project_id != result.project_id
-                or job.state is not JobState.RUNNING
-                or job.lease_owner != lease_owner
-                or job.fencing_token != fencing_token
-                or job.lease_expires_at_us is None
-                or job.lease_expires_at_us <= now_us
-                or result.finished_at_us > now_us
-            ):
-                raise JiejianError(ErrorCode.JOB_LEASE_MISMATCH, "录制结果租约不匹配")
-            existing = work.recordings.get(result.recording_id)
-            if existing is None:
-                raise JiejianError(ErrorCode.JOB_PERSISTENCE, "录制对象不存在")
-            persisted = self._record_from_result(existing, result)
-            draft = None
-            if result.result_type is RecordingRunnerResultType.CAPTURED:
-                request = self._request_store.load(
-                    job.job_id,
-                    expected_hash=job.request_hash,
-                    known_secrets=known_secrets,
-                )
-                if (
-                    request.business_action_id, request.action_revision, request.test_identity_id,
-                    request.purpose, request.parent_recording_id, request.effect_id,
-                    request.preparation_source_fingerprint,
-                ) != (
-                    existing.business_action_id, existing.action_revision, existing.test_identity_id,
-                    existing.purpose, existing.parent_recording_id, existing.effect_id,
-                    existing.preparation_source_fingerprint,
-                ):
-                    raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制请求与持久来源不一致")
-                draft = self._processor.build(
-                    recording_id=result.recording_id,
-                    flow_id=existing.flow_id,
-                    business_action_id=request.business_action_id,
-                    action_revision=request.action_revision,
-                    test_identity_id=request.test_identity_id,
-                    purpose=request.purpose,
-                    parent_recording_id=request.parent_recording_id,
-                    effect_id=request.effect_id,
-                    events=result.events,
-                    known_secrets=known_secrets,
-                )
-                pending = transition_recording_state(
-                    persisted.to_domain(),
-                    RecordingState.PENDING_REVIEW,
-                    operator="RECORDING_SERVICE",
-                    occurred_at_us=now_us,
-                )
-                persisted = RecordingRecord.from_domain(
-                    pending,
-                    flow_id=existing.flow_id,
-                    browser_events=result.events,
-                )
-                encoded = canonical_flow_draft_json_bytes(
-                    draft,
-                    known_secrets=known_secrets,
-                )
-                work.flow_drafts.add(
-                    FlowDraftRevisionRecord(
-                        recording_id=draft.recording_id,
-                        revision=draft.revision,
-                        flow_id=draft.flow_id,
-                        draft=draft,
-                        draft_sha256=hashlib.sha256(encoded).hexdigest(),
-                        created_at_us=now_us,
-                    )
-                )
-            work.recordings.replace(persisted)
-            completed = work.job_control.complete_recording_result(
-                job_id=job.job_id,
-                recording_id=persisted.recording_id,
-                attempt=job.attempt,
-                lease_owner=lease_owner,
-                fencing_token=fencing_token,
-                completed_at_us=now_us,
-            )
-            if completed is None:
-                raise JiejianError(ErrorCode.JOB_LEASE_MISMATCH, "录制结果租约不匹配")
-            append_job_event(
-                work,
-                job=completed,
-                event_type=JobEventType.JOB_SUCCEEDED,
-                source_state=JobState.RUNNING,
-                target_state=JobState.SUCCEEDED,
-                occurred_at_us=now_us,
-                metadata={
-                    "attempt": completed.attempt,
-                    "fencing_token": fencing_token,
-                    "result_type": result.result_type.value,
-                    "draft_revision": draft.revision if draft is not None else 0,
-                },
-            )
+            result = self._persist_success_in_work(work, job_id=job_id, lease_owner=lease_owner, fencing_token=fencing_token, result=result, now_us=now_us, known_secrets=known_secrets)
             work.commit()
-            return RecordingCompletionResult(
-                job=completed,
-                recording=persisted,
-                draft=draft,
+            return result
+
+    def _persist_success_in_work(self, work: StorageUnitOfWork, *, job_id: str, lease_owner: str, fencing_token: int, result: RecordingRunnerResult, now_us: int, known_secrets: Sequence[str]):
+        """复用调用方事务的正式持久化算法，不自行提交。"""
+        job = work.jobs.get(job_id)
+        if (
+            job is None
+            or job.recording_id != result.recording_id
+            or job.run_id is not None
+            or job.project_id != result.project_id
+            or job.state is not JobState.RUNNING
+            or job.lease_owner != lease_owner
+            or job.fencing_token != fencing_token
+            or job.lease_expires_at_us is None
+            or job.lease_expires_at_us <= now_us
+            or result.finished_at_us > now_us
+        ):
+            raise JiejianError(ErrorCode.JOB_LEASE_MISMATCH, "录制结果租约不匹配")
+        existing = work.recordings.get(result.recording_id)
+        if existing is None:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "录制对象不存在")
+        persisted = self._record_from_result(existing, result)
+        draft = None
+        if result.result_type is RecordingRunnerResultType.CAPTURED:
+            request = self._request_store.load(
+                job.job_id,
+                expected_hash=job.request_hash,
+                known_secrets=known_secrets,
             )
+            if (
+                request.business_action_id, request.action_revision, request.subject_test_identity_id, request.resource_owner_test_identity_id,
+                request.purpose, request.parent_recording_id, request.effect_id,
+                request.preparation_source_fingerprint,
+            ) != (
+                existing.business_action_id, existing.action_revision, existing.subject_test_identity_id, existing.resource_owner_test_identity_id,
+                existing.purpose, existing.parent_recording_id, existing.effect_id,
+                existing.preparation_source_fingerprint,
+            ):
+                raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制请求与持久来源不一致")
+            draft = self._processor.build(
+                recording_id=result.recording_id,
+                flow_id=existing.flow_id,
+                business_action_id=request.business_action_id,
+                action_revision=request.action_revision,
+                subject_test_identity_id=request.subject_test_identity_id,
+                resource_owner_test_identity_id=request.resource_owner_test_identity_id,
+                purpose=request.purpose,
+                parent_recording_id=request.parent_recording_id,
+                effect_id=request.effect_id,
+                events=result.events,
+                known_secrets=known_secrets,
+            )
+            pending = transition_recording_state(
+                persisted.to_domain(),
+                RecordingState.PENDING_REVIEW,
+                operator="RECORDING_SERVICE",
+                occurred_at_us=now_us,
+            )
+            persisted = RecordingRecord.from_domain(
+                pending,
+                flow_id=existing.flow_id,
+                browser_events=result.events,
+            )
+            encoded = canonical_flow_draft_json_bytes(
+                draft,
+                known_secrets=known_secrets,
+            )
+            work.flow_drafts.add(
+                FlowDraftRevisionRecord(
+                    recording_id=draft.recording_id,
+                    revision=draft.revision,
+                    flow_id=draft.flow_id,
+                    draft=draft,
+                    draft_sha256=hashlib.sha256(encoded).hexdigest(),
+                    created_at_us=now_us,
+                )
+            )
+        work.recordings.replace(persisted)
+        completed = work.job_control.complete_recording_result(
+            job_id=job.job_id,
+            recording_id=persisted.recording_id,
+            attempt=job.attempt,
+            lease_owner=lease_owner,
+            fencing_token=fencing_token,
+            completed_at_us=now_us,
+        )
+        if completed is None:
+            raise JiejianError(ErrorCode.JOB_LEASE_MISMATCH, "录制结果租约不匹配")
+        append_job_event(
+            work,
+            job=completed,
+            event_type=JobEventType.JOB_SUCCEEDED,
+            source_state=JobState.RUNNING,
+            target_state=JobState.SUCCEEDED,
+            occurred_at_us=now_us,
+            metadata={
+                "attempt": completed.attempt,
+                "fencing_token": fencing_token,
+                "result_type": result.result_type.value,
+                "draft_revision": draft.revision if draft is not None else 0,
+            },
+        )
+        return RecordingCompletionResult(
+            job=completed,
+            recording=persisted,
+            draft=draft,
+        )
 
     def _existing(
         self,
@@ -497,7 +590,8 @@ class RecordingSubmission:
             project_id=existing.project_id,
             business_action_id=existing.business_action_id,
             action_revision=existing.action_revision,
-            test_identity_id=existing.test_identity_id,
+            subject_test_identity_id=existing.subject_test_identity_id,
+            resource_owner_test_identity_id=existing.resource_owner_test_identity_id,
             preparation_source_fingerprint=existing.preparation_source_fingerprint,
             purpose=existing.purpose,
             parent_recording_id=existing.parent_recording_id,

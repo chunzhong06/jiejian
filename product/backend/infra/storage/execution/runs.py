@@ -33,10 +33,14 @@ class RunRow(Base):
         ),
         CheckConstraint(
             "(lifecycle = 'COMPLETED' AND verdict IS NOT NULL) OR "
-            "(lifecycle <> 'COMPLETED' AND verdict IS NULL)",
+            "(lifecycle = 'SAFETY_STOPPED' AND (verdict IS NULL OR verdict IN ('BLOCK', 'INCONCLUSIVE'))) OR "
+            "(lifecycle NOT IN ('COMPLETED', 'SAFETY_STOPPED') AND verdict IS NULL)",
             name="lifecycle_verdict_matrix",
         ),
-        CheckConstraint("contract_version >= 1", name="contract_version_positive"),
+        CheckConstraint("policy_epoch >= 0", name="policy_epoch_nonnegative"),
+        CheckConstraint("length(engine_version) BETWEEN 1 AND 64", name="engine_version_length"),
+        *(CheckConstraint(f"length({name}) = 64 AND {name} NOT GLOB '*[^0-9a-f]*'", name=f"{name}_format")
+          for name in ("request_hash", "plan_fingerprint", "source_fingerprint")),
         CheckConstraint(
             "created_at_us >= 0 AND updated_at_us >= created_at_us "
             "AND (finished_at_us IS NULL OR finished_at_us >= created_at_us)",
@@ -52,8 +56,10 @@ class RunRow(Base):
         ForeignKey("projects.project_id", ondelete="RESTRICT"),
         nullable=False,
     )
-    contract_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    contract_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    plan_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False)
     engine_version: Mapped[str] = mapped_column(String(64), nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(24), nullable=False)
     verdict: Mapped[str | None] = mapped_column(String(16))
@@ -106,8 +112,10 @@ from product.backend.infra.storage.base import MetadataValue, StorageRecord, _ME
 class RunRecord(StorageRecord):
     run_id: str = Field(pattern=RUN_ID_PATTERN)
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
-    contract_id: str = Field(min_length=1, max_length=128)
-    contract_version: int = Field(ge=1)
+    request_hash: str = Field(pattern=SHA256_PATTERN)
+    plan_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    source_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    policy_epoch: int = Field(ge=0)
     engine_version: str = Field(min_length=1, max_length=64)
     lifecycle: RunLifecycle
     verdict: RunVerdict | None = None
@@ -117,7 +125,11 @@ class RunRecord(StorageRecord):
 
     @model_validator(mode="after")
     def validate_run_matrix(self) -> RunRecord:
-        if (self.lifecycle is RunLifecycle.COMPLETED) != (self.verdict is not None):
+        if self.lifecycle is RunLifecycle.SAFETY_STOPPED:
+            valid = self.verdict in (None, RunVerdict.BLOCK, RunVerdict.INCONCLUSIVE)
+        else:
+            valid = (self.lifecycle is RunLifecycle.COMPLETED) == (self.verdict is not None)
+        if not valid:
             raise ValueError("run lifecycle and verdict are inconsistent")
         if self.updated_at_us < self.created_at_us:
             raise ValueError("run update time precedes creation")
@@ -138,8 +150,10 @@ class RunRepository:
             RunRow(
                 run_id=record.run_id,
                 project_id=record.project_id,
-                contract_id=record.contract_id,
-                contract_version=record.contract_version,
+                request_hash=record.request_hash,
+                plan_fingerprint=record.plan_fingerprint,
+                source_fingerprint=record.source_fingerprint,
+                policy_epoch=record.policy_epoch,
                 engine_version=record.engine_version,
                 lifecycle=record.lifecycle.value,
                 verdict=record.verdict.value if record.verdict is not None else None,
@@ -160,8 +174,10 @@ class RunRepository:
         return RunRecord(
             run_id=row.run_id,
             project_id=row.project_id,
-            contract_id=row.contract_id,
-            contract_version=row.contract_version,
+            request_hash=row.request_hash,
+            plan_fingerprint=row.plan_fingerprint,
+            source_fingerprint=row.source_fingerprint,
+            policy_epoch=row.policy_epoch,
             engine_version=row.engine_version,
             lifecycle=RunLifecycle(row.lifecycle),
             verdict=RunVerdict(row.verdict) if row.verdict is not None else None,
@@ -180,8 +196,10 @@ class RunRepository:
             RunRecord(
                 run_id=row.run_id,
                 project_id=row.project_id,
-                contract_id=row.contract_id,
-                contract_version=row.contract_version,
+                request_hash=row.request_hash,
+                plan_fingerprint=row.plan_fingerprint,
+                source_fingerprint=row.source_fingerprint,
+                policy_epoch=row.policy_epoch,
                 engine_version=row.engine_version,
                 lifecycle=RunLifecycle(row.lifecycle),
                 verdict=RunVerdict(row.verdict) if row.verdict is not None else None,
@@ -209,8 +227,10 @@ class RunRepository:
             RunRecord(
                 run_id=row.run_id,
                 project_id=row.project_id,
-                contract_id=row.contract_id,
-                contract_version=row.contract_version,
+                request_hash=row.request_hash,
+                plan_fingerprint=row.plan_fingerprint,
+                source_fingerprint=row.source_fingerprint,
+                policy_epoch=row.policy_epoch,
                 engine_version=row.engine_version,
                 lifecycle=RunLifecycle(row.lifecycle),
                 verdict=RunVerdict(row.verdict) if row.verdict is not None else None,

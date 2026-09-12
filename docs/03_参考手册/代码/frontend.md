@@ -54,6 +54,21 @@
 - `checksApi`
 主要 import / dot-source：`./http`, `./runs`
 
+### `product/frontend/src/api/currentChecks.ts`
+- `ActionResultStory`
+- `CheckBreakpoint`
+- `CheckEvidence`
+- `CheckObservation`
+- `CheckOutcome`
+- `CheckPreview`
+- `CheckStatus`
+- `CheckVerdict`
+- `EvidenceExplanation`
+- `ResultStory`
+- `StoryIdentity`
+- `currentChecksApi`
+主要 import / dot-source：`./http`, `./repairs`
+
 ### `product/frontend/src/api/deferredChecks.ts`
 - `DeliveryCheckDto`
 - `PreparationExternalBlockerDto`
@@ -76,7 +91,7 @@
 - `OfficialExperienceDto`
 - `OfficialScenarioVersion`
 - `experienceApi`
-主要 import / dot-source：`./http`
+主要 import / dot-source：`./businessBoundaries`, `./http`, `./repairs`
 
 ### `product/frontend/src/api/http.test.ts`
 主要 import / dot-source：`./http`, `vitest`
@@ -137,12 +152,14 @@
 
 ### `product/frontend/src/api/preparation.ts`
 - `ActionPreparation`
+- `AllowControlRequirement`
 - `IdentitySlot`
+- `PermissionReference`
 - `PreparationItem`
 - `PreparationStatus`
 - `PreparationView`
 - `preparationApi`
-主要 import / dot-source：`./http`
+主要 import / dot-source：`./businessBoundaries`, `./http`
 
 ### `product/frontend/src/api/projects.ts`
 - `ActionCandidateDto`
@@ -162,6 +179,7 @@
 - `FlowDraftVariableDto`
 - `FlowDraftVariableSourceDto`
 - `RecordingActionDto`
+- `RecordingCreateInput`
 - `RecordingDto`
 - `RecordingJobDto`
 - `RecordingReviewCommand`
@@ -170,6 +188,17 @@
 - `RecordingViewDto`
 - `SupplementChoiceDto`
 - `recordingsApi`
+主要 import / dot-source：`./http`
+
+### `product/frontend/src/api/repairs.ts`
+- `ProjectRepair`
+- `RepairContract`
+- `RepairReference`
+- `RepairStatus`
+- `RepairVerification`
+- `repairLabels`
+- `repairReference`
+- `repairsApi`
 主要 import / dot-source：`./http`
 
 ### `product/frontend/src/api/results.ts`
@@ -219,7 +248,7 @@
 ### `product/frontend/src/api/sourceChanges.ts`
 - `SourceChangeViewDto`
 - `sourceChangesApi`
-主要 import / dot-source：`./http`
+主要 import / dot-source：`./http`, `./repairs`
 
 ### `product/frontend/src/api/system.test.ts`
 主要 import / dot-source：`./system`, `vitest`
@@ -252,25 +281,25 @@
 - `WorkspaceProjectDto`
 - `WorkspaceViewDto`
 - `workspaceApi`
-主要 import / dot-source：`./businessBoundaries`, `./http`
+主要 import / dot-source：`./businessBoundaries`, `./http`, `./repairs`
 
 ### `product/frontend/src/app/AppHeader.tsx`
 - `AppHeader`
 - `aiStatusLabel`
 - `mcpStatusLabel`
 - `systemStatusLabel`
-主要 import / dot-source：`../api/llm`, `../api/mcp`, `../api/projects`, `../api/system`, `../components/ApplicationSwitcher`, `./ThemeContext`, `@ant-design/icons`, `antd`
+主要 import / dot-source：`../api/llm`, `../api/mcp`, `../api/projects`, `../api/system`, `../components/ApplicationSwitcher`, `./ThemeContext`, `@ant-design/icons`, `antd`, `react`
 
 ### `product/frontend/src/app/browserState.ts`
 - `browserState`
 主要 import / dot-source：`../api/projects`, `../api/recordings`
 
 ### `product/frontend/src/app/ControlShell.test.tsx`
-主要 import / dot-source：`../api/workspace`, `./ControlShell`, `@testing-library/react`, `vitest`
+主要 import / dot-source：`../api/workspace`, `./ControlShell`, `./ThemeContext`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/app/ControlShell.tsx`
 - `ControlShell`
-主要 import / dot-source：`../api/experience`, `../api/http`, `../api/mcp`, `../api/projects`, `../api/system`, `../components/ErrorRecovery`, `../components/ModuleNavigation`, `../features/access/AccessPage`, `../features/boundaries/BusinessBoundaryPage`, `../features/preparation/PreparationPage`, `../features/settings/LLMSettingsDrawer`, `../features/system/RuntimePage`, `../features/tools/ToolsPage`, `../features/workspace/WorkbenchPage`, `./AppHeader`, `./NotificationCenter`, `./presentation`, `./useProjectWorkspace`, `./useSystemStatus`, `antd`, `react`, `react-router-dom`
+主要 import / dot-source：`../api/experience`, `../api/http`, `../api/mcp`, `../api/projects`, `../api/system`, `../components/ErrorRecovery`, `../components/ModuleNavigation`, `../features/access/AccessPage`, `../features/boundaries/BusinessBoundaryPage`, `../features/changes/ChangesPage`, `../features/settings/LLMSettingsDrawer`, `../features/system/RuntimePage`, `../features/testing/CurrentTestsPage`, `../features/tools/ToolsPage`, `../features/workspace/OfficialSamplePanel`, `../features/workspace/WorkbenchPage`, `./AppHeader`, `./NotificationCenter`, `./presentation`, `./useProjectWorkspace`, `./useSystemStatus`, `antd`, `react`, `react-router-dom`
 
 ### `product/frontend/src/app/NotificationCenter.test.tsx`
 主要 import / dot-source：`../api/http`, `./NotificationCenter`, `@testing-library/react`, `vitest`
@@ -427,7 +456,7 @@
 
 ### `product/frontend/src/features/changes/ChangesPage.tsx`
 - `ChangesPage`
-主要 import / dot-source：`../../api/deferredChecks`, `../../api/http`, `../../api/projects`, `../../api/sourceChanges`, `../../app/presentation`, `../../components/PageTaskHeader`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/repairs`, `../../api/sourceChanges`, `../../app/presentation`, `../../components/PageTaskHeader`, `antd`, `react`
 
 ### `product/frontend/src/features/checks/CheckHistoryPage.test.tsx`
 主要 import / dot-source：`./CheckHistoryPage`, `@testing-library/react`, `vitest`
@@ -521,7 +550,7 @@
 
 ### `product/frontend/src/features/recording/RecordingPage.tsx`
 - `RecordingPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/recordings`, `../../api/runs`, `../../api/workspace`, `../../app/browserState`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./FlowDraftReview`, `./RecordingCaptureCard`, `./RecordingSetupCard`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/recordings`, `../../api/runs`, `../../api/workspace`, `../../app/browserState`, `../../components/AssistantPanel`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `./FlowDraftReview`, `./RecordingCaptureCard`, `antd`, `react`
 
 ### `product/frontend/src/features/recording/RecordingSetupCard.tsx`
 - `RecordingSetupCard`
@@ -548,6 +577,17 @@
 - `RuntimePage`
 主要 import / dot-source：`../../api/llm`, `../../api/system`, `antd`, `react`
 
+### `product/frontend/src/features/testing/CurrentResultStory.tsx`
+- `CurrentResultStory`
+主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/repairs`, `../../app/presentation`, `../../components/AssistantPanel`, `antd`, `react`
+
+### `product/frontend/src/features/testing/CurrentTestsPage.test.tsx`
+主要 import / dot-source：`../../api/currentChecks`, `./CurrentTestsPage`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/testing/CurrentTestsPage.tsx`
+- `CurrentTestsPage`
+主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../app/presentation`, `../../components/PageTaskHeader`, `../../components/TaskActionBar`, `../preparation/PreparationPage`, `./CurrentResultStory`, `antd`, `react`
+
 ### `product/frontend/src/features/testing/TestingPage.test.tsx`
 主要 import / dot-source：`./TestingPage`, `@testing-library/react`, `vitest`
 
@@ -562,12 +602,19 @@
 - `ToolsPage`
 主要 import / dot-source：`../../api/http`, `../../api/mcp`, `../../api/projects`, `../../components/PageTaskHeader`, `../settings/MCPAccessCard`, `antd`
 
+### `product/frontend/src/features/workspace/OfficialSamplePanel.test.tsx`
+主要 import / dot-source：`../../api/experience`, `./OfficialSamplePanel`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/workspace/OfficialSamplePanel.tsx`
+- `OfficialSamplePanel`
+主要 import / dot-source：`../../api/experience`, `../../api/http`, `../../api/repairs`, `antd`, `react`
+
 ### `product/frontend/src/features/workspace/WorkbenchPage.test.tsx`
 主要 import / dot-source：`../../api/workspace`, `./WorkbenchPage`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/workspace/WorkbenchPage.tsx`
 - `WorkbenchPage`
-主要 import / dot-source：`../../api/experience`, `../../api/projects`, `../../api/system`, `../../api/workspace`, `../../components/PageTaskHeader`, `antd`
+主要 import / dot-source：`../../api/experience`, `../../api/projects`, `../../api/repairs`, `../../api/system`, `../../api/workspace`, `../../components/PageTaskHeader`, `antd`, `react`
 
 ### `product/frontend/src/main.tsx`
 主要 import / dot-source：`./app/ControlShell`, `./app/ThemeContext`, `react`, `react-dom/client`

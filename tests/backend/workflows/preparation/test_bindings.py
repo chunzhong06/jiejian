@@ -283,17 +283,17 @@ def test_target_finalize_persists_flow_execution_resource_and_preserves_policy(h
     result = _finalize(harness, recording)
     assert result.recording.state is RecordingState.COMPLETED
     assert result.flow is not None
-    assert result.flow.schema_version == "2"
+    assert result.flow.schema_version == "3"
     assert (
         result.flow.business_action_id,
         result.flow.action_revision,
-        result.flow.test_identity_id,
+        result.flow.subject_test_identity_id,
     ) == (harness.action.action_id, 1, harness.identities[0].identity_id)
 
     execution, resources, _, _ = _records(harness, harness.action.action_id)
     assert execution is not None
     assert len(resources) == 1
-    assert resources[0].owner_test_identity_id == harness.identities[0].identity_id
+    assert resources[0].resource_owner_test_identity_id == harness.identities[0].identity_id
     assert execution.source_draft_sha256 == resources[0].source_draft_sha256
     assert execution.flow_sha256 == resources[0].flow_sha256 == _flow_hash(result.flow)
     assert resources[0].resource_injection == execution.resource_injection
@@ -305,8 +305,9 @@ def test_target_finalize_persists_flow_execution_resource_and_preserves_policy(h
 
 
 def test_owner_resources_coexist_and_duplicate_finalize_keeps_latest_execution(tmp_path):
-    harness = build_preparation_harness(tmp_path, identity_count=2)
+    harness = build_preparation_harness(tmp_path, identity_count=2, second_actor=True)
     try:
+        # 两个正式 Actor 各有 OWNS ALLOW，确保两个 owner 都有合法的资源槽。
         first = add_recording(harness, identity_index=0)
         first_result = _finalize(harness, first)
         second = add_recording(harness, identity_index=1)
@@ -314,7 +315,7 @@ def test_owner_resources_coexist_and_duplicate_finalize_keeps_latest_execution(t
 
         execution, resources, _, _ = _records(harness, harness.action.action_id)
         assert execution is not None
-        assert {item.owner_test_identity_id for item in resources} == {
+        assert {item.resource_owner_test_identity_id for item in resources} == {
             harness.identities[0].identity_id,
             harness.identities[1].identity_id,
         }
@@ -529,7 +530,7 @@ def test_context_rejects_invalid_effect_revision_foreign_identity_and_parent_ide
             work.test_identities.add(foreign_identity)
             work.commit()
         with harness.core.uow_factory() as work:
-            bad_source = target.model_copy(update={"test_identity_id": foreign_identity_id})
+            bad_source = target.model_copy(update={"subject_test_identity_id": foreign_identity_id})
             with pytest.raises(JiejianError) as foreign_error:
                 require_recording_source(work, bad_source)
         assert foreign_error.value.code == ErrorCode.RECORD_STATE_PRECONDITION.value
@@ -715,10 +716,10 @@ def test_deleted_identity_preserves_recordings_flows_and_all_bindings_but_invali
         assert tuple(work.flow_drafts.list_for_recording(item.recording_id) for item in (target, observation, recovery)) == before_drafts
     assert _records(harness, harness.action.action_id) == before_bindings
     execution, resources, evidence, recovery_binding = before_bindings
-    assert all(item.test_identity_id == identity.identity_id for item in (execution, *resources, evidence, recovery_binding))
-    assert resources[0].owner_test_identity_id == identity.identity_id
+    assert all(item.subject_test_identity_id == identity.identity_id for item in (execution, *resources, evidence, recovery_binding))
+    assert resources[0].resource_owner_test_identity_id == identity.identity_id
     assert flow_path.read_bytes() == before_flow
-    assert target_result.flow.test_identity_id == identity.identity_id
+    assert target_result.flow.subject_test_identity_id == identity.identity_id
     view = harness.core.preparation.get(harness.project_id)
     assert view.preparation_complete is False
     assert view.actions[0].execution.status is PreparationStatus.STALE

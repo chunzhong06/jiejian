@@ -309,7 +309,7 @@ class ApplicationUnderstandingService:
         *,
         revision: int,
     ) -> ApplicationUnderstanding:
-        """供变化编排先形成真实 diff，再按冻结顺序刷新权限绑定。"""
+        """供变化编排形成真实快照；不刷新权限绑定，后续只读检查 current Actor/Action 映射。"""
 
         return self._analyze_source(
             project_id,

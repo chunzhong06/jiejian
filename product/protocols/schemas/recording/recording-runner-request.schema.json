@@ -339,9 +339,24 @@
       "title": "Recording Id",
       "type": "string"
     },
+    "resource_owner_confirmed": {
+      "default": false,
+      "title": "Resource Owner Confirmed",
+      "type": "boolean"
+    },
+    "resource_owner_slot_id": {
+      "pattern": "^isl_[0-9a-f]{32}$",
+      "title": "Resource Owner Slot Id",
+      "type": "string"
+    },
+    "resource_owner_test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Resource Owner Test Identity Id",
+      "type": "string"
+    },
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },
@@ -354,13 +369,18 @@
       "title": "Sessions",
       "type": "array"
     },
+    "subject_slot_id": {
+      "pattern": "^isl_[0-9a-f]{32}$",
+      "title": "Subject Slot Id",
+      "type": "string"
+    },
+    "subject_test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Subject Test Identity Id",
+      "type": "string"
+    },
     "target_scope": {
       "$ref": "#/$defs/WebTargetScope"
-    },
-    "test_identity_id": {
-      "pattern": "^tid_[0-9a-f]{32}$",
-      "title": "Test Identity Id",
-      "type": "string"
     },
     "trace_enabled": {
       "const": false,
@@ -374,7 +394,10 @@
     "project_id",
     "business_action_id",
     "action_revision",
-    "test_identity_id",
+    "subject_test_identity_id",
+    "resource_owner_test_identity_id",
+    "subject_slot_id",
+    "resource_owner_slot_id",
     "preparation_source_fingerprint",
     "created_at_us",
     "target_scope",

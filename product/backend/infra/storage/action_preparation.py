@@ -12,6 +12,7 @@ from product.backend.core.action_preparation import (
     ActionEvidenceBinding, ActionExecutionBinding, ActionRecoveryBinding, ActionResourceBinding,
 )
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.assurance import ActionAllowControlBinding
 from product.backend.infra.storage.base import Base, _canonical_json, _flush, _scalar, _scalars, ensure_storage_payload_safe
 
 
@@ -48,8 +49,10 @@ class _BindingColumns:
     source_fingerprint: Mapped[str | None] = mapped_column(String(64))
     endpoint_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     # 身份 ID 是历史来源，写入时验证真实账号，删除账号后由现场检查判定失效。
-    test_identity_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    identity_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject_test_identity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    subject_identity_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_owner_test_identity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    owner_identity_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     confirmed_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
     binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
 
@@ -71,11 +74,10 @@ class ActionExecutionBindingRow(_BindingColumns, _RecordedColumns, Base):
 class ActionResourceBindingRow(_BindingColumns, _RecordedColumns, Base):
     __tablename__ = "action_resource_bindings"
     __table_args__ = _binding_constraints() + (
-        PrimaryKeyConstraint("business_action_id", "action_revision", "owner_test_identity_id"),
-        CheckConstraint("owner_test_identity_id = test_identity_id", name="owner_identity_match"),
+        PrimaryKeyConstraint("business_action_id", "action_revision", "resource_owner_test_identity_id"),
         CheckConstraint("length(actual_resource_id) BETWEEN 1 AND 256", name="resource_value_bound"),
     )
-    owner_test_identity_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    resource_owner_test_identity_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     actual_resource_id: Mapped[str] = mapped_column(String(256), nullable=False)
     flow_id: Mapped[str] = mapped_column(String(64), nullable=False)
     flow_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -122,6 +124,30 @@ _ROWS = {
 _JSON_FIELDS = frozenset({"resource_injection", "request_template", "observer_reference"})
 
 
+class ActionAllowControlBindingRow(Base):
+    __tablename__ = "action_allow_control_bindings"
+    __table_args__ = (
+        ForeignKeyConstraint(["deny_intent_id", "deny_intent_revision"],
+                             ["permission_intent_revisions.intent_id", "permission_intent_revisions.revision"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["selected_allow_intent_id", "selected_allow_intent_revision"],
+                             ["permission_intent_revisions.intent_id", "permission_intent_revisions.revision"], ondelete="RESTRICT"),
+        CheckConstraint("deny_intent_revision >= 1 AND selected_allow_intent_revision >= 1 AND confirmed_at_us >= 0", name="revision_time_bounds"),
+        *(CheckConstraint(f"length({name}) = 64 AND {name} NOT GLOB '*[^0-9a-f]*'", name=f"{name}_format")
+          for name in ("deny_intent_hash", "selected_allow_intent_hash", "selection_fingerprint")),
+        *(CheckConstraint(f"length({name}) = 36 AND substr({name}, 1, 4) = 'pin_' AND substr({name}, 5) NOT GLOB '*[^0-9a-f]*'", name=f"{name}_format")
+          for name in ("deny_intent_id", "selected_allow_intent_id")),
+    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.project_id", ondelete="RESTRICT"), primary_key=True)
+    deny_intent_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    deny_intent_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    deny_intent_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    selected_allow_intent_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    selected_allow_intent_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    selected_allow_intent_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    selection_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmed_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
 class ActionPreparationRepository:
     """仅替换同一动作版本的指定技术资产；其他账号、效果和业务历史保持不变。"""
 
@@ -153,14 +179,36 @@ class ActionPreparationRepository:
                 setattr(row, key, value)
         _flush(self._session)
 
+    def allow_controls(self, project_id: str) -> tuple[ActionAllowControlBinding, ...]:
+        rows = _scalars(self._session, select(ActionAllowControlBindingRow).where(
+            ActionAllowControlBindingRow.project_id == project_id,
+        ).order_by(ActionAllowControlBindingRow.deny_intent_id))
+        return tuple(ActionAllowControlBinding(**{
+            name: getattr(row, name) for name in ActionAllowControlBinding.model_fields
+        }) for row in rows)
+
+    def replace_allow_control(self, binding: ActionAllowControlBinding) -> None:
+        payload = binding.model_dump(mode="json")
+        ActionAllowControlBinding.model_validate_json(_canonical_json(payload), strict=True)
+        row = _scalar(self._session, select(ActionAllowControlBindingRow).where(
+            ActionAllowControlBindingRow.project_id == binding.project_id,
+            ActionAllowControlBindingRow.deny_intent_id == binding.deny_intent_id,
+        ))
+        if row is None:
+            self._session.add(ActionAllowControlBindingRow(**payload))
+        else:
+            for key, value in payload.items():
+                setattr(row, key, value)
+        _flush(self._session)
+
     def execution(self, action_id: str, revision: int) -> ActionExecutionBinding | None:
         return self._one(ActionExecutionBinding, action_id, revision)
 
     def resource(self, action_id: str, revision: int, owner_id: str) -> ActionResourceBinding | None:
-        return self._one(ActionResourceBinding, action_id, revision, owner_test_identity_id=owner_id)
+        return self._one(ActionResourceBinding, action_id, revision, resource_owner_test_identity_id=owner_id)
 
     def resources(self, action_id: str, revision: int) -> tuple[ActionResourceBinding, ...]:
-        return self._many(ActionResourceBinding, action_id, revision, "owner_test_identity_id")
+        return self._many(ActionResourceBinding, action_id, revision, "resource_owner_test_identity_id")
 
     def evidence(self, action_id: str, revision: int, effect_id: str) -> ActionEvidenceBinding | None:
         return self._one(ActionEvidenceBinding, action_id, revision, effect_id=effect_id)

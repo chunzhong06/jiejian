@@ -6,7 +6,7 @@
 
 ## 这是什么
 
-Recording 把“用户在已登录网页里完成一次真实业务动作”转换为可审阅的 `FlowDraft`。它不是浏览器宏录制器，也不会把登录、导航和偶然请求自动宣布为安全测试流程。提交服务只接受正式 BusinessAction ID/revision 和一个已准备 TestIdentity；服务端解析 endpoint、目标范围和非秘密身份元数据，独立 Worker 再启动独立 Recording Process 与有头 Chromium。
+Recording 把“用户在已登录网页里完成一次真实业务动作”转换为可审阅的 `FlowDraft`。它不是浏览器宏录制器，也不会把登录、导航和偶然请求自动宣布为安全测试流程。提交服务只接受正式 BusinessAction ID/revision 和当前合法 ALLOW 指定的 subject/owner TestIdentity 与对应 slot；服务端解析 endpoint、目标范围和非秘密身份元数据，独立 Worker 再启动独立 Recording Process 与有头 Chromium。
 
 持久 Recording 生命周期、Job 生命周期和 capture 控制阶段是三套不同事实。`STARTING/RECORDING/PROCESSING/PENDING_REVIEW` 表达业务对象状态；Job 表达调度与执行；`capture_phase` 从当前 attempt 的 ready/start/started/stop 标记投影。FlowDraft 只在正式 Recording result 经 `RecordingSubmission.consume_result → FlowDraftProcessor` 后形成。
 
@@ -30,13 +30,15 @@ Recording 把“用户在已登录网页里完成一次真实业务动作”转�
 
 Recording 应根据录制顺序自动采用唯一且可执行的业务解释；只有多个同级业务解释并存时，页面才让用户在业务动作、有限资源值或来源步骤之间选择。编译后的 Flow 仍保留必要 SETUP 与唯一 TARGET，通过 `CASE_SUBJECT`、`CASE_RESOURCE_ID` 在运行时注入差分事实，但 HTTP method、path 位置、JSONPath、step ID 和 candidate ID 不进入普通审阅。业务资源、真实结果、独立观察和恢复方式在安全准备中形成；权限要求只能由 Human Approval 改变，不能塞回 Recording 或 Flow。
 
-`PreparationBindingService.inspect()` 按当前 Action、实现、endpoint、身份、Recording/Draft 与 Flow 指纹检查四类技术绑定；`PreparationService` 将其与 Assurance 身份和资源需求现场组合。格式 2 的 RecordingRunnerRequest、FlowDraft 与 Flow 绑定精确 business_action_id/action_revision/test_identity_id，不接受旧 action_candidate_id。TARGET 最终化保存唯一 Flow 和当前 owner 的资源；OBSERVATION 开始前指定已有 effect_id，补录绑定同动作、同版本、同账号的已完成 TARGET；RECOVERY 只用于改变状态的动作。唯一候选按确定性规则采用，歧义仍需审阅，不通过 HTTP method 猜测业务结果。
+`PreparationBindingService.inspect()` 按当前 Action、实现、endpoint、身份、Recording/Draft 与 Flow 指纹检查四类技术绑定；`PreparationService` 将其与 Assurance 身份和资源需求现场组合。格式 3 的 RecordingRunnerRequest、FlowDraft 与 Flow 绑定精确 business_action_id/action_revision、subject_test_identity_id 与 resource_owner_test_identity_id，不接受旧 action_candidate_id。TARGET 最终化保存唯一 Flow 和当前 owner 的资源；OBSERVATION 开始前指定已有 effect_id，补录继承同动作、同版本、同 subject/owner 的已完成 TARGET；RECOVERY 只用于改变状态的动作。唯一候选按确定性规则采用，歧义仍需审阅，不通过 HTTP method 猜测业务结果。
 
 录制 create/status/capture/review/finalize/discard API 复用当前 ApplicationCore。GET detail 的 supplement_choices 只投影准备服务已经筛选的 OBSERVATION/RECOVERY 待审候选，返回 step_id 和最多160字符的已有业务标签；TARGET、非待审或无草稿时为空。前端只消费该列表，不按 HTTP method 另筛；选择仍经 CONFIRM_TARGET_STEP 与最终化候选校验。POST `/api/jobs/{job_id}/cancel` 只允许 Recording Job，RUN 必须在请求取消前拒绝。Assistant 的 recording-review 必须指定 recording_id，只解释已有 step/resource；它不能生成请求或修改 TARGET、技术绑定。
 
 用户可通过严格格式1的 POST `/api/recordings/{recording_id}/discard` 明确放弃待审草稿。服务在同一UoW内确认关联Job存在、属于该录制且没有run_id、已经SUCCEEDED/FAILED/CANCELLED，才沿现有转换进入CANCELLED；重复放弃幂等。COMPLETED、活动或错关联Job拒绝；录制、草稿、事件、Flow和已有绑定均保留，不改变Job终态、不触发浏览器或秘密清理。活跃录制继续使用原Job取消与fencing退出路径。
 
 页面在最终 Flow 或安全准备事实保存成功后，先刷新 Recording 本地事实，再刷新项目工作区；底部“继续准备”只按这次工作区刷新返回的准备投影续接。Recording 生命周期轮询只更新本页状态，不能在每个 tick 刷新整个工作区。工作区同步失败不回滚已经成立的保存结果，但必须显示可恢复提示。
+
+新录制必须匹配当前完整 ALLOW 和已准备槽位；异 owner 需要 resource_owner_confirmed=true。认证 session 仍使用自身 test_identity_id，且只能等于 subject。旧格式 2 请求、草稿和 Flow 由明确历史 reader 校验原始 canonical/hash 后只读投影 subject=owner，原文件和 draft_json 不改写；新 Worker 输入只接受格式 3。
 
 ## 不能破坏
 
@@ -67,3 +69,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps
 - [录制与 Flow 协议](../../03_参考手册/协议/录制与Flow协议.md)
 - [浏览器录制身份隔离与 FlowDraft 边界](../../05_设计依据/ADR-0037-浏览器录制身份隔离与FlowDraft边界.md)
 - [修改安全准备](修改安全准备.md)
+
+## 当前固定录制事务
+
+受控官方配方通过submit_captured复用正式提交事务：创建、claim、消费和持久完成共用一个UoW，只有真实时钟和单次attempt；普通浏览器路径不变。稳定key先读持久状态，重建Installer可继续PENDING_REVIEW，不重消费已接受结果；回滚不留下半个Job或Recording。TARGET/OBSERVATION/RECOVERY和双身份、具体资源继续严格绑定，秘密只在运行时注入。

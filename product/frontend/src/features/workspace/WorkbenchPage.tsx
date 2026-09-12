@@ -1,6 +1,8 @@
 // 动作级工作台：直接渲染服务端 WorkspaceView 与唯一 PrimaryTask，不重算 currentness。
 
 import { Alert, Button, Divider, Typography } from 'antd'
+import type { ReactNode } from 'react'
+import { repairLabels } from '../../api/repairs'
 import type { OfficialExperienceDto } from '../../api/experience'
 import type { ProjectDto } from '../../api/projects'
 import type { WorkspaceViewDto } from '../../api/workspace'
@@ -25,12 +27,14 @@ export function WorkbenchPage({
   systemStatus,
   experience,
   onNavigate,
+  samplePanel,
 }: {
   selected: ProjectDto | null
   workspace: WorkspaceViewDto | null
   systemStatus: SystemStatus
   experience: OfficialExperienceDto | null
   onNavigate: (path: string) => void
+  samplePanel?: ReactNode
 }) {
   const systemIssue = systemStatus.api === 'unknown'
     || systemStatus.worker === 'stopped'
@@ -44,11 +48,11 @@ export function WorkbenchPage({
       <Button type="primary" onClick={() => onNavigate('/application')}>接入自己的应用</Button>
     </section>
     <Divider plain>官方示例</Divider>
-    <section className="workbench-sample-entry" aria-labelledby="workbench-sample-entry-title">
+    {samplePanel ?? <section className="workbench-sample-entry" aria-labelledby="workbench-sample-entry-title">
       <Typography.Text className="workbench-eyebrow">当前能力</Typography.Text>
       <Typography.Title id="workbench-sample-entry-title" level={3}>{experience?.display_name ?? '协作空间'}</Typography.Title>
       <Typography.Paragraph type="secondary">{experience?.available === false ? experience.unavailable_reason ?? '当前尚不支持正式权限检查。' : '当前尚不支持启动官方示例检查。'}</Typography.Paragraph>
-    </section>
+    </section>}
   </div>
 
   const primary = workspace?.primary_task ?? null
@@ -79,13 +83,14 @@ export function WorkbenchPage({
               <Typography.Text type="secondary">{primary?.user_responsibility ?? '新的业务或源码事实到来后，界鉴会继续从这里给出下一项真实任务。'}</Typography.Text>
               {primary && <Typography.Text type="secondary">系统接下来会：{primary.system_will_do}</Typography.Text>}
             </div>
-            {primary && <Button type="primary" disabled={!primary.can_execute} onClick={() => onNavigate(primary.route)}>前往处理</Button>}
+            {primary && <Button type="primary" disabled={!primary.can_execute} onClick={() => onNavigate(primary.route + (primary.run_id ? `?run_id=${encodeURIComponent(primary.run_id)}` : primary.change_id && primary.route === '/tests' ? `?change_id=${encodeURIComponent(primary.change_id)}` : ''))}>前往处理</Button>}
           </div>
         </article>
         <aside className="workbench-trusted-result" aria-label="最近可信结果">
           <Typography.Text className="workbench-eyebrow">最近可信结果</Typography.Text>
-          <Typography.Title level={3}>当前没有正式检查结果</Typography.Title>
-          <Typography.Paragraph type="secondary">可在权限页维护业务边界，并按工作台提示处理当前待办。</Typography.Paragraph>
+          <Typography.Title level={3}>{workspace?.latest_result?.summary ?? '当前没有正式检查结果'}</Typography.Title>
+          <Typography.Paragraph type="secondary">{workspace?.latest_result ? '结论来自已发布检查，仅覆盖该次冻结的权限与源码。' : '按当前待办准备材料，然后显式开始检查。'}</Typography.Paragraph>
+          {workspace?.latest_result && <Button onClick={() => onNavigate(`/tests?run_id=${encodeURIComponent(workspace.latest_result!.run_id)}`)}>查看最近结果</Button>}
         </aside>
       </div>
       {systemIssue && <Button type="link" className="workbench-system-link" onClick={() => onNavigate('/settings/system')}>运行环境中有服务暂不可用，查看详情</Button>}
@@ -94,10 +99,11 @@ export function WorkbenchPage({
     <section className="workbench-domain-panel" aria-label="当前专项摘要">
       <div className="workbench-domain-grid">
         <article><Typography.Text className="workbench-secondary-label">业务边界</Typography.Text><Typography.Title level={3}>{workspace?.actions.length ?? 0} 项当前业务动作</Typography.Title><Typography.Paragraph type="secondary">{reviewCount ? `${reviewCount} 项需要确认当前权限或代码实现。` : '当前动作、权限与实现状态由服务端实时投影。'}</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/permissions')}>进入业务边界</Button></article>
-        <article><Typography.Text className="workbench-secondary-label">变化与修复</Typography.Text><Typography.Title level={3}>当前暂不可用</Typography.Title><Typography.Paragraph type="secondary">当前尚不支持代码变化分析、修复与复验。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/changes')}>查看当前说明</Button></article>
-        <article><Typography.Text className="workbench-secondary-label">检查与结果</Typography.Text><Typography.Title level={3}>{workspace?.areas.find((area) => area.key === 'tests')?.status_label ?? '检查准备'}</Typography.Title><Typography.Paragraph type="secondary">按已确认的权限要求准备账号、业务演示与结果证明；当前尚不支持正式权限检查。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/tests')}>进入检查准备</Button></article>
+        <article><Typography.Text className="workbench-secondary-label">变化与修复</Typography.Text><Typography.Title level={3}>{workspace?.repair?.status ? repairLabels[workspace.repair.status] : workspace?.source_change ? '已有代码变化' : '尚无待处理变化'}</Typography.Title><Typography.Paragraph type="secondary">登记修改后重新核对实际源码，用原权限、原资源和原证据标准复验。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/changes')}>查看变化与修复</Button></article>
+        <article><Typography.Text className="workbench-secondary-label">检查与结果</Typography.Text><Typography.Title level={3}>{workspace?.areas.find((area) => area.key === 'tests')?.status_label ?? '检查准备'}</Typography.Title><Typography.Paragraph type="secondary">执行完整正常对照与拒绝验证，并查看实际发生的业务后果。</Typography.Paragraph><Button type="link" onClick={() => onNavigate('/tests')}>进入检查与结果</Button></article>
       </div>
     </section>
+    {samplePanel}
     <section className="workbench-secondary-panel" aria-label="当前能力边界">
       <Alert type="info" showIcon message="业务边界可以持续维护" description="代码重新分析不会自动改写业务 revision 或权限；需要时由维护提案明确重绑或沿用权限。" />
     </section>

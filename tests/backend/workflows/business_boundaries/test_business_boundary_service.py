@@ -56,6 +56,24 @@ from product.backend.workflows.business_boundaries.fingerprints import (
 pytestmark = [pytest.mark.database, pytest.mark.essential]
 
 
+def test_permission_status_excludes_technical_selection_but_keeps_incomplete_allow():
+    from product.backend.workflows.business_boundaries.service import BusinessBoundaryService
+    from tests.fixtures.assurance import action, permission, EFFECT, SECOND_EFFECT
+
+    deny = permission(3, expectation=PermissionExpectation.DENY,
+                      relation=PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT)
+    status = BusinessBoundaryService._permission_status(action(), (permission(1), permission(2), deny))
+    assert status.permission_semantics_confirmed
+    assert status.allow_control_available
+    assert status.reason_codes == ()
+    incomplete = BusinessBoundaryService._permission_status(action(), (
+        permission(1), permission(2, effects=(SECOND_EFFECT,)),
+        permission(3, expectation=PermissionExpectation.DENY, effects=(EFFECT, SECOND_EFFECT)),
+    ))
+    assert not incomplete.allow_control_available
+    assert incomplete.reason_codes == ("ALLOW_CONTROL_REQUIRED",)
+
+
 def _core(tmp_path: Path) -> tuple[ApplicationCore, str]:
     source = tmp_path / "source"
     source.mkdir()
@@ -191,6 +209,44 @@ def _maintenance_command(draft, *, actors=None, actions=None, permissions=None):
         permissions=draft.permissions if permissions is None else permissions,
         provenance="本机用户维护业务边界",
     )
+
+
+def test_multi_effect_approval_normalizes_formal_order_and_preserves_permission_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from uuid import UUID, uuid4
+    from product.backend.workflows.business_boundaries import service
+
+    core, project_id = _core(tmp_path)
+    try:
+        first = _action().effect_catalog[0]
+        second = _second_action().effect_catalog[0]
+        action = _action().model_copy(update={"effect_catalog": (first, second)})
+        allow = _permission("pperm_1111111111111111", "pactr_1111111111111111", PermissionExpectation.ALLOW)
+        deny = _permission("pperm_2222222222222222", "pactr_2222222222222222", PermissionExpectation.DENY)
+        proposal = _create_proposal(core, project_id, action=action, permissions=(
+            allow.model_copy(update={"protected_effect_item_ids": (first.item_id, second.item_id)}),
+            deny.model_copy(update={"protected_effect_item_ids": (second.item_id,)}),
+        ))
+        # 普通审批先分配两个 Actor 和一个 Action，再在实际 UUID 边界固定反序 Effect ID。
+        allocated = iter((uuid4(), uuid4(), uuid4(), UUID(hex="f" * 32), UUID(hex="1" * 32)))
+        monkeypatch.setattr(service, "uuid4", lambda: next(allocated, None) or uuid4())
+        approved = core.business_boundaries.approve(
+            project_id, proposal.proposal_id,
+            expected_fingerprint=proposal.proposal_fingerprint, reason="确认多效果正式映射",
+        )
+        persisted = core.business_boundaries.view(project_id)
+        assert persisted.actions == approved.actions
+        assert persisted.permission_intents == approved.permission_intents
+        formal = persisted.actions[0]
+        assert tuple(effect.effect_id for effect in formal.effect_catalog) == ("bef_" + "1" * 32, "bef_" + "f" * 32)
+        assert tuple(effect.business_label for effect in formal.effect_catalog) == (second.business_label, first.business_label)
+        assert formal.semantic_fingerprint == boundary_sha256(formal.semantic_payload())
+        by_expectation = {item.expectation: item for item in persisted.permission_intents}
+        assert by_expectation[PermissionExpectation.ALLOW].protected_effect_ids == ("bef_" + "1" * 32, "bef_" + "f" * 32)
+        assert by_expectation[PermissionExpectation.DENY].protected_effect_ids == ("bef_" + "1" * 32,)
+    finally:
+        core.close()
 
 
 def test_bundle_approval_creates_stable_boundary_once_and_test_identity_uses_actor(

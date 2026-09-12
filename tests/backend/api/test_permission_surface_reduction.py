@@ -22,7 +22,9 @@ def test_old_governance_and_execution_profile_routes_are_absent(tmp_path: Path) 
     assert not any("execution-profiles" in path for path in paths)
     assert "/api/projects/{project_id}/contracts" not in paths
     assert "/api/runs/{run_id}/contract" not in paths
-    assert "/api/projects/{project_id}/permission-intents" in paths
+    assert "/api/projects/{project_id}/permission-intents" not in paths
+    assert "/api/projects/{project_id}/permission-drafts" in paths
+    assert "/api/projects/{project_id}/runs" in paths
 
 
 def test_internal_execution_profile_storage_remains_registered() -> None:

@@ -57,7 +57,7 @@ approvedBoundary.permission_intents = command.proposed_permissions.map((item, in
   effective_state: 'ACTIVE',
   _test_index: index,
 }))
-approvedBoundary.permission_statuses = approvedBoundary.actions.map((item: any) => ({ action_id: item.action_id, action_revision: 1, permission_semantics_confirmed: true, active_permission_count: 1, stale_permission_count: 0, allow_control_available: true, validation_contract_complete: false, reason_codes: ['VALIDATION_PIPELINE_DEFERRED_TO_1_1_3'] }))
+approvedBoundary.permission_statuses = approvedBoundary.actions.map((item: any) => ({ action_id: item.action_id, action_revision: 1, permission_semantics_confirmed: true, active_permission_count: 1, stale_permission_count: 0, allow_control_available: true, reason_codes: [] }))
 
 describe('业务边界页面', () => {
   afterEach(() => cleanup())
@@ -103,8 +103,8 @@ describe('业务边界页面', () => {
       ...approvedBoundary,
       permission_intents: [],
       permission_statuses: [
-        { ...approvedBoundary.permission_statuses[0], permission_semantics_confirmed: false, active_permission_count: 0, stale_permission_count: 1, allow_control_available: false, reason_codes: ['PERMISSION_REVISION_REVIEW_REQUIRED', 'ALLOW_CONTROL_REQUIRED', 'VALIDATION_PIPELINE_DEFERRED_TO_1_1_3'] },
-        { ...approvedBoundary.permission_statuses[1], permission_semantics_confirmed: false, active_permission_count: 0, stale_permission_count: 0, allow_control_available: false, reason_codes: ['PERMISSION_SEMANTICS_REQUIRED', 'ALLOW_CONTROL_REQUIRED', 'VALIDATION_PIPELINE_DEFERRED_TO_1_1_3'] },
+        { ...approvedBoundary.permission_statuses[0], permission_semantics_confirmed: false, active_permission_count: 0, stale_permission_count: 1, allow_control_available: false, reason_codes: ['PERMISSION_REVISION_REVIEW_REQUIRED', 'ALLOW_CONTROL_REQUIRED'] },
+        { ...approvedBoundary.permission_statuses[1], permission_semantics_confirmed: false, active_permission_count: 0, stale_permission_count: 0, allow_control_available: false, reason_codes: ['PERMISSION_SEMANTICS_REQUIRED', 'ALLOW_CONTROL_REQUIRED'] },
       ],
     }
     mockApi.current.mockResolvedValue(current)
@@ -115,19 +115,27 @@ describe('业务边界页面', () => {
     expect(screen.getByText('当前权限需要确认')).toBeInTheDocument()
   })
 
+  it('已确认权限且完整允许对照存在时不显示旧检查链占位提示', async () => {
+    mockApi.current.mockResolvedValue(approvedBoundary)
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
+    await screen.findByRole('button', { name: '调整当前业务边界' })
+    expect(screen.queryByText(/检查主链尚未重新接入/)).not.toBeInTheDocument()
+    expect(screen.queryByText('权限已确认，还需完整允许对照')).not.toBeInTheDocument()
+  })
+
   it('只有拒绝规则时仍区分已确认语义与缺少允许对照', async () => {
     const current = {
       ...approvedBoundary,
       permission_statuses: approvedBoundary.permission_statuses.map((item: any) => ({
         ...item,
         allow_control_available: false,
-        reason_codes: ['ALLOW_CONTROL_REQUIRED', 'VALIDATION_PIPELINE_DEFERRED_TO_1_1_3'],
+        reason_codes: ['ALLOW_CONTROL_REQUIRED'],
       })),
     }
     mockApi.current.mockResolvedValue(current)
 
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
-    expect((await screen.findAllByText('权限语义已确认，验证合同暂不完整')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('权限已确认，还需完整允许对照')).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/缺少覆盖同一业务结果的允许对照/).length).toBeGreaterThan(0)
     expect(screen.queryByText('当前权限尚未确认')).not.toBeInTheDocument()
   })

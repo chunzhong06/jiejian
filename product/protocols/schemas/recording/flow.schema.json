@@ -882,9 +882,14 @@
       "title": "Id",
       "type": "string"
     },
+    "resource_owner_test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Resource Owner Test Identity Id",
+      "type": "string"
+    },
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },
@@ -896,14 +901,14 @@
       "title": "Steps",
       "type": "array"
     },
+    "subject_test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Subject Test Identity Id",
+      "type": "string"
+    },
     "target_step_id": {
       "pattern": "^[a-z][a-z0-9_-]{0,63}$",
       "title": "Target Step Id",
-      "type": "string"
-    },
-    "test_identity_id": {
-      "pattern": "^tid_[0-9a-f]{32}$",
-      "title": "Test Identity Id",
       "type": "string"
     }
   },
@@ -911,7 +916,8 @@
     "id",
     "business_action_id",
     "action_revision",
-    "test_identity_id",
+    "subject_test_identity_id",
+    "resource_owner_test_identity_id",
     "target_step_id",
     "steps"
   ],

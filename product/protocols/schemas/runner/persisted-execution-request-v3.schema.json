@@ -1,0 +1,859 @@
+{
+  "$defs": {
+    "CaseRole": {
+      "enum": [
+        "ALLOW_REGRESSION",
+        "ALLOW_CONTROL",
+        "DENY_CHALLENGE"
+      ],
+      "title": "CaseRole",
+      "type": "string"
+    },
+    "ChangeContext": {
+      "additionalProperties": false,
+      "properties": {
+        "change_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Change Id",
+          "type": "string"
+        },
+        "impact_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Impact Fingerprint",
+          "type": "string"
+        },
+        "required_intent_ids": {
+          "items": {
+            "pattern": "^pin_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Required Intent Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "change_id",
+        "impact_fingerprint",
+        "required_intent_ids"
+      ],
+      "title": "ChangeContext",
+      "type": "object"
+    },
+    "EffectProofRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binding Fingerprint",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "VERDICT_REQUIRED",
+            "DIAGNOSIS_REQUIRED",
+            "SUPPORTING"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "proof_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Proof Fingerprint",
+          "type": "string"
+        },
+        "reference": {
+          "discriminator": {
+            "mapping": {
+              "RECORDED_OBSERVATION": "#/$defs/RecordedProofReference",
+              "REGISTERED_OBSERVER": "#/$defs/ObserverProofReference"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RecordedProofReference"
+            },
+            {
+              "$ref": "#/$defs/ObserverProofReference"
+            }
+          ],
+          "title": "Reference"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "rule": {
+          "enum": [
+            "HTTP_RESOURCE_PRESENCE",
+            "REGISTERED_EFFECT",
+            "RECORDED_SUPPORT"
+          ],
+          "title": "Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "effect_id",
+        "level",
+        "rule",
+        "binding_fingerprint",
+        "resource_id",
+        "reference",
+        "proof_fingerprint"
+      ],
+      "title": "EffectProofRequirement",
+      "type": "object"
+    },
+    "ExecutionAction": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "action_semantic_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Action Semantic Fingerprint",
+          "type": "string"
+        },
+        "cases": {
+          "items": {
+            "$ref": "#/$defs/ExecutionCase"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        },
+        "twins": {
+          "items": {
+            "$ref": "#/$defs/ExecutionTwin"
+          },
+          "maxItems": 4096,
+          "title": "Twins",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_revision",
+        "action_semantic_fingerprint",
+        "cases",
+        "twins"
+      ],
+      "title": "ExecutionAction",
+      "type": "object"
+    },
+    "ExecutionAssetReference": {
+      "additionalProperties": false,
+      "properties": {
+        "execution_binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Execution Binding Fingerprint",
+          "type": "string"
+        },
+        "flow_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Flow Id",
+          "type": "string"
+        },
+        "flow_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Flow Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flow_id",
+        "flow_sha256",
+        "execution_binding_fingerprint"
+      ],
+      "title": "ExecutionAssetReference",
+      "type": "object"
+    },
+    "ExecutionCase": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "pattern": "^case_[0-9a-f]{32}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "config_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Config Fingerprint",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ExecutionAssetReference"
+        },
+        "owner_identity_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Owner Identity Fingerprint",
+          "type": "string"
+        },
+        "permission": {
+          "$ref": "#/$defs/FrozenPermission"
+        },
+        "proof_requirements": {
+          "items": {
+            "$ref": "#/$defs/EffectProofRequirement"
+          },
+          "maxItems": 48,
+          "minItems": 1,
+          "title": "Proof Requirements",
+          "type": "array"
+        },
+        "protected_effect_ids": {
+          "items": {
+            "pattern": "^bef_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Protected Effect Ids",
+          "type": "array"
+        },
+        "recovery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecoveryReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resource_binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Resource Binding Fingerprint",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "resource_owner_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Resource Owner Actor Id",
+          "type": "string"
+        },
+        "resource_owner_actor_revision": {
+          "minimum": 1,
+          "title": "Resource Owner Actor Revision",
+          "type": "integer"
+        },
+        "resource_owner_test_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Resource Owner Test Identity Id",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "$ref": "#/$defs/CaseRole"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Roles",
+          "type": "array"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        },
+        "subject_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Subject Actor Id",
+          "type": "string"
+        },
+        "subject_actor_revision": {
+          "minimum": 1,
+          "title": "Subject Actor Revision",
+          "type": "integer"
+        },
+        "subject_identity_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Subject Identity Fingerprint",
+          "type": "string"
+        },
+        "subject_test_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Subject Test Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "roles",
+        "permission",
+        "subject_test_identity_id",
+        "subject_actor_id",
+        "subject_actor_revision",
+        "subject_identity_fingerprint",
+        "resource_owner_test_identity_id",
+        "resource_owner_actor_id",
+        "resource_owner_actor_revision",
+        "owner_identity_fingerprint",
+        "resource_id",
+        "resource_binding_fingerprint",
+        "execution",
+        "protected_effect_ids",
+        "proof_requirements",
+        "recovery",
+        "source_fingerprint",
+        "config_fingerprint"
+      ],
+      "title": "ExecutionCase",
+      "type": "object"
+    },
+    "ExecutionTwin": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_case_id": {
+          "pattern": "^case_[0-9a-f]{32}$",
+          "title": "Allow Case Id",
+          "type": "string"
+        },
+        "deny_case_id": {
+          "pattern": "^case_[0-9a-f]{32}$",
+          "title": "Deny Case Id",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "invariants": {
+          "$ref": "#/$defs/TwinInvariants"
+        },
+        "protected_effect_ids": {
+          "items": {
+            "pattern": "^bef_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Protected Effect Ids",
+          "type": "array"
+        },
+        "selected_allow_permission": {
+          "$ref": "#/$defs/PermissionReference"
+        },
+        "twin_id": {
+          "pattern": "^twin_[0-9a-f]{32}$",
+          "title": "Twin Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "twin_id",
+        "deny_case_id",
+        "allow_case_id",
+        "selected_allow_permission",
+        "protected_effect_ids",
+        "invariants",
+        "fingerprint"
+      ],
+      "title": "ExecutionTwin",
+      "type": "object"
+    },
+    "FrozenPermission": {
+      "additionalProperties": false,
+      "properties": {
+        "expectation": {
+          "enum": [
+            "ALLOW",
+            "DENY"
+          ],
+          "title": "Expectation",
+          "type": "string"
+        },
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "protected_effect_ids": {
+          "items": {
+            "pattern": "^bef_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Protected Effect Ids",
+          "type": "array"
+        },
+        "relation": {
+          "enum": [
+            "OWNS",
+            "SAME_ROLE_OTHER_ACCOUNT",
+            "OTHER_ROLE"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "resource_owner_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Resource Owner Actor Id",
+          "type": "string"
+        },
+        "resource_owner_actor_revision": {
+          "minimum": 1,
+          "title": "Resource Owner Actor Revision",
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "subject_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Subject Actor Id",
+          "type": "string"
+        },
+        "subject_actor_revision": {
+          "minimum": 1,
+          "title": "Subject Actor Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash",
+        "expectation",
+        "relation",
+        "subject_actor_id",
+        "subject_actor_revision",
+        "resource_owner_actor_id",
+        "resource_owner_actor_revision",
+        "protected_effect_ids"
+      ],
+      "title": "FrozenPermission",
+      "type": "object"
+    },
+    "ObserverProofReference": {
+      "additionalProperties": false,
+      "properties": {
+        "descriptor_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Descriptor Fingerprint",
+          "type": "string"
+        },
+        "descriptor_id": {
+          "pattern": "^exp_[0-9a-f]{32}$",
+          "title": "Descriptor Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "REGISTERED_OBSERVER",
+          "default": "REGISTERED_OBSERVER",
+          "title": "Kind",
+          "type": "string"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "descriptor_id",
+        "descriptor_fingerprint",
+        "observer_id"
+      ],
+      "title": "ObserverProofReference",
+      "type": "object"
+    },
+    "PermissionReference": {
+      "additionalProperties": false,
+      "properties": {
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash"
+      ],
+      "title": "PermissionReference",
+      "type": "object"
+    },
+    "RecordedProofReference": {
+      "additionalProperties": false,
+      "properties": {
+        "draft_revision": {
+          "minimum": 1,
+          "title": "Draft Revision",
+          "type": "integer"
+        },
+        "draft_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Draft Sha256",
+          "type": "string"
+        },
+        "kind": {
+          "const": "RECORDED_OBSERVATION",
+          "default": "RECORDED_OBSERVATION",
+          "title": "Kind",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        },
+        "request_template_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Template Fingerprint",
+          "type": "string"
+        },
+        "step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Step Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recording_id",
+        "draft_revision",
+        "draft_sha256",
+        "step_id",
+        "request_template_fingerprint"
+      ],
+      "title": "RecordedProofReference",
+      "type": "object"
+    },
+    "RecoveryReference": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binding Fingerprint",
+          "type": "string"
+        },
+        "draft_revision": {
+          "minimum": 1,
+          "title": "Draft Revision",
+          "type": "integer"
+        },
+        "draft_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Draft Sha256",
+          "type": "string"
+        },
+        "recording_id": {
+          "pattern": "^rec_[0-9a-f]{32}$",
+          "title": "Recording Id",
+          "type": "string"
+        },
+        "request_template_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Template Fingerprint",
+          "type": "string"
+        },
+        "step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Step Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recording_id",
+        "draft_revision",
+        "draft_sha256",
+        "step_id",
+        "binding_fingerprint",
+        "request_template_fingerprint"
+      ],
+      "title": "RecoveryReference",
+      "type": "object"
+    },
+    "RepairContext": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_regression_case_fingerprints": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "title": "Allow Regression Case Fingerprints",
+          "type": "array"
+        },
+        "must_disappear_effect_ids": {
+          "items": {
+            "pattern": "^bef_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Must Disappear Effect Ids",
+          "type": "array"
+        },
+        "original_evidence_standard_fingerprints": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 48,
+          "minItems": 1,
+          "title": "Original Evidence Standard Fingerprints",
+          "type": "array"
+        },
+        "original_intents": {
+          "items": {
+            "$ref": "#/$defs/PermissionReference"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Original Intents",
+          "type": "array"
+        },
+        "original_policy_epoch": {
+          "minimum": 0,
+          "title": "Original Policy Epoch",
+          "type": "integer"
+        },
+        "owner_identity_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Owner Identity Fingerprint",
+          "type": "string"
+        },
+        "repair_reference": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Repair Reference",
+          "type": "string"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "resource_owner_test_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Resource Owner Test Identity Id",
+          "type": "string"
+        },
+        "selected_allow_permission": {
+          "$ref": "#/$defs/PermissionReference"
+        },
+        "source_run_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Source Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repair_reference",
+        "source_run_id",
+        "original_policy_epoch",
+        "original_intents",
+        "selected_allow_permission",
+        "resource_id",
+        "resource_owner_test_identity_id",
+        "owner_identity_fingerprint",
+        "must_disappear_effect_ids",
+        "original_evidence_standard_fingerprints",
+        "allow_regression_case_fingerprints"
+      ],
+      "title": "RepairContext",
+      "type": "object"
+    },
+    "TwinInvariants": {
+      "additionalProperties": false,
+      "properties": {
+        "config_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Config Fingerprint",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ExecutionAssetReference"
+        },
+        "owner_identity_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Owner Identity Fingerprint",
+          "type": "string"
+        },
+        "proof_fingerprints": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 48,
+          "minItems": 1,
+          "title": "Proof Fingerprints",
+          "type": "array"
+        },
+        "recovery_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recovery Fingerprint"
+        },
+        "resource_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "resource_owner_test_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Resource Owner Test Identity Id",
+          "type": "string"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_id",
+        "resource_owner_test_identity_id",
+        "owner_identity_fingerprint",
+        "execution",
+        "proof_fingerprints",
+        "recovery_fingerprint",
+        "source_fingerprint",
+        "config_fingerprint"
+      ],
+      "title": "TwinInvariants",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/ExecutionAction"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "title": "Actions",
+      "type": "array"
+    },
+    "budget_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Budget Fingerprint",
+      "type": "string"
+    },
+    "change_context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ChangeContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "config_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Config Fingerprint",
+      "type": "string"
+    },
+    "engine_version": {
+      "pattern": "^[a-zA-Z0-9_.-]{1,64}$",
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "plan_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Plan Fingerprint",
+      "type": "string"
+    },
+    "policy_epoch": {
+      "minimum": 0,
+      "title": "Policy Epoch",
+      "type": "integer"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "repair_context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RepairContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": "3",
+      "default": "3",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "source_fingerprint",
+    "policy_epoch",
+    "engine_version",
+    "plan_fingerprint",
+    "actions",
+    "config_fingerprint",
+    "budget_fingerprint"
+  ],
+  "title": "PersistedExecutionRequestV3",
+  "type": "object"
+}

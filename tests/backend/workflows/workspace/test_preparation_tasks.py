@@ -78,21 +78,19 @@ def test_distinct_accounts_allow_subject_and_exact_missing_resource_owner(tmp_pa
         task = _task(h)
         assert task.task_kind == "DEMONSTRATE_ACTION"
         assert task.test_identity_id == subject.test_identity_id and task.recording_purpose == "TARGET"
-        # 先给非 owner 账号建立执行材料，才能真实形成指定 owner 的资源缺口。
-        first_index = next(i for i, identity in enumerate(h.identities) if identity.identity_id != subject.test_identity_id)
-        first = _finish(h, identity_index=first_index)
-        task = _task(h)
-        assert task.task_kind == "PREPARE_ACTION_RESOURCE"
-        assert task.test_identity_id != first.test_identity_id
-        resource = next(item for item in h.core.preparation.get(h.project_id).actions[0].resources
-                        if item.status is not Status.SATISFIED)
-        assert (task.identity_slot_id, task.test_identity_id) == (resource.owner_slot_id, resource.owner_test_identity_id)
+        assert task.subject_test_identity_id == task.resource_owner_test_identity_id == subject.test_identity_id
+        assert task.subject_slot_id == task.resource_owner_slot_id == allowed.subject_slot_id
+        # 未经正式 ALLOW 指定的账号不能建立资源，即使它已登录且属于同一个 Actor。
+        from product.backend.core.errors import JiejianError
+        wrong_index = next(i for i, identity in enumerate(h.identities) if identity.identity_id != subject.test_identity_id)
+        with pytest.raises(JiejianError) as error:
+            _finish(h, identity_index=wrong_index)
+        assert error.value.code == "RECORD_STATE_PRECONDITION"
+        first = _finish(h, identity_index=1 - wrong_index)
         with h.core.uow_factory() as work:
-            old_binding = work.action_preparation.resource(h.action.action_id, 1, first.test_identity_id)
-        second_index = 1 - first_index
-        _finish(h, identity_index=second_index)
-        with h.core.uow_factory() as work:
-            assert work.action_preparation.resource(h.action.action_id, 1, first.test_identity_id) == old_binding
+            resources = work.action_preparation.resources(h.action.action_id, 1)
+            assert len(resources) == 1
+            assert resources[0].resource_owner_test_identity_id == first.resource_owner_test_identity_id
         assert _task(h).task_kind == "COMPLETE_EFFECT_EVIDENCE"
     finally:
         h.close()
@@ -107,7 +105,7 @@ def test_current_recording_is_resumed_without_duplicate_task(harness, state):
         work.commit()
     first = _task(harness)
     assert first.task_kind == "REVIEW_RECORDING" and first.recording_id == recording.recording_id
-    assert first.test_identity_id == recording.test_identity_id
+    assert first.test_identity_id == recording.subject_test_identity_id
     assert first.title == ("确认业务演示" if state is RecordingState.PENDING_REVIEW else "继续业务演示")
     assert _task(harness) == first
     with harness.core.uow_factory() as work:
@@ -140,14 +138,14 @@ def test_current_parent_effect_recovery_and_complete_projection(tmp_path, state_
         task = _task(h)
         assert task.task_kind == "COMPLETE_EFFECT_EVIDENCE"
         assert (task.parent_recording_id, task.test_identity_id, task.recording_purpose, task.effect_id) == (
-            target.recording_id, target.test_identity_id, "OBSERVATION", h.effect_id)
+            target.recording_id, target.subject_test_identity_id, "OBSERVATION", h.effect_id)
         _finish(h, purpose=RecordingPurpose.OBSERVATION, parent_recording_id=target.recording_id,
                 effect_id=h.effect_id, target_step_id="first")
         task = _task(h)
         if state_changing:
             assert task.task_kind == "COMPLETE_RECOVERY"
             assert (task.parent_recording_id, task.test_identity_id, task.recording_purpose, task.effect_id) == (
-                target.recording_id, target.test_identity_id, "RECOVERY", None)
+                target.recording_id, target.subject_test_identity_id, "RECOVERY", None)
             _finish(h, purpose=RecordingPurpose.RECOVERY, parent_recording_id=target.recording_id, target_step_id="first")
         else:
             assert task is None
@@ -155,8 +153,9 @@ def test_current_parent_effect_recovery_and_complete_projection(tmp_path, state_
         assert workspace.primary_task is None
         tests = next(item for item in workspace.areas if item.key == "tests")
         assert (tests.status, tests.status_label) == ("READY", "材料已准备")
-        assert "正式检查尚未接入" in tests.description
-        assert next(item for item in workspace.areas if item.key == "changes").status == "BLOCKED"
+        from product.backend.workflows.checks.repair_text import CURRENT_TASK_TEXT
+        assert tests.description == CURRENT_TASK_TEXT["RUN_CURRENT_CHECK"][1]
+        assert next(item for item in workspace.areas if item.key == "changes").status == "READY"
         assert h.core.preparation.get(h.project_id).preparation_complete
     finally:
         h.close()
@@ -268,7 +267,7 @@ def test_unusable_resource_parent_is_never_offered(harness, change):
     original_factory = harness.core.workspace._uow_factory
     from contextlib import contextmanager
     updates = {"failed": {"state": RecordingState.FAILED},
-        "wrong_identity": {"test_identity_id": "tid_" + "f" * 32},
+        "wrong_identity": {"subject_test_identity_id": "tid_" + "f" * 32},
         "stale_source": {"preparation_source_fingerprint": "f" * 64},
         "wrong_purpose": {"purpose": RecordingPurpose.OBSERVATION}}[change]
     @contextmanager
@@ -319,3 +318,34 @@ def test_task_fingerprint_changes_for_endpoint_source_and_recording_state(harnes
         work.commit()
     active = _task(harness)
     assert active.recording_id == pending.recording_id and active.task_id != pending.task_id
+
+
+@pytest.mark.parametrize("kind", ["RUN_CURRENT_CHECK", "REGISTER_SOURCE_CHANGE", "VERIFY_REPAIR", "VIEW_CURRENT_RESULT"])
+def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
+    from product.backend.core.lifecycle import RunVerdict
+    from product.backend.workflows.projects.repair import ProjectRepair, CurrentRepairTask
+    from tests.backend.core.test_check_repair import contract_and_new
+    from tests.fixtures.check_service import ready_check_harness
+    h = ready_check_harness(tmp_path)
+    try:
+        core, project = h.core, h.project_id
+        understanding = core.application_understanding.get(project)
+        contract = contract_and_new()[0]
+        task = CurrentRepairTask(task_reference=contract.deny.identity.fingerprint(), contract=contract,
+            status="READY_TO_VERIFY", change_id="chg_" + "8" * 32)
+        repair = ProjectRepair(project_id=project, status="READY_TO_VERIFY" if kind == "VERIFY_REPAIR" else None,
+            tasks=(task,) if kind == "VERIFY_REPAIR" else (), primary_task_reference=task.task_reference if kind == "VERIFY_REPAIR" else None)
+        run_id = "run_" + "9" * 32
+        entry = SimpleNamespace(result_integrity="VALID", run=SimpleNamespace(run_id=run_id, policy_epoch=core.business_boundaries.view(project).policy_epoch, verdict=RunVerdict.PASS, created_at_us=1))
+        core.workspace.set_current_checks(checks=core.checks,
+            reader=SimpleNamespace(list_for_project=lambda _: (entry,) if kind == "VIEW_CURRENT_RESULT" else (),
+                package=lambda *args, **kwargs: SimpleNamespace(request=SimpleNamespace(source_fingerprint=understanding.source_fingerprint))),
+            changes=SimpleNamespace(latest=lambda _: None), repairs=SimpleNamespace(evaluate=lambda _: repair),
+            source_inspector=lambda _: "changed" if kind == "REGISTER_SOURCE_CHANGE" else understanding.source_fingerprint)
+        actual = core.workspace.get(project).primary_task
+        assert actual.task_kind == kind, actual.model_dump_json()
+        assert actual.change_id == (task.change_id if kind == "VERIFY_REPAIR" else None)
+        assert actual.run_id == (run_id if kind == "VIEW_CURRENT_RESULT" else None)
+        assert actual.route == ("/changes" if kind == "REGISTER_SOURCE_CHANGE" else "/tests")
+    finally:
+        h.close()

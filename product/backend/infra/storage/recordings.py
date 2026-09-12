@@ -87,10 +87,11 @@ class RecordingRow(Base):
     business_action_id: Mapped[str] = mapped_column(String(36), nullable=False)
     action_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     preparation_source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
-    test_identity_id: Mapped[str] = mapped_column(
+    subject_test_identity_id: Mapped[str] = mapped_column(
         # 保留录制时的身份来源；账号可被删除，实时可用性由 preparation 检查。
         String(36), nullable=False,
     )
+    resource_owner_test_identity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     purpose: Mapped[str] = mapped_column(String(16), nullable=False)
     parent_recording_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("recordings.recording_id", ondelete="RESTRICT"),
@@ -190,7 +191,8 @@ class RecordingRecord(StorageRecord):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
     action_revision: int = Field(ge=1)
-    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    subject_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    resource_owner_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     preparation_source_fingerprint: str = Field(pattern=SHA256_PATTERN)
     purpose: RecordingPurpose = RecordingPurpose.TARGET
     parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
@@ -222,7 +224,8 @@ class RecordingRecord(StorageRecord):
             project_id=self.project_id,
             business_action_id=self.business_action_id,
             action_revision=self.action_revision,
-            test_identity_id=self.test_identity_id,
+            subject_test_identity_id=self.subject_test_identity_id,
+            resource_owner_test_identity_id=self.resource_owner_test_identity_id,
             preparation_source_fingerprint=self.preparation_source_fingerprint,
             effect_id=self.effect_id,
             purpose=self.purpose,
@@ -250,7 +253,8 @@ class RecordingRecord(StorageRecord):
             project_id=recording.project_id,
             business_action_id=recording.business_action_id,
             action_revision=recording.action_revision,
-            test_identity_id=recording.test_identity_id,
+            subject_test_identity_id=recording.subject_test_identity_id,
+            resource_owner_test_identity_id=recording.resource_owner_test_identity_id,
             preparation_source_fingerprint=recording.preparation_source_fingerprint,
             effect_id=recording.effect_id,
             purpose=recording.purpose,
@@ -275,6 +279,7 @@ class FlowDraftRevisionRecord(StorageRecord):
     draft: FlowDraft
     draft_sha256: str = Field(pattern=SHA256_PATTERN)
     created_at_us: int = Field(ge=0)
+    raw_historical_draft_json: str | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def validate_draft_identity(self) -> FlowDraftRevisionRecord:
@@ -282,7 +287,15 @@ class FlowDraftRevisionRecord(StorageRecord):
             raise ValueError("flow draft recording ID is inconsistent")
         if self.draft.revision != self.revision or self.draft.flow_id != self.flow_id:
             raise ValueError("flow draft revision identity is inconsistent")
-        digest = hashlib.sha256(canonical_flow_draft_json_bytes(self.draft)).hexdigest()
+        if self.raw_historical_draft_json is not None:
+            from product.protocols.recording_legacy import read_legacy_document
+            raw = self.raw_historical_draft_json.encode("utf-8")
+            projected = read_legacy_document(raw, "draft", expected_hash=self.draft_sha256)
+            if projected != self.draft:
+                raise ValueError("historical draft projection is inconsistent")
+            digest = hashlib.sha256(raw).hexdigest()
+        else:
+            digest = hashlib.sha256(canonical_flow_draft_json_bytes(self.draft)).hexdigest()
         if digest != self.draft_sha256:
             raise ValueError("flow draft hash is inconsistent")
         return self
@@ -311,7 +324,7 @@ class RecordingRepository:
         if row is None:
             raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "录制对象不存在")
         # 生命周期更新不能顺带更换已提交的业务来源。
-        for name in ("project_id", "business_action_id", "action_revision", "test_identity_id",
+        for name in ("project_id", "business_action_id", "action_revision", "subject_test_identity_id", "resource_owner_test_identity_id",
                      "purpose", "parent_recording_id", "effect_id", "flow_id", "preparation_source_fingerprint"):
             if getattr(row, name) != getattr(record, name):
                 raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "录制来源不可更换")
@@ -343,7 +356,8 @@ class RecordingRepository:
             project_id=record.project_id,
             business_action_id=record.business_action_id,
             action_revision=record.action_revision,
-            test_identity_id=record.test_identity_id,
+            subject_test_identity_id=record.subject_test_identity_id,
+            resource_owner_test_identity_id=record.resource_owner_test_identity_id,
             preparation_source_fingerprint=record.preparation_source_fingerprint,
             effect_id=record.effect_id,
             flow_id=record.flow_id,
@@ -381,7 +395,8 @@ class RecordingRepository:
             project_id=row.project_id,
             business_action_id=row.business_action_id,
             action_revision=row.action_revision,
-            test_identity_id=row.test_identity_id,
+            subject_test_identity_id=row.subject_test_identity_id,
+            resource_owner_test_identity_id=row.resource_owner_test_identity_id,
             preparation_source_fingerprint=row.preparation_source_fingerprint,
             effect_id=row.effect_id,
             purpose=RecordingPurpose(row.purpose),
@@ -431,6 +446,8 @@ class FlowDraftRevisionRepository:
         self._known_secrets = known_secrets
 
     def add(self, record: FlowDraftRevisionRecord) -> None:
+        if record.raw_historical_draft_json is not None:
+            raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "历史草稿不能作为新写入")
         payload = record.model_dump(mode="json")
         ensure_storage_payload_safe(payload, self._known_secrets)
         draft_json = canonical_flow_draft_json_bytes(
@@ -474,7 +491,15 @@ class FlowDraftRevisionRepository:
 
     @staticmethod
     def _record(row: FlowDraftRevisionRow) -> FlowDraftRevisionRecord:
-        draft = FlowDraft.model_validate_json(row.draft_json, strict=True)
+        from product.protocols.flow_draft import _strict_json, FLOW_DRAFT_MAX_BYTES
+        raw = row.draft_json.encode("utf-8")
+        payload = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, ())
+        historical = payload.get("schema_version") == "2"
+        if historical:
+            from product.protocols.recording_legacy import read_legacy_document
+            draft = read_legacy_document(raw, "draft", expected_hash=row.draft_sha256)
+        else:
+            draft = FlowDraft.model_validate_json(raw, strict=True)
         return FlowDraftRevisionRecord(
             recording_id=row.recording_id,
             revision=row.revision,
@@ -482,4 +507,5 @@ class FlowDraftRevisionRepository:
             draft=draft,
             draft_sha256=row.draft_sha256,
             created_at_us=row.created_at_us,
+            raw_historical_draft_json=row.draft_json if historical else None,
         )

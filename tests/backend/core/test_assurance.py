@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from product.backend.core.assurance import (
-    AllocationMode, AssuranceStatus, IdentityRequirementPlanner,
+    ActionAllowControlBinding, AllocationMode, AssuranceStatus, IdentityRequirementPlanner,
     _color_components, compile_action_assurance,
 )
 from product.backend.core.permission_intent import PermissionIntentRelation as Relation
@@ -96,16 +96,57 @@ def test_invalid_history_is_readable_but_fails_closed(relation, owner, owner_rev
     assert historical.model_dump_json() == before
 
 
-def test_deny_requires_allow_for_every_effect_and_never_invents_control():
+def test_deny_requires_one_allow_covering_all_effects():
     deny = permission(2, expectation=PermissionExpectation.DENY, effects=(EFFECT, SECOND_EFFECT))
     for inputs in ((deny,), (permission(1), deny)):
         contract = compile_action_assurance(action(), inputs)
         assert contract.status is AssuranceStatus.BLOCKED
         assert "ALLOW_CONTROL_REQUIRED" in contract.reason_codes
-        assert any(item.allow_permission is None for item in contract.allow_controls)
-    complete = compile_action_assurance(action(), (permission(1), deny, permission(3, effects=(SECOND_EFFECT,))))
+        assert len(contract.allow_controls) == 1
+        assert contract.allow_controls[0].resolved_allow_permission is None
+    partial = compile_action_assurance(action(), (permission(1), deny, permission(3, effects=(SECOND_EFFECT,))))
+    assert partial.status is AssuranceStatus.BLOCKED
+    complete = compile_action_assurance(action(), (permission(1, effects=(EFFECT, SECOND_EFFECT)), deny))
     assert complete.status is AssuranceStatus.READY
     assert {item.effect_id for item in complete.effect_evidence} == {EFFECT, SECOND_EFFECT}
+
+
+def test_equal_best_candidates_need_current_human_selection():
+    deny = permission(3, relation=Relation.SAME_ROLE_OTHER_ACCOUNT, expectation=PermissionExpectation.DENY)
+    candidates = (permission(1), permission(2))
+    first = compile_action_assurance(action(), (*candidates, deny))
+    assert first == compile_action_assurance(action(), (deny, *reversed(candidates)))
+    requirement = first.allow_controls[0]
+    assert requirement.resolved_allow_permission is None
+    assert "ALLOW_CONTROL_SELECTION_REQUIRED" in first.reason_codes
+    selected = candidates[1]
+    binding = ActionAllowControlBinding(
+        project_id=deny.project_id, deny_intent_id=deny.intent_id, deny_intent_revision=deny.revision,
+        deny_intent_hash=deny.intent_hash, selected_allow_intent_id=selected.intent_id,
+        selected_allow_intent_revision=selected.revision, selected_allow_intent_hash=selected.intent_hash,
+        selection_fingerprint=requirement.selection_fingerprint, confirmed_at_us=20,
+    )
+    resolved = compile_action_assurance(action(), (*candidates, deny), (binding,))
+    assert resolved.status is AssuranceStatus.READY
+    assert resolved.allow_controls[0].resolved_allow_permission.intent_id == selected.intent_id
+    changed = compile_action_assurance(action(), (*candidates, permission(4), deny), (binding,))
+    assert changed.allow_controls[0].resolved_allow_permission is None
+    assert deny.policy_epoch == selected.policy_epoch == 1
+
+
+@pytest.mark.parametrize("same_role", [False, True])
+def test_resolved_twins_share_owner_and_preserve_distinct_subject(same_role):
+    owner = ACTOR if same_role else OTHER_ACTOR
+    allow = permission(1, subject=owner, owner=owner)
+    deny = permission(2, subject=ACTOR, owner=owner,
+        relation=Relation.SAME_ROLE_OTHER_ACCOUNT if same_role else Relation.OTHER_ROLE,
+        expectation=PermissionExpectation.DENY)
+    result = compile_action_assurance(action(), (allow, deny))
+    assert result.status is AssuranceStatus.READY
+    allow_slots, deny_slots = result.identity_requirements.permissions
+    assert allow_slots.resource_owner_slot_id == deny_slots.resource_owner_slot_id
+    assert allow_slots.subject_slot_id == allow_slots.resource_owner_slot_id
+    assert deny_slots.subject_slot_id != deny_slots.resource_owner_slot_id
 
 
 def test_contract_fingerprint_freezes_business_revisions_and_recovery():

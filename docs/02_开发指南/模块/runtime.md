@@ -2,7 +2,7 @@
 
 > 状态：CURRENT。`product/backend/infra/runtime` 拥有持久 Job、attempt/lease/fencing、角色化子进程、Worker/Runner 生命周期、staging、恢复和运行诊断。
 
-当前 ApplicationCore 在服务生命周期启动真实 LocalWorkerSupervisor，WorkerContainer 与 Queue 仅接受 RECORDING；RUN/CHECK 不 claim、不执行。System、/ready 与 MCP 按真实线程状态报告 running/stopped 和 capability，CHECK 始终 unavailable。API 只监督调度，浏览器仍进入独立 Recording Runner。
+当前 ApplicationCore 在服务生命周期启动 LocalWorkerSupervisor；WorkerContainer 与 Queue 显式装配 CHECK + RECORDING。System 与 /ready 分开报告线程状态和当前能力。CHECK 使用 infra/runtime/check_runner 的独立监督器与入口，复用 JobAttempts、AttemptProcessControl 和进程树；不加载旧 Contract Runner 作为 fallback。
 
 ## 职责
 

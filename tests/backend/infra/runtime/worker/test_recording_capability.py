@@ -1,5 +1,5 @@
 # =============================================================================
-# Recording-only Worker 能力直接测试
+# 当前 CHECK/Recording 装配与显式 Recording-only 过滤测试
 #
 # 定位
 #   验证当前 Worker 装配、SQLite 目标过滤、线程生命周期与秘密边界。
@@ -27,7 +27,10 @@ from product.backend.infra.runtime.jobs.models import (
     RecoveryReasonCode,
     RecoveryScan,
 )
-from product.backend.infra.runtime.jobs.targets import JobTargetType
+from product.backend.infra.runtime.jobs.targets import JobTargetType, recording_job_targets
+from product.backend.infra.runtime.jobs.attempts import JobAttempts
+from product.backend.infra.runtime.jobs.recovery import JobRecovery
+from product.backend.workflows.preparation.demonstrations import legal_demonstrations
 from product.backend.infra.runtime.process.environment import (
     ProcessEnvironmentRole,
     minimal_process_environment,
@@ -54,11 +57,16 @@ def _wait_until(predicate, *, timeout: float = 2.0) -> None:
 def _submit_recording(harness: PreparationHarness, suffix: str = "recording"):
     """从真实当前动作、身份和 source fingerprint 提交正式 Recording Job。"""
 
+    prepared = harness.core.preparation.get(harness.project_id).actions[0]
+    choice = legal_demonstrations(prepared.assurance_contract, prepared.permissions, prepared.identity_requirements)[0]
     return harness.core.project_recordings.submit(
         harness.project_id,
         business_action_id=harness.action.action_id,
         action_revision=harness.action.revision,
-        test_identity_id=harness.identities[0].identity_id,
+        subject_test_identity_id=choice.subject_test_identity_id,
+        resource_owner_test_identity_id=choice.resource_owner_test_identity_id,
+        subject_slot_id=choice.subject_slot_id, resource_owner_slot_id=choice.resource_owner_slot_id,
+        resource_owner_confirmed=True,
         duration_seconds=1,
         idempotency_key=f"worker-{suffix}",
         headless=True,
@@ -84,8 +92,10 @@ def _run_and_job(
     run = RunRecord(
         run_id=run_id,
         project_id=project_id,
-        contract_id="worker-fixture-contract",
-        contract_version=1,
+        request_hash="a" * 64,
+        plan_fingerprint="b" * 64,
+        source_fingerprint="c" * 64,
+        policy_epoch=1,
         engine_version="worker-fixture",
         lifecycle=run_state,
         verdict=None,
@@ -98,7 +108,7 @@ def _run_and_job(
         project_id=project_id,
         run_id=run_id,
         recording_id=None,
-        operation_type="RUN",
+        operation_type="CHECK",
         state=state,
         idempotency_key=f"run-fixture-{ordinal}",
         request_hash="a" * 64,
@@ -130,14 +140,14 @@ def _read_job(harness: PreparationHarness, job_id: str) -> JobRecord:
     return job
 
 
-def test_application_core_worker_is_recording_only_and_lifecycle_is_idempotent(tmp_path: Path) -> None:
+def test_application_core_worker_has_current_capabilities_and_idempotent_lifecycle(tmp_path: Path) -> None:
     harness = build_preparation_harness(tmp_path)
     try:
         core = harness.core
         assert core.worker_status() == {
             "worker": "stopped",
-            "worker_capabilities": ("RECORDING",),
-            "check": "unavailable",
+            "worker_capabilities": ("CHECK", "RECORDING"),
+            "check": "available",
             "recovered_jobs": 0,
         }
         assert not core.worker.is_running()
@@ -157,8 +167,18 @@ def test_application_core_worker_is_recording_only_and_lifecycle_is_idempotent(t
         harness.close()
 
 
+def _recording_only(core):
+    # 显式选择受限 capability；生产组合根本身已经同时支持 CHECK 和 Recording。
+    targets = recording_job_targets()
+    core.job_attempts = JobAttempts(core.uow_factory, targets=targets)
+    core.worker._targets = targets
+    core.worker._attempts = core.job_attempts
+    core.worker._recovery = JobRecovery(core.uow_factory, targets=targets)
+
+
 def test_sqlite_claim_and_next_job_filter_run_before_limit_and_explicit_claim(tmp_path: Path) -> None:
     harness = build_preparation_harness(tmp_path)
+    _recording_only(harness.core)
     try:
         now_us = time.time_ns() // 1_000
         runs = tuple(
@@ -205,6 +225,7 @@ def test_sqlite_claim_and_next_job_filter_run_before_limit_and_explicit_claim(tm
 
 def test_all_run_queue_is_invisible_to_recording_worker(tmp_path: Path) -> None:
     harness = build_preparation_harness(tmp_path)
+    _recording_only(harness.core)
     try:
         now_us = time.time_ns() // 1_000
         rows = tuple(
@@ -229,6 +250,7 @@ def test_all_run_queue_is_invisible_to_recording_worker(tmp_path: Path) -> None:
 
 def test_recovery_filters_run_before_limit_and_rejects_unsupported_run(tmp_path: Path) -> None:
     harness = build_preparation_harness(tmp_path)
+    _recording_only(harness.core)
     try:
         now_us = time.time_ns() // 1_000
         run, run_job = _run_and_job(
@@ -369,14 +391,14 @@ def test_stop_timeout_truthfully_keeps_thread_and_application_close_keeps_resour
         harness.close()
 
 
-def test_worker_container_is_recording_only_and_does_not_upgrade_missing_database(tmp_path: Path) -> None:
+def test_worker_container_has_current_targets_and_does_not_upgrade_missing_database(tmp_path: Path) -> None:
     current_root = tmp_path / "current"
     current_root.mkdir()
     harness = build_preparation_harness(current_root)
     try:
         container = WorkerContainer(harness.var_dir, environ={})
         try:
-            assert container.job_targets.target_types == (JobTargetType.RECORDING,)
+            assert container.job_targets.target_types == (JobTargetType.RECORDING, JobTargetType.RUN)
             registry = container.handler_factory.build_registry("recording-worker", {})
             recording_job = JobRecord(
                 job_id="job_" + "b" * 32,
@@ -410,6 +432,7 @@ def test_worker_container_is_recording_only_and_does_not_upgrade_missing_databas
             )
             with pytest.raises(JiejianError):
                 registry.resolve(run_job)
+            assert registry.resolve(run_job.model_copy(update={"operation_type": "CHECK"})) is not None
         finally:
             container.close()
             container.close()
@@ -458,11 +481,11 @@ def test_control_plane_ready_and_status_follow_worker_lifecycle_without_writer(t
         status = client.get("/api/system/status")
         assert ready.status_code == 200
         assert ready.json()["worker"] == "stopped"
-        assert ready.json()["worker_capabilities"] == ["RECORDING"]
-        assert ready.json()["check"] == "unavailable"
+        assert ready.json()["worker_capabilities"] == ["CHECK", "RECORDING"]
+        assert ready.json()["check"] == "available"
         assert status.json()["data"]["worker"] == "stopped"
-        assert status.json()["data"]["worker_capabilities"] == ["RECORDING"]
-        assert status.json()["data"]["check"] == "unavailable"
+        assert status.json()["data"]["worker_capabilities"] == ["CHECK", "RECORDING"]
+        assert status.json()["data"]["check"] == "available"
 
     running_app = create_control_plane_app(tmp_path / "running", start_worker=True)
     with ControlPlaneTestClient(running_app) as client:

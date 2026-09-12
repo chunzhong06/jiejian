@@ -21,7 +21,7 @@ from typing import Any, Literal, TypeAlias
 from pydantic import Field, field_validator, model_validator
 
 
-from product.protocols.execution import ProtocolModel
+from product.protocols.web.base import ProtocolModel
 
 
 HTTP_TEMPLATE_MAX_BYTES = 262_144

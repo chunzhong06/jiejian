@@ -53,43 +53,7 @@ class _StubRepairContract(BaseModel):
     repair_fingerprint: str
 
 
-EXPECTED_MCP_TOOLS = {
-    "jiejian_application_reanalyze",
-    "jiejian_application_understanding",
-    "jiejian_change_show",
-    "jiejian_change_submit",
-    "jiejian_check_cancel",
-    "jiejian_check_prepare",
-    "jiejian_check_preview",
-    "jiejian_check_run",
-    "jiejian_evidence_index",
-    "jiejian_delivery_check",
-    "jiejian_flow_list",
-    "jiejian_flow_status",
-    "jiejian_identity_list",
-    "jiejian_identity_prepare_cancel",
-    "jiejian_identity_prepare_confirm",
-    "jiejian_identity_prepare_start",
-    "jiejian_identity_preparation_status",
-    "jiejian_identity_status",
-    "jiejian_intent_list",
-    "jiejian_intent_propose",
-    "jiejian_intent_rebind_propose",
-    "jiejian_intent_show",
-    "jiejian_official_sample_apply_fix",
-    "jiejian_official_sample_stop",
-    "jiejian_product_status",
-    "jiejian_project_list",
-    "jiejian_project_show",
-    "jiejian_recording_capture_start",
-    "jiejian_recording_start",
-    "jiejian_recording_stop",
-    "jiejian_result_history",
-    "jiejian_result_presentation",
-    "jiejian_repair_contract_get",
-    "jiejian_repair_status",
-    "jiejian_system_status",
-}
+from tests.backend.api.test_current_mcp import TOOLS as EXPECTED_MCP_TOOLS
 
 
 class _MemorySecretStore:
@@ -141,10 +105,12 @@ def test_mcp_server_instructions_use_one_completed_user_task_as_change_boundary(
     )
     instructions = app.state.mcp_server.instructions
 
-    assert "跨任务保留已确认的权限基线和历史" in instructions
-    assert "不必因每次保存或单个文件修改反复调用界鉴" in instructions
-    assert "一个完整的用户任务已经完成后" in instructions
-    assert "调用一次 jiejian_change_submit 登记整批变化" in instructions
+    assert "READ读取既有事实" in instructions
+    assert "PREPARE只登记代码变化声明" in instructions
+    assert "完整当前权限" in instructions
+    assert "不修改权限或检查结论" in instructions
+    app.state.context.close()
+
 
 
 def test_mcp_access_controller_restores_pairing_without_restoring_grants() -> None:
@@ -357,297 +323,20 @@ def test_mcp_transport_rejects_disabled_wrong_token_and_wrong_origin(
     anyio.run(scenario)
 
 
-def test_official_mcp_client_reads_same_status_and_enforces_prepare(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    app = create_app(
-        tmp_path / "var",
-        start_worker=False,
-        secret_store=_MemorySecretStore(),
-    )
-    source = _source(tmp_path)
-    connection = app.state.context.application_understanding.connect(source)
-    project_id = connection.project.project_id
-    expected = app.state.context.product_status.get(project_id).model_dump(mode="json")
+def test_official_sdk_never_exposes_old_or_permission_writer_tools(tmp_path):
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=_MemorySecretStore())
     token = app.state.mcp_access.pair().access_token
-    assert token is not None
-
-    async def scenario() -> None:
+    async def scenario():
         async with app.router.lifespan_context(app):
-            async with httpx2.AsyncClient(
-                transport=httpx2.ASGITransport(app=app),
-                base_url=TEST_CONTROL_ORIGIN,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Origin": TEST_CONTROL_ORIGIN,
-                },
-                follow_redirects=True,
-            ) as http_client:
-                transport = streamable_http_client(
-                    f"{TEST_CONTROL_ORIGIN}/mcp",
-                    http_client=http_client,
-                    terminate_on_close=False,
-                )
-                async with Client(transport) as client:
-                    tools = await client.list_tools()
-                    tool_names = {item.name for item in tools.tools}
-                    assert tool_names == EXPECTED_MCP_TOOLS
-                    assert not any(
-                        forbidden in name
-                        for name in tool_names
-                        for forbidden in ("permission_set", "candidate_decide", "approve", "reject")
-                    )
-                    activity = app.state.mcp_access.view()
-                    assert activity.client_connected is True
-                    assert activity.client_name
-                    assert activity.client_version
-                    assert activity.last_seen_at_us is not None
-                    assert activity.connection_state is MCPConnectionState.CONNECTED
-                    status = await client.call_tool(
-                        "jiejian_product_status",
-                        {"project_id": project_id},
-                    )
-                    assert status.is_error is False
-                    assert status.structured_content == expected
-
-                    repair_status = await client.call_tool(
-                        "jiejian_repair_status",
-                        {"project_id": project_id},
-                    )
-                    assert repair_status.is_error is False
-                    assert repair_status.structured_content == expected["repair"]
-
-                    expected_delivery = app.state.context.delivery_check.check(
-                        project_id
-                    ).model_dump(mode="json")
-                    delivery = await client.call_tool(
-                        "jiejian_delivery_check",
-                        {"project_id": project_id},
-                    )
-                    assert delivery.is_error is False
-                    assert delivery.structured_content == expected_delivery
-
-                    repair_reference = RepairContractReference(
-                        source_run_id="run_" + "6" * 32,
-                        source_finding_id="finding_" + "7" * 32,
-                        repair_fingerprint="8" * 64,
-                    )
-                    repair_contract = _StubRepairContract(
-                        project_id=project_id,
-                        **repair_reference.model_dump(),
-                    )
-                    monkeypatch.setattr(
-                        app.state.context.repair_contracts,
-                        "get",
-                        lambda source_run_id, source_finding_id: repair_contract,
-                    )
-                    repair_view = await client.call_tool(
-                        "jiejian_repair_contract_get",
-                        {
-                            "project_id": project_id,
-                            "source_run_id": repair_reference.source_run_id,
-                            "source_finding_id": repair_reference.source_finding_id,
-                        },
-                    )
-                    assert repair_view.is_error is False
-                    assert repair_view.structured_content == repair_contract.model_dump(mode="json")
-
-                    with pytest.raises(MCPError) as blocked:
-                        await client.call_tool(
-                            "jiejian_application_reanalyze",
-                            {"project_id": project_id, "revision": 0},
-                        )
-                    assert blocked.value.data["error_code"] == "MCP_PERMISSION_REQUIRED"
-                    assert blocked.value.data["details"] == {
-                        "required_level": "PREPARE",
-                        "project_id": project_id,
-                    }
-
-                    with pytest.raises(MCPError) as execute_blocked:
-                        await client.call_tool(
-                            "jiejian_check_run",
-                            {
-                                "project_id": project_id,
-                                "idempotency_key": "read-cannot-run",
-                            },
-                        )
-                    assert execute_blocked.value.data["error_code"] == "MCP_PERMISSION_REQUIRED"
-                    assert execute_blocked.value.data["details"] == {
-                        "required_level": "EXECUTE",
-                        "project_id": project_id,
-                    }
-
-                    app.state.mcp_access.set_level(
-                        project_id,
-                        MCPAccessLevel.PREPARE,
-                    )
-                    change_id = "chg_" + "a" * 32
-                    change_view = _StubSourceChangeView(
-                        change_id=change_id,
-                        project_id=project_id,
-                        actual_changed_path_count=2,
-                        claimed_paths=("app.py",),
-                        added_paths=("new.py",),
-                        modified_paths=("app.py",),
-                        removed_paths=(),
-                        summary="发现 1 条权限要求与本次变化直接相关。",
-                    )
-                    change_calls: list[
-                        tuple[
-                            str,
-                            str,
-                            tuple[str, ...],
-                            str,
-                            RepairContractReference | None,
-                        ]
-                    ] = []
-
-                    def submit_change(
-                        selected_project_id,
-                        *,
-                        reason,
-                        claimed_paths,
-                        submitted_by,
-                        repair_reference=None,
-                    ):
-                        change_calls.append(
-                            (
-                                selected_project_id,
-                                reason,
-                                claimed_paths,
-                                submitted_by,
-                                repair_reference,
-                            )
-                        )
-                        return SimpleNamespace(change_id=change_id), None, None
-
-                    monkeypatch.setattr(
-                        app.state.context.source_changes,
-                        "submit",
-                        submit_change,
-                    )
-                    monkeypatch.setattr(
-                        app.state.context.source_changes,
-                        "view",
-                        lambda selected_change_id: change_view,
-                    )
-                    submitted_change = await client.call_tool(
-                        "jiejian_change_submit",
-                        {
-                            "project_id": project_id,
-                            "reason": "完成实现修复",
-                            "claimed_paths": ["app.py"],
-                            "repair_reference": repair_reference.model_dump(mode="json"),
-                        },
-                    )
-                    assert submitted_change.structured_content == change_view.model_dump(mode="json")
-                    assert change_calls == [
-                        (
-                            project_id,
-                            "完成实现修复",
-                            ("app.py",),
-                            f"MCP · {activity.client_name}",
-                            repair_reference,
-                        )
-                    ]
-                    shown_change = await client.call_tool(
-                        "jiejian_change_show",
-                        {"project_id": project_id, "change_id": change_id},
-                    )
-                    assert shown_change.structured_content == change_view.model_dump(mode="json")
-                    assert shown_change.structured_content["claimed_paths"] == ["app.py"]
-                    assert shown_change.structured_content["added_paths"] == ["new.py"]
-                    assert shown_change.structured_content["modified_paths"] == ["app.py"]
-                    assert "source_fingerprint" not in shown_change.structured_content
-                    assert "changed_paths" not in shown_change.structured_content
-                    assert "content_sha256" not in shown_change.structured_content
-
-                    compile_calls: list[str] = []
-                    monkeypatch.setattr(
-                        app.state.context.security_setup,
-                        "compile",
-                        lambda selected_project_id: compile_calls.append(
-                            selected_project_id
-                        ),
-                    )
-                    source_entries = tuple(sorted(path.name for path in source.iterdir()))
-                    prepared = await client.call_tool(
-                        "jiejian_check_prepare",
-                        {"project_id": project_id},
-                    )
-                    assert prepared.is_error is False
-                    assert compile_calls == [project_id]
-                    assert tuple(sorted(path.name for path in source.iterdir())) == source_entries
-
-                    with pytest.raises(MCPError) as authorization_required:
-                        await client.call_tool(
-                            "jiejian_application_reanalyze",
-                            {"project_id": project_id, "revision": 0},
-                        )
-                    assert (
-                        authorization_required.value.data["error_code"]
-                        == "APPLICATION_ANALYSIS_NOT_AUTHORIZED"
-                    )
-
-                    run_calls: list[tuple[str, str, str | None]] = []
-                    monkeypatch.setattr(
-                        app.state.context.checks,
-                        "submit",
-                        lambda selected_project_id, *, idempotency_key, change_id=None: (
-                            run_calls.append((selected_project_id, idempotency_key, change_id))
-                            or (
-                                SimpleNamespace(
-                                    job=_StubToolView(object_id="job-test"),
-                                    run=_StubToolView(object_id="run-test"),
-                                ),
-                                SimpleNamespace(schema_version="1"),
-                                False,
-                            )
-                        ),
-                    )
-                    app.state.mcp_access.set_level(
-                        project_id,
-                        MCPAccessLevel.EXECUTE,
-                    )
-                    executed = await client.call_tool(
-                        "jiejian_check_run",
-                        {
-                            "project_id": project_id,
-                            "idempotency_key": "mcp-test-run",
-                            "change_id": change_id,
-                        },
-                    )
-                    assert executed.is_error is False
-                    assert executed.structured_content == {
-                        "schema_version": "1",
-                        "job": {"schema_version": "1", "object_id": "job-test"},
-                        "run": {"schema_version": "1", "object_id": "run-test"},
-                    }
-                    assert run_calls == [(project_id, "mcp-test-run", change_id)]
-
-                    direct_presentation = _StubToolView(object_id="result-test")
-                    monkeypatch.setattr(
-                        app.state.context.result_presentation,
-                        "build",
-                        lambda run_id: direct_presentation,
-                    )
-                    presented = await client.call_tool(
-                        "jiejian_result_presentation",
-                        {"run_id": "run-test"},
-                    )
-                    assert presented.is_error is False
-                    assert presented.structured_content == direct_presentation.model_dump(
-                        mode="json"
-                    )
-
-                    app.state.mcp_access.pause()
-                    with pytest.raises(MCPError):
-                        await client.call_tool(
-                            "jiejian_product_status",
-                            {"project_id": project_id},
-                        )
-
+            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=TEST_CONTROL_ORIGIN,
+                headers={"Authorization": "Bearer " + token}, follow_redirects=True) as http:
+                async with Client(streamable_http_client(TEST_CONTROL_ORIGIN + "/mcp", http_client=http, terminate_on_close=False)) as client:
+                    listed = (await client.list_tools()).tools
+                    assert {tool.name for tool in listed} == EXPECTED_MCP_TOOLS
+                    assert all(tool.input_schema["additionalProperties"] is False for tool in listed)
+                    for name in ("jiejian_intent_propose", "jiejian_check_prepare", "jiejian_official_sample_apply_fix", "jiejian_flow_list"):
+                        rejected = await client.call_tool(name, {"project_id": "unknown"})
+                        assert rejected.is_error
     anyio.run(scenario)
 
 
@@ -695,43 +384,6 @@ def test_mcp_application_projection_omits_source_and_log_or_body_fields(
                         for candidate in payload[field]
                     )
 
-                    monkeypatch.setattr(
-                        app.state.context.product_flows,
-                        "list",
-                        lambda selected_project_id: (
-                            {
-                                "recording_id": "rec-test",
-                                "project_id": selected_project_id,
-                                "flow_id": "flow-test",
-                                "state": "RECORDING",
-                                "created_at_us": 1,
-                                "updated_at_us": 2,
-                                "browser_events": [{"request_body": "secret-body"}],
-                                "job": {
-                                    "job_id": "job-test",
-                                    "state": "RUNNING",
-                                    "failure_detail": "secret-log",
-                                },
-                            },
-                        ),
-                    )
-                    flows = await client.call_tool(
-                        "jiejian_flow_list",
-                        {"project_id": project_id},
-                    )
-                    assert flows.structured_content == {
-                        "result": [
-                            {
-                                "recording_id": "rec-test",
-                                "project_id": project_id,
-                                "flow_id": "flow-test",
-                                "state": "RECORDING",
-                                "created_at_us": 1,
-                                "updated_at_us": 2,
-                                "job": {"job_id": "job-test", "state": "RUNNING"},
-                            }
-                        ]
-                    }
                     serialized = json.dumps(payload, ensure_ascii=False).casefold()
                     assert "secret_ref" not in serialized
                     assert "request_body" not in serialized

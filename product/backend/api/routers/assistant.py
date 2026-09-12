@@ -1,4 +1,4 @@
-# 仅注册三个 CURRENT AI 入口；GET 冷读取，POST 显式生成，焦点由服务端复核。
+# 当前 AI 入口；GET 冷读取，POST 显式生成，业务焦点及发布结果由服务端复核。
 from __future__ import annotations
 
 from enum import StrEnum
@@ -39,6 +39,14 @@ class AssistantFocus(ApiModel):
 
 def build_assistant_router(context) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/api/runs/{run_id}/assistant/result-explanation", response_model=ApiResponse)
+    def get_result_assistant(run_id: str):
+        return data_response(context.assistant_service.get_result(run_id).model_dump(mode="json"))
+
+    @router.post("/api/runs/{run_id}/assistant/result-explanation", response_model=ApiResponse)
+    def generate_result_assistant(run_id: str, body: AssistantGenerateRequest):
+        return data_response(context.assistant_service.generate_result(run_id, retry=body.retry).model_dump(mode="json"))
 
     @router.get("/api/projects/{project_id}/assistant/{surface}", response_model=ApiResponse)
     async def get_project_assistant(project_id: str, surface: ProjectAssistantSurface, focus: Annotated[AssistantFocus, Query()]):

@@ -8,6 +8,7 @@ import type {
   PermissionIntentRevisionDto,
 } from './businessBoundaries'
 import { request } from './http'
+import type { ProjectRepair } from './repairs'
 
 export type WorkspaceProjectDto = {
   project_id: string
@@ -46,6 +47,7 @@ export type PrimaryTaskKind =
   | 'ESTABLISH_BUSINESS_BOUNDARY'
   | 'REVIEW_PERMISSION_REVISION'
   | 'COMPLETE_ALLOW_CONTROL'
+  | 'SELECT_ALLOW_CONTROL'
   | 'REVIEW_ACTOR_IMPLEMENTATION'
   | 'REVIEW_ACTION_IMPLEMENTATION'
   | 'REVIEW_RECORDING'
@@ -54,6 +56,10 @@ export type PrimaryTaskKind =
   | 'PREPARE_ACTION_RESOURCE'
   | 'COMPLETE_EFFECT_EVIDENCE'
   | 'COMPLETE_RECOVERY'
+  | 'REGISTER_SOURCE_CHANGE'
+  | 'VERIFY_REPAIR'
+  | 'RUN_CURRENT_CHECK'
+  | 'VIEW_CURRENT_RESULT'
 
 export type PrimaryTaskDto = {
   task_id: string
@@ -64,12 +70,18 @@ export type PrimaryTaskDto = {
   why_now: string
   user_responsibility: string
   system_will_do: string
-  route: '/application' | '/permissions' | '/tests'
+  route: '/application' | '/permissions' | '/tests' | '/changes'
+  change_id?: string | null
+  run_id?: string | null
   can_execute: boolean
   stale_fingerprint: string
   action_revision?: number | null
   identity_slot_id?: string | null
   test_identity_id?: string | null
+  subject_test_identity_id?: string | null
+  resource_owner_test_identity_id?: string | null
+  subject_slot_id?: string | null
+  resource_owner_slot_id?: string | null
   recording_id?: string | null
   recording_purpose?: 'TARGET' | 'OBSERVATION' | 'RECOVERY' | null
   parent_recording_id?: string | null
@@ -92,6 +104,9 @@ export type WorkspaceViewDto = {
   actions: ActionWorkspaceDto[]
   primary_task: PrimaryTaskDto | null
   areas: WorkspaceAreaDto[]
+  latest_result?: { run_id: string; verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE'; summary: string; policy_epoch: number; created_at_us: number } | null
+  source_change?: { change_id: string; revalidation_status: string; can_execute: boolean; reason: string; created_at_us: number } | null
+  repair?: ProjectRepair | null
 }
 
 export const workspaceApi = {

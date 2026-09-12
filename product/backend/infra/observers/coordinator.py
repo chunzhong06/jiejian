@@ -15,12 +15,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.execution.port import TargetCaseSession
+if TYPE_CHECKING:
+    from product.backend.infra.execution.port import TargetCaseSession
 from product.backend.infra.observers.async_task import run_async_task_observer
 from product.backend.infra.observers.audit_log import run_audit_log_observer
 from product.backend.infra.observers.azure_blob import run_azure_blob_observer

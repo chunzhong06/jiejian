@@ -4,15 +4,15 @@
 
 ## 先理解：多个入口只有一套产品状态
 
-界鉴可以从 GUI、CLI 或自动化脚本进入，但这些入口不能各自维护业务进度。当前 GUI 状态由 `WorkspaceService` 从 Project、ApplicationUnderstanding、正式 Business Boundary、Permission、pending Proposal、实时 implementation inspection 与 PreparationView 形成；保留的已发布结果读取仍由 `ResultPresentation` 负责，但完整新检查主链尚未重新接入当前产品入口。
+界鉴可以从 GUI、CLI 或自动化脚本进入，但这些入口不能各自维护业务进度。当前 GUI 状态由 `WorkspaceService` 从 Project、ApplicationUnderstanding、正式 Business Boundary、Permission、pending Proposal、实时 implementation inspection 与 PreparationView 形成；当前检查与结果由 CheckService、严格发布 Reader 和 ResultStory 提供，SourceChange/ProjectRepair 负责真实变化与原题复验。
 
 ```text
 ApplicationCore / Published facts
-  → WorkspaceView / BusinessBoundaryView
+  → WorkspaceView / BusinessBoundaryView / ResultStory / ProjectRepair
   → loopback API envelope → GUI
   → CLI Human / Machine v1
   → MCP Streamable HTTP → 固定工具白名单
-  → 保留的 ResultPresentation / Report publication（只读已发布事实）
+  → 当前 Evidence publication（只读已发布事实）
 ```
 
 页面文案、终端颜色或 JSON 格式都不能反向改变事实。Report 是独立不可变交付物，也不由 CLI stdout 代替。
@@ -54,21 +54,21 @@ CLI 与 Machine 输出是控制和投影通道，不是审批人。公开命令�
 
 ## MCP Streamable HTTP 与工具输出
 
-MCP 精确挂载在同一 loopback FastAPI 服务的 `/mcp`，由官方 Python SDK v2 提供 Streamable HTTP；不保留 SSE 路由，也不创建第二个 ApplicationCore、Worker 或监听端口。当前只装配录制 Worker；System、`/ready` 与 `jiejian_system_status` 共享真实 `worker`、`worker_capabilities`、检查可用性和恢复计数。只有实际线程存活且仅录制能力装配才报告 running；CHECK 不可用。首次创建的 Authorization Bearer 只经精确 SecretStore 引用长期保存，后续启动自动恢复 READ。
+MCP精确挂载同一loopback FastAPI的/mcp，由官方SDK提供Streamable HTTP，不创建第二个ApplicationCore或端口。当前Worker支持CHECK与RECORDING，System/ready/MCP投影同一真实存活与能力事实；只有Worker running不能证明Plan可执行。长期Bearer只经精确SecretStore保存，启动恢复READ。
 
 GUI 读取的 `MCPAccessView` 明确区分凭据与连接：`DISABLED → CREDENTIAL_READY → AUTHENTICATED → CONNECTED` 是正常建立过程，认证失败投影为 `CREDENTIAL_REJECTED`，人工暂停投影为 `PAUSED`。`last_authenticated_at_us` 只证明 Bearer 通过，`last_seen_at_us` 才代表 SDK 已观测到完成 initialize 的客户端活动；状态页面不能把凭据生成、配置复制或客户端自报当成连接成功。恢复、轮换、暂停和 shutdown 都清除旧活动与逐 Project 提升，避免上一客户端或上一 serve 冒充当前连接。
 
-MCP 工具不套用 API envelope 或 CLI Machine envelope，而按 SDK 协议返回现有 Pydantic View 的 structured content 或有界轻量投影。根 View 自身已有 `schema_version` 时保持原值；不能为每个嵌套 DTO 重复制造版本，也不能把 MCP 协议版本当作产品版本。当前 MCP 不暴露 Workspace 写操作、Proposal 决定或执行能力。
+MCP工具按SDK返回structured content，不套API/CLI envelope；仅独立持久根有schema_version。当前提供有界事实、SourceChange和完整Check提交/取消，不开放Proposal决定、权限writer或任意执行。
 
-长期配对只恢复 `READ`，current 工具白名单固定为 Project、ApplicationUnderstanding、Business Boundary、Intent、TestIdentity 与 System 的只读查询；`PREPARE / EXECUTE`、repair、change submit/show 与 check prepare/run 均未装配。工具清单也不含 permission_set、candidate_decide、approve 或 reject，不能接收源码正文、diff、Git 命令、补丁建议或客户端自报权限范围。暂停和 shutdown 撤销活动会话但保留配对；轮换立即废止旧令牌并保存新令牌；忘记连接删除配对。普通状态不返回明文令牌，访问边界只使用 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED` 三个稳定错误；权限不足 details 只允许 `required_level` 和 `project_id`。未来恢复更高 level 时必须另行扩展正式协议与验收，不能依赖现有保留代码自行生效。
+长期配对只恢复READ。精确14工具：原7个Project/ApplicationUnderstanding/BusinessBoundary/Intent/Identity/System READ，加change_show/check_status/result_show/repair_show；change_submit为PREPARE，check_run/check_cancel为EXECUTE。GUI对当前项目临时提升，pause/resume/rotate/forget/close清除；令牌、状态和错误继续沿同一受控边界。未声明参数拒绝，不能选择Case/Permission/Effect、提交源码/diff、执行Git/shell/任意HTTP或写权限。
 
-## ResultPresentation 与 Evidence
+## ResultStory 与 Evidence
 
-`ResultPresentation` 回答“谁对什么执行了什么、预期是什么、表面请求怎样、真实对象怎样、为何形成结论”。它可以把冻结 EffectBinding 与实际 Observation 投影为 KEY/SUPPORTING、FOUND/NOT_FOUND/UNAVAILABLE，也可以从冻结请求投影变化重验标记和必需权限摘要，但不能重算 Verification 或显示源码指纹。
+当前 ResultStory 从严格发布 Reader 读取冻结请求、Case 结果、证据和 Breakpoint，组织权限要求、实际身份、表面响应、真实业务结果、定位和原题复验。它只解释已有事实，不重新运行 Verification，也不让模型补写结论或定位。
 
-`ResultPresentation.execution_traces` 从冻结 request snapshot 与已发布 Evidence 还原每个 Case/Action 的实际事件 DAG。它可以表达入口 subject、实际 actor、权限 decision、后台代表关系和最终产物；缺少关键来源时只发布已有节点并标记 partial。GUI、CLI 或 MCP 只能投影这些节点，不能借事件顺序产生新的安全结论。
+ExecutionTrace 提供同 Run 的派发、授权和真实业务效果因果；只有已确认禁止效果的 Case 才进入 Breakpoint，缺少中间来源只降低定位精度。原题要求从已发布 BLOCK 重建，复验状态读取精确关联的 NEW Run，不能用最新普通结果冒充修复。
 
-API evidence index 只返回已发布索引；完整 Evidence detail 是另一资源。索引与文档不能逐字比较，CLI 也不为方便展示复制整份 Evidence。报告投影关系见[报告与格式投影协议](报告与格式投影协议.md)。
+API evidence index 只返回已发布索引；完整 Evidence detail 是另一资源，索引与文档不能逐字比较。旧 ResultPresentation、Report 和 History 消费者未接入当前检查入口。格式投影边界见[报告与格式投影协议](报告与格式投影协议.md)。
 
 ## LocalControl 与 ServeLock
 

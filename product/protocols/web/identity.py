@@ -21,8 +21,7 @@ from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
 
-from product.backend.core.identifiers import PROJECT_ID_PATTERN
-from product.protocols.execution import ProtocolModel
+from product.protocols.web.base import ProtocolModel
 from product.protocols.web.workflow import (
     HttpRequestTemplate,
     ValueSlotSource,
@@ -30,6 +29,7 @@ from product.protocols.web.workflow import (
 
 
 _IDENTIFIER = r"^[A-Za-z][A-Za-z0-9_.:-]{0,63}$"
+PROJECT_ID_PATTERN = r"^[a-z][a-z0-9_-]{0,63}$"
 _PATH = r"^/[A-Za-z0-9_./{}~:@%+\-]*$"
 
 

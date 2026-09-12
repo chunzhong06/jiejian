@@ -16,6 +16,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from product.backend.core.permission_semantics import BusinessEffectKind
+from product.protocols.check_runtime import CheckProofConfig
+from product.protocols.observer import ObserverSpec
 
 from product.backend.core.verification.facts import (
     DisclosureProof,
@@ -55,11 +58,30 @@ class EffectProjection:
     security_effect_fact: SecurityEffectFact
 
 
+@dataclass(frozen=True)
+class _CheckEffect:
+    effect_id: str
+    kind: BusinessEffectKind
+    expected_state: str | None
+
+
 class EffectProjector:
     """只依据冻结 Effect、Binding 与已发布观察形成确定性业务事实。"""
 
     def __init__(self, *, observer_bindings: Mapping[str, Any]) -> None:
         self._observer_bindings = observer_bindings
+
+    @classmethod
+    def project_check(cls, *, case_id: str, resource_id: str, proof: CheckProofConfig,
+                      spec: ObserverSpec, envelopes: tuple[ObservationEnvelope, ...],
+                      disclosure_proof: DisclosureProof | None = None) -> ObservationFact:
+        """当前效果仅适配已冻结的 kind/state，复用原投影算法，不构造旧权限契约。"""
+        requirement = "proof_" + proof.binding_fingerprint[:32]
+        projector = cls(observer_bindings={requirement: spec})
+        effect = _CheckEffect(proof.effect_id, BusinessEffectKind(proof.effect_kind), proof.expected_state)
+        return projector._project_requirement(case_id=case_id, resource_id=resource_id, effect=effect,
+            projection_version="v1", requirement_id=requirement, envelopes=envelopes,
+            required=True, disclosure_proof=disclosure_proof)
 
     def project(
         self,
@@ -395,6 +417,7 @@ def _project_audit(
     supported = effect.kind in {
         SecurityEffectKind.EXTERNAL_DISPATCH,
         SecurityEffectKind.RESTRICTED_FUNCTION_INVOCATION,
+        SecurityEffectKind.CREDENTIAL_ACCESS,
     }
     if not supported:
         return _unknown_fact(
@@ -422,7 +445,7 @@ def _project_audit(
         )
     records = tuple(record for group in groups for record in group)
     applied = any(
-        record.get("event_type") == "SIDE_EFFECT"
+        (record.get("event_type") == "SIDE_EFFECT" or record.get("kind") == "FINAL_EFFECT")
         and record.get("effect") == "APPLIED"
         and record.get("effect_id") == effect.effect_id
         for record in records

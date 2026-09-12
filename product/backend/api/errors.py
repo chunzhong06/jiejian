@@ -28,6 +28,8 @@ def _status_for(code: str) -> int:
     }:
         return 404
     if code in {
+        ErrorCode.STATE_PRECONDITION.value,
+        ErrorCode.JOB_IDEMPOTENCY_CONFLICT.value,
         ErrorCode.PROJECT_SOURCE_DRIFT.value,
         ErrorCode.PROJECT_NOT_REVALIDATED.value,
         ErrorCode.PROJECT_ARCHIVE_CONFLICT.value,

@@ -43,11 +43,12 @@ def test_worker_dtos_are_strict_and_frozen_without_root_document_version() -> No
 def test_submit_ids_are_optional_but_strict_when_supplied() -> None:
     values = {
         "project_id": "job-runtime-project",
-        "operation_type": "ACTIVE_RUN",
+        "operation_type": "CHECK",
         "idempotency_key": "request-1",
         "request_hash": "a" * 64,
-        "contract_id": "contract",
-        "contract_version": 1,
+        "plan_fingerprint": "b" * 64,
+        "source_fingerprint": "c" * 64,
+        "policy_epoch": 1,
         "engine_version": "0.1.0",
         "max_attempts": 3,
         "available_at_us": 100,

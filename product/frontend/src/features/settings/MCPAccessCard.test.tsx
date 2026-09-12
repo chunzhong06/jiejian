@@ -122,7 +122,7 @@ describe('MCPAccessCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '调整这次允许范围' }))
     expect(screen.getByRole('dialog', { name: '这次允许 AI 工具做到哪一步？' })).toBeInTheDocument()
-    expect(screen.getByText(/完成一个用户任务后登记整批代码变化/)).toBeInTheDocument()
+    expect(screen.getByText(/登记整批代码变化声明，由界鉴重新核对实际源码与权限影响/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '保存这次允许范围' }))
     await waitFor(() => expect(mockApi.setProjectAccess).toHaveBeenCalledWith('proj-1', 'PREPARE'))
   })

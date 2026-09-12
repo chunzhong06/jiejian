@@ -208,12 +208,13 @@ class FlowDraftStep(FlowDraftProtocolModel):
 
 # Recording 事件生成的版本化审阅对象；未确认变量和绑定保持显式状态。
 class FlowDraft(FlowDraftProtocolModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["3"] = "3"
     recording_id: str = Field(pattern=RECORDING_ID_PATTERN)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
     action_revision: int = Field(ge=1)
-    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    subject_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    resource_owner_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     purpose: RecordingPurpose = RecordingPurpose.TARGET
     parent_recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
     effect_id: str | None = Field(default=None, pattern=EFFECT_ID_PATTERN)
@@ -365,7 +366,7 @@ def parse_flow_draft(
     known_secrets: Sequence[str] = (),
 ) -> FlowDraft:
     parsed = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, known_secrets)
-    if parsed.get("schema_version") != "2":
+    if parsed.get("schema_version") != "3":
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "Flow 草稿版本不受支持")
     try:
         return FlowDraft.model_validate_json(raw, strict=True)

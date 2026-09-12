@@ -42,12 +42,13 @@ export type FlowDraftVariableDto = {
   confirmed_source?: FlowDraftVariableSourceDto | null
 }
 export type FlowDraftDto = {
-  schema_version: '2'
+  schema_version: '3'
   recording_id: string
   flow_id: string
   business_action_id: string
   action_revision: number
-  test_identity_id: string
+  subject_test_identity_id: string
+  resource_owner_test_identity_id: string
   revision: number
   recommended_target_step_id?: string | null
   target_step_id?: string | null
@@ -56,6 +57,8 @@ export type FlowDraftDto = {
   variables?: FlowDraftVariableDto[]
 }
 export type RecordingDto = {
+  subject_test_identity_id?: string
+  resource_owner_test_identity_id?: string
   supplement_choices?: SupplementChoiceDto[]
   schema_version?: '1'
   recording_id: string
@@ -86,31 +89,29 @@ export type RecordingViewDto = {
   test_identity?: RecordingTestIdentityDto
 }
 export type RecordingReviewCommand = Record<string, unknown>
+export type RecordingCreateInput = {
+  business_action_id: string
+  action_revision: number
+  subject_test_identity_id: string
+  resource_owner_test_identity_id: string
+  subject_slot_id: string
+  resource_owner_slot_id: string
+  resource_owner_confirmed: boolean
+  duration_seconds: number
+  purpose: 'TARGET' | 'OBSERVATION' | 'RECOVERY'
+  parent_recording_id: string | null
+  effect_id: string | null
+}
 
 export const recordingsApi = {
   setup: (projectId: string) =>
     request<RecordingSetupDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings/setup`),
-  createRecording: (
-    projectId: string,
-    businessActionId: string,
-    actionRevision: number,
-    testIdentityId: string,
-    durationSeconds: number,
-    purpose: 'TARGET' | 'OBSERVATION' | 'RECOVERY' = 'TARGET',
-    parentRecordingId?: string,
-    effectId?: string,
-  ) =>
+  createRecording: (projectId: string, input: RecordingCreateInput) =>
     request<RecordingViewDto>(`/api/projects/${encodeURIComponent(projectId)}/recordings`, {
       method: 'POST',
       body: JSON.stringify({
         schema_version: '2',
-        business_action_id: businessActionId,
-        action_revision: actionRevision,
-        test_identity_id: testIdentityId,
-        duration_seconds: durationSeconds,
-        purpose,
-        parent_recording_id: parentRecordingId ?? null,
-        effect_id: effectId ?? null,
+        ...input,
         idempotency_key: `gui-recording-${crypto.randomUUID()}`,
       }),
     }),

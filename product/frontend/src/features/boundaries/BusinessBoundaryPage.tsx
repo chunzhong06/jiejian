@@ -175,8 +175,8 @@ function CurrentBoundary({ boundary }: { boundary: BusinessBoundaryViewDto }) {
           ? <Alert type="warning" showIcon message="当前 revision 需要重新确认权限" description="这项业务动作已经形成新 revision，原权限仍保留为历史，但当前 revision 需要重新确认权限。" />
           : status?.reason_codes.includes('PERMISSION_SEMANTICS_REQUIRED')
             ? <Alert type="warning" showIcon message="当前权限尚未确认" description="这项业务动作还没有当前权限规则。" />
-            : status && !status.validation_contract_complete
-              ? <Alert type={status.allow_control_available ? 'info' : 'warning'} showIcon message="权限语义已确认，验证合同暂不完整" description={status.allow_control_available ? '完整新检查主链尚未重新接入；这不影响当前业务权限事实。' : '当前规则缺少覆盖同一业务结果的允许对照，但拒绝语义仍已保存。'} />
+            : status?.reason_codes.includes('ALLOW_CONTROL_REQUIRED')
+              ? <Alert type="warning" showIcon message="权限已确认，还需完整允许对照" description="当前规则缺少覆盖同一业务结果的允许对照，但拒绝语义仍已保存。" />
               : null}
       </article>
     })}</div>

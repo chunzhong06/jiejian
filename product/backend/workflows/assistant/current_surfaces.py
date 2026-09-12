@@ -1,4 +1,4 @@
-# 从正式业务、当前录制与准备缺口构造三个 CURRENT AI 输入；只投影短事实，不写业务状态。
+# 从正式业务、录制、准备及已发布结果构造当前 AI 输入；只投影短事实，不写业务状态。
 
 from __future__ import annotations
 
@@ -17,18 +17,42 @@ from product.backend.workflows.preparation.models import PreparationStatus
 from product.backend.workflows.recording.source import require_recording_source
 
 
-CURRENT_ASSISTANT_TEMPLATES = frozenset({Template.IMPLEMENTATION_MAPPING, Template.BUSINESS_RECORDING_REVIEW, Template.PREPARATION_EXPLANATION})
+CURRENT_ASSISTANT_TEMPLATES = frozenset({Template.IMPLEMENTATION_MAPPING, Template.BUSINESS_RECORDING_REVIEW, Template.PREPARATION_EXPLANATION, Template.RESULT_EXPLANATION})
 
 
 class PreparationAssistantSurfaceResolver:
     """只接受显式正式对象焦点；缓存指纹与 provider 短事实分离。"""
 
-    def __init__(self, *, business_boundaries, application_understanding, preparation, recording_lifecycle, uow_factory):
+    def __init__(self, *, business_boundaries, application_understanding, preparation, recording_lifecycle, uow_factory, check_story=None):
         self._business_boundaries = business_boundaries
         self._application_understanding = application_understanding
         self._preparation = preparation
         self._recording_lifecycle = recording_lifecycle
         self._uow_factory = uow_factory
+        self._check_story = check_story
+
+    def resolve_result(self, run_id):
+        if self._check_story is None:
+            self._invalid()
+        story = self._check_story.build(run_id)
+        entities = []
+        # 输入遵守既有实体预算；全量结果仍由确定性 ResultStory 提供，缓存绑定全量不可变事实。
+        for item in story.actions[:128]:
+            comparison = item.fact_comparison
+            facts = dict(expectation=item.permission.expectation, surface_result=comparison.http_surface.execution_outcome,
+                actual_result=_unique_short(effect.judgement for effect in comparison.effects), conclusion=item.judgement,
+                evidence_sources=_unique_short(explanation.source_label for explanation in item.evidence_explanations))
+            if item.breakpoint is not None:
+                facts["precision"] = item.breakpoint.precision.value
+                if item.breakpoint.breakpoint_type is not None:
+                    facts["breakpoint_type"] = item.breakpoint.breakpoint_type.value
+                facts["confirmed_impacts"] = _unique_short(item.breakpoint.orphan_effect_ids)
+            entities.append(_entity(item.case_id, EntityType.RESULT_ITEM, item.display_name, facts))
+        surface = build_surface_input(Template.RESULT_EXPLANATION, subject_id=run_id,
+            facts={"verdict": story.verdict.value, "headline": story.judgement,
+                "checked_count": len(story.actions), "limitations": story.claim_boundary}, entities=entities)
+        fingerprint = boundary_sha256({"story": story.model_dump(mode="json"), "input": surface.model_dump(mode="json")})
+        return ResolvedAssistantSurface(run_id, fingerprint, surface, bool(entities))
 
     def resolve_project(self, project_id, template_id, *, business_actor_id=None, business_action_id=None, recording_id=None):
         for value, pattern in ((business_actor_id, ACTOR_ID_PATTERN), (business_action_id, ACTION_ID_PATTERN), (recording_id, RECORDING_ID_PATTERN)):

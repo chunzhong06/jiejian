@@ -70,6 +70,60 @@ TRACE_FIELDS = FIELDS + (
 )
 
 
+@pytest.mark.parametrize("values", [[], [f"id-{index}" for index in range(64)]])
+def test_explicit_scope_arrays_keep_source_order_and_roundtrip(tmp_path, values):
+    fields = tuple(dict.fromkeys((*TRACE_FIELDS, "allowed_action_ids", "allowed_resource_ids")))
+    row = _record("case-1", "task-case-1", "scope", "authorization", 1,
+        kind="AUTHORIZATION", semantic_key="authorization", source_component="service",
+        source_location="api:/read", recorded_at_us=1, allowed_action_ids=list(reversed(values)),
+        allowed_resource_ids=values)
+    _write(tmp_path / "audit.jsonl", [row])
+    result = _observe(tmp_path, spec=_spec(fields=fields))
+    assert result.outcome.status is ObserverOutcomeStatus.AVAILABLE
+    assert result.envelope.state.canonical_data["records"] == [row]
+    assert result.envelope.model_validate_json(result.envelope.model_dump_json()) == result.envelope
+
+
+@pytest.mark.parametrize("value,valid",[([],True),(["z","a"],True),(["e"+str(i) for i in range(16)],True),
+    (None,False),(True,False),("effect",False),({},False),([[]],False),([1],False),(["a","a"],False),
+    (["token=hidden"],False),(["x"*161],False),(["e"+str(i) for i in range(17)],False)])
+def test_audit_dispatch_is_bounded_and_preserves_raw_order(tmp_path,value,valid):
+    row=_record("case-1","task-case-1","dispatch","work_accepted",1,kind="MESSAGE",semantic_key="work_accepted",
+        source_component="queue",source_location="queue:work",recorded_at_us=1,dispatch_effect_ids=value)
+    _write(tmp_path/"audit.jsonl",[row])
+    result=_observe(tmp_path,spec=_spec(fields=TRACE_FIELDS+("dispatch_effect_ids",)))
+    assert (result.outcome.status is ObserverOutcomeStatus.AVAILABLE) is valid
+    if valid:
+        assert result.envelope.state.canonical_data["records"]==[row]
+    else:
+        assert result.envelope.completeness is not ObservationCompleteness.COMPLETE
+        assert not result.envelope.state.canonical_data["records"]
+
+
+@pytest.mark.parametrize("value", [None, "action", True, 1, {}, [[]], [1], [True],
+    ["same", "same"], ["x" * 161], ["token=hidden"], [f"id-{index}" for index in range(65)]])
+@pytest.mark.parametrize("field", ["allowed_action_ids", "allowed_resource_ids"])
+def test_invalid_scope_rejects_whole_event_and_never_truncates_to_complete(tmp_path, field, value):
+    row = _record("case-1", "task-case-1", "scope", "authorization", 1,
+        kind="AUTHORIZATION", semantic_key="authorization", source_component="service",
+        source_location="api:/read", recorded_at_us=1, **{field: value})
+    _write(tmp_path / "audit.jsonl", [row])
+    result = _observe(tmp_path, spec=_spec(fields=tuple(dict.fromkeys((*TRACE_FIELDS, field)))))
+    assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
+    assert result.envelope.completeness is not ObservationCompleteness.COMPLETE
+    assert "AUDIT_EVENT_INVALID" in result.envelope.reason_codes
+    assert result.envelope.state.canonical_data["records"] == []
+
+
+def test_scope_requires_trace_metadata_and_other_composite_values_remain_invalid(tmp_path):
+    rows = [_record("case-1", "task-case-1", "missing-trace", "REQUEST", 1, allowed_action_ids=[]),
+        _record("case-1", "task-case-1", "composite", "REQUEST", 2, value=[])]
+    _write(tmp_path / "audit.jsonl", rows)
+    result = _observe(tmp_path, spec=_spec(fields=FIELDS + ("allowed_action_ids",)))
+    assert result.outcome.status is ObserverOutcomeStatus.INCONCLUSIVE
+    assert result.envelope.state.canonical_data["records"] == []
+
+
 def _spec(*, phases: tuple[ObservationPhase, ...] = (ObservationPhase.AFTER,), max_files: int = 4, max_lines: int = 100, max_line_bytes: int = 4096, max_rows: int = 100, timeout_us: int = 5_000_000, fields: tuple[str, ...] = FIELDS) -> ObserverSpec:
     return ObserverSpec(
         observer_id="audit_observer",

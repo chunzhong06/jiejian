@@ -1,6 +1,8 @@
 /* 官方 Sample 体验 API：只交换非秘密状态与明确用户动作，不携带源码路径或预期结论。 */
 
 import { request } from './http'
+import type { RepairReference } from './repairs'
+import type { BoundaryProposalViewDto } from './businessBoundaries'
 
 export type OfficialScenarioVersion = 'VULNERABLE' | 'EVIDENCE_LIMITED' | 'FIXED'
 
@@ -17,6 +19,7 @@ export type OfficialExperienceDto = {
   scenario_changed_at_us?: number | null
   vulnerable_change_id: string | null
   repair_change_id: string | null
+  pending_tasks?: string[]
 }
 
 export type CompetitionValidationSummaryDto = {
@@ -57,13 +60,14 @@ export const experienceApi = {
     }),
   prepare: () =>
     request<OfficialExperienceDto>('/api/experience/official-sample/prepare', { method: 'POST' }),
-  switchVersion: (version: OfficialScenarioVersion, sourceRunId?: string) =>
+  boundaryProposal: () => request<BoundaryProposalViewDto>('/api/experience/official-sample/boundary-proposal', { method: 'POST' }),
+  switchVersion: (version: OfficialScenarioVersion, reference?: RepairReference) =>
     request<OfficialExperienceDto>('/api/experience/official-sample/version', {
       method: 'POST',
       body: JSON.stringify({
         schema_version: '1',
         version,
-        source_run_id: sourceRunId ?? null,
+        repair_reference: reference ?? null,
       }),
     }),
   stop: () => request<OfficialExperienceDto>('/api/experience/official-sample/stop', { method: 'POST' }),

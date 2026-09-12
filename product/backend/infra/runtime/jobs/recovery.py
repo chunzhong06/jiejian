@@ -24,7 +24,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.events import EventMetadata, append_job_event
 from product.backend.infra.runtime.jobs.models import ConfirmRecovery, JobEventType, JobMutationResult, RecoveryCandidate, RecoveryScan, RetryPolicy, compute_retry_available_at, validate_control_request
-from product.backend.infra.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry, default_run_job_targets
+from product.backend.infra.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry, current_check_and_recording_targets
 
 _TERMINAL_JOB_STATES = {
     JobState.SUCCEEDED,
@@ -47,7 +47,7 @@ class JobRecovery:
         self._uow_factory = uow_factory
         self._retry_policy = retry_policy or RetryPolicy()
         self._jitter_source = jitter_source
-        self._targets = targets or default_run_job_targets()
+        self._targets = targets or current_check_and_recording_targets()
 
     def list_recovery_candidates(
         self,

@@ -20,7 +20,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Protocol, TypeVar
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.storage import JobRecord
+from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.models import CancellationResult, ClaimJob, ClaimedJob, CompleteCancellation, FatalFailure, JobMutationResult, RetryableFailure, RenewLease, WaitingFatalFailure
 from product.backend.infra.runtime.jobs.targets import JobTargetType
 
@@ -36,6 +36,11 @@ class JobHandler(Protocol[ResultT_co]):
 
 class JobAttemptPort(Protocol):
     """Recording 与 Worker Attempt 服务之间的最小端口。"""
+
+    def claim_in_work(self, work: StorageUnitOfWork, request: ClaimJob, *,
+                      known_secrets: Sequence[str] = ()) -> ClaimedJob | None:
+        """在调用者事务中领取，事务所有权仍属于调用者。"""
+        ...
 
     def claim(
         self,
@@ -91,18 +96,23 @@ class JobHandlerRegistry:
 
     def __init__(self) -> None:
         self._factories: dict[JobTargetType, Callable[[], JobHandler[Any]]] = {}
+        self._operation_types: dict[JobTargetType, frozenset[str]] = {}
         self._auxiliary_factories: dict[str, Callable[[], JobHandler[Any]]] = {}
 
     def register(
         self,
         target_type: JobTargetType,
         factory: Callable[[], JobHandler[Any]],
+        *,
+        operation_types: frozenset[str] | None = None,
     ) -> None:
         if not isinstance(target_type, JobTargetType):
             raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务目标类型非法")
         if target_type in self._factories:
             raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务处理器重复注册")
         self._factories[target_type] = factory
+        if operation_types is not None:
+            self._operation_types[target_type] = operation_types
 
     def register_auxiliary(
         self,
@@ -126,6 +136,10 @@ class JobHandlerRegistry:
 
     def resolve(self, job: JobRecord) -> JobHandler[Any]:
         target_type = JobTargetType.from_job(job)
+        # RUN 是持久目标类型，不能据此接受已退出当前链路的旧执行操作。
+        allowed = self._operation_types.get(target_type)
+        if allowed is not None and job.operation_type not in allowed:
+            raise JiejianError(ErrorCode.JOB_PERSISTENCE, "任务操作类型未注册")
         try:
             factory = self._factories[target_type]
         except KeyError:

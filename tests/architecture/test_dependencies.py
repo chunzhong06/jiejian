@@ -13,7 +13,7 @@ import pytest
 from product.backend import __version__
 from product.backend.core.verification.facts import TargetType
 from product.backend.composition import ApplicationCore
-from product.backend.composition import WorkerContainer
+from product.backend.composition.worker import WorkerContainer
 
 
 pytestmark = pytest.mark.essential

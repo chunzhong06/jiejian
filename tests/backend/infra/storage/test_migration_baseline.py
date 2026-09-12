@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.database, pytest.mark.essential]
 ROOT = Path(__file__).resolve().parents[4]
 BASE_REVISION = "0001_business_boundary_v2"
 MAINTENANCE_REVISION = "0002_business_boundary_maintenance"
-CURRENT_REVISION = "0003_action_assurance_recording"
+CURRENT_REVISION = "0004_action_resource_ownership"
 LEGACY_REVISIONS = (
     "0001_web_v1",
     "0002_remove_contract_workbench",
@@ -185,7 +185,7 @@ def test_fresh_database_reaches_111_head_idempotently(tmp_path: Path) -> None:
     tables = _tables(database)
     assert _revision(database) == CURRENT_REVISION
     assert tables == set(Base.metadata.tables) | {"alembic_version"}
-    assert len(Base.metadata.tables) == 37
+    assert len(Base.metadata.tables) == 38
     assert BOUNDARY_TABLES <= tables
     assert not (FORBIDDEN_TABLES & tables)
     assert database.read_bytes() == first
@@ -244,6 +244,7 @@ def test_repository_contains_frozen_110_111_and_incremental_112_migrations() -> 
         "0001_business_boundary_v2.py",
         "0002_business_boundary_maintenance.py",
         "0003_action_assurance_recording.py",
+        "0004_action_resource_ownership.py",
     ]
 
 
@@ -668,8 +669,10 @@ def test_recording_identity_is_historical_while_business_and_draft_foreign_keys_
             if table != "recordings":
                 assert "flow_draft_revisions" in referenced
             columns = {row[1]: row for row in connection.execute(f'PRAGMA table_info("{table}")')}
-            assert columns["test_identity_id"][3] == 1
+            assert columns["subject_test_identity_id"][3] == 1
+            assert columns["resource_owner_test_identity_id"][3] == 1
+            assert "test_identity_id" not in columns
         resource_sql = connection.execute(
             "SELECT sql FROM sqlite_master WHERE name='action_resource_bindings'").fetchone()[0]
-        assert "owner_test_identity_id = test_identity_id" in resource_sql
+        assert "owner_identity_match" not in resource_sql
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []

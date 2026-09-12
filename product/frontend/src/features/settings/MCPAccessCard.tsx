@@ -129,7 +129,7 @@ const levelLabels: Record<MCPAccessLevel, string> = {
 
 const levelDescriptions: Record<MCPAccessLevel, string> = {
   READ: '查看当前应用、已确认的权限规则和已发布结果；不会登记变化或启动检查。',
-  PREPARE: '完成一个用户任务后登记整批代码变化，整理影响并准备检查；不会自行启动检查。',
+  PREPARE: '登记整批代码变化声明，由界鉴重新核对实际源码与权限影响；不会自行启动检查。',
   EXECUTE: '还可以启动你已在界鉴中准备好的检查或停止受控任务；不能扩大范围或改变权限规则。',
 }
 

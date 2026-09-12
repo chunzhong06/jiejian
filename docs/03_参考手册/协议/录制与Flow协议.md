@@ -14,7 +14,7 @@ FlowDraft 仍只是候选业务流程。唯一且可执行的 TARGET 与资源�
 
 ## 协议边界
 
-- 普通 Recording create 请求只提交正式 `business_action_id + action_revision`、单一已准备 `test_identity_id`、时长、purpose、必要 parent/effect 与幂等键；服务端从 ApplicationUnderstanding 和 TestIdentity 解析 endpoint、动作与非秘密身份元数据。GUI 不传 Profile/path、目标范围、SecretStore 引用或 headless 开关。
+- 普通 Recording create 请求只提交正式 `business_action_id + action_revision`、完整 ALLOW 指定的 `subject_test_identity_id`、`resource_owner_test_identity_id`、两者 slot ID 与必要的 owner 确认、时长、purpose、必要 parent/effect 与幂等键；服务端从 ApplicationUnderstanding 和 TestIdentity 解析 endpoint、动作与非秘密身份元数据。GUI 不传 Profile/path、目标范围、SecretStore 引用或 headless 开关。
 - `RecordingRunnerRequest` 绑定正式业务动作版本、身份、准备来源指纹、目标范围、预算和单一短期 session 描述。目标授权必须与已确认 endpoint 一致，超时、请求数和响应字节预算只能收紧。session 只包含 Cookie/Bearer 的 `env:` 引用与非秘密元数据；秘密正文只进入本次 Worker/Recording Runner 最小环境和内存中的独立 BrowserContext。
 - Recording result 表达一次录制的状态、错误、清理结果与已脱敏事件；不回传登录状态或秘密引用。
 - `RecordingEvent` 保存稳定序号、关联标识、事件类型、身份和有界脱敏摘要。
@@ -49,7 +49,7 @@ TargetScope、身份、协议、主机、端口、私网、重定向、响应大
 
 ## 版本规则与 Schema 真源
 
-当前 `RecordingRunnerRequest`、`FlowDraft` 与最终 `Flow` 的根 `schema_version` 为字符串 2；`RecordingEvent`、`RecordingRunnerResult` 与审阅命令仍为字符串 1。只升级发生不兼容变化的独立根，不按产品版本机械同步。模型、required 和 strict parsing 以：
+当前 `RecordingRunnerRequest`、`FlowDraft` 与最终 `Flow` 的根 `schema_version` 为字符串 3；`RecordingEvent`、`RecordingRunnerResult` 与审阅命令仍为字符串 1。只升级发生不兼容变化的独立根，不按产品版本机械同步。模型、required 和 strict parsing 以：
 
 - `product/protocols/recording.py`
 - `product/protocols/flow_draft.py`
@@ -57,6 +57,8 @@ TargetScope、身份、协议、主机、端口、私网、重定向、响应大
 - `product/protocols/schemas/recording/`
 
 为准。版本号只表示机器格式。
+
+格式 2 仅由 recording_legacy.py 的明确历史 reader 读取：先验证原始 canonical/hash，再内存投影 subject=owner；不得重写历史字节或以 v3 投影 hash 替代原 hash。当前 Worker 只接收格式 3。RecordingSessionRef.test_identity_id 保留认证会话自身语义，且必须匹配 subject，不能恢复 owner 会话冒充操作人。
 
 ## 查询入口
 

@@ -9,6 +9,7 @@ from product.backend.core.assurance import (
     ActionAssuranceContract,
     AssuranceStatus,
     compile_action_assurance,
+    ActionAllowControlBinding, PermissionIdentity,
 )
 from product.backend.core.business_boundary import BusinessActionRevision
 from product.backend.workflows.business_boundaries.models import BusinessBoundaryView
@@ -24,10 +25,12 @@ from product.backend.workflows.preparation.models import (
     ResourcePreparationView,
 )
 from product.backend.workflows.test_identities.service import TestIdentityStatus, TestIdentityView
+from product.backend.core.errors import ErrorCode, JiejianError
+import time
 
 
 class BoundaryReader(Protocol):
-    def view(self, project_id: str) -> BusinessBoundaryView: ...
+    def view(self, project_id: str, *, work=None) -> BusinessBoundaryView: ...
 
 
 class IdentityReader(Protocol):
@@ -37,30 +40,101 @@ class IdentityReader(Protocol):
 class PreparationBindingReader(Protocol):
     def inspect(
         self, action: BusinessActionRevision, contract: ActionAssuranceContract,
-        identities: IdentityPreparationView,
+        identities: IdentityPreparationView, *, work=None,
     ) -> ActionTechnicalPreparationView: ...
 
 
 class PreparationService:
-    """每次重新检查当前材料，不保存准备状态，不形成 CheckPlan 或 Run。"""
+    """现场检查当前材料并派生只读计划；不保存准备状态或提交检查任务。"""
 
     def __init__(
         self, business_boundaries: BoundaryReader, test_identities: IdentityReader,
-        *, bindings: PreparationBindingReader | None = None,
+        *, bindings: PreparationBindingReader | None = None, uow_factory=None, clock_us=None,
     ) -> None:
         self._business_boundaries = business_boundaries
         self._test_identities = test_identities
         self._bindings = bindings
+        self._uow_factory = uow_factory
+        self._clock_us = clock_us or (lambda: time.time_ns() // 1000)
+
+    def current_plan(self, project_id: str, *, engine_version: str, config_fingerprint: str):
+        """由已检查的技术绑定装配纯编译输入；缺少受控能力时保留具名缺口。"""
+        from product.backend.workflows.preparation.planning import current_plan
+        return current_plan(self, project_id, engine_version=engine_version,
+                            config_fingerprint=config_fingerprint)
+
+    def build_execution_request_v3(self, project_id: str, *, engine_version: str,
+                                   config_fingerprint: str, budget_fingerprint: str,
+                                   change_context=None, repair_context=None):
+        """只构造完整快照；有缺口时拒绝，不生成会话、Job 或 Run。"""
+        import json
+        from product.protocols.execution_v3 import PersistedExecutionRequestV3
+        plan = self.current_plan(project_id, engine_version=engine_version,
+                                 config_fingerprint=config_fingerprint)
+        if plan.gaps or not plan.actions or any(not item.cases for item in plan.actions):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备尚未完成",
+                               details={"reason": "CHECK_PLAN_INCOMPLETE"})
+        payload = plan.model_dump(mode="json", exclude={"gaps"})
+        for action in payload["actions"]:
+            action.pop("gaps")
+        payload.update(config_fingerprint=config_fingerprint, budget_fingerprint=budget_fingerprint,
+                       change_context=None if change_context is None else change_context.model_dump(mode="json"),
+                       repair_context=None if repair_context is None else repair_context.model_dump(mode="json"))
+        return PersistedExecutionRequestV3.model_validate_json(json.dumps(payload), strict=True)
+
+    def select_allow_control(self, project_id: str, *, deny_permission: PermissionIdentity,
+                             selected_allow_permission: PermissionIdentity, expected_selection_fingerprint: str):
+        """在同一事务重读候选后保存技术选择；不改变正式权限、Approval 或 epoch。"""
+        if self._uow_factory is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备服务未装配")
+        with self._uow_factory() as work:
+            boundary = self._business_boundaries.view(project_id, work=work)
+            deny = next((item for item in boundary.permission_intents if item.intent_id == deny_permission.intent_id), None)
+            if deny is None or (deny.revision, deny.intent_hash) != (deny_permission.revision, deny_permission.intent_hash):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
+            action = next(item for item in boundary.actions if item.action_id == deny.business_action_id)
+            contract = compile_action_assurance(action, boundary.permission_intents)
+            requirement = next((item for item in contract.allow_controls if item.deny_permission == deny_permission), None)
+            if requirement is None or requirement.selection_fingerprint != expected_selection_fingerprint:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
+            if selected_allow_permission not in requirement.candidate_allow_permissions:
+                current = next((item for item in boundary.permission_intents if item.intent_id == selected_allow_permission.intent_id), None)
+                if current is not None and (current.revision, current.intent_hash) != (selected_allow_permission.revision, selected_allow_permission.intent_hash):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
+                raise JiejianError(ErrorCode.INPUT_INVALID, "准备选择无效")
+            existing = next((item for item in work.action_preparation.allow_controls(project_id)
+                             if item.deny_intent_id == deny_permission.intent_id), None)
+            binding = ActionAllowControlBinding(
+                project_id=project_id, deny_intent_id=deny_permission.intent_id,
+                deny_intent_revision=deny_permission.revision, deny_intent_hash=deny_permission.intent_hash,
+                selected_allow_intent_id=selected_allow_permission.intent_id,
+                selected_allow_intent_revision=selected_allow_permission.revision,
+                selected_allow_intent_hash=selected_allow_permission.intent_hash,
+                selection_fingerprint=expected_selection_fingerprint, confirmed_at_us=self._clock_us(),
+            )
+            if existing is not None and existing.model_dump(exclude={"confirmed_at_us"}) == binding.model_dump(exclude={"confirmed_at_us"}):
+                return existing
+            work.action_preparation.replace_allow_control(binding)
+            work.commit()
+            return binding
 
     def get(self, project_id: str) -> PreparationView:
         boundary = self._business_boundaries.view(project_id)
         identities = tuple(item for item in self._test_identities.list(project_id)
                            if item.project_id == project_id)
         actor_names = {(item.actor_id, item.revision): item.display_name for item in boundary.actors}
+        selections = ()
+        if self._uow_factory is not None:
+            with self._uow_factory() as work:
+                selections = work.action_preparation.allow_controls(project_id)
         actions = []
         for action in boundary.actions:
-            contract = compile_action_assurance(action, boundary.permission_intents)
+            contract = compile_action_assurance(action, boundary.permission_intents, selections)
             identity_view = self._identities(contract, identities, actor_names)
+            from product.backend.workflows.preparation.demonstrations import legal_demonstrations
+            demonstrations = legal_demonstrations(contract, boundary.permission_intents, identity_view)
+            missing_legal_owners = {item.owner_slot_id for item in contract.resources} - {
+                item.resource_owner_slot_id for item in demonstrations}
             technical = (
                 self._bindings.inspect(action, contract, identity_view)
                 if self._bindings is not None else self._missing_technical(contract, identity_view)
@@ -86,9 +160,10 @@ class PreparationService:
             reasons = tuple(dict.fromkeys((
                 *contract.reason_codes, *(reason for item in items for reason in item.reason_codes),
                 *(("PREPARATION_REQUIREMENT_MISMATCH",) if not sources_complete else ()),
+                *(("ALLOW_RESOURCE_SETUP_REQUIRED",) if missing_legal_owners else ()),
             )))
             complete = (
-                contract.status is AssuranceStatus.READY and sources_complete
+                contract.status is AssuranceStatus.READY and sources_complete and not missing_legal_owners
                 and all(item.status is PreparationStatus.SATISFIED for item in items[:-1])
                 and technical.recovery.status is (
                     PreparationStatus.SATISFIED if contract.recovery_required else PreparationStatus.NOT_REQUIRED
@@ -100,6 +175,7 @@ class PreparationService:
                 assurance_contract_fingerprint=contract.fingerprint, assurance_contract=contract,
                 identity_requirements=identity_view, preparation_complete=complete,
                 reason_codes=reasons,
+                permissions=tuple(item for item in boundary.permission_intents if item.business_action_id == action.action_id),
             ))
         return PreparationView(
             project_id=project_id, actions=tuple(actions),

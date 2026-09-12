@@ -10,7 +10,8 @@ import pytest
 
 import product.backend.infra.runtime.process.control as process_control
 import product.backend.infra.runtime.process.tree as tree
-from product.backend.core.errors import JiejianError
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.lifecycle import JobState
 from product.backend.infra.runtime.process.tree import (
     controller_for,
     release_process_tree,
@@ -32,6 +33,33 @@ class _Process:
     def wait(self, timeout: float) -> int:
         self.wait_timeout = timeout
         return 0
+
+
+@pytest.mark.parametrize("mode", ["cancel", "timeout", "expired", "fence"])
+def test_monitor_checks_current_lease_and_preserves_stop_before_cleanup_error(tmp_path, monkeypatch, mode):
+    moments = iter((0.0, 1.0, 2.0))
+    job = SimpleNamespace(job_id="job", run_id="run", state=JobState.RUNNING, lease_owner="owner",
+        fencing_token=1, lease_expires_at_us=100, cancel_requested_at_us=1 if mode == "cancel" else None)
+    control = process_control.AttemptProcessControl(uow_factory=None, attempt_service=None,
+        lease_owner="owner", utc_now_us=lambda: 10, monotonic=lambda: next(moments), sleep=lambda _: None,
+        lease_duration_us=30_000_000, poll_interval_seconds=0.01, termination_grace_seconds=0)
+    current = SimpleNamespace(**vars(job))
+    if mode == "expired":
+        current.lease_expires_at_us = 10
+    if mode == "fence":
+        current.fencing_token = 2
+    monkeypatch.setattr(control, "read_job", lambda _: current)
+    def failed_cleanup(*args):
+        raise TimeoutError("tree still alive")
+    monkeypatch.setattr(process_control, "force_terminate_process_tree", failed_cleanup)
+    with pytest.raises(JiejianError) as caught:
+        control.monitor(SimpleNamespace(poll=lambda: None), job, max_duration_us=1,
+            cancel_path=tmp_path / "cancel.requested")
+    expected = {"cancel": ErrorCode.EXEC_CANCELLED, "timeout": ErrorCode.RUNNER_TIMEOUT,
+        "expired": ErrorCode.JOB_LEASE_EXPIRED, "fence": ErrorCode.JOB_LEASE_MISMATCH}[mode]
+    assert caught.value.code == expected.value
+    if mode in ("cancel", "timeout"):
+        assert caught.value.to_dict()["details"]["cleanup_error_code"] == ErrorCode.PROCESS_TREE_FAILED.value
 
 
 def test_windows_force_termination_targets_only_owned_process_tree(monkeypatch) -> None:

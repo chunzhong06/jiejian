@@ -28,8 +28,10 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             job = work.jobs.get(job_id)
         if job is None:
             raise JiejianError(ErrorCode.JOB_NOT_FOUND, "任务不存在")
+        if job.operation_type == "CHECK" and job.run_id is not None:
+            return data_response(context.checks.cancel(job.project_id, job.run_id).model_dump(mode="json"))
         if job.recording_id is None or job.run_id is not None:
-            raise JiejianError(ErrorCode.STATE_PRECONDITION, "当前不提供正式权限检查")
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "任务不支持当前取消操作")
         result = context.job_queue.request_cancellation(RequestCancellation(job_id=job_id, now_us=time.time_ns() // 1_000))
         return data_response(result.model_dump(mode="json"))
 
@@ -43,7 +45,11 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             project_id,
             business_action_id=body.business_action_id,
             action_revision=body.action_revision,
-            test_identity_id=body.test_identity_id,
+            subject_test_identity_id=body.subject_test_identity_id,
+            resource_owner_test_identity_id=body.resource_owner_test_identity_id,
+            subject_slot_id=body.subject_slot_id,
+            resource_owner_slot_id=body.resource_owner_slot_id,
+            resource_owner_confirmed=body.resource_owner_confirmed,
             duration_seconds=body.duration_seconds,
             idempotency_key=body.idempotency_key,
             purpose=RecordingPurpose(body.purpose),
@@ -141,7 +147,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
         # 列表只返回定位和生命周期摘要，浏览器事件不是页面列表的数据来源。
         fields = {
             "recording_id", "project_id", "flow_id", "business_action_id", "action_revision",
-            "test_identity_id", "state", "purpose", "parent_recording_id", "effect_id",
+            "subject_test_identity_id", "resource_owner_test_identity_id", "state", "purpose", "parent_recording_id", "effect_id",
             "created_at_us", "updated_at_us",
         }
         return data_response([item.model_dump(mode="json", include=fields) for item in recordings])
@@ -187,7 +193,11 @@ class RecordingCreateRequest(ApiModel):
     schema_version: Literal["2"]
     business_action_id: str = Field(pattern=r"^bac_[0-9a-f]{32}$")
     action_revision: int = Field(ge=1)
-    test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")
+    subject_test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")
+    resource_owner_test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")
+    subject_slot_id: str = Field(pattern=r"^isl_[0-9a-f]{32}$")
+    resource_owner_slot_id: str = Field(pattern=r"^isl_[0-9a-f]{32}$")
+    resource_owner_confirmed: bool = False
     duration_seconds: int = Field(default=60, ge=1, le=3_600)
     idempotency_key: str = Field(min_length=1, max_length=128)
     purpose: Literal["TARGET", "OBSERVATION", "RECOVERY"] = "TARGET"
@@ -238,7 +248,7 @@ def _recording_metadata(context: ApplicationCore, recording) -> dict[str, object
 
     with context.uow_factory() as work:
         action = work.business_boundaries.action_revision(recording.business_action_id, recording.action_revision)
-    test_identity_id = recording.test_identity_id
+    test_identity_id = recording.subject_test_identity_id
     try:
         identity = context.test_identities.get(test_identity_id)
     except JiejianError as exc:

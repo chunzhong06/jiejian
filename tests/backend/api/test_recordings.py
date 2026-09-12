@@ -151,13 +151,9 @@ def test_supplement_outside_review_or_without_draft_has_no_choices(review_contex
 def test_discard_api_uses_service_and_keeps_draft_history(review_context):
     app, h, target = review_context
     recording = _supplement(h, target, RecordingPurpose.RECOVERY, 2)
-    job = JobRecord(job_id="job_" + uuid4().hex, project_id=h.project_id, recording_id=recording.recording_id,
-        operation_type="RECORDING", state=JobState.SUCCEEDED, idempotency_key=recording.recording_id,
-        request_hash="a" * 64, attempt=0, max_attempts=1, available_at_us=1, fencing_token=0,
-        created_at_us=1, updated_at_us=3)
     with h.core.uow_factory() as work:
-        work.jobs.add(job)
-        work.commit()
+        job = work.jobs.get_by_recording(recording.recording_id)
+        assert job is not None and job.state is JobState.SUCCEEDED
     with TestClient(app) as client:
         path = f"/api/recordings/{recording.recording_id}/discard"
         first = client.post(path, json={"schema_version": "1"})
@@ -186,10 +182,10 @@ def test_discard_api_local_control(review_context, authorization):
         assert result.status_code == 403
 
 
-def test_cancel_api_rejects_run_without_touching_job_or_queue(tmp_path, monkeypatch):
+def test_cancel_api_rejects_unsupported_job_without_touching_queue(tmp_path, monkeypatch):
     app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
     core = app.state.context
-    run_job = SimpleNamespace(job_id="job-run", run_id="run-frozen", recording_id=None, state="QUEUED")
+    run_job = SimpleNamespace(job_id="job-run", run_id="run-frozen", recording_id=None, state="QUEUED", operation_type="LEGACY")
     before = vars(run_job).copy()
     original_factory = core.uow_factory
     @contextmanager
@@ -202,7 +198,7 @@ def test_cancel_api_rejects_run_without_touching_job_or_queue(tmp_path, monkeypa
     monkeypatch.setattr(core.job_queue, "request_cancellation", cancel)
     with TestClient(app) as client:
         response = client.post("/api/jobs/job-run/cancel")
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert response.json()["error"]["code"] == "STATE_PRECONDITION"
         assert client.post("/api/jobs/missing-job/cancel").status_code == 404
         assert vars(run_job) == before
@@ -221,7 +217,8 @@ def test_recording_finalize_api_supplies_runtime_timestamp(tmp_path: Path) -> No
         def finalize(self, recording_id: str, *, var_dir: Path, now_us: int):
             calls.append((recording_id, var_dir, now_us))
             return SimpleNamespace(
-                recording=SimpleNamespace(business_action_id="bac_" + "1" * 32, action_revision=1, test_identity_id="tid_" + "1" * 32),
+                recording=SimpleNamespace(business_action_id="bac_" + "1" * 32, action_revision=1,
+                    subject_test_identity_id="tid_" + "1" * 32, resource_owner_test_identity_id="tid_" + "1" * 32),
                 model_dump=lambda **_kwargs: {"recording_id": recording_id}
             )
 
@@ -292,20 +289,25 @@ def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path
             "schema_version",
             "business_action_id",
             "action_revision",
-            "test_identity_id",
+            "subject_test_identity_id", "resource_owner_test_identity_id",
+            "subject_slot_id", "resource_owner_slot_id", "resource_owner_confirmed",
             "duration_seconds",
             "idempotency_key",
             "purpose",
             "parent_recording_id",
             "effect_id",
         }
+        position = app.state.context.preparation.get(project_id).actions[0].assurance_contract.identity_requirements.permissions[0]
         valid = client.post(
             f"/api/projects/{project_id}/recordings",
             json={
                 "schema_version": "2",
                 "business_action_id": action_id,
                 "action_revision": 1,
-                "test_identity_id": identity.identity_id,
+                "subject_test_identity_id": identity.identity_id,
+                "resource_owner_test_identity_id": identity.identity_id,
+                "subject_slot_id": position.subject_slot_id,
+                "resource_owner_slot_id": position.resource_owner_slot_id,
                 "duration_seconds": 60,
                 "idempotency_key": "single-owner",
             },

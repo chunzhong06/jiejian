@@ -182,6 +182,72 @@ class SourceChangeRepository:
         self._session = session
         self._known_secrets = known_secrets
 
+    def add_current_change(self, manifest, change_set, assessment) -> None:
+        """复用三张聚合表写当前严格 DTO；调用方持有同一事务，旧 reader 不猜新形状。"""
+        if not (manifest.change_id == change_set.change_id == assessment.change_id
+            and manifest.project_id == change_set.project_id == assessment.project_id
+            and change_set.change_fingerprint == assessment.change_fingerprint):
+            raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "代码变化聚合身份不一致")
+        values = manifest.model_dump(mode="json",exclude={"claimed_paths","repair_reference"})
+        values.update(claimed_paths_json=_canonical_json(list(manifest.claimed_paths)),
+            repair_reference_json=None if manifest.repair_reference is None else _canonical_json(manifest.repair_reference.model_dump(mode="json")))
+        changes = change_set.model_dump(mode="json",exclude={"added_paths","modified_paths","removed_paths"})
+        for name in ("added_paths","modified_paths","removed_paths"):
+            changes[name+"_json"] = _canonical_json(list(getattr(change_set,name)))
+        impacts = assessment.model_dump(mode="json",exclude={"reason_codes","payload"})
+        impacts.update(reason_codes_json=_canonical_json(list(assessment.reason_codes)),
+            impacts_json=_canonical_json(assessment.payload.model_dump(mode="json")))
+        for payload in (values,changes,impacts):
+            ensure_storage_payload_safe(payload,self._known_secrets)
+        # 在写主行前检查已有列上界；不让超量 payload 静默截断或产生半个聚合。
+        limits = {"claimed_paths_json":131072,"repair_reference_json":1024,"added_paths_json":524288,
+            "modified_paths_json":524288,"removed_paths_json":524288,"reason_codes_json":8192,"impacts_json":2097152}
+        if any(value is not None and len(value)>limits[name] for payload in (values,changes,impacts)
+            for name,value in payload.items() if name in limits):
+            raise JiejianError(ErrorCode.STORAGE_CONSTRAINT, "代码变化聚合超出边界")
+        self._session.add(ChangeManifestRow(**values))
+        _flush(self._session)
+        self._session.add(SourceChangeSetRow(**changes))
+        self._session.add(ChangeImpactAssessmentRow(**impacts))
+        _flush(self._session)
+
+    def current_change(self, project_id: str, change_id: str):
+        from product.backend.core.source_changes import CurrentChangeManifest, CurrentChangeAssessment
+        row = _scalar(self._session,select(ChangeManifestRow).where(
+            ChangeManifestRow.project_id == project_id,ChangeManifestRow.change_id == change_id))
+        if row is None:
+            return None
+        impact = _scalar(self._session,select(ChangeImpactAssessmentRow).where(ChangeImpactAssessmentRow.change_id == change_id))
+        try:
+            manifest = CurrentChangeManifest.model_validate_json(_canonical_json(dict(change_id=row.change_id,
+                project_id=row.project_id,reason=row.reason,claimed_paths=json.loads(row.claimed_paths_json),
+                repair_reference=None if row.repair_reference_json is None else json.loads(row.repair_reference_json),
+                submitted_by=row.submitted_by,created_at_us=row.created_at_us)))
+            assessment = CurrentChangeAssessment.model_validate_json(_canonical_json(dict(change_id=impact.change_id,
+                project_id=impact.project_id,change_fingerprint=impact.change_fingerprint,complete=impact.complete,
+                reason_codes=json.loads(impact.reason_codes_json),payload=json.loads(impact.impacts_json),
+                impact_fingerprint=impact.impact_fingerprint,created_at_us=impact.created_at_us)))
+            change_set = self.change_set(change_id)
+            if change_set is None or change_set.change_fingerprint != assessment.change_fingerprint:
+                raise ValueError("current change aggregate missing")
+            return manifest,change_set,assessment
+        except (AttributeError,TypeError,ValueError):
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, "当前代码变化数据损坏") from None
+
+    def current_changes(self, project_id: str, *, limit: int = 50):
+        if isinstance(limit,bool) or not 1 <= limit <= 100:
+            raise ValueError("current change list limit")
+        ids = self._session.scalars(select(ChangeManifestRow.change_id).where(ChangeManifestRow.project_id == project_id)
+            .order_by(ChangeManifestRow.created_at_us.desc(),ChangeManifestRow.change_id.desc()).limit(limit)).all()
+        return tuple(self.current_change(project_id,identity) for identity in ids)
+
+    def latest_current_for_repair(self, project_id, reference):
+        identity = _scalar(self._session,select(ChangeManifestRow.change_id).where(
+            ChangeManifestRow.project_id==project_id,
+            ChangeManifestRow.repair_reference_json==_canonical_json(reference.model_dump(mode="json")))
+            .order_by(ChangeManifestRow.created_at_us.desc(),ChangeManifestRow.change_id.desc()).limit(1))
+        return None if identity is None else self.current_change(project_id,identity)
+
     def add_snapshot(self, snapshot: SourceRevisionSnapshot) -> None:
         values = snapshot.model_dump(mode="json", exclude={"files"})
         values["files_json"] = _canonical_json(

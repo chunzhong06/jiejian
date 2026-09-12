@@ -10,6 +10,8 @@ import json
 import os
 import runpy
 import secrets
+import re
+import threading
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -200,6 +202,7 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
                     "delegated_from_event_id",
                     "credential_source",
                     "effect_id",
+                    "dispatch_effect_ids",
                     "origin_authorization_event_id",
                     "recorded_at_us",
                     "resource_id",
@@ -256,13 +259,19 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
             value = json.loads(self._control_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise ValueError("sample control is unavailable") from exc
-        if type(value) is not dict or set(value) != {
+        required = {
             "schema_version",
             "authorization_order",
             "owner_observation",
             "blob_observation",
-        } or value["schema_version"] != "1":
+        }
+        if type(value) is not dict or not required <= set(value) or set(value)-required-{"export_effect_id","view_effect_id"} or value["schema_version"] != "1":
             raise ValueError("sample control has invalid fields")
+        for name in ("export_effect_id","view_effect_id"):
+            effect_id=value.get(name)
+            if effect_id is not None and (not isinstance(effect_id,str) or re.fullmatch(r"bef_[0-9a-f]{32}",effect_id) is None):
+                raise ValueError("invalid sample effect mapping")
+            setattr(self,name,effect_id)
         authorization_order = self._read_authorization_policy()
         owner_observation = value["owner_observation"]
         blob_observation = value["blob_observation"]
@@ -364,25 +373,22 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/session":
             self._get_session()
             return
+        if path == f"/api/projects/{PROJECT_ID}/resources/{RESOURCE_ID}/state":
+            account = self._session_account()
+            if account is None:
+                return
+            if account != "alice":
+                self._forbidden("PROJECT_OWNER_REQUIRED")
+                return
+            self._resource_observation()
+            return
         if path == f"/api/observer/resources/{RESOURCE_ID}":
             if not self._authorized_bearer(
                 self.server.owner_observer,
                 code="OWNER_OBSERVER_ACCESS_DENIED",
             ):
                 return
-            marker = self.headers.get("X-Jiejian-Case-ID", "")
-            # 初始面与 BEFORE 面尚未记录主体，仍返回可靠基线；Bob 的目标请求到达后，
-            # 证据受限版才关闭只读业务状态，让结论诚实停留在“证据不足”。
-            if (
-                self.server.owner_observation == "UNAVAILABLE"
-                and self.server.case_actor(marker) == "bob"
-            ):
-                self._json(
-                    HTTPStatus.SERVICE_UNAVAILABLE,
-                    {"code": "OWNER_OBSERVER_UNAVAILABLE"},
-                )
-                return
-            self._json(HTTPStatus.OK, self.server.storage.resource_state())
+            self._resource_observation()
             return
         if path == "/api/projects":
             if self._session_account() is None:
@@ -410,10 +416,15 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 return
             # 该端点只承载成员日常查看能力，避免把导出任务状态误当成
             # DATA_DISCLOSURE 的受保护内容。
-            self._json(
-                HTTPStatus.OK,
-                self.server.storage.collaboration_materials(),
-            )
+            data=self.server.storage.collaboration_materials()
+            self.server._read_control()
+            if self.server.view_effect_id is not None:
+                marker=self.headers.get("X-Jiejian-Request-ID") or self.headers.get("X-Jiejian-Case-ID") or _new_marker()
+                self.server.storage.append_audit(marker=marker,task_id="",event_type="collaboration_read",sequence=1,
+                    result="read",effect="APPLIED",kind="FINAL_EFFECT",semantic_key="collaboration_read",
+                    subject_id=account,actor_id=account,effect_id=self.server.view_effect_id,resource_id=PROJECT_ID,
+                    source_component="collaboration-server",source_location="api:collaboration")
+            self._json(HTTPStatus.OK,data)
             return
         if path.startswith(f"/api/projects/{PROJECT_ID}/exports/"):
             account = self._session_account()
@@ -522,7 +533,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         if requested_resource != RESOURCE_ID:
             self._json(HTTPStatus.BAD_REQUEST, {"code": "EXPORT_RESOURCE_INVALID"})
             return
-        marker = self.headers.get("X-Jiejian-Case-ID") or _new_marker()
+        marker = self.headers.get("X-Jiejian-Request-ID") or self.headers.get("X-Jiejian-Case-ID") or _new_marker()
         if not _valid_marker(marker):
             self._json(HTTPStatus.BAD_REQUEST, {"code": "REQUEST_MARKER_INVALID"})
             return
@@ -567,103 +578,67 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
                 identity_event_id=identity_event_id,
             )
             return
-        if account == "bob" and self.server.authorization_order == "AUTHORIZE_BEFORE_ENQUEUE":
-            self.server.storage.append_audit(
-                marker=marker,
-                task_id="",
-                event_type="authorization_decided",
-                sequence=3,
-                result="denied",
-                effect="DENY",
-                parent_event_id=identity_event_id,
-                kind="AUTHORIZATION",
-                semantic_key="authorization_decided",
-                subject_id=account,
-                actor_id=account,
-                authorization_decision="DENY",
-                source_component="collaboration-server",
-                source_location="policy:project-owner",
-            )
-            self._forbidden("EXPORT_PERMISSION_REQUIRED")
-            return
-        job = self.server.storage.create_job(marker, account)
-        if not job["_created"]:
-            if job["state"] == "REVOKED":
-                self._json(
-                    HTTPStatus.CONFLICT,
-                    {"code": "EXPORT_MARKER_REVOKED", "request_marker": marker},
-                )
-                return
-            if account == "bob":
+        fixed=self.server.authorization_order=="AUTHORIZE_BEFORE_ENQUEUE"
+        sequence=3
+        authorization_id=None
+        def authorize(parent, number):
+            decision="DENY" if account=="bob" else "ALLOW"
+            return self.server.storage.append_audit(marker=marker,task_id="",event_type="authorization_decided",
+                sequence=number,result=decision.casefold(),effect=decision,parent_event_id=parent,
+                kind="AUTHORIZATION",semantic_key="authorization_decided",subject_id=account,actor_id=account,
+                authorization_decision=decision,source_component="collaboration-server",source_location="policy:project-owner")
+        if fixed:
+            authorization_id=authorize(identity_event_id,sequence)
+            sequence+=1
+            if account=="bob":
                 self._forbidden("EXPORT_PERMISSION_REQUIRED")
                 return
-            self._json(
-                HTTPStatus.ACCEPTED,
-                {"code": "EXPORT_ALREADY_ACCEPTED", "request_marker": marker, "task_id": job["task_id"]},
-            )
+        job=self.server.storage.create_job(marker,account)
+        if not job["_created"]:
+            if job["state"]=="REVOKED":
+                self._json(HTTPStatus.CONFLICT,{"code":"EXPORT_MARKER_REVOKED","request_marker":marker})
+            elif account=="bob":
+                self._forbidden("EXPORT_PERMISSION_REQUIRED")
+            else:
+                self._json(HTTPStatus.ACCEPTED,{"code":"EXPORT_ALREADY_ACCEPTED","request_marker":marker,"task_id":job["task_id"]})
             return
         self.server.storage.write_task(job)
-        created_event_id = self.server.storage.append_audit(
-            marker=marker,
-            task_id=str(job["task_id"]),
-            event_type="export_request_created",
-            sequence=3,
-            result="created",
-            effect="PENDING",
-            parent_event_id=identity_event_id,
-            kind="PERSISTENT_EFFECT",
-            semantic_key="export_request_created",
-            subject_id=account,
-            actor_id=account,
-            source_component="collaboration-server",
-            source_location="storage:export-job",
-        )
-        decision = "DENY" if account == "bob" else "ALLOW"
-        decision_event_id = self.server.storage.append_audit(
-            marker=marker,
-            task_id=str(job["task_id"]),
-            event_type="authorization_decided",
-            sequence=4,
-            result=decision.casefold(),
-            effect=decision,
-            parent_event_id=created_event_id,
-            kind="AUTHORIZATION",
-            semantic_key="authorization_decided",
-            subject_id=account,
-            actor_id=account,
-            authorization_decision=decision,
-            source_component="collaboration-server",
-            source_location="policy:project-owner",
-        )
-        self.server.storage.append_audit(
-            marker=marker,
-            task_id=str(job["task_id"]),
-            event_type="export_message_sent",
-            sequence=5,
-            result="queued",
-            effect="PENDING",
-            parent_event_id=decision_event_id,
-            kind="MESSAGE",
-            semantic_key="export_message_sent",
-            subject_id=account,
-            actor_id=account,
-            origin_authorization_event_id=decision_event_id,
-            source_component="collaboration-server",
-            source_location="queue:export-events",
-        )
-        self.server.storage.append_queue_message(
-            marker=marker,
-            task_id=str(job["task_id"]),
-            event_type="EXPORT_ENQUEUED",
-            sequence=1,
-            result="queued",
-            effect="PENDING",
-        )
-        self.server.worker.enqueue(job)
-        if account == "bob":
-            self._forbidden("EXPORT_PERMISSION_REQUIRED")
-            return
-        self._json(HTTPStatus.ACCEPTED, {"code": "EXPORT_ACCEPTED", "request_marker": marker, "task_id": job["task_id"]})
+        created_id=self.server.storage.append_audit(marker=marker,task_id=str(job["task_id"]),event_type="export_request_created",
+            sequence=sequence,result="created",effect="PENDING",parent_event_id=authorization_id or identity_event_id,
+            kind="PERSISTENT_EFFECT",semantic_key="export_request_created",subject_id=account,actor_id=account,
+            source_component="collaboration-server",source_location="storage:export-job")
+        dispatch_sequence=sequence+1
+        dispatch_id=self.server.storage.audit_event_id(marker,"export_message_sent",dispatch_sequence)
+        response_complete=threading.Event()
+        effect_id=self.server.export_effect_id
+        accepted=self.server.worker.enqueue(job,dispatch_event_id=dispatch_id,authorization_event_id=authorization_id,
+            first_sequence=dispatch_sequence+(1 if fixed else 2),response_complete=response_complete,export_effect_id=effect_id)
+        try:
+            if not accepted:
+                failed=self.server.storage.find_job(marker)
+                self.server.storage.write_task(failed,final_result={"state":"FAILED","failure_code":"QUEUE_FULL"})
+                self._json(HTTPStatus.SERVICE_UNAVAILABLE,{"code":"EXPORT_QUEUE_FULL"})
+                return
+            # 只有真实队列接受后才记录成功派发；派发不是 ZIP 已形成。
+            self.server.storage.append_audit(marker=marker,task_id=str(job["task_id"]),event_type="export_message_sent",
+                sequence=dispatch_sequence,result="queued",effect="PENDING",parent_event_id=created_id,
+                kind="MESSAGE",semantic_key="export_message_sent",subject_id=account,actor_id=account,
+                origin_authorization_event_id=authorization_id,dispatch_effect_ids=() if effect_id is None else (effect_id,),
+                source_component="collaboration-server",source_location="queue:export-events")
+            self.server.storage.append_queue_message(marker=marker,task_id=str(job["task_id"]),event_type="EXPORT_ENQUEUED",
+                sequence=1,result="queued",effect="PENDING")
+            if not fixed:
+                authorize(dispatch_id,dispatch_sequence+1)
+            if account=="bob":
+                self._forbidden("EXPORT_PERMISSION_REQUIRED")
+            else:
+                self._json(HTTPStatus.ACCEPTED,{"code":"EXPORT_ACCEPTED","request_marker":marker,"task_id":job["task_id"]})
+        finally:
+            # DENY 和异常响应同样放行已接受的工作，明确保留错误派发的真实后果。
+            try:
+                self.wfile.flush()
+            finally:
+                response_complete.set()
 
     def _create_validation_export(
         self,
@@ -862,7 +837,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             source_component="collaboration-server",
             source_location="storage:export-job",
         )
-        self.server.storage.append_audit(
+        dispatch_event_id = self.server.storage.append_audit(
             marker=marker,
             task_id=str(job["task_id"]),
             event_type="export_message_sent",
@@ -886,7 +861,8 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             result="queued",
             effect="PENDING",
         )
-        self.server.worker.enqueue(job)
+        self.server.worker.enqueue(job,dispatch_event_id=dispatch_event_id,
+            authorization_event_id=origin_authorization_event_id,first_sequence=first_sequence+2)
         return job
 
     def _revoke_export(self) -> None:
@@ -898,7 +874,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         if account != "alice":
             self._forbidden("PROJECT_OWNER_REQUIRED")
             return
-        marker = self.headers.get("X-Jiejian-Case-ID", "")
+        marker = self.headers.get("X-Jiejian-Request-ID") or self.headers.get("X-Jiejian-Case-ID", "")
         if not _valid_marker(marker):
             self._json(HTTPStatus.BAD_REQUEST, {"code": "REQUEST_MARKER_INVALID"})
             return
@@ -1010,6 +986,14 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(selected)
         return True
+
+    def _resource_observation(self) -> None:
+        """两种独立鉴权入口共用只读事实与故障开关，不产生业务效果。"""
+        marker = self.headers.get("X-Jiejian-Request-ID") or self.headers.get("X-Jiejian-Case-ID", "")
+        if self.server.owner_observation == "UNAVAILABLE" and self.server.case_actor(marker) == "bob":
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"code": "OWNER_OBSERVER_UNAVAILABLE"})
+            return
+        self._json(HTTPStatus.OK, self.server.storage.resource_state())
 
     def _session_account(self) -> str | None:
         cookie = SimpleCookie()

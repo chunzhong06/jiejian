@@ -31,6 +31,7 @@ from product.backend.infra.storage.contracts import ContractVersionRepository
 from product.backend.infra.storage.llm import AIAssistanceSettingsRepository, LLMProfileRepository
 from product.backend.infra.storage.execution_profiles import ExecutionProfileRepository
 from product.backend.infra.storage.results.evidence import EvidenceIndexRepository
+from product.backend.infra.storage.results.check_publications import CheckPublicationRepository
 from product.backend.infra.storage.results.findings import FindingRepository
 from product.backend.infra.storage.results.finalizations import RunFinalizationRepository
 from product.backend.infra.storage.results.gating import GatingRepository
@@ -60,6 +61,7 @@ class StorageUnitOfWork:
     job_events: JobEventRepository
     job_control: JobControlRepository
     evidence: EvidenceIndexRepository
+    check_publications: CheckPublicationRepository
     llm_profiles: LLMProfileRepository
     ai_assistance_settings: AIAssistanceSettingsRepository
     execution_profiles: ExecutionProfileRepository
@@ -113,6 +115,7 @@ class StorageUnitOfWork:
         self.job_events = JobEventRepository(session, self._known_secrets)
         self.job_control = JobControlRepository(session, self._known_secrets)
         self.evidence = EvidenceIndexRepository(session, self._known_secrets)
+        self.check_publications = CheckPublicationRepository(session, self._known_secrets)
         self.llm_profiles = LLMProfileRepository(session, self._known_secrets)
         self.ai_assistance_settings = AIAssistanceSettingsRepository(session, self._known_secrets)
         self.execution_profiles = ExecutionProfileRepository(

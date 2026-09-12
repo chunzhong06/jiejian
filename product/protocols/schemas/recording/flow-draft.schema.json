@@ -344,14 +344,19 @@
       "default": null,
       "title": "Resource Candidate Id"
     },
+    "resource_owner_test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Resource Owner Test Identity Id",
+      "type": "string"
+    },
     "revision": {
       "minimum": 1,
       "title": "Revision",
       "type": "integer"
     },
     "schema_version": {
-      "const": "2",
-      "default": "2",
+      "const": "3",
+      "default": "3",
       "title": "Schema Version",
       "type": "string"
     },
@@ -363,6 +368,11 @@
       "minItems": 1,
       "title": "Steps",
       "type": "array"
+    },
+    "subject_test_identity_id": {
+      "pattern": "^tid_[0-9a-f]{32}$",
+      "title": "Subject Test Identity Id",
+      "type": "string"
     },
     "target_step_id": {
       "anyOf": [
@@ -376,11 +386,6 @@
       ],
       "default": null,
       "title": "Target Step Id"
-    },
-    "test_identity_id": {
-      "pattern": "^tid_[0-9a-f]{32}$",
-      "title": "Test Identity Id",
-      "type": "string"
     },
     "variables": {
       "default": [],
@@ -397,7 +402,8 @@
     "flow_id",
     "business_action_id",
     "action_revision",
-    "test_identity_id",
+    "subject_test_identity_id",
+    "resource_owner_test_identity_id",
     "revision",
     "steps"
   ],

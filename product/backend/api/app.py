@@ -24,13 +24,17 @@ from product.backend.api.routers.projects import build_projects_router
 from product.backend.api.routers.system import build_system_router
 from product.backend.api.routers.test_identities import build_test_identities_router
 from product.backend.api.routers.business_boundaries import build_business_boundaries_router
-from product.backend.api.routers.current_experience import build_current_experience_router
+from product.backend.api.routers.experience import build_experience_router
 from product.backend.api.routers.mcp_access import build_mcp_access_router
 from product.backend.api.routers.workspace import build_workspace_router
 from product.backend.api.routers.recordings import build_recordings_router
 from product.backend.api.routers.preparation import build_preparation_router
 from product.backend.api.routers.assistant import build_assistant_router
 from product.backend.api.routers.permission_drafts import build_permission_drafts_router
+from product.backend.api.routers.checks import build_checks_router
+from product.backend.api.routers.runs import build_runs_router
+from product.backend.api.routers.results import build_results_router
+from product.backend.api.routers.source_changes import build_source_changes_router
 from product.backend.api.local_control import LocalControlGuard
 from product.backend.api.mcp import build_mcp_control
 from product.backend.workflows.mcp_access import MCPAccessController
@@ -115,12 +119,16 @@ def create_app(
     app.include_router(build_projects_router(context))
     app.include_router(build_business_boundaries_router(context))
     app.include_router(build_workspace_router(context))
-    app.include_router(build_current_experience_router())
+    app.include_router(build_experience_router(context))
     app.include_router(build_test_identities_router(context))
     app.include_router(build_recordings_router(context))
     app.include_router(build_preparation_router(context))
     app.include_router(build_assistant_router(context))
     app.include_router(build_permission_drafts_router(context))
+    app.include_router(build_checks_router(context))
+    app.include_router(build_runs_router(context))
+    app.include_router(build_results_router(context))
+    app.include_router(build_source_changes_router(context))
     app.include_router(build_mcp_access_router(context, mcp_access))
     app.include_router(build_llm_router(context))
     app.include_router(build_onboarding_router(context))

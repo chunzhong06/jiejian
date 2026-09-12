@@ -1,5 +1,15 @@
 // 动作准备的只读投影；主任务继续由 Workspace 提供，客户端不推导准备顺序。
 import { request } from './http'
+import type { PermissionIntentRevisionDto } from './businessBoundaries'
+
+export type PermissionReference = { intent_id: string; revision: number; intent_hash: string }
+export type AllowControlRequirement = {
+  deny_permission: PermissionReference
+  protected_effect_ids: string[]
+  candidate_allow_permissions: PermissionReference[]
+  resolved_allow_permission: PermissionReference | null
+  selection_fingerprint: string
+}
 
 export type PreparationStatus = 'SATISFIED' | 'NEEDS_USER' | 'STALE' | 'BLOCKED' | 'NOT_REQUIRED'
 export type PreparationItem = { status: PreparationStatus; reason_codes: string[]; binding_fingerprint?: string | null }
@@ -13,6 +23,8 @@ export type ActionPreparation = {
   action_revision: number
   display_name: string
   preparation_complete: boolean
+  permissions: PermissionIntentRevisionDto[]
+  assurance_contract: { allow_controls: AllowControlRequirement[] }
   identity_requirements: PreparationItem & { allocation_mode: string; slots: IdentitySlot[] }
   execution: PreparationItem
   resources: Array<PreparationItem & { owner_slot_id: string; owner_test_identity_id: string | null }>
@@ -23,4 +35,10 @@ export type ActionPreparation = {
 export type PreparationView = { project_id: string; actions: ActionPreparation[]; preparation_complete: boolean }
 export const preparationApi = {
   get: (projectId: string) => request<PreparationView>(`/api/projects/${projectId}/preparation`),
+  selectAllowControl: (projectId: string, control: AllowControlRequirement, selected: PermissionReference) =>
+    request(`/api/projects/${projectId}/preparation/allow-control`, {
+      method: 'POST',
+      body: JSON.stringify({ schema_version: '1', deny_permission: control.deny_permission,
+        selected_allow_permission: selected, expected_selection_fingerprint: control.selection_fingerprint }),
+    }),
 }

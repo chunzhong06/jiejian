@@ -129,6 +129,26 @@ class RecordingRequestStore:
         except OSError:
             raise JiejianError(ErrorCode.JOB_PERSISTENCE, "孤儿录制请求清理失败") from None
 
+    def load_history(self, job_id: str, *, expected_hash: str):
+        """只读验证已发布 v2 来源；Worker 仍使用只接受 v3 的 load。"""
+        from product.protocols.recording_legacy import read_legacy_document
+        try:
+            path = self.path_for(job_id)
+            if path.stat().st_size > RECORDING_REQUEST_MAX_BYTES:
+                raise ValueError("history size")
+            raw = path.read_bytes()
+            if not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), expected_hash):
+                raise ValueError("history hash")
+            import json
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                raise ValueError("history root")
+            if payload.get("schema_version") == "2":
+                return read_legacy_document(raw, "request", expected_hash=expected_hash)
+            return self.load(job_id, expected_hash=expected_hash)
+        except (OSError, ValueError):
+            raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "历史录制来源无效") from None
+
     def path_for(self, job_id: str) -> Path:
         if re.fullmatch(JOB_ID_PATTERN, job_id) is None:
             raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务 ID 格式无效")

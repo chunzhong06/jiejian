@@ -76,11 +76,12 @@ class FlowStep(RecordingFlowModel):
 
 # 已确认、无环且不含秘密的录制流程；变量只能引用先前步骤。
 class Flow(RecordingFlowModel):
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["3"] = "3"
     id: str = Field(pattern=PROJECT_ID_PATTERN)
     business_action_id: str = Field(pattern=ACTION_ID_PATTERN)
     action_revision: int = Field(ge=1)
-    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    subject_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    resource_owner_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     target_step_id: str = Field(pattern=PROJECT_ID_PATTERN)
     steps: tuple[FlowStep, ...] = Field(min_length=1)
 

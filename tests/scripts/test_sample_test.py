@@ -137,118 +137,42 @@ def test_start_product_invokes_root_start_cmd_and_owns_its_process_tree(
     assert str(captured["kwargs"]["tree_name"]).startswith("jiejian-sample-test-")
 
 
-def test_official_experience_enters_the_agent_written_problem_version(tmp_path: Path) -> None:
-    events: list[tuple[str, str]] = []
+def test_driver_gui_checkpoint_never_claims_api_as_gui():
+    from scripts.dev.sample_test.current_gui import CurrentGui
+    gui = CurrentGui(None, None, None)
+    with pytest.raises(official.SampleTestError, match="GUI_CHECKPOINT_UNKNOWN"):
+        gui.checkpoint("start", {})
+    assert gui.records == []
 
-    class Control:
-        def __init__(self, label: str) -> None:
-            self.label = label
 
-        def click(self) -> None:
-            events.append(("click", self.label))
-
-        def wait_for(self, *, timeout: int | None = None) -> None:
-            if timeout is not None:
-                assert timeout == 30_000
-            events.append(("wait", self.label))
-
-    class Response:
-        status = 200
-        url = "http://127.0.0.1:8765/api/experience/official-sample/start"
-
-        class Request:
-            method = "POST"
-
-        request = Request()
-
-    class Pending:
-        value = Response()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args) -> None:
-            return None
-
-    class Page:
-        def goto(self, url: str, *, wait_until: str) -> None:
-            events.append(("goto", f"{url}:{wait_until}"))
-
-        def get_by_role(
-            self,
-            role: str,
-            *,
-            name: str,
-            exact: bool | None = None,
-        ) -> Control:
-            assert role == "button"
-            assert exact in {None, True}
-            return Control(name)
-
-        def get_by_text(self, text: str) -> Control:
-            return Control(text)
-
-        def expect_response(self, predicate, *, timeout: int) -> Pending:
-            assert timeout == 30_000
-            assert predicate(Response()) is True
-            return Pending()
-
-        def wait_for_url(self, url: str, *, timeout: int) -> None:
-            assert (url, timeout) == ("**/#/workspace", 30_000)
-
-        def get_by_label(self, label: str) -> Control:
-            return Control(label)
-
-        def screenshot(self, *, path: str, full_page: bool) -> None:
-            assert Path(path) == tmp_path / "official-problem-version.png"
-            assert full_page is True
-
+def test_current_driver_submits_frozen_full_plan_and_reuses_unknown_receipt_key(monkeypatch):
+    from scripts.dev.sample_test import current_api as current
+    calls = []
+    responses = 0
     class Client:
-        origin = "http://127.0.0.1:8765"
-
-        @staticmethod
-        def call(method: str, path: str):
-            assert method == "GET"
-            if path == "/api/experience/official-sample":
-                return {
-                    "active": True,
-                    "scenario_version": "VULNERABLE",
-                    "scenario_prepared": False,
-                    "project_id": "project-demo",
-                    "origin": "http://127.0.0.1:9000",
-                }
-            assert path == "/api/projects/project-demo/runs"
-            return []
-
-    state = official.HarnessState(stage=2)
-    result = official._start_official_experience(Page(), Client(), tmp_path, state)
-
-    assert result["project_id"] == "project-demo"
-    assert state.sample_started is True
-    assert ("click", "启动官方示例") in events
-    assert ("click", "启动问题版") in events
-    assert ("wait", "启动示例不会开始真实检查，也不会预先生成结论。") in events
-    assert ("wait", "一键应用样例配置") in events
-
-
-def test_fixed_case_submits_the_repair_change_through_the_formal_check_api() -> None:
-    calls: list[tuple[str, str]] = []
-
-    class Client:
-        @staticmethod
-        def call(method: str, path: str):
-            calls.append((method, path))
-            return {"repair_change_id": "chg_" + "4" * 32}
-
-    body = official._check_submission_body(
-        Client(),
-        name="fixed",
-        verification_run_id="run_vulnerable",
-    )
-
-    assert calls == [("GET", "/api/experience/official-sample")]
-    assert body["change_id"] == "chg_" + "4" * 32
-    assert str(body["idempotency_key"]).startswith("sample-fixed-")
+        def call(self, method, path, body=None, **kwargs):
+            nonlocal responses
+            calls.append((method, path, body))
+            if "check-preview" in path:
+                return {"can_execute": True, "action_count": 2, "case_count": 3, "plan_fingerprint": "a" * 64}
+            if method == "GET":
+                return []
+            responses += 1
+            if responses == 1:
+                raise official.SampleTestError("POST runs 无法访问: TimeoutError")
+            return {"run": {"run_id": "run-current"}, "job": {"job_id": "job-current"}}
+    monkeypatch.setattr(current, "wait_published", lambda *args: None)
+    monkeypatch.setattr(current, "assert_current_result", lambda *args, **kwargs: None)
+    monkeypatch.setattr(current, "read_result", lambda *args: {"story": {"verdict": "PASS", "actions": [
+        {"permission": {"expectation": "ALLOW"}} for _ in range(3)]}, "evidence": [
+        {"case": {"protected_effect_ids": ["effect"], "permission": {"expectation": "ALLOW"}}} for _ in range(3)]})
+    current.run_current(Client(), "project", official.HarnessState(), name="fixed", expected="PASS", change_id="chg_exact")
+    writes = [body for method, _, body in calls if method == "POST"]
+    assert len(writes) == 2 and writes[0] == writes[1]
+    assert writes[0]["schema_version"] == "2" and writes[0]["expected_plan_fingerprint"] == "a" * 64
+    assert writes[0]["change_id"] == "chg_exact"
+    assert calls[0][1].endswith("?change_id=chg_exact")
+    assert calls[2][:2] == ("GET", "/api/projects/project/runs")
 
 
 def test_sample_test_suite_keeps_no_argument_semantics_on_official(
@@ -562,69 +486,19 @@ def test_start_waits_for_source_prepare_before_control_ready(
         driver._wait_product_ready(Client(), PreparedProcess(), timeout=1)
 
 
-def test_cli_equivalence_uses_result_and_history_while_evidence_stays_api_owned(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    driver = official
-    run_id = "run_current"
-    evidence_index = [
-        {"evidence_id": "evidence-a", "artifact_path": "artifacts/evidence/a.json"},
-        {"evidence_id": "evidence-b", "artifact_path": "artifacts/evidence/b.json"},
-    ]
-    evidence_documents = {
-        "evidence-a": {"evidence_id": "evidence-a", "requirement_bindings": ["owner"]},
-        "evidence-b": {"evidence_id": "evidence-b", "requirement_bindings": ["blob"]},
-    }
-
+def test_current_driver_read_projection_binds_story_and_evidence():
+    from scripts.dev.sample_test.current_api import read_result
     class Client:
-        calls: list[str] = []
-
-        @classmethod
-        def call(cls, method: str, path: str):
+        def call(self, method, path):
             assert method == "GET"
-            cls.calls.append(path)
-            if path == f"/api/runs/{run_id}/evidence":
-                return evidence_index
-            evidence_id = path.rsplit("/", 1)[-1]
-            return evidence_documents[evidence_id]
-
-    loaded_index, loaded_documents = driver._load_evidence(Client(), run_id)
-    assert loaded_index == evidence_index
-    assert loaded_documents == list(evidence_documents.values())
-    assert loaded_index != loaded_documents
-    assert Client.calls == [
-        f"/api/runs/{run_id}/evidence",
-        f"/api/runs/{run_id}/evidence/evidence-a",
-        f"/api/runs/{run_id}/evidence/evidence-b",
-    ]
-
-    presentation = {"run_id": run_id, "verdict": "INCONCLUSIVE"}
-    history = {"project_id": "project-current", "comparisons": []}
-    def run_cli(_root, _var_dir, _environment, *arguments: str) -> str:
-        if arguments[:2] == ("result", "show"):
-            return "检查结果"
-        if arguments[0] == "history":
-            return "历史变化"
-        if arguments[1:3] == ("result", "show"):
-            return json.dumps({"data": presentation})
-        return json.dumps({"data": history})
-
-    monkeypatch.setattr(driver, "_run_cli", run_cli)
-    run = {
-        "run_id": run_id,
-        "presentation": presentation,
-        "evidence_index": loaded_index,
-        "evidence": loaded_documents,
-    }
-    driver._assert_cli_equivalence(
-        ROOT,
-        tmp_path,
-        "project-current",
-        run,
-        history,
-        {},
-    )
+            if path.endswith("result-story"):
+                return {"actions": [{"evidence_explanations": [{"evidence_refs": ["ev-one"]}]}]}
+            if path.endswith("/evidence"):
+                return [{"evidence_id": "ev-one"}]
+            return {"run_id": "run-one", "evidence_id": "ev-one"}
+    result = read_result(Client(), "run-one")
+    assert result["evidence"][0]["evidence_id"] == "ev-one"
+    assert result["run_id"] == "run-one"
 
 def test_recording_window_requires_a_unique_new_controlled_chromium(
     monkeypatch: pytest.MonkeyPatch,
@@ -865,8 +739,8 @@ def test_unavailable_run_result_has_stable_failure_identity(
         driver,
         "_wait_for",
         lambda *_args, **_kwargs: {
-            "lifecycle": "FAILED",
-            "result_integrity": "UNAVAILABLE",
+            "run": {"lifecycle": "FAILED"},
+            "result_integrity": "INVALID",
         },
     )
 
@@ -875,7 +749,7 @@ def test_unavailable_run_result_has_stable_failure_identity(
 
     assert driver._failure_identity(caught.value) == (
         "L5_RUN_RESULT_UNAVAILABLE",
-        "L5_RUN_RESULT_UNAVAILABLE: lifecycle=FAILED integrity=UNAVAILABLE "
+        "L5_RUN_RESULT_UNAVAILABLE: lifecycle=FAILED integrity=INVALID "
         "run_id=run-public run_job_id=run-job-public",
     )
 
@@ -1091,3 +965,104 @@ def test_real_official_scenario_setup_closes_before_full_l5() -> None:
     assert summary["control_port_closed"] is True
     assert summary["sample_port_closed"] is True
     assert summary["owned_process_tree_closed"] is True
+
+
+def test_current_driver_rejects_changed_official_recipe_before_approval(tmp_path):
+    from scripts.dev.sample_test.current_api import assert_official_proposal
+    from tests.backend.workflows.business_boundaries.test_business_boundary_service import _core
+    from product.backend.workflows.business_boundaries.official_recipe import official_boundary_recipe
+    from product.backend.core.business_boundary import boundary_sha256
+    core, project = _core(tmp_path)
+    try:
+        proposal = core.business_boundaries.create_proposal(project, official_boundary_recipe().proposal_command).proposal
+        assert assert_official_proposal({"proposal": proposal.model_dump(mode="json")}, project) == proposal
+        item = proposal.proposed_actors[0].model_copy(update={"description": "不属于冻结配方的描述"})
+        changed = proposal.model_copy(update={"proposed_actors": (item, *proposal.proposed_actors[1:])})
+        changed = changed.model_copy(update={"proposal_fingerprint": boundary_sha256(changed.fingerprint_payload())})
+        with pytest.raises(official.SampleTestError, match="RECIPE_MISMATCH"):
+            assert_official_proposal({"proposal": changed.model_dump(mode="json")}, project)
+    finally:
+        core.close()
+
+
+def test_current_driver_rebind_accepts_only_unchanged_formal_permissions(tmp_path):
+    from scripts.dev.sample_test.current_api import _assert_rebind
+    from tests.backend.workflows.business_boundaries.test_business_boundary_service import _core, _maintenance_command
+    from product.backend.workflows.business_boundaries.official_recipe import official_boundary_recipe
+    core, project = _core(tmp_path)
+    try:
+        proposal = core.business_boundaries.create_proposal(project, official_boundary_recipe().proposal_command).proposal
+        before = core.business_boundaries.approve(project, proposal.proposal_id, expected_fingerprint=proposal.proposal_fingerprint, reason="确认固定配方")
+        draft = core.business_boundaries.maintenance_draft(project)
+        rebind = core.business_boundaries.create_maintenance_proposal(project, _maintenance_command(draft)).proposal
+        _assert_rebind(rebind, before.model_dump(mode="json"))
+        wrong = rebind.proposed_permissions[0].model_copy(update={"write_mode": "APPEND_REVISION"})
+        with pytest.raises(official.SampleTestError, match="PERMISSION_CHANGED"):
+            _assert_rebind(rebind.model_copy(update={"proposed_permissions": (wrong, *rebind.proposed_permissions[1:])}), before.model_dump(mode="json"))
+    finally:
+        core.close()
+
+
+def test_current_driver_sequence_uses_original_block_reference_and_distinct_runs(monkeypatch):
+    from scripts.dev.sample_test import current_api as current
+    order = []
+    first = {"run_id": "run-first", "story": {"verdict": "BLOCK", "actions": [{"case_id": "case-original", "permission": {"expectation": "DENY"}, "breakpoint": {"breakpoint_type": "AUTHORIZATION_LATE"}}]}}
+    limited = {"run_id": "run-limited", "story": {"verdict": "INCONCLUSIVE"}}
+    fixed = {"run_id": "run-fixed", "story": {"verdict": "PASS", "repair_verification": {"status": "VERIFIED", "source_run_id": "run-first", "repair_reference": "a" * 64}}}
+    runs = [first, limited, fixed]
+    def run(client, project, state, **kwargs):
+        order.append((kwargs["name"], kwargs.get("change_id")))
+        return runs[len(order) - 1]
+    switches = []
+    def switch(client, project, version, **kwargs):
+        switches.append((version, kwargs.get("reference")))
+        return {"vulnerable_change_id": "chg-limited", "repair_change_id": "chg-fixed"}
+    class Client:
+        def call(self, method, path):
+            if path.endswith("repair-contracts"):
+                return [{"source_run_id": "run-first", "source_case_id": "case-original", "repair_fingerprint": "a" * 64}]
+            return {"status": "VERIFIED"}
+    monkeypatch.setattr(current, "_boundary", lambda *args: {"policy_epoch": 1, "permission_intents": []})
+    monkeypatch.setattr(current, "run_current", run)
+    monkeypatch.setattr(current, "switch_current", switch)
+    monkeypatch.setattr(current, "prepare_current", lambda *args: None)
+    monkeypatch.setattr(current, "project_run_ids", lambda *args: [item["run_id"] for item in runs])
+    monkeypatch.setattr(current, "read_result", lambda _, run_id: next(item for item in runs if item["run_id"] == run_id))
+    assert current.run_sequence(Client(), "project", official.HarnessState(), checkpoint=lambda *args: None) == runs
+    assert order == [("problem", None), ("limited", "chg-limited"), ("fixed", "chg-fixed")]
+    assert switches == [("EVIDENCE_LIMITED", None), ("FIXED", {"source_run_id": "run-first", "source_case_id": "case-original", "repair_fingerprint": "a" * 64})]
+
+
+def test_current_driver_public_fact_checks_require_zip_role_and_normal_business():
+    import copy
+    from scripts.dev.sample_test.current_api import assert_current_result
+    kinds = ("owner_api", "read_only_sqlite", "structured_audit_log", "async_task_status", "azure_queue_peek", "azure_blob_object")
+    levels = ["VERDICT_REQUIRED" if kind == "azure_blob_object" else "DIAGNOSIS_REQUIRED" if kind == "structured_audit_log" else "SUPPORTING" for kind in kinds]
+    denial = {"permission": {"expectation": "DENY"}, "evidence_explanations": [{"source_location": "observer/" + kind, "observed_fact": {"level": level}} for kind, level in zip(kinds, levels)]}
+    normal = {"permission": {"expectation": "ALLOW"}}
+    observation = {"proof_fingerprint": "proof", "phase": "AFTER", "state": "CONFIRMED", "complete": True, "reliable": True, "correlated": True, "authoritative": True}
+    normal_document = {"case": {"permission": {"expectation": "ALLOW"}, "protected_effect_ids": ["effect"], "proof_requirements": [{"level": "VERDICT_REQUIRED", "proof_fingerprint": "proof"}]},
+        "outcome": {"execution_outcome": "ACCEPTED", "actual_identity_status": "MATCH", "baseline_trusted": True, "recovery_verified": True, "run_correlated": True, "resource_correlated": True}, "observations": [observation]}
+    denial_document = {"case": {"permission": {"expectation": "DENY"}, "protected_effect_ids": ["effect"]}, "observations": [{"observer_id": kind, "level": level} for kind, level in zip(kinds, levels)]}
+    result = {"run_id": "run", "story": {"verdict": "PASS", "actions": [denial, normal, normal]}, "evidence": [denial_document, normal_document, copy.deepcopy(normal_document)]}
+    assert_current_result(result, expected="PASS")
+    result["evidence"][1]["outcome"]["execution_outcome"] = "UNKNOWN"
+    with pytest.raises(official.SampleTestError, match="NORMAL_BUSINESS_UNTRUSTED"):
+        assert_current_result(result, expected="PASS")
+    result["evidence"][1]["outcome"]["execution_outcome"] = "ACCEPTED"
+    result["story"]["actions"][0]["evidence_explanations"][0]["observed_fact"]["level"] = "VERDICT_REQUIRED"
+    with pytest.raises(official.SampleTestError, match="SOURCE_RESPONSIBILITY"):
+        assert_current_result(result, expected="PASS")
+
+
+def test_failure_cleanup_cancels_exact_active_check_before_reset():
+    calls = []
+    class Client:
+        def call(self, method, path, body=None, **kwargs):
+            calls.append((method, path))
+            return {"job": {"state": "CANCELLED"}}
+    state = official.HarnessState(active_run_id="run-owned", active_run_job_id="job-owned", sample_started=True, product_ready=True)
+    result = official._cleanup_after_failure(Client(), state, {"owner": "identity-owned"})
+    assert calls == [("POST", "/api/jobs/job-owned/cancel"), ("GET", "/api/runs/run-owned"),
+        ("POST", "/api/test-identities/identity-owned/reset"), ("POST", "/api/experience/official-sample/stop"), ("POST", "/api/system/shutdown")]
+    assert result["state_closed"] and result["shutdown_requested"]

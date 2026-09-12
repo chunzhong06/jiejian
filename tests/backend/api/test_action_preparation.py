@@ -38,5 +38,6 @@ def test_preparation_get_matches_source_without_writes_or_external_calls(tmp_pat
         assert client.post(f"/api/projects/{h.project_id}/preparation", json={"schema_version": "1"}).status_code == 405
         assert client.get("/api/projects/missing-project/preparation").status_code == 404
         registered = set(app.openapi()["paths"])
-        assert not any(path.startswith(("/api/runs", "/api/changes")) or "prepare-safe" in path for path in registered)
+        assert not any(path.startswith("/api/changes") or "prepare-safe" in path for path in registered)
+        assert "/api/runs/{run_id}/result-story" in registered
     event.remove(core.engine, "before_cursor_execute", listener)

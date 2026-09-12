@@ -181,3 +181,31 @@ def recording_job_targets() -> JobTargetRegistry:
     registry = JobTargetRegistry()
     registry.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
     return registry
+
+
+class CheckJobTargetHandler(RunJobTargetHandler):
+    """当前检查只以 v3 请求 hash 关联 Run；旧 RUN operation 不进入当前调度。"""
+
+    def load(self, work, job):
+        run, recording = super().load(work, job)
+        if job.operation_type != "CHECK" or run.project_id != job.project_id or run.request_hash != job.request_hash:
+            raise JiejianError(ErrorCode.JOB_REQUEST_CONFLICT, "任务执行请求与既有快照不一致")
+        return run, recording
+
+    def advance_after_claim(self, work, job, now_us):
+        self.load(work, job)
+        return super().advance_after_claim(work, job, now_us)
+
+    def finish(self, work, job, now_us, outcome):
+        self.load(work, job)
+        return super().finish(work, job, now_us, outcome)
+
+
+def current_check_and_recording_targets() -> JobTargetRegistry:
+    """显式装配当前 v3 检查与录制目标，内部 RUN 名称只用于既有 Job FK。"""
+    from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
+
+    registry = JobTargetRegistry()
+    registry.register(JobTargetType.RUN, CheckJobTargetHandler())
+    registry.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
+    return registry

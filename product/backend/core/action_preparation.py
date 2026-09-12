@@ -118,8 +118,10 @@ class _ActionBinding(BoundaryModel):
     implementation_fingerprint: str = Field(pattern=SHA256_PATTERN)
     source_fingerprint: str | None = Field(default=None, pattern=SHA256_PATTERN)
     endpoint_fingerprint: str = Field(pattern=SHA256_PATTERN)
-    test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
-    identity_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    subject_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    subject_identity_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    resource_owner_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
+    owner_identity_fingerprint: str = Field(pattern=SHA256_PATTERN)
     confirmed_at_us: int = Field(ge=0)
     binding_fingerprint: str = Field(pattern=SHA256_PATTERN)
 
@@ -143,7 +145,6 @@ class ActionExecutionBinding(_RecordedBinding):
 
 
 class ActionResourceBinding(_RecordedBinding):
-    owner_test_identity_id: str = Field(pattern=TEST_IDENTITY_ID_PATTERN)
     actual_resource_id: str = Field(min_length=1, max_length=256)
     flow_id: str = Field(pattern=PROJECT_ID_PATTERN)
     flow_sha256: str = Field(pattern=SHA256_PATTERN)
@@ -157,11 +158,6 @@ class ActionResourceBinding(_RecordedBinding):
             raise ValueError("resource value must be a bounded non-secret identifier")
         return value
 
-    @model_validator(mode="after")
-    def validate_owner(self) -> ActionResourceBinding:
-        if self.owner_test_identity_id != self.test_identity_id:
-            raise ValueError("resource owner must be the source recording identity")
-        return self
 
 
 class ActionEvidenceBinding(_ActionBinding):

@@ -21,7 +21,7 @@
 | `product/frontend/package.json`、`product/frontend/tsconfig*.json` | 源码依赖/类型/构建合同 | 产品版本真源、node_modules 或 dist |
 | `var/development/frontend/` | 受控 Node/pnpm、workspace、依赖与不可变 build | Git 管理源码、产品运行数据 |
 
-普通工作区以 `/workspace` 为主控工作台，保留 `/changes /permissions /tests` 三个辅助模块的视觉层级。`/permissions` 接入 `BusinessBoundaryPage` 与 `BoundaryMaintenanceEditor`，`/tests` 接入 PreparationPage 并按 Workspace 主任务进入受控身份/录制操作。`/changes` 和正式 Check/Run/Result 仍不可用，不调用旧 writer。
+普通工作区以 `/workspace` 为主控工作台，保留 `/changes /permissions /tests` 三个辅助模块的视觉层级。`/permissions` 接入 `BusinessBoundaryPage` 与 `BoundaryMaintenanceEditor`；`/tests` 装配 `CurrentTestsPage`，用精确 run_id/change_id 在准备材料、显式检查、进度与已发布结果间续接。准备材料仍由 `PreparationPage` 进入受控身份/录制。`/changes` 使用当前 SourceChange 与 ProjectRepair 投影登记声明、核对真实差异和复验原题；结果完整性失效时撤下安全结论。`OfficialSamplePanel` 提供显式启动、普通审批续接、准备和版本切换；`ToolsPage` 只在当前项目与 serve 授予有限 MCP 能力。旧 Run/Profile/ResultPresentation writer 不进入当前链。
 
 精确组件和类型见[前端自动代码参考](../../03_参考手册/代码/frontend.md)。
 
@@ -39,7 +39,7 @@
 | 修改测试身份 | `features/identities/TestIdentityPage.tsx` | [修改测试账号](../任务/修改测试账号.md)；`frontend-test src/features/identities` |
 | 修改录制与安全准备 | `features/recording/` | [修改 Recording](../任务/修改Recording.md)；`frontend-test src/features/recording` |
 | 修改 Agent 变化与待办 | `features/changes/ChangesPage.tsx`、`api/sourceChanges.ts` | [修改 Agent 变更影响](../任务/修改Agent变更影响.md)；Workbench、ControlShell 与后端 change 测试 |
-| 修改测试模块总览 | `features/testing/TestingPage.tsx` | TestingPage 与 ControlShell 路由测试；再按实际修改核对测试条件、运行或结果页面 |
+| 修改测试模块总览与当前结果 | `features/testing/CurrentTestsPage.tsx`、`CurrentResultStory.tsx`、`api/currentChecks.ts` | CurrentTestsPage 与 ControlShell 路由测试；服务端预览门禁、提交幂等、陈旧响应与证据完整性 |
 | 修改测试准备总览 | `features/preparation/PreparationPage.tsx`、`api/preparation.ts` | PreparationView、Workspace PrimaryTask、页面直接测试与 ControlShell 权威刷新测试 |
 | 修改保留的验证/结果组件 | `features/checks/` | 先确认当前路由是否接入；不得把旧 permissions mode 恢复为 Human Approval 入口 |
 | 修改结果、历史、Evidence 或报告 | `features/checks/CheckResultsPage.tsx`、`CheckHistoryPage.tsx`、`EvidenceTimeline.tsx`、`ReportPanel.tsx` | [修改结果与报告](../任务/修改结果与报告.md)；对应单文件测试 |
@@ -49,7 +49,7 @@
 
 ## 事实与页面状态
 
-`WorkspaceService` 决定 当前区域状态、动作级摘要和唯一 `PrimaryTask`；`BusinessBoundaryView` 决定正式 Actor/Action/Effect/Permission，维护草稿完整保留 stable identity，`BoundaryProposalView.change_summary` 决定待审变化说明。前端可以保留当前项目、页面和未提交草稿，但正式事实必须刷新 API。保留的 Job/Run、ResultPresentation 与 HistoryView 不属于当前检查入口。
+`WorkspaceService` 决定区域状态、动作级摘要和唯一 `PrimaryTask`；`BusinessBoundaryView` 决定正式 Actor/Action/Effect/Permission，维护草稿完整保留 stable identity，`BoundaryProposalView.change_summary` 决定待审变化说明。当前检查由 CheckPreview、CheckRunStatus 和 ResultStory 分别提供准备门禁、执行状态和已发布结果；前端可以保留临时选择，但正式事实必须刷新 API。旧 ResultPresentation 与 HistoryView 不属于当前检查入口。
 
 所有写操作要有清楚的 busy、成功、失败和恢复路径。需要长时间的多阶段过程必须展示稳定阶段边界，服务端有进度时流式呈现；没有权威进度时说明当前阶段和静默上限，不伪造百分比。首个主错误保留，cleanup warning 单独展示。
 
@@ -64,7 +64,7 @@
 ## 必须保持的边界
 
 - API DTO 只接受当前 envelope；未知 schema/字段按 request 层失败，不在组件里猜旧格式。
-- 权限、Observer、ResultPresentation 与 History 由后端拥有；组件不按 HTTP 状态或文本正则自行判断安全。
+- 权限、Observer 与 ResultStory 由后端拥有；组件不按 HTTP 状态或文本正则自行判断安全。
 - 计划身份来自冻结请求；没有独立实际身份事实时显示无法确认，不用计划值冒充实际值。
 - 密码、Cookie、Token、API Key 不进 localStorage、普通 React state 日志、错误详情或 DOM 长期展示；临时 Key 成功失败后立即清空。
 - 普通用户先看到任务语言和当前主动作，内部 ID、reason code、Schema、路径和原始 Evidence 只进入明确命名的证据、报告或 Machine 入口，不建立通用“高级信息”收纳箱。
@@ -72,7 +72,7 @@
 - `product/frontend` 只保存源码/配置，禁止 node_modules、dist、测试缓存和 tsbuildinfo。
 - Workbench 不常驻显示产品版本；只在系统设置等明确诊断位置展示。
 - 桌面侧栏固定 224px，只承载四个产品区域；顶部固定 52px，承载应用切换、活动任务、AI 工具连接和“设置与更多”。AI 辅助、系统状态、模型、主题与安全退出都位于该菜单，退出是最后一项；菜单关闭后不得保留撑宽文档的旧浮层。
-- 普通 Boundary 页面不展示或应用官方业务合同。官方 recipe 只作为后端内部冻结资产保留，等待未来正式 Sample context 通过普通 Proposal 与用户批准流程复用；不得按项目名猜 Sample，也不得把入口移到其他普通页面。
+- 普通 Boundary 页面按同一 Proposal/Approval 流程处理业务边界。官方 recipe 只能由真实活动 Sample context 提交为普通待审提案，再由用户明确批准；不得按项目名猜 Sample，也不得自动批准。
 - 视觉验收以 2560×1440、浏览器 100% 为主基准，工作台第一屏必须容纳应用、当前判断、唯一主任务、最近可信结果与三项摘要；同时核对原生亮色与暗色，并覆盖 1280px、600px 和长页面滚动时内容框架内粘滞的 `TaskActionBar`。普通结果与展示模式复用同一事实链和颜色语义。
 
 ## 直接验证
@@ -92,7 +92,7 @@
 | 现象 | 先检查 | 不要先做 |
 | --- | --- | --- |
 | 刷新后状态回退或页面分叉 | 对应 API 响应、`ControlShell.tsx` 恢复路径、后端 Readiness/Run 真源 | 增加 localStorage 业务缓存 |
-| 页面显示结论与 CLI/API 不一致 | ResultPresentation/History DTO 与 `src/api/results.ts` | 在组件里重算 Verdict 或解析文案 |
+| 页面显示结论与 API 不一致 | ResultStory、发布完整性与 `src/api/currentChecks.ts` | 在组件里重算 Verdict 或解析文案 |
 | 写操作成功但页面仍显示旧状态 | mutation 完成后的权威查询和失效刷新 | 用定时器永久轮询或手改前端对象 |
 | 长任务看似卡死 | Job/Run 状态、正式 progress、当前阶段静默上限 | 伪造百分比或把 loading 当完成事实 |
 | Vitest 通过但生产构建失败 | 受控 workspace 的 TypeScript/Vite build 和导入边界 | 在 `product/frontend` 直接安装依赖 |

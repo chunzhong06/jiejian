@@ -110,6 +110,22 @@
 - `build_validation_domain_bundle(case, allow_trace_records, deny_trace_records, allow_trace_complete, deny_trace_complete, allow_effect_fact, deny_effect_fact) -> ValidationDomainBundle`
 主要 import / dot-source：`.registry`, `__future__`, `dataclasses`, `hashlib`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.permissions.coverage`, `product.backend.core.verification.trace`, `typing`
 
+### `scripts/dev/sample_test/current_api.py`
+- `assert_official_proposal(payload, project)`
+- `prepare_current(client, project, initial, gui)`
+- `project_run_ids(client, project)`
+- `switch_current(client, project, version, reference, gui)`
+- `wait_published(client, run_id, job_id)`
+- `read_result(client, run_id)`
+- `run_current(client, project, state, name, expected, change_id, gui)`
+- `assert_current_result(result, expected)`
+- `run_sequence(client, project, state, checkpoint, gui)`
+主要 import / dot-source：`hashlib`, `json`, `product.backend.core.boundary_proposal`, `product.backend.workflows.business_boundaries.official_recipe`, `uuid`
+
+### `scripts/dev/sample_test/current_gui.py`
+- `class CurrentGui`
+主要 import / dot-source：`urllib.parse`
+
 ### `scripts/dev/sample_test/driver.py`
 - `SUITES`
 - `run_suite(root, var_dir, suite, publish_summary) -> None`

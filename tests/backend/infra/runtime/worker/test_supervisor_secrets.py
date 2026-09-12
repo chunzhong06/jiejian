@@ -9,6 +9,8 @@ import product.backend.infra.runtime.worker.supervisor as worker_supervisor_modu
 from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, minimal_process_environment
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.check_execution import execution_pair
+from tests.backend.infra.observers.test_audit_log_observer import _spec
 
 
 def test_worker_supervisor_receives_only_requested_secret_names(tmp_path: Path) -> None:
@@ -24,12 +26,18 @@ def test_worker_supervisor_receives_only_requested_secret_names(tmp_path: Path) 
 
 
 def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_filter(
-    tmp_path: Path, monkeypatch, runtime_request_factory, caplog
+    tmp_path: Path, monkeypatch, caplog
 ) -> None:
     requested: list[tuple[str, ...]] = []
     dispatched: dict[str, object] = {}
-    job = SimpleNamespace(job_id="job-1", run_id="run-1", request_hash="hash-1")
-    request = runtime_request_factory()
+    job = SimpleNamespace(job_id="job-1", run_id="run-1", recording_id=None, operation_type="CHECK", request_hash="hash-1")
+    def configure(payload):
+        for identity in payload["identities"]:
+            identity["binding"]["secret_ref"] = "env:JIEJIAN_TEST_TOKEN"
+        observer = _spec().model_dump(mode="json")
+        observer["target"]["locator"]["authorized_root_ref"] = "env:OWNER_READ_ONLY"
+        payload["observers"].append(observer)
+    request, bundle = execution_pair(configure=configure)
 
     class FakeRequestStore:
         def __init__(self, var_dir: Path) -> None:
@@ -38,6 +46,10 @@ def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_f
         def load(self, job_id: str, *, expected_hash: str):
             assert (job_id, expected_hash) == ("job-1", "hash-1")
             return request
+
+        def load_bundle(self, job_id: str, *, expected_hash: str):
+            assert (job_id, expected_hash) == ("job-1", request.config_fingerprint)
+            return bundle
 
     class FakeProcess:
         def poll(self) -> int:
@@ -61,7 +73,7 @@ def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_f
         def wait(self, timeout: float) -> None:
             assert timeout == 0.1
 
-    monkeypatch.setattr(worker_supervisor_module, "ExecutionRequestStore", FakeRequestStore)
+    monkeypatch.setattr(worker_supervisor_module, "CheckRequestStore", FakeRequestStore)
     monkeypatch.setattr(worker_supervisor_module, "WorkerDispatcher", FakeDispatcher)
     manager = LocalWorkerSupervisor(
         tmp_path / "var",

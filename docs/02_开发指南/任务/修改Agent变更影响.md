@@ -1,96 +1,62 @@
 # 修改 Agent 变更影响
 
-> 状态：CURRENT。用于修改源码版本快照、Agent 变化声明、权限实现影响、修复要求引用、重验计划、变化感知的检查提交，以及结果和历史中的变化摘要。
+> 状态：CURRENT。适用于当前 SourceChange、原题 Repair、完整检查提交与只读结果投影。
 
-## 先确认边界
+## 事实与权限边界
 
-Agent 只能说明“这次修改是为了什么”，并可附上有界的相对路径线索。路径不是事实，也不能决定检查范围。界鉴会在既有源码只读授权内重新分析项目，按服务端形成的前后快照计算真实增删改，再把变化关联到当前 `PermissionIntentRevision` 的实现映射。
+Agent 提交修改理由、至多128条相对 `claimed_paths` 和可选 `CurrentRepairReference`。路径仅为线索：界鉴在已授权源码根内重新扫描，用两份服务端快照的内容hash计算真实增删改。Git、mtime和Agent声明都不是安全事实。密码、Cookie、Token和源码正文不进入变化公共投影。
 
-人的 ALLOW/DENY、规则退休和正式实现映射仍只由 Human GUI 批准。MCP、CLI、Machine、模型、Compiler 和 Run 都不能借变化分析推进 `policy_epoch`，也不能把 Agent 提供的权限 ID、Case ID 或 Effect ID 当作重验范围。
+Actor、Action、Effect、Permission与正式实现映射仍由普通Human Approval批准。变化提交不调用旧 `refresh_bindings`，不自动重绑、不推进 `policy_epoch`，不允许客户端选择Permission、Case或Effect。
 
-## 当前闭环
+## 当前实现链
 
 ```text
-jiejian_change_submit（PREPARE，可选携带权威 RepairContract 引用）
-  → 服务端按 source Run/Finding 重建 RepairContract 并核对 fingerprint
-  → 保存 ChangeManifest
-  → 受控源码重分析
-  → SourceRevisionSnapshot 前后比较
-  → SourceChangeSet 记录真实增删改
-  → ChangeImpactAssessment 关联当前权限实现证据
-  → SourceRevalidationInspection 核对当前源码/权限/binding
-  → ProjectRevalidation 组合准备度与可信结果
-  → ProjectRepair 组合修复要求、关联变化与独立复验
-  → READY inspection 形成 RevalidationPlan
-  → jiejian_check_prepare / jiejian_check_run(change_id)
-  → submit 前只读核对 live 源码与登记基线
-  → PersistedExecutionRequest.source_fingerprint
-  → PersistedExecutionRequest.change_context
-  → 可选 PersistedExecutionRequest.repair_context
-  → ResultPresentation / HistoryView / report.json
+CurrentSourceChangeService.submit
+→ 保存扫描前理解/权限epoch及全部PermissionReference
+→ analyze_source_for_change形成真实SourceRevisionSnapshot
+→ 同一事务重核理解/权限、计算ChangeSet与Assessment并登记
+→ SourceRevalidationInspection
+→ CheckService.preview/submit(change_id)
+→ PersistedExecutionRequestV3.ChangeContext / RepairContext
+→ CHECK Worker / Runner / publication
+→ ResultStory / CurrentRepairVerification / ProjectRepair / Workspace
 ```
 
-`jiejian_change_show` 是 READ 工具，返回变化数量、影响计数、待复核权限、安全文案，以及提交来源、Agent 声明和界鉴实际确认的新增/修改/删除相对路径。MCP 提交时，服务端把当前已验证客户端名称记为 `MCP · <client_name>`；无法取得名称时只记为 `MCP Agent`，不由前端猜测来源。路径只允许位于已授权源码根下；工具不返回绝对路径、源码正文、diff、hash、Git 信息或命令输出。GUI 默认只显示数量，用户展开“查看变化明细”后才显示这些相对路径。展示模式只能用结果中冻结的 change ID 读取对应记录，并把该记录作为登记回执；不能用 latest API 猜测 Agent/MCP 与 Run 的关系。修复型变化只保存 `RepairContractReference`，不复制合同，也不接受文件、函数、行号或补丁建议；提交与后续检查都会从已发布事实重新校验引用。
+Manifest、diff和assessment在同一事务保存；扫描期间权限变化使整个登记失败，但不回滚用户的并发审批。扫描产生的真实理解与快照可以保留，不能称为变化登记成功。复用既有四张source change表，无新增DDL；旧格式不靠猜测shape读作current。
 
-普通产品的修复续接只读取 `ProjectRepair`。当状态为 READY_TO_VERIFY 时，验证入口优先使用该修复任务关联的 change ID；没有正式修复任务时，才使用普通 `ProjectRevalidation=READY` 的 change ID。Official Sample 编排中的 repair ID 不进入这项选择。工作台的 Delivery Check 只能由用户显式点击触发，每次重新读取 live 服务端事实，前端不保存上次结论。
+| 责任 | 当前入口 |
+| --- | --- |
+| 路径、快照、变化DTO | `product/backend/core/source_changes.py` |
+| 扫描、影响、登记、inspection | `product/backend/workflows/changes/service.py` |
+| 聚合持久化 | `product/backend/infra/storage/source_changes.py` |
+| 原题语义与标准比较 | `product/backend/core/check_repair.py` |
+| 从已发布包重建合同 | `product/backend/workflows/checks/repair.py` |
+| 项目问题族与状态 | `product/backend/workflows/projects/repair.py` |
+| 完整请求冻结 | `product/backend/workflows/checks/service.py` |
+| GUI/MCP入口 | `product/backend/api/routers/source_changes.py`、`product/backend/api/mcp.py` |
 
-## 代码与测试入口
+## 影响与现场重验
 
-| 修改内容 | 生产真源 | 直接测试 |
-| --- | --- | --- |
-| 快照、Manifest、diff、影响与重验模型 | `product/backend/core/source_changes.py` | `tests/backend/workflows/source_changes/test_source_changes.py` |
-| SQLite 聚合与 migration | `product/backend/infra/storage/source_changes.py`、`product/backend/migrations/versions/0005_source_change_impacts.py`、`0006_repair_contract_reference.py` | Storage 与 migration 测试 |
-| 重分析、影响评估与唯一重验 inspection | `product/backend/workflows/source_changes.py` | source changes workflow 测试 |
-| 项目重验状态 | `product/backend/workflows/projects/revalidation.py` | `tests/backend/workflows/projects/test_revalidation.py` |
-| 项目修复闭环 | `product/backend/workflows/projects/repair.py` | `tests/backend/workflows/projects/test_repair.py` |
-| MCP 与只读 API | `product/backend/api/mcp.py`、`product/backend/api/routers/source_changes.py` | `test_mcp.py`、`test_source_changes.py`、Oracle invariant |
-| 检查准备、提交和 Run 冻结 | `product/backend/workflows/security_setup/checks.py`、`product/backend/workflows/runs/execution.py`、`product/protocols/execution_request.py` | checks、request store、source changes 测试 |
-| 显式交付证明 | `product/backend/workflows/projects/delivery.py`、`product/backend/api/routers/projects.py` | `tests/backend/workflows/projects/test_delivery.py`、API/MCP 测试 |
-| 修复合同重建与复验 | `product/backend/workflows/results/repair.py`、`product/backend/core/repair.py` | `test_repair_contracts.py`、官方 Sample 修复编排测试 |
-| 工作台、结果与历史 | `WorkbenchPage`、`CheckResultsPage`、`CheckHistoryPage` | 各页面同目录测试 |
+`DIRECTLY_AFFECTED`只表示真实变化与当前Action、subject/owner Actor实现路径相交；`NO_DIRECT_EVIDENCE`不是安全结论。缺基线、绑定失效或映射不可靠形成`MAPPING_REVIEW_REQUIRED`。影响列表准确记录受影响动作，冻结的`required_intent_ids`保守包含全部当前Permission；完整Plan永不裁剪。
 
-## 影响分类
+Inspection仅有`READY / NO_BASELINE / SOURCE_STALE / POLICY_STALE / MAPPING_REVIEW_REQUIRED`，准备缺口另行结构化保留。所有Check提交，包括不带change_id的普通提交，都在提交前及事务内重新核对live源码；陈旧preview或后续磁盘变化不能绕过。
 
-- `DIRECTLY_AFFECTED`：真实变化路径与当前 action 或 role 的实现证据直接相交。这些权限至少进入本次必需重验集合。
-- `MAPPING_REVIEW_REQUIRED`：实现证据缺失、候选失效、binding 非 CURRENT，或没有可靠基线。检查必须关闭执行，先回到权限页由人复核正式映射。
-- `NO_DIRECT_EVIDENCE`：当前没有找到与已知权限实现直接相交的变化。这不是安全结论，产品文案必须保留“这不代表其他未建模影响一定不存在”。
+## 原题修复
 
-当前执行仍使用完整 ACTIVE/CURRENT Coverage，不根据影响结果裁剪 Runner 用例。`required_intent_ids` 只说明本次至少需要重验哪些权限，不能替代现有 Coverage、ALLOW 控制或 DifferentialPlan。
+引用由`source_run_id/source_case_id/64位repair_fingerprint`构成，必须指向本项目已发布BLOCK中的VULNERABLE Case。服务端从不可变包重建完整合同，不接受客户端合同正文。冻结原Permission集合与epoch、subject/owner真实身份、具体资源、全部禁止效果、选定ALLOW控制和原Run全部实际SAFE的ALLOW_REGRESSION。
 
-`SourceRevalidationInspection` 固定只有 READY、NO_BASELINE、SOURCE_STALE、POLICY_STALE 和 MAPPING_REVIEW_REQUIRED。`revalidation_plan()` 必须先调用 inspection，只有 READY 才能形成计划，不能在计划入口复制第二套算法。`ProjectRevalidation` 再严格按“无变化、映射待审、stale、同变化可信结果、准备未完成、可重验”顺序形成 NO_CHANGE、REVIEW_REQUIRED、STALE、VERIFIED、PREPARATION_REQUIRED 或 READY；旧结果不能掩盖后续源码或权限漂移。
+superset控制与完整回归分别保留；历史SAFE回归可以为空，但NEW控制仍必须SAFE。路径匹配排除新source/config/Flow等技术标识，保留全部业务身份；每条VERDICT_REQUIRED的完整Observer/HTTP模板、独立观察身份、descriptor、scope/phase/closure/budget等标准必须严格相同，不能降低标准。
 
-## 冻结与历史
+NEW Run必须不同于source，并冻结精确change及repair context。权限变化为STALE；可信原禁止效果仍存在为NOT_VERIFIED；路径、归因、观察、控制或完整当前Run不足为INCONCLUSIVE；只有所有原题要求和完整当前Run都成立才VERIFIED。普通未关联PASS不能冒充修复。验证是两份publication的只读派生，不建可变修复结论表。
 
-所有新检查提交都会在创建 Job/Run 前重新扫描当前源码。扫描失败或 live 指纹偏离登记基线时直接阻断；通过后，项目级源码指纹写入格式 2 的 `PersistedExecutionRequest` 顶层。变化感知的提交再由 `ChangeVerificationContext` 冻结 `change_id`、影响指纹和排序去重后的必需权限 ID。修复型变化还冻结独立 `RepairVerificationContext`，其中只保留权威引用、原权限身份、必须消失的效果、必须保留的 ALLOW 控制和原关键证据标准。Runner 与 Evidence 不接收文件清单、源码内容或补丁建议，也不在执行时重新读取 live 变化记录。
+ProjectRepair按最早BLOCK建立问题族，取最新精确关联变化与NEW Run。状态为`REPAIR_REQUIRED / CHANGE_SUBMITTED / READY_TO_VERIFY / VERIFIED / NOT_VERIFIED / INCONCLUSIVE / STALE`；没有问题时为null。Workspace保留接入、边界、重绑、准备的优先级，再选择登记变化、复验原题、运行当前检查或查看结果，携带精确change_id/run_id。
 
-结果和历史从该 Run 的冻结请求投影权限版本、代码变化重验标记和必需权限数量。普通页面不显示内部权限 ID 或任何指纹；后续源码、权限或 binding 变化不能改写已经提交的 Run。
+## API与MCP
 
-## 修改时逐项核对
+GUI使用`/api/projects/{id}/source-changes`、`/repair`、`/check-preview?change_id=...`及schema2的`/runs`；原题列表在`/api/runs/{run_id}/repair-contracts`。MCP只有`change_submit`为PREPARE，`check_run/check_cancel`为EXECUTE，其他当前工具READ。项目授权临时保存在当前进程，pause/resume/rotate/forget/close清除；权限审批不开放给MCP。
 
-1. `claimed_paths` 仍是受限相对路径线索，绝对路径、父目录跳转和空路径段继续拒绝。
-2. 真实 diff 只由两份服务端快照计算；mtime、Agent 声明和 Git 状态不参与。
-3. 没有基线、源码再次漂移、权限规则版本漂移或实现绑定非 CURRENT 时 fail closed。
-4. Agent rebind 只形成 `IntentProposal`；只有 GUI 批准事务可以把 binding 恢复为 CURRENT，且纯重绑不推进 `policy_epoch`。
-5. `check_prepare` 与 `check_run` 只接受可选 `change_id`，不新增选择权限、Case、Effect、Profile 或文件范围的参数。
-6. `ChangeVerificationContext` 保持嵌套对象，不单独增加 `schema_version`；公共执行请求变化后同步 checked-in Schema。
-7. `RepairContractReference` 必须由服务端重建校验后才能持久化；后续 check prepare/run 继续复用同一 `change_id`，不增加修复专用运行入口。
-8. 工作台默认只显示有界业务摘要和已验证的提交来源；展开变化明细时才显示 Agent 声明和界鉴实际确认的相对路径。结果和历史不显示 change ID、权限内部 ID 或指纹；展示模式只在说明精确 Run 关联的回执层显示 change ID，并覆盖无基线、直接影响、映射待审和无直接证据四种情况。
-9. ProjectPreparation、ProjectReadiness、Guidance、ProductStatus、变化页和验证入口只消费 inspection/ProjectRevalidation，不按 `complete`、mapping count 或 change ID 比较另算状态。
-10. `ProjectRepair` 只投影已发布修复要求、关联变化、ProjectRevalidation 与复验事实；`DeliveryCheck` 按 live 源码、当前权限身份、修复/重验状态和最近可信结果形成一次只读、fail-closed 的交付证明。
+MCP只返回相对路径、有界影响和业务结果，隐藏绝对路径、源码/config hash、原始Evidence/Trace与秘密。客户端来源从认证SDK会话取，不由Agent自报。
 
-## 最小验证
+## 直接验证
 
-按实际修改选择最小集合：
-
-```powershell
-.\scripts\dev.ps1 test tests/backend/workflows/source_changes/test_source_changes.py
-.\scripts\dev.ps1 test tests/backend/workflows/projects/test_revalidation.py tests/backend/workflows/projects/test_preparation.py tests/backend/workflows/control/test_status.py
-.\scripts\dev.ps1 test tests/backend/workflows/results/test_repair_contracts.py tests/backend/workflows/test_official_sample_repair.py
-.\scripts\dev.ps1 test tests/backend/api/test_mcp.py tests/backend/api/test_permission_oracle_invariant.py
-.\scripts\dev.ps1 test tests/backend/workflows/security_setup/test_checks.py tests/backend/workflows/results/test_result_presentation.py tests/backend/workflows/results/test_history.py
-.\scripts\dev.ps1 frontend-test src/features/workspace/WorkbenchPage.test.tsx src/features/checks/CheckResultsPage.test.tsx src/features/checks/CheckHistoryPage.test.tsx
-.\scripts\dev.ps1 schema
-.\scripts\dev.ps1 docs
-```
-
-协议模型、源码注释和产品文案变化还要分别执行项目的 Schema、注释与文档治理检查。不要为了变化闭环启动真实外部 Agent 或扩大到完整 L4/L5。
+使用`dev.ps1 test`按受影响范围选择`tests/backend/workflows/changes/test_current_source_changes.py`、`tests/backend/core/test_check_repair.py`、`tests/backend/workflows/checks/test_repair_publication.py`、`test_project_repair_states.py`、`tests/backend/api/test_current_mcp.py`及`test_permission_oracle_invariant.py`。覆盖真实扫描、原子回滚、权限并发、superset/空回归、错误原题、公开SDK及秘密边界。公共模型变化同步schema；文档使用docs检查。不要恢复旧ProjectRevalidation、DeliveryCheck、ResultPresentation或旧CLI链来补current能力。

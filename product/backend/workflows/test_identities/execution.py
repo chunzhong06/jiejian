@@ -76,7 +76,7 @@ class TestIdentityExecutionCredentials:
                     for index, cookie in enumerate(record.cookies)
                 )
             )
-        role_id = f"role-{record.role_candidate_id.removeprefix('role_')[:24]}"
+        role_id = f"role-{record.actor_id.removeprefix('bar_')}-r{record.actor_revision}"
         return WebExecutionIdentity(
             identity_id=record.identity_id,
             role=role_id,

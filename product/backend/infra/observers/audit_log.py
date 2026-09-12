@@ -65,12 +65,17 @@ _TRACE_AUDIT_FIELDS = frozenset(
         "source_component",
         "source_location",
         "recorded_at_us",
+        "allowed_action_ids",
+        "dispatch_effect_ids",
+        "allowed_resource_ids",
     }
 )
 _TRACE_AUDIT_REQUIRED_FIELDS = frozenset(
     {"kind", "semantic_key", "source_component", "source_location", "recorded_at_us"}
 )
-_TRACE_AUDIT_STRING_FIELDS = _TRACE_AUDIT_FIELDS - {"recorded_at_us"}
+_TRACE_SCOPE_FIELDS = frozenset({"allowed_action_ids", "allowed_resource_ids"})
+_TRACE_ARRAY_FIELDS = _TRACE_SCOPE_FIELDS | {"dispatch_effect_ids"}
+_TRACE_AUDIT_STRING_FIELDS = _TRACE_AUDIT_FIELDS - {"recorded_at_us"} - _TRACE_ARRAY_FIELDS
 _TRACE_AUDIT_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$")
 _TRACE_SEMANTIC_KEY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _TRACE_KINDS = frozenset(
@@ -336,6 +341,17 @@ def _trace_fields_are_safe(record: Mapping[str, Any]) -> bool:
         return True
     if not _TRACE_AUDIT_REQUIRED_FIELDS.issubset(present):
         return False
+    # 只允许显式公开 ID 集合；缺失与空集合不补值，记录顺序留给来源 hash 与冲突检测。
+    for field in present & _TRACE_ARRAY_FIELDS:
+        values = record[field]
+        maximum = 16 if field == "dispatch_effect_ids" else 64
+        if (not isinstance(values, list) or len(values) > maximum
+            or any(not isinstance(value, str) or not _TRACE_AUDIT_TOKEN.fullmatch(value)
+                or _TRACE_INLINE_SECRET.search(value) for value in values)
+            or len(set(values)) != len(values)):
+            return False
+    if record.get("dispatch_effect_ids") and (record.get("kind") not in {"MESSAGE","DELEGATION"} or record.get("effect_id") is not None):
+        return False
     for field in present & _TRACE_AUDIT_STRING_FIELDS:
         value = record[field]
         if not isinstance(value, str) or not _TRACE_AUDIT_TOKEN.fullmatch(value):
@@ -521,7 +537,8 @@ def _run_child(invocation: AuditLogObserverInvocation, *, utc_now_us: Callable[[
                     reasons.add(AUDIT_EVENT_INVALID)
                 continue
             if set(record) - set(locator.allowed_fields) or any(
-                isinstance(value, (dict, list, tuple)) for value in record.values()
+                key not in _TRACE_ARRAY_FIELDS and isinstance(value, (dict, list, tuple))
+                for key, value in record.items()
             ):
                 reasons.add(AUDIT_EVENT_INVALID)
                 continue

@@ -22,8 +22,8 @@
 | `scripts/dev/frontend.ps1` | 固定 Node/pnpm、受控工作区、编辑器插件、指纹和 production build | 正式前端源码、产品 UI 行为 |
 | `scripts/dev/prepare.ps1` | Chromium、数据库、source receipt 和源码可启动组合 | Wheel 与普通产品启动展示 |
 | `scripts/dev/commands.ps1` | start/test/schema/docs/frontend-test/cli/shell 的能力组合 | 重复实现各模块已有能力 |
-| `scripts/dev/sample-test.ps1` | 自动 L5 的 PowerShell 入口、独立运行目录、Harness 调用与净化汇总发布位置 | 产品 prepare、UIA 或十阶段编排实现 |
-| `scripts/dev/sample_test/driver.py` | `official/validation/competition/all` 参数解析、suite 分派与成功汇总原子发布 | 十阶段编排、30 Case 实现或 Windows UIA |
+| `scripts/dev/sample-test.ps1` | 自动 L5 的 PowerShell 入口、独立运行目录、Harness 调用与净化汇总发布位置 | 产品 prepare、UIA 或八步编排实现 |
+| `scripts/dev/sample_test/driver.py` | `official/validation/competition/all` 参数解析、suite 分派与成功汇总原子发布 | 八步编排、30 Case 实现或 Windows UIA |
 | `scripts/dev/sample_test/official.py` | 从真实 `start.cmd` 开始验证问题版、一键合同、Agent 修复、三态结果与资源收口 | 普通应用 Recording UIA 细节、生产领域语义 |
 | `scripts/dev/sample_test/validation.py` | 30 Case 编排与正式 Continuity/Breakpoint 算法调用 | private oracle 定义或 Domain Model 重写 |
 | `scripts/dev/sample_test/adapter.py`、`registry.py`、`oracle.py` | 公开事实适配、public registry 与 private oracle 外层验收 | 产品 Verdict 或目标授权输入 |
@@ -78,3 +78,7 @@
 ```
 
 涉及真实工具准备或 Portable 时，再分别执行 `dev.ps1 prepare`、`dev.ps1 package`。发行路线见[修改发布与便携版](../任务/修改发布与便携版.md)。最终验收的唯一自动 L5 入口是 `dev.ps1 sample-test`；人工只做展示验收。PowerShell 改动还要确认 Windows PowerShell 5.1 解析与项目规定的 UTF-8 BOM，最终运行 `git diff --check`。
+
+## 当前默认Sample编排
+
+默认official.py保留真实start.cmd/受控浏览器会话/receipt/进程树/首错清理，current_api.py调用普通Proposal、Human批准、Preparation与schema2完整runs。问题→观察不足NEW→原题修复NEW固定顺序，ResultStory/Evidence/Run历史/ProjectRepair替代旧Report/CLI。current_gui.py连接真实界面动作，只有完整动作记录与事实核验成立才报告L5通过；开发只运行stub，最终才执行唯一sample-test。

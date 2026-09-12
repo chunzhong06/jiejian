@@ -1,9 +1,10 @@
-// 验证 CURRENT 产品壳只装配 Workspace、业务边界和明确不可用的后续区域。
+// 验证产品壳装配工作台、业务边界及当前检查，旧结果深链不恢复旧状态机。
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceViewDto } from '../api/workspace'
 import ControlShell from './ControlShell'
+import { ProductThemeProvider } from './ThemeContext'
 
 const mockApi = vi.hoisted(() => ({
   experienceStatus: vi.fn(), mcpStatus: vi.fn(), shutdown: vi.fn(), remove: vi.fn(),
@@ -42,7 +43,10 @@ vi.mock('./useSystemStatus', () => ({ useSystemStatus: () => ({
   setAiSettings: vi.fn(), aiSettingsFailed: false,
   status: { api: 'available', worker: 'unavailable', browser: 'available' }, refresh: vi.fn(),
 }) }))
+vi.mock('../api/sourceChanges', () => ({ sourceChangesApi: { list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../api/repairs', async () => ({ ...await vi.importActual<typeof import('../api/repairs')>('../api/repairs'), repairsApi: { project: vi.fn().mockResolvedValue({ project_id: 'p1', status: null, tasks: [], primary_task_reference: null }) } }))
 vi.mock('../api/preparation', () => ({ preparationApi: { get: vi.fn().mockResolvedValue({ project_id: 'p1', actions: [], preparation_complete: false }) } }))
+vi.mock('../api/currentChecks', () => ({ currentChecksApi: { preview: vi.fn().mockResolvedValue({ project_id: 'p1', can_execute: false, plan_fingerprint: 'f', action_count: 0, case_count: 0, actions: [], gaps: [] }), list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus } }))
 vi.mock('../api/mcp', () => ({ mcpAccessApi: { status: mockApi.mcpStatus } }))
 vi.mock('../api/projects', () => ({ projectsApi: { remove: mockApi.remove } }))
@@ -81,15 +85,16 @@ describe('CURRENT 应用壳', () => {
     expect(screen.getAllByText('检查与结果').length).toBeGreaterThan(0)
   })
 
-  it('变化与检查只显示当前能力边界', async () => {
+  it('变化与检查装配当前入口，准备缺失时不自动执行', async () => {
     window.location.hash = '#/changes'
     const view = render(<ControlShell />)
-    expect(await screen.findByText('变化与修复当前暂不可用')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '变化与修复' })).toBeInTheDocument()
+    expect(await screen.findByText('尚无代码变化记录')).toBeInTheDocument()
 
     view.unmount()
     window.location.hash = '#/tests'
     render(<ControlShell />)
-    expect(await screen.findByRole('heading', { name: '检查准备' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '检查与结果' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /开始检查|验证运行/ })).not.toBeInTheDocument()
   })
 
@@ -101,6 +106,26 @@ describe('CURRENT 应用壳', () => {
     expect(screen.getByText(/请从工作台进入当前可用的业务边界或检查准备/)).toBeInTheDocument()
   })
 
+  it('视口改变后关闭旧菜单，再次打开仍可退出', async () => {
+    render(<ControlShell />)
+    const more = await screen.findByRole('button', { name: /设置与更多/ })
+    fireEvent.click(more)
+    await waitFor(() => expect(screen.getByText('退出界鉴')).toBeVisible())
+    fireEvent(window, new Event('resize'))
+    await waitFor(() => expect(screen.queryByText('退出界鉴')).not.toBeInTheDocument())
+    fireEvent.click(more)
+    await waitFor(() => expect(screen.getByText('退出界鉴')).toBeVisible())
+    expect(mockApi.shutdown).not.toHaveBeenCalled()
+  })
+  it('主题子菜单经明确点击展开，切换后关闭旧浮层', async () => {
+    render(<ProductThemeProvider><ControlShell /></ProductThemeProvider>)
+    fireEvent.click(await screen.findByRole('button', { name: /设置与更多/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /主题 ·/ }))
+    fireEvent.click(await screen.findByText('暗色主题'))
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'))
+    await waitFor(() => expect(screen.queryByText('退出界鉴')).not.toBeInTheDocument())
+    expect(mockApi.shutdown).not.toHaveBeenCalled()
+  })
   it('只通过明确确认请求安全退出', async () => {
     render(<ControlShell />)
     fireEvent.click(await screen.findByRole('button', { name: /设置与更多/ }))

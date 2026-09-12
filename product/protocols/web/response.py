@@ -10,7 +10,7 @@ from enum import StrEnum
 from typing import Any, TypeAlias
 
 from pydantic import Field, model_validator
-from product.protocols.execution import ProtocolModel
+from product.protocols.web.base import ProtocolModel
 from .request import (
     EmptyBody,
     FormUrlEncodedBody,

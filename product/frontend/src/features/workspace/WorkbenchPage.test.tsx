@@ -21,7 +21,7 @@ const workspace: WorkspaceViewDto = {
     permission_status: {
       action_id: `bac_${'1'.repeat(32)}`, action_revision: 2,
       permission_semantics_confirmed: false, active_permission_count: 0, stale_permission_count: 1,
-      allow_control_available: false, validation_contract_complete: false,
+      allow_control_available: false,
       reason_codes: ['PERMISSION_REVISION_REVIEW_REQUIRED'],
     },
     implementation: {

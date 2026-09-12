@@ -24,7 +24,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import JobRecord, StorageUnitOfWork
 from product.backend.infra.runtime.jobs.events import EventMetadata, append_job_event
 from product.backend.infra.runtime.jobs.models import CancellationResult, ClaimJob, ClaimedJob, CompleteCancellation, FatalFailure, JobEventType, JobMutationResult, RetryPolicy, RetryableFailure, RenewLease, WaitingFatalFailure, checked_time_add, compute_retry_available_at, validate_control_request
-from product.backend.infra.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry, default_run_job_targets
+from product.backend.infra.runtime.jobs.targets import JobTargetOutcome, JobTargetRegistry, current_check_and_recording_targets
 
 _TERMINAL_JOB_STATES = {
     JobState.SUCCEEDED,
@@ -47,55 +47,56 @@ class JobAttempts:
         self._uow_factory = uow_factory
         self._retry_policy = retry_policy or RetryPolicy()
         self._jitter_source = jitter_source
-        self._targets = targets or default_run_job_targets()
+        self._targets = targets or current_check_and_recording_targets()
 
     def claim(
-        self,
-        request: ClaimJob,
-        *,
-        known_secrets: Sequence[str] = (),
+        self, request: ClaimJob, *, known_secrets: Sequence[str] = (),
     ) -> ClaimedJob | None:
-        """在单个事务中领取任务并返回新的 fencing token；竞争失败返回 ``None``。"""
-
-        validate_control_request(request, known_secrets)
-        lease_expires_at_us = checked_time_add(
-            request.now_us,
-            request.lease_duration_us,
-        )
+        """用自有事务领取任务；同一算法也供受控原子物化调用。"""
         with self._new_uow(known_secrets) as work:
-            job = work.job_control.claim(
-                job_id=request.job_id,
-                lease_owner=request.lease_owner,
-                now_us=request.now_us,
-                lease_expires_at_us=lease_expires_at_us,
-                target_types=self._targets.target_types,
-            )
-            if job is None:
-                if request.job_id is None:
-                    return None
-                self._raise_claim_error(work, request.job_id, request.now_us)
-            assert job is not None
-            run, recording = self._targets.advance_after_claim(
-                work,
-                job,
-                request.now_us,
-            )
-            append_job_event(
-                work,
-                job=job,
-                event_type=JobEventType.JOB_CLAIMED,
-                source_state=(
-                    JobState.PENDING if job.attempt == 1 else JobState.RETRY_WAIT
-                ),
-                target_state=JobState.RUNNING,
-                occurred_at_us=request.now_us,
-                metadata={
-                    "attempt": job.attempt,
-                    "fencing_token": job.fencing_token,
-                },
-            )
-            work.commit()
-            return ClaimedJob(job=job, run=run, recording=recording)
+            result = self.claim_in_work(work, request, known_secrets=known_secrets)
+            if result is not None:
+                work.commit()
+            return result
+
+    def claim_in_work(
+        self, work: StorageUnitOfWork, request: ClaimJob, *, known_secrets: Sequence[str] = (),
+    ) -> ClaimedJob | None:
+        """复用调用方事务执行完整 CAS 与事件写入，不提交或关闭事务。"""
+        validate_control_request(request, known_secrets)
+        lease_expires_at_us = checked_time_add(request.now_us, request.lease_duration_us)
+        job = work.job_control.claim(
+            job_id=request.job_id,
+            lease_owner=request.lease_owner,
+            now_us=request.now_us,
+            lease_expires_at_us=lease_expires_at_us,
+            target_types=self._targets.target_types,
+        )
+        if job is None:
+            if request.job_id is None:
+                return None
+            self._raise_claim_error(work, request.job_id, request.now_us)
+        assert job is not None
+        run, recording = self._targets.advance_after_claim(
+            work,
+            job,
+            request.now_us,
+        )
+        append_job_event(
+            work,
+            job=job,
+            event_type=JobEventType.JOB_CLAIMED,
+            source_state=(
+                JobState.PENDING if job.attempt == 1 else JobState.RETRY_WAIT
+            ),
+            target_state=JobState.RUNNING,
+            occurred_at_us=request.now_us,
+            metadata={
+                "attempt": job.attempt,
+                "fencing_token": job.fencing_token,
+            },
+        )
+        return ClaimedJob(job=job, run=run, recording=recording)
 
     def renew_lease(
         self,

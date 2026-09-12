@@ -67,6 +67,7 @@ class OwnerApiObserverAdapter:
         phase: ObservationPhase,
         known_secrets: tuple[str, ...] = (),
         identity_runtime: HttpIdentityRuntime | None = None,
+        request_marker: str | None = None,
     ) -> ObservationEnvelope:
         """执行一次有界 GET；异常仍交给 Runner 的统一错误映射。"""
 
@@ -92,7 +93,7 @@ class OwnerApiObserverAdapter:
         correlation = Correlation(
             case_id=case_id,
             resource_id=resource_id,
-            request_marker=case_id,
+            request_marker=request_marker or case_id,
         )
         if 200 <= response.status_code < 300:
             state = build_normalized_state(payload, known_secrets=known_secrets)

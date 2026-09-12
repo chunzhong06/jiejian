@@ -5,7 +5,7 @@
 #   独立 Worker 进程的完整应用服务与基础设施装配边界。
 #
 # 职责
-#   只读核验数据库，装配录制 Job、请求与结果接受服务。
+#   只读核验数据库，装配当前 CHECK/Recording Job、请求与结果接受服务。
 #
 # 边界
 #   不继承 ApplicationCore，不创建 Cache、Onboarding、LLM 或 GUI 能力。
@@ -22,7 +22,7 @@ from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.factory import WorkerHandlerFactory
 from product.backend.infra.runtime.jobs.queue import JobQueue
-from product.backend.infra.runtime.jobs.targets import recording_job_targets
+from product.backend.infra.runtime.jobs.targets import current_check_and_recording_targets
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.recording.submission import RecordingSubmission
@@ -56,7 +56,7 @@ class WorkerContainer:
             StorageUnitOfWork,
             create_session_factory(self.engine),
         )
-        self.job_targets = recording_job_targets()
+        self.job_targets = current_check_and_recording_targets()
         self.job_attempts = JobAttempts(self.uow_factory, targets=self.job_targets)
         self.job_queue = JobQueue(self.uow_factory, targets=self.job_targets)
         self.recording_request_store = RecordingRequestStore(self.var_dir)

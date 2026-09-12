@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from typing import Any
 
 if __package__:
@@ -18,16 +19,19 @@ class ExportWorker:
 
     def __init__(self, storage: CollaborationStorage) -> None:
         self.storage = storage
-        self._pending: queue.Queue[str | None] = queue.Queue(maxsize=128)
+        self._pending: queue.Queue[tuple | None] = queue.Queue(maxsize=128)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="sample-export-worker", daemon=True)
         self._thread.start()
 
-    def enqueue(self, job: dict[str, Any]) -> None:
+    def enqueue(self, job: dict[str, Any], *, dispatch_event_id=None, authorization_event_id=None,
+                first_sequence=1, response_complete=None, export_effect_id=None) -> bool:
         try:
-            self._pending.put_nowait(str(job["task_id"]))
+            self._pending.put_nowait((dict(job),dispatch_event_id,authorization_event_id,first_sequence,response_complete,export_effect_id))
+            return True
         except queue.Full:
             self.storage.update_job(str(job["task_id"]), "FAILED")
+            return False
 
     def stop(self) -> None:
         self._stop.set()
@@ -40,17 +44,25 @@ class ExportWorker:
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                task_id = self._pending.get(timeout=0.1)
+                item = self._pending.get(timeout=0.1)
             except queue.Empty:
                 continue
-            if task_id is None:
+            if item is None:
                 return
-            self._process(task_id)
+            job,dispatch,authorization,sequence,response_complete,effect_id = item
+            # 已真实入队后等待响应处理结束；这不是授权门禁，DENY 与异常同样释放。
+            deadline=time.monotonic()+5
+            while response_complete is not None and not response_complete.wait(0.05):
+                if self._stop.is_set() or time.monotonic()>=deadline:
+                    failed=self.storage.update_job(str(job["task_id"]),"FAILED")
+                    self.storage.write_task(failed,final_result={"state":"FAILED","failure_code":"RESPONSE_WINDOW_CLOSED"})
+                    break
+            else:
+                if not self._stop.is_set():
+                    self._process(job,dispatch,authorization,sequence,effect_id)
 
-    def _process(self, task_id: str) -> None:
-        job = self._job_by_task(task_id)
-        if job is None:
-            return
+    def _process(self, job, dispatch_event_id, authorization_event_id, first_sequence, export_effect_id) -> None:
+        task_id=str(job["task_id"])
         marker = str(job["case_id"])
         self.storage.update_job(task_id, "RUNNING")
         running = {**job, "state": "RUNNING"}
@@ -59,20 +71,16 @@ class ExportWorker:
             marker=marker,
             task_id=task_id,
             event_type="export_job_started",
-            sequence=6,
+            sequence=first_sequence,
             result="running",
             effect="PROCESSING",
-            parent_event_id=self.storage.audit_event_id(marker, "export_message_sent", 5),
+            parent_event_id=dispatch_event_id,
             kind="DELEGATION",
             semantic_key="export_job_started",
             subject_id=str(job["actor_id"]),
             actor_id="export-worker",
-            origin_authorization_event_id=self.storage.audit_event_id(
-                marker, "authorization_decided", 4
-            ),
-            delegated_from_event_id=self.storage.audit_event_id(
-                marker, "export_message_sent", 5
-            ),
+            origin_authorization_event_id=authorization_event_id,
+            delegated_from_event_id=dispatch_event_id,
             source_component="export-worker",
             source_location="worker:export",
         )
@@ -94,17 +102,16 @@ class ExportWorker:
                 marker=marker,
                 task_id=task_id,
                 event_type="archive_generated",
-                sequence=7,
+                sequence=first_sequence+1,
                 result="ready",
-                effect="READY",
+                effect="APPLIED",
+                effect_id=export_effect_id,
                 parent_event_id=started_event_id,
                 kind="FINAL_EFFECT",
                 semantic_key="archive_generated",
                 subject_id=str(job["actor_id"]),
                 actor_id="export-worker",
-                origin_authorization_event_id=self.storage.audit_event_id(
-                    marker, "authorization_decided", 4
-                ),
+                origin_authorization_event_id=authorization_event_id,
                 delegated_from_event_id=started_event_id,
                 source_component="export-worker",
                 source_location="blob:project-export",
@@ -113,7 +120,7 @@ class ExportWorker:
                 marker=marker,
                 task_id=task_id,
                 event_type="export_job_completed",
-                sequence=8,
+                sequence=first_sequence+2,
                 result="ready",
                 effect="READY",
                 parent_event_id=archive_event_id,
@@ -121,9 +128,7 @@ class ExportWorker:
                 semantic_key="export_job_completed",
                 subject_id=str(job["actor_id"]),
                 actor_id="export-worker",
-                origin_authorization_event_id=self.storage.audit_event_id(
-                    marker, "authorization_decided", 4
-                ),
+                origin_authorization_event_id=authorization_event_id,
                 delegated_from_event_id=archive_event_id,
                 source_component="export-worker",
                 source_location="worker:export",
@@ -157,7 +162,7 @@ class ExportWorker:
                 marker=marker,
                 task_id=task_id,
                 event_type="EXPORT_FAILED",
-                sequence=7,
+                sequence=first_sequence+1,
                 result="failed",
                 effect="FAILED",
             )

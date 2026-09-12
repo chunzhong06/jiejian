@@ -145,7 +145,6 @@ export type PermissionBoundaryStatusDto = {
   active_permission_count: number
   stale_permission_count: number
   allow_control_available: boolean
-  validation_contract_complete: boolean
   reason_codes: string[]
 }
 export type BusinessBoundaryViewDto = {

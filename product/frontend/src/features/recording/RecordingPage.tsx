@@ -6,7 +6,7 @@
  * ============================================================================= */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Card, Descriptions, Radio, Space } from 'antd'
+import { Alert, Card, Checkbox, Descriptions, Radio, Space } from 'antd'
 import { ApiError } from '../../api/http'
 import { recordingsApi, type FlowDraftDto, type RecordingActionDto, type RecordingDto, type RecordingReviewCommand, type RecordingTestIdentityDto, type RecordingViewDto } from '../../api/recordings'
 import { runsApi } from '../../api/runs'
@@ -18,7 +18,6 @@ import { AssistantPanel } from '../../components/AssistantPanel'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { FlowDraftReview } from './FlowDraftReview'
 import { RecordingCaptureCard, captureLabel } from './RecordingCaptureCard'
-import { RecordingSetupCard } from './RecordingSetupCard'
 import './recording.css'
 
 const finishedStates = new Set(['PENDING_REVIEW', 'COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'])
@@ -33,10 +32,14 @@ async function sourceChoiceId(value: string) {
 export function RecordingPage({ project, task, effectName, onError, onBack, onStateChanged, onContinuePreparation }: { project: ProjectDto; task?: PrimaryTaskDto; effectName?: string; onError: (error: ApiError) => void; onBack: () => void; onStateChanged: () => Promise<WorkspaceViewDto | undefined>; onContinuePreparation: () => Promise<void> | void }) {
   const [recording, setRecording] = useState<RecordingDto | null>(null)
   const [actionOptions, setActionOptions] = useState<RecordingActionDto[]>([])
-  const [actionId, setActionId] = useState<string>()
   const [identityOptions, setIdentityOptions] = useState<RecordingTestIdentityDto[]>([])
-  const [testIdentityId, setTestIdentityId] = useState<string>()
-  const [duration, setDuration] = useState(600)
+  const [ownerConfirmed, setOwnerConfirmed] = useState(false)
+  const duration = 600
+  const subjectId = task?.subject_test_identity_id
+  const ownerId = task?.resource_owner_test_identity_id
+  const distinctOwner = Boolean(subjectId && ownerId && subjectId !== ownerId)
+  const validAssignment = Boolean(task?.can_execute && task.action_revision && task.subject_slot_id && task.resource_owner_slot_id && subjectId && ownerId)
+  const creating = useRef(false)
   const [sources, setSources] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string>()
@@ -89,13 +92,12 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
     let active = true
     // 浏览器状态只负责页面定位；当前 Recording 必须先由服务端列表重新确认。
     setRecording(null)
+    setOwnerConfirmed(false)
     browserState.clearRecording()
     Promise.all([recordingsApi.setup(project.project_id), recordingsApi.recordings(project.project_id)]).then(([setup, items]) => {
       if (!active) return
       setActionOptions(setup.action_options)
-      setActionId(task ? task.business_action_id ?? undefined : setup.action_options[0]?.business_action_id)
       setIdentityOptions(setup.test_identity_options)
-      setTestIdentityId(task ? task.test_identity_id ?? undefined : setup.test_identity_options[0]?.test_identity_id)
       // 有主任务时只恢复它指定的录制，不能拿项目最后一条录制替代当前材料。
       const id = task ? task.recording_id : items[0]?.recording_id
       if (id) return recordingsApi.recording(id).then((view) => { if (active) updateView(view) })
@@ -141,19 +143,24 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
   }, [draft?.revision])
 
   const createRecording = async () => {
-    const action = actionOptions.find((item) => item.business_action_id === actionId)
-    if (!action || !testIdentityId || busy) return
-    setBusy(true); setMessage(undefined)
+    const action = actionOptions.find((item) => item.business_action_id === task?.business_action_id && item.action_revision === task.action_revision)
+    if (!task || !action || !validAssignment || !subjectId || !ownerId || !task.subject_slot_id || !task.resource_owner_slot_id || (distinctOwner && !ownerConfirmed) || busy || creating.current) return
+    creating.current = true; setBusy(true); setMessage(undefined)
     try {
-      if (task) {
-        const current = await onStateChanged()
-        if (!alive.current) return
-        if (!current || current.primary_task?.task_id !== task.task_id || !current.primary_task.can_execute) {
-          setSyncError('准备要求已变化，请返回检查准备，按最新任务继续。'); return
-        }
+      const current = await onStateChanged()
+      if (!alive.current) return
+      const fresh = current?.primary_task
+      if (!fresh || fresh.task_id !== task.task_id || !fresh.can_execute || fresh.subject_test_identity_id !== subjectId || fresh.resource_owner_test_identity_id !== ownerId || fresh.subject_slot_id !== task.subject_slot_id || fresh.resource_owner_slot_id !== task.resource_owner_slot_id) {
+        setSyncError('准备要求已变化，请返回检查准备，按最新任务继续。'); return
       }
-      const created = await recordingsApi.createRecording(project.project_id, action.business_action_id, task?.action_revision ?? action.action_revision, testIdentityId, duration,
-        task?.recording_purpose ?? 'TARGET', task?.parent_recording_id ?? undefined, task?.effect_id ?? undefined)
+      // 组合只来自最新主任务；资源归属确认不会改变登录主体，也不允许自由拼接账号。
+      const created = await recordingsApi.createRecording(project.project_id, {
+        business_action_id: action.business_action_id, action_revision: task.action_revision!,
+        subject_test_identity_id: subjectId, resource_owner_test_identity_id: ownerId,
+        subject_slot_id: task.subject_slot_id, resource_owner_slot_id: task.resource_owner_slot_id,
+        resource_owner_confirmed: !distinctOwner || ownerConfirmed, duration_seconds: duration,
+        purpose: task.recording_purpose ?? 'TARGET', parent_recording_id: task.parent_recording_id ?? null, effect_id: task.effect_id ?? null,
+      })
       updateView(created)
       if (!alive.current) return
       const id = created.recording?.recording_id
@@ -161,7 +168,7 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
       if (alive.current) await syncWorkspace('录制已创建')
     }
     catch (error) { if (alive.current) onError(error as ApiError) }
-    finally { if (alive.current) setBusy(false) }
+    finally { creating.current = false; if (alive.current) setBusy(false) }
   }
   const refreshPage = async () => {
     setBusy(true)
@@ -170,8 +177,6 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
       if (!alive.current) return
       setActionOptions(setup.action_options)
       setIdentityOptions(setup.test_identity_options)
-      setActionId((current) => current && setup.action_options.some((item) => item.business_action_id === current) ? current : setup.action_options[0]?.business_action_id)
-      setTestIdentityId((current) => current && setup.test_identity_options.some((item) => item.test_identity_id === current) ? current : setup.test_identity_options[0]?.test_identity_id)
       const recordingId = recording?.recording_id ?? (task ? task.recording_id : items[0]?.recording_id)
       if (recordingId) updateView(await recordingsApi.recording(recordingId))
       else { setRecording(null); browserState.clearRecording() }
@@ -241,9 +246,9 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
 
   const reviewable = recording?.state === 'PENDING_REVIEW' && Boolean(draft)
   const phase = String(recording?.capture_phase ?? '')
-  const setupDisabled = Boolean(recording && !['COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].includes(recording.state))
+  const identityName = (id?: string | null) => identityOptions.find((item) => item.test_identity_id === id)?.label ?? '当前任务指定的账号'
   const primaryAction = !recording
-    ? { label: '打开浏览器并开始准备', onClick: () => void createRecording(), loading: busy, disabled: !actionId || !testIdentityId }
+    ? task ? { label: '打开浏览器并开始准备', onClick: () => void createRecording(), loading: busy, disabled: !validAssignment || !actionOptions.some((item) => item.business_action_id === task.business_action_id && item.action_revision === task.action_revision) || !identityOptions.some((item) => item.test_identity_id === subjectId) || !identityOptions.some((item) => item.test_identity_id === ownerId) || (distinctOwner && !ownerConfirmed) } : undefined
     : phase === 'AWAITING_CAPTURE'
       ? { label: '开始记录这个操作', onClick: () => void controlCapture('start'), loading: busy }
       : phase === 'CAPTURING'
@@ -261,19 +266,18 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
       label: '取消并丢弃本次录制', onClick: () => void cancelRecording(), loading: busy, danger: true,
       confirm: { title: '取消并丢弃本次录制？', description: '界鉴会停止受控浏览器任务并丢弃尚未确认的本次录制；不会生成可用业务流程。', okText: '取消并丢弃', cancelText: '继续录制' },
     }
-    : !task && recording && ['COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].includes(recording.state)
-      ? {
-        label: '重新录制当前选择', onClick: () => void createRecording(), loading: busy, disabled: !actionId || !testIdentityId,
-        confirm: { title: '重新录制当前选择的业务动作？', description: '界鉴会打开一个新的受控浏览器任务；已经保存的旧流程不会删除，新录制会成为当前页面正在处理的流程。', okText: '开始新录制', cancelText: '取消' },
-      }
-      : undefined
+    : undefined
 
   return <Space direction="vertical" size="large" className="full-width recording-page">
     <PageTaskHeader title={task?.title ?? '业务流程'} description={task?.user_responsibility ?? '在真实浏览器中完成一次操作，再整理为可重复使用的业务演示。'} status={captureLabel(recording)} />
     {task?.recording_purpose === 'OBSERVATION' && <Alert type="info" showIcon message={`请演示一次：你通常在哪里确认“${effectName ?? '这项已确认的业务结果'}”是否发生。`} />}
     {task?.recording_purpose === 'RECOVERY' && <Alert type="info" showIcon message="请演示一次：你通常怎样恢复这项业务操作改变的状态。" />}
-    {task ? <Card title="本次演示"><p>{task.why_now}</p><p>{task.system_will_do}</p><Descriptions size="small" column={1}><Descriptions.Item label="业务动作">{actionOptions.find((item) => item.business_action_id === task.business_action_id)?.display_name ?? '当前业务动作'}</Descriptions.Item><Descriptions.Item label="演示账号">{identityOptions.find((item) => item.test_identity_id === task.test_identity_id)?.label ?? '当前任务指定的账号'}</Descriptions.Item></Descriptions></Card>
-      : <RecordingSetupCard actions={actionOptions} identities={identityOptions} actionId={actionId} testIdentityId={testIdentityId} duration={duration} disabled={setupDisabled} onActionChange={setActionId} onIdentityChange={setTestIdentityId} onDurationChange={setDuration} />}
+    {task ? <Card title="本次演示"><p>{task.why_now}</p><p>{task.system_will_do}</p><Descriptions size="small" column={1}>
+      <Descriptions.Item label="业务动作">{actionOptions.find((item) => item.business_action_id === task.business_action_id)?.display_name ?? '当前业务动作'}</Descriptions.Item>
+      <Descriptions.Item label="谁执行">{identityName(subjectId)}</Descriptions.Item>
+      <Descriptions.Item label="资源属于谁">{identityName(ownerId)}</Descriptions.Item>
+    </Descriptions>{!recording && distinctOwner && <Checkbox checked={ownerConfirmed} disabled={busy} onChange={(event) => setOwnerConfirmed(event.target.checked)}>我确认本次演示的测试资源属于“{identityName(ownerId)}”</Checkbox>}</Card>
+      : <Alert type="info" showIcon message="要准备新的业务演示，请返回检查准备，按当前任务选择的账号和资源继续。" />}
     {recording && <RecordingCaptureCard recording={recording} onRefresh={() => void refreshPage()} />}
     {reviewable && recording && <AssistantPanel projectId={project.project_id} surface="recording-review" focus={{ recording_id: recording.recording_id }} title="这次录制的步骤用途" actionLabel="解读这次录制" />}
     {reviewable && draft && recordingPurpose === 'TARGET' && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.business_action_id === draft.business_action_id)?.display_name ?? '这个业务动作'} sources={sources} canFinalize={canFinalize} onSourcesChange={setSources} onReview={(command) => void review(command)} />}

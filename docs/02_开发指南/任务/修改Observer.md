@@ -1,8 +1,24 @@
 # 修改 Observer
 
-> 状态：CURRENT。适用于 Observer 协议、真实观察适配器、观察调度、游标与预算、Evidence 发布，以及结果页来源解释。
+> 状态：CURRENT。当前 CHECK 入口见首节；其后保留实现单独标明适用范围。
 
-## Observer 解决什么问题
+## 当前 CHECK 观察链
+
+`PersistedExecutionRequestV3` 与 `CheckRuntimeBundle` 冻结 Case、证明和来源；CHECK Worker 启动隔离 Check Runner，`CheckExecutor` 经 `CheckObserverRuntime` 调用真实适配器。`ObservationEnvelope` 经 `EffectProjector.project_check` 形成 `CheckObservation`，与本 Case 的 outcome 和显式 Trace 一起封口为 `CheckEvidence`。`CheckPublisher` 校验并通过租约/fencing 发布后，`CheckResultReader` 和 `CheckStoryBuilder` 只读消费。
+
+当前修改入口是 `infra/observers/check_runtime.py`、各来源 adapter、`effect_projector.py`、`check_trace.py`、`infra/execution/check_executor.py`、`product/protocols/check_result.py` 与 `workflows/checks/story.py`。这些 backend 相对路径均位于 `product/backend/`。旧 `runtime/runner/` 和 `ResultPresentation` 不属于此链。
+
+`VERDICT_REQUIRED` 是必需证明；`SUPPORTING` 与 `DIAGNOSIS_REQUIRED` 保留各自来源事实，不能升级为主证明。只有 `core/verification/checks.py` 决定三态。辅助观察失败不能抹去独立权威来源已经确认的 DENY 禁止效果。实际身份由同一会话的独立身份核验及冻结映射确定，不从 Trace 或计划身份补值。
+
+结构化审计只额外允许 `allowed_action_ids`、`allowed_resource_ids` 两个数组键；每组 0～64 个唯一严格字符串，每项为 1～160 字符的公开 ID，须符合 `^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$` 并通过既有秘密检查。25 个允许字段是封闭集合。其他复合值、非法数组元素或不完整 Trace 元数据使整个事件无效，不截断为完整结果。缺失和空范围均不证明授权；原始数组顺序参与记录 canonical/provenance，Trace 中集合才排序。文件、行、字节、游标、超时与闭合预算不变。
+
+直接验证从 `tests/protocols/observer/`、`tests/backend/infra/observers/`、`tests/backend/infra/execution/test_check_trace.py` 和 `tests/backend/infra/runtime/jobs/test_check_audit_scope_publication.py` 选取受影响节点，使用 `dev.ps1 test`；协议变化同步 `dev.ps1 schema -Update` 与 `schema`，再更新文档。真实发布测试覆盖采集、Case 隔离、权限范围定位和 BLOCK 保留。
+
+## 保留实现参考（不适用于当前 CHECK 入口）
+
+以下为旧执行、Sample 和历史结果消费者的保留说明。其中 Contract、旧 Runner、ResultPresentation、Report、History、Gate、CLI/MCP 和前端路径仅描述该保留链，不声明当前 CHECK 已接通这些能力；维护当前链应使用首节入口。
+
+### Observer 解决什么问题
 
 目标接口返回的 HTTP 状态只能说明一次请求怎样回应，不能单独证明真实资源是否发生变化。Observer Adapter 在执行前后或最终观察窗口内形成规范化 `ObservationEnvelope`，`EffectProjector` 再按冻结业务效果形成带 `effect_id` 的 `ObservationFact` 与 `SecurityEffectFact`，由 Runner 写入 Evidence。Observer 负责回答“真实世界里观察到了什么”，Projector 负责回答“该观察是否证明这个具体业务效果”，二者都不决定安全结论。
 
@@ -19,7 +35,7 @@ Azure Blob
 
 这些来源都必须实际执行、投影并发布。它们在判定中的角色由冻结的 `EffectBinding` 和 `ObserverRequirementBinding` 决定，不能按 Observer 类型、页面顺序或实现便利硬编码。
 
-## 快速找到修改位置
+### 快速找到修改位置
 
 | 我想修改什么 | 主要位置 | 通常需要一起核对 |
 | --- | --- | --- |
@@ -35,7 +51,7 @@ Azure Blob
 
 精确类名和导出清单由对应自动代码参考生成。本文维护修改路线和不能从符号表得出的语义边界。
 
-## 先判断谁拥有事实
+### 先判断谁拥有事实
 
 | 问题 | 权威来源 | Observer 可以做什么 | Observer 不能做什么 |
 | --- | --- | --- | --- |
@@ -48,7 +64,7 @@ Azure Blob
 
 秘密始终只以受控引用进入最小运行时。密码、Cookie、Token、连接凭据、对象正文和未经净化的目标响应不得进入 Observer 公共协议、Evidence、reason code、日志或异常正文。
 
-## 理解实际运行集合与判定集合
+### 理解实际运行集合与判定集合
 
 当前多来源行为分成两层：
 
@@ -67,7 +83,7 @@ Azure Blob
 - required 不完整时不能被 supporting 的数量、文本或“看起来一致”所替代；
 - 未进入冻结绑定的来源不能被临时加入当前 Verdict。
 
-## 新增或修改 Observer 协议
+### 新增或修改 Observer 协议
 
 正常步骤：
 
@@ -80,7 +96,7 @@ Azure Blob
 
 内部 reason code 也会进入受控投影，必须使用稳定公开 token；不要用前导下划线表示“内部”。异常正文只描述安全、有限的信息，诊断细节留在受控日志边界。
 
-## 新增或修改真实适配器
+### 新增或修改真实适配器
 
 适配器只负责一次受限观察。通用路线是：
 
@@ -105,7 +121,7 @@ Azure Blob
 
 Windows 上日志和 Sample 状态可能由原子替换写入。读路径必须与写路径共享适当的进程内锁或打开策略，避免把短暂文件替换竞态误报成资源不可用；修复竞态不能通过无限重试扩大预算。
 
-## 修改阶段、游标和 EVENTUAL 闭合
+### 修改阶段、游标和 EVENTUAL 闭合
 
 `BEFORE` 建立执行前事实或游标，`AFTER` 观察同步结果，`EVENTUAL` 在有限窗口内确认异步终态。阶段不是通用重试标签：
 
@@ -116,7 +132,7 @@ Windows 上日志和 Sample 状态可能由原子替换写入。读路径必须�
 
 游标必须能证明“从哪个可信位置继续”。游标 round-trip 后应保持同一资源、同一锚点和合法范围；文件无新增内容、Queue 无相关消息等正常空观察不能生成不可解析的下一游标。
 
-## 修改调度、Evidence 与展示映射
+### 修改调度、Evidence 与展示映射
 
 Coordinator 负责按 Case 阶段调用 Adapter，并校验返回的 observer id、requirement id、phase 和目标绑定；它不得比较状态摘要或解释业务效果。EffectProjector 只消费冻结 Effect/Binding 和本 Case 的 Envelope：`OBJECT_CREATION` 要有真实目标对象，`STATE_MUTATION` 只比较目标业务字段/状态，`DATA_DISCLOSURE` 使用受保护投影与摘要证明，dispatch/task 使用显式当前 Case 事实；未支持组合保持 UNKNOWN。Runner 负责把全部实际运行来源放入 CaseResult 与 Evidence。Evidence 的 semantic hash 必须基于模型规范化后的稳定顺序；如果模型会排序 `observation_facts` 或 `reason_codes`，哈希输入也必须先做同样规范化，否则跨进程发布会出现摘要漂移。
 
@@ -134,7 +150,7 @@ UNAVAILABLE = 观察不完整、无关、失败或无法证明闭合
 
 不能要求六个来源在同一状态。真实 BLOCK 可以同时包含关键 `FOUND`、支持来源 `FOUND` 或 `UNAVAILABLE`；PASS 要求关键来源充分闭合为 `NOT_FOUND`；关键 Blob 不可用时必须保留 INCONCLUSIVE。页面顺序和中文标签可以稳定，但它们不参与 Verdict。
 
-## 测试、Golden 与真实运行验证
+### 测试、Golden 与真实运行验证
 
 所有命令从仓库根运行。Python 检查同时设置 `PYTHONDONTWRITEBYTECODE=1` 并使用 `python -B`；正式 pytest 只经 `dev.ps1 test`。
 
@@ -158,7 +174,7 @@ UNAVAILABLE = 观察不完整、无关、失败或无法证明闭合
 
 涉及真实 GUI 流程、Windows 文件替换或本地服务组合时，L4 后单独做 L5。L5 检查页面来源、真实业务状态、清理与进程回收，不用页面颜色替代后端 Evidence 核验。
 
-## 常见失败怎样定位
+### 常见失败怎样定位
 
 - HTTP 403 但 Verdict 是 BLOCK：这可能是正确结果；检查关键 Observer 是否确认真实副作用，不要把 403 当作安全证明。
 - supporting 来源 `UNAVAILABLE` 导致 INCONCLUSIVE：检查调度或 Verification 是否错误把 corroborating 加进阻塞集合。
@@ -169,7 +185,7 @@ UNAVAILABLE = 观察不完整、无关、失败或无法证明闭合
 - AsyncTask/Queue 闭合正常但其他来源被反复轮询：检查 EVENTUAL 语义是否被错误扩大。
 - 页面把某类 Observer 永远标成 KEY：停止前端修补，回查冻结 EffectBinding 的 required/corroborating 角色。
 
-## 最终检查清单
+### 最终检查清单
 
 Observer 变化至少确认：
 
@@ -188,3 +204,7 @@ Trace 父子边只来自已发布结构化事实，影响锥没有回读 live �
 ```
 
 进一步约束见[执行与观察](../../01_系统地图/执行与观察.md)、[Observer 观察协议](../../03_参考手册/协议/Observer观察协议.md)、[权限验证与结果](../../01_系统地图/权限验证与结果.md)和[验证与测试](../../04_工程约束/验证与测试.md)。
+
+## 当前完成来源与职责
+
+current CheckObserverRuntime对每Case/proof独立保留游标与历史。Task的可信EVENTUAL SUCCESS、非空task_id及精确包络关联可形成私有execution_completed，不等于业务效果确认；ZIP才是官方导出的决定性来源。审计AFTER/EVENTUAL重读同一BEFORE锚点，不将空尾段当闭合事实。descriptor和Cookie Owner绑定见[修改Web执行](修改Web执行.md)。

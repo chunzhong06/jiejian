@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Protocol
+from contextlib import nullcontext
 
 from product.backend.core.action_preparation import (
     ActionEvidenceBinding, ActionEvidenceKind, ActionExecutionBinding, ActionRecoveryBinding,
@@ -25,41 +26,66 @@ from product.backend.workflows.preparation.recording_candidates import (
     supplement_candidates,
 )
 from product.backend.workflows.recording.source import (
-    identity_source_fingerprint, recording_endpoint_fingerprint, require_recording_source,
+    identity_source_fingerprint, recording_endpoint_fingerprint, require_persisted_recording_source,
 )
 from product.backend.workflows.test_identities.service import TestIdentityStatus
+from product.backend.core.check_plan import RegisteredEffectProofCapability
 
 
 class RegisteredObserverReader(Protocol):
     def contains(self, project_id: str, reference: RegisteredObserverReference) -> bool: ...
 
 
+class RegisteredEffectProofReader(Protocol):
+    def capability(self, project_id: str, reference: RegisteredObserverReference,
+                   effect_id: str) -> RegisteredEffectProofCapability | None: ...
+
+
 class PreparationBindingService:
     """接受有明确来源的技术事实；准备状态始终现场计算，不形成权限或 Run。"""
 
-    def __init__(self, uow_factory, var_dir: Path, *, test_identities=None, registered_observers: RegisteredObserverReader | None = None):
+    def __init__(self, uow_factory, var_dir: Path, *, test_identities=None, registered_observers: RegisteredObserverReader | None = None,
+                 effect_proofs: RegisteredEffectProofReader | None = None):
         self._uow_factory = uow_factory
         self._var_dir = var_dir.resolve()
         self._test_identities = test_identities
         self._registered_observers = registered_observers
+        self._effect_proofs = effect_proofs
+
+    def proof_capabilities(self, project_id, evidence):
+        """只询问已绑定 descriptor；未注入能力 reader 时不推断证明能力。"""
+        if self._effect_proofs is None:
+            return ()
+        result = []
+        for binding in evidence:
+            if binding.kind is not ActionEvidenceKind.REGISTERED_OBSERVER:
+                continue
+            capability = self._effect_proofs.capability(project_id, binding.observer_reference, binding.effect_id)
+            if capability is not None:
+                result.append(RegisteredEffectProofCapability.model_validate(capability))
+        return tuple(result)
 
     def accept_recording(self, work, recording, draft_record, *, flow=None, now_us: int):
         """由生命周期服务在同一完成事务调用，候选不明确时整个事务不生效。"""
-        action, identity, understanding = require_recording_source(work, recording)
+        action, identity, understanding = require_persisted_recording_source(work, recording, self._var_dir)
         draft = draft_record.draft
-        if (draft.business_action_id, draft.action_revision, draft.test_identity_id,
+        if draft.resource_owner_test_identity_id != recording.resource_owner_test_identity_id:
+            raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "草稿与录制业务来源不一致")
+        if (draft.business_action_id, draft.action_revision, draft.subject_test_identity_id,
             draft.recording_id, draft.purpose, draft.parent_recording_id, draft.effect_id) != (
-            recording.business_action_id, recording.action_revision, recording.test_identity_id,
+            recording.business_action_id, recording.action_revision, recording.subject_test_identity_id,
             recording.recording_id, recording.purpose, recording.parent_recording_id, recording.effect_id,
         ):
             raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "草稿与录制业务来源不一致")
-        common = self._common(work, action, identity, understanding, now_us)
+        common = self._common(work, action, identity, understanding, now_us, recording.resource_owner_test_identity_id)
         source = {
             "source_recording_id": recording.recording_id, "source_draft_revision": draft.revision,
             "source_draft_sha256": draft_record.draft_sha256,
         }
         if recording.purpose is RecordingPurpose.TARGET:
-            if flow is None or (flow.business_action_id, flow.action_revision, flow.test_identity_id) != (
+            if flow is not None and flow.resource_owner_test_identity_id != recording.resource_owner_test_identity_id:
+                raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "最终 Flow 的业务身份不一致")
+            if flow is None or (flow.business_action_id, flow.action_revision, flow.subject_test_identity_id) != (
                 action.action_id, action.revision, identity.identity_id,
             ):
                 raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "最终 Flow 的业务身份不一致")
@@ -72,14 +98,13 @@ class PreparationBindingService:
             flow_facts = {"flow_id": flow.id, "flow_sha256": _flow_sha256(flow), "resource_injection": injection}
             resource = seal_binding(
                 ActionResourceBinding, **common, **source, **flow_facts,
-                owner_test_identity_id=identity.identity_id,
                 actual_resource_id=resource_value(request_event(recording, target), candidate),
             )
             execution = seal_binding(ActionExecutionBinding, **common, **source, **flow_facts)
             work.action_preparation.replace(execution)
             work.action_preparation.replace(resource)
             return
-        resource = work.action_preparation.resource(action.action_id, action.revision, identity.identity_id)
+        resource = work.action_preparation.resource(action.action_id, action.revision, recording.resource_owner_test_identity_id)
         if (resource is None or resource.source_recording_id != recording.parent_recording_id
                 or self._source_reasons(work, resource, action, understanding)):
             raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "补录需要原业务演示中仍有效的具体资源")
@@ -104,8 +129,8 @@ class PreparationBindingService:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND, "录制草稿不存在")
             if recording.purpose is RecordingPurpose.TARGET:
                 return ()
-            action, _, understanding = require_recording_source(work, recording)
-            resource = work.action_preparation.resource(action.action_id, action.revision, recording.test_identity_id)
+            action, _, understanding = require_persisted_recording_source(work, recording, self._var_dir)
+            resource = work.action_preparation.resource(action.action_id, action.revision, recording.resource_owner_test_identity_id)
             if resource is None or self._source_reasons(work, resource, action, understanding):
                 return ()
             return supplement_candidates(recording, draft.draft, resource.actual_resource_id)
@@ -116,21 +141,21 @@ class PreparationBindingService:
             recording = work.recordings.get(recording_id)
             if recording is None or recording.state is not RecordingState.COMPLETED or recording.purpose is not RecordingPurpose.TARGET:
                 raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "Observer 引用需要已完成的业务演示")
-            action, identity, understanding = require_recording_source(work, recording)
+            action, identity, understanding = require_persisted_recording_source(work, recording, self._var_dir)
             if (effect_id not in {item.effect_id for item in action.effect_catalog}
                     or self._registered_observers is None
                     or not self._registered_observers.contains(action.project_id, reference)):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "受控 Observer 或当前业务效果不可用")
             binding = seal_binding(
-                ActionEvidenceBinding, **self._common(work, action, identity, understanding, now_us),
+                ActionEvidenceBinding, **self._common(work, action, identity, understanding, now_us, recording.resource_owner_test_identity_id),
                 kind=ActionEvidenceKind.REGISTERED_OBSERVER, effect_id=effect_id, observer_reference=reference,
             )
             work.action_preparation.replace(binding)
             work.commit()
             return binding
 
-    def inspect(self, action, contract, identities) -> ActionTechnicalPreparationView:
-        with self._uow_factory() as work:
+    def inspect(self, action, contract, identities, *, work=None) -> ActionTechnicalPreparationView:
+        with (self._uow_factory() if work is None else nullcontext(work)) as work:
             understanding = work.application_understanding.get(action.project_id)
             repository = work.action_preparation
             execution = repository.execution(action.action_id, action.revision)
@@ -167,8 +192,9 @@ class PreparationBindingService:
             reasons += ("TEST_IDENTITY_INSPECTION_UNAVAILABLE",)
         else:
             try:
-                identity = self._test_identities.get(binding.test_identity_id)
-                if identity.project_id != action.project_id or identity.status is not TestIdentityStatus.PREPARED:
+                identity = self._test_identities.get(binding.subject_test_identity_id)
+                owner = self._test_identities.get(binding.resource_owner_test_identity_id)
+                if any(item.project_id != action.project_id or item.status is not TestIdentityStatus.PREPARED for item in (identity, owner)):
                     reasons += ("TEST_IDENTITY_LOGIN_REQUIRED",)
             except JiejianError:
                 reasons += ("TEST_IDENTITY_REQUIRED",)
@@ -182,14 +208,25 @@ class PreparationBindingService:
             binding.project_id, binding.business_action_id, binding.action_revision, binding.action_semantic_fingerprint,
         ) != (action.project_id, action.action_id, action.revision, action.semantic_fingerprint):
             return ("ACTION_BINDING_SOURCE_STALE",)
-        identity = work.test_identities.get(binding.test_identity_id)
+        identity = work.test_identities.get(binding.subject_test_identity_id)
+        owner = work.test_identities.get(binding.resource_owner_test_identity_id)
+        if (owner is None or owner.project_id != action.project_id or owner.prepared_at_us is None
+                or binding.owner_identity_fingerprint != identity_source_fingerprint(owner)):
+            return ("RESOURCE_OWNER_SOURCE_STALE",)
+        owner_root = work.business_boundaries.actor(owner.actor_id)
+        owner_actor = work.business_boundaries.actor_revision(owner.actor_id, owner.actor_revision)
+        if (owner_root is None or owner_actor is None or owner_root.current_revision != owner.actor_revision
+                or owner_actor.effective_state is not BusinessRevisionState.ACTIVE
+                or inspect_actor_binding(owner.actor_id, owner.actor_revision,
+                    work.business_boundaries.actor_binding(owner.actor_id, owner.actor_revision), understanding).status is not ImplementationBindingStatus.CURRENT):
+            return ("RESOURCE_OWNER_SOURCE_STALE",)
         action_root = work.business_boundaries.action(action.action_id)
         implementation = inspect_action_binding(action.action_id, action.revision,
                                                 work.business_boundaries.action_binding(action.action_id, action.revision), understanding)
         if (action_root is None or action_root.current_revision != action.revision
                 or action.effective_state is not BusinessRevisionState.ACTIVE
                 or identity is None or identity.project_id != action.project_id or identity.prepared_at_us is None
-                or binding.identity_fingerprint != identity_source_fingerprint(identity)
+                or binding.subject_identity_fingerprint != identity_source_fingerprint(identity)
                 or implementation.status is not ImplementationBindingStatus.CURRENT
                 or binding.implementation_fingerprint != implementation.binding_fingerprint
                 or binding.source_fingerprint != understanding.source_fingerprint
@@ -215,32 +252,33 @@ class PreparationBindingService:
         expected_purpose = (RecordingPurpose.OBSERVATION if isinstance(binding, ActionEvidenceBinding) else
                             RecordingPurpose.RECOVERY if isinstance(binding, ActionRecoveryBinding) else RecordingPurpose.TARGET)
         if (recording is None or draft_record is None or recording.state is not RecordingState.COMPLETED
+                or recording.resource_owner_test_identity_id != binding.resource_owner_test_identity_id
                 or recording.purpose is not expected_purpose or recording.project_id != action.project_id
-                or (recording.business_action_id, recording.action_revision, recording.test_identity_id)
-                != (binding.business_action_id, binding.action_revision, binding.test_identity_id)
+                or (recording.business_action_id, recording.action_revision, recording.subject_test_identity_id)
+                != (binding.business_action_id, binding.action_revision, binding.subject_test_identity_id)
                 or draft_record.revision != binding.source_draft_revision
                 or draft_record.draft_sha256 != binding.source_draft_sha256):
             return ("RECORDING_SOURCE_STALE",)
         try:
-            require_recording_source(work, recording)
+            require_persisted_recording_source(work, recording, self._var_dir)
         except JiejianError:
             return ("RECORDING_SOURCE_STALE",)
         if isinstance(binding, (ActionExecutionBinding, ActionResourceBinding)):
             from product.backend.workflows.recording.lifecycle import RecordingLifecycle
             try:
-                flow = RecordingLifecycle.load_final_flow(RecordingLifecycle.flow_path(self._var_dir, recording))
+                flow = RecordingLifecycle.load_final_flow(RecordingLifecycle.flow_path(self._var_dir, recording), expected_hash=binding.flow_sha256)
             except JiejianError:
                 return ("ACTION_FLOW_UNAVAILABLE",)
-            if (_flow_sha256(flow) != binding.flow_sha256 or flow.id != binding.flow_id
-                    or (flow.business_action_id, flow.action_revision, flow.test_identity_id)
-                    != (binding.business_action_id, binding.action_revision, binding.test_identity_id)):
+            if (flow.id != binding.flow_id or flow.resource_owner_test_identity_id != binding.resource_owner_test_identity_id
+                    or (flow.business_action_id, flow.action_revision, flow.subject_test_identity_id)
+                    != (binding.business_action_id, binding.action_revision, binding.subject_test_identity_id)):
                 return ("ACTION_FLOW_STALE",)
         else:
             if isinstance(binding, ActionEvidenceBinding) and recording.effect_id != binding.effect_id:
                 return ("EFFECT_REFERENCE_STALE",)
             if isinstance(binding, ActionRecoveryBinding) and not action.state_changing:
                 return ("RECOVERY_NOT_REQUIRED",)
-            resource = work.action_preparation.resource(action.action_id, action.revision, binding.test_identity_id)
+            resource = work.action_preparation.resource(action.action_id, action.revision, binding.resource_owner_test_identity_id)
             if (resource is None or resource.source_recording_id != recording.parent_recording_id
                     or self._source_reasons(work, resource, action, understanding)):
                 return ("SUPPLEMENT_RESOURCE_STALE",)
@@ -253,7 +291,7 @@ class PreparationBindingService:
         return ()
 
     @staticmethod
-    def _common(work, action, identity, understanding, now_us):
+    def _common(work, action, identity, understanding, now_us, owner_id):
         implementation = work.business_boundaries.action_binding(action.action_id, action.revision)
         return {
             "project_id": action.project_id, "business_action_id": action.action_id, "action_revision": action.revision,
@@ -261,7 +299,9 @@ class PreparationBindingService:
             "implementation_fingerprint": implementation.binding_fingerprint,
             "source_fingerprint": understanding.source_fingerprint,
             "endpoint_fingerprint": recording_endpoint_fingerprint(understanding),
-            "test_identity_id": identity.identity_id, "identity_fingerprint": identity_source_fingerprint(identity),
+            "subject_test_identity_id": identity.identity_id, "subject_identity_fingerprint": identity_source_fingerprint(identity),
+            "resource_owner_test_identity_id": owner_id,
+            "owner_identity_fingerprint": identity_source_fingerprint(work.test_identities.get(owner_id)),
             "confirmed_at_us": now_us,
         }
 

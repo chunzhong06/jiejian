@@ -82,6 +82,7 @@ PrimaryTaskKind = Literal[
     "ESTABLISH_BUSINESS_BOUNDARY",
     "REVIEW_PERMISSION_REVISION",
     "COMPLETE_ALLOW_CONTROL",
+    "SELECT_ALLOW_CONTROL",
     "REVIEW_ACTOR_IMPLEMENTATION",
     "REVIEW_ACTION_IMPLEMENTATION",
     "REVIEW_RECORDING",
@@ -90,6 +91,10 @@ PrimaryTaskKind = Literal[
     "PREPARE_ACTION_RESOURCE",
     "COMPLETE_EFFECT_EVIDENCE",
     "COMPLETE_RECOVERY",
+    "REGISTER_SOURCE_CHANGE",
+    "VERIFY_REPAIR",
+    "RUN_CURRENT_CHECK",
+    "VIEW_CURRENT_RESULT",
 ]
 
 
@@ -101,6 +106,10 @@ class PrimaryTaskView(WorkspaceModel):
     action_revision: int | None = Field(default=None, ge=1)
     identity_slot_id: str | None = None
     test_identity_id: str | None = None
+    subject_test_identity_id: str | None = None
+    resource_owner_test_identity_id: str | None = None
+    subject_slot_id: str | None = None
+    resource_owner_slot_id: str | None = None
     recording_id: str | None = None
     recording_purpose: Literal["TARGET", "OBSERVATION", "RECOVERY"] | None = None
     parent_recording_id: str | None = None
@@ -109,7 +118,9 @@ class PrimaryTaskView(WorkspaceModel):
     why_now: str = Field(min_length=1, max_length=1024)
     user_responsibility: str = Field(min_length=1, max_length=1024)
     system_will_do: str = Field(min_length=1, max_length=1024)
-    route: Literal["/application", "/permissions", "/tests"]
+    route: Literal["/application", "/permissions", "/tests", "/changes"]
+    change_id: str | None = None
+    run_id: str | None = None
     can_execute: bool
     stale_fingerprint: str = Field(pattern=SHA256_PATTERN)
 
@@ -123,6 +134,25 @@ class WorkspaceAreaView(WorkspaceModel):
     status_label: str
 
 
+from product.backend.workflows.projects.repair import ProjectRepair
+
+
+class WorkspaceLatestResult(WorkspaceModel):
+    run_id: str
+    verdict: Literal["PASS","BLOCK","INCONCLUSIVE"]
+    policy_epoch: int = Field(ge=0)
+    created_at_us: int = Field(ge=0)
+    summary: str
+
+
+class WorkspaceSourceChange(WorkspaceModel):
+    change_id: str
+    revalidation_status: str
+    can_execute: bool
+    reason: str
+    created_at_us: int = Field(ge=0)
+
+
 class WorkspaceView(WorkspaceModel):
     project: WorkspaceProjectView
     connection: WorkspaceConnectionView
@@ -130,6 +160,9 @@ class WorkspaceView(WorkspaceModel):
     actions: tuple[ActionWorkspaceView, ...]
     primary_task: PrimaryTaskView | None
     areas: tuple[WorkspaceAreaView, ...]
+    latest_result: WorkspaceLatestResult | None = None
+    source_change: WorkspaceSourceChange | None = None
+    repair: ProjectRepair | None = None
 
 
 __all__ = [

@@ -1,33 +1,16 @@
-// 代码变化产品摘要 API；只接收授权源码根下的相对路径，不接收正文或内部指纹。
-
+// 当前代码变化事实；声明仅作线索，服务端重新扫描并决定可执行状态。
 import { request } from './http'
-
+import type { RepairReference } from './repairs'
 export type SourceChangeViewDto = {
-  change_id: string
-  project_id: string
-  reason: string
-  submitted_by: string
-  created_at_us: number
-  status: 'COMPARABLE' | 'NO_BASELINE'
-  complete: boolean
-  actual_changed_path_count: number
-  added_count: number
-  modified_count: number
-  removed_count: number
-  claimed_paths: string[]
-  added_paths: string[]
-  modified_paths: string[]
-  removed_paths: string[]
-  directly_affected_count: number
-  mapping_review_required_count: number
-  no_direct_evidence_count: number
-  review_intent_ids: string[]
-  summary: string
-  next_path: '/permissions' | null
+  manifest: { change_id: string; project_id: string; reason: string; submitted_by: string; created_at_us: number; claimed_paths: string[]; repair_reference: RepairReference | null }
+  change_set: { status: 'COMPARABLE' | 'NO_BASELINE'; added_paths: string[]; modified_paths: string[]; removed_paths: string[] }
+  assessment: { payload: { action_impacts: Array<{ action_id: string; action_revision: number; classification: 'DIRECTLY_AFFECTED' | 'MAPPING_REVIEW_REQUIRED' | 'NO_DIRECT_EVIDENCE'; relevant_paths: string[]; permission_refs: Array<{ intent_id: string }> }> } }
+  revalidation: { status: 'READY' | 'NO_BASELINE' | 'SOURCE_STALE' | 'POLICY_STALE' | 'MAPPING_REVIEW_REQUIRED'; can_execute: boolean; preparation_gaps: Array<{ reason: string }> }
 }
-
+const base = (id: string) => `/api/projects/${encodeURIComponent(id)}/source-changes`
 export const sourceChangesApi = {
-  list: (projectId: string, limit = 50) => request<SourceChangeViewDto[]>(`/api/projects/${encodeURIComponent(projectId)}/source-changes?limit=${limit}`),
-  latest: (projectId: string) => request<SourceChangeViewDto | null>(`/api/projects/${encodeURIComponent(projectId)}/source-changes/latest`),
-  show: (projectId: string, changeId: string) => request<SourceChangeViewDto>(`/api/projects/${encodeURIComponent(projectId)}/source-changes/${encodeURIComponent(changeId)}`),
+  list: (id: string, limit = 50) => request<SourceChangeViewDto[]>(`${base(id)}?limit=${limit}`),
+  latest: (id: string) => request<SourceChangeViewDto | null>(`${base(id)}/latest`),
+  show: (id: string, changeId: string) => request<SourceChangeViewDto>(`${base(id)}/${encodeURIComponent(changeId)}`),
+  submit: (id: string, reason: string, paths: string[], reference: RepairReference | null) => request<SourceChangeViewDto>(base(id), { method: 'POST', body: JSON.stringify({ schema_version: '1', reason, claimed_paths: paths, repair_reference: reference }) }),
 }

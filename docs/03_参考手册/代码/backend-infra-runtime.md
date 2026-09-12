@@ -9,6 +9,19 @@
 ### `product/backend/infra/runtime/__init__.py`
 主要 import / dot-source：`.paths`
 
+### `product/backend/infra/runtime/check_runner/__main__.py`
+- `main() -> int`
+主要 import / dot-source：`argparse`, `os`, `pathlib`, `product.backend.infra.runtime.check_runner.executor`
+
+### `product/backend/infra/runtime/check_runner/executor.py`
+- `execute_check_attempt(input_path, staging, environ) -> int`
+主要 import / dot-source：`__future__`, `logging`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.artifacts.check_packages`, `product.backend.infra.execution.check_executor`, `product.backend.infra.execution.web.check_runtime`, `product.backend.infra.runtime.jobs.check_requests`, `product.backend.infra.runtime.paths`, `product.protocols.check_result`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `time`
+
+### `product/backend/infra/runtime/check_runner/supervisor.py`
+- `class CheckRunnerSupervisor`
+- `class CheckJobHandler`
+主要 import / dot-source：`__future__`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.artifacts.check_packages`, `product.backend.infra.artifacts.check_publication`, `product.backend.infra.artifacts.check_validation`, `product.backend.infra.execution.web.check_runtime`, `product.backend.infra.runtime.jobs.check_requests`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.control`, `product.backend.infra.runtime.process.environment`, `product.backend.infra.runtime.process.tree`, `product.protocols.check_result`, `product.protocols.check_runtime`, `subprocess`, `time`
+
 ### `product/backend/infra/runtime/diagnostics.py`
 - `class DoctorCheck`
 - `class DoctorReport`
@@ -22,6 +35,10 @@
 - `_TERMINAL_JOB_STATES`
 - `class JobAttempts`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.runtime.jobs.events`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.storage`, `secrets`
+
+### `product/backend/infra/runtime/jobs/check_requests.py`
+- `class CheckRequestStore`
+主要 import / dot-source：`__future__`, `hashlib`, `hmac`, `logging`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.paths`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `re`, `uuid`
 
 ### `product/backend/infra/runtime/jobs/dispatch.py`
 - `WORKER_LOG_MAX_BYTES`
@@ -112,6 +129,8 @@
 - `class RunJobTargetHandler`
 - `default_run_job_targets() -> JobTargetRegistry`
 - `recording_job_targets() -> JobTargetRegistry`
+- `class CheckJobTargetHandler`
+- `current_check_and_recording_targets() -> JobTargetRegistry`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.storage`, `typing`
 
 ### `product/backend/infra/runtime/jobs/verification.py`
@@ -156,7 +175,7 @@
 - `DEFAULT_TERMINATION_GRACE_SECONDS`
 - `force_terminate_process_tree(process, timeout) -> None`
 - `class AttemptProcessControl`
-主要 import / dot-source：`__future__`, `collections.abc`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.storage`, `subprocess`, `time`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.storage`, `subprocess`, `time`, `typing`
 
 ### `product/backend/infra/runtime/process/environment.py`
 - `class ProcessEnvironmentRole`
@@ -268,6 +287,10 @@
 - `serve_owner_is_alive(path, owner_token) -> bool`
 主要 import / dot-source：`__future__`, `json`, `pathlib`, `product.backend.infra.runtime.process.lock`
 
+### `product/backend/infra/runtime/session_secrets.py`
+- `class SessionSecretOverlay`
+主要 import / dot-source：`threading`
+
 ### `product/backend/infra/runtime/settings.py`
 - `_ENVIRONMENT_KEYS`
 - `class Settings`
@@ -294,6 +317,6 @@
 
 ### `product/backend/infra/runtime/worker/supervisor.py`
 - `class LocalWorkerSupervisor`
-主要 import / dot-source：`__future__`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.dispatch`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.queue`, `product.backend.infra.runtime.jobs.recovery`, `product.backend.infra.runtime.jobs.requests`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.runtime.worker.lifetime`, `product.backend.infra.storage`, `product.protocols`, `threading`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.execution.web.check_runtime`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.check_requests`, `product.backend.infra.runtime.jobs.dispatch`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.jobs.queue`, `product.backend.infra.runtime.jobs.recovery`, `product.backend.infra.runtime.jobs.targets`, `product.backend.infra.runtime.paths`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.runtime.worker.lifetime`, `product.backend.infra.storage`, `product.protocols`, `threading`, `time`, `uuid`
 
 <!-- GENERATED:END -->

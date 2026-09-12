@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
 
-from product.protocols.execution import ProtocolModel
+from product.protocols.web.base import ProtocolModel
 
 
 class WebTargetScope(ProtocolModel):
@@ -119,4 +119,3 @@ class WebTargetScope(ProtocolModel):
 class WebTargetDefinition(ProtocolModel):
     scope: WebTargetScope
     reset_path: str = Field(pattern=r"^/[A-Za-z0-9_./{}-]{1,255}$")
-

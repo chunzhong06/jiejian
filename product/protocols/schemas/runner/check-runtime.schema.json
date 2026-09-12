@@ -1,0 +1,2144 @@
+{
+  "$defs": {
+    "AsyncTaskApiLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_loopback_http": {
+          "title": "Allow Loopback Http",
+          "type": "boolean"
+        },
+        "allow_private_network": {
+          "title": "Allow Private Network",
+          "type": "boolean"
+        },
+        "base_url": {
+          "maxLength": 256,
+          "minLength": 12,
+          "title": "Base Url",
+          "type": "string"
+        },
+        "locator_type": {
+          "const": "ASYNC_TASK_STATUS",
+          "default": "ASYNC_TASK_STATUS",
+          "title": "Locator Type",
+          "type": "string"
+        },
+        "poll_budget": {
+          "$ref": "#/$defs/AsyncTaskPollBudget"
+        },
+        "read_only_credential_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Read Only Credential Ref",
+          "type": "string"
+        },
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 18,
+          "title": "Relative Path Template",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_url",
+        "relative_path_template",
+        "read_only_credential_ref",
+        "allow_private_network",
+        "allow_loopback_http",
+        "poll_budget"
+      ],
+      "title": "AsyncTaskApiLocator",
+      "type": "object"
+    },
+    "AsyncTaskPollBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_polls": {
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Max Polls",
+          "type": "integer"
+        },
+        "max_response_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "per_request_timeout_us": {
+          "maximum": 120000000,
+          "minimum": 1,
+          "title": "Per Request Timeout Us",
+          "type": "integer"
+        },
+        "poll_interval_us": {
+          "maximum": 120000000,
+          "minimum": 0,
+          "title": "Poll Interval Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_polls",
+        "poll_interval_us",
+        "per_request_timeout_us",
+        "max_response_bytes"
+      ],
+      "title": "AsyncTaskPollBudget",
+      "type": "object"
+    },
+    "AuditLogScanBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_files": {
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Max Files",
+          "type": "integer"
+        },
+        "max_line_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Line Bytes",
+          "type": "integer"
+        },
+        "max_lines": {
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Max Lines",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_files",
+        "max_lines",
+        "max_line_bytes"
+      ],
+      "title": "AuditLogScanBudget",
+      "type": "object"
+    },
+    "AzureBlobObjectLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_loopback_http": {
+          "title": "Allow Loopback Http",
+          "type": "boolean"
+        },
+        "allowed_metadata_fields": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "title": "Allowed Metadata Fields",
+          "type": "array"
+        },
+        "container_name": {
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$",
+          "title": "Container Name",
+          "type": "string"
+        },
+        "exclusive_test_container": {
+          "const": true,
+          "title": "Exclusive Test Container",
+          "type": "boolean"
+        },
+        "locator_type": {
+          "const": "AZURE_BLOB_OBJECT",
+          "default": "AZURE_BLOB_OBJECT",
+          "title": "Locator Type",
+          "type": "string"
+        },
+        "prefix_template": {
+          "maxLength": 256,
+          "minLength": 3,
+          "title": "Prefix Template",
+          "type": "string"
+        },
+        "read_only_sas_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Read Only Sas Ref",
+          "type": "string"
+        },
+        "scan_budget": {
+          "$ref": "#/$defs/BlobObjectScanBudget"
+        },
+        "service_url": {
+          "maxLength": 256,
+          "minLength": 24,
+          "title": "Service Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "allow_loopback_http",
+        "service_url",
+        "container_name",
+        "prefix_template",
+        "read_only_sas_ref",
+        "exclusive_test_container",
+        "allowed_metadata_fields",
+        "scan_budget"
+      ],
+      "title": "AzureBlobObjectLocator",
+      "type": "object"
+    },
+    "AzureQueuePeekLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_loopback_http": {
+          "title": "Allow Loopback Http",
+          "type": "boolean"
+        },
+        "allowed_fields": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 4,
+          "title": "Allowed Fields",
+          "type": "array"
+        },
+        "exclusive_test_queue": {
+          "const": true,
+          "title": "Exclusive Test Queue",
+          "type": "boolean"
+        },
+        "locator_type": {
+          "const": "AZURE_QUEUE_PEEK",
+          "default": "AZURE_QUEUE_PEEK",
+          "title": "Locator Type",
+          "type": "string"
+        },
+        "peek_budget": {
+          "$ref": "#/$defs/QueuePeekBudget"
+        },
+        "queue_name": {
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$",
+          "title": "Queue Name",
+          "type": "string"
+        },
+        "read_only_sas_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Read Only Sas Ref",
+          "type": "string"
+        },
+        "service_url": {
+          "maxLength": 256,
+          "minLength": 24,
+          "title": "Service Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "allow_loopback_http",
+        "service_url",
+        "queue_name",
+        "read_only_sas_ref",
+        "exclusive_test_queue",
+        "allowed_fields",
+        "peek_budget"
+      ],
+      "title": "AzureQueuePeekLocator",
+      "type": "object"
+    },
+    "BearerIdentityBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "BEARER",
+          "default": "BEARER",
+          "title": "Kind",
+          "type": "string"
+        },
+        "secret_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Secret Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "secret_ref"
+      ],
+      "title": "BearerIdentityBinding",
+      "type": "object"
+    },
+    "BlobObjectScanBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "max_object_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Object Bytes",
+          "type": "integer"
+        },
+        "max_objects": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Max Objects",
+          "type": "integer"
+        },
+        "max_pages": {
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Max Pages",
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Total Bytes",
+          "type": "integer"
+        },
+        "page_size": {
+          "maximum": 5000,
+          "minimum": 1,
+          "title": "Page Size",
+          "type": "integer"
+        },
+        "per_request_timeout_us": {
+          "maximum": 120000000,
+          "minimum": 1,
+          "title": "Per Request Timeout Us",
+          "type": "integer"
+        },
+        "retry_interval_us": {
+          "maximum": 120000000,
+          "minimum": 0,
+          "title": "Retry Interval Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "page_size",
+        "max_pages",
+        "max_objects",
+        "max_object_bytes",
+        "max_total_bytes",
+        "max_attempts",
+        "per_request_timeout_us",
+        "retry_interval_us"
+      ],
+      "title": "BlobObjectScanBudget",
+      "type": "object"
+    },
+    "CheckActionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "action_semantic_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Action Semantic Fingerprint",
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "execution_binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Execution Binding Fingerprint",
+          "type": "string"
+        },
+        "flow_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Flow Id",
+          "type": "string"
+        },
+        "flow_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Flow Sha256",
+          "type": "string"
+        },
+        "primary_resource_concept": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Primary Resource Concept",
+          "type": "string"
+        },
+        "proofs": {
+          "items": {
+            "$ref": "#/$defs/CheckProofConfig"
+          },
+          "maxItems": 48,
+          "minItems": 1,
+          "title": "Proofs",
+          "type": "array"
+        },
+        "recovery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CheckRecoveryConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "state_changing": {
+          "title": "State Changing",
+          "type": "boolean"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/CheckFlowStep"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_revision",
+        "action_semantic_fingerprint",
+        "display_name",
+        "primary_resource_concept",
+        "state_changing",
+        "flow_id",
+        "flow_sha256",
+        "execution_binding_fingerprint",
+        "steps",
+        "proofs"
+      ],
+      "title": "CheckActionConfig",
+      "type": "object"
+    },
+    "CheckAuxiliarySource": {
+      "additionalProperties": false,
+      "properties": {
+        "descriptor_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Descriptor Fingerprint",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "SUPPORTING",
+            "DIAGNOSIS_REQUIRED"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "observation_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Observation Identity Id",
+          "type": "string"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        },
+        "source_label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Source Label",
+          "type": "string"
+        },
+        "source_location": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./:-]{0,255}$",
+          "title": "Source Location",
+          "type": "string"
+        },
+        "trace_namespace": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trace Namespace"
+        }
+      },
+      "required": [
+        "observer_id",
+        "descriptor_fingerprint",
+        "observation_identity_id",
+        "level",
+        "source_label",
+        "source_location"
+      ],
+      "title": "CheckAuxiliarySource",
+      "type": "object"
+    },
+    "CheckBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_cases": {
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Max Cases",
+          "type": "integer"
+        },
+        "max_duration_us": {
+          "maximum": 3600000000,
+          "minimum": 1,
+          "title": "Max Duration Us",
+          "type": "integer"
+        },
+        "max_parallel_cases": {
+          "const": 1,
+          "default": 1,
+          "title": "Max Parallel Cases",
+          "type": "integer"
+        },
+        "max_requests": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "max_response_bytes": {
+          "maximum": 4194304,
+          "minimum": 1,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "recovery_reserve_requests": {
+          "maximum": 500,
+          "minimum": 0,
+          "title": "Recovery Reserve Requests",
+          "type": "integer"
+        },
+        "request_timeout_us": {
+          "maximum": 30000000,
+          "minimum": 1,
+          "title": "Request Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_requests",
+        "request_timeout_us",
+        "max_duration_us",
+        "max_response_bytes",
+        "max_cases",
+        "recovery_reserve_requests"
+      ],
+      "title": "CheckBudget",
+      "type": "object"
+    },
+    "CheckFlowStep": {
+      "additionalProperties": false,
+      "properties": {
+        "classifier": {
+          "$ref": "#/$defs/HttpOutcomeClassifier"
+        },
+        "depends_on_step_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Depends On Step Ids",
+          "type": "array"
+        },
+        "purpose": {
+          "enum": [
+            "SETUP",
+            "TARGET"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "step_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Step Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "step_id",
+        "purpose",
+        "request",
+        "classifier",
+        "depends_on_step_ids"
+      ],
+      "title": "CheckFlowStep",
+      "type": "object"
+    },
+    "CheckIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "actor_label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Actor Label",
+          "type": "string"
+        },
+        "actor_revision": {
+          "minimum": 1,
+          "title": "Actor Revision",
+          "type": "integer"
+        },
+        "binding": {
+          "discriminator": {
+            "mapping": {
+              "BEARER": "#/$defs/BearerIdentityBinding",
+              "PREPARED_COOKIE_SESSION": "#/$defs/PreparedCookieSessionIdentityBinding"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BearerIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/PreparedCookieSessionIdentityBinding"
+            }
+          ],
+          "title": "Binding"
+        },
+        "identity_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Identity Fingerprint",
+          "type": "string"
+        },
+        "identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CheckIdentityVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "identity_id",
+        "actor_id",
+        "actor_revision",
+        "identity_fingerprint",
+        "label",
+        "actor_label",
+        "binding"
+      ],
+      "title": "CheckIdentity",
+      "type": "object"
+    },
+    "CheckIdentityVerification": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Expected Actor Id",
+          "type": "string"
+        },
+        "expected_actor_revision": {
+          "minimum": 1,
+          "title": "Expected Actor Revision",
+          "type": "integer"
+        },
+        "expected_application_subject_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Expected Application Subject Id",
+          "type": "string"
+        },
+        "namespace": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "subject_json_path": {
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+          "title": "Subject Json Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "expected_application_subject_id",
+        "expected_actor_id",
+        "expected_actor_revision",
+        "request",
+        "subject_json_path"
+      ],
+      "title": "CheckIdentityVerification",
+      "type": "object"
+    },
+    "CheckProofConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "auxiliary_sources": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CheckAuxiliarySource"
+          },
+          "maxItems": 5,
+          "title": "Auxiliary Sources",
+          "type": "array"
+        },
+        "binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binding Fingerprint",
+          "type": "string"
+        },
+        "business_label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Business Label",
+          "type": "string"
+        },
+        "descriptor_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Descriptor Fingerprint"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "effect_kind": {
+          "enum": [
+            "STATE_MUTATION",
+            "DATA_DISCLOSURE",
+            "OBJECT_CREATION",
+            "EXTERNAL_DISPATCH",
+            "RESTRICTED_FUNCTION_INVOCATION",
+            "CREDENTIAL_ACCESS"
+          ],
+          "title": "Effect Kind",
+          "type": "string"
+        },
+        "exclusive_resource_window": {
+          "default": false,
+          "title": "Exclusive Resource Window",
+          "type": "boolean"
+        },
+        "expected_state": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected State"
+        },
+        "observation_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Observation Identity Id",
+          "type": "string"
+        },
+        "observer_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observer Id"
+        },
+        "protected_projection": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Projection",
+          "type": "array"
+        },
+        "request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpRequestTemplate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "resource_concept": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Resource Concept",
+          "type": "string"
+        },
+        "rule": {
+          "enum": [
+            "HTTP_RESOURCE_PRESENCE",
+            "REGISTERED_EFFECT",
+            "RECORDED_SUPPORT"
+          ],
+          "title": "Rule",
+          "type": "string"
+        },
+        "source_label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Source Label",
+          "type": "string"
+        },
+        "source_location": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./:-]{0,255}$",
+          "title": "Source Location",
+          "type": "string"
+        }
+      },
+      "required": [
+        "effect_id",
+        "business_label",
+        "resource_concept",
+        "effect_kind",
+        "binding_fingerprint",
+        "rule",
+        "observation_identity_id",
+        "source_label",
+        "source_location"
+      ],
+      "title": "CheckProofConfig",
+      "type": "object"
+    },
+    "CheckRecoveryConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binding Fingerprint",
+          "type": "string"
+        },
+        "projection_fields": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Projection Fields",
+          "type": "array"
+        },
+        "request": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "source_subject_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Source Subject Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding_fingerprint",
+        "source_subject_identity_id",
+        "request"
+      ],
+      "title": "CheckRecoveryConfig",
+      "type": "object"
+    },
+    "EmptyBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "EMPTY",
+          "default": "EMPTY",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EmptyBody",
+      "type": "object"
+    },
+    "FormUrlEncodedBody": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Fields",
+          "type": "array"
+        },
+        "kind": {
+          "const": "FORM_URLENCODED",
+          "default": "FORM_URLENCODED",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "FormUrlEncodedBody",
+      "type": "object"
+    },
+    "HttpOutcomeClassifier": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpPredicate"
+          },
+          "maxItems": 128,
+          "title": "Accepted",
+          "type": "array"
+        },
+        "completion_binding": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Binding"
+        },
+        "denied": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpPredicate"
+          },
+          "maxItems": 128,
+          "title": "Denied",
+          "type": "array"
+        }
+      },
+      "title": "HttpOutcomeClassifier",
+      "type": "object"
+    },
+    "HttpParameter": {
+      "additionalProperties": false,
+      "description": "受控 Query/Header/Form 字段；字段值只能是 literal 或已声明 Slot。",
+      "properties": {
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "HttpParameter",
+      "type": "object"
+    },
+    "HttpPredicate": {
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribute"
+        },
+        "expected": {
+          "default": null,
+          "title": "Expected"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "kind": {
+          "$ref": "#/$defs/HttpPredicateKind"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "redirect_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Redirect Path"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "statuses": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 32,
+          "title": "Statuses",
+          "type": "array"
+        },
+        "values": {
+          "default": [],
+          "items": {},
+          "maxItems": 32,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "HttpPredicate",
+      "type": "object"
+    },
+    "HttpPredicateKind": {
+      "enum": [
+        "STATUS_IN",
+        "JSON_PATH_EXISTS",
+        "JSON_PATH_EQUALS",
+        "JSON_PATH_IN",
+        "HEADER_EXISTS",
+        "HEADER_EQUALS",
+        "REDIRECT_PATH_MATCHES",
+        "HTML_SELECTOR_EXISTS",
+        "HTML_ATTRIBUTE_EQUALS",
+        "BODY_CONTAINS_LITERAL"
+      ],
+      "title": "HttpPredicateKind",
+      "type": "string"
+    },
+    "HttpRequestTemplate": {
+      "additionalProperties": false,
+      "description": "单请求受控模板；不接受 URL、脚本、任意文件或保留认证头。",
+      "properties": {
+        "body": {
+          "discriminator": {
+            "mapping": {
+              "EMPTY": "#/$defs/EmptyBody",
+              "FORM_URLENCODED": "#/$defs/FormUrlEncodedBody",
+              "JSON": "#/$defs/JsonBody",
+              "MULTIPART": "#/$defs/MultipartBody"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EmptyBody"
+            },
+            {
+              "$ref": "#/$defs/JsonBody"
+            },
+            {
+              "$ref": "#/$defs/FormUrlEncodedBody"
+            },
+            {
+              "$ref": "#/$defs/MultipartBody"
+            }
+          ],
+          "title": "Body"
+        },
+        "headers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Headers",
+          "type": "array"
+        },
+        "input_slots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ValueSlot"
+          },
+          "maxItems": 128,
+          "title": "Input Slots",
+          "type": "array"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "PATCH",
+            "POST",
+            "PUT",
+            "DELETE",
+            "HEAD"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Path",
+          "type": "string"
+        },
+        "query": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Query",
+          "type": "array"
+        },
+        "response_extractors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResponseExtractor"
+          },
+          "maxItems": 128,
+          "title": "Response Extractors",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "path"
+      ],
+      "title": "HttpRequestTemplate",
+      "type": "object"
+    },
+    "JsonBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "JSON",
+          "default": "JSON",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "JsonBody",
+      "type": "object"
+    },
+    "MultipartBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "MULTIPART",
+          "default": "MULTIPART",
+          "title": "Kind",
+          "type": "string"
+        },
+        "parts": {
+          "items": {
+            "$ref": "#/$defs/MultipartPart"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Parts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "parts"
+      ],
+      "title": "MultipartBody",
+      "type": "object"
+    },
+    "MultipartPart": {
+      "additionalProperties": false,
+      "description": "Multipart 只允许 literal、Slot 或已登记 fixture/artifact 标识。",
+      "properties": {
+        "content_type": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Type"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "fixture_artifact_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixture Artifact Id"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MultipartPart",
+      "type": "object"
+    },
+    "ObservationPhase": {
+      "enum": [
+        "INITIAL",
+        "BASELINE",
+        "BEFORE",
+        "AFTER",
+        "EVENTUAL"
+      ],
+      "title": "ObservationPhase",
+      "type": "string"
+    },
+    "ObserverBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "max_rows": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Max Rows",
+          "type": "integer"
+        },
+        "timeout_us": {
+          "maximum": 120000000,
+          "minimum": 1,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "timeout_us",
+        "max_rows",
+        "max_bytes"
+      ],
+      "title": "ObserverBudget",
+      "type": "object"
+    },
+    "ObserverSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "budget": {
+          "$ref": "#/$defs/ObserverBudget"
+        },
+        "observer_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Observer Id",
+          "type": "string"
+        },
+        "observer_type": {
+          "$ref": "#/$defs/ObserverType"
+        },
+        "phases": {
+          "items": {
+            "$ref": "#/$defs/ObservationPhase"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Phases",
+          "type": "array"
+        },
+        "protocol_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "target": {
+          "$ref": "#/$defs/ObserverTarget"
+        }
+      },
+      "required": [
+        "observer_id",
+        "observer_type",
+        "target",
+        "phases",
+        "required",
+        "budget"
+      ],
+      "title": "ObserverSpec",
+      "type": "object"
+    },
+    "ObserverTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "locator": {
+          "discriminator": {
+            "mapping": {
+              "ASYNC_TASK_STATUS": "#/$defs/AsyncTaskApiLocator",
+              "AZURE_BLOB_OBJECT": "#/$defs/AzureBlobObjectLocator",
+              "AZURE_QUEUE_PEEK": "#/$defs/AzureQueuePeekLocator",
+              "OWNER_API": "#/$defs/OwnerApiLocator",
+              "READ_ONLY_SQLITE": "#/$defs/SqliteQueryLocator",
+              "STRUCTURED_AUDIT_LOG": "#/$defs/StructuredAuditLogLocator"
+            },
+            "propertyName": "locator_type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/OwnerApiLocator"
+            },
+            {
+              "$ref": "#/$defs/SqliteQueryLocator"
+            },
+            {
+              "$ref": "#/$defs/StructuredAuditLogLocator"
+            },
+            {
+              "$ref": "#/$defs/AsyncTaskApiLocator"
+            },
+            {
+              "$ref": "#/$defs/AzureQueuePeekLocator"
+            },
+            {
+              "$ref": "#/$defs/AzureBlobObjectLocator"
+            }
+          ],
+          "title": "Locator"
+        },
+        "normalization_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Normalization Id",
+          "type": "string"
+        },
+        "normalization_version": {
+          "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}$",
+          "title": "Normalization Version",
+          "type": "string"
+        },
+        "target_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Target Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "locator",
+        "normalization_id",
+        "normalization_version"
+      ],
+      "title": "ObserverTarget",
+      "type": "object"
+    },
+    "ObserverType": {
+      "enum": [
+        "OWNER_API",
+        "READ_ONLY_SQLITE",
+        "STRUCTURED_AUDIT_LOG",
+        "ASYNC_TASK_STATUS",
+        "AZURE_QUEUE_PEEK",
+        "AZURE_BLOB_OBJECT"
+      ],
+      "title": "ObserverType",
+      "type": "string"
+    },
+    "OwnerApiLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "locator_type": {
+          "const": "OWNER_API",
+          "default": "OWNER_API",
+          "title": "Locator Type",
+          "type": "string"
+        },
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 2,
+          "title": "Relative Path Template",
+          "type": "string"
+        }
+      },
+      "required": [
+        "relative_path_template"
+      ],
+      "title": "OwnerApiLocator",
+      "type": "object"
+    },
+    "PreparedCookieCredential": {
+      "additionalProperties": false,
+      "description": "已准备 Cookie 的非秘密元数据；真实值只通过环境引用注入。",
+      "properties": {
+        "domain": {
+          "maxLength": 253,
+          "minLength": 1,
+          "title": "Domain",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "secure": {
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "value_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Value Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "domain",
+        "path",
+        "secure",
+        "value_ref"
+      ],
+      "title": "PreparedCookieCredential",
+      "type": "object"
+    },
+    "PreparedCookieSessionIdentityBinding": {
+      "additionalProperties": false,
+      "description": "把 Credential Manager 中已确认的 Cookie 会话投影到一次隔离 Case。",
+      "properties": {
+        "cookies": {
+          "items": {
+            "$ref": "#/$defs/PreparedCookieCredential"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Cookies",
+          "type": "array"
+        },
+        "kind": {
+          "const": "PREPARED_COOKIE_SESSION",
+          "default": "PREPARED_COOKIE_SESSION",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cookies"
+      ],
+      "title": "PreparedCookieSessionIdentityBinding",
+      "type": "object"
+    },
+    "QueuePeekBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "max_message_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Message Bytes",
+          "type": "integer"
+        },
+        "max_messages": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Messages",
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "Max Total Bytes",
+          "type": "integer"
+        },
+        "per_request_timeout_us": {
+          "maximum": 120000000,
+          "minimum": 1,
+          "title": "Per Request Timeout Us",
+          "type": "integer"
+        },
+        "retry_interval_us": {
+          "maximum": 120000000,
+          "minimum": 0,
+          "title": "Retry Interval Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_messages",
+        "max_message_bytes",
+        "max_total_bytes",
+        "max_attempts",
+        "per_request_timeout_us",
+        "retry_interval_us"
+      ],
+      "title": "QueuePeekBudget",
+      "type": "object"
+    },
+    "ResponseExtractor": {
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z_:][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribute"
+        },
+        "cookie_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cookie Name"
+        },
+        "extractor_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Extractor Id",
+          "type": "string"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "kind": {
+          "$ref": "#/$defs/ResponseExtractorKind"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "extractor_id",
+        "kind"
+      ],
+      "title": "ResponseExtractor",
+      "type": "object"
+    },
+    "ResponseExtractorKind": {
+      "enum": [
+        "JSON_PATH",
+        "HEADER",
+        "COOKIE",
+        "LOCATION",
+        "HTML_SELECTOR",
+        "HTML_ATTRIBUTE"
+      ],
+      "title": "ResponseExtractorKind",
+      "type": "string"
+    },
+    "SqliteQueryLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "database_secret_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Database Secret Ref",
+          "type": "string"
+        },
+        "locator_type": {
+          "const": "READ_ONLY_SQLITE",
+          "default": "READ_ONLY_SQLITE",
+          "title": "Locator Type",
+          "type": "string"
+        },
+        "query_template_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Query Template Id",
+          "type": "string"
+        },
+        "table_or_view": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Table Or View",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query_template_id",
+        "table_or_view",
+        "database_secret_ref"
+      ],
+      "title": "SqliteQueryLocator",
+      "type": "object"
+    },
+    "StructuredAuditLogLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_fields": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 26,
+          "minItems": 6,
+          "title": "Allowed Fields",
+          "type": "array"
+        },
+        "authorized_root_ref": {
+          "pattern": "^env:[A-Z_][A-Z0-9_]{0,63}$",
+          "title": "Authorized Root Ref",
+          "type": "string"
+        },
+        "locator_type": {
+          "const": "STRUCTURED_AUDIT_LOG",
+          "default": "STRUCTURED_AUDIT_LOG",
+          "title": "Locator Type",
+          "type": "string"
+        },
+        "relative_file_pattern": {
+          "pattern": "^[a-z][a-z0-9_-]{0,48}\\.jsonl$",
+          "title": "Relative File Pattern",
+          "type": "string"
+        },
+        "scan_budget": {
+          "$ref": "#/$defs/AuditLogScanBudget"
+        }
+      },
+      "required": [
+        "authorized_root_ref",
+        "relative_file_pattern",
+        "allowed_fields",
+        "scan_budget"
+      ],
+      "title": "StructuredAuditLogLocator",
+      "type": "object"
+    },
+    "ValueSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "consumer": {
+          "$ref": "#/$defs/ValueSlotConsumer"
+        },
+        "consumer_step": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Step"
+        },
+        "consumer_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Step Id"
+        },
+        "literal": {
+          "default": null,
+          "title": "Literal"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "producer_step": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Producer Step"
+        },
+        "producer_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Producer Step Id"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "secret_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secret Ref"
+        },
+        "slot_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ValueSlotSource"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Path"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
+        }
+      },
+      "required": [
+        "slot_id",
+        "source",
+        "consumer"
+      ],
+      "title": "ValueSlot",
+      "type": "object"
+    },
+    "ValueSlotConsumer": {
+      "enum": [
+        "PATH",
+        "QUERY",
+        "HEADER",
+        "JSON_BODY",
+        "FORM_FIELD",
+        "MULTIPART_FIELD"
+      ],
+      "title": "ValueSlotConsumer",
+      "type": "string"
+    },
+    "ValueSlotSource": {
+      "enum": [
+        "CASE_SUBJECT_ID",
+        "CASE_RESOURCE_ID",
+        "FIXED_LITERAL",
+        "SECRET_REF",
+        "PRIOR_STEP_JSON_PATH",
+        "PRIOR_STEP_HEADER",
+        "PRIOR_STEP_COOKIE",
+        "PRIOR_STEP_LOCATION"
+      ],
+      "title": "ValueSlotSource",
+      "type": "string"
+    },
+    "ValueType": {
+      "enum": [
+        "STRING",
+        "INTEGER",
+        "BOOLEAN",
+        "JSON"
+      ],
+      "title": "ValueType",
+      "type": "string"
+    },
+    "WebTargetScope": {
+      "additionalProperties": false,
+      "description": "Web 目标的协议级授权范围。",
+      "properties": {
+        "allow_private_network": {
+          "default": false,
+          "title": "Allow Private Network",
+          "type": "boolean"
+        },
+        "allowed_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "allowed_origins": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Origins",
+          "type": "array"
+        },
+        "allowed_ports": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Allowed Ports",
+          "type": "array"
+        },
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
+        },
+        "follow_redirects": {
+          "const": false,
+          "default": false,
+          "title": "Follow Redirects",
+          "type": "boolean"
+        },
+        "max_requests": {
+          "default": 64,
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 4194304,
+          "minimum": 1,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Timeout Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "base_url",
+        "allowed_origins",
+        "allowed_hosts",
+        "allowed_ports"
+      ],
+      "title": "WebTargetScope",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/CheckActionConfig"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "title": "Actions",
+      "type": "array"
+    },
+    "budget": {
+      "$ref": "#/$defs/CheckBudget"
+    },
+    "identities": {
+      "items": {
+        "$ref": "#/$defs/CheckIdentity"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Identities",
+      "type": "array"
+    },
+    "observers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ObserverSpec"
+      },
+      "maxItems": 256,
+      "title": "Observers",
+      "type": "array"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/WebTargetScope"
+    },
+    "target_type": {
+      "const": "WEB",
+      "default": "WEB",
+      "title": "Target Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "source_fingerprint",
+    "target",
+    "budget",
+    "identities",
+    "actions"
+  ],
+  "title": "CheckRuntimeBundle",
+  "type": "object"
+}

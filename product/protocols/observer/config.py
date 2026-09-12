@@ -351,6 +351,9 @@ _AUDIT_ALLOWED_FIELDS = frozenset(
         "source_component",
         "source_location",
         "recorded_at_us",
+        "allowed_action_ids",
+        "dispatch_effect_ids",
+        "allowed_resource_ids",
     }
 )
 
@@ -370,7 +373,7 @@ class StructuredAuditLogLocator(ObserverModel):
     locator_type: Literal["STRUCTURED_AUDIT_LOG"] = "STRUCTURED_AUDIT_LOG"
     authorized_root_ref: str = Field(pattern=_SECRET_REF_PATTERN)
     relative_file_pattern: str = Field(pattern=_AUDIT_FILENAME_PATTERN)
-    allowed_fields: tuple[str, ...] = Field(min_length=len(_AUDIT_REQUIRED_FIELDS), max_length=24)
+    allowed_fields: tuple[str, ...] = Field(min_length=len(_AUDIT_REQUIRED_FIELDS), max_length=26)
     scan_budget: AuditLogScanBudget
 
     @field_validator("allowed_fields")

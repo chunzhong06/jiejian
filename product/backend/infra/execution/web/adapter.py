@@ -31,7 +31,7 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import redact_known_secrets
 from product.backend.core.verification.facts import ExecutionFact, ExecutionOutcome, TargetType
 from product.protocols.web.identity import AuthTargetScope
-from product.protocols.web.target import WebTargetDefinition
+from product.protocols.web.target import WebTargetDefinition, WebTargetScope
 from product.protocols.web.workflow import (
     EmptyBody,
     FormUrlEncodedBody,
@@ -85,7 +85,7 @@ class WebTargetGuard:
 
     def __init__(
         self,
-        target: WebTargetDefinition | AuthTargetScope,
+        target: WebTargetDefinition | WebTargetScope | AuthTargetScope,
         *,
         reserved_origins: Sequence[str] = (),
     ) -> None:
@@ -149,7 +149,7 @@ class HttpExecutionAdapter:
 
     def __init__(
         self,
-        target: WebTargetDefinition,
+        target: WebTargetDefinition | WebTargetScope,
         *,
         cleanup_reserve: int = 0,
         known_secrets: tuple[str, ...] = (),
@@ -157,6 +157,7 @@ class HttpExecutionAdapter:
         executor_process_id: int | None = None,
         fixture_artifacts: Mapping[str, bytes] | None = None,
         reserved_origins: Sequence[str] = (),
+        request_marker: Callable[[str], str] | None = None,
     ) -> None:
         """创建不读取代理环境、不自动跟随重定向的有界 HTTP 客户端。
 
@@ -174,9 +175,10 @@ class HttpExecutionAdapter:
         self.cancellation_requested = cancellation_requested or (lambda: False)
         self.executor_process_id = executor_process_id
         self.fixture_artifacts = dict(fixture_artifacts or {})
+        self.request_marker = request_marker
         self.client = httpx.Client(
             follow_redirects=False,
-            timeout=target.scope.timeout_seconds,
+            timeout=self.guard.scope.timeout_seconds,
             trust_env=False,
         )
 
@@ -328,6 +330,8 @@ class HttpExecutionAdapter:
             self.auth_requests_used[auth_scope.base_url] = used + 1
         # case ID 贯穿目标请求和样例状态，便于把副作用关联回当前攻击用例。
         request_headers = {"X-Jiejian-Case-ID": case_id}
+        if self.request_marker is not None:
+            request_headers["X-Jiejian-Request-ID"] = self.request_marker(case_id)
         if self.executor_process_id is not None:
             request_headers["X-Jiejian-Runner-PID"] = str(self.executor_process_id)
         if identity_runtime is not None and not bootstrap_request and auth_scope is None:

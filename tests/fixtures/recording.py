@@ -40,13 +40,19 @@ class RecordingContext:
             work.application_understanding.replace(understanding)
             action_binding = work.business_boundaries.action_binding(self.harness.action.action_id, 1)
             actor_binding = work.business_boundaries.actor_binding(identity.actor_id, identity.actor_revision)
-            fingerprint = recording_source_fingerprint(self.harness.action, identity, understanding, action_binding, actor_binding)
+            fingerprint = recording_source_fingerprint(self.harness.action, identity, understanding, action_binding, actor_binding, owner=identity, owner_actor_binding=actor_binding)
             work.commit()
+        preparation = self.harness.core.preparation.get(self.project_id).actions[0]
+        position = next(item for item in preparation.assurance_contract.identity_requirements.permissions
+                        if item.subject_slot_id == item.resource_owner_slot_id)
         return RecordingRunnerRequest.model_validate(request.model_dump(mode="python") | {
             "project_id": self.project_id,
             "business_action_id": self.harness.action.action_id,
             "action_revision": 1,
-            "test_identity_id": identity.identity_id,
+            "subject_test_identity_id": identity.identity_id,
+            "resource_owner_test_identity_id": identity.identity_id,
+            "subject_slot_id": position.subject_slot_id,
+            "resource_owner_slot_id": position.resource_owner_slot_id,
             "preparation_source_fingerprint": fingerprint,
             "sessions": (request.sessions[0].model_copy(update={"test_identity_id": identity.identity_id}),),
         })
@@ -249,12 +255,15 @@ def browser_server(secret: str) -> Iterator[LocalBrowserServer]:
 def recording_request(port: int) -> RecordingRunnerRequest:
     created_at_us = time.time_ns() // 1_000
     return RecordingRunnerRequest(
-        schema_version="2",
+        schema_version="3",
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
         business_action_id="bac_0123456789abcdef0123456789abcdef",
         action_revision=1,
-        test_identity_id=TEST_IDENTITY_ID,
+        subject_test_identity_id=TEST_IDENTITY_ID,
+        resource_owner_test_identity_id=TEST_IDENTITY_ID,
+        subject_slot_id="isl_" + "1" * 32,
+        resource_owner_slot_id="isl_" + "1" * 32,
         preparation_source_fingerprint="a" * 64,
         created_at_us=created_at_us,
         target_scope=WebTargetScope(
@@ -306,12 +315,15 @@ def runner_request(
     secret_refs: tuple[str, ...] = ("env:RECORDING_SECRET",),
 ) -> RecordingRunnerRequest:
     return RecordingRunnerRequest(
-        schema_version="2",
+        schema_version="3",
         recording_id=recording_id,
         project_id=PROJECT_ID,
         business_action_id="bac_" + "1" * 32,
         action_revision=1,
-        test_identity_id=TEST_IDENTITY_ID,
+        subject_test_identity_id=TEST_IDENTITY_ID,
+        resource_owner_test_identity_id=TEST_IDENTITY_ID,
+        subject_slot_id="isl_" + "1" * 32,
+        resource_owner_slot_id="isl_" + "1" * 32,
         preparation_source_fingerprint="a" * 64,
         created_at_us=NOW_US if recording_id.endswith("1" * 32) else NOW_US + 100,
         target_scope=WebTargetScope(

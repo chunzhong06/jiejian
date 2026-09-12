@@ -13,6 +13,7 @@ from product.backend.core.business_boundary import (
     BusinessActionRevision,
     boundary_sha256,
 )
+from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.permission_intent import (
     PermissionIntentEffectiveState,
     PermissionIntentRelation,
@@ -33,9 +34,9 @@ class AssuranceStatus(StrEnum):
 
 
 class PermissionIdentity(BoundaryModel):
-    intent_id: str
+    intent_id: str = Field(pattern=r"^pin_[0-9a-f]{32}$")
     revision: int = Field(ge=1)
-    intent_hash: str
+    intent_hash: str = Field(pattern=SHA256_PATTERN)
 
 
 class IdentityRequirementSlot(BoundaryModel):
@@ -71,8 +72,23 @@ class EffectEvidenceRequirement(BoundaryModel):
 
 class AllowControlRequirement(BoundaryModel):
     deny_permission: PermissionIdentity
-    effect_id: str
-    allow_permission: PermissionIdentity | None
+    protected_effect_ids: tuple[str, ...]
+    candidate_allow_permissions: tuple[PermissionIdentity, ...]
+    resolved_allow_permission: PermissionIdentity | None
+    selection_fingerprint: str = Field(pattern=SHA256_PATTERN)
+
+
+# 只记录有限候选中的人工技术选择；不拥有审批权或 policy epoch。
+class ActionAllowControlBinding(BoundaryModel):
+    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    deny_intent_id: str = Field(pattern=r"^pin_[0-9a-f]{32}$")
+    deny_intent_revision: int = Field(ge=1)
+    deny_intent_hash: str = Field(pattern=SHA256_PATTERN)
+    selected_allow_intent_id: str = Field(pattern=r"^pin_[0-9a-f]{32}$")
+    selected_allow_intent_revision: int = Field(ge=1)
+    selected_allow_intent_hash: str = Field(pattern=SHA256_PATTERN)
+    selection_fingerprint: str = Field(pattern=SHA256_PATTERN)
+    confirmed_at_us: int = Field(ge=0)
 
 
 class ActionAssuranceContract(BoundaryModel):
@@ -140,26 +156,56 @@ def _color_components(neighbors: tuple[frozenset[int], ...]) -> tuple[int, ...]:
 class IdentityRequirementPlanner:
     """先合并 OWNS，再按每个 Actor revision 的不同身份约束分组；输入须已通过关系审查。"""
 
-    def plan(self, permissions: tuple[PermissionIntentRevision, ...]) -> IdentityRequirementPlan:
+    def plan(
+        self, permissions: tuple[PermissionIntentRevision, ...],
+        controls: tuple[AllowControlRequirement, ...] = (),
+    ) -> IdentityRequirementPlan:
         ordered = tuple(sorted(permissions, key=lambda item: (item.intent_id, item.revision)))
         if any(not _relation_valid(item) for item in ordered):
             raise ValueError("PERMISSION_RELATION_REVIEW_REQUIRED")
         if len({item.intent_id for item in ordered}) != len(ordered):
             raise ValueError("current permission identities must be unique")
-        # 一个逻辑位置由权限身份与 subject/owner 角色确定；OWNS 的两端使用同一个组件。
+        # 先以并查集合并 OWNS 和已解析 Twin 的 owner，再构造同角色 distinct 图。
         components: dict[tuple[str, int], list[tuple[tuple[str, str], ...]]] = defaultdict(list)
         edges: list[tuple[tuple[str, str], tuple[str, str]]] = []
+        parents = {(item.intent_id, role): (item.intent_id, role)
+                   for item in ordered for role in ("subject", "owner")}
+        actors = {(item.intent_id, role): actor for item in ordered for role, actor in (
+            ("subject", (item.subject_actor_id, item.subject_actor_revision)),
+            ("owner", (item.resource_owner_actor_id, item.resource_owner_actor_revision)),
+        )}
+
+        def root(position):
+            while parents[position] != position:
+                position = parents[position]
+            return position
+
+        def merge(left, right):
+            if left not in parents or right not in parents or actors[left] != actors[right]:
+                raise ValueError("CHECK_TWIN_INVARIANT_REQUIRED")
+            a, b = sorted((root(left), root(right)))
+            parents[b] = a
+
         for item in ordered:
             subject = (item.intent_id, "subject")
             owner = (item.intent_id, "owner")
             subject_actor = (item.subject_actor_id, item.subject_actor_revision)
             owner_actor = (item.resource_owner_actor_id, item.resource_owner_actor_revision)
             if item.relation is PermissionIntentRelation.OWNS:
-                components[subject_actor].append(tuple(sorted((subject, owner))))
+                merge(subject, owner)
             else:
-                components[subject_actor].append((subject,))
-                components[owner_actor].append((owner,))
                 edges.append((subject, owner))
+        for control in controls:
+            if control.resolved_allow_permission is not None:
+                merge((control.deny_permission.intent_id, "owner"),
+                      (control.resolved_allow_permission.intent_id, "owner"))
+        grouped = defaultdict(list)
+        for position in sorted(parents):
+            grouped[root(position)].append(position)
+        for representative, positions in sorted(grouped.items()):
+            components[actors[representative]].append(tuple(positions))
+        if any(root(left) == root(right) for left, right in edges):
+            raise ValueError("IDENTITY_DISTINCT_REQUIRED")
 
         slot_specs: list[tuple[str, str, int, int, tuple[str, ...]]] = []
         position_slots: dict[tuple[str, str], str] = {}
@@ -217,6 +263,7 @@ class IdentityRequirementPlanner:
 def compile_action_assurance(
     action: BusinessActionRevision,
     permissions: tuple[PermissionIntentRevision, ...],
+    allow_control_bindings: tuple[ActionAllowControlBinding, ...] = (),
 ) -> ActionAssuranceContract:
     """现场编译 current 权限；无 ALLOW 或历史关系不一致均阻断，不推测替代身份。"""
 
@@ -234,17 +281,20 @@ def compile_action_assurance(
     effects = {effect.effect_id for effect in action.effect_catalog}
     if any(not set(item.protected_effect_ids) <= effects for item in current):
         reasons.append("PERMISSION_REVISION_REVIEW_REQUIRED")
-    plan = IdentityRequirementPlanner().plan(current if valid else ())
     allows = tuple(item for item in current if item.expectation is PermissionExpectation.ALLOW and _relation_valid(item))
-    controls = tuple(AllowControlRequirement(
-        deny_permission=_permission_identity(deny), effect_id=effect_id,
-        allow_permission=next((
-            _permission_identity(allow) for allow in allows if effect_id in allow.protected_effect_ids
-        ), None),
-    ) for deny in current if deny.expectation is PermissionExpectation.DENY
-        for effect_id in deny.protected_effect_ids)
-    if not allows or any(item.allow_permission is None for item in controls):
+    controls = tuple(_compile_allow_control(action, deny, allows, allow_control_bindings)
+                     for deny in current if deny.expectation is PermissionExpectation.DENY)
+    if not allows or any(not item.candidate_allow_permissions for item in controls):
         reasons.append("ALLOW_CONTROL_REQUIRED")
+    if any(item.candidate_allow_permissions and item.resolved_allow_permission is None for item in controls):
+        reasons.append("ALLOW_CONTROL_SELECTION_REQUIRED")
+    try:
+        plan = IdentityRequirementPlanner().plan(current if valid else (), controls if valid else ())
+    except ValueError as error:
+        if str(error) not in {"CHECK_TWIN_INVARIANT_REQUIRED", "IDENTITY_DISTINCT_REQUIRED"}:
+            raise
+        reasons.append(str(error))
+        plan = IdentityRequirementPlanner().plan(())
     owner_intents: dict[str, set[str]] = defaultdict(set)
     for item in plan.permissions:
         owner_intents[item.resource_owner_slot_id].add(item.permission.intent_id)
@@ -271,8 +321,45 @@ def compile_action_assurance(
     })
 
 
+def _compile_allow_control(action, deny, allows, bindings):
+    candidates = tuple(allow for allow in allows if _relation_valid(deny)
+        and (allow.resource_owner_actor_id, allow.resource_owner_actor_revision)
+        == (deny.resource_owner_actor_id, deny.resource_owner_actor_revision)
+        and set(allow.protected_effect_ids) >= set(deny.protected_effect_ids))
+    # ID 只控制展示顺序，不能用来解决同级候选歧义。
+    def rank(allow):
+        return int((allow.subject_actor_id, allow.subject_actor_revision)
+                   != (deny.subject_actor_id, deny.subject_actor_revision))
+    best_rank = min((rank(item) for item in candidates), default=None)
+    identities = tuple(_permission_identity(item) for item in candidates if rank(item) == best_rank)
+    deny_identity = _permission_identity(deny)
+    effects = tuple(sorted(set(deny.protected_effect_ids)))
+    fingerprint = boundary_sha256({
+        "kind": "ActionAllowControlSelection", "deny_permission": deny_identity.model_dump(mode="json"),
+        "protected_effect_ids": effects,
+        "candidate_allow_permissions": [item.model_dump(mode="json") for item in identities],
+    })
+    resolved = identities[0] if len(identities) == 1 else None
+    if len(identities) > 1:
+        selected = {(
+            item.selected_allow_intent_id, item.selected_allow_intent_revision, item.selected_allow_intent_hash
+        ) for item in bindings if item.project_id == action.project_id
+            and (item.deny_intent_id, item.deny_intent_revision, item.deny_intent_hash)
+            == (deny.intent_id, deny.revision, deny.intent_hash)
+            and item.selection_fingerprint == fingerprint}
+        matches = tuple(item for item in identities
+                        if (item.intent_id, item.revision, item.intent_hash) in selected)
+        if len(matches) == 1:
+            resolved = matches[0]
+    return AllowControlRequirement(
+        deny_permission=deny_identity, protected_effect_ids=effects,
+        candidate_allow_permissions=identities, resolved_allow_permission=resolved,
+        selection_fingerprint=fingerprint,
+    )
+
+
 __all__ = [
-    "ActionAssuranceContract", "ActionResourceRequirement", "AllocationMode",
+    "ActionAssuranceContract", "ActionAllowControlBinding", "AllowControlRequirement", "ActionResourceRequirement", "AllocationMode",
     "AssuranceStatus", "EffectEvidenceRequirement", "IdentityRequirementPlan",
     "IdentityRequirementPlanner", "IdentityRequirementSlot", "PermissionIdentity",
     "PermissionIdentitySlots", "compile_action_assurance",

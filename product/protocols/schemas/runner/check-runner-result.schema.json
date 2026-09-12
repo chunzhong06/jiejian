@@ -1,0 +1,306 @@
+{
+  "$defs": {
+    "CaseVerdict": {
+      "enum": [
+        "SAFE",
+        "VULNERABLE",
+        "INCONCLUSIVE",
+        "SKIPPED",
+        "ERROR"
+      ],
+      "title": "CaseVerdict",
+      "type": "string"
+    },
+    "CheckCaseOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_identity_status": {
+          "enum": [
+            "MATCH",
+            "MISMATCH",
+            "UNKNOWN"
+          ],
+          "title": "Actual Identity Status",
+          "type": "string"
+        },
+        "baseline_trusted": {
+          "title": "Baseline Trusted",
+          "type": "boolean"
+        },
+        "execution_outcome": {
+          "enum": [
+            "ACCEPTED",
+            "DENIED",
+            "FAILED",
+            "UNKNOWN"
+          ],
+          "title": "Execution Outcome",
+          "type": "string"
+        },
+        "http_status": {
+          "anyOf": [
+            {
+              "maximum": 599,
+              "minimum": 100,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Http Status"
+        },
+        "recovery_verified": {
+          "title": "Recovery Verified",
+          "type": "boolean"
+        },
+        "resource_correlated": {
+          "title": "Resource Correlated",
+          "type": "boolean"
+        },
+        "run_correlated": {
+          "title": "Run Correlated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "execution_outcome",
+        "actual_identity_status",
+        "baseline_trusted",
+        "recovery_verified",
+        "run_correlated",
+        "resource_correlated"
+      ],
+      "title": "CheckCaseOutcome",
+      "type": "object"
+    },
+    "CheckCaseResult": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^case_[0-9a-f]{32}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev_[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 48,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "outcome": {
+          "$ref": "#/$defs/CheckCaseOutcome"
+        },
+        "reason_codes": {
+          "items": {
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "verdict": {
+          "$ref": "#/$defs/CaseVerdict"
+        }
+      },
+      "required": [
+        "case_id",
+        "action_id",
+        "verdict",
+        "reason_codes",
+        "evidence_ids",
+        "outcome"
+      ],
+      "title": "CheckCaseResult",
+      "type": "object"
+    },
+    "CheckPrimaryError": {
+      "additionalProperties": false,
+      "properties": {
+        "cause_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cause Code"
+        },
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "phase": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Phase",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "phase"
+      ],
+      "title": "CheckPrimaryError",
+      "type": "object"
+    },
+    "RunLifecycle": {
+      "enum": [
+        "QUEUED",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "SAFETY_STOPPED"
+      ],
+      "title": "RunLifecycle",
+      "type": "string"
+    },
+    "RunVerdict": {
+      "enum": [
+        "PASS",
+        "BLOCK",
+        "INCONCLUSIVE"
+      ],
+      "title": "RunVerdict",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "case_results": {
+      "items": {
+        "$ref": "#/$defs/CheckCaseResult"
+      },
+      "maxItems": 8192,
+      "title": "Case Results",
+      "type": "array"
+    },
+    "cleanup_issues": {
+      "default": [],
+      "items": {
+        "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Cleanup Issues",
+      "type": "array"
+    },
+    "completed_at_us": {
+      "minimum": 0,
+      "title": "Completed At Us",
+      "type": "integer"
+    },
+    "config_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Config Hash",
+      "type": "string"
+    },
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "lease_owner": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Lease Owner",
+      "type": "string"
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/RunLifecycle"
+    },
+    "primary_error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CheckPrimaryError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "request_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "result_type": {
+      "enum": [
+        "SUCCESS",
+        "SAFETY_STOPPED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "title": "Result Type",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "started_at_us": {
+      "minimum": 0,
+      "title": "Started At Us",
+      "type": "integer"
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunVerdict"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "run_id",
+    "job_id",
+    "attempt",
+    "lease_owner",
+    "fencing_token",
+    "request_hash",
+    "config_hash",
+    "result_type",
+    "lifecycle",
+    "case_results",
+    "verdict",
+    "started_at_us",
+    "completed_at_us"
+  ],
+  "title": "CheckRunnerResult",
+  "type": "object"
+}

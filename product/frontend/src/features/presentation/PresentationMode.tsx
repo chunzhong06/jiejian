@@ -257,25 +257,25 @@ function ChangeAct({ change, intent, issue, approval, onOpen }: {
   onOpen: () => void
 }) {
   if (!change) return <div className="presentation-page-body"><Alert message="当前问题 Run 没有可读取的关联变化" description="界鉴不会把最近一条无关变化拼接到这个故事中。" type="warning" showIcon /><Button onClick={onOpen}>查看正式变化记录</Button></div>
-  const actualPaths = [...change.added_paths.map((path) => ({ label: '新增', path })), ...change.modified_paths.map((path) => ({ label: '修改', path })), ...change.removed_paths.map((path) => ({ label: '删除', path }))]
-  const submittedThroughMcp = change.submitted_by.startsWith('MCP')
+  const actualPaths = [...change.change_set.added_paths.map((path) => ({ label: '新增', path })), ...change.change_set.modified_paths.map((path) => ({ label: '修改', path })), ...change.change_set.removed_paths.map((path) => ({ label: '删除', path }))]
+  const submittedThroughMcp = change.manifest.submitted_by.startsWith('MCP')
   return <div className="presentation-page-body">
     <section className="presentation-change-flow" aria-label="人的规则、提交变化与界鉴核对">
       <article><span>人的权限基线</span><strong>{permissionStatement(intent, issue)}</strong><small>{approval ? `${approval.approved_by} 已确认` : '审批记录未发布'}</small></article><div aria-hidden="true">→</div>
-      <article className="is-agent"><span>变化提交记录</span><strong>{change.reason}</strong><small>{change.submitted_by} · {formatTimestamp(change.created_at_us)}</small></article><div aria-hidden="true">→</div>
-      <article className="is-system"><span>界鉴独立核对</span><strong>实际变化 {change.actual_changed_path_count} 个文件</strong><small>直接影响 {change.directly_affected_count} 条权限规则</small></article>
+      <article className="is-agent"><span>变化提交记录</span><strong>{change.manifest.reason}</strong><small>{change.manifest.submitted_by} · {formatTimestamp(change.manifest.created_at_us)}</small></article><div aria-hidden="true">→</div>
+      <article className="is-system"><span>界鉴独立核对</span><strong>实际变化 {change.change_set.added_paths.length + change.change_set.modified_paths.length + change.change_set.removed_paths.length} 个文件</strong><small>直接影响 {change.assessment.payload.action_impacts.filter(item => item.classification === 'DIRECTLY_AFFECTED').length} 项业务动作</small></article>
     </section>
     <section className="presentation-change-receipt" aria-label="变化来源、回执与检查关联">
-      <div><span>提交来源</span><strong>{change.submitted_by}</strong></div>
-      <div><span>{submittedThroughMcp ? 'MCP 提交回执' : '变化登记回执'}</span><strong>界鉴已登记这次变化</strong><small>{change.change_id}</small></div>
+      <div><span>提交来源</span><strong>{change.manifest.submitted_by}</strong></div>
+      <div><span>{submittedThroughMcp ? 'MCP 提交回执' : '变化登记回执'}</span><strong>界鉴已登记这次变化</strong><small>{change.manifest.change_id}</small></div>
       <div><span>检查关联</span><strong>由本次问题检查精确引用</strong><small>不使用“最近一条变化”推测</small></div>
     </section>
-    <Alert type="info" showIcon message={change.summary} description="Agent 说明只解释修改意图；文件数量、真实路径和权限影响来自界鉴重新读取源码后的结果。" />
+    <Alert type="info" showIcon message={change.change_set.status === 'COMPARABLE' ? '真实源码变化已登记' : '缺少可比较的源码基线'} description="Agent 说明只解释修改意图；文件数量、真实路径和权限影响来自界鉴重新读取源码后的结果。" />
     <section className="presentation-change-detail" aria-label="声明变化与实际变化">
-      <article><Typography.Text strong>Agent 声明会修改</Typography.Text>{change.claimed_paths.length ? <ul>{change.claimed_paths.map((path) => <li key={path}><Typography.Text code>{path}</Typography.Text></li>)}</ul> : <Typography.Paragraph type="secondary">Agent 没有声明具体路径。</Typography.Paragraph>}</article>
+      <article><Typography.Text strong>Agent 声明会修改</Typography.Text>{change.manifest.claimed_paths.length ? <ul>{change.manifest.claimed_paths.map((path) => <li key={path}><Typography.Text code>{path}</Typography.Text></li>)}</ul> : <Typography.Paragraph type="secondary">Agent 没有声明具体路径。</Typography.Paragraph>}</article>
       <article><Typography.Text strong>界鉴实际确认</Typography.Text>{actualPaths.length ? <ul>{actualPaths.map((item) => <li key={`${item.label}:${item.path}`}><span>{item.label}</span><Typography.Text code>{item.path}</Typography.Text></li>)}</ul> : <Typography.Paragraph type="secondary">当前变化没有形成可比较的文件差异。</Typography.Paragraph>}</article>
     </section>
-    <div className="presentation-actions"><Tag color={submittedThroughMcp ? 'blue' : 'default'}>{change.submitted_by}</Tag><Button onClick={onOpen}>查看完整变化记录</Button></div>
+    <div className="presentation-actions"><Tag color={submittedThroughMcp ? 'blue' : 'default'}>{change.manifest.submitted_by}</Tag><Button onClick={onOpen}>查看完整变化记录</Button></div>
   </div>
 }
 
@@ -332,7 +332,7 @@ function RepairAct({ presentation, sourcePresentation, issue, repairChange, onEv
   const verified = verification.status === 'VERIFIED'
   const orderedPaths = ['DENY_EFFECT_REMOVAL', 'ALLOW_CONTROL', 'REGRESSION_CONTROL'].flatMap((kind) => verification.path_results.filter((item) => item.kind === kind))
   return <div className="presentation-page-body">
-    {repairChange && <div className="presentation-repair-change"><span>修复变化</span><strong>{repairChange.reason}</strong><small>{repairChange.submitted_by} · 实际修改 {repairChange.actual_changed_path_count} 个文件</small></div>}
+    {repairChange && <div className="presentation-repair-change"><span>修复变化</span><strong>{repairChange.manifest.reason}</strong><small>{repairChange.manifest.submitted_by} · 实际修改 {repairChange.change_set.added_paths.length + repairChange.change_set.modified_paths.length + repairChange.change_set.removed_paths.length} 个文件</small></div>}
     <section className="presentation-repair-contract" aria-label="修复合同"><article><span>必须消失</span><strong>{requirement?.must_disappear || '原违规后果必须消失'}</strong></article><article><span>必须保留</span><strong>{requirement?.must_remain || '合法业务能力必须保留'}</strong></article><article><span>不能改变</span><strong>{requirement?.must_not_change.join('、') || '原权限和关键观察标准'}</strong></article></section>
     <div className="presentation-before-after"><RepairRunCard label="修复前" presentation={sourcePresentation} issue={sourceIssue} /><div className="presentation-repair-arrow" aria-hidden="true">→</div><RepairRunCard label="修复后" presentation={presentation} issue={issue} /></div>
     <section aria-labelledby="repair-paths-title"><Typography.Title id="repair-paths-title" level={3}>三条路径分别核对</Typography.Title><div className="presentation-repair-paths">

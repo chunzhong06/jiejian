@@ -45,6 +45,20 @@ from product.backend.infra.observers.owner_api import (
 from product.backend.core.redaction import redact_known_secrets
 pytestmark = pytest.mark.essential
 
+
+def test_audit_scope_locator_all_26_fields_are_bound_and_unknown_fields_rejected():
+    from product.protocols.observer.config import _AUDIT_ALLOWED_FIELDS
+    from tests.backend.infra.observers.test_audit_log_observer import _spec, FIELDS
+    fields = tuple(sorted(_AUDIT_ALLOWED_FIELDS))
+    assert len(fields) == 26
+    spec = _spec(fields=fields)
+    raw = canonical_json_bytes(spec)
+    assert ObserverSpec.model_validate_json(raw) == spec
+    assert observer_canonical_sha256(spec) != observer_canonical_sha256(_spec(fields=FIELDS))
+    for invalid in (fields + ("unknown",), fields + (fields[0],), FIELDS + ("unknown",), FIELDS + (FIELDS[0],)):
+        with pytest.raises(ValueError):
+            _spec(fields=invalid)
+
 def test_locator_types_and_secret_boundaries_are_strict() -> None:
     owner = ObserverSpec(
         observer_id="owner_api",

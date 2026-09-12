@@ -19,6 +19,11 @@ def _recording() -> Recording:
     return Recording(
         recording_id="rec_0123456789abcdef0123456789abcdef",
         project_id="ownership-recording",
+        business_action_id="bac_" + "1" * 32,
+        action_revision=1,
+        subject_test_identity_id="tid_" + "1" * 32,
+        resource_owner_test_identity_id="tid_" + "2" * 32,
+        preparation_source_fingerprint="a" * 64,
         created_at_us=1,
         updated_at_us=1,
     )
@@ -57,6 +62,8 @@ def test_recording_normal_lifecycle_reaches_review_then_completion() -> None:
         reason_code=RecordingReasonCode.REVIEW_COMPLETED,
     )
 
+    assert recording.subject_test_identity_id == "tid_" + "1" * 32
+    assert recording.resource_owner_test_identity_id == "tid_" + "2" * 32
     assert recording.state is RecordingState.COMPLETED
     assert recording.started_at_us == 2
     assert recording.capture_finished_at_us == 5

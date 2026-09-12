@@ -112,7 +112,8 @@ def build_draft() -> FlowDraft:
         flow_id="recorded-flow",
         business_action_id=BUSINESS_ACTION_ID,
         action_revision=1,
-        test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        subject_test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        resource_owner_test_identity_id="tid_0123456789abcdef0123456789abcdef",
         events=recorded_events(),
     )
 
@@ -166,7 +167,7 @@ def test_review_requires_explicit_target_and_recorded_resource_confirmation() ->
     assert ready.revision >= draft.revision
     assert all(item.status is FlowDraftVariableStatus.CONFIRMED for item in ready.variables)
     flow = compiler.compile(ready)
-    assert flow.schema_version == "2"
+    assert flow.schema_version == "3"
     assert flow.business_action_id == BUSINESS_ACTION_ID
     assert flow.target_step_id == reviewed.target_step_id
     assert flow.steps[-1].purpose is WorkflowStepPurpose.TARGET
@@ -211,7 +212,8 @@ def test_compile_drops_extractors_used_only_by_steps_after_target() -> None:
         flow_id="recorded-flow",
         business_action_id=BUSINESS_ACTION_ID,
         action_revision=1,
-        test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        subject_test_identity_id="tid_0123456789abcdef0123456789abcdef",
+        resource_owner_test_identity_id="tid_0123456789abcdef0123456789abcdef",
         revision=1,
         steps=(
             FlowDraftStep(

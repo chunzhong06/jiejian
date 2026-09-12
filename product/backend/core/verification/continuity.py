@@ -20,6 +20,8 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from product.backend.core.verification.differential import PermissionTwin
+from product.backend.core.verification.checks import CheckDecisionInput
+from product.protocols.execution_v3 import ExecutionAction
 from product.backend.core.verification.facts import (
     ObservedEffect,
     SecurityEffectFact,
@@ -52,7 +54,8 @@ class _ContinuityModel(BaseModel):
 
 class AuthorizationEffectReference(_ContinuityModel):
     effect_id: str = Field(pattern=_PUBLIC_ID)
-    resource_id: str = Field(pattern=_PUBLIC_ID)
+    # 资源使用冻结业务标识的原值；不得为适配旧 Trace 命名空间生成别名。
+    resource_id: str = Field(min_length=1, max_length=256)
 
 
 class AuthorizationContinuityAssessment(_ContinuityModel):
@@ -114,6 +117,42 @@ class AuthorizationContinuityAssessment(_ContinuityModel):
         elif confirmed or unknown:
             raise ValueError("intact continuity requires every protected effect to be absent")
         return self
+
+
+def assess_check_authorization_continuity(
+    action: ExecutionAction,
+    facts: CheckDecisionInput,
+) -> AuthorizationContinuityAssessment:
+    """解释当前 DENY 已形成的效果事实；不调用判定器，也不读取目标或重新形成 Verdict。"""
+    case = facts.case
+    if case not in action.cases:
+        raise ValueError("continuity case is outside the frozen action")
+    if case.permission.expectation != "DENY":
+        raise ValueError("authorization continuity requires a frozen DENY case")
+    required = tuple(proof for proof in case.proof_requirements if proof.level == "VERDICT_REQUIRED")
+    by_proof = {fact.proof_fingerprint: fact for fact in facts.effects}
+    protected = tuple(AuthorizationEffectReference(effect_id=effect_id, resource_id=case.resource_id)
+                      for effect_id in case.protected_effect_ids)
+    attributed = facts.actual_identity == "MATCH" and facts.run_correlated and facts.resource_correlated
+    confirmed = []
+    unknown = []
+    for reference in protected:
+        proofs = tuple(proof for proof in required if proof.effect_id == reference.effect_id)
+        values = tuple(by_proof.get(proof.proof_fingerprint) for proof in proofs)
+        trusted = tuple(value for value in values if value is not None and value.authoritative
+                        and value.complete and value.reliable and value.correlated)
+        if attributed and any(value.state == "CONFIRMED" for value in trusted):
+            confirmed.append(reference)
+        elif not (attributed and facts.baseline_trusted and values and len(trusted) == len(values)
+                  and all(value.state == "ABSENT" and value.closure == "CLOSED" for value in trusted)):
+            unknown.append(reference)
+    state = (AuthorizationContinuityState.ORPHAN_EFFECT_CONFIRMED if confirmed else
+             AuthorizationContinuityState.UNKNOWN if unknown else AuthorizationContinuityState.INTACT)
+    reason = ("DENY_PROTECTED_EFFECT_CONFIRMED" if confirmed else
+              "PROTECTED_EFFECT_EVIDENCE_INCOMPLETE" if unknown else "ALL_PROTECTED_EFFECTS_RELIABLY_ABSENT")
+    return AuthorizationContinuityAssessment(case_id=case.case_id, action_id=action.action_id, state=state,
+        protected_effects=protected, confirmed_effects=tuple(confirmed), unknown_effects=tuple(unknown),
+        reason_codes=(reason,))
 
 
 def assess_authorization_continuity(

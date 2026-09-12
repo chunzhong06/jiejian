@@ -40,7 +40,7 @@ from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 _BASE_MIGRATION_REVISION = "0001_business_boundary_v2"
 _MAINTENANCE_MIGRATION_REVISION = "0002_business_boundary_maintenance"
-_CURRENT_MIGRATION_REVISION = "0003_action_assurance_recording"
+_CURRENT_MIGRATION_REVISION = "0005_verification_loop_v3"
 _LEGACY_1_X_MIGRATION_REVISIONS = frozenset(
     {
         "0001_web_v1",
@@ -219,6 +219,27 @@ def _check_database_compatibility(
             revision = revisions[0]
             if revision in _LEGACY_1_X_MIGRATION_REVISIONS:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
+            if revision == "0004_action_resource_ownership" and resource_root is not None:
+                if _sqlite_schema_signature(connection) != _legacy_schema_signature(resource_root, revision):
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
+                if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, "既有数据库引用关系无效；数据库未修改")
+                for table in ("runs", "evidence_index", "findings", "finding_occurrences", "run_finalizations",
+                              "regression_baselines", "gate_results", "change_manifests", "source_change_sets",
+                              "change_impact_assessments"):
+                    if connection.execute(f'SELECT 1 FROM "{table}" LIMIT 1').fetchone() is not None:
+                        raise JiejianError(ErrorCode.STORAGE_MIGRATION, "存在旧执行数据；数据库未修改")
+                if connection.execute("SELECT 1 FROM jobs WHERE run_id IS NOT NULL LIMIT 1").fetchone() is not None:
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, "存在旧执行任务；数据库未修改")
+                return
+            if revision == "0003_action_assurance_recording" and resource_root is not None:
+                if _sqlite_schema_signature(connection) != _legacy_schema_signature(resource_root, revision):
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
+                if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, "既有数据库引用关系无效；数据库未修改")
+                if connection.execute("SELECT 1 FROM action_resource_bindings WHERE owner_test_identity_id != test_identity_id LIMIT 1").fetchone() is not None:
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, "既有资源身份关系无效；数据库未修改")
+                return
             if revision in {_BASE_MIGRATION_REVISION, _MAINTENANCE_MIGRATION_REVISION} and resource_root is not None:
                 if _sqlite_schema_signature(connection) != _legacy_schema_signature(
                     resource_root, revision

@@ -1,0 +1,121 @@
+{
+  "$defs": {
+    "CheckPublishedFile": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_count": {
+          "maximum": 1048576,
+          "minimum": 1,
+          "title": "Byte Count",
+          "type": "integer"
+        },
+        "path": {
+          "pattern": "^(?:result|request|runtime)\\.json$|^evidence/ev_[0-9a-f]{64}\\.json$",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "byte_count"
+      ],
+      "title": "CheckPublishedFile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "config_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Config Hash",
+      "type": "string"
+    },
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/CheckPublishedFile"
+      },
+      "maxItems": 4097,
+      "minItems": 3,
+      "title": "Files",
+      "type": "array"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "lease_expires_at_us": {
+      "minimum": 1,
+      "title": "Lease Expires At Us",
+      "type": "integer"
+    },
+    "lease_owner": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Lease Owner",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "published_at_us": {
+      "minimum": 0,
+      "title": "Published At Us",
+      "type": "integer"
+    },
+    "request_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "result_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Result Hash",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^run_[0-9a-f]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "run_id",
+    "job_id",
+    "attempt",
+    "lease_owner",
+    "fencing_token",
+    "lease_expires_at_us",
+    "published_at_us",
+    "request_hash",
+    "config_hash",
+    "result_hash",
+    "files"
+  ],
+  "title": "CheckPublicationManifest",
+  "type": "object"
+}

@@ -101,7 +101,8 @@ class FlowDraftProcessor:
         flow_id: str,
         business_action_id: str,
         action_revision: int,
-        test_identity_id: str,
+        subject_test_identity_id: str,
+        resource_owner_test_identity_id: str,
         events: Sequence[RecordingEvent],
         purpose: RecordingPurpose = RecordingPurpose.TARGET,
         parent_recording_id: str | None = None,
@@ -169,12 +170,13 @@ class FlowDraftProcessor:
             else None
         )
         draft = FlowDraft(
-            schema_version="2",
+            schema_version="3",
             recording_id=recording_id,
             flow_id=flow_id,
             business_action_id=business_action_id,
             action_revision=action_revision,
-            test_identity_id=test_identity_id,
+            subject_test_identity_id=subject_test_identity_id,
+            resource_owner_test_identity_id=resource_owner_test_identity_id,
             purpose=purpose,
             parent_recording_id=parent_recording_id,
             effect_id=effect_id,

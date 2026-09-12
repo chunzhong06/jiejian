@@ -1,108 +1,59 @@
-// 验证变化页只展示真实源码差异，并把待确认规则与重验动作送回持续工作区。
-
+// 当前变化页验证真实diff、精确change关联及未知回执不自动重复写入。
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChangesPage } from './ChangesPage'
-
-const api = vi.hoisted(() => ({ list: vi.fn() }))
-vi.mock('../../api/sourceChanges', () => ({ sourceChangesApi: { list: api.list } }))
-
-const change = {
-  change_id: `chg_${'1'.repeat(32)}`,
-  project_id: 'p1',
-  reason: 'Agent 增加了批量导出入口',
-  submitted_by: 'MCP · Codex',
-  created_at_us: 1,
-  status: 'COMPARABLE' as const,
-  complete: true,
-  actual_changed_path_count: 2,
-  added_count: 1,
-  modified_count: 1,
-  removed_count: 0,
-  claimed_paths: [],
-  added_paths: ['app/export_job.py'],
-  modified_paths: ['app/permissions.py'],
-  removed_paths: [],
-  directly_affected_count: 1,
-  mapping_review_required_count: 1,
-  no_direct_evidence_count: 0,
-  review_intent_ids: [`pin_${'2'.repeat(32)}`],
-  summary: '发现 1 条权限规则需要重新确认。',
-  next_path: '/permissions' as const,
-}
-
-describe('ChangesPage', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    api.list.mockResolvedValue([change])
+const api = vi.hoisted(() => ({ list: vi.fn(), submit: vi.fn(), repair: vi.fn() }))
+vi.mock('../../api/sourceChanges', () => ({ sourceChangesApi: { list: api.list, submit: api.submit } }))
+vi.mock('../../api/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/repairs')>('../../api/repairs'), repairsApi: { project: api.repair } }))
+const change = { manifest: { change_id: 'chg_one', project_id: 'p1', reason: '修改导出检查位置', submitted_by: 'MCP · Codex', created_at_us: 1, claimed_paths: ['wrong.py'], repair_reference: null }, change_set: { status: 'COMPARABLE', added_paths: [], modified_paths: ['real.py'], removed_paths: [] }, assessment: { payload: { action_impacts: [{ action_id: 'action', classification: 'DIRECTLY_AFFECTED', permission_refs: [], relevant_paths: ['real.py'] }] } }, revalidation: { status: 'READY', can_execute: true, preparation_gaps: [] } }
+const props = () => ({ project: { project_id: 'p1' }, onNavigate: vi.fn(), onError: vi.fn(), onStateChanged: vi.fn() })
+describe('当前变化与修复', () => {
+  beforeEach(() => { vi.clearAllMocks(); api.list.mockResolvedValue([change]); api.repair.mockResolvedValue({ project_id: 'p1', status: null, tasks: [], primary_task_reference: null }); api.submit.mockResolvedValue(change) })
+  it('展示真实文件并把精确变化带到完整检查', async () => {
+    const p = props(); render(<ChangesPage {...p} />)
+    expect(await screen.findByText('修改导出检查位置')).toBeInTheDocument()
+    expect(screen.getByText('real.py')).toBeInTheDocument()
+    expect(screen.queryByText('wrong.py')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '检查这次变化' }))
+    expect(p.onNavigate).toHaveBeenCalledWith('/tests?change_id=chg_one')
+    expect(api.submit).not.toHaveBeenCalled()
   })
-
-  it('展示真实变化并只按服务端指定的当前 change_id 绑定主操作', async () => {
-    const onNavigate = vi.fn()
-    const olderChange = { ...change, change_id: `chg_${'3'.repeat(32)}`, reason: '较早的变化' }
-    api.list.mockResolvedValue([olderChange, change])
-    const { rerender } = render(<ChangesPage
-      project={{ project_id: 'p1', name: '持续开发应用' }}
-      status={{ revalidation: { status: 'REVIEW_REQUIRED', change_id: change.change_id, summary: '当前实现映射待确认', next_path: '/permissions', next_label: '确认权限实现' } } as any}
-      onError={vi.fn()}
-      onNavigate={onNavigate}
-    />)
-
-    expect(await screen.findByText('Agent 增加了批量导出入口')).toBeInTheDocument()
-    expect(screen.getAllByText(/MCP · Codex/).length).toBeGreaterThan(0)
-    expect(api.list).toHaveBeenCalledWith('p1')
-    expect(screen.getAllByText('app/export_job.py').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('app/permissions.py').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('需要重新确认实现映射').length).toBeGreaterThan(0)
-
-    fireEvent.click(screen.getByRole('button', { name: '确认权限实现' }))
-    expect(onNavigate).toHaveBeenNthCalledWith(1, '/permissions')
-
-    rerender(<ChangesPage
-      project={{ project_id: 'p1', name: '持续开发应用' }}
-      status={{ revalidation: { status: 'READY', change_id: change.change_id, summary: '可以重验', next_path: '/validation', next_label: '开始重新验证' } } as any}
-      onError={vi.fn()}
-      onNavigate={onNavigate}
-    />)
-    fireEvent.click(screen.getByRole('button', { name: '开始重新验证' }))
-    expect(onNavigate).toHaveBeenNthCalledWith(2, '/validation')
+  it('只在明确提交时登记说明和相对路径', async () => {
+    const p = props(); render(<ChangesPage {...p} />)
+    await screen.findByText('修改导出检查位置')
+    fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: ' 调整导出授权 ' } })
+    fireEvent.change(screen.getByLabelText('涉及文件（可选，每行一个相对路径）'), { target: { value: 'src/app.py' } })
+    fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
+    await waitFor(() => expect(api.submit).toHaveBeenCalledWith('p1', '调整导出授权', ['src/app.py'], null))
   })
-
-  it.each([
-    ['PREPARATION_REQUIRED', '/preparation', '补齐测试准备', '需要补齐测试准备'],
-    ['VERIFIED', '/results', '查看验证结果', '已纳入当前安全基线'],
-    ['STALE', '/changes', '重新说明代码变化', '当前变化已失效'],
-  ] as const)('%s 完全使用统一状态提供的路径和说明', async (status, path, action, label) => {
-    const onNavigate = vi.fn()
-    render(<ChangesPage
-      project={{ project_id: 'p1', name: '持续开发应用' }}
-      status={{ revalidation: { status, change_id: change.change_id, summary: `${label}说明`, next_path: path, next_label: action } } as any}
-      onError={vi.fn()}
-      onNavigate={onNavigate}
-    />)
-
-    expect((await screen.findAllByText(label)).length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByRole('button', { name: action }))
-    expect(onNavigate).toHaveBeenCalledWith(path)
+  it('读取损坏或跨项目事实时关闭写入入口', async () => {
+    api.repair.mockResolvedValue({ project_id: 'other', tasks: [] })
+    const p = props(); render(<ChangesPage {...p} />)
+    expect(await screen.findByText('无法完整读取变化与原题，暂不能登记或发起复验。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '登记并核对实际变化' })).toBeDisabled()
+    expect(screen.queryByText('修改导出检查位置')).not.toBeInTheDocument()
   })
-
-  it('NO_CHANGE 不把历史数量重新解释为当前操作', async () => {
-    render(<ChangesPage
-      project={{ project_id: 'p1', name: '持续开发应用' }}
-      status={{ revalidation: { status: 'NO_CHANGE', change_id: null, summary: '无待处理变化', next_path: null, next_label: null } } as any}
-      onError={vi.fn()}
-      onNavigate={vi.fn()}
-    />)
-    expect(await screen.findByText('Agent 增加了批量导出入口')).toBeInTheDocument()
-    expect(screen.getAllByText('无待处理变化').length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: /确认权限实现|补齐测试准备|开始重新验证|查看验证结果|重新说明代码变化/ })).not.toBeInTheDocument()
+  it('未知登记回执只回读，不自动重复提交', async () => {
+    api.submit.mockRejectedValue(new Error('response unavailable'))
+    render(<ChangesPage {...props()} />)
+    await screen.findByText('修改导出检查位置')
+    fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: '修复导出' } })
+    fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
+    await screen.findByText('上次登记回执未确认。请先查看下方变化记录，避免重复登记。')
+    expect(api.submit).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '登记并核对实际变化' })).toBeDisabled()
   })
-
-  it('没有变化时说明正在等待后续 Agent 修改', async () => {
-    api.list.mockResolvedValue([])
-    render(<ChangesPage project={{ project_id: 'p1' }} status={null} onError={vi.fn()} onNavigate={vi.fn()} />)
-
-    await waitFor(() => expect(screen.getByText('当前没有需要重新核对的代码变化。')).toBeInTheDocument())
-    expect(screen.getByText('等待 Agent 提交下一次代码变化。')).toBeInTheDocument()
+  it('不接受查询参数伪造的原题引用', async () => {
+    const p = props(); render(<ChangesPage {...p} requestedRepair="unknown" />)
+    await screen.findByText('修改导出检查位置')
+    fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: '修复导出' } })
+    fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
+    await waitFor(() => expect(p.onError).toHaveBeenCalled())
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+  it('没有历史变化仍允许显式登记，不伪造安全状态', async () => {
+    api.list.mockResolvedValue([]); render(<ChangesPage {...props()} />)
+    expect(await screen.findByText('尚无代码变化记录')).toBeInTheDocument()
+    expect(screen.queryByText('原题复验通过')).not.toBeInTheDocument()
   })
 })

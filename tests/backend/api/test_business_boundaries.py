@@ -142,13 +142,19 @@ def test_old_write_surfaces_are_not_registered(tmp_path: Path) -> None:
         for path in (
             "/api/projects/sample-project/permission-intents",
             "/api/projects/sample-project/checks",
-            "/api/projects/sample-project/recordings",
             "/api/projects/sample-project/runs",
-            "/api/projects/sample-project/preparation",
             "/api/projects/sample-project/business-boundaries/official-recipe",
             "/api/projects/sample-project/business-boundaries/official-recipe/proposal",
         ):
             assert client.post(path, json={"schema_version": "1"}).status_code == 404
+        # 当前 Recording writer 已注册，但必须拒绝缺少正式动作与身份的旧空载荷。
+        assert client.post(
+            "/api/projects/sample-project/recordings", json={"schema_version": "1"}
+        ).status_code == 422
+        # Preparation 当前只有 GET；POST 应明确拒绝该方法，而不是把读接口当成不存在。
+        assert client.post(
+            "/api/projects/sample-project/preparation", json={"schema_version": "1"}
+        ).status_code == 405
 
 
 def test_business_boundary_maintenance_api_uses_desired_state_not_write_modes(

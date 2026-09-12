@@ -30,19 +30,19 @@
 
 本地 API 固定绑定 IPv4 loopback。GUI 根页面取得当前服务进程的 HttpOnly、SameSite=Strict control session；所有 `/api` 请求验证 Host 与 session，写请求再验证精确 Origin。`X-Forwarded-*` 等代理头不能扩大授权。错误必须通过稳定 `ErrorCode`、有界 details 和 trace 映射；异常正文、环境变量和秘密值不能进入响应。
 
-权限意图写入只走 `POST /api/projects/{project_id}/permission-intents/approvals` 和 proposal approve/reject。`POST /api/projects/{project_id}/permission-drafts` 只接收用户明确提交的有限文本并返回当前响应草稿，不写 PermissionIntent、数据库或缓存，也没有 activate/apply 路由。审批 body 不接受自由 actor，Router 只做严格 DTO 映射，正式 revision/binding/epoch 事务由 `PermissionIntentService` 拥有。对已有 cell 选择未确认必须追加 RETIRED revision，不能删除历史。对应交互和 Oracle 边界见[修改权限意图与 Agent 授权](修改权限意图与Agent授权.md)。
+正式业务边界和权限写入只走普通business-boundaries Proposal approve/reject事务，LOCAL_GUI由服务端固定；自然语言permission-drafts只返回有限待审草稿，不写Proposal/Permission。修复、MCP、Runner和结果均不能成为审批者。
 
-当前动作准备 GET、身份登录四端点、Recording create/status/capture/review/finalize/discard 与 Recording-only Job cancel 均经组合根服务；RUN 取消与旧 preparation writer 不恢复。Assistant 只注册 implementation-mapping、recording-review、preparation-explanation；权限自然语言草稿使用独立 permission-drafts POST。接口细节见[修改安全准备](修改安全准备.md)、[修改测试账号](修改测试账号.md)、[修改模型服务](修改模型服务.md)。保留的 `ProductStatus.revalidation` 不属于 WorkspaceView，变化与检查写入口仍不装配。
+当前动作准备、TestIdentity、Recording与CHECK均经ApplicationCore。Job取消将CHECK交给同一CheckService.cancel，Recording仍按正式队列取消。SourceChange/Repair、check-preview及schema2 runs已装配；旧preparation writer、ProductStatus和旧结果链不回接。
 
-MCP 使用官方 Python SDK v2 的 Streamable HTTP，精确挂载在同一 FastAPI 服务的 `/mcp`，不提供 SSE 兼容入口，不创建第二个服务或 ApplicationCore。SDK 自身启用 Host/Origin 与 DNS rebinding 防护；transport 只接受当前连接 Bearer，不能使用 GUI control session Cookie。首次创建或轮换生成至少 256-bit 随机令牌，并只通过 `cred:jiejian/mcp-control/pairing` 的精确 SecretStore 操作保存；普通连接状态永不返回正文。启动存在凭据时自动恢复 READ；不装配 PREPARE/EXECUTE。暂停或 shutdown 清除活动会话但保留凭据，轮换替换旧令牌，删除连接才移除长期凭据。
+MCP使用官方Python SDK Streamable HTTP，精确挂载同一FastAPI的/mcp，不创建第二个ApplicationCore。SDK核验Host/Origin/DNS rebinding，transport只接受Bearer；配对随机令牌只在精确SecretStore引用保存。启动恢复READ，GUI可对当前项目临时提升PREPARE/EXECUTE，pause/resume/rotate/forget/close清除提升，长期凭据与当前会话分开。
 
 `MCPAccessView.connection_state` 是 GUI 的唯一连接阶段事实：`DISABLED` 表示尚无凭据，`CREDENTIAL_READY` 表示凭据已创建但尚未观测到客户端，`AUTHENTICATED` 表示 Bearer 已通过但 SDK 尚未成功处理 MCP 请求，`CONNECTED` 在 SDK 成功处理任一请求后成立，`CREDENTIAL_REJECTED` 表示最近一次认证失败，`PAUSED` 表示当前 serve 不接受连接。无状态 HTTP 请求可以不携带 initialize 客户端身份；名称和版本只用于补充展示，缺失时不能把已经成立的连接降级。创建凭据、复制配置或客户端自称已保存都不能提前显示“连接成功”；恢复连接清除旧活动和临时提升后回到 `CREDENTIAL_READY`。
 
 唯一连接向导位于 GUI“AI 工具连接”，正式提供 Codex、TRAE、Qoder、CodeBuddy 和 DSH 五个客户端选项，但同一时间只展示一个客户端的五步新手流程。全部客户端使用 server name `jiejian` 和 `http://127.0.0.1:8765/mcp`。Codex、CodeBuddy 与 DSH 从用户级 `JIEJIAN_MCP_TOKEN` 读取凭据；DSH 使用 `@deepseek-ai/dsh-mcp-client`。TRAE 与 Qoder 的当前公开 HTTP 配置需要用户在本机请求头中单独填写 Bearer，GUI 分别提供“第 3 步配置”和“第 4 步凭据”的复制按钮，并提示不得同步、提交或分享该配置。普通页面不显示原始配置预览、CLI 备选或协议解释；每步只说明打开位置、粘贴动作、重启要求和成功标志。
 
-MCP Server instructions 和 GUI 可复制的“连接任务”使用同一用户语义：Agent 在开始用户任务时先读取服务说明，再从 固定 READ 工具 `jiejian_project_list/show`、`jiejian_application_understanding_show`、`jiejian_business_boundary_show`、`jiejian_intent_list/show`、`jiejian_test_identity_list` 与 `jiejian_system_status` 中选择必要事实。已确认的权限基线与 revision 跨用户任务持续保存，新任务不重新创建权限规则。复制内容不得包含 Bearer 正文或要求用户在对话中粘贴秘密；内部 ID 不作为普通用户的首要操作说明。
+MCP instructions明确READ读取事实、PREPARE登记变化声明、EXECUTE运行完整当前权限或取消本项目检查，遇到人类决定返回GUI。基线跨用户任务保存；复制内容不含Bearer正文，也不要求把秘密发进对话。
 
-每个 MCP 工具都经过统一连接认证，但当前白名单只有上述固定 `READ` 工具，只返回现有 Pydantic View 或有界轻量投影。`PREPARE / EXECUTE`、intent proposal、change submit、check prepare/run 以及 permission_set、candidate_decide、approve、reject 都不在 current 工具面；未来恢复也不得扩展为 shell、任意 HTTP、任意路径、秘密、请求正文、完整日志或完整 Evidence。访问失败稳定映射为 `MCP_DISABLED`、`MCP_AUTH_REQUIRED`、`MCP_PERMISSION_REQUIRED`，权限不足 details 只包含 `required_level/project_id`。
+每个MCP工具先统一连接认证，再按项目require授权。精确14工具包括原7个READ及change_show/check_status/result_show/repair_show，change_submit为PREPARE，check_run/check_cancel为EXECUTE。未声明参数按公开schema拒绝；不提供选Case/Effect/Permission、approval、任意路径/HTTP/shell或原始Evidence/Trace。错误沿既有MCP_DISABLED/MCP_AUTH_REQUIRED/MCP_PERMISSION_REQUIRED映射，不暴露输入秘密。
 
 Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `schema_version/kind/status/data/next_actions/warnings`，失败增加有界 `error`。默认 Human 只给结论与下一步，只有显式 `--json` 才进入 Machine 模式；两种输出都来自同一产品事实。更完整的关系见[控制面与 Machine 输出协议](../../03_参考手册/协议/控制面与Machine输出协议.md)。
 

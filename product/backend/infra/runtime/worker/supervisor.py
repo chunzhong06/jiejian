@@ -38,8 +38,9 @@ from product.backend.infra.runtime.jobs.models import (
     WaitingFatalFailure,
 )
 from product.backend.infra.runtime.jobs.queue import JobQueue
-from product.backend.infra.runtime.jobs.targets import JobTargetRegistry, default_run_job_targets
-from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, required_secret_names
+from product.backend.infra.runtime.jobs.targets import JobTargetRegistry, current_check_and_recording_targets
+from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+from product.backend.infra.execution.web.check_runtime import check_secret_names
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.protocols import required_recording_secret_names
 from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock
@@ -66,7 +67,7 @@ class LocalWorkerSupervisor:
     ) -> None:
         self.var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
-        self._targets = targets if targets is not None else default_run_job_targets()
+        self._targets = targets if targets is not None else current_check_and_recording_targets()
         self._job_queue = job_queue or JobQueue(uow_factory, targets=self._targets)
         self._attempts = attempt_service or JobAttempts(uow_factory, targets=self._targets)
         self._recovery = recovery_service or JobRecovery(uow_factory, targets=self._targets)
@@ -96,7 +97,7 @@ class LocalWorkerSupervisor:
 
     @property
     def capabilities(self) -> tuple[str, ...]:
-        return tuple(item.value for item in self._targets.target_types)
+        return tuple(sorted("CHECK" if item.value == "RUN" else item.value for item in self._targets.target_types))
 
     @property
     def recovered_jobs(self) -> int:
@@ -221,11 +222,12 @@ class LocalWorkerSupervisor:
         try:
             secret_names = ()
             if job.run_id is not None:
-                request = ExecutionRequestStore(self.var_dir).load(
+                store = CheckRequestStore(self.var_dir)
+                request = store.load(
                     job.job_id,
                     expected_hash=job.request_hash,
                 )
-                secret_names = required_secret_names(request)
+                secret_names = check_secret_names(store.load_bundle(job.job_id, expected_hash=request.config_fingerprint))
             elif job.recording_id is not None:
                 recording_request = RecordingRequestStore(self.var_dir).load(
                     job.job_id,
@@ -304,6 +306,8 @@ class LocalWorkerSupervisor:
         if expected_lease_owner is None or current.lease_owner != expected_lease_owner:
             return
         try:
+            if self._reconcile_check(current):
+                return
             if current.lease_expires_at_us is not None and current.lease_expires_at_us > now_us:
                 if current.cancel_requested_at_us is not None:
                     from product.backend.infra.runtime.jobs.models import CompleteCancellation
@@ -377,6 +381,8 @@ class LocalWorkerSupervisor:
                 ErrorCode.PROCESS_TREE_FAILED,
                 "Worker 锁或内核进程树退出证明不足，任务不会自动重试",
             )
+        if self._reconcile_check(current):
+            return
         result = self._recovery.confirm_recovery(
             ConfirmRecovery(
                 job_id=current.job_id,
@@ -398,6 +404,24 @@ class LocalWorkerSupervisor:
                 "target_state": result.job.state.value,
             },
         )
+
+    def _reconcile_check(self, job) -> bool:
+        if job.operation_type != "CHECK" or job.run_id is None:
+            return False
+        from product.backend.infra.artifacts.check_packages import check_final_directory
+        from product.backend.infra.artifacts.check_publication import CheckPublisher
+        final = check_final_directory(self.var_dir, job.project_id, job.run_id)
+        if not final.exists():
+            return False
+        try:
+            CheckPublisher(self.var_dir, self._uow_factory, clock_us=self._clock_us).complete_existing(final)
+        except JiejianError as exc:
+            if not exc.code.startswith(("ARTIFACT_", "RUNNER_PROTOCOL_")):
+                raise
+            logger.warning("CHECK_RECONCILIATION_REJECTED", extra={"job_id": job.job_id, "error_code": exc.code})
+            return False
+        self._recovered_jobs += 1
+        return True
 
     def _finish_waiting_failure(self, job_id: str) -> None:
         """接受数据库真实状态，只结束仍为 waiting 且无租约的 Job。"""

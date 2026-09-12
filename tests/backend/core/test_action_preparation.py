@@ -41,8 +41,10 @@ def _base_facts(test_identity_id: str = TEST_IDENTITY_ID) -> dict[str, object]:
         "implementation_fingerprint": OTHER_SHA,
         "source_fingerprint": None,
         "endpoint_fingerprint": "c" * 64,
-        "test_identity_id": test_identity_id,
-        "identity_fingerprint": "d" * 64,
+        "subject_test_identity_id": test_identity_id,
+        "resource_owner_test_identity_id": test_identity_id,
+        "owner_identity_fingerprint": "d" * 64,
+        "subject_identity_fingerprint": "d" * 64,
         "confirmed_at_us": 100,
     }
 
@@ -95,7 +97,7 @@ def _resource(
     return seal_binding(
         ActionResourceBinding,
         **(_recorded_facts(test_identity_id) | {
-            "owner_test_identity_id": test_identity_id,
+            "resource_owner_test_identity_id": test_identity_id,
             "actual_resource_id": actual_resource_id,
             "flow_id": FLOW_ID,
             "flow_sha256": flow_sha256,
@@ -178,17 +180,20 @@ def test_resource_owner_and_reusable_injection_are_explicit() -> None:
 
     assert first.resource_injection == second.resource_injection
     assert first.flow_sha256 != second.flow_sha256
-    with pytest.raises(ValidationError, match="owner"):
-        seal_binding(
-            ActionResourceBinding,
-            **(_recorded_facts() | {
-                "owner_test_identity_id": OTHER_TEST_IDENTITY_ID,
-                "actual_resource_id": "resource-1",
-                "flow_id": FLOW_ID,
-                "flow_sha256": SHA,
-                "resource_injection": _injection(),
-            }),
-        )
+    separate = seal_binding(
+        ActionResourceBinding,
+        **(_recorded_facts() | {
+            "resource_owner_test_identity_id": OTHER_TEST_IDENTITY_ID,
+            "actual_resource_id": "resource-1",
+            "flow_id": FLOW_ID,
+            "flow_sha256": SHA,
+            "resource_injection": _injection(),
+        }),
+    )
+    assert separate.subject_test_identity_id == TEST_IDENTITY_ID
+    assert separate.resource_owner_test_identity_id == OTHER_TEST_IDENTITY_ID
+    assert separate.binding_fingerprint != first.binding_fingerprint
+
 
 
 @pytest.mark.parametrize("value", ["https://example.test", "a/b", "<script>", "", ".", "..", "x" * 257])
@@ -347,7 +352,7 @@ def test_recorded_request_template_accepts_finite_nested_json_and_requires_resou
     ("field", "value"),
     [
         ("business_action_id", "action-1"),
-        ("test_identity_id", "identity-1"),
+        ("subject_test_identity_id", "identity-1"),
         ("source_recording_id", "recording-1"),
         ("source_draft_revision", 0),
         ("source_draft_sha256", "short"),

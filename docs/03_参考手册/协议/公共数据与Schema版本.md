@@ -15,9 +15,15 @@
 | `PersistedExecutionRequest` | `execution_request.py` | `schemas/runner/persisted-execution-request.schema.json` | 2 |
 | `RunnerInput`、`Evidence`、`RunnerResult` | `runner/` | `schemas/runner/` | 1 |
 | Observer Invocation、`ObservationEnvelope` | `observer/` | `schemas/observer/`；同时签入 `ObserverSpec`/`ObserverOutcome` 组件 Schema | 1 |
-| `RecordingRunnerRequest`、`RecordingEvent`、`RecordingRunnerResult` | `recording.py` | `schemas/recording/` | 1 |
-| `FlowDraft`、FlowDraft 审阅命令 | `flow_draft.py` | `schemas/recording/` | 1 |
-| `Flow` | `recording_flow.py` | `schemas/recording/flow.schema.json` | 1 |
+| `RecordingRunnerRequest` | `recording.py` | `schemas/recording/recording-runner-request.schema.json` | 3 |
+| `RecordingEvent`、`RecordingRunnerResult` | `recording.py` | `schemas/recording/` | 1 |
+| `FlowDraft` | `flow_draft.py` | `schemas/recording/flow-draft.schema.json` | 3 |
+| FlowDraft 审阅命令 | `flow_draft.py` | `schemas/recording/flow-draft-review-command.schema.json` | 1 |
+| `Flow` | `recording_flow.py` | `schemas/recording/flow.schema.json` | 3 |
+| `PersistedExecutionRequestV3` | `execution_v3.py` | `schemas/runner/persisted-execution-request-v3.schema.json` | 3 |
+| `CheckRuntimeBundle` | `check_runtime.py` | `schemas/runner/check-runtime.schema.json` | 1 |
+| `CheckRunnerInput`、`CheckRunnerProgress`、`CheckEvidence`、`CheckRunnerResult` | `check_result.py` | `schemas/runner/check-{runner-input,runner-progress,evidence,runner-result}.schema.json` | 1 |
+| `CheckPublicationManifest` | `check_publication.py` | `schemas/runner/check-publication-manifest.schema.json` | 1 |
 | `IdentityPreparationRequest`、`IdentityPreparationResult` | `test_identity_preparation.py` | `schemas/identity/` | 1 |
 | `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest`、`PublicationManifest` | `artifacts.py`、`run_packages.py` | `schemas/artifacts/` | 1 |
 | `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 5 |
@@ -25,7 +31,7 @@
 | `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
 | `RunnerProgressEvent` | `product/backend/infra/runtime/runner/progress.py` | 无；内部有界 JSONL reader | 1 |
 
-API `ApiResponse` 根格式为字符串 1，前端必须先严格验证该最外层版本再读取 `data` 或脱敏错误；未知或缺失版本直接失败。`HealthResponse`、`ReadyResponse`、各独立请求体、运行配置 `Settings` 和 CLI `DoctorReport` 也为 1。ApplicationUnderstanding、ApplicationConnectionView、EndpointDiscoveryResult、ProjectReadiness、AIAssistanceSettings、GuidanceSnapshot、AssistantGuidanceView、ErrorDiagnosis、LLMModelCatalog、LLMProfileView 和其他 `ApiResponse.data` 或 error 内部视图不重复声明版本。它们的 Python 真源位于相应 API 或运行时入口，目前没有 checked-in JSON Schema。Sample 的 `scenario.json`、`truth.json`、`contract.json`、`profile.json` 是当前 Web V1 演示根文档，格式版本统一为 1；样例不扩展 Verdict 覆盖范围。
+API `ApiResponse` 根格式为字符串 1，前端必须先严格验证该最外层版本再读取 `data` 或脱敏错误；未知或缺失版本直接失败。`HealthResponse`、`ReadyResponse`、其他格式 1 独立请求体、运行配置 `Settings` 和 CLI `DoctorReport` 也为 1。ApplicationUnderstanding、ApplicationConnectionView、EndpointDiscoveryResult、ProjectReadiness、AIAssistanceSettings、GuidanceSnapshot、AssistantGuidanceView、ErrorDiagnosis、LLMModelCatalog、LLMProfileView 和其他 `ApiResponse.data` 或 error 内部视图不重复声明版本。它们的 Python 真源位于相应 API 或运行时入口，目前没有 checked-in JSON Schema。Sample 的 `scenario.json`、`truth.json`、`contract.json`、`profile.json` 是当前 Web V1 演示根文档，格式版本统一为 1；样例不扩展 Verdict 覆盖范围。
 
 AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache entry 是各自拥有严格 reader 的版本 1 根文档。模型输出只接受固定模板身份、最多三条不重复 recommendation 和本次系统提供的 option ID；缓存成功记录只保存 provider/profile/model、推理设置、模板身份、事实指纹、已验证推荐和生成时间，失败记录只保存稳定错误码与退避时间。它们没有 checked-in Schema，严格 Python reader 与本地白名单 validator 是当前机器边界真源。
 
@@ -33,7 +39,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 `ChangeVerificationContext` 与 `RepairVerificationContext` 只嵌入 `PersistedExecutionRequest`，不是独立交换根，因此不重复 `schema_version`。当前请求在顶层冻结项目源码指纹；`ChangeVerificationContext` 只保留变化身份、影响指纹和必需权限集合。`RepairVerificationContext` 冻结权威修复引用、原 `policy_epoch`、原权限身份、必须消失的效果、必须保留的 ALLOW 控制和原关键证据标准。文件清单、diff、源码内容与补丁建议都不进入执行请求。
 
-当前 Job 与 Worker 只接受格式 2。已发布历史结果有一个明确的只读例外：历史 reader 可以解析严格 canonical 的格式 1 请求，用于 Result、History 与 RepairContract 重建；它不会补猜格式 1 缺少的项目级源码身份，也不能把历史请求送回当前执行入口。只有格式 2 请求能作为新的 Run 输入。
+当前 CHECK 入口消费 `PersistedExecutionRequestV3` 与 hash 绑定的 `CheckRuntimeBundle`，由 Worker/Check Runner 执行并发布 Check 根文档。v3 请求独立于 backend，冻结严格 Case/Twin/资产和可选 ChangeContext/RepairContext。`PermissionContract`、格式 2 `PersistedExecutionRequest`、旧 Runner/Evidence、ResultPresentation 和报告根仍有保留实现或历史消费者，不是当前 CHECK 的输入或 fallback。Recording Worker 接受 RecordingRunnerRequest 格式 3。历史 reader 对严格 canonical 的格式 1 请求仅做只读解析，不补猜源码身份，也不能把它送回当前执行入口或 v3 构造器。
 
 ## 生命周期与数据流
 
@@ -45,7 +51,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 ## 兼容规则
 
-当前不兼容旧开发数据库、Profile、Evidence、Artifact、Report 或任意旧 wire format。除已发布 `PersistedExecutionRequest` 格式 1 的严格只读历史入口外，每个根只接受上表当前格式，不提供 fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库只接受签入的 `0001_business_boundary_v2` fresh 基线与精确结构；旧 1.x revision 只读拒绝。数据库 revision 与根文档版本不能互相替代。
+当前不兼容旧开发数据库、Profile、Evidence、Artifact、Report 或任意旧 wire format。除已发布 `PersistedExecutionRequest` 格式 1 及 RecordingRunnerRequest/FlowDraft/Flow 格式 2 的明确严格只读历史入口外，每个根只接受上表当前格式，不提供 fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库以签入的 0001→0002→0003→0004→0005 链增量升级，当前 head 为 `0005_verification_loop_v3`。0003→0004 保留已批准的归属迁移规则，0004→0005 在 DDL 前验证冻结结构、外键和既有行约束，失败回滚，不猜测补造旧执行快照；旧 1.x revision 只读拒绝。数据库 revision 与根文档版本不能互相替代。
 
 ## 版本规则与 Schema 真源
 
@@ -88,7 +94,14 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/recording/recording-runner-result.schema.json`
 - `product/protocols/schemas/reports/report-package-manifest.schema.json`
 - `product/protocols/schemas/reports/report.schema.json`
+- `product/protocols/schemas/runner/check-evidence.schema.json`
+- `product/protocols/schemas/runner/check-publication-manifest.schema.json`
+- `product/protocols/schemas/runner/check-runner-input.schema.json`
+- `product/protocols/schemas/runner/check-runner-progress.schema.json`
+- `product/protocols/schemas/runner/check-runner-result.schema.json`
+- `product/protocols/schemas/runner/check-runtime.schema.json`
 - `product/protocols/schemas/runner/evidence.schema.json`
+- `product/protocols/schemas/runner/persisted-execution-request-v3.schema.json`
 - `product/protocols/schemas/runner/persisted-execution-request.schema.json`
 - `product/protocols/schemas/runner/runner-input.schema.json`
 - `product/protocols/schemas/runner/runner-result.schema.json`

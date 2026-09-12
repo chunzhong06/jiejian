@@ -25,6 +25,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.repair import RepairContractReference
+from product.backend.core.check_repair import CurrentRepairReference
+from product.protocols.execution_v3 import Hash, LogicalId, PermissionReference
 
 
 _SNAPSHOT_ID_PATTERN = r"^snp_[0-9a-f]{32}$"
@@ -308,6 +310,77 @@ def source_change_fingerprint(payload: dict[str, Any]) -> str:
 
 def change_impact_fingerprint(payload: dict[str, Any]) -> str:
     return _canonical_sha256(payload)
+
+
+class CurrentChangeManifest(ChangeManifest):
+    """当前变化只引用已发布 Run/Case，不复用旧 Finding 合同引用。"""
+    repair_reference: CurrentRepairReference | None = None
+
+
+class CurrentActionChangeImpact(SourceChangeModel):
+    action_id: LogicalId
+    action_revision: int = Field(ge=1)
+    permission_refs: tuple[PermissionReference, ...] = Field(max_length=4096)
+    classification: Literal["DIRECTLY_AFFECTED", "MAPPING_REVIEW_REQUIRED", "NO_DIRECT_EVIDENCE"]
+    relevant_paths: tuple[str, ...] = Field(max_length=128)
+    reason_codes: tuple[str, ...] = Field(max_length=32)
+
+    @field_validator("relevant_paths")
+    @classmethod
+    def validate_paths(cls, values):
+        return IntentChangeImpact.validate_relevant_paths(values)
+
+
+class CurrentChangeAssessmentPayload(SourceChangeModel):
+    policy_epoch: int = Field(ge=0)
+    permission_refs: tuple[PermissionReference, ...] = Field(max_length=4096)
+    action_impacts: tuple[CurrentActionChangeImpact, ...] = Field(max_length=512)
+
+    @model_validator(mode="after")
+    def validate_sets(self):
+        keys = tuple((item.intent_id,item.revision,item.intent_hash) for item in self.permission_refs)
+        if keys != tuple(sorted(set(keys))):
+            raise ValueError("current change permission set")
+        actions = tuple(item.action_id for item in self.action_impacts)
+        if actions != tuple(sorted(set(actions))):
+            raise ValueError("current change action set")
+        for impact in self.action_impacts:
+            if not set((item.intent_id,item.revision,item.intent_hash) for item in impact.permission_refs) <= set(keys):
+                raise ValueError("impact permission outside current policy")
+        return self
+
+
+class CurrentChangeAssessment(SourceChangeModel):
+    change_id: str = Field(pattern=_CHANGE_ID_PATTERN)
+    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    change_fingerprint: Hash
+    complete: bool
+    reason_codes: tuple[str, ...] = Field(max_length=32)
+    payload: CurrentChangeAssessmentPayload
+    impact_fingerprint: Hash
+    created_at_us: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_content(self):
+        if self.impact_fingerprint != change_impact_fingerprint(self.model_dump(mode="json",exclude={"impact_fingerprint","created_at_us"})):
+            raise ValueError("current impact fingerprint")
+        return self
+
+
+def build_current_change_set(manifest, baseline, current) -> SourceChangeSet:
+    """只比较授权快照的内容 hash；Agent 路径声明不进入真实 diff。"""
+    if baseline is not None and baseline.project_id != current.project_id or manifest.project_id != current.project_id:
+        raise ValueError("cross project source snapshot")
+    previous = {} if baseline is None else {item.relative_path:item.content_sha256 for item in baseline.files}
+    files = {item.relative_path:item.content_sha256 for item in current.files}
+    ordered = lambda values: tuple(sorted(values,key=lambda path:(path.casefold(),path)))
+    payload = dict(change_id=manifest.change_id,project_id=manifest.project_id,
+        previous_snapshot_id=None if baseline is None else baseline.snapshot_id,current_snapshot_id=current.snapshot_id,
+        status="NO_BASELINE" if baseline is None else "COMPARABLE",
+        added_paths=() if baseline is None else ordered(files.keys()-previous.keys()),
+        removed_paths=() if baseline is None else ordered(previous.keys()-files.keys()),
+        modified_paths=() if baseline is None else ordered(path for path in previous.keys() & files.keys() if previous[path] != files[path]))
+    return SourceChangeSet(**payload,change_fingerprint=source_change_fingerprint(payload),created_at_us=manifest.created_at_us)
 
 
 __all__ = [

@@ -455,8 +455,10 @@ class BusinessBoundaryService:
             work.commit()
         return view
 
-    def view(self, project_id: str) -> BusinessBoundaryView:
-        with self._uow_factory() as work:
+    def view(self, project_id: str, *, work=None) -> BusinessBoundaryView:
+        from contextlib import nullcontext
+        # 技术准备写入者可以在自己的 UoW 中重读正式事实；这里仍不读取技术选择。
+        with (self._uow_factory() if work is None else nullcontext(work)) as work:
             actor_roots = work.business_boundaries.list_actors(project_id)
             action_roots = work.business_boundaries.list_actions(project_id)
             actors = tuple(
@@ -996,7 +998,8 @@ class BusinessBoundaryService:
                     self._raise(ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID, "复用 Effect 与冻结定义不一致")
             effects.append(effect)
             local_to_formal[proposed.item_id] = effect_id
-        return tuple(effects), local_to_formal
+        # 正式指纹与领域对象使用相同的 effect_id 规范顺序，本地提案标识顺序不构成业务语义。
+        return tuple(sorted(effects, key=lambda effect: effect.effect_id)), local_to_formal
 
     def _plan_permissions(
         self,
@@ -1250,8 +1253,14 @@ class BusinessBoundaryService:
                 if related_stale
                 else "PERMISSION_SEMANTICS_REQUIRED"
             )
+        # 技术选择和身份实验缺口由 Preparation 投影，不把它们变成重新审批权限的要求。
+        semantic_reasons = {
+            "PERMISSION_SEMANTICS_REQUIRED", "PERMISSION_REVISION_REVIEW_REQUIRED",
+            "PERMISSION_RELATION_REVIEW_REQUIRED", "ALLOW_CONTROL_REQUIRED",
+        }
         reasons.extend(reason for reason in contract.reason_codes
-                       if reason != "PERMISSION_SEMANTICS_REQUIRED" and reason not in reasons)
+                       if reason in semantic_reasons
+                       and reason != "PERMISSION_SEMANTICS_REQUIRED" and reason not in reasons)
         return PermissionBoundaryStatus(
             action_id=action.action_id,
             action_revision=action.revision,
