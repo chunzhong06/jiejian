@@ -34,12 +34,35 @@ function selectionMaterial() {
   return value
 }
 describe('动作准备', () => {
+  it('预置材料只在当前缺口显式导入，之后仍由服务端决定下一任务', async () => {
+    const p=props(),provided=vi.fn().mockResolvedValue(undefined)
+    render(<PreparationPage {...p} onProvidedMaterials={provided}/>)
+    const button=await screen.findByRole('button',{name:'使用已提供的测试材料'})
+    expect(provided).not.toHaveBeenCalled()
+    api.get.mockResolvedValue(material({preparation_complete:true}))
+    p.onStateChanged.mockResolvedValue(workspace(task({task_kind:'RUN_CURRENT_CHECK',title:'运行当前检查'})))
+    fireEvent.click(button)
+    await waitFor(()=>expect(provided).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('heading',{name:'运行当前检查'})).toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'使用已提供的测试材料'})).not.toBeInTheDocument()
+    expect(api.create).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled()
+  })
+
+  it('只有当前缺口展开，已可检查任务返回总览而不误开录制', async () => {
+    const p=props(workspace(task({ task_kind:'RUN_CURRENT_CHECK', title:'运行当前检查' })))
+    render(<PreparationPage {...p}/>)
+    fireEvent.click(await screen.findByRole('button',{name:'前往处理'}))
+    await waitFor(()=>expect(p.onNavigate).toHaveBeenCalledWith('/tests'))
+    expect(api.create).not.toHaveBeenCalled(); expect(api.start).not.toHaveBeenCalled()
+    expect(screen.queryByText(/录制任务/)).not.toBeInTheDocument()
+  })
+
   it('显示实际两个账号需求、静态材料与失效证明，不在加载时写入', async () => {
     render(<PreparationPage {...props()} />)
     expect(await screen.findByText('普通成员账号 1')).toBeInTheDocument()
     expect(screen.getByText('普通成员账号 2')).toBeInTheDocument()
-    expect(screen.getByText('需要更新')).toBeInTheDocument()
-    expect(screen.getByText('只读动作不需要恢复')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /结果证明.*需要更新/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /只读动作不需要恢复/ })).toBeInTheDocument()
     expect(api.create).not.toHaveBeenCalled(); expect(api.start).not.toHaveBeenCalled()
     expect(screen.queryByText(/Alice|Bob|slot2|最多支持/)).not.toBeInTheDocument()
   })

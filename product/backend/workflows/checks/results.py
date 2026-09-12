@@ -12,6 +12,8 @@ from product.backend.infra.artifacts.check_packages import (
     CheckPackage, check_final_directory, validate_check_package,
     read_check_bytes, reject_check_links,
 )
+from product.backend.infra.artifacts.check_validation import validate_check_inputs
+from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.protocols.check_result import canonical_check_document, parse_check_document, CheckRunnerProgress
 from product.protocols.execution_v3 import WireModel
@@ -35,10 +37,21 @@ class CheckJobView(WireModel):
     cancel_requested: bool
 
 
+class CheckProgressCaseView(WireModel):
+    case_id: str
+    action_label: str
+    expectation: Literal["ALLOW", "DENY"]
+    planned_subject_label: str
+    planned_resource_owner_label: str
+    resource_id: str
+    effect_labels: tuple[str, ...]
+
+
 class CheckProgressView(WireModel):
     phase: Literal["PREPARING", "EXECUTING", "FINALIZING"]
     completed_cases: int = Field(ge=0)
     planned_cases: int = Field(ge=0)
+    current_case: CheckProgressCaseView | None = None
 
 
 class CheckRunStatus(WireModel):
@@ -123,8 +136,46 @@ class CheckResultReader:
             if (progress.run_id, progress.job_id, progress.attempt, progress.fencing_token, progress.request_hash) != (
                 run.run_id, job.job_id, job.attempt, job.fencing_token, run.request_hash):
                 return None
-            return CheckProgressView(phase=progress.phase, completed_cases=progress.completed_cases, planned_cases=progress.planned_cases)
+            return CheckProgressView(phase=progress.phase, completed_cases=progress.completed_cases,
+                planned_cases=progress.planned_cases, current_case=self._progress_case(run, job, progress))
         except (ValueError, OSError, JiejianError):
+            return None
+
+    def _progress_case(self, run, job, progress) -> CheckProgressCaseView | None:
+        """补充最近进度所指的计划考题，不证明实际请求、身份或效果已经形成。"""
+        if progress.phase != "EXECUTING" or not 0 <= progress.completed_cases < progress.planned_cases:
+            return None
+        try:
+            store = CheckRequestStore(self._var_dir)
+            request = store.load(job.job_id, expected_hash=run.request_hash)
+            bundle = store.load_bundle(job.job_id, expected_hash=request.config_fingerprint)
+            validate_check_inputs(request, bundle)
+            if (request.project_id, request.source_fingerprint, request.plan_fingerprint,
+                request.policy_epoch, request.engine_version) != (run.project_id, run.source_fingerprint,
+                run.plan_fingerprint, run.policy_epoch, run.engine_version) or (
+                job.run_id, job.project_id, job.request_hash) != (run.run_id, run.project_id, run.request_hash):
+                return None
+            cases = [(action, case) for action in request.actions for case in action.cases]
+            # 必须跟随 infra/execution/check_executor.py::execute 的串行顺序，不能按请求数组位置猜当前题。
+            cases.sort(key=lambda pair: (pair[1].permission.expectation == "DENY", pair[0].action_id, pair[1].case_id))
+            if progress.planned_cases != len(cases):
+                return None
+            action, case = cases[progress.completed_cases]
+            configured = next((item for item in bundle.actions if item.action_id == action.action_id), None)
+            identities = {item.identity_id: item for item in bundle.identities}
+            subject = identities.get(case.subject_test_identity_id)
+            owner = identities.get(case.resource_owner_test_identity_id)
+            if configured is None or subject is None or owner is None:
+                return None
+            proofs = {item.binding_fingerprint: item for item in configured.proofs}
+            if any(item.binding_fingerprint not in proofs for item in case.proof_requirements):
+                return None
+            labels = tuple(dict.fromkeys(proofs[item.binding_fingerprint].business_label for item in case.proof_requirements))
+            return CheckProgressCaseView(case_id=case.case_id, action_label=configured.display_name,
+                expectation=case.permission.expectation, planned_subject_label=subject.label,
+                planned_resource_owner_label=owner.label, resource_id=case.resource_id, effect_labels=labels)
+        except (ValueError, OSError, JiejianError):
+            # 冻结资产不可读或关联失效只降级本说明；原有效阶段/计数继续保留，编程错误不宽泛吞掉。
             return None
 
     def _package(self, work, run, job):

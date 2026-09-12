@@ -231,6 +231,11 @@
 - `class CurrentRepairService`
 主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.protocols.execution_v3`
 
+### `product/backend/workflows/checks/repair_presentation.py`
+- `class RepairComparisonRow`
+- `build_repair_comparison(contract, source, current) -> tuple[RepairComparisonRow, ...]`
+主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.protocols.execution_v3`, `typing`
+
 ### `product/backend/workflows/checks/repair_text.py`
 - `REPAIR_STATUS_LABELS`
 - `CHANGE_IMPACT_LABELS`
@@ -240,10 +245,11 @@
 ### `product/backend/workflows/checks/results.py`
 - `class CheckRunView`
 - `class CheckJobView`
+- `class CheckProgressCaseView`
 - `class CheckProgressView`
 - `class CheckRunStatus`
 - `class CheckResultReader`
-主要 import / dot-source：`__future__`, `hashlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.artifacts.check_packages`, `product.backend.infra.runtime.paths`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `hashlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.artifacts.check_packages`, `product.backend.infra.artifacts.check_validation`, `product.backend.infra.runtime.jobs.check_requests`, `product.backend.infra.runtime.paths`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
 
 ### `product/backend/workflows/checks/runtime_bundle.py`
 - `recorded_request_template(template) -> HttpRequestTemplate`
@@ -265,7 +271,7 @@
 - `class ActionResultStory`
 - `class ResultStory`
 - `class CheckStoryBuilder`
-主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.checks`, `product.backend.workflows.checks.story_text`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.checks`, `product.backend.workflows.checks.repair_presentation`, `product.backend.workflows.checks.story_text`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
 
 ### `product/backend/workflows/checks/story_text.py`
 - `JUDGEMENTS`
@@ -469,7 +475,7 @@
 - `class CurrentRepairTask`
 - `class ProjectRepair`
 - `class CurrentProjectRepairService`
-主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.lifecycle`, `product.protocols.execution_v3`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.lifecycle`, `product.backend.workflows.checks.repair_presentation`, `product.protocols.execution_v3`, `pydantic`, `typing`
 
 ### `product/backend/workflows/projects/revalidation.py`
 - `class ProjectRevalidationStatus`

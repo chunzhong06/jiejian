@@ -9,6 +9,7 @@ from product.backend.core.lifecycle import CaseVerdict, RunVerdict
 from product.backend.core.check_repair import CurrentRepairContract, CurrentRepairVerification
 from product.backend.core.verification.breakpoints import BreakpointLocator, BreakpointResult
 from product.backend.core.verification.checks import CheckDecisionInput, project_check_effect_facts
+from product.backend.workflows.checks.repair_presentation import RepairComparisonRow, build_repair_comparison
 from product.backend.workflows.checks.story_text import CLAIM_BOUNDARIES, EFFECT_LABELS, EXECUTION_LABELS, JUDGEMENTS
 from product.protocols.check_result import CheckObservation, CheckCaseOutcome
 from product.protocols.execution_v3 import ChangeContext, FrozenPermission, WireModel
@@ -42,6 +43,8 @@ class StoryControl(WireModel):
 class FactComparison(WireModel):
     permission_requirement: FrozenPermission
     planned_identity: StoryIdentity
+    planned_resource_owner: StoryIdentity | None = None
+    resource_id: str | None = None
     verified_actual_identity: StoryIdentity
     http_surface: CheckCaseOutcome
     http_explanation: str
@@ -71,6 +74,7 @@ class ActionResultStory(WireModel):
     evidence_explanations: tuple[EvidenceExplanation, ...]
     claim_boundary: tuple[str, ...]
     repair_requirement: CurrentRepairContract | None = None
+    repair_comparison: tuple[RepairComparisonRow, ...] = ()
     technical_references: tuple[str, ...]
 
 
@@ -114,6 +118,10 @@ class CheckStoryBuilder:
                 identity = identities[case.subject_test_identity_id]
                 planned = StoryIdentity(identity_id=identity.identity_id, label=identity.label,
                     actor_id=identity.actor_id, actor_label=identity.actor_label, verification_status="PLANNED")
+                # 资源归属同样来自本轮冻结身份，不能冒充目标实际识别的操作人。
+                owner = identities[case.resource_owner_test_identity_id]
+                planned_owner = StoryIdentity(identity_id=owner.identity_id, label=owner.label,
+                    actor_id=owner.actor_id, actor_label=owner.actor_label, verification_status="PLANNED")
                 status = result.outcome.actual_identity_status
                 verification = identity.verification if status == "MATCH" else None
                 actual = planned.model_copy(update=dict(verification_status=status,
@@ -174,6 +182,7 @@ class CheckStoryBuilder:
                 stories.append(ActionResultStory(action_id=action.action_id, action_revision=action.action_revision,
                     display_name=config.display_name, case_id=case.case_id, permission=case.permission, judgement=judgement,
                     fact_comparison=FactComparison(permission_requirement=case.permission, planned_identity=planned,
+                        planned_resource_owner=planned_owner, resource_id=case.resource_id,
                         verified_actual_identity=actual, http_surface=result.outcome,
                         http_explanation=EXECUTION_LABELS[result.outcome.execution_outcome], effects=tuple(effects), allow_control=control),
                     breakpoint=breakpoint, decisive_proof_chain=tuple(decisive[:4]), evidence_explanations=tuple(explanations),
@@ -182,7 +191,9 @@ class CheckStoryBuilder:
         verification = None
         if include_repair and self.repairs is not None:
             contracts = {item.source_case_id:item for item in self.repairs.contracts(run_id)}
-            stories = [item.model_copy(update={"repair_requirement":contracts.get(item.case_id)}) for item in stories]
+            stories = [item.model_copy(update={"repair_requirement": contracts.get(item.case_id),
+                "repair_comparison": build_repair_comparison(contracts[item.case_id], package)
+                    if item.case_id in contracts else ()}) for item in stories]
             verification = self.repairs.verification(run_id)
         return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
             judgement=JUDGEMENTS[package.result.verdict.value], policy_epoch=package.request.policy_epoch,

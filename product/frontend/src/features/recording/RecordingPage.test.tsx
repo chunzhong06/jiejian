@@ -62,8 +62,8 @@ describe('RecordingPage', () => {
     const task = demonstrationTask(); props.onStateChanged.mockResolvedValue({ primary_task: task })
     render(<RecordingPage {...props} task={task} />)
     await waitFor(() => expect(screen.getByRole('button', { name: '打开浏览器并开始准备' })).toBeEnabled())
-    expect(screen.getByText('谁执行')).toBeInTheDocument()
-    expect(screen.getByText('资源属于谁')).toBeInTheDocument()
+    expect(screen.getByText(/谁执行：/)).toBeInTheDocument()
+    expect(screen.getByText(/资源属于谁：/)).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '打开浏览器并开始准备' }))
     await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', {
       business_action_id: action.business_action_id, action_revision: 3,

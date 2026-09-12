@@ -72,6 +72,18 @@ describe('业务边界页面', () => {
     })
   })
 
+  it('提供的权限提案只在明确采用后加载，仍需普通人工批准', async () => {
+    const provided=vi.fn().mockResolvedValue({proposal,decision:null})
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} onProvidedProposal={provided}/>)
+    const button=await screen.findByRole('button',{name:'使用已提供的权限提案'})
+    expect(provided).not.toHaveBeenCalled()
+    fireEvent.click(button)
+    expect(await screen.findByRole('heading',{name:'待确认业务边界'})).toBeInTheDocument()
+    expect(provided).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button',{name:'确认这组业务边界'})).toBeDisabled()
+    expect(mockApi.approve).not.toHaveBeenCalled()
+  })
+
   it('只把 Candidate 当识别依据，并要求用户填写真实业务结果', async () => {
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
     expect(await screen.findByRole('heading', { name: '从当前源码整理业务边界' })).toBeInTheDocument()
@@ -110,9 +122,10 @@ describe('业务边界页面', () => {
     mockApi.current.mockResolvedValue(current)
 
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
-    expect(await screen.findByText('这项业务动作已经形成新 revision，原权限仍保留为历史，但当前 revision 需要重新确认权限。')).toBeInTheDocument()
-    expect(screen.getByText('这项业务动作还没有当前权限规则。')).toBeInTheDocument()
-    expect(screen.getByText('当前权限需要确认')).toBeInTheDocument()
+    expect(await screen.findByText('当前业务版本需要重新确认权限；原权限仍保留为历史。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('navigation', { name: '业务动作索引' }).querySelectorAll('button')[1])
+    expect(screen.getByText('当前权限尚未确认')).toBeInTheDocument()
+    expect(screen.getByText('需要确认当前权限')).toBeInTheDocument()
   })
 
   it('已确认权限且完整允许对照存在时不显示旧检查链占位提示', async () => {
@@ -176,8 +189,8 @@ describe('业务边界页面', () => {
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
 
     expect(await screen.findByText('新增 1 个业务主体')).toBeInTheDocument()
-    expect(screen.getByText('导出完整项目交付包 → 新 revision')).toBeInTheDocument()
-    expect(screen.getByText('负责人允许导出 → 沿用到新 revision')).toBeInTheDocument()
+    expect(screen.getByText('导出完整项目交付包 → 更新业务版本')).toBeInTheDocument()
+    expect(screen.getByText('负责人允许导出 → 沿用权限')).toBeInTheDocument()
     expect(screen.getByText('导出完整项目交付包 → 重新绑定到当前源码证据')).toBeInTheDocument()
   })
 })

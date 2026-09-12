@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'r
 import { ApiError } from '../../api/http'
 import { currentChecksApi, type CheckPreview, type CheckStatus, type ResultStory } from '../../api/currentChecks'
 import { formatTimestamp, lifecycleLabel } from '../../app/presentation'
-import { PageTaskHeader } from '../../components/PageTaskHeader'
+import { EditorialHeader, EditorialPage, FlowSpine } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { PreparationPage } from '../preparation/PreparationPage'
 import { CurrentResultStory } from './CurrentResultStory'
@@ -13,9 +13,9 @@ const verdictLabels = { PASS: '本次权限要求已得到验证', BLOCK: '已�
 const progressLabels = { PREPARING: '正在准备本次执行', EXECUTING: '正在执行并观察业务结果', FINALIZING: '正在核验并保存结果' }
 const active = (status: CheckStatus) => ['QUEUED', 'RUNNING'].includes(status.run.lifecycle)
 
-export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> & { requestedRunId?: string | null; changeId?: string | null }) {
-  const { project, onError, onNavigate, requestedRunId, changeId } = props
-  const [materials, setMaterials] = useState(false)
+export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> & { requestedTaskId?: string | null; requestedRunId?: string | null; changeId?: string | null }) {
+  const { project, onError, onNavigate, requestedRunId, requestedTaskId, changeId } = props
+  const [materials, setMaterials] = useState(Boolean(requestedTaskId))
   const [preview, setPreview] = useState<CheckPreview | null>(null)
   const [runs, setRuns] = useState<CheckStatus[]>([])
   const [loading, setLoading] = useState(true)
@@ -27,6 +27,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const [story, setStory] = useState<ResultStory | null>(null)
   const [runFailed, setRunFailed] = useState(false)
   const [pollPaused, setPollPaused] = useState(false)
+  const [workspaceSyncFailed, setWorkspaceSyncFailed] = useState(false)
   const [refreshEpoch, setRefreshEpoch] = useState(0)
   const submitting = useRef(false)
   const pending = useRef<{ fingerprint: string; key: string } | undefined>(undefined)
@@ -34,6 +35,19 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const loadEpoch = useRef(0)
   const currentProject = useRef(project.project_id)
   currentProject.current = project.project_id
+  const workspaceRefresh = useRef(props.onStateChanged)
+  workspaceRefresh.current = props.onStateChanged
+  const workspaceSynced = useRef<string | undefined>(undefined)
+  const syncWorkspace = useCallback(async (key: string) => {
+    if (workspaceSynced.current === key) return
+    try {
+      const next = await workspaceRefresh.current()
+      if (!alive.current || currentProject.current !== project.project_id) return
+      if (!next || next.project.project_id !== project.project_id) { setWorkspaceSyncFailed(true); return }
+      workspaceSynced.current = key; setWorkspaceSyncFailed(false)
+    } catch { if (alive.current && currentProject.current === project.project_id) setWorkspaceSyncFailed(true) }
+  }, [project.project_id])
+
   useEffect(() => { alive.current = true; return () => { alive.current = false; loadEpoch.current += 1 } }, [])
   const refresh = useCallback(async () => {
     const epoch = ++loadEpoch.current
@@ -46,10 +60,10 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     finally { if (alive.current && epoch === loadEpoch.current) setLoading(false) }
   }, [project.project_id, onError, changeId])
   useEffect(() => {
-    setSelected(requestedRunId ?? undefined); setStatus(null); setStory(null); setRuns([]); setMaterials(false)
+    setSelected(requestedRunId ?? undefined); setStatus(null); setStory(null); setRuns([]); setMaterials(Boolean(requestedTaskId))
     pending.current = undefined; setSubmissionUncertain(false)
     void refresh()
-  }, [refresh, requestedRunId])
+  }, [refresh, requestedRunId, requestedTaskId])
 
   useEffect(() => {
     if (!selected || materials) return
@@ -75,11 +89,13 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
             else setPollPaused(true)
           }
         }
+        // 已发布事实保持只读；终态以后另行刷新唯一 Workspace，不能让工作台继续保留旧缺口。
+        if (valid && !active(next)) void syncWorkspace(`${selected}:${next.run.lifecycle}:${next.result_integrity}:${next.run.finished_at_us}`)
       } catch (error) { if (valid) { setStatus(null); setStory(null); setRunFailed(true); onError(error as ApiError) } }
     }
     void read()
     return () => { valid = false; if (timer) clearTimeout(timer) }
-  }, [selected, materials, project.project_id, refreshEpoch, onError])
+  }, [selected, materials, project.project_id, refreshEpoch, onError, syncWorkspace])
 
   const start = async () => {
     if (submitting.current || !preview?.can_execute || readFailed) return
@@ -104,11 +120,13 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       pending.current = undefined; setSubmissionUncertain(false)
       setSelected(submitted.run.run_id)
       await refresh()
+      void syncWorkspace(`submitted:${submitted.run.run_id}`)
     } catch (error) { if (alive.current && currentProject.current === projectId) onError(error as ApiError) }
     finally { submitting.current = false; if (alive.current && currentProject.current === projectId) setBusy(false) }
   }
   const showMaterials = () => { setMaterials(true); setSelected(undefined) }
-  if (materials) return <PreparationPage {...props} onNavigate={(path) => {
+  // 显式切换准备任务只重置页面局部模式；同一任务刷新继续保留当前输入和服务端材料。
+  if (materials) return <PreparationPage key={`${project.project_id}:${requestedTaskId ?? "materials"}`} {...props} onNavigate={(path) => {
     if (path === '/tests') { setMaterials(false); void refresh() } else onNavigate(path)
   }} />
   const running = runs.find(active)
@@ -116,14 +134,35 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const headline = selectedMode ? story?.judgement ?? (runFailed ? '暂时无法读取本次检查' : status?.result_integrity === 'INVALID' ? '结果完整性校验失败，不能展示安全结论' : status ? lifecycleLabel(status.run.lifecycle) : '正在读取检查记录')
     : loading ? '正在读取当前检查条件' : running ? '有一项检查正在执行' : preview?.can_execute ? '当前准备条件允许开始检查' : readFailed ? '暂时无法确认当前检查条件' : '请先补齐本次检查所需材料'
   const currentVerdict = story?.verdict
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
-    <PageTaskHeader title="检查与结果" description="按已确认的权限运行正常对照与拒绝验证，观察实际发生的业务后果。" />
-    <section className="testing-overview" aria-label="当前检查判断">
-      <Typography.Title level={3}>{headline}</Typography.Title>
+  const primaryAction = selectedMode ? undefined : running ? { label: '查看当前进度', onClick: () => setSelected(running.run.run_id) }
+    : preview?.can_execute ? { label: submissionUncertain ? '确认上次提交' : '开始检查', loading: busy, disabled: loading || readFailed, onClick: () => void start() }
+    : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }
+  return <EditorialPage label="权限验证工作区">
+    <EditorialHeader eyebrow="验证 · 原来的权限考题" title={headline}>
       {currentVerdict && <span className={`semantic-state ${currentVerdict === 'PASS' ? 'is-safe' : currentVerdict === 'BLOCK' ? 'is-danger' : 'is-warning'}`}>{currentVerdict === 'PASS' ? '验证通过' : currentVerdict === 'BLOCK' ? '发现权限问题' : '证据不足'}</span>}
-      {!selectedMode && preview && <Typography.Paragraph type="secondary">本次范围包含 {preview.action_count} 项业务动作、{preview.case_count} 项验证。开始前会重新核对准备条件。</Typography.Paragraph>}
-      {selectedMode && status?.progress && !story && <Typography.Paragraph role="status">{progressLabels[status.progress.phase]} · 已处理 {status.progress.completed_cases} / {status.progress.planned_cases} 项验证。进度不代表安全结论。</Typography.Paragraph>}
-    </section>
+    </EditorialHeader>
+    {!selectedMode && <section className="task-focus" aria-label="当前检查判断"><h2>本次将验证什么</h2>
+      {preview && <><p>本次范围包含 {preview.action_count} 项业务动作、{preview.case_count} 项验证。开始前会重新核对准备条件。</p><ul>{preview.actions.map((action) => <li key={action.action_id}>{props.workspace?.actions.find((item) => item.action_id === action.action_id && item.action_revision === action.action_revision)?.display_name ?? '本轮已确认的业务动作'} · 完整正常对照与拒绝验证</li>)}</ul></>}
+      <p className="editorial-muted">只有显式开始检查才会执行目标操作；材料齐备本身不是安全结论。</p>
+      {primaryAction && <Button type="primary" loading={busy} disabled={primaryAction.disabled} onClick={primaryAction.onClick}>{primaryAction.label}</Button>}
+    </section>}
+    {selectedMode && status?.progress && !story && <FlowSpine label="本轮权限验证过程" steps={[
+      {key:'prepare',title:'冻结本轮权限与测试材料',state:status.progress.phase === 'PREPARING' ? 'current' : 'complete',detail:<p>正在准备本次执行，尚无安全结论。</p>},
+      {key:'execute',title:'执行正常对照与拒绝验证，观察真实业务结果',state:status.progress.phase === 'EXECUTING' ? 'current' : status.progress.phase === 'FINALIZING' ? 'complete' : 'future',detail:<>
+        <p role="status">{progressLabels[status.progress.phase]} · 已处理 {status.progress.completed_cases} / {status.progress.planned_cases} 项验证。进度不代表安全结论。</p>
+        {/* 最近进度只定位冻结的计划题目；不能把计划账号或计数补成实际执行事实。 */}
+        {status.progress.current_case ? <section aria-label="当前处理的权限考题">
+          <h3>{status.progress.current_case.expectation === 'ALLOW' ? '正常对照' : '拒绝验证'} · {status.progress.current_case.action_label}</h3>
+          <p>计划操作账号：{status.progress.current_case.planned_subject_label}；资源所有者：{status.progress.current_case.planned_resource_owner_label}。</p>
+          <p>本题将观察：{status.progress.current_case.effect_labels.join('、') || '本题冻结的业务结果'}。</p>
+          <details><summary>核对本题资源引用</summary><code>{status.progress.current_case.resource_id}</code></details>
+        </section> : <p className="editorial-muted">当前考题说明暂不可用，执行进度仍以服务端为准。</p>}
+        <ol className="editorial-muted" aria-label="尚待发布的观察事实"><li>页面响应：未确认</li><li>后台执行：未确认</li><li>最终业务结果：未确认</li></ol>
+        <p className="editorial-muted">这里显示最近进度对应的计划考题；实际账号、请求回应和业务结果将在本轮证据发布后说明。</p>
+      </>},
+      {key:'publish',title:'核验并发布本轮证据与结论',state:status.progress.phase === 'FINALIZING' ? 'current' : 'future',detail:<p>正在核验已取得的事实，发布完成后才展示判断。</p>},
+    ]} />}
+    {workspaceSyncFailed && <p role="alert">本次检查事实已保留，但下一步任务尚未同步。<Button onClick={() => void syncWorkspace(`retry:${selected ?? "overview"}:${refreshEpoch}`)}>重新同步工作台</Button></p>}
     {!selectedMode && loading && <Spin />}
     {!selectedMode && readFailed && <Alert type="warning" showIcon message="检查条件读取失败。刷新成功后才能开始检查。" />}
     {submissionUncertain && <Alert type="warning" showIcon message="上次提交尚未确认。请先刷新检查记录；再次确认提交会复用同一次请求。" />}
@@ -146,8 +185,6 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     </>}
     <TaskActionBar back={{ label: selectedMode ? '返回检查总览' : '返回工作台', disabled: busy, onClick: () => { if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate('/workspace') } }}
       refresh={{ label: selectedMode ? '刷新检查结果' : '刷新检查条件', loading: loading || busy, onClick: () => { if (selectedMode) setRefreshEpoch((value) => value + 1); else void refresh() } }}
-      primary={selectedMode ? undefined : running ? { label: '查看当前进度', onClick: () => setSelected(running.run.run_id) }
-        : preview?.can_execute ? { label: submissionUncertain ? '确认上次提交' : '开始检查', loading: busy, disabled: loading || readFailed, onClick: () => void start() }
-        : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }} />
-  </Space>
+      />
+  </EditorialPage>
 }

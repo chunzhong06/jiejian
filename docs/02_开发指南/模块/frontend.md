@@ -17,11 +17,14 @@
 | `product/frontend/src/app/` | ControlShell、正式路由、项目切换、亮暗主题、全局状态恢复、错误与通知 | 各业务页面内部实现、后端事实重算 |
 | `product/frontend/src/api/` | 当前 loopback DTO、request/envelope、资源 client | 浏览器存储秘密、兼容旧 DTO |
 | `product/frontend/src/features/` | workspace、changes、access、preparation、identities、recording、checks、presentation、settings、system 用户任务 | 跨任务真源和通用基础设施 |
+| `product/frontend/src/shared/ui/`、`product/frontend/src/shared/styles/` | 唯一视觉 token、编辑式任务骨架与共享排版 | 权限、任务优先级和安全结论 |
 | `product/frontend/src/components/` | 导航、页头、状态提示、通用状态与可访问组件 | 业务规则、API 写入副作用 |
 | `product/frontend/package.json`、`product/frontend/tsconfig*.json` | 源码依赖/类型/构建合同 | 产品版本真源、node_modules 或 dist |
 | `var/development/frontend/` | 受控 Node/pnpm、workspace、依赖与不可变 build | Git 管理源码、产品运行数据 |
 
-普通工作区以 `/workspace` 为主控工作台，保留 `/changes /permissions /tests` 三个辅助模块的视觉层级。`/permissions` 接入 `BusinessBoundaryPage` 与 `BoundaryMaintenanceEditor`；`/tests` 装配 `CurrentTestsPage`，用精确 run_id/change_id 在准备材料、显式检查、进度与已发布结果间续接。准备材料仍由 `PreparationPage` 进入受控身份/录制。`/changes` 使用当前 SourceChange 与 ProjectRepair 投影登记声明、核对真实差异和复验原题；结果完整性失效时撤下安全结论。`OfficialSamplePanel` 提供显式启动、普通审批续接、准备和版本切换；`ToolsPage` 只在当前项目与 serve 授予有限 MCP 能力。旧 Run/Profile/ResultPresentation writer 不进入当前链。
+普通工作区导航依次为工作台、权限、验证、变化与修复。工作台突出服务端唯一 PrimaryTask，历史结果仅作上下文，不使用统计或并列摘要格。`/permissions` 接入 `BusinessBoundaryPage` 与 `BoundaryMaintenanceEditor`；`/tests` 装配 `CurrentTestsPage`，用精确 run_id/change_id 在准备材料、显式检查、进度与已发布结果间续接。准备材料通过精确 `task_id` 直达 `PreparationPage` 当前缺口，完成后从 Workspace 权威刷新取得下一任务，再进入受控身份/录制。`/changes` 使用当前 SourceChange 与 ProjectRepair 投影登记声明、核对真实差异和复验原题；结果完整性失效时撤下安全结论。`OfficialSamplePanel` 只控制启动、重置、停止及中性版本条件，不承载审批、材料安装或检查判断。仅当真实活动 experience 的 project_id 与当前项目一致时，ControlShell 向普通权限页和 Preparation 提供可选预置输入；采用提案仍走同一 Proposal/Human Approval，采用材料后重读 Preparation/Workspace，再到普通验证入口显式检查；`ToolsPage` 只在当前项目与 serve 授予有限 MCP 能力。旧 Run/Profile/ResultPresentation writer 不进入当前链。
+
+`ResultStory` 分开呈现人的规则与已发布机器事实，以 01/02/03 顺序组织说明，并用问题式 Evidence Drawer 展开证据；证据读取失败时撤下整轮结果。Changes 使用时间流，通用 `RepairComparison` 展示真实合同中的全部义务；控制与回归引用同一 Case 时仍分别保留角色，单行 SAFE 不代表原题总体验证完成。
 
 精确组件和类型见[前端自动代码参考](../../03_参考手册/代码/frontend.md)。
 
@@ -30,7 +33,7 @@
 | 任务 | 主要位置 | 先读与直接验证 |
 | --- | --- | --- |
 | 修改产品壳、路由或恢复 | `product/frontend/src/app/ControlShell.tsx`、`presentation.ts` | [修改前端](../任务/修改前端.md)；`frontend-test src/app/ControlShell.test.tsx` |
-| 修改亮暗主题 | `app/ThemeContext.tsx`、`app/theme.ts`、`styles.css` | ThemeContext 测试、生产 build、亮暗 2560 与响应式 Playwright |
+| 修改亮暗主题 | `shared/ui/tokens.ts`、`app/ThemeContext.tsx`、`app/theme.ts`、`shared/styles/editorial.css` | ThemeContext 测试、生产 build、亮暗 2560 与响应式 Playwright |
 | 修改 API envelope、错误或请求基础层 | `product/frontend/src/api/http.ts` | `frontend-test src/api/http.test.ts`；再测一个直接消费者 |
 | 修改某类 API DTO/client | `product/frontend/src/api/*.ts` 与对应 `product/backend/api/routers/*.py` | 对应后端 Router 测试 + DTO 消费页测试 |
 | 修改动作级工作台 | `features/workspace/WorkbenchPage.tsx`、`api/workspace.ts`、`app/useProjectWorkspace.ts` | Workbench、Workspace API 与 ControlShell 测试 |
@@ -73,7 +76,7 @@
 - Workbench 不常驻显示产品版本；只在系统设置等明确诊断位置展示。
 - 桌面侧栏固定 224px，只承载四个产品区域；顶部固定 52px，承载应用切换、活动任务、AI 工具连接和“设置与更多”。AI 辅助、系统状态、模型、主题与安全退出都位于该菜单，退出是最后一项；菜单关闭后不得保留撑宽文档的旧浮层。
 - 普通 Boundary 页面按同一 Proposal/Approval 流程处理业务边界。官方 recipe 只能由真实活动 Sample context 提交为普通待审提案，再由用户明确批准；不得按项目名猜 Sample，也不得自动批准。
-- 视觉验收以 2560×1440、浏览器 100% 为主基准，工作台第一屏必须容纳应用、当前判断、唯一主任务、最近可信结果与三项摘要；同时核对原生亮色与暗色，并覆盖 1280px、600px 和长页面滚动时内容框架内粘滞的 `TaskActionBar`。普通结果与展示模式复用同一事实链和颜色语义。
+- 视觉验收以 2560×1440、浏览器 100% 为主基准，工作台第一屏以应用、当前判断和唯一主任务为焦点，最近可信结果退为上下文，其他工作通过安静的文字入口访问；同时核对原生亮色与暗色，并覆盖 1280px、600px 和长页面滚动时内容框架内粘滞的 `TaskActionBar`。普通结果与展示模式复用同一事实链和颜色语义。
 
 ## 直接验证
 

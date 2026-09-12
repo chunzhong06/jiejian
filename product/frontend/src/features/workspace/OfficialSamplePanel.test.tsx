@@ -20,19 +20,22 @@ it('打开确认框不会启动或批准；确认后只启动一次', async () =
   expect(api.boundaryProposal).not.toHaveBeenCalled()
   expect(api.prepare).not.toHaveBeenCalled()
 })
-it('未批准时只请求准备检查并展示待办，不偷偷批准权限', async () => {
+it('活动环境只提供条件控制，不出现审批、材料或检查入口', async () => {
   render(<OfficialSamplePanel {...props()} value={active} />)
-  expect(screen.getByText('请先审阅并批准示例权限。')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '进入示例检查' })).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: '准备示例材料' }))
-  await waitFor(() => expect(api.prepare).toHaveBeenCalledTimes(1))
-  expect(api.boundaryProposal).not.toHaveBeenCalled()
+  expect(screen.getByText('官方环境 · 问题版')).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'准备示例材料'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'审阅示例权限'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'进入示例检查'})).not.toBeInTheDocument()
+  expect(api.prepare).not.toHaveBeenCalled();expect(api.boundaryProposal).not.toHaveBeenCalled()
 })
-it('提案生成后前往普通业务边界审阅，未创建检查', async () => {
-  const p = props(); render(<OfficialSamplePanel {...p} value={active} />)
-  fireEvent.click(screen.getByRole('button', { name: '审阅示例权限' }))
-  await waitFor(() => expect(p.onNavigate).toHaveBeenCalledWith('/permissions'))
-  expect(api.prepare).not.toHaveBeenCalled()
+it('重置先明确确认，确认后只调用一次受控启动且不写结论', async () => {
+  render(<OfficialSamplePanel {...props()} value={active} />)
+  fireEvent.click(screen.getByText('官方环境 · 问题版'))
+  fireEvent.click(screen.getByRole('button',{name:'重置官方环境'}))
+  expect(api.start).not.toHaveBeenCalled()
+  fireEvent.click(await screen.findByRole('button',{name:'确认重置'}))
+  await waitFor(()=>expect(api.start).toHaveBeenCalledTimes(1))
+  expect(api.prepare).not.toHaveBeenCalled();expect(api.boundaryProposal).not.toHaveBeenCalled()
 })
 it('启动回执不明时回读实际状态，不自动重试', async () => {
   api.start.mockRejectedValue(new Error('lost response'))

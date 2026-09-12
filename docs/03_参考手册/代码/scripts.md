@@ -124,7 +124,7 @@
 
 ### `scripts/dev/sample_test/current_gui.py`
 - `class CurrentGui`
-主要 import / dot-source：`urllib.parse`
+主要 import / dot-source：`contextlib`, `urllib.parse`
 
 ### `scripts/dev/sample_test/driver.py`
 - `SUITES`

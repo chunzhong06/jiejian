@@ -1,7 +1,7 @@
-/* 录制采集卡：显示浏览器采集阶段、控制开始/停止并恢复后台事件游标。 */
+/* 录制采集过程：显示浏览器采集阶段、控制开始/停止并恢复后台事件游标。 */
 
 import { useEffect, useState } from 'react'
-import { Alert, Card, Space, Tag, Typography } from 'antd'
+import { Alert, Space, Tag, Typography } from 'antd'
 import type { RecordingDto, RecordingJobDto } from '../../api/recordings'
 import type { JobEventDto } from '../../api/runs'
 import { browserState } from '../../app/browserState'
@@ -39,10 +39,10 @@ export function RecordingCaptureCard({ recording, onRefresh }: {
     : phase === 'CAPTURING'
       ? captureGuide
       : <Alert type={recording.state === 'FAILED' || recording.state === 'SAFETY_STOPPED' ? 'error' : 'info'} showIcon message={captureLabel(recording)} description={phase === 'PREPARING_BROWSER' ? '正在启动有界 Chromium，请稍候。' : phase === 'STOPPING' ? `正在整理刚才的操作并寻找真正执行“${actionName}”的请求…` : recording.state === 'CANCELLED' ? '本次事件已丢弃，没有生成流程草稿。' : '界鉴会保留当前状态；关闭页面只会断开显示。'} />
-  return <Card title={`录制「${actionName}」`}><Space direction="vertical" className="full-width" size="middle">
+  return <section className="recording-capture"><h2>{`录制「${actionName}」`}</h2><Space direction="vertical" className="full-width" size="middle">
     {phaseContent}
     <RecordingProgress job={recording.job ?? undefined} onRefresh={onRefresh} />
-  </Space></Card>
+  </Space></section>
 }
 
 function RecordingProgress({ job, onRefresh }: { job?: RecordingJobDto; onRefresh: () => void }) {

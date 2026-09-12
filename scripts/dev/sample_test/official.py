@@ -661,7 +661,8 @@ def run(
             headless=True,
             executable_path=str(source_runtime.playwright_executable),
         )
-        page = browser.new_page(viewport={"width": 2560, "height": 1440})
+        # 正式 GUI 同时覆盖减少动态效果；定位仍必须使用实际视口坐标，不能停在离屏测量位置。
+        page = browser.new_page(viewport={"width": 2560, "height": 1440}, reduced_motion="reduce")
         client.bind_page(page)
 
         from .current_api import prepare_current, project_run_ids, run_sequence

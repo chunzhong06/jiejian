@@ -12,7 +12,7 @@
  * ============================================================================= */
 
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Collapse, Input, List, Radio, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Checkbox, Collapse, Input, List, Radio, Space, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { onboardingApi, type DiscoveryResult } from '../../api/onboarding'
 import { AssistantPanel } from '../../components/AssistantPanel'
@@ -320,18 +320,16 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       ? { label: '确认本地地址', onClick: () => void confirmEndpoint(), loading, disabled: !endpoint.trim() || !appRunningConfirmed || !endpointConfirmed }
       : currentStep === 3
         ? { label: understanding?.source_analysis_authorized ? '重新开始分析' : '授权并开始分析', onClick: () => void authorizeAndAnalyze(), loading, disabled: !analysisAuthorized }
-        : { label: reviewComplete ? '继续准备测试账号' : '确认权限组和业务动作后继续', onClick: onContinue, disabled: !reviewComplete }
+        : { label: reviewComplete ? '继续建立权限规则' : '确认权限组和业务动作后继续', onClick: onContinue, disabled: !reviewComplete }
 
-  const candidateReview = endpointReady && understanding?.source_fingerprint ? <Card className="application-step application-understanding" title="界鉴已经理解">
+  const candidateReview = endpointReady && understanding?.source_fingerprint ? <section className="application-step application-understanding"><h2>界鉴已经理解</h2>
     <div className="application-understanding-grid">
       <section aria-labelledby="understood-role-title"><Typography.Text className="application-understanding-kicker">权限组</Typography.Text><Typography.Title id="understood-role-title" level={4}>{confirmedRoles.length ? `${confirmedRoles.length} 个已确认` : '尚未确认'}</Typography.Title><div className="application-understanding-tags">{confirmedRoles.map((candidate) => <Tag key={candidate.candidate_id}>{candidate.display_name}</Tag>)}</div><Typography.Text type={pendingRoles.length ? 'warning' : 'secondary'}>{pendingRoles.length ? `还有 ${pendingRoles.length} 个需要确认` : '当前没有待确认项'}</Typography.Text></section>
       <section aria-labelledby="understood-action-title"><Typography.Text className="application-understanding-kicker">关键业务动作</Typography.Text><Typography.Title id="understood-action-title" level={4}>{confirmedActions.length ? `${confirmedActions.length} 个已确认` : '尚未确认'}</Typography.Title><div className="application-understanding-tags">{confirmedActions.map((candidate) => <Tag key={candidate.candidate_id}>{candidate.display_name}</Tag>)}</div><Typography.Text type={pendingActions.length ? 'warning' : 'secondary'}>{pendingActions.length ? `还有 ${pendingActions.length} 个需要确认` : '当前没有待确认项'}</Typography.Text></section>
     </div>
     <Alert type={pendingUnderstandingCount ? 'warning' : 'success'} showIcon message={pendingUnderstandingCount ? `还有 ${pendingUnderstandingCount} 项应用理解需要你确认` : '权限组和业务动作已经确认'} description="这里只确认应用中存在哪些用户类别和操作，不会自动决定谁应该允许或拒绝。" />
-    <Collapse className="application-understanding-details" activeKey={pendingUnderstandingCount ? ['review-details'] : []} items={[{
-      key: 'review-details',
-      label: pendingUnderstandingCount ? '查看并确认系统识别结果' : '查看识别结果与依据',
-      children: <div className="application-review-details">
+    <details className="application-understanding-details" open={pendingUnderstandingCount > 0 || undefined}><summary>{pendingUnderstandingCount ? '查看并确认系统识别结果' : '查看识别结果与依据'}</summary>
+      <div className="application-review-details">
         <section className="candidate-review-block" aria-labelledby="permission-group-review-title">
           <div className="candidate-review-heading"><Typography.Title level={4} id="permission-group-review-title">权限组</Typography.Title><Typography.Text type="secondary">确认应用中真实存在的用户类别；这里不设置允许或拒绝规则。</Typography.Text></div>
           <CandidateSection title="已确认的权限组" candidates={confirmedRoles} kind="role" variant="confirmed" loading={loading} onDecide={(candidate, decision, name) => void decide('role', candidate, decision, name)} emptyText="还没有已确认的权限组。" />
@@ -346,13 +344,13 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
           <section className="application-manual-section"><Typography.Title level={5}>没有找到？手工补充</Typography.Title><div className="application-manual"><Input aria-label="手工补充业务动作" value={manualAction} onChange={(event) => setManualAction(event.target.value)} placeholder="例如：批准退款" /><Button onClick={() => void addAction()} disabled={!manualAction.trim()} loading={loading}>补充并确认业务动作</Button></div></section>
           {understanding.action_candidates.some((candidate) => candidate.decision === 'REJECTED') && <Collapse ghost items={[{ key: 'excluded-actions', label: `已排除的候选（${understanding.action_candidates.filter((candidate) => candidate.decision === 'REJECTED').length}）`, children: <List dataSource={understanding.action_candidates.filter((candidate) => candidate.decision === 'REJECTED')} renderItem={(candidate) => <ExcludedCandidateRow key={candidate.candidate_id} candidate={candidate} kind="action" loading={loading} onDecide={(decision, name) => void decide('action', candidate, decision, name)} />} /> }]} />}
         </section>
-      </div>,
-    }]} />
+      </div>
+    </details>
     <AssistantPanel projectId={understanding.project_id} surface="candidate-review" title="候选整理建议" actionLabel="AI 帮我整理" />
-  </Card> : null
+  </section> : null
 
   return <div className="application-setup">
-    <ol className="task-sequence" aria-label="应用接入进度">
+    <ol className="access-progress" aria-label="应用接入进度">
       {sequence.map((label, index) => {
         const step = index + 1
         const state = step < currentStep ? 'complete' : step === currentStep ? 'current' : 'upcoming'
@@ -361,13 +359,13 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
     </ol>
     {message && <Alert showIcon type="info" message={message} closable onClose={() => setMessage('')} />}
     {error && <Alert showIcon type="error" message={error.message} closable onClose={() => setError(null)} />}
-    {!understanding && <Card className="application-step" title="选择应用文件夹">
+    {!understanding && <section className="application-step"><h2>选择应用文件夹</h2>
       <Alert type="info" showIcon message="接入前，请先在本机启动应用" description="界鉴连接的是正在运行的本地 Web 应用。选择目录后，界鉴会读取少量配置推测启动方式，并在 127.0.0.1 的有限候选地址中寻找已经响应的应用；当前不会替你执行未知启动命令。" />
       <Typography.Paragraph>如果应用已经启动，直接选择它的源码文件夹。界鉴不会安装依赖、读取秘密或扫描任意端口。</Typography.Paragraph>
       {officialSampleStart}
       <Collapse ghost items={[{ key: 'manual-path', label: '目录选择器不可用？', children: <Space.Compact className="application-manual-path"><Input aria-label="应用文件夹绝对路径" value={manualPath} onChange={(event) => setManualPath(event.target.value)} placeholder="输入应用文件夹绝对路径" /><Button loading={loading} onClick={() => void connectPath(manualPath)}>连接这个目录</Button></Space.Compact> }]} />
-    </Card>}
-    {understanding && !endpointReady && <Card className="application-step" title="确认本地访问地址">
+    </section>}
+    {understanding && !endpointReady && <section className="application-step"><h2>确认本地访问地址</h2>
       {discovery && <div className="application-discovery">
         <Typography.Text strong>识别结果</Typography.Text>
         <Space wrap>{discovery.detected_types.length > 0 ? discovery.detected_types.map((item) => <Tag key={item}>{item}</Tag>) : <Typography.Text type="secondary">未识别到明确技术栈</Typography.Text>}</Space>
@@ -383,12 +381,12 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       <Input aria-label="手工输入本地地址" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder="没有候选时输入 http://127.0.0.1:端口" />
       <Checkbox checked={appRunningConfirmed} onChange={(event) => setAppRunningConfirmed(event.target.checked)}>我确认应用已经由我启动，界鉴不需要执行任何启动命令</Checkbox>
       <Checkbox checked={endpointConfirmed} onChange={(event) => setEndpointConfirmed(event.target.checked)}>确认这是我的本地应用，并允许界鉴访问这个地址</Checkbox>
-    </Card>}
-    {endpointReady && understanding?.confirmed_endpoint && !understanding.source_fingerprint && <Card className="application-step" title="分析权限组与关键业务动作">
+    </section>}
+    {endpointReady && understanding?.confirmed_endpoint && !understanding.source_fingerprint && <section className="application-step"><h2>分析权限组与关键业务动作</h2>
       <Typography.Paragraph>已确认地址：<Tag color="blue">{understanding.confirmed_endpoint}</Tag></Typography.Paragraph>
       <Alert type="warning" showIcon message="需要你单独授权只读源码分析" description="界鉴不会执行或导入源码，不会运行 npm/python 命令，不会联网，不读取 .env、私钥、凭据和生成目录，也不会把源码正文写入报告、日志或发送给模型。" />
       <Checkbox checked={analysisAuthorized} onChange={(event) => setAnalysisAuthorized(event.target.checked)}>我允许界鉴只读分析当前应用源码，用于寻找权限组与关键业务动作</Checkbox>
-    </Card>}
+    </section>}
     {candidateReview}
     <TaskActionBar
       back={{ label: '返回工作台', onClick: onBack }}

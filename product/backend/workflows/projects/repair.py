@@ -6,6 +6,7 @@ from pydantic import Field
 from product.backend.core.lifecycle import RunVerdict
 
 from product.backend.core.check_repair import CurrentRepairContract, CurrentRepairVerification
+from product.backend.workflows.checks.repair_presentation import RepairComparisonRow, build_repair_comparison
 from product.protocols.execution_v3 import Hash, LogicalId, WireModel
 
 CurrentRepairStatus = Literal["REPAIR_REQUIRED","CHANGE_SUBMITTED","READY_TO_VERIFY","VERIFIED","NOT_VERIFIED","INCONCLUSIVE","STALE"]
@@ -18,6 +19,7 @@ class CurrentRepairTask(WireModel):
     change_id: LogicalId | None = None
     run_id: LogicalId | None = None
     verification: CurrentRepairVerification | None = None
+    comparison: tuple[RepairComparisonRow, ...] = ()
 
 
 class ProjectRepair(WireModel):
@@ -78,5 +80,8 @@ class CurrentProjectRepairService:
                 change_id=change_id,run_id=run_id,verification=verification))
         ranking = {name:index for index,name in enumerate(("STALE","NOT_VERIFIED","INCONCLUSIVE","REPAIR_REQUIRED","CHANGE_SUBMITTED","READY_TO_VERIFY","VERIFIED"))}
         tasks.sort(key=lambda item:(ranking[item.status],item.task_reference))
+        # 七态与优先级已经确定；只向精确关联且已发布的新 Run 附加展示行。
+        tasks = [item.model_copy(update={"comparison": build_repair_comparison(item.contract,
+            packages[item.contract.source_run_id], packages.get(item.run_id))}) for item in tasks]
         return ProjectRepair(project_id=project_id,status=None if not tasks else tasks[0].status,
             tasks=tuple(tasks),primary_task_reference=None if not tasks else tasks[0].task_reference)

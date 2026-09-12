@@ -1,0 +1,7 @@
+/* 修改声明、真实源码事实与原题复验沿同一时间流阅读。 */
+.editorial-page .change-registration { padding-block: var(--space-24); border-block: var(--line-width) solid var(--color-border); }
+.editorial-page .change-event-content, .editorial-page .repair-flow-entry { border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-16) 0; min-width: 0; }
+.editorial-page .change-event { grid-template-columns: 150px 24px minmax(0,1fr); }
+.editorial-page .change-event .repair-flow-entry { border-top: var(--line-width) solid var(--color-border); margin-top: var(--space-24); }
+.repair-origin-context { border-left: 2px solid var(--color-border-strong); padding-left: var(--space-20); }
+@media(max-width:900px) { .editorial-page .change-event { grid-template-columns: 16px minmax(0,1fr); } .editorial-page .change-event-time { grid-column: 2; } .editorial-page .change-event-rail { grid-column: 1; grid-row: 1 / span 2; } .editorial-page .change-event > .change-event-content { grid-column: 2; } }

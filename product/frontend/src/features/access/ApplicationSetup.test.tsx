@@ -88,7 +88,7 @@ describe('ApplicationSetup', () => {
 
     expect(screen.queryByText(/Profile path|resource id|read path|recovery path/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '选择应用文件夹' }))
-    expect(await screen.findByText('确认本地访问地址', { selector: '.ant-card-head-title' })).toBeInTheDocument()
+    expect(await screen.findByText('确认本地访问地址', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText(/只探测 127\.0\.0\.1/)).toBeInTheDocument()
     expect(screen.queryByText(/::1/)).not.toBeInTheDocument()
     expect(await screen.findByText('Vite')).toBeInTheDocument()
@@ -97,11 +97,11 @@ describe('ApplicationSetup', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /应用已经由我启动/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /确认这是我的本地应用/ }))
     fireEvent.click(screen.getByRole('button', { name: '确认本地地址' }))
-    expect(await screen.findByText('分析权限组与关键业务动作', { selector: '.ant-card-head-title' })).toBeInTheDocument()
+    expect(await screen.findByText('分析权限组与关键业务动作', { selector: 'h2' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('checkbox', { name: /只读分析当前应用源码/ }))
     fireEvent.click(screen.getByRole('button', { name: '授权并开始分析' }))
-    expect(await screen.findByText('界鉴已经理解', { selector: '.ant-card-head-title' })).toBeInTheDocument()
+    expect(await screen.findByText('界鉴已经理解', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText('还有 2 项应用理解需要你确认')).toBeInTheDocument()
     expect(screen.getByText(/这里只确认应用中存在哪些用户类别和操作/)).toBeInTheDocument()
     expect(screen.getByDisplayValue('owner')).toBeInTheDocument()
@@ -170,7 +170,7 @@ describe('ApplicationSetup', () => {
     mockProjects.understanding.mockResolvedValue(restored)
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={onChanged} onBack={vi.fn()} onContinue={vi.fn()} />)
 
-    expect(await screen.findByText('普通用户')).toBeInTheDocument()
+    expect((await screen.findAllByText('普通用户')).length).toBeGreaterThan(0)
     mockProjects.understanding.mockClear()
     fireEvent.click(screen.getByRole('button', { name: '刷新当前状态' }))
 
@@ -199,9 +199,9 @@ describe('ApplicationSetup', () => {
     mockProjects.understanding.mockResolvedValue(restored)
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} endpointStatus="NEEDS_CONFIRMATION" onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
 
-    expect(await screen.findByText('确认本地访问地址', { selector: '.ant-card-head-title' })).toBeInTheDocument()
+    expect(await screen.findByText('确认本地访问地址', { selector: 'h2' })).toBeInTheDocument()
     expect(mockProjects.discoverEndpoints).toHaveBeenCalledWith('app-demo')
-    expect(screen.queryByText('确认权限组与业务动作', { selector: '.ant-card-head-title' })).not.toBeInTheDocument()
+    expect(screen.queryByText('确认权限组与业务动作', { selector: 'h2' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: /应用已经由我启动/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /确认这是我的本地应用/ }))
     fireEvent.click(screen.getByRole('button', { name: '确认本地地址' }))

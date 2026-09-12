@@ -30,6 +30,11 @@ def test_project_repair_projects_exact_linked_state(state):
     actual = service.evaluate(source.request.project_id)
     assert actual.status == ("INCONCLUSIVE" if state == "PENDING" else state)
     assert len(actual.tasks) == (0 if state is None else 1)
+    if actual.tasks:
+        rows = actual.tasks[0].comparison
+        assert [row.role for row in rows] == ["DENY", "SELECTED_ALLOW", "REGRESSION"]
+        assert all(row.match_status == ("MATCHED" if linked and state != "PENDING" else "NOT_AVAILABLE") for row in rows)
+        assert actual.tasks[0].contract == contract
     if linked:
         assert actual.tasks[0].run_id == current.result.run_id
 

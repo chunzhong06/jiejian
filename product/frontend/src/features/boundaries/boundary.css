@@ -1,0 +1,30 @@
+/* 权限围绕动作与完整业务句子阅读，批准提案是唯一独立边界对象。 */
+.editorial-page .boundary-editor, .editorial-page .boundary-new-proposal { background: transparent; border: 0; border-radius: 0; padding: 0; }
+.boundary-document { display: grid; grid-template-columns: 190px minmax(0,1fr); gap: var(--space-40); }
+.action-index { display: flex; flex-direction: column; gap: var(--space-8); align-self: start; min-width: 0; }
+.action-index button { background: transparent; border: 0; border-left: 2px solid transparent; padding: var(--space-8) var(--space-12); color: var(--color-secondary); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.action-index button[aria-current] { color: var(--color-primary); border-left-color: var(--color-primary); background: var(--color-surface-subtle); }
+.action-index-horizontal { flex-direction: row; flex-wrap: wrap; margin-block: var(--space-16); }
+.boundary-action-document h2 { font-size: var(--font-section); margin-top: 0; }
+.boundary-action-document h3 { margin-top: var(--space-32); }
+.rule-effect-note { display: block; margin-top: var(--space-8); font-size: var(--font-body); color: var(--color-secondary); }
+.boundary-implementation { padding-block: var(--space-16); border-top: var(--line-width) solid var(--color-border); }
+.boundary-actor-details { margin-block: var(--space-24); padding-block: var(--space-16); border-block: var(--line-width) solid var(--color-border); }
+.boundary-actor-details summary { cursor: pointer; margin-bottom: var(--space-16); }
+.boundary-editor-row-block { display: grid; gap: var(--space-12); padding-block: var(--space-20); border-bottom: var(--line-width) solid var(--color-border); }
+.boundary-editor .boundary-candidate-basis { background: transparent; border-radius: 0; padding: var(--space-16) 0; }
+.boundary-editor .boundary-candidate-chip { border: 0; border-radius: 0; background: transparent; padding-left: 0; }
+.boundary-editor .boundary-permission-editor { border-left: 0; padding-inline: 0; }
+.boundary-permission-editor .rule-sentence { grid-column: 1/-1; margin: 0 0 var(--space-12); }
+.sentence-field { display: grid; gap: var(--space-8); min-width: 0; font-size: var(--font-secondary); }
+.editorial-page .boundary-review { border: var(--line-width) solid var(--color-border-strong); border-radius: var(--radius-small); background: var(--color-surface); padding: var(--space-24); }
+.proposal-diff > section { border-top: var(--line-width) solid var(--color-border); padding-block: var(--space-16); }
+.proposal-diff-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-32); }
+.proposal-diff-columns > div + div { border-left: var(--line-width) solid var(--color-border); padding-left: var(--space-24); }
+.boundary-review h4 { font-size: var(--font-body); margin: 0 0 var(--space-12); }
+.boundary-permission-assist { background: transparent; }
+@media(max-width:900px) { .boundary-document { grid-template-columns: 1fr; gap: var(--space-24); } .action-index { flex-direction: row; flex-wrap: wrap; } }
+@media(max-width:600px) { .boundary-editor .boundary-permission-editor, .boundary-editor .boundary-effect-editor, .boundary-editor .boundary-editor-row, .proposal-diff-columns { grid-template-columns: minmax(0,1fr); } .proposal-diff-columns > div + div { border-left: 0; padding-left: 0; border-top: var(--line-width) solid var(--color-border); padding-top: var(--space-16); } .editorial-page .boundary-review { padding: var(--space-16); } }
+/* Select 的最长选项不能撑开权限句子的 Grid 列；完整名称仍在上方业务句子中可读。 */
+.sentence-field .ant-select { width: 100%; min-width: 0; max-width: 100%; }
+.sentence-field .ant-select-selector, .sentence-field .ant-select-selection-wrap, .sentence-field .ant-select-selection-item { min-width: 0; max-width: 100%; }

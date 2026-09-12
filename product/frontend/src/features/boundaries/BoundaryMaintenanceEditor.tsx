@@ -11,6 +11,7 @@ import type {
   BusinessEffectKind,
   ProposedEffectDto,
 } from '../../api/businessBoundaries'
+import { RuleSentence } from '../../shared/ui/Editorial'
 import { confidenceLabels, effectKindLabels, expectationLabels, relationLabels } from './boundaryLabels'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { PermissionDraftAssist } from './PermissionDraftAssist'
@@ -30,6 +31,8 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
   const [actions, setActions] = useState<DraftAction[]>(initial.actions)
   const [permissions, setPermissions] = useState<BoundaryMaintenancePermissionDto[]>(initial.permissions)
   const [error, setError] = useState<string>()
+  const [selectedActionId, setSelectedActionId] = useState<string>()
+  const selectedAction = actions.find((item) => item.item_id === selectedActionId) ?? actions[0]
 
   const applySuggestions = (suggestions: PermissionDraftSuggestion[]) => {
     let next = permissions
@@ -67,7 +70,7 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
 
   const addPermission = () => {
     const actor = actors.find((item) => item.effective_state === 'ACTIVE')
-    const action = actions.find((item) => item.effective_state === 'ACTIVE')
+    const action = selectedAction?.effective_state === 'ACTIVE' ? selectedAction : actions.find((item) => item.effective_state === 'ACTIVE')
     if (!actor || !action) {
       setError('先保留至少一个启用的业务主体和业务动作。')
       return
@@ -111,8 +114,8 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
       <Typography.Paragraph type="secondary">当前主体、动作和权限会完整保留。修改只会先形成一份不可变提案，批准后才追加正式业务版本 或更新实现映射。</Typography.Paragraph>
     </div></div>
 
-    <Divider orientation="left">谁在使用应用</Divider>
-    <div className="boundary-editor-list">{actors.map((actor) => <article key={actor.item_id} className="boundary-editor-card">
+    <details className="boundary-actor-details" open={!actors.length || undefined}><summary>业务主体 · 谁在操作、资源属于谁</summary>
+    <div className="boundary-editor-list">{actors.map((actor) => <article key={actor.item_id} className="boundary-editor-row-block">
       <div className="boundary-editor-row">
         <Input aria-label="业务主体名称" value={actor.display_name} onChange={(event) => setActors((items) => items.map((item) => item.item_id === actor.item_id ? { ...item, display_name: event.target.value } : item))} />
         <Checkbox checked={actor.effective_state === 'RETIRED'} onChange={(event) => setActors((items) => items.map((item) => item.item_id === actor.item_id ? { ...item, effective_state: event.target.checked ? 'RETIRED' : 'ACTIVE' } : item))}>停用</Checkbox>
@@ -124,10 +127,10 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
         setPermissions((items) => items.filter((item) => item.subject_actor_item_id !== actor.item_id && item.resource_owner_actor_item_id !== actor.item_id))
       }}>移除新主体</Button>}
     </article>)}</div>
-    <Button onClick={() => setActors((items) => [...items, manualActor()])}>新增业务主体</Button>
+    <Button onClick={() => setActors((items) => [...items, manualActor()])}>新增业务主体</Button></details>
 
-    <Divider orientation="left">做什么，会产生什么业务结果</Divider>
-    <div className="boundary-editor-list">{actions.map((action) => <article key={action.item_id} className="boundary-editor-card boundary-action-editor">
+    <h3>选择你要整理的业务动作</h3><nav className="action-index action-index-horizontal" aria-label="编辑业务动作索引">{actions.map((item) => <button type="button" key={item.item_id} aria-current={item.item_id === selectedAction?.item_id ? 'true' : undefined} onClick={() => setSelectedActionId(item.item_id)}>{item.display_name || '尚未命名的动作'}</button>)}</nav>
+    <div className="boundary-editor-list">{actions.filter((item) => item.item_id === selectedAction?.item_id).map((action) => <article key={action.item_id} className="boundary-editor-row-block boundary-action-editor">
       <div className="boundary-editor-row">
         <Input aria-label="业务动作名称" value={action.display_name} onChange={(event) => updateAction(setActions, action.item_id, { display_name: event.target.value })} />
         <Select aria-label={`${action.display_name || '业务动作'}类型`} value={action.operation_kind} options={operationOptions} onChange={(value) => updateAction(setActions, action.item_id, { operation_kind: value })} />
@@ -150,22 +153,23 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
         setPermissions((items) => items.filter((item) => item.business_action_item_id !== action.item_id))
       }}>移除新动作</Button>}</Space>
     </article>)}</div>
-    <Button onClick={() => setActions((items) => [...items, manualAction()])}>新增业务动作</Button>
+    <Button onClick={() => { const added = manualAction(); setActions((items) => [...items, added]); setSelectedActionId(added.item_id) }}>新增业务动作</Button>
 
-    <Divider orientation="left">谁可以做什么</Divider>
+    <h3>这项动作的权限规则</h3><p className="editorial-muted">分别填写操作人和资源所有者，再确认允许或拒绝与受保护的结果。</p>
     <PermissionDraftAssist projectId={draft.project_id} boundaryFingerprint={draft.boundary_state_fingerprint}
       draftKey={JSON.stringify([actors, actions, permissions])} disabled={busy} onApply={applySuggestions} />
-    <div className="boundary-editor-list">{permissions.map((permission) => {
+    <div className="boundary-editor-list">{permissions.filter((item) => item.business_action_item_id === selectedAction?.item_id).map((permission) => {
       const action = actions.find((item) => item.item_id === permission.business_action_item_id)
-      return <article key={permission.item_id} className="boundary-editor-card boundary-permission-editor">
-        <Select aria-label="谁" value={permission.subject_actor_item_id} options={actors.map(actorOption)} onChange={(value) => updatePermission(setPermissions, permission.item_id, { subject_actor_item_id: value })} />
-        <Select aria-label="做什么" value={permission.business_action_item_id} options={actions.map(actionOption)} onChange={(value) => {
+      return <article key={permission.item_id} className="boundary-editor-row-block boundary-permission-editor">
+        <RuleSentence>{actors.find((item) => item.item_id === permission.subject_actor_item_id)?.display_name || '谁'} 对{permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '另一个' : ''}{actors.find((item) => item.item_id === permission.resource_owner_actor_item_id)?.display_name || '资源所有者'}{permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '账号' : ''}拥有的资源，{permission.expectation === 'ALLOW' ? '可以' : '不可以'}{action?.display_name || '执行这项动作'}。</RuleSentence>
+        <label className="sentence-field"><span>谁在操作</span><Select aria-label="谁" value={permission.subject_actor_item_id} options={actors.map(actorOption)} onChange={(value) => updatePermission(setPermissions, permission.item_id, { subject_actor_item_id: value })} /></label>
+        <label className="sentence-field"><span>做什么</span><Select aria-label="做什么" value={permission.business_action_item_id} options={actions.map(actionOption)} onChange={(value) => {
           const next = actions.find((item) => item.item_id === value)
           updatePermission(setPermissions, permission.item_id, { business_action_item_id: value, protected_effect_item_ids: next?.effects.map((item) => item.item_id) ?? [] })
-        }} />
-        <Select aria-label="对谁拥有的资源" value={permission.resource_owner_actor_item_id} options={actors.map(actorOption)} onChange={(value) => updatePermission(setPermissions, permission.item_id, { resource_owner_actor_item_id: value })} />
-        <Select aria-label="资源关系" value={permission.relation} options={Object.entries(relationLabels).map(([value, label]) => ({ value, label }))} onChange={(value) => updatePermission(setPermissions, permission.item_id, { relation: value })} />
-        <Select aria-label="允许或拒绝" value={permission.expectation} options={Object.entries(expectationLabels).map(([value, label]) => ({ value, label }))} onChange={(value) => updatePermission(setPermissions, permission.item_id, { expectation: value })} />
+        }} /></label>
+        <label className="sentence-field"><span>资源属于谁</span><Select aria-label="对谁拥有的资源" value={permission.resource_owner_actor_item_id} options={actors.map(actorOption)} onChange={(value) => updatePermission(setPermissions, permission.item_id, { resource_owner_actor_item_id: value })} /></label>
+        <label className="sentence-field"><span>两个身份与资源的关系</span><Select aria-label="资源关系" value={permission.relation} options={Object.entries(relationLabels).map(([value, label]) => ({ value, label }))} onChange={(value) => updatePermission(setPermissions, permission.item_id, { relation: value })} /></label>
+        <label className="sentence-field"><span>应该允许还是拒绝</span><Select aria-label="允许或拒绝" value={permission.expectation} options={Object.entries(expectationLabels).map(([value, label]) => ({ value, label }))} onChange={(value) => updatePermission(setPermissions, permission.item_id, { expectation: value })} /></label>
         <Checkbox.Group aria-label="这条规则保护的业务结果" value={permission.protected_effect_item_ids} options={(action?.effects ?? []).map((effect) => ({ value: effect.item_id, label: effect.business_label || '尚未命名的业务结果' }))} onChange={(values) => updatePermission(setPermissions, permission.item_id, { protected_effect_item_ids: values.map(String) })} />
         <Checkbox checked={permission.effective_state === 'RETIRED'} onChange={(event) => updatePermission(setPermissions, permission.item_id, { effective_state: event.target.checked ? 'RETIRED' : 'ACTIVE' })}>停用这条规则</Checkbox>
         {!permission.intent_id && <Button danger type="text" onClick={() => setPermissions((items) => items.filter((item) => item.item_id !== permission.item_id))}>移除新规则</Button>}

@@ -12,7 +12,7 @@
  * ============================================================================= */
 
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Empty, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import type { WorkspaceViewDto } from '../../api/workspace'
 import type { ProjectDto } from '../../api/projects'
@@ -22,7 +22,7 @@ import {
   type IdentityPreparationDto,
   type TestIdentityDto,
 } from '../../api/testIdentities'
-import { PageTaskHeader } from '../../components/PageTaskHeader'
+import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import './identities.css'
 
@@ -180,11 +180,11 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     },
   })
 
-  if (loading) return <Card><Spin /> 正在读取测试账号…</Card>
+  if (loading) return <EditorialPage><Spin /> 正在读取测试账号…</EditorialPage>
 
-  return <div className="identity-page">
-    <PageTaskHeader title="测试账号" description="为已确认的业务主体准备真实测试账号；登录在独立窗口中完成，界鉴不会保存密码。" status={preparation ? preparationStatus(preparation) : `${preparedCount} 个账号已准备`} />
-    <Card className="identity-overview" title="准备测试账号">
+  return <EditorialPage label="测试账号登录准备">
+    <EditorialHeader eyebrow="验证 · 真实账号" title={initialPreparation ? `准备“${preparationIdentity?.label ?? '当前测试账号'}”的登录状态` : '管理当前测试账号'}><p className="editorial-muted">{preparation ? preparationStatus(preparation) : '只处理当前账号，其他有效准备仍然保留'}</p></EditorialHeader>
+    {!initialPreparation && <><section className="identity-overview"><h2>准备测试账号</h2>
       <Typography.Paragraph>点击“打开登录浏览器”后，请在独立窗口中自行完成密码、单点登录或多因素认证。只有你明确确认后，界鉴才保存当前应用需要的有限登录状态。</Typography.Paragraph>
       <Alert type="info" showIcon message="账号数量由当前权限要求决定" description="检查准备页会列出每个业务主体所需的独立账号；在这里管理已创建账号的登录状态。" />
       {roles.length > 0 && <div className="identity-create">
@@ -192,16 +192,16 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
         <Input aria-label="测试账号名称" value={label} maxLength={128} onChange={(event) => setLabel(event.target.value)} placeholder="例如：普通用户A / 管理员测试账号" />
         <Button loading={busy} disabled={activeLogin || !selectedRole || !label.trim()} onClick={() => void createIdentity()}>添加测试账号</Button>
       </div>}
-    </Card>
+    </section>
 
     <section className="identity-role-section" aria-labelledby="identity-role-section-title">
-      <div className="identity-role-heading"><div><Typography.Title id="identity-role-section-title" level={3}>按业务主体准备</Typography.Title><Typography.Paragraph type="secondary">每张角色卡说明它要验证什么、当前使用哪个账号，以及下一步需要你做什么。</Typography.Paragraph></div><Space wrap><Tag>{preparedCount} 个账号已准备</Tag><Button loading={busy} onClick={() => void refresh()}>刷新账号状态</Button></Space></div>
+      <div className="identity-role-heading"><div><Typography.Title id="identity-role-section-title" level={3}>按业务主体准备</Typography.Title><Typography.Paragraph type="secondary">各业务主体下只展示已有账号与当前登录状态；失效账号单独处理。</Typography.Paragraph></div><Space wrap><Tag>{preparedCount} 个账号已准备</Tag><Button loading={busy} onClick={() => void refresh()}>刷新账号状态</Button></Space></div>
       {roles.length === 0 && <Empty description="请先在业务边界中确认业务主体" />}
       <div className="identity-role-grid">{roles.map((role) => {
         const roleIdentities = identities.filter((identity) => identity.actor_id === role.actor_id && identity.actor_revision === role.revision)
         const rolePrepared = roleIdentities.filter((identity) => identity.status === 'PREPARED').length
-        return <article className="identity-role-card" key={role.actor_id}>
-          <div className="identity-role-card-header"><div><Typography.Text className="identity-role-kicker">业务主体角色</Typography.Text><Typography.Title level={4}>{role.display_name}</Typography.Title></div><Tag color={rolePrepared ? 'green' : 'orange'}>{rolePrepared ? `${rolePrepared} 个已准备` : '需要账号'}</Tag></div>
+        return <article className="identity-role-row" key={role.actor_id}>
+          <div className="identity-role-row-header"><div><Typography.Text className="identity-role-kicker">业务主体角色</Typography.Text><Typography.Title level={4}>{role.display_name}</Typography.Title></div><Tag color={rolePrepared ? 'green' : 'orange'}>{rolePrepared ? `${rolePrepared} 个已准备` : '需要账号'}</Tag></div>
           <Typography.Paragraph>用于验证“{role.display_name}”在合法路径和禁止路径中的真实权限边界。</Typography.Paragraph>
           <div className="identity-role-accounts">{roleIdentities.length === 0
             ? <Typography.Text type="secondary">当前测试账号：尚未添加。请在上方为这个业务主体添加账号。</Typography.Text>
@@ -210,7 +210,8 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
       })}</div>
     </section>
 
-    {preparation?.status === 'WAITING_FOR_LOGIN' && <Card className="identity-login-steps" title={`准备“${preparationIdentity?.label ?? '普通用户测试账号'}”`}>
+    </>}
+    {preparation?.status === 'WAITING_FOR_LOGIN' && <section className="identity-login-steps"><h2>{`准备“${preparationIdentity?.label ?? '当前测试账号'}”`}</h2>
       <ol className="identity-login-step-list">
         <li><Tag color="green">✓</Tag><div><Typography.Text strong>登录窗口已经打开</Typography.Text><Typography.Text type="secondary">界鉴正在等待你完成这个测试账号的登录。</Typography.Text></div></li>
         <li><Tag color="blue">当前</Tag><div><Typography.Text strong>在新窗口完成登录</Typography.Text><Typography.Text type="secondary">正常输入密码，完成 SSO 或 MFA。登录成功后不要关闭这个窗口。</Typography.Text></div></li>
@@ -218,7 +219,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
       </ol>
       <Alert type="warning" showIcon message="不要关闭这个窗口" description="点击确认后，界鉴会安全保存当前应用所需的有限登录状态；不会保存你的密码。" />
       <Button loading={busy} onClick={() => void cancel()}>取消准备</Button>
-    </Card>}
+    </section>}
     {preparation && preparation.status !== 'WAITING_FOR_LOGIN' && <Alert
       type={preparation.status === 'FAILED' ? 'error' : preparation.status === 'UNSUPPORTED' ? 'warning' : preparation.status === 'PREPARED' ? 'success' : 'info'}
       showIcon
@@ -232,7 +233,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
 
     <TaskActionBar
       back={{ label: '返回检查准备', onClick: onBack, disabled: busy || activeLogin }}
-      primary={{ label: '查看下一项准备', onClick: onContinuePreparation, disabled: busy || activeLogin || Boolean(syncError) }}
+      primary={activeLogin ? undefined : { label: '查看下一项准备', onClick: onContinuePreparation, disabled: busy || activeLogin || Boolean(syncError) }}
     />
-  </div>
+  </EditorialPage>
 }

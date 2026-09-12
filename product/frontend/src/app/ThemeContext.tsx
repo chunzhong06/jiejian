@@ -4,6 +4,7 @@ import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react'
 import { createProductTheme, type ResolvedTheme } from './theme'
+import { productCssVariables } from '../shared/ui/tokens'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -35,6 +36,7 @@ export function ProductThemeProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(STORAGE_KEY, mode)
     document.documentElement.dataset.theme = resolved
     document.documentElement.style.colorScheme = resolved
+    Object.entries(productCssVariables(resolved)).forEach(([key, value]) => document.documentElement.style.setProperty(key, value))
   }, [mode, resolved])
 
   const value = useMemo(() => ({ mode, resolved, setMode }), [mode, resolved])

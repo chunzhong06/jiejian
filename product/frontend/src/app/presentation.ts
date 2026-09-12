@@ -20,9 +20,9 @@ export type ProductAreaRoute = '/workspace' | '/changes' | '/permissions' | '/te
 
 export const productAreas = [
   { route: '/workspace', label: '工作台', shortLabel: '工作台' },
+  { route: '/permissions', label: '权限', shortLabel: '权限' },
+  { route: '/tests', label: '验证', shortLabel: '验证' },
   { route: '/changes', label: '变化与修复', shortLabel: '变化' },
-  { route: '/permissions', label: '权限边界', shortLabel: '权限' },
-  { route: '/tests', label: '检查与结果', shortLabel: '检查' },
 ] as const
 
 export function normalizeRoute(pathname: string): AppRoute {

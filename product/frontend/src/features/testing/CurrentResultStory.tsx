@@ -1,10 +1,13 @@
 // 已发布结果的业务展示；安全判断与断裂精度原样取自后端，原始证据只在明确详情中展开。
-import { Alert, Button, Collapse, Descriptions, Drawer, Empty, Spin, Typography } from 'antd'
+import { Alert, Button, Descriptions, Drawer, Empty, Spin, Typography } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { currentChecksApi, type CheckBreakpoint, type CheckEvidence, type EvidenceExplanation, type ResultStory } from '../../api/currentChecks'
 import type { ApiError } from '../../api/http'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { formatTimestamp } from '../../app/presentation'
+import { EvidenceSurface, RuleSentence } from '../../shared/ui/Editorial'
+import { RepairComparison } from '../changes/RepairComparison'
+import './testing.css'
 import { repairLabels } from '../../api/repairs'
 
 const breakpointLabels = {
@@ -18,6 +21,7 @@ const stateLabels = { CONFIRMED: '已发现', ABSENT: '未发现', UNKNOWN: '无
 const controlLabels = { SAFE: '正常对照已通过', VULNERABLE: '正常对照发现问题', INCONCLUSIVE: '正常对照证据不足' }
 
 export function CurrentResultStory({ story, onError, onNavigate }: { story: ResultStory; onError: (error: ApiError) => void; onNavigate?: (path: string) => void }) {
+  const [selectedCase, setSelectedCase] = useState<string>()
   const [detail, setDetail] = useState<{ source?: EvidenceExplanation; breakpoint?: CheckBreakpoint; refs: string[] }>()
   const [documents, setDocuments] = useState<CheckEvidence[]>([])
   const [loading, setLoading] = useState(false)
@@ -34,53 +38,38 @@ export function CurrentResultStory({ story, onError, onNavigate }: { story: Resu
     } catch (error) { if (requestEpoch.current === epoch) { setFailed(true); onError(error as ApiError) } }
     finally { if (requestEpoch.current === epoch) setLoading(false) }
   }
-  const evidenceRow = (item: EvidenceExplanation, index: number) => <section className="check-evidence-row" key={`${item.observed_fact.observer_id}:${item.observed_fact.phase}:${index}`}>
-    <Typography.Text strong>{item.source_label}</Typography.Text>
-    <Typography.Paragraph type="secondary">{phaseLabels[item.observed_fact.phase]} · {stateLabels[item.observed_fact.state]}</Typography.Paragraph>
-    <Typography.Paragraph>{item.supports_claim}</Typography.Paragraph>
-    <Button onClick={() => void openEvidence(item.evidence_refs, item)}>查看{item.source_label}证据</Button>
+  const evidenceRow = (item: EvidenceExplanation, index: number) => <section className="evidence-question" key={`${item.observed_fact.observer_id}:${item.observed_fact.phase}:${index}`}>
+    <p><strong>{item.source_label}</strong> · {phaseLabels[item.observed_fact.phase]} · {stateLabels[item.observed_fact.state]}</p>
+    <p className="editorial-muted">{item.supports_claim}</p>
+    {item.evidence_refs.length > 0 && <Button onClick={() => void openEvidence(item.evidence_refs, item)}>为什么这样判断？查看{item.source_label}证据</Button>}
   </section>
   const ordered = [...story.actions].sort((a, b) => Number(a.permission.expectation === 'ALLOW') - Number(b.permission.expectation === 'ALLOW'))
-  return <>
-    <Typography.Paragraph type="secondary">本次检查依据权限版本 {story.policy_epoch}</Typography.Paragraph>
-    {story.repair_verification && <Alert type={story.repair_verification.status === 'VERIFIED' ? 'success' : 'warning'} showIcon message={repairLabels[story.repair_verification.status]} description="原题复验状态来自原检查与本次新检查的已发布事实。" action={onNavigate && <Button onClick={() => onNavigate(`/tests?run_id=${encodeURIComponent(story.repair_verification!.source_run_id)}`)}>查看原问题</Button>} />}
+  const action = ordered.find((item) => item.case_id === selectedCase) ?? ordered.find((item) => item.repair_requirement) ?? ordered[0]
+  const comparison = action?.fact_comparison
+  const actual = comparison?.verified_actual_identity
+  return <div className="result-story" aria-label="已发布的权限与证据故事">
+    <p className="editorial-muted">本次检查依据权限版本 {story.policy_epoch}，规则由人确认；AI 只解释已有事实。</p>
+    {story.repair_verification && <section className="repair-verification-summary"><h2>{story.repair_verification.status === 'VERIFIED' ? '原问题已经通过复验，要求保留的合法能力未受影响' : repairLabels[story.repair_verification.status]}</h2><p>原问题与本次新检查均保留为独立记录。</p>{onNavigate && <Button onClick={() => onNavigate(`/tests?run_id=${encodeURIComponent(story.repair_verification!.source_run_id)}`)}>查看原问题</Button>}</section>}
+    {ordered.length > 1 && <nav className="result-case-index" aria-label="本轮权限考题">{ordered.map((item) => <button key={item.case_id} aria-current={item.case_id === action?.case_id ? 'true' : undefined} onClick={() => setSelectedCase(item.case_id)}>{item.display_name} · {item.fact_comparison.planned_identity.label ?? '计划账号'} · {item.permission.expectation === 'DENY' ? '应当拒绝' : '应当允许'}</button>)}</nav>}
+    {action && comparison && actual ? <article>
+      <h2>{action.judgement}</h2>
+      {action.repair_requirement && onNavigate && <Button type="primary" onClick={() => onNavigate(`/changes?repair_reference=${encodeURIComponent(action.repair_requirement!.repair_fingerprint)}`)}>登记修复变化</Button>}
+      <p className="editorial-eyebrow">人的权限要求</p>
+      <RuleSentence><strong>{comparison.planned_identity.label ?? comparison.planned_identity.actor_label ?? '原操作账号'}</strong> 对<strong>{comparison.planned_resource_owner?.label ?? (action.permission.relation === 'OWNS' ? '自己' : action.permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '另一个同权限组账号' : '原资源所有者')}</strong>拥有的资源，<strong>{action.permission.expectation === 'DENY' ? '不得' : '可以'}{action.display_name}</strong>。</RuleSentence>
+      <EvidenceSurface label="本轮机器事实">
+        <p>页面 / 请求回应：{comparison.http_surface.http_status !== null && <>HTTP {comparison.http_surface.http_status} · </>}{comparison.http_explanation}</p>
+        {comparison.effects.map((effect) => <p key={effect.effect_id}><strong>{effect.business_label}：{effect.judgement}</strong></p>)}
+        <p>正常业务对照：{comparison.allow_control ? controlLabels[comparison.allow_control.verdict] : '本项为正常业务验证'}</p>
+      </EvidenceSurface>
+      <section className="story-section" aria-label="实际身份"><span className="story-number">01</span><div><h3>实际身份</h3><p>计划操作人：{comparison.planned_identity.label ?? '未提供账号名称'}；计划资源所有者：{comparison.planned_resource_owner?.label ?? '未提供可读身份'}。</p><p>目标独立确认的实际账号：{actual.verification_status === 'MATCH' ? actual.label ?? '身份已独立确认' : actual.verification_status === 'MISMATCH' ? '实际身份与计划不一致' : '无法独立确认'}。</p></div></section>
+      <section className="story-section" aria-label="断裂位置"><span className="story-number">02</span><div><h3>首个可证明的断裂</h3><p>{action.breakpoint?.breakpoint_type ? breakpointLabels[action.breakpoint.breakpoint_type] : '本项没有已发布的权限断裂定位'}</p>{action.breakpoint && <p className="editorial-muted">{precisionLabels[action.breakpoint.precision]}</p>}{!!action.breakpoint?.evidence_refs.length && <Button onClick={() => void openEvidence(action.breakpoint!.evidence_refs, undefined, action.breakpoint!)}>为什么定位在这里？查看定位证据</Button>}</div></section>
+      <section className="story-section" aria-label="最终业务结果"><span className="story-number">03</span><div><h3>最终业务结果与决定性证明</h3>{action.decisive_proof_chain.length ? action.decisive_proof_chain.map(evidenceRow) : <><p>当前没有完整的决定性证明；现有观察不足以支持新的安全判断。</p><p className="editorial-muted">查看下方缺少的事实，补足对应证明后发起新的检查。已经由其他权威事实确认的问题仍保留。</p></>}</div></section>
+      <details className="story-observations"><summary>全部观察来源与说明边界</summary>{action.evidence_explanations.map(evidenceRow)}{action.claim_boundary.map((text) => <p key={text} className="editorial-muted">{text}</p>)}</details>
+      {action.repair_requirement && <section aria-label="原题修复要求"><h2>修复原问题，并保留正常业务</h2><p>原权限、操作账号、资源归属和证据标准保持不变。关闭功能不能证明修复成功。</p><RepairComparison rows={action.repair_comparison ?? []}/></section>}
+    </article> : <Empty description="本次没有可展示的检查项" />}
     {story.change_context && onNavigate && <Button onClick={() => onNavigate('/changes')}>查看关联变化与修复</Button>}
-    <Collapse accordion defaultActiveKey={ordered[0]?.case_id} items={ordered.map((action) => {
-      const comparison = action.fact_comparison
-      const actual = comparison.verified_actual_identity
-      return { key: action.case_id, label: `${action.display_name} · ${comparison.planned_identity.label ?? '计划账号'} · ${action.permission.expectation === 'DENY' ? '应当拒绝' : '应当允许'}`,
-        children: <>
-          <Typography.Title level={4}>{action.judgement}</Typography.Title>
-          {action.repair_requirement && <section aria-label="原题修复要求">
-            <Typography.Title level={5}>原题修复要求</Typography.Title>
-            <Typography.Paragraph>保持原权限、操作账号、资源归属和证据标准，消除本题不应发生的后果，并保留 {action.repair_requirement.regressions.length} 项原正常业务回归。</Typography.Paragraph>
-            {onNavigate && <Button onClick={() => onNavigate(`/changes?repair_reference=${encodeURIComponent(action.repair_requirement!.repair_fingerprint)}`)}>登记修复变化</Button>}
-          </section>}
-          <Descriptions title="事实对照" column={{ xs: 1, sm: 2 }} layout="vertical" items={[
-            { key: 'permission', label: '权限要求', children: `${comparison.planned_identity.actor_label ?? '当前主体'}${action.permission.expectation === 'DENY' ? '不得' : '可以'}${action.display_name}；${action.permission.relation === 'OWNS' ? '操作自己的资源' : action.permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '操作同类主体其他账号的资源' : '操作其他权限主体的资源'}` },
-            { key: 'planned', label: '计划使用的账号', children: comparison.planned_identity.label ?? '未提供账号名称' },
-            { key: 'actual', label: '独立确认的实际账号', children: actual.verification_status === 'MATCH' ? actual.label ?? '身份已独立确认' : actual.verification_status === 'MISMATCH' ? '实际身份与计划不一致' : '无法独立确认' },
-            { key: 'http', label: '请求的表面回应', children: <>{comparison.http_surface.http_status !== null && <Typography.Text>HTTP {comparison.http_surface.http_status} · </Typography.Text>}{comparison.http_explanation}</> },
-            { key: 'effects', label: '真实业务后果', span: 2, children: comparison.effects.map((effect) => <Typography.Paragraph key={effect.effect_id}>{effect.business_label}：{effect.judgement}</Typography.Paragraph>) },
-            { key: 'control', label: '正常业务对照', children: comparison.allow_control ? controlLabels[comparison.allow_control.verdict] : '本项为正常业务验证' },
-          ]} />
-          {action.breakpoint && <section aria-label="断裂位置">
-            <Typography.Title level={5}>断裂位置</Typography.Title>
-            <Typography.Paragraph>{action.breakpoint.breakpoint_type ? breakpointLabels[action.breakpoint.breakpoint_type] : '当前无法确定断裂类型'}</Typography.Paragraph>
-            <Typography.Paragraph type="secondary">{precisionLabels[action.breakpoint.precision]}</Typography.Paragraph>
-            <Button onClick={() => void openEvidence(action.breakpoint!.evidence_refs, undefined, action.breakpoint!)}>查看定位证据</Button>
-          </section>}
-          <Typography.Title level={5}>决定性证明链</Typography.Title>
-          {action.decisive_proof_chain.length ? action.decisive_proof_chain.map(evidenceRow) : <Typography.Paragraph type="secondary">当前没有完整的决定性证明；请查看本项判断和全部观察来源。</Typography.Paragraph>}
-          <details><summary>全部观察来源与说明边界</summary>
-            {action.evidence_explanations.map(evidenceRow)}
-            {action.claim_boundary.map((text) => <Typography.Paragraph key={text} type="secondary">{text}</Typography.Paragraph>)}
-          </details>
-        </> }
-    })} />
-    {!ordered.length && <Empty description="本次没有可展示的检查项" />}
     <AssistantPanel runId={story.run_id} title="理解本次检查结果" actionLabel="解释已有结果" />
-    {story.claim_boundary.map((text) => <Typography.Paragraph key={text} type="secondary">{text}</Typography.Paragraph>)}
+    {story.claim_boundary.map((text) => <p key={text} className="editorial-muted">{text}</p>)}
     <Drawer title="已发布证据" open={Boolean(detail)} width={640} onClose={() => { requestEpoch.current += 1; setDetail(undefined); setDocuments([]) }}>
       {loading && <Spin tip="正在核验发布证据"><div style={{ minHeight: 80 }} /></Spin>}
       {failed && <Alert showIcon type="error" message="证据未能通过读取或完整性检查，请返回刷新检查结果。" />}
@@ -90,6 +79,7 @@ export function CurrentResultStory({ story, onError, onNavigate }: { story: Resu
         { key: 'supports', label: '因此支持什么', children: detail.source.supports_claim },
         { key: 'limit', label: '不能单独证明什么', children: detail.source.does_not_prove },
       ]} />}
+      {!loading && !failed && detail?.breakpoint && <dl className="evidence-answers"><dt>在哪里看到</dt><dd>本轮已发布的执行路径与定位边界，具体位置见下方。</dd><dt>看到什么</dt><dd>{detail.breakpoint.breakpoint_type ? breakpointLabels[detail.breakpoint.breakpoint_type] : '已有后果证据，定位范围有限'}</dd><dt>因此支持什么</dt><dd>{precisionLabels[detail.breakpoint.precision]}</dd><dt>不能单独证明什么</dt><dd>定位只解释已有后果，不能替代决定性业务结果证据；不完整路径不支持更细的位置。</dd></dl>}
       {documents.map((document) => <section key={document.evidence_id}>
         {detail?.breakpoint && document.trace && <>
           <Typography.Title level={5}>已发布的定位边界</Typography.Title>
@@ -101,5 +91,5 @@ export function CurrentResultStory({ story, onError, onNavigate }: { story: Resu
         <details><summary>证据文件与技术引用</summary><pre className="check-evidence-json">{JSON.stringify(document, null, 2)}</pre></details>
       </section>)}
     </Drawer>
-  </>
+  </div>
 }

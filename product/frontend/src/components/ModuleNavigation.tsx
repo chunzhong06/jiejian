@@ -1,4 +1,4 @@
-// 工作台独立承担主控入口，变化、权限和测试收在专项工作区；详细任务不进入主导航。
+// 四个业务方向保持自由导航；当前页面与服务端状态分别表达，工具留在顶部。
 
 import { AppstoreOutlined, DiffOutlined, ExperimentOutlined, MenuOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { Button, Drawer, Typography } from 'antd'
@@ -34,36 +34,20 @@ function ModuleList({ route, areas, onNavigate }: {
   onNavigate: (path: AppRoute) => void
 }) {
   const selectedRoute = activeArea(route)
-  const workbench = productAreas[0]
-  const workbenchArea = areas?.find((item) => item.route === workbench.route)
-  const workbenchStatus: AreaStatus = workbenchArea?.status ?? 'READY'
-  const workbenchSelected = selectedRoute === workbench.route
-  return <>
-    <div className="module-workbench-group">
-      <button type="button" className={`module-workbench-button is-${workbenchStatus.toLowerCase()}${workbenchSelected ? ' is-selected' : ''}`} aria-label={`${workbench.label}，${workbenchArea?.status_label ?? '可以开始'}`} aria-current={workbenchSelected ? 'page' : undefined} onClick={() => onNavigate(workbench.route)}>
-        <span className="module-workbench-icon" aria-hidden="true"><AppstoreOutlined /></span>
-        <span className="module-navigation-label">{workbench.label}</span>
-        <NavigationState status={workbenchStatus} label={workbenchArea?.status_label ?? '可以开始'} />
-      </button>
-    </div>
-    <div className="module-navigation-group">
-      <Typography.Text className="module-navigation-title">专项工作</Typography.Text>
-      <ul className="module-navigation-list">
-      {productAreas.slice(1).map((fallback) => {
-        const area = areas?.find((item) => item.route === fallback.route)
-        const status: AreaStatus = area?.status ?? (fallback.route === '/workspace' ? 'READY' : 'EMPTY')
-        const selected = selectedRoute === fallback.route
-        return <li className={`module-navigation-item is-${status.toLowerCase()}${selected ? ' is-selected' : ''}`} key={fallback.route}>
-          <button type="button" className="module-navigation-button" aria-label={`${fallback.label}，${area?.status_label ?? '等待应用'}`} aria-current={selected ? 'page' : undefined} onClick={() => onNavigate(fallback.route)}>
-            <span className="module-navigation-icon" aria-hidden="true"><ModuleIcon route={fallback.route} /></span>
-            <span className="module-navigation-label">{fallback.label}</span>
-            <NavigationState status={status} label={area?.status_label ?? '等待应用'} />
-          </button>
-        </li>
-      })}
-      </ul>
-    </div>
-  </>
+  return <ul className="module-navigation-list">
+    {productAreas.map((fallback) => {
+      const area = areas?.find((item) => item.route === fallback.route)
+      const status: AreaStatus = area?.status ?? (fallback.route === '/workspace' ? 'READY' : 'EMPTY')
+      const selected = selectedRoute === fallback.route
+      return <li className={`module-navigation-item is-${status.toLowerCase()}${selected ? ' is-selected' : ''}`} key={fallback.route}>
+        <button type="button" className="module-navigation-button" aria-label={`${fallback.label}，${area?.status_label ?? '等待应用'}`} aria-current={selected ? 'page' : undefined} onClick={() => onNavigate(fallback.route)}>
+          <span className="module-navigation-icon" aria-hidden="true"><ModuleIcon route={fallback.route} /></span>
+          <span className="module-navigation-label">{fallback.label}</span>
+          <NavigationState status={status} label={area?.status_label ?? '等待应用'} />
+        </button>
+      </li>
+    })}
+  </ul>
 }
 
 export function DesktopModuleNavigation({ route, areas, onNavigate }: {

@@ -1,12 +1,16 @@
 // 当前权限实验与只读结果合同；浏览器只提交计划指纹，不创建考题或计算安全结论。
 import { ApiError, request } from './http'
-import type { RepairContract, RepairVerification } from './repairs'
+import type { RepairContract, RepairVerification, RepairComparisonRow } from './repairs'
 
 export type CheckVerdict = 'PASS' | 'BLOCK' | 'INCONCLUSIVE'
+export type CheckProgressCase = {
+  case_id: string; action_label: string; expectation: 'ALLOW' | 'DENY'
+  planned_subject_label: string; planned_resource_owner_label: string; resource_id: string; effect_labels: string[]
+}
 export type CheckStatus = {
   run: { run_id: string; project_id: string; lifecycle: string; verdict: CheckVerdict | null; plan_fingerprint: string; policy_epoch: number; created_at_us: number; finished_at_us: number | null }
   job: { job_id: string; state: string; attempt: number; cancel_requested: boolean } | null
-  progress: { phase: 'PREPARING' | 'EXECUTING' | 'FINALIZING'; completed_cases: number; planned_cases: number } | null
+  progress: { phase: 'PREPARING' | 'EXECUTING' | 'FINALIZING'; completed_cases: number; planned_cases: number; current_case?: CheckProgressCase | null } | null
   result_integrity: 'VALID' | 'INVALID' | 'NOT_PUBLISHED'
 }
 export type CheckPreview = {
@@ -38,12 +42,12 @@ export type ActionResultStory = {
   permission: { expectation: 'ALLOW' | 'DENY'; relation: string }
   judgement: string
   fact_comparison: {
-    planned_identity: StoryIdentity; verified_actual_identity: StoryIdentity; http_surface: CheckOutcome; http_explanation: string
+    planned_identity: StoryIdentity; planned_resource_owner?: StoryIdentity | null; resource_id?: string | null; verified_actual_identity: StoryIdentity; http_surface: CheckOutcome; http_explanation: string
     effects: Array<{ effect_id: string; business_label: string; resource_concept: string; observed_state: 'CONFIRMED' | 'ABSENT' | 'UNKNOWN'; judgement: string; evidence_refs: string[] }>
     allow_control: { case_id: string; verdict: 'SAFE' | 'VULNERABLE' | 'INCONCLUSIVE'; evidence_refs: string[] } | null
   }
   breakpoint: CheckBreakpoint | null; decisive_proof_chain: EvidenceExplanation[]; evidence_explanations: EvidenceExplanation[]
-  claim_boundary: string[]; repair_requirement: RepairContract | null; technical_references: string[]
+  claim_boundary: string[]; repair_requirement: RepairContract | null; repair_comparison?: RepairComparisonRow[]; technical_references: string[]
 }
 export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null }
 export type CheckEvidence = {

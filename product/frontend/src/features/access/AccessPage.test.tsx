@@ -26,7 +26,7 @@ describe('AccessPage', () => {
       onContinue={onContinue}
     />)
 
-    expect(screen.getByRole('heading', { name: '应用接入' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '确认应用与业务动作，再建立权限' })).toBeInTheDocument()
     expect(screen.getByTestId('application-setup')).toHaveTextContent('正式应用接入向导')
     expect(screen.queryByText(/Profile|注册并校验|当前工作概览|项目列表/i)).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText(/profiles\\profile\.json/i)).not.toBeInTheDocument()

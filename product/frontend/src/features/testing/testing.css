@@ -1,0 +1,18 @@
+/* 结果按人的规则、机器事实与因果章节阅读；一次只突出一个证据主面。 */
+.result-story { display: grid; gap: var(--space-24); min-width: 0; }
+.result-story h2 { font-size: var(--font-section); line-height: 1.5; }
+.result-case-index { display: flex; flex-wrap: wrap; gap: var(--space-8) var(--space-16); border-bottom: var(--line-width) solid var(--color-border); padding-bottom: var(--space-16); }
+.result-case-index button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--color-secondary); font: inherit; text-align: left; cursor: pointer; padding: var(--space-8) 0; }
+.result-case-index button[aria-current] { border-bottom-color: var(--color-primary); color: var(--color-primary); }
+.story-section { display: grid; grid-template-columns: 64px minmax(0,1fr); gap: var(--space-16); padding-block: var(--space-24); border-bottom: var(--line-width) solid var(--color-border); }
+.story-number { color: var(--color-secondary); font-size: 30px; }
+.story-section h3 { margin: 0 0 var(--space-12); }
+.story-observations { padding-block: var(--space-20); }
+.story-observations summary { cursor: pointer; }
+.evidence-question { padding-block: var(--space-12); }
+.evidence-question p { margin: var(--space-8) 0; }
+.repair-comparison > section { border-top: var(--line-width) solid var(--color-border); padding-block: var(--space-20); }
+.repair-comparison-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-24); }
+.repair-comparison-columns > div + div { border-left: var(--line-width) solid var(--color-border); padding-left: var(--space-24); }
+.evidence-answers dt { font-weight: 600; margin-top: var(--space-16); }.evidence-answers dd { margin: var(--space-8) 0; }
+@media(max-width:600px) { .story-section { grid-template-columns: 36px minmax(0,1fr); gap: var(--space-12); } .story-number { font-size: 24px; } .repair-comparison-columns { grid-template-columns: 1fr; gap: var(--space-12); } .repair-comparison-columns > div + div { border-left: 0; padding-left: 0; } .evidence-question .ant-btn { height: auto; white-space: normal; } }

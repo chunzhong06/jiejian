@@ -78,23 +78,23 @@ describe('CURRENT 应用壳', () => {
   it('在工作台展示服务端 Workspace 与唯一主任务', async () => {
     render(<ControlShell />)
 
-    expect(await screen.findByRole('heading', { name: '演示应用', level: 2 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '当前还没有稳定业务边界。', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('当前还没有稳定业务边界。')).toBeInTheDocument()
-    expect(screen.getByText('建立当前业务边界')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '建立当前业务边界' })).toBeInTheDocument()
     expect(screen.getAllByText('变化与修复').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('检查与结果').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('验证').length).toBeGreaterThan(0)
   })
 
   it('变化与检查装配当前入口，准备缺失时不自动执行', async () => {
     window.location.hash = '#/changes'
     const view = render(<ControlShell />)
-    expect(await screen.findByRole('heading', { name: '变化与修复' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '代码改过以后，继续检查原来的权限' })).toBeInTheDocument()
     expect(await screen.findByText('尚无代码变化记录')).toBeInTheDocument()
 
     view.unmount()
     window.location.hash = '#/tests'
     render(<ControlShell />)
-    expect(await screen.findByRole('heading', { name: '检查与结果' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '请先补齐本次检查所需材料' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /开始检查|验证运行/ })).not.toBeInTheDocument()
   })
 

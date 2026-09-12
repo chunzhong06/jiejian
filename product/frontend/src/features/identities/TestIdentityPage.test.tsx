@@ -44,7 +44,7 @@ describe('TestIdentityPage', () => {
 
   it('说明不保存密码并显示每个已确认角色的账号准备情况', async () => {
     render(<TestIdentityPage {...pageProps()} />)
-    expect(await screen.findByRole('heading', { name: '测试账号' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '管理当前测试账号' })).toBeInTheDocument()
     expect(screen.getByText(/独立窗口中自行完成密码/)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '按业务主体准备' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '普通用户' })).toBeInTheDocument()
@@ -76,7 +76,7 @@ describe('TestIdentityPage', () => {
     fireEvent.click(confirm)
     await waitFor(() => expect(testIdentitiesApi.confirmPreparation).toHaveBeenCalledWith(`prep_${'c'.repeat(32)}`))
     expect(await screen.findByText('登录状态已准备；界鉴没有保存你的密码')).toBeInTheDocument()
-    const header = screen.getByRole('region', { name: '测试账号' })
+    const header = screen.getByRole('heading', { name: '管理当前测试账号' }).closest('header')!
     expect(screen.getByRole('button', { name: '查看下一项准备' })).toBeInTheDocument()
     expect(props.onStateChanged).toHaveBeenCalled()
     expect(header).not.toHaveTextContent('完成当前登录准备')

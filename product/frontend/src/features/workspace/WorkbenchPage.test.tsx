@@ -52,30 +52,39 @@ const workspace: WorkspaceViewDto = {
 const systemStatus = { api: 'available' as const, worker: 'unavailable' as const, browser: 'available' as const }
 
 describe('WorkbenchPage', () => {
+  it('陈旧任务不启用主动作，最近结果不能抢占当前任务', () => {
+    const latest = { run_id: 'r1', verdict: 'PASS' as const, summary: '上次结果通过', policy_epoch: 1, created_at_us: 1 }
+    render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用' }} workspace={{ ...workspace, primary_task: { ...workspace.primary_task!, can_execute: false }, latest_result: latest }} systemStatus={systemStatus} experience={experience} onNavigate={vi.fn()} />)
+    expect(screen.getByRole('button', { name: workspace.primary_task!.title })).toBeDisabled()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(workspace.primary_task!.why_now)
+    expect(document.querySelectorAll('.ant-btn-primary')).toHaveLength(1)
+    expect(document.querySelector('.ant-card')).not.toBeInTheDocument()
+  })
+
   it('直接展示并执行服务端 PrimaryTask', () => {
     const onNavigate = vi.fn()
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用' }} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={onNavigate} />)
 
     expect(screen.getByRole('heading', { name: '当前动作已形成新 revision。' })).toBeInTheDocument()
-    expect(screen.getByText('重新确认“导出交付包”的权限')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '重新确认“导出交付包”的权限' })).toBeInTheDocument()
     expect(screen.getByText('系统接下来会：保存新的权限 revision。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '前往处理' }))
+    fireEvent.click(screen.getByRole('button', { name: '重新确认“导出交付包”的权限' }))
     expect(onNavigate).toHaveBeenCalledWith('/permissions')
   })
 
-  it('不读取 dormant Run 伪造结果，并汇总动作级复核状态', () => {
+  it('不读取 dormant Run 伪造结果，也不把统计和摘要格放回工作台', () => {
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用' }} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={vi.fn()} />)
 
     expect(within(screen.getByLabelText('最近可信结果')).getByText('当前没有正式检查结果')).toBeInTheDocument()
-    expect(screen.getByText('1 项当前业务动作')).toBeInTheDocument()
-    expect(screen.getByText('1 项需要确认当前权限或代码实现。')).toBeInTheDocument()
-    expect(screen.getByText('当前不可检查')).toBeInTheDocument()
+    expect(screen.queryByText('1 项当前业务动作')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('当前专项摘要')).not.toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: '自由进入相关工作' })).toBeInTheDocument()
   })
 
   it('空工作区只提供应用接入，不启动旧示例状态机', () => {
     render(<WorkbenchPage selected={null} workspace={null} systemStatus={systemStatus} experience={experience} onNavigate={vi.fn()} />)
 
-    expect(screen.getByText('建立第一份权限安全基线')).toBeInTheDocument()
+    expect(screen.getByText('建立第一份权限基线')).toBeInTheDocument()
     expect(screen.getByText('当前不可用')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '启动官方示例' })).not.toBeInTheDocument()
   })

@@ -20,8 +20,9 @@ NOW = 1_790_000_000_000_000
 
 
 @pytest.fixture
-def package_parts(worker_services, tmp_path):
-    request, bundle = execution_pair()
+def package_parts(worker_services, tmp_path, request):
+    options = getattr(request, "param", {})
+    request, bundle = execution_pair(**options)
     factory = partial(StorageUnitOfWork, worker_services.session_factory)
     with factory() as work:
         work.projects.add(ProjectRecord(project_id=request.project_id, name="发布检查测试", status=ProjectStatus.READY,

@@ -1,7 +1,7 @@
 // 业务边界页面：在现有产品壳内完成候选整理、不可变提案与 LOCAL_GUI 明确批准。
 
 import { Alert, Button, Result, Spin, Typography } from 'antd'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   businessBoundariesApi,
   type BoundaryMaintenanceCommandDto,
@@ -13,18 +13,22 @@ import {
 } from '../../api/businessBoundaries'
 import type { ApiError } from '../../api/http'
 import type { ProjectDto } from '../../api/projects'
+import { EditorialHeader, EditorialPage, RuleSentence } from '../../shared/ui/Editorial'
+import './boundary.css'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
 import { BoundaryMaintenanceEditor } from './BoundaryMaintenanceEditor'
 import { BoundaryProposalEditor } from './BoundaryProposalEditor'
 import { BoundaryProposalReview } from './BoundaryProposalReview'
 import { effectKindLabels, expectationLabels, relationLabels } from './boundaryLabels'
 
-export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack }: {
+export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack, onProvidedProposal }: {
   project: ProjectDto
+  onProvidedProposal?: () => Promise<BoundaryProposalViewDto>
   onError: (error: ApiError) => void
   onStateChanged: () => Promise<unknown> | unknown
   onBack: () => void
 }) {
+  const providedInFlight = useRef(false)
   const [boundary, setBoundary] = useState<BusinessBoundaryViewDto>()
   const [preview, setPreview] = useState<Awaited<ReturnType<typeof businessBoundariesApi.preview>>>()
   const [maintenanceDraft, setMaintenanceDraft] = useState<BoundaryMaintenanceDraftDto>()
@@ -59,6 +63,16 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack 
     return () => { active = false }
   }, [onError, project.project_id])
 
+  const loadProvidedProposal = async () => {
+    if (!onProvidedProposal || providedInFlight.current || busy) return
+    providedInFlight.current = true; setBusy(true)
+    try { setProposalView(await onProvidedProposal()); setEditing(null) }
+    catch (error) {
+      onError(error as ApiError)
+      // 生成回执不明时仅恢复已存在提案，不重复生成，也不批准。
+      try { const pending = await businessBoundariesApi.proposals(project.project_id, true); if (pending.proposals.length) { setProposalView(pending.proposals.at(-1)); setEditing(null) } } catch { /* 原错误保留。 */ }
+    } finally { providedInFlight.current = false; setBusy(false) }
+  }
   const createProposal = async (command: BoundaryProposalCommandDto) => {
     setBusy(true)
     setSuccess(undefined)
@@ -138,48 +152,47 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack 
 
   const permissionsComplete = boundary.actions.length > 0
     && boundary.permission_statuses.every((item) => item.permission_semantics_confirmed)
-  return <div className="boundary-page">
-    <PageTaskHeader title="业务边界" description="先确认稳定业务语义，再按需追加业务版本、沿用权限或重新绑定当前代码实现。" status={proposalView ? '等待人工确认' : permissionsComplete ? '业务权限状态 已确认' : '需要确认当前权限'} />
+  return <EditorialPage label="权限规则文档">
+    <EditorialHeader eyebrow="权限 · 由你确认的业务规则" title={proposalView ? '审阅这次权限变化，再决定是否批准' : editing ? '把权限写清楚，再形成待审提案' : '谁可以对谁的资源做什么'}><p className="editorial-muted">{permissionsComplete ? '业务权限状态 已确认' : '需要确认当前权限'}</p></EditorialHeader>
     {success && <Alert type="success" showIcon message={success} />}
-    <CurrentBoundary boundary={boundary} />
+    {!proposalView && !editing && <CurrentBoundary boundary={boundary} />}
 
     {proposalView
-      ? <BoundaryProposalReview proposalView={proposalView} busy={busy} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
+      ? <BoundaryProposalReview currentBoundary={boundary} proposalView={proposalView} busy={busy} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
       : editing === 'INITIAL'
-        ? <BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} />
+        ? onProvidedProposal && !initialCommand ? <section aria-label="提供的权限材料">
+            <p>这个项目已提供一份业务权限提案。先核对操作人、资源所有者和真实结果，再决定是否批准。</p>
+            <Button type="primary" loading={busy} onClick={() => void loadProvidedProposal()}>使用已提供的权限提案</Button>
+            <details><summary>自行编写权限草稿</summary><BoundaryProposalEditor key={editorKey} preview={preview} busy={busy} onSubmit={(command) => void createProposal(command)} /></details>
+          </section> : <BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} />
         : editing === 'MAINTENANCE' && maintenanceDraft
           ? <BoundaryMaintenanceEditor key={editorKey} draft={maintenanceDraft} initialCommand={initialMaintenanceCommand} busy={busy} onSubmit={(command) => void createMaintenanceProposal(command)} />
           : <div className="boundary-new-proposal"><Typography.Text type="secondary">调整会从当前已确认的业务对象开始，并形成新的不可变提案；现有正式边界不会被原地改写。</Typography.Text><Button onClick={() => { setInitialMaintenanceCommand(undefined); setEditorKey((value) => value + 1); setEditing(boundary.actors.length ? 'MAINTENANCE' : 'INITIAL') }}>{boundary.actors.length ? '调整当前业务边界' : '建立业务边界'}</Button></div>}
-  </div>
+  </EditorialPage>
 }
 
 function CurrentBoundary({ boundary }: { boundary: BusinessBoundaryViewDto }) {
+  const [selectedId, setSelectedId] = useState<string>()
+  const action = boundary.actions.find((item) => item.action_id === selectedId) ?? boundary.actions[0]
   const actors = new Map(boundary.actors.map((item) => [item.actor_id, item]))
-  const actionBindings = new Map(boundary.action_bindings.map((item) => [item.action_id, item.status]))
-  if (boundary.actors.length === 0) return <section className="current-boundary-empty"><Typography.Text className="workbench-eyebrow">当前正式事实</Typography.Text><Typography.Title level={3}>还没有正式业务边界</Typography.Title><Typography.Paragraph type="secondary">可以从当前源码候选整理，也可以完全手工补充；没有实现映射不会阻止业务语义成立。</Typography.Paragraph></section>
-  const permissionsComplete = boundary.actions.length > 0
-    && boundary.permission_statuses.every((item) => item.permission_semantics_confirmed)
-  return <section className="current-boundary" aria-labelledby="current-boundary-title">
-    <div className="boundary-section-heading"><div><Typography.Text className="workbench-eyebrow">当前正式事实</Typography.Text><Typography.Title level={3} id="current-boundary-title">{permissionsComplete ? '业务权限状态 已确认' : '当前权限需要确认'}</Typography.Title></div><span className={`semantic-state${permissionsComplete ? ' is-safe' : ''}`}>{permissionsComplete ? '已确认' : '待确认'}</span></div>
-    <div className="current-boundary-actors"><Typography.Text strong>业务主体</Typography.Text><span>{boundary.actors.map((item) => item.display_name).join('、')}</span></div>
-    <div className="current-boundary-actions">{boundary.actions.map((action) => {
-      const status = boundary.permission_statuses.find((item) => item.action_id === action.action_id)
-      const permissions = boundary.permission_intents.filter((item) => item.business_action_id === action.action_id && item.action_revision === action.revision && item.effective_state === 'ACTIVE')
-      const binding = actionBindings.get(action.action_id)
-      return <article key={action.action_id} className="current-boundary-action">
-        <div><Typography.Title level={4}>{action.display_name}</Typography.Title><Typography.Paragraph type="secondary">{action.description}</Typography.Paragraph></div>
-        <div className="current-boundary-effects"><Typography.Text strong>业务结果</Typography.Text><ul>{action.effect_catalog.map((effect) => <li key={effect.effect_id}><b>{effect.business_label}</b><span>{effect.resource_concept} · {effectKindLabels[effect.effect_kind]}{effect.protected_projection?.length ? ` · 有限字段：${effect.protected_projection.join('、')}` : ''}</span></li>)}</ul></div>
-        <div className="current-boundary-permissions"><Typography.Text strong>允许 / 拒绝</Typography.Text><ul>{permissions.map((permission, index) => <li key={`${permission.subject_actor_id}-${permission.expectation}-${index}`}><b>{actors.get(permission.subject_actor_id)?.display_name ?? '当前业务主体'} · {expectationLabels[permission.expectation]}</b><span>{actors.get(permission.resource_owner_actor_id)?.display_name ?? '当前资源主体'} · {relationLabels[permission.relation]}</span></li>)}</ul></div>
-        {binding === 'MISSING' ? <Alert type="info" showIcon message="业务边界已确认" description="当前代码中还没有可靠定位到这项动作。" /> : binding && binding !== 'CURRENT' ? <Alert type="warning" showIcon message="业务语义保持有效" description="当前代码定位需要后续重新确认。" /> : null}
-        {status?.reason_codes.includes('PERMISSION_REVISION_REVIEW_REQUIRED')
-          ? <Alert type="warning" showIcon message="当前 revision 需要重新确认权限" description="这项业务动作已经形成新 revision，原权限仍保留为历史，但当前 revision 需要重新确认权限。" />
-          : status?.reason_codes.includes('PERMISSION_SEMANTICS_REQUIRED')
-            ? <Alert type="warning" showIcon message="当前权限尚未确认" description="这项业务动作还没有当前权限规则。" />
-            : status?.reason_codes.includes('ALLOW_CONTROL_REQUIRED')
-              ? <Alert type="warning" showIcon message="权限已确认，还需完整允许对照" description="当前规则缺少覆盖同一业务结果的允许对照，但拒绝语义仍已保存。" />
-              : null}
-      </article>
-    })}</div>
+  if (!action) return <p>还没有正式业务边界。先整理一项动作和它必须保护的真实结果。</p>
+  const status = boundary.permission_statuses.find((item) => item.action_id === action.action_id)
+  const binding = boundary.action_bindings.find((item) => item.action_id === action.action_id)?.status
+  const permissions = boundary.permission_intents.filter((item) => item.business_action_id === action.action_id && item.action_revision === action.revision && item.effective_state === 'ACTIVE')
+  return <section className="boundary-document" aria-label="当前业务动作与权限">
+    <nav className="action-index" aria-label="业务动作索引">{boundary.actions.map((item) => <button key={item.action_id} aria-current={item.action_id === action.action_id ? 'true' : undefined} onClick={() => setSelectedId(item.action_id)}>{item.display_name}</button>)}</nav>
+    <article className="boundary-action-document"><h2>{action.display_name}</h2><p className="editorial-muted">{action.description}</p>
+      <h3>这项动作会产生什么真实结果</h3><ul>{action.effect_catalog.map((effect) => <li key={effect.effect_id}><strong>{effect.business_label}</strong> · {effect.resource_concept}</li>)}</ul>
+      <h3>你确认的权限</h3>{permissions.length ? permissions.map((permission, index) => <RuleSentence key={permission.intent_id ?? index}>
+        <strong>{actors.get(permission.subject_actor_id)?.display_name ?? '当前业务主体'}</strong> 对<strong>{permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `另一个${actors.get(permission.resource_owner_actor_id)?.display_name ?? '同权限组'}账号` : actors.get(permission.resource_owner_actor_id)?.display_name ?? '当前资源主体'}</strong>拥有的资源，<strong>{permission.expectation === 'ALLOW' ? '可以' : '不可以'}{action.display_name}</strong>。
+        <span className="rule-effect-note">必须保护：{permission.protected_effect_ids.map((id) => action.effect_catalog.find((effect) => effect.effect_id === id)?.business_label ?? '已确认的业务结果').join('、')}。</span>
+      </RuleSentence>) : <p>这项动作还没有当前权限规则。</p>}
+      <section className="boundary-implementation"><h3>当前实现与这份规则</h3><p>{binding === 'CURRENT' ? '当前代码定位与已确认动作相符。' : binding === 'MISSING' ? '当前代码中还没有可靠定位到这项动作。业务语义仍保留。' : '当前代码定位需要重新确认；它不会自动改写权限。'}</p>
+      {status?.reason_codes.includes('PERMISSION_REVISION_REVIEW_REQUIRED') && <p role="status">当前业务版本需要重新确认权限；原权限仍保留为历史。</p>}
+      {status?.permission_semantics_confirmed && status.reason_codes.includes('ALLOW_CONTROL_REQUIRED') && <><p role="status">权限已确认，还需完整允许对照</p><p>缺少覆盖同一业务结果的允许对照；已确认的拒绝规则仍然保留。</p></>}
+      {status?.reason_codes.includes('PERMISSION_SEMANTICS_REQUIRED') && <p role="status">当前权限尚未确认</p>}
+      </section>
+    </article>
   </section>
 }
 

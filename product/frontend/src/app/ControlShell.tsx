@@ -159,7 +159,7 @@ function ControlShellContent() {
   }
 
   const content = () => {
-    if (route === '/workspace') return <WorkbenchPage selected={selected} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={(path) => navigate(path)} samplePanel={<OfficialSamplePanel value={experience} onError={notifyError} onNavigate={navigate} onChanged={async (value) => {
+    if (route === '/workspace') return <WorkbenchPage selected={selected} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={(path) => navigate(path)} samplePanel={<OfficialSamplePanel value={experience} onError={notifyError} onChanged={async (value) => {
       setExperience(value)
       const items = await workspaceState.refreshProjects()
       const project = value.active ? items.find(item => item.project_id === value.project_id) : null
@@ -169,9 +169,9 @@ function ControlShellContent() {
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspaceState.refreshCurrentWorkspace() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
-    if (route === '/permissions') return <BusinessBoundaryPage key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onBack={() => navigate('/workspace')} />
+    if (route === '/permissions') return <BusinessBoundaryPage key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onProvidedProposal={experience?.active && experience.project_id === selected.project_id ? experienceApi.boundaryProposal : undefined} onBack={() => navigate('/workspace')} />
     if (route === '/changes') return <ChangesPage key={`changes-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigate} onStateChanged={workspaceState.refreshCurrentWorkspace} requestedRepair={new URLSearchParams(location.search).get('repair_reference')} />
-    if (route === '/tests') return <CurrentTestsPage key={`tests-${selected.project_id}-${retryEpoch}-${new URLSearchParams(location.search).get('change_id') ?? ''}`} project={selected} workspace={workspace} onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onNavigate={navigateRecoveryTarget} requestedRunId={new URLSearchParams(location.search).get('run_id')} changeId={new URLSearchParams(location.search).get('change_id')} />
+    if (route === '/tests') return <CurrentTestsPage key={`tests-${selected.project_id}-${retryEpoch}-${new URLSearchParams(location.search).get('change_id') ?? ''}`} project={selected} workspace={workspace} onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onProvidedMaterials={experience?.active && experience.project_id === selected.project_id ? async () => { const value = await experienceApi.prepare(); setExperience(value); return value } : undefined} onNavigate={navigateRecoveryTarget} requestedTaskId={new URLSearchParams(location.search).get('task_id')} requestedRunId={new URLSearchParams(location.search).get('run_id')} changeId={new URLSearchParams(location.search).get('change_id')} />
     return <CurrentUnavailableArea title="此历史入口当前不可用" description="请从工作台进入当前可用的业务边界或检查准备。" onBack={() => navigate('/workspace')} />
   }
 

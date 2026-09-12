@@ -47,8 +47,8 @@ export function PermissionDraftAssist({ projectId, boundaryFingerprint, draftKey
     finally { if (current.current !== null) setBusy(false) }
   }
   const stale = Boolean(view && resultKey.current !== key)
-  return <section className="boundary-permission-assist" aria-label="用文字整理权限草稿">
-    <Space wrap><Tag color="purple">[AI辅助]</Tag><Typography.Text strong>用文字整理权限草稿</Typography.Text></Space>
+  return <section className="boundary-permission-assist margin-note" aria-label="用文字整理权限草稿">
+    <Space wrap><Typography.Text>建议 · 尚未生效</Typography.Text><Typography.Text strong>用文字整理权限草稿</Typography.Text></Space>
     <Typography.Paragraph type="secondary">描述谁可以或不可以对谁的资源执行什么动作。建议只填入当前草稿，仍需生成提案并由你批准。</Typography.Paragraph>
     <Input.TextArea aria-label="权限要求原文" value={text} maxLength={2000} autoSize={{ minRows: 3, maxRows: 8 }} onChange={(event) => setText(event.target.value)} />
     <Button disabled={disabled || !text.trim()} loading={busy} onClick={() => void generate()}>AI 辅助整理</Button>
@@ -56,16 +56,16 @@ export function PermissionDraftAssist({ projectId, boundaryFingerprint, draftKey
     {stale && <Alert type="info" showIcon message="草稿或原文已经修改，请重新生成建议。" />}
     {view && !stale && <div>
       <Typography.Title level={5}>待你确认的建议</Typography.Title>
-      {view.suggestions.map((item, index) => <div key={item.option_ids.join(':')} className="boundary-editor-card">
+      {view.suggestions.map((item, index) => <div key={item.option_ids.join(':')} className="boundary-editor-row-block">
         <Checkbox checked={selected.includes(index)} onChange={(event) => setSelected((items) => event.target.checked ? [...items, index] : items.filter((value) => value !== index))}>
           {item.subject_display_name}对{item.resource_owner_display_name}的资源（{relationLabels[item.relation]}），{item.suggested_expectation === 'ALLOW' ? '允许' : '拒绝'}“{item.action_display_name}”
         </Checkbox>
         <p>业务结果：{item.effect_display_names.join('、')}</p>
-        {item.source_quotes.map((quote) => <Typography.Paragraph key={quote}>原文：“{quote}”</Typography.Paragraph>)}
+        {item.source_quotes.map((quote) => <Typography.Paragraph key={quote}>依据原文：“{quote}”</Typography.Paragraph>)}
       </div>)}
       {view.issues.map((issue, index) => <Alert key={index} type="warning" showIcon message={issue.message} description={issue.source_quote ? `待确认原文：“${issue.source_quote}”` : undefined} />)}
       {!view.suggestions.length && !view.issues.length && <Typography.Paragraph>当前没有可采用的建议，请继续手工填写。</Typography.Paragraph>}
-      <Button disabled={disabled || !selected.length} loading={busy} onClick={() => void apply()}>将选中建议填入草稿</Button>
+      <Button disabled={disabled || !selected.length} loading={busy} onClick={() => void apply()}>采用到草稿</Button>
     </div>}
   </section>
 }

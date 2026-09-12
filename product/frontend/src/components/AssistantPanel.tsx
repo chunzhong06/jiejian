@@ -70,13 +70,14 @@ export function AssistantPanel({ title, actionLabel, ...subject }: AssistantSubj
   )
   const disabled = view?.status === 'DISABLED'
   if (view?.can_generate === false) return null
-  return <section className="assistant-panel" aria-label={`AI辅助：${title}`}>
+  return <section className="assistant-panel margin-note" aria-label={`AI辅助：${title}`}>
     <div className="assistant-panel-heading">
-      <Space wrap><Tag color="purple">[AI辅助]</Tag><Typography.Text strong>{title}</Typography.Text></Space>
+      <Space wrap><Typography.Text>建议 · 仅解释已有事实</Typography.Text><Typography.Text strong>{title}</Typography.Text></Space>
       <Button size="small" loading={loading || view?.status === 'GENERATING'} disabled={disabled || (isProjectSubject(subject) && !view)} onClick={() => void generate()}>
         {view?.status === 'BACKOFF' ? '重试 AI 辅助' : actionLabel}
       </Button>
     </div>
+    <p className="editorial-muted">依据：当前已取得的业务事实。建议不会改变权限或检查结论。</p>
     {disabled && <Typography.Text type="secondary">AI 辅助未开启或尚未配置；当前任务仍可继续。</Typography.Text>}
     {!disabled && localError && <Typography.Text type="secondary">{localError}</Typography.Text>}
     {!disabled && !localError && view?.status === 'REFRESH_NEEDED' && <Typography.Text type="secondary">尚未生成建议，点击按钮后才会连接模型服务。</Typography.Text>}

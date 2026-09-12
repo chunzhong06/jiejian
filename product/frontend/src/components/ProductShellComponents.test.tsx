@@ -16,8 +16,9 @@ const areas = [
 describe('Web V1 产品壳共享组件', () => {
   it('区域状态来自统一产品状态，当前 route 只标记页面焦点', () => {
     render(<DesktopModuleNavigation route="/flows" areas={areas} onNavigate={vi.fn()} />)
-    expect(screen.getByText('专项工作')).toBeInTheDocument()
-    expect(document.querySelector('.module-workbench-group')).toContainElement(screen.getByRole('button', { name: /工作台.*持续更新/ }))
+    expect(screen.queryByText('专项工作')).not.toBeInTheDocument()
+    expect(Array.from(document.querySelectorAll('.module-navigation-label')).map((el) => el.textContent)).toEqual(['工作台', '权限', '验证', '变化与修复'])
+    expect(document.querySelector('.module-navigation-list')).toContainElement(screen.getByRole('button', { name: /工作台.*持续更新/ }))
     expect(screen.queryByText('辅助工具')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /AI 工具/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /运行环境/ })).not.toBeInTheDocument()
@@ -35,7 +36,7 @@ describe('Web V1 产品壳共享组件', () => {
     const trigger = screen.getByRole('button', { name: '打开持续验证工作区' })
     trigger.focus()
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByRole('button', { name: /检查与结果.*当前不可检查/ })).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('button', { name: /验证.*当前不可检查/ })).toHaveFocus())
     fireEvent.click(await screen.findByRole('button', { name: /变化与修复.*需要处理/ }))
     expect(onNavigate).toHaveBeenCalledWith('/changes')
     await waitFor(() => expect(trigger).toHaveFocus())

@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).parents[2]
 START = ROOT / "scripts" / "start.ps1"
@@ -24,11 +26,48 @@ def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
-def test_cmd_requires_powershell7_without_unverified_fallback() -> None:
+def test_cmd_prefers_powershell7_with_windows_powershell_fallback() -> None:
     text = START_CMD.read_bytes().decode("ascii")
-    assert "where pwsh.exe" in text and 'set "START_EXIT=3"' in text
-    assert "winget install --id Microsoft.PowerShell" in text
-    assert 'set "POWERSHELL_EXE=powershell' not in text
+    assert "where pwsh.exe" in text
+    assert 'set "POWERSHELL_EXE=pwsh.exe"' in text
+    assert 'set "POWERSHELL_EXE=%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"' in text
+    assert text.count('"%POWERSHELL_EXE%" -NoLogo') == 1
+
+
+@pytest.mark.parametrize("prefer_core", [False, True])
+def test_cmd_selects_real_shell_and_forwards_arguments(tmp_path: Path, prefer_core: bool) -> None:
+    core = shutil.which("pwsh")
+    if core is None:
+        candidate = Path(os.environ["LOCALAPPDATA"]) / "Programs/PowerShell/7/pwsh.exe"
+        core = str(candidate) if candidate.is_file() else None
+    if prefer_core and core is None:
+        pytest.skip("PowerShell 7 is not installed")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    batch = tmp_path / "start.cmd"
+    batch.write_bytes(START_CMD.read_bytes())
+    output = tmp_path / "selected.json"
+    (scripts / "start.ps1").write_text(
+        "# 验证批处理真实选壳和参数转交，不运行产品准备。\n"
+        "param([string]$ProbeOutput)\n"
+        "[pscustomobject]@{major=$PSVersionTable.PSVersion.Major;output=$ProbeOutput}|"
+        "ConvertTo-Json -Compress|Set-Content -LiteralPath $ProbeOutput -Encoding UTF8\n"
+        "exit 0\n", encoding="utf-8-sig",
+    )
+    environment = os.environ.copy()
+    windows = Path(os.environ["SystemRoot"])
+    environment["PATH"] = os.pathsep.join(
+        ([str(Path(core).parent)] if prefer_core else []) + [str(windows / "System32"), str(windows)]
+    )
+    # 模拟普通 Windows 调用者，避免测试宿主的 Core 模块抢先覆盖 5.1 内置模块。
+    environment.pop("PSMODULEPATH", None)
+    result = subprocess.run(
+        [str(windows / "System32/cmd.exe"), "/d", "/c", str(batch), "-ProbeOutput", str(output)],
+        cwd=tmp_path, env=environment, text=True, capture_output=True, timeout=20, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    record = json.loads(output.read_text(encoding="utf-8-sig"))
+    assert record == {"major": 7 if prefer_core else 5, "output": str(output)}
 
 
 def _powershell_literal(value: Path) -> str:

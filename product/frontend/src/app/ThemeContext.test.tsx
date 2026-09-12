@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { palettes } from '../shared/ui/tokens'
 import { ProductThemeProvider, useThemeMode } from './ThemeContext'
 
 function ThemeProbe() {
@@ -33,5 +34,7 @@ describe('ProductThemeProvider', () => {
     expect(screen.getByText('dark:dark')).toBeInTheDocument()
     expect(document.documentElement.dataset.theme).toBe('dark')
     expect(localStorage.getItem('jiejian.theme')).toBe('dark')
+    expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe(palettes.dark.background)
+    expect(document.documentElement.style.getPropertyValue('--color-evidence-surface')).toBe(palettes.dark.evidenceSurface)
   })
 })

@@ -1,0 +1,46 @@
+/* 连续任务排版：普通 section 通过留白和细线建立层级，不制造卡片容器。 */
+.editorial-page { display: grid; gap: var(--space-32); max-width: 1200px; padding-block: var(--space-24); margin-inline: auto; min-width: 0; color: var(--color-text); font-size: var(--font-body); }
+.editorial-header h1 { font-size: clamp(var(--font-titleMin), 2.4vw, var(--font-titleMax)); line-height: 1.4; font-weight: 600; margin: var(--space-12) 0 var(--space-16); max-width: 1100px; overflow-wrap: anywhere; }
+.editorial-header p { margin: 0; }
+.editorial-eyebrow { font-size: var(--font-label); color: var(--color-secondary); letter-spacing: .06em; }
+.editorial-muted { color: var(--color-secondary); }
+.task-focus { border-block: var(--line-width) solid var(--color-border); padding-block: var(--space-24); max-width: 1000px; }
+.task-focus h2 { font-size: var(--font-section); line-height: 1.5; font-weight: 600; margin: 0 0 var(--space-12); }
+.task-focus p { margin: var(--space-8) 0 var(--space-16); max-width: 900px; }
+.task-focus .ant-btn { margin-top: var(--space-8); height: auto; min-height: 40px; white-space: normal; text-align: left; }
+.editorial-context { padding-block: var(--space-8); max-width: 1000px; }
+.editorial-context p { margin: var(--space-8) 0; }
+.editorial-context .ant-btn-link { padding-inline: 0; }
+.editorial-links { border-top: var(--line-width) solid var(--color-border); display: flex; flex-wrap: wrap; gap: var(--space-12) var(--space-32); padding-top: var(--space-24); }
+.editorial-links .ant-btn { padding-inline: 0; }
+.editorial-page .workbench-project-status { margin-top: var(--space-12); }
+.editorial-page :focus-visible { outline: 3px solid var(--color-primary); outline-offset: 4px; }
+.editorial-page .editorial-note { color: var(--color-secondary); font-size: var(--font-secondary); border-left: 3px solid var(--color-ai); padding-left: var(--space-16); }
+@media(max-width:600px) {
+ .editorial-page { gap: var(--space-24); padding: var(--space-12) var(--space-8); }
+ .task-focus { padding-block: var(--space-20); }
+ .editorial-header h1 { margin-top: var(--space-8); }
+ .editorial-links { gap: var(--space-8) var(--space-24); }
+}
+@media(prefers-reduced-motion:reduce) { .editorial-page *, .editorial-page *::before { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+.flow-spine { list-style: none; padding: 0; margin: var(--space-24) 0; }
+.flow-step { position: relative; margin-left: var(--space-8); padding: 0 0 var(--space-24) var(--space-32); border-left: var(--line-width) solid var(--color-border); }
+.flow-step::before { content: ''; position: absolute; left: -5px; top: 10px; width: 9px; height: 9px; border-radius: 50%; background: var(--color-border); }
+.flow-step.is-current::before { background: var(--color-primary); outline: 5px solid var(--color-surface-subtle); }
+.flow-step-title { display: flex; gap: var(--space-8); align-items: baseline; }
+.flow-step-title h3 { margin: 0; font-size: var(--font-body); line-height: 1.6; font-weight: 600; }
+.flow-step.is-complete, .flow-step.is-future { color: var(--color-secondary); }
+.flow-step-detail { margin-top: var(--space-12); }
+.rule-sentence { font-size: var(--font-section); line-height: 1.7; margin-block: var(--space-20); }
+.evidence-surface { background: var(--color-evidence-surface); color: var(--color-evidence-text); padding: var(--space-24) var(--space-32); }
+.evidence-surface .editorial-eyebrow { color: var(--color-fact); }
+.evidence-surface .ant-btn-default { color: var(--color-evidence-text); background: transparent; border-color: var(--color-evidence-text); }
+.evidence-surface .ant-btn-default:hover { color: var(--color-evidence-text) !important; background: var(--color-evidence-subtle) !important; border-color: var(--color-evidence-text) !important; }
+.margin-note { border-left: 3px solid var(--color-ai); padding-left: var(--space-20); margin-block: var(--space-24); }
+@media(max-width:600px) { .flow-step { padding-left: var(--space-24); } .evidence-surface { padding: var(--space-20); } .rule-sentence { font-size: var(--font-body); } }
+
+.editorial-page .assistant-panel.margin-note { background: transparent; border: 0; border-left: 3px solid var(--color-ai); border-radius: 0; padding: var(--space-8) 0 var(--space-8) var(--space-20); box-shadow: none; }
+
+/* 程序定位到只读标题供屏幕阅读器续读，不把整行标题画成操作控件。 */
+.preparation-action h2[tabindex="-1"]:focus { outline: none; }

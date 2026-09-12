@@ -89,8 +89,8 @@ def prepare_current(client, project, *, initial=False, gui=None):
         proposal = assert_official_proposal(gui.propose() if gui is not None else client.call("POST", "/api/experience/official-sample/boundary-proposal"), project)
         gui.approve(project, proposal) if gui is not None else _approve(client, project, proposal)
     before = _boundary(client, project)
-    prepared = gui.prepare() if gui is not None else client.call("POST", "/api/experience/official-sample/prepare")
-    if "HUMAN_IMPLEMENTATION_REBIND_REQUIRED" in prepared.get("pending_tasks", []):
+    # 普通准备页由 Workspace 门禁驱动；先按公开绑定状态复核，不能先失败一次 prepare 探测流程。
+    if any(binding["status"] != "CURRENT" for kind in ("actor_bindings", "action_bindings") for binding in before[kind]):
         prefix = f"/api/projects/{project}/business-boundaries"
         draft = client.call("GET", prefix + "/maintenance-draft")
         proposal = _proposal(gui.maintenance(project) if gui is not None else client.call("POST", prefix + "/maintenance-proposals", {
@@ -99,9 +99,14 @@ def prepare_current(client, project, *, initial=False, gui=None):
             "provenance": "复核本次受控示例的当前实现映射"}, accepted=(201,)), project)
         _assert_rebind(proposal, before)
         gui.approve(project, proposal) if gui is not None else _approve(client, project, proposal)
-        prepared = gui.prepare() if gui is not None else client.call("POST", "/api/experience/official-sample/prepare")
+    prepared = gui.prepare() if gui is not None else client.call("POST", "/api/experience/official-sample/prepare")
     if not prepared.get("scenario_prepared"):
-        _error("SAMPLE_PREPARATION_INCOMPLETE: " + str(prepared.get("pending_tasks", [])))
+        materials = client.call("GET", f"/api/projects/{project}/preparation")
+        preview = client.call("GET", f"/api/projects/{project}/check-preview")
+        # Sample 的安装标记不是普通准备真源；只接受同项目确实仍齐备且可执行的现有材料。
+        if (materials.get("project_id") != project or materials.get("preparation_complete") is not True
+                or preview.get("project_id") != project or preview.get("can_execute") is not True):
+            _error("SAMPLE_PREPARATION_INCOMPLETE: " + str(prepared.get("pending_tasks", [])))
     if _policy(_boundary(client, project)) != _policy(before) or project_run_ids(client, project) != before_runs:
         _error("SAMPLE_PREPARATION_CHANGED_POLICY_OR_RUNS")
     return prepared
@@ -153,7 +158,7 @@ def run_current(client, project, state, *, name, expected, change_id=None, gui=N
         "idempotency_key": "sample-" + name + "-" + uuid4().hex, "change_id": change_id}
     prior_runs = set(project_run_ids(client, project)) if gui is not None else set()
     try:
-        submitted = gui.submit(project, body, change_id) if gui is not None else client.call("POST", f"/api/projects/{project}/runs", body, accepted=(202,))
+        submitted = gui.submit(project, body, change_id, require_repair=name == "fixed") if gui is not None else client.call("POST", f"/api/projects/{project}/runs", body, accepted=(202,))
     except Exception as exc:
         if gui is not None:
             # GUI写入回执未知只定位本轮新增Run供精确清理，不用API再提交第二轮。
