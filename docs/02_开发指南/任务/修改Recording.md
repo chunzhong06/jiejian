@@ -1,6 +1,6 @@
 # 修改 Recording
 
-> 当前适用范围：Recording 服务、正式 API 与仅录制 Worker 已装配；CHECK 不可用。检查准备页根据 Workspace 主任务装配录制操作与审阅。
+> 当前适用范围：Recording 服务、正式 API 与 CHECK/RECORDING Worker 已装配；录制不自动提交 CHECK。检查准备页根据 Workspace 主任务装配录制操作与审阅。
 
 > 状态：CURRENT。用于修改真实业务流程录制、capture 控制、FlowDraft 审阅、Flow 编译和 Recording 失败收口。
 
@@ -51,7 +51,7 @@ Recording 应根据录制顺序自动采用唯一且可执行的业务解释；�
 
 ## 怎么验证
 
-先运行修改点的 workflow/protocol/infra 直接测试。涉及 API 控制再补 recordings Router；涉及页面只跑对应前端文件。真实录制与进程退出按已装配能力和明确授权验证。完整检查与 Official Sample runtime 未装配，不运行 sample-test 来冒充当前录制验收；L5 入口与边界见验证规范。
+先运行修改点的 workflow/protocol/infra 直接测试。涉及 API 控制再补 recordings Router；涉及页面只跑对应前端文件。真实录制与进程退出按已装配能力和明确授权验证。当前 CHECK 与官方环境复用普通链；局部录制验证不自动扩大为 sample-test，L5 入口与边界见验证规范。
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/workflows/recording tests/backend/infra/recording tests/backend/api/test_recordings.py tests/protocols/test_recording.py

@@ -8,6 +8,7 @@ from pydantic import Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import JobState, RunLifecycle, RunVerdict
+from product.backend.core.identifiers import RUN_ID_PATTERN
 from product.backend.infra.artifacts.check_packages import (
     CheckPackage, check_final_directory, validate_check_package,
     read_check_bytes, reject_check_links,
@@ -61,6 +62,24 @@ class CheckRunStatus(WireModel):
     result_integrity: Literal["VALID", "INVALID", "NOT_PUBLISHED"]
 
 
+class CheckHistoryCursor(WireModel):
+    created_at_us: int = Field(ge=0)
+    run_id: str = Field(pattern=RUN_ID_PATTERN)
+
+
+class CheckHistoryItem(WireModel):
+    status: CheckRunStatus
+    action_labels: tuple[str, ...] = ()
+    change_id: str | None = None
+    source_run_id: str | None = None
+
+
+class CheckHistoryPage(WireModel):
+    project_id: str
+    items: tuple[CheckHistoryItem, ...]
+    next_cursor: CheckHistoryCursor | None = None
+
+
 class CheckResultReader:
     """没有凭据、执行器和写仓储入口；每次读取重新核验已发布字节，不缓存可变文件结论。"""
 
@@ -72,6 +91,53 @@ class CheckResultReader:
             if work.projects.get(project_id) is None:
                 raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
             return tuple(self._status(work, run) for run in work.runs.list_for_project(project_id))
+
+    def active_for_project(self, project_id: str) -> CheckRunStatus | None:
+        """按持久生命周期定位一条本项目活动 Run，不为活动项验证全部历史。"""
+        with self._uow_factory() as work:
+            if work.projects.get(project_id) is None:
+                raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
+            candidates = work.runs.page_for_project(project_id, limit=1,
+                lifecycles=(RunLifecycle.QUEUED, RunLifecycle.RUNNING))
+            return None if not candidates else self._status(work, candidates[0])
+
+    def history(self, project_id: str, *, limit: int = 25, before_created_at_us: int | None = None,
+                before_run_id: str | None = None, query: str | None = None,
+                verdict: RunVerdict | None = None, lifecycle: RunLifecycle | None = None) -> CheckHistoryPage:
+        """一次最多校验 250 条；过滤后仍以最后扫描键续读，不声称跨请求快照或总量。"""
+        if not 1 <= limit <= 50 or (before_created_at_us is None) != (before_run_id is None):
+            raise JiejianError(ErrorCode.INPUT_INVALID, "历史分页参数无效")
+        needle = (query or "").strip().casefold()
+        with self._uow_factory() as work:
+            if work.projects.get(project_id) is None:
+                raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
+            candidates = work.runs.page_for_project(project_id, limit=250,
+                before_created_at_us=before_created_at_us, before_run_id=before_run_id)
+            items, last = [], None
+            for run in candidates:
+                last = run
+                status, package = self._status_and_package(work, run)
+                labels, change_id, source_run_id = (), None, None
+                if package is not None:
+                    # request 冻结实际动作集合与顺序；可读标签只从同一已校验 bundle 按 action_id 关联。
+                    configured = {action.action_id: action for action in package.bundle.actions}
+                    labels = tuple(dict.fromkeys(configured[action.action_id].display_name for action in package.request.actions))
+                    change_id = None if package.request.change_context is None else package.request.change_context.change_id
+                    source_run_id = None if package.request.repair_context is None else package.request.repair_context.source_run_id
+                if verdict is not None and status.run.verdict != verdict:
+                    continue
+                if lifecycle is not None and status.run.lifecycle != lifecycle:
+                    continue
+                if needle and not any(needle in value.casefold() for value in (run.run_id, *labels)):
+                    continue
+                items.append(CheckHistoryItem(status=status, action_labels=labels,
+                    change_id=change_id, source_run_id=source_run_id))
+                if len(items) == limit:
+                    break
+            cursor = None
+            if last is not None and work.runs.has_after_for_project(project_id, last.created_at_us, last.run_id):
+                cursor = CheckHistoryCursor(created_at_us=last.created_at_us, run_id=last.run_id)
+            return CheckHistoryPage(project_id=project_id, items=tuple(items), next_cursor=cursor)
 
     def status(self, run_id: str, *, project_id: str | None = None) -> CheckRunStatus:
         with self._uow_factory() as work:
@@ -103,6 +169,9 @@ class CheckResultReader:
         return run
 
     def _status(self, work, run):
+        return self._status_and_package(work, run)[0]
+
+    def _status_and_package(self, work, run):
         job = work.jobs.get_by_run(run.run_id)
         integrity, package = "NOT_PUBLISHED", None
         if work.check_publications.get(run.run_id) is not None or run.verdict is not None:
@@ -123,7 +192,7 @@ class CheckResultReader:
             progress=self._progress(run, job) if package is None else CheckProgressView(phase="FINALIZING",
                 completed_cases=len(package.result.case_results),
                 planned_cases=sum(len(action.cases) for action in package.request.actions)),
-            result_integrity=integrity)
+            result_integrity=integrity), package
 
     def _progress(self, run, job):
         if job is None or job.operation_type != "CHECK" or job.state is not JobState.RUNNING:

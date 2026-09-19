@@ -248,8 +248,11 @@
 - `class CheckProgressCaseView`
 - `class CheckProgressView`
 - `class CheckRunStatus`
+- `class CheckHistoryCursor`
+- `class CheckHistoryItem`
+- `class CheckHistoryPage`
 - `class CheckResultReader`
-主要 import / dot-source：`__future__`, `hashlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.artifacts.check_packages`, `product.backend.infra.artifacts.check_validation`, `product.backend.infra.runtime.jobs.check_requests`, `product.backend.infra.runtime.paths`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `hashlib`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.infra.artifacts.check_packages`, `product.backend.infra.artifacts.check_validation`, `product.backend.infra.runtime.jobs.check_requests`, `product.backend.infra.runtime.paths`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
 
 ### `product/backend/workflows/checks/runtime_bundle.py`
 - `recorded_request_template(template) -> HttpRequestTemplate`
@@ -268,10 +271,12 @@
 - `class StoryControl`
 - `class FactComparison`
 - `class EvidenceExplanation`
+- `class StoryTraceEvent`
+- `class StoryExecutionPath`
 - `class ActionResultStory`
 - `class ResultStory`
 - `class CheckStoryBuilder`
-主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.checks`, `product.backend.workflows.checks.repair_presentation`, `product.backend.workflows.checks.story_text`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `product.backend.core.check_repair`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.checks`, `product.backend.core.verification.trace`, `product.backend.workflows.checks.repair_presentation`, `product.backend.workflows.checks.story_text`, `product.protocols.check_result`, `product.protocols.execution_v3`, `pydantic`, `typing`
 
 ### `product/backend/workflows/checks/story_text.py`
 - `JUDGEMENTS`
@@ -291,18 +296,6 @@
 ### `product/backend/workflows/contracts/governance.py`
 - `class ContractGovernance`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.contracts.lifecycle`, `product.backend.core.contracts.models`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `product.backend.infra.storage`, `time`
-
-### `product/backend/workflows/control.py`
-- `class ProductFlowQuery`
-- `class ProductResultQuery`
-- `class ProductProjectSummary`
-- `class ProductAreaView`
-- `class ProductAttentionView`
-- `class ProductResultSummary`
-- `class InconclusiveRecoveryView`
-- `class ProductStatusView`
-- `class ProductStatusService`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.readiness`, `product.backend.workflows.projects.repair`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.source_changes`, `product.protocols`, `pydantic`, `typing`
 
 ### `product/backend/workflows/mcp_access.py`
 - `MCP_PAIRING_SECRET_REF`
@@ -437,12 +430,6 @@
 - `class ProjectCatalog`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.storage`
 
-### `product/backend/workflows/projects/delivery.py`
-- `class DeliveryDecision`
-- `class DeliveryCheckView`
-- `class DeliveryCheckService`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.lifecycle`, `product.backend.workflows.projects.repair`, `product.backend.workflows.projects.revalidation`, `product.backend.workflows.source_changes`, `product.protocols.execution_request`, `pydantic`, `typing`
-
 ### `product/backend/workflows/projects/lifecycle.py`
 - `_ACTIVE_JOB_STATES`
 - `_ACTIVE_RUN_STATES`
@@ -541,7 +528,7 @@
 主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording`, `product.backend.infra.recording.request_store`, `product.backend.infra.runtime.jobs.events`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.storage`, `product.backend.workflows.recording.processing`, `product.backend.workflows.recording.source`, `product.protocols`, `product.protocols.web.target`, `pydantic`, `time`, `typing`, `urllib.parse`, `uuid`
 
 ### `product/backend/workflows/results/__init__.py`
-主要 import / dot-source：`.history`, `.presentation`
+主要 import / dot-source：`.presentation`
 
 ### `product/backend/workflows/results/finalizer.py`
 - `class ResultFinalizer`
@@ -557,19 +544,6 @@
 ### `product/backend/workflows/results/gating.py`
 - `class RegressionGate`
 主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.behavior_differential`, `product.backend.core.verification.gating`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.results.gating`, `product.backend.workflows.results.findings`, `product.backend.workflows.results.published`, `product.protocols`, `time`, `typing`
-
-### `product/backend/workflows/results/history.py`
-- `class HistoryChangeStatus`
-- `class HistoryChange`
-- `class HistoryComparison`
-- `class IntentRevisionHistory`
-- `class IntentRunHistory`
-- `class ResultIntentHistory`
-- `class HistoryView`
-- `class HistoryComparisonBuilder`
-- `_RELATION_TEXT`
-- `_STATUS_VIEW`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.verification.permissions`, `product.backend.workflows.results.presentation`, `pydantic`, `typing`
 
 ### `product/backend/workflows/results/presentation/__init__.py`
 主要 import / dot-source：`.builder`, `.explanations`, `.models`, `product.backend.core.verification.breakpoints`
@@ -622,11 +596,6 @@
 ### `product/backend/workflows/results/reporting.py`
 - `class ReportBuilder`
 主要 import / dot-source：`__future__`, `collections.abc`, `json`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.core.verification.gating`, `product.backend.infra.artifacts.report_reader`, `product.backend.infra.artifacts.report_store`, `product.backend.infra.storage`, `product.backend.workflows.results.published`, `product.protocols`, `product.protocols.report`, `typing`
-
-### `product/backend/workflows/results/services.py`
-- `class ResultServices`
-- `build_result_services(var_dir, uow_factory, clock_us) -> ResultServices`
-主要 import / dot-source：`__future__`, `dataclasses`, `pathlib`, `product.backend.infra.storage`, `product.backend.workflows.results.finalizer`, `product.backend.workflows.results.findings`, `product.backend.workflows.results.gating`, `product.backend.workflows.results.history`, `product.backend.workflows.results.presentation`, `product.backend.workflows.results.published`, `product.backend.workflows.results.repair`, `product.backend.workflows.results.reporting`, `typing`
 
 ### `product/backend/workflows/results/trace.py`
 - `build_execution_traces(snapshot, evidence_items) -> tuple[ExecutionTrace, ...]`
@@ -735,7 +704,7 @@
 - `class WorkspaceLatestResult`
 - `class WorkspaceSourceChange`
 - `class WorkspaceView`
-主要 import / dot-source：`__future__`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.business_boundaries.models`, `product.backend.workflows.projects.repair`, `product.protocols`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.business_boundaries.models`, `product.backend.workflows.checks.results`, `product.backend.workflows.projects.repair`, `product.protocols`, `pydantic`, `typing`
 
 ### `product/backend/workflows/workspace/service.py`
 - `class WorkspaceService`

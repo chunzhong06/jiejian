@@ -9,6 +9,7 @@ from product.backend.core.lifecycle import CaseVerdict, RunVerdict
 from product.backend.core.check_repair import CurrentRepairContract, CurrentRepairVerification
 from product.backend.core.verification.breakpoints import BreakpointLocator, BreakpointResult
 from product.backend.core.verification.checks import CheckDecisionInput, project_check_effect_facts
+from product.backend.core.verification.trace import TraceAuthorizationDecision, TraceEventKind
 from product.backend.workflows.checks.repair_presentation import RepairComparisonRow, build_repair_comparison
 from product.backend.workflows.checks.story_text import CLAIM_BOUNDARIES, EFFECT_LABELS, EXECUTION_LABELS, JUDGEMENTS
 from product.protocols.check_result import CheckObservation, CheckCaseOutcome
@@ -61,6 +62,24 @@ class EvidenceExplanation(WireModel):
     evidence_refs: tuple[str, ...]
 
 
+class StoryTraceEvent(WireModel):
+    event_id: str
+    parent_event_ids: tuple[str, ...]
+    kind: TraceEventKind
+    authorization_decision: TraceAuthorizationDecision | None
+    effect_id: str | None
+    dispatch_effect_ids: tuple[str, ...]
+    source_component: str
+    source_location: str
+
+
+class StoryExecutionPath(WireModel):
+    complete: bool
+    reason_codes: tuple[str, ...]
+    events: tuple[StoryTraceEvent, ...] = Field(max_length=512)
+    evidence_refs: tuple[str, ...]
+
+
 class ActionResultStory(WireModel):
     action_id: str
     action_revision: int = Field(ge=1)
@@ -76,6 +95,7 @@ class ActionResultStory(WireModel):
     repair_requirement: CurrentRepairContract | None = None
     repair_comparison: tuple[RepairComparisonRow, ...] = ()
     technical_references: tuple[str, ...]
+    execution_path: StoryExecutionPath | None = None
 
 
 class ResultStory(WireModel):
@@ -187,7 +207,7 @@ class CheckStoryBuilder:
                         http_explanation=EXECUTION_LABELS[result.outcome.execution_outcome], effects=tuple(effects), allow_control=control),
                     breakpoint=breakpoint, decisive_proof_chain=tuple(decisive[:4]), evidence_explanations=tuple(explanations),
                     claim_boundary=tuple(CLAIM_BOUNDARIES[key] for key in ("execution", "identity", "scope", "immutable")),
-                    technical_references=(case.case_id, *result.evidence_ids)))
+                    technical_references=(case.case_id, *result.evidence_ids), execution_path=_execution_path(documents)))
         verification = None
         if include_repair and self.repairs is not None:
             contracts = {item.source_case_id:item for item in self.repairs.contracts(run_id)}
@@ -214,3 +234,17 @@ def _single_trace(documents):
     traces = tuple(document.trace for document in documents if document.trace is not None)
     # 多份不相等 Trace 不拼接因果；保持违规事实并降低定位精度。
     return traces[0] if traces and all(trace == traces[0] for trace in traces) else None
+
+
+def _execution_path(documents) -> StoryExecutionPath | None:
+    """只投影本 Case 一致的已发布 Trace；不拼图、补边或把事件来源引用当证据文件。"""
+    trace = _single_trace(documents)
+    if trace is None:
+        return None
+    # 保留既有拓扑顺序及全部节点；部分/空路径也必须照录完整性与原因。
+    return StoryExecutionPath(complete=trace.complete, reason_codes=trace.reason_codes,
+        events=tuple(StoryTraceEvent(event_id=event.event_id, parent_event_ids=event.parent_event_ids,
+            kind=event.kind, authorization_decision=event.authorization_decision, effect_id=event.effect_id,
+            dispatch_effect_ids=event.dispatch_effect_ids, source_component=event.source_component,
+            source_location=event.source_location) for event in trace.events),
+        evidence_refs=tuple(dict.fromkeys(document.evidence_id for document in documents if document.trace == trace)))

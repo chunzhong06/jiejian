@@ -1,6 +1,6 @@
 // 动作级检查准备：展示现场材料，操作顺序与定位只消费最新 Workspace 主任务。
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Radio, Space, Spin, Tag, Typography } from 'antd'
+import { Button, Empty, Radio, Space, Spin, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import type { ProjectDto } from '../../api/projects'
 import { preparationApi, type AllowControlRequirement, type PreparationItem, type PreparationView } from '../../api/preparation'
@@ -22,13 +22,14 @@ function Material({ name, item }: { name: string; item: PreparationItem }) {
   return <div className="preparation-list-item"><Typography.Text>{name}</Typography.Text><span>{label}</span></div>
 }
 
-export function PreparationPage({ project, workspace, onStateChanged, onError, onNavigate, onProvidedMaterials }: {
+export function PreparationPage({ project, workspace, onStateChanged, onError, onNavigate, onProvidedMaterials, onFeedback }: {
   project: ProjectDto
   onProvidedMaterials?: () => Promise<unknown>
   workspace: WorkspaceViewDto | null
   onStateChanged: () => Promise<WorkspaceViewDto | undefined>
   onError: (error: ApiError) => void
   onNavigate: (path: string) => void
+  onFeedback?: (message: string) => void
 }) {
   const [preparation, setPreparation] = useState<PreparationView | null>(null)
   const [currentWorkspace, setCurrentWorkspace] = useState(workspace)
@@ -39,8 +40,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const [recordingTask, setRecordingTask] = useState<PrimaryTaskDto>()
   const [login, setLogin] = useState<IdentityPreparationDto>()
   const [choices, setChoices] = useState<Record<string, string>>({})
-  const currentActionRef = useRef<HTMLHeadingElement>(null)
-  useEffect(() => { if (!loading) { currentActionRef.current?.scrollIntoView?.({ block: 'nearest' }); currentActionRef.current?.focus() } }, [loading, currentWorkspace?.primary_task?.task_id])
+  // 后台刷新只更新事实，不滚动页面或夺走正在操作的焦点。
   const selecting = useRef(false)
   const projectRef = useRef(project.project_id)
   projectRef.current = project.project_id
@@ -80,7 +80,13 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const installProvidedMaterials = async () => {
     if (!onProvidedMaterials || selecting.current || busy || syncError) return
     selecting.current = true; setBusy(true)
-    try { await onProvidedMaterials(); await reload() }
+    try {
+      await onProvidedMaterials()
+      if (!alive.current || projectRef.current !== project.project_id) return
+      onFeedback?.('提供的测试材料已保存。准备材料不代表实际身份或安全结论。')
+      setSyncError('材料已保存，正在同步下一步。')
+      await reload()
+    }
     catch (error) {
       if (alive.current && projectRef.current === project.project_id) {
         onError(error as ApiError)
@@ -97,6 +103,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
       await preparationApi.selectAllowControl(project.project_id, control, selected)
       if (!alive.current || projectRef.current !== project.project_id) return
       setChoices({}); setSyncError('正常对照已保存，正在同步下一步。')
+      onFeedback?.('正常对照已保存，原有权限规则保持不变。')
       await reload()
     } catch (error) { if (alive.current && projectRef.current === project.project_id) onError(error as ApiError) }
     finally { selecting.current = false; if (alive.current && projectRef.current === project.project_id) setBusy(false) }
@@ -138,7 +145,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   }
 
   if (mode === 'identities') return <TestIdentityPage key={`${project.project_id}:${login?.preparation_id ?? 'accounts'}`} project={project} initialPreparation={login}
-    onError={onError} onBack={() => void showMaterials()} onContinuePreparation={showMaterials} onStateChanged={syncChild} />
+    onError={onError} onBack={() => void showMaterials()} onContinuePreparation={showMaterials} onStateChanged={syncChild} onPrepared={() => onFeedback?.('登录状态已保存，已有的其他材料继续保留。')} />
   if (mode === 'recording' && recordingTask) return <RecordingPage key={`${project.project_id}:${recordingTask.task_id}`} project={project} task={recordingTask}
     effectName={currentWorkspace?.actions.find((item) => item.action_id === recordingTask.business_action_id)?.effect_catalog.find((item) => item.effect_id === recordingTask.effect_id)?.business_label}
     onError={onError} onBack={() => void showMaterials()} onContinuePreparation={showMaterials} onStateChanged={syncChild} />
@@ -152,7 +159,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     {task.task_kind === 'PREPARE_TEST_IDENTITY' ? task.test_identity_id ? '打开登录浏览器' : '创建账号并登录' : task.route === '/tests' && currentStage !== undefined ? '继续准备这项材料' : '前往处理'}
   </Button> : null
   return <EditorialPage label="当前准备缺口">
-    <EditorialHeader eyebrow="验证 · 准备原来的权限考题" title={task?.title ?? '测试材料已准备完成'}><p className="editorial-muted">{task?.why_now ?? '返回检查总览，由服务端核对当前执行条件。'}</p></EditorialHeader>
+    <EditorialHeader eyebrow="当前工作 / 检查准备" title="继续准备本轮检查"><p className="editorial-muted">完成眼前这一项，界鉴会根据最新材料衔接下一步。</p></EditorialHeader>
     {syncError && <p role="alert">{syncError}</p>}
     {preparation?.preparation_complete && <p role="status">测试材料已准备完成，请返回检查总览核对执行条件。</p>}
     {task && currentStage === undefined && task.task_kind !== 'SELECT_ALLOW_CONTROL' && <section className="task-focus"><p>{task.user_responsibility}</p>{primaryButton}</section>}
@@ -177,26 +184,31 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
         { key: 'recovery', title: '恢复现场', items: [{ name: action.recovery.status === 'NOT_REQUIRED' ? '只读动作不需要恢复' : '恢复本次操作改变的状态', item: action.recovery }] },
       ]
       const steps: FlowStep[] = groups.map((group, index) => ({ key: group.key,
-        title: `${group.title} · ${group.items.length ? group.items.map(({name,item}) => `${name}：${states[item.status][0]}`).join('；') : '尚无准备事实'}`,
+        title: group.items.length > 0 && group.items.every(({item}) => item.status === 'NOT_REQUIRED') ? `${group.title} · 无需准备` : group.items.length > 0 && group.items.every(({item}) => ['SATISFIED','NOT_REQUIRED'].includes(item.status)) ? `${group.title} · 已准备` : current && currentStage === index ? `${group.title} · 当前处理` : `随后核对${group.title}`,
         state: current && currentStage === index ? 'current' : group.items.length > 0 && group.items.every(({item}) => ['SATISFIED','NOT_REQUIRED'].includes(item.status)) ? 'complete' : 'future',
-        detail: <><p>{task?.user_responsibility}</p><p className="editorial-muted">{task?.system_will_do}</p>
+        detail: <><p>{task?.user_responsibility}</p>{index === 0 && <p className="editorial-muted">保存登录状态不等于确认实际执行身份；实际身份在检查中核验。</p>}
           {group.items.map(({name,item},i) => <Material key={i} name={name} item={item} />)}
           {index === 3 && <p>必须独立确认上述业务结果；页面回应不能替代结果证明。当前无法取得决定性事实时，界鉴不会宣布安全。</p>}
           {index === 1 && <p>同一种业务动作复用已有执行方法；本次只补当前缺失的演示或账号/资源。</p>}
           {providedAvailable && <><p>这个项目已提供可导入的账号、动作、资源和证明材料；导入会核对当前权限，保持已有有效材料。</p><Button type="primary" loading={busy} disabled={Boolean(syncError) || !task?.can_execute} onClick={() => void installProvidedMaterials()}>使用已提供的测试材料</Button></>}
-          {primaryButton}</>,
+          <div className="task-focus-actions">{primaryButton}</div><p className="task-next"><span>完成后</span>{task?.system_will_do}</p></>,
       }))
+      if (!current) return <details key={action.action_id} className="preparation-other-actions"><summary>{action.display_name} · 查看已有材料</summary><FlowSpine label={`${action.display_name}的准备过程`} steps={steps} />{groups.map(group => <div key={group.key}><h3>{group.title}</h3>{group.items.map(({name,item},i) => <Material key={i} name={name} item={item}/>)}</div>)}</details>
+      const currentStep = steps.find(step => step.state === 'current')
+      const retained = groups.filter(group => group.items.some(({item}) => item.status === 'SATISFIED') && group.items.every(({item}) => ['SATISFIED','NOT_REQUIRED'].includes(item.status)))
       return <section key={action.action_id} className="preparation-action" aria-label={action.display_name}>
-        <h2 ref={current ? currentActionRef : undefined} tabIndex={current ? -1 : undefined}>{action.display_name}</h2>
-        <details><summary>回看已确认的权限（无需重复填写）</summary>{action.permissions.map((permission) => <p key={permission.intent_id}>{permissionLabel(permission.intent_id ?? '')}</p>)}</details>
+        <div className="preparation-heading"><h2>{action.display_name}</h2><details><summary>回看已确认的权限</summary>{action.permissions.map((permission) => <p key={permission.intent_id}>{permissionLabel(permission.intent_id ?? '')}</p>)}</details></div>
+        <div className="preparation-progress"><FlowSpine label={`${action.display_name}的材料状态`} steps={steps.map(step => ({...step, detail:undefined}))} /></div>
         {current && task?.task_kind === 'SELECT_ALLOW_CONTROL' && action.assurance_contract.allow_controls.filter((control) => !control.resolved_allow_permission && control.candidate_allow_permissions.length > 1).map((control) => <section key={control.selection_fingerprint} className="task-focus" aria-label="选择正常对照">
           <h3>选择正常对照</h3><p>{permissionLabel(control.deny_permission.intent_id)}</p><p>以下操作均符合正常对照条件。请选择本次用来确认业务功能正常的一项，现有权限规则保持不变。</p>
           <Radio.Group aria-label="正常对照候选" value={choices[control.selection_fingerprint]} disabled={busy || !task.can_execute || Boolean(syncError)} onChange={(event) => setChoices((values) => ({ ...values, [control.selection_fingerprint]: event.target.value }))}>
             <Space direction="vertical">{control.candidate_allow_permissions.map((candidate) => <Radio value={candidate.intent_id} key={candidate.intent_id}>{permissionLabel(candidate.intent_id)}</Radio>)}</Space>
           </Radio.Group><div><Button type="primary" loading={busy} disabled={!choices[control.selection_fingerprint] || !task.can_execute || Boolean(syncError)} onClick={() => void selectControl(control)}>确认正常对照</Button></div>
         </section>)}
-        <FlowSpine label={`${action.display_name}的准备过程`} steps={steps} />
-        {current && <AssistantPanel projectId={project.project_id} surface="preparation-explanation" focus={{ business_action_id: action.action_id }} title="理解这项动作的准备要求" actionLabel="解释准备缺口" />}
+        {currentStep && <section className="task-focus preparation-current" aria-label="当前需要处理的材料"><p className="editorial-eyebrow">当前需要你处理</p><h2>{task?.title}</h2><p className="editorial-muted">{task?.why_now}</p>{currentStep.detail}</section>}
+        {retained.length > 0 && <details className="preparation-saved"><summary>已保存的材料<span>{retained.length} 类材料继续保留</span></summary><div className="preparation-retained" aria-label="仍然有效的材料">{retained.map(group => <span key={group.key}><strong aria-hidden="true">✓</strong>{group.title}已保留</span>)}</div>{retained.map(group => <div key={group.key}><h3>{group.title}</h3>{group.items.map(({name,item},i) => <Material key={i} name={name} item={item}/>)}</div>)}</details>}
+        <details className="preparation-remaining"><summary>查看全部测试条件</summary><FlowSpine label={`${action.display_name}的准备过程`} steps={steps.map(step => ({...step,detail:undefined}))} />{groups.map(group => <div key={group.key}><h3>{group.title}</h3>{group.items.map(({name,item},i) => <Material key={i} name={name} item={item}/>)}</div>)}</details>
+        <details className="preparation-remaining"><summary>解释这项准备要求</summary><AssistantPanel projectId={project.project_id} surface="preparation-explanation" focus={{ business_action_id: action.action_id }} title="理解这项动作的准备要求" actionLabel="解释准备缺口" /></details>
       </section>
     })}
     <details><summary>其他测试账号</summary><Button disabled={busy} onClick={() => { setLogin(undefined); setMode('identities') }}>管理测试账号</Button></details>

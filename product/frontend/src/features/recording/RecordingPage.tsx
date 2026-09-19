@@ -6,10 +6,10 @@
  * ============================================================================= */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Checkbox, Radio, Space } from 'antd'
+import { Alert, Button, Checkbox, Radio, Space } from 'antd'
 import { ApiError } from '../../api/http'
 import { recordingsApi, type FlowDraftDto, type RecordingActionDto, type RecordingDto, type RecordingReviewCommand, type RecordingTestIdentityDto, type RecordingViewDto } from '../../api/recordings'
-import { runsApi } from '../../api/runs'
+import { jobsApi } from '../../api/jobs'
 import type { ProjectDto } from '../../api/projects'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { browserState } from '../../app/browserState'
@@ -189,7 +189,7 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
     const recordingId = recording?.recording_id
     if (!jobId || !recordingId) return
     setBusy(true)
-    try { await runsApi.cancel(jobId); if (alive.current) await refresh(recordingId); if (alive.current) await syncWorkspace('取消请求已提交') }
+    try { await jobsApi.cancel(jobId); if (alive.current) await refresh(recordingId); if (alive.current) await syncWorkspace('取消请求已提交') }
     catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }
   }
@@ -274,11 +274,12 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
     {task?.recording_purpose === 'RECOVERY' && <Alert type="info" showIcon message="请演示一次：你通常怎样恢复这项业务操作改变的状态。" />}
     {task ? <section className="task-focus"><h2>本次演示</h2><p>{task.why_now}</p><p className="editorial-muted">{task.system_will_do}</p>
       <p>业务动作：{actionOptions.find((item) => item.business_action_id === task.business_action_id)?.display_name ?? '当前业务动作'}</p>
-      <p>谁执行：<strong>{identityName(subjectId)}</strong>；资源属于谁：<strong>{identityName(ownerId)}</strong>。</p>
-      {!recording && distinctOwner && <Checkbox checked={ownerConfirmed} disabled={busy} onChange={(event) => setOwnerConfirmed(event.target.checked)}>我确认本次演示的测试资源属于“{identityName(ownerId)}”</Checkbox>}</section>
+      <dl className="preparation-account-pair"><div><dt>操作账号</dt><dd>{identityName(subjectId)}</dd></div><div><dt>资源所属账号</dt><dd>{identityName(ownerId)}</dd></div></dl>
+      {!recording && distinctOwner && <Checkbox checked={ownerConfirmed} disabled={busy} onChange={(event) => setOwnerConfirmed(event.target.checked)}>我确认本次演示的测试资源属于“{identityName(ownerId)}”</Checkbox>}
+      {!recording && primaryAction && <div className="task-focus-actions"><Button type="primary" size="large" loading={busy} disabled={Boolean(syncError) || busy || ('disabled' in primaryAction && Boolean(primaryAction.disabled))} onClick={primaryAction.onClick}>{primaryAction.label}</Button></div>}</section>
       : <Alert type="info" showIcon message="要准备新的业务演示，请返回检查准备，按当前任务选择的账号和资源继续。" />}
     {recording && <RecordingCaptureCard recording={recording} onRefresh={() => void refreshPage()} />}
-    {reviewable && recording && <AssistantPanel projectId={project.project_id} surface="recording-review" focus={{ recording_id: recording.recording_id }} title="这次录制的步骤用途" actionLabel="解读这次录制" />}
+    {reviewable && recording && <details><summary>解释这次录制</summary><AssistantPanel projectId={project.project_id} surface="recording-review" focus={{ recording_id: recording.recording_id }} title="这次录制的步骤用途" actionLabel="解读这次录制" /></details>}
     {reviewable && draft && recordingPurpose === 'TARGET' && <FlowDraftReview draft={draft as FlowDraftDto} actionName={recording.action?.display_name ?? actionOptions.find((item) => item.business_action_id === draft.business_action_id)?.display_name ?? '这个业务动作'} sources={sources} canFinalize={canFinalize} onSourcesChange={setSources} onReview={(command) => void review(command)} />}
     {reviewable && draft && recordingPurpose !== 'TARGET' && <section><h2>{recordingPurpose === 'OBSERVATION' ? '哪一步用于确认业务结果？' : '哪一步用于恢复业务状态？'}</h2>
       {supplementChoices.length > 1 && <Radio.Group value={draft.target_step_id} disabled={busy} onChange={(event) => void review({ schema_version: '1', operation: 'CONFIRM_TARGET_STEP', step_id: event.target.value })}>
@@ -289,6 +290,6 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
     {message && <Alert type="success" showIcon message={message} />}
     {syncError && <Alert type="warning" showIcon message={syncError} />}
     {recording?.state === 'COMPLETED' && draft && <section className="recording-summary"><h2>已保存的业务流程</h2><p>{recording.action?.display_name ?? '已确认动作'} · 账号：{recording.test_identity?.label ?? '已准备测试账号'}</p><p>录制内容已保存</p></section>}
-    <TaskActionBar back={{ label: '返回检查准备', onClick: onBack, disabled: busy }} refresh={{ label: '刷新流程状态', onClick: () => void refreshPage(), loading: busy }} restart={restartAction} primary={primaryAction && { ...primaryAction, disabled: Boolean(syncError) || busy || ('disabled' in primaryAction && Boolean(primaryAction.disabled)) }} />
+    <TaskActionBar back={{ label: '返回检查准备', onClick: onBack, disabled: busy }} refresh={{ label: '刷新流程状态', onClick: () => void refreshPage(), loading: busy }} restart={restartAction} primary={recording && primaryAction ? { ...primaryAction, disabled: Boolean(syncError) || busy || ('disabled' in primaryAction && Boolean(primaryAction.disabled)) } : undefined} />
   </EditorialPage>
 }

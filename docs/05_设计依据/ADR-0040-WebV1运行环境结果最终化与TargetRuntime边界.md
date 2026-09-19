@@ -10,6 +10,10 @@
 
 继续在这些边界上增加 CLI Target 会复制环境、执行和结果链，并使失败恢复依赖 PID、访问顺序或历史兼容分支。因此需要在不改变 PermissionContract、Evidence 和 Verification 安全语义的前提下，先形成 Web V1 的单一内部基线。
 
+## 当前适用边界
+
+运行目录、维护与进程身份边界仍适用。下文 ResultFinalizer、Finding/Report 与 TargetRuntime 的旧结果实现仅保留独立格式及底层消费者，不属于当前 CHECK 装配；当前主链见[系统全景](../01_系统地图/系统全景.md)。
+
 ## 决策
 
 ### 1. 开发依赖只有一个解析真源
@@ -32,7 +36,7 @@
 
 `LocalMaintenanceService` 只处理 AI 辅助缓存、历史运行日志、临时运行文件和可证明损坏的运行时。自动日志保留按每类最近 20 份且最长 14 天执行；手工日志清理保护当前 serve 会话，临时清理保护当前 Worker、Recording、Identity、Sample 与 ServeLock 路径。`clear-all` 不触发运行时修复，也不得触碰 `var/data`、`var/development`、Evidence、报告或凭据。GUI、CLI 和 API 复用 ApplicationCore 下同一服务，写操作先预览再确认；数据重置不进入该入口。
 
-完整缓存统计和预算 prune 只在用户查看状态或显式维护时执行，不属于普通启动。在 ApplicationCore、MCP/control 与当前仅录制 Worker 生命周期装配后对外 ready，Worker 状态仍按线程事实独立报告；生命周期持有的后台任务随后清理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留。按需维护用一个目录快照同时得到字节数、文件数、预算和递归 partial 候选；只有外部 prune 实际改变目录后才再扫描一次。无安全、并发或身份消费者的 cache digest 不计算。启动维护失败只记录诊断，不反向改变服务可用状态。
+完整缓存统计和预算 prune 只在用户查看状态或显式维护时执行，不属于普通启动。在 ApplicationCore、MCP/control 与当前 CHECK/RECORDING Worker 生命周期装配后对外 ready，Worker 状态仍按线程事实独立报告；生命周期持有的后台任务随后清理缓存根直接临时项、过期 temp/test 顶层项和有界日志保留。按需维护用一个目录快照同时得到字节数、文件数、预算和递归 partial 候选；只有外部 prune 实际改变目录后才再扫描一次。无安全、并发或身份消费者的 cache digest 不计算。启动维护失败只记录诊断，不反向改变服务可用状态。
 
 ### 6. 同一解释器和内核进程树是恢复前提
 
@@ -40,7 +44,7 @@
 
 ### 7. publication、结果派生和 Gate 分层
 
-Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalizer` 物化 Finding/Occurrence 和基础 RunReport，并以独立派生状态记录成功、失败和重试。派生失败不回滚 publication，不修改 Evidence 或 Verdict。每个完整性已验证的 Run 都有基础报告；Gate 是可选后续派生，生成另一份不可变 Gate 报告。GET 只能读取已物化事实。
+Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalizer` 物化 Finding/Occurrence 和基础 RunReport，并以独立派生状态记录成功、失败和重试。派生失败不回滚 publication，不修改 Evidence 或 Verdict。该保留结果链中的完整性已验证 Run 可派生基础报告；Gate 是可选后续派生，生成另一份不可变 Gate 报告。GET 只能读取已物化事实。
 
 ### 8. 当前协议只表达 Web，内部使用 Target Runtime Port
 
@@ -48,7 +52,7 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ### 9. 当前开发基线不保留历史兼容
 
-旧数据库、旧 Profile、旧 Runner/Evidence/Report、旧路由 alias、旧参数位置、旧类名 re-export、旧 Demo Target 和旧 Schema reader 一次删除。当前 parser 每个根文档只接受一个明确版本；数据库以显式 `0001_web_v1` 为不可改写发布基线，后续只通过签入 migration 演进。Repository-owned Sample、fixture、Schema、客户端和 CURRENT 文档同步迁移，不提供 fallback 或 wrapper。
+旧数据库、旧 Profile、旧 Runner/Evidence/Report、旧路由 alias、旧参数位置、旧类名 re-export、旧 Demo Target 和旧 Schema reader 一次删除。当前 parser 每个根文档只接受一个明确版本；数据库以签入的 `0001_business_boundary_v2` 为不可改写根，沿当前 0001→0005 链严格升级，后续只通过签入 migration 演进。Repository-owned Sample、fixture、Schema、客户端和 CURRENT 文档同步迁移，不提供 fallback 或 wrapper。
 
 ## 理由与取舍
 
@@ -60,7 +64,7 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ## 迁移与兼容
 
-当前单代基线不读取或迁移旧运行目录和旧开发数据库。仓库自身调用方、Sample、fixture、Schema、前端客户端和文档已一次迁移；数据库从唯一显式 `0001_web_v1` 基线沿签入 migration 演进。Windows 验收从全新本地运行态双击仓库根 `start.cmd`，证明 editable 当前源码、受控依赖和 `var/runtime/frontend` 可以完整再生；旧兼容入口直接删除。
+当前单代基线不读取或迁移旧运行目录和旧开发数据库。仓库自身调用方、Sample、fixture、Schema、前端客户端和文档已一次迁移；数据库从冻结 `0001_business_boundary_v2` 沿签入 migration 演进，严格升级条件以当前迁移链为准。Windows 验收从全新本地运行态双击仓库根 `start.cmd`，证明 editable 当前源码、受控依赖和 `var/runtime/frontend` 可以完整再生；旧兼容入口直接删除。
 
 ## 相关真源
 

@@ -10,7 +10,7 @@ from product.backend.workflows.assistant.service import AssistantService
 from product.backend.workflows.assistant.templates import parse_assistant_result
 from product.backend.workflows.checks.results import CheckResultReader
 from product.backend.workflows.checks.story import CheckStoryBuilder
-from tests.backend.infra.runtime.jobs.test_check_publication import package_parts, NOW
+from tests.fixtures.check_publication import package_parts, NOW
 
 
 def resolver(parts):

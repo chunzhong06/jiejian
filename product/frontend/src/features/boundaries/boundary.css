@@ -1,5 +1,53 @@
 /* 权限围绕动作与完整业务句子阅读，批准提案是唯一独立边界对象。 */
-.editorial-page .boundary-editor, .editorial-page .boundary-new-proposal { background: transparent; border: 0; border-radius: 0; padding: 0; }
+.boundary-draft { display:grid;gap:var(--space-24);min-width:0; }
+.boundary-confirmation { display:inline-block;color:var(--color-secondary);font-size:var(--font-secondary);margin-top:var(--space-12); }
+.boundary-document .action-index h3 { margin:0 0 var(--space-12);font-size:var(--font-body); }
+.boundary-document .action-index .ant-input,.boundary-document .action-index .ant-input-affix-wrapper { margin-bottom:var(--space-12); }
+.action-index button small { display:block;font-weight:400;margin-top:var(--space-8);color:var(--color-secondary); }
+.boundary-action-heading,.boundary-draft-toolbar { display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-24); }
+.boundary-action-heading>div { min-width:0; }
+.boundary-action-heading>.ant-btn { flex-shrink:0; }
+.boundary-action-heading h2 { margin:0; }
+.boundary-draft-toolbar h1 { display:inline-block;margin:0 var(--space-16) 0 0;font-size:clamp(var(--font-titleMin),2.3vw,var(--font-titleMax));line-height:1.35;letter-spacing:-.035em; }
+.boundary-overview-heading { display:flex;align-items:center;justify-content:space-between;gap:var(--space-24); }
+.boundary-overview-heading>.ant-btn { flex-shrink:0; }
+.boundary-draft-toolbar>div { display:flex;align-items:center;gap:var(--space-8);flex-wrap:wrap; }
+.boundary-action-document .permission-summary-row h3 { margin:0;font-size:var(--font-body);line-height:1.7;font-weight:600; }
+.permission-summary-row { display:flex;gap:var(--space-20);align-items:flex-start;border-bottom:1px solid var(--color-border);padding:var(--space-32) 0; }
+.permission-summary-row>div { flex:1;min-width:0; }
+.permission-summary-row p { margin:var(--space-8) 0 0;color:var(--color-secondary);font-size:var(--font-secondary); }
+.permission-summary-row>.ant-btn { flex-shrink:0; }
+.permission-badge { display:inline-flex;flex-shrink:0;align-items:center;padding:var(--space-4) var(--space-12);border-radius:var(--radius-small);font-size:var(--font-secondary);color:var(--color-secondary);background:var(--color-surface-subtle); }
+.permission-badge.is-allow { color:var(--color-safe);background:color-mix(in srgb,var(--color-safe-mark) 10%,var(--color-surface)); }
+.permission-badge.is-deny { color:var(--color-danger);background:color-mix(in srgb,var(--color-danger-mark) 10%,var(--color-surface)); }
+.boundary-supporting { margin-top:var(--space-32);border:1px solid var(--color-border);border-radius:var(--radius-medium);overflow:hidden; }
+.boundary-secondary { padding:var(--space-20);font-size:var(--font-secondary); }
+.boundary-secondary+.boundary-secondary { border-top:1px solid var(--color-border); }
+.boundary-secondary summary,.permission-assist-disclosure summary,.permission-retirement summary { cursor:pointer; }
+.boundary-secondary summary { font-size:var(--font-body);font-weight:500; }
+.boundary-empty-rules { padding-block:var(--space-40);color:var(--color-secondary); }
+.boundary-draft-footer { display:flex;align-items:center;justify-content:space-between;gap:var(--space-24);padding:var(--space-20) var(--space-24);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-medium); }
+.boundary-draft-footer small { display:block;color:var(--color-secondary);font-size:var(--font-label);margin-top:var(--space-4); }
+.permission-rule-form { padding:var(--space-32);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-large);box-shadow:var(--shadow-focus); }
+.permission-rule-form h2 { font-size:var(--font-section);line-height:1.7;margin-bottom:var(--space-24); }
+.permission-form-fields { border-top:1px solid var(--color-border);padding-top:var(--space-24);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-24) var(--space-32); }
+.permission-effect-selection { margin-block:var(--space-24);padding-block:var(--space-24);border-block:1px solid var(--color-border); }
+.permission-effect-selection h3 { font-size:var(--font-body);margin:0 0 var(--space-16); }
+.permission-effect-selection .ant-checkbox-group { display:flex;flex-direction:column;gap:var(--space-12); }
+.permission-form-actions { display:flex;gap:var(--space-16);margin-top:var(--space-24);flex-wrap:wrap; }
+.permission-assist-disclosure { color:var(--color-secondary);font-size:var(--font-secondary); }
+.boundary-mode-nav { display:flex;gap:var(--space-12);margin-block:var(--space-24);flex-wrap:wrap; }
+.boundary-step-continue { margin-block:var(--space-24); }
+.boundary-draft [hidden] { display:none!important; }
+@media(max-width:760px) {
+ .boundary-overview-heading { align-items:flex-start;flex-wrap:wrap; }
+ .permission-form-fields { grid-template-columns:minmax(0,1fr); }
+ .permission-rule-form { padding:var(--space-20); }
+ .permission-summary-row { gap:var(--space-12);flex-wrap:wrap;padding:var(--space-24) 0; }
+ .permission-summary-row>div { flex-basis:calc(100% - 90px); }
+ .permission-summary-row>.ant-btn { margin-left:auto; }
+ .boundary-draft-toolbar,.boundary-draft-footer { flex-wrap:wrap; }
+}
 .boundary-document { display: grid; grid-template-columns: 190px minmax(0,1fr); gap: var(--space-40); }
 .action-index { display: flex; flex-direction: column; gap: var(--space-8); align-self: start; min-width: 0; }
 .action-index button { background: transparent; border: 0; border-left: 2px solid transparent; padding: var(--space-8) var(--space-12); color: var(--color-secondary); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
@@ -28,3 +76,12 @@
 /* Select 的最长选项不能撑开权限句子的 Grid 列；完整名称仍在上方业务句子中可读。 */
 .sentence-field .ant-select { width: 100%; min-width: 0; max-width: 100%; }
 .sentence-field .ant-select-selector, .sentence-field .ant-select-selection-wrap, .sentence-field .ant-select-selection-item { min-width: 0; max-width: 100%; }
+
+.boundary-document,.boundary-editor { background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-large);padding:var(--space-24);box-shadow:var(--shadow-focus); }
+.boundary-document .action-index { border-right:1px solid var(--color-border);padding-right:var(--space-16); }
+.action-index button { border-radius:var(--radius-small);border-left:0; }
+.action-index button[aria-current] { color:var(--color-text);border-left:0; }
+.boundary-new-proposal { background:transparent;border:0;border-top:1px solid var(--color-border);border-radius:0;padding:var(--space-16) 0; }
+.boundary-editor .boundary-section-heading h2,.boundary-editor .boundary-section-heading h3 { font-size:var(--font-section); }
+@media(max-width:900px){.boundary-document .action-index{border-right:0;border-bottom:1px solid var(--color-border);padding:0 0 var(--space-12)}}
+@media(max-width:600px){.boundary-document,.boundary-editor{padding:var(--space-16)}}

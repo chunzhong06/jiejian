@@ -34,13 +34,14 @@ GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `Ap
 | 从正式权限编译测试需要 | `core/permission_semantics.py`、`core/assurance.py`、`workflows/preparation/` | [修改业务边界与权限意图](../任务/修改权限意图与Agent授权.md)；`tests/backend/core/test_assurance.py`、`tests/backend/workflows/preparation/` |
 | 修改项目、接入或工作区状态 | `workflows/projects/`、`onboarding/`、`application_understanding/`、`workflows/workspace/` | 当前主任务先看 Workspace；旧 `projects/preparation.py` 与 `projects/readiness.py` 仅作迁移资产，不得接回当前产品；直接验证 `tests/backend/workflows/workspace/` |
 | 新增或修改应用用例 | 对应 `product/backend/workflows/` 子目录、`product/backend/composition/application.py` | 对应 `tests/backend/workflows/` 子目录；若改变装配再加 `tests/backend/composition/` |
-| 修改 API/CLI 控制面 | `product/backend/api/routers/`、`product/backend/cli/commands/` | [修改 API 与控制面](../任务/修改API与控制面.md)；`test_control_plane.py`、`test_control.py` |
+| 修改 API/CLI 控制面 | `product/backend/api/routers/`、`product/backend/cli/commands/` | [修改 API 与控制面](../任务/修改API与控制面.md)；`test_control_plane.py`、`test_current_cli.py` |
 | 修改数据库或事务 | `infra/storage/`、`migrations/versions/` | [修改数据库](../任务/修改数据库.md)；storage/migration 直接测试 |
 | 修改 Worker/Runner/Job | `infra/runtime/jobs/`、`worker/`、`runner/`、`process/` | [修改 Worker 与 Runner](../任务/修改Worker与Runner.md)；所属 runtime 目录测试 |
 | 修改 Observer | `product/backend/infra/observers/`、`product/protocols/observer/` | [修改 Observer](../任务/修改Observer.md)；adapter + observer protocol 测试 |
 | 修改 Recording | `workflows/recording/`、`infra/recording/`、Recording 协议 | [修改 Recording](../任务/修改Recording.md)；workflow + process + protocol 测试 |
 | 修改模型与 AI 辅助 | `infra/llm/`、`workflows/assistant/` | [修改模型服务](../任务/修改模型服务.md)；fake transport + assistant workflow 测试 |
-| 修改结果、历史或报告 | `workflows/results/`、`infra/artifacts/`、`storage/results/` | [修改结果与报告](../任务/修改结果与报告.md)；results + artifact publication 测试 |
+| 修改当前结果、历史或原题修复 | `workflows/checks/`、`workflows/projects/repair.py` | [修改结果与报告](../任务/修改结果与报告.md)；当前 Reader/Story/Repair 与发布读取测试 |
+| 修改独立报告格式 | `product/protocols/report.py`、`infra/artifacts/report_store.py`、`core/reporting.py` | [修改结果与报告](../任务/修改结果与报告.md)；独立报告解析、发布与格式投影测试 |
 
 ## 一次后端变更的落点顺序
 
@@ -53,7 +54,7 @@ GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `Ap
 ## 必须保持的边界
 
 - `core` 不导入 workflows、infra、API、CLI 或具体 Web Runtime；纯规则必须可以在无 I/O 条件下测试。
-- API、CLI 和 GUI 复用 ApplicationCore，不各自复制事务、Readiness、ResultPresentation 或 History 逻辑。
+- API、CLI 和 GUI 复用 ApplicationCore，不各自复制事务、Workspace、ResultStory 或当前检查历史逻辑。
 - 旧 `ProjectPreparationService` 与 ProjectReadiness 仅为仓库保留的迁移资产，不在当前 ApplicationCore 装配；ActionSafetySetup 已被四类动作技术绑定取代，当前唯一 inspection 是 PreparationService；不得建立准备进度表或把旧权限矩阵接回业务边界。
 - WorkerContainer 独立于 ApplicationCore；两个组合根只从 `product.backend.composition` 暴露，不在 Workflow 或 Infra 中建立第二个装配入口。
 - API 进程只管理控制面与 Worker 生命周期；目标请求、浏览器和高风险观察进入 Worker/Runner 或独立 Recording Process。
@@ -70,7 +71,7 @@ GUI/CLI/API 的组合根是 `product/backend/composition/application.py` 的 `Ap
 ```powershell
 .\scripts\dev.ps1 test tests/backend/core/verification
 .\scripts\dev.ps1 test tests/backend/workflows/results
-.\scripts\dev.ps1 test tests/backend/api/test_control_plane.py tests/backend/cli/test_control.py
+.\scripts\dev.ps1 test tests/backend/api/test_control_plane.py tests/backend/cli/test_current_cli.py
 .\scripts\dev.ps1 test tests/architecture/test_dependencies.py
 ```
 

@@ -31,6 +31,7 @@ from product.backend.workflows.business_boundaries.inspection import (
     ActorImplementationInspection,
 )
 from product.backend.workflows.business_boundaries.models import PermissionBoundaryStatus
+from product.backend.workflows.checks.results import CheckRunStatus
 from product.protocols import TargetType
 
 
@@ -146,6 +147,7 @@ class WorkspaceLatestResult(WorkspaceModel):
 
 
 class WorkspaceSourceChange(WorkspaceModel):
+    submitted_by: str | None = Field(default=None, min_length=1, max_length=128)
     change_id: str
     revalidation_status: str
     can_execute: bool
@@ -163,6 +165,7 @@ class WorkspaceView(WorkspaceModel):
     latest_result: WorkspaceLatestResult | None = None
     source_change: WorkspaceSourceChange | None = None
     repair: ProjectRepair | None = None
+    active_check: CheckRunStatus | None = None
 
 
 __all__ = [

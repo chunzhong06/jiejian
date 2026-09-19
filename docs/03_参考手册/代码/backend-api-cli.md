@@ -143,7 +143,7 @@
 ### `product/backend/api/routers/runs.py`
 - `class RunCreateRequest`
 - `build_runs_router(context) -> APIRouter`
-主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `pydantic`, `typing`
 
 ### `product/backend/api/routers/source_changes.py`
 - `class SourceChangeCreateRequest`
@@ -185,22 +185,6 @@
 - `default_frontend_dir() -> Path`
 主要 import / dot-source：`__future__`, `collections.abc`, `contextlib`, `dataclasses`, `pathlib`, `product.backend.infra.runtime.logging`, `product.backend.infra.runtime.settings`, `typer`
 
-### `product/backend/cli/commands/control.py`
-- `status_command(context, project_id) -> None`
-- `application_list_command(context) -> None`
-- `application_show_command(context, project_id) -> None`
-- `application_remove_command(context, project_id, confirmed) -> None`
-- `source_change_list_command(context, project_id, limit) -> None`
-- `source_change_show_command(context, project_id, change_id) -> None`
-- `check_preview_command(context, project_id, change_id) -> None`
-- `check_prepare_command(context, project_id, change_id) -> None`
-- `check_cancel_command(context, project_id) -> None`
-- `check_run_command(context, project_id, change_id) -> None`
-- `result_show_command(context, run_id, project_id) -> None`
-- `result_report_command(context, run_id, report_id) -> None`
-- `history_command(context, project_id) -> None`
-主要 import / dot-source：`__future__`, `product.backend.cli.bootstrap`, `product.backend.cli.presentation`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.runtime.jobs.models`, `time`, `typer`, `uuid`
-
 ### `product/backend/cli/commands/system.py`
 - `class ServeReadinessStatus`
 - `serve_command(context, host, port, open_browser, frontend_dir, official_sample_root) -> None`
@@ -226,8 +210,6 @@
 - `_DOCTOR_LABELS`
 - `emit_human(payload) -> None`
 - `emit_doctor(report) -> None`
-- `emit_result_presentation(presentation) -> None`
-- `emit_status(status) -> None`
 - `emit_command(kind, data, next_actions, warnings, human) -> None`
 - `emit_json(payload) -> None`
 - `fail(error) -> NoReturn`

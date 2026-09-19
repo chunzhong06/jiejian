@@ -2,7 +2,7 @@
 
 import { Button, Dropdown, Layout, Space } from 'antd'
 import { useEffect, useState } from 'react'
-import { ApiOutlined, BgColorsOutlined, CloudServerOutlined, LogoutOutlined, MoreOutlined, RobotOutlined } from '@ant-design/icons'
+import { ApiOutlined, BgColorsOutlined, LogoutOutlined, MoreOutlined, RobotOutlined } from '@ant-design/icons'
 import type { LLMProfile, AIAssistanceSettings } from '../api/llm'
 import type { MCPAccessView } from '../api/mcp'
 import type { ProjectDto } from '../api/projects'
@@ -26,6 +26,7 @@ export function aiStatusLabel(
 }
 
 export function systemStatusLabel(status: SystemStatus) {
+  if (status.api === 'unknown') return '状态未知'
   return status.api === 'available'
     && (status.worker === 'running' || status.worker === 'unavailable')
     && status.browser === 'available'
@@ -34,22 +35,21 @@ export function systemStatusLabel(status: SystemStatus) {
 }
 
 export function mcpStatusLabel(status: MCPAccessView | null, failed: boolean) {
-  if (failed) return 'AI 工具 · 状态未知'
-  if (!status) return 'AI 工具 · 正在读取'
+  if (failed) return 'Coding Agent · 状态未知'
+  if (!status) return 'Coding Agent · 正在读取'
   const state = status.connection_state
     ?? (!status.paired ? 'DISABLED' : !status.accepting_connections ? 'PAUSED' : status.client_connected ? 'CONNECTED' : 'CREDENTIAL_READY')
-  if (state === 'DISABLED') return 'AI 工具 · 未准备'
-  if (state === 'CREDENTIAL_READY') return 'AI 工具 · 等待连接'
-  if (state === 'AUTHENTICATED') return 'AI 工具 · 正在确认连接'
-  if (state === 'CREDENTIAL_REJECTED') return 'AI 工具 · 凭据需更新'
-  if (state === 'CONNECTED') return `AI 工具 · ${status.client_name?.trim() || '已连接'}`
-  return 'AI 工具 · 已暂停'
+  if (state === 'DISABLED') return 'Coding Agent · 未准备'
+  if (state === 'CREDENTIAL_READY') return 'Coding Agent · 等待连接'
+  if (state === 'AUTHENTICATED') return 'Coding Agent · 正在确认连接'
+  if (state === 'CREDENTIAL_REJECTED') return 'Coding Agent · 凭据需更新'
+  if (state === 'CONNECTED') return `Coding Agent · ${status.client_name?.trim() || '已连接'}`
+  return 'Coding Agent · 已暂停'
 }
 
 type AppHeaderProps = {
   projects: ProjectDto[]
   selected: ProjectDto | null
-  activeTask?: { kind?: string }
   mcpStatus: MCPAccessView | null
   mcpStatusFailed: boolean
   systemStatus: SystemStatus
@@ -65,7 +65,6 @@ type AppHeaderProps = {
 export function AppHeader({
   projects,
   selected,
-  activeTask,
   mcpStatus,
   mcpStatusFailed,
   systemStatus,
@@ -88,18 +87,15 @@ export function AppHeader({
   }, [])
   const themeLabels: Record<ThemeMode, string> = { system: '跟随系统', light: '亮色', dark: '暗色' }
   const mcpLabel = mcpStatusLabel(mcpStatus, mcpStatusFailed)
-  const mcpConnected = mcpStatus?.connection_state === 'CONNECTED' || mcpStatus?.client_connected === true
-  const compactMcpLabel = mcpConnected ? mcpStatus?.client_name?.trim() || 'AI 工具' : 'AI 工具'
-  const systemLabel = systemStatusLabel(systemStatus)
+  const mcpConnected = mcpStatus?.connection_state === 'CONNECTED'
+  const compactMcpLabel = mcpConnected ? `${mcpStatus?.client_name?.trim() || 'Agent'} · 已连接` : 'Agent · 未连接'
   return <Layout.Header className="topbar">
     <div className="topbar-left">
       <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} onRemoveCurrent={onRemoveCurrent} />
-      {activeTask && <Button type="link" onClick={() => onNavigate(activeTask.kind === 'RUN' ? '/validation' : '/flows')}>
-        {activeTask.kind === 'RUN' ? '正在检查 · 查看' : '正在录制 · 查看'}
-      </Button>}
+
     </div>
     <Space className="topbar-tools" size="small">
-      <Button type="text" icon={<ApiOutlined />} aria-label={`${mcpLabel}，打开 AI 工具`} onClick={() => onNavigate('/tools')}><span>{compactMcpLabel}</span><i className={`topbar-status-dot${mcpConnected ? ' is-connected' : ''}`} aria-hidden="true" /></Button>
+      <Button type="text" icon={<ApiOutlined />} aria-label={`${mcpLabel}，打开 Coding Agent`} onClick={() => onNavigate('/tools')}><span>{compactMcpLabel}</span><i className={`topbar-status-dot${mcpConnected ? ' is-connected' : ''}`} aria-hidden="true" /></Button>
       <Dropdown
         open={menuOpen}
         onOpenChange={setMenuOpen}
@@ -110,7 +106,6 @@ export function AppHeader({
           triggerSubMenuAction: 'click',
           items: [
             { key: 'ai', icon: <RobotOutlined />, label: `AI 辅助 · ${aiLabel.replace(/^AI辅助 · /, '')}` },
-            { key: 'system', icon: <CloudServerOutlined />, label: systemLabel },
             { type: 'divider' },
             {
               key: 'theme', icon: <BgColorsOutlined />, label: `主题 · ${themeLabels[mode]}`, children: [
@@ -125,13 +120,12 @@ export function AppHeader({
             onClick: ({ key }) => {
               setMenuOpen(false)
             if (key === 'ai') onOpenAI()
-            else if (key === 'system') onNavigate('/settings/system')
             else if (key === 'shutdown') onRequestShutdown()
             else if (key.startsWith('theme:')) setMode(key.slice('theme:'.length) as ThemeMode)
           },
         }}
       >
-        <Button type="text" icon={<MoreOutlined />} aria-label={`设置与更多，${systemLabel}`}><i className={`topbar-status-dot${systemLabel === '系统正常' ? ' is-connected' : ' is-warning'}`} aria-hidden="true" /></Button>
+        <Button type="text" icon={<MoreOutlined />} aria-label="设置与更多" />
       </Dropdown>
     </Space>
   </Layout.Header>

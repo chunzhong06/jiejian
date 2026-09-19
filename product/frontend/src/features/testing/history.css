@@ -1,0 +1,15 @@
+/* 历史用紧凑行表达记录；筛选与返回上下文独立于检查执行。 */
+.history-toolbar{display:flex;gap:var(--space-8);flex-wrap:wrap;align-items:center}
+.history-toolbar>.ant-input-affix-wrapper{width:300px;max-width:100%}
+.history-toolbar>.ant-select{min-width:150px}
+.history-records{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-large);overflow:hidden}
+.history-date{font-size:var(--font-label);font-weight:500;color:var(--color-secondary);margin:0;padding:var(--space-12) var(--space-20);background:var(--color-bg);border-bottom:1px solid var(--color-border)}
+.history-record{width:100%;border:0;border-bottom:1px solid var(--color-border);background:transparent;color:var(--color-text);padding:var(--space-20);text-align:left;display:grid;grid-template-columns:minmax(0,1fr) 130px 100px 90px;gap:var(--space-20);align-items:center;cursor:pointer}
+.history-record:hover{background:var(--color-surface-hover)}
+.history-record-copy{display:grid;gap:var(--space-4);min-width:0}.history-record-copy strong{font-weight:550;overflow-wrap:anywhere}.history-record small,.history-lifecycle{font-size:var(--font-label);color:var(--color-secondary)}
+.history-id{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono)}
+.history-verdict,.history-open{font-size:var(--font-secondary)}.history-verdict.is-pass{color:var(--color-safe)}.history-verdict.is-block{color:var(--color-danger)}.history-verdict.is-inconclusive{color:var(--color-warning)}.history-open{color:var(--color-secondary)}
+.history-empty{padding:var(--space-40);text-align:center}.history-empty h2{font-size:var(--font-section);font-weight:500}.history-empty p,.history-boundary{color:var(--color-secondary);font-size:var(--font-secondary)}
+.history-loading{padding:var(--space-24);display:flex;gap:var(--space-12);align-items:center;justify-content:center}.history-more{justify-self:center}
+@media(max-width:1000px){.history-record{grid-template-columns:minmax(0,1fr) 120px 90px}.history-open{display:none}}
+@media(max-width:600px){.history-record{padding:var(--space-16);grid-template-columns:minmax(0,1fr) 92px;gap:var(--space-12)}.history-lifecycle{grid-column:1/-1}.history-toolbar>.ant-input-affix-wrapper{width:100%}.history-toolbar>.ant-select{flex:1;min-width:130px}.history-empty{padding:var(--space-24)}}

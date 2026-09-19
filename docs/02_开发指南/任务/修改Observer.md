@@ -16,7 +16,7 @@
 
 ## 保留实现参考（不适用于当前 CHECK 入口）
 
-以下为旧执行、Sample 和历史结果消费者的保留说明。其中 Contract、旧 Runner、ResultPresentation、Report、History、Gate、CLI/MCP 和前端路径仅描述该保留链，不声明当前 CHECK 已接通这些能力；维护当前链应使用首节入口。
+以下只解释保留的 Contract/Observer 协议与底层实现及其直接测试，不是当前 GUI、CLI、MCP 或 sample-test 的产品结果路径。当前任务从首节 CheckObservation/CheckEvidence 与 Story 入口开始。
 
 ### Observer 解决什么问题
 
@@ -46,7 +46,7 @@ Azure Blob
 | 后台任务、Queue、Blob | `product/backend/infra/observers/async_task.py`、`azure_queue.py`、`azure_blob.py` | EVENTUAL 预算、终态闭合、相关性与模拟服务测试 |
 | 本地应用的六面观察接线 | `product/backend/workflows/security_setup/local_observer_wiring.py` | `profile_builder.py`、生成 Profile、Sample 配置 |
 | Runner 调用和 Evidence 组装 | `product/backend/infra/runtime/runner/case_orchestrator.py`、`result_builder.py` | `executor.py`、`product/protocols/runner/evidence.py` |
-| 人类结果中的来源角色和状态 | `product/backend/workflows/results/presentation/` | Effect binding、已发布 Evidence、前端结果组件 |
+| 当前故事中的来源角色和状态 | `product/backend/workflows/checks/story.py` | CheckEvidence 与当前结果组件 |
 | 已发布执行路径 | `product/backend/workflows/results/trace.py`、`product/backend/core/verification/trace.py` | 结构化 Audit、Evidence、ResultPresentation |
 
 精确类名和导出清单由对应自动代码参考生成。本文维护修改路线和不能从符号表得出的语义边界。
@@ -60,7 +60,7 @@ Azure Blob
 | 来源看到了什么 | Adapter 的 Outcome/Envelope 与 EffectProjector 的 `ObservationFact` | 记录相关、受预算约束且绑定具体 effect 的事实 | 把 HTTP 403、任务名称、whole-state hash 或模型文本当成资源事实 |
 | 事实是否足以闭合 | Observation completeness、causality、phase 和 closure policy | 明确 `CONFIRMED`、`ABSENT` 或不完整 | 在观察不足时补推断或给 PASS |
 | 最终 Verdict | Verification | 提供既有事实 | 决定 PASS、BLOCK、INCONCLUSIVE |
-| 页面来源状态 | ResultPresentation | 提供 Evidence ref 和冻结角色 | 输出面向页面的另一套安全结论 |
+| 当前页面来源状态 | ResultStory | 提供 Evidence ref 和冻结角色 | 输出面向页面的另一套安全结论 |
 
 秘密始终只以受控引用进入最小运行时。密码、Cookie、Token、连接凭据、对象正文和未经净化的目标响应不得进入 Observer 公共协议、Evidence、reason code、日志或异常正文。
 
@@ -178,7 +178,7 @@ UNAVAILABLE = 观察不完整、无关、失败或无法证明闭合
 
 - HTTP 403 但 Verdict 是 BLOCK：这可能是正确结果；检查关键 Observer 是否确认真实副作用，不要把 403 当作安全证明。
 - supporting 来源 `UNAVAILABLE` 导致 INCONCLUSIVE：检查调度或 Verification 是否错误把 corroborating 加进阻塞集合。
-- 六个来源都运行了但页面少一项：按 ObserverBinding → CaseResult → Evidence → ResultPresentation 逐段检查 one-to-one 绑定。
+- 六个来源都运行了但页面少一项：按冻结 proof binding → CheckObservation → CheckEvidence → ResultStory 逐段检查引用。
 - 审计文件没有新增内容时报游标无效：确认复用了当前游标，没有创建零长度 anchor。
 - BEFORE 可读而 AFTER 偶发文件不存在：检查 Windows 原子替换的读写锁，而不是增加无界重试。
 - Evidence 内容相同但 publication hash 不同：检查 facts/reason codes 是否在计算 hash 前按模型规则规范化。

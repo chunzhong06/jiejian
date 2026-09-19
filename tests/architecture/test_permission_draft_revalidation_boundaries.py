@@ -58,14 +58,24 @@ def test_revalidation_plan_delegates_to_inspection() -> None:
 
 def test_consumers_do_not_restore_parallel_change_judgments() -> None:
     preparation = _source("product/backend/workflows/projects/preparation.py")
-    status = _source("product/backend/workflows/control.py")
+    workspace = _source("product/backend/workflows/workspace/service.py")
     worker = _source("product/backend/composition/worker.py")
     revalidation = _source("product/backend/workflows/projects/revalidation.py")
 
     assert "mapping_review_required_count" not in preparation
     assert "latest.complete" not in preparation
-    assert "latest_change_unverified" not in status
+    assert "latest_change_unverified" not in workspace
+    assert "workflows.control" not in workspace
+    assert "ProductStatus" not in workspace
+    assert any(isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "change" for target in node.targets)
+               and isinstance(node.value, ast.Call) and ast.unparse(node.value.func) == "changes.latest"
+               for node in ast.walk(ast.parse(workspace)))
+    projections = [node for node in ast.walk(ast.parse(workspace))
+                   if isinstance(node, ast.Call) and ast.unparse(node.func) == "WorkspaceSourceChange"]
+    assert len(projections) == 1
+    fields = {item.arg: ast.unparse(item.value) for item in projections[0].keywords}
+    assert fields["revalidation_status"] == "change.revalidation.status"
+    assert fields["can_execute"] == "change.revalidation.can_execute"
     assert "PermissionDraftService" not in worker
     assert "ProjectRevalidationService" not in worker
     assert "StorageUnitOfWork" not in revalidation
-

@@ -20,7 +20,7 @@ from product.backend.workflows.checks.story import CheckStoryBuilder
 from product.protocols.check_result import CheckCaseOutcome, CheckCaseResult, CheckObservation, canonical_check_document, check_request_marker, seal_check_evidence
 from product.protocols.check_runtime import canonical_check_runtime_bytes, parse_check_runtime
 from product.protocols.execution_v3 import ChangeContext, PersistedExecutionRequestV3, canonical_execution_request_v3_bytes
-from tests.backend.infra.runtime.jobs.test_check_publication import package_parts, NOW
+from tests.fixtures.check_publication import package_parts, NOW
 from tests.fixtures.action_preparation import MemorySecretStore
 from tests.fixtures.control_plane import create_app, TestClient
 

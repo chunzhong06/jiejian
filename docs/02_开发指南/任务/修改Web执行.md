@@ -2,6 +2,16 @@
 
 > 状态：CURRENT。当前生产Target只有WEB；API不执行目标，真实HTTP与Observer进入隔离Runner。
 
+## 快速找到修改位置
+
+| 我想修改什么 | 主要位置 | 职责边界 |
+| --- | --- | --- |
+| 冻结运行输入 | `product/backend/workflows/checks/runtime_bundle.py` | 只从已确认材料构造 bundle，不访问目标补配置 |
+| Case 编排边界 | `product/backend/infra/execution/check_executor.py` | 仅隔离 Runner 消费冻结计划 |
+| Web 执行适配 | `product/backend/infra/execution/web/check_runtime.py` | 请求、身份、scope 与预算边界 |
+| 独立观察适配 | `product/backend/infra/observers/check_runtime.py` | 观察事实不由表面响应替代 |
+| 共享叶协议 | `product/protocols/web/` | 严格模型与 canonical/hash，不随产品版本改号 |
+
 ## 冻结输入与职责
 
 当前链为正式BusinessBoundary/Permission与已审阅Recording、Preparation、受控Registry，经`workflows/checks/runtime_bundle.py`生成`CheckRuntimeBundle`，与`PersistedExecutionRequestV3`一起冻结。`infra/execution/check_executor.py`编排Case，`infra/execution/web/check_runtime.py`执行请求，`infra/observers/check_runtime.py`保存独立来源。旧Contract/Profile builder不是当前装配入口。

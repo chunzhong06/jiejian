@@ -1,6 +1,6 @@
 # Portable 运行身份与发行结构
 
-> 当前适用范围：本版本不构建或验收 Portable，完整执行 Worker 也未接回控制面。以下身份与目录规则约束保留发行实现及未来恢复，不表示当前源码启动会创建 Worker。
+> 适用范围：独立便携发行的身份与目录合同。当前源码产品已装配 CHECK/RECORDING Worker；便携包是否可用仍须独立构建与运行验收，不能以源码检查代替。
 
 > 状态：CURRENT。本文解释 Windows x64 Portable 的发行根、包内 Python/Chromium、release.json、可选 Sample 层、可写 var 与移动目录信任。
 

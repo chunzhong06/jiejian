@@ -15,7 +15,7 @@ vi.mock('../../api/recordings', () => ({ recordingsApi: {
   startCapture: api.startCapture, stopCapture: api.stopCapture, reviewRecording: api.reviewRecording,
   finalizeRecording: api.finalizeRecording, discard: api.discard,
 } }))
-vi.mock('../../api/runs', () => ({ runsApi: { cancel: api.cancel } }))
+vi.mock('../../api/jobs', () => ({ jobsApi: { cancel: api.cancel } }))
 
 const action = { business_action_id: `bac_${'1'.repeat(32)}`, display_name: '修改资源', action_revision: 3 }
 const identity = { test_identity_id: `tid_${'2'.repeat(32)}`, label: '普通成员账号 A', actor_display_name: '普通成员' }
@@ -62,8 +62,8 @@ describe('RecordingPage', () => {
     const task = demonstrationTask(); props.onStateChanged.mockResolvedValue({ primary_task: task })
     render(<RecordingPage {...props} task={task} />)
     await waitFor(() => expect(screen.getByRole('button', { name: '打开浏览器并开始准备' })).toBeEnabled())
-    expect(screen.getByText(/谁执行：/)).toBeInTheDocument()
-    expect(screen.getByText(/资源属于谁：/)).toBeInTheDocument()
+    expect(screen.getByText('操作账号')).toBeInTheDocument()
+    expect(screen.getByText('资源所属账号')).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '打开浏览器并开始准备' }))
     await waitFor(() => expect(api.createRecording).toHaveBeenCalledWith('p1', {
       business_action_id: action.business_action_id, action_revision: 3,

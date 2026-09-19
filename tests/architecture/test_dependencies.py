@@ -155,7 +155,8 @@ def test_automated_l5_dependencies_do_not_enter_product_runtime() -> None:
 
 def test_product_names_do_not_encode_development_generations() -> None:
     generation_name = re.compile(r"(?i)(?:^|[_-])v[12](?:[._-]|$)|(?:^|[_-])stage(?:[._-]|$)|阶段")
-    web_v1_baseline = BACKEND / "migrations" / "versions" / "0001_web_v1.py"
+    frozen_root_migration = BACKEND / "migrations" / "versions" / "0001_business_boundary_v2.py"
+    assert frozen_root_migration.is_file()
     product_files = []
     for path in (ROOT / "product").rglob("*"):
         relative_parts = path.relative_to(ROOT / "product").parts
@@ -166,7 +167,7 @@ def test_product_names_do_not_encode_development_generations() -> None:
     assert not [
         path
         for path in product_files
-        if path != web_v1_baseline and generation_name.search(path.name)
+        if path != frozen_root_migration and generation_name.search(path.name)
     ]
 
     for path in _python_files(ROOT / "product"):
@@ -251,7 +252,15 @@ def test_frontend_and_wheel_sources_are_scoped() -> None:
         (frontend / "package.json").read_text(encoding="utf-8")
     )
     assert "version" not in frontend_manifest
-    assert __version__ == "1.0.16"
+    version_source = ROOT / project["tool"]["hatch"]["version"]["path"]
+    version_assignments = []
+    for node in ast.parse(version_source.read_text(encoding="utf-8")).body:
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+        if any(isinstance(target, ast.Name) and target.id == "__version__" for target in targets):
+            assert isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+            version_assignments.append(node.value.value)
+    assert version_assignments == [__version__]
+    assert re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", __version__)
 
 
 def test_frontend_source_tree_contains_no_generated_install_or_build_artifacts() -> None:

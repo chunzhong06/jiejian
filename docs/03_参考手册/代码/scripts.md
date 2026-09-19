@@ -124,7 +124,16 @@
 
 ### `scripts/dev/sample_test/current_gui.py`
 - `class CurrentGui`
-主要 import / dot-source：`contextlib`, `urllib.parse`
+主要 import / dot-source：`contextlib`, `re`, `urllib.parse`
+
+### `scripts/dev/sample_test/current_mcp.py`
+- `CLIENT_NAME`
+- `REASON`
+- `RUN_KEY`
+- `class SDKSession`
+- `cleanup(client, gui, state)`
+- `run(client, gui, project, runs, state, session_factory)`
+主要 import / dot-source：`.`, `contextlib`, `functools`
 
 ### `scripts/dev/sample_test/driver.py`
 - `SUITES`

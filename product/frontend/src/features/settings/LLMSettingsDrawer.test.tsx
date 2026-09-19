@@ -63,8 +63,11 @@ describe('LLMSettingsDrawer', () => {
     expect(screen.getByText('GPT 5.6（gpt-5.6）')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '保存并检查连接' }))
     await waitFor(() => expect(mockApi.saveDefault).toHaveBeenCalledWith(expect.objectContaining({ provider: 'openai', model: 'gpt-5.6', reasoning_effort: null, secret: 'temporary-key' })))
-    expect(password).toHaveValue('')
-    expect(onChanged).toHaveBeenCalled()
+    // 请求发出不等于保存完成；等待回执后的表单清理和父页面同步。
+    await waitFor(() => {
+      expect(password).toHaveValue('')
+      expect(onChanged).toHaveBeenCalledOnce()
+    })
     expect(screen.queryByText('temporary-key')).not.toBeInTheDocument()
     expect(localStorage.length).toBe(0)
   })

@@ -72,6 +72,21 @@ describe('业务边界页面', () => {
     })
   })
 
+  it('批准已成功而维护草稿读取失败时，保留回执并撤下旧批准操作', async () => {
+    mockApi.proposals.mockResolvedValue({ project_id: 'app_demo', proposals: [{ proposal, decision: null }] })
+    mockApi.approve.mockResolvedValue(approvedBoundary)
+    mockApi.maintenanceDraft.mockRejectedValueOnce(new Error('follow-up read failed'))
+    const onError = vi.fn(), onFeedback = vi.fn()
+    render(<BusinessBoundaryPage project={project} onError={onError} onFeedback={onFeedback} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    fireEvent.change(await screen.findByRole('textbox', { name: '确认或放弃原因' }), { target: { value: '确认这些权限要求' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认这组业务边界' }))
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1))
+    expect(mockApi.approve).toHaveBeenCalledTimes(1)
+    expect(onFeedback).toHaveBeenCalledWith('权限变更已批准，正在同步当前工作。')
+    expect(screen.queryByRole('button', { name: '确认这组业务边界' })).not.toBeInTheDocument()
+    expect(screen.getByText('当前规则已确认')).toBeInTheDocument()
+  })
+
   it('提供的权限提案只在明确采用后加载，仍需普通人工批准', async () => {
     const provided=vi.fn().mockResolvedValue({proposal,decision:null})
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} onProvidedProposal={provided}/>)
@@ -131,7 +146,7 @@ describe('业务边界页面', () => {
   it('已确认权限且完整允许对照存在时不显示旧检查链占位提示', async () => {
     mockApi.current.mockResolvedValue(approvedBoundary)
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
-    await screen.findByRole('button', { name: '调整当前业务边界' })
+    await screen.findByRole('button', { name: '管理业务对象' })
     expect(screen.queryByText(/检查主链尚未重新接入/)).not.toBeInTheDocument()
     expect(screen.queryByText('权限已确认，还需完整允许对照')).not.toBeInTheDocument()
   })
@@ -165,10 +180,10 @@ describe('业务边界页面', () => {
     mockApi.createMaintenanceProposal.mockReturnValue(new Promise(() => {}))
 
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: '调整当前业务边界' }))
-    expect(await screen.findByRole('heading', { name: '调整当前业务边界' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: '管理业务对象' }))
+    expect(await screen.findByRole('heading', { name: '管理业务对象' })).toBeInTheDocument()
     expect(screen.queryByText(/write_mode/i)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '生成待审调整提案' }))
+    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
 
     await waitFor(() => expect(mockApi.createMaintenanceProposal).toHaveBeenCalledOnce())
     expect(JSON.stringify(mockApi.createMaintenanceProposal.mock.calls[0][1])).not.toContain('write_mode')

@@ -11,9 +11,8 @@ export const darkDesignTokens = designTokens('dark')
 export function createProductTheme(mode: ResolvedTheme): ThemeConfig {
   const designTokens = mode === 'dark' ? darkDesignTokens : lightDesignTokens
   return {
-    algorithm: mode === 'dark'
-      ? [antdTheme.darkAlgorithm, antdTheme.compactAlgorithm]
-      : [antdTheme.defaultAlgorithm, antdTheme.compactAlgorithm],
+    // 操作页面按正文令牌呈现控件，紧凑算法会再次缩小文字与命中区域。
+    algorithm: mode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
       colorPrimary: designTokens.primary,
       colorInfo: designTokens.evidence,
@@ -48,7 +47,7 @@ export function createProductTheme(mode: ResolvedTheme): ThemeConfig {
       controlHeightSM: metrics.control.small,
     },
     components: {
-      Button: { borderRadius: metrics.radius.medium, controlHeight: metrics.control.normal, controlHeightLG: metrics.control.large, controlHeightSM: metrics.control.small, paddingInline: 14, primaryShadow: 'none' },
+      Button: { borderRadius: metrics.radius.medium, borderRadiusLG: metrics.radius.medium, controlHeight: metrics.control.normal, controlHeightLG: metrics.control.large, controlHeightSM: metrics.control.small, paddingInline: 16, primaryShadow: 'none' },
       Card: { bodyPadding: 20, bodyPaddingSM: 16, headerBg: designTokens.surface, headerHeight: 44 },
       Input: {
         activeBg: designTokens.elevated,

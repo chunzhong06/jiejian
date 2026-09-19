@@ -22,7 +22,7 @@ it('打开确认框不会启动或批准；确认后只启动一次', async () =
 })
 it('活动环境只提供条件控制，不出现审批、材料或检查入口', async () => {
   render(<OfficialSamplePanel {...props()} value={active} />)
-  expect(screen.getByText('官方环境 · 问题版')).toBeInTheDocument()
+  expect(screen.getByText('示例环境 · 问题版')).toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'准备示例材料'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'审阅示例权限'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'进入示例检查'})).not.toBeInTheDocument()
@@ -30,7 +30,7 @@ it('活动环境只提供条件控制，不出现审批、材料或检查入口'
 })
 it('重置先明确确认，确认后只调用一次受控启动且不写结论', async () => {
   render(<OfficialSamplePanel {...props()} value={active} />)
-  fireEvent.click(screen.getByText('官方环境 · 问题版'))
+  fireEvent.click(screen.getByText('示例环境 · 问题版'))
   fireEvent.click(screen.getByRole('button',{name:'重置官方环境'}))
   expect(api.start).not.toHaveBeenCalled()
   fireEvent.click(await screen.findByRole('button',{name:'确认重置'}))

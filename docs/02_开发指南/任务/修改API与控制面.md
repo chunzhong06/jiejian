@@ -6,7 +6,7 @@
 
 控制面把 GUI、CLI、MCP 和自动化请求翻译为同一 ApplicationCore 调用，再把已形成的产品事实投影给用户。它负责 transport、严格输入、LocalControl/MCP 授权、错误映射、生命周期接线和输出格式，但不负责执行目标请求，也不在路由或工具里重新判断权限安全。
 
-当前 GUI 工作台只消费 `WorkspaceView`：`WorkspaceService` 组合 Project、ApplicationUnderstanding、Business Boundary、Permission、实时 implementation inspection 与 PreparationView，并按固定优先级生成唯一 `PrimaryTask`。保留的 `ProductStatus`、`ProjectReadiness`、`ResultPresentation` 和 `HistoryView` 属于尚未接回的旧执行/结果链，不能从 Router 或页面重新接入。
+当前 GUI 工作台只消费 `WorkspaceView`：`WorkspaceService` 组合 Project、ApplicationUnderstanding、Business Boundary、Permission、实时 implementation inspection 与 PreparationView，并按固定优先级生成唯一 `PrimaryTask`。当前结果由 CheckResultReader/CheckStoryBuilder 提供；旧 ProductStatus、Delivery 和 History 服务已移除，独立报告格式不属于当前控制面结果入口。
 
 ## 快速找到修改位置
 
@@ -21,8 +21,8 @@
 | MCP 长期配对与逐 Project 临时权限 | `product/backend/workflows/mcp_access.py`、`product/backend/api/routers/mcp_access.py` | `tests/backend/api/test_mcp.py` |
 | ApplicationCore 组合 | `product/backend/composition/application.py` | `tests/backend/composition/`、`tests/architecture/test_storage_composition.py` |
 | Action Workspace、唯一 PrimaryTask 与动作级权限/实现摘要 | `product/backend/workflows/workspace/` | `tests/backend/workflows/workspace/test_service.py`、`tests/backend/api/test_workspace.py` |
-| 普通 CLI 命令与 Machine 输出 | `product/backend/cli/app.py`、`product/backend/cli/commands/control.py`、`product/backend/cli/presentation.py` | `tests/backend/cli/test_control.py` |
-| 同一 VarDir 单控制者 | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` | `tests/backend/api/test_control_plane.py`、`tests/backend/cli/test_control.py` |
+| 普通 CLI 命令与 Machine 输出 | `product/backend/cli/app.py`、`product/backend/cli/commands/system.py`、`product/backend/cli/presentation.py` | `tests/backend/cli/test_current_cli.py` |
+| 同一 VarDir 单控制者 | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` | `tests/backend/api/test_control_plane.py`、`tests/backend/cli/test_current_cli.py` |
 
 ## 正常修改路线
 
@@ -32,7 +32,7 @@
 
 正式业务边界和权限写入只走普通business-boundaries Proposal approve/reject事务，LOCAL_GUI由服务端固定；自然语言permission-drafts只返回有限待审草稿，不写Proposal/Permission。修复、MCP、Runner和结果均不能成为审批者。
 
-当前动作准备、TestIdentity、Recording与CHECK均经ApplicationCore。Job取消将CHECK交给同一CheckService.cancel，Recording仍按正式队列取消。SourceChange/Repair、check-preview及schema2 runs已装配；旧preparation writer、ProductStatus和旧结果链不回接。
+当前动作准备、TestIdentity、Recording与CHECK均经ApplicationCore。Job取消将CHECK交给同一CheckService.cancel，Recording仍按正式队列取消。SourceChange/Repair、check-preview及 HTTP 提交格式 2 的 runs 已装配（其持久冻结请求为 PersistedExecutionRequestV3）；旧preparation writer、ProductStatus和旧结果链不回接。
 
 MCP使用官方Python SDK Streamable HTTP，精确挂载同一FastAPI的/mcp，不创建第二个ApplicationCore。SDK核验Host/Origin/DNS rebinding，transport只接受Bearer；配对随机令牌只在精确SecretStore引用保存。启动恢复READ，GUI可对当前项目临时提升PREPARE/EXECUTE，pause/resume/rotate/forget/close清除提升，长期凭据与当前会话分开。
 
@@ -63,12 +63,12 @@ Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `sche
 优先运行受影响 Router 的直接测试，再按变化补以下最小邻域：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/test_control_plane.py tests/backend/cli/test_control.py
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/test_control_plane.py tests/backend/cli/test_current_cli.py
 ```
 
 只改一个资源 Router 时不要机械运行整组控制面。改 Machine envelope、ServeLock、启动/关闭或 ApplicationCore 组合时，必须覆盖 CLI/API 同事实、错误通道与单控制者。改 OpenAPI DTO 后再运行 schema/docs 检查；只有入口跨进程行为变化才增加少量 E2E。
 
-MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、精确 READ 工具白名单、暂停/轮换/忘记、跨启动配对恢复、非秘密投影和唯一 ApplicationCore；同时断言不存在 PREPARE/EXECUTE、ProductStatus、ResultPresentation 或检查执行工具。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
+MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、精确当前 14 工具及其授权层级、暂停/轮换/忘记、跨启动配对恢复、非秘密投影和唯一 ApplicationCore；同时验证启动默认 READ、逐项目临时提升及审批隔离；检查提交/取消只调用当前 ApplicationCore，不暴露旧结果服务或任意 HTTP/shell。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
 
 ## 失败先查哪里
 

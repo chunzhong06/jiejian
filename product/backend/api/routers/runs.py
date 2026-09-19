@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import Field
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
+from product.backend.core.identifiers import RUN_ID_PATTERN
+from product.backend.core.lifecycle import RunLifecycle, RunVerdict
 
 
 class RunCreateRequest(ApiModel):
@@ -31,6 +33,16 @@ def build_runs_router(context: ApplicationCore) -> APIRouter:
     @router.get("/api/projects/{project_id}/runs", response_model=ApiResponse)
     def list_runs(project_id: str):
         return data_response([item.model_dump(mode="json") for item in context.check_results.list_for_project(project_id)])
+
+    @router.get("/api/projects/{project_id}/check-history", response_model=ApiResponse)
+    def check_history(project_id: str, limit: int = Query(25, ge=1, le=50),
+                      before_created_at_us: int | None = Query(None, ge=0),
+                      before_run_id: str | None = Query(None, pattern=RUN_ID_PATTERN),
+                      query: str | None = Query(None, max_length=128),
+                      verdict: RunVerdict | None = None, lifecycle: RunLifecycle | None = None):
+        return data_response(context.check_results.history(project_id, limit=limit,
+            before_created_at_us=before_created_at_us, before_run_id=before_run_id,
+            query=query, verdict=verdict, lifecycle=lifecycle).model_dump(mode="json"))
 
     @router.get("/api/runs/{run_id}", response_model=ApiResponse)
     def get_run(run_id: str):

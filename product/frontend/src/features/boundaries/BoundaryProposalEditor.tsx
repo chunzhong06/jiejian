@@ -27,6 +27,7 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
   const [actions, setActions] = useState<DraftAction[]>(initial.actions)
   const [permissions, setPermissions] = useState<ProposedPermissionDto[]>(initial.permissions)
   const [error, setError] = useState<string>()
+  const [mode, setMode] = useState<'objects' | 'rules'>('objects')
   const [selectedActionId, setSelectedActionId] = useState<string>()
   const selectedAction = actions.find((item) => item.item_id === selectedActionId) ?? actions[0]
   const lowCandidates = preview.candidates.filter((item) => item.confidence === 'LOW')
@@ -82,13 +83,16 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
     <div className="boundary-section-heading">
       <div><Typography.Title level={3} id="boundary-editor-title">从当前源码整理业务边界</Typography.Title><Typography.Paragraph type="secondary">源码候选只帮助识别名称。最终业务主体、动作、结果和权限均由你审阅后形成新提案。</Typography.Paragraph></div>
     </div>
-    <div className="boundary-candidate-basis" aria-label="源码识别依据">
+    <nav className="boundary-mode-nav" aria-label="首次建立权限"><Button type={mode === 'objects' ? 'primary' : 'default'} onClick={() => setMode('objects')}>1 · 整理业务对象</Button><Button type={mode === 'rules' ? 'primary' : 'default'} onClick={() => setMode('rules')}>2 · 编写权限规则</Button></nav>
+    {mode === 'objects' && <div>
+    <details><summary>查看源码识别依据</summary><div className="boundary-candidate-basis" aria-label="源码识别依据">
       <Typography.Text strong>当前识别依据</Typography.Text>
       <div>{preview.candidates.filter((item) => item.confidence !== 'LOW').map((item) => <span key={item.candidate_id} className="boundary-candidate-chip"><b>{item.display_name}</b><small>{confidenceLabels[item.confidence]}</small></span>)}</div>
       {lowCandidates.length > 0 && <details><summary>查看可能相关的候选</summary><Space wrap>{lowCandidates.map((item) => <Button key={item.candidate_id} onClick={() => addCandidate(item)}>加入“{item.display_name}”</Button>)}</Space></details>}
       {preview.candidates.length === 0 && <Typography.Text type="secondary">当前源码没有可靠候选；仍可手工建立稳定业务语义。</Typography.Text>}
     </div>
 
+    </details>
     <details className="boundary-actor-details" open={!actors.length || undefined}><summary>业务主体 · 谁在操作、资源属于谁</summary>
     <div className="boundary-editor-list">{actors.map((actor) => <article key={actor.item_id} className="boundary-editor-row-block">
       <Input aria-label="业务主体名称" value={actor.display_name} placeholder="业务主体名称" onChange={(event) => setActors((items) => items.map((item) => item.item_id === actor.item_id ? { ...item, display_name: event.target.value } : item))} />
@@ -115,6 +119,8 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
     </article>)}</div>
     <Button onClick={() => { const added = manualAction(); setActions((items) => [...items, added]); setSelectedActionId(added.item_id) }}>手工补充业务动作</Button>
 
+    <div className="boundary-step-continue"><Button type="primary" onClick={() => setMode('rules')}>继续编写权限规则</Button></div></div>}
+    {mode === 'rules' && <div><nav className="action-index action-index-horizontal" aria-label="编辑业务动作索引">{actions.map(item => <button key={item.item_id} aria-current={item.item_id === selectedAction?.item_id ? 'true' : undefined} onClick={() => setSelectedActionId(item.item_id)}>{item.display_name || '尚未命名的动作'}</button>)}</nav>
     <h3>这项动作的权限规则</h3><p className="editorial-muted">分别填写操作人和资源所有者，再确认允许或拒绝与受保护的结果。</p>
     <div className="boundary-editor-list">{permissions.filter((item) => item.business_action_item_id === selectedAction?.item_id).map((permission) => {
       const action = actions.find((item) => item.item_id === permission.business_action_item_id)
@@ -133,6 +139,7 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
       </article>
     })}</div>
     <Button onClick={addPermission}>添加权限规则</Button>
+    </div>}
     {error && <Alert type="warning" showIcon message="草稿还不能生成提案" description={error} />}
     <div className="boundary-editor-submit"><Button type="primary" loading={busy} onClick={submit}>生成待审业务边界</Button></div>
   </section>

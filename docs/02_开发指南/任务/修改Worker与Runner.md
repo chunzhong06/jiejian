@@ -92,7 +92,7 @@ Runner 的顺序是安全语义的一部分。通常保持：
 → CaseResult/Evidence 输出
 ```
 
-具体 workflow 是否包含 SETUP/CLEANUP 由冻结 Profile 决定。Runner 不能临时生成未来模型，也不能在本阶段引入新的 Recovery 或 Effect projector。
+具体 workflow 是否包含 SETUP/CLEANUP 由冻结 Profile 决定。Runner 不能临时生成未来模型，也不能绕过已冻结的 Recovery 或 Effect 证明合同。
 
 实际 Observer 集合为 required 与 corroborating 的并集。两者都要运行、投影并发布，但只有 required 阻塞 baseline、target 和 Verdict；corroborating baseline 不进入 fingerprint/twin gate。修改 `case_orchestrator.py` 或 `result_builder.py` 时，要同时验证 CaseResult 和 Evidence 都保留全部实际来源及正确角色。
 

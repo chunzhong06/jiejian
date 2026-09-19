@@ -96,7 +96,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -209,6 +209,36 @@ class RunRepository:
             )
             for row in rows
         )
+
+    @staticmethod
+    def _page_statement(project_id, before_created_at_us=None, before_run_id=None):
+        statement = select(RunRow).where(RunRow.project_id == project_id)
+        if before_created_at_us is not None:
+            statement = statement.where(or_(RunRow.created_at_us < before_created_at_us,
+                and_(RunRow.created_at_us == before_created_at_us, RunRow.run_id > before_run_id)))
+        return statement.order_by(RunRow.created_at_us.desc(), RunRow.run_id.asc())
+
+    def page_for_project(self, project_id: str, *, limit: int,
+                         before_created_at_us: int | None = None, before_run_id: str | None = None,
+                         lifecycles: tuple[RunLifecycle, ...] | None = None) -> tuple[RunRecord, ...]:
+        """只读有界候选；游标是排序位置，不跨项目查找游标对应记录。"""
+        if not 1 <= limit <= 250 or (before_created_at_us is None) != (before_run_id is None):
+            raise ValueError("invalid bounded run page")
+        statement = self._page_statement(project_id, before_created_at_us, before_run_id)
+        if lifecycles is not None:
+            statement = statement.where(RunRow.lifecycle.in_(tuple(item.value for item in lifecycles)))
+        rows = _scalars(self._session, statement.limit(limit))
+        return tuple(RunRecord(run_id=row.run_id, project_id=row.project_id, request_hash=row.request_hash,
+            plan_fingerprint=row.plan_fingerprint, source_fingerprint=row.source_fingerprint,
+            policy_epoch=row.policy_epoch, engine_version=row.engine_version,
+            lifecycle=RunLifecycle(row.lifecycle), verdict=RunVerdict(row.verdict) if row.verdict is not None else None,
+            created_at_us=row.created_at_us, updated_at_us=row.updated_at_us, finished_at_us=row.finished_at_us)
+            for row in rows)
+
+    def has_after_for_project(self, project_id: str, created_at_us: int, run_id: str) -> bool:
+        """仅探测后续键是否存在，不加载或校验第 251 个历史 Run。"""
+        statement = self._page_statement(project_id, created_at_us, run_id).with_only_columns(RunRow.run_id).limit(1)
+        return _scalar(self._session, statement) is not None
 
     def list_finished_for_project(self, project_id: str) -> tuple[RunRecord, ...]:
         """按冻结完成时间和 Run ID 返回可参与结果最终化的历史 Run。"""

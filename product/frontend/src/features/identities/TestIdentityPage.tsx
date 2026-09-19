@@ -40,13 +40,14 @@ function preparationStatus(preparation: IdentityPreparationDto | null) {
   return preparation.status === 'FAILED' ? '登录准备失败' : preparation.message
 }
 
-export function TestIdentityPage({ project, initialPreparation, onError, onBack, onStateChanged, onContinuePreparation }: {
+export function TestIdentityPage({ project, initialPreparation, onError, onBack, onStateChanged, onContinuePreparation, onPrepared }: {
   project: ProjectDto
   initialPreparation?: IdentityPreparationDto
   onError: (error: ApiError) => void
   onBack: () => void
   onStateChanged: () => Promise<WorkspaceViewDto | undefined>
   onContinuePreparation: () => Promise<void> | void
+  onPrepared?: () => void
 }) {
   const [roles, setRoles] = useState<BusinessActorRevisionDto[]>([])
   const [identities, setIdentities] = useState<TestIdentityDto[]>([])
@@ -100,8 +101,9 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
         if (!active) return
         setPreparation(next)
         if (next.status === 'PREPARED') {
+          onPrepared?.()
           await load()
-          await syncWorkspace('账号登录状态已保存')
+          await syncWorkspace(next.status === 'PREPARED' ? '账号登录状态已保存' : '登录保存请求已提交')
         }
       }).catch((error) => onError(error as ApiError))
     }, 500)
@@ -147,8 +149,9 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
       const next = await testIdentitiesApi.confirmPreparation(preparation.preparation_id)
       if (!alive.current) return
       setPreparation(next)
+      if (next.status === 'PREPARED') onPrepared?.()
       await load()
-      await syncWorkspace('账号登录状态已保存')
+      await syncWorkspace(next.status === 'PREPARED' ? '账号登录状态已保存' : '登录保存请求已提交')
     }
     catch (error) { if (alive.current) onError(error as ApiError) } finally { if (alive.current) setBusy(false) }
   }
@@ -211,14 +214,10 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     </section>
 
     </>}
-    {preparation?.status === 'WAITING_FOR_LOGIN' && <section className="identity-login-steps"><h2>{`准备“${preparationIdentity?.label ?? '当前测试账号'}”`}</h2>
-      <ol className="identity-login-step-list">
-        <li><Tag color="green">✓</Tag><div><Typography.Text strong>登录窗口已经打开</Typography.Text><Typography.Text type="secondary">界鉴正在等待你完成这个测试账号的登录。</Typography.Text></div></li>
-        <li><Tag color="blue">当前</Tag><div><Typography.Text strong>在新窗口完成登录</Typography.Text><Typography.Text type="secondary">正常输入密码，完成 SSO 或 MFA。登录成功后不要关闭这个窗口。</Typography.Text></div></li>
-        <li><Tag>3</Tag><div><Typography.Text strong>回到界鉴确认</Typography.Text><Button type="primary" loading={busy} onClick={() => void confirm()}>我已完成登录</Button></div></li>
-      </ol>
-      <Alert type="warning" showIcon message="不要关闭这个窗口" description="点击确认后，界鉴会安全保存当前应用所需的有限登录状态；不会保存你的密码。" />
-      <Button loading={busy} onClick={() => void cancel()}>取消准备</Button>
+    {preparation?.status === 'WAITING_FOR_LOGIN' && <section className="identity-login-steps task-focus"><p className="editorial-eyebrow">当前需要你处理</p><h2>在已打开的浏览器中完成登录</h2>
+      <p>测试账号：{preparationIdentity?.label ?? '当前测试账号'}</p><p className="editorial-muted">正常完成密码、单点登录或多因素认证，然后回到这里确认。</p><p>保存完成前，请保持登录窗口打开。</p>
+      <Space wrap><Button type="primary" aria-label="我已完成登录" aria-busy={busy} loading={busy} onClick={() => void confirm()}>我已完成登录</Button><Button loading={busy} onClick={() => void cancel()}>取消准备</Button></Space>
+      <p className="editorial-muted">只保存当前应用所需的有限登录状态，不保存密码。实际执行身份在检查中核验。</p>
     </section>}
     {preparation && preparation.status !== 'WAITING_FOR_LOGIN' && <Alert
       type={preparation.status === 'FAILED' ? 'error' : preparation.status === 'UNSUPPORTED' ? 'warning' : preparation.status === 'PREPARED' ? 'success' : 'info'}

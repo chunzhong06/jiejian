@@ -37,6 +37,13 @@ export type CheckBreakpoint = {
   precision: 'EXACT' | 'RANGE' | 'VIOLATION_ONLY'; first_violation_event_id: string | null
   range_start_event_id: string | null; range_end_event_id: string | null; evidence_refs: string[]
 }
+export type StoryTraceEvent = {
+  event_id: string; parent_event_ids: string[]
+  kind: 'ENTRY' | 'IDENTITY' | 'AUTHORIZATION' | 'PERSISTENT_EFFECT' | 'MESSAGE' | 'DELEGATION' | 'FINAL_EFFECT' | 'RECOVERY'
+  authorization_decision: 'ALLOW' | 'DENY' | null; effect_id: string | null; dispatch_effect_ids: string[]
+  source_component: string; source_location: string
+}
+export type StoryExecutionPath = { complete: boolean; reason_codes: string[]; events: StoryTraceEvent[]; evidence_refs: string[] }
 export type ActionResultStory = {
   action_id: string; action_revision: number; display_name: string; case_id: string
   permission: { expectation: 'ALLOW' | 'DENY'; relation: string }
@@ -48,6 +55,7 @@ export type ActionResultStory = {
   }
   breakpoint: CheckBreakpoint | null; decisive_proof_chain: EvidenceExplanation[]; evidence_explanations: EvidenceExplanation[]
   claim_boundary: string[]; repair_requirement: RepairContract | null; repair_comparison?: RepairComparisonRow[]; technical_references: string[]
+  execution_path?: StoryExecutionPath | null
 }
 export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null }
 export type CheckEvidence = {
@@ -57,7 +65,19 @@ export type CheckEvidence = {
 }
 const projectPath = (id: string) => `/api/projects/${encodeURIComponent(id)}`
 const runPath = (id: string) => `/api/runs/${encodeURIComponent(id)}`
+export type CheckHistoryCursor = { created_at_us: number; run_id: string }
+export type CheckHistoryItem = { status: CheckStatus; action_labels: string[]; change_id: string | null; source_run_id: string | null }
+export type CheckHistoryPage = { project_id: string; items: CheckHistoryItem[]; next_cursor: CheckHistoryCursor | null }
+export type CheckHistoryQuery = { query?: string; verdict?: CheckVerdict; lifecycle?: CheckStatus['run']['lifecycle']; cursor?: CheckHistoryCursor | null }
 export const currentChecksApi = {
+  history: (id: string, options: CheckHistoryQuery = {}) => {
+    const query = new URLSearchParams({ limit: '25' })
+    if (options.query?.trim()) query.set('query', options.query.trim())
+    if (options.verdict) query.set('verdict', options.verdict)
+    if (options.lifecycle) query.set('lifecycle', options.lifecycle)
+    if (options.cursor) { query.set('before_created_at_us', String(options.cursor.created_at_us)); query.set('before_run_id', options.cursor.run_id) }
+    return request<CheckHistoryPage>(`${projectPath(id)}/check-history?${query}`)
+  },
   preview: (id: string, changeId?: string | null) => request<CheckPreview>(`${projectPath(id)}/check-preview${changeId ? `?change_id=${encodeURIComponent(changeId)}` : ''}`),
   list: (id: string) => request<CheckStatus[]>(`${projectPath(id)}/runs`),
   submit: (id: string, fingerprint: string, key: string, changeId?: string | null) => request<Pick<CheckStatus, 'run' | 'job'>>(`${projectPath(id)}/runs`, {

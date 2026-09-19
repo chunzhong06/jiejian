@@ -15,10 +15,10 @@ const areas = [
 
 describe('Web V1 产品壳共享组件', () => {
   it('区域状态来自统一产品状态，当前 route 只标记页面焦点', () => {
-    render(<DesktopModuleNavigation route="/flows" areas={areas} onNavigate={vi.fn()} />)
+    render(<DesktopModuleNavigation route="/permissions" areas={areas} onNavigate={vi.fn()} />)
     expect(screen.queryByText('专项工作')).not.toBeInTheDocument()
-    expect(Array.from(document.querySelectorAll('.module-navigation-label')).map((el) => el.textContent)).toEqual(['工作台', '权限', '验证', '变化与修复'])
-    expect(document.querySelector('.module-navigation-list')).toContainElement(screen.getByRole('button', { name: /工作台.*持续更新/ }))
+    expect(Array.from(document.querySelectorAll('.module-navigation-label')).map((el) => el.textContent)).toEqual(['当前工作', '权限规则', '代码变化', '检查历史'])
+    expect(document.querySelector('.module-navigation-list')).toContainElement(screen.getByRole('button', { name: /当前工作.*持续更新/ }))
     expect(screen.queryByText('辅助工具')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /AI 工具/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /运行环境/ })).not.toBeInTheDocument()
@@ -26,26 +26,26 @@ describe('Web V1 产品壳共享组件', () => {
     expect(screen.queryByRole('button', { name: /AI 辅助/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '退出界鉴' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /权限.*规则已建立/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('button', { name: /变化.*需要处理/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /检查历史.*当前不可检查/ })).toBeInTheDocument()
     expect(screen.queryByText(/第 .* 步/)).not.toBeInTheDocument()
   })
 
   it('窄屏抽屉关闭后把焦点还给流程按钮', async () => {
     const onNavigate = vi.fn()
-    render(<MobileModuleNavigation route="/validation" areas={areas} onNavigate={onNavigate} />)
+    render(<MobileModuleNavigation route="/history" areas={areas} onNavigate={onNavigate} />)
     const trigger = screen.getByRole('button', { name: '打开持续验证工作区' })
     trigger.focus()
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByRole('button', { name: /验证.*当前不可检查/ })).toHaveFocus())
-    fireEvent.click(await screen.findByRole('button', { name: /变化与修复.*需要处理/ }))
-    expect(onNavigate).toHaveBeenCalledWith('/changes')
+    await waitFor(() => expect(screen.getByRole('button', { name: /检查历史.*当前不可检查/ })).toHaveFocus())
+    fireEvent.click(await screen.findByRole('button', { name: /权限规则.*规则已建立/ }))
+    expect(onNavigate).toHaveBeenCalledWith('/permissions')
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
   it('窄屏位于工作台时把抽屉焦点交给独立主入口', async () => {
     render(<MobileModuleNavigation route="/workspace" areas={areas} onNavigate={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: '打开持续验证工作区' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /工作台.*持续更新/ })).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('button', { name: /当前工作.*持续更新/ })).toHaveFocus())
   })
 
   it('应用切换只返回服务端列表中的应用，并保留接入新应用入口', async () => {

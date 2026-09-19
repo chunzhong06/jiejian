@@ -6,6 +6,8 @@ import type { WorkspaceViewDto } from '../api/workspace'
 import ControlShell from './ControlShell'
 import { ProductThemeProvider } from './ThemeContext'
 
+vi.mock('../features/boundaries/BusinessBoundaryPage', () => ({ BusinessBoundaryPage: () => <><h1>当前权限规则编辑区</h1><input aria-label="未提交的权限输入" defaultValue=""/></> }))
+
 const mockApi = vi.hoisted(() => ({
   experienceStatus: vi.fn(), mcpStatus: vi.fn(), shutdown: vi.fn(), remove: vi.fn(),
 }))
@@ -46,13 +48,23 @@ vi.mock('./useSystemStatus', () => ({ useSystemStatus: () => ({
 vi.mock('../api/sourceChanges', () => ({ sourceChangesApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/repairs', async () => ({ ...await vi.importActual<typeof import('../api/repairs')>('../api/repairs'), repairsApi: { project: vi.fn().mockResolvedValue({ project_id: 'p1', status: null, tasks: [], primary_task_reference: null }) } }))
 vi.mock('../api/preparation', () => ({ preparationApi: { get: vi.fn().mockResolvedValue({ project_id: 'p1', actions: [], preparation_complete: false }) } }))
-vi.mock('../api/currentChecks', () => ({ currentChecksApi: { preview: vi.fn().mockResolvedValue({ project_id: 'p1', can_execute: false, plan_fingerprint: 'f', action_count: 0, case_count: 0, actions: [], gaps: [] }), list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../api/currentChecks', () => ({ currentChecksApi: { history:vi.fn().mockResolvedValue({project_id:'p1',items:[],next_cursor:null}), preview: vi.fn().mockResolvedValue({ project_id: 'p1', can_execute: false, plan_fingerprint: 'f', action_count: 0, case_count: 0, actions: [], gaps: [] }), list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus } }))
 vi.mock('../api/mcp', () => ({ mcpAccessApi: { status: mockApi.mcpStatus } }))
 vi.mock('../api/projects', () => ({ projectsApi: { remove: mockApi.remove } }))
 vi.mock('../api/system', () => ({ systemApi: { shutdown: mockApi.shutdown } }))
 
 describe('CURRENT 应用壳', () => {
+  it('从当前工作转到历史再进入权限规则，保留同一份未提交输入', async () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    render(<ControlShell />)
+    fireEvent.change(await screen.findByLabelText('未提交的权限输入'), {target:{value:'正在整理的资源归属'}})
+    fireEvent.click(screen.getByRole('button',{name:/^检查历史，/}))
+    expect(await screen.findByRole('heading',{name:'检查历史'})).toBeInTheDocument()
+    expect(screen.queryByRole('textbox',{name:'未提交的权限输入'})).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'权限规则，需要建立'}))
+    expect(await screen.findByLabelText('未提交的权限输入')).toHaveValue('正在整理的资源归属')
+  })
   afterEach(() => cleanup())
   beforeEach(() => {
     window.location.hash = '#/workspace'
@@ -75,20 +87,18 @@ describe('CURRENT 应用壳', () => {
     mockApi.shutdown.mockResolvedValue({ status: 'stopping', message: 'stopping' })
   })
 
-  it('在工作台展示服务端 Workspace 与唯一主任务', async () => {
+  it('当前工作直接装配服务端指定的权限任务，历史有独立导航', async () => {
     render(<ControlShell />)
-
-    expect(await screen.findByRole('heading', { name: '当前还没有稳定业务边界。', level: 1 })).toBeInTheDocument()
-    expect(screen.getByText('当前还没有稳定业务边界。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '建立当前业务边界' })).toBeInTheDocument()
-    expect(screen.getAllByText('变化与修复').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('验证').length).toBeGreaterThan(0)
+    expect(await screen.findByRole('heading', { name: '当前权限规则编辑区', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /检查历史，/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /当前工作，/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '建立当前业务边界' })).not.toBeInTheDocument()
   })
 
   it('变化与检查装配当前入口，准备缺失时不自动执行', async () => {
     window.location.hash = '#/changes'
     const view = render(<ControlShell />)
-    expect(await screen.findByRole('heading', { name: '代码改过以后，继续检查原来的权限' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '代码变化' })).toBeInTheDocument()
     expect(await screen.findByText('尚无代码变化记录')).toBeInTheDocument()
 
     view.unmount()

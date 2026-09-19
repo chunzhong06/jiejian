@@ -82,3 +82,5 @@
 ## 当前默认Sample编排
 
 默认official.py保留真实start.cmd/受控浏览器会话/receipt/进程树/首错清理，current_api.py调用普通Proposal、Human批准、Preparation与schema2完整runs。问题→观察不足NEW→原题修复NEW固定顺序，ResultStory/Evidence/Run历史/ProjectRepair替代旧Report/CLI。current_gui.py连接真实界面动作，只有完整动作记录与事实核验成立才报告L5通过；开发只运行stub，最终才执行唯一sample-test。
+
+同一 Official 流程的 current_mcp.py 负责受控 SDK 权限责任验收与配对所有权收口；current_gui.py 操作历史、路径节点及局部证据区。原三轮之外的普通 MCP Run 单独汇总，开发只用隔离 stub。准确操作、凭据保留和失败边界见[修改官方示例与整链验收](../任务/修改官方示例与整链验收.md#同实例-mcp-责任场景)。

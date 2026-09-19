@@ -99,7 +99,7 @@ MCP 控制入口、Streamable HTTP、Bearer、工具权限
 → docs/02_开发指南/任务/修改前端.md
 → docs/02_开发指南/模块/frontend.md
 
-结果、Finding、History、Report、Gate
+当前 ResultStory、CHECK 历史与原题修复；独立 Report/Finding/Gate 格式
 → docs/02_开发指南/任务/修改结果与报告.md
 → docs/01_系统地图/权限验证与结果.md
 → docs/03_参考手册/协议/报告与格式投影协议.md

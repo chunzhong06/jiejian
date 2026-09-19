@@ -5,7 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from product.backend.composition import ApplicationCore, WorkerContainer
+from product.backend.composition import ApplicationCore
+from product.backend.composition.worker import WorkerContainer
 from product.backend.infra import storage as storage_facade
 from product.backend.infra.storage.base import Base
 from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
@@ -215,6 +216,6 @@ def test_backend_composition_has_two_unique_independent_roots() -> None:
 def test_control_and_worker_process_use_the_current_composition_boundary() -> None:
     assert "product.backend.composition" in _imported_modules(BACKEND / "api" / "app.py")
     assert "product.backend.composition" in _imported_modules(BACKEND / "cli" / "bootstrap.py")
-    assert "product.backend.composition" in _imported_modules(
+    assert "product.backend.composition.worker" in _imported_modules(
         BACKEND / "infra" / "runtime" / "worker" / "process.py"
     )

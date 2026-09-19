@@ -40,7 +40,7 @@ export function OfficialSamplePanel({ value, onChanged, onError }: {
     {!value ? <p>正在读取官方环境…</p> : !value.available ? <Alert type="info" message={value.unavailable_reason ?? '当前环境无法启动官方示例。'} /> : !value.active ? <>
       <p>协作空间提供待确认的权限提案和测试材料，随后使用普通的验证与修复流程。</p>
       <Button onClick={() => setConfirm('start')}>启动官方示例</Button>
-    </> : <details><summary>官方环境 · {value.scenario_version ? versions[value.scenario_version] : '待准备'}</summary>
+    </> : <details className="sample-environment"><summary>示例环境 · {value.scenario_version ? versions[value.scenario_version] : '待准备'}</summary>
       <p className="editorial-muted">这里仅控制本机示例条件。权限在权限页确认，材料在验证页准备；每次切换后都需要新的检查，已有事实保持不变。</p>
       <Space wrap>
         <Button disabled={busy || value.scenario_version === 'VULNERABLE'} onClick={() => setConfirm('VULNERABLE')}>切换到问题版</Button>

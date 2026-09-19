@@ -67,8 +67,10 @@ def _run(**changes: Any) -> RunRecord:
     values = {
         "run_id": RUN_ID,
         "project_id": PROJECT_ID,
-        "contract_id": "ownership-contract",
-        "contract_version": 3,
+        "request_hash": "b" * 64,
+        "plan_fingerprint": "c" * 64,
+        "source_fingerprint": "d" * 64,
+        "policy_epoch": 3,
         "engine_version": "0.1.0",
         "lifecycle": RunLifecycle.COMPLETED,
         "verdict": RunVerdict.PASS,

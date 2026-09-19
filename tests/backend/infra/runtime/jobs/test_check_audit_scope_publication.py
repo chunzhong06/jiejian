@@ -12,6 +12,7 @@ from product.backend.infra.runtime.jobs.models import ClaimJob
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.storage import ProjectRecord, StorageUnitOfWork
 from product.backend.workflows.checks.story import CheckStoryBuilder
+from product.backend.workflows.checks import story as story_module
 from product.protocols.check_result import canonical_check_document
 from product.protocols.check_runtime import canonical_check_runtime_bytes
 from product.protocols.execution_v3 import canonical_execution_request_v3_bytes
@@ -20,7 +21,7 @@ from tests.backend.infra.observers.test_audit_log_observer import _spec, _record
 
 
 @pytest.mark.parametrize("variant", ["expanded", "legal", "missing", "outside_resource", "cross_case", "wrong_ancestor", "invalid"])
-def test_real_scope_collection_publication_and_current_story(worker_services, check_target, tmp_path, variant):
+def test_real_scope_collection_publication_and_current_story(worker_services, check_target, tmp_path, variant, monkeypatch):
     from product.backend.workflows.checks.results import CheckResultReader
 
     fields = tuple(dict.fromkeys((*TRACE_FIELDS, "allowed_action_ids", "allowed_resource_ids")))
@@ -108,9 +109,20 @@ def test_real_scope_collection_publication_and_current_story(worker_services, ch
     package = CheckPublisher(tmp_path, factory).publish(staging)
     reader = CheckResultReader(var_dir=tmp_path, uow_factory=factory)
     story = CheckStoryBuilder(reader).build(job.run_id)
+    # 对真实 BLOCK 包关闭新增显示字段，全部既有身份、定位和修复字段必须逐值保持。
+    with monkeypatch.context() as context:
+        context.setattr(story_module, "_execution_path", lambda documents: None)
+        without_path = CheckStoryBuilder(reader).build(job.run_id)
+    assert story.model_dump(exclude={"actions": {"__all__": {"execution_path"}}}) == without_path.model_dump(
+        exclude={"actions": {"__all__": {"execution_path"}}})
     assert story.verdict is RunVerdict.BLOCK
     deny_story = next(item for item in story.actions if item.permission.expectation == "DENY")
     document = next(item for item in package.evidence if item.case.case_id == deny_story.case_id)
+    assert deny_story.execution_path.complete == document.trace.complete
+    assert deny_story.execution_path.reason_codes == document.trace.reason_codes
+    assert deny_story.execution_path.evidence_refs == (document.evidence_id,)
+    assert [(event.event_id, event.parent_event_ids) for event in deny_story.execution_path.events] == [
+        (event.event_id, event.parent_event_ids) for event in document.trace.events]
     assert any(item.level == "VERDICT_REQUIRED" and item.state == "CONFIRMED" and item.authoritative
         for item in document.observations)
     assert document.evidence_id in deny_story.technical_references

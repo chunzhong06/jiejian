@@ -1,5 +1,5 @@
 // 动作准备页验证：服务端唯一主任务、真实身份槽位、写后刷新与失效响应隔离。
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PreparationView } from '../../api/preparation'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
@@ -43,7 +43,7 @@ describe('动作准备', () => {
     p.onStateChanged.mockResolvedValue(workspace(task({task_kind:'RUN_CURRENT_CHECK',title:'运行当前检查'})))
     fireEvent.click(button)
     await waitFor(()=>expect(provided).toHaveBeenCalledTimes(1))
-    expect(await screen.findByRole('heading',{name:'运行当前检查'})).toBeInTheDocument()
+    expect(await screen.findByRole('button',{name:'前往处理'})).toBeInTheDocument()
     expect(screen.queryByRole('button',{name:'使用已提供的测试材料'})).not.toBeInTheDocument()
     expect(api.create).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled()
   })
@@ -59,10 +59,10 @@ describe('动作准备', () => {
 
   it('显示实际两个账号需求、静态材料与失效证明，不在加载时写入', async () => {
     render(<PreparationPage {...props()} />)
-    expect(await screen.findByText('普通成员账号 1')).toBeInTheDocument()
-    expect(screen.getByText('普通成员账号 2')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /结果证明.*需要更新/ })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /只读动作不需要恢复/ })).toBeInTheDocument()
+    expect(await within(await screen.findByLabelText('当前需要处理的材料')).findByText('普通成员账号 1')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('当前需要处理的材料')).getByText('普通成员账号 2')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('查看全部测试条件')); expect(within(screen.getByText('查看全部测试条件').parentElement!).getByRole('heading', { name: '随后核对结果证明' })).toBeInTheDocument()
+    expect(within(screen.getByText('查看全部测试条件').parentElement!).getByText('只读动作不需要恢复')).toBeInTheDocument()
     expect(api.create).not.toHaveBeenCalled(); expect(api.start).not.toHaveBeenCalled()
     expect(screen.queryByText(/Alice|Bob|slot2|最多支持/)).not.toBeInTheDocument()
   })
@@ -148,7 +148,7 @@ describe('动作准备', () => {
     expect(await screen.findByText(/下一步尚未同步/)).toBeInTheDocument(); expect(button).toBeDisabled()
     const updated = selectionMaterial(); updated.actions[0].assurance_contract.allow_controls[0].selection_fingerprint = 'changed-candidate-set'
     api.get.mockResolvedValue(updated); p.onStateChanged.mockResolvedValue(workspace(task({ task_kind: 'SELECT_ALLOW_CONTROL' })))
-    fireEvent.click(screen.getByRole('button', { name: '刷新准备材料' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '刷新准备材料' })).toHaveAttribute('aria-busy','false')); fireEvent.click(screen.getByRole('button', { name: '刷新准备材料' }))
     await waitFor(() => expect(screen.queryByText(/下一步尚未同步/)).not.toBeInTheDocument())
     expect(screen.getByRole('button', { name: '确认正常对照' })).toBeDisabled()
     expect(api.select).toHaveBeenCalledOnce()

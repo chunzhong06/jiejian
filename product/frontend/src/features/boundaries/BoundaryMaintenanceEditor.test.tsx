@@ -49,17 +49,47 @@ beforeEach(() => { vi.clearAllMocks(); ai.maintenanceDraft.mockResolvedValue(dra
 const suggestion = { option_ids: ['opt-1'], subject_actor_id: actorId, subject_actor_revision: 2, business_action_id: actionId, action_revision: 3, resource_owner_actor_id: actorId, resource_owner_actor_revision: 2, relation: 'OWNS', protected_effect_ids: [effectId], subject_display_name: '项目负责人', action_display_name: '导出交付包', resource_owner_display_name: '项目负责人', effect_display_names: ['交付包真实形成'], current_expectation: 'ALLOW', suggested_expectation: 'DENY', source_quotes: ['负责人不得导出交付包'] }
 const response = { project_id: 'p1', boundary_fingerprint: 'semantic', status: 'READY_FOR_REVIEW', suggestions: [suggestion], issues: [] }
 describe('BoundaryMaintenanceEditor', () => {
+  it('新增后保存的草稿规则可以撤回，不删除任何已生效规则', () => {
+    const onSubmit = vi.fn()
+    render(<BoundaryMaintenanceEditor draft={draft} busy={false} onSubmit={onSubmit}/>)
+    fireEvent.click(screen.getByRole('button',{name:'新增权限规则'}))
+    fireEvent.click(screen.getByRole('button',{name:'保存到草稿'}))
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button',{name:'移除草稿规则'}))
+    fireEvent.click(screen.getByRole('button',{name:'审阅全部变更'}))
+    expect(onSubmit.mock.calls[0][0].permissions).toEqual(draft.permissions)
+  })
+  it('单条修改先进入本地草稿，审阅时仍保留完整身份和其他规则', () => {
+    const onSubmit = vi.fn()
+    const other = {...draft.permissions[0],item_id:'other',intent_id:'other-intent'}
+    render(<BoundaryMaintenanceEditor draft={{...draft,permissions:[...draft.permissions,other]}} focus={{intentId}} busy={false} onSubmit={onSubmit}/>)
+    fireEvent.click(screen.getByRole('radio',{name:'禁止'}))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByRole('button',{name:'审阅全部变更'})).toBeDisabled()
+    fireEvent.click(screen.getByRole('button',{name:'保存到草稿'}))
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button',{name:'审阅全部变更'}))
+    expect(onSubmit.mock.calls[0][0].permissions).toEqual([{...draft.permissions[0],expectation:'DENY'},other])
+  })
+  it('取消单条编辑丢弃临时修改，不改变草稿和正式规则', () => {
+    const onSubmit = vi.fn()
+    render(<BoundaryMaintenanceEditor draft={draft} focus={{intentId}} busy={false} onSubmit={onSubmit}/>)
+    fireEvent.click(screen.getByRole('radio',{name:'禁止'}))
+    fireEvent.click(screen.getByRole('button',{name:'取消本次编辑'}))
+    fireEvent.click(screen.getByRole('button',{name:'审阅全部变更'}))
+    expect(onSubmit.mock.calls[0][0].permissions).toEqual(draft.permissions)
+  })
   it('提交编辑后的完整 desired state，不暴露或生成 write_mode', () => {
     const onSubmit = vi.fn()
-    render(<BoundaryMaintenanceEditor draft={draft} busy={false} onSubmit={onSubmit} />)
+    render(<BoundaryMaintenanceEditor draft={draft} focus={{mode:'objects'}} busy={false} onSubmit={onSubmit} />)
 
-    expect(screen.getByRole('heading', { name: '调整当前业务边界' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '管理业务对象' })).toBeInTheDocument()
     expect(screen.queryByText(actorId)).not.toBeInTheDocument()
     expect(screen.queryByText(actionId)).not.toBeInTheDocument()
     expect(screen.queryByText(/write_mode/i)).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('业务动作名称'), { target: { value: '导出完整交付包' } })
-    fireEvent.click(screen.getByRole('button', { name: '生成待审调整提案' }))
+    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
 
     expect(onSubmit).toHaveBeenCalledOnce()
     const command = onSubmit.mock.calls[0][0]
@@ -72,8 +102,9 @@ describe('BoundaryMaintenanceEditor', () => {
   it('AI 只显式生成，用户选择填入后仍须单独生成提案', async () => {
     ai.generate.mockResolvedValue(response)
     const onSubmit = vi.fn()
-    render(<BoundaryMaintenanceEditor draft={draft} busy={false} onSubmit={onSubmit} />)
+    render(<BoundaryMaintenanceEditor draft={draft} focus={{mode:'objects'}} busy={false} onSubmit={onSubmit} />)
     expect(ai.generate).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('用自然语言辅助填写'))
     fireEvent.change(screen.getByLabelText('权限要求原文'), { target: { value: '负责人不得导出交付包' } })
     fireEvent.click(screen.getByRole('button', { name: 'AI 辅助整理' }))
     expect(await screen.findByText('依据原文：“负责人不得导出交付包”')).toBeInTheDocument()
@@ -82,14 +113,15 @@ describe('BoundaryMaintenanceEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: '采用到草稿' }))
     await waitFor(() => expect(screen.queryByText('待你确认的建议')).not.toBeInTheDocument())
     expect(onSubmit).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '生成待审调整提案' }))
+    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
     expect(onSubmit.mock.calls[0][0].permissions[0]).toMatchObject({ intent_id: intentId, expectation: 'DENY', protected_effect_item_ids: ['peff_existing'] })
   })
   it('生成期间修改草稿会丢弃迟到建议，保留手工内容', async () => {
     let resolve!: (value: typeof response) => void
     ai.generate.mockReturnValue(new Promise((done) => { resolve = done }))
     const onSubmit = vi.fn()
-    render(<BoundaryMaintenanceEditor draft={draft} busy={false} onSubmit={onSubmit} />)
+    render(<BoundaryMaintenanceEditor draft={draft} focus={{mode:'objects'}} busy={false} onSubmit={onSubmit} />)
+    fireEvent.click(screen.getByText('用自然语言辅助填写'))
     fireEvent.change(screen.getByLabelText('权限要求原文'), { target: { value: '负责人不得导出交付包' } })
     fireEvent.click(screen.getByRole('button', { name: 'AI 辅助整理' }))
     await waitFor(() => expect(ai.generate).toHaveBeenCalledOnce())
@@ -97,18 +129,19 @@ describe('BoundaryMaintenanceEditor', () => {
     resolve(response)
     await waitFor(() => expect(screen.getByRole('button', { name: 'AI 辅助整理' })).not.toHaveClass('ant-btn-loading'))
     expect(screen.queryByText('待你确认的建议')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '生成待审调整提案' }))
+    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
     expect(onSubmit.mock.calls[0][0].actions[0].display_name).toBe('手工修改的动作')
     expect(onSubmit.mock.calls[0][0].permissions[0].expectation).toBe('ALLOW')
   })
   it('AI 失败不阻止手工提交，正式边界漂移不允许填入建议', async () => {
     ai.generate.mockRejectedValue(new Error('disabled'))
     const onSubmit = vi.fn()
-    render(<BoundaryMaintenanceEditor draft={draft} busy={false} onSubmit={onSubmit} />)
+    render(<BoundaryMaintenanceEditor draft={draft} focus={{mode:'objects'}} busy={false} onSubmit={onSubmit} />)
+    fireEvent.click(screen.getByText('用自然语言辅助填写'))
     fireEvent.change(screen.getByLabelText('权限要求原文'), { target: { value: '负责人不得导出交付包' } })
     fireEvent.click(screen.getByRole('button', { name: 'AI 辅助整理' }))
     expect(await screen.findByText(/请继续手工填写权限规则/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '生成待审调整提案' }))
+    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
     expect(onSubmit).toHaveBeenCalledOnce()
     ai.generate.mockResolvedValue(response)
     fireEvent.click(screen.getByRole('button', { name: 'AI 辅助整理' }))

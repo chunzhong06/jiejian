@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -309,8 +310,12 @@ def test_frontend_editor_reuses_only_controlled_dependency_workspace() -> None:
     assert "ts.resolveModuleName" in implementation
     assert "Install-FrontendEditorPlugin $workspace" in _text(MODULE_ROOT / "frontend.ps1")
     assert 'Invoke-External "frontend-editor"' in _text(MODULE_ROOT / "commands.ps1")
-    assert "PermissionCheckPage.test.tsx" in verifier
-    assert "StartCheckPage.test.tsx" not in verifier
+    # 编辑器探针必须覆盖仍存在的生产组件和测试，避免删除旧页面后阻断所有前端命令。
+    sample_paths = [ROOT.joinpath(*re.findall(r'"([^"]+)"', parts))
+                    for parts in re.findall(r'path\.join\(\s*projectRoot,([^)]*)\)', verifier, re.S)]
+    assert len(sample_paths) == 2
+    assert all(path.is_file() and path.is_relative_to(ROOT / "product" / "frontend" / "src") for path in sample_paths)
+    assert sum(path.name.endswith(".test.tsx") for path in sample_paths) == 1
     assert not (ROOT / "product" / "frontend" / "node_modules").exists()
 
 

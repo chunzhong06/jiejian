@@ -13,9 +13,10 @@ export function TaskFocus({ title, responsibility, systemWillDo, action }: {
   action?: { label: string; disabled?: boolean; onClick: () => void }
 }) {
   return <section className="task-focus" aria-label="当前判断与主任务">
+    <p className="editorial-eyebrow task-focus-label">当前需要你做</p>
     <h2>{title}</h2><p>{responsibility}</p>
-    {systemWillDo && <p className="editorial-muted">系统接下来会：{systemWillDo}</p>}
-    {action && <Button type="primary" disabled={action.disabled} onClick={action.onClick}>{action.label}</Button>}
+    {action && <div className="task-focus-actions"><Button type="primary" size="large" disabled={action.disabled} onClick={action.onClick}>{action.label}<span aria-hidden="true"> →</span></Button></div>}
+    {systemWillDo && <p className="task-next"><span>完成后</span>{systemWillDo}</p>}
   </section>
 }
 

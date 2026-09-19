@@ -1,6 +1,6 @@
 // 业务边界维护编辑器：完整保留 stable identity，只提交 desired state，不让前端决定 write mode。
 
-import { Alert, Button, Checkbox, Divider, Input, Select, Space, Typography } from 'antd'
+import { Alert, Button, Checkbox, Input, Select, Space, Typography } from 'antd'
 import { useMemo, useState } from 'react'
 import type {
   BoundaryMaintenanceActionDto,
@@ -11,8 +11,8 @@ import type {
   BusinessEffectKind,
   ProposedEffectDto,
 } from '../../api/businessBoundaries'
-import { RuleSentence } from '../../shared/ui/Editorial'
-import { confidenceLabels, effectKindLabels, expectationLabels, relationLabels } from './boundaryLabels'
+import { PermissionRuleForm } from './PermissionRuleForm'
+import { confidenceLabels, effectKindLabels } from './boundaryLabels'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { PermissionDraftAssist } from './PermissionDraftAssist'
 import type { PermissionDraftSuggestion } from '../../api/permissionDrafts'
@@ -20,7 +20,8 @@ import type { PermissionDraftSuggestion } from '../../api/permissionDrafts'
 type DraftEffect = Omit<ProposedEffectDto, 'effect_kind'> & { effect_kind?: BusinessEffectKind }
 type DraftAction = Omit<BoundaryMaintenanceActionDto, 'effects'> & { effects: DraftEffect[] }
 
-export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmit }: {
+export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmit, focus }: {
+  focus?: { actionId?: string; intentId?: string; mode?: 'objects' | 'new' }
   draft: BoundaryMaintenanceDraftDto
   initialCommand?: BoundaryMaintenanceCommandDto
   busy: boolean
@@ -31,7 +32,16 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
   const [actions, setActions] = useState<DraftAction[]>(initial.actions)
   const [permissions, setPermissions] = useState<BoundaryMaintenancePermissionDto[]>(initial.permissions)
   const [error, setError] = useState<string>()
-  const [selectedActionId, setSelectedActionId] = useState<string>()
+  const [selectedActionId, setSelectedActionId] = useState<string>(initial.actions.find(item => item.action_id === focus?.actionId)?.item_id ?? initial.actions[0]?.item_id)
+  const [mode, setMode] = useState<'rules' | 'objects'>(focus?.mode === 'objects' ? 'objects' : 'rules')
+  const [query, setQuery] = useState('')
+  const [editingRule, setEditingRule] = useState<BoundaryMaintenancePermissionDto | undefined>(() => {
+    const existing = initial.permissions.find(item => item.intent_id === focus?.intentId)
+    if (focus?.intentId && existing) return {...existing}
+    const action = initial.actions.find(item => item.action_id === focus?.actionId) ?? initial.actions[0]
+    const actor = initial.actors.find(item => item.effective_state === 'ACTIVE')
+    return focus?.mode === 'new' && actor && action ? newPermission(actor.item_id, action.item_id, action.effects.map(effect => effect.item_id)) : undefined
+  })
   const selectedAction = actions.find((item) => item.item_id === selectedActionId) ?? actions[0]
 
   const applySuggestions = (suggestions: PermissionDraftSuggestion[]) => {
@@ -75,13 +85,7 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
       setError('先保留至少一个启用的业务主体和业务动作。')
       return
     }
-    setPermissions((items) => [...items, {
-      item_id: localId('pperm'), intent_id: null, expected_current_revision: null,
-      effective_state: 'ACTIVE', subject_actor_item_id: actor.item_id,
-      business_action_item_id: action.item_id, resource_owner_actor_item_id: actor.item_id,
-      relation: 'OWNS', expectation: 'ALLOW',
-      protected_effect_item_ids: action.effects.map((item) => item.item_id),
-    }])
+    setEditingRule(newPermission(actor.item_id, action.item_id, action.effects.map(item => item.item_id)))
   }
   const removeEffect = (actionId: string, effectId: string) => {
     updateAction(setActions, actionId, {
@@ -108,12 +112,25 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
     })
   }
 
-  return <section className="boundary-editor" aria-labelledby="boundary-maintenance-title">
-    <div className="boundary-section-heading"><div>
-      <Typography.Title level={3} id="boundary-maintenance-title">调整当前业务边界</Typography.Title>
-      <Typography.Paragraph type="secondary">当前主体、动作和权限会完整保留。修改只会先形成一份不可变提案，批准后才追加正式业务版本 或更新实现映射。</Typography.Paragraph>
-    </div></div>
-
+  const editedAction = actions.find(item => item.item_id === editingRule?.business_action_item_id)
+  const changedCount = [...actors, ...actions, ...permissions].filter(item => {
+    const original = [...draft.actors, ...draft.actions, ...draft.permissions].find(value => value.item_id === item.item_id)
+    return JSON.stringify(item) !== JSON.stringify(original)
+  }).length
+  const saveRule = (value: BoundaryMaintenancePermissionDto) => {
+    setPermissions(items => items.some(item => item.item_id === value.item_id) ? items.map(item => item.item_id === value.item_id ? value : item) : [...items, value])
+    setEditingRule(undefined); setError(undefined)
+  }
+  const sentence = (rule: BoundaryMaintenancePermissionDto) => {
+    const subject = actors.find(item => item.item_id === rule.subject_actor_item_id)?.display_name || '操作人'
+    const owner = actors.find(item => item.item_id === rule.resource_owner_actor_item_id)?.display_name || '资源所有者'
+    return `${subject}对${rule.relation === 'OWNS' ? '自己' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `另一个${owner}账号` : owner}拥有的资源，${rule.expectation === 'ALLOW' ? '可以' : '不得'}${selectedAction?.display_name || '执行这项动作'}。`
+  }
+  return <section className="boundary-draft" aria-label="权限规则草稿">
+    <div className="boundary-draft-toolbar"><div><h1 id="boundary-maintenance-title">{editingRule ? '编辑权限规则' : mode === 'objects' ? '管理业务对象' : '权限草稿'}</h1><span className="semantic-state is-warning">草稿 · 尚未生效</span></div>
+      {editingRule ? <Button disabled={busy} onClick={() => setEditingRule(undefined)}>取消并返回草稿</Button> : <Button disabled={busy} onClick={() => setMode(value => value === 'rules' ? 'objects' : 'rules')}>{mode === 'rules' ? '管理业务对象' : '返回权限草稿'}</Button>}
+    </div>
+    {editingRule && editedAction ? <PermissionRuleForm key={editingRule.item_id} initial={editingRule} actors={actors} action={editedAction} busy={busy} onSave={saveRule} onCancel={() => setEditingRule(undefined)}/> : mode === 'objects' ? <section className="boundary-editor" aria-label="业务对象编辑">
     <details className="boundary-actor-details" open={!actors.length || undefined}><summary>业务主体 · 谁在操作、资源属于谁</summary>
     <div className="boundary-editor-list">{actors.map((actor) => <article key={actor.item_id} className="boundary-editor-row-block">
       <div className="boundary-editor-row">
@@ -155,29 +172,18 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
     </article>)}</div>
     <Button onClick={() => { const added = manualAction(); setActions((items) => [...items, added]); setSelectedActionId(added.item_id) }}>新增业务动作</Button>
 
-    <h3>这项动作的权限规则</h3><p className="editorial-muted">分别填写操作人和资源所有者，再确认允许或拒绝与受保护的结果。</p>
-    <PermissionDraftAssist projectId={draft.project_id} boundaryFingerprint={draft.boundary_state_fingerprint}
-      draftKey={JSON.stringify([actors, actions, permissions])} disabled={busy} onApply={applySuggestions} />
-    <div className="boundary-editor-list">{permissions.filter((item) => item.business_action_item_id === selectedAction?.item_id).map((permission) => {
-      const action = actions.find((item) => item.item_id === permission.business_action_item_id)
-      return <article key={permission.item_id} className="boundary-editor-row-block boundary-permission-editor">
-        <RuleSentence>{actors.find((item) => item.item_id === permission.subject_actor_item_id)?.display_name || '谁'} 对{permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '另一个' : ''}{actors.find((item) => item.item_id === permission.resource_owner_actor_item_id)?.display_name || '资源所有者'}{permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '账号' : ''}拥有的资源，{permission.expectation === 'ALLOW' ? '可以' : '不可以'}{action?.display_name || '执行这项动作'}。</RuleSentence>
-        <label className="sentence-field"><span>谁在操作</span><Select aria-label="谁" value={permission.subject_actor_item_id} options={actors.map(actorOption)} onChange={(value) => updatePermission(setPermissions, permission.item_id, { subject_actor_item_id: value })} /></label>
-        <label className="sentence-field"><span>做什么</span><Select aria-label="做什么" value={permission.business_action_item_id} options={actions.map(actionOption)} onChange={(value) => {
-          const next = actions.find((item) => item.item_id === value)
-          updatePermission(setPermissions, permission.item_id, { business_action_item_id: value, protected_effect_item_ids: next?.effects.map((item) => item.item_id) ?? [] })
-        }} /></label>
-        <label className="sentence-field"><span>资源属于谁</span><Select aria-label="对谁拥有的资源" value={permission.resource_owner_actor_item_id} options={actors.map(actorOption)} onChange={(value) => updatePermission(setPermissions, permission.item_id, { resource_owner_actor_item_id: value })} /></label>
-        <label className="sentence-field"><span>两个身份与资源的关系</span><Select aria-label="资源关系" value={permission.relation} options={Object.entries(relationLabels).map(([value, label]) => ({ value, label }))} onChange={(value) => updatePermission(setPermissions, permission.item_id, { relation: value })} /></label>
-        <label className="sentence-field"><span>应该允许还是拒绝</span><Select aria-label="允许或拒绝" value={permission.expectation} options={Object.entries(expectationLabels).map(([value, label]) => ({ value, label }))} onChange={(value) => updatePermission(setPermissions, permission.item_id, { expectation: value })} /></label>
-        <Checkbox.Group aria-label="这条规则保护的业务结果" value={permission.protected_effect_item_ids} options={(action?.effects ?? []).map((effect) => ({ value: effect.item_id, label: effect.business_label || '尚未命名的业务结果' }))} onChange={(values) => updatePermission(setPermissions, permission.item_id, { protected_effect_item_ids: values.map(String) })} />
-        <Checkbox checked={permission.effective_state === 'RETIRED'} onChange={(event) => updatePermission(setPermissions, permission.item_id, { effective_state: event.target.checked ? 'RETIRED' : 'ACTIVE' })}>停用这条规则</Checkbox>
-        {!permission.intent_id && <Button danger type="text" onClick={() => setPermissions((items) => items.filter((item) => item.item_id !== permission.item_id))}>移除新规则</Button>}
+
+    </section> : <section className="boundary-document">
+      <nav className="action-index" aria-label="编辑业务动作索引"><h3>业务动作</h3><Input aria-label="搜索草稿动作" placeholder="搜索动作" allowClear value={query} onChange={event => setQuery(event.target.value)}/>{actions.filter(item => item.display_name.includes(query.trim())).map(item => <button key={item.item_id} aria-current={item.item_id === selectedAction?.item_id ? 'true' : undefined} onClick={() => setSelectedActionId(item.item_id)}>{item.display_name || '尚未命名的动作'}<small>{permissions.filter(rule => rule.business_action_item_id === item.item_id && rule.effective_state === 'ACTIVE').length} 条启用规则</small></button>)}{!actions.some(item => item.display_name.includes(query.trim())) && <p>没有匹配的动作</p>}</nav>
+      <article className="boundary-action-document"><div className="boundary-action-heading"><div><h2>{selectedAction?.display_name || '尚无业务动作'}</h2><p className="editorial-muted">{selectedAction?.description}</p></div><Button type="primary" disabled={busy} onClick={addPermission}>新增权限规则</Button></div>
+        {permissions.filter(item => item.business_action_item_id === selectedAction?.item_id).map(permission => <section className="permission-summary-row" key={permission.item_id}><span className={`permission-badge ${permission.effective_state === 'RETIRED' ? 'is-retired' : permission.expectation === 'ALLOW' ? 'is-allow' : 'is-deny'}`}>{permission.effective_state === 'RETIRED' ? '停用' : permission.expectation === 'ALLOW' ? '允许' : '禁止'}</span><div><h3>{sentence(permission)}</h3><p>保护结果：{permission.protected_effect_item_ids.map(id => selectedAction?.effects.find(effect => effect.item_id === id)?.business_label || '已确认结果').join('、')}</p></div><Button type="link" disabled={busy} aria-label={`编辑规则：${sentence(permission)}`} onClick={() => setEditingRule({...permission})}>编辑</Button>{!permission.intent_id && <Button type="text" danger disabled={busy} onClick={() => setPermissions(items => items.filter(item => item.item_id !== permission.item_id))}>移除草稿规则</Button>}</section>)}
+        {!permissions.some(item => item.business_action_item_id === selectedAction?.item_id) && <p className="boundary-empty-rules">这项动作还没有权限规则。点击“新增权限规则”开始填写。</p>}
+        <details className="boundary-secondary"><summary>受保护的业务结果</summary>{selectedAction?.effects.map(effect => <p key={effect.item_id}>{effect.business_label} · {effect.resource_concept}</p>)}</details>
       </article>
-    })}</div>
-    <Button onClick={addPermission}>新增权限规则</Button>
-    {error && <Alert type="warning" showIcon message="草稿还不能生成提案" description={error} />}
-    <div className="boundary-editor-submit"><Button type="primary" loading={busy} onClick={submit}>生成待审调整提案</Button></div>
+    </section>}
+    <details className="permission-assist-disclosure" hidden={Boolean(editingRule)}><summary>用自然语言辅助填写</summary><PermissionDraftAssist projectId={draft.project_id} boundaryFingerprint={draft.boundary_state_fingerprint} draftKey={JSON.stringify([actors, actions, permissions])} disabled={busy} onApply={applySuggestions}/></details>
+    {error && <Alert type="warning" showIcon message="草稿还不能生成提案" description={error}/>}
+    <div className="boundary-draft-footer"><span>{changedCount ? `已有 ${changedCount} 项草稿修改` : '尚未修改当前规则'}<small>修改仅保留在当前项目页面会话中，批准后才会生效。</small></span><Button type={editingRule ? 'default' : 'primary'} disabled={Boolean(editingRule)} loading={busy} onClick={submit}>审阅全部变更</Button></div>
   </section>
 }
 
@@ -243,9 +249,6 @@ function localId(prefix: 'pactr' | 'pactn' | 'peff' | 'pperm') {
 
 function updateAction(setter: React.Dispatch<React.SetStateAction<DraftAction[]>>, itemId: string, patch: Partial<DraftAction>) { setter((items) => items.map((item) => item.item_id === itemId ? { ...item, ...patch } : item)) }
 function updateEffect(setter: React.Dispatch<React.SetStateAction<DraftAction[]>>, actionId: string, effectId: string, patch: Partial<DraftEffect>) { setter((items) => items.map((item) => item.item_id === actionId ? { ...item, effects: item.effects.map((effect) => effect.item_id === effectId ? { ...effect, ...patch } : effect) } : item)) }
-function updatePermission(setter: React.Dispatch<React.SetStateAction<BoundaryMaintenancePermissionDto[]>>, itemId: string, patch: Partial<BoundaryMaintenancePermissionDto>) { setter((items) => items.map((item) => item.item_id === itemId ? { ...item, ...patch } : item)) }
-function actorOption(item: BoundaryMaintenanceActorDto) { return { value: item.item_id, label: `${item.display_name || '尚未命名的主体'}${item.effective_state === 'RETIRED' ? '（停用）' : ''}` } }
-function actionOption(item: DraftAction) { return { value: item.item_id, label: `${item.display_name || '尚未命名的动作'}${item.effective_state === 'RETIRED' ? '（停用）' : ''}` } }
 function splitProjection(value: string) { return value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean) }
 function cleanAction(item: DraftAction): BoundaryMaintenanceActionDto { return { ...item, display_name: item.display_name.trim(), description: item.description.trim(), primary_resource_concept: item.primary_resource_concept.trim(), effects: item.effects.map((effect) => ({ ...effect, effect_kind: effect.effect_kind!, business_label: effect.business_label.trim(), resource_concept: effect.resource_concept.trim(), expected_state: effect.expected_state?.trim() || null, protected_projection: effect.effect_kind === 'DATA_DISCLOSURE' ? effect.protected_projection ?? [] : [], description: effect.description.trim() })) } }
 function implementationLabel(status: string) { return status === 'CURRENT' ? '当前有效' : status === 'MISSING' ? '缺少可验证证据' : '需要重新确认' }
@@ -264,3 +267,7 @@ const operationOptions: Array<{ value: BoundaryMaintenanceActionDto['operation_k
   { value: 'EXPORT', label: '导出' }, { value: 'ADMIN', label: '管理' }, { value: 'CUSTOM', label: '其他业务动作' },
 ]
 const effectOptions = Object.entries(effectKindLabels).map(([value, label]) => ({ value, label }))
+
+function newPermission(actorId: string, actionId: string, effects: string[]): BoundaryMaintenancePermissionDto {
+  return {item_id:localId('pperm'),intent_id:null,expected_current_revision:null,effective_state:'ACTIVE',subject_actor_item_id:actorId,resource_owner_actor_item_id:actorId,business_action_item_id:actionId,relation:'OWNS',expectation:'ALLOW',protected_effect_item_ids:effects}
+}

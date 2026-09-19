@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.database, pytest.mark.essential]
 ROOT = Path(__file__).resolve().parents[4]
 BASE_REVISION = "0001_business_boundary_v2"
 MAINTENANCE_REVISION = "0002_business_boundary_maintenance"
-CURRENT_REVISION = "0004_action_resource_ownership"
+CURRENT_REVISION = "0005_verification_loop_v3"
 LEGACY_REVISIONS = (
     "0001_web_v1",
     "0002_remove_contract_workbench",
@@ -175,7 +175,7 @@ def _upgrade_to_revision(database: Path, revision: str = MAINTENANCE_REVISION) -
     command.upgrade(config, revision)
 
 
-def test_fresh_database_reaches_111_head_idempotently(tmp_path: Path) -> None:
+def test_fresh_database_reaches_current_head_idempotently(tmp_path: Path) -> None:
     database = tmp_path / "current.db"
 
     upgrade_database(database)
@@ -185,13 +185,14 @@ def test_fresh_database_reaches_111_head_idempotently(tmp_path: Path) -> None:
     tables = _tables(database)
     assert _revision(database) == CURRENT_REVISION
     assert tables == set(Base.metadata.tables) | {"alembic_version"}
-    assert len(Base.metadata.tables) == 38
+    assert len(Base.metadata.tables) == 39
+    assert "check_publications" in tables
     assert BOUNDARY_TABLES <= tables
     assert not (FORBIDDEN_TABLES & tables)
     assert database.read_bytes() == first
 
 
-def test_application_recreates_111_after_explicit_database_deletion(tmp_path: Path) -> None:
+def test_application_recreates_current_database_after_explicit_deletion(tmp_path: Path) -> None:
     var_dir = tmp_path / "var"
     initial = ApplicationCore(var_dir)
     initial.close()
@@ -238,18 +239,19 @@ def test_current_revision_with_schema_drift_is_rejected_unchanged(tmp_path: Path
     _assert_rejected_without_modification(database, check_sidecars=False)
 
 
-def test_repository_contains_frozen_110_111_and_incremental_112_migrations() -> None:
+def test_repository_contains_frozen_migration_chain() -> None:
     versions = ROOT / "product" / "backend" / "migrations" / "versions"
     assert sorted(path.name for path in versions.glob("*.py")) == [
         "0001_business_boundary_v2.py",
         "0002_business_boundary_maintenance.py",
         "0003_action_assurance_recording.py",
         "0004_action_resource_ownership.py",
+        "0005_verification_loop_v3.py",
     ]
 
 
 def test_0002_business_data_upgrades_in_place_and_preserves_rows(tmp_path: Path) -> None:
-    database = tmp_path / "upgrade-110.db"
+    database = tmp_path / "upgrade-business-data.db"
     _upgrade_to_revision(database)
     actor_id = "bar_" + "1" * 32
     action_id = "bac_" + "2" * 32

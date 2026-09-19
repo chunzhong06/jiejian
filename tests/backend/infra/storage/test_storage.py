@@ -82,7 +82,7 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
         with engine.connect() as connection:
             assert connection.execute(
                 text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == "0006_repair_contract_reference"
+            ).scalar_one() == "0005_verification_loop_v3"
         recording_columns = {item["name"] for item in inspector.get_columns("recordings")}
         assert {"purpose", "parent_recording_id"} <= recording_columns
     finally:
@@ -238,8 +238,10 @@ def test_foreign_key_violation_really_fails(
                 insert(RunRow).values(
                     run_id=RUN_ID,
                     project_id="missing-project",
-                    contract_id="contract",
-                    contract_version=1,
+                    request_hash="b" * 64,
+                    plan_fingerprint="c" * 64,
+                    source_fingerprint="d" * 64,
+                    policy_epoch=3,
                     engine_version="0.1.0",
                     lifecycle="QUEUED",
                     verdict=None,

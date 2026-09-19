@@ -16,7 +16,7 @@ Observer 公共模型仍由 `product/protocols/observer/` 定义，独立 Invoca
 
 ## 保留实现参考（不适用于当前 CHECK 入口）
 
-以下为旧执行、Sample 和历史结果消费者的保留说明。其中 Contract、旧 Runner、ResultPresentation、Report、History、Gate、CLI/MCP 和前端路径仅描述该保留链，不声明当前 CHECK 已接通这些能力；维护当前链应使用首节入口。
+以下为保留 Observer 独立格式和底层消费者参考，不代表当前 GUI、CLI、MCP 或 sample-test 已装配旧结果链；当前 CHECK 使用首节协议。
 
 ### 先用 Bob 导出故事理解 Observer
 

@@ -17,7 +17,7 @@ from product.backend.workflows.checks.results import CheckResultReader
 from product.protocols.check_result import CheckRunnerProgress, canonical_check_document
 from product.protocols.check_runtime import parse_check_runtime
 from product.protocols.execution_v3 import PersistedExecutionRequestV3
-from tests.backend.infra.runtime.jobs.test_check_publication import package_parts, NOW
+from tests.fixtures.check_publication import package_parts, NOW
 from tests.fixtures.action_preparation import MemorySecretStore
 from tests.fixtures.check_plan import prepared_action
 from tests.fixtures.control_plane import create_app, TestClient

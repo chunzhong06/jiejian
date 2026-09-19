@@ -1,9 +1,9 @@
 // 当前检查工作区：准备、显式提交、有限状态刷新和只读故事共享同一项目事实。
-import { Alert, Button, Empty, List, Space, Spin, Typography } from 'antd'
+import { Alert, Button, Space, Spin, Typography } from 'antd'
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
 import { ApiError } from '../../api/http'
 import { currentChecksApi, type CheckPreview, type CheckStatus, type ResultStory } from '../../api/currentChecks'
-import { formatTimestamp, lifecycleLabel } from '../../app/presentation'
+import { lifecycleLabel } from '../../app/presentation'
 import { EditorialHeader, EditorialPage, FlowSpine } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { PreparationPage } from '../preparation/PreparationPage'
@@ -13,7 +13,7 @@ const verdictLabels = { PASS: '本次权限要求已得到验证', BLOCK: '已�
 const progressLabels = { PREPARING: '正在准备本次执行', EXECUTING: '正在执行并观察业务结果', FINALIZING: '正在核验并保存结果' }
 const active = (status: CheckStatus) => ['QUEUED', 'RUNNING'].includes(status.run.lifecycle)
 
-export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> & { requestedTaskId?: string | null; requestedRunId?: string | null; changeId?: string | null }) {
+export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> & { requestedTaskId?: string | null; requestedRunId?: string | null; requestedCaseId?: string | null; changeId?: string | null; onBackToHistory?: () => void }) {
   const { project, onError, onNavigate, requestedRunId, requestedTaskId, changeId } = props
   const [materials, setMaterials] = useState(Boolean(requestedTaskId))
   const [preview, setPreview] = useState<CheckPreview | null>(null)
@@ -118,6 +118,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       const submitted = await currentChecksApi.submit(projectId, pending.current.fingerprint, pending.current.key, changeId)
       if (!alive.current || currentProject.current !== projectId) return
       pending.current = undefined; setSubmissionUncertain(false)
+      props.onFeedback?.('检查请求已确认，可以离开此页后再查看结果。')
       setSelected(submitted.run.run_id)
       await refresh()
       void syncWorkspace(`submitted:${submitted.run.run_id}`)
@@ -138,13 +139,16 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     : preview?.can_execute ? { label: submissionUncertain ? '确认上次提交' : '开始检查', loading: busy, disabled: loading || readFailed, onClick: () => void start() }
     : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }
   return <EditorialPage label="权限验证工作区">
-    <EditorialHeader eyebrow="验证 · 原来的权限考题" title={headline}>
+    {selectedMode && <div className="result-return"><Button type="link" onClick={() => { if (props.onBackToHistory) props.onBackToHistory(); else onNavigate('/history') }}>← 返回检查记录</Button></div>}
+    <EditorialHeader eyebrow={selectedMode ? '检查历史 / 本轮结果' : '当前工作 / 权限检查'} title={headline}>
       {currentVerdict && <span className={`semantic-state ${currentVerdict === 'PASS' ? 'is-safe' : currentVerdict === 'BLOCK' ? 'is-danger' : 'is-warning'}`}>{currentVerdict === 'PASS' ? '验证通过' : currentVerdict === 'BLOCK' ? '发现权限问题' : '证据不足'}</span>}
     </EditorialHeader>
-    {!selectedMode && <section className="task-focus" aria-label="当前检查判断"><h2>本次将验证什么</h2>
-      {preview && <><p>本次范围包含 {preview.action_count} 项业务动作、{preview.case_count} 项验证。开始前会重新核对准备条件。</p><ul>{preview.actions.map((action) => <li key={action.action_id}>{props.workspace?.actions.find((item) => item.action_id === action.action_id && item.action_revision === action.action_revision)?.display_name ?? '本轮已确认的业务动作'} · 完整正常对照与拒绝验证</li>)}</ul></>}
+    {!selectedMode && <section className="task-focus" aria-label="当前检查判断"><p className="editorial-eyebrow task-focus-label">当前需要你做</p><h2>{running ? '查看本轮检查进展' : preview?.can_execute ? '确认范围，开始本轮检查' : '准备本轮验证材料'}</h2>
+      {props.workspace?.source_change && <p className="editorial-muted">最近代码变化：{props.workspace.source_change.reason} · {props.workspace.source_change.submitted_by || '来源未提供'}</p>}
+      {preview && <><p>本次范围包含 {preview.action_count} 项业务动作、{preview.case_count} 项验证。开始前会重新核对准备条件。</p><ul className="check-scope-list">{preview.actions.map((action) => <li key={action.action_id}><strong>{props.workspace?.actions.find((item) => item.action_id === action.action_id && item.action_revision === action.action_revision)?.display_name ?? '本轮已确认的业务动作'}</strong><span>正常对照与拒绝验证</span></li>)}</ul></>}
       <p className="editorial-muted">只有显式开始检查才会执行目标操作；材料齐备本身不是安全结论。</p>
-      {primaryAction && <Button type="primary" loading={busy} disabled={primaryAction.disabled} onClick={primaryAction.onClick}>{primaryAction.label}</Button>}
+      {primaryAction && <div className="task-focus-actions"><Button type="primary" size="large" loading={busy} disabled={primaryAction.disabled} onClick={primaryAction.onClick}>{primaryAction.label}</Button></div>}
+      <p className="task-next"><span>接下来</span>{running ? '执行结束后，查看已发布的结果与证据。' : preview?.can_execute ? '界鉴将执行本轮检查，并把结果保存在检查历史中。' : '按当前缺口准备材料，再核对本轮检查条件。'}</p>
     </section>}
     {selectedMode && status?.progress && !story && <FlowSpine label="本轮权限验证过程" steps={[
       {key:'prepare',title:'冻结本轮权限与测试材料',state:status.progress.phase === 'PREPARING' ? 'current' : 'complete',detail:<p>正在准备本次执行，尚无安全结论。</p>},
@@ -173,17 +177,13 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       setBusy(true)
       try { await currentChecksApi.cancel(status.job!.job_id); setRefreshEpoch(value => value + 1) } catch (error) { onError(error as ApiError) } finally { setBusy(false) }
     }}>{status.job.cancel_requested ? '正在停止检查' : '停止本次检查'}</Button>}
-    {selectedMode && story && <CurrentResultStory key={story.run_id} story={story} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }} />}
+    {selectedMode && story && <CurrentResultStory key={story.run_id} story={story} requestedCaseId={props.requestedCaseId} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }} />}
     {!selectedMode && <>
       <Button onClick={showMaterials} disabled={busy}>管理准备材料</Button>
       {preview && !preview.can_execute && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}
-      <section aria-label="检查记录"><Typography.Title level={4}>检查记录</Typography.Title>
-        <List dataSource={runs} locale={{ emptyText: <Empty description="尚无检查记录" /> }} renderItem={(item) => <List.Item actions={[<Button key="open" onClick={() => setSelected(item.run.run_id)}>查看{active(item) ? '进度' : '结果'}</Button>]}>
-          <List.Item.Meta title={item.result_integrity === 'VALID' && item.run.verdict ? verdictLabels[item.run.verdict] : item.result_integrity === 'INVALID' ? '结果完整性校验失败' : lifecycleLabel(item.run.lifecycle)} description={`${formatTimestamp(item.run.created_at_us)} · 权限版本 ${item.run.policy_epoch}`} />
-        </List.Item>} />
-      </section>
+      <Button type="link" onClick={() => onNavigate('/history')}>查看全部检查历史</Button>
     </>}
-    <TaskActionBar back={{ label: selectedMode ? '返回检查总览' : '返回工作台', disabled: busy, onClick: () => { if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate('/workspace') } }}
+    <TaskActionBar back={{ label: props.onBackToHistory ? '返回检查历史' : '返回当前工作', disabled: busy, onClick: () => { if (props.onBackToHistory) props.onBackToHistory(); else if (selectedMode) { setSelected(undefined); void refresh() } else onNavigate('/workspace') } }}
       refresh={{ label: selectedMode ? '刷新检查结果' : '刷新检查条件', loading: loading || busy, onClick: () => { if (selectedMode) setRefreshEpoch((value) => value + 1); else void refresh() } }}
       />
   </EditorialPage>

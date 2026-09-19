@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Space, Tag, Typography } from 'antd'
 import type { RecordingDto, RecordingJobDto } from '../../api/recordings'
-import type { JobEventDto } from '../../api/runs'
+import type { JobEventDto } from '../../api/jobs'
 import { browserState } from '../../app/browserState'
 import { lifecycleLabel } from '../../app/presentation'
 

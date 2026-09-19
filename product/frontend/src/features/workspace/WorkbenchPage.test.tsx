@@ -56,7 +56,7 @@ describe('WorkbenchPage', () => {
     const latest = { run_id: 'r1', verdict: 'PASS' as const, summary: '上次结果通过', policy_epoch: 1, created_at_us: 1 }
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用' }} workspace={{ ...workspace, primary_task: { ...workspace.primary_task!, can_execute: false }, latest_result: latest }} systemStatus={systemStatus} experience={experience} onNavigate={vi.fn()} />)
     expect(screen.getByRole('button', { name: workspace.primary_task!.title })).toBeDisabled()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(workspace.primary_task!.why_now)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('当前工作'); expect(screen.getByText(workspace.primary_task!.why_now)).toBeInTheDocument()
     expect(document.querySelectorAll('.ant-btn-primary')).toHaveLength(1)
     expect(document.querySelector('.ant-card')).not.toBeInTheDocument()
   })
@@ -65,9 +65,9 @@ describe('WorkbenchPage', () => {
     const onNavigate = vi.fn()
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用' }} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={onNavigate} />)
 
-    expect(screen.getByRole('heading', { name: '当前动作已形成新 revision。' })).toBeInTheDocument()
+    expect(screen.getByText('当前动作已形成新 revision。')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '重新确认“导出交付包”的权限' })).toBeInTheDocument()
-    expect(screen.getByText('系统接下来会：保存新的权限 revision。')).toBeInTheDocument()
+    expect(screen.getByText('保存新的权限 revision。')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '重新确认“导出交付包”的权限' }))
     expect(onNavigate).toHaveBeenCalledWith('/permissions')
   })

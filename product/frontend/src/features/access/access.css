@@ -9,6 +9,7 @@
 .access-progress .task-sequence-step::after { display: none; }
 .access-progress .task-sequence-step.is-current { background: transparent; }
 .application-step .ant-card-body { display: grid; gap: 20px; }
+.application-setup > .application-step { background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-large);padding:var(--space-24); }
 .endpoint-list { width: 100%; }
 .application-discovery { display: grid; gap: var(--space-8); }
 .application-understanding-grid { display: grid; gap: var(--space-16); grid-template-columns: repeat(2, minmax(0, 1fr)); }

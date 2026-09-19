@@ -53,7 +53,7 @@ ApplicationCore 冻结请求并创建 Job
   → 原子 publication / Job 终态
 ```
 
-Run/Job 生命周期说明执行是否完成；RunnerResult 保存 attempt 结果与主错误；Evidence/Verification 保存安全事实。Runner progress 是可删除、非权威、受限 JSONL，只给 GUI 显示阶段，不参与完成、发布或恢复。
+Run/Job 生命周期说明执行是否完成；RunnerResult 保存 attempt 结果与主错误；Evidence/Verification 保存安全事实。当前 CHECK progress.json 是可删除、非权威的有界展示旁路，只给 GUI 显示阶段，不参与完成、发布或恢复；旧 Runner 的 JSONL 不作为当前 CHECK 输入。
 
 长时多阶段任务必须输出稳定边界并 flush；能提供真实进度时有界流式输出，没有时说明当前阶段和静默上限。失败证据保留所属 phase，cleanup 结果单独记录，避免“进程仍运行但用户看不到状态”的黑箱。
 
@@ -63,7 +63,7 @@ Run/Job 生命周期说明执行是否完成；RunnerResult 保存 attempt 结�
 | 子进程存活与退出 | `runtime/process`、Supervisor 持有的进程句柄 | 不能由 Job 文本状态推断 |
 | Runner 业务结果 | 当前 attempt 的 RunnerResult/staging | 不能由 exit code 单独推断 PASS/BLOCK |
 | 已发布 Evidence/Report | 通过 manifest/hash 的 publication | 不能读取 staging 或孤儿文件替代 |
-| GUI 进度 | 有界 `progress.jsonl` 旁路 | 可丢失，不参与恢复和最终化 |
+| GUI 进度 | 当前 CHECK 有界 `progress.json` 旁路 | 可丢失，不参与恢复和最终化 |
 
 ## 必须保持的边界
 

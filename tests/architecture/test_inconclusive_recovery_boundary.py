@@ -1,112 +1,97 @@
-# 保护证据不足恢复只读投影、历史发布不可变与前端零重算边界。
-
+# 保护当前结果 API 的只读转发、Evidence 不可变与目标执行隔离。
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
+import pytest
+
+from product.backend.api.routers.results import build_results_router
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "product/backend"
-CONTROL = BACKEND / "workflows/control.py"
-RESULTS_ROUTER = BACKEND / "api/routers/results.py"
-RESULT_WORKFLOWS = BACKEND / "workflows/results"
-VERIFICATION = BACKEND / "core/verification"
-RESULT_PAGE = ROOT / "product/frontend/src/features/checks/CheckResultsPage.tsx"
-CONTROL_SHELL = ROOT / "product/frontend/src/app/ControlShell.tsx"
+READ_MODELS = tuple(BACKEND / path for path in (
+    "workflows/checks/results.py", "workflows/checks/story.py",
+    "workflows/checks/repair.py", "workflows/projects/repair.py",
+))
 
 
-def _imports(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    result: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            result.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            result.add(node.module)
-    return result
+def _tree(path: Path) -> ast.Module:
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
-def _router_operations(path: Path) -> tuple[tuple[str, str], ...]:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    operations: list[tuple[str, str]] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        for decorator in node.decorator_list:
-            if (
-                isinstance(decorator, ast.Call)
-                and isinstance(decorator.func, ast.Attribute)
-                and decorator.args
-                and isinstance(decorator.args[0], ast.Constant)
-                and isinstance(decorator.args[0].value, str)
-            ):
-                operations.append((decorator.func.attr, decorator.args[0].value))
-    return tuple(operations)
+def test_result_router_only_registers_current_read_resources() -> None:
+    router = build_results_router(SimpleNamespace())
+    assert {(route.path, frozenset(route.methods)) for route in router.routes} == {
+        (f"/api/runs/{{run_id}}/{suffix}", frozenset({"GET"}))
+        for suffix in ("repair-contracts", "result-story", "evidence", "evidence/{evidence_id}")
+    }
 
 
-def test_published_evidence_routes_are_read_only() -> None:
-    evidence_operations = tuple(
-        (method, route)
-        for method, route in _router_operations(RESULTS_ROUTER)
-        if "/evidence" in route
-    )
-
-    assert evidence_operations
-    assert all(method == "get" for method, _route in evidence_operations)
+@pytest.mark.parametrize("suffix,service,method,args,is_list", [
+    ("repair-contracts", "check_repairs", "contracts", ("run-a",), True),
+    ("result-story", "check_story", "build", ("run-a",), False),
+    ("evidence", "check_results", "evidence_index", ("run-a",), True),
+    ("evidence/{evidence_id}", "check_results", "evidence", ("run-a", "evidence-a"), False),
+])
+def test_result_routes_forward_exact_references(suffix, service, method, args, is_list) -> None:
+    # 直接调用已注册 endpoint，不启动 HTTP 服务或真实 Reader。
+    document = Mock(spec=["model_dump"])
+    document.model_dump.return_value = {"fact": "published-only"}
+    read = Mock(return_value=(document,) if is_list else document)
+    context = SimpleNamespace(**{service: SimpleNamespace(**{method: read})})
+    route = next(item for item in build_results_router(context).routes if item.path.endswith("/" + suffix))
+    response = route.endpoint(*args)
+    read.assert_called_once_with(*args)
+    document.model_dump.assert_called_once_with(mode="json")
+    expected = [{"fact": "published-only"}] if is_list else {"fact": "published-only"}
+    assert json.loads(response.body) == {"schema_version": "1", "data": expected}
 
 
 def test_no_api_mutator_targets_old_evidence_or_verdict() -> None:
-    forbidden_targets = ("evidence", "supplement", "amend", "old-run", "verdict")
+    forbidden = ("evidence", "supplement", "amend", "old-run", "verdict")
     for path in (BACKEND / "api/routers").rglob("*.py"):
-        for method, route in _router_operations(path):
-            if method not in {"post", "put", "patch", "delete"}:
+        for node in ast.walk(_tree(path)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            assert not any(token in route.casefold() for token in forbidden_targets), (
-                path,
-                method,
-                route,
-            )
+            for decorator in node.decorator_list:
+                if (isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr in {"post", "put", "patch", "delete"}
+                    and decorator.args and isinstance(decorator.args[0], ast.Constant)):
+                    assert not any(token in str(decorator.args[0].value).casefold() for token in forbidden), path
 
 
-def test_recovery_and_result_read_models_do_not_reach_target_observers() -> None:
+def test_current_read_models_do_not_execute_targets_or_write_facts() -> None:
     forbidden = (
-        "product.backend.infra.observers",
-        "product.backend.infra.runtime.runner",
-        "product.backend.infra.execution",
-        "httpx",
-        "playwright",
+        "product.backend.infra.observers", "product.backend.infra.execution",
+        "product.backend.infra.runtime.runner", "product.backend.infra.runtime.check_runner",
+        "product.backend.infra.llm", "httpx", "playwright", "subprocess",
     )
-    paths = (CONTROL, *RESULT_WORKFLOWS.rglob("*.py"))
-    for path in paths:
-        imports = _imports(path)
-        assert not {
-            name
-            for name in imports
-            if any(name == prefix or name.startswith(prefix + ".") for prefix in forbidden)
-        }, path
+    for path in READ_MODELS:
+        imports = set()
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Import):
+                imports.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imports.add(node.module)
+                assert not {alias.name for alias in node.names} & {
+                    "evaluate_check_case", "aggregate_check_verdict",
+                }, path
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                assert node.func.id not in {"evaluate_check_case", "aggregate_check_verdict"}, path
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                # 内存集合的 append/update 不是持久化写入。
+                assert node.func.attr not in {
+                    "commit", "flush", "execute", "submit", "approve", "write_text", "write_bytes",
+                    "run_job", "publish", "unlink", "mkdir",
+                    "evaluate_check_case", "aggregate_check_verdict",
+                }, (path, node.func.attr)
+        assert not {name for name in imports if any(name == p or name.startswith(p + ".") for p in forbidden)}, path
 
 
-def test_verification_never_calls_action_asset_inspection() -> None:
-    paths = (*VERIFICATION.rglob("*.py"), *RESULT_WORKFLOWS.rglob("*.py"))
-    assert not [
-        path
-        for path in paths
-        if "inspect_action" in path.read_text(encoding="utf-8")
-    ]
-
-
-def test_frontend_only_renders_backend_recovery_projection() -> None:
-    result_page = RESULT_PAGE.read_text(encoding="utf-8")
-    shell = CONTROL_SHELL.read_text(encoding="utf-8")
-
-    assert "inconclusiveRecovery.next_path" in result_page
-    assert "inconclusiveRecovery.next_label" in result_page
-    assert "inconclusiveRecovery={status?.inconclusive_recovery}" in shell
-    for forbidden in (
-        "ORIGINAL_PERMISSION_INTENT_CHANGED",
-        "intent_hash",
-        "policy_fingerprint",
-        "完善真实结果确认方式",
-    ):
-        assert forbidden not in result_page
+def test_verification_and_read_models_do_not_inspect_live_action_assets() -> None:
+    for path in (*READ_MODELS, *(BACKEND / "core/verification").rglob("*.py")):
+        assert "inspect_action" not in path.read_text(encoding="utf-8"), path

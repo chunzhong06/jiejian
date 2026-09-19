@@ -66,11 +66,11 @@ describe('TestIdentityPage', () => {
       status: 'PREPARED', message: '测试账号登录状态已安全保存', error_code: null,
       log_path: 'D:/sample/var/logs/identity-preparations/prep.log',
     })
-    const props = pageProps()
+    const props = { ...pageProps(), onPrepared: vi.fn() }
     render(<TestIdentityPage {...props} />)
     fireEvent.click(await screen.findByRole('button', { name: '打开登录浏览器' }))
-    expect(await screen.findByText('不要关闭这个窗口')).toBeInTheDocument()
-    expect(screen.getByText('在新窗口完成登录')).toBeInTheDocument()
+    expect(await screen.findByText('保存完成前，请保持登录窗口打开。')).toBeInTheDocument()
+    expect(screen.getByText('在已打开的浏览器中完成登录')).toBeInTheDocument()
     const confirm = await screen.findByRole('button', { name: '我已完成登录' })
     expect(testIdentitiesApi.confirmPreparation).not.toHaveBeenCalled()
     fireEvent.click(confirm)
@@ -78,7 +78,7 @@ describe('TestIdentityPage', () => {
     expect(await screen.findByText('登录状态已准备；界鉴没有保存你的密码')).toBeInTheDocument()
     const header = screen.getByRole('heading', { name: '管理当前测试账号' }).closest('header')!
     expect(screen.getByRole('button', { name: '查看下一项准备' })).toBeInTheDocument()
-    expect(props.onStateChanged).toHaveBeenCalled()
+    expect(props.onStateChanged).toHaveBeenCalled(); expect(props.onPrepared).toHaveBeenCalledTimes(1)
     expect(header).not.toHaveTextContent('完成当前登录准备')
     expect(header).not.toHaveTextContent('继续准备')
   })
@@ -94,10 +94,10 @@ describe('TestIdentityPage', () => {
       status: 'SAVING', message: '正在保存', error_code: null,
       log_path: 'D:/sample/var/logs/identity-preparations/prep.log',
     })
-    render(<TestIdentityPage {...pageProps()} />)
+    const onPrepared = vi.fn(); render(<TestIdentityPage {...pageProps()} onPrepared={onPrepared} />)
     fireEvent.click(await screen.findByRole('button', { name: '打开登录浏览器' }))
     fireEvent.click(await screen.findByRole('button', { name: '我已完成登录' }))
-    expect(await screen.findByText('正在安全保存这个应用所需的登录状态…')).toBeInTheDocument()
+    expect(await screen.findByText('正在安全保存这个应用所需的登录状态…')).toBeInTheDocument(); expect(onPrepared).not.toHaveBeenCalled()
   })
 
   it('刷新账号状态只重新读取权限组和账号事实', async () => {

@@ -8,6 +8,7 @@ import type {
   PermissionIntentRevisionDto,
 } from './businessBoundaries'
 import { request } from './http'
+import type { CheckStatus } from './currentChecks'
 import type { ProjectRepair } from './repairs'
 
 export type WorkspaceProjectDto = {
@@ -105,8 +106,9 @@ export type WorkspaceViewDto = {
   primary_task: PrimaryTaskDto | null
   areas: WorkspaceAreaDto[]
   latest_result?: { run_id: string; verdict: 'PASS' | 'BLOCK' | 'INCONCLUSIVE'; summary: string; policy_epoch: number; created_at_us: number } | null
-  source_change?: { change_id: string; revalidation_status: string; can_execute: boolean; reason: string; created_at_us: number } | null
+  source_change?: { change_id: string; revalidation_status: string; can_execute: boolean; reason: string; created_at_us: number; submitted_by?: string | null } | null
   repair?: ProjectRepair | null
+  active_check?: CheckStatus | null
 }
 
 export const workspaceApi = {

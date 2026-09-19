@@ -338,7 +338,7 @@ def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
         run_id = "run_" + "9" * 32
         entry = SimpleNamespace(result_integrity="VALID", run=SimpleNamespace(run_id=run_id, policy_epoch=core.business_boundaries.view(project).policy_epoch, verdict=RunVerdict.PASS, created_at_us=1))
         core.workspace.set_current_checks(checks=core.checks,
-            reader=SimpleNamespace(list_for_project=lambda _: (entry,) if kind == "VIEW_CURRENT_RESULT" else (),
+            reader=SimpleNamespace(active_for_project=lambda _: None, list_for_project=lambda _: (entry,) if kind == "VIEW_CURRENT_RESULT" else (),
                 package=lambda *args, **kwargs: SimpleNamespace(request=SimpleNamespace(source_fingerprint=understanding.source_fingerprint))),
             changes=SimpleNamespace(latest=lambda _: None), repairs=SimpleNamespace(evaluate=lambda _: repair),
             source_inspector=lambda _: "changed" if kind == "REGISTER_SOURCE_CHANGE" else understanding.source_fingerprint)

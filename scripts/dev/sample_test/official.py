@@ -80,6 +80,10 @@ class HarnessState:
     active_run_job_id: str | None = None
     sample_started: bool = False
     product_ready: bool = False
+    mcp_project_id: str | None = None
+    mcp_created_pairing: bool = False
+    mcp_cleanup_pending: bool = False
+    mcp_forget_attempted: bool = False
 
 
 def _required_mapping(value: object, label: str) -> Mapping[str, object]:
@@ -432,6 +436,16 @@ def _write_summary(audit_dir: Path, payload: dict[str, object]) -> None:
     os.replace(temporary, path)
 
 
+def _gui_complete(records, *, stop_after_setup=False):
+    required = {"start", "human-approve", "prepare", "exit"}
+    if not stop_after_setup:
+        required |= {"submit-check", "problem-result", "limited-result", "fixed-result", "evidence-and-repair",
+            "decisive-evidence", "execution-path", "history-search", "history-return", "mcp-connected",
+            "mcp-level-read", "mcp-level-prepare", "mcp-level-execute", "mcp-change", "mcp-completion",
+            "mcp-responsibility", "mcp-cleanup"}
+    return required.issubset({item["event"] for item in records if item.get("status") == "PASSED"})
+
+
 def _failure_identity(error: Exception) -> tuple[str, str]:
     """把主错误压缩成稳定、无秘密的审计字段。"""
 
@@ -449,6 +463,7 @@ def _cleanup_after_failure(
     client: ApiClient,
     state: HarnessState,
     identities: Mapping[str, str],
+    gui=None,
 ) -> dict[str, object]:
     """按公开 API 收口身份、Sample 和控制面，不覆盖首个失败。"""
 
@@ -471,8 +486,17 @@ def _cleanup_after_failure(
             _wait_for(lambda: client.call("GET", f"/api/runs/{state.active_run_id}"),
                 lambda item: (item.get("job") or {}).get("state") in {"SUCCEEDED", "FAILED", "CANCELLED"},
                 timeout=30, label="取消本次检查")
+            state.active_run_id = state.active_run_job_id = None
         except Exception as error:
             report["check_cleanup_error"] = type(error).__name__
+            report["state_closed"] = False
+    if state.mcp_cleanup_pending:
+        try:
+            from .current_mcp import cleanup
+            cleanup(client, gui, state)
+            actions.append("mcp.cleanup")
+        except Exception as error:
+            report["mcp_cleanup_error"] = type(error).__name__
             report["state_closed"] = False
     for identity_id in identities.values():
         try:
@@ -636,6 +660,7 @@ def run(
     project_id = ""
     primary_failure: Exception | None = None
     failure_cleanup: dict[str, object] = {}
+    gui = None
     try:
         _phase(state, 1)
         process, log = _start_product(root, var_dir)
@@ -695,17 +720,21 @@ def run(
         page.goto(client.origin + "/#/tests", wait_until="networkidle")
         if not stop_after_setup:
             checkpoint("evidence-and-repair", {"project_id": project_id, "runs": runs})
+            from .current_mcp import run as run_mcp
+            mcp_evidence = run_mcp(client, gui, project_id, runs, state)
+        else:
+            mcp_evidence = None
         _phase(state, 8)
         _shutdown_owned_runtime(client, state, identities, browser, playwright, process, var_dir, sample_port, shutdown_action=gui.shutdown)
         browser = None
         playwright = None
         process = None
         state.product_ready = False
-        required_gui = {"start", "human-approve", "prepare", "exit"} | (set() if stop_after_setup else {"submit-check", "problem-result", "limited-result", "fixed-result", "evidence-and-repair"})
-        gui_complete = required_gui.issubset({item["event"] for item in gui.records if item.get("status") == "PASSED"})
+        gui_complete = _gui_complete(gui.records, stop_after_setup=stop_after_setup)
         _write_summary(audit_dir, {"schema_version": "1", "project_id": project_id,
             "scenario_versions": [] if stop_after_setup else ["VULNERABLE", "EVIDENCE_LIMITED", "FIXED"],
             "runs": [{"run_id": item["run_id"], "verdict": item["story"]["verdict"]} for item in runs],
+            "mcp_evidence": mcp_evidence, "total_run_count": 0 if stop_after_setup else 4,
             "read_projections": ["ResultStory", "Evidence", "RunHistory", "ProjectRepair"],
             "gui_status": "PASSED" if gui_complete else "GUI_INTEGRATION_INCOMPLETE", "gui_checkpoints": gui.records,
             "control_port_closed": True, "sample_port_closed": True, "owned_process_tree_closed": True})
@@ -715,7 +744,7 @@ def run(
     except Exception as error:
         primary_failure = error
         try:
-            failure_cleanup = _cleanup_after_failure(client, state, identities)
+            failure_cleanup = _cleanup_after_failure(client, state, identities, gui=gui)
         except Exception as cleanup_error:
             failure_cleanup = {"cleanup_error": type(cleanup_error).__name__}
     finally:

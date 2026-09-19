@@ -147,17 +147,19 @@ class WorkspaceService:
                 for item in actor_views
             )
         )
-        latest_result,source_change,repair = None,None,None
+        latest_result,source_change,repair,active_check = None,None,None,None
         if self._current_checks is not None:
             from product.backend.workflows.workspace.models import WorkspaceLatestResult, WorkspaceSourceChange
             from product.backend.workflows.checks.repair_text import CURRENT_TASK_TEXT
             from product.backend.workflows.checks.story_text import JUDGEMENTS
             checks,reader,changes,repairs,source_inspector = self._current_checks
+            active_check = reader.active_for_project(project_id)
             change = changes.latest(project_id)
             if change is not None:
                 source_change = WorkspaceSourceChange(change_id=change.manifest.change_id,
                     revalidation_status=change.revalidation.status,can_execute=change.revalidation.can_execute,
-                    reason=change.manifest.reason,created_at_us=change.manifest.created_at_us)
+                    reason=change.manifest.reason,created_at_us=change.manifest.created_at_us,
+                    submitted_by=change.manifest.submitted_by)
             repair = repairs.evaluate(project_id)
             for entry in reader.list_for_project(project_id):
                 if entry.result_integrity != "VALID" or entry.run.policy_epoch != boundary.policy_epoch:
@@ -196,7 +198,7 @@ class WorkspaceService:
             actions=action_views,
             primary_task=primary_task,
             areas=self._areas(boundary_attention, preparation.preparation_complete),
-            latest_result=latest_result,source_change=source_change,repair=repair,
+            latest_result=latest_result,source_change=source_change,repair=repair,active_check=active_check,
         )
 
     def _preparation_task(self, boundary, preparation, understanding):

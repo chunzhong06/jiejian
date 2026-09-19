@@ -458,3 +458,32 @@ def test_new_initial_and_maintenance_relation_writes_are_rejected_without_side_e
         assert core.business_boundaries.proposals(project_id, pending_only=True).proposals == ()
     finally:
         core.close()
+
+
+def test_active_check_and_change_source_do_not_change_primary_task(tmp_path, monkeypatch):
+    from sqlalchemy import text
+    from product.backend.core.lifecycle import RunLifecycle
+    from product.backend.infra.storage import RunRecord
+    core, project = _core(tmp_path)
+    try:
+        before = core.workspace.get(project)
+        assert before.active_check is None and before.source_change is None
+        with core.uow_factory() as work:
+            work.runs.add(RunRecord(run_id="run_"+"1"*32, project_id=project, request_hash="a"*64,
+                plan_fingerprint="b"*64, source_fingerprint="c"*64, policy_epoch=0, engine_version="test",
+                lifecycle=RunLifecycle.QUEUED, created_at_us=1, updated_at_us=1))
+            work.commit()
+        monkeypatch.setattr(core.source_changes, "latest", lambda _: SimpleNamespace(
+            manifest=SimpleNamespace(change_id="chg_"+"1"*32, reason="已登记的变化", created_at_us=1, submitted_by="MCP"),
+            revalidation=SimpleNamespace(status="READY", can_execute=True)))
+        active = core.workspace.get(project)
+        assert active.active_check.run.run_id == "run_"+"1"*32
+        assert active.source_change.submitted_by == "MCP"
+        assert active.primary_task == before.primary_task
+        with core.uow_factory() as work:
+            work._require_session().execute(text("UPDATE runs SET lifecycle='CANCELLED' WHERE run_id=:id"), {"id": "run_"+"1"*32})
+            work.commit()
+        after = core.workspace.get(project)
+        assert after.active_check is None and after.primary_task == before.primary_task
+    finally:
+        core.close()

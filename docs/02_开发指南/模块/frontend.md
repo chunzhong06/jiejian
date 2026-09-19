@@ -16,15 +16,17 @@
 | --- | --- | --- |
 | `product/frontend/src/app/` | ControlShell、正式路由、项目切换、亮暗主题、全局状态恢复、错误与通知 | 各业务页面内部实现、后端事实重算 |
 | `product/frontend/src/api/` | 当前 loopback DTO、request/envelope、资源 client | 浏览器存储秘密、兼容旧 DTO |
-| `product/frontend/src/features/` | workspace、changes、access、preparation、identities、recording、checks、presentation、settings、system 用户任务 | 跨任务真源和通用基础设施 |
+| `product/frontend/src/features/` | workspace、changes、access、preparation、identities、recording、testing、boundaries、tools、settings、system 用户任务 | 跨任务真源和通用基础设施 |
 | `product/frontend/src/shared/ui/`、`product/frontend/src/shared/styles/` | 唯一视觉 token、编辑式任务骨架与共享排版 | 权限、任务优先级和安全结论 |
 | `product/frontend/src/components/` | 导航、页头、状态提示、通用状态与可访问组件 | 业务规则、API 写入副作用 |
 | `product/frontend/package.json`、`product/frontend/tsconfig*.json` | 源码依赖/类型/构建合同 | 产品版本真源、node_modules 或 dist |
 | `var/development/frontend/` | 受控 Node/pnpm、workspace、依赖与不可变 build | Git 管理源码、产品运行数据 |
 
-普通工作区导航依次为工作台、权限、验证、变化与修复。工作台突出服务端唯一 PrimaryTask，历史结果仅作上下文，不使用统计或并列摘要格。`/permissions` 接入 `BusinessBoundaryPage` 与 `BoundaryMaintenanceEditor`；`/tests` 装配 `CurrentTestsPage`，用精确 run_id/change_id 在准备材料、显式检查、进度与已发布结果间续接。准备材料通过精确 `task_id` 直达 `PreparationPage` 当前缺口，完成后从 Workspace 权威刷新取得下一任务，再进入受控身份/录制。`/changes` 使用当前 SourceChange 与 ProjectRepair 投影登记声明、核对真实差异和复验原题；结果完整性失效时撤下安全结论。`OfficialSamplePanel` 只控制启动、重置、停止及中性版本条件，不承载审批、材料安装或检查判断。仅当真实活动 experience 的 project_id 与当前项目一致时，ControlShell 向普通权限页和 Preparation 提供可选预置输入；采用提案仍走同一 Proposal/Human Approval，采用材料后重读 Preparation/Workspace，再到普通验证入口显式检查；`ToolsPage` 只在当前项目与 serve 授予有限 MCP 能力。旧 Run/Profile/ResultPresentation writer 不进入当前链。
+一级导航是 `/workspace 当前工作`、`/permissions 权限规则`、`/changes 代码变化`、`/history 检查历史`。系统状态入口位于桌面导航左下角和窄屏菜单底部，统一进入系统详情；顶部更多菜单不重复此入口。当前工作直接装配服务端 PrimaryTask 指向的权限、应用或 CurrentTestsPage；`/tests` 与 `/changes` 保留精确 task/run/change/repair 深链。权限编辑从主任务和自由入口共用同一页面。权限总览按动作索引展示规则摘要，业务定义单独管理；单条编辑先保存到浏览器会话草稿，再统一生成待审提案并显式批准。代码变化以记录列表与当前详情组织，区分 Agent 声明、实际源码变化和原题复验；示例环境控制只展开一层。Preparation 只展开当前缺口，其他有效材料保留；成功回执和后续同步失败分开。OfficialSamplePanel 仅提供中性环境管理，普通 Proposal/Human Approval、材料采用和显式检查仍是唯一业务入口。ToolsPage 管理连接与逐项目临时授权，不把连接当作正在执行。
 
-`ResultStory` 分开呈现人的规则与已发布机器事实，以 01/02/03 顺序组织说明，并用问题式 Evidence Drawer 展开证据；证据读取失败时撤下整轮结果。Changes 使用时间流，通用 `RepairComparison` 展示真实合同中的全部义务；控制与回归引用同一 Case 时仍分别保留角色，单行 SAFE 不代表原题总体验证完成。
+`CurrentResultStory` 默认展示所选 Case 的已发布执行路径，缺 Trace 时保留事实对照；仅布局显式父边，不从 HTTP、时间或效果事实补因果。桌面 Evidence 为不改变画布尺寸的 complementary 浮层，优先放在右侧并避开所选事实，窄屏为 dialog；来源证据继续回答四问，节点证据说明所选位置及承载文档。修复要求按需展开，RepairComparison 保留 DENY、SELECTED_ALLOW 和全部 REGRESSION，普通 PASS 不等于原题 VERIFIED。历史从 project → exact Run → exact Case → Evidence 下钻，返回保留筛选与位置；协议见[当前 CHECK 只读投影](../../03_参考手册/协议/控制面与Machine输出协议.md#当前-check-历史与执行路径)。
+
+`api/currentChecks.ts` 负责当前 CHECK；`api/jobs.ts` 仅提供录制取消 Job 和 JobEventDto。旧 checks 页面与旧结果客户端已删除，旧 URL 只给不可用页。后台通知由 `app/useCheckActivity.ts` 提供，项目内会话由 `app/RetainedWorkPages.tsx` 保留。
 
 精确组件和类型见[前端自动代码参考](../../03_参考手册/代码/frontend.md)。
 
@@ -44,15 +46,14 @@
 | 修改 Agent 变化与待办 | `features/changes/ChangesPage.tsx`、`api/sourceChanges.ts` | [修改 Agent 变更影响](../任务/修改Agent变更影响.md)；Workbench、ControlShell 与后端 change 测试 |
 | 修改测试模块总览与当前结果 | `features/testing/CurrentTestsPage.tsx`、`CurrentResultStory.tsx`、`api/currentChecks.ts` | CurrentTestsPage 与 ControlShell 路由测试；服务端预览门禁、提交幂等、陈旧响应与证据完整性 |
 | 修改测试准备总览 | `features/preparation/PreparationPage.tsx`、`api/preparation.ts` | PreparationView、Workspace PrimaryTask、页面直接测试与 ControlShell 权威刷新测试 |
-| 修改保留的验证/结果组件 | `features/checks/` | 先确认当前路由是否接入；不得把旧 permissions mode 恢复为 Human Approval 入口 |
-| 修改结果、历史、Evidence 或报告 | `features/checks/CheckResultsPage.tsx`、`CheckHistoryPage.tsx`、`EvidenceTimeline.tsx`、`ReportPanel.tsx` | [修改结果与报告](../任务/修改结果与报告.md)；对应单文件测试 |
+| 修改当前结果、历史与 Evidence | `features/testing/CurrentResultStory.tsx`、`ExecutionPath.tsx`、`CheckHistoryPage.tsx` | [修改结果与报告](../任务/修改结果与报告.md)；对应单文件测试 |
 | 修改模型或运行环境设置 | `features/settings/`、`features/system/` | settings/system 组件与对应 API 测试 |
 | 修改样式、响应式或可访问性 | 所属 feature CSS/TSX 与 `product/frontend/src/components/` | 定向 Vitest；生产 build；展示验收 |
 | 修改依赖或构建 | `product/frontend/package.json`、`product/frontend/pnpm-lock.yaml`、`scripts/dev/frontend.ps1` | `dev.ps1 frontend-test`、`prepare -ForcePrepare` |
 
 ## 事实与页面状态
 
-`WorkspaceService` 决定区域状态、动作级摘要和唯一 `PrimaryTask`；`BusinessBoundaryView` 决定正式 Actor/Action/Effect/Permission，维护草稿完整保留 stable identity，`BoundaryProposalView.change_summary` 决定待审变化说明。当前检查由 CheckPreview、CheckRunStatus 和 ResultStory 分别提供准备门禁、执行状态和已发布结果；前端可以保留临时选择，但正式事实必须刷新 API。旧 ResultPresentation 与 HistoryView 不属于当前检查入口。
+`WorkspaceService` 决定唯一 PrimaryTask；active_check 仅投影同项目最新活动 Run，source_change.submitted_by 原样表示登记来源。CheckPreview、CheckRunStatus、ResultStory 分别负责门禁、生命周期和已发布结论。RetainedWorkPages 在当前项目页面会话内保留工作输入、权限草稿、历史筛选和位置；项目切换或明确重试重建，不用 localStorage 持久化这些状态，也不保留设置/密钥页面。Evidence Portal 离开页面必须关闭。后台完成只提供通知，不自动导航；短检查通过新的 latest_result 精确回读确认，首次加载已有结果不提示刚完成。
 
 所有写操作要有清楚的 busy、成功、失败和恢复路径。需要长时间的多阶段过程必须展示稳定阶段边界，服务端有进度时流式呈现；没有权威进度时说明当前阶段和静默上限，不伪造百分比。首个主错误保留，cleanup warning 单独展示。
 
@@ -74,9 +75,9 @@
 - 真正 `<button>`、label、dialog 和状态文本保持可访问；自动 L5 通过 UI Automation InvokePattern 操作正式按钮，不为测试增加隐藏入口。
 - `product/frontend` 只保存源码/配置，禁止 node_modules、dist、测试缓存和 tsbuildinfo。
 - Workbench 不常驻显示产品版本；只在系统设置等明确诊断位置展示。
-- 桌面侧栏固定 224px，只承载四个产品区域；顶部固定 52px，承载应用切换、活动任务、AI 工具连接和“设置与更多”。AI 辅助、系统状态、模型、主题与安全退出都位于该菜单，退出是最后一项；菜单关闭后不得保留撑宽文档的旧浮层。
+- 布局唯一真源是 tokens.ts：导航 200px、顶部 60px、窄屏摘要 52px、内容最大 1460px。中性浅灰/白完整工作面、有限深度及局部深色执行路径同时支持亮暗主题；普通返回与刷新不悬浮，确有主提交时 TaskActionBar 才在表单范围粘滞。动效只表达状态，180ms 并保持 reduce-motion 等价；菜单关闭后不保留旧浮层。
 - 普通 Boundary 页面按同一 Proposal/Approval 流程处理业务边界。官方 recipe 只能由真实活动 Sample context 提交为普通待审提案，再由用户明确批准；不得按项目名猜 Sample，也不得自动批准。
-- 视觉验收以 2560×1440、浏览器 100% 为主基准，工作台第一屏以应用、当前判断和唯一主任务为焦点，最近可信结果退为上下文，其他工作通过安静的文字入口访问；同时核对原生亮色与暗色，并覆盖 1280px、600px 和长页面滚动时内容框架内粘滞的 `TaskActionBar`。普通结果与展示模式复用同一事实链和颜色语义。
+- 视觉验收以 2560×1440、浏览器 100% 为主基准，工作台第一屏以应用、当前判断和唯一主任务为焦点，最近可信结果退为上下文，其他工作通过安静的文字入口访问；同时核对原生亮色与暗色，并覆盖 1280px、600px 和长表单内确有主提交时的 `TaskActionBar`。普通结果与展示模式复用同一事实链和颜色语义。
 
 ## 直接验证
 
@@ -94,7 +95,7 @@
 
 | 现象 | 先检查 | 不要先做 |
 | --- | --- | --- |
-| 刷新后状态回退或页面分叉 | 对应 API 响应、`ControlShell.tsx` 恢复路径、后端 Readiness/Run 真源 | 增加 localStorage 业务缓存 |
+| 刷新后状态回退或页面分叉 | 对应 API 响应、`ControlShell.tsx` 恢复路径、后端 Workspace/Run 真源 | 增加 localStorage 业务缓存 |
 | 页面显示结论与 API 不一致 | ResultStory、发布完整性与 `src/api/currentChecks.ts` | 在组件里重算 Verdict 或解析文案 |
 | 写操作成功但页面仍显示旧状态 | mutation 完成后的权威查询和失效刷新 | 用定时器永久轮询或手改前端对象 |
 | 长任务看似卡死 | Job/Run 状态、正式 progress、当前阶段静默上限 | 伪造百分比或把 loading 当完成事实 |

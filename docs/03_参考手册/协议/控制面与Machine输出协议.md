@@ -25,9 +25,17 @@ Business Boundary API 位于 `/api/projects/{project_id}/business-boundaries`。
 
 GUI 通过固定 loopback API 读取 envelope。当前工作区入口只有 `GET /api/projects/{project_id}/workspace`，旧 `/status` 返回 404。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本。
 
-保留的 `ProductStatus`、`ProjectReadiness`、`ProjectPreparation`、权限矩阵和 CheckPreview DTO 不属于 current 写链。GUI 不得因为这些类型仍存在就重新注册旧权限审批或检查入口。
+当前准备和权限由 PreparationService 与 BusinessBoundaryService 提供；旧 ProductStatus、Delivery 和 History 服务已移除，保留的旧准备/矩阵类型不构成当前写入口。
 
-Delivery Check 在 当前 GUI 与 projects API 明确不可用；不得用旧服务查询结果替代 Workspace 或伪造本版可交付结论。
+当前 GUI 与 projects API 不提供独立交付检查入口；Workspace 不产生交付结论。
+
+## 当前 CHECK 历史与执行路径
+
+`GET /api/projects/{project_id}/check-history` 只读当前 CHECK，保留原 `/runs` 列表契约。默认 limit 25、最大 50；query 最长 128，trim 后大小写不敏感的字面子串匹配 run_id 和已验证冻结动作名，可按 verdict/lifecycle 筛选。成对 cursor 使用 created_at_us 降序与 run_id 升序的严格 keyset，项目条件在 SQL 中限制；每次最多校验 250 条候选，返回最后实际扫描键之后的继续位置，只有后面仍有候选才提供 cursor。因此空 items 加非空 cursor 合法，不提供 total 或跨请求快照保证。INVALID 不使用数据库 Verdict、未知标签或上下文冒充已发布事实；NOT_PUBLISHED 原义保持。精确 DTO 由 `workflows/checks/results.py` 和自动代码参考维护。
+
+`ActionResultStory.execution_path` 是同 Case 的只读嵌套投影，不写回发布包，不携带 schema_version。没有非空 Trace 或多个 Trace 冲突时为 null；相同 Trace 保留一份完整拓扑图，partial/空 partial 的 complete/reasons 原样保持。全部最多 512 个节点与显式 parent_event_ids 逐项复制，不按时间补边；文档引用只包含实际承载该 Trace 的 CheckEvidence ID，保序去重，不混用事件的其他来源引用。节点不包含时间、凭据、authority scope、semantic_key 或原始正文；字段真源为 `workflows/checks/story.py`。完整性错误仍传播，不能以空图吞错。
+
+Workspace 的 active_check 只表示本项目最新 QUEUED/RUNNING，终态后为空不代表 PASS；source_change.submitted_by 直接复制登记来源。三导航、会话保留、结果通知和局部证据区的详细消费职责见[前端模块](../../02_开发指南/模块/frontend.md)。这些读取不改变 PrimaryTask、修复合同或安全结论，也不恢复旧 History/Report writer。
 
 ## CLI Human 与 Machine
 
@@ -68,7 +76,7 @@ MCP工具按SDK返回structured content，不套API/CLI envelope；仅独立持�
 
 ExecutionTrace 提供同 Run 的派发、授权和真实业务效果因果；只有已确认禁止效果的 Case 才进入 Breakpoint，缺少中间来源只降低定位精度。原题要求从已发布 BLOCK 重建，复验状态读取精确关联的 NEW Run，不能用最新普通结果冒充修复。
 
-API evidence index 只返回已发布索引；完整 Evidence detail 是另一资源，索引与文档不能逐字比较。旧 ResultPresentation、Report 和 History 消费者未接入当前检查入口。格式投影边界见[报告与格式投影协议](报告与格式投影协议.md)。
+API evidence index 只返回已发布索引；完整 Evidence detail 是另一资源，索引与文档不能逐字比较。独立报告格式和保留的 ResultPresentation 底层实现不接入当前检查入口。格式投影边界见[报告与格式投影协议](报告与格式投影协议.md)。
 
 ## LocalControl 与 ServeLock
 
@@ -78,7 +86,7 @@ GUI serve 与会创建 ApplicationCore 的 CLI 命令共享 `ServeLock`。同一
 
 ## 状态、错误与长时过程
 
-控制面显示的状态必须来源明确：当前 Workspace/PrimaryTask 是动作工作区事实，Job/Run 是保留生命周期，Runner progress 是非权威展示旁路，ResultPresentation 是已发布结果。当前页面不能把后三者接回 Workspace 或伪造最近可信结果。
+控制面显示的状态必须来源明确：当前 Workspace/PrimaryTask 是动作工作区事实，Job/Run 表示生命周期，Runner progress 是非权威展示旁路，ResultStory 只投影经校验的发布结果。Workspace 的活动检查与最近结果摘要必须来自当前 Reader，不能从进度推算安全结论。
 
 发生错误时先保留第一主错误及 trace，再执行正式 cleanup。cleanup warning 单独展示，不覆盖 primary failure。安全 BLOCK/INCONCLUSIVE 不是控制面执行错误，不能被 ErrorRecovery 当作异常页面。
 
@@ -89,11 +97,11 @@ GUI serve 与会创建 ApplicationCore 的 CLI 命令共享 `ServeLock`。同一
 | WorkspaceView / PrimaryTask | `product/backend/workflows/workspace/` |
 | API envelope 与 LocalControl | `product/backend/api/envelope.py`、`product/backend/api/local_control.py` |
 | MCP transport、工具与授权 | `product/backend/api/mcp.py`、`product/backend/workflows/mcp_access.py` |
-| CLI 命令与 Machine renderer | `product/backend/cli/app.py`、`product/backend/cli/presentation.py`、`product/backend/cli/commands/control.py` |
-| ResultPresentation/ExecutionTrace/History | `product/backend/workflows/results/presentation/`、`product/backend/workflows/results/trace.py`、`product/backend/workflows/results/history.py` |
+| CLI 命令与 Machine renderer | `product/backend/cli/app.py`、`product/backend/cli/presentation.py`、`product/backend/cli/commands/system.py` |
+| 当前结果/执行路径/检查历史 | `product/backend/workflows/checks/story.py`、`product/backend/workflows/checks/results.py` |
 | ServeLock 与 CLI bootstrap | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` |
 | GUI API/控制壳 | `product/frontend/src/api/`、`product/frontend/src/app/` |
-| 直接测试 | `tests/backend/cli/test_control.py`、`tests/backend/api/test_control_plane.py`、`tests/backend/api/test_mcp.py`、对应前端测试 |
+| 直接测试 | `tests/backend/cli/test_current_cli.py`、`tests/backend/api/test_control_plane.py`、`tests/backend/api/test_mcp.py`、对应前端测试 |
 
 ## 版本边界
 

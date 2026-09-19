@@ -65,19 +65,16 @@ def test_root_help_is_task_oriented() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for text in ("status", "serve", "application", "check", "result", "history", "system"):
+    for text in ("serve", "system"):
         assert text in result.stdout
-    for section in ("普通任务", "图形界面", "运行与维护"):
+    for section in ("图形界面", "运行与维护"):
         assert section in result.stdout
-    for removed in ("account", "flow", "settings", "advanced", "Profile", "Baseline", "Gate", "LEGACY_PROFILE", "VarDir"):
+    for removed in ("status", "application", "check", "result", "history", "account", "flow", "settings", "advanced", "Profile", "Baseline", "Gate", "LEGACY_PROFILE", "VarDir"):
         assert removed not in result.stdout
 
 
 def test_command_groups_without_leaf_show_help_and_succeed() -> None:
     groups = (
-        ("application",),
-        ("check",),
-        ("result",),
         ("system",),
         ("system", "clean"),
     )
@@ -91,16 +88,16 @@ def test_command_groups_without_leaf_show_help_and_succeed() -> None:
             assert removed not in result.stdout
 
 
-def test_invalid_command_and_missing_argument_use_chinese_framework_messages() -> None:
-    unknown = CliRunner().invoke(app, ["application", "unknown"])
-    missing = CliRunner().invoke(app, ["application", "show"])
+def test_invalid_command_is_localized_and_missing_option_value_is_rejected() -> None:
+    unknown = CliRunner().invoke(app, ["system", "unknown"])
+    missing = CliRunner().invoke(app, ["--var-dir"])
 
     assert unknown.exit_code != 0
     assert "没有名为“unknown”的命令" in unknown.output
     assert "No such command" not in unknown.output
     assert missing.exit_code != 0
-    assert "缺少必需参数“project_id”" in missing.output
-    assert "Missing argument" not in missing.output
+    assert "--var-dir" in missing.output
+    assert "Traceback" not in missing.output
 
 
 def test_doctor_json_is_stable_and_requires_playwright_with_chromium(
@@ -284,16 +281,14 @@ def test_toolchain_probe_is_local_version_check_without_network(
     assert all("http" not in str(call[0]).lower() for call in calls)
 
 
-def test_status_human_mode_does_not_require_an_interactive_terminal(tmp_path: Path) -> None:
+def test_retired_status_command_does_not_create_runtime(tmp_path: Path) -> None:
     result = CliRunner().invoke(
         app,
         ["--var-dir", str(tmp_path / "var"), "status"],
     )
 
-    assert result.exit_code == 0
-    assert result.stderr == ""
-    assert result.stdout.startswith("界鉴工作台")
-    assert "接入应用" in result.stdout
+    assert result.exit_code != 0
+    assert not (tmp_path / "var").exists()
 
 
 def test_maintenance_cli_uses_application_service_and_preserves_data(tmp_path: Path) -> None:

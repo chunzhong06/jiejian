@@ -6,7 +6,7 @@ from product.backend.core.errors import JiejianError
 from product.backend.infra.artifacts.check_publication import CheckPublisher
 from product.backend.workflows.checks.results import CheckResultReader
 from product.protocols.check_result import CheckRunnerProgress, canonical_check_document
-from tests.backend.infra.runtime.jobs.test_check_publication import package_parts, NOW
+from tests.fixtures.check_publication import package_parts, NOW
 
 
 def published(parts):
