@@ -22,6 +22,10 @@ def build_preparation_router(context) -> APIRouter:
     async def get_preparation(project_id: str):
         return data_response(context.preparation.get(project_id).model_dump(mode="json"))
 
+    @router.get("/api/projects/{project_id}/preparation/evidence/{action_id}", response_model=ApiResponse)
+    async def get_evidence_details(project_id: str, action_id: str):
+        return data_response(context.preparation.evidence_details(project_id, action_id).model_dump(mode="json"))
+
     @router.post("/api/projects/{project_id}/preparation/allow-control", response_model=ApiResponse)
     async def select_allow_control(project_id: str, body: AllowControlSelectionRequest):
         # 外层 LocalControlGuard 对全部写请求实施当前会话与精确 Origin 防护。

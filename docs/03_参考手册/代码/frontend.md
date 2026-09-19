@@ -63,6 +63,7 @@
 - `ResultStory`
 - `StoryExecutionPath`
 - `StoryIdentity`
+- `StoryProofCoverage`
 - `StoryTraceEvent`
 - `currentChecksApi`
 主要 import / dot-source：`./http`, `./repairs`
@@ -126,6 +127,8 @@
 ### `product/frontend/src/api/preparation.ts`
 - `ActionPreparation`
 - `AllowControlRequirement`
+- `EffectMaterialSummary`
+- `EvidenceMaterialDetail`
 - `IdentitySlot`
 - `PermissionReference`
 - `PreparationItem`
@@ -426,12 +429,19 @@
 - `TestIdentityPage`
 主要 import / dot-source：`../../api/businessBoundaries`, `../../api/http`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `antd`, `react`
 
+### `product/frontend/src/features/preparation/EvidenceMaterials.test.tsx`
+主要 import / dot-source：`../../api/preparation`, `./EvidenceMaterials`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/preparation/EvidenceMaterials.tsx`
+- `EvidenceMaterials`
+主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../shared/ui/Editorial`, `@ant-design/icons`, `antd`, `react`
+
 ### `product/frontend/src/features/preparation/PreparationPage.test.tsx`
 主要 import / dot-source：`../../api/preparation`, `../../api/workspace`, `./PreparationPage`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/preparation/PreparationPage.tsx`
 - `PreparationPage`
-主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../app/taskDestination`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `../identities/TestIdentityPage`, `../recording/RecordingPage`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../app/taskDestination`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `../identities/TestIdentityPage`, `../recording/RecordingPage`, `./EvidenceMaterials`, `antd`, `react`
 
 ### `product/frontend/src/features/recording/FlowDraftReview.tsx`
 - `FlowDraftReview`
@@ -482,7 +492,7 @@
 
 ### `product/frontend/src/features/testing/CurrentResultStory.tsx`
 - `CurrentResultStory`
-主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/repairs`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../components/AssistantPanel`, `../../shared/ui/Editorial`, `../changes/RepairComparison`, `./ExecutionPath`, `@ant-design/icons`, `antd`, `react`
+主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/repairs`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../components/AssistantPanel`, `../../shared/ui/Editorial`, `../changes/RepairComparison`, `./ExecutionPath`, `./ProofCoverage`, `@ant-design/icons`, `antd`, `react`
 
 ### `product/frontend/src/features/testing/CurrentTestsPage.test.tsx`
 主要 import / dot-source：`../../api/currentChecks`, `./CurrentTestsPage`, `./testing.fixtures`, `@testing-library/react`, `vitest`
@@ -498,6 +508,10 @@
 - `ExecutionPath`
 - `traceKindLabels`
 主要 import / dot-source：`../../api/currentChecks`, `@ant-design/icons`, `react`
+
+### `product/frontend/src/features/testing/ProofCoverage.tsx`
+- `ProofCoverage`
+主要 import / dot-source：`../../api/currentChecks`, `antd`
 
 ### `product/frontend/src/features/testing/testing.fixtures.ts`
 主要 import / dot-source：`../../api/currentChecks`

@@ -80,6 +80,18 @@ class StoryExecutionPath(WireModel):
     evidence_refs: tuple[str, ...]
 
 
+class StoryProofCoverage(WireModel):
+    effect_id: str
+    business_label: str
+    proof_fingerprint: str
+    required_level: Literal["VERDICT_REQUIRED", "SUPPORTING"]
+    source_label: str
+    observed_state: Literal["CONFIRMED", "ABSENT", "UNKNOWN"]
+    evidence_refs: tuple[str, ...]
+    supporting_evidence_refs: tuple[str, ...]
+    limitations: tuple[str, ...]
+
+
 class ActionResultStory(WireModel):
     action_id: str
     action_revision: int = Field(ge=1)
@@ -96,6 +108,7 @@ class ActionResultStory(WireModel):
     repair_comparison: tuple[RepairComparisonRow, ...] = ()
     technical_references: tuple[str, ...]
     execution_path: StoryExecutionPath | None = None
+    proof_coverage: tuple[StoryProofCoverage, ...] = ()
 
 
 class ResultStory(WireModel):
@@ -207,7 +220,8 @@ class CheckStoryBuilder:
                         http_explanation=EXECUTION_LABELS[result.outcome.execution_outcome], effects=tuple(effects), allow_control=control),
                     breakpoint=breakpoint, decisive_proof_chain=tuple(decisive[:4]), evidence_explanations=tuple(explanations),
                     claim_boundary=tuple(CLAIM_BOUNDARIES[key] for key in ("execution", "identity", "scope", "immutable")),
-                    technical_references=(case.case_id, *result.evidence_ids), execution_path=_execution_path(documents)))
+                    technical_references=(case.case_id, *result.evidence_ids), execution_path=_execution_path(documents),
+                    proof_coverage=_proof_coverage(case, proofs, documents, facts)))
         verification = None
         if include_repair and self.repairs is not None:
             contracts = {item.source_case_id:item for item in self.repairs.contracts(run_id)}
@@ -220,6 +234,37 @@ class CheckStoryBuilder:
             actions=tuple(stories), claim_boundary=(CLAIM_BOUNDARIES["scope"], CLAIM_BOUNDARIES["immutable"]),
             technical_references=(package.result.request_hash, package.result.config_hash, package.manifest.result_hash),
             change_context=package.request.change_context,repair_verification=verification)
+
+
+def _proof_coverage(case, proofs, documents, facts):
+    """复制同包已投影事实；引用按观察级别分组，不以文档 ID 合并提升证明等级。"""
+    projected = {(item.proof_fingerprint, item.effect_id): item for item in facts}
+    coverage = []
+    for requirement in case.proof_requirements:
+        proof = proofs[requirement.binding_fingerprint]
+        matched = tuple((document.evidence_id, observation) for document in documents
+            for observation in document.observations
+            if (observation.proof_fingerprint, observation.effect_id) ==
+               (requirement.proof_fingerprint, requirement.effect_id))
+        fact = projected.get((requirement.proof_fingerprint, requirement.effect_id))
+        limitations = []
+        state = "UNKNOWN" if fact is None or not matched else fact.state
+        if not matched:
+            limitations.append("本轮没有对应观察")
+        if fact is not None and fact.state == "ABSENT" and fact.closure != "CLOSED":
+            state = "UNKNOWN"
+            limitations.append("观察窗口尚未闭合")
+        if requirement.level == "SUPPORTING":
+            limitations.append("辅助材料不替代必要证明")
+        if state == "UNKNOWN" and matched:
+            limitations.append("现有观察不足以确认业务结果")
+        coverage.append(StoryProofCoverage(effect_id=requirement.effect_id, business_label=proof.business_label,
+            proof_fingerprint=requirement.proof_fingerprint, required_level=requirement.level,
+            source_label=proof.source_label, observed_state=state,
+            evidence_refs=tuple(dict.fromkeys(ref for ref, item in matched if item.level == "VERDICT_REQUIRED")),
+            supporting_evidence_refs=tuple(dict.fromkeys(ref for ref, item in matched if item.level != "VERDICT_REQUIRED")),
+            limitations=tuple(limitations)))
+    return tuple(coverage)
 
 
 def _decision_input(case, result, facts, control):

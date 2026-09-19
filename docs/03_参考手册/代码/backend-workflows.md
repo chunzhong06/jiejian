@@ -273,6 +273,7 @@
 - `class EvidenceExplanation`
 - `class StoryTraceEvent`
 - `class StoryExecutionPath`
+- `class StoryProofCoverage`
 - `class ActionResultStory`
 - `class ResultStory`
 - `class CheckStoryBuilder`
@@ -390,6 +391,15 @@
 - `class LegalActionDemonstration`
 - `legal_demonstrations(contract, permissions, identities)`
 主要 import / dot-source：`product.backend.core.assurance`, `product.backend.core.business_boundary`, `product.backend.core.permission_semantics`, `product.backend.workflows.preparation.models`
+
+### `product/backend/workflows/preparation/evidence.py`
+- `evidence_details(service, project_id, action_id) -> EvidenceMaterialDetail`
+主要 import / dot-source：`product.backend.core.errors`, `product.backend.workflows.preparation.evidence_models`, `product.backend.workflows.preparation.models`
+
+### `product/backend/workflows/preparation/evidence_models.py`
+- `class EffectMaterialSummary`
+- `class EvidenceMaterialDetail`
+主要 import / dot-source：`product.backend.core.business_boundary`, `product.backend.workflows.preparation.models`, `pydantic`, `typing`
 
 ### `product/backend/workflows/preparation/models.py`
 - `class PreparationStatus`

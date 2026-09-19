@@ -13,6 +13,7 @@ import { TaskActionBar } from '../../components/TaskActionBar'
 import { TestIdentityPage } from '../identities/TestIdentityPage'
 import { RecordingPage } from '../recording/RecordingPage'
 import { TaskReceipt, useTaskGuard } from '../../components/TaskContinuity'
+import { EvidenceMaterials } from './EvidenceMaterials'
 
 const states = {
   SATISFIED: ['已准备', 'green'], NEEDS_USER: ['需要准备', 'orange'],
@@ -38,6 +39,9 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const [busy, setBusy] = useState(false)
   const [syncError, setSyncError] = useState<string>()
   const [receipt, setReceipt] = useState<string>()
+  const [evidenceAction, setEvidenceAction] = useState<{ projectId: string; actionId: string }>()
+  const evidenceReturn = useRef<HTMLElement | null>(null)
+  const evidenceReturnAction = useRef<string | undefined>(undefined)
   useTaskGuard(busy || Boolean(syncError))
   const feedback = (message: string) => { setReceipt(message); onFeedback?.(message) }
   const [mode, setMode] = useState<'materials' | 'identities' | 'recording'>('materials')
@@ -53,7 +57,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   useEffect(() => { if (workspace?.project.project_id === project.project_id) setCurrentWorkspace(workspace) }, [workspace, project.project_id])
   useEffect(() => {
     let active = true
-    setLoading(true); setPreparation(null); setChoices({}); setMode('materials'); setSyncError(undefined)
+    setLoading(true); setPreparation(null); setChoices({}); setMode('materials'); setSyncError(undefined); setEvidenceAction(undefined)
     void preparationApi.get(project.project_id).then((value) => { if (active) setPreparation(value) })
       .catch((error) => { if (active) onError(error as ApiError) })
       .finally(() => { if (active) setLoading(false) })
@@ -148,6 +152,10 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     finally { if (alive.current) setBusy(false) }
   }
 
+  if (evidenceAction?.projectId === project.project_id) return <EvidenceMaterials key={`${project.project_id}:${evidenceAction.actionId}`} projectId={project.project_id} actionId={evidenceAction.actionId} onBack={() => {
+    setEvidenceAction(undefined)
+    requestAnimationFrame(() => evidenceReturn.current?.focus())
+  }} />
   if (mode === 'identities') return <TestIdentityPage key={`${project.project_id}:${login?.preparation_id ?? 'accounts'}`} project={project} initialPreparation={login}
     onError={onError} onBack={() => void showMaterials()} onContinuePreparation={showMaterials} onStateChanged={syncChild} onPrepared={() => onFeedback?.('登录状态已保存，已有的其他材料继续保留。')} />
   if (mode === 'recording' && recordingTask) return <RecordingPage key={`${project.project_id}:${recordingTask.task_id}`} project={project} task={recordingTask}
@@ -173,6 +181,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
       const slots = action.identity_requirements.slots
       const slotName = (id: string) => { const slot = slots.find((item) => item.requirement.slot_id === id); return slot ? `${slot.actor_display_name}账号 ${slot.requirement.ordinal}` : '资源所有者账号' }
       const current = task?.business_action_id === action.action_id
+      const evidenceLink = <Button disabled={busy} ref={node => { if (evidenceReturnAction.current === action.action_id) evidenceReturn.current = node }} onClick={() => { evidenceReturnAction.current = action.action_id; setEvidenceAction({ projectId: project.project_id, actionId: action.action_id }) }}>查看证明要求与材料</Button>
       const permissionLabel = (id: string) => {
         const permission = action.permissions.find((item) => item.intent_id === id)
         if (!permission) return '当前已确认权限'
@@ -197,7 +206,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
           {providedAvailable && <><p>这个项目已提供可导入的账号、动作、资源和证明材料；导入会核对当前权限，保持已有有效材料。</p><Button type="primary" loading={busy} disabled={Boolean(syncError) || !task?.can_execute} onClick={() => void installProvidedMaterials()}>使用已提供的测试材料</Button></>}
           <div className="task-focus-actions">{primaryButton}</div><p className="task-next"><span>完成后</span>{task?.system_will_do}</p></>,
       }))
-      if (!current) return <details key={action.action_id} className="preparation-other-actions"><summary>{action.display_name} · 查看已有材料</summary><FlowSpine label={`${action.display_name}的准备过程`} steps={steps} />{groups.map(group => <div key={group.key}><h3>{group.title}</h3>{group.items.map(({name,item},i) => <Material key={i} name={name} item={item}/>)}</div>)}</details>
+      if (!current) return <details key={action.action_id} className="preparation-other-actions"><summary>{action.display_name} · 查看已有材料</summary><FlowSpine label={`${action.display_name}的准备过程`} steps={steps} />{groups.map(group => <div key={group.key}><h3>{group.title}</h3>{group.items.map(({name,item},i) => <Material key={i} name={name} item={item}/>)}</div>)}{evidenceLink}</details>
       const currentStep = steps.find(step => step.state === 'current')
       const retained = groups.filter(group => group.items.some(({item}) => item.status === 'SATISFIED') && group.items.every(({item}) => ['SATISFIED','NOT_REQUIRED'].includes(item.status)))
       return <section key={action.action_id} className="preparation-action" aria-label={action.display_name}>
@@ -213,6 +222,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
         {retained.length > 0 && <details className="preparation-saved"><summary>已保存的材料<span>{retained.length} 类材料继续保留</span></summary><div className="preparation-retained" aria-label="仍然有效的材料">{retained.map(group => <span key={group.key}><strong aria-hidden="true">✓</strong>{group.title}已保留</span>)}</div>{retained.map(group => <div key={group.key}><h3>{group.title}</h3>{group.items.map(({name,item},i) => <Material key={i} name={name} item={item}/>)}</div>)}</details>}
         <details className="preparation-remaining"><summary>查看全部测试条件</summary><FlowSpine label={`${action.display_name}的准备过程`} steps={steps.map(step => ({...step,detail:undefined}))} />{groups.map(group => <div key={group.key}><h3>{group.title}</h3>{group.items.map(({name,item},i) => <Material key={i} name={name} item={item}/>)}</div>)}</details>
         <details className="preparation-remaining"><summary>解释这项准备要求</summary><AssistantPanel projectId={project.project_id} surface="preparation-explanation" focus={{ business_action_id: action.action_id }} title="理解这项动作的准备要求" actionLabel="解释准备缺口" /></details>
+        {evidenceLink}
       </section>
     })}
     <details><summary>其他测试账号</summary><Button disabled={busy} onClick={() => { setLogin(undefined); setMode('identities') }}>管理测试账号</Button></details>

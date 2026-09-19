@@ -9,6 +9,17 @@ vi.mock('../../api/currentChecks',()=>({currentChecksApi:api}))
 vi.mock('../../components/AssistantPanel',()=>({AssistantPanel:()=>null}))
 beforeEach(()=>vi.clearAllMocks())
 describe('结果调查',()=>{
+  it('要求对应入口读取同轮证据，辅助材料保留等级和所选要求上下文',async()=>{
+    const value=story()
+    value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof1',required_level:'SUPPORTING',source_label:'历史来源',observed_state:'UNKNOWN',evidence_refs:[],supporting_evidence_refs:['ev1'],limitations:['辅助材料不替代必要证明']}]
+    api.evidence.mockResolvedValue({schema_version:'1',run_id:'r1',action_id:'a1',case:{case_id:'c1'},evidence_id:'ev1',outcome,observations:[],trace:null})
+    render(<CurrentResultStory story={value} onError={vi.fn()}/>)
+    expect(screen.getByRole('region',{name:'本轮要求与证据对应'})).toHaveTextContent('辅助材料不替代必要证明')
+    expect(screen.queryByRole('button',{name:'查看必要证明记录'})).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'查看辅助观察记录'}))
+    expect(await screen.findByText('来自所选证明要求')).toBeInTheDocument()
+    expect(api.evidence).toHaveBeenCalledWith('r1','ev1')
+  })
   it('页面进入保留状态时关闭 Portal，证据不能遮盖新页面',async()=>{
     api.evidence.mockResolvedValue({schema_version:'1',run_id:'r1',action_id:'a1',case:{case_id:'c1'},evidence_id:'ev1',outcome,observations:[],trace:null})
     const value=story(),error=vi.fn()

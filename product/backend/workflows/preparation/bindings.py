@@ -52,6 +52,49 @@ class PreparationBindingService:
         self._registered_observers = registered_observers
         self._effect_proofs = effect_proofs
 
+    def describe_evidence(self, action, views):
+        """仅描述当前已绑定材料；指纹漂移时不拼接旧状态和新来源。"""
+        from product.backend.workflows.preparation.evidence_models import EffectMaterialSummary
+        effects = {item.effect_id: item for item in action.effect_catalog}
+        result = []
+        with self._uow_factory() as work:
+            for view in views:
+                effect = effects[view.effect_id]
+                binding = work.action_preparation.evidence(action.action_id, action.revision, view.effect_id)
+                fields = dict(effect_id=effect.effect_id, business_label=effect.business_label,
+                    resource_concept=effect.resource_concept, material_status=view.status,
+                    binding_fingerprint=view.binding_fingerprint, reason_codes=view.reason_codes)
+                if (None if binding is None else binding.binding_fingerprint) != view.binding_fingerprint or (
+                    binding is not None and (binding.project_id, binding.business_action_id,
+                    binding.action_revision, binding.effect_id) !=
+                    (action.project_id, action.action_id, action.revision, view.effect_id)
+                ):
+                    fields.update(material_status=PreparationStatus.STALE, binding_fingerprint=None,
+                                  reason_codes=("EVIDENCE_SNAPSHOT_CHANGED",))
+                elif binding is not None:
+                    fields.update(source_kind=binding.kind.value, source_label="已保存的观察材料")
+                    if binding.kind is ActionEvidenceKind.REGISTERED_OBSERVER:
+                        reference = binding.observer_reference
+                        available = None if self._registered_observers is None else self._registered_observers.contains(
+                            action.project_id, reference)
+                        fields.update(source_label="已绑定的受控来源", registered_source_available=available)
+                        reasons = list(view.reason_codes)
+                        if available is False:
+                            reasons.append("REGISTERED_OBSERVER_UNAVAILABLE")
+                        capability = None if self._effect_proofs is None or not available else self._effect_proofs.capability(
+                            action.project_id, reference, effect.effect_id)
+                        # Reader 声明仍须对应精确来源与效果；不能按名称或另一效果兜底。
+                        if capability is not None and (capability.descriptor_id, capability.descriptor_fingerprint,
+                            capability.observer_id, capability.effect_id) == (reference.descriptor_id,
+                            reference.descriptor_fingerprint, reference.observer_id, effect.effect_id):
+                            fields.update(closure_supported=capability.closure_supported,
+                                          resource_correlation_supported=capability.resource_correlation_supported)
+                        else:
+                            reasons.append("PROOF_CAPABILITY_UNAVAILABLE")
+                        fields["reason_codes"] = tuple(dict.fromkeys(reasons))
+                result.append(EffectMaterialSummary(**fields))
+        return tuple(result)
+
     def proof_capabilities(self, project_id, evidence):
         """只询问已绑定 descriptor；未注入能力 reader 时不推断证明能力。"""
         if self._effect_proofs is None:

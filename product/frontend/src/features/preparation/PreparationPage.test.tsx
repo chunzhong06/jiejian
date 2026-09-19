@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PreparationView } from '../../api/preparation'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { PreparationPage } from './PreparationPage'
-const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn() }))
-vi.mock('../../api/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select } }))
+const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn() }))
+vi.mock('../../api/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select, evidence: api.evidence } }))
 vi.mock('../../api/testIdentities', () => ({ testIdentitiesApi: { create: api.create, startPreparation: api.start } }))
 vi.mock('../../components/AssistantPanel', () => ({ AssistantPanel: () => null }))
 vi.mock('../identities/TestIdentityPage', () => ({ TestIdentityPage: () => <div>登录准备页面</div> }))
@@ -34,6 +34,16 @@ function selectionMaterial() {
   return value
 }
 describe('动作准备', () => {
+  it('材料说明入口只读取当前动作，返回后恢复入口焦点', async () => {
+    api.evidence.mockResolvedValue({project_id:'p1',action_id:'a1',action_revision:2,action_label:'导出交付包',effects:[]})
+    render(<PreparationPage {...props()}/>)
+    fireEvent.click(await screen.findByRole('button',{name:'查看证明要求与材料'}))
+    expect(await screen.findByText('当前动作没有需要说明的结果证明材料')).toBeInTheDocument()
+    expect(api.evidence).toHaveBeenCalledWith('p1','a1')
+    expect(api.create).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled();expect(api.select).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button',{name:'返回准备材料'}))
+    await waitFor(()=>expect(screen.getByRole('button',{name:'查看证明要求与材料'})).toHaveFocus())
+  })
   it('预置材料只在当前缺口显式导入，之后仍由服务端决定下一任务', async () => {
     const p=props(),provided=vi.fn().mockResolvedValue(undefined)
     render(<PreparationPage {...p} onProvidedMaterials={provided}/>)

@@ -125,3 +125,5 @@ def test_open_absence_never_claims_closed_window_or_decisive_proof(package_parts
     for action in story.actions:
         assert action.decisive_proof_chain == ()
         assert all("已闭合" not in effect.judgement for effect in action.fact_comparison.effects)
+        assert all(item.observed_state == "UNKNOWN" and "观察窗口尚未闭合" in item.limitations
+                   for item in action.proof_coverage)

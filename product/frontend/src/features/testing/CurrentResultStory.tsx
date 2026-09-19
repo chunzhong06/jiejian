@@ -2,12 +2,13 @@
 import { Alert, Button, Descriptions, Drawer, Empty, Grid, Spin, Typography } from 'antd'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { WorkPageVisible } from '../../app/RetainedWorkPages'
-import { currentChecksApi, type CheckBreakpoint, type CheckEvidence, type EvidenceExplanation, type ResultStory, type StoryTraceEvent } from '../../api/currentChecks'
+import { currentChecksApi, type CheckBreakpoint, type CheckEvidence, type EvidenceExplanation, type ResultStory, type StoryTraceEvent, type StoryProofCoverage } from '../../api/currentChecks'
 import { ApiError } from '../../api/http'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { formatTimestamp } from '../../app/presentation'
 import { EvidenceSurface, RuleSentence } from '../../shared/ui/Editorial'
 import { RepairComparison } from '../changes/RepairComparison'
+import { ProofCoverage } from './ProofCoverage'
 import './testing.css'
 import { ExecutionPath, traceKindLabels } from './ExecutionPath'
 import { repairLabels } from '../../api/repairs'
@@ -29,7 +30,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
   const evidencePanel = useRef<HTMLElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
   const [selectedCase, setSelectedCase] = useState<string | undefined>(requestedCaseId ?? undefined)
-  const [detail, setDetail] = useState<{ source?: EvidenceExplanation; breakpoint?: CheckBreakpoint; event?: StoryTraceEvent; refs: string[] }>()
+  const [detail, setDetail] = useState<{ source?: EvidenceExplanation; breakpoint?: CheckBreakpoint; event?: StoryTraceEvent; coverage?: StoryProofCoverage; refs: string[] }>()
   const [documents, setDocuments] = useState<CheckEvidence[]>([])
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -41,13 +42,13 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
   // Drawer 通过 Portal 挂到 body；页面会话隐藏时必须主动关闭，不能覆盖新页面。
   useEffect(() => { if (!visible) { requestEpoch.current += 1; setDetail(undefined); setDocuments([]) } }, [visible])
   const closeEvidence = () => { requestEpoch.current += 1; setDetail(undefined); setDocuments([]); returnFocus.current?.focus({ preventScroll: true }) }
-  const openEvidence = async (refs: string[], source?: EvidenceExplanation, breakpoint?: CheckBreakpoint, event?: StoryTraceEvent) => {
+  const openEvidence = async (refs: string[], source?: EvidenceExplanation, breakpoint?: CheckBreakpoint, event?: StoryTraceEvent, coverage?: StoryProofCoverage) => {
     const epoch = ++requestEpoch.current
     returnFocus.current = document.activeElement as HTMLElement
     // 浮层不参与画布布局；放到触发事实的另一侧，避免遮住当前选择。
     const anchor = returnFocus.current?.getBoundingClientRect()
     setEvidenceSide(anchor && anchor.right + 16 > window.innerWidth - 384 ? 'left' : 'right')
-    setDetail({ refs, source, breakpoint, event }); setDocuments([]); setLoading(true); setFailed(false)
+    setDetail({ refs, source, breakpoint, event, coverage }); setDocuments([]); setLoading(true); setFailed(false)
     try {
       // 详情必须重新走完整性 reader；不把索引或缓存中的显示文案当作证据文件。
       const values = await Promise.all([...new Set(refs)].map((id) => currentChecksApi.evidence(story.run_id, id)))
@@ -66,6 +67,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
   const comparison = action?.fact_comparison
   const actual = comparison?.verified_actual_identity
   const evidenceContent = <>
+      {detail?.coverage && <div className="evidence-selection"><p className="editorial-eyebrow">来自所选证明要求</p><h3>{detail.coverage.business_label}</h3><p>{detail.coverage.source_label} · {detail.coverage.required_level === 'VERDICT_REQUIRED' ? '必要证明' : '辅助材料'}</p><p className="editorial-muted">下方只显示对应本项要求的观察；完整文档保留在技术引用中。</p></div>}
       {detail?.event && <div className="evidence-selection"><p className="editorial-eyebrow">来自所选节点</p><h3>{traceKindLabels[detail.event.kind]}</h3></div>}
       {loading && <Spin tip="正在核验发布证据"><div style={{ minHeight: 80 }} /></Spin>}
       {failed && <Alert showIcon type="error" message="证据未能通过读取或完整性检查，请返回刷新检查结果。" />}
@@ -84,7 +86,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
           {!document.trace.complete && <Typography.Paragraph type="secondary">执行路径不完整，定位精度以本项判断为准。</Typography.Paragraph>}
         </>}
         <Typography.Title level={5}>观察记录</Typography.Title>
-        {document.observations.map((item, index) => <Typography.Paragraph key={index}>{phaseLabels[item.phase]} · {stateLabels[item.state]} · {formatTimestamp(item.window_end_us)}</Typography.Paragraph>)}
+        {document.observations.filter(item => !detail?.coverage || (item.effect_id === detail.coverage.effect_id && item.proof_fingerprint === detail.coverage.proof_fingerprint)).map((item, index) => <Typography.Paragraph key={index}>{phaseLabels[item.phase]} · {stateLabels[item.state]} · {formatTimestamp(item.window_end_us)}</Typography.Paragraph>)}
         <details><summary>证据文件与技术引用</summary><pre className="check-evidence-json">{JSON.stringify(document, null, 2)}</pre></details>
       </section>)}
   </>
@@ -106,6 +108,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
       <section className="story-section" aria-label="断裂位置"><div><h3>首个可证明的断裂</h3><p>{action.breakpoint?.breakpoint_type ? breakpointLabels[action.breakpoint.breakpoint_type] : '本项没有已发布的权限断裂定位'}</p>{action.breakpoint && <p className="editorial-muted">{precisionLabels[action.breakpoint.precision]}</p>}{!!action.breakpoint?.evidence_refs.length && <Button onClick={() => void openEvidence(action.breakpoint!.evidence_refs, undefined, action.breakpoint!)}>为什么定位在这里？查看定位证据</Button>}</div></section>
       <section className="story-section" aria-label="最终业务结果"><div><h3>最终业务结果与决定性证明</h3>{action.decisive_proof_chain.length ? action.decisive_proof_chain.map(evidenceRow) : <><p>当前没有完整的决定性证明；现有观察不足以支持新的安全判断。</p><p className="editorial-muted">查看下方缺少的事实，补足对应证明后发起新的检查。已经由其他权威事实确认的问题仍保留。</p></>}</div></section>
       </div><details className="story-observations"><summary>全部观察来源与说明边界</summary>{action.evidence_explanations.map(evidenceRow)}{action.claim_boundary.map((text) => <p key={text} className="editorial-muted">{text}</p>)}</details>
+      <ProofCoverage rows={action.proof_coverage ?? []} onEvidence={(row, refs) => void openEvidence(refs, undefined, undefined, undefined, row)} />
       {action.repair_requirement && <details aria-label="原题修复要求"><summary>查看原题修复要求与全部合法能力</summary><h2>修复原问题，并保留正常业务</h2><p>原权限、操作账号、资源归属和证据标准保持不变。关闭功能不能证明修复成功。</p><RepairComparison rows={action.repair_comparison ?? []} sourceRunId={story.run_id} onNavigate={onNavigate}/></details>}
     </article> : <Empty description={selectedCase ? '本轮没有指定的检查项，请从上方选择本轮已有记录。' : '本次没有可展示的检查项'} />}
     {story.change_context && onNavigate && <Button onClick={() => onNavigate('/changes')}>查看关联变化与修复</Button>}

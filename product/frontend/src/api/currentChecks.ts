@@ -44,6 +44,12 @@ export type StoryTraceEvent = {
   source_component: string; source_location: string
 }
 export type StoryExecutionPath = { complete: boolean; reason_codes: string[]; events: StoryTraceEvent[]; evidence_refs: string[] }
+export type StoryProofCoverage = {
+  effect_id: string; business_label: string; proof_fingerprint: string
+  required_level: 'VERDICT_REQUIRED' | 'SUPPORTING'; source_label: string
+  observed_state: 'CONFIRMED' | 'ABSENT' | 'UNKNOWN'
+  evidence_refs: string[]; supporting_evidence_refs: string[]; limitations: string[]
+}
 export type ActionResultStory = {
   action_id: string; action_revision: number; display_name: string; case_id: string
   permission: { expectation: 'ALLOW' | 'DENY'; relation: string }
@@ -56,6 +62,7 @@ export type ActionResultStory = {
   breakpoint: CheckBreakpoint | null; decisive_proof_chain: EvidenceExplanation[]; evidence_explanations: EvidenceExplanation[]
   claim_boundary: string[]; repair_requirement: RepairContract | null; repair_comparison?: RepairComparisonRow[]; technical_references: string[]
   execution_path?: StoryExecutionPath | null
+  proof_coverage?: StoryProofCoverage[]
 }
 export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null }
 export type CheckEvidence = {

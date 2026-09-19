@@ -57,6 +57,8 @@
 
 ## 事实与页面状态
 
+准备页的 `EvidenceMaterials` 是独立的只读材料工作面：左侧按业务结果切换，右侧区分已保存来源、声明能力和当前限制。只提供返回、刷新与查看，读取失败撤下旧快照，跨项目迟到响应丢弃；返回准备页恢复入口焦点。历史结果的 `ProofCoverage` 使用服务端同轮投影并连接已有证据浮层，不根据当前配置重建历史。来源声明、实际观察和安全结论始终分别表达。
+
 `WorkspaceService` 决定唯一 PrimaryTask；active_check 仅投影同项目最新活动 Run，source_change.submitted_by 原样表示登记来源。CheckPreview、CheckRunStatus、ResultStory 分别负责门禁、生命周期和已发布结论。RetainedWorkPages 在当前项目页面会话内保留工作输入、权限草稿、历史筛选和位置；项目切换或明确重试重建，不用 localStorage 持久化这些状态，也不保留设置/密钥页面。Evidence Portal 离开页面必须关闭。后台完成只提供通知，不自动导航；短检查通过新的 latest_result 精确回读确认，首次加载已有结果不提示刚完成。
 
 所有写操作要有清楚的 busy、成功、失败和恢复路径。需要长时间的多阶段过程必须展示稳定阶段边界，服务端有进度时流式呈现；没有权威进度时说明当前阶段和静默上限，不伪造百分比。首个主错误保留，cleanup warning 单独展示。

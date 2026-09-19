@@ -57,6 +57,11 @@ class PreparationService:
         self._uow_factory = uow_factory
         self._clock_us = clock_us or (lambda: time.time_ns() // 1000)
 
+    def evidence_details(self, project_id: str, action_id: str):
+        """只解释已保存材料及能力声明；不改变准备状态或创建执行计划。"""
+        from product.backend.workflows.preparation.evidence import evidence_details
+        return evidence_details(self, project_id, action_id)
+
     def current_plan(self, project_id: str, *, engine_version: str, config_fingerprint: str):
         """由已检查的技术绑定装配纯编译输入；缺少受控能力时保留具名缺口。"""
         from product.backend.workflows.preparation.planning import current_plan

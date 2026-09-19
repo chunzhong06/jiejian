@@ -33,7 +33,19 @@ export type ActionPreparation = {
   reason_codes: string[]
 }
 export type PreparationView = { project_id: string; actions: ActionPreparation[]; preparation_complete: boolean }
+export type EffectMaterialSummary = {
+  effect_id: string; business_label: string; resource_concept: string
+  material_status: PreparationStatus; binding_fingerprint: string | null
+  source_kind: 'RECORDED_OBSERVATION' | 'REGISTERED_OBSERVER' | null; source_label: string
+  registered_source_available: boolean | null; closure_supported: boolean | null
+  resource_correlation_supported: boolean | null; reason_codes: string[]
+}
+export type EvidenceMaterialDetail = {
+  project_id: string; action_id: string; action_revision: number; action_label: string
+  effects: EffectMaterialSummary[]
+}
 export const preparationApi = {
+  evidence: (projectId: string, actionId: string) => request<EvidenceMaterialDetail>(`/api/projects/${encodeURIComponent(projectId)}/preparation/evidence/${encodeURIComponent(actionId)}`),
   get: (projectId: string) => request<PreparationView>(`/api/projects/${projectId}/preparation`),
   selectAllowControl: (projectId: string, control: AllowControlRequirement, selected: PermissionReference) =>
     request(`/api/projects/${projectId}/preparation/allow-control`, {
