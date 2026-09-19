@@ -75,7 +75,7 @@ describe('TestIdentityPage', () => {
     expect(testIdentitiesApi.confirmPreparation).not.toHaveBeenCalled()
     fireEvent.click(confirm)
     await waitFor(() => expect(testIdentitiesApi.confirmPreparation).toHaveBeenCalledWith(`prep_${'c'.repeat(32)}`))
-    expect(await screen.findByText('登录状态已准备；界鉴没有保存你的密码')).toBeInTheDocument()
+    expect(await screen.findByText('测试登录状态已保存。实际执行身份将在检查中独立核验。')).toBeInTheDocument()
     const header = screen.getByRole('heading', { name: '管理当前测试账号' }).closest('header')!
     expect(screen.getByRole('button', { name: '查看下一项准备' })).toBeInTheDocument()
     expect(props.onStateChanged).toHaveBeenCalled(); expect(props.onPrepared).toHaveBeenCalledTimes(1)
@@ -125,5 +125,16 @@ describe('TestIdentityPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '刷新账号状态' }))
 
     expect(await screen.findByText('账号状态已刷新，但工作区状态刷新失败，请重试“刷新账号状态”。')).toBeInTheDocument()
+  })
+  it('登录保存回执不明后只读取准备状态，不重复保存', async () => {
+    const login = { preparation_id: 'prep_unknown', identity_id: identity.identity_id, status: 'WAITING_FOR_LOGIN', message: '等待登录', error_code: null, log_path: '' }
+    vi.mocked(testIdentitiesApi.confirmPreparation).mockRejectedValue(new Error('lost acknowledgement'))
+    vi.mocked(testIdentitiesApi.preparation).mockResolvedValue(login as never)
+    render(<TestIdentityPage {...pageProps()} initialPreparation={login as never}/>)
+    fireEvent.click(await screen.findByRole('button', { name: '我已完成登录' }))
+    fireEvent.click(await screen.findByRole('button', { name: '重新读取下一步' }))
+    expect(await screen.findByText('尚未确认保存请求的结果。请继续核对，或取消本次准备；不要重复保存。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '我已完成登录' })).toBeDisabled()
+    expect(testIdentitiesApi.confirmPreparation).toHaveBeenCalledOnce()
   })
 })

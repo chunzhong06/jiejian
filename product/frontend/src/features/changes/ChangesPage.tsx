@@ -7,6 +7,8 @@ import type { ProjectDto } from '../../api/projects'
 import { sourceChangesApi, type SourceChangeViewDto } from '../../api/sourceChanges'
 import { repairsApi, repairLabels, repairReference, type ProjectRepair } from '../../api/repairs'
 import { formatTimestamp } from '../../app/presentation'
+import { workspaceApi } from '../../api/workspace'
+import { taskDestination } from '../../app/taskDestination'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { RepairComparison } from './RepairComparison'
 import '../testing/testing.css'
@@ -29,6 +31,18 @@ export function ChangesPage({ project, onError, onNavigate, onStateChanged, requ
   const visible = useContext(WorkPageVisible)
   const epoch = useRef(0)
   const submitting = useRef(false)
+  const continueWork = async () => {
+    if (submitting.current) return
+    submitting.current = true; setBusy(true)
+    const current = epoch.current
+    try {
+      const next = await workspaceApi.current(project.project_id)
+      if (epoch.current !== current) return
+      if (next.project.project_id !== project.project_id) throw new ApiError('STATE_PRECONDITION', '任务所属应用不一致。')
+      onNavigate(next.primary_task ? taskDestination(next.primary_task) : '/workspace')
+    } catch (error) { if (epoch.current === current) onError(error as ApiError) }
+    finally { submitting.current = false; setBusy(false) }
+  }
   const refresh = useCallback(async () => {
     const current = ++epoch.current
     setLoading(true)
@@ -105,7 +119,7 @@ export function ChangesPage({ project, onError, onNavigate, onStateChanged, requ
     {selectedChange && <section className="changes-workspace" aria-label="代码变化记录">
       <nav className="change-record-index" aria-label="修改记录"><h2>修改记录</h2>{changes.map(change => <button key={change.manifest.change_id} aria-current={change.manifest.change_id === selectedChange.manifest.change_id ? 'true' : undefined} onClick={() => setSelectedChangeId(change.manifest.change_id)}><time>{formatTimestamp(change.manifest.created_at_us)}</time><strong>{change.manifest.reason}</strong><small>{change.manifest.submitted_by || '来源未提供'}</small><span>{repair?.tasks.find(item => item.change_id === change.manifest.change_id)?.status === 'VERIFIED' ? '原题复验已通过' : change.revalidation.can_execute ? '可继续检查' : revalidationLabels[change.revalidation.status]}</span></button>)}</nav>
       <article className="change-detail" aria-label="所选代码变化">
-        <header><h2>{selectedChange.manifest.reason}</h2><p className="editorial-muted">登记来源：{selectedChange.manifest.submitted_by || '来源未提供'} · {formatTimestamp(selectedChange.manifest.created_at_us)}</p></header>
+        <header><h2>{selectedChange.manifest.reason}</h2><p className="editorial-muted">登记来源：{selectedChange.manifest.submitted_by || '来源未提供'} · {formatTimestamp(selectedChange.manifest.created_at_us)}</p><p>这次变化已登记，无需再次填写。先核对可继续使用的材料，再按当前缺口继续。</p><Button loading={busy} onClick={() => void continueWork()}>核对现有材料</Button></header>
         <section className="change-detail-section"><span className="change-section-number" aria-hidden="true">1</span><div><h3>Agent 登记的修改</h3><p>{selectedChange.manifest.reason}</p><p className="editorial-muted">这段说明是登记声明，实际修改以下方源码核对为准。</p></div></section>
         <section className="change-detail-section"><span className="change-section-number" aria-hidden="true">2</span><div><h3>界鉴核对的实际变化</h3><p>{selectedChange.change_set.added_paths.length + selectedChange.change_set.modified_paths.length + selectedChange.change_set.removed_paths.length} 个文件发生变化 · {selectedChange.assessment.payload.action_impacts.filter(item => item.classification === 'DIRECTLY_AFFECTED').length} 项业务动作受到直接影响。</p><p>{revalidationLabels[selectedChange.revalidation.status]}</p><details className="change-paths"><summary>查看实际文件变化</summary>{(['added_paths','modified_paths','removed_paths'] as const).map((key,index) => <section key={key}><h4>{['新增','修改','删除'][index]}</h4>{selectedChange.change_set[key].length ? <ul>{selectedChange.change_set[key].map(path => <li key={path}><code>{path}</code></li>)}</ul> : <p>无</p>}</section>)}</details></div></section>
         <section className="change-detail-section"><span className="change-section-number" aria-hidden="true">3</span><div><h3>{selectedRepairs.length ? '关联的原问题与复验' : '检查这次变化'}</h3>

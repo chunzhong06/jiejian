@@ -6,6 +6,7 @@ import { currentChecksApi, type CheckPreview, type CheckStatus, type ResultStory
 import { lifecycleLabel } from '../../app/presentation'
 import { EditorialHeader, EditorialPage, FlowSpine } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../components/TaskActionBar'
+import { TaskReceipt, useTaskGuard } from '../../components/TaskContinuity'
 import { PreparationPage } from '../preparation/PreparationPage'
 import { CurrentResultStory } from './CurrentResultStory'
 
@@ -25,6 +26,10 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const [selected, setSelected] = useState<string>()
   const [status, setStatus] = useState<CheckStatus | null>(null)
   const [story, setStory] = useState<ResultStory | null>(null)
+  const [openedResult, setOpenedResult] = useState<string>()
+  const observedRunning = useRef(new Set<string>())
+  const completionPending = Boolean(story && observedRunning.current.has(story.run_id) && openedResult !== story.run_id)
+  useTaskGuard(Boolean(status && active(status)) || completionPending || busy || submissionUncertain)
   const [runFailed, setRunFailed] = useState(false)
   const [pollPaused, setPollPaused] = useState(false)
   const [workspaceSyncFailed, setWorkspaceSyncFailed] = useState(false)
@@ -61,7 +66,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   }, [project.project_id, onError, changeId])
   useEffect(() => {
     setSelected(requestedRunId ?? undefined); setStatus(null); setStory(null); setRuns([]); setMaterials(Boolean(requestedTaskId))
-    pending.current = undefined; setSubmissionUncertain(false)
+    pending.current = undefined; setSubmissionUncertain(false); setOpenedResult(undefined); observedRunning.current.clear()
     void refresh()
   }, [refresh, requestedRunId, requestedTaskId])
 
@@ -76,6 +81,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
         const next = await currentChecksApi.status(selected)
         if (next.run.project_id !== project.project_id || next.run.run_id !== selected) throw new ApiError('STATE_PRECONDITION', '检查记录所属项目不一致。')
         if (!valid) return
+        if (active(next)) observedRunning.current.add(next.run.run_id)
         setStatus(next); setRuns((items) => items.map((item) => item.run.run_id === selected ? next : item))
         // 进度不代表结论，必须先通过完整性读取；失效时撤下旧故事。
         if (next.result_integrity === 'VALID') {
@@ -132,9 +138,9 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   }} />
   const running = runs.find(active)
   const selectedMode = Boolean(selected)
-  const headline = selectedMode ? story?.judgement ?? (runFailed ? '暂时无法读取本次检查' : status?.result_integrity === 'INVALID' ? '结果完整性校验失败，不能展示安全结论' : status ? lifecycleLabel(status.run.lifecycle) : '正在读取检查记录')
+  const headline = selectedMode ? (completionPending ? '本轮检查已完成' : story?.judgement) ?? (runFailed ? '暂时无法读取本次检查' : status?.result_integrity === 'INVALID' ? '结果完整性校验失败，不能展示安全结论' : status ? lifecycleLabel(status.run.lifecycle) : '正在读取检查记录')
     : loading ? '正在读取当前检查条件' : running ? '有一项检查正在执行' : preview?.can_execute ? '当前准备条件允许开始检查' : readFailed ? '暂时无法确认当前检查条件' : '请先补齐本次检查所需材料'
-  const currentVerdict = story?.verdict
+  const currentVerdict = completionPending ? undefined : story?.verdict
   const primaryAction = selectedMode ? undefined : running ? { label: '查看当前进度', onClick: () => setSelected(running.run.run_id) }
     : preview?.can_execute ? { label: submissionUncertain ? '确认上次提交' : '开始检查', loading: busy, disabled: loading || readFailed, onClick: () => void start() }
     : { label: '准备检查材料', disabled: loading || busy, onClick: showMaterials }
@@ -177,7 +183,8 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       setBusy(true)
       try { await currentChecksApi.cancel(status.job!.job_id); setRefreshEpoch(value => value + 1) } catch (error) { onError(error as ApiError) } finally { setBusy(false) }
     }}>{status.job.cancel_requested ? '正在停止检查' : '停止本次检查'}</Button>}
-    {selectedMode && story && <CurrentResultStory key={story.run_id} story={story} requestedCaseId={props.requestedCaseId} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }} />}
+    {completionPending && story && <section className="task-focus" aria-label="本轮检查完成"><TaskReceipt message="检查已完成，结果已保存。"/><p>本轮结果与证据已保存在检查历史中。</p><Button type="primary" onClick={() => setOpenedResult(story.run_id)}>查看本轮结果</Button></section>}
+    {selectedMode && story && !completionPending && <CurrentResultStory key={story.run_id} story={story} requestedCaseId={props.requestedCaseId} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }} />}
     {!selectedMode && <>
       <Button onClick={showMaterials} disabled={busy}>管理准备材料</Button>
       {preview && !preview.can_execute && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}

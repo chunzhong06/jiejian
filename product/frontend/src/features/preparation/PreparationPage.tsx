@@ -12,6 +12,7 @@ import { taskDestination } from '../../app/taskDestination'
 import { TaskActionBar } from '../../components/TaskActionBar'
 import { TestIdentityPage } from '../identities/TestIdentityPage'
 import { RecordingPage } from '../recording/RecordingPage'
+import { TaskReceipt, useTaskGuard } from '../../components/TaskContinuity'
 
 const states = {
   SATISFIED: ['已准备', 'green'], NEEDS_USER: ['需要准备', 'orange'],
@@ -36,6 +37,9 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [syncError, setSyncError] = useState<string>()
+  const [receipt, setReceipt] = useState<string>()
+  useTaskGuard(busy || Boolean(syncError))
+  const feedback = (message: string) => { setReceipt(message); onFeedback?.(message) }
   const [mode, setMode] = useState<'materials' | 'identities' | 'recording'>('materials')
   const [recordingTask, setRecordingTask] = useState<PrimaryTaskDto>()
   const [login, setLogin] = useState<IdentityPreparationDto>()
@@ -61,7 +65,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     const next = await preparationApi.get(project.project_id)
     if (!alive.current || projectRef.current !== project.project_id) return
     setPreparation(next)
-    const nextWorkspace = await onStateChanged()
+    const nextWorkspace = await onStateChanged().catch(() => undefined)
     if (!alive.current || projectRef.current !== project.project_id) return
     if (!nextWorkspace) { setSyncError('材料已刷新，但下一步尚未同步，请重试刷新。'); return }
     setCurrentWorkspace(nextWorkspace)
@@ -83,7 +87,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     try {
       await onProvidedMaterials()
       if (!alive.current || projectRef.current !== project.project_id) return
-      onFeedback?.('提供的测试材料已保存。准备材料不代表实际身份或安全结论。')
+      feedback('提供的测试材料已保存。准备材料不代表实际身份或安全结论。')
       setSyncError('材料已保存，正在同步下一步。')
       await reload()
     }
@@ -103,7 +107,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
       await preparationApi.selectAllowControl(project.project_id, control, selected)
       if (!alive.current || projectRef.current !== project.project_id) return
       setChoices({}); setSyncError('正常对照已保存，正在同步下一步。')
-      onFeedback?.('正常对照已保存，原有权限规则保持不变。')
+      feedback('正常对照已保存，原有权限规则保持不变。')
       await reload()
     } catch (error) { if (alive.current && projectRef.current === project.project_id) onError(error as ApiError) }
     finally { selecting.current = false; if (alive.current && projectRef.current === project.project_id) setBusy(false) }
@@ -160,7 +164,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   </Button> : null
   return <EditorialPage label="当前准备缺口">
     <EditorialHeader eyebrow="当前工作 / 检查准备" title="继续准备本轮检查"><p className="editorial-muted">完成眼前这一项，界鉴会根据最新材料衔接下一步。</p></EditorialHeader>
-    {syncError && <p role="alert">{syncError}</p>}
+    {(receipt || syncError) && <TaskReceipt message={receipt ?? '正在核对准备材料'} pending={syncError} onRetry={syncError ? () => void refresh() : undefined}/>}
     {preparation?.preparation_complete && <p role="status">测试材料已准备完成，请返回检查总览核对执行条件。</p>}
     {task && currentStage === undefined && task.task_kind !== 'SELECT_ALLOW_CONTROL' && <section className="task-focus"><p>{task.user_responsibility}</p>{primaryButton}</section>}
     {!preparation?.actions.length && <Empty description="请先在业务边界中确认动作和权限" />}
@@ -198,7 +202,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
       const retained = groups.filter(group => group.items.some(({item}) => item.status === 'SATISFIED') && group.items.every(({item}) => ['SATISFIED','NOT_REQUIRED'].includes(item.status)))
       return <section key={action.action_id} className="preparation-action" aria-label={action.display_name}>
         <div className="preparation-heading"><h2>{action.display_name}</h2><details><summary>回看已确认的权限</summary>{action.permissions.map((permission) => <p key={permission.intent_id}>{permissionLabel(permission.intent_id ?? '')}</p>)}</details></div>
-        <div className="preparation-progress"><FlowSpine label={`${action.display_name}的材料状态`} steps={steps.map(step => ({...step, detail:undefined}))} /></div>
+        <p className="preparation-progress editorial-muted">{retained.length ? `${retained.length} 类有效材料继续保留。` : '按当前缺口逐项准备。'}后续要求可在下方展开查看。</p>
         {current && task?.task_kind === 'SELECT_ALLOW_CONTROL' && action.assurance_contract.allow_controls.filter((control) => !control.resolved_allow_permission && control.candidate_allow_permissions.length > 1).map((control) => <section key={control.selection_fingerprint} className="task-focus" aria-label="选择正常对照">
           <h3>选择正常对照</h3><p>{permissionLabel(control.deny_permission.intent_id)}</p><p>以下操作均符合正常对照条件。请选择本次用来确认业务功能正常的一项，现有权限规则保持不变。</p>
           <Radio.Group aria-label="正常对照候选" value={choices[control.selection_fingerprint]} disabled={busy || !task.can_execute || Boolean(syncError)} onChange={(event) => setChoices((values) => ({ ...values, [control.selection_fingerprint]: event.target.value }))}>

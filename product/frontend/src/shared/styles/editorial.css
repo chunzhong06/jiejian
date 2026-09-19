@@ -1,4 +1,16 @@
 /* 连续工作空间：操作表面、普通上下文与证据各自分层，尺寸与颜色复用统一令牌。 */
+.task-journey { margin: 0 auto var(--space-24); padding: var(--space-12) 0 var(--space-20); border-bottom: var(--line-width) solid var(--color-border); max-width: var(--layout-content); }
+.task-journey-heading { display:flex; align-items:center; justify-content:space-between; gap:var(--space-16); font-size:var(--font-secondary); }
+.task-journey-heading strong { font-weight:500; }.task-journey-heading>span { color:var(--color-secondary); font-size:var(--font-label); }
+.task-journey ol { display:flex; flex-wrap:wrap; gap:var(--space-24); list-style:none; padding:0; margin:var(--space-16) 0 0; }
+.task-journey li { display:flex; align-items:center; gap:var(--space-8); color:var(--color-secondary); font-size:var(--font-secondary); }
+.task-journey li>span { display:inline-flex; align-items:center; justify-content:center; width:var(--space-24); height:var(--space-24); border-radius:50%; border:var(--line-width) solid var(--color-border); font-size:var(--font-label); }
+.task-journey li[data-state=CURRENT] { color:var(--color-primary); }.task-journey li[data-state=CURRENT]>span { background:var(--color-primary); color:var(--color-on-accent); border-color:transparent; }
+.task-journey li[data-state=COMPLETE]>span { color:var(--color-safe); background:var(--color-safe-light); border-color:transparent; }.task-journey li[data-state=NEEDS_REVIEW] { color:var(--color-warning); }.task-journey p { margin:var(--space-16) 0 0; color:var(--color-warning); font-size:var(--font-secondary); }
+.task-receipt { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--space-12); padding:var(--space-16) var(--space-20); border-radius:var(--radius-medium); background:color-mix(in srgb,var(--color-safe-mark) 9%,var(--color-surface)); color:var(--color-safe); font-size:var(--font-secondary); }
+.task-receipt strong { font-weight:500; }.task-receipt p { margin:var(--space-4) 0 0; color:var(--color-secondary); }.task-receipt[data-pending=true] { background:color-mix(in srgb,var(--color-warning-mark) 9%,var(--color-surface)); color:var(--color-warning); }
+.editorial-page:has(.preparation-action),.editorial-page:has(.identity-login-steps),.editorial-page:has(.recording-workspace) { max-width:var(--layout-task); width:100%; }
+@media(max-width:600px) { .task-journey-heading>span { display:none; }.task-journey ol { gap:var(--space-12); }.task-journey li { font-size:var(--font-label); }.task-journey li>span { width:var(--space-20); height:var(--space-20); } }
 .editorial-page { display: grid; gap: var(--space-24); max-width: var(--layout-content); padding-block: var(--space-12); margin-inline: auto; min-width: 0; color: var(--color-text); font-size: var(--font-body); }
 .editorial-header h1 { font-size: clamp(var(--font-titleMin), 2.3vw, var(--font-titleMax)); line-height: 1.35; font-weight: 650; letter-spacing: -.035em; margin: var(--space-12) 0 var(--space-16); max-width: 1100px; overflow-wrap: anywhere; }
 .editorial-header p { margin: 0; }

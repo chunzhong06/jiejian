@@ -5,8 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceViewDto } from '../api/workspace'
 import ControlShell from './ControlShell'
 import { ProductThemeProvider } from './ThemeContext'
+import { useState } from 'react'
+import { useTaskGuard } from '../components/TaskContinuity'
 
-vi.mock('../features/boundaries/BusinessBoundaryPage', () => ({ BusinessBoundaryPage: () => <><h1>当前权限规则编辑区</h1><input aria-label="未提交的权限输入" defaultValue=""/></> }))
+vi.mock('../features/boundaries/BusinessBoundaryPage', () => ({ BusinessBoundaryPage: () => {
+  const [value, setValue] = useState(''); useTaskGuard(Boolean(value))
+  return <><h1>当前权限规则编辑区</h1><input aria-label="未提交的权限输入" value={value} onChange={event => setValue(event.target.value)}/><button onClick={() => setValue('')}>取消编辑</button></>
+} }))
 
 const mockApi = vi.hoisted(() => ({
   experienceStatus: vi.fn(), mcpStatus: vi.fn(), shutdown: vi.fn(), remove: vi.fn(),
@@ -55,6 +60,15 @@ vi.mock('../api/projects', () => ({ projectsApi: { remove: mockApi.remove } }))
 vi.mock('../api/system', () => ({ systemApi: { shutdown: mockApi.shutdown } }))
 
 describe('CURRENT 应用壳', () => {
+  it('后台任务变化保留当前输入，取消后才呈现服务端新任务', async () => {
+    const view = render(<ControlShell/>)
+    fireEvent.change(await screen.findByLabelText('未提交的权限输入'), { target: { value: '不要覆盖' } })
+    workspaceState.workspace = { ...currentWorkspace, primary_task: { ...currentWorkspace.primary_task!, task_id: 'next', task_kind: 'RUN_CURRENT_CHECK', route: '/tests' } }
+    view.rerender(<ControlShell/>)
+    expect(screen.getByLabelText('未提交的权限输入')).toHaveValue('不要覆盖')
+    fireEvent.click(screen.getByRole('button', { name: '取消编辑' }))
+    expect(await screen.findByRole('heading', { name: '请先补齐本次检查所需材料' })).toBeInTheDocument()
+  })
   it('从当前工作转到历史再进入权限规则，保留同一份未提交输入', async () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
     render(<ControlShell />)

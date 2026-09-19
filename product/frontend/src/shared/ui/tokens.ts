@@ -5,7 +5,7 @@ export const palettes = {
 } as const
 export type ProductTheme = keyof typeof palettes
 export const metrics = {
-  layout: { navigation: 200, header: 60, mobileSummary: 52, content: 1460 },
+  layout: { navigation: 200, header: 60, mobileSummary: 52, content: 1460, task: 1120, form: 1240 },
   space: [4, 8, 12, 16, 20, 24, 32, 40, 48],
   font: { body: 15, secondary: 13, label: 12, section: 22, titleMin: 26, titleMax: 34 },
   radius: { small: 6, medium: 10, large: 16 },

@@ -92,7 +92,13 @@ export type ApplicationConnectionDto = {
   discovery: DiscoveryResult
 }
 
+export type CandidateSelection = { kind: 'ROLE' | 'ACTION'; candidate_id: string; decision: 'PROPOSED' | 'CONFIRMED' | 'REJECTED'; display_name: string }
+
 export const projectsApi = {
+  decideCandidates: (id: string, revision: number, decisions: CandidateSelection[]) =>
+    request<ApplicationUnderstandingDto>(`/api/projects/${id}/candidate-decisions`, {
+      method: 'PUT', body: JSON.stringify({ schema_version: '1', revision, decisions }),
+    }),
   projects: () => request<ProjectDto[]>('/api/projects'),
   archivedProjects: () => request<ProjectDto[]>('/api/projects?include_archived=true'),
   connectApplication: (sourceRoot: string, projectName?: string) =>

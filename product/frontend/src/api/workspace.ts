@@ -44,6 +44,7 @@ export type PrimaryTaskKind =
   | 'CONFIRM_APPLICATION_ENDPOINT'
   | 'AUTHORIZE_SOURCE_ANALYSIS'
   | 'RUN_SOURCE_ANALYSIS'
+  | 'REVIEW_APPLICATION_CANDIDATES'
   | 'REVIEW_BOUNDARY_PROPOSAL'
   | 'ESTABLISH_BUSINESS_BOUNDARY'
   | 'REVIEW_PERMISSION_REVISION'
@@ -99,6 +100,10 @@ export type WorkspaceAreaDto = {
 }
 
 export type WorkspaceViewDto = {
+  journey?: {
+    title: string; primary_task_id: string | null; action_id: string | null; change_id: string | null; run_id: string | null
+    steps: Array<{ key: 'connect' | 'rules' | 'prepare' | 'check'; label: string; status: 'COMPLETE' | 'CURRENT' | 'PENDING' | 'NEEDS_REVIEW' | 'UNKNOWN' }>
+  } | null
   project: WorkspaceProjectDto
   connection: WorkspaceConnectionDto
   actors: ActorWorkspaceDto[]

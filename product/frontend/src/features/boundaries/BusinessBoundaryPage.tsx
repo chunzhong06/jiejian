@@ -16,6 +16,7 @@ import type { ProjectDto } from '../../api/projects'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import './boundary.css'
 import { PageTaskHeader } from '../../components/PageTaskHeader'
+import { TaskReceipt, useTaskGuard } from '../../components/TaskContinuity'
 import { BoundaryMaintenanceEditor } from './BoundaryMaintenanceEditor'
 import { BoundaryProposalEditor } from './BoundaryProposalEditor'
 import { BoundaryProposalReview } from './BoundaryProposalReview'
@@ -42,6 +43,20 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack,
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [success, setSuccess] = useState<string>()
+  const [syncError, setSyncError] = useState<string>()
+  const [approvalUncertain, setApprovalUncertain] = useState(false)
+  const approvalInFlight = useRef(false)
+  useTaskGuard(busy || Boolean(syncError) || approvalUncertain)
+  const syncApproved = async () => {
+    setBusy(true)
+    try {
+      setMaintenanceDraft(await businessBoundariesApi.maintenanceDraft(project.project_id))
+      const workspace = await onStateChanged()
+      if (!workspace) throw new Error('工作区尚未完成同步')
+      setSyncError(undefined)
+    } catch { setSyncError('批准事实已保留，下一步暂时无法读取。请重试读取，不要重复批准。') }
+    finally { setBusy(false) }
+  }
 
   useEffect(() => {
     let active = true
@@ -96,23 +111,42 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack,
     finally { setBusy(false) }
   }
   const approve = async (target: BoundaryProposalViewDto['proposal'], reason: string) => {
-    const current = await businessBoundariesApi.approve(project.project_id, target, reason)
+    let current: BusinessBoundaryViewDto
+    try { current = await businessBoundariesApi.approve(project.project_id, target, reason) }
+    catch (error) { setApprovalUncertain(true); throw error }
     setBoundary(current)
     setProposalView(undefined)
     setInitialCommand(undefined)
     setInitialMaintenanceCommand(undefined)
     setEditing(null)
-    setSuccess('当前业务边界已经由你确认。界鉴只应用本次提案中的 revision、权限或实现映射变化。')
+    setSuccess('权限规则已确认。')
+    setSyncError('正在读取下一步。')
     // 批准回执已经成立；后续维护草稿读取失败不能留下可以再次批准的旧提案。
     onFeedback?.('权限变更已批准，正在同步当前工作。')
-    setMaintenanceDraft(await businessBoundariesApi.maintenanceDraft(project.project_id))
-    await onStateChanged()
+    await syncApproved()
   }
   const approveCurrent = async (reason: string) => {
-    if (!proposalView) return
+    if (!proposalView || approvalInFlight.current || approvalUncertain) return
+    approvalInFlight.current = true
     setBusy(true)
     try { await approve(proposalView.proposal, reason) }
     catch (error) { onError(error as ApiError) }
+    finally { approvalInFlight.current = false; setBusy(false) }
+  }
+  const readApproval = async () => {
+    if (!proposalView || busy) return
+    setBusy(true)
+    try {
+      // 回执不明只读同一不可变提案的决定，不能重新发送批准来探测。
+      const all = await businessBoundariesApi.proposals(project.project_id)
+      const saved = all.proposals.find(item => item.proposal.proposal_id === proposalView.proposal.proposal_id)
+      if (!saved?.decision) return
+      setBoundary(await businessBoundariesApi.current(project.project_id))
+      setApprovalUncertain(false); setProposalView(undefined); setEditing(null)
+      setSuccess(saved.decision.decision === 'APPROVED' ? '权限规则已确认。' : '这组提案已放弃，正式权限未由本次提案改变。')
+      setSyncError('正在读取下一步。')
+      await syncApproved()
+    } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
   const rejectCurrent = async (reason: string) => {
@@ -163,11 +197,12 @@ export function BusinessBoundaryPage({ project, onError, onStateChanged, onBack,
     && boundary.permission_statuses.every((item) => item.permission_semantics_confirmed)
   return <EditorialPage label="权限规则文档">
     {editing !== 'MAINTENANCE' && <div className="boundary-overview-heading"><EditorialHeader eyebrow="业务权限" title={proposalView ? '审阅权限变更' : editing ? '建立权限规则' : '权限规则'}><p className="editorial-muted">用业务规则说明，谁可以对谁的资源做什么。</p><span className="boundary-confirmation">{permissionsComplete ? '当前规则已确认' : '需要确认当前权限'}</span></EditorialHeader>{!proposalView && !editing && <Button onClick={() => beginMaintenance({mode:'objects'})}>管理业务对象</Button>}</div>}
-    {success && <Alert type="success" showIcon message={success} />}
+    {success && <TaskReceipt message={success} pending={syncError} onRetry={syncError && !busy ? () => void syncApproved() : undefined}/>}
+    {approvalUncertain && <Alert type="warning" message="批准回执尚未确认。请先核对同一提案的决定，不要重复批准。" action={<Button loading={busy} onClick={() => void readApproval()}>核对批准结果</Button>}/>}
     {!proposalView && !editing && <CurrentBoundary boundary={boundary} onEdit={beginMaintenance} />}
 
     {proposalView
-      ? <BoundaryProposalReview currentBoundary={boundary} proposalView={proposalView} busy={busy} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
+      ? <BoundaryProposalReview currentBoundary={boundary} proposalView={proposalView} busy={busy || approvalUncertain} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
       : editing === 'INITIAL'
         ? onProvidedProposal && !initialCommand ? <section aria-label="提供的权限材料">
             <p>这个项目已提供一份业务权限提案。先核对操作人、资源所有者和真实结果，再决定是否批准。</p>

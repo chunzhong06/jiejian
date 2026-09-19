@@ -139,6 +139,7 @@
 - `ApplicationConnectionDto`
 - `ApplicationUnderstandingDto`
 - `CandidateEvidenceDto`
+- `CandidateSelection`
 - `EndpointCandidateDto`
 - `EndpointDiscoveryDto`
 - `ProjectDto`
@@ -225,11 +226,11 @@
 主要 import / dot-source：`../api/projects`, `../api/recordings`
 
 ### `product/frontend/src/app/ControlShell.test.tsx`
-主要 import / dot-source：`../api/workspace`, `./ControlShell`, `./ThemeContext`, `@testing-library/react`, `vitest`
+主要 import / dot-source：`../api/workspace`, `../components/TaskContinuity`, `./ControlShell`, `./ThemeContext`, `@testing-library/react`, `react`, `vitest`
 
 ### `product/frontend/src/app/ControlShell.tsx`
 - `ControlShell`
-主要 import / dot-source：`../api/experience`, `../api/http`, `../api/mcp`, `../api/projects`, `../api/system`, `../components/ErrorRecovery`, `../components/ModuleNavigation`, `../features/access/AccessPage`, `../features/boundaries/BusinessBoundaryPage`, `../features/changes/ChangesPage`, `../features/settings/LLMSettingsDrawer`, `../features/system/RuntimePage`, `../features/testing/CheckHistoryPage`, `../features/testing/CurrentTestsPage`, `../features/tools/ToolsPage`, `../features/workspace/OfficialSamplePanel`, `../features/workspace/WorkbenchPage`, `./AppHeader`, `./NotificationCenter`, `./RetainedWorkPages`, `./presentation`, `./useCheckActivity`, `./useProjectWorkspace`, `./useSystemStatus`, `antd`, `react`, `react-router-dom`
+主要 import / dot-source：`../api/experience`, `../api/http`, `../api/mcp`, `../api/projects`, `../api/system`, `../api/workspace`, `../components/ErrorRecovery`, `../components/ModuleNavigation`, `../components/TaskContinuity`, `../features/access/AccessPage`, `../features/boundaries/BusinessBoundaryPage`, `../features/changes/ChangesPage`, `../features/settings/LLMSettingsDrawer`, `../features/system/RuntimePage`, `../features/testing/CheckHistoryPage`, `../features/testing/CurrentTestsPage`, `../features/tools/ToolsPage`, `../features/workspace/OfficialSamplePanel`, `../features/workspace/WorkbenchPage`, `./AppHeader`, `./NotificationCenter`, `./RetainedWorkPages`, `./presentation`, `./useCheckActivity`, `./useProjectWorkspace`, `./useSystemStatus`, `antd`, `react`, `react-router-dom`
 
 ### `product/frontend/src/app/NotificationCenter.test.tsx`
 主要 import / dot-source：`../api/http`, `./NotificationCenter`, `@testing-library/react`, `vitest`
@@ -339,19 +340,33 @@
 - `TaskActionBar`
 主要 import / dot-source：`antd`
 
+### `product/frontend/src/components/TaskContinuity.tsx`
+- `TaskGuardContext`
+- `TaskJourney`
+- `TaskReceipt`
+- `useTaskGuard`
+主要 import / dot-source：`../api/workspace`, `../app/RetainedWorkPages`, `antd`, `react`
+
 ### `product/frontend/src/features/access/AccessPage.test.tsx`
 主要 import / dot-source：`./AccessPage`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/access/AccessPage.tsx`
 - `AccessPage`
-主要 import / dot-source：`../../api/projects`, `../../api/workspace`, `../../shared/ui/Editorial`, `./ApplicationSetup`
+主要 import / dot-source：`../../api/projects`, `../../api/workspace`, `../../shared/ui/Editorial`, `./ApplicationSetup`, `antd`
 
 ### `product/frontend/src/features/access/ApplicationSetup.test.tsx`
 主要 import / dot-source：`./ApplicationSetup`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/access/ApplicationSetup.tsx`
 - `ApplicationSetup`
-主要 import / dot-source：`../../api/http`, `../../api/onboarding`, `../../api/projects`, `../../api/workspace`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/onboarding`, `../../api/projects`, `../../api/workspace`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `./CandidateReview`, `antd`, `react`
+
+### `product/frontend/src/features/access/CandidateReview.test.tsx`
+主要 import / dot-source：`../../api/projects`, `./CandidateReview`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/access/CandidateReview.tsx`
+- `CandidateReview`
+主要 import / dot-source：`../../api/projects`, `../../components/TaskContinuity`, `antd`, `react`
 
 ### `product/frontend/src/features/boundaries/boundaryLabels.ts`
 - `confidenceLabels`
@@ -365,22 +380,22 @@
 
 ### `product/frontend/src/features/boundaries/BoundaryMaintenanceEditor.tsx`
 - `BoundaryMaintenanceEditor`
-主要 import / dot-source：`../../api/businessBoundaries`, `../../api/permissionDrafts`, `../../components/AssistantPanel`, `./PermissionDraftAssist`, `./PermissionRuleForm`, `./boundaryLabels`, `antd`, `react`
+主要 import / dot-source：`../../api/businessBoundaries`, `../../api/permissionDrafts`, `../../components/AssistantPanel`, `../../components/TaskContinuity`, `./PermissionDraftAssist`, `./PermissionRuleForm`, `./boundaryLabels`, `antd`, `react`
 
 ### `product/frontend/src/features/boundaries/BoundaryProposalEditor.tsx`
 - `BoundaryProposalEditor`
-主要 import / dot-source：`../../api/businessBoundaries`, `../../shared/ui/Editorial`, `./boundaryLabels`, `antd`, `react`
+主要 import / dot-source：`../../api/businessBoundaries`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `./PermissionRuleForm`, `./boundaryLabels`, `antd`, `react`
 
 ### `product/frontend/src/features/boundaries/BoundaryProposalReview.tsx`
 - `BoundaryProposalReview`
 主要 import / dot-source：`../../api/businessBoundaries`, `./boundaryLabels`, `antd`, `react`
 
 ### `product/frontend/src/features/boundaries/BusinessBoundaryPage.test.tsx`
-主要 import / dot-source：`./BusinessBoundaryPage`, `@testing-library/react`, `vitest`
+主要 import / dot-source：`../../api/businessBoundaries`, `./BoundaryProposalEditor`, `./BusinessBoundaryPage`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/boundaries/BusinessBoundaryPage.tsx`
 - `BusinessBoundaryPage`
-主要 import / dot-source：`../../api/businessBoundaries`, `../../api/http`, `../../api/projects`, `../../components/PageTaskHeader`, `../../shared/ui/Editorial`, `./BoundaryMaintenanceEditor`, `./BoundaryProposalEditor`, `./BoundaryProposalReview`, `./boundaryLabels`, `antd`, `react`
+主要 import / dot-source：`../../api/businessBoundaries`, `../../api/http`, `../../api/projects`, `../../components/PageTaskHeader`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `./BoundaryMaintenanceEditor`, `./BoundaryProposalEditor`, `./BoundaryProposalReview`, `./boundaryLabels`, `antd`, `react`
 
 ### `product/frontend/src/features/boundaries/PermissionDraftAssist.tsx`
 - `PermissionDraftAssist`
@@ -388,14 +403,14 @@
 
 ### `product/frontend/src/features/boundaries/PermissionRuleForm.tsx`
 - `PermissionRuleForm`
-主要 import / dot-source：`../../api/businessBoundaries`, `./boundaryLabels`, `antd`, `react`
+主要 import / dot-source：`../../api/businessBoundaries`, `../../components/TaskContinuity`, `./boundaryLabels`, `antd`, `react`
 
 ### `product/frontend/src/features/changes/ChangesPage.test.tsx`
 主要 import / dot-source：`./ChangesPage`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/changes/ChangesPage.tsx`
 - `ChangesPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/repairs`, `../../api/sourceChanges`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../shared/ui/Editorial`, `./RepairComparison`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/repairs`, `../../api/sourceChanges`, `../../api/workspace`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../app/taskDestination`, `../../shared/ui/Editorial`, `./RepairComparison`, `antd`, `react`
 
 ### `product/frontend/src/features/changes/RepairComparison.test.tsx`
 主要 import / dot-source：`../../api/repairs`, `./RepairComparison`, `@testing-library/react`, `vitest`
@@ -409,14 +424,14 @@
 
 ### `product/frontend/src/features/identities/TestIdentityPage.tsx`
 - `TestIdentityPage`
-主要 import / dot-source：`../../api/businessBoundaries`, `../../api/http`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../components/TaskActionBar`, `../../shared/ui/Editorial`, `antd`, `react`
+主要 import / dot-source：`../../api/businessBoundaries`, `../../api/http`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `antd`, `react`
 
 ### `product/frontend/src/features/preparation/PreparationPage.test.tsx`
 主要 import / dot-source：`../../api/preparation`, `../../api/workspace`, `./PreparationPage`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/preparation/PreparationPage.tsx`
 - `PreparationPage`
-主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../app/taskDestination`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `../../shared/ui/Editorial`, `../identities/TestIdentityPage`, `../recording/RecordingPage`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../app/taskDestination`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `../identities/TestIdentityPage`, `../recording/RecordingPage`, `antd`, `react`
 
 ### `product/frontend/src/features/recording/FlowDraftReview.tsx`
 - `FlowDraftReview`
@@ -432,7 +447,7 @@
 
 ### `product/frontend/src/features/recording/RecordingPage.tsx`
 - `RecordingPage`
-主要 import / dot-source：`../../api/http`, `../../api/jobs`, `../../api/projects`, `../../api/recordings`, `../../api/workspace`, `../../app/browserState`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `../../shared/ui/Editorial`, `./FlowDraftReview`, `./RecordingCaptureCard`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/jobs`, `../../api/projects`, `../../api/recordings`, `../../api/workspace`, `../../app/browserState`, `../../components/AssistantPanel`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `./FlowDraftReview`, `./RecordingCaptureCard`, `antd`, `react`
 
 ### `product/frontend/src/features/settings/LLMSettingsDrawer.test.tsx`
 主要 import / dot-source：`./LLMSettingsDrawer`, `@testing-library/react`, `vitest`
@@ -474,7 +489,7 @@
 
 ### `product/frontend/src/features/testing/CurrentTestsPage.tsx`
 - `CurrentTestsPage`
-主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../app/presentation`, `../../components/TaskActionBar`, `../../shared/ui/Editorial`, `../preparation/PreparationPage`, `./CurrentResultStory`, `antd`, `react`
+主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../app/presentation`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `../preparation/PreparationPage`, `./CurrentResultStory`, `antd`, `react`
 
 ### `product/frontend/src/features/testing/ExecutionPath.test.tsx`
 主要 import / dot-source：`../../api/currentChecks`, `./ExecutionPath`, `./testing.fixtures`, `@testing-library/react`, `vitest`

@@ -11,6 +11,7 @@ from product.backend.composition import ApplicationCore
 from product.backend.core.application_understanding import (
     ActionRiskHint,
     CandidateDecision,
+    CandidateSelection,
 )
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
@@ -109,6 +110,12 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
             ).model_dump(mode="json")
         )
 
+    @router.put("/api/projects/{project_id}/candidate-decisions", response_model=ApiResponse)
+    def decide_candidates(project_id: str, body: CandidateBatchDecisionRequest):
+        return data_response(context.application_understanding.decide_candidates(
+            project_id, revision=body.revision, decisions=tuple(body.decisions),
+        ).model_dump(mode="json"))
+
     @router.put(
         "/api/projects/{project_id}/roles/{candidate_id}",
         response_model=ApiResponse,
@@ -200,6 +207,12 @@ class SourceAnalysisAuthorizationRequest(ApiModel):
 class SourceAnalysisRequest(ApiModel):
     schema_version: Literal["1"]
     revision: int = Field(ge=0, le=1_000_000)
+
+
+class CandidateBatchDecisionRequest(ApiModel):
+    schema_version: Literal["1"]
+    revision: int = Field(ge=0, le=1_000_000)
+    decisions: list[CandidateSelection] = Field(min_length=1, max_length=256)
 
 
 class CandidateDecisionRequest(ApiModel):

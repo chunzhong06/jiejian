@@ -46,3 +46,14 @@
   .application-manual .ant-btn, .application-manual .ant-input,
   .application-manual-path .ant-btn, .application-manual-path .ant-input { width: 100%; }
 }
+.candidate-workspace { max-width:var(--layout-form); display:grid; gap:var(--space-24); }
+.candidate-workspace > .ant-btn { justify-self:start; }
+/* 接入页的提交在工作面内；底部导航保持文档流，避免压住审阅按钮。 */
+.application-setup > .task-action-bar { position:static; }
+.candidate-workspace header h2 { margin:var(--space-8) 0; }.candidate-workspace>.ant-segmented { justify-self:start; }
+.candidate-selection-row { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:var(--space-16); padding:var(--space-16) 0; border-bottom:var(--line-width) solid var(--color-border); }
+.candidate-selection-row>.ant-checkbox-wrapper { margin-top:var(--space-8); }.candidate-selection-row p,.candidate-selection-row details { font-size:var(--font-secondary); color:var(--color-secondary); margin:var(--space-8) 0; }
+.candidate-selection-row .ant-input { max-width:100%; }.candidate-workspace fieldset { border:0; padding:0; margin:var(--space-12) 0; min-width:0; }
+.candidate-batch-review { padding:var(--space-24); background:var(--color-surface-subtle); border-radius:var(--radius-medium); }.candidate-batch-review>div { margin-block:var(--space-12); }.candidate-batch-review .ant-btn { margin-right:var(--space-12); }
+.candidate-stale { padding-block:var(--space-16); color:var(--color-warning); }
+@media(max-width:600px) { .candidate-workspace { gap:var(--space-16); }.candidate-selection-row { gap:var(--space-12); }.candidate-batch-review { padding:var(--space-16); } }

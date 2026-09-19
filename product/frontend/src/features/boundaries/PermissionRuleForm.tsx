@@ -3,6 +3,7 @@ import { Alert, Button, Checkbox, Select, Segmented } from 'antd'
 import { useId, useState } from 'react'
 import type { BoundaryMaintenancePermissionDto } from '../../api/businessBoundaries'
 import { relationLabels } from './boundaryLabels'
+import { useTaskGuard } from '../../components/TaskContinuity'
 
 type NamedItem = { item_id: string; display_name: string }
 export function PermissionRuleForm({ initial, actors, action, busy, onSave, onCancel }: {
@@ -15,6 +16,7 @@ export function PermissionRuleForm({ initial, actors, action, busy, onSave, onCa
 }) {
   const expectationId = useId()
   const [value, setValue] = useState(initial)
+  useTaskGuard(busy || JSON.stringify(value) !== JSON.stringify(initial))
   const [error, setError] = useState<string>()
   const patch = (change: Partial<BoundaryMaintenancePermissionDto>) => { setValue(current => ({ ...current, ...change })); setError(undefined) }
   const options = actors.map(item => ({ value:item.item_id, label:item.display_name || '尚未命名的主体' }))

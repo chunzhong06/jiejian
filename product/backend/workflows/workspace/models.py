@@ -79,6 +79,7 @@ PrimaryTaskKind = Literal[
     "CONFIRM_APPLICATION_ENDPOINT",
     "AUTHORIZE_SOURCE_ANALYSIS",
     "RUN_SOURCE_ANALYSIS",
+    "REVIEW_APPLICATION_CANDIDATES",
     "REVIEW_BOUNDARY_PROPOSAL",
     "ESTABLISH_BUSINESS_BOUNDARY",
     "REVIEW_PERMISSION_REVISION",
@@ -155,6 +156,21 @@ class WorkspaceSourceChange(WorkspaceModel):
     created_at_us: int = Field(ge=0)
 
 
+class WorkspaceJourneyStep(WorkspaceModel):
+    key: Literal["connect", "rules", "prepare", "check"]
+    label: str
+    status: Literal["COMPLETE", "CURRENT", "PENDING", "NEEDS_REVIEW", "UNKNOWN"]
+
+
+class WorkspaceJourney(WorkspaceModel):
+    title: str
+    primary_task_id: str | None
+    action_id: str | None = None
+    change_id: str | None = None
+    run_id: str | None = None
+    steps: tuple[WorkspaceJourneyStep, ...]
+
+
 class WorkspaceView(WorkspaceModel):
     project: WorkspaceProjectView
     connection: WorkspaceConnectionView
@@ -166,6 +182,7 @@ class WorkspaceView(WorkspaceModel):
     source_change: WorkspaceSourceChange | None = None
     repair: ProjectRepair | None = None
     active_check: CheckRunStatus | None = None
+    journey: WorkspaceJourney | None = None
 
 
 __all__ = [

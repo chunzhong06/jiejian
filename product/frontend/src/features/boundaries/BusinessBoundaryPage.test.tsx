@@ -3,6 +3,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BusinessBoundaryPage } from './BusinessBoundaryPage'
+import { BoundaryProposalEditor } from './BoundaryProposalEditor'
+import type { BoundaryProposalCommandDto, BoundaryDraftViewDto } from '../../api/businessBoundaries'
 
 const mockApi = vi.hoisted(() => ({
   current: vi.fn(), preview: vi.fn(), proposals: vi.fn(), createProposal: vi.fn(),
@@ -77,14 +79,32 @@ describe('业务边界页面', () => {
     mockApi.approve.mockResolvedValue(approvedBoundary)
     mockApi.maintenanceDraft.mockRejectedValueOnce(new Error('follow-up read failed'))
     const onError = vi.fn(), onFeedback = vi.fn()
-    render(<BusinessBoundaryPage project={project} onError={onError} onFeedback={onFeedback} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    render(<BusinessBoundaryPage project={project} onError={onError} onFeedback={onFeedback} onStateChanged={vi.fn().mockResolvedValue({ project })} onBack={vi.fn()}/>)
     fireEvent.change(await screen.findByRole('textbox', { name: '确认或放弃原因' }), { target: { value: '确认这些权限要求' } })
     fireEvent.click(screen.getByRole('button', { name: '确认这组业务边界' }))
-    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('批准事实已保留，下一步暂时无法读取。请重试读取，不要重复批准。')).toBeInTheDocument()
     expect(mockApi.approve).toHaveBeenCalledTimes(1)
     expect(onFeedback).toHaveBeenCalledWith('权限变更已批准，正在同步当前工作。')
     expect(screen.queryByRole('button', { name: '确认这组业务边界' })).not.toBeInTheDocument()
     expect(screen.getByText('当前规则已确认')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重新读取下一步' }))
+    await waitFor(() => expect(screen.queryByText('批准事实已保留，下一步暂时无法读取。请重试读取，不要重复批准。')).not.toBeInTheDocument())
+    expect(mockApi.approve).toHaveBeenCalledTimes(1)
+  })
+
+  it('批准回执不明时只查询同一提案决定，不能重复批准', async () => {
+    mockApi.proposals.mockResolvedValue({ project_id: 'app_demo', proposals: [{ proposal, decision: null }] })
+    mockApi.approve.mockRejectedValue(new Error('lost acknowledgement'))
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    fireEvent.change(await screen.findByRole('textbox', { name: '确认或放弃原因' }), { target: { value: '确认权限要求' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认这组业务边界' }))
+    const read = await screen.findByRole('button', { name: '核对批准结果' })
+    mockApi.proposals.mockResolvedValue({ project_id: 'app_demo', proposals: [{ proposal, decision: { decision: 'APPROVED' } }] })
+    mockApi.current.mockResolvedValue(approvedBoundary)
+    fireEvent.click(read)
+    expect(await screen.findByText('权限规则已确认。')).toBeInTheDocument()
+    expect(mockApi.approve).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: '确认这组业务边界' })).not.toBeInTheDocument()
   })
 
   it('提供的权限提案只在明确采用后加载，仍需普通人工批准', async () => {
@@ -97,6 +117,22 @@ describe('业务边界页面', () => {
     expect(provided).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button',{name:'确认这组业务边界'})).toBeDisabled()
     expect(mockApi.approve).not.toHaveBeenCalled()
+  })
+
+  it('首次规则逐条取消或保存，生成提案仍包含其他动作的全部规则', () => {
+    const onSubmit = vi.fn()
+    render(<BoundaryProposalEditor preview={preview as BoundaryDraftViewDto} initialCommand={command as BoundaryProposalCommandDto} busy={false} onSubmit={onSubmit}/>)
+    fireEvent.click(screen.getByRole('button', { name: '继续编写权限规则' }))
+    fireEvent.click(screen.getByRole('button', { name: '添加权限规则' }))
+    expect(screen.getByRole('button', { name: '生成待审业务边界' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '取消本次编辑' }))
+    expect(screen.getAllByRole('button', { name: '编辑这条规则' })).toHaveLength(2)
+    fireEvent.click(screen.getAllByRole('button', { name: '编辑这条规则' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '保存到草稿' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '生成待审业务边界' }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ proposed_permissions: expect.arrayContaining(command.proposed_permissions.map(item => expect.objectContaining(item))) }))
+    expect(onSubmit.mock.calls[0][0].proposed_permissions).toHaveLength(3)
   })
 
   it('只把 Candidate 当识别依据，并要求用户填写真实业务结果', async () => {

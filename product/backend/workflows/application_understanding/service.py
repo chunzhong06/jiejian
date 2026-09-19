@@ -33,6 +33,7 @@ from product.backend.core.application_understanding import (
     CandidateConfidence,
     CandidateDecision,
     CandidateOrigin,
+    CandidateSelection,
     RoleCandidate,
     candidate_id,
     canonical_role_key,
@@ -443,6 +444,38 @@ class ApplicationUnderstandingService:
             display_name=display_name,
             candidate_type="action",
         )
+
+    def decide_candidates(
+        self, project_id: str, *, revision: int,
+        decisions: tuple[CandidateSelection, ...],
+    ) -> ApplicationUnderstanding:
+        """在同一 revision 下全有或全无地保存候选审阅；不生成或批准权限。"""
+        if not 1 <= len(decisions) <= 256 or len({item.candidate_id for item in decisions}) != len(decisions):
+            raise JiejianError(ErrorCode.ONBOARDING_INPUT_INVALID, "每批需包含 1 至 256 个不同候选")
+        with self._uow_factory() as work:
+            current = self._current_for_update(work, project_id, revision)
+            roles = {item.candidate_id: item for item in current.role_candidates}
+            actions = {item.candidate_id: item for item in current.action_candidates}
+            # 所有项先在内存中完整校验，任何一项失败都不会保存前面的决定。
+            for selection in decisions:
+                candidates = roles if selection.kind == "ROLE" else actions
+                selected = candidates.get(selection.candidate_id)
+                if selected is None:
+                    raise JiejianError(ErrorCode.APPLICATION_CANDIDATE_NOT_FOUND, "候选不属于当前应用或已被替换")
+                if selected.stale or selected.decision is CandidateDecision.REVIEW_REQUIRED:
+                    raise JiejianError(ErrorCode.APPLICATION_REVISION_CONFLICT, "候选需要重新分析或单独复核，批量决定未保存")
+                decision = CandidateDecision(selection.decision)
+                if decision is CandidateDecision.PROPOSED and selected.origin is CandidateOrigin.MANUAL:
+                    raise JiejianError(ErrorCode.ONBOARDING_INPUT_INVALID, "手工候选不能改为系统待确认项")
+                values = selected.model_dump(mode="python")
+                values.update(decision=decision, display_name=self._display_name(
+                    selection.display_name, max_length=128 if selection.kind == "ROLE" else 256))
+                candidates[selection.candidate_id] = type(selected).model_validate(values)
+            updated = self._save_candidate_update(work, current,
+                role_candidates=tuple(roles[item.candidate_id] for item in current.role_candidates),
+                action_candidates=tuple(actions[item.candidate_id] for item in current.action_candidates))
+        self._refresh_permission_bindings(project_id)
+        return updated
 
     def add_manual_role(
         self,

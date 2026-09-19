@@ -258,6 +258,26 @@ def test_workspace_primary_task_follows_single_fixed_priority(tmp_path: Path) ->
         core.close()
 
 
+def test_first_candidates_remain_primary_until_both_kinds_confirmed(tmp_path: Path) -> None:
+    core, project_id = _core(tmp_path)
+    try:
+        role, action = _role_candidate(), _action_candidate()
+        _ready_understanding(core, project_id, role_candidates=(role,), action_candidates=(action,))
+        first = core.workspace.get(project_id)
+        assert first.primary_task.task_kind == "REVIEW_APPLICATION_CANDIDATES"
+        assert first.journey.primary_task_id == first.primary_task.task_id
+        assert core.workspace.get(project_id) == first
+        role = role.model_copy(update={"decision": CandidateDecision.CONFIRMED})
+        _ready_understanding(core, project_id, role_candidates=(role,), action_candidates=(action,))
+        assert core.workspace.get(project_id).primary_task.task_kind == "REVIEW_APPLICATION_CANDIDATES"
+        action = action.model_copy(update={"decision": CandidateDecision.CONFIRMED})
+        _ready_understanding(core, project_id, role_candidates=(role,), action_candidates=(action,))
+        assert core.workspace.get(project_id).primary_task.task_kind == "ESTABLISH_BUSINESS_BOUNDARY"
+        assert not core.business_boundaries.view(project_id).permission_intents
+    finally:
+        core.close()
+
+
 def test_existing_stale_action_binding_becomes_rebind_task(tmp_path: Path) -> None:
     core, project_id = _core(tmp_path)
     try:

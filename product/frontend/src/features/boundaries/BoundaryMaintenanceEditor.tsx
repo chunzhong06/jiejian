@@ -12,6 +12,7 @@ import type {
   ProposedEffectDto,
 } from '../../api/businessBoundaries'
 import { PermissionRuleForm } from './PermissionRuleForm'
+import { useTaskGuard } from '../../components/TaskContinuity'
 import { confidenceLabels, effectKindLabels } from './boundaryLabels'
 import { AssistantPanel } from '../../components/AssistantPanel'
 import { PermissionDraftAssist } from './PermissionDraftAssist'
@@ -31,6 +32,7 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
   const [actors, setActors] = useState<BoundaryMaintenanceActorDto[]>(initial.actors)
   const [actions, setActions] = useState<DraftAction[]>(initial.actions)
   const [permissions, setPermissions] = useState<BoundaryMaintenancePermissionDto[]>(initial.permissions)
+  useTaskGuard(busy || JSON.stringify([actors, actions, permissions]) !== JSON.stringify([initial.actors, initial.actions, initial.permissions]))
   const [error, setError] = useState<string>()
   const [selectedActionId, setSelectedActionId] = useState<string>(initial.actions.find(item => item.action_id === focus?.actionId)?.item_id ?? initial.actions[0]?.item_id)
   const [mode, setMode] = useState<'rules' | 'objects'>(focus?.mode === 'objects' ? 'objects' : 'rules')

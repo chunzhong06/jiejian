@@ -157,6 +157,9 @@ describe('当前检查工作区', () => {
     expect(api.story).not.toHaveBeenCalled(); expect(api.submit).not.toHaveBeenCalled()
     api.status.mockResolvedValue(status())
     fireEvent.click(screen.getByRole('button', { name: '刷新检查结果' }))
+    expect(await screen.findByText('检查已完成，结果已保存。')).toBeInTheDocument()
+    expect(screen.queryByText('确认禁止的交付包已经生成')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看本轮结果' }))
     expect(await screen.findByText('确认禁止的交付包已经生成')).toBeInTheDocument()
   })
   it('切换项目后忽略前一项目延迟的故事', async () => {

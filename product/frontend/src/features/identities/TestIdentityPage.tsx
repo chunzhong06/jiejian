@@ -24,6 +24,7 @@ import {
 } from '../../api/testIdentities'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../components/TaskActionBar'
+import { TaskReceipt, useTaskGuard } from '../../components/TaskContinuity'
 import './identities.css'
 
 function statusTag(identity: TestIdentityDto) {
@@ -57,14 +58,18 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [syncError, setSyncError] = useState<string>()
+  const [receipt, setReceipt] = useState<string>()
+  const confirming = useRef(false)
+  const [saveUncertain, setSaveUncertain] = useState(false)
 
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   const activeLogin = Boolean(preparation && !['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status))
+  useTaskGuard(busy || activeLogin || Boolean(syncError) || Boolean(label.trim()))
 
   const syncWorkspace = async (savedMessage: string) => {
     if (!alive.current) return false
-    const snapshot = await onStateChanged()
+    const snapshot = await onStateChanged().catch(() => undefined)
     if (!alive.current) return false
     if (snapshot) {
       setSyncError(undefined)
@@ -101,6 +106,8 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
         if (!active) return
         setPreparation(next)
         if (next.status === 'PREPARED') {
+          setReceipt('测试登录状态已保存。实际执行身份将在检查中独立核验。')
+          setSyncError('正在核对已保存的账号与下一项任务。')
           onPrepared?.()
           await load()
           await syncWorkspace(next.status === 'PREPARED' ? '账号登录状态已保存' : '登录保存请求已提交')
@@ -116,6 +123,17 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
   const refresh = async () => {
     setBusy(true)
     try {
+      if (preparation) {
+        const next = await testIdentitiesApi.preparation(preparation.preparation_id)
+        if (!alive.current) return
+        setPreparation(next)
+        if (saveUncertain && ['WAITING_FOR_LOGIN','STARTING'].includes(next.status)) {
+          setSyncError('尚未确认保存请求的结果。请继续核对，或取消本次准备；不要重复保存。')
+          await load()
+          return
+        }
+        setSaveUncertain(false)
+      }
       await load()
       await syncWorkspace('账号状态已刷新')
     }
@@ -143,17 +161,20 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
   }
 
   const confirm = async () => {
-    if (!preparation) return
+    if (!preparation || confirming.current || syncError) return
+    confirming.current = true
     setBusy(true)
     try {
       const next = await testIdentitiesApi.confirmPreparation(preparation.preparation_id)
       if (!alive.current) return
       setPreparation(next)
+      setReceipt(next.status === 'PREPARED' ? '测试登录状态已保存。实际执行身份将在检查中独立核验。' : '登录保存请求已提交，正在核对结果。')
+      setSyncError('正在读取账号状态与下一步。')
       if (next.status === 'PREPARED') onPrepared?.()
       await load()
       await syncWorkspace(next.status === 'PREPARED' ? '账号登录状态已保存' : '登录保存请求已提交')
     }
-    catch (error) { if (alive.current) onError(error as ApiError) } finally { if (alive.current) setBusy(false) }
+    catch (error) { if (alive.current) { setSaveUncertain(true); setSyncError('保存结果需要核对。请先重新读取，不要重复提交。'); onError(error as ApiError) } } finally { confirming.current = false; if (alive.current) setBusy(false) }
   }
 
   const cancel = async () => {
@@ -216,10 +237,10 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     </>}
     {preparation?.status === 'WAITING_FOR_LOGIN' && <section className="identity-login-steps task-focus"><p className="editorial-eyebrow">当前需要你处理</p><h2>在已打开的浏览器中完成登录</h2>
       <p>测试账号：{preparationIdentity?.label ?? '当前测试账号'}</p><p className="editorial-muted">正常完成密码、单点登录或多因素认证，然后回到这里确认。</p><p>保存完成前，请保持登录窗口打开。</p>
-      <Space wrap><Button type="primary" aria-label="我已完成登录" aria-busy={busy} loading={busy} onClick={() => void confirm()}>我已完成登录</Button><Button loading={busy} onClick={() => void cancel()}>取消准备</Button></Space>
+      <Space wrap><Button type="primary" aria-label="我已完成登录" aria-busy={busy} disabled={Boolean(syncError)} loading={busy} onClick={() => void confirm()}>我已完成登录</Button><Button loading={busy} onClick={() => void cancel()}>取消准备</Button></Space>
       <p className="editorial-muted">只保存当前应用所需的有限登录状态，不保存密码。实际执行身份在检查中核验。</p>
     </section>}
-    {preparation && preparation.status !== 'WAITING_FOR_LOGIN' && <Alert
+    {preparation && preparation.status !== 'WAITING_FOR_LOGIN' && !(receipt && preparation.status === 'PREPARED') && <Alert
       type={preparation.status === 'FAILED' ? 'error' : preparation.status === 'UNSUPPORTED' ? 'warning' : preparation.status === 'PREPARED' ? 'success' : 'info'}
       showIcon
       message={preparation.status === 'SAVING' ? '正在安全保存这个应用所需的登录状态…' : preparation.status === 'PREPARED' ? '登录状态已准备；界鉴没有保存你的密码' : preparation.message}
@@ -228,7 +249,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
         {['PREPARED', 'UNSUPPORTED', 'CANCELLED', 'FAILED'].includes(preparation.status) && <Button onClick={() => setPreparation(null)}>关闭提示</Button>}
       </Space>}
     />}
-    {syncError && <Alert type="warning" showIcon message={syncError} />}
+    {(receipt || syncError) && <TaskReceipt message={receipt ?? '正在核对测试账号'} pending={syncError} onRetry={syncError ? () => void refresh() : undefined}/>}
 
     <TaskActionBar
       back={{ label: '返回检查准备', onClick: onBack, disabled: busy || activeLogin }}

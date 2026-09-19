@@ -87,6 +87,14 @@ class ActionRiskHint(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+# 批量审阅的单个决定只属于应用理解，不携带权限或执行配置。
+class CandidateSelection(UnderstandingModel):
+    kind: Literal["ROLE", "ACTION"]
+    candidate_id: str = Field(pattern=r"^(role|action)_[0-9a-f]{32}$")
+    decision: Literal["PROPOSED", "CONFIRMED", "REJECTED"]
+    display_name: str = Field(min_length=1, max_length=256)
+
+
 class CandidateEvidence(UnderstandingModel):
     relative_path: str = Field(min_length=1, max_length=1024)
     line_start: int = Field(ge=1)

@@ -31,6 +31,7 @@
 - `class CandidateOrigin`
 - `class CandidateConfidence`
 - `class ActionRiskHint`
+- `class CandidateSelection`
 - `class CandidateEvidence`
 - `class RoleCandidate`
 - `class ActionCandidate`

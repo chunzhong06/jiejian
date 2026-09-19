@@ -21,7 +21,7 @@ ApplicationCore / Published facts
 
 使用独立 `WorkspaceView` 作为 GUI 唯一工作区 DTO。它包含当前项目与连接、Actor/Action 动作级视图、current Permission、实时 implementation inspection、四个长期区域，以及服务端按固定优先级选出的唯一 `PrimaryTask`。稳定 task ID 与 stale fingerprint 由服务端事实生成；前端不得重算优先级、binding currentness 或权限状态。
 
-Business Boundary API 位于 `/api/projects/{project_id}/business-boundaries`。无正式边界时，`preview` 与首次 Proposal create 建立稳定 identity；已有边界后，普通 create 返回 `BOUNDARY_MAINTENANCE_REQUIRED`，客户端改用 `maintenance-draft` 和唯一 `maintenance-proposals` desired-state 写入口。客户端不提交 `write_mode`，服务端用 `boundary_state_fingerprint` 校验并发后自动形成 CREATE/REFERENCE/APPEND Proposal；Proposal 列表/读取/批准/拒绝继续复用，Approve body 只含预期 `proposal_fingerprint` 与 reason，审批身份和渠道固定为 `LOCAL_GUI`。没有 official recipe 普通路由、PATCH Proposal、旧 matrix cell writer、candidate decide 或自动 approve。current 响应只含精确匹配当前 ACTIVE Actor/Action revision 与 Effect catalog 的 latest ACTIVE Permission；历史 revision 仍由历史读取入口保存。
+Business Boundary API 位于 `/api/projects/{project_id}/business-boundaries`。无正式边界时，`preview` 与首次 Proposal create 建立稳定 identity；已有边界后，普通 create 返回 `BOUNDARY_MAINTENANCE_REQUIRED`，客户端改用 `maintenance-draft` 和唯一 `maintenance-proposals` desired-state 写入口。客户端不提交 `write_mode`，服务端用 `boundary_state_fingerprint` 校验并发后自动形成 CREATE/REFERENCE/APPEND Proposal；Proposal 列表/读取/批准/拒绝继续复用，Approve body 只含预期 `proposal_fingerprint` 与 reason，审批身份和渠道固定为 `LOCAL_GUI`。没有 official recipe 普通路由、PATCH Proposal、旧 matrix cell writer 或自动 approve；应用候选决定不属于权限批准。current 响应只含精确匹配当前 ACTIVE Actor/Action revision 与 Effect catalog 的 latest ACTIVE Permission；历史 revision 仍由历史读取入口保存。
 
 GUI 通过固定 loopback API 读取 envelope。当前工作区入口只有 `GET /api/projects/{project_id}/workspace`，旧 `/status` 返回 404。API 成功 envelope 使用根 `schema_version="1"` 与 `data`；异常由稳定 error code、trace 和有界 details 映射。API envelope 版本描述控制面机器格式，不是产品版本。
 
@@ -29,13 +29,19 @@ GUI 通过固定 loopback API 读取 envelope。当前工作区入口只有 `GET
 
 当前 GUI 与 projects API 不提供独立交付检查入口；Workspace 不产生交付结论。
 
+## 应用候选批量决定
+
+`PUT /api/projects/{project_id}/candidate-decisions` 复用 application-understanding 格式，命令根版本为 1，携带 understanding revision 和 1 至 256 个不重复候选决定。嵌套决定仅包含种类、候选引用、显示名称与决定，不另设版本。服务端先检查所有项，再在同一事务保存并只推进一次 revision；未知、重复、失效或非法候选使整批失败。MANUAL 候选不能转成系统 PROPOSED。成功后只更新理解与既有绑定刷新，不创建或批准权限。
+
+回执不明先读当前理解，匹配新 revision 与全部决定才展示保存事实；旧 revision 不自动重放。Workspace journey 是嵌套只读位置投影，复用唯一 PrimaryTask，不建立任务表或新的裁判逻辑。首次存在有效待审候选且没有正式边界、未同时确认权限组和动作时，发布 REVIEW_APPLICATION_CANDIDATES。
+
 ## 当前 CHECK 历史与执行路径
 
 `GET /api/projects/{project_id}/check-history` 只读当前 CHECK，保留原 `/runs` 列表契约。默认 limit 25、最大 50；query 最长 128，trim 后大小写不敏感的字面子串匹配 run_id 和已验证冻结动作名，可按 verdict/lifecycle 筛选。成对 cursor 使用 created_at_us 降序与 run_id 升序的严格 keyset，项目条件在 SQL 中限制；每次最多校验 250 条候选，返回最后实际扫描键之后的继续位置，只有后面仍有候选才提供 cursor。因此空 items 加非空 cursor 合法，不提供 total 或跨请求快照保证。INVALID 不使用数据库 Verdict、未知标签或上下文冒充已发布事实；NOT_PUBLISHED 原义保持。精确 DTO 由 `workflows/checks/results.py` 和自动代码参考维护。
 
 `ActionResultStory.execution_path` 是同 Case 的只读嵌套投影，不写回发布包，不携带 schema_version。没有非空 Trace 或多个 Trace 冲突时为 null；相同 Trace 保留一份完整拓扑图，partial/空 partial 的 complete/reasons 原样保持。全部最多 512 个节点与显式 parent_event_ids 逐项复制，不按时间补边；文档引用只包含实际承载该 Trace 的 CheckEvidence ID，保序去重，不混用事件的其他来源引用。节点不包含时间、凭据、authority scope、semantic_key 或原始正文；字段真源为 `workflows/checks/story.py`。完整性错误仍传播，不能以空图吞错。
 
-Workspace 的 active_check 只表示本项目最新 QUEUED/RUNNING，终态后为空不代表 PASS；source_change.submitted_by 直接复制登记来源。三导航、会话保留、结果通知和局部证据区的详细消费职责见[前端模块](../../02_开发指南/模块/frontend.md)。这些读取不改变 PrimaryTask、修复合同或安全结论，也不恢复旧 History/Report writer。
+Workspace 的 active_check 只表示本项目最新 QUEUED/RUNNING，终态后为空不代表 PASS；source_change.submitted_by 直接复制登记来源。四个一级入口、会话保留、结果通知和局部证据区的详细消费职责见[前端模块](../../02_开发指南/模块/frontend.md)。这些读取不改变 PrimaryTask、修复合同或安全结论，也不恢复旧 History/Report writer。
 
 ## CLI Human 与 Machine
 

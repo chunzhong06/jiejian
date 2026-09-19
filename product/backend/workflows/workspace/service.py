@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from product.backend.core.application_understanding import ApplicationUnderstanding
+from product.backend.core.application_understanding import ApplicationUnderstanding, CandidateDecision
 from product.backend.core.business_boundary import (
     ImplementationBindingStatus,
     boundary_sha256,
@@ -40,6 +40,8 @@ from product.backend.workflows.workspace.models import (
     WorkspaceConnectionView,
     WorkspaceProjectView,
     WorkspaceView,
+    WorkspaceJourney,
+    WorkspaceJourneyStep,
 )
 
 
@@ -199,7 +201,43 @@ class WorkspaceService:
             primary_task=primary_task,
             areas=self._areas(boundary_attention, preparation.preparation_complete),
             latest_result=latest_result,source_change=source_change,repair=repair,active_check=active_check,
+            journey=self._journey(connection, boundary_attention, preparation.preparation_complete,
+                primary_task, latest_result, source_change, active_check),
         )
+
+    @staticmethod
+    def _journey(connection, boundary_attention, preparation_complete, task, result, change, active):
+        """只把已有事实投影为位置提示，不以位置顺序反推完成或另选主任务。"""
+        connected = connection.endpoint_status == "CONFIRMED" and connection.source_analysis_status == "COMPLETED"
+        kind = task.task_kind if task else None
+        needs_source_review = kind == "REGISTER_SOURCE_CHANGE"
+        rules_current = connected and not boundary_attention
+        result_current = result is not None and rules_current and preparation_complete and not needs_source_review and kind in {None, "VIEW_CURRENT_RESULT"}
+        statuses = {
+            "connect": "COMPLETE" if connected else "PENDING",
+            "rules": "COMPLETE" if rules_current else "NEEDS_REVIEW" if connected else "PENDING",
+            "prepare": "COMPLETE" if rules_current and preparation_complete and not needs_source_review else "PENDING",
+            "check": ("COMPLETE" if result_current else "NEEDS_REVIEW") if result is not None else "PENDING",
+        }
+        if kind in {"REVIEW_APPLICATION_CANDIDATES", "ESTABLISH_BUSINESS_BOUNDARY"}:
+            statuses["rules"] = "PENDING"
+        if needs_source_review:
+            statuses["prepare"] = "NEEDS_REVIEW"
+            statuses["check"] = "NEEDS_REVIEW"
+        if task:
+            current = ("connect" if task.route == "/application" else "rules" if task.route == "/permissions" else
+                "check" if kind in {"RUN_CURRENT_CHECK", "VIEW_CURRENT_RESULT", "VERIFY_REPAIR"} else "prepare")
+            statuses[current] = "CURRENT"
+        # 活动 Run 可在其他待办出现时继续运行；只提示进度，不能据此完成前三项。
+        if active is not None and task is None:
+            statuses["check"] = "CURRENT"
+        title = "核对代码变化后的权限" if change or needs_source_review else "建立本次权限检查"
+        return WorkspaceJourney(title=title, primary_task_id=task.task_id if task else None,
+            action_id=task.business_action_id if task else None,
+            change_id=change.change_id if change else None,
+            run_id=active.run.run_id if active else result.run_id if result else None,
+            steps=tuple(WorkspaceJourneyStep(key=key, label=label, status=statuses[key]) for key, label in (
+                ("connect", "接入应用"), ("rules", "确认规则"), ("prepare", "准备检查"), ("check", "检查与结果"))))
 
     def _preparation_task(self, boundary, preparation, understanding):
         """先按任务类别跨动作排序；只定位现有来源，不复制准备检查或写入事实。"""
@@ -449,6 +487,21 @@ class WorkspaceService:
             None,
         )
         if not boundary.actors or not boundary.actions or missing_permission is not None:
+            candidates = (*understanding.role_candidates, *understanding.action_candidates)
+            # 首次发现结果需有明确审阅；已有正式边界的维护不被候选建议重新阻断。
+            confirmed_roles = any(item.decision is CandidateDecision.CONFIRMED and not item.stale for item in understanding.role_candidates)
+            confirmed_actions = any(item.decision is CandidateDecision.CONFIRMED and not item.stale for item in understanding.action_candidates)
+            if not boundary.actors and not boundary.actions and not (confirmed_roles and confirmed_actions) and any(
+                item.decision is CandidateDecision.PROPOSED and not item.stale
+                for item in candidates
+            ):
+                return cls._task(
+                    "REVIEW_APPLICATION_CANDIDATES", title="审阅识别到的业务信息",
+                    why_now="源码分析已完成，候选尚未由你审阅。",
+                    user_responsibility="确认、排除或保留待审的权限组和业务动作。",
+                    system_will_do="保存候选决定后，再由你建立正式权限规则。",
+                    route="/application", facts={"understanding_revision": understanding.revision},
+                )
             title = (
                 "建立当前业务边界"
                 if missing_permission is None

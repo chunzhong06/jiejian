@@ -124,6 +124,7 @@
 - `class EndpointConfirmationRequest`
 - `class SourceAnalysisAuthorizationRequest`
 - `class SourceAnalysisRequest`
+- `class CandidateBatchDecisionRequest`
 - `class CandidateDecisionRequest`
 - `class ManualRoleRequest`
 - `class ManualActionRequest`

@@ -703,6 +703,8 @@
 - `class WorkspaceAreaView`
 - `class WorkspaceLatestResult`
 - `class WorkspaceSourceChange`
+- `class WorkspaceJourneyStep`
+- `class WorkspaceJourney`
 - `class WorkspaceView`
 主要 import / dot-source：`__future__`, `product.backend.core.business_boundary`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.permission_intent`, `product.backend.workflows.business_boundaries.inspection`, `product.backend.workflows.business_boundaries.models`, `product.backend.workflows.checks.results`, `product.backend.workflows.projects.repair`, `product.protocols`, `pydantic`, `typing`
 
