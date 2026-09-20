@@ -36,6 +36,7 @@ export type CheckBreakpoint = {
   breakpoint_type: 'AUTHORIZATION_MISSING' | 'AUTHORIZATION_LATE' | 'AUTHORIZATION_BYPASS' | 'IDENTITY_SUBSTITUTION' | 'AUTHORITY_EXPANSION' | 'COMPENSATION_MASKING' | null
   precision: 'EXACT' | 'RANGE' | 'VIOLATION_ONLY'; first_violation_event_id: string | null
   range_start_event_id: string | null; range_end_event_id: string | null; evidence_refs: string[]
+  reason_codes?: string[]
 }
 export type StoryTraceEvent = {
   event_id: string; parent_event_ids: string[]

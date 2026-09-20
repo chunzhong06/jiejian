@@ -1,6 +1,8 @@
 // 证据调查必须维持 Run/Case 归属，切换后的陈旧读取不能污染当前事实。
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Grid } from 'antd'
+import type { StoryTraceEvent } from '../../api/currentChecks'
 import { CurrentResultStory } from './CurrentResultStory'
 import { story, outcome } from './testing.fixtures'
 import { WorkPageVisible } from '../../app/RetainedWorkPages'
@@ -8,7 +10,30 @@ const api=vi.hoisted(()=>({evidence:vi.fn()}))
 vi.mock('../../api/currentChecks',()=>({currentChecksApi:api}))
 vi.mock('../../components/AssistantPanel',()=>({AssistantPanel:()=>null}))
 beforeEach(()=>vi.clearAllMocks())
+afterEach(()=>vi.restoreAllMocks())
+const node:StoryTraceEvent={event_id:'task',parent_event_ids:[],kind:'MESSAGE',authorization_decision:null,effect_id:null,dispatch_effect_ids:[],source_component:'应用服务',source_location:'task-record'}
 describe('结果调查',()=>{
+  it('桌面证据独立占列，核验节点后展示四问并返回原焦点',async()=>{
+    vi.spyOn(Grid,'useBreakpoint').mockReturnValue({lg:true})
+    const value=story();value.actions[0].execution_path={complete:true,reason_codes:[],evidence_refs:['ev1'],events:[node]}
+    api.evidence.mockResolvedValue({schema_version:'1',run_id:'r1',action_id:'a1',case:{case_id:'c1'},evidence_id:'ev1',outcome,observations:[],trace:{complete:true,events:[node]}})
+    render(<CurrentResultStory story={value} onError={vi.fn()}/>)
+    const trigger=screen.getByRole('button',{name:'查看任务派发的发布证据'});trigger.focus();fireEvent.click(trigger)
+    expect(await screen.findByText('应用服务的已发布记录')).toBeInTheDocument()
+    expect(screen.getByRole('complementary',{name:'已发布证据'})).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('不能单独证明什么')).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('complementary'),{key:'Escape'})
+    expect(trigger).toHaveFocus()
+  })
+  it.each(['missing-node','wrong-document'])('拒绝未对应当前选择的证据：%s',async scenario=>{
+    const value=story();value.actions[0].execution_path={complete:true,reason_codes:[],evidence_refs:['ev1'],events:[node]}
+    api.evidence.mockResolvedValue({schema_version:'1',run_id:'r1',action_id:'a1',case:{case_id:'c1'},evidence_id:scenario==='wrong-document'?'other':'ev1',outcome,observations:[],trace:{complete:true,events:[]}})
+    const error=vi.fn();render(<CurrentResultStory story={value} onError={error}/>)
+    fireEvent.click(screen.getByRole('button',{name:'查看任务派发的发布证据'}))
+    await waitFor(()=>expect(error).toHaveBeenCalledOnce())
+    expect(screen.queryByText('应用服务的已发布记录')).not.toBeInTheDocument()
+  })
   it('要求对应入口读取同轮证据，辅助材料保留等级和所选要求上下文',async()=>{
     const value=story()
     value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof1',required_level:'SUPPORTING',source_label:'历史来源',observed_state:'UNKNOWN',evidence_refs:[],supporting_evidence_refs:['ev1'],limitations:['辅助材料不替代必要证明']}]

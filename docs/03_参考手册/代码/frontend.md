@@ -488,11 +488,11 @@
 主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/projects`, `../../app/presentation`, `../../shared/ui/Editorial`, `antd`, `react`
 
 ### `product/frontend/src/features/testing/CurrentResultStory.test.tsx`
-主要 import / dot-source：`../../app/RetainedWorkPages`, `./CurrentResultStory`, `./testing.fixtures`, `@testing-library/react`, `vitest`
+主要 import / dot-source：`../../api/currentChecks`, `../../app/RetainedWorkPages`, `./CurrentResultStory`, `./testing.fixtures`, `@testing-library/react`, `antd`, `vitest`
 
 ### `product/frontend/src/features/testing/CurrentResultStory.tsx`
 - `CurrentResultStory`
-主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/repairs`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../components/AssistantPanel`, `../../shared/ui/Editorial`, `../changes/RepairComparison`, `./ExecutionPath`, `./ProofCoverage`, `@ant-design/icons`, `antd`, `react`
+主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/repairs`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../components/AssistantPanel`, `../../shared/ui/Editorial`, `../changes/RepairComparison`, `./DiagnosisSummary`, `./ExecutionPath`, `./ProofCoverage`, `./tracePresentation`, `@ant-design/icons`, `antd`, `react`
 
 ### `product/frontend/src/features/testing/CurrentTestsPage.test.tsx`
 主要 import / dot-source：`../../api/currentChecks`, `./CurrentTestsPage`, `./testing.fixtures`, `@testing-library/react`, `vitest`
@@ -501,19 +501,35 @@
 - `CurrentTestsPage`
 主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../app/presentation`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `../preparation/PreparationPage`, `./CurrentResultStory`, `antd`, `react`
 
+### `product/frontend/src/features/testing/DiagnosisSummary.test.tsx`
+主要 import / dot-source：`./DiagnosisSummary`, `./testing.fixtures`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/testing/DiagnosisSummary.tsx`
+- `DiagnosisSummary`
+主要 import / dot-source：`../../api/currentChecks`, `./tracePresentation`, `@ant-design/icons`, `antd`
+
 ### `product/frontend/src/features/testing/ExecutionPath.test.tsx`
 主要 import / dot-source：`../../api/currentChecks`, `./ExecutionPath`, `./testing.fixtures`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/testing/ExecutionPath.tsx`
 - `ExecutionPath`
-- `traceKindLabels`
-主要 import / dot-source：`../../api/currentChecks`, `@ant-design/icons`, `react`
+主要 import / dot-source：`../../api/currentChecks`, `./tracePresentation`, `@ant-design/icons`, `react`
 
 ### `product/frontend/src/features/testing/ProofCoverage.tsx`
 - `ProofCoverage`
 主要 import / dot-source：`../../api/currentChecks`, `antd`
 
 ### `product/frontend/src/features/testing/testing.fixtures.ts`
+主要 import / dot-source：`../../api/currentChecks`
+
+### `product/frontend/src/features/testing/tracePresentation.ts`
+- `breakpointLabels`
+- `precisionDescriptions`
+- `precisionLabels`
+- `traceEventContext`
+- `traceEventLabel`
+- `traceKindLabels`
+- `traceLimitations`
 主要 import / dot-source：`../../api/currentChecks`
 
 ### `product/frontend/src/features/tools/ToolsPage.test.tsx`

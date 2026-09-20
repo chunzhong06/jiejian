@@ -24,7 +24,7 @@
 
 一级导航是 `/workspace 当前工作`、`/permissions 权限规则`、`/changes 代码变化`、`/history 检查历史`。系统状态入口位于桌面导航左下角和窄屏菜单底部，统一进入系统详情；顶部更多菜单不重复此入口。当前工作直接装配服务端 PrimaryTask 指向的权限、应用或 CurrentTestsPage；`/tests` 与 `/changes` 保留精确 task/run/change/repair 深链。权限编辑从主任务和自由入口共用同一页面。权限总览按动作索引展示规则摘要，业务定义单独管理；单条编辑先保存到浏览器会话草稿，再统一生成待审提案并显式批准。代码变化以记录列表与当前详情组织，区分 Agent 声明、实际源码变化和原题复验；示例环境控制只展开一层。Preparation 只展开当前缺口，其他有效材料保留；成功回执和后续同步失败分开。OfficialSamplePanel 仅提供中性环境管理，普通 Proposal/Human Approval、材料采用和显式检查仍是唯一业务入口。ToolsPage 管理连接与逐项目临时授权，不把连接当作正在执行。
 
-`CurrentResultStory` 默认展示所选 Case 的已发布执行路径，缺 Trace 时保留事实对照；仅布局显式父边，不从 HTTP、时间或效果事实补因果。桌面 Evidence 为不改变画布尺寸的 complementary 浮层，优先放在右侧并避开所选事实，窄屏为 dialog；来源证据继续回答四问，节点证据说明所选位置及承载文档。修复要求按需展开，RepairComparison 保留 DENY、SELECTED_ALLOW 和全部 REGRESSION，普通 PASS 不等于原题 VERIFIED。历史从 project → exact Run → exact Case → Evidence 下钻，返回保留筛选与位置；协议见[当前 CHECK 只读投影](../../03_参考手册/协议/控制面与Machine输出协议.md#当前-check-历史与执行路径)。
+`CurrentResultStory` 默认展示所选 Case 的已发布执行路径，缺 Trace 时保留事实对照；仅布局显式父边，不从 HTTP、时间或效果事实补因果。桌面 Evidence 使用独立的 complementary 侧栏，不遮挡路径；画布按实际宽度适配并保留可读下限，窄屏为单一 dialog；来源证据继续回答四问，节点证据说明所选位置及承载文档。修复要求按需展开，RepairComparison 保留 DENY、SELECTED_ALLOW 和全部 REGRESSION，普通 PASS 不等于原题 VERIFIED。历史从 project → exact Run → exact Case → Evidence 下钻，返回保留筛选与位置；协议见[当前 CHECK 只读投影](../../03_参考手册/协议/控制面与Machine输出协议.md#当前-check-历史与执行路径)。
 
 `api/currentChecks.ts` 负责当前 CHECK；`api/jobs.ts` 仅提供录制取消 Job 和 JobEventDto。旧 checks 页面与旧结果客户端已删除，旧 URL 只给不可用页。后台通知由 `app/useCheckActivity.ts` 提供，项目内会话由 `app/RetainedWorkPages.tsx` 保留。
 
@@ -57,7 +57,7 @@
 
 ## 事实与页面状态
 
-准备页的 `EvidenceMaterials` 是独立的只读材料工作面：左侧按业务结果切换，右侧区分已保存来源、声明能力和当前限制。只提供返回、刷新与查看，读取失败撤下旧快照，跨项目迟到响应丢弃；返回准备页恢复入口焦点。历史结果的 `ProofCoverage` 使用服务端同轮投影并连接已有证据浮层，不根据当前配置重建历史。来源声明、实际观察和安全结论始终分别表达。
+准备页的 `EvidenceMaterials` 是独立的只读材料工作面：左侧按业务结果切换，右侧区分已保存来源、声明能力和当前限制。只提供返回、刷新与查看，读取失败撤下旧快照，跨项目迟到响应丢弃；返回准备页恢复入口焦点。历史结果的 `ProofCoverage` 使用服务端同轮投影并连接已有证据侧栏或窄屏抽屉，不根据当前配置重建历史。来源声明、实际观察和安全结论始终分别表达。
 
 `WorkspaceService` 决定唯一 PrimaryTask；active_check 仅投影同项目最新活动 Run，source_change.submitted_by 原样表示登记来源。CheckPreview、CheckRunStatus、ResultStory 分别负责门禁、生命周期和已发布结论。RetainedWorkPages 在当前项目页面会话内保留工作输入、权限草稿、历史筛选和位置；项目切换或明确重试重建，不用 localStorage 持久化这些状态，也不保留设置/密钥页面。Evidence Portal 离开页面必须关闭。后台完成只提供通知，不自动导航；短检查通过新的 latest_result 精确回读确认，首次加载已有结果不提示刚完成。
 
