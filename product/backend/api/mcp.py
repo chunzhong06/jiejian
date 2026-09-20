@@ -107,6 +107,9 @@ def _current_change_view(value):
     """Agent 仅看到相对路径与业务影响，不得到源码、快照或配置指纹。"""
     return dict(project_id=value.manifest.project_id,change_id=value.manifest.change_id,reason=value.manifest.reason,
         submitted_by=value.manifest.submitted_by,claimed_paths=list(value.manifest.claimed_paths),
+        registration_status="RECORDED", repair_reference=_json(value.manifest.repair_reference),
+        comparison_status=value.change_set.status,
+        receipt_boundary="登记回执只确认本批修改已记录，不确认修复成功；无需让用户重复登记。",
         added_paths=list(value.change_set.added_paths),modified_paths=list(value.change_set.modified_paths),
         removed_paths=list(value.change_set.removed_paths),revalidation=_json(value.revalidation),
         action_impacts=[dict(action_id=item.action_id,action_revision=item.action_revision,classification=item.classification,
@@ -126,6 +129,10 @@ def _current_repair_view(contract):
         resource_owner_test_identity_id=contract.deny.identity.resource_owner_test_identity_id,
         must_disappear=list(contract.deny.identity.protected_effect_ids),evidence_refs=list(contract.deny.evidence_refs),
         selected_allow_permission=_json(contract.selected_control.identity.permission),
+        must_preserve=[dict(role=role,source_case_id=item.source_case_id,
+            action_id=item.identity.action_id,protected_effect_ids=list(item.identity.protected_effect_ids))
+            for role,item in (("SELECTED_ALLOW",contract.selected_control),
+                             *(("REGRESSION",row) for row in contract.regressions))],
         regression_count=len(contract.regressions))
 
 

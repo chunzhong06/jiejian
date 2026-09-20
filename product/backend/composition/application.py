@@ -135,6 +135,9 @@ class ApplicationCore:
         from product.backend.workflows.checks.repair import CurrentRepairService
         self.source_changes = CurrentSourceChangeService(uow_factory=factory,understanding=self.application_understanding,
             boundaries=self.business_boundaries,clock_us=clock_us)
+        from product.backend.workflows.changes.identity import SourceIdentityReader
+        self.source_identity = SourceIdentityReader(uow_factory=factory, understanding=self.application_understanding,
+            changes=self.source_changes, results=self.check_results)
         self.check_repairs = CurrentRepairService(reader=self.check_results,change_context_reader=self.source_changes.context,
             breakpoint_reader=lambda run,case:next(item.breakpoint for item in self.check_story.build(run,include_repair=False).actions if item.case_id==case))
         self.source_changes.set_dependencies(plan_reader=self.checks.preview,repair_resolver=self.check_repairs.resolve)

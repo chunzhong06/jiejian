@@ -9,6 +9,7 @@ import { TaskActionBar } from '../../components/TaskActionBar'
 import { TaskReceipt, useTaskGuard } from '../../components/TaskContinuity'
 import { PreparationPage } from '../preparation/PreparationPage'
 import { CurrentResultStory } from './CurrentResultStory'
+import { SourceIdentityPanel } from '../changes/SourceIdentityPanel'
 
 const verdictLabels = { PASS: '本次权限要求已得到验证', BLOCK: '已确认不应发生的业务后果', INCONCLUSIVE: '现有证据不足以完成判断' }
 const progressLabels = { PREPARING: '正在准备本次执行', EXECUTING: '正在执行并观察业务结果', FINALIZING: '正在核验并保存结果' }
@@ -17,6 +18,7 @@ const active = (status: CheckStatus) => ['QUEUED', 'RUNNING'].includes(status.ru
 export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> & { requestedTaskId?: string | null; requestedRunId?: string | null; requestedCaseId?: string | null; changeId?: string | null; onBackToHistory?: () => void }) {
   const { project, onError, onNavigate, requestedRunId, requestedTaskId, changeId } = props
   const [materials, setMaterials] = useState(Boolean(requestedTaskId))
+  const [resultView, setResultView] = useState<'result' | 'source'>('result')
   const [preview, setPreview] = useState<CheckPreview | null>(null)
   const [runs, setRuns] = useState<CheckStatus[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,7 +67,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
     finally { if (alive.current && epoch === loadEpoch.current) setLoading(false) }
   }, [project.project_id, onError, changeId])
   useEffect(() => {
-    setSelected(requestedRunId ?? undefined); setStatus(null); setStory(null); setRuns([]); setMaterials(Boolean(requestedTaskId))
+    setSelected(requestedRunId ?? undefined); setStatus(null); setStory(null); setRuns([]); setMaterials(Boolean(requestedTaskId)); setResultView('result')
     pending.current = undefined; setSubmissionUncertain(false); setOpenedResult(undefined); observedRunning.current.clear()
     void refresh()
   }, [refresh, requestedRunId, requestedTaskId])
@@ -184,7 +186,7 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
       try { await currentChecksApi.cancel(status.job!.job_id); setRefreshEpoch(value => value + 1) } catch (error) { onError(error as ApiError) } finally { setBusy(false) }
     }}>{status.job.cancel_requested ? '正在停止检查' : '停止本次检查'}</Button>}
     {completionPending && story && <section className="task-focus" aria-label="本轮检查完成"><TaskReceipt message="检查已完成，结果已保存。"/><p>本轮结果与证据已保存在检查历史中。</p><Button type="primary" onClick={() => setOpenedResult(story.run_id)}>查看本轮结果</Button></section>}
-    {selectedMode && story && !completionPending && <CurrentResultStory key={story.run_id} story={story} requestedCaseId={props.requestedCaseId} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }} />}
+    {selectedMode && story && !completionPending && <><nav className="result-view-switch" aria-label="本轮结果视图"><Button type={resultView === 'result' ? 'primary' : 'text'} aria-pressed={resultView === 'result'} onClick={() => setResultView('result')}>结果与证据</Button><Button type={resultView === 'source' ? 'primary' : 'text'} aria-pressed={resultView === 'source'} onClick={() => setResultView('source')}>源码对应</Button></nav>{resultView === 'source' ? <SourceIdentityPanel key={story.run_id} projectId={project.project_id} recordId={story.run_id} kind="runs" onNavigate={onNavigate} onIntegrityError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }}/> : <CurrentResultStory key={story.run_id} story={story} requestedCaseId={props.requestedCaseId} onNavigate={onNavigate} onError={(error) => { setStory(null); setRunFailed(true); setStatus(null); onError(error) }} />}</>}
     {!selectedMode && <>
       <Button onClick={showMaterials} disabled={busy}>管理准备材料</Button>
       {preview && !preview.can_execute && <Typography.Paragraph type="secondary">请在准备材料中核对账号、动作演示、资源、结果证明与恢复条件；材料齐备后仍需服务端确认执行配置。</Typography.Paragraph>}

@@ -201,6 +201,12 @@
 ### `product/backend/workflows/changes/__init__.py`
 主要 import / dot-source：`.service`
 
+### `product/backend/workflows/changes/identity.py`
+- `class SourceIdentityRecord`
+- `class SourceIdentityComparison`
+- `class SourceIdentityReader`
+主要 import / dot-source：`__future__`, `product.backend.core.errors`, `product.backend.infra.source_identity`, `product.protocols.execution_v3`, `pydantic`, `time`, `typing`
+
 ### `product/backend/workflows/changes/service.py`
 - `class SourceRevalidationInspection`
 - `class CurrentChangeView`

@@ -184,6 +184,11 @@
 - `sourceChangesApi`
 主要 import / dot-source：`./http`, `./repairs`
 
+### `product/frontend/src/api/sourceIdentity.ts`
+- `SourceIdentity`
+- `sourceIdentityApi`
+主要 import / dot-source：`./http`
+
 ### `product/frontend/src/api/system.test.ts`
 主要 import / dot-source：`./system`, `vitest`
 
@@ -413,7 +418,7 @@
 
 ### `product/frontend/src/features/changes/ChangesPage.tsx`
 - `ChangesPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/repairs`, `../../api/sourceChanges`, `../../api/workspace`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../app/taskDestination`, `../../shared/ui/Editorial`, `./RepairComparison`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/repairs`, `../../api/sourceChanges`, `../../api/workspace`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../app/taskDestination`, `../../shared/ui/Editorial`, `./RepairDelivery`, `./SourceIdentityPanel`, `@ant-design/icons`, `antd`, `react`
 
 ### `product/frontend/src/features/changes/RepairComparison.test.tsx`
 主要 import / dot-source：`../../api/repairs`, `./RepairComparison`, `@testing-library/react`, `vitest`
@@ -421,6 +426,21 @@
 ### `product/frontend/src/features/changes/RepairComparison.tsx`
 - `RepairComparison`
 主要 import / dot-source：`../../api/repairs`, `antd`
+
+### `product/frontend/src/features/changes/RepairDelivery.test.tsx`
+主要 import / dot-source：`../../api/repairs`, `./RepairDelivery`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/changes/RepairDelivery.tsx`
+- `RepairTask`
+- `RepairDelivery`
+主要 import / dot-source：`../../api/repairs`, `../../api/sourceChanges`, `../../app/presentation`, `../../shared/ui/Editorial`, `./RepairComparison`, `@ant-design/icons`, `antd`, `react`
+
+### `product/frontend/src/features/changes/SourceIdentityPanel.test.tsx`
+主要 import / dot-source：`../../api/http`, `./SourceIdentityPanel`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/changes/SourceIdentityPanel.tsx`
+- `SourceIdentityPanel`
+主要 import / dot-source：`../../api/http`, `../../api/sourceIdentity`, `../../app/presentation`, `@ant-design/icons`, `antd`, `react`
 
 ### `product/frontend/src/features/identities/TestIdentityPage.test.tsx`
 主要 import / dot-source：`../../api/businessBoundaries`, `../../api/testIdentities`, `./TestIdentityPage`, `@testing-library/react`, `vitest`
@@ -499,7 +519,7 @@
 
 ### `product/frontend/src/features/testing/CurrentTestsPage.tsx`
 - `CurrentTestsPage`
-主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../app/presentation`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `../preparation/PreparationPage`, `./CurrentResultStory`, `antd`, `react`
+主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../app/presentation`, `../../components/TaskActionBar`, `../../components/TaskContinuity`, `../../shared/ui/Editorial`, `../changes/SourceIdentityPanel`, `../preparation/PreparationPage`, `./CurrentResultStory`, `antd`, `react`
 
 ### `product/frontend/src/features/testing/DiagnosisSummary.test.tsx`
 主要 import / dot-source：`./DiagnosisSummary`, `./testing.fixtures`, `@testing-library/react`, `vitest`

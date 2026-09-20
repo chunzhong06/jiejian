@@ -24,6 +24,14 @@ def build_source_changes_router(context: ApplicationCore) -> APIRouter:
 
     router = APIRouter()
 
+    @router.get("/api/projects/{project_id}/source-changes/{change_id}/source-identity", response_model=ApiResponse)
+    def change_source_identity(project_id: str, change_id: str):
+        return data_response(context.source_identity.for_change(project_id, change_id).model_dump(mode="json"))
+
+    @router.get("/api/projects/{project_id}/runs/{run_id}/source-identity", response_model=ApiResponse)
+    def run_source_identity(project_id: str, run_id: str):
+        return data_response(context.source_identity.for_run(project_id, run_id).model_dump(mode="json"))
+
     @router.post("/api/projects/{project_id}/source-changes",response_model=ApiResponse,status_code=201)
     def create_source_change(project_id: str, body: SourceChangeCreateRequest):
         view = context.source_changes.submit(project_id,reason=body.reason,claimed_paths=body.claimed_paths,

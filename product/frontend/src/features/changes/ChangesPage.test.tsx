@@ -1,10 +1,10 @@
 // 当前变化页验证真实diff、精确change关联及未知回执不自动重复写入。
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChangesPage } from './ChangesPage'
-const api = vi.hoisted(() => ({ list: vi.fn(), submit: vi.fn(), repair: vi.fn(), workspace: vi.fn() }))
+const api = vi.hoisted(() => ({ list: vi.fn(), show: vi.fn(), submit: vi.fn(), repair: vi.fn(), workspace: vi.fn() }))
 vi.mock('../../api/workspace', () => ({ workspaceApi: { current: api.workspace } }))
-vi.mock('../../api/sourceChanges', () => ({ sourceChangesApi: { list: api.list, submit: api.submit } }))
+vi.mock('../../api/sourceChanges', () => ({ sourceChangesApi: { list: api.list, show: api.show, submit: api.submit } }))
 vi.mock('../../api/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/repairs')>('../../api/repairs'), repairsApi: { project: api.repair } }))
 const change = { manifest: { change_id: 'chg_one', project_id: 'p1', reason: '修改导出检查位置', submitted_by: 'MCP · Codex', created_at_us: 1, claimed_paths: ['wrong.py'], repair_reference: null }, change_set: { status: 'COMPARABLE', added_paths: [], modified_paths: ['real.py'], removed_paths: [] }, assessment: { payload: { action_impacts: [{ action_id: 'action', classification: 'DIRECTLY_AFFECTED', permission_refs: [], relevant_paths: ['real.py'] }] } }, revalidation: { status: 'READY', can_execute: true, preparation_gaps: [] } }
 const props = () => ({ project: { project_id: 'p1' }, onNavigate: vi.fn(), onError: vi.fn(), onStateChanged: vi.fn() })
@@ -66,5 +66,35 @@ describe('当前变化与修复', () => {
     api.list.mockResolvedValue([]); render(<ChangesPage {...props()} />)
     expect(await screen.findByText('尚无代码变化记录')).toBeInTheDocument()
     expect(screen.queryByText('原题复验通过')).not.toBeInTheDocument()
+  })
+  it('缺少基线不把文件清单误当成已核实差异', async () => {
+    api.list.mockResolvedValue([{ ...change, change_set: { ...change.change_set, status: 'NO_BASELINE' } }])
+    render(<ChangesPage {...props()}/>)
+    await screen.findByRole('heading', { name: '修改导出检查位置' })
+    expect(screen.getByText('缺少基线，本次不展示差异清单。')).toBeInTheDocument()
+    expect(screen.queryByText('real.py')).not.toBeInTheDocument()
+  })
+  it('同批只有部分原题通过时，不显示整体通过标题', async () => {
+    const contract = { source_run_id: 'run', source_case_id: 'case', repair_fingerprint: 'ref', regressions: [] }
+    api.repair.mockResolvedValue({ project_id: 'p1', primary_task_reference: null, tasks: [
+      { task_reference: 'one', contract, change_id: 'chg_one', status: 'VERIFIED' },
+      { task_reference: 'two', contract: { ...contract, repair_fingerprint: 'two' }, change_id: 'chg_one', status: 'INCONCLUSIVE' },
+    ] })
+    render(<ChangesPage {...props()}/>)
+    expect(await screen.findByRole('heading', { name: '修改已登记，修复状态尚待确认' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '本批修改的原题复验已通过' })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: '修改记录' })).queryByText('原题复验已通过')).not.toBeInTheDocument()
+  })
+  it('原题关联较早批次时按精确 ID 补读，刷新后仍保留所选批次', async () => {
+    api.repair.mockResolvedValue({ project_id: 'p1', primary_task_reference: null, tasks: [{ task_reference: 'task', contract: { source_run_id: 'run', source_case_id: 'case', repair_fingerprint: 'ref', regressions: [] }, change_id: 'older', status: 'CHANGE_SUBMITTED' }] })
+    api.show.mockResolvedValue({ ...change, manifest: { ...change.manifest, change_id: 'older', reason: '较早的精确批次' } })
+    render(<ChangesPage {...props()} requestedRepair="ref"/>)
+    fireEvent.click(await screen.findByRole('button', { name: '查看本批修改' }))
+    expect(await screen.findByRole('heading', { name: '较早的精确批次' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: '刷新变化与修复' })).not.toHaveClass('ant-btn-loading'))
+    fireEvent.click(screen.getByRole('button', { name: '刷新变化与修复' }))
+    await waitFor(() => expect(api.show).toHaveBeenCalledWith('p1', 'older'))
+    expect(screen.getByRole('heading', { name: '较早的精确批次' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '修改导出检查位置' })).not.toBeInTheDocument()
   })
 })

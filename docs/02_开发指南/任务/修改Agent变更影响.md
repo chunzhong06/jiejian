@@ -28,6 +28,7 @@ Manifest、diff和assessment在同一事务保存；扫描期间权限变化使�
 | --- | --- |
 | 路径、快照、变化DTO | `product/backend/core/source_changes.py` |
 | 扫描、影响、登记、inspection | `product/backend/workflows/changes/service.py` |
+| 源码身份只读比较 | `product/backend/workflows/changes/identity.py`、`product/backend/infra/source_identity.py` |
 | 聚合持久化 | `product/backend/infra/storage/source_changes.py` |
 | 原题语义与标准比较 | `product/backend/core/check_repair.py` |
 | 从已发布包重建合同 | `product/backend/workflows/checks/repair.py` |
@@ -56,6 +57,18 @@ ProjectRepair按最早BLOCK建立问题族，取最新精确关联变化与NEW R
 GUI使用`/api/projects/{id}/source-changes`、`/repair`、`/check-preview?change_id=...`及schema2的`/runs`；原题列表在`/api/runs/{run_id}/repair-contracts`。MCP只有`change_submit`为PREPARE，`check_run/check_cancel`为EXECUTE，其他当前工具READ。项目授权临时保存在当前进程，pause/resume/rotate/forget/close清除；权限审批不开放给MCP。
 
 MCP只返回相对路径、有界影响和业务结果，隐藏绝对路径、源码/config hash、原始Evidence/Trace与秘密。客户端来源从认证SDK会话取，不由Agent自报。
+
+登记回执明确返回 `RECORDED`、精确原题引用与 `COMPARABLE/NO_BASELINE`；这些字段只证明本批修改已登记，不代表修复通过，也不要求用户重复登记。修复要求的 `must_preserve` 分别列出选定正常对照和全部原安全回归的 Case/Action/Effect 引用，不暴露证据标准指纹或执行模板。
+
+## 源码对应与交付阅读
+
+GUI 的 `GET /api/projects/{project_id}/source-changes/{change_id}/source-identity` 和 `GET /api/projects/{project_id}/runs/{run_id}/source-identity` 经 LocalControl 保护。SourceIdentityReader 从精确变化快照或已校验的发布包读取冻结内容指纹，并在既有分析授权下只读核对当前源码。当前投影使用 `SAME/CHANGED/NO_BASELINE/UNAVAILABLE`，不写数据库、不创建历史记录、不参与检查可执行状态或安全判断。缺失文件索引时仍可展示已冻结的 Run 指纹，但不能推算文件数。
+
+Git 只补充当前 HEAD 与授权目录内的工作区上下文；不读取远端、提交正文和凭据，不提交、检出、刷新索引或联网。命令的时间和输出有界，禁用 fsmonitor；存在自定义 clean/process 过滤器时不运行 status，保留提交并将工作区状态标为未知。正常换行配置必须保留，防止 Windows CRLF 误报。核对期间源码或 HEAD 变化时，不展示不完整的当前身份。历史格式未保存 Git，必须显示未记录，不能用当前 HEAD 回填。Git 信息不进入 MCP。
+
+内容相同只覆盖受控扫描范围，不能证明运行目标的部署版本；目前没有独立目标版本标识，GUI 单独明确这一点。源码对应读取遇到发布完整性错误时，结果页撤下旧安全结论；普通网络失败只将源码对应标为不可读。
+
+变化总览分开展示 Agent 声明、服务端真实差异与关联修复；缺基线不显示猜测的文件差异，同批部分原题通过不能显示整体通过。修复详情独立展示禁止后果、必须保留的正常业务和全部回归、原始证据、登记回执及服务端七态。历史结果通过“结果与证据 / 源码对应”切换阅读，完整技术引用按需展开；页面读取和刷新均不发起检查。
 
 ## 直接验证
 
