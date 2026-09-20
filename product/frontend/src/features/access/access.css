@@ -1,6 +1,14 @@
 /* 应用接入页：保持四步任务、候选审阅与底部动作之间稳定的纵向节奏。 */
 
 .application-setup { display: grid; gap: var(--space-24); }
+.access-next-surface{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-large);padding:var(--space-32);box-shadow:var(--shadow-focus)}
+.access-next-surface>header{display:flex;align-items:center;gap:var(--space-20)}.access-next-surface h2{margin:0;font-size:var(--font-section)}.access-next-surface header p{margin:var(--space-8) 0 0}
+.access-app-icon{display:grid;place-items:center;flex-shrink:0;width:56px;height:56px;border-radius:var(--radius-medium);color:var(--color-primary);background:var(--color-primary-light);font-size:28px}
+.access-facts{display:grid;gap:var(--space-12);border-block:1px solid var(--color-border);padding-block:var(--space-24);margin-block:var(--space-24)}.access-facts>div{display:grid;grid-template-columns:150px minmax(0,1fr);gap:var(--space-20)}.access-facts dt{color:var(--color-secondary)}.access-facts dd{margin:0}
+.access-next-task h2{font-size:26px}.access-next-task>p:not(.editorial-eyebrow){color:var(--color-secondary);margin-bottom:var(--space-24)}
+.access-next-note{border-top:1px solid var(--color-border);margin-top:var(--space-24);padding-top:var(--space-20);color:var(--color-secondary)}
+.access-next-surface details{font-size:var(--font-secondary);color:var(--color-secondary)}.access-next-surface summary{cursor:pointer}.access-review-surface:focus{outline:none}
+@media(max-width:600px){.access-next-surface{padding:var(--space-24)}.access-facts>div{grid-template-columns:90px minmax(0,1fr);gap:var(--space-12)}.access-next-task h2{font-size:22px}}
 .application-setup > .ant-alert { margin-bottom: 0; }
 .application-step { display: grid; gap: var(--space-16); padding-block: var(--space-20); border-top: var(--line-width) solid var(--color-border); }
 .application-step h2 { font-size: var(--font-section); margin: 0; }

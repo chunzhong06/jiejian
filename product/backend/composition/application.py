@@ -106,6 +106,10 @@ class ApplicationCore:
             clock_us=clock_us,
         )
         self.business_boundaries = BusinessBoundaryService(factory, clock_us=clock_us)
+        from product.backend.workflows.supplemental_materials import SupplementalMaterialService
+        from product.backend.workflows.changes.observations import CodeObservationService
+        self.supplemental_materials = SupplementalMaterialService(factory, clock_us=clock_us)
+        self.code_observations = CodeObservationService(self.application_understanding, clock_us=clock_us)
         self.permission_intents = PermissionIntentService(factory)
         self.test_identities = TestIdentityService(
             factory,
@@ -135,6 +139,8 @@ class ApplicationCore:
         from product.backend.workflows.checks.repair import CurrentRepairService
         self.source_changes = CurrentSourceChangeService(uow_factory=factory,understanding=self.application_understanding,
             boundaries=self.business_boundaries,clock_us=clock_us)
+        self.source_changes.code_observations = self.code_observations
+        self.checks.code_observations = self.code_observations
         from product.backend.workflows.changes.identity import SourceIdentityReader
         self.source_identity = SourceIdentityReader(uow_factory=factory, understanding=self.application_understanding,
             changes=self.source_changes, results=self.check_results)

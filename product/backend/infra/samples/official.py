@@ -278,27 +278,31 @@ class OfficialSampleManager:
                         pass
                 secret_values.clear()
                 shutil.rmtree(experience_root, ignore_errors=True)
-                _append_event(
-                    log_path,
-                    "OFFICIAL_SAMPLE_START_FAILED",
-                    error_code=(
-                        exc.code
-                        if isinstance(exc, JiejianError)
-                        else ErrorCode.OFFICIAL_SAMPLE_START_FAILED.value
-                    ),
-                    failure_type=type(exc).__name__,
-                    process_state=process_state,
-                    reason=(
-                        str(diagnostic["reason"])
-                        if diagnostic.get("reason") is not None
-                        else None
-                    ),
-                    missing_names=(
-                        tuple(str(name) for name in diagnostic["missing_names"])
-                        if isinstance(diagnostic.get("missing_names"), list)
-                        else None
-                    ),
-                )
+                try:
+                    _append_event(
+                        log_path,
+                        "OFFICIAL_SAMPLE_START_FAILED",
+                        error_code=(
+                            exc.code
+                            if isinstance(exc, JiejianError)
+                            else ErrorCode.OFFICIAL_SAMPLE_START_FAILED.value
+                        ),
+                        failure_type=type(exc).__name__,
+                        process_state=process_state,
+                        reason=(
+                            str(diagnostic["reason"])
+                            if diagnostic.get("reason") is not None
+                            else None
+                        ),
+                        missing_names=(
+                            tuple(str(name) for name in diagnostic["missing_names"])
+                            if isinstance(diagnostic.get("missing_names"), list)
+                            else None
+                        ),
+                    )
+                except Exception:
+                    # 日志写入失败不能覆盖启动首错。
+                    pass
                 if isinstance(exc, JiejianError):
                     raise
                 raise JiejianError(
@@ -387,15 +391,19 @@ class OfficialSampleManager:
             except Exception as exc:  # pragma: no cover - 由平台进程树测试覆盖
                 termination_error = exc
             runtime.secrets.clear()
-            _append_event(runtime.log_path, "OFFICIAL_SAMPLE_STOPPED")
+            try:
+                _append_event(runtime.log_path, "OFFICIAL_SAMPLE_STOPPED")
+            except Exception as exc:
+                if termination_error is None:
+                    termination_error = exc
             try:
                 shutil.rmtree(runtime.experience_root)
-            except OSError as exc:
-                raise JiejianError(
-                    ErrorCode.OFFICIAL_SAMPLE_START_FAILED,
-                    "官方示例运行目录清理失败",
-                ) from exc
+            except OSError:
+                if termination_error is None:
+                    termination_error = JiejianError(
+                        ErrorCode.OFFICIAL_SAMPLE_START_FAILED, "官方示例运行目录清理失败")
             if termination_error is not None:
+                # 尝试既有清理步骤后仍抛第一主错，不用后续日志或目录错误覆盖它。
                 raise termination_error
 
     def _require_active(self, experience_id: str) -> OfficialSampleRuntime:

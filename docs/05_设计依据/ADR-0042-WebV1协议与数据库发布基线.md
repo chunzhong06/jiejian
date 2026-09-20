@@ -22,7 +22,7 @@ Schema 的唯一登记入口是 `product/protocols/schema.py`。默认 `scripts/
 
 当前根格式各自演进，不再全部是字符串 1。HTTP runs 提交格式 2、持久 CHECK 请求格式 3、独立 Report 格式 5 和报告包 manifest 格式 1 分别由独立 reader 约束。完整根集合和允许的严格历史入口见[公共数据与 Schema 版本](../03_参考手册/协议/公共数据与Schema版本.md)。
 
-当前数据库从 `0001_business_boundary_v2` 沿签入的 0002、0003、0004 到 `0005_verification_loop_v3`。精确升级条件、拒绝非空旧执行事实和数据保留规则由各 migration 与[数据与持久化](../01_系统地图/数据与持久化.md)定义。原统一格式和旧根迁移方案不作为当前代码或兼容承诺。
+当前数据库从 `0001_business_boundary_v2` 沿签入的 0002、0003、0004、0005 到 `0006_product_provenance`。精确升级条件、拒绝非空旧执行事实和数据保留规则由各 migration 与[数据与持久化](../01_系统地图/数据与持久化.md)定义。原统一格式和旧根迁移方案不作为当前代码或兼容承诺。
 
 ## 理由与取舍
 

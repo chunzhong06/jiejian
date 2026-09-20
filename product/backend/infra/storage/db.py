@@ -40,7 +40,7 @@ from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 _BASE_MIGRATION_REVISION = "0001_business_boundary_v2"
 _MAINTENANCE_MIGRATION_REVISION = "0002_business_boundary_maintenance"
-_CURRENT_MIGRATION_REVISION = "0005_verification_loop_v3"
+_CURRENT_MIGRATION_REVISION = "0006_product_provenance"
 _LEGACY_1_X_MIGRATION_REVISIONS = frozenset(
     {
         "0001_web_v1",
@@ -219,6 +219,13 @@ def _check_database_compatibility(
             revision = revisions[0]
             if revision in _LEGACY_1_X_MIGRATION_REVISIONS:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
+            if revision == "0005_verification_loop_v3" and resource_root is not None:
+                # 历史真源是签入迁移链，不以当前 ORM 减表猜测旧结构。
+                if _sqlite_schema_signature(connection) != _legacy_schema_signature(resource_root, revision):
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
+                if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    raise JiejianError(ErrorCode.STORAGE_MIGRATION, "既有数据库引用关系无效；数据库未修改")
+                return
             if revision == "0004_action_resource_ownership" and resource_root is not None:
                 if _sqlite_schema_signature(connection) != _legacy_schema_signature(resource_root, revision):
                     raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)

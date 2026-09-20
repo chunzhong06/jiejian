@@ -51,6 +51,7 @@ class JobQueue:
         *,
         known_secrets: Sequence[str] = (),
         precondition: Callable[[StorageUnitOfWork], None] | None = None,
+        on_created: Callable[[StorageUnitOfWork, RunRecord], None] | None = None,
     ) -> JobSubmissionResult:
         """幂等地创建排队任务及其执行目标；重复键返回原提交而不复制副作用。"""
 
@@ -106,6 +107,9 @@ class JobQueue:
                 self._targets.resolve(job)
                 work.runs.add(run)
                 work.jobs.add(job)
+                # 只允许首次创建的非执行元数据随 Run/Job 原子落库；幂等回读不重采观察。
+                if on_created is not None:
+                    on_created(work, run)
                 append_job_event(
                     work,
                     job=job,

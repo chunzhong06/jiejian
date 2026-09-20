@@ -22,7 +22,7 @@ CurrentSourceChangeService.submit
 → ResultStory / CurrentRepairVerification / ProjectRepair / Workspace
 ```
 
-Manifest、diff和assessment在同一事务保存；扫描期间权限变化使整个登记失败，但不回滚用户的并发审批。扫描产生的真实理解与快照可以保留，不能称为变化登记成功。复用既有四张source change表，无新增DDL；旧格式不靠猜测shape读作current。
+Manifest、diff和assessment在同一事务保存；扫描期间权限变化使整个登记失败，但不回滚用户的并发审批。扫描产生的真实理解与快照可以保留，不能称为变化登记成功。变化语义复用既有四张source change表，代码观察通过独立元数据表附带；旧格式不靠猜测shape读作current。
 
 | 责任 | 当前入口 |
 | --- | --- |
@@ -62,9 +62,9 @@ MCP只返回相对路径、有界影响和业务结果，隐藏绝对路径、�
 
 ## 源码对应与交付阅读
 
-GUI 的 `GET /api/projects/{project_id}/source-changes/{change_id}/source-identity` 和 `GET /api/projects/{project_id}/runs/{run_id}/source-identity` 经 LocalControl 保护。SourceIdentityReader 从精确变化快照或已校验的发布包读取冻结内容指纹，并在既有分析授权下只读核对当前源码。当前投影使用 `SAME/CHANGED/NO_BASELINE/UNAVAILABLE`，不写数据库、不创建历史记录、不参与检查可执行状态或安全判断。缺失文件索引时仍可展示已冻结的 Run 指纹，但不能推算文件数。
+GUI 的 `GET /api/projects/{project_id}/source-changes/{change_id}/source-identity` 和 `GET /api/projects/{project_id}/runs/{run_id}/source-identity` 经 LocalControl 保护。SourceIdentityReader 从精确变化快照或已校验的发布包读取冻结内容指纹，并在既有分析授权下只读核对当前源码。当前读取投影使用 `SAME/CHANGED/NO_BASELINE/UNAVAILABLE`，GET 不写数据库、不创建历史记录、不参与检查可执行状态或安全判断。缺失文件索引时仍可展示已冻结的 Run 指纹，但不能推算文件数。
 
-Git 只补充当前 HEAD 与授权目录内的工作区上下文；不读取远端、提交正文和凭据，不提交、检出、刷新索引或联网。命令的时间和输出有界，禁用 fsmonitor；存在自定义 clean/process 过滤器时不运行 status，保留提交并将工作区状态标为未知。正常换行配置必须保留，防止 Windows CRLF 误报。核对期间源码或 HEAD 变化时，不展示不完整的当前身份。历史格式未保存 Git，必须显示未记录，不能用当前 HEAD 回填。Git 信息不进入 MCP。
+实时 Git 读取只补充当前 HEAD 与授权目录内的工作区上下文；不读取远端、提交正文和凭据，不提交、检出、刷新索引或联网。命令的时间和输出有界，禁用 fsmonitor；存在自定义 clean/process 过滤器时不运行 status，保留提交并将工作区状态标为未知。正常换行配置必须保留，防止 Windows CRLF 误报。核对期间源码或 HEAD 变化时，不展示不完整的当前身份。没有精确代码观察关联的旧记录显示未记录，不能用当前 HEAD 回填。Git 信息不进入 MCP。
 
 内容相同只覆盖受控扫描范围，不能证明运行目标的部署版本；目前没有独立目标版本标识，GUI 单独明确这一点。源码对应读取遇到发布完整性错误时，结果页撤下旧安全结论；普通网络失败只将源码对应标为不可读。
 
@@ -73,3 +73,9 @@ Git 只补充当前 HEAD 与授权目录内的工作区上下文；不读取远�
 ## 直接验证
 
 使用`dev.ps1 test`按受影响范围选择`tests/backend/workflows/changes/test_current_source_changes.py`、`tests/backend/core/test_check_repair.py`、`tests/backend/workflows/checks/test_repair_publication.py`、`test_project_repair_states.py`、`tests/backend/api/test_current_mcp.py`及`test_permission_oracle_invariant.py`。覆盖真实扫描、原子回滚、权限并发、superset/空回归、错误原题、公开SDK及秘密边界。公共模型变化同步schema；文档使用docs检查。不要恢复旧ProjectRevalidation、DeliveryCheck、ResultPresentation或旧CLI链来补current能力。
+
+## 历史代码观察
+
+`workflows/changes/observations.py` 在变化登记和 Run 首次接受事务中采集独立观察。Git 前后核对理解 revision/root/授权和内容指纹；不一致或读取失败只保存期望内容指纹和 UNAVAILABLE，不能拼接部分身份。观察只含 HEAD、工作区变化布尔值、时间与授权扫描范围，不保存绝对目录、远端或正文。
+
+`SourceIdentityReader.recorded` 通过精确 change_id/run_id 关联读取 git_status、head、has_local_changes、observed_at_us、observation_id 和 consistency；已发布 Run 仍先校验 package。无关联的旧历史继续 NOT_RECORDED；当前 Git 不回填历史。`JobQueue.submit` 的可选 on_created 回调仅在新 Run/Job 插入后、commit 前保存这些元数据，幂等回读不执行回调。直接测试为 `test_code_observations.py`、`test_provenance_callback.py` 和既有源码身份/提交测试。

@@ -25,6 +25,7 @@ from product.backend.api.routers.system import build_system_router
 from product.backend.api.routers.test_identities import build_test_identities_router
 from product.backend.api.routers.business_boundaries import build_business_boundaries_router
 from product.backend.api.routers.experience import build_experience_router
+from product.backend.api.routers.supplemental_materials import build_supplemental_material_router
 from product.backend.api.routers.mcp_access import build_mcp_access_router
 from product.backend.api.routers.workspace import build_workspace_router
 from product.backend.api.routers.recordings import build_recordings_router
@@ -120,6 +121,7 @@ def create_app(
     app.include_router(build_business_boundaries_router(context))
     app.include_router(build_workspace_router(context))
     app.include_router(build_experience_router(context))
+    app.include_router(build_supplemental_material_router(context))
     app.include_router(build_test_identities_router(context))
     app.include_router(build_recordings_router(context))
     app.include_router(build_preparation_router(context))

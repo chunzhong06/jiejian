@@ -6,6 +6,7 @@ import { ApiError } from '../../api/http'
 import { preparationApi, type EvidenceMaterialDetail } from '../../api/preparation'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import './evidence-materials.css'
+import { SupplementalMaterials } from './SupplementalMaterials'
 
 const statuses = { SATISFIED: '材料已准备', NEEDS_USER: '材料不足', STALE: '材料需要更新', BLOCKED: '需要先确认', NOT_REQUIRED: '无需此项材料' }
 const reasons: Record<string, string> = {
@@ -24,6 +25,7 @@ export function EvidenceMaterials({ projectId, actionId, onBack }: {
   const [revision, setRevision] = useState(0)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
+  const [supplemental, setSupplemental] = useState(false)
   const title = useRef<HTMLHeadingElement>(null)
   useEffect(() => { title.current?.focus() }, [])
   useEffect(() => {
@@ -42,10 +44,12 @@ export function EvidenceMaterials({ projectId, actionId, onBack }: {
   const current = snapshot?.project_id === projectId && snapshot.action_id === actionId ? snapshot : undefined
   const effect = current?.effects.find(item => item.effect_id === selected)
   const snapshotChanged = effect?.reason_codes.includes('EVIDENCE_SNAPSHOT_CHANGED')
+  if (supplemental && current) return <SupplementalMaterials key={`${projectId}:${actionId}`} projectId={projectId} actionId={actionId} actionRevision={current.action_revision} actionLabel={current.action_label} onBack={() => setSupplemental(false)}/>
   return <EditorialPage label="证明要求与材料">
     <div className="proof-page-actions"><Button icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={onBack}>返回准备材料</Button><Button icon={<ReloadOutlined aria-hidden="true" />} loading={loading} onClick={() => setRevision(value => value + 1)}>刷新材料详情</Button></div>
     <EditorialHeader eyebrow="当前工作 / 证明材料" title="看清每项结果的证明依据"><p className="editorial-muted">查看已保存的材料、来源声明与当前缺口。</p></EditorialHeader>
     <h2 className="proof-action-title" ref={title} tabIndex={-1}>{current?.action_label ?? '证明要求与材料'}</h2>
+    {current && <p className="editorial-muted">已有业务记录也可以单独登记，供补充阅读。<Button type="link" onClick={() => setSupplemental(true)}>管理补充材料</Button></p>}
     {loading && <div role="status" className="proof-loading"><Spin /> 正在读取当前材料…</div>}
     {failed && <Alert type="warning" showIcon message="材料详情暂时无法读取" description="旧快照已撤下。请刷新重试；这不会修改材料或发起检查。" />}
     {current && !current.effects.length && <Empty description="当前动作没有需要说明的结果证明材料" />}

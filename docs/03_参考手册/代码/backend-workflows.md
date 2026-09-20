@@ -207,6 +207,10 @@
 - `class SourceIdentityReader`
 主要 import / dot-source：`__future__`, `product.backend.core.errors`, `product.backend.infra.source_identity`, `product.protocols.execution_v3`, `pydantic`, `time`, `typing`
 
+### `product/backend/workflows/changes/observations.py`
+- `class CodeObservationService`
+主要 import / dot-source：`__future__`, `product.backend.core.errors`, `product.backend.infra.source_identity`, `time`, `uuid`
+
 ### `product/backend/workflows/changes/service.py`
 - `class SourceRevalidationInspection`
 - `class CurrentChangeView`
@@ -319,7 +323,7 @@
 - `class OfficialScenarioVersion`
 - `class OfficialExperienceView`
 - `class OfficialSampleExperience`
-主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `json`, `product.backend.core.action_preparation`, `product.backend.core.check_repair`, `product.backend.core.errors`, `product.backend.core.test_identity`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.workflows.business_boundaries.official_recipe`, `product.backend.workflows.checks.local_observer_wiring`, `product.backend.workflows.checks.registry`, `product.backend.workflows.official_scenario`, `product.backend.workflows.test_identities`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `product.protocols.observer`, `pydantic`, `threading`, `time`
+主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `json`, `product.backend.core.action_preparation`, `product.backend.core.check_repair`, `product.backend.core.errors`, `product.backend.core.test_identity`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.workflows.business_boundaries.official_recipe`, `product.backend.workflows.checks.local_observer_wiring`, `product.backend.workflows.checks.registry`, `product.backend.workflows.official_scenario`, `product.backend.workflows.supplemental_contract`, `product.backend.workflows.test_identities`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `product.protocols.observer`, `pydantic`, `threading`, `time`, `typing`, `uuid`
 
 ### `product/backend/workflows/official_scenario.py`
 - `SAMPLE_PROJECT_ID`
@@ -684,6 +688,19 @@
 - `class SourceRevalidationInspection`
 - `class SourceChangeService`
 主要 import / dot-source：`__future__`, `collections.abc`, `enum`, `product.backend.core.application_understanding`, `product.backend.core.errors`, `product.backend.core.permission_intent`, `product.backend.core.repair`, `product.backend.core.source_changes`, `product.backend.infra.storage`, `product.backend.workflows.application_understanding.service`, `product.backend.workflows.permission_intents`, `product.backend.workflows.results.repair`, `pydantic`, `time`, `typing`, `uuid`
+
+### `product/backend/workflows/supplemental_contract.py`
+- `class MaterialModel`
+- `class SupplementalRecord`
+- `class SupplementalDocument`
+- `validate_material_payload(value, known_secrets)`
+- `material_fingerprint(value)`
+- `request_uuid(value)`
+主要 import / dot-source：`__future__`, `hashlib`, `product.backend.core.errors`, `product.backend.infra.storage.base`, `pydantic`, `re`, `typing`, `uuid`
+
+### `product/backend/workflows/supplemental_materials.py`
+- `class SupplementalMaterialService`
+主要 import / dot-source：`__future__`, `hashlib`, `product.backend.core.errors`, `product.backend.infra.storage.base`, `product.backend.workflows.supplemental_contract`, `threading`, `time`, `uuid`
 
 ### `product/backend/workflows/test_identities/__init__.py`
 主要 import / dot-source：`product.backend.workflows.test_identities.service`

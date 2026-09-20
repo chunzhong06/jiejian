@@ -7,6 +7,7 @@ from sqlalchemy import event
 from product.backend.core.errors import JiejianError
 from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
 from product.backend.infra.runtime.paths import RuntimePaths
+from product.protocols.execution_v3 import canonical_execution_request_v3_bytes
 from tests.fixtures.action_preparation import build_preparation_harness
 from tests.fixtures.check_service import ready_check_harness
 
@@ -44,12 +45,17 @@ def test_submit_freezes_request_and_config_with_one_nonretryable_job(tmp_path, m
         core = harness.core
         monkeypatch.setattr(core.secret_store, "read", lambda _ref: pytest.fail("submission read a secret"))
         preview = core.checks.preview(harness.project_id)
+        frozen_before = canonical_execution_request_v3_bytes(core.checks._freeze(harness.project_id)[1])
         first = core.checks.submit(harness.project_id, expected_plan_fingerprint=preview.plan_fingerprint, idempotency_key="same")
         repeated = core.checks.submit(harness.project_id, expected_plan_fingerprint=preview.plan_fingerprint, idempotency_key="same")
         assert first.created and not repeated.created and first.job.job_id == repeated.job.job_id
         assert first.job.operation_type == "CHECK" and first.job.max_attempts == 1
+        with core.uow_factory() as work:
+            observation = work.code_observations.for_target(harness.project_id, "run", first.run.run_id)
+        assert observation is not None and observation["source_fingerprint"] == first.run.source_fingerprint
         store = CheckRequestStore(core.var_dir)
         request = store.load(first.job.job_id, expected_hash=first.job.request_hash)
+        assert canonical_execution_request_v3_bytes(request) == frozen_before
         assert request.plan_fingerprint == preview.plan_fingerprint
         assert store.load_bundle(first.job.job_id, expected_hash=request.config_fingerprint).identities[0].verification is None
         configs = list(RuntimePaths(core.var_dir).jobs.glob("*/config-*.json"))

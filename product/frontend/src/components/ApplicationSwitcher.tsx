@@ -10,12 +10,14 @@ export function ApplicationSwitcher({
   onSelect,
   onConnectNew,
   onRemoveCurrent,
+  onEnvironment,
 }: {
   projects: ProjectDto[]
   selected: ProjectDto | null
   onSelect: (project: ProjectDto) => void
   onConnectNew: () => void
   onRemoveCurrent: () => void
+  onEnvironment?: () => void
 }) {
   const currentLabel = selected ? selected.name?.trim() || '未命名应用' : '选择应用'
   const items = [
@@ -26,6 +28,7 @@ export function ApplicationSwitcher({
     })),
     ...(projects.length > 0 ? [{ type: 'divider' as const }] : []),
     { key: 'connect-new', label: '接入新应用', icon: <PlusOutlined /> },
+    ...(onEnvironment ? [{ key: 'environment', label: '应用与示例环境' }] : []),
     ...(selected ? [{ key: 'remove-current', label: '移除当前应用', icon: <DeleteOutlined />, danger: true }] : []),
   ]
   return <Dropdown
@@ -35,6 +38,7 @@ export function ApplicationSwitcher({
       selectedKeys: selected ? [selected.project_id] : [],
       onClick: ({ key }) => {
         if (key === 'connect-new') onConnectNew()
+        else if (key === 'environment') onEnvironment?.()
         else if (key === 'remove-current') onRemoveCurrent()
         else {
           const project = projects.find((item) => item.project_id === key)

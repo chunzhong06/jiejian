@@ -1,0 +1,103 @@
+{
+  "$defs": {
+    "SupplementalRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "event_label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Event Label",
+          "type": "string"
+        },
+        "recorded_at_us": {
+          "minimum": 0,
+          "title": "Recorded At Us",
+          "type": "integer"
+        },
+        "resource_label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Resource Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recorded_at_us",
+        "resource_label",
+        "event_label"
+      ],
+      "title": "SupplementalRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action_id": {
+      "maxLength": 36,
+      "minLength": 1,
+      "title": "Action Id",
+      "type": "string"
+    },
+    "action_revision": {
+      "minimum": 1,
+      "title": "Action Revision",
+      "type": "integer"
+    },
+    "claimed_resource_label": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Claimed Resource Label"
+    },
+    "project_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/SupplementalRecord"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Records",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_label": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Source Label",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "project_id",
+    "action_id",
+    "action_revision",
+    "title",
+    "source_label",
+    "records"
+  ],
+  "title": "SupplementalDocument",
+  "type": "object"
+}

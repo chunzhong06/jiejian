@@ -3,6 +3,7 @@
 export type AppRoute =
   | '/workspace'
   | '/application'
+  | '/environment'
   | '/changes'
   | '/permissions'
   | '/tests'
@@ -26,6 +27,7 @@ export const productAreas = [
 ] as const
 
 export function normalizeRoute(pathname: string): AppRoute {
+  if (pathname === '/environment') return pathname
   if (productAreas.some((area) => area.route === pathname)) return pathname as ProductAreaRoute
   if (pathname === '/tests' || pathname === '/changes' || pathname === '/application' || pathname === '/identities' || pathname === '/flows' || pathname === '/preparation' || pathname === '/validation' || pathname === '/results' || pathname === '/verification' || pathname === '/history') return pathname
   if (pathname === '/tools' || pathname === '/settings/system') return pathname

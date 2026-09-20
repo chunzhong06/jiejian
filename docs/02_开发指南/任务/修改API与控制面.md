@@ -81,3 +81,9 @@ MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、H
 - [修改 Agent 变更影响](修改Agent变更影响.md)
 - [工程设计](../../04_工程约束/工程设计.md)
 - [验证与测试](../../04_工程约束/验证与测试.md)
+
+## 人工补充材料
+
+动作级 `supplemental-materials` 路由由 `SupplementalMaterialService` 统一校验和保存。preview 只读；create 绑定 expected_fingerprint 与 UUID request_id；revisions 仅追加说明，withdraw 追加撤回修订。请求 ID 按项目唯一绑定操作、目标和内容，冲突拒绝。所有项目/动作/修订精确核对，新登记必须匹配当前正式动作修订。
+
+导入根 schema_version=1 仅允许项目/动作/动作修订、标题/来源/可选声明资源及1～100条时间/资源/事件记录，UTF-8 canonical 最多64KiB，拒绝额外字段和典型秘密。格式接受不证明真实性；association_status 仅 USER_DECLARED 或 UNCONFIRMED，usage 固定 SUPPLEMENTAL_ONLY。无路径读取、URL采集或脚本执行入口；材料不进入 MCP、Evidence、准备完整性、Plan 或 Verdict。每次列表及修订历史读取最多100项，显式 limit/has_more，不伪造总量；修订历史用正整数 before_revision 继续读取更早记录。直接测试为 `tests/backend/workflows/test_supplemental_materials.py`。

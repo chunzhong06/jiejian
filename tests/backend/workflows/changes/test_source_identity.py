@@ -17,7 +17,7 @@ from product.backend.api.routers.source_changes import build_source_changes_rout
 def identity(monkeypatch):
     record = SimpleNamespace(snapshot_id="snp_" + "a" * 32, source_fingerprint="a" * 64, project_id="p1", files=("one", "two"))
     repository = SimpleNamespace(snapshot=Mock(return_value=record), snapshot_for_fingerprint=Mock(return_value=record))
-    work = SimpleNamespace(source_changes=repository)
+    work = SimpleNamespace(source_changes=repository, code_observations=SimpleNamespace(for_target=Mock(return_value=None)))
     understanding = SimpleNamespace(get=Mock(return_value=SimpleNamespace(revision=1, source_root="authorized", source_analysis_authorized=True)),
                                     inspect_source_fingerprint=Mock(return_value="a" * 64))
     changes = SimpleNamespace(get=Mock(return_value=(None, SimpleNamespace(current_snapshot_id="saved"), None)))
@@ -40,6 +40,17 @@ def test_content_is_authority_even_with_dirty_git_and_missing_historical_git(ide
     assert second.recorded == first.recorded
     assert second.current_git.head == first.current_git.head
     identity.results.package.assert_called_with("run1", project_id="p1")
+
+
+def test_recorded_git_comes_only_from_exact_run_association(identity):
+    with identity.reader._uow_factory() as work:
+        work.code_observations.for_target.return_value = dict(project_id="p1", source_fingerprint="a" * 64,
+            git_status="AVAILABLE", head="e" * 40, has_local_changes=False, observed_at_us=1,
+            observation_id="obs_" + "d" * 32, consistency="CONSISTENT")
+        result = identity.reader.for_run("p1", "run1")
+        work.code_observations.for_target.assert_called_once_with("p1", "run", "run1")
+    assert result.recorded.head == "e" * 40
+    assert result.current_git.head == "f" * 40
 
 
 def test_change_uses_exact_snapshot_not_latest_understanding(identity):

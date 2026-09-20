@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.database, pytest.mark.essential]
 ROOT = Path(__file__).resolve().parents[4]
 BASE_REVISION = "0001_business_boundary_v2"
 MAINTENANCE_REVISION = "0002_business_boundary_maintenance"
-CURRENT_REVISION = "0005_verification_loop_v3"
+CURRENT_REVISION = "0006_product_provenance"
 LEGACY_REVISIONS = (
     "0001_web_v1",
     "0002_remove_contract_workbench",
@@ -185,7 +185,7 @@ def test_fresh_database_reaches_current_head_idempotently(tmp_path: Path) -> Non
     tables = _tables(database)
     assert _revision(database) == CURRENT_REVISION
     assert tables == set(Base.metadata.tables) | {"alembic_version"}
-    assert len(Base.metadata.tables) == 39
+    assert len(Base.metadata.tables) == 45
     assert "check_publications" in tables
     assert BOUNDARY_TABLES <= tables
     assert not (FORBIDDEN_TABLES & tables)
@@ -247,6 +247,7 @@ def test_repository_contains_frozen_migration_chain() -> None:
         "0003_action_assurance_recording.py",
         "0004_action_resource_ownership.py",
         "0005_verification_loop_v3.py",
+        "0006_product_provenance.py",
     ]
 
 

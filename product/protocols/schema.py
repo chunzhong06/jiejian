@@ -36,6 +36,7 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("execution/web-execution-profile.schema.json", "product.protocols.web.profile:WebExecutionProfile"),
     SchemaEntry("identity/identity-preparation-request.schema.json", "product.protocols.test_identity_preparation:IdentityPreparationRequest"),
     SchemaEntry("identity/identity-preparation-result.schema.json", "product.protocols.test_identity_preparation:IdentityPreparationResult"),
+    SchemaEntry("materials/supplemental-document.schema.json", "product.backend.workflows.supplemental_contract:SupplementalDocument"),
     SchemaEntry("observer/async-task-observer-invocation.schema.json", "product.protocols.observer.invocation:AsyncTaskObserverInvocation"),
     SchemaEntry("observer/audit-log-observer-invocation.schema.json", "product.protocols.observer.invocation:AuditLogObserverInvocation"),
     SchemaEntry("observer/observation-envelope.schema.json", "product.protocols.observer.result:ObservationEnvelope"),

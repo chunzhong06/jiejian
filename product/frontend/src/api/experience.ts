@@ -20,6 +20,11 @@ export type OfficialExperienceDto = {
   vulnerable_change_id: string | null
   repair_change_id: string | null
   pending_tasks?: string[]
+  lifecycle?: 'NOT_STARTED' | 'STARTING' | 'RUNNING' | 'STOPPING' | 'STOPPED' | 'FAILED' | 'UNKNOWN'
+  history_project_id?: string | null
+  last_error_code?: string | null
+  operation_id?: string | null
+  operation_state?: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN' | null
 }
 
 export type CompetitionValidationSummaryDto = {
@@ -53,10 +58,10 @@ export type CompetitionValidationSummaryViewDto = {
 export const experienceApi = {
   status: () => request<OfficialExperienceDto>('/api/experience/official-sample'),
   validationSummary: () => request<CompetitionValidationSummaryViewDto>('/api/experience/official-sample/validation-summary'),
-  start: () =>
+  start: (operationId?: string) =>
     request<OfficialExperienceDto>('/api/experience/official-sample/start', {
       method: 'POST',
-      body: JSON.stringify({ schema_version: '1', consent: true }),
+      body: JSON.stringify({ schema_version: '1', consent: true, ...(operationId ? { operation_id: operationId } : {}) }),
     }),
   prepare: () =>
     request<OfficialExperienceDto>('/api/experience/official-sample/prepare', { method: 'POST' }),
@@ -70,5 +75,6 @@ export const experienceApi = {
         repair_reference: reference ?? null,
       }),
     }),
-  stop: () => request<OfficialExperienceDto>('/api/experience/official-sample/stop', { method: 'POST' }),
+  stop: (operationId?: string) => request<OfficialExperienceDto>('/api/experience/official-sample/stop', { method: 'POST', ...(operationId ? { body: JSON.stringify({ operation_id: operationId }) } : {}) }),
+  history: () => request<{items:Array<{operation_id:string;operation:string;state:string;project_id:string|null;experience_id:string|null;started_at_us:number;finished_at_us:number|null;error_code:string|null}>;has_more:boolean}>('/api/experience/official-sample/history'),
 }

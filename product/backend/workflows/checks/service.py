@@ -42,6 +42,7 @@ class CheckService:
         self._submission_lock = RLock()
         self._source_inspector = source_inspector
         self._changes = self._repairs = None
+        self.code_observations = None
 
     def set_revalidation_services(self, *, changes, repairs):
         self._changes,self._repairs = changes,repairs
@@ -100,7 +101,8 @@ class CheckService:
         try:
             self._store.write_bundle(job_id, bundle)
             self._store.write(job_id, request)
-            result = self._queue.submit(submission, precondition=checkpoint)
+            metadata = {} if self.code_observations is None else {"on_created": self.code_observations.attach_run}
+            result = self._queue.submit(submission, precondition=checkpoint, **metadata)
             created = result.created
             return result
         finally:

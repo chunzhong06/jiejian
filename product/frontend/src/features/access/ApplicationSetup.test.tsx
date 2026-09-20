@@ -102,6 +102,7 @@ describe('ApplicationSetup', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: /只读分析当前应用源码/ }))
     fireEvent.click(screen.getByRole('button', { name: '授权并开始分析' }))
+    fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
     expect(await screen.findByText('先确认应用里有哪些业务', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText(/识别建议只帮助整理业务/)).toBeInTheDocument()
     expect(screen.getByDisplayValue('owner')).toBeInTheDocument()
@@ -127,6 +128,7 @@ describe('ApplicationSetup', () => {
     const confirmed = { ...restored, role_candidates: [{ ...role, decision: 'CONFIRMED', display_name: '所有者' }], revision: 4 }
     mockProjects.decideCandidates.mockResolvedValue({ ...confirmed, action_candidates: [{ ...action, decision: 'CONFIRMED' }] })
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
     fireEvent.change(await screen.findByDisplayValue('owner'), { target: { value: '所有者' } })
     fireEvent.click(screen.getByText('业务动作 · 1'))
     fireEvent.click(screen.getByText('权限组 · 1'))
@@ -174,6 +176,7 @@ describe('ApplicationSetup', () => {
     mockProjects.understanding.mockResolvedValue(restored)
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={onChanged} onBack={vi.fn()} onContinue={vi.fn()} />)
 
+    fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
     expect(await screen.findByDisplayValue('普通用户')).toBeInTheDocument()
     mockProjects.understanding.mockClear()
     fireEvent.click(screen.getByRole('button', { name: '刷新当前状态' }))
@@ -213,6 +216,25 @@ describe('ApplicationSetup', () => {
     await waitFor(() => expect(mockProjects.confirmEndpoint).toHaveBeenCalledWith('app-demo', 'http://127.0.0.1:5173', 3))
   })
 
+  it('恢复读取失败时不回到新建入口，重试只读取已保存状态', async () => {
+    mockProjects.understanding.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(baseUnderstanding)
+    render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: '重新读取接入状态' }))
+    expect(screen.queryByRole('button', { name: '选择应用文件夹' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '确认本地访问地址' })).toBeInTheDocument()
+    expect(mockProjects.understanding).toHaveBeenCalledTimes(2)
+    expect(mockProjects.connectApplication).not.toHaveBeenCalled()
+    expect(mockProjects.confirmEndpoint).not.toHaveBeenCalled()
+  })
+
+  it('拒绝将其他项目的恢复响应展示为当前接入事实', async () => {
+    mockProjects.understanding.mockResolvedValue({ ...baseUnderstanding, project_id: 'another-app' })
+    render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
+    expect(await screen.findByText('恢复的应用状态与当前应用不一致。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '确认本地地址' })).not.toBeInTheDocument()
+    expect(mockProjects.discoverEndpoints).not.toHaveBeenCalled()
+  })
+
   it('按事实层级分开确认、待确认、手工补充和已排除候选', async () => {
     const confirmed = { ...role, decision: 'CONFIRMED' as const, display_name: '普通用户' }
     const rejected = { ...role, candidate_id: `role_${'c'.repeat(32)}`, decision: 'REJECTED' as const, display_name: '排除组' }
@@ -232,6 +254,7 @@ describe('ApplicationSetup', () => {
 
     render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
 
+    fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
     expect(await screen.findByDisplayValue('普通用户')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: '纳入普通用户' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: '纳入排除组' })).not.toBeChecked()

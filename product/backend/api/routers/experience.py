@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
@@ -18,6 +18,10 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
     @router.get("/api/experience/official-sample", response_model=ApiResponse)
     def official_sample_status():
         return data_response(context.official_experience.status().model_dump(mode="json"))
+
+    @router.get("/api/experience/official-sample/history", response_model=ApiResponse)
+    def official_sample_history(limit: int = Query(25, ge=1, le=100)):
+        return data_response(context.official_experience.history(limit=limit))
 
     @router.get(
         "/api/experience/official-sample/validation-summary",
@@ -33,6 +37,7 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
         return data_response(
             context.official_experience.start(
                 consent=body.consent,
+                operation_id=body.operation_id,
             ).model_dump(mode="json")
         )
 
@@ -62,8 +67,8 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
         )
 
     @router.post("/api/experience/official-sample/stop", response_model=ApiResponse)
-    def stop_official_sample():
-        return data_response(context.official_experience.stop().model_dump(mode="json"))
+    def stop_official_sample(body: OfficialSampleStopRequest | None = None):
+        return data_response(context.official_experience.stop(operation_id=None if body is None else body.operation_id).model_dump(mode="json"))
 
     return router
 
@@ -71,6 +76,11 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
 class OfficialSampleStartRequest(ApiModel):
     schema_version: Literal["1"]
     consent: Literal[True]
+    operation_id: str | None = None
+
+
+class OfficialSampleStopRequest(ApiModel):
+    operation_id: str | None = None
 
 
 class OfficialSampleVersionRequest(ApiModel):

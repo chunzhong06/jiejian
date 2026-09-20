@@ -21,7 +21,7 @@ const phaseLabels = { BASELINE: '初始状态', BEFORE: '操作前', AFTER: '操
 const stateLabels = { CONFIRMED: '已发现', ABSENT: '未发现', UNKNOWN: '无法确认' }
 const controlLabels = { SAFE: '正常对照已通过', VULNERABLE: '正常对照发现问题', INCONCLUSIVE: '正常对照证据不足' }
 
-export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId }: { story: ResultStory; onError: (error: ApiError) => void; onNavigate?: (path: string) => void; requestedCaseId?: string | null }) {
+export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId, historicalOnly }: { story: ResultStory; onError: (error: ApiError) => void; onNavigate?: (path: string) => void; requestedCaseId?: string | null; historicalOnly?: boolean }) {
   const wide = Grid.useBreakpoint().lg
   const visible = useContext(WorkPageVisible)
   const evidencePanel = useRef<HTMLElement>(null)
@@ -96,7 +96,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
     {ordered.length > 1 && <nav className="result-case-index" aria-label="本轮权限考题">{ordered.map((item) => <button key={item.case_id} aria-current={item.case_id === action?.case_id ? 'true' : undefined} onClick={() => { requestEpoch.current += 1; setDetail(undefined); setDocuments([]); setSelectedCase(item.case_id) }}>{item.display_name} · {item.fact_comparison.planned_identity.label ?? '计划账号'} · {item.permission.expectation === 'DENY' ? '应当拒绝' : '应当允许'}</button>)}</nav>}
     {action && comparison && actual ? <article>
       <header className="result-case-heading"><div><p className="editorial-eyebrow">{action.display_name} · 本项判断</p><h2>{action.judgement}</h2>{action.breakpoint && <p className="result-diagnosis-badge" data-precision={action.breakpoint.precision}>{precisionLabels[action.breakpoint.precision]}<span>{precisionDescriptions[action.breakpoint.precision]}</span></p>}</div>
-      {action.repair_requirement && onNavigate && <Button type="primary" onClick={() => onNavigate(`/changes?repair_reference=${encodeURIComponent(action.repair_requirement!.repair_fingerprint)}`)}>查看修复要求</Button>}</header>
+      {action.repair_requirement && onNavigate && !historicalOnly && <Button type="primary" onClick={() => onNavigate(`/changes?repair_reference=${encodeURIComponent(action.repair_requirement!.repair_fingerprint)}`)}>查看修复要求</Button>}</header>
       <div className="result-human-rule"><p className="editorial-eyebrow">人的权限要求</p><RuleSentence><strong>{comparison.planned_identity.label ?? comparison.planned_identity.actor_label ?? '原操作账号'}</strong> 对<strong>{comparison.planned_resource_owner?.label ?? (action.permission.relation === 'OWNS' ? '自己' : action.permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '另一个同权限组账号' : '原资源所有者')}</strong>拥有的资源，<strong>{action.permission.expectation === 'DENY' ? '不得' : '可以'}{action.display_name}</strong>。</RuleSentence></div>
       <p className="result-publication"><FileTextOutlined aria-hidden="true"/> 本轮证据已发布 · 权限版本 {story.policy_epoch}</p>
       <ExecutionPath key={`${story.run_id}:${action.case_id}`} action={action} selectedEvent={detail?.event?.event_id} onSelect={(event, refs) => void openEvidence(refs, undefined, undefined, event)} />
@@ -112,7 +112,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
       <ProofCoverage rows={action.proof_coverage ?? []} onEvidence={(row, refs) => void openEvidence(refs, undefined, undefined, undefined, row)} />
       {action.repair_requirement && <details aria-label="原题修复要求"><summary>查看原题修复要求与全部合法能力</summary><h2>修复原问题，并保留正常业务</h2><p>原权限、操作账号、资源归属和证据标准保持不变。关闭功能不能证明修复成功。</p><RepairComparison rows={action.repair_comparison ?? []} sourceRunId={story.run_id} onNavigate={onNavigate}/></details>}
     </article> : <Empty description={selectedCase ? '本轮没有指定的检查项，请从上方选择本轮已有记录。' : '本次没有可展示的检查项'} />}
-    {story.change_context && onNavigate && <Button onClick={() => onNavigate('/changes')}>查看关联变化与修复</Button>}
+    {story.change_context && onNavigate && !historicalOnly && <Button onClick={() => onNavigate('/changes')}>查看关联变化与修复</Button>}
     <details><summary>解释本次结果</summary><AssistantPanel runId={story.run_id} title="理解本次检查结果" actionLabel="解释已有结果" /></details>
     {story.claim_boundary.map((text) => <p key={text} className="editorial-muted">{text}</p>)}
 

@@ -14,7 +14,12 @@ class SourceIdentityRecord(WireModel):
     fingerprint: Hash
     snapshot_id: str | None
     file_count: int | None = Field(default=None, ge=0, le=512)
-    git_status: Literal["NOT_RECORDED"] = "NOT_RECORDED"
+    git_status: Literal["NOT_RECORDED", "AVAILABLE", "UNBORN", "NOT_A_REPOSITORY", "UNAVAILABLE"] = "NOT_RECORDED"
+    head: str | None = None
+    has_local_changes: bool | None = None
+    observed_at_us: int | None = None
+    observation_id: str | None = None
+    consistency: Literal["CONSISTENT", "UNAVAILABLE"] | None = None
 
 
 class SourceIdentityComparison(WireModel):
@@ -52,9 +57,13 @@ class SourceIdentityReader:
         if fingerprint is not None:
             with self._uow_factory() as work:
                 snapshot = work.source_changes.snapshot_for_fingerprint(project_id, fingerprint)
+                observation = work.code_observations.for_target(project_id, "run" if run_id else "change", run_id or change_id)
+            historical = {}
+            if observation is not None and observation["project_id"] == project_id and observation["source_fingerprint"] == fingerprint:
+                historical = {key: observation[key] for key in ("git_status", "head", "has_local_changes", "observed_at_us", "observation_id", "consistency")}
             recorded = SourceIdentityRecord(fingerprint=fingerprint,
                 snapshot_id=None if snapshot is None else snapshot.snapshot_id,
-                file_count=None if snapshot is None else len(snapshot.files))
+                file_count=None if snapshot is None else len(snapshot.files), **historical)
         current, git, comparison = None, GitSourceContext(status="UNAVAILABLE"), "UNAVAILABLE"
         try:
             before = self._understanding.get(project_id)

@@ -46,3 +46,13 @@ it('启动回执不明时回读实际状态，不自动重试', async () => {
   expect(api.start).toHaveBeenCalledTimes(1)
   expect(p.onChanged).toHaveBeenCalledWith(active)
 })
+it('明确启动成功但页面同步失败时，不保留可重复启动的确认框', async () => {
+  const p = props(); p.onChanged.mockRejectedValueOnce(new Error('workspace unavailable'))
+  render(<OfficialSamplePanel {...p}/>)
+  fireEvent.click(screen.getByRole('button', { name: '启动官方示例' }))
+  fireEvent.click(await screen.findByRole('button', { name: '启动问题版' }))
+  expect(await screen.findByText('环境操作已完成，页面尚未同步')).toBeInTheDocument()
+  expect(api.start).toHaveBeenCalledTimes(1)
+  expect(api.start).toHaveBeenCalledWith(expect.any(String))
+  expect(screen.queryByRole('button', { name: '启动问题版' })).not.toBeInTheDocument()
+})

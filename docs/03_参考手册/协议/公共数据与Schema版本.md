@@ -28,6 +28,7 @@
 | `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest`、`PublicationManifest` | `artifacts.py`、`run_packages.py` | `schemas/artifacts/` | 1 |
 | `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 5 |
 | `ReportPackageManifest` | `report.py` | `schemas/reports/report-package-manifest.schema.json` | 1 |
+| `SupplementalDocument` | `product/backend/workflows/supplemental_contract.py` | `schemas/materials/supplemental-document.schema.json` | 1 |
 | `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
 | `RunnerProgressEvent` | `product/backend/infra/runtime/runner/progress.py` | 无；内部有界 JSONL reader | 1 |
 
@@ -51,7 +52,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 
 ## 兼容规则
 
-当前不兼容旧开发数据库、Profile、Evidence、Artifact、Report 或任意旧 wire format。除已发布 `PersistedExecutionRequest` 格式 1 及 RecordingRunnerRequest/FlowDraft/Flow 格式 2 的明确严格只读历史入口外，每个根只接受上表当前格式，不提供 fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库以签入的 0001→0002→0003→0004→0005 链增量升级，当前 head 为 `0005_verification_loop_v3`。0003→0004 保留已批准的归属迁移规则，0004→0005 在 DDL 前验证冻结结构、外键和既有行约束，失败回滚，不猜测补造旧执行快照；旧 1.x revision 只读拒绝。数据库 revision 与根文档版本不能互相替代。
+当前不兼容旧开发数据库、Profile、Evidence、Artifact、Report 或任意旧 wire format。除已发布 `PersistedExecutionRequest` 格式 1 及 RecordingRunnerRequest/FlowDraft/Flow 格式 2 的明确严格只读历史入口外，每个根只接受上表当前格式，不提供 fallback 或 alias；嵌套 DTO 的变化由所属根版本和 canonical 回归保护。数据库以签入的 0001→0002→0003→0004→0005→0006 链增量升级，当前 head 为 `0006_product_provenance`。0003→0004 保留已批准的归属迁移规则，0004→0005 在 DDL 前验证冻结结构、外键和既有行约束，失败回滚，不猜测补造旧执行快照；旧 1.x revision 只读拒绝。0005→0006 只追加材料、代码观察与环境回执表，允许精确合法的非空 0005 并保留全部历史。数据库 revision 与根文档版本不能互相替代。
 
 ## 版本规则与 Schema 真源
 
@@ -80,6 +81,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/execution/web-execution-profile.schema.json`
 - `product/protocols/schemas/identity/identity-preparation-request.schema.json`
 - `product/protocols/schemas/identity/identity-preparation-result.schema.json`
+- `product/protocols/schemas/materials/supplemental-document.schema.json`
 - `product/protocols/schemas/observer/async-task-observer-invocation.schema.json`
 - `product/protocols/schemas/observer/audit-log-observer-invocation.schema.json`
 - `product/protocols/schemas/observer/observation-envelope.schema.json`

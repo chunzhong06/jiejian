@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass
 from enum import StrEnum
 from threading import RLock
+from typing import Literal
+from uuid import uuid4
 
 from pydantic import Field
 
@@ -23,6 +25,7 @@ from product.backend.workflows.test_identities import PreparedLoginState, TestId
 from product.protocols.check_runtime import CheckIdentityVerification, CheckAuxiliarySource
 from product.protocols.execution_v3 import WireModel
 from product.protocols.observer import ObserverSpec
+from product.backend.workflows.supplemental_contract import request_uuid
 
 
 class OfficialScenarioVersion(StrEnum):
@@ -45,6 +48,11 @@ class OfficialExperienceView(WireModel):
     vulnerable_change_id: str | None = None
     repair_change_id: str | None = None
     pending_tasks: tuple[str,...] = Field(default=(),max_length=16)
+    lifecycle: Literal["NOT_STARTED", "STARTING", "RUNNING", "STOPPING", "STOPPED", "FAILED", "UNKNOWN"] = "NOT_STARTED"
+    history_project_id: str | None = None
+    last_error_code: str | None = None
+    operation_id: str | None = None
+    operation_state: Literal["PENDING", "SUCCEEDED", "FAILED", "UNKNOWN"] | None = None
 
 
 @dataclass
@@ -74,12 +82,35 @@ class OfficialSampleExperience:
         self._clock=clock_us or (lambda:time.time_ns()//1000)
         self._lock=RLock()
         self._current=None
+        self._running_operation = None
+        self._operation_cleanup_confirmed = False
+        self._cleanup_uncertain = False
 
     def status(self):
         current=self._current
         installation=self._manager.installation
+        with self._uow_factory() as work:
+            operations, _ = work.environment_operations.list(1)
+        operation = operations[0] if operations else None
+        active = bool(current and current.active and self._manager.active)
+        lifecycle = "RUNNING" if active else "NOT_STARTED"
+        state = None if operation is None else operation["state"]
+        if operation is not None:
+            if state == "PENDING":
+                if self._running_operation == operation["operation_id"]:
+                    lifecycle = "STOPPING" if operation["operation"] == "stop" else "STARTING"
+                else:
+                    lifecycle, state = "UNKNOWN", "UNKNOWN"
+            elif state == "UNKNOWN":
+                lifecycle = "UNKNOWN"
+            elif state == "FAILED":
+                lifecycle = "RUNNING" if active else "FAILED"
+            elif operation["operation"] == "stop" and operation["cleanup_confirmed"]:
+                lifecycle = "STOPPED"
+            elif not active:
+                lifecycle = "UNKNOWN"
         return OfficialExperienceView(available=installation.available,display_name=installation.display_name,
-            unavailable_reason=installation.reason,active=bool(current and current.active and self._manager.active),
+            unavailable_reason=installation.reason,active=active,
             experience_id=None if current is None else current.runtime.experience_id,
             project_id=None if current is None else current.project_id,origin=None if current is None else current.runtime.origin,
             scenario_prepared=bool(current and current.scenario_prepared),
@@ -87,25 +118,46 @@ class OfficialSampleExperience:
             scenario_changed_at_us=None if current is None else current.scenario_changed_at_us,
             vulnerable_change_id=None if current is None else current.vulnerable_change_id,
             repair_change_id=None if current is None else current.repair_change_id,
-            pending_tasks=() if current is None else current.pending_tasks)
+            pending_tasks=() if current is None else current.pending_tasks,
+            lifecycle=lifecycle, history_project_id=None if operation is None else operation["project_id"],
+            last_error_code=None if operation is None else operation["error_code"],
+            operation_id=None if operation is None else operation["operation_id"], operation_state=state)
 
-    def start(self, *, consent):
+    def start(self, *, consent, operation_id=None):
+        if consent is not True:
+            raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,"启动官方示例前需要明确同意本机运行与源码复制")
+        return self._operate("start", operation_id, lambda: self._start(consent=consent))
+
+    def _start(self, *, consent):
         if consent is not True:
             raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,"启动官方示例前需要明确同意本机运行与源码复制")
         with self._lock:
             if self._current is not None and self._current.active:
-                self.stop()
+                self._stop()
+            if self._cleanup_uncertain:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "上一环境清理尚未确认")
+            self._operation_cleanup_confirmed = False
             runtime=self._manager.start(authorization_order="ENQUEUE_BEFORE_AUTHORIZE",owner_observation="AVAILABLE",blob_observation="AVAILABLE")
+            project = None
             try:
+                self._operation_progress(experience_id=runtime.experience_id, project_id=None)
                 connection=self._understanding.connect(runtime.source_root,project_name=runtime.display_name)
                 project=connection.project.project_id
+                self._operation_progress(project_id=project)
                 value=self._understanding.confirm_endpoint(project,endpoint=runtime.origin,revision=connection.understanding.revision)
                 value=self._understanding.authorize_source_analysis(project,revision=value.revision)
                 self._understanding.analyze_source_for_change(project,revision=value.revision)
                 self._current=_Experience(runtime,project,scenario_changed_at_us=self._clock(),pending_tasks=("HUMAN_BOUNDARY_APPROVAL_REQUIRED",))
                 return self.status()
             except Exception:
-                self._manager.stop(runtime.experience_id)
+                # 清理失败不能遮盖首次连接/分析错误，回执保留未确认清理事实。
+                try:
+                    self._manager.stop(runtime.experience_id)
+                    # 已创建 Project 尚未归档时保留未知收口，不能把仅进程退出当成完整清理。
+                    self._operation_cleanup_confirmed = project is None
+                except Exception:
+                    self._operation_cleanup_confirmed = False
+                    self._cleanup_uncertain = True
                 raise
 
     def boundary_proposal(self):
@@ -286,19 +338,134 @@ class OfficialSampleExperience:
             if current is None or not current.active or current.project_id!=project_id:
                 return False
             self._require_idle(project_id)
-            self._manager.stop(current.runtime.experience_id)
+            if self._cleanup_uncertain:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "环境清理尚未确认")
+            try:
+                self._manager.stop(current.runtime.experience_id)
+            except Exception:
+                # manager 可能已清空内存句柄；未知清理不能靠重试空 stop 伪装成功。
+                self._cleanup_uncertain = True
+                raise
             self._registry.unregister(project_id)
             self._secrets.clear_session(current.runtime.experience_id)
             current.active=False
             return True
 
-    def stop(self):
+    def stop(self, *, operation_id=None):
+        return self._operate("stop", operation_id, self._stop)
+
+    def _stop(self):
         with self._lock:
-            if self._current is not None and self._current.active:
+            if self._current is not None:
                 project=self._current.project_id
-                self.stop_project(project)
+                if self._current.active:
+                    self.stop_project(project)
+                # 前次归档失败仍必须完成该步骤，不能仅凭 active=false 报告停止成功。
                 self._archive(project)
+            else:
+                with self._uow_factory() as work:
+                    history, _ = work.environment_operations.list(2)
+                previous = history[1] if len(history) > 1 else None
+                if previous and (previous["experience_id"] or previous["state"] in {"PENDING", "UNKNOWN"}) and not (
+                    previous["operation"] == "stop" and previous["state"] == "SUCCEEDED" and previous["cleanup_confirmed"]):
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, "缺少本进程环境所有权，不能确认历史环境停止")
+            self._operation_cleanup_confirmed = True
             return self.status()
 
     def close(self):
-        self.stop()
+        if self._current is not None and self._current.active:
+            self.stop()
+
+    def _operation_progress(self, **fields):
+        if self._running_operation is None:
+            return
+        with self._uow_factory() as work:
+            value = work.environment_operations.get(self._running_operation)
+            value.update(fields)
+            work.environment_operations.save(value)
+            work.commit()
+
+    def _receipt_view(self, receipt):
+        value = self.status()
+        state = "UNKNOWN" if receipt["state"] == "PENDING" else receipt["state"]
+        lifecycle = "UNKNOWN"
+        if state == "SUCCEEDED" and receipt["operation"] == "stop" and receipt["cleanup_confirmed"]:
+            lifecycle = "STOPPED"
+        elif state == "FAILED":
+            lifecycle = "FAILED"
+        elif (state == "SUCCEEDED" and self._current is not None and self._current.active
+              and self._current.runtime.experience_id == receipt["experience_id"] and self._manager.active is not None):
+            lifecycle = "RUNNING"
+        # 重放旧操作只返回其身份，不把当前另一实例冒充原回执。
+        same = self._current is not None and self._current.runtime.experience_id == receipt["experience_id"]
+        updates = dict(operation_id=receipt["operation_id"], operation_state=state, lifecycle=lifecycle,
+            history_project_id=receipt["project_id"], last_error_code=receipt["error_code"],
+            experience_id=receipt["experience_id"], project_id=receipt["project_id"], active=lifecycle == "RUNNING")
+        if not same:
+            updates.update(origin=None, scenario_prepared=False, scenario_version=None, scenario_changed_at_us=None,
+                vulnerable_change_id=None, repair_change_id=None, pending_tasks=())
+        return value.model_copy(update=updates)
+
+    def _operate(self, operation, operation_id, action):
+        """先持久接受一次操作，再执行已有生命周期；未知回执不重放副作用。"""
+        operation_id = request_uuid(operation_id) if operation_id is not None else str(uuid4())
+        with self._lock:
+            with self._uow_factory() as work:
+                existing = work.environment_operations.get(operation_id)
+                if existing is not None:
+                    if existing["operation"] not in (("start", "reset") if operation == "start" else ("stop",)):
+                        raise JiejianError(ErrorCode.STATE_PRECONDITION, "操作标识已用于不同环境操作")
+                    return self._receipt_view(existing)
+                current = self._current
+                latest, _ = work.environment_operations.list(1)
+                indexed_current = current if current and (operation == "stop" or current.active) else None
+                value = dict(operation_id=operation_id,
+                    operation="reset" if operation == "start" and current and current.active else operation,
+                    state="PENDING", started_at_us=max(self._clock(), latest[0]["started_at_us"] + 1 if latest else 0), finished_at_us=None,
+                    project_id=indexed_current.project_id if indexed_current else latest[0]["project_id"] if operation == "stop" and latest else None,
+                    experience_id=indexed_current.runtime.experience_id if indexed_current else latest[0]["experience_id"] if operation == "stop" and latest else None,
+                    error_code=None, cleanup_confirmed=False)
+                work.environment_operations.save(value)
+                work.commit()
+            self._running_operation = operation_id
+            self._operation_cleanup_confirmed = False
+            rejected_without_effect = False
+            try:
+                # 已知忙碌门禁在任何生命周期副作用之前拒绝；拒绝回执不污染仍运行的环境。
+                if current is not None and current.active:
+                    try:
+                        self._require_idle(current.project_id)
+                    except JiejianError:
+                        rejected_without_effect = True
+                        raise
+                action()
+            except Exception as exc:
+                code = exc.code if isinstance(exc, JiejianError) else ErrorCode.OFFICIAL_SAMPLE_START_FAILED.value
+                code = code if code in {item.value for item in ErrorCode} else ErrorCode.OFFICIAL_SAMPLE_START_FAILED.value
+                try:
+                    self._operation_progress(state="FAILED" if rejected_without_effect or self._operation_cleanup_confirmed else "UNKNOWN",
+                        finished_at_us=max(self._clock(), value["started_at_us"]), error_code=code,
+                        cleanup_confirmed=self._operation_cleanup_confirmed)
+                except Exception:
+                    # DB 回执保存失败时原 PENDING 在重启后投影 UNKNOWN，仍保留第一主错误。
+                    pass
+                if isinstance(exc, JiejianError):
+                    raise
+                raise JiejianError(ErrorCode(code), "官方环境操作未完成") from None
+            else:
+                self._operation_progress(state="SUCCEEDED", finished_at_us=max(self._clock(), value["started_at_us"]),
+                    cleanup_confirmed=self._operation_cleanup_confirmed)
+                return self.status()
+            finally:
+                self._running_operation = None
+
+    def history(self, *, limit=25):
+        if not 1 <= limit <= 100:
+            raise JiejianError(ErrorCode.INPUT_INVALID, "环境历史上限为 100")
+        with self._uow_factory() as work:
+            items, has_more = work.environment_operations.list(limit)
+        for item in items:
+            item.pop("cleanup_confirmed")
+            if item["state"] == "PENDING" and item["operation_id"] != self._running_operation:
+                item["state"] = "UNKNOWN"
+        return dict(items=items, has_more=has_more)

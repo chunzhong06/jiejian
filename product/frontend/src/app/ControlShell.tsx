@@ -15,6 +15,7 @@ import { CurrentTestsPage } from '../features/testing/CurrentTestsPage'
 import { CheckHistoryPage } from '../features/testing/CheckHistoryPage'
 import { ChangesPage } from '../features/changes/ChangesPage'
 import { OfficialSamplePanel } from '../features/workspace/OfficialSamplePanel'
+import { EnvironmentPage } from '../features/workspace/EnvironmentPage'
 import { BusinessBoundaryPage } from '../features/boundaries/BusinessBoundaryPage'
 import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
 import { RuntimePage } from '../features/system/RuntimePage'
@@ -211,7 +212,7 @@ function ControlShellContent() {
       const preparing = !['RUN_CURRENT_CHECK', 'VIEW_CURRENT_RESULT', 'VERIFY_REPAIR'].includes(task.task_kind)
       return renderChecks(workspace?.active_check?.run.run_id ?? task.run_id, preparing ? task.task_id : null, task.change_id)
     }
-    if (task.route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspaceState.refreshCurrentWorkspace() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
+    if (task.route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
     return undefined
   }
 
@@ -228,7 +229,8 @@ function ControlShellContent() {
     if (directTask) return directTask
     if (route === '/workspace') return <WorkbenchPage selected={selected} workspace={workspace} systemStatus={systemStatus} experience={experience} mcpStatus={mcpStatusFailed ? null : mcpStatus} onNavigate={(path) => navigate(path)} samplePanel={samplePanel} />
     if (route === '/tools') return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
-    if (route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={() => { void workspaceState.refreshCurrentWorkspace() }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
+    if (route === '/environment') return <EnvironmentPage project={selected} workspace={workspace} systemStatus={systemStatus} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async value => { setExperience(value); const items = await workspaceState.refreshProjects(); const next = value.active ? items.find(item => item.project_id === value.project_id) : undefined; if (next) { workspaceState.selectProject(next); await workspaceState.refreshCurrentWorkspace(next) } }}/>
+    if (route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
     if (route === '/permissions') return renderPermissions()

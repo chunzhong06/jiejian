@@ -47,6 +47,7 @@ class CurrentSourceChangeService:
         self._repair_resolver = repair_resolver
         self._clock = clock_us or (lambda:time.time_ns()//1000)
         self._lock = RLock()
+        self.code_observations = None
 
     def set_dependencies(self, *, plan_reader, repair_resolver):
         self._plan_reader,self._repair_resolver = plan_reader,repair_resolver
@@ -86,6 +87,10 @@ class CurrentSourceChangeService:
                 change = build_current_change_set(manifest,baseline,snapshot)
                 assessment = self._assess(work,current_boundary,actual,change)
                 work.source_changes.add_current_change(manifest,change,assessment)
+                if self.code_observations is not None:
+                    observation = self.code_observations.capture(project_id, snapshot.source_fingerprint)
+                    work.code_observations.add_link(observation, kind="change", target_id=manifest.change_id,
+                        project_id=project_id, source_fingerprint=snapshot.source_fingerprint)
                 work.commit()
             # 登记回执和可执行 inspection 分开；准备缺口不撤销已经成功保存的变化事实。
             return self.view(project_id,manifest.change_id)

@@ -91,7 +91,7 @@ export function AppHeader({
   const compactMcpLabel = mcpConnected ? `${mcpStatus?.client_name?.trim() || 'Agent'} · 已连接` : 'Agent · 未连接'
   return <Layout.Header className="topbar">
     <div className="topbar-left">
-      <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} onRemoveCurrent={onRemoveCurrent} />
+      <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} onRemoveCurrent={onRemoveCurrent} onEnvironment={() => onNavigate('/environment')} />
 
     </div>
     <Space className="topbar-tools" size="small">

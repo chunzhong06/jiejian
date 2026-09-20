@@ -23,6 +23,9 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.infra.storage.supplemental_materials import SupplementalMaterialRepository
+from product.backend.infra.storage.code_observations import CodeObservationRepository
+from product.backend.infra.storage.environment_operations import EnvironmentOperationRepository
 from product.backend.infra.storage.execution.job_control import JobControlRepository
 from product.backend.infra.storage.application_understanding import ApplicationUnderstandingRepository
 from product.backend.infra.storage.business_boundaries import BusinessBoundaryRepository
@@ -130,6 +133,9 @@ class StorageUnitOfWork:
             self._known_secrets,
         )
         self.source_changes = SourceChangeRepository(session, self._known_secrets)
+        self.supplemental_materials = SupplementalMaterialRepository(session, self._known_secrets)
+        self.code_observations = CodeObservationRepository(session, self._known_secrets)
+        self.environment_operations = EnvironmentOperationRepository(session, self._known_secrets)
         return self
 
     def commit(self) -> None:

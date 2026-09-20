@@ -43,7 +43,7 @@ def test_fresh_incremental_schema_and_repeat_start_match(tmp_path):
     upgrade_database(incremental)
     with sqlite3.connect(incremental) as left, sqlite3.connect(fresh) as right:
         assert _sqlite_schema_signature(left) == _sqlite_schema_signature(right)
-        assert left.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0005_verification_loop_v3"
+        assert left.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0006_product_provenance"
         columns = {row[1] for row in left.execute("PRAGMA table_info(runs)")}
         assert {"request_hash", "plan_fingerprint", "source_fingerprint", "policy_epoch"} <= columns
         assert {"contract_id", "contract_version"}.isdisjoint(columns)
