@@ -346,7 +346,12 @@
 - `class OfficialScenarioVersion`
 - `class OfficialExperienceView`
 - `class OfficialSampleExperience`
-主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `json`, `product.backend.core.checks.repair`, `product.backend.core.errors`, `product.backend.core.identities.models`, `product.backend.core.preparation.bindings`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.workflows.business_boundaries.official_recipe`, `product.backend.workflows.checks.local_observer_wiring`, `product.backend.workflows.checks.registry`, `product.backend.workflows.examples.materials`, `product.backend.workflows.preparation.supplemental_contract`, `product.backend.workflows.test_identities`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `product.protocols.observer`, `pydantic`, `threading`, `time`, `typing`, `uuid`
+主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `json`, `product.backend.core.checks.repair`, `product.backend.core.errors`, `product.backend.core.identities.models`, `product.backend.core.preparation.bindings`, `product.backend.infra.samples`, `product.backend.infra.secrets`, `product.backend.workflows.business_boundaries.official_recipe`, `product.backend.workflows.checks.local_observer_wiring`, `product.backend.workflows.checks.registry`, `product.backend.workflows.examples.materials`, `product.backend.workflows.examples.recovery`, `product.backend.workflows.preparation.supplemental_contract`, `product.backend.workflows.test_identities`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `product.protocols.observer`, `pydantic`, `threading`, `time`, `typing`, `uuid`
+
+### `product/backend/workflows/examples/journey.py`
+- `class OfficialDevelopmentJourney`
+- `build_development_journey(current, reader, understanding, boundaries, repairs)`
+主要 import / dot-source：`product.backend.core.errors`, `product.protocols.execution_v3`, `typing`
 
 ### `product/backend/workflows/examples/materials.py`
 - `SAMPLE_PROJECT_ID`
@@ -355,6 +360,10 @@
 - `VIEW_ACTION_KEY`
 - `class OfficialScenarioInstaller`
 主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `itertools`, `json`, `pathlib`, `product.backend.core.errors`, `product.backend.core.recording.models`, `product.backend.infra.runtime.jobs.attempts`, `product.backend.infra.runtime.jobs.models`, `product.backend.workflows.recording.credentials`, `product.backend.workflows.recording.lifecycle`, `product.backend.workflows.recording.project_submission`, `product.backend.workflows.recording.submission`, `product.protocols`
+
+### `product/backend/workflows/examples/recovery.py`
+- `class SampleRecovery`
+主要 import / dot-source：`product.backend.core.errors`, `product.backend.infra.runtime.process.tree`, `uuid`
 
 ### `product/backend/workflows/examples/validation_summary.py`
 - `_SUMMARY_FILE`
@@ -419,6 +428,16 @@
 - `class EffectMaterialSummary`
 - `class EvidenceMaterialDetail`
 主要 import / dot-source：`product.backend.core.boundaries.entities`, `product.backend.workflows.preparation.models`, `pydantic`, `typing`
+
+### `product/backend/workflows/preparation/material_models.py`
+- `class MaterialReference`
+- `class MaterialChange`
+- `class PreparationDraft`
+主要 import / dot-source：`product.backend.core.boundaries.entities`, `pydantic`, `typing`
+
+### `product/backend/workflows/preparation/materials.py`
+- `class PreparationMaterialService`
+主要 import / dot-source：`json`, `product.backend.core.boundaries.entities`, `product.backend.core.errors`, `product.backend.core.preparation.bindings`, `product.backend.core.recording.models`, `product.backend.workflows.preparation.material_models`, `product.backend.workflows.recording.lifecycle`, `time`
 
 ### `product/backend/workflows/preparation/models.py`
 - `class PreparationStatus`
@@ -527,8 +546,9 @@
 
 ### `product/backend/workflows/recording/source.py`
 - `identity_source_fingerprint(identity)`
-- `recording_endpoint_fingerprint(understanding)`
-- `recording_source_fingerprint(action, identity, understanding, action_binding, actor_binding, owner, owner_actor_binding)`
+- `current_recording_instance(work, project_id)`
+- `recording_endpoint_fingerprint(understanding, controlled_instance_id)`
+- `recording_source_fingerprint(action, identity, understanding, action_binding, actor_binding, owner, owner_actor_binding, controlled_instance_id)`
 - `require_recording_source(work, request, historical_source)`
 - `require_persisted_recording_source(work, recording, var_dir)`
 主要 import / dot-source：`product.backend.core.boundaries.entities`, `product.backend.core.errors`, `product.backend.core.recording.models`, `product.backend.workflows.business_boundaries.inspection`

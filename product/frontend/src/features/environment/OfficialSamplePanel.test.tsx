@@ -1,47 +1,64 @@
 // 示例动作必须明确确认，普通审批与准备分开，失败后只回读状态。
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { OfficialSamplePanel } from './OfficialSamplePanel'
 import type { OfficialExperienceDto } from '../../api/experience'
 
-const api = vi.hoisted(() => ({ start: vi.fn(), prepare: vi.fn(), status: vi.fn(), boundaryProposal: vi.fn(), switchVersion: vi.fn(), project: vi.fn() }))
+const api = vi.hoisted(() => ({ start: vi.fn(), reset: vi.fn(), reconcile: vi.fn(), prepare: vi.fn(), status: vi.fn(), boundaryProposal: vi.fn(), switchVersion: vi.fn(), project: vi.fn() }))
 vi.mock('../../api/experience', () => ({ experienceApi: api }))
 vi.mock('../../api/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/repairs')>('../../api/repairs'), repairsApi: { project: api.project } }))
 const idle: OfficialExperienceDto = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, project_id: null, origin: null, scenario_prepared: false, scenario_version: null, vulnerable_change_id: null, repair_change_id: null }
 const active: OfficialExperienceDto = { ...idle, active: true, project_id: 'p1', experience_id: 'experience', scenario_version: 'VULNERABLE', pending_tasks: ['HUMAN_BOUNDARY_APPROVAL_REQUIRED'] }
 const props = () => ({ value: idle, onChanged: vi.fn().mockResolvedValue(undefined), onError: vi.fn(), onNavigate: vi.fn() })
-beforeEach(() => { vi.clearAllMocks(); api.start.mockResolvedValue(active); api.status.mockResolvedValue(active); api.prepare.mockResolvedValue(active); api.project.mockResolvedValue({ project_id: 'p1', status: null, tasks: [] }); api.boundaryProposal.mockResolvedValue({}) })
+beforeEach(() => { vi.clearAllMocks(); api.start.mockResolvedValue(active); api.reset.mockResolvedValue(active); api.reconcile.mockResolvedValue(active); api.status.mockResolvedValue(active); api.prepare.mockResolvedValue(active); api.project.mockResolvedValue({ project_id: 'p1', status: null, tasks: [] }); api.boundaryProposal.mockResolvedValue({}) })
 it('打开确认框不会启动或批准；确认后只启动一次', async () => {
   render(<OfficialSamplePanel {...props()} />)
-  fireEvent.click(screen.getByRole('button', { name: '启动官方示例' }))
+  fireEvent.click(screen.getByRole('button', { name: '启动示例' }))
   expect(api.start).not.toHaveBeenCalled()
-  fireEvent.click(await screen.findByRole('button', { name: '启动问题版' }))
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '启动示例' }))
   await waitFor(() => expect(api.start).toHaveBeenCalledTimes(1))
   expect(api.boundaryProposal).not.toHaveBeenCalled()
   expect(api.prepare).not.toHaveBeenCalled()
 })
 it('活动环境只提供条件控制，不出现审批、材料或检查入口', async () => {
   render(<OfficialSamplePanel {...props()} value={active} />)
-  expect(screen.getByText('示例环境 · 问题版')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '示例环境管理' })).toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'准备示例材料'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'审阅示例权限'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'进入示例检查'})).not.toBeInTheDocument()
   expect(api.prepare).not.toHaveBeenCalled();expect(api.boundaryProposal).not.toHaveBeenCalled()
 })
-it('重置先明确确认，确认后只调用一次受控启动且不写结论', async () => {
+it('旧记录缺少所有权时给出处理说明，不提供无效的循环核对', () => {
+  render(<OfficialSamplePanel {...props()} value={{ ...idle, lifecycle: 'UNKNOWN', recovery_state: 'NONE', operation_state: 'UNKNOWN' }} />)
+  expect(screen.getByText(/旧记录没有可核验的进程身份/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '重新核对环境' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '启动示例' })).toBeDisabled()
+})
+it('停止后只提供全新同步实现入口，明确旧项目归档与材料不继承', async () => {
+  render(<OfficialSamplePanel {...props()} value={{ ...idle, project_id: 'old', lifecycle: 'STOPPED', workspace_retained: true, recovery_state: 'EXITED' }} />)
+  expect(screen.getByRole('heading', { name: '从全新示例开始' })).toBeInTheDocument()
+  expect(screen.queryByText('从上次中断处继续')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '启动示例' }))
+  expect(screen.getByText(/旧项目将归档/)).toBeInTheDocument()
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '启动示例' }))
+  await waitFor(() => expect(api.start).toHaveBeenCalledTimes(1))
+  expect(api.prepare).not.toHaveBeenCalled(); expect(api.boundaryProposal).not.toHaveBeenCalled()
+})
+it('重置先明确确认，确认后只调用重置接口且不写结论', async () => {
   render(<OfficialSamplePanel {...props()} value={active} />)
-  fireEvent.click(screen.getByText('示例环境 · 问题版'))
+  expect(screen.getByRole('heading', { name: '示例环境管理' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button',{name:'重置官方环境'}))
   expect(api.start).not.toHaveBeenCalled()
   fireEvent.click(await screen.findByRole('button',{name:'确认重置'}))
-  await waitFor(()=>expect(api.start).toHaveBeenCalledTimes(1))
+  await waitFor(()=>expect(api.reset).toHaveBeenCalledTimes(1))
+  expect(api.start).not.toHaveBeenCalled()
   expect(api.prepare).not.toHaveBeenCalled();expect(api.boundaryProposal).not.toHaveBeenCalled()
 })
 it('启动回执不明时回读实际状态，不自动重试', async () => {
   api.start.mockRejectedValue(new Error('lost response'))
   const p = props(); render(<OfficialSamplePanel {...p} />)
-  fireEvent.click(screen.getByRole('button', { name: '启动官方示例' }))
-  fireEvent.click(await screen.findByRole('button', { name: '启动问题版' }))
+  fireEvent.click(screen.getByRole('button', { name: '启动示例' }))
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '启动示例' }))
   await waitFor(() => expect(api.status).toHaveBeenCalledTimes(1))
   expect(api.start).toHaveBeenCalledTimes(1)
   expect(p.onChanged).toHaveBeenCalledWith(active)
@@ -49,10 +66,10 @@ it('启动回执不明时回读实际状态，不自动重试', async () => {
 it('明确启动成功但页面同步失败时，不保留可重复启动的确认框', async () => {
   const p = props(); p.onChanged.mockRejectedValueOnce(new Error('workspace unavailable'))
   render(<OfficialSamplePanel {...p}/>)
-  fireEvent.click(screen.getByRole('button', { name: '启动官方示例' }))
-  fireEvent.click(await screen.findByRole('button', { name: '启动问题版' }))
+  fireEvent.click(screen.getByRole('button', { name: '启动示例' }))
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '启动示例' }))
   expect(await screen.findByText('环境操作已完成，页面尚未同步')).toBeInTheDocument()
   expect(api.start).toHaveBeenCalledTimes(1)
   expect(api.start).toHaveBeenCalledWith(expect.any(String))
-  expect(screen.queryByRole('button', { name: '启动问题版' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })

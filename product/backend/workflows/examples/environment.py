@@ -26,9 +26,11 @@ from product.protocols.check_runtime import CheckIdentityVerification, CheckAuxi
 from product.protocols.execution_v3 import WireModel
 from product.protocols.observer import ObserverSpec
 from product.backend.workflows.preparation.supplemental_contract import request_uuid
+from product.backend.workflows.examples.recovery import SampleRecovery
 
 
 class OfficialScenarioVersion(StrEnum):
+    BASELINE="BASELINE"
     VULNERABLE="VULNERABLE"
     EVIDENCE_LIMITED="EVIDENCE_LIMITED"
     FIXED="FIXED"
@@ -47,12 +49,15 @@ class OfficialExperienceView(WireModel):
     scenario_changed_at_us: int | None = None
     vulnerable_change_id: str | None = None
     repair_change_id: str | None = None
+    evidence_limited: bool = False
     pending_tasks: tuple[str,...] = Field(default=(),max_length=16)
     lifecycle: Literal["NOT_STARTED", "STARTING", "RUNNING", "STOPPING", "STOPPED", "FAILED", "UNKNOWN"] = "NOT_STARTED"
     history_project_id: str | None = None
     last_error_code: str | None = None
     operation_id: str | None = None
     operation_state: Literal["PENDING", "SUCCEEDED", "FAILED", "UNKNOWN"] | None = None
+    workspace_retained: bool = False
+    recovery_state: Literal["NONE", "EXITED", "OWNERSHIP_UNCONFIRMED", "OWNED_RUNNING"] = "NONE"
 
 
 @dataclass
@@ -68,16 +73,19 @@ class _Experience:
     repair_change_id: str | None = None
     proposal_id: str | None = None
     pending_tasks: tuple[str,...] = ()
+    evidence_limited: bool = False
+    preset_source_fingerprint: str | None = None
 
 
 class OfficialSampleExperience:
     def __init__(self, manager: OfficialSampleManager, *, understanding, boundaries, identities, secret_store,
                  registry, installer, bindings, preparation, changes, repairs, uow_factory, var_dir,
-                 archive_project, clock_us=None):
+                 archive_project, clock_us=None, reader=None, project_repairs=None):
         self._manager,self._understanding,self._boundaries=manager,understanding,boundaries
         self._identities,self._secrets,self._registry=identities,secret_store,registry
         self._installer,self._bindings,self._preparation=installer,bindings,preparation
         self._changes,self._repairs=changes,repairs
+        self._reader, self._project_repairs = reader, project_repairs
         self._uow_factory,self._var_dir,self._archive=uow_factory,var_dir,archive_project
         self._clock=clock_us or (lambda:time.time_ns()//1000)
         self._lock=RLock()
@@ -85,9 +93,11 @@ class OfficialSampleExperience:
         self._running_operation = None
         self._operation_cleanup_confirmed = False
         self._cleanup_uncertain = False
+        self._recovery = SampleRecovery(uow_factory, manager, self._clock)
 
     def status(self):
         current=self._current
+        retained, instance, observation, retained_project = self._recovery.read()
         installation=self._manager.installation
         with self._uow_factory() as work:
             operations, _ = work.environment_operations.list(1)
@@ -109,45 +119,97 @@ class OfficialSampleExperience:
                 lifecycle = "STOPPED"
             elif not active:
                 lifecycle = "UNKNOWN"
+        recovery_state = "NONE" if instance is None else "OWNERSHIP_UNCONFIRMED" if observation is None else observation["outcome"]
+        if not active and recovery_state == "EXITED":
+            lifecycle = "STOPPED"
+        elif active and recovery_state == "OWNED_RUNNING" and lifecycle == "UNKNOWN":
+            lifecycle = "RUNNING"
         return OfficialExperienceView(available=installation.available,display_name=installation.display_name,
             unavailable_reason=installation.reason,active=active,
             experience_id=None if current is None else current.runtime.experience_id,
-            project_id=None if current is None else current.project_id,origin=None if current is None else current.runtime.origin,
+            project_id=(None if retained is None else retained["project_id"]) if current is None else current.project_id,origin=None if current is None or not active else current.runtime.origin,
             scenario_prepared=bool(current and current.scenario_prepared),
-            scenario_version=None if current is None else current.scenario_version,
+            scenario_version=(None if retained is None else OfficialScenarioVersion(retained["scenario_version"])) if current is None else current.scenario_version,
             scenario_changed_at_us=None if current is None else current.scenario_changed_at_us,
             vulnerable_change_id=None if current is None else current.vulnerable_change_id,
             repair_change_id=None if current is None else current.repair_change_id,
+            evidence_limited=bool(current and current.evidence_limited),
             pending_tasks=() if current is None else current.pending_tasks,
             lifecycle=lifecycle, history_project_id=None if operation is None else operation["project_id"],
             last_error_code=None if operation is None else operation["error_code"],
-            operation_id=None if operation is None else operation["operation_id"], operation_state=state)
+            operation_id=None if operation is None else operation["operation_id"], operation_state=state,
+            workspace_retained=bool(retained and retained_project and retained_project.status.value != "ARCHIVED"), recovery_state=recovery_state)
+
+    def reconcile(self):
+        with self._lock:
+            if self._manager.active is None:
+                self._recovery.reconcile()
+            elif self._current is not None and self._current.active:
+                self._recovery.confirm_owned(self._current.runtime)
+            return self.status()
+
+    def reset(self, *, consent, operation_id=None):
+        if consent is not True:
+            raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED, "重置需要明确同意归档旧应用并创建全新示例")
+        return self._operate("reset", operation_id, lambda: self._start(consent=True, reset=True))
 
     def start(self, *, consent, operation_id=None):
         if consent is not True:
             raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,"启动官方示例前需要明确同意本机运行与源码复制")
         return self._operate("start", operation_id, lambda: self._start(consent=consent))
 
-    def _start(self, *, consent):
+    def _start(self, *, consent, reset=False):
         if consent is not True:
             raise JiejianError(ErrorCode.STATE_OPERATOR_REQUIRED,"启动官方示例前需要明确同意本机运行与源码复制")
         with self._lock:
-            if self._current is not None and self._current.active:
+            if self._current is not None and self._current.active and self._manager.active is not None:
+                if not reset:
+                    return self.status()
                 self._stop()
-            if self._cleanup_uncertain:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION, "上一环境清理尚未确认")
+            if self._current is not None and self._manager.active is None:
+                if self._recovery.reconcile() != "EXITED":
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, "上一实例退出尚未确认")
+                self._registry.unregister(self._current.project_id)
+                self._secrets.clear_session(self._current.runtime.experience_id)
+                self._current.active = False
+                self._cleanup_uncertain = False
             self._operation_cleanup_confirmed = False
-            runtime=self._manager.start(authorization_order="ENQUEUE_BEFORE_AUTHORIZE",owner_observation="AVAILABLE",blob_observation="AVAILABLE")
+            previous, old_instance, _, old_project = self._recovery.read()
+            if previous is None:
+                with self._uow_factory() as work:
+                    history, _ = work.environment_operations.list(2)
+                legacy = history[1] if len(history) > 1 else None
+                if legacy and legacy["experience_id"] and not legacy["cleanup_confirmed"]:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, "旧环境缺少所有权记录，请先人工确认旧实例已停止")
+            if old_instance is not None and self._recovery.reconcile() != "EXITED":
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "旧实例退出尚未确认，不能启动全新示例")
+            if old_instance is not None:
+                self._manager.cleanup_exited_instance(old_instance["instance_id"], old_instance["kernel_identity"])
+            if old_project is not None and old_project.status.value != "ARCHIVED":
+                self._archive(old_project.project_id)
+            # 每次真正启动都建立全新问题版；旧项目只保留为历史，不继承其权限、源码或材料。
+            workspace = self._recovery.create()
+            version = OfficialScenarioVersion.BASELINE
+            runtime=self._manager.start(workspace_id=workspace["workspace_id"],
+                authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
+                execution_mode="SYNCHRONOUS",
+                owner_observation="UNAVAILABLE" if version is OfficialScenarioVersion.EVIDENCE_LIMITED else "AVAILABLE",
+                blob_observation="UNAVAILABLE" if version is OfficialScenarioVersion.EVIDENCE_LIMITED else "AVAILABLE")
             project = None
             try:
+                self._recovery.launched(workspace, runtime)
                 self._operation_progress(experience_id=runtime.experience_id, project_id=None)
                 connection=self._understanding.connect(runtime.source_root,project_name=runtime.display_name)
                 project=connection.project.project_id
+                workspace = {**workspace, "project_id": project}
+                self._recovery.save(workspace)
+                understanding = connection.understanding
                 self._operation_progress(project_id=project)
-                value=self._understanding.confirm_endpoint(project,endpoint=runtime.origin,revision=connection.understanding.revision)
+                value=self._understanding.confirm_endpoint(project,endpoint=runtime.origin,revision=understanding.revision)
                 value=self._understanding.authorize_source_analysis(project,revision=value.revision)
-                self._understanding.analyze_source_for_change(project,revision=value.revision)
-                self._current=_Experience(runtime,project,scenario_changed_at_us=self._clock(),pending_tasks=("HUMAN_BOUNDARY_APPROVAL_REQUIRED",))
+                analyzed = self._understanding.analyze_source_for_change(project,revision=value.revision)
+                self._current=_Experience(runtime,project,scenario_version=version,scenario_changed_at_us=self._clock(),pending_tasks=("HUMAN_BOUNDARY_APPROVAL_REQUIRED",),
+                    preset_source_fingerprint=analyzed.source_fingerprint)
                 return self.status()
             except Exception:
                 # 清理失败不能遮盖首次连接/分析错误，回执保留未确认清理事实。
@@ -245,7 +307,10 @@ class OfficialSampleExperience:
                     return self.status()
                 identity=values[0] if values else self._identities.create(current.project_id,actor_id=actor.actor_id,actor_revision=actor.revision,label=label)
                 if identity.status is not TestIdentityStatus.PREPARED:
-                    reference=credential_ref("test-identity",current.project_id,identity.identity_id,"cookie-00")
+                    if identity.auth_method is not None:
+                        identity = self._identities.reset(identity.identity_id)
+                    # 新实例使用新的秘密引用；不转移旧 SessionSecretOverlay 墓碑的所有权。
+                    reference=credential_ref("test-identity",current.project_id,identity.identity_id,f"cookie-00-{current.runtime.experience_id}")
                     self._secrets.set_session(current.runtime.experience_id,reference,current.runtime.secrets[name])
                     identity=self._identities.save_prepared_state(identity.identity_id,PreparedLoginState(auth_method=TestIdentityAuthMethod.COOKIE_SESSION,
                         cookies=(TestIdentityCookie(name="jiejian_sample_session",domain="127.0.0.1",path="/",secure=False,http_only=True,
@@ -257,7 +322,8 @@ class OfficialSampleExperience:
             recordings=self._installer.install(project_id=current.project_id,endpoint=current.runtime.origin,
                 export_action_id=actions[0].action_id,view_action_id=actions[1].action_id,
                 owner_identity_id=identities[0].identity_id,member_identity_id=identities[1].identity_id,
-                source_fingerprint=understanding.source_fingerprint)
+                source_fingerprint=understanding.source_fingerprint, runtime_instance_id=current.runtime.experience_id,
+                synchronous_export=self._manager.export_execution_mode(current.runtime.experience_id) == "SYNCHRONOUS")
             for action,recording,reference in zip(actions,recordings,references,strict=True):
                 self._bindings.register_observer(recording,effect_id=action.effect_catalog[0].effect_id,reference=reference,now_us=self._clock())
             current.scenario_prepared=self._preparation.get(current.project_id).preparation_complete
@@ -300,6 +366,17 @@ class OfficialSampleExperience:
         with self._lock:
             current=self._require_active()
             self._require_idle(current.project_id)
+            if version is OfficialScenarioVersion.EVIDENCE_LIMITED:
+                return self.set_observation(available=False)
+            if version is current.scenario_version:
+                return self.status()
+            if current.preset_source_fingerprint is not None and self._understanding.inspect_source_fingerprint(current.project_id) != current.preset_source_fingerprint:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码已有外部修改，预设变更不会覆盖它；请通过普通 Agent 协作登记和验证")
+            if version is OfficialScenarioVersion.BASELINE:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,"起始实现只能通过启动全新示例建立，不能覆盖当前开发历史")
+            if version is OfficialScenarioVersion.VULNERABLE:
+                if current.scenario_version is not OfficialScenarioVersion.BASELINE or not self.development_journey().can_optimize:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION,"请先对当前同步实现完成独立检查，再应用预设异步优化")
             reference=None if repair_reference is None else CurrentRepairReference.model_validate(repair_reference)
             if version is OfficialScenarioVersion.FIXED:
                 if reference is None:
@@ -310,16 +387,39 @@ class OfficialSampleExperience:
                 owner_observation="UNAVAILABLE" if version is OfficialScenarioVersion.EVIDENCE_LIMITED else "AVAILABLE",
                 blob_observation="UNAVAILABLE" if version is OfficialScenarioVersion.EVIDENCE_LIMITED else "AVAILABLE")
             current.scenario_version=version
+            workspace, _, _, _ = self._recovery.read()
+            if workspace is not None and workspace["project_id"] == current.project_id:
+                self._recovery.save({**workspace, "scenario_version": version.value})
             current.scenario_changed_at_us=self._clock()
             current.scenario_prepared=False
-            change=self._changes.submit(current.project_id,reason="示例机械修复" if version is OfficialScenarioVersion.FIXED else "示例观察或实现条件切换",
-                repair_reference=reference,submitted_by="LOCAL_GUI")
+            current.evidence_limited=False
+            change=self._changes.submit(current.project_id,reason="预设开发变更：先授权再派发，保留异步导出" if version is OfficialScenarioVersion.FIXED else "预设开发变更：将同步导出改为后台队列处理",
+                repair_reference=reference,submitted_by="预设演示 · 本机用户")
             if version is OfficialScenarioVersion.FIXED:
                 current.repair_change_id=change.manifest.change_id
             else:
                 current.vulnerable_change_id=change.manifest.change_id
+            if self._understanding is not None:
+                current.preset_source_fingerprint = self._understanding.get(current.project_id).source_fingerprint
             current.pending_tasks=("PREPARE_CURRENT_MATERIALS",)
             return self.status()
+
+    def set_observation(self, *, available):
+        """只改变示例观察条件；保留代码、业务数据与变化登记，不制造修复事实。"""
+        with self._lock:
+            current = self._require_active()
+            self._require_idle(current.project_id)
+            self._manager.set_observation(current.runtime.experience_id, available=available)
+            current.evidence_limited = not available
+            current.scenario_prepared = False
+            current.scenario_changed_at_us = self._clock()
+            current.pending_tasks = ("PREPARE_CURRENT_MATERIALS",)
+            return self.status()
+
+    def development_journey(self):
+        from product.backend.workflows.examples.journey import build_development_journey
+        return build_development_journey(self._require_active(), reader=self._reader,
+            understanding=self._understanding, boundaries=self._boundaries, repairs=self._project_repairs)
 
     def _require_active(self):
         current=self._current
@@ -349,6 +449,7 @@ class OfficialSampleExperience:
             self._registry.unregister(project_id)
             self._secrets.clear_session(current.runtime.experience_id)
             current.active=False
+            self._recovery.reconcile()
             return True
 
     def stop(self, *, operation_id=None):
@@ -360,8 +461,8 @@ class OfficialSampleExperience:
                 project=self._current.project_id
                 if self._current.active:
                     self.stop_project(project)
-                # 前次归档失败仍必须完成该步骤，不能仅凭 active=false 报告停止成功。
-                self._archive(project)
+                else:
+                    self._recovery.reconcile()
             else:
                 with self._uow_factory() as work:
                     history, _ = work.environment_operations.list(2)
@@ -411,16 +512,25 @@ class OfficialSampleExperience:
         operation_id = request_uuid(operation_id) if operation_id is not None else str(uuid4())
         with self._lock:
             with self._uow_factory() as work:
+                work.acquire_write_lock()
                 existing = work.environment_operations.get(operation_id)
                 if existing is not None:
-                    if existing["operation"] not in (("start", "reset") if operation == "start" else ("stop",)):
+                    if existing["operation"] != operation:
                         raise JiejianError(ErrorCode.STATE_PRECONDITION, "操作标识已用于不同环境操作")
                     return self._receipt_view(existing)
                 current = self._current
                 latest, _ = work.environment_operations.list(1)
+                if latest and latest[0]["state"] == "PENDING":
+                    workspace = work.sample_workspaces.latest()
+                    instance = None if workspace is None else work.sample_workspaces.instance(workspace["workspace_id"])
+                    observation = None if instance is None else work.sample_workspaces.observation(instance["instance_id"])
+                    owned = (observation is not None and observation["outcome"] == "OWNED_RUNNING" and current is not None
+                        and current.active and instance["instance_id"] == current.runtime.experience_id and self._manager.active is not None)
+                    if not owned and (observation is None or observation["outcome"] != "EXITED"):
+                        raise JiejianError(ErrorCode.STATE_PRECONDITION, "上一环境操作尚未核对，不能并发建立或停止环境")
                 indexed_current = current if current and (operation == "stop" or current.active) else None
                 value = dict(operation_id=operation_id,
-                    operation="reset" if operation == "start" and current and current.active else operation,
+                    operation=operation,
                     state="PENDING", started_at_us=max(self._clock(), latest[0]["started_at_us"] + 1 if latest else 0), finished_at_us=None,
                     project_id=indexed_current.project_id if indexed_current else latest[0]["project_id"] if operation == "stop" and latest else None,
                     experience_id=indexed_current.runtime.experience_id if indexed_current else latest[0]["experience_id"] if operation == "stop" and latest else None,

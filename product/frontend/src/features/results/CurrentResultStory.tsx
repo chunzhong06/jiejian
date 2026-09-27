@@ -21,7 +21,7 @@ const phaseLabels = { BASELINE: '初始状态', BEFORE: '操作前', AFTER: '操
 const stateLabels = { CONFIRMED: '已发现', ABSENT: '未发现', UNKNOWN: '无法确认' }
 const controlLabels = { SAFE: '正常对照已通过', VULNERABLE: '正常对照发现问题', INCONCLUSIVE: '正常对照证据不足' }
 
-export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId, historicalOnly }: { story: ResultStory; onError: (error: ApiError) => void; onNavigate?: (path: string) => void; requestedCaseId?: string | null; historicalOnly?: boolean }) {
+export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId, historicalOnly, embedded = false }: { story: ResultStory; onError: (error: ApiError) => void; onNavigate?: (path: string) => void; requestedCaseId?: string | null; historicalOnly?: boolean; embedded?: boolean }) {
   const wide = Grid.useBreakpoint().lg
   const visible = useContext(WorkPageVisible)
   const evidencePanel = useRef<HTMLElement>(null)
@@ -97,12 +97,11 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
     {action && comparison && actual ? <article>
       <header className="result-case-heading"><div>
         <p className="editorial-eyebrow">{action.display_name} · 已发布的检查结果</p>
-        <h1>{story.judgement}</h1>
-        {action.judgement !== story.judgement && <p className="result-case-judgement">本项判断：{action.judgement}</p>}
+        {embedded ? <h2>本项判断：{action.judgement}</h2> : <><h1>{story.judgement}</h1>{action.judgement !== story.judgement && <p className="result-case-judgement">本项判断：{action.judgement}</p>}</>}
         <p className="result-outcome">{comparison.http_surface.http_status !== null && <span>HTTP {comparison.http_surface.http_status} · </span>}{comparison.http_explanation}</p>
         {comparison.effects.map(effect => <p className="result-effect-line" key={effect.effect_id}>{effect.business_label}：{effect.judgement}</p>)}
       </div>
-      {action.repair_requirement && onNavigate && !historicalOnly && <Button type="primary" onClick={() => onNavigate(`/changes?repair_reference=${encodeURIComponent(action.repair_requirement!.repair_fingerprint)}`)}>查看修复要求</Button>}</header>
+      {action.repair_requirement && onNavigate && !historicalOnly && <Button type="primary" onClick={() => onNavigate(`/changes?repair_reference=${encodeURIComponent(action.repair_requirement!.repair_fingerprint)}`)}>准备 Agent 修复任务</Button>}</header>
       <div className="result-human-rule"><p className="editorial-eyebrow">人的权限要求</p><RuleSentence><strong>{comparison.planned_identity.label ?? comparison.planned_identity.actor_label ?? '原操作账号'}</strong> 对<strong>{comparison.planned_resource_owner?.label ?? (action.permission.relation === 'OWNS' ? '自己' : action.permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '另一个同权限组账号' : '原资源所有者')}</strong>拥有的资源，<strong>{action.permission.expectation === 'DENY' ? '不得' : '可以'}{action.display_name}</strong>。</RuleSentence></div>
 
       <div className="result-causal-workspace" data-evidence-open={Boolean(detail && wide)}>

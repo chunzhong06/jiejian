@@ -74,6 +74,7 @@
 ### `product/frontend/src/api/experience.ts`
 - `CompetitionValidationSummaryDto`
 - `CompetitionValidationSummaryViewDto`
+- `OfficialDevelopmentJourneyDto`
 - `OfficialExperienceDto`
 - `OfficialScenarioVersion`
 - `experienceApi`
@@ -133,7 +134,14 @@
 - `EffectMaterialSummary`
 - `EvidenceMaterialDetail`
 - `IdentitySlot`
+- `MaterialChange`
+- `MaterialDetails`
+- `MaterialPreview`
+- `MaterialReceipt`
+- `MaterialRecordingContext`
+- `MaterialReference`
 - `PermissionReference`
+- `PreparationDraft`
 - `PreparationItem`
 - `PreparationStatus`
 - `PreparationView`
@@ -248,7 +256,10 @@
 
 ### `product/frontend/src/app/ControlShell.tsx`
 - `ControlShell`
-主要 import / dot-source：`../api/experience`, `../api/http`, `../api/mcp`, `../api/projects`, `../api/system`, `../api/workspace`, `../features/access/AccessPage`, `../features/boundaries/BusinessBoundaryPage`, `../features/changes/ChangesPage`, `../features/checks/CurrentTestsPage`, `../features/environment/EnvironmentPage`, `../features/environment/OfficialSamplePanel`, `../features/history/CheckHistoryPage`, `../features/settings/LLMSettingsDrawer`, `../features/system/RuntimePage`, `../features/tools/ToolsPage`, `../features/workspace/WorkbenchPage`, `./AppHeader`, `./NotificationCenter`, `./RetainedWorkPages`, `./navigation/ModuleNavigation`, `./presentation`, `./shell/ErrorRecovery`, `./tasks/TaskContinuity`, `./useCheckActivity`, `./useProjectWorkspace`, `./useSystemStatus`, `antd`, `react`, `react-router-dom`
+主要 import / dot-source：`../api/experience`, `../api/http`, `../api/mcp`, `../api/projects`, `../api/system`, `../api/workspace`, `../features/access/AccessPage`, `../features/boundaries/BusinessBoundaryPage`, `../features/changes/ChangesPage`, `../features/checks/CurrentTestsPage`, `../features/environment/EnvironmentPage`, `../features/environment/OfficialDevelopmentJourney`, `../features/environment/OfficialSamplePanel`, `../features/history/CheckHistoryPage`, `../features/settings/LLMSettingsDrawer`, `../features/system/RuntimePage`, `../features/tools/ToolsPage`, `../features/workspace/WorkbenchPage`, `./AppHeader`, `./NotificationCenter`, `./RetainedWorkPages`, `./navigation/ModuleNavigation`, `./presentation`, `./shell/ErrorRecovery`, `./tasks/TaskContinuity`, `./useCheckActivity`, `./useProjectWorkspace`, `./useSystemStatus`, `antd`, `react`, `react-router-dom`
+
+### `product/frontend/src/app/navigation/AgentNavigation.tsx`
+- `AgentNavigation`
 
 ### `product/frontend/src/app/navigation/ApplicationSwitcher.tsx`
 - `ApplicationSwitcher`
@@ -261,9 +272,6 @@
 
 ### `product/frontend/src/app/navigation/ProductShellComponents.test.tsx`
 主要 import / dot-source：`../../shared/ui/TaskActionBar`, `./ApplicationSwitcher`, `./ModuleNavigation`, `@testing-library/react`, `vitest`
-
-### `product/frontend/src/app/navigation/RecordNavigation.tsx`
-- `RecordNavigation`
 
 ### `product/frontend/src/app/NotificationCenter.test.tsx`
 主要 import / dot-source：`../api/http`, `./NotificationCenter`, `@testing-library/react`, `vitest`
@@ -438,7 +446,7 @@
 
 ### `product/frontend/src/features/changes/ChangesPage.tsx`
 - `ChangesPage`
-主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/repairs`, `../../api/sourceChanges`, `../../api/workspace`, `../../app/RetainedWorkPages`, `../../app/navigation/RecordNavigation`, `../../app/presentation`, `../../app/taskDestination`, `../../app/useLiveRead`, `../../shared/ui/Editorial`, `./RepairDelivery`, `./SourceIdentityPanel`, `@ant-design/icons`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/projects`, `../../api/repairs`, `../../api/sourceChanges`, `../../api/workspace`, `../../app/RetainedWorkPages`, `../../app/navigation/AgentNavigation`, `../../app/presentation`, `../../app/taskDestination`, `../../app/useLiveRead`, `../../shared/ui/Editorial`, `./RepairDelivery`, `./SourceIdentityPanel`, `@ant-design/icons`, `antd`, `react`
 
 ### `product/frontend/src/features/changes/RepairComparison.test.tsx`
 主要 import / dot-source：`../../api/repairs`, `./RepairComparison`, `@testing-library/react`, `vitest`
@@ -463,7 +471,7 @@
 主要 import / dot-source：`../../api/http`, `../../api/sourceIdentity`, `../../app/presentation`, `@ant-design/icons`, `antd`, `react`
 
 ### `product/frontend/src/features/checks/CurrentTestsPage.test.tsx`
-主要 import / dot-source：`../../api/currentChecks`, `../results/testing.fixtures`, `./CurrentTestsPage`, `@testing-library/react`, `vitest`
+主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/workspace`, `../results/testing.fixtures`, `./CurrentTestsPage`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/checks/CurrentTestsPage.tsx`
 - `CurrentTestsPage`
@@ -483,19 +491,26 @@
 - `EnvironmentPage`
 主要 import / dot-source：`../../api/experience`, `../../api/http`, `../../api/projects`, `../../api/system`, `../../api/workspace`, `../../app/presentation`, `../../shared/ui/Editorial`, `./EnvironmentHistory`, `./OfficialSamplePanel`, `@ant-design/icons`, `antd`, `react`
 
+### `product/frontend/src/features/environment/OfficialDevelopmentJourney.test.tsx`
+主要 import / dot-source：`../../api/experience`, `./OfficialDevelopmentJourney`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/environment/OfficialDevelopmentJourney.tsx`
+- `OfficialDevelopmentJourney`
+主要 import / dot-source：`../../api/experience`, `../../api/http`, `../../api/repairs`, `../../app/RetainedWorkPages`, `../../app/useLiveRead`, `antd`, `react`
+
 ### `product/frontend/src/features/environment/OfficialSamplePanel.test.tsx`
 主要 import / dot-source：`../../api/experience`, `./OfficialSamplePanel`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/environment/OfficialSamplePanel.tsx`
 - `OfficialSamplePanel`
-主要 import / dot-source：`../../api/experience`, `../../api/http`, `../../api/repairs`, `antd`, `react`
+主要 import / dot-source：`../../api/experience`, `../../api/http`, `antd`, `react`
 
 ### `product/frontend/src/features/history/CheckHistoryPage.test.tsx`
-主要 import / dot-source：`../../api/currentChecks`, `./CheckHistoryPage`, `@testing-library/react`, `react`, `vitest`
+主要 import / dot-source：`../../api/currentChecks`, `../../app/RetainedWorkPages`, `./CheckHistoryPage`, `@testing-library/react`, `react`, `vitest`
 
 ### `product/frontend/src/features/history/CheckHistoryPage.tsx`
 - `CheckHistoryPage`
-主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/projects`, `../../app/RetainedWorkPages`, `../../app/navigation/RecordNavigation`, `../../app/presentation`, `../../app/useLiveRead`, `../../shared/ui/Editorial`, `antd`, `react`
+主要 import / dot-source：`../../api/currentChecks`, `../../api/http`, `../../api/projects`, `../../app/RetainedWorkPages`, `../../app/presentation`, `../../app/useLiveRead`, `../../shared/ui/Editorial`, `antd`, `react`
 
 ### `product/frontend/src/features/identities/TestIdentityPage.test.tsx`
 主要 import / dot-source：`../../api/businessBoundaries`, `../../api/testIdentities`, `./TestIdentityPage`, `@testing-library/react`, `vitest`
@@ -511,12 +526,24 @@
 - `EvidenceMaterials`
 主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../shared/ui/Editorial`, `./SupplementalMaterials`, `@ant-design/icons`, `antd`, `react`
 
+### `product/frontend/src/features/preparation/MaterialEditor.test.tsx`
+主要 import / dot-source：`./MaterialEditor`, `@testing-library/react`, `vitest`
+
+### `product/frontend/src/features/preparation/MaterialEditor.tsx`
+- `MaterialEditor`
+- `materialName`
+主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../app/tasks/TaskContinuity`, `../../shared/ui/Editorial`, `antd`, `react`
+
+### `product/frontend/src/features/preparation/MaterialOverview.tsx`
+- `MaterialOverview`
+主要 import / dot-source：`../../api/preparation`, `@ant-design/icons`, `antd`, `react`
+
 ### `product/frontend/src/features/preparation/PreparationPage.test.tsx`
 主要 import / dot-source：`../../api/preparation`, `../../api/workspace`, `./PreparationPage`, `@testing-library/react`, `vitest`
 
 ### `product/frontend/src/features/preparation/PreparationPage.tsx`
 - `PreparationPage`
-主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../app/RetainedWorkPages`, `../../app/taskDestination`, `../../app/tasks/TaskContinuity`, `../../app/useLiveRead`, `../../shared/ui/Editorial`, `../../shared/ui/TaskActionBar`, `../assistant/AssistantPanel`, `../identities/TestIdentityPage`, `../recording/RecordingPage`, `./EvidenceMaterials`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/preparation`, `../../api/projects`, `../../api/testIdentities`, `../../api/workspace`, `../../app/RetainedWorkPages`, `../../app/taskDestination`, `../../app/tasks/TaskContinuity`, `../../app/useLiveRead`, `../../shared/ui/Editorial`, `../../shared/ui/TaskActionBar`, `../assistant/AssistantPanel`, `../identities/TestIdentityPage`, `../recording/RecordingPage`, `./EvidenceMaterials`, `./MaterialEditor`, `./MaterialOverview`, `antd`, `react`
 
 ### `product/frontend/src/features/preparation/SupplementalMaterials.test.tsx`
 主要 import / dot-source：`../../api/http`, `./SupplementalMaterials`, `@testing-library/react`, `vitest`
@@ -539,7 +566,7 @@
 
 ### `product/frontend/src/features/recording/RecordingPage.tsx`
 - `RecordingPage`
-主要 import / dot-source：`../../api/http`, `../../api/jobs`, `../../api/projects`, `../../api/recordings`, `../../api/workspace`, `../../app/browserState`, `../../app/tasks/TaskContinuity`, `../../shared/ui/Editorial`, `../../shared/ui/TaskActionBar`, `../assistant/AssistantPanel`, `./FlowDraftReview`, `./RecordingCaptureCard`, `antd`, `react`
+主要 import / dot-source：`../../api/http`, `../../api/jobs`, `../../api/preparation`, `../../api/projects`, `../../api/recordings`, `../../api/workspace`, `../../app/browserState`, `../../app/tasks/TaskContinuity`, `../../shared/ui/Editorial`, `../../shared/ui/TaskActionBar`, `../assistant/AssistantPanel`, `./FlowDraftReview`, `./RecordingCaptureCard`, `antd`, `react`
 
 ### `product/frontend/src/features/results/CurrentResultStory.test.tsx`
 主要 import / dot-source：`../../api/currentChecks`, `../../app/RetainedWorkPages`, `./CurrentResultStory`, `./testing.fixtures`, `@testing-library/react`, `antd`, `vitest`
@@ -605,7 +632,7 @@
 
 ### `product/frontend/src/features/tools/ToolsPage.tsx`
 - `ToolsPage`
-主要 import / dot-source：`../../api/http`, `../../api/mcp`, `../../api/projects`, `../../shared/ui/PageTaskHeader`, `./MCPAccessCard`, `antd`
+主要 import / dot-source：`../../api/http`, `../../api/mcp`, `../../api/projects`, `../../app/navigation/AgentNavigation`, `../../shared/ui/PageTaskHeader`, `./MCPAccessCard`, `antd`
 
 ### `product/frontend/src/features/workspace/WorkbenchPage.test.tsx`
 主要 import / dot-source：`../../api/currentChecks`, `../../api/workspace`, `../results/testing.fixtures`, `./WorkbenchPage`, `@testing-library/react`, `vitest`

@@ -305,10 +305,12 @@ def test_current_driver_sequence_uses_original_block_reference_and_distinct_runs
     first = {"run_id": "run-first", "story": {"verdict": "BLOCK", "actions": [{"case_id": "case-original", "permission": {"expectation": "DENY"}, "breakpoint": {"breakpoint_type": "AUTHORIZATION_LATE"}}]}}
     limited = {"run_id": "run-limited", "story": {"verdict": "INCONCLUSIVE"}}
     fixed = {"run_id": "run-fixed", "story": {"verdict": "PASS", "repair_verification": {"status": "VERIFIED", "source_run_id": "run-first", "repair_reference": "a" * 64}}}
-    runs = [first, limited, fixed]
+    baseline = {"run_id": "run-baseline", "story": {"verdict": "PASS"}}
+    chronological = [baseline, first, limited, fixed]
+    runs = [first, limited, baseline, fixed]
     def run(client, project, state, **kwargs):
         order.append((kwargs["name"], kwargs.get("change_id")))
-        return runs[len(order) - 1]
+        return chronological[len(order) - 1]
     switches = []
     def switch(client, project, version, **kwargs):
         switches.append((version, kwargs.get("reference")))
@@ -325,8 +327,8 @@ def test_current_driver_sequence_uses_original_block_reference_and_distinct_runs
     monkeypatch.setattr(current, "project_run_ids", lambda *args: [item["run_id"] for item in runs])
     monkeypatch.setattr(current, "read_result", lambda _, run_id: next(item for item in runs if item["run_id"] == run_id))
     assert current.run_sequence(Client(), "project", sample_harness_state.HarnessState(), checkpoint=lambda *args: None) == runs
-    assert order == [("problem", None), ("limited", "chg-limited"), ("fixed", "chg-fixed")]
-    assert switches == [("EVIDENCE_LIMITED", None), ("FIXED", {"source_run_id": "run-first", "source_case_id": "case-original", "repair_fingerprint": "a" * 64})]
+    assert order == [("baseline", None), ("problem", None), ("limited", "chg-limited"), ("fixed", "chg-fixed")]
+    assert switches == [("VULNERABLE", None), ("EVIDENCE_LIMITED", None), ("FIXED", {"source_run_id": "run-first", "source_case_id": "case-original", "repair_fingerprint": "a" * 64})]
 
 def test_current_driver_public_fact_checks_require_zip_role_and_normal_business():
     import copy

@@ -1,4 +1,4 @@
-// 三个产品入口保持自由导航；记录页签保留历史与变化的独立深链。
+// 业务工作区使用稳定一级入口；Agent 连接与交付归入同一协作模块。
 
 import { AppstoreOutlined, HistoryOutlined, SafetyCertificateOutlined, BranchesOutlined, RightOutlined } from '@ant-design/icons'
 import { Button } from 'antd'
@@ -13,7 +13,7 @@ type AreaStatus = WorkspaceAreaDto['status'] | 'EMPTY'
 function activeArea(route: AppRoute): ProductAreaRoute {
   if (route === '/application') return '/workspace'
   if (route === '/identities' || route === '/flows') return '/workspace'
-  if (route === '/history' || route === '/changes') return '/history'
+  if (route === '/tools') return '/changes'
   if (route === '/tests' || route === '/preparation' || route === '/validation' || route === '/results' || route === '/verification') return '/workspace'
   return productAreas.some((area) => area.route === route) ? route as ProductAreaRoute : '/workspace'
 }

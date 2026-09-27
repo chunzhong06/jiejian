@@ -29,3 +29,31 @@ it('拒绝响应内项目不一致，保留已有权威工作区', async () => {
   await act(async () => { await result.current.refreshCurrentWorkspace() })
   expect(result.current.workspace?.project.project_id).toBe('p1'); expect(onError).toHaveBeenCalledTimes(1)
 })
+
+it('后台轮询加入显式刷新，不使材料保存后的读取失效', async () => {
+  const onError = vi.fn(); const { result } = renderHook(() => useProjectWorkspace(onError))
+  await waitFor(() => expect(result.current.workspace?.project.project_id).toBe('p1'))
+  let resolve!: (value: WorkspaceViewDto) => void
+  api.current.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+  let explicit!: Promise<WorkspaceViewDto | undefined>, background!: Promise<WorkspaceViewDto | undefined>
+  act(() => { explicit = result.current.refreshCurrentWorkspace(); background = result.current.refreshCurrentWorkspace(undefined, true) })
+  expect(api.current).toHaveBeenCalledTimes(2)
+  const next = { ...workspace('p1'), primary_task: { task_id: 'new-task' } } as WorkspaceViewDto
+  await act(async () => { resolve(next); expect(await explicit).toEqual(next); expect(await background).toEqual(next) })
+  expect(result.current.workspace).toEqual(next)
+})
+
+it.each([false, true])('旧显式读取延迟或失败时采用最新已接受结果（失败=%s）', async failed => {
+  const onError = vi.fn(); const { result } = renderHook(() => useProjectWorkspace(onError))
+  await waitFor(() => expect(result.current.workspace?.project.project_id).toBe('p1'))
+  let resolveOld!: (value: WorkspaceViewDto) => void
+  let rejectOld!: (error: Error) => void
+  api.current.mockImplementationOnce(() => new Promise((done, reject) => { resolveOld = done; rejectOld = reject }))
+  let older!: Promise<WorkspaceViewDto | undefined>
+  act(() => { older = result.current.refreshCurrentWorkspace() })
+  const next = { ...workspace('p1'), primary_task: { task_id: 'new-task' } } as WorkspaceViewDto
+  api.current.mockResolvedValueOnce(next)
+  await act(async () => { expect(await result.current.refreshCurrentWorkspace()).toEqual(next) })
+  await act(async () => { if (failed) rejectOld(new Error('older request failed')); else resolveOld(workspace('p1')); expect(await older).toEqual(next) })
+  expect(result.current.workspace).toEqual(next)
+})

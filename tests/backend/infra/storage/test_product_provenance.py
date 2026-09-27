@@ -50,7 +50,7 @@ def test_nonempty_0005_preserved_fresh_repeat(tmp_path):
     upgrade_database(fresh)
     with sqlite3.connect(prior) as left, sqlite3.connect(fresh) as right:
         assert _sqlite_schema_signature(left) == _sqlite_schema_signature(right)
-        assert left.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0006_product_provenance"
+        assert left.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0007_preparation_recovery"
         assert left.execute("PRAGMA foreign_key_check").fetchall() == []
 
 

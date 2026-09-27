@@ -88,6 +88,7 @@ class ProjectRecordingService:
         parent_recording_id: str | None = None,
         effect_id: str | None = None,
         headless: bool = False,
+        material_candidate: bool = False,
     ) -> ProjectRecordingSubmission:
         """按普通控制面合同提交浏览器录制。"""
         return self._submit(**{key: value for key, value in locals().items() if key != "self"})
@@ -114,6 +115,7 @@ class ProjectRecordingService:
         effect_id: str | None = None,
         headless: bool = False,
         captured_events=None,
+        material_candidate: bool = False,
     ) -> ProjectRecordingSubmission:
         """校验项目式输入并提交；异常时精确清理本次短期会话。"""
 
@@ -215,11 +217,17 @@ class ProjectRecordingService:
             )
         ):
             raise JiejianError(ErrorCode.STATE_PRECONDITION, "录制需要本应用当前角色下已登录的测试账号")
+        from product.backend.workflows.recording.source import current_recording_instance
+        if self._uow_factory is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "录制来源事务尚未装配")
+        with self._uow_factory() as work:
+            controlled_instance_id = current_recording_instance(work, project_id)
         source_fingerprint = recording_source_fingerprint(
             action, identity, understanding,
             next(item for item in boundary.action_bindings if item.action_id == action.action_id),
             next(item for item in boundary.actor_bindings if item.actor_id == identity.actor_id),
             owner=owner, owner_actor_binding=next(item for item in boundary.actor_bindings if item.actor_id == owner.actor_id),
+            controlled_instance_id=controlled_instance_id,
         )
         if captured_events is not None:
             prior = self._recording_submission.captured_existing(project_id, idempotency_key)
@@ -269,6 +277,7 @@ class ProjectRecordingService:
                 trace_enabled=False,
             )
             command = SubmitRecording(
+                    material_candidate=material_candidate,
                     request=request,
                     flow_id=f"flow-{action.action_id.removeprefix('bac_')}-r{action.revision}",
                     idempotency_key=idempotency_key,

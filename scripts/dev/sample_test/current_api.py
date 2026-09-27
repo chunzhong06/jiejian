@@ -120,7 +120,8 @@ def switch_current(client, project, version, *, reference=None, gui=None):
     before = project_run_ids(client, project)
     status = gui.switch(version, reference) if gui is not None else client.call("POST", "/api/experience/official-sample/version", {
         "schema_version": "1", "version": version, "repair_reference": reference})
-    if status.get("scenario_version") != version or project_run_ids(client, project) != before:
+    condition_matches = status.get("evidence_limited") is True if version == "EVIDENCE_LIMITED" else status.get("scenario_version") == version
+    if not condition_matches or project_run_ids(client, project) != before:
         _error("SAMPLE_SWITCH_INVALID")
     return status
 
@@ -224,6 +225,10 @@ def assert_current_result(result, *, expected):
 def run_sequence(client, project, state, *, checkpoint, gui=None):
     ui = {} if gui is None else {"gui": gui}
     policy = _policy(_boundary(client, project))
+    baseline = run_current(client, project, state, name="baseline", expected="PASS", **ui)
+    checkpoint("baseline-result", baseline)
+    switch_current(client, project, "VULNERABLE", **ui)
+    prepare_current(client, project, **ui)
     first = run_current(client, project, state, name="problem", expected="BLOCK", **ui)
     deny = next(action for action in first["story"]["actions"] if action["permission"]["expectation"] == "DENY")
     if (deny.get("breakpoint") or {}).get("breakpoint_type") != "AUTHORIZATION_LATE":
@@ -251,9 +256,9 @@ def run_sequence(client, project, state, *, checkpoint, gui=None):
         _error("SAMPLE_ORIGINAL_REPAIR_NOT_VERIFIED")
     if _policy(_boundary(client, project)) != policy or _digest(read_result(client, first["run_id"])) != frozen_first:
         _error("SAMPLE_ORIGINAL_FACTS_CHANGED")
-    runs = [first, limited, fixed]
+    runs = [first, limited, baseline, fixed]
     ids = {item["run_id"] for item in runs}
-    if len(ids) != 3 or set(project_run_ids(client, project)) != ids:
+    if len(ids) != 4 or set(project_run_ids(client, project)) != ids:
         _error("SAMPLE_NEW_RUN_HISTORY_MISMATCH")
     for item in runs:
         if _digest(read_result(client, item["run_id"])) != _digest(item):

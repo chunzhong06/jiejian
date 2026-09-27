@@ -16,10 +16,12 @@ def environment(tmp_path):
     harness = build_preparation_harness(tmp_path)
     manager = SimpleNamespace(active=None, installation=SimpleNamespace(available=True, display_name="协作空间", reason=None))
     def start(**kwargs):
-        manager.active = SimpleNamespace(experience_id="exp_" + uuid4().hex, display_name="协作空间", source_root=harness.source_root, origin="http://127.0.0.1:8765")
+        manager.active = SimpleNamespace(experience_id="exp_" + uuid4().hex, display_name="协作空间", source_root=harness.source_root, process=Mock(), origin="http://127.0.0.1:8765")
         return manager.active
     def stop(*args):
         manager.active = None
+    manager.workspace_source = lambda workspace_id: harness.source_root
+    manager.cleanup_exited_instance = Mock()
     manager.start, manager.stop = Mock(side_effect=start), Mock(side_effect=stop)
     understanding = SimpleNamespace(connect=Mock(return_value=SimpleNamespace(project=SimpleNamespace(project_id=harness.project_id), understanding=SimpleNamespace(revision=1))),
         confirm_endpoint=Mock(return_value=SimpleNamespace(revision=2)), authorize_source_analysis=Mock(return_value=SimpleNamespace(revision=3)), analyze_source_for_change=Mock())
@@ -44,7 +46,7 @@ def test_start_stop_replay_and_persistent_history(environment):
     assert stopped.lifecycle == "STOPPED"
     assert env.experience.stop(operation_id=stop_key) == stopped
     assert env.manager.stop.call_count == 1
-    assert env.arguments["archive_project"].call_count == 1
+    assert env.arguments["archive_project"].call_count == 0
     # 重建服务不复活进程，但保留停止后的精确项目入口。
     rebuilt = OfficialSampleExperience(env.manager, **env.arguments)
     assert rebuilt.status().lifecycle == "STOPPED"
@@ -90,21 +92,19 @@ def test_start_partial_project_and_first_error_survive_cleanup_failure(environme
     assert env.manager.start.call_count == 1
 
 
-def test_archive_failure_not_stopped_and_new_explicit_stop_finishes(environment):
+def test_stop_never_archives_and_reset_reports_archive_failure(environment):
     env = environment
     env.experience.start(consent=True)
     archive = env.arguments["archive_project"]
     archive.side_effect = JiejianError(ErrorCode.STORAGE_FAILURE, "归档失败")
-    key = str(uuid4())
+    assert env.experience.stop().lifecycle == "STOPPED"
+    archive.assert_not_called()
+    # 本用例聚焦归档首错；真实 Windows 内核身份由工作空间恢复集成测试覆盖。
+    env.experience._recovery.reconcile = Mock(return_value="EXITED")
     with pytest.raises(JiejianError):
-        env.experience.stop(operation_id=key)
-    assert env.experience.status().lifecycle == "UNKNOWN"
-    assert not env.experience.status().active
-    env.experience.stop(operation_id=key)
+        env.experience.reset(consent=True)
     assert archive.call_count == 1
-    archive.side_effect = None
-    assert env.experience.stop(operation_id=str(uuid4())).lifecycle == "STOPPED"
-    assert archive.call_count == 2
+    assert not env.experience.status().active
 
 
 def test_restart_completed_start_is_not_running(environment):
@@ -113,7 +113,7 @@ def test_restart_completed_start_is_not_running(environment):
     env.manager.active = None
     rebuilt = OfficialSampleExperience(env.manager, **env.arguments)
     assert rebuilt.status().lifecycle == "UNKNOWN"
-    assert rebuilt.status().project_id is None
+    assert rebuilt.status().project_id == env.harness.project_id
     assert rebuilt.status().history_project_id == env.harness.project_id
     with pytest.raises(JiejianError):
         rebuilt.stop()

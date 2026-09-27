@@ -18,7 +18,7 @@ def test_fresh_ownership_database_is_current_and_repeatable(tmp_path):
     upgrade_database(database)
     upgrade_database(database)
     with sqlite3.connect(database) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0006_product_provenance"
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0007_preparation_recovery"
         columns = {row[1] for row in connection.execute("PRAGMA table_info(recordings)")}
         assert {"subject_test_identity_id", "resource_owner_test_identity_id"} <= columns
         assert "test_identity_id" not in columns

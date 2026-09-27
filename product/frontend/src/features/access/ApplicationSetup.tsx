@@ -71,10 +71,10 @@ function CandidateRow({ candidate, kind, loading, onDecide }: {
         {action && <Tag color="gold">{riskLabels[action.risk_hint]}</Tag>}
       </Space>
       <Input aria-label={`${noun}显示名称`} value={displayName} maxLength={kind === 'role' ? 128 : 256} onChange={(event) => setDisplayName(event.target.value)} />
-      <Space wrap>
-        <Button type="primary" size="small" loading={loading} disabled={!displayName.trim()} onClick={() => onDecide('CONFIRMED', displayName)}>确认这个{noun}</Button>
+      <div className="confirmation-actions">
         <Button size="small" loading={loading} onClick={() => onDecide('REJECTED', displayName)}>不是{noun}</Button>
-      </Space>
+        <Button type="primary" size="small" loading={loading} disabled={!displayName.trim()} onClick={() => onDecide('CONFIRMED', displayName)}>确认这个{noun}</Button>
+      </div>
       <Typography.Text type="secondary">识别依据：{evidenceLabel(candidate)}{candidate.evidence[0]?.symbol ? ` · ${candidate.evidence[0].symbol}` : ''}</Typography.Text>
     </div>
   </List.Item>
@@ -113,8 +113,8 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
   const [restoreAttempt, setRestoreAttempt] = useState(0)
   const reviewSurface = useRef<HTMLDivElement>(null)
   const syncWorkspace = async () => {
-    try { await onChanged(); setSyncFailed(false) }
-    catch { setSyncFailed(true) }
+    try { await onChanged(); setSyncFailed(false); return true }
+    catch { setSyncFailed(true); return false }
   }
   useEffect(() => { setReviewOpen(false); setSyncFailed(false) }, [selected?.project_id])
   useEffect(() => { if (reviewOpen) reviewSurface.current?.focus() }, [reviewOpen])
@@ -296,7 +296,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
         : { label: reviewComplete ? '继续建立权限规则' : '确认权限组和业务动作后继续', onClick: onContinue, disabled: !reviewComplete || candidateEditing || loading || syncFailed }
 
   const candidateReview = endpointReady && understanding?.source_fingerprint ? <CandidateReview
-    key={understanding.project_id} value={understanding} onEditingChange={setCandidateEditing} onApplied={value => { applyUnderstanding(value); void syncWorkspace() }}
+    key={understanding.project_id} value={understanding} onEditingChange={setCandidateEditing} onApplied={async (value, confirmed) => { applyUnderstanding(value); const synced = await syncWorkspace(); if (confirmed && synced && value.role_candidates.some(item => item.decision === 'CONFIRMED' && !item.stale) && value.action_candidates.some(item => item.decision === 'CONFIRMED' && !item.stale)) onContinue() }}
     manual={<><div className="application-manual"><Input aria-label="手工补充权限组" value={manualRole} onChange={event=>setManualRole(event.target.value)} placeholder="例如：审核员"/><Button disabled={!manualRole.trim()} loading={loading} onClick={()=>void addRole()}>补充并确认权限组</Button></div><div className="application-manual"><Input aria-label="手工补充业务动作" value={manualAction} onChange={event=>setManualAction(event.target.value)} placeholder="例如：查看项目"/><Button disabled={!manualAction.trim()} loading={loading} onClick={()=>void addAction()}>补充并确认业务动作</Button></div></>}
     staleReview={<>{[...understanding.role_candidates.map(item=>({...item,kind:'role' as const})),...understanding.action_candidates.map(item=>({...item,kind:'action' as const}))].filter(item=>item.stale||item.decision==='REVIEW_REQUIRED').map(item=><details key={item.candidate_id} className="candidate-stale"><summary>{item.display_name} · 需要单独复核</summary><CandidateRow candidate={item} kind={item.kind} loading={loading} onDecide={(decision,name)=>void decide(item.kind,item,decision,name)}/></details>)}</>}
   /> : null
@@ -368,7 +368,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
           cancelText: '取消',
         },
       } : undefined}
-      primary={currentStep === 4 && !reviewOpen ? undefined : primaryAction}
+      primary={currentStep === 4 ? reviewOpen && reviewComplete && !candidateEditing ? primaryAction : undefined : primaryAction}
     />
   </div>
 }

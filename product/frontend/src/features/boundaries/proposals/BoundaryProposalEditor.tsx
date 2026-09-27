@@ -130,14 +130,14 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
     {editingRule && selectedAction ? <PermissionRuleForm key={editingRule.item_id} initial={editingRule} actors={actors} action={{...selectedAction,effects:selectedAction.effect_catalog}} busy={busy}
       onSave={value=>{const saved={...value,write_mode:'CREATE' as const};setPermissions(items=>items.some(item=>item.item_id===saved.item_id)?items.map(item=>item.item_id===saved.item_id?saved:item):[...items,saved]);setEditingRule(undefined);setReceipt('这条规则已保存到当前草稿，正式权限尚未改变。')}}
       onCancel={()=>setEditingRule(undefined)}/>
-      : <><h3>这项动作的权限规则</h3><p className="editorial-muted">一次编辑一条规则，保存后统一审阅全部变更。</p>
+      : <><h3>这项动作的权限规则</h3><p className="editorial-muted">一次编辑一条规则，保存到草稿后，在下一步统一核对修改。</p>
       {permissions.filter(item=>item.business_action_item_id===selectedAction?.item_id).map(permission=><section className="permission-summary-row" key={permission.item_id}>
         <span className={'permission-badge '+(permission.expectation==='ALLOW'?'is-allow':'is-deny')}>{permission.expectation==='ALLOW'?'允许':'禁止'}</span>
         <RuleSentence>{actors.find(item=>item.item_id===permission.subject_actor_item_id)?.display_name || '操作人'}对{permission.relation==='OWNS'?'自己':actors.find(item=>item.item_id===permission.resource_owner_actor_item_id)?.display_name || '资源所有者'}拥有的资源，{permission.expectation==='ALLOW'?'可以':'不得'}{selectedAction?.display_name}。</RuleSentence>
         <Button onClick={()=>{setEditingRule({...permission});setReceipt(undefined)}}>编辑这条规则</Button><Button type="text" danger onClick={()=>setPermissions(items=>items.filter(item=>item.item_id!==permission.item_id))}>移除权限规则</Button>
       </section>)}<Button onClick={addPermission}>添加权限规则</Button></>}
     </div>}
-    {error && <Alert type="warning" showIcon message="草稿还不能生成提案" description={error} />}
+    {error && <Alert className="flow-feedback" type="warning" showIcon message="草稿还不能生成提案" description={error} />}
     <div className="boundary-editor-submit"><Button type="primary" loading={busy} disabled={Boolean(editingRule)} onClick={submit}>生成待审业务边界</Button></div>
   </section>
 }

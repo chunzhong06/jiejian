@@ -56,7 +56,7 @@ describe('BoundaryMaintenanceEditor', () => {
     fireEvent.click(screen.getByRole('button',{name:'保存到草稿'}))
     expect(onSubmit).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button',{name:'移除草稿规则'}))
-    fireEvent.click(screen.getByRole('button',{name:'审阅全部变更'}))
+    fireEvent.click(screen.getByRole('button',{name:/^(下一步：核对修改|核对代码关联)$/}))
     expect(onSubmit.mock.calls[0][0].permissions).toEqual(draft.permissions)
   })
   it('单条修改先进入本地草稿，审阅时仍保留完整身份和其他规则', () => {
@@ -65,10 +65,10 @@ describe('BoundaryMaintenanceEditor', () => {
     render(<BoundaryMaintenanceEditor draft={{...draft,permissions:[...draft.permissions,other]}} focus={{intentId}} busy={false} onSubmit={onSubmit}/>)
     fireEvent.click(screen.getByRole('radio',{name:'禁止'}))
     expect(onSubmit).not.toHaveBeenCalled()
-    expect(screen.getByRole('button',{name:'审阅全部变更'})).toBeDisabled()
+    expect(screen.getByRole('button',{name:/^(下一步：核对修改|核对代码关联)$/})).toBeDisabled()
     fireEvent.click(screen.getByRole('button',{name:'保存到草稿'}))
     expect(onSubmit).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button',{name:'审阅全部变更'}))
+    fireEvent.click(screen.getByRole('button',{name:/^(下一步：核对修改|核对代码关联)$/}))
     expect(onSubmit.mock.calls[0][0].permissions).toEqual([{...draft.permissions[0],expectation:'DENY'},other])
   })
   it('取消单条编辑丢弃临时修改，不改变草稿和正式规则', () => {
@@ -76,7 +76,7 @@ describe('BoundaryMaintenanceEditor', () => {
     render(<BoundaryMaintenanceEditor draft={draft} focus={{intentId}} busy={false} onSubmit={onSubmit}/>)
     fireEvent.click(screen.getByRole('radio',{name:'禁止'}))
     fireEvent.click(screen.getByRole('button',{name:'取消本次编辑'}))
-    fireEvent.click(screen.getByRole('button',{name:'审阅全部变更'}))
+    fireEvent.click(screen.getByRole('button',{name:/^(下一步：核对修改|核对代码关联)$/}))
     expect(onSubmit.mock.calls[0][0].permissions).toEqual(draft.permissions)
   })
   it('提交编辑后的完整 desired state，不暴露或生成 write_mode', () => {
@@ -91,7 +91,7 @@ describe('BoundaryMaintenanceEditor', () => {
     fireEvent.click(screen.getByRole('button', {name:'编辑动作'}))
     fireEvent.change(screen.getByLabelText('业务动作名称'), { target: { value: '导出完整交付包' } })
     if(screen.queryByRole('button',{name:'保存到草稿'})) fireEvent.click(screen.getByRole('button',{name:'保存到草稿'}))
-    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
+    fireEvent.click(screen.getByRole('button', { name: /^(下一步：核对修改|核对代码关联)$/ }))
 
     expect(onSubmit).toHaveBeenCalledOnce()
     const command = onSubmit.mock.calls[0][0]
@@ -117,7 +117,7 @@ describe('BoundaryMaintenanceEditor', () => {
     await waitFor(() => expect(screen.queryByText('待你确认的建议')).not.toBeInTheDocument())
     expect(onSubmit).not.toHaveBeenCalled()
     if(screen.queryByRole('button',{name:'保存到草稿'})) fireEvent.click(screen.getByRole('button',{name:'保存到草稿'}))
-    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
+    fireEvent.click(screen.getByRole('button', { name: /^(下一步：核对修改|核对代码关联)$/ }))
     expect(onSubmit.mock.calls[0][0].permissions[0]).toMatchObject({ intent_id: intentId, expectation: 'DENY', protected_effect_item_ids: ['peff_existing'] })
   })
   it('生成期间修改草稿会丢弃迟到建议，保留手工内容', async () => {
@@ -137,7 +137,7 @@ describe('BoundaryMaintenanceEditor', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'AI 辅助整理', hidden:true })).not.toHaveClass('ant-btn-loading'))
     expect(screen.queryByText('待你确认的建议')).not.toBeInTheDocument()
     if(screen.queryByRole('button',{name:'保存到草稿'})) fireEvent.click(screen.getByRole('button',{name:'保存到草稿'}))
-    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
+    fireEvent.click(screen.getByRole('button', { name: /^(下一步：核对修改|核对代码关联)$/ }))
     expect(onSubmit.mock.calls[0][0].actions[0].display_name).toBe('手工修改的动作')
     expect(onSubmit.mock.calls[0][0].permissions[0].expectation).toBe('ALLOW')
   })
@@ -151,7 +151,7 @@ describe('BoundaryMaintenanceEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI 辅助整理' }))
     expect(await screen.findByText(/请继续手工填写权限规则/)).toBeInTheDocument()
     if(screen.queryByRole('button',{name:'保存到草稿'})) fireEvent.click(screen.getByRole('button',{name:'保存到草稿'}))
-    fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
+    fireEvent.click(screen.getByRole('button', { name: /^(下一步：核对修改|核对代码关联)$/ }))
     expect(onSubmit).toHaveBeenCalledOnce()
     ai.generate.mockResolvedValue(response)
     fireEvent.click(screen.getByRole('button', { name: 'AI 辅助整理' }))

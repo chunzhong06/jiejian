@@ -51,7 +51,7 @@ export function EvidenceMaterials({ projectId, actionId, onBack }: {
     <h2 className="proof-action-title" ref={title} tabIndex={-1}>{current?.action_label ?? '证明要求与材料'}</h2>
     {current && <p className="editorial-muted">已有业务记录也可以单独登记，供补充阅读。<Button type="link" onClick={() => setSupplemental(true)}>管理补充材料</Button></p>}
     {loading && <div role="status" className="proof-loading"><Spin /> 正在读取当前材料…</div>}
-    {failed && <Alert type="warning" showIcon message="材料详情暂时无法读取" description="旧快照已撤下。请刷新重试；这不会修改材料或发起检查。" />}
+    {failed && <Alert className="flow-feedback" type="warning" showIcon message="材料详情暂时无法读取" description="旧快照已撤下。请刷新重试；这不会修改材料或发起检查。" />}
     {current && !current.effects.length && <Empty description="当前动作没有需要说明的结果证明材料" />}
     {!!current?.effects.length && <div className="proof-workspace">
       <nav className="proof-index" aria-label="业务结果索引"><p className="editorial-eyebrow">需要证明的业务结果</p>{current.effects.map((item, index) => <button key={item.effect_id} aria-current={selected === item.effect_id ? 'true' : undefined} onClick={() => setSelected(item.effect_id)}><span className="proof-index-number">{String(index + 1).padStart(2, '0')}</span><span><strong>{item.business_label}</strong><small>{statuses[item.material_status]}</small></span></button>)}</nav>

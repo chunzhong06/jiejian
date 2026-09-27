@@ -1,5 +1,5 @@
 // 修复阅读面保留全部正常业务，七态以服务端为准，不能用变化登记推断成功。
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { RepairDelivery, type RepairTask } from './RepairDelivery'
 import type { RepairComparisonRow, RepairStatus } from '../../api/repairs'
@@ -8,6 +8,21 @@ const task = (status: RepairStatus): RepairTask => ({ task_reference: 'task', st
   contract: { project_id: 'p1', source_run_id: 'run-old', source_case_id: 'deny', repair_fingerprint: 'repair', original_policy_epoch: 1, deny: { identity: { action_id: 'action', resource_id: 'resource', subject_test_identity_id: 'subject', resource_owner_test_identity_id: 'owner', protected_effect_ids: ['effect'] }, evidence_refs: [] }, regressions: [{ source_case_id: 'read' }] },
   comparison: [row('DENY', 'deny'), row('SELECTED_ALLOW', 'allow'), row('REGRESSION', 'read')] })
 describe('修复要求与交付', () => {
+  it('复制任务保留精确原题和正常业务，并明确尚未发送给 Agent', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const navigate = vi.fn()
+    render(<RepairDelivery task={task('REPAIR_REQUIRED')} onNavigate={navigate} onBack={vi.fn()} onViewChange={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '复制修复任务' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
+    expect(writeText.mock.calls[0][0]).toContain('run-old')
+    expect(writeText.mock.calls[0][0]).toContain('读取资料')
+    expect(writeText.mock.calls[0][0]).toContain('jiejian_change_submit')
+    const referenceLine = writeText.mock.calls[0][0].split('\n').find((line: string) => line.startsWith('repair_reference：'))!
+    expect(JSON.parse(referenceLine.slice('repair_reference：'.length))).toEqual({ source_run_id: 'run-old', source_case_id: 'deny', repair_fingerprint: 'repair' })
+    expect(await screen.findByRole('status')).toHaveTextContent('尚未发送给 Agent')
+    expect(navigate).not.toHaveBeenCalled()
+  })
   it('服务端允许复验时从原题直接携带精确变化引用，不登记或提交检查', () => {
     const onNavigate = vi.fn()
     render(<RepairDelivery task={task('READY_TO_VERIFY')} onNavigate={onNavigate} onBack={vi.fn()} onViewChange={vi.fn()}/>)

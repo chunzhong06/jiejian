@@ -136,7 +136,7 @@ def cleanup(client, gui, state):
 
 
 def run(client, gui, project, runs, state, *, session_factory=SDKSession):
-    """在原三轮后只增加一个普通 Run；失败交由 Official 先取消活动任务再收口配对。"""
+    """在起始、问题、观察不足、修复四轮后只增加一个普通 Run；失败由 Official 收口。"""
     token = credential = None
     state.mcp_project_id = project
     initial = client.call("GET", "/api/mcp/access")
@@ -209,8 +209,8 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
                 _error("MCP_ORDINARY_RUN_MARKED_VERIFIED")
             if (result["story"].get("change_context") or {}).get("change_id") != change_id:
                 _error("MCP_RUN_CHANGE_MISMATCH")
-            if set(current_api.project_run_ids(client, project)) != before_runs | {state.active_run_id} or len(before_runs) != 3:
-                _error("MCP_FOUR_RUNS_MISMATCH")
+            if set(current_api.project_run_ids(client, project)) != before_runs | {state.active_run_id} or len(before_runs) != 4:
+                _error("MCP_FIVE_RUNS_MISMATCH")
             for original in runs:
                 if current_api.read_result(client, original["run_id"]) != original:
                     _error("MCP_ORIGINAL_RESULT_CHANGED")
@@ -219,7 +219,7 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
             gui._mark("mcp-responsibility")
         cleanup(client, gui, state)
         return dict(client_name=CLIENT_NAME, project_id=project, change_id=change_id, run_id=result["run_id"],
-            verdict="PASS", scope="ordinary-full-check", actual_changed_path_count=0, total_run_count=4,
+            verdict="PASS", scope="ordinary-full-check", actual_changed_path_count=0, total_run_count=5,
             pairing="created-and-removed" if state.mcp_created_pairing else "existing-preserved")
     except Exception as exc:
         from .harness.state import SampleTestError

@@ -103,12 +103,12 @@ describe('ApplicationSetup', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /只读分析当前应用源码/ }))
     fireEvent.click(screen.getByRole('button', { name: '授权并开始分析' }))
     fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
-    expect(await screen.findByText('先确认应用里有哪些业务', { selector: 'h2' })).toBeInTheDocument()
-    expect(screen.getByText(/识别建议只帮助整理业务/)).toBeInTheDocument()
+    expect(await screen.findByText('整理权限组与业务动作', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText(/先调整应用里有哪些权限组/)).toBeInTheDocument()
     expect(screen.getByDisplayValue('owner')).toBeInTheDocument()
     fireEvent.click(screen.getByText('业务动作 · 1'))
     expect(screen.getByDisplayValue('修改文档')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '确认权限组和业务动作后继续' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '确认权限组和业务动作后继续' })).not.toBeInTheDocument()
     expect(onConnected).toHaveBeenCalledWith(expect.objectContaining({ project_id: 'app-demo' }))
   })
 
@@ -127,14 +127,15 @@ describe('ApplicationSetup', () => {
     mockProjects.understanding.mockResolvedValue(restored)
     const confirmed = { ...restored, role_candidates: [{ ...role, decision: 'CONFIRMED', display_name: '所有者' }], revision: 4 }
     mockProjects.decideCandidates.mockResolvedValue({ ...confirmed, action_candidates: [{ ...action, decision: 'CONFIRMED' }] })
-    render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={vi.fn()} />)
+    const continued = vi.fn()
+    render(<ApplicationSetup selected={{ project_id: 'app-demo', name: 'demo', status: 'DRAFT' }} onConnected={vi.fn()} onChanged={vi.fn()} onBack={vi.fn()} onContinue={continued} />)
     fireEvent.click(await screen.findByRole('button', { name: '审阅业务与权限' }))
     fireEvent.change(await screen.findByDisplayValue('owner'), { target: { value: '所有者' } })
     fireEvent.click(screen.getByText('业务动作 · 1'))
     fireEvent.click(screen.getByText('权限组 · 1'))
     expect(screen.getByDisplayValue('所有者')).toBeInTheDocument()
     expect(mockProjects.decideCandidates).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '审阅本次选择' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步：核对业务总览' }))
     const summary = screen.getByRole('region', { name: '本次选择完整摘要' })
     expect(summary).toHaveTextContent('所有者')
     expect(summary).toHaveTextContent('修改文档')
@@ -144,6 +145,8 @@ describe('ApplicationSetup', () => {
       expect.objectContaining({ candidate_id: action.candidate_id, decision: 'CONFIRMED' }),
     ]))
     expect(await screen.findByText('本次业务信息已确认，权限规则尚未改变。')).toBeInTheDocument()
+    await waitFor(() => expect(continued).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('button', { name: '下一步：核对业务总览' })).not.toBeInTheDocument()
   })
 
   it('保留只读授权并允许按当前源码重新发现候选', async () => {

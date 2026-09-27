@@ -232,6 +232,7 @@ def test_samples_are_one_way_test_data_not_product_dependencies() -> None:
         "page.py",
         "storage.py",
         "background.py",
+        "inline_export.py",
         "openapi.json",
     }
     for path in _python_files(ROOT / "product"):

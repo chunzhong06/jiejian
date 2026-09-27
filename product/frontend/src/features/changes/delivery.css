@@ -378,3 +378,5 @@
     font-size: 16px;
   }
 }
+
+.agent-handoff{margin-block:24px}.agent-handoff h2{margin-top:0}.agent-handoff p{max-width:80ch;color:var(--color-secondary);line-height:1.7}.agent-handoff-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-block:16px}.agent-task-list{margin-block:24px}.agent-task-list h2{font-size:var(--font-section)}

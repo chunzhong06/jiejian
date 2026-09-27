@@ -38,9 +38,9 @@ describe('ToolsPage', () => {
       last_auth_failure_at_us: null,
     })
 
-    render(<ToolsPage projects={[{ project_id: 'project-demo', name: '演示应用', status: 'READY' }]} onError={vi.fn()} />)
+    render(<ToolsPage onNavigate={vi.fn()} projects={[{ project_id: 'project-demo', name: '演示应用', status: 'READY' }]} onError={vi.fn()} />)
 
-    expect(await screen.findByRole('heading', { name: 'AI 工具连接' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Agent 连接与授权' })).toBeInTheDocument()
     for (const label of ['Codex', 'TRAE', 'Qoder', 'CodeBuddy', 'DSH']) {
       expect(screen.getByText(label, { selector: '.ant-segmented-item-label' })).toBeInTheDocument()
     }

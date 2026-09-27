@@ -105,10 +105,10 @@ def test_real_official_scenario_setup_closes_before_full_l5() -> None:
     summary = json.loads(
         (run_dir / "audit" / "sample-test" / "sample-test-summary.json").read_text(encoding="utf-8")
     )
-    assert summary["scenario_setup_probe"] == "passed"
-    assert summary["case_count"] == 3
-    assert summary["differential_pair_count"] == 1
-    assert summary["workspace_ui_probe"] == "passed"
+    assert summary["gui_status"] == "PASSED"
+    assert summary["total_run_count"] == 0 and summary["runs"] == []
+    events = {item["event"] for item in summary["gui_checkpoints"] if item["status"] == "PASSED"}
+    assert {"business-selection-review", "human-approve", "prepare", "identity-management-layout", "boundary-maintenance-layout", "exit"} <= events
     assert summary["control_port_closed"] is True
     assert summary["sample_port_closed"] is True
     assert summary["owned_process_tree_closed"] is True

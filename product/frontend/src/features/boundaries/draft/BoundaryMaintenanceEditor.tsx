@@ -111,6 +111,7 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
     const original = [...draft.actors, ...draft.actions, ...draft.permissions].find(value => value.item_id === item.item_id)
     return JSON.stringify(item) !== JSON.stringify(original)
   }).length
+  const editingDraft = Boolean(changedCount || editingRule || Object.keys(objectDrafts).length)
   const saveRule = (value: BoundaryMaintenancePermissionDto) => {
     setPermissions(items => items.some(item => item.item_id === value.item_id) ? items.map(item => item.item_id === value.item_id ? value : item) : [...items, value])
     setSelectedActionId(value.business_action_item_id); setEditingRule(undefined); setError(undefined)
@@ -121,8 +122,8 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
     return `${subject}对${rule.relation === 'OWNS' ? '自己' : rule.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `另一个${owner}账号` : owner}拥有的资源，${rule.expectation === 'ALLOW' ? '可以' : '不得'}${selectedAction?.display_name || '执行这项动作'}。`
   }
   return <section className="boundary-draft" aria-label="权限规则草稿">
-    <div className="boundary-draft-toolbar"><div><h1 id="boundary-maintenance-title">{editingRule ? '编辑权限规则' : '权限管理'}</h1>{changedCount > 0 && <span className="semantic-state">草稿 · {changedCount} 项修改</span>}</div>
-      {editingRule && <Button disabled={busy} onClick={() => setEditingRule(undefined)}>取消并返回草稿</Button>}
+    <div className="boundary-draft-toolbar"><div><h1 id="boundary-maintenance-title">{editingRule ? '编辑权限规则' : '权限管理'}</h1>{changedCount > 0 && <span className="semantic-state">草稿 · {changedCount} 项修改</span>}<p className="editorial-muted">{editingDraft ? '先将单项编辑保存到草稿，再统一核对并确认修改。' : '修改角色、动作或权限后统一确认；源码变化时，可单独核对代码关联。'}</p></div>
+      <div className="boundary-draft-main-actions">{editingRule && <Button disabled={busy} onClick={() => setEditingRule(undefined)}>取消并返回草稿</Button>}<Button type={editingDraft ? 'primary' : 'default'} disabled={Boolean(editingRule) || Object.keys(objectDrafts).length > 0} loading={busy} onClick={submit}>{editingDraft ? '下一步：核对修改' : '核对代码关联'}</Button></div>
     </div>
     {!editingRule && <nav className="boundary-view-tabs" aria-label="权限管理视图">{([['rules','权限规则'],['actions','业务动作'],['actors','业务角色']] as const).map(([key,label])=><button key={key} type="button" aria-current={mode===key?'page':undefined} onClick={()=>setMode(key)}>{label}</button>)}</nav>}
     {editingRule && editedAction ? <PermissionRuleForm key={editingRule.item_id} initial={editingRule} actors={actors} action={editedAction} actions={actions.filter(item=>item.effective_state==='ACTIVE')} busy={busy} onSave={saveRule} onCancel={() => setEditingRule(undefined)}/> : mode !== 'rules' ? <BoundaryObjectsWorkspace kind={mode} actors={actors} actions={actions} permissions={permissions} draft={draft} copies={objectDrafts} setCopies={setObjectDrafts} setActors={setActors} setActions={setActions} setPermissions={setPermissions} busy={busy}/> : <><div className="boundary-collection-toolbar"><Input className="boundary-search" aria-label="搜索草稿动作" placeholder="搜索动作、角色或规则" allowClear value={query} onChange={event => setQuery(event.target.value)}/><Button type="primary" disabled={busy} onClick={addPermission}>新增权限规则</Button></div><section className="boundary-document">
@@ -135,7 +136,7 @@ export function BoundaryMaintenanceEditor({ draft, initialCommand, busy, onSubmi
     </section></>}
     <details className="permission-assist-disclosure" hidden={Boolean(editingRule) || mode !== 'rules'}><summary>用自然语言辅助填写</summary><PermissionDraftAssist projectId={draft.project_id} boundaryFingerprint={draft.boundary_state_fingerprint} draftKey={JSON.stringify([actors, actions, permissions, objectDrafts])} disabled={busy} onApply={applySuggestions}/></details>
     {error && <Alert type="warning" showIcon message="草稿还不能生成提案" description={error}/>}
-    {(changedCount > 0 || Object.keys(objectDrafts).length > 0) ? <div className="boundary-draft-footer"><span>{changedCount ? `已有 ${changedCount} 项草稿修改` : '尚未修改当前规则'}<small>修改仅保留在当前项目页面会话中，批准后才会生效。</small></span><Button type={editingRule ? 'default' : 'primary'} disabled={Boolean(editingRule) || Object.keys(objectDrafts).length > 0} loading={busy} onClick={submit}>审阅全部变更</Button></div> : <div className="boundary-review-quiet"><Button type="text" disabled={Boolean(editingRule)} loading={busy} onClick={submit}>审阅全部变更</Button><small>也可核对当前定义与代码关联</small></div>}
+    {(changedCount > 0 || Object.keys(objectDrafts).length > 0) && <div className="boundary-draft-footer"><span>{changedCount ? `已有 ${changedCount} 项草稿修改` : '单项编辑尚未保存到草稿'}<small>修改仅保留在当前项目页面会话中，确认后才会生效。</small></span></div>}
   </section>
 }
 

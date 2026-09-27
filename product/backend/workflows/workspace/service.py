@@ -61,6 +61,7 @@ _TASK_PRESENTATION: dict[str, tuple[str, str]] = {
     "COMPLETE_EFFECT_EVIDENCE": ("准备结果证明", "受保护业务效果的证明方式已具备。"),
     "COMPLETE_RECOVERY": ("准备恢复方式", "本次检查需要的恢复方式已明确。"),
     "REGISTER_SOURCE_CHANGE": ("查看变化登记", "本次源码变化已登记并完成实际变化核对。"),
+    "PREPARE_AGENT_REPAIR": ("准备 Agent 修复任务", "Agent 完成修改并登记真实变化后，再按原题独立复验。"),
     "VERIFY_REPAIR": ("核对原题复验", "原题适用性与复验条件已经核对；修复结果由独立复验确认。"),
     "RUN_CURRENT_CHECK": ("查看检查预览", "正式预览允许执行，并由你明确开始检查。"),
     "VIEW_CURRENT_RESULT": ("查看检查结果", "本次已发布的结果与证据可供查看。"),
@@ -201,15 +202,19 @@ class WorkspaceService:
                 except (JiejianError,OSError):
                     drifted = True
                 kind = ("VERIFY_REPAIR" if task is not None and task.status=="READY_TO_VERIFY" else
-                    "REGISTER_SOURCE_CHANGE" if drifted else "RUN_CURRENT_CHECK" if latest_result is None and checks.preview(project_id).can_execute else
+                    "REGISTER_SOURCE_CHANGE" if drifted else
+                    "PREPARE_AGENT_REPAIR" if task is not None and task.status in {"REPAIR_REQUIRED", "NOT_VERIFIED"} else
+                    "RUN_CURRENT_CHECK" if latest_result is None and checks.preview(project_id).can_execute else
                     "VIEW_CURRENT_RESULT" if latest_result is not None else None)
                 if kind is not None:
                     title,why,responsibility = CURRENT_TASK_TEXT[kind]
                     change_id = task.change_id if kind=="VERIFY_REPAIR" else None
                     run_id = latest_result.run_id if kind=="VIEW_CURRENT_RESULT" else None
+                    repair_fingerprint = task.contract.repair_fingerprint if kind=="PREPARE_AGENT_REPAIR" else None
                     primary_task = self._task(kind,title=title,why_now=why,user_responsibility=responsibility,
-                        system_will_do=why,route="/changes" if kind=="REGISTER_SOURCE_CHANGE" else "/tests",
-                        change_id=change_id,run_id=run_id,facts=dict(change_id=change_id,run_id=run_id))
+                        system_will_do=why,route="/changes" if kind in {"REGISTER_SOURCE_CHANGE", "PREPARE_AGENT_REPAIR"} else "/tests",
+                        change_id=change_id,run_id=run_id,repair_fingerprint=repair_fingerprint,
+                        facts=dict(change_id=change_id,run_id=run_id,repair_fingerprint=repair_fingerprint))
         return WorkspaceView(
             project=WorkspaceProjectView(
                 project_id=project.project_id,
@@ -248,7 +253,7 @@ class WorkspaceService:
             statuses["check"] = "NEEDS_REVIEW"
         if task:
             current = ("connect" if task.route == "/application" else "rules" if task.route == "/permissions" else
-                "check" if kind in {"RUN_CURRENT_CHECK", "VIEW_CURRENT_RESULT", "VERIFY_REPAIR"} else "prepare")
+                "check" if kind in {"RUN_CURRENT_CHECK", "VIEW_CURRENT_RESULT", "VERIFY_REPAIR", "PREPARE_AGENT_REPAIR"} else "prepare")
             statuses[current] = "CURRENT"
         # 活动 Run 可在其他待办出现时继续运行；只提示进度，不能据此完成前三项。
         if active is not None and task is None:

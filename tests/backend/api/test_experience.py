@@ -33,7 +33,7 @@ def test_unavailable_installation_keeps_product_alive_and_requires_consent(tmp_p
         assert summary["available"] is False and summary["summary"] is None
 
 
-def test_start_stop_and_replacement_archive_only_owned_sample(tmp_path):
+def test_start_stop_preserves_project_and_explicit_reset_archives(tmp_path):
     app, _ = _app(tmp_path)
     with TestClient(app) as client:
         first_response = _start(client)
@@ -41,10 +41,12 @@ def test_start_stop_and_replacement_archive_only_owned_sample(tmp_path):
         first = first_response.json()["data"]
         core = app.state.context
         root = core.official_samples.active.experience_root
-        assert first["active"] and first["scenario_version"] == "VULNERABLE"
+        assert first["active"] and first["scenario_version"] == "BASELINE"
         assert not first["scenario_prepared"]
         assert first["origin"].startswith("http://127.0.0.1:")
-        second_response = _start(client)
+        same = _start(client).json()["data"]
+        assert same["project_id"] == first["project_id"]
+        second_response = client.post("/api/experience/official-sample/reset", json={"schema_version":"1", "consent":True})
         assert second_response.status_code == 200, second_response.text
         second = second_response.json()["data"]
         assert second["project_id"] != first["project_id"]
@@ -53,7 +55,9 @@ def test_start_stop_and_replacement_archive_only_owned_sample(tmp_path):
         stopped = client.post("/api/experience/official-sample/stop")
         assert stopped.status_code == 200, stopped.text
         assert not stopped.json()["data"]["active"]
-        assert core.projects.get(second["project_id"]).status is ProjectStatus.ARCHIVED
+        assert core.projects.get(second["project_id"]).status is not ProjectStatus.ARCHIVED
+        assert stopped.json()["data"]["workspace_retained"]
+        assert stopped.json()["data"]["recovery_state"] == "EXITED"
         assert core.official_samples.active is None
 
 
@@ -85,10 +89,11 @@ def test_prepare_requires_ordinary_approval_and_never_publishes_result(tmp_path)
         assert client.post("/api/experience/official-sample/prepare").json()["data"] == prepared.json()["data"]
         rejected = client.post("/api/experience/official-sample/version", json={"schema_version": "1", "version": "FIXED"})
         assert rejected.status_code != 200
-        assert core.official_experience.status().scenario_version == "VULNERABLE"
+        assert core.official_experience.status().scenario_version == "BASELINE"
         limited = client.post("/api/experience/official-sample/version", json={"schema_version": "1", "version": "EVIDENCE_LIMITED"})
         assert limited.status_code == 200, limited.text
-        assert limited.json()["data"]["scenario_version"] == "EVIDENCE_LIMITED"
+        assert limited.json()["data"]["scenario_version"] == "BASELINE"
+        assert limited.json()["data"]["evidence_limited"]
         with core.uow_factory() as work:
             assert all(job.operation_type == "BROWSER_RECORDING" for job in work.jobs.list_for_project(project))
 

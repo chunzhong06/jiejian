@@ -14,8 +14,9 @@ class ChecksActions(GuiSession):
             raise SampleTestError("GUI_SAMPLE_PROJECT_MISSING")
         workspace = self.client.call("GET", f"/api/projects/{project}/workspace")
         task = workspace.get("primary_task") or {}
-        if (workspace.get("project", {}).get("project_id") == project and task.get("route") == "/tests"
-                and task.get("task_kind") in {"RUN_CURRENT_CHECK", "VIEW_CURRENT_RESULT", "VERIFY_REPAIR"}
+        reusable_task = (task.get("route") == "/tests" and task.get("task_kind") in {"RUN_CURRENT_CHECK", "VIEW_CURRENT_RESULT", "VERIFY_REPAIR"}
+            or task.get("route") == "/changes" and task.get("task_kind") == "PREPARE_AGENT_REPAIR")
+        if (workspace.get("project", {}).get("project_id") == project and reusable_task
                 and task.get("can_execute")):
             materials = self.client.call("GET", f"/api/projects/{project}/preparation")
             preview = self.client.call("GET", f"/api/projects/{project}/check-preview")

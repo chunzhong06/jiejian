@@ -111,7 +111,8 @@ describe('LLMSettingsDrawer', () => {
     await waitFor(() => expect(mockApi.discoverModels).toHaveBeenCalled())
     fireEvent.click(screen.getByRole('button', { name: '保存并检查连接' }))
     await waitFor(() => expect(onError).toHaveBeenCalled())
-    expect(password).toHaveValue('')
+    // 错误回调与表单 DOM 更新不是同一完成点，直接等待秘密输入实际清空。
+    await waitFor(() => expect(password).toHaveValue(''))
     fireEvent.change(password, { target: { value: 'temporary-key' } })
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledOnce()

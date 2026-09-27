@@ -64,7 +64,7 @@ describe('当前变化与修复', () => {
   })
   it('没有历史变化仍允许显式登记，不伪造安全状态', async () => {
     api.list.mockResolvedValue([]); render(<ChangesPage {...props()} />)
-    expect(await screen.findByText('尚无代码变化记录')).toBeInTheDocument()
+    expect(await screen.findByText('暂无修复任务或修改记录。检查发现问题后，可在这里准备任务并跟踪修复。')).toBeInTheDocument()
     expect(screen.queryByText('原题复验通过')).not.toBeInTheDocument()
   })
   it('缺少基线不把文件清单误当成已核实差异', async () => {
@@ -81,7 +81,8 @@ describe('当前变化与修复', () => {
       { task_reference: 'two', contract: { ...contract, repair_fingerprint: 'two' }, change_id: 'chg_one', status: 'INCONCLUSIVE' },
     ] })
     render(<ChangesPage {...props()}/>)
-    expect(await screen.findByRole('heading', { name: '修改已登记，修复状态尚待确认' })).toBeInTheDocument()
+    await screen.findByRole('heading', { name: '修改导出检查位置' })
+    expect(within(screen.getByRole('list', { name: '本批修改的事实进展' })).getByText('修复结论待确认')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '本批修改的原题复验已通过' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('navigation', { name: '修改记录' })).queryByText('原题复验已通过')).not.toBeInTheDocument()
   })

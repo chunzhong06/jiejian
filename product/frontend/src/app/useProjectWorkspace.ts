@@ -13,6 +13,8 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
   const [workspace, setWorkspace] = useState<WorkspaceViewDto | null>(null)
   const currentProject = useRef<string | null>(null)
   const requestEpoch = useRef(0)
+  const pendingRead = useRef<{ projectId: string; epoch: number; promise: Promise<WorkspaceViewDto | undefined> } | undefined>(undefined)
+  const acceptedRead = useRef<{ projectId: string; epoch: number; value: WorkspaceViewDto } | undefined>(undefined)
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false; requestEpoch.current += 1 } }, [])
 
@@ -44,18 +46,31 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
       return undefined
     }
     const requestedProject = project.project_id
+    // 背景回读加入已有请求；写后显式刷新仍发新请求，不能复用写入前的快照。
+    if (quiet && pendingRead.current?.projectId === requestedProject) return pendingRead.current.promise
     const epoch = ++requestEpoch.current
+    const read = (async (): Promise<WorkspaceViewDto | undefined> => {
     try {
       const current = await workspaceApi.current(requestedProject)
       // Agent 回读和用户切换可能交错；旧请求不能把另一项目或旧任务写回当前工作区。
-      if (!alive.current || currentProject.current !== requestedProject || epoch !== requestEpoch.current) return undefined
+      if (!alive.current || currentProject.current !== requestedProject) return undefined
+      if (epoch !== requestEpoch.current) return pendingRead.current?.projectId === requestedProject ? pendingRead.current.promise : acceptedRead.current?.projectId === requestedProject && acceptedRead.current.epoch === requestEpoch.current ? acceptedRead.current.value : undefined
       if (current.project.project_id !== requestedProject) throw new ApiError('STATE_PRECONDITION', '工作区返回了另一项目的状态。')
       setWorkspace(current)
+      acceptedRead.current = { projectId: requestedProject, epoch, value: current }
       return current
     } catch (error) {
+      if (alive.current && currentProject.current === requestedProject && epoch !== requestEpoch.current) {
+        return pendingRead.current?.projectId === requestedProject ? pendingRead.current.promise : acceptedRead.current?.projectId === requestedProject && acceptedRead.current.epoch === requestEpoch.current ? acceptedRead.current.value : undefined
+      }
       if (alive.current && currentProject.current === requestedProject && epoch === requestEpoch.current && !quiet) onError(error as ApiError)
       return undefined
+    } finally {
+      if (pendingRead.current?.epoch === epoch) pendingRead.current = undefined
     }
+    })()
+    pendingRead.current = { projectId: requestedProject, epoch, promise: read }
+    return read
   }, [onError, selected])
 
   useEffect(() => { void refreshProjects() }, [refreshProjects])

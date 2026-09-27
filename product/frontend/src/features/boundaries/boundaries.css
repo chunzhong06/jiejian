@@ -211,7 +211,7 @@
 
 .boundary-editor-submit {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 16px;
 }
@@ -233,7 +233,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  justify-content: flex-start;
+  justify-content: flex-end;
   margin-top: 8px;
 }
 
@@ -468,6 +468,11 @@
   overflow: hidden;
 }
 
+.boundary-supporting > .boundary-secondary {
+  margin-top: 0;
+  border-top: 1px solid var(--color-border);
+}
+
 .boundary-secondary {
   padding: var(--space-20);
   margin-top: 26px;
@@ -525,6 +530,8 @@
 }
 
 .boundary-step-continue {
+  display: flex;
+  justify-content: flex-end;
   margin-block: var(--space-24);
 }
 
@@ -1021,6 +1028,7 @@
 
 .definition-edit-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -1320,10 +1328,13 @@
 .boundary-collection-toolbar .ant-input-affix-wrapper input{margin:0;min-height:0}
 .boundary-collection-toolbar>.ant-btn{min-height:40px}
 .boundary-view-tabs button{min-height:44px;white-space:nowrap}
-.boundary-effect-overview{padding:20px 0;margin-top:24px;border-top:1px solid var(--color-border);font-size:13px;color:var(--color-secondary)}
-.boundary-effect-overview h3{font-size:13px;margin:0 0 12px;color:var(--color-text)}
+.boundary-effect-overview{padding:var(--space-20);margin:0;font-size:var(--font-secondary);color:var(--color-secondary)}
+.boundary-effect-overview h3{font-size:var(--font-body);margin:0 0 var(--space-8);color:var(--color-text)}
+.boundary-effect-overview p{margin:0;overflow-wrap:anywhere}
 .boundary-document .action-index>h3{font-size:12px;color:var(--color-secondary)}
 .boundary-draft .permission-assist-disclosure{border-top:1px solid var(--color-border);margin-top:24px;padding:16px 0}
 @media(max-width:760px){.boundary-collection-toolbar{flex-wrap:wrap;gap:12px}.boundary-collection-toolbar .boundary-search{width:100%;min-height:44px}.boundary-collection-toolbar>.ant-btn{min-height:44px}.boundary-view-tabs{gap:20px}.boundary-view-tabs button{font-size:14px}}
 
-.boundary-review-quiet{display:flex;align-items:center;gap:12px;margin-top:20px;color:var(--color-secondary)}.boundary-review-quiet small{font-size:12px}.change-support-entry,.preparation-secondary-entry{display:flex;align-items:center;gap:16px;margin-top:24px;font-size:13px;color:var(--color-secondary)}
+.boundary-draft-main-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.boundary-draft-toolbar p{max-width:62ch;margin:8px 0 0;font-size:13px}.change-support-entry,.preparation-secondary-entry{display:flex;align-items:center;gap:16px;margin-top:24px;font-size:13px;color:var(--color-secondary)}
+
+.boundary-draft-toolbar>div:first-child{flex:1;min-width:0}.boundary-draft-toolbar p{flex-basis:100%}.boundary-draft-toolbar>.boundary-draft-main-actions{flex-shrink:0;justify-content:flex-end;align-self:flex-start;max-width:100%}

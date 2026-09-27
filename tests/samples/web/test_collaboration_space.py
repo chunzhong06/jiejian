@@ -50,6 +50,28 @@ def _login(client: httpx.Client, account: str, password: str) -> None:
     assert response.json()["account"] == account
 
 
+def test_synchronous_baseline_completes_before_response_without_queue(collaboration_space_factory, monkeypatch):
+    sample = collaboration_space_factory(execution_mode="SYNCHRONOUS")
+    monkeypatch.setattr(sample.server.worker, "enqueue", lambda *args, **kwargs: pytest.fail("同步实现不能派发队列"))
+    with httpx.Client(base_url=sample.base_url, trust_env=False) as client:
+        _login(client, "alice", sample.passwords["alice"])
+        response = client.post(f"/api/projects/{PROJECT_ID}/exports", json={"resource_id": RESOURCE_ID},
+                               headers={"X-Jiejian-Request-ID": "inline-owner"})
+        assert response.status_code == 200
+        assert response.json()["code"] == "EXPORT_COMPLETED"
+        assert sample.server.storage.find_job("inline-owner")["state"] == "SUCCESS"
+        assert sample.server.storage.queue_records() == []
+        _login(client, "bob", sample.passwords["bob"])
+        denied = client.post(f"/api/projects/{PROJECT_ID}/exports", json={"resource_id": RESOURCE_ID},
+                            headers={"X-Jiejian-Request-ID": "inline-member"})
+        assert denied.status_code == 403
+        assert sample.server.storage.find_job("inline-member") is None
+    events = _audit_records(sample.server.runtime_root, "inline-owner")
+    assert events[-1]["semantic_key"] == "archive_generated"
+    assert events[-1]["source_component"] == "collaboration-server"
+    assert not any(event["kind"] in {"MESSAGE", "DELEGATION"} for event in events)
+
+
 def _wait_task(client: httpx.Client, base_url: str, marker: str, bearer: str) -> dict:
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:

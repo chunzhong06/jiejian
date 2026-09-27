@@ -8,13 +8,13 @@ import { ProductThemeProvider } from './ThemeContext'
 import { useState } from 'react'
 import { useTaskGuard } from './tasks/TaskContinuity'
 
-vi.mock('../features/boundaries/BusinessBoundaryPage', () => ({ BusinessBoundaryPage: () => {
+vi.mock('../features/boundaries/BusinessBoundaryPage', () => ({ BusinessBoundaryPage: ({onFeedback}: {onFeedback?: (message: string) => void}) => {
   const [value, setValue] = useState(''); useTaskGuard(Boolean(value))
-  return <><h1>当前权限规则编辑区</h1><input aria-label="未提交的权限输入" value={value} onChange={event => setValue(event.target.value)}/><button onClick={() => setValue('')}>取消编辑</button></>
+  return <><h1>当前权限规则编辑区</h1><input aria-label="未提交的权限输入" value={value} onChange={event => setValue(event.target.value)}/><button onClick={() => setValue('')}>取消编辑</button><button onClick={() => onFeedback?.('当前操作已保存')}>完成当前操作</button></>
 } }))
 
 const mockApi = vi.hoisted(() => ({
-  experienceStatus: vi.fn(), mcpStatus: vi.fn(), shutdown: vi.fn(), remove: vi.fn(),
+  experienceStatus: vi.fn(), experienceHistory: vi.fn(), mcpStatus: vi.fn(), shutdown: vi.fn(), remove: vi.fn(),
 }))
 
 const currentWorkspace: WorkspaceViewDto = {
@@ -52,14 +52,43 @@ vi.mock('./useSystemStatus', () => ({ useSystemStatus: () => ({
 }) }))
 vi.mock('../api/sourceChanges', () => ({ sourceChangesApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/repairs', async () => ({ ...await vi.importActual<typeof import('../api/repairs')>('../api/repairs'), repairsApi: { project: vi.fn().mockResolvedValue({ project_id: 'p1', status: null, tasks: [], primary_task_reference: null }) } }))
-vi.mock('../api/preparation', () => ({ preparationApi: { get: vi.fn().mockResolvedValue({ project_id: 'p1', actions: [], preparation_complete: false }) } }))
+vi.mock('../api/preparation', () => ({ preparationApi: { get: vi.fn().mockResolvedValue({ project_id: 'p1', actions: [], preparation_complete: false }), draft: vi.fn().mockResolvedValue({schema_version:'1',revision:0,action_id:null,material:null}) } }))
 vi.mock('../api/currentChecks', () => ({ currentChecksApi: { history:vi.fn().mockResolvedValue({project_id:'p1',items:[],next_cursor:null}), preview: vi.fn().mockResolvedValue({ project_id: 'p1', can_execute: false, plan_fingerprint: 'f', action_count: 0, case_count: 0, actions: [], gaps: [] }), list: vi.fn().mockResolvedValue([]) } }))
-vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus } }))
+vi.mock('../api/experience', () => ({ experienceApi: { status: mockApi.experienceStatus, history: mockApi.experienceHistory } }))
 vi.mock('../api/mcp', () => ({ mcpAccessApi: { status: mockApi.mcpStatus } }))
 vi.mock('../api/projects', () => ({ projectsApi: { remove: mockApi.remove } }))
 vi.mock('../api/system', () => ({ systemApi: { shutdown: mockApi.shutdown } }))
 
 describe('CURRENT 应用壳', () => {
+  it('移除官方应用只提交一次移除并回读已停止环境，不残留停止按钮', async () => {
+    const running = { available: true, display_name: '协作空间', active: true, project_id: 'p1', experience_id: 'sample', scenario_version: 'FIXED', lifecycle: 'RUNNING', recovery_state: 'OWNED_RUNNING' }
+    mockApi.experienceStatus.mockResolvedValue(running)
+    mockApi.experienceHistory.mockResolvedValue({ items: [], has_more: false })
+    mockApi.remove.mockResolvedValue({})
+    window.location.hash = '#/environment'
+    render(<ControlShell/>)
+    fireEvent.click(await screen.findByRole('button', { name: '停止并移除当前应用' }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('官方示例实例会一并停止')
+    mockApi.experienceStatus.mockResolvedValue({ ...running, active: false, lifecycle: 'STOPPED', recovery_state: 'EXITED' })
+    workspaceState.selectProject.mockImplementation(() => { workspaceState.selected = null; workspaceState.workspace = null })
+    workspaceState.refreshProjects.mockResolvedValue([])
+    fireEvent.click(screen.getByRole('button', { name: '确认移除' }))
+    await waitFor(() => expect(mockApi.remove).toHaveBeenCalledExactlyOnceWith('p1'))
+    expect(await screen.findByRole('heading', { name: '建立第一份权限基线' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '停止官方示例' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '启动示例' })).toBeInTheDocument()
+  })
+  it('操作成功回执离开原页面后清除，不残留到空工作台', async () => {
+    const view = render(<ControlShell/>)
+    fireEvent.click(await screen.findByRole('button', { name: /建立当前业务边界/ }))
+    fireEvent.click(await screen.findByRole('button', { name: '完成当前操作' }))
+    expect(await screen.findByText('当前操作已保存')).toBeInTheDocument()
+    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /工作台，/ }))
+    expect(screen.queryByText('当前操作已保存')).not.toBeInTheDocument()
+    workspaceState.selected = null; workspaceState.workspace = null
+    view.rerender(<ControlShell/>)
+    expect(screen.queryByText('当前操作已保存')).not.toBeInTheDocument()
+  })
   it('后台任务变化保留当前输入，取消后才呈现服务端新任务', async () => {
     const view = render(<ControlShell/>)
     fireEvent.click(await screen.findByRole('button',{name:/建立当前业务边界/}))
@@ -118,8 +147,8 @@ describe('CURRENT 应用壳', () => {
   it('变化与检查装配当前入口，准备缺失时不自动执行', async () => {
     window.location.hash = '#/changes'
     const view = render(<ControlShell />)
-    expect(await screen.findByRole('heading', { name: '代码变化' })).toBeInTheDocument()
-    expect(await screen.findByText('尚无代码变化记录')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Agent 协作' })).toBeInTheDocument()
+    expect(await screen.findByText('暂无修复任务或修改记录。检查发现问题后，可在这里准备任务并跟踪修复。')).toBeInTheDocument()
 
     view.unmount()
     window.location.hash = '#/tests'

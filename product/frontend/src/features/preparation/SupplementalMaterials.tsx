@@ -108,7 +108,7 @@ export function SupplementalMaterials({ projectId, actionId, actionRevision, act
   return <EditorialPage label="补充材料登记与审阅">
     <div className="supplemental-toolbar"><Button type="link" icon={<ArrowLeftOutlined aria-hidden/>} disabled={busy || uncertain || editing} onClick={onBack}>返回证明材料</Button><Button disabled={busy} onClick={() => { setLoading(true); void load() }}>重新读取材料</Button></div>
     <EditorialHeader eyebrow={`${actionLabel} / 补充材料`} title={preview ? '这份材料能说明什么' : '管理已提供的业务记录'}><p className="editorial-muted">登记已有业务记录，先核对来源与适用范围。</p></EditorialHeader>
-    {issue && <Alert type="warning" showIcon message={issue}/>}{receipt && <p className="work-receipt" role="status">{receipt}</p>}
+    {issue && <Alert className="flow-feedback" type="warning" showIcon message={issue}/>}{receipt && <p className="work-receipt" role="status">{receipt}</p>}
     <input ref={fileInput} type="file" accept="application/json,.json" aria-label="选择补充材料文件" hidden onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void readFile(file) }}/>
     {!current && <section className="supplemental-empty"><FileTextOutlined aria-hidden/><h2>添加一份已有材料</h2><p>只接受界鉴补充材料格式的 JSON 文件。材料最多 100 条记录、64 KiB。</p><Button type="primary" size="large" icon={<UploadOutlined aria-hidden/>} loading={busy} onClick={() => fileInput.current?.click()}>选择材料文件</Button><Button type="link" onClick={template}>下载空白格式模板</Button><p className="editorial-muted">模板里的示例占位需要替换为真实记录；读取成功不代表记录已获独立验证。</p></section>}
     {current && <div className="supplemental-review"><section className="supplemental-main"><header><h2>{current.title}</h2><span className="source-tag">{preview ? '待审阅' : selected?.withdrawn ? '已撤下引用' : `已保存 · 修订 ${selected?.revision}`}</span></header>

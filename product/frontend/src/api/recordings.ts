@@ -90,6 +90,7 @@ export type RecordingViewDto = {
 }
 export type RecordingReviewCommand = Record<string, unknown>
 export type RecordingCreateInput = {
+  material_candidate?: boolean
   business_action_id: string
   action_revision: number
   subject_test_identity_id: string

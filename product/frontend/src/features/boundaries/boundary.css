@@ -48,6 +48,7 @@
 
 .permission-form-actions {
   display: flex;
+  justify-content: flex-end;
   gap: var(--space-16);
   margin-top: var(--space-24);
   flex-wrap: wrap;

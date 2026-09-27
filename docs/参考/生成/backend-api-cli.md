@@ -68,6 +68,7 @@
 - `class OfficialSampleStartRequest`
 - `class OfficialSampleStopRequest`
 - `class OfficialSampleVersionRequest`
+- `class OfficialObservationRequest`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.checks.repair`, `product.backend.workflows.examples.environment`, `typing`
 
 ### `product/backend/api/routers/gating.py`
@@ -117,7 +118,7 @@
 ### `product/backend/api/routers/preparation.py`
 - `class AllowControlSelectionRequest`
 - `build_preparation_router(context) -> APIRouter`
-主要 import / dot-source：`fastapi`, `product.backend.api.envelope`, `product.backend.core.preparation.requirements`, `pydantic`, `typing`
+主要 import / dot-source：`fastapi`, `product.backend.api.envelope`, `product.backend.core.preparation.requirements`, `product.backend.workflows.preparation.material_models`, `pydantic`, `typing`
 
 ### `product/backend/api/routers/projects.py`
 - `build_projects_router(context) -> APIRouter`

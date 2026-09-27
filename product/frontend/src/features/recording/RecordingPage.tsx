@@ -20,6 +20,7 @@ import { TaskReceipt, useTaskGuard } from '../../app/tasks/TaskContinuity'
 import { FlowDraftReview } from './FlowDraftReview'
 import { RecordingCaptureCard, captureLabel } from './RecordingCaptureCard'
 import './recording.css'
+import { preparationApi, type MaterialRecordingContext } from '../../api/preparation'
 
 const finishedStates = new Set(['PENDING_REVIEW', 'COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'])
 
@@ -30,7 +31,9 @@ async function sourceChoiceId(value: string) {
   return `choice-${Array.from(new Uint8Array(digest)).map((item) => item.toString(16).padStart(2, '0')).join('').slice(0, 16)}`
 }
 
-export function RecordingPage({ project, task, effectName, onError, onBack, onStateChanged, onContinuePreparation }: { project: ProjectDto; task?: PrimaryTaskDto; effectName?: string; onError: (error: ApiError) => void; onBack: () => void; onStateChanged: () => Promise<WorkspaceViewDto | undefined>; onContinuePreparation: () => Promise<void> | void }) {
+export function RecordingPage({ project, task: primaryTask, materialContext, effectName, onError, onBack, onStateChanged, onContinuePreparation }: { project: ProjectDto; task?: PrimaryTaskDto; materialContext?: MaterialRecordingContext; effectName?: string; onError: (error: ApiError) => void; onBack: () => void; onStateChanged: () => Promise<WorkspaceViewDto | undefined>; onContinuePreparation: () => Promise<void> | void }) {
+  const task = materialContext ?? primaryTask
+  const taskKey = materialContext ? `${materialContext.context_id}:${materialContext.recording_id ?? ''}` : primaryTask?.task_id
   const [recording, setRecording] = useState<RecordingDto | null>(null)
   const [actionOptions, setActionOptions] = useState<RecordingActionDto[]>([])
   const [identityOptions, setIdentityOptions] = useState<RecordingTestIdentityDto[]>([])
@@ -105,7 +108,7 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
       if (id) return recordingsApi.recording(id).then((view) => { if (active) updateView(view) })
     }).catch((error) => { if (active) onError(error as ApiError) })
     return () => { active = false }
-  }, [project.project_id, task?.task_id])
+  }, [project.project_id, taskKey])
 
   useEffect(() => {
     const recordingId = recording?.recording_id
@@ -149,14 +152,22 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
     if (!task || !action || !validAssignment || !subjectId || !ownerId || !task.subject_slot_id || !task.resource_owner_slot_id || (distinctOwner && !ownerConfirmed) || busy || creating.current) return
     creating.current = true; setBusy(true); setMessage(undefined)
     try {
-      const current = await onStateChanged()
+      const current = materialContext ? null : await onStateChanged()
       if (!alive.current) return
-      const fresh = current?.primary_task
-      if (!fresh || fresh.task_id !== task.task_id || !fresh.can_execute || fresh.subject_test_identity_id !== subjectId || fresh.resource_owner_test_identity_id !== ownerId || fresh.subject_slot_id !== task.subject_slot_id || fresh.resource_owner_slot_id !== task.resource_owner_slot_id) {
+      const fresh = materialContext ? (await preparationApi.material(project.project_id, materialContext.material)).recording_context : current?.primary_task
+      const same = fresh && (materialContext ? 'context_id' in fresh && fresh.context_id === materialContext.context_id : 'task_id' in fresh && fresh.task_id === primaryTask?.task_id)
+      if (!fresh || !same || !fresh.can_execute || fresh.subject_test_identity_id !== subjectId || fresh.resource_owner_test_identity_id !== ownerId || fresh.subject_slot_id !== task.subject_slot_id || fresh.resource_owner_slot_id !== task.resource_owner_slot_id) {
         setSyncError('准备要求已变化，请返回检查准备，按最新任务继续。'); return
       }
-      // 组合只来自最新主任务；资源归属确认不会改变登录主体，也不允许自由拼接账号。
+      if (materialContext && fresh.recording_id) {
+        // 创建回执丢失后按同一材料范围找回活动候选，不生成另一项录制来试探。
+        updateView(await recordingsApi.recording(fresh.recording_id))
+        await syncWorkspace('已找回这项材料的录制')
+        return
+      }
+      // 组合只来自最新主任务或已复核的材料范围；归属确认不改变登录主体，不允许自由拼接账号。
       const created = await recordingsApi.createRecording(project.project_id, {
+        ...(materialContext ? { material_candidate: true } : {}),
         business_action_id: action.business_action_id, action_revision: task.action_revision!,
         subject_test_identity_id: subjectId, resource_owner_test_identity_id: ownerId,
         subject_slot_id: task.subject_slot_id, resource_owner_slot_id: task.resource_owner_slot_id,
@@ -179,7 +190,8 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
       if (!alive.current) return
       setActionOptions(setup.action_options)
       setIdentityOptions(setup.test_identity_options)
-      const recordingId = recording?.recording_id ?? (task ? task.recording_id : items[0]?.recording_id)
+      const resumed = materialContext && !recording ? (await preparationApi.material(project.project_id, materialContext.material)).recording_context?.recording_id : null
+      const recordingId = recording?.recording_id ?? resumed ?? (task ? task.recording_id : items[0]?.recording_id)
       if (recordingId) updateView(await recordingsApi.recording(recordingId))
       else { setRecording(null); browserState.clearRecording() }
       await syncWorkspace('流程状态已刷新')
@@ -239,10 +251,10 @@ export function RecordingPage({ project, task, effectName, onError, onBack, onSt
       const finalized = await recordingsApi.finalizeRecording(recording.recording_id)
       updateView(finalized)
       if (!alive.current) return
-      setMessage(recordingPurpose === 'TARGET' ? '业务流程已保存。' : '本次补录已保存。')
+      setMessage(materialContext ? '新录制已保存为候选。返回材料详情，核对影响后再确认替换。' : recordingPurpose === 'TARGET' ? '业务流程已保存。' : '本次补录已保存。')
       setSyncError('保存已确认，正在核对下一项准备。')
       await refresh(recording.recording_id)
-      setMessage(recordingPurpose === 'TARGET' ? '业务流程已保存。' : '本次补录已保存。')
+      setMessage(materialContext ? '新录制已保存为候选。返回材料详情，核对影响后再确认替换。' : recordingPurpose === 'TARGET' ? '业务流程已保存。' : '本次补录已保存。')
       await syncWorkspace(recordingPurpose === 'TARGET' ? '业务流程已保存' : '补录事实已保存')
     } catch (error) { if (alive.current) onError(error as ApiError) }
     finally { if (alive.current) setBusy(false) }

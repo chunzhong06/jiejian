@@ -6,7 +6,6 @@ import { currentChecksApi, type CheckHistoryCursor, type CheckHistoryItem, type 
 import type { ProjectDto } from '../../api/projects'
 import { formatTimestamp, lifecycleLabel } from '../../app/presentation'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
-import { RecordNavigation } from '../../app/navigation/RecordNavigation'
 import './history.css'
 import { useLiveRead } from '../../app/useLiveRead'
 import { WorkPageVisible } from '../../app/RetainedWorkPages'
@@ -51,7 +50,15 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
     } catch (error) { if (request === epoch.current) { setFailed(true); onError(error as ApiError) } }
     finally { if (request === epoch.current) { busy.current = false; setLoading(false) } }
   }, [project.project_id, options, onError])
-  useEffect(() => { void load(); return () => { epoch.current += 1; busy.current = false } }, [load])
+  useEffect(() => {
+    if (!visible) {
+      // 离开模块后释放筛选；从某条结果返回时页面仍可见，保留原阅读位置。
+      setQuery(''); setOptions(previous => Object.keys(previous).length ? {} : previous)
+      return
+    }
+    void load()
+    return () => { epoch.current += 1; busy.current = false }
+  }, [load, visible])
   // 详情关闭后恢复选中行和滚动位置；后台结果变化不抢走正在阅读的历史。
   useEffect(() => {
     if (requestedRunId || !returnTarget.current) return
@@ -67,6 +74,11 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
     const page = await currentChecksApi.history(project.project_id, options)
     if (request !== epoch.current) return
     if (page.project_id !== project.project_id || page.items.some(item=>item.status.run.project_id!==project.project_id)) throw new ApiError('STATE_PRECONDITION','历史记录所属应用不一致。')
+    // 空列表没有阅读位置要保护，应直接呈现新记录，不能要求先清除不存在的筛选。
+    if (!items.length) {
+      setItems(page.items); setCursor(page.next_cursor); setNewRecords(false); setFailed(false)
+      return
+    }
     // 阅读中的列表不重排；已有行就地更新，新记录提供明确提示。
     setItems(previous => {
       if (page.items.some(item=>!previous.some(old=>old.status.run.run_id===item.status.run.run_id))) setNewRecords(true)
@@ -78,6 +90,7 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
     onNavigate(`/history?run_id=${encodeURIComponent(runId)}`)
   }
   const clear = () => { setQuery(''); setOptions({}) }
+  const filtered = Boolean(options.query || options.verdict || options.lifecycle)
   const grouped = items.map((item, index) => {
     const date = new Date(item.status.run.created_at_us / 1000).toLocaleDateString('zh-CN')
     const previousDate = index ? new Date(items[index - 1].status.run.created_at_us / 1000).toLocaleDateString('zh-CN') : null
@@ -87,13 +100,12 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
     <div hidden={Boolean(requestedRunId)}>
       <EditorialPage label="项目检查历史">
         <EditorialHeader eyebrow="记录与证据" title="检查历史"><p className="editorial-muted">回看每一次检查，沿原问题追踪复验结果。</p></EditorialHeader>
-        <RecordNavigation active="history" onNavigate={onNavigate}/>
         <div className="history-surface"><form className="history-toolbar" onSubmit={event => { event.preventDefault(); setOptions(previous => ({ ...previous, query: query.trim() })) }}>
           <Input aria-label="搜索检查历史" placeholder="搜索业务动作或检查编号" maxLength={128} value={query} onChange={event => setQuery(event.target.value)} allowClear />
           <Button htmlType="submit" aria-label="搜索">搜索</Button>
           <Select aria-label="筛选检查结论" value={options.verdict ?? ''} options={[{ value: '', label: '全部结论' }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))]} onChange={value => setOptions(previous => ({ ...previous, query: query.trim(), verdict: value ? value as CheckHistoryQuery['verdict'] : undefined }))} />
           <Select aria-label="筛选执行状态" value={options.lifecycle ?? ''} options={[{ value: '', label: '全部执行状态' }, ...['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].map(value => ({ value, label: lifecycleLabel(value) }))]} onChange={value => setOptions(previous => ({ ...previous, lifecycle: value ? value as CheckHistoryQuery['lifecycle'] : undefined }))} />
-          <Button type="text" onClick={clear}>清除筛选</Button>
+          {filtered && <Button type="text" onClick={clear}>清除筛选</Button>}
         </form>
         {newRecords && <div className="history-update" role="status">有新的检查记录<Button onClick={()=>void load()}>显示新记录</Button></div>}
         {live.retrying && <p role="status">暂时无法同步记录，正在重试。已有记录仍可查看。</p>}
@@ -111,7 +123,7 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
               </button>
             </div>
           })}
-          {!loading && !failed && !items.length && <div className="history-empty"><h2>{cursor ? '这一段记录中没有匹配项' : '没有匹配的检查记录'}</h2><p>{cursor ? '还可以继续查找更早的记录。' : '调整筛选条件，或从当前工作开始一次检查。'}</p><Button onClick={clear}>清除筛选</Button></div>}
+          {!loading && !failed && !items.length && <div className="history-empty"><h2>{cursor ? '这一段记录中没有匹配项' : filtered ? '没有匹配的检查记录' : '尚无检查记录'}</h2><p>{cursor ? '还可以继续查找更早的记录。' : filtered ? '请调整筛选条件。' : '本应用的检查记录会自动显示在这里。'}</p>{filtered ? <Button onClick={clear}>清除筛选</Button> : !cursor && <Button onClick={() => onNavigate('/tests')}>前往检查与材料</Button>}</div>}
           {failed && <div role="alert" className="history-empty"><p>历史记录读取失败，已有记录已保留。</p><Button onClick={() => void load(cursor)}>重试读取</Button></div>}
           {loading && <div role="status" className="history-loading"><Spin size="small" />正在读取检查历史</div>}
         </section></div>

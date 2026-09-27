@@ -2,12 +2,15 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ready, status, observation, outcome, story } from '../results/testing.fixtures'
+import type { WorkspaceViewDto } from '../../api/workspace'
 import type { ResultStory } from '../../api/currentChecks'
 import { CurrentTestsPage } from './CurrentTestsPage'
+import { ApiError } from '../../api/http'
 const api = vi.hoisted(() => ({ preview: vi.fn(), list: vi.fn(), status: vi.fn(), submit: vi.fn(), story: vi.fn(), evidence: vi.fn() }))
 vi.mock('../../api/currentChecks', () => ({ currentChecksApi: api }))
 vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: ({ runId }: { runId: string }) => <div>受限结果解释 {runId}</div> }))
 vi.mock('../preparation/PreparationPage', () => ({ PreparationPage: ({ onNavigate }: { onNavigate: (path: string) => void }) => <><input aria-label="当前材料临时输入" defaultValue=""/><button onClick={() => onNavigate('/tests')}>完成材料准备</button></> }))
+vi.mock('../changes/SourceIdentityPanel', () => ({ SourceIdentityPanel: () => <section>本轮源码对应内容</section> }))
 const props = () => ({ project: { project_id: 'p1' }, workspace: null, onStateChanged: vi.fn(), onError: vi.fn(), onNavigate: vi.fn() })
 beforeEach(() => {
   vi.clearAllMocks(); api.preview.mockResolvedValue(ready); api.list.mockResolvedValue([]); api.status.mockResolvedValue(status())
@@ -16,6 +19,41 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 describe('当前检查工作区', () => {
+  it('没有提交时只读条件，不出现提交未知或检查已保存提示', async () => {
+    render(<CurrentTestsPage {...props()} />)
+    await screen.findByRole('button', { name: '开始检查' })
+    expect(api.submit).not.toHaveBeenCalled()
+    expect(screen.queryByText(/检查请求已发出|工作台状态暂未同步|检查事实已保留/)).not.toBeInTheDocument()
+  })
+  it('首次提交被写入前门禁拒绝后恢复普通按钮，不伪装成未知回执', async () => {
+    const p = props(); api.submit.mockRejectedValueOnce(new ApiError('STATE_PRECONDITION', '准备来源已变化'))
+    render(<CurrentTestsPage {...p} />)
+    fireEvent.click(await screen.findByRole('button', { name: '开始检查' }))
+    await waitFor(() => expect(p.onError).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: '开始检查' })).toBeEnabled()
+    expect(screen.queryByText(/检查请求已发出/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '开始检查' }))
+    await waitFor(() => expect(api.submit).toHaveBeenCalledTimes(2))
+    expect(api.submit.mock.calls[0][2]).not.toBe(api.submit.mock.calls[1][2])
+  })
+  it('已有未知提交随后遇到门禁拒绝仍保留原请求，不声称未发生', async () => {
+    const p = props(); api.submit.mockRejectedValueOnce(new Error('lost response')).mockRejectedValueOnce(new ApiError('STATE_PRECONDITION', '当前条件改变'))
+    render(<CurrentTestsPage {...p} />)
+    fireEvent.click(await screen.findByRole('button', { name: '开始检查' }))
+    fireEvent.click(await screen.findByRole('button', { name: '确认上次提交' }))
+    await waitFor(() => expect(p.onError).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('button', { name: '确认上次提交' })).toBeInTheDocument()
+    expect(api.submit.mock.calls[0]).toEqual(api.submit.mock.calls[1])
+  })
+  it('退出历史结果后不把该记录的工作台同步失败带到新检查', async () => {
+    const p = props(); p.onStateChanged.mockRejectedValue(new Error('workspace unavailable'))
+    const view = render(<CurrentTestsPage {...p} requestedRunId="r1" />)
+    await screen.findByText(/检查记录已读取，工作台状态暂未同步/)
+    view.rerender(<CurrentTestsPage {...p} requestedRunId={null} />)
+    await screen.findByRole('button', { name: '开始检查' })
+    expect(screen.queryByText(/工作台状态暂未同步/)).not.toBeInTheDocument()
+    expect(api.submit).not.toHaveBeenCalled()
+  })
   it('执行已结束但结果尚未发布时继续自动读取，结果发布后无需手动刷新', async () => {
     api.status.mockResolvedValueOnce({...status(),result_integrity:'NOT_PUBLISHED'}).mockResolvedValue(status())
     render(<CurrentTestsPage {...props()} requestedRunId="r1"/>)
@@ -28,10 +66,10 @@ describe('当前检查工作区', () => {
     render(<CurrentTestsPage {...p} requestedRunId="r1"/>)
     expect(await screen.findByRole('heading',{name:'确认禁止的交付包已经生成'})).toBeInTheDocument()
     await waitFor(()=>expect(p.onStateChanged).toHaveBeenCalledTimes(1))
-    expect(await screen.findByText(/本次检查事实已保留，但下一步任务尚未同步/)).toBeInTheDocument()
+    expect(await screen.findByText(/检查记录已读取，工作台状态暂未同步/)).toBeInTheDocument()
     p.onStateChanged.mockResolvedValue({project:{project_id:'p1'}})
     fireEvent.click(screen.getByRole('button',{name:'重新同步工作台'}))
-    await waitFor(()=>expect(screen.queryByText(/本次检查事实已保留，但下一步任务尚未同步/)).not.toBeInTheDocument())
+    await waitFor(()=>expect(screen.queryByText(/检查记录已读取，工作台状态暂未同步/)).not.toBeInTheDocument())
     expect(screen.getByRole('heading',{name:'确认禁止的交付包已经生成'})).toBeInTheDocument()
     expect(api.submit).not.toHaveBeenCalled()
   })
@@ -165,7 +203,8 @@ describe('当前检查工作区', () => {
     api.status.mockResolvedValue(status())
     fireEvent.click(screen.getByRole('button', { name: '刷新检查结果' }))
     expect(await screen.findByText('检查已完成，结果已保存。')).toBeInTheDocument()
-    expect(screen.queryByText('确认禁止的交付包已经生成')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: '本轮检查完成' })).getByRole('heading', { name: '确认禁止的交付包已经生成' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: '本轮结果视图' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '查看本轮结果' }))
     expect(await screen.findByText('确认禁止的交付包已经生成')).toBeInTheDocument()
   })
@@ -180,4 +219,39 @@ describe('当前检查工作区', () => {
     await waitFor(() => expect(api.preview).toHaveBeenCalledWith('p2', undefined))
     expect(screen.queryByText('确认禁止的交付包已经生成')).not.toBeInTheDocument()
   })
+})
+
+it('修复批次经过管理材料、返回检查仍只提交同一精确变化', async () => {
+  const p = props(); render(<CurrentTestsPage {...p} changeId="repair-exact" />)
+  fireEvent.click(await screen.findByRole('button', {name:'管理准备材料'}))
+  expect(p.onNavigate).toHaveBeenLastCalledWith('/tests?materials=1&change_id=repair-exact')
+  fireEvent.click(screen.getByRole('button', {name:'完成材料准备'}))
+  expect(p.onNavigate).toHaveBeenLastCalledWith('/tests?change_id=repair-exact')
+  fireEvent.click(await screen.findByRole('button', {name:'开始检查'}))
+  await waitFor(() => expect(api.submit).toHaveBeenCalledOnce())
+  expect(api.submit.mock.calls[0][3]).toBe('repair-exact')
+})
+it('结果与源码视图共享导航之前的唯一主结论', async () => {
+  render(<CurrentTestsPage {...props()} requestedRunId="r1" />)
+  const heading = await screen.findByRole('heading', {name:story().judgement,level:1})
+  const tabs = screen.getByRole('navigation',{name:'本轮结果视图'})
+  expect(heading.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  fireEvent.click(screen.getByRole('button',{name:'源码对应'}))
+  expect(screen.getByRole('heading',{name:story().judgement,level:1})).toBe(heading)
+  fireEvent.click(screen.getByRole('button',{name:'结果与证据'}))
+  expect(screen.getByRole('heading',{name:story().judgement,level:1})).toBe(heading)
+  expect(api.submit).not.toHaveBeenCalled()
+})
+
+it('普通入口承接服务端待复验任务，完成后的工作台刷新不丢掉本轮结果', async () => {
+  const workspace: WorkspaceViewDto = { project:{project_id:'p1',name:'应用',status:'READY',target_type:'WEB'},connection:{endpoint_status:'CONFIRMED',source_analysis_status:'COMPLETED'},actors:[],actions:[],areas:[],primary_task:{task_id:'repair',task_kind:'VERIFY_REPAIR',title:'复验',why_now:'已登记',user_responsibility:'确认执行',system_will_do:'原题复验',business_action_id:null,business_actor_id:null,route:'/tests',change_id:'repair-exact',can_execute:true,stale_fingerprint:'current'} }
+  const p = props(); const view = render(<CurrentTestsPage {...p} workspace={workspace}/>)
+  fireEvent.click(await screen.findByRole('button',{name:'开始检查'}))
+  await waitFor(() => expect(api.submit).toHaveBeenCalledOnce())
+  expect(api.submit.mock.calls[0][3]).toBe('repair-exact')
+  await screen.findByRole('heading',{name:story().judgement,level:1})
+  view.rerender(<CurrentTestsPage {...p} workspace={{...workspace,primary_task:null}}/>)
+  expect(screen.getByRole('heading',{name:story().judgement,level:1})).toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'开始检查'})).not.toBeInTheDocument()
+  expect(api.submit).toHaveBeenCalledOnce()
 })

@@ -91,6 +91,7 @@ PrimaryTaskKind = Literal[
     "COMPLETE_EFFECT_EVIDENCE",
     "COMPLETE_RECOVERY",
     "REGISTER_SOURCE_CHANGE",
+    "PREPARE_AGENT_REPAIR",
     "VERIFY_REPAIR",
     "RUN_CURRENT_CHECK",
     "VIEW_CURRENT_RESULT",
@@ -123,6 +124,7 @@ class PrimaryTaskView(WorkspaceModel):
     system_will_do: str = Field(min_length=1, max_length=1024)
     route: Literal["/application", "/permissions", "/tests", "/changes"]
     change_id: str | None = None
+    repair_fingerprint: str | None = Field(default=None, pattern=SHA256_PATTERN)
     run_id: str | None = None
     can_execute: bool
     stale_fingerprint: str = Field(pattern=SHA256_PATTERN)

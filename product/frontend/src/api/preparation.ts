@@ -44,7 +44,34 @@ export type EvidenceMaterialDetail = {
   project_id: string; action_id: string; action_revision: number; action_label: string
   effects: EffectMaterialSummary[]
 }
+export type MaterialReference = { action_id: string; action_revision: number; kind: 'execution' | 'resource' | 'evidence' | 'recovery'; member_id: string | null }
+export type MaterialDetails = {
+  material: MaterialReference; status: PreparationStatus; reason_codes: string[]; retained: boolean
+  source_recording_id: string | null; confirmed_at_us: number | null; expected_fingerprint: string; observed_at_us: number
+  candidates: Array<{ recording_id: string; captured_at_us: number | null; current: boolean; updates: MaterialReference[] }>
+  recording_context: MaterialRecordingContext | null
+}
+export type MaterialRecordingContext = {
+  context_id: string; material: MaterialReference; expected_fingerprint: string; can_execute: boolean
+  business_action_id: string; action_revision: number; subject_test_identity_id: string; resource_owner_test_identity_id: string
+  subject_slot_id: string; resource_owner_slot_id: string; recording_purpose: 'TARGET' | 'OBSERVATION' | 'RECOVERY'
+  parent_recording_id: string | null; effect_id: string | null; recording_id: string | null
+  title: string; why_now: string; user_responsibility: string; system_will_do: string
+}
+export type MaterialChange = { schema_version: '1'; operation_id: string; material: MaterialReference; expected_fingerprint: string; candidate_recording_id: string | null }
+export type MaterialPreview = { updates: MaterialReference[]; retained: MaterialReference[]; recheck: MaterialReference[] }
+export type MaterialReceipt = MaterialPreview & { operation_id: string; created_at_us: number; result: 'SAVED' | 'RECHECKED' }
+export type PreparationDraft = {
+  schema_version: '1'; revision: number; action_id: string | null; action_revision: number | null
+  material: MaterialReference | null; candidate_recording_id: string | null; base_fingerprint: string | null; pending_operation_id: string | null
+}
 export const preparationApi = {
+  material: (projectId: string, ref: MaterialReference) => request<MaterialDetails>(`/api/projects/${projectId}/preparation/materials/${ref.action_id}/${ref.kind}?action_revision=${ref.action_revision}${ref.member_id ? `&member_id=${encodeURIComponent(ref.member_id)}` : ''}`),
+  previewMaterial: (projectId: string, value: MaterialChange) => request<MaterialPreview>(`/api/projects/${projectId}/preparation/changes/preview`, { method: 'POST', body: JSON.stringify(value) }),
+  saveMaterial: (projectId: string, value: MaterialChange) => request<MaterialReceipt>(`/api/projects/${projectId}/preparation/changes`, { method: 'POST', body: JSON.stringify(value) }),
+  materialReceipt: (projectId: string, operationId: string) => request<MaterialReceipt>(`/api/projects/${projectId}/preparation/changes/${operationId}`),
+  draft: (projectId: string) => request<PreparationDraft>(`/api/projects/${projectId}/preparation/draft`),
+  saveDraft: (projectId: string, value: PreparationDraft) => request<PreparationDraft>(`/api/projects/${projectId}/preparation/draft`, { method: 'PUT', body: JSON.stringify(value) }),
   evidence: (projectId: string, actionId: string) => request<EvidenceMaterialDetail>(`/api/projects/${encodeURIComponent(projectId)}/preparation/evidence/${encodeURIComponent(actionId)}`),
   get: (projectId: string) => request<PreparationView>(`/api/projects/${projectId}/preparation`),
   selectAllowControl: (projectId: string, control: AllowControlRequirement, selected: PermissionReference) =>

@@ -50,7 +50,7 @@ class Node:
         self.page.events.append(("fill", self.name, value))
         self.page.inputs[self.name] = value
     def get_attribute(self, name):
-        if name == "open": return "" if hasattr(self.name, "pattern") and self.page.manual_open else None
+        if name == "open": return "" if (hasattr(self.name, "pattern") or self.name == "手动登记代码变化") and self.page.manual_open else None
         assert name == "aria-current"
         return "true" if self.page.selected else "false"
     def click(self):
@@ -134,7 +134,7 @@ def context(tmp_path, *, task=None):
 
 def test_normal_pages_propose_and_prepare_once_without_starting_check(tmp_path):
     gui, page, client = context(tmp_path)
-    page.reply("启动问题版", "POST", "/api/experience/official-sample/start", {"active": True})
+    page.reply("启动示例", "POST", "/api/experience/official-sample/start", {"active": True})
     page.reply("使用已提供的权限提案", "POST", "/api/experience/official-sample/boundary-proposal", {"proposal": {}})
     page.reply("使用已提供的测试材料", "POST", "/api/experience/official-sample/prepare", {"scenario_prepared": True})
     gui.start(); gui.propose(); gui.prepare()
@@ -143,7 +143,7 @@ def test_normal_pages_propose_and_prepare_once_without_starting_check(tmp_path):
     assert ("wait", '[aria-label="当前需要处理的任务"]', {}, ()) in page.events
     assert ("wait", "开始检查", {}, ()) in page.events
     clicks = [item[1] for item in page.events if item[0] == "click"]
-    assert clicks == ["启动官方示例", "启动问题版", "使用已提供的权限提案", "使用已提供的测试材料", "返回检查总览"]
+    assert clicks == ["启动示例", "启动示例", "使用已提供的权限提案", "使用已提供的测试材料", "返回检查总览"]
     assert all(method == "GET" for method, _, _ in client.calls)
 
 
@@ -157,15 +157,15 @@ def test_prepare_does_not_guess_when_workspace_is_not_preparation(tmp_path, chan
     assert not page.events and all(item[0] == "GET" for item in client.calls)
 
 
-@pytest.mark.parametrize("version,label", [("EVIDENCE_LIMITED", "切换到证据受限版"), ("FIXED", "切换到修复版")])
+@pytest.mark.parametrize("version,label", [("VULNERABLE", "应用预设异步优化"), ("FIXED", "应用预设修复")])
 def test_switch_uses_neutral_environment_controls_and_exact_original(tmp_path, version, label):
     gui, page, client = context(tmp_path)
     reference = {"source_run_id": "run-original", "source_case_id": "case-original", "repair_fingerprint": "fingerprint"} if version == "FIXED" else None
     client.values["/api/projects/project/repair"] = {"project_id": "project", "tasks": [{"status": "REPAIR_REQUIRED", "contract": reference}]}
     client.values["/api/runs/run-original"] = {"result_integrity": "VALID", "run": {"verdict": "BLOCK"}}
-    page.reply("确认切换", "POST", "/api/experience/official-sample/version", {"scenario_version": version}, {"version": version, "repair_reference": reference})
+    page.reply("应用代码变更", "POST", "/api/experience/official-sample/version", {"scenario_version": version}, {"version": version, "repair_reference": reference})
     gui.switch(version, reference)
-    assert [item[1] for item in page.events if item[0] == "click"] == [label, "确认切换"]
+    assert [item[1] for item in page.events if item[0] == "click"] == [label, "应用代码变更"]
     assert all(method == "GET" for method, _, _ in client.calls)
 
 
@@ -313,8 +313,9 @@ def test_fixed_submission_requires_unique_original_task_before_any_click(tmp_pat
 
 
 @pytest.mark.parametrize("mismatch", [False, True])
-def test_valid_materials_are_reused_without_reinstall_or_check_submission(tmp_path, mismatch):
-    gui, page, client = context(tmp_path, task={"route": "/tests", "task_id": "old-result", "task_kind": "VIEW_CURRENT_RESULT", "can_execute": True})
+@pytest.mark.parametrize("route,kind", [("/tests", "VIEW_CURRENT_RESULT"), ("/changes", "PREPARE_AGENT_REPAIR")])
+def test_valid_materials_are_reused_without_reinstall_or_check_submission(tmp_path, mismatch, route, kind):
+    gui, page, client = context(tmp_path, task={"route": route, "task_id": "old-result", "task_kind": kind, "can_execute": True})
     client.values["/api/projects/project/preparation"] = {"project_id": "other" if mismatch else "project", "preparation_complete": True}
     client.values["/api/projects/project/check-preview"] = {"project_id": "project", "can_execute": True}
     if mismatch:
@@ -436,10 +437,10 @@ def test_completion_does_not_navigate_until_user_click_and_retains_filter(tmp_pa
 def test_environment_switch_needs_no_nested_disclosures(tmp_path):
     gui, page, _ = context(tmp_path)
     page.outer = True
-    page.reply("确认切换", "POST", "/api/experience/official-sample/version", {"scenario_version": "EVIDENCE_LIMITED"},
-        {"version": "EVIDENCE_LIMITED", "repair_reference": None})
+    page.reply("使用受限观察条件", "POST", "/api/experience/official-sample/observation", {"scenario_version": "VULNERABLE", "evidence_limited": True},
+        {"available": False})
     gui.switch("EVIDENCE_LIMITED", None)
-    assert [event[1] for event in page.events if event[0] == "click"] == ["切换到证据受限版", "确认切换"]
+    assert [event[1] for event in page.events if event[0] == "click"] == ["可选体验：证据不足时会怎样", "使用受限观察条件"]
 
 
 @pytest.mark.parametrize("opened", [False, True])

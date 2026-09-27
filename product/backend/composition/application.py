@@ -43,6 +43,7 @@ from product.backend.workflows.business_boundaries.drafting import PermissionDra
 from product.backend.workflows.workspace import WorkspaceService
 from product.backend.workflows.preparation.bindings import PreparationBindingService
 from product.backend.workflows.preparation.service import PreparationService
+from product.backend.workflows.preparation.materials import PreparationMaterialService
 from product.backend.workflows.recording.credentials import RecordingCredentialProvider, RuntimeSecretVault
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.workflows.recording.project_submission import ProjectRecordingService
@@ -126,6 +127,7 @@ class ApplicationCore:
             self.business_boundaries, self.test_identities, bindings=self.preparation_bindings,
             uow_factory=factory, clock_us=clock_us,
         )
+        self.preparation_materials = PreparationMaterialService(factory, self.preparation_bindings, self.var_dir, preparation=self.preparation, clock_us=clock_us)
         self.check_runtime_builder = CheckRuntimeBuilder(uow_factory=factory, var_dir=self.var_dir,
             preparation=self.preparation, business_boundaries=self.business_boundaries,
             credentials=self.check_credentials, registry=self.check_registry)
@@ -233,7 +235,8 @@ class ApplicationCore:
             boundaries=self.business_boundaries, identities=self.test_identities, secret_store=self.secret_store,
             registry=self.check_registry, installer=self.official_scenario, bindings=self.preparation_bindings,
             preparation=self.preparation, changes=self.source_changes, repairs=self.check_repairs,
-            uow_factory=factory, var_dir=self.var_dir, archive_project=self.project_lifecycle.archive, clock_us=clock_us)
+            uow_factory=factory, var_dir=self.var_dir, archive_project=self.project_lifecycle.archive, clock_us=clock_us,
+            reader=self.check_results, project_repairs=self.project_repair)
 
     def close(self) -> None:
         """先确认录制、登录进程及调度线程退出，再清空短期秘密和释放数据库。"""

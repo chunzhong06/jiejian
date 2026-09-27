@@ -59,6 +59,7 @@ export type PrimaryTaskKind =
   | 'COMPLETE_EFFECT_EVIDENCE'
   | 'COMPLETE_RECOVERY'
   | 'REGISTER_SOURCE_CHANGE'
+  | 'PREPARE_AGENT_REPAIR'
   | 'VERIFY_REPAIR'
   | 'RUN_CURRENT_CHECK'
   | 'VIEW_CURRENT_RESULT'
@@ -78,6 +79,7 @@ export type PrimaryTaskDto = {
   system_will_do: string
   route: '/application' | '/permissions' | '/tests' | '/changes'
   change_id?: string | null
+  repair_fingerprint?: string | null
   run_id?: string | null
   can_execute: boolean
   stale_fingerprint: string

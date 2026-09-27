@@ -23,7 +23,7 @@ from product.backend.workflows.preparation.recording_candidates import (
     supplement_candidates,
 )
 from product.backend.workflows.recording.source import (
-    identity_source_fingerprint, recording_endpoint_fingerprint, require_persisted_recording_source,
+    identity_source_fingerprint, recording_endpoint_fingerprint, require_persisted_recording_source, current_recording_instance,
 )
 from product.backend.workflows.test_identities.service import TestIdentityStatus
 from product.backend.core.checks.plan import RegisteredEffectProofCapability
@@ -107,6 +107,11 @@ class PreparationBindingService:
 
     def accept_recording(self, work, recording, draft_record, *, flow=None, now_us: int):
         """由生命周期服务在同一完成事务调用，候选不明确时整个事务不生效。"""
+        for binding in self.build_recording_bindings(work, recording, draft_record, flow=flow, now_us=now_us):
+            work.action_preparation.replace(binding)
+
+    def build_recording_bindings(self, work, recording, draft_record, *, flow=None, now_us: int):
+        """复核不可变捕获来源后构造绑定；预览与接受共用此路径，构造本身不写库。"""
         action, identity, understanding = require_persisted_recording_source(work, recording, self._var_dir)
         draft = draft_record.draft
         if draft.resource_owner_test_identity_id != recording.resource_owner_test_identity_id:
@@ -141,9 +146,7 @@ class PreparationBindingService:
                 actual_resource_id=resource_value(request_event(recording, target), candidate),
             )
             execution = seal_binding(ActionExecutionBinding, **common, **source, **flow_facts)
-            work.action_preparation.replace(execution)
-            work.action_preparation.replace(resource)
-            return
+            return (execution, resource)
         resource = work.action_preparation.resource(action.action_id, action.revision, recording.resource_owner_test_identity_id)
         if (resource is None or resource.source_recording_id != recording.parent_recording_id
                 or self._source_reasons(work, resource, action, understanding)):
@@ -158,7 +161,7 @@ class PreparationBindingService:
         else:
             binding = seal_binding(ActionRecoveryBinding, **common, **source,
                                    step_id=chosen.step_id, request_template=chosen.request_template)
-        work.action_preparation.replace(binding)
+        return (binding,)
 
     def candidates(self, recording_id: str):
         """为补录审阅返回现有有限候选；读取不会自动接受或调用外部服务。"""
@@ -270,7 +273,7 @@ class PreparationBindingService:
                 or implementation.status is not ImplementationBindingStatus.CURRENT
                 or binding.implementation_fingerprint != implementation.binding_fingerprint
                 or binding.source_fingerprint != understanding.source_fingerprint
-                or binding.endpoint_fingerprint != recording_endpoint_fingerprint(understanding)):
+                or binding.endpoint_fingerprint != recording_endpoint_fingerprint(understanding, controlled_instance_id=current_recording_instance(work, action.project_id))):
             return ("ACTION_BINDING_SOURCE_STALE",)
         actor_root = work.business_boundaries.actor(identity.actor_id)
         actor = work.business_boundaries.actor_revision(identity.actor_id, identity.actor_revision)
@@ -338,7 +341,7 @@ class PreparationBindingService:
             "action_semantic_fingerprint": action.semantic_fingerprint,
             "implementation_fingerprint": implementation.binding_fingerprint,
             "source_fingerprint": understanding.source_fingerprint,
-            "endpoint_fingerprint": recording_endpoint_fingerprint(understanding),
+            "endpoint_fingerprint": recording_endpoint_fingerprint(understanding, controlled_instance_id=current_recording_instance(work, action.project_id)),
             "subject_test_identity_id": identity.identity_id, "subject_identity_fingerprint": identity_source_fingerprint(identity),
             "resource_owner_test_identity_id": owner_id,
             "owner_identity_fingerprint": identity_source_fingerprint(work.test_identities.get(owner_id)),

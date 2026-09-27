@@ -41,8 +41,8 @@ export function PermissionRuleForm({ initial, actors, action: initialAction, act
     {!value.intent_id && actions ? <label className="sentence-field">业务动作<Select aria-label="业务动作" disabled={busy} value={value.business_action_item_id} options={actions.map(item=>({value:item.item_id,label:item.display_name}))} onChange={business_action_item_id=>patch({business_action_item_id,protected_effect_item_ids:actions.find(item=>item.item_id===business_action_item_id)?.effects.map(effect=>effect.item_id)??[]})}/></label> : <p className="editorial-muted">业务动作：{action.display_name}</p>}
     <div className="permission-effect-selection"><h3>这条规则保护的业务结果</h3><Checkbox.Group disabled={busy} aria-label="这条规则保护的业务结果" value={value.protected_effect_item_ids} options={action.effects.map(effect => ({value:effect.item_id,label:effect.business_label || '尚未命名的业务结果'}))} onChange={values => patch({protected_effect_item_ids:values.map(String)})}/><p className="editorial-muted">{value.expectation === 'DENY' ? '禁止时，不应产生选中的业务结果。' : '允许时，需要验证选中的正常业务结果。'}</p></div>
     {value.intent_id && <section className="permission-retirement"><h3>规则状态</h3><Checkbox disabled={busy} checked={value.effective_state === 'RETIRED'} onChange={event => patch({effective_state:event.target.checked ? 'RETIRED' : 'ACTIVE'})}>停用这条规则</Checkbox></section>}
-    {error && <Alert type="warning" showIcon message={error}/>}
-    <div className="permission-form-actions"><Button type="primary" size="large" disabled={busy} onClick={save}>保存到草稿</Button><Button disabled={busy} onClick={onCancel}>取消本次编辑</Button></div>
+    {error && <Alert className="flow-feedback" type="warning" showIcon message={error}/>}
+    <div className="permission-form-actions"><Button disabled={busy} onClick={onCancel}>取消本次编辑</Button><Button type="primary" size="large" disabled={busy} onClick={save}>保存到草稿</Button></div>
     <p className="editorial-muted">保存草稿不会修改已生效规则。</p>
   </section>
 }

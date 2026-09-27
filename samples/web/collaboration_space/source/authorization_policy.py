@@ -13,3 +13,8 @@ def export_authorization_order() -> AuthorizationOrder:
     """返回当前导出实现采用的授权与后台任务顺序。"""
 
     return "AUTHORIZE_BEFORE_ENQUEUE"
+
+
+def export_execution_mode() -> Literal["SYNCHRONOUS", "QUEUED"]:
+    """原始实现等待项目包生成后才返回；预设优化将执行方式改为后台队列。"""
+    return "SYNCHRONOUS"

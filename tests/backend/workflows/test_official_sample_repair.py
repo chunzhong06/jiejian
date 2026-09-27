@@ -25,6 +25,7 @@ def test_fixed_version_validates_original_reference_before_mechanical_switch(tmp
         registry=None, installer=None, bindings=None, preparation=None, changes=SimpleNamespace(submit=submit),
         repairs=SimpleNamespace(resolve=resolve), uow_factory=lambda: nullcontext(SimpleNamespace(environment_operations=SimpleNamespace(list=lambda limit: ([], False)), jobs=SimpleNamespace(list_for_project=lambda _: ()))),
         var_dir=tmp_path, archive_project=None)
+    experience._recovery = SimpleNamespace(read=lambda: (None, None, None, None))
     experience._current = _Experience(runtime=runtime, project_id="sample-repair", scenario_prepared=True)
     with pytest.raises(JiejianError):
         experience.switch_version(version=OfficialScenarioVersion.FIXED)
@@ -33,6 +34,6 @@ def test_fixed_version_validates_original_reference_before_mechanical_switch(tmp
     assert [name for name, _ in calls] == ["resolve", "switch", "submit"]
     assert calls[1][1]["authorization_order"] == "AUTHORIZE_BEFORE_ENQUEUE"
     assert calls[2][1]["repair_reference"] == reference
-    assert calls[2][1]["submitted_by"] == "LOCAL_GUI"
+    assert calls[2][1]["submitted_by"] == "预设演示 · 本机用户"
     assert view.repair_change_id == "chg_" + "4" * 32
     assert not view.scenario_prepared and view.pending_tasks == ("PREPARE_CURRENT_MATERIALS",)

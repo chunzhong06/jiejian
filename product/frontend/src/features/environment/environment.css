@@ -144,9 +144,19 @@
 }
 
 .environment-details .workbench-sample-entry {
-  padding: var(--space-24) 0;
+  padding: 0;
   border: 0;
+  margin: 0;
 }
+
+.environment-controls .sample-environment { margin: 0; padding: 0; }
+.environment-controls .sample-environment h3 { margin: 0 0 var(--space-12); }
+.environment-controls .sample-environment details { margin-top: var(--space-16); }
+.editorial-page[aria-label="应用环境"] { gap: var(--space-20); }
+.editorial-page[aria-label="应用环境"] > .environment-details { margin-top: 0; padding-block: var(--space-16); }
+.editorial-page[aria-label="应用环境"] > .application-management { display:flex; align-items:center; justify-content:space-between; gap:var(--space-20); margin-top:0; padding-top:var(--space-20); }
+.editorial-page[aria-label="应用环境"] > .application-management p { margin-bottom:0; }
+@media(max-width:600px) { .editorial-page[aria-label="应用环境"] > .application-management { align-items:stretch; flex-direction:column; } }
 
 @media(max-width:760px) {
   .environment-facts {
@@ -202,3 +212,10 @@
     grid-template-columns: minmax(0,1fr);
   }
 }
+
+/* 重启只恢复工作上下文；保留与复核内容并列，避免旧实例状态看似仍然生效。 */
+.environment-recovery{padding:28px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface)}
+.environment-recovery h2{font-size:28px;margin:18px 0 12px}.environment-recovery>p{color:var(--color-secondary);line-height:1.8}
+.environment-retained{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--color-border);border-bottom:1px solid var(--color-border);margin:24px 0;gap:30px;padding:24px 0}
+.environment-retained>div+div{border-left:1px solid var(--color-border);padding-left:30px}.environment-retained p{color:var(--color-secondary)}
+@media(max-width:650px){.environment-recovery{padding:20px}.environment-retained{grid-template-columns:1fr;gap:16px}.environment-retained>div+div{border-left:0;border-top:1px solid var(--color-border);padding:20px 0 0}.environment-recovery .ant-btn{min-height:44px}}

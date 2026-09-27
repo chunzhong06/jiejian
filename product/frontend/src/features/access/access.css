@@ -432,6 +432,15 @@
 .candidate-batch-review .ant-btn {
   margin-right: var(--space-12);
 }
+.candidate-review-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-24); }
+.candidate-review-columns > section { padding: var(--space-20); background: var(--color-surface); border: var(--line-width) solid var(--color-border); border-radius: var(--radius-medium); }
+.candidate-review-columns h3 { margin: 0 0 var(--space-24); }
+.candidate-review-columns h4 { margin: var(--space-20) 0 var(--space-8); color: var(--color-secondary); font-size: var(--font-secondary); }
+.candidate-review-columns ul { margin: 0; padding-left: var(--space-20); line-height: 1.8; }
+.candidate-step-footer { display: flex; justify-content: space-between; align-items: center; gap: var(--space-20); border-top: var(--line-width) solid var(--color-border); padding-top: var(--space-20); }
+.candidate-step-footer p { margin: var(--space-8) 0 0; color: var(--color-secondary); font-size: var(--font-secondary); }
+.candidate-step-footer .ant-btn { margin: 0; }
+@media(max-width:600px) { .candidate-review-columns { grid-template-columns: minmax(0,1fr); } .candidate-step-footer { align-items: stretch; flex-direction: column; } }
 
 .candidate-stale {
   padding-block: var(--space-16);

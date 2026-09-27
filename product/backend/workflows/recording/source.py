@@ -14,16 +14,27 @@ def identity_source_fingerprint(identity):
     })
 
 
-def recording_endpoint_fingerprint(understanding):
+def current_recording_instance(work, project_id):
+    """只从本项目的受控工作空间读取实例身份；普通应用没有该关联，不按地址猜测。"""
+    workspace = work.sample_workspaces.for_project(project_id)
+    instance = None if workspace is None else work.sample_workspaces.instance(workspace["workspace_id"])
+    return None if instance is None else instance["instance_id"]
+
+
+def recording_endpoint_fingerprint(understanding, *, controlled_instance_id=None):
     """同时绑定确认的目标地址与发现来源，切换端口也必须重新确认技术事实。"""
     # endpoint_source_fingerprint 描述源码位置，本身不能区分同一应用的不同目标地址。
-    return boundary_sha256({
+    value = {
         "confirmed_endpoint": understanding.confirmed_endpoint,
         "endpoint_source_fingerprint": understanding.endpoint_source_fingerprint,
-    })
+    }
+    # 未托管项目保持既有算法；托管实例变化时，即便地址被复用也不能继承旧现场材料。
+    if controlled_instance_id is not None:
+        value["controlled_instance_id"] = controlled_instance_id
+    return boundary_sha256(value)
 
 
-def recording_source_fingerprint(action, identity, understanding, action_binding, actor_binding, *, owner, owner_actor_binding):
+def recording_source_fingerprint(action, identity, understanding, action_binding, actor_binding, *, owner, owner_actor_binding, controlled_instance_id=None):
     """冻结录制开始时的非秘密来源；重登录不会抹去已确认的技术事实。"""
     return boundary_sha256({
         "action_id": action.action_id, "revision": action.revision,
@@ -32,7 +43,7 @@ def recording_source_fingerprint(action, identity, understanding, action_binding
         "subject_actor_implementation_fingerprint": actor_binding.binding_fingerprint,
         "owner_actor_implementation_fingerprint": owner_actor_binding.binding_fingerprint,
         "source_fingerprint": understanding.source_fingerprint,
-        "endpoint_fingerprint": recording_endpoint_fingerprint(understanding),
+        "endpoint_fingerprint": recording_endpoint_fingerprint(understanding, controlled_instance_id=controlled_instance_id),
         "subject_test_identity_id": identity.identity_id,
         "resource_owner_test_identity_id": owner.identity_id,
         "subject_identity_fingerprint": identity_source_fingerprint(identity),
@@ -86,6 +97,7 @@ def require_recording_source(work, request, *, historical_source=None):
         work.business_boundaries.action_binding(action.action_id, action.revision),
         work.business_boundaries.actor_binding(actor.actor_id, actor.revision),
         owner=owner, owner_actor_binding=owner_binding,
+        controlled_instance_id=current_recording_instance(work, action.project_id),
     )
     if historical_source is not None:
         from product.protocols.recording_legacy import LegacyRecordingRunnerRequest
@@ -102,7 +114,7 @@ def require_recording_source(work, request, *, historical_source=None):
             "action_implementation_fingerprint": work.business_boundaries.action_binding(action.action_id, action.revision).binding_fingerprint,
             "actor_implementation_fingerprint": work.business_boundaries.actor_binding(actor.actor_id, actor.revision).binding_fingerprint,
             "source_fingerprint": understanding.source_fingerprint,
-            "endpoint_fingerprint": recording_endpoint_fingerprint(understanding),
+            "endpoint_fingerprint": recording_endpoint_fingerprint(understanding, controlled_instance_id=current_recording_instance(work, action.project_id)),
             "identity_fingerprint": identity_source_fingerprint(identity),
         })
     if request.preparation_source_fingerprint != expected:

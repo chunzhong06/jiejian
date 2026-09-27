@@ -61,8 +61,8 @@ describe('RuntimePage', () => {
     render(<RuntimePage status={status} profiles={[]} failed={false} />)
 
     expect(screen.getByText('1.1.0')).toBeInTheDocument()
-    expect(screen.getByText('完整检查 Worker 尚未重新接入当前业务边界架构。')).toBeInTheDocument()
-    expect(screen.getByText('尚未接入')).toBeInTheDocument()
+    expect(screen.getByText('检查执行器当前不可用。')).toBeInTheDocument()
+    expect(screen.getByText('不可用')).toBeInTheDocument()
     expect(screen.getAllByText(/仅构建时需要/)).toHaveLength(2)
     expect(screen.getByText(/源码构建/)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('1.0 KiB')).toBeInTheDocument())
@@ -79,4 +79,17 @@ describe('RuntimePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认执行' }))
     await waitFor(() => expect(systemApi.maintenanceOperation).toHaveBeenCalledWith('clear-all', { confirmed: true, dry_run: false, plan_id: 'plan_1' }))
   })
+})
+
+it('首次读取失败不显示零值，恢复读取后撤下错误并恢复维护入口', async () => {
+  const read = vi.spyOn(systemApi, 'maintenanceStatus').mockRejectedValueOnce(new Error('Failed to fetch')).mockResolvedValue(maintenanceStatus)
+  render(<RuntimePage status={status} profiles={[]} failed={false}/>)
+  expect(await screen.findByText('维护状态暂时无法读取')).toBeInTheDocument()
+  expect(screen.getAllByText('数量未知')).toHaveLength(3)
+  expect(screen.queryByText('0 B')).not.toBeInTheDocument()
+  expect(screen.getByRole('button',{name:'清理全部可删除内容'})).toBeDisabled()
+  fireEvent.click(screen.getByRole('button',{name:'刷新状态'}))
+  await waitFor(() => expect(screen.queryByText('维护状态暂时无法读取')).not.toBeInTheDocument())
+  expect(screen.getByRole('button',{name:'清理全部可删除内容'})).toBeEnabled()
+  expect(read).toHaveBeenCalledTimes(2)
 })

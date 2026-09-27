@@ -274,6 +274,7 @@ def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
         "0004_action_resource_ownership.py",
         "0005_verification_loop_v3.py",
         "0006_product_provenance.py",
+        "0007_preparation_recovery.py",
     ]
     revisions = {}
     for path in files:
@@ -292,4 +293,5 @@ def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
         "0004_action_resource_ownership": "0003_action_assurance_recording",
         "0005_verification_loop_v3": "0004_action_resource_ownership",
         "0006_product_provenance": "0005_verification_loop_v3",
+        "0007_preparation_recovery": "0006_product_provenance",
     }

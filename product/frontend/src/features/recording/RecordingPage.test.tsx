@@ -7,7 +7,7 @@ import { RecordingPage } from './RecordingPage'
 
 const api = vi.hoisted(() => ({
   setup: vi.fn(), recordings: vi.fn(), recording: vi.fn(), createRecording: vi.fn(), startCapture: vi.fn(), stopCapture: vi.fn(),
-  reviewRecording: vi.fn(), finalizeRecording: vi.fn(), cancel: vi.fn(), discard: vi.fn(),
+  reviewRecording: vi.fn(), finalizeRecording: vi.fn(), cancel: vi.fn(), discard: vi.fn(), material: vi.fn(),
 }))
 
 vi.mock('../../api/recordings', () => ({ recordingsApi: {
@@ -15,6 +15,7 @@ vi.mock('../../api/recordings', () => ({ recordingsApi: {
   startCapture: api.startCapture, stopCapture: api.stopCapture, reviewRecording: api.reviewRecording,
   finalizeRecording: api.finalizeRecording, discard: api.discard,
 } }))
+vi.mock('../../api/preparation', () => ({ preparationApi: { material: api.material } }))
 vi.mock('../../api/jobs', () => ({ jobsApi: { cancel: api.cancel } }))
 
 const action = { business_action_id: `bac_${'1'.repeat(32)}`, display_name: '修改资源', action_revision: 3 }
@@ -206,4 +207,25 @@ describe('RecordingPage', () => {
     expect(screen.queryByRole('button', { name: '打开浏览器并开始准备' })).not.toBeInTheDocument()
     expect(api.createRecording).not.toHaveBeenCalled()
   })
+  it('主动替换只从服务器材料范围录制，并标记为待采用候选', async () => {
+    const scope = { ...demonstrationTask(), context_id:'scope', material:{action_id:action.business_action_id,action_revision:3,kind:'execution' as const,member_id:null}, expected_fingerprint:'basis', recording_id:null,
+      business_action_id:action.business_action_id,action_revision:3,subject_test_identity_id:identity.test_identity_id,resource_owner_test_identity_id:identity.test_identity_id,subject_slot_id:'slot-a',resource_owner_slot_id:'slot-a',recording_purpose:'TARGET' as const,parent_recording_id:null,effect_id:null }
+    api.material.mockResolvedValue({recording_context:scope})
+    api.createRecording.mockResolvedValue({recording:{...target,state:'CREATED'}})
+    render(<RecordingPage {...pageProps()} materialContext={scope}/>)
+    const button = await screen.findByRole('button',{name:'打开浏览器并开始准备'})
+    await waitFor(()=>expect(button).toBeEnabled()); fireEvent.click(button)
+    await waitFor(()=>expect(api.createRecording).toHaveBeenCalledWith('p1',expect.objectContaining({material_candidate:true})))
+  })
+  it('候选创建响应丢失后找回既有录制，不重新创建', async () => {
+    const scope = { ...demonstrationTask(), context_id:'scope', material:{action_id:action.business_action_id,action_revision:3,kind:'execution' as const,member_id:null}, expected_fingerprint:'basis', recording_id:null,
+      business_action_id:action.business_action_id,action_revision:3,subject_test_identity_id:identity.test_identity_id,resource_owner_test_identity_id:identity.test_identity_id,subject_slot_id:'slot-a',resource_owner_slot_id:'slot-a',recording_purpose:'TARGET' as const,parent_recording_id:null,effect_id:null }
+    api.material.mockResolvedValue({recording_context:{...scope,recording_id:target.recording_id}})
+    render(<RecordingPage {...pageProps()} materialContext={scope}/>)
+    const button = await screen.findByRole('button',{name:'打开浏览器并开始准备'})
+    await waitFor(()=>expect(button).toBeEnabled()); fireEvent.click(button)
+    await waitFor(()=>expect(api.recording).toHaveBeenCalledWith(target.recording_id))
+    expect(api.createRecording).not.toHaveBeenCalled()
+  })
+
 })

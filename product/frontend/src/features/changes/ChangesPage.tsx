@@ -1,6 +1,6 @@
 // 当前变化与原题修复：只展示服务端事实，显式提交声明并保留精确复验关联。
 import { Alert, Button, Empty, Form, Input, Select, Space, Spin, Typography } from 'antd'
-import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { WorkPageVisible } from '../../app/RetainedWorkPages'
 import { ApiError } from '../../api/http'
 import type { ProjectDto } from '../../api/projects'
@@ -10,7 +10,7 @@ import { formatTimestamp } from '../../app/presentation'
 import { workspaceApi } from '../../api/workspace'
 import { taskDestination } from '../../app/taskDestination'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
-import { RecordNavigation } from '../../app/navigation/RecordNavigation'
+import { AgentNavigation } from '../../app/navigation/AgentNavigation'
 import { RepairDelivery } from './RepairDelivery'
 import { CheckOutlined, FileTextOutlined, CodeOutlined } from '@ant-design/icons'
 import { SourceIdentityPanel } from './SourceIdentityPanel'
@@ -20,8 +20,9 @@ import './changes.css'
 import { useLiveRead } from '../../app/useLiveRead'
 
 const revalidationLabels = { READY: '源码与权限仍有效', NO_BASELINE: '缺少可比较的源码基线', SOURCE_STALE: '源码再次变化，请重新登记', POLICY_STALE: '权限已变化，需要重新核对', MAPPING_REVIEW_REQUIRED: '请重新确认代码实现映射' }
-export function ChangesPage({ project, onError, onNavigate, onStateChanged, requestedRepair }: {
+export function ChangesPage({ project, onError, onNavigate, onStateChanged, requestedRepair, developmentJourney }: {
   project: ProjectDto; onError: (error: ApiError) => void; onNavigate: (path: string) => void; onStateChanged: () => unknown; requestedRepair?: string | null
+  developmentJourney?: ReactNode
 }) {
   const [selectedChangeId, setSelectedChangeId] = useState<string>()
   const [detailReference, setDetailReference] = useState<string | undefined>(requestedRepair ?? undefined)
@@ -93,12 +94,12 @@ export function ChangesPage({ project, onError, onNavigate, onStateChanged, requ
   const registration = <section className="change-registration" aria-label="登记代码变化">
       <Typography.Title level={3}>登记代码变化</Typography.Title>
       <Typography.Paragraph type="secondary">修改说明与文件路径只是线索，实际变化和完整检查范围由界鉴重新计算。</Typography.Paragraph>
-      {uncertain && <Alert showIcon type="warning" message="上次登记回执未确认。请先查看下方变化记录，避免重复登记。" action={<Button disabled={loading || failed} onClick={() => setUncertain(false)}>已核对记录</Button>} />}
+      {uncertain && <Alert className="flow-feedback" showIcon type="warning" message="上次登记回执未确认。请先查看下方变化记录，避免重复登记。" action={<Button disabled={loading || failed} onClick={() => setUncertain(false)}>已核对记录</Button>} />}
       <Form form={form} layout="vertical" onFinish={values => void submit(values)} disabled={busy || loading || failed || uncertain}>
         <Form.Item name="reason" label="修改说明" rules={[{ required: true, whitespace: true, message: '请说明这次修改。' }, { max: 512 }]}><Input.TextArea maxLength={512} autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
         <Form.Item label="关联原题（可选）"><Select allowClear value={selectedRepair} onChange={setSelectedRepair} placeholder="普通代码变化" options={repair?.tasks.filter(task => task.status !== 'STALE').map((task, index) => ({ value: task.contract.repair_fingerprint, label: `原问题 ${index + 1} · ${repairLabels[task.status]}` }))} /></Form.Item>
         <Form.Item name="paths" label="涉及文件（可选，每行一个相对路径）"><Input.TextArea maxLength={32768} autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
-        <Button type={focusedTask?.status === 'READY_TO_VERIFY' ? 'default' : 'primary'} htmlType="submit" loading={busy}>登记并核对实际变化</Button>
+        <div className="confirmation-actions"><Button type={focusedTask?.status === 'READY_TO_VERIFY' ? 'default' : 'primary'} htmlType="submit" loading={busy}>登记并核对实际变化</Button></div>
       </Form>
     </section>
   const selectedChange = changes.find(item => item.manifest.change_id === selectedChangeId)
@@ -124,16 +125,18 @@ export function ChangesPage({ project, onError, onNavigate, onStateChanged, requ
   if (detailTask && !failed) return <RepairDelivery task={detailTask} change={changes.find(change => change.manifest.change_id === detailTask.change_id)} onNavigate={onNavigate}
     loadingChange={busy} onBack={() => { setSourceOpen(false); setDetailReference(undefined) }} onViewChange={() => { if (detailTask.change_id) void showChange(detailTask.change_id) }}/>
   const selectedStatus = selectedRepairs.length && selectedRepairs.every(task => task.status === 'VERIFIED') ? 'VERIFIED' : selectedRepairs.find(task => task.status === 'NOT_VERIFIED' || task.status === 'STALE')?.status
-  const headline = failed ? '暂时无法读取代码变化' : !selectedChange ? '代码变化' : !selectedRepairs.length ? '代码变化已登记，等待检查' : selectedStatus === 'VERIFIED' ? '本批修改的原题复验已通过' : selectedStatus === 'NOT_VERIFIED' ? '修改已登记，原问题仍然存在' : selectedStatus === 'STALE' ? '修改已登记，原题依据需要重新确认' : '修改已登记，修复状态尚待确认'
+  const headline = failed ? '暂时无法读取协作进展' : 'Agent 协作'
   return <EditorialPage label="变化与原题复验时间流">
-    <EditorialHeader eyebrow="代码变化 / 协作与验证" title={headline}><p className="editorial-muted">Coding Agent 登记修改，界鉴核对源码；独立复验后才确认修复。</p></EditorialHeader>
-    <RecordNavigation active="changes" onNavigate={onNavigate}/>
+    <EditorialHeader eyebrow="开发协作 / 修复与交付" title={headline}><p className="editorial-muted">明确修复要求 → 查看 Agent 修改 → 核对实际变化 → 按原题复验。</p></EditorialHeader>
+    <AgentNavigation active="delivery" onNavigate={onNavigate}/>
+    {developmentJourney}
     {receipt && <p className="work-receipt" role="status">{receipt}</p>}
     {!loading && selectedRepair && !focusedTask && <p role="alert">未找到指定的原题修复要求。请回到原问题重新进入，当前不会替换成另一条原题。</p>}
     {failed && <p role="alert">无法完整读取变化与原题，暂不能登记或发起复验。</p>}
     <div className="change-topline">{selectedChange && <ol className="change-milestones" aria-label="本批修改的事实进展"><li className="is-complete"><span aria-hidden><CheckOutlined/></span>修改已登记</li><li className="is-complete"><span aria-hidden><CheckOutlined/></span>{selectedChange.change_set.status === 'COMPARABLE' ? '本批差异已核对' : '首次源码已记录'}</li><li className={selectedStatus === 'VERIFIED' ? 'is-complete' : ''}><span aria-hidden>{selectedStatus === 'VERIFIED' ? <CheckOutlined/> : '3'}</span>{selectedStatus === 'VERIFIED' ? '原题复验已通过' : '修复结论待确认'}</li></ol>}
     <div className="changes-toolbar"><Button disabled={busy} loading={loading} onClick={() => void refresh()}>刷新变化与修复</Button></div></div>
-    {!loading && !failed && !changes.length && <Empty description="尚无代码变化记录" />}
+    {!!repair?.tasks.length && <section aria-label="修复任务" className="agent-task-list"><h2>修复任务</h2>{repair.tasks.map(task => <section key={task.task_reference} className="repair-context"><div><strong>{task.comparison?.find(row => row.role === 'DENY')?.action_label ?? '原题修复要求'}</strong><p>{repairLabels[task.status]}</p></div><Button type={task.task_reference === repair.primary_task_reference ? 'primary' : 'default'} onClick={() => setDetailReference(task.contract.repair_fingerprint)}>{['REPAIR_REQUIRED','NOT_VERIFIED'].includes(task.status) ? '准备修复任务' : '查看修复与交付'}</Button></section>)}</section>}
+    {!loading && !failed && !changes.length && <Empty description={repair?.tasks.length ? '等待 Agent 登记修改；完成后将在这里显示真实变化。' : '暂无修复任务或修改记录。检查发现问题后，可在这里准备任务并跟踪修复。'} />}
     {selectedChange && <section className="changes-workspace" aria-label="代码变化记录">
       <nav className="change-record-index" aria-label="修改记录"><h2>修改记录</h2>{changes.map(change => <button key={change.manifest.change_id} aria-current={change.manifest.change_id === selectedChange.manifest.change_id ? 'true' : undefined} onClick={() => setSelectedChangeId(change.manifest.change_id)}><time>{formatTimestamp(change.manifest.created_at_us)}</time><strong>{change.manifest.reason}</strong><small>{change.manifest.submitted_by || '来源未提供'}</small><span>{repair?.tasks.some(item => item.change_id === change.manifest.change_id) && repair.tasks.filter(item => item.change_id === change.manifest.change_id).every(item => item.status === 'VERIFIED') ? '原题复验已通过' : change.revalidation.can_execute ? '可继续检查' : revalidationLabels[change.revalidation.status]}</span></button>)}</nav>
       <article className="change-detail" aria-label="所选代码变化">
@@ -153,8 +156,7 @@ export function ChangesPage({ project, onError, onNavigate, onStateChanged, requ
       </article>
     </section>}
     {live.retrying && <p role="status">变化记录暂未同步，正在自动重试。</p>}
-    <div className="change-support-entry"><Button onClick={()=>onNavigate('/tools')}>Agent 连接与授权</Button><span>通过 MCP 登记后无需重复填写。</span></div>
+    <p className="editorial-muted">Agent 通过 MCP 登记后无需重复填写。连接设置位于“连接与授权”。</p>
     <details className="change-manual-entry"><summary>手动登记代码变化</summary>{registration}</details>
-    {repair?.tasks.filter(task => !task.change_id || !changes.some(change => change.manifest.change_id === task.change_id)).map(task => <section key={task.task_reference} className="repair-context"><div><strong>{task.comparison?.find(row => row.role === 'DENY')?.action_label ?? '原题修复要求'}</strong><p>{repairLabels[task.status]}</p></div><Button onClick={() => setDetailReference(task.contract.repair_fingerprint)}>查看修复要求与进展</Button></section>)}
   </EditorialPage>
 }

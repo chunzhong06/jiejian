@@ -23,6 +23,14 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
     def official_sample_history(limit: int = Query(25, ge=1, le=100)):
         return data_response(context.official_experience.history(limit=limit))
 
+    @router.get("/api/experience/official-sample/development", response_model=ApiResponse)
+    def official_development():
+        return data_response(context.official_experience.development_journey().model_dump(mode="json"))
+
+    @router.post("/api/experience/official-sample/observation", response_model=ApiResponse)
+    def official_observation(body: OfficialObservationRequest):
+        return data_response(context.official_experience.set_observation(available=body.available).model_dump(mode="json"))
+
     @router.get(
         "/api/experience/official-sample/validation-summary",
         response_model=ApiResponse,
@@ -40,6 +48,14 @@ def build_experience_router(context: ApplicationCore) -> APIRouter:
                 operation_id=body.operation_id,
             ).model_dump(mode="json")
         )
+
+    @router.post("/api/experience/official-sample/reset", response_model=ApiResponse)
+    def reset_official_sample(body: OfficialSampleStartRequest):
+        return data_response(context.official_experience.reset(consent=body.consent, operation_id=body.operation_id).model_dump(mode="json"))
+
+    @router.post("/api/experience/official-sample/reconcile", response_model=ApiResponse)
+    def reconcile_official_sample():
+        return data_response(context.official_experience.reconcile().model_dump(mode="json"))
 
     @router.post(
         "/api/experience/official-sample/prepare",
@@ -87,6 +103,11 @@ class OfficialSampleVersionRequest(ApiModel):
     schema_version: Literal["1"]
     version: Literal["VULNERABLE", "EVIDENCE_LIMITED", "FIXED"]
     repair_reference: CurrentRepairReference | None = None
+
+
+class OfficialObservationRequest(ApiModel):
+    schema_version: Literal["1"]
+    available: bool
 
 
 __all__ = ["build_experience_router"]

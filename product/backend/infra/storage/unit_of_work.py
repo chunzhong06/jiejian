@@ -26,6 +26,8 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage.supplemental_materials import SupplementalMaterialRepository
 from product.backend.infra.storage.code_observations import CodeObservationRepository
 from product.backend.infra.storage.environment_operations import EnvironmentOperationRepository
+from product.backend.infra.storage.preparation_recovery import PreparationRecoveryRepository
+from product.backend.infra.storage.sample_workspaces import SampleWorkspaceRepository
 from product.backend.infra.storage.execution.job_control import JobControlRepository
 from product.backend.infra.storage.application_understanding import ApplicationUnderstandingRepository
 from product.backend.infra.storage.business_boundaries import BusinessBoundaryRepository
@@ -136,6 +138,8 @@ class StorageUnitOfWork:
         self.supplemental_materials = SupplementalMaterialRepository(session, self._known_secrets)
         self.code_observations = CodeObservationRepository(session, self._known_secrets)
         self.environment_operations = EnvironmentOperationRepository(session, self._known_secrets)
+        self.preparation_recovery = PreparationRecoveryRepository(session, self._known_secrets)
+        self.sample_workspaces = SampleWorkspaceRepository(session, self._known_secrets)
         return self
 
     def commit(self) -> None:
@@ -156,6 +160,17 @@ class StorageUnitOfWork:
             session.rollback()
             raise JiejianError(ErrorCode.STORAGE_FAILURE, "数据库操作失败") from None
         self._committed = True
+
+    def acquire_write_lock(self) -> None:
+        """在读取乐观并发基线前取得 SQLite 写事务，避免 legacy SELECT 不开启事务的窗口。"""
+        session = self._require_session()
+        try:
+            connection = session.connection()
+            if not connection.connection.driver_connection.in_transaction:
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+        except SQLAlchemyError:
+            session.rollback()
+            raise JiejianError(ErrorCode.STORAGE_FAILURE, "当前有其他写操作，请先核对状态") from None
 
     def rollback(self) -> None:
         session = self._require_session()

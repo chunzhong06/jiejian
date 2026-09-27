@@ -22,6 +22,7 @@ export type ProductAreaRoute = '/workspace' | '/changes' | '/permissions' | '/te
 export const productAreas = [
   { route: '/workspace', label: '工作台', shortLabel: '工作台' },
   { route: '/permissions', label: '权限管理', shortLabel: '权限管理' },
+  { route: '/changes', label: 'Agent 协作', shortLabel: 'Agent 协作' },
   { route: '/history', label: '记录与证据', shortLabel: '记录与证据' },
 ] as const
 

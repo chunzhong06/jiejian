@@ -18,6 +18,7 @@ def test_api_worker_runner_publication_reaches_current_story_and_history(tmp_pat
     with TestClient(app) as client:
         started = client.post('/api/experience/official-sample/start', json={'schema_version':'1', 'consent':True})
         assert started.status_code == 200, started.text
+        assert started.json()['data']['scenario_version'] == 'BASELINE'
         project = started.json()['data']['project_id']
         proposal_response = client.post('/api/experience/official-sample/boundary-proposal')
         assert proposal_response.status_code == 200, proposal_response.text
@@ -43,11 +44,17 @@ def test_api_worker_runner_publication_reaches_current_story_and_history(tmp_pat
             assert time.monotonic() < deadline, {'run':status['run'], 'job':status['job'], 'integrity':status['result_integrity']}
             time.sleep(0.1)
         assert status['run']['lifecycle'] == 'COMPLETED', status
-        assert status['result_integrity'] == 'VALID' and status['run']['verdict'] == 'BLOCK'
+        assert status['result_integrity'] == 'VALID' and status['run']['verdict'] == 'PASS'
         story = client.get(f'/api/runs/{run_id}/result-story').json()['data']
-        assert story['run_id'] == run_id and story['verdict'] == 'BLOCK'
+        assert story['run_id'] == run_id and story['verdict'] == 'PASS'
         deny = [item for item in story['actions'] if item['permission']['expectation'] == 'DENY']
-        assert len(deny) == 1 and deny[0]['breakpoint']['breakpoint_type'] == 'AUTHORIZATION_LATE'
+        # 起始同步实现先授权；异步优化后的 AUTHORIZATION_LATE 由完整开发演练另行验证。
+        assert len(deny) == 1 and deny[0]['repair_requirement'] is None
+        assert len(story['actions']) == 3
+        for item in story['actions']:
+            expected = 'ABSENT' if item['permission']['expectation'] == 'DENY' else 'CONFIRMED'
+            effects = item['fact_comparison']['effects']
+            assert effects and all(effect['observed_state'] == expected for effect in effects)
         index = client.get(f'/api/runs/{run_id}/evidence').json()['data']
         refs = {item['evidence_id'] for item in index}
         assert refs

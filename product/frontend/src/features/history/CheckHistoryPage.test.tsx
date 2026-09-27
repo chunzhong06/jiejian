@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CheckHistoryItem, CheckHistoryPage as HistoryPage } from '../../api/currentChecks'
 import { CheckHistoryPage } from './CheckHistoryPage'
+import { WorkPageVisible } from '../../app/RetainedWorkPages'
 
 const api = vi.hoisted(() => ({ history: vi.fn(), submit: vi.fn() }))
 vi.mock('../../api/currentChecks', () => ({ currentChecksApi: api }))
@@ -20,6 +21,33 @@ beforeEach(() => { vi.clearAllMocks(); api.history.mockResolvedValue(page()); vi
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('独立检查历史', () => {
+  it('重新进入模块清空旧筛选并立即读取最新记录', async () => {
+    const props = { project: { project_id: 'p1' }, onError: error, onNavigate: vi.fn(), renderRun: () => null }
+    const view = render(<WorkPageVisible.Provider value={true}><CheckHistoryPage {...props}/></WorkPageVisible.Provider>)
+    await screen.findByText('r1')
+    fireEvent.change(screen.getByRole('textbox', { name: '搜索检查历史' }), { target: { value: '旧条件' } })
+    api.history.mockResolvedValue(page([]))
+    fireEvent.click(screen.getByRole('button', { name: '搜索' }))
+    await screen.findByText('没有匹配的检查记录')
+    view.rerender(<WorkPageVisible.Provider value={false}><CheckHistoryPage {...props}/></WorkPageVisible.Provider>)
+    const hiddenCalls = api.history.mock.calls.length
+    api.history.mockResolvedValue(page([item('new-run')]))
+    view.rerender(<WorkPageVisible.Provider value={true}><CheckHistoryPage {...props}/></WorkPageVisible.Provider>)
+    expect(await screen.findByText('new-run')).toBeVisible()
+    expect(screen.getByRole('textbox', { name: '搜索检查历史' })).toHaveValue('')
+    expect(api.history).toHaveBeenCalledTimes(hiddenCalls + 1)
+    expect(api.history.mock.lastCall?.[1]).toEqual({ cursor: null })
+    expect(screen.queryByRole('button', { name: '清除筛选' })).not.toBeInTheDocument()
+  })
+  it('无筛选的空列表在自动回读时直接显示新记录', async () => {
+    api.history.mockResolvedValueOnce(page([])).mockResolvedValue(page([item('new-run')]))
+    render(<Harness/>)
+    await screen.findByText('尚无检查记录')
+    expect(screen.queryByRole('button', { name: '清除筛选' })).not.toBeInTheDocument()
+    fireEvent.focus(window)
+    expect(await screen.findByText('new-run')).toBeVisible()
+    expect(api.submit).not.toHaveBeenCalled()
+  })
   it('有界空页保留继续入口，只有明确操作才读取下一段', async () => {
     const cursor = { created_at_us: 12, run_id: 'cursor' }
     api.history.mockResolvedValueOnce(page([], cursor)).mockResolvedValueOnce(page([item('older')]))

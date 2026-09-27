@@ -395,6 +395,9 @@ APPLICATION_PAGE = r"""<!doctype html>
           });
           if (!result.ok) { exportNotice.dataset.tone = 'danger'; exportNotice.textContent = messageFor(result.data.code); return; }
           exportMarker = result.data.request_marker;
+          if (result.data.code === 'EXPORT_COMPLETED') {
+            renderExportState('READY'); exportNotice.dataset.tone = 'success'; exportNotice.textContent = '完整项目交付包已同步生成。'; return;
+          }
           exportNotice.textContent = '请求已提交，正在生成资料包…'; renderExportState('PROCESSING');
           for (var attempt = 0; attempt < 40; attempt += 1) {
             await new Promise(function (resolve) { window.setTimeout(resolve, 125); });

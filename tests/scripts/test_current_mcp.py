@@ -13,7 +13,7 @@ class Control:
     origin = "http://127.0.0.1:8765"
     def __init__(self, paired):
         self.paired, self.level, self.calls = paired, "READ", []
-        self.runs, self.changes = ["problem", "limited", "fixed"], []
+        self.runs, self.changes = ["problem", "limited", "baseline", "fixed"], []
         self.active = False
 
     def call(self, method, path, body=None, **kwargs):
@@ -80,7 +80,7 @@ class Gui:
 def scenario(monkeypatch, *, paired=True, fault=None):
     control, state = Control(paired), HarnessState()
     gui, calls = Gui(control, fault), []
-    originals = [dict(run_id=name, story=dict(verdict=verdict)) for name, verdict in zip(control.runs, ["BLOCK", "INCONCLUSIVE", "PASS"])]
+    originals = [dict(run_id=name, story=dict(verdict=verdict)) for name, verdict in zip(control.runs, ["BLOCK", "INCONCLUSIVE", "PASS", "PASS"])]
     extra = dict(run_id="mcp-new", story=dict(verdict="PASS", change_context=dict(change_id="change-mcp"),
         actions=[dict(action_id="export"), dict(action_id="export"), dict(action_id="view")],
         repair_verification=dict(status="VERIFIED") if fault == "verified" else None))
@@ -124,11 +124,11 @@ def scenario(monkeypatch, *, paired=True, fault=None):
 
 
 @pytest.mark.parametrize("paired", [True, False])
-def test_fourth_ordinary_run_keeps_originals_and_pairing_ownership(monkeypatch, paired):
+def test_fifth_ordinary_run_keeps_originals_and_pairing_ownership(monkeypatch, paired):
     control, gui, state, originals, calls, session = scenario(monkeypatch, paired=paired)
     result = mcp.run(control, gui, "project", originals, state, session_factory=session)
-    assert result["total_run_count"] == 4 and result["scope"] == "ordinary-full-check"
-    assert result["actual_changed_path_count"] == 0 and len(originals) == 3
+    assert result["total_run_count"] == 5 and result["scope"] == "ordinary-full-check"
+    assert result["actual_changed_path_count"] == 0 and len(originals) == 4
     assert control.paired == paired and control.level == "READ" and not state.mcp_cleanup_pending
     assert state.active_run_id is None
     assert [name for name, _ in calls].count("jiejian_change_submit") == 2
@@ -176,7 +176,7 @@ def test_new_pairing_is_cleaned_after_unknown_receipt_without_repeat_pair(monkey
 @pytest.mark.parametrize("missing", ["execution-path", "history-search", "mcp-connected", "mcp-change", "mcp-completion", "mcp-cleanup"])
 def test_official_requires_gui_records_and_setup_only_skips_mcp(missing):
     from scripts.dev.sample_test.official import _gui_complete
-    names = {"start", "human-approve", "prepare", "exit", "submit-check", "problem-result", "limited-result", "fixed-result", "evidence-and-repair",
+    names = {"business-selection-review", "identity-management-layout", "material-reuse-recovery", "environment-restart-recovery", "start", "human-approve", "prepare", "exit", "submit-check", "baseline-result", "problem-result", "limited-result", "fixed-result", "evidence-and-repair",
         "decisive-evidence", "execution-path", "history-search", "history-return", "mcp-connected", "mcp-level-read", "mcp-level-prepare", "mcp-level-execute",
         "mcp-change", "mcp-completion", "mcp-responsibility", "mcp-cleanup"}
     records = [dict(event=name, status="PASSED") for name in names]

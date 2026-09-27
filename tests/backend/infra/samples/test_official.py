@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import ast
 from pathlib import Path
 
 import httpx
@@ -159,9 +160,10 @@ def test_official_sample_runs_from_copied_source_with_dynamic_port_and_no_secret
         assert runtime.origin.startswith("http://127.0.0.1:")
         assert not runtime.origin.endswith(":8865")
         assert (runtime.source_root / "server.py").is_file()
-        assert "ENQUEUE_BEFORE_AUTHORIZE" in (
-            runtime.source_root / "authorization_policy.py"
-        ).read_text(encoding="utf-8").rsplit("return ", 1)[-1]
+        tree = ast.parse((runtime.source_root / "authorization_policy.py").read_text(encoding="utf-8"))
+        authorization = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "export_authorization_order")
+        assert ast.literal_eval(authorization.body[-1].value) == "ENQUEUE_BEFORE_AUTHORIZE"
+        assert manager.export_execution_mode(runtime.experience_id) == "QUEUED"
         assert not (runtime.source_root / "collaboration_space").exists()
         assert runtime.descriptor_path.is_file()
         descriptor = json.loads(runtime.descriptor_path.read_text(encoding="utf-8"))
@@ -225,6 +227,7 @@ def test_behavior_switch_keeps_origin_and_source_but_resets_sample_state(
         policy = (runtime.source_root / "authorization_policy.py").read_text(
             encoding="utf-8"
         )
-        assert policy.rsplit("return ", 1)[-1].strip() == '"AUTHORIZE_BEFORE_ENQUEUE"'
+        authorization = next(node for node in ast.parse(policy).body if isinstance(node, ast.FunctionDef) and node.name == "export_authorization_order")
+        assert ast.literal_eval(authorization.body[-1].value) == "AUTHORIZE_BEFORE_ENQUEUE"
     finally:
         manager.stop()

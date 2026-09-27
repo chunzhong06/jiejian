@@ -204,8 +204,10 @@
   margin: 0 0 var(--space-16);
 }
 
+.confirmation-actions,
 .task-focus-actions {
   display: flex;
+  justify-content: flex-end;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-16);
@@ -727,3 +729,8 @@
 /* 准备已完成时用紧凑的下一步操作，完整材料继续按需展开。 */
 .preparation-next { display: flex; flex-wrap: wrap; gap: var(--space-16); align-items: center; padding: var(--space-20); border: 1px solid var(--color-border); border-radius: var(--radius-large); background: var(--color-surface); }
 .preparation-next p { flex: 1; margin: 0; }
+
+/* 条件提示自行保留上下间距，出现、消失或连续出现时都不贴住工作卡片。 */
+.flow-feedback { margin-block: var(--space-16); }
+.feedback-stack { display: flex; flex-direction: column; gap: var(--space-16); }
+.feedback-stack > .ant-typography { margin: 0; }

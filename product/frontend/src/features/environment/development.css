@@ -1,0 +1,16 @@
+/* 演练以开发目标与当前动作组织，技术设置不与主任务争夺层级。 */
+.sample-development{margin-block:var(--space-24);border:1px solid var(--color-border);border-radius:var(--radius-large);background:var(--color-surface);overflow:hidden}
+.sample-development>header{display:flex;justify-content:space-between;gap:var(--space-20);align-items:start;padding:var(--space-24)}
+.sample-development h2{font-size:var(--font-section);margin:0}
+.sample-development h3{font-size:var(--font-body);margin:0 0 var(--space-12)}
+.sample-development-label{color:var(--color-secondary);font-size:var(--font-secondary)}
+.sample-development-steps{display:flex;flex-wrap:wrap;gap:var(--space-24);margin:0;padding:var(--space-16) var(--space-24);list-style:decimal inside;background:var(--color-surface-subtle);color:var(--color-secondary)}
+.sample-development-steps [aria-current=step]{color:var(--color-text);font-weight:600}
+.sample-development-body{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:var(--space-32);padding:var(--space-24)}
+.sample-development-body>div,.sample-development-body>aside{min-width:0}
+.sample-development-loading{display:flex;align-items:center;justify-content:center;gap:var(--space-12);min-height:120px;padding:var(--space-24);color:var(--color-secondary)}
+.sample-development-body aside{border-left:1px solid var(--color-border);padding-left:var(--space-24);color:var(--color-secondary);font-size:var(--font-secondary)}
+.sample-development p{line-height:1.7;overflow-wrap:anywhere}
+.sample-development footer{padding:var(--space-20) var(--space-24);border-top:1px solid var(--color-border);color:var(--color-secondary);font-size:var(--font-secondary)}
+.sample-development footer p{margin:0}
+@media(max-width:760px){.sample-development>header{flex-direction:column}.sample-development-body{grid-template-columns:minmax(0,1fr)}.sample-development-body aside{border-left:0;border-top:1px solid var(--color-border);padding:var(--space-20) 0 0}}

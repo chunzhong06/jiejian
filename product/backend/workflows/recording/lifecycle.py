@@ -298,7 +298,11 @@ class RecordingLifecycle:
                                                    browser_events=recording.browser_events)
             work.recordings.replace(recording)
             try:
-                bindings.accept_recording(work, recording, draft_record, flow=flow, now_us=now_us)
+                if work.preparation_recovery.candidate_recording(recording_id):
+                    # 候选审阅仍核对完整来源，但采用须经过材料预览与确认；跨进程自动最终化也遵守此标记。
+                    bindings.build_recording_bindings(work, recording, draft_record, flow=flow, now_us=now_us)
+                else:
+                    bindings.accept_recording(work, recording, draft_record, flow=flow, now_us=now_us)
             except ValidationError:
                 raise JiejianError(ErrorCode.RECORD_DRAFT_UNCONFIRMED, "录制中的资源或请求不能形成受限技术绑定") from None
             work.commit()

@@ -262,7 +262,8 @@ def test_recording_finalize_api_supplies_runtime_timestamp(tmp_path: Path) -> No
     }
 
 @pytest.mark.essential
-def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path: Path) -> None:
+@pytest.mark.parametrize("material_candidate", [False, True])
+def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path: Path, material_candidate: bool) -> None:
     store = MemorySecretStore()
     app = create_app(tmp_path / "var", start_worker=False, secret_store=store, environ={})
     harness = build_preparation_harness(tmp_path, core=app.state.context)
@@ -286,6 +287,7 @@ def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path
             "RecordingCreateRequest"
         ]["properties"]
         assert set(schema) == {
+            "material_candidate",
             "schema_version",
             "business_action_id",
             "action_revision",
@@ -297,10 +299,12 @@ def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path
             "parent_recording_id",
             "effect_id",
         }
+        assert schema["material_candidate"]["default"] is False
         position = app.state.context.preparation.get(project_id).actions[0].assurance_contract.identity_requirements.permissions[0]
         valid = client.post(
             f"/api/projects/{project_id}/recordings",
             json={
+                **({"material_candidate": True} if material_candidate else {}),
                 "schema_version": "2",
                 "business_action_id": action_id,
                 "action_revision": 1,
@@ -314,6 +318,8 @@ def test_recording_api_uses_confirmed_action_and_prepared_test_identity(tmp_path
         )
         assert valid.status_code == 202, valid.text
         data = valid.json()["data"]
+        with app.state.context.uow_factory() as work:
+            assert work.preparation_recovery.candidate_recording(data["recording"]["recording_id"]) is material_candidate
         assert data["action"]["business_action_id"] == action_id
         assert data["test_identity"]["test_identity_id"] == identity.identity_id
         assert "fixture-secret" not in valid.text

@@ -208,14 +208,13 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
 
   return <EditorialPage label="测试账号登录准备">
     <EditorialHeader eyebrow="验证 · 真实账号" title={initialPreparation ? `准备“${preparationIdentity?.label ?? '当前测试账号'}”的登录状态` : '管理当前测试账号'}><p className="editorial-muted">{preparation ? preparationStatus(preparation) : '只处理当前账号，其他有效准备仍然保留'}</p></EditorialHeader>
-    {!initialPreparation && <><section className="identity-overview"><h2>准备测试账号</h2>
-      <Typography.Paragraph>点击“打开登录浏览器”后，请在独立窗口中自行完成密码、单点登录或多因素认证。只有你明确确认后，界鉴才保存当前应用需要的有限登录状态。</Typography.Paragraph>
-      <Alert type="info" showIcon message="账号数量由当前权限要求决定" description="检查准备页会列出每个业务主体所需的独立账号；在这里管理已创建账号的登录状态。" />
+    {!initialPreparation && <><section className="identity-overview"><header><h2>添加测试账号</h2><p className="editorial-muted">选择账号所属角色并起一个便于识别的名称，然后在账号列表中打开登录浏览器。</p></header>
       {roles.length > 0 && <div className="identity-create">
-        <Select aria-label="选择已确认业务主体" value={selectedRole} onChange={setSelectedRole} options={roles.map((role) => ({ value: role.actor_id, label: role.display_name }))} />
-        <Input aria-label="测试账号名称" value={label} maxLength={128} onChange={(event) => setLabel(event.target.value)} placeholder="例如：普通用户A / 管理员测试账号" />
+        <label><span>所属业务角色</span><Select aria-label="选择已确认业务主体" value={selectedRole} onChange={setSelectedRole} options={roles.map((role) => ({ value: role.actor_id, label: role.display_name }))} /></label>
+        <label><span>账号名称</span><Input aria-label="测试账号名称" value={label} maxLength={128} onChange={(event) => setLabel(event.target.value)} placeholder="例如：普通成员 Bob" /></label>
         <Button loading={busy} disabled={activeLogin || !selectedRole || !label.trim()} onClick={() => void createIdentity()}>添加测试账号</Button>
       </div>}
+      <p className="identity-guidance">需要几个账号由已确认的权限规则决定。密码由你在独立浏览器中输入；明确确认后，界鉴才保存有限的登录状态。</p>
     </section>
 
     <section className="identity-role-section" aria-labelledby="identity-role-section-title">
@@ -237,7 +236,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     </>}
     {preparation?.status === 'WAITING_FOR_LOGIN' && <section className="identity-login-steps task-focus"><p className="editorial-eyebrow">当前需要你处理</p><h2>在已打开的浏览器中完成登录</h2>
       <p>测试账号：{preparationIdentity?.label ?? '当前测试账号'}</p><p className="editorial-muted">正常完成密码、单点登录或多因素认证，然后回到这里确认。</p><p>保存完成前，请保持登录窗口打开。</p>
-      <Space wrap><Button type="primary" aria-label="我已完成登录" aria-busy={busy} disabled={Boolean(syncError)} loading={busy} onClick={() => void confirm()}>我已完成登录</Button><Button loading={busy} onClick={() => void cancel()}>取消准备</Button></Space>
+      <div className="confirmation-actions"><Button loading={busy} onClick={() => void cancel()}>取消准备</Button><Button type="primary" aria-label="我已完成登录" aria-busy={busy} disabled={Boolean(syncError)} loading={busy} onClick={() => void confirm()}>我已完成登录</Button></div>
       <p className="editorial-muted">只保存当前应用所需的有限登录状态，不保存密码。实际执行身份在检查中核验。</p>
     </section>}
     {preparation && preparation.status !== 'WAITING_FOR_LOGIN' && !(receipt && preparation.status === 'PREPARED') && <Alert
@@ -251,9 +250,9 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     />}
     {(receipt || syncError) && <TaskReceipt message={receipt ?? '正在核对测试账号'} pending={syncError} onRetry={syncError ? () => void refresh() : undefined}/>}
 
-    <TaskActionBar
+    <div className="identity-page-actions"><TaskActionBar
       back={{ label: '返回检查准备', onClick: onBack, disabled: busy || activeLogin }}
       primary={activeLogin ? undefined : { label: '查看下一项准备', onClick: onContinuePreparation, disabled: busy || activeLogin || Boolean(syncError) }}
-    />
+    /></div>
   </EditorialPage>
 }

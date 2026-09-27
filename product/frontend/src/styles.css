@@ -1400,6 +1400,7 @@ samp {
 }
 
 .llm-settings-actions {
+  justify-content: flex-end;
   align-items: center;
   display: flex;
   gap: var(--space-12);

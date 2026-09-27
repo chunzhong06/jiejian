@@ -6,6 +6,7 @@ from product.backend.api.envelope import ApiModel
 from product.backend.core.preparation.requirements import PermissionIdentity
 from pydantic import Field
 from typing import Literal
+from product.backend.workflows.preparation.material_models import MaterialChange, MaterialReference, PreparationDraft
 
 
 class AllowControlSelectionRequest(ApiModel):
@@ -17,6 +18,31 @@ class AllowControlSelectionRequest(ApiModel):
 
 def build_preparation_router(context) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/api/projects/{project_id}/preparation/materials/{action_id}/{kind}", response_model=ApiResponse)
+    async def material_details(project_id: str, action_id: str, kind: Literal["execution", "resource", "evidence", "recovery"], action_revision: int, member_id: str | None = None):
+        ref = MaterialReference(action_id=action_id, action_revision=action_revision, kind=kind, member_id=member_id)
+        return data_response(context.preparation_materials.details(project_id, ref))
+
+    @router.post("/api/projects/{project_id}/preparation/changes/preview", response_model=ApiResponse)
+    async def preview_material(project_id: str, body: MaterialChange):
+        return data_response(context.preparation_materials.preview(project_id, body))
+
+    @router.post("/api/projects/{project_id}/preparation/changes", response_model=ApiResponse)
+    async def save_material(project_id: str, body: MaterialChange):
+        return data_response(context.preparation_materials.apply(project_id, body))
+
+    @router.get("/api/projects/{project_id}/preparation/changes/{operation_id}", response_model=ApiResponse)
+    async def material_receipt(project_id: str, operation_id: str):
+        return data_response(context.preparation_materials.receipt(project_id, operation_id))
+
+    @router.get("/api/projects/{project_id}/preparation/draft", response_model=ApiResponse)
+    async def preparation_draft(project_id: str):
+        return data_response(context.preparation_materials.draft(project_id))
+
+    @router.put("/api/projects/{project_id}/preparation/draft", response_model=ApiResponse)
+    async def save_preparation_draft(project_id: str, body: PreparationDraft):
+        return data_response(context.preparation_materials.save_draft(project_id, body))
 
     @router.get("/api/projects/{project_id}/preparation", response_model=ApiResponse)
     async def get_preparation(project_id: str):

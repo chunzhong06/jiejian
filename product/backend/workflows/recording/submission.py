@@ -57,6 +57,7 @@ class SubmitRecording(RecordingApplicationModel):
     available_at_us: int = Field(ge=0)
     now_us: int = Field(ge=0)
     job_id: str | None = Field(default=None, pattern=JOB_ID_PATTERN)
+    material_candidate: bool = False
 
 
 class RecordingSubmissionResult(RecordingApplicationModel):
@@ -327,6 +328,8 @@ class RecordingSubmission:
             command.idempotency_key,
         )
         if existing is not None:
+            if work.preparation_recovery.candidate_recording(existing.recording_id) != command.material_candidate:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "同一次录制的材料采用方式不能改变")
             return self._existing(work, existing, request_hash)
         if work.projects.get(command.request.project_id) is None:
             raise JiejianError(ErrorCode.JOB_PERSISTENCE, "录制所属项目不存在")
@@ -376,6 +379,9 @@ class RecordingSubmission:
             updated_at_us=command.now_us,
         )
         work.recordings.add(recording)
+        if command.material_candidate:
+            # 在 Job 对 Worker 可见前保存候选用途，重启或自动最终化也不能提前替换正式材料。
+            work.preparation_recovery.mark_candidate_recording(recording.recording_id)
         work.jobs.add(job)
         append_job_event(
             work,

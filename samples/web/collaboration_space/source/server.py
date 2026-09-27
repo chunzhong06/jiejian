@@ -22,11 +22,13 @@ from xml.sax.saxutils import escape as xml_escape
 
 if __package__:
     from .background import ExportWorker
+    from .inline_export import complete_inline_export
     from .page import APPLICATION_PAGE
     from .storage import CollaborationStorage, PROJECT_ID, PROJECT_NAME, RESOURCE_ID
 else:
     # 正式 Sample 以 source 为模块根运行，仓库测试则通过命名空间包导入。
     from background import ExportWorker
+    from inline_export import complete_inline_export
     from page import APPLICATION_PAGE
     from storage import CollaborationStorage, PROJECT_ID, PROJECT_NAME, RESOURCE_ID
 
@@ -275,8 +277,7 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
         authorization_order = self._read_authorization_policy()
         owner_observation = value["owner_observation"]
         blob_observation = value["blob_observation"]
-        if value["authorization_order"] != authorization_order:
-            raise ValueError("sample control and source authorization order differ")
+        # 授权行为由当前源码决定；环境观察开关不能覆盖 Agent 对真实实现的修改。
         if owner_observation not in {"AVAILABLE", "UNAVAILABLE"}:
             raise ValueError("invalid owner observation mode")
         if blob_observation not in {"AVAILABLE", "UNAVAILABLE"}:
@@ -322,6 +323,14 @@ class CollaborationSpaceServer(ThreadingHTTPServer):
     @property
     def authorization_order(self) -> AuthorizationOrder:
         return self._read_control()[0]
+
+    @property
+    def export_execution_mode(self) -> str:
+        policy = runpy.run_path(str(self._authorization_policy_path))
+        mode = policy.get("export_execution_mode", lambda: "QUEUED")()
+        if mode not in {"SYNCHRONOUS", "QUEUED"}:
+            raise ValueError("invalid export execution mode")
+        return mode
 
     @property
     def owner_observation(self) -> OwnerObservation:
@@ -405,7 +414,7 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             if self.server.storage.member_role(account) is None:
                 self._forbidden("PROJECT_MEMBER_REQUIRED")
                 return
-            self._json(HTTPStatus.OK, self.server.storage.project_detail())
+            self._json(HTTPStatus.OK, {**self.server.storage.project_detail(), "export_execution_mode": self.server.export_execution_mode})
             return
         if path == f"/api/projects/{PROJECT_ID}/collaboration":
             account = self._session_account()
@@ -579,6 +588,10 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             )
             return
         fixed=self.server.authorization_order=="AUTHORIZE_BEFORE_ENQUEUE"
+        execution_mode = self.server.export_execution_mode
+        if execution_mode not in {"SYNCHRONOUS", "QUEUED"} or execution_mode == "SYNCHRONOUS" and not fixed:
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"code": "EXPORT_IMPLEMENTATION_INVALID"})
+            return
         sequence=3
         authorization_id=None
         def authorize(parent, number):
@@ -608,6 +621,12 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
             kind="PERSISTENT_EFFECT",semantic_key="export_request_created",subject_id=account,actor_id=account,
             source_component="collaboration-server",source_location="storage:export-job")
         dispatch_sequence=sequence+1
+        if execution_mode == "SYNCHRONOUS":
+            completed = complete_inline_export(self.server.storage, job, parent_event_id=created_id,
+                authorization_event_id=authorization_id, sequence=dispatch_sequence, effect_id=self.server.export_effect_id)
+            self._json(HTTPStatus.OK if completed else HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"code": "EXPORT_COMPLETED" if completed else "EXPORT_FAILED", "request_marker": marker, "task_id": job["task_id"]})
+            return
         dispatch_id=self.server.storage.audit_event_id(marker,"export_message_sent",dispatch_sequence)
         response_complete=threading.Event()
         effect_id=self.server.export_effect_id

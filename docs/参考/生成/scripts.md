@@ -149,6 +149,12 @@
 - `class BoundariesActions`
 主要 import / dot-source：`.session`
 
+### `scripts/dev/sample_test/gui/business_review.py`
+- `verify_business_selection(gui, project)`
+- `verify_identity_layout(gui)`
+- `verify_maintenance_layout(gui)`
+主要 import / dot-source：`playwright.sync_api`, `scripts.dev.sample_test.harness.state`
+
 ### `scripts/dev/sample_test/gui/checks.py`
 - `class ChecksActions`
 主要 import / dot-source：`.session`, `contextlib`, `re`, `urllib.parse`
@@ -160,6 +166,11 @@
 ### `scripts/dev/sample_test/gui/history.py`
 - `class HistoryActions`
 主要 import / dot-source：`.session`, `urllib.parse`
+
+### `scripts/dev/sample_test/gui/material_recovery.py`
+- `verify_material_reuse(gui, project_id)`
+- `verify_environment_restart(gui, project_id)`
+主要 import / dot-source：`playwright.sync_api`, `scripts.dev.sample_test.harness.state`, `urllib.parse`
 
 ### `scripts/dev/sample_test/gui/mcp.py`
 - `class McpActions`

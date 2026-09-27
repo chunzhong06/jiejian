@@ -74,6 +74,8 @@ class OfficialScenarioInstaller:
         owner_identity_id: str,
         member_identity_id: str,
         source_fingerprint: str,
+        runtime_instance_id: str | None = None,
+        synchronous_export: bool = False,
     ) -> tuple[str, str]:
         """发布两条已审阅场景流程；它们只定义考题，不代表任何运行结果。"""
 
@@ -82,10 +84,11 @@ class OfficialScenarioInstaller:
             action_id=export_action_id,
             identity_id=owner_identity_id,
             endpoint=endpoint,
-            event_factory=_export_events,
+            event_factory=lambda endpoint, identity, now: _export_events(endpoint, identity, now, synchronous=synchronous_export),
             resource_consumer=ValueSlotConsumer.JSON_BODY,
             resource_location="$.resource_id",
             source_fingerprint=source_fingerprint,
+            runtime_instance_id=runtime_instance_id,
         )
         view_recording = self._install_recording(
             project_id=project_id,
@@ -97,11 +100,12 @@ class OfficialScenarioInstaller:
             resource_location="path[2]",
             source_fingerprint=source_fingerprint,
             target_request_id="request_000002",
+            runtime_instance_id=runtime_instance_id,
         )
         self._install_recording(project_id=project_id,action_id=export_action_id,identity_id=owner_identity_id,
             endpoint=endpoint,event_factory=_recovery_events,resource_consumer=ValueSlotConsumer.JSON_BODY,
             resource_location="$.resource_id",source_fingerprint=source_fingerprint,
-            purpose=RecordingPurpose.RECOVERY,parent_recording_id=export_recording)
+            purpose=RecordingPurpose.RECOVERY,parent_recording_id=export_recording,runtime_instance_id=runtime_instance_id)
         return export_recording, view_recording
 
     def _install_recording(
@@ -118,6 +122,7 @@ class OfficialScenarioInstaller:
         purpose=RecordingPurpose.TARGET,
         parent_recording_id=None,
         target_request_id="request_000001",
+        runtime_instance_id=None,
     ) -> str:
         from product.backend.workflows.preparation.demonstrations import legal_demonstrations
         action=next(item for item in self._preparation.get(project_id).actions if item.action_id==action_id)
@@ -127,8 +132,8 @@ class OfficialScenarioInstaller:
         if choice is None:
             raise JiejianError(ErrorCode.STATE_PRECONDITION,"官方示例缺少已确认的合法演示组合")
         key=(project_id,action_id,action.action_revision,identity_id,choice.resource_owner_test_identity_id,
-             choice.subject_slot_id,choice.resource_owner_slot_id,source_fingerprint,purpose.value,parent_recording_id,
-             resource_consumer.value,resource_location,target_request_id,"official-recipe-v2")
+             choice.subject_slot_id,choice.resource_owner_slot_id,source_fingerprint,endpoint,runtime_instance_id,purpose.value,parent_recording_id,
+             resource_consumer.value,resource_location,target_request_id,"official-recipe-v3")
         submitted=self._project_recordings.submit_captured(project_id,
             events=event_factory(endpoint,identity_id,self._clock_us()),
             business_action_id=action_id,action_revision=action.action_revision,
@@ -198,9 +203,9 @@ def _view_events(endpoint: str, identity_id: str, now_us: int) -> tuple[Recordin
     )
 
 
-def _export_events(endpoint: str, identity_id: str, now_us: int) -> tuple[RecordingEvent, ...]:
+def _export_events(endpoint: str, identity_id: str, now_us: int, *, synchronous: bool = False) -> tuple[RecordingEvent, ...]:
     requests = (
-        ("POST", "request_000001", f"{endpoint}/api/projects/{SAMPLE_PROJECT_ID}/exports", json.dumps({"resource_id": SAMPLE_RESOURCE_ID}), 202, "{}"),
+        ("POST", "request_000001", f"{endpoint}/api/projects/{SAMPLE_PROJECT_ID}/exports", json.dumps({"resource_id": SAMPLE_RESOURCE_ID}), 200 if synchronous else 202, "{}"),
     )
     output: list[RecordingEvent] = []
     sequence = 1

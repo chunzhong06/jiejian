@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PreparationView } from '../../api/preparation'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { PreparationPage } from './PreparationPage'
-const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn() }))
-vi.mock('../../api/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select, evidence: api.evidence } }))
+const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn(), draft: vi.fn(), saveDraft: vi.fn() }))
+vi.mock('../../api/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select, evidence: api.evidence, draft: api.draft, saveDraft: api.saveDraft } }))
 vi.mock('../../api/testIdentities', () => ({ testIdentitiesApi: { create: api.create, startPreparation: api.start } }))
 vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: () => null }))
 vi.mock('../identities/TestIdentityPage', () => ({ TestIdentityPage: () => <div>登录准备页面</div> }))
@@ -18,7 +18,7 @@ const material = (patch: Partial<PreparationView> = {}): PreparationView => ({ p
   execution: { status: 'SATISFIED', reason_codes: [] }, resources: [], effect_evidence: [{ effect_id: 'e1', status: 'STALE', reason_codes: [] }], recovery: { status: 'NOT_REQUIRED', reason_codes: [] }, reason_codes: [],
 }], ...patch })
 const props = (current = workspace(task())) => ({ project: { project_id: 'p1' }, workspace: current, onStateChanged: vi.fn().mockResolvedValue(current), onError: vi.fn(), onNavigate: vi.fn() })
-beforeEach(() => { vi.clearAllMocks(); api.get.mockResolvedValue(material()); api.create.mockResolvedValue({ identity_id: 'identity2' }); api.start.mockResolvedValue({ preparation_id: 'login2' }) })
+beforeEach(() => { vi.clearAllMocks(); api.draft.mockResolvedValue({schema_version:"1",revision:0,action_id:null,material:null}); api.get.mockResolvedValue(material()); api.create.mockResolvedValue({ identity_id: 'identity2' }); api.start.mockResolvedValue({ preparation_id: 'login2' }) })
 function selectionMaterial() {
   const value = material()
   const reference = (id: string) => ({ intent_id: id, revision: 1, intent_hash: `${id}-hash` })
@@ -34,15 +34,43 @@ function selectionMaterial() {
   return value
 }
 describe('动作准备', () => {
-  it('材料说明入口只读取当前动作，返回后恢复入口焦点', async () => {
-    api.evidence.mockResolvedValue({project_id:'p1',action_id:'a1',action_revision:2,action_label:'导出交付包',effects:[]})
+  it('材料保存后的下一步同步失败会自动恢复，不需要离开再回来', async () => {
+    const p = props(), provided = vi.fn().mockResolvedValue(undefined)
+    render(<PreparationPage {...p} onProvidedMaterials={provided}/>)
+    const button = await screen.findByRole('button', { name: '使用已提供的测试材料' })
+    api.get.mockResolvedValue(material({ preparation_complete: true }))
+    p.onStateChanged.mockResolvedValueOnce(undefined)
+    fireEvent.click(button)
+    await screen.findByText(/下一步尚未同步/)
+    expect(screen.getByRole('heading', { name: '材料已保存，正在同步下一步' })).toBeInTheDocument()
+    p.onStateChanged.mockResolvedValue(workspace(task({ task_kind: 'RUN_CURRENT_CHECK', title: '运行当前检查' })))
+    await waitFor(() => expect(screen.getByRole('button', { name: '刷新准备材料' })).toHaveAttribute('aria-busy', 'false'))
+    fireEvent.focus(window)
+    await waitFor(() => expect(screen.queryByText(/下一步尚未同步/)).not.toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: '前往处理' })).toBeEnabled()
+    expect(provided).toHaveBeenCalledOnce()
+  })
+  it('读取失败不冒充业务动作为空', async () => {
+    api.get.mockRejectedValueOnce(new Error('offline'))
+    render(<PreparationPage {...props()} />)
+    expect(await screen.findByRole('heading', { name: '暂时无法读取检查材料' })).toBeInTheDocument()
+    expect(screen.queryByText('请先在业务边界中确认动作和权限')).not.toBeInTheDocument()
+    expect(api.create).not.toHaveBeenCalled()
+  })
+  it('拒绝展示其他应用返回的材料快照', async () => {
+    api.get.mockResolvedValueOnce(material({ project_id: 'other-project' }))
+    const p = props(); render(<PreparationPage {...p} />)
+    expect(await screen.findByRole('heading', { name: '暂时无法读取检查材料' })).toBeInTheDocument()
+    expect(p.onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'STATE_PRECONDITION' }))
+    expect(screen.queryByRole('table', { name: '检查材料清单' })).not.toBeInTheDocument()
+  })
+  it('五类材料清单按需展开，不在读取时写入', async () => {
     render(<PreparationPage {...props()}/>)
-    fireEvent.click(await screen.findByRole('button',{name:'查看证明要求与材料'}))
-    expect(await screen.findByText('当前动作没有需要说明的结果证明材料')).toBeInTheDocument()
-    expect(api.evidence).toHaveBeenCalledWith('p1','a1')
-    expect(api.create).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled();expect(api.select).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button',{name:'返回准备材料'}))
-    await waitFor(()=>expect(screen.getByRole('button',{name:'查看证明要求与材料'})).toHaveFocus())
+    const table = await screen.findByRole('table', {name:'检查材料清单'})
+    expect(within(table).getAllByRole('row')).toHaveLength(6)
+    fireEvent.click(within(table).getByRole('button', {name:'处理'}))
+    expect(screen.getAllByRole('button', {name:'管理测试账号'})).toHaveLength(2)
+    expect(api.create).not.toHaveBeenCalled(); expect(api.saveDraft).not.toHaveBeenCalled()
   })
   it('预置材料只在当前缺口显式导入，之后仍由服务端决定下一任务', async () => {
     const p=props(),provided=vi.fn().mockResolvedValue(undefined)
@@ -69,10 +97,10 @@ describe('动作准备', () => {
 
   it('显示实际两个账号需求、静态材料与失效证明，不在加载时写入', async () => {
     render(<PreparationPage {...props()} />)
-    expect(await within(await screen.findByLabelText('当前需要处理的材料')).findByText('普通成员账号 1')).toBeInTheDocument()
-    expect(within(screen.getByLabelText('当前需要处理的材料')).getByText('普通成员账号 2')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('查看全部测试条件')); expect(within(screen.getByText('查看全部测试条件').parentElement!).getByRole('heading', { name: '随后核对结果证明' })).toBeInTheDocument()
-    expect(within(screen.getByText('查看全部测试条件').parentElement!).getByText('只读动作不需要恢复')).toBeInTheDocument()
+    const table = await screen.findByRole('table', {name:'检查材料清单'})
+    expect(within(table).getByText('普通成员账号 1、普通成员账号 2')).toBeInTheDocument()
+    expect(within(table).getByText('结果证明')).toBeInTheDocument()
+    expect(within(table).getByText('只读动作无需恢复')).toBeInTheDocument()
     expect(api.create).not.toHaveBeenCalled(); expect(api.start).not.toHaveBeenCalled()
     expect(screen.queryByText(/Alice|Bob|slot2|最多支持/)).not.toBeInTheDocument()
   })
@@ -91,7 +119,7 @@ describe('动作准备', () => {
   it('材料全部齐备也不提供 Run 或验证运行入口', async () => {
     api.get.mockResolvedValue(material({ preparation_complete: true }))
     render(<PreparationPage {...props(workspace(null))} />)
-    expect(await screen.findByText('测试材料已准备完成，请返回检查总览核对执行条件。')).toBeInTheDocument()
+    expect(await screen.findByRole('table', { name: '检查材料清单' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /开始检查|验证运行|继续准备这项材料/ })).not.toBeInTheDocument()
   })
   it('创建指定 slot 账号后先刷新材料和 Workspace，才打开登录', async () => {

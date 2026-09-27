@@ -32,10 +32,11 @@ def _load_evidence(client, run_id):
 def _gui_complete(records, *, stop_after_setup=False):
     required = {"start", "human-approve", "prepare", "exit"}
     if not stop_after_setup:
-        required |= {"submit-check", "problem-result", "limited-result", "fixed-result", "evidence-and-repair",
+        required |= {"submit-check", "baseline-result", "problem-result", "limited-result", "fixed-result", "evidence-and-repair",
             "decisive-evidence", "execution-path", "history-search", "history-return", "mcp-connected",
             "mcp-level-read", "mcp-level-prepare", "mcp-level-execute", "mcp-change", "mcp-completion",
             "mcp-responsibility", "mcp-cleanup"}
+        required |= {"material-reuse-recovery", "environment-restart-recovery", "business-selection-review", "identity-management-layout"}
     return required.issubset({item["event"] for item in records if item.get("status") == "PASSED"})
 
 
@@ -127,12 +128,22 @@ def run(
         state.sample_started = True
         project_id = str(experience["project_id"])
         sample_port = int(str(experience["origin"]).rsplit(":", 1)[1])
-        if not experience.get("active") or experience.get("scenario_version") != "VULNERABLE" or project_run_ids(client, project_id):
+        if not experience.get("active") or experience.get("scenario_version") != "BASELINE" or project_run_ids(client, project_id):
             raise sample_harness_state.SampleTestError("SAMPLE_NEW_INSTANCE_INVALID")
         _phase(state, 3)
+        if not stop_after_setup or verify_workspace_ui:
+            from scripts.dev.sample_test.gui.business_review import verify_business_selection
+            verify_business_selection(gui, project_id)
         prepare_current(client, project_id, initial=True, gui=gui)
         prepared_identities = client.call("GET", f"/api/projects/{project_id}/test-identities")
         identities = {str(index): str(item["identity_id"]) for index, item in enumerate(prepared_identities)}
+        if not stop_after_setup:
+            from scripts.dev.sample_test.gui.material_recovery import verify_material_reuse
+            verify_material_reuse(gui, project_id)
+        if not stop_after_setup or verify_workspace_ui:
+            from scripts.dev.sample_test.gui.business_review import verify_identity_layout, verify_maintenance_layout
+            verify_identity_layout(gui)
+            verify_maintenance_layout(gui)
         if stop_after_setup:
             runs = []
         else:
@@ -144,6 +155,10 @@ def run(
             checkpoint("evidence-and-repair", {"project_id": project_id, "runs": runs})
             from scripts.dev.sample_test.current_mcp import run as run_mcp
             mcp_evidence = run_mcp(client, gui, project_id, runs, state)
+            from scripts.dev.sample_test.gui.material_recovery import verify_environment_restart
+            sample_port, restarted_project = verify_environment_restart(gui, project_id)
+            identities = {str(index): str(item["identity_id"]) for index, item in enumerate(
+                client.call("GET", f"/api/projects/{restarted_project}/test-identities"))}
         else:
             mcp_evidence = None
         _phase(state, 8)
@@ -154,9 +169,10 @@ def run(
         state.product_ready = False
         gui_complete = _gui_complete(gui.records, stop_after_setup=stop_after_setup)
         sample_reporting_diagnostics._write_summary(audit_dir, {"schema_version": "1", "project_id": project_id,
-            "scenario_versions": [] if stop_after_setup else ["VULNERABLE", "EVIDENCE_LIMITED", "FIXED"],
+            "scenario_versions": [] if stop_after_setup else ["BASELINE", "VULNERABLE", "FIXED"],
+            "observation_conditions": [] if stop_after_setup else ["AVAILABLE", "UNAVAILABLE"],
             "runs": [{"run_id": item["run_id"], "verdict": item["story"]["verdict"]} for item in runs],
-            "mcp_evidence": mcp_evidence, "total_run_count": 0 if stop_after_setup else 4,
+            "mcp_evidence": mcp_evidence, "total_run_count": 0 if stop_after_setup else 5,
             "read_projections": ["ResultStory", "Evidence", "RunHistory", "ProjectRepair"],
             "gui_status": "PASSED" if gui_complete else "GUI_INTEGRATION_INCOMPLETE", "gui_checkpoints": gui.records,
             "control_port_closed": True, "sample_port_closed": True, "owned_process_tree_closed": True})

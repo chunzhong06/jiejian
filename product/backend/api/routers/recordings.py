@@ -56,6 +56,7 @@ def build_recordings_router(context: ApplicationCore) -> APIRouter:
             parent_recording_id=body.parent_recording_id,
             effect_id=body.effect_id,
             headless=False,
+            **({"material_candidate": True} if body.material_candidate else {}),
         )
         return data_response(
             {
@@ -191,6 +192,7 @@ from product.backend.api.envelope import ApiModel
 
 class RecordingCreateRequest(ApiModel):
     schema_version: Literal["2"]
+    material_candidate: bool = False
     business_action_id: str = Field(pattern=r"^bac_[0-9a-f]{32}$")
     action_revision: int = Field(ge=1)
     subject_test_identity_id: str = Field(pattern=r"^tid_[0-9a-f]{32}$")

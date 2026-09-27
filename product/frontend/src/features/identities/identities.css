@@ -4,20 +4,31 @@
   gap: var(--space-24);
 }
 
-.identity-overview .ant-card-body {
+.identity-overview {
   display: grid;
-  gap: var(--space-16);
+  gap: var(--space-24);
+  padding: var(--space-24);
+  border: var(--line-width) solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-surface);
 }
+.identity-overview header h2 { margin: 0 0 var(--space-8); }
+.identity-overview header p { margin: 0; max-width: 68ch; }
+.identity-create > label { display: grid; gap: var(--space-8); min-width: 0; }
+.identity-create > label > span { font-size: var(--font-secondary); color: var(--color-secondary); }
+.identity-create .ant-select { width: 100%; }
+.identity-guidance { margin: 0; max-width: 80ch; color: var(--color-secondary); font-size: var(--font-secondary); line-height: 1.7; }
+.identity-page-actions .task-action-bar { position: static; }
 
 .identity-overview .ant-typography {
   margin-bottom: 0;
 }
 
 .identity-create {
-  align-items: center;
+  align-items: end;
   display: grid;
   gap: var(--space-12);
-  grid-template-columns: minmax(160px, .7fr) minmax(260px, 1.3fr) max-content;
+  grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr) max-content;
   max-width: 860px;
 }
 

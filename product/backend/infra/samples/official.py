@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import ast
 import os
 import re
 import secrets
@@ -169,6 +170,8 @@ class OfficialSampleManager:
         authorization_order: AuthorizationOrder = "ENQUEUE_BEFORE_AUTHORIZE",
         owner_observation: OwnerObservation = "AVAILABLE",
         blob_observation: BlobObservation = "AVAILABLE",
+        execution_mode: Literal["SYNCHRONOUS", "QUEUED"] = "QUEUED",
+        workspace_id: str | None = None,
     ) -> OfficialSampleRuntime:
         """复制官方源码并以动态端口启动；任一步失败都回收已创建进程。"""
 
@@ -196,7 +199,7 @@ class OfficialSampleManager:
                     "官方示例体验标识无效",
                 )
             experience_root = self._paths.official_sample_runtime / clean_id
-            source_root = experience_root / "source"
+            source_root = experience_root / "source" if workspace_id is None else self.workspace_source(workspace_id)
             runtime_root = experience_root / "state"
             log_path = self._paths.logs / "official-samples" / f"{clean_id}.log"
             if experience_root.exists() or log_path.exists():
@@ -204,11 +207,11 @@ class OfficialSampleManager:
                     ErrorCode.OFFICIAL_SAMPLE_CONFLICT,
                     "官方示例体验目录已经存在",
                 )
-            _copy_source(installation.source, source_root)
-            _write_authorization_policy(
-                source_root / _AUTHORIZATION_POLICY_FILE,
-                authorization_order,
-            )
+            if not source_root.exists():
+                _copy_source(installation.source, source_root)
+                _write_authorization_policy(source_root / _AUTHORIZATION_POLICY_FILE, authorization_order, execution_mode)
+            elif workspace_id is None or not source_root.is_dir():
+                raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_CONFLICT, "示例源码目录不可用")
             runtime_root.mkdir(parents=True, exist_ok=False)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             control_path = runtime_root / "control.json"
@@ -317,6 +320,7 @@ class OfficialSampleManager:
         authorization_order: AuthorizationOrder,
         owner_observation: OwnerObservation,
         blob_observation: BlobObservation,
+        execution_mode: Literal["SYNCHRONOUS", "QUEUED"] = "QUEUED",
     ) -> OfficialSampleRuntime:
         """只切换真实代码和观察开关；业务恢复由原资源撤销完成，不清除历史。"""
 
@@ -330,7 +334,7 @@ class OfficialSampleManager:
             policy_path = runtime.source_root / _AUTHORIZATION_POLICY_FILE
             previous_policy = policy_path.read_text(encoding="utf-8")
             try:
-                _write_authorization_policy(policy_path, authorization_order)
+                _write_authorization_policy(policy_path, authorization_order, execution_mode)
                 _write_control(
                     runtime.control_path,
                     authorization_order,
@@ -362,6 +366,38 @@ class OfficialSampleManager:
             if name in requested
         }
 
+    def set_observation(self, experience_id: str, *, available: bool) -> None:
+        """观察支线只替换非秘密控制字段，不重写 Agent 正在维护的源码。"""
+        with self._lock:
+            runtime = self._require_active(experience_id)
+            payload = json.loads(runtime.control_path.read_text(encoding="utf-8"))
+            payload.update(owner_observation="AVAILABLE" if available else "UNAVAILABLE",
+                           blob_observation="AVAILABLE" if available else "UNAVAILABLE")
+            _write_text_atomic(runtime.control_path, json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+    def export_execution_mode(self, experience_id: str) -> str:
+        """只解析预设声明，不在 API 进程执行应用源码；复杂改写要求用户自行录制。"""
+        with self._lock:
+            runtime = self._require_active(experience_id)
+            path = runtime.source_root / _AUTHORIZATION_POLICY_FILE
+            try:
+                if path.stat().st_size > 16384:
+                    raise ValueError("policy too large")
+                tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+                functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "export_execution_mode"]
+                if len(functions) != 1:
+                    raise ValueError("mode unavailable")
+                body = functions[0].body
+                executable = [node for node in body if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str))]
+                if len(executable) != 1 or not isinstance(executable[0], ast.Return):
+                    raise ValueError("mode is not a literal")
+                mode = ast.literal_eval(executable[0].value)
+                if mode not in {"SYNCHRONOUS", "QUEUED"}:
+                    raise ValueError("mode invalid")
+                return mode
+            except (OSError, ValueError, SyntaxError, TypeError):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "当前源码已超出预设材料范围，请自行录制当前导出动作") from None
+
     def bind_effects(self, experience_id: str, *, export_effect_id: str, view_effect_id: str) -> None:
         """仅活动体验在正式批准后写入公开效果映射，不更改源码或观察标准。"""
         with self._lock:
@@ -371,6 +407,28 @@ class OfficialSampleManager:
             payload=json.loads(runtime.control_path.read_text(encoding="utf-8"))
             payload.update(export_effect_id=export_effect_id,view_effect_id=view_effect_id)
             _write_text_atomic(runtime.control_path,json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(",",":")))
+
+    def workspace_source(self, workspace_id: str) -> Path:
+        """只解析受控工作空间；持久源码与包含临时秘密的实例目录隔离。"""
+        if re.fullmatch(r"wsp_[0-9a-f]{32}", workspace_id) is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "示例工作空间标识无效")
+        root = self._paths.official_sample_runtime.parent / "workspaces"
+        path = root / workspace_id / "source"
+        if path.resolve() != path.absolute() or not path.resolve().is_relative_to(root.absolute()):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "示例工作空间目录越界")
+        return path
+
+    def cleanup_exited_instance(self, instance_id: str, identity: dict) -> None:
+        """明确确认旧受控树已退出后清理实例目录；持久源码目录不在此范围。"""
+        from product.backend.infra.runtime.process.tree import kernel_tree_has_exited
+        if _EXPERIENCE_ID.fullmatch(instance_id) is None or identity != {"kind": "windows-job", "name": f"jiejian-sample-{instance_id}"} or not kernel_tree_has_exited(identity):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "旧实例退出尚未确认，不能清理运行数据")
+        root = self._paths.official_sample_runtime.absolute()
+        path = root / instance_id
+        if path.resolve() != path.absolute() or not path.resolve().is_relative_to(root):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "示例实例目录越界")
+        if path.exists():
+            shutil.rmtree(path)
 
     def stop(self, experience_id: str | None = None) -> None:
         """回收当前 Sample 进程树和会话目录；只保留独立历史日志。"""
@@ -578,8 +636,12 @@ def _write_control(
 def _write_authorization_policy(
     path: Path,
     authorization_order: AuthorizationOrder,
+    execution_mode: Literal["SYNCHRONOUS", "QUEUED"] = "QUEUED",
 ) -> None:
     """只改官方源码中唯一的机械顺序，让运行行为与源码 diff 保持一致。"""
+
+    if execution_mode not in {"SYNCHRONOUS", "QUEUED"} or execution_mode == "SYNCHRONOUS" and authorization_order != "AUTHORIZE_BEFORE_ENQUEUE":
+        raise JiejianError(ErrorCode.STATE_PRECONDITION, "示例执行方式与授权顺序不匹配")
 
     source = f'''# 协作空间导出动作的授权顺序；官方样例会修改本文件来形成可核验的真实源码变化。
 
@@ -596,6 +658,11 @@ def export_authorization_order() -> AuthorizationOrder:
     """返回当前导出实现采用的授权与后台任务顺序。"""
 
     return "{authorization_order}"
+
+
+def export_execution_mode() -> Literal["SYNCHRONOUS", "QUEUED"]:
+    """同步完成项目包或交给后台队列；两种模式都真实执行导出。"""
+    return "{execution_mode}"
 '''
     _write_text_atomic(path, source)
 

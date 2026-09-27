@@ -124,9 +124,39 @@ def execute_published(core, project, *, key, change_id=None):
     return core.check_results.package(job.run_id), core.check_story.build(job.run_id)
 
 
+def _apply_optimization_after_baseline(core, project):
+    from product.backend.core.errors import JiejianError
+    from product.backend.workflows.examples.environment import OfficialScenarioVersion
+    with pytest.raises(JiejianError):
+        core.official_experience.switch_version(version=OfficialScenarioVersion.VULNERABLE)
+    package, baseline = execute_published(core, project, key="baseline")
+    assert baseline.verdict.value == "PASS", [(case.verdict.value, case.reason_codes, case.outcome.execution_outcome, case.outcome.http_status) for case in package.result.case_results]
+    assert core.official_experience.development_journey().can_optimize
+    changed = core.official_experience.switch_version(version=OfficialScenarioVersion.VULNERABLE)
+    assert changed.vulnerable_change_id and changed.project_id == project
+    prepare_changed_sample(core, project)
+
+
+def test_external_source_change_cannot_be_overwritten_by_preset(current_sample):
+    from product.backend.core.errors import JiejianError
+    from product.backend.workflows.examples.environment import OfficialScenarioVersion
+    core = current_sample
+    core.official_experience.start(consent=True)
+    source = core.official_samples.active.source_root / "authorization_policy.py"
+    changed = source.read_text(encoding="utf-8") + "\n# 用户当前开发中的修改\n"
+    source.write_text(changed, encoding="utf-8")
+    view = core.official_experience.development_journey()
+    assert view.implementation == "CUSTOM" and view.delivery_source == "EXTERNAL_CODE"
+    assert not view.can_optimize
+    with pytest.raises(JiejianError, match="外部修改"):
+        core.official_experience.switch_version(version=OfficialScenarioVersion.VULNERABLE)
+    assert source.read_text(encoding="utf-8") == changed
+
+
 def test_sample_problem_reaches_published_current_story(current_sample):
     core = current_sample
     project = prepare_sample(core)
+    _apply_optimization_after_baseline(core, project)
     package, story = execute_published(core, project, key="problem")
     if story.verdict.value != "BLOCK" or any(case.verdict.value == "INCONCLUSIVE" for case in package.result.case_results):
         print("CASE_DIAGNOSTIC", [(case.verdict.value, case.reason_codes, case.outcome.model_dump(mode="json"))
@@ -146,6 +176,7 @@ def test_sample_observer_failure_and_fixed_new_run_preserve_original_question(cu
     from product.backend.workflows.examples.environment import OfficialScenarioVersion
     core = current_sample
     project = prepare_sample(core)
+    _apply_optimization_after_baseline(core, project)
     original, story = execute_published(core, project, key="original")
     assert story.verdict.value == "BLOCK"
     contract = core.check_repairs.contracts(original.result.run_id)[0]
@@ -175,6 +206,7 @@ def test_sample_observer_failure_and_fixed_new_run_preserve_original_question(cu
     assert fixed_story.verdict.value == "PASS"
     assert verification.status == "VERIFIED"
     assert core.project_repair.evaluate(project).status == "VERIFIED"
+    assert core.official_experience.development_journey().repair_verified
     assert len({original.result.run_id, insufficient.result.run_id, repaired.result.run_id}) == 3
     assert core.check_results.package(original.result.run_id) == original
 
@@ -230,6 +262,7 @@ def test_current_flow_bytes_and_descriptor_rejections_preserve_frozen_material(c
 def test_real_zip_without_task_binding_does_not_promote_original_202(current_sample, monkeypatch):
     core = current_sample
     project = prepare_sample(core)
+    _apply_optimization_after_baseline(core, project)
     original = core.check_registry.snapshot(project)
     proofs = tuple(proof.model_copy(update={"auxiliary_sources": tuple(source for source in proof.auxiliary_sources
         if source.spec.observer_type.value != "ASYNC_TASK_STATUS")}) for proof in original.proofs)
