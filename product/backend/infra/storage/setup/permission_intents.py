@@ -18,10 +18,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from product.backend.core.permission_intent import (
-    PermissionIntentRevision,
-    ProjectPolicyState,
-)
+from product.backend.core.boundaries.permissions import PermissionIntentRevision, ProjectPolicyState
 from product.backend.infra.storage.base import (
     Base,
     _canonical_json,

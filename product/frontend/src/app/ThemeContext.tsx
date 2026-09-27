@@ -23,13 +23,17 @@ function storedMode(): ThemeMode {
 export function ProductThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>(storedMode)
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   const resolved: ResolvedTheme = mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
 
   useEffect(() => {
     const query = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches)
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onMotionChange = (event: MediaQueryListEvent) => setReducedMotion(event.matches)
     query.addEventListener('change', onChange)
-    return () => query.removeEventListener('change', onChange)
+    motion.addEventListener('change', onMotionChange)
+    return () => { query.removeEventListener('change', onChange); motion.removeEventListener('change', onMotionChange) }
   }, [])
 
   useEffect(() => {
@@ -40,8 +44,13 @@ export function ProductThemeProvider({ children }: { children: ReactNode }) {
   }, [mode, resolved])
 
   const value = useMemo(() => ({ mode, resolved, setMode }), [mode, resolved])
+  // 组件库必须知道动效已关闭，才能立即卸载退出中的图标与浮层；仅截断CSS会留下可访问残影。
+  const productTheme = useMemo(() => {
+    const current = createProductTheme(resolved)
+    return {...current, token: {...current.token, motion: !reducedMotion}}
+  }, [resolved, reducedMotion])
   return <ThemeModeContext.Provider value={value}>
-    <ConfigProvider locale={zhCN} theme={createProductTheme(resolved)}>{children}</ConfigProvider>
+    <ConfigProvider locale={zhCN} theme={productTheme}>{children}</ConfigProvider>
   </ThemeModeContext.Provider>
 }
 

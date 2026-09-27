@@ -26,10 +26,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from product.backend.core.permission_semantics import (
-    BusinessEffectKind as SecurityEffectKind,
-    PermissionExpectation,
-)
+from product.backend.core.boundaries.semantics import BusinessEffectKind as SecurityEffectKind, PermissionExpectation
 
 _ID_PATTERN = r"^[a-z][a-z0-9_-]{0,63}$"
 _TEXT_PATTERN = r"^[a-z][a-z0-9_.:-]{0,127}$"

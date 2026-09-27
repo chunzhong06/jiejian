@@ -27,7 +27,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingPurpose, RecordingState, transition_recording_state
+from product.backend.core.recording.models import RecordingPurpose, RecordingState, transition_recording_state
 from product.protocols.recording_flow import Flow
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import FlowDraftReviewCommand, FlowDraft, canonical_flow_draft_json_bytes

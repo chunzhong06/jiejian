@@ -24,15 +24,6 @@ _HIGH_VALUE_GUIDES = (
     "修改Web执行.md",
     "修改结果与报告.md",
 )
-_MODULE_GUIDES = (
-    "backend.md",
-    "frontend.md",
-    "protocols.md",
-    "recording.md",
-    "runtime.md",
-    "scripts.md",
-    "storage.md",
-)
 _ROOT_GUIDE_PATHS = frozenset(
     {
         "environment.yml",
@@ -71,10 +62,10 @@ def _declared_repository_paths(root: Path, text: str) -> list[tuple[str, Path]]:
 def _fixture_root(tmp_path: Path) -> Path:
     (tmp_path / "product/backend/core").mkdir(parents=True)
     (tmp_path / "product/protocols/schemas").mkdir(parents=True)
-    (tmp_path / "docs/03_参考手册/代码").mkdir(parents=True)
-    (tmp_path / "docs/03_参考手册/协议").mkdir(parents=True)
-    (tmp_path / "docs/llms.txt").write_text("→ docs/03_参考手册/协议/公共数据与Schema版本.md\n", encoding="utf-8")
-    (tmp_path / "docs/03_参考手册/协议/公共数据与Schema版本.md").write_text("# 协议版本\n", encoding="utf-8")
+    (tmp_path / "docs/参考/生成").mkdir(parents=True)
+    (tmp_path / "docs/参考/协议").mkdir(parents=True)
+    (tmp_path / "docs/llms.txt").write_text("→ docs/参考/协议/公共数据与Schema版本.md\n", encoding="utf-8")
+    (tmp_path / "docs/参考/协议/公共数据与Schema版本.md").write_text("# 协议版本\n", encoding="utf-8")
     return tmp_path
 
 
@@ -88,7 +79,7 @@ def test_generator_parses_source_without_importing_production(tmp_path: Path) ->
 
     generate(root, update=True)
 
-    reference = (root / "docs/03_参考手册/代码/backend-core.md").read_text(encoding="utf-8")
+    reference = (root / "docs/参考/生成/backend-core.md").read_text(encoding="utf-8")
     assert "PublicThing" in reference
     assert "public_function(value) -> int" in reference
     assert not (root / "imported-marker").exists()
@@ -101,13 +92,13 @@ def test_generator_update_is_byte_stable(tmp_path: Path) -> None:
     generate(root, update=True)
     first = {
         path: path.read_bytes()
-        for path in (root / "docs/03_参考手册").rglob("*.md")
+        for path in (root / "docs/参考").rglob("*.md")
     }
     assert generate(root, update=False) == []
     generate(root, update=True)
     second = {
         path: path.read_bytes()
-        for path in (root / "docs/03_参考手册").rglob("*.md")
+        for path in (root / "docs/参考").rglob("*.md")
     }
     assert first == second
 
@@ -116,8 +107,8 @@ def test_generator_rejects_and_repairs_duplicate_code_reference_header(tmp_path:
     root = _fixture_root(tmp_path)
     (root / "product/backend/core/sample.py").write_text("PUBLIC_VALUE = 1\n", encoding="utf-8")
     generate(root, update=True)
-    reference = root / "docs/03_参考手册/代码/backend-core.md"
-    header = "# 自动代码参考：后端 Core\n\n> 生成区域只描述当前代码结构；职责与安全理由由模块参考和任务指南维护。\n\n"
+    reference = root / "docs/参考/生成/backend-core.md"
+    header = "# 自动代码参考：后端 Core\n\n> 生成区域只描述当前代码结构；职责与安全理由由能力映射和任务指南维护。\n\n"
     reference.write_text(header * 2 + reference.read_text(encoding="utf-8"), encoding="utf-8")
 
     with pytest.raises(SystemExit, match="代码参考漂移"):
@@ -155,7 +146,7 @@ def test_generator_extracts_powershell_functions_params_and_dot_sources(tmp_path
     )
 
     generate(root, update=True)
-    reference = (root / "docs/03_参考手册/代码/scripts.md").read_text(encoding="utf-8")
+    reference = (root / "docs/参考/生成/scripts.md").read_text(encoding="utf-8")
     assert "function Invoke-Sample" in reference
     assert "param $Mode" in reference
     assert "param $Force" in reference
@@ -175,7 +166,7 @@ def test_generator_aggregates_api_and_cli_sources(tmp_path: Path) -> None:
     (cli / "commands.py").write_text("def public_cli(): ...\n", encoding="utf-8")
 
     generate(root, update=True)
-    reference = (root / "docs/03_参考手册/代码/backend-api-cli.md").read_text(encoding="utf-8")
+    reference = (root / "docs/参考/生成/backend-api-cli.md").read_text(encoding="utf-8")
     assert "product/backend/api/routes.py" in reference
     assert "public_api()" in reference
     assert "product/backend/cli/commands.py" in reference
@@ -195,7 +186,7 @@ def test_high_value_guide_quick_map_repository_paths_exist(guide_name: str) -> N
     """高价值 Guide 的快速修改地图不得把开发者指向不存在的静态仓库位置。"""
 
     root = Path(__file__).parents[2]
-    guide = root / "docs/02_开发指南/任务" / guide_name
+    guide = root / ("docs/开发/环境与脚本.md" if guide_name == "修改开发环境.md" else "docs/开发/能力/" + guide_name)
     text = guide.read_text(encoding="utf-8")
     marker = "## 快速找到修改位置"
     assert marker in text, f"{guide_name} 缺少快速修改地图"
@@ -207,39 +198,16 @@ def test_high_value_guide_quick_map_repository_paths_exist(guide_name: str) -> N
     assert missing == [], f"{guide_name} 包含不存在的仓库位置：{missing}"
 
 
-@pytest.mark.parametrize("guide_name", _MODULE_GUIDES)
-def test_module_guides_keep_scripts_guide_navigation_quality(guide_name: str) -> None:
-    """模块 Guide 必须保持 scripts.md 级别的职责、修改路由和验证密度。"""
-
+def test_capability_map_points_to_real_owners_and_tests() -> None:
+    """能力地图的静态实现与测试入口必须存在，不强制机械标题或条数。"""
     root = Path(__file__).parents[2]
-    guide = root / "docs/02_开发指南/模块" / guide_name
-    text = guide.read_text(encoding="utf-8")
-    required_markers = (
-        "> 状态：CURRENT。",
-        "## 职责",
-        "## 非职责",
-        "## 稳定入口",
-        "## 我想修改什么",
-        "## 必须保持的边界",
-        "## 直接验证",
-    )
-    missing_markers = [marker for marker in required_markers if marker not in text]
-    assert missing_markers == [], f"{guide_name} 缺少模块导航结构：{missing_markers}"
-    assert text.count("| ---") >= 2, f"{guide_name} 缺少边界表或修改路由表"
-    route_section = text.split("## 我想修改什么", 1)[1].split("\n## ", 1)[0]
-    route_rows = [
-        line
-        for line in route_section.splitlines()
-        if line.startswith("| ") and not line.startswith(("| ---", "| 任务"))
-    ]
-    assert len(route_rows) >= 5, f"{guide_name} 修改路由不足"
-    assert text.count("\n- ") >= 5, f"{guide_name} 硬边界不足"
-    assert "dev.ps1" in text, f"{guide_name} 没有给出受控验证入口"
-
+    text = (root / "docs/架构/能力映射.md").read_text(encoding="utf-8")
     declared = _declared_repository_paths(root, text)
-    assert declared, f"{guide_name} 没有声明可检查的静态仓库位置"
-    missing = sorted({value for value, path in declared if not path.exists()})
-    assert missing == [], f"{guide_name} 包含不存在的仓库位置：{missing}"
+    assert declared
+    assert [value for value, path in declared if not path.exists()] == []
+    assert "tests/backend/core/" in text
+    assert "tests/backend/workflows/" in text
+    assert "tests/backend/infra/runtime/" in text
 
 
 def test_observer_sqlite_knowledge_route_reaches_current_owner() -> None:
@@ -247,10 +215,10 @@ def test_observer_sqlite_knowledge_route_reaches_current_owner() -> None:
 
     root = Path(__file__).parents[2]
     routes = (root / "docs/llms.txt").read_text(encoding="utf-8")
-    guide = (root / "docs/02_开发指南/任务/修改Observer.md").read_text(encoding="utf-8")
-    reference = (root / "docs/03_参考手册/协议/Observer观察协议.md").read_text(encoding="utf-8")
-    assert "docs/02_开发指南/任务/修改Observer.md" in routes
-    assert "docs/03_参考手册/协议/Observer观察协议.md" in routes
+    guide = (root / "docs/开发/能力/修改Observer.md").read_text(encoding="utf-8")
+    reference = (root / "docs/参考/协议/Observer观察协议.md").read_text(encoding="utf-8")
+    assert "docs/开发/能力/修改Observer.md" in routes
+    assert "docs/参考/协议/Observer观察协议.md" in routes
     for value in (
         "product/backend/infra/observers/sqlite.py",
         "tests/backend/infra/observers/",
@@ -263,11 +231,11 @@ def test_observer_reference_exposes_corroborating_channels_owner() -> None:
     """Reference 必须把佐证角色字段追到当前公共协议与装配实现。"""
 
     root = Path(__file__).parents[2]
-    reference = (root / "docs/03_参考手册/协议/Observer观察协议.md").read_text(encoding="utf-8")
+    reference = (root / "docs/参考/协议/Observer观察协议.md").read_text(encoding="utf-8")
     assert "corroborating_channels" in reference
     for value in (
         "product/protocols/execution.py",
-        "product/backend/workflows/security_setup/local_observer_wiring.py",
+        "product/backend/workflows/checks/local_observer_wiring.py",
     ):
         assert value in reference
         assert (root / value).exists()
@@ -277,7 +245,7 @@ def test_observer_reference_exposes_failure_to_inconclusive_trace() -> None:
     """Reference 必须把观察失败到三态判断的实现和测试链路说清。"""
 
     root = Path(__file__).parents[2]
-    reference = (root / "docs/03_参考手册/协议/Observer观察协议.md").read_text(encoding="utf-8")
+    reference = (root / "docs/参考/协议/Observer观察协议.md").read_text(encoding="utf-8")
     assert "失败为什么只能 INCONCLUSIVE" in reference
     for value in (
         "product/protocols/observer/result.py",
@@ -294,9 +262,9 @@ def test_portable_python_knowledge_route_reaches_builder_and_identity() -> None:
 
     root = Path(__file__).parents[2]
     routes = (root / "docs/llms.txt").read_text(encoding="utf-8")
-    guide = (root / "docs/02_开发指南/任务/修改发布与便携版.md").read_text(encoding="utf-8")
-    reference = (root / "docs/03_参考手册/协议/Portable运行身份与发行结构.md").read_text(encoding="utf-8")
-    assert "docs/03_参考手册/协议/Portable运行身份与发行结构.md" in routes
+    guide = (root / "docs/开发/能力/修改发布与便携版.md").read_text(encoding="utf-8")
+    reference = (root / "docs/参考/协议/Portable运行身份与发行结构.md").read_text(encoding="utf-8")
+    assert "docs/参考/协议/Portable运行身份与发行结构.md" in routes
     for fact in ("start.cmd", "runtime/start.ps1", "runtime/python", "JIEJIAN_RUNTIME_MODE=portable"):
         assert fact in guide
         assert fact in reference

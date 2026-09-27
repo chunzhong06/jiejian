@@ -23,8 +23,8 @@ import {
   type TestIdentityDto,
 } from '../../api/testIdentities'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
-import { TaskActionBar } from '../../components/TaskActionBar'
-import { TaskReceipt, useTaskGuard } from '../../components/TaskContinuity'
+import { TaskActionBar } from '../../shared/ui/TaskActionBar'
+import { TaskReceipt, useTaskGuard } from '../../app/tasks/TaskContinuity'
 import './identities.css'
 
 function statusTag(identity: TestIdentityDto) {

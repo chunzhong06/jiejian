@@ -18,14 +18,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from product.backend.core.application_understanding import ApplicationUnderstanding, CandidateDecision
-from product.backend.core.business_boundary import (
-    ImplementationBindingStatus,
-    boundary_sha256,
-)
+from product.backend.core.applications.models import ApplicationUnderstanding, CandidateDecision
+from product.backend.core.boundaries.entities import ImplementationBindingStatus, boundary_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.permission_semantics import PermissionExpectation
-from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.core.boundaries.semantics import PermissionExpectation
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.workflows.preparation.models import PreparationStatus
 from product.backend.workflows.recording.source import require_persisted_recording_source
 from product.backend.infra.storage import StorageUnitOfWork
@@ -43,6 +40,31 @@ from product.backend.workflows.workspace.models import (
     WorkspaceJourney,
     WorkspaceJourneyStep,
 )
+
+
+_TASK_PRESENTATION: dict[str, tuple[str, str]] = {
+    "CONFIRM_APPLICATION_ENDPOINT": ("核对应用连接", "当前应用的访问地址已经确认。"),
+    "AUTHORIZE_SOURCE_ANALYSIS": ("查看源码分析授权", "你已明确授权本次只读源码分析。"),
+    "RUN_SOURCE_ANALYSIS": ("开始源码分析", "本次分析完成并形成可审阅的候选。"),
+    "REVIEW_APPLICATION_CANDIDATES": ("审阅候选", "候选已明确采纳或排除，尚不代表正式权限生效。"),
+    "REVIEW_BOUNDARY_PROPOSAL": ("审阅这组变更", "这份提案已经形成你的确认或放弃决定。"),
+    "ESTABLISH_BUSINESS_BOUNDARY": ("建立业务权限", "业务角色、动作及对应权限已由你确认。"),
+    "REVIEW_PERMISSION_REVISION": ("复核权限要求", "当前业务版本对应的权限要求已重新确认。"),
+    "COMPLETE_ALLOW_CONTROL": ("补齐正常权限对照", "存在覆盖禁止效果的完整允许权限。"),
+    "SELECT_ALLOW_CONTROL": ("选择正常对照", "已从当前有限候选中确认一个正常对照。"),
+    "REVIEW_ACTOR_IMPLEMENTATION": ("核对角色定位", "角色在当前源码中的实现定位已完成核对。"),
+    "REVIEW_ACTION_IMPLEMENTATION": ("核对动作定位", "动作在当前源码中的实现定位已完成核对。"),
+    "REVIEW_RECORDING": ("核对操作录制", "操作录制已审阅，并绑定到本次准备要求。"),
+    "PREPARE_TEST_IDENTITY": ("准备测试账号", "账号材料已保存并通过准备核对；实际身份仍由执行事实确认。"),
+    "DEMONSTRATE_ACTION": ("演示业务动作", "当前业务动作的执行材料已保存并完成核对。"),
+    "PREPARE_ACTION_RESOURCE": ("准备测试资源", "本次动作所需资源已准备并完成核对。"),
+    "COMPLETE_EFFECT_EVIDENCE": ("准备结果证明", "受保护业务效果的证明方式已具备。"),
+    "COMPLETE_RECOVERY": ("准备恢复方式", "本次检查需要的恢复方式已明确。"),
+    "REGISTER_SOURCE_CHANGE": ("查看变化登记", "本次源码变化已登记并完成实际变化核对。"),
+    "VERIFY_REPAIR": ("核对原题复验", "原题适用性与复验条件已经核对；修复结果由独立复验确认。"),
+    "RUN_CURRENT_CHECK": ("查看检查预览", "正式预览允许执行，并由你明确开始检查。"),
+    "VIEW_CURRENT_RESULT": ("查看检查结果", "本次已发布的结果与证据可供查看。"),
+}
 
 
 class WorkspaceService:
@@ -642,9 +664,15 @@ class WorkspaceService:
             "can_execute": can_execute,
         }
         fingerprint = boundary_sha256(payload)
+        # 操作文案只解释已选任务；不进入事实指纹，也不增加执行权限。
+        action_label, completion = _TASK_PRESENTATION[task_kind]
         return PrimaryTaskView(
             task_id=f"ptk_{fingerprint[:32]}",
             task_kind=task_kind,
+            proposal_id=facts.get("proposal_id") if task_kind == "REVIEW_BOUNDARY_PROPOSAL" else None,
+            action_label=action_label,
+            completion_criteria=completion,
+            unavailable_reason=None if can_execute else why_now,
             business_action_id=business_action_id,
             business_actor_id=business_actor_id,
             title=title,

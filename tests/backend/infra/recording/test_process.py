@@ -6,7 +6,7 @@ from io import BytesIO, StringIO
 from pathlib import Path
 import pytest
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingState
+from product.backend.core.recording.models import RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RecordingRunnerResult, canonical_recording_json_bytes, parse_recording_result
 from product.backend.workflows.recording.submission import SubmitRecording

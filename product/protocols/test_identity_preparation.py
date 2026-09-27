@@ -26,7 +26,7 @@ from product.backend.core.identifiers import (
     PROJECT_ID_PATTERN,
     TEST_IDENTITY_ID_PATTERN,
 )
-from product.backend.core.test_identity import TestIdentityAuthMethod
+from product.backend.core.identities.models import TestIdentityAuthMethod
 from product.protocols.execution import ProtocolModel
 from product.protocols.web.target import WebTargetScope
 

@@ -34,11 +34,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.test_identity import (
-    TestIdentity,
-    TestIdentityAuthMethod,
-    TestIdentityCookie,
-)
+from product.backend.core.identities.models import TestIdentity, TestIdentityAuthMethod, TestIdentityCookie
 from product.backend.infra.storage.base import (
     Base,
     _flush,

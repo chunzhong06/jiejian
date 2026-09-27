@@ -87,6 +87,27 @@ export type BoundaryProposalViewDto = {
   proposal: BoundaryProposalDto
   decision: BoundaryDecisionDto | null
   change_summary: BoundaryProposalChangeSummaryDto | null
+  review?: BoundaryProposalReviewDto | null
+}
+export type BoundaryReviewValueDto = {
+  display_name: string; description: string; effective_state: string
+  resource_concept: string | null; operation_kind: string | null; state_changing: boolean | null
+  effects: Array<Omit<ProposedEffectDto, 'item_id' | 'effect_id'>>
+  subject: string | null; resource_owner: string | null; action: string | null
+  relation: ProposedPermissionDto['relation'] | null; expectation: ProposedPermissionDto['expectation'] | null
+  protected_effects: string[]
+}
+export type BoundaryProposalReviewDto = {
+  basis_state: 'COMPLETE' | 'UNAVAILABLE'; current_state_changed: boolean
+  items: Array<{ entity_kind: 'ACTOR' | 'ACTION' | 'PERMISSION'; item_id: string; entity_id: string | null
+    basis_revision: number | null; change_kind: 'CREATE' | 'UPDATE' | 'RETIRE' | 'REFERENCE'; basis_available: boolean
+    before: BoundaryReviewValueDto | null; after: BoundaryReviewValueDto }>
+}
+export type BoundaryEditorDto = {
+  project_id: string; boundary: BusinessBoundaryViewDto; preview: BoundaryDraftViewDto
+  maintenance_draft: BoundaryMaintenanceDraftDto | null; boundary_state_fingerprint: string | null
+  pending_proposals: Array<{proposal_id: string; created_at_us: number; change_summary: BoundaryProposalChangeSummaryDto | null}>
+  pending_has_more: boolean
 }
 export type BoundaryProposalListDto = {
   project_id: string
@@ -195,6 +216,8 @@ export type BoundaryProposalChangeSummaryDto = {
 const prefix = (projectId: string) => `/api/projects/${projectId}/business-boundaries`
 
 export const businessBoundariesApi = {
+  editor: (projectId: string) => request<BoundaryEditorDto>(`${prefix(projectId)}/editor`),
+  proposal: (projectId: string, proposalId: string) => request<BoundaryProposalViewDto>(`${prefix(projectId)}/proposals/${encodeURIComponent(proposalId)}`),
   current: (projectId: string) => request<BusinessBoundaryViewDto>(prefix(projectId)),
   preview: (projectId: string) => request<BoundaryDraftViewDto>(`${prefix(projectId)}/preview`),
   maintenanceDraft: (projectId: string) => request<BoundaryMaintenanceDraftDto>(`${prefix(projectId)}/maintenance-draft`),

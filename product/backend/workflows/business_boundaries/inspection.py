@@ -6,22 +6,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from product.backend.core.application_understanding import (
-    ActionCandidate,
-    ApplicationUnderstanding,
-    CandidateDecision,
-    RoleCandidate,
-)
-from product.backend.core.boundary_proposal import ProposalCandidateKind
-from product.backend.core.business_boundary import (
-    ACTION_ID_PATTERN,
-    ACTOR_ID_PATTERN,
-    ActionImplementationBinding,
-    ActorImplementationBinding,
-    ImplementationBindingStatus,
-    ImplementationCandidateSnapshot,
-    SOURCE_PROPOSAL_ID_PATTERN,
-)
+from product.backend.core.applications.models import ActionCandidate, ApplicationUnderstanding, CandidateDecision, RoleCandidate
+from product.backend.core.boundaries.proposals import ProposalCandidateKind
+from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, ActionImplementationBinding, ActorImplementationBinding, ImplementationBindingStatus, ImplementationCandidateSnapshot, SOURCE_PROPOSAL_ID_PATTERN
 from product.backend.core.identifiers import SHA256_PATTERN
 from product.backend.workflows.business_boundaries.fingerprints import (
     candidate_source_snapshot,

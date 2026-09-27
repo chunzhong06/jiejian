@@ -20,22 +20,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from product.backend.core.boundary_proposal import (
-    BoundaryProposalBundle,
-    BoundaryProposalDecision,
-    BoundarySourceSnapshot,
-    ProposedActionItem,
-    ProposedActorItem,
-    ProposedPermissionItem,
-)
-from product.backend.core.business_boundary import (
-    ActionImplementationBinding,
-    ActorImplementationBinding,
-    BusinessAction,
-    BusinessActionRevision,
-    BusinessActor,
-    BusinessActorRevision,
-)
+from product.backend.core.boundaries.proposals import BoundaryProposalBundle, BoundaryProposalDecision, BoundarySourceSnapshot, ProposedActionItem, ProposedActorItem, ProposedPermissionItem
+from product.backend.core.boundaries.entities import ActionImplementationBinding, ActorImplementationBinding, BusinessAction, BusinessActionRevision, BusinessActor, BusinessActorRevision
 from product.backend.infra.storage.base import (
     Base,
     _canonical_json,

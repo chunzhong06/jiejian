@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-from product.backend.core.application_understanding import ActionCandidate, RoleCandidate
-from product.backend.core.boundary_proposal import (
-    CandidateSourceSnapshot,
-    ProposalCandidateKind,
-)
-from product.backend.core.business_boundary import (
-    ImplementationCandidateSnapshot,
-    boundary_sha256,
-)
+from product.backend.core.applications.models import ActionCandidate, RoleCandidate
+from product.backend.core.boundaries.proposals import CandidateSourceSnapshot, ProposalCandidateKind
+from product.backend.core.boundaries.entities import ImplementationCandidateSnapshot, boundary_sha256
 
 
 def candidate_source_snapshot(

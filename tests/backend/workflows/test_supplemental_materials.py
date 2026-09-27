@@ -10,9 +10,9 @@ from sqlalchemy import text
 from product.backend.core.errors import JiejianError
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.infra.storage.supplemental_materials import SupplementalMaterialRepository
-from product.backend.workflows.supplemental_contract import SupplementalDocument
-from product.backend.workflows.supplemental_contract import material_fingerprint
-from product.backend.workflows.supplemental_materials import SupplementalMaterialService
+from product.backend.workflows.preparation.supplemental_contract import SupplementalDocument
+from product.backend.workflows.preparation.supplemental_contract import material_fingerprint
+from product.backend.workflows.preparation.supplemental import SupplementalMaterialService
 from product.backend.api.routers.supplemental_materials import build_supplemental_material_router
 from tests.fixtures.action_preparation import build_preparation_harness
 

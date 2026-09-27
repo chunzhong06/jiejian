@@ -9,18 +9,9 @@ from uuid import uuid4
 
 import pytest
 
-from product.backend.core.application_understanding import (
-    ActionCandidate,
-    ActionRiskHint,
-    ApplicationUnderstanding,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateOrigin,
-    RoleCandidate,
-    candidate_id,
-)
+from product.backend.core.applications.models import ActionCandidate, ActionRiskHint, ApplicationUnderstanding, CandidateConfidence, CandidateDecision, CandidateOrigin, RoleCandidate, candidate_id
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.test_identity import TestIdentityCookie as IdentityCookie
+from product.backend.core.identities.models import TestIdentityCookie as IdentityCookie
 from product.backend.infra.identity.browser import IdentityPreparationBrowserAdapter
 from product.backend.infra.recording.browser import (
     BrowserRecordingAdapter,

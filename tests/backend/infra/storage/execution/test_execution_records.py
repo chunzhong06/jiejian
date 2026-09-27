@@ -14,7 +14,7 @@ pytestmark = pytest.mark.database
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
-from product.backend.core.recording import Recording, RecordingState
+from product.backend.core.recording.models import Recording, RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import STAGED_ARTIFACT_MAX_BYTES
 from product.backend.infra.runtime.logging import configure_logging
@@ -185,7 +185,7 @@ def test_committed_records_survive_engine_restart_with_exact_values(
     with StorageUnitOfWork(factory) as work:
         work.projects.add(expected_project)
         from tests.fixtures.assurance import action
-        from product.backend.core.business_boundary import BusinessAction, boundary_sha256
+        from product.backend.core.boundaries.entities import BusinessAction, boundary_sha256
         revision = action().model_copy(update={"project_id": PROJECT_ID})
         revision = revision.model_copy(update={"semantic_fingerprint": boundary_sha256(revision.semantic_payload())})
         work.business_boundaries.add_action_revision(revision)

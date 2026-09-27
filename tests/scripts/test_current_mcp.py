@@ -5,7 +5,8 @@ import pytest
 from mcp import MCPError
 
 from scripts.dev.sample_test import current_mcp as mcp
-from scripts.dev.sample_test.official import HarnessState, SampleTestError
+from scripts.dev.sample_test.harness.state import HarnessState
+from scripts.dev.sample_test.harness.state import SampleTestError
 
 
 class Control:
@@ -132,7 +133,7 @@ def test_fourth_ordinary_run_keeps_originals_and_pairing_ownership(monkeypatch, 
     assert state.active_run_id is None
     assert [name for name, _ in calls].count("jiejian_change_submit") == 2
     assert [name for name, _ in calls].count("jiejian_check_run") == 2
-    assert gui.events == ([] if paired else ["pair-click"]) + ["level-READ", "connected", "level-PREPARE",
+    assert gui.events == ([] if paired else ["pair-click"]) + ["connected", "level-READ", "level-PREPARE",
         "change-visible-manual-closed", "level-EXECUTE", "history-filter", "dismiss", "exact-completion-and-return",
         "mcp-responsibility", "level-READ"] + ([] if paired else ["forget-click"]) + ["mcp-cleanup"]
     assert all(path not in {"/api/mcp/access/pair", "/api/mcp/access/rotate", "/api/mcp/access/forget"} for _, path in control.calls)
@@ -238,7 +239,7 @@ def test_unknown_run_receipt_remains_primary_when_recovery_read_also_fails(monke
 
 
 def test_official_failure_cancels_before_mcp_pairing_cleanup(monkeypatch):
-    from scripts.dev.sample_test.official import _cleanup_after_failure
+    from scripts.dev.sample_test.harness.lifecycle import _cleanup_after_failure
     control, gui, state, _, _, _ = scenario(monkeypatch, paired=False)
     control.paired, control.active, control.level = True, True, "EXECUTE"
     control.runs.append("mcp-new")

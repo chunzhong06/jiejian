@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
-from product.backend.core.permission_semantics import BusinessEffectKind
+from product.backend.core.boundaries.semantics import BusinessEffectKind
 from product.protocols.check_runtime import CheckProofConfig
 from product.protocols.observer import ObserverSpec
 

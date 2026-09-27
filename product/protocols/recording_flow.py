@@ -21,7 +21,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
-from product.backend.core.business_boundary import ACTION_ID_PATTERN
+from product.backend.core.boundaries.entities import ACTION_ID_PATTERN
 from product.protocols.web.workflow import (
     HttpOutcomeClassifier,
     HttpRequestTemplate,

@@ -1,7 +1,7 @@
 # 从 A1 正式纯编译器生成相互绑定的请求与配置，供当前执行链测试复用。
 import json
 
-from product.backend.core.check_plan import compile_project_check_plan
+from product.backend.core.checks.plan import compile_project_check_plan
 from product.protocols.check_runtime import CheckRuntimeBundle, check_runtime_fingerprint
 from product.protocols.execution_v3 import PersistedExecutionRequestV3
 from tests.fixtures.check_plan import prepared_action

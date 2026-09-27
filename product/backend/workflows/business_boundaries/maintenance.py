@@ -2,37 +2,11 @@
 
 from __future__ import annotations
 
-from product.backend.core.application_understanding import (
-    ApplicationUnderstanding,
-    CandidateDecision,
-)
-from product.backend.core.boundary_proposal import (
-    BoundaryProposalBundle,
-    ProposalCandidateKind,
-    ProposalWriteMode,
-    ProposedActionItem,
-    ProposedActorItem,
-    ProposedEffectItem,
-    ProposedPermissionItem,
-)
-from product.backend.core.business_boundary import (
-    ActionImplementationBinding,
-    ActorImplementationBinding,
-    BusinessAction,
-    BusinessActionRevision,
-    BusinessActor,
-    BusinessActorRevision,
-    BusinessEffectDefinition,
-    BusinessRevisionState,
-    ImplementationCandidateSnapshot,
-    boundary_sha256,
-)
+from product.backend.core.applications.models import ApplicationUnderstanding, CandidateDecision
+from product.backend.core.boundaries.proposals import BoundaryProposalBundle, ProposalCandidateKind, ProposalWriteMode, ProposedActionItem, ProposedActorItem, ProposedEffectItem, ProposedPermissionItem
+from product.backend.core.boundaries.entities import ActionImplementationBinding, ActorImplementationBinding, BusinessAction, BusinessActionRevision, BusinessActor, BusinessActorRevision, BusinessEffectDefinition, BusinessRevisionState, ImplementationCandidateSnapshot, boundary_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.permission_intent import (
-    PermissionIntentEffectiveState,
-    PermissionIntentRevision,
-    PermissionIntentSemantic,
-)
+from product.backend.core.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRevision, PermissionIntentSemantic
 from product.backend.workflows.business_boundaries.inspection import (
     ActionImplementationInspection,
     ActorImplementationInspection,

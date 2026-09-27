@@ -6,15 +6,15 @@ from mcp import MCPError
 from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 
-from product.backend.workflows.mcp_access import MCPAccessLevel
+from product.backend.workflows.agent_access.service import MCPAccessLevel
 from tests.fixtures.action_preparation import MemorySecretStore
 from tests.fixtures.check_service import ready_check_harness
 from tests.fixtures.control_plane import create_app, TEST_CONTROL_ORIGIN
+from tests.backend.api._support_current_mcp import (
+    TOOLS,
+)
 
 
-TOOLS = {"jiejian_project_list","jiejian_project_show","jiejian_application_understanding","jiejian_business_boundary",
-    "jiejian_intent_show","jiejian_identity_list","jiejian_system_status","jiejian_change_show","jiejian_check_status",
-    "jiejian_result_show","jiejian_repair_show","jiejian_change_submit","jiejian_check_run","jiejian_check_cancel"}
 
 
 @pytest.mark.parametrize("fault,expected", [("token", 401), ("origin", 403), ("host", 421), ("paused", 403), ("rotated", 401), ("closed", 403)])
@@ -66,7 +66,7 @@ def test_connection_reset_clears_all_project_grants(tmp_path, reset):
 def test_sdk_generic_change_id_submits_full_current_question_after_human_rebind(tmp_path):
     from pathlib import Path
     from tests.fixtures.runtime_environment import runtime_identity_environment
-    from tests.backend.workflows.test_current_official_sample import prepare_sample, prepare_changed_sample
+    from tests.backend.workflows._support_current_official_sample import prepare_sample, prepare_changed_sample
     var_dir = tmp_path / "var"
     app = create_app(var_dir, start_worker=False, secret_store=MemorySecretStore(),
         environ=runtime_identity_environment(var_dir),

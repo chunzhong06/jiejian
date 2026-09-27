@@ -4,6 +4,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceViewDto } from '../../api/workspace'
 import { WorkbenchPage } from './WorkbenchPage'
+import { currentChecksApi } from '../../api/currentChecks'
+import { status } from '../results/testing.fixtures'
+
+vi.mock('../../api/preparation',()=>({preparationApi:{get:vi.fn().mockResolvedValue({project_id:'p1',actions:[],preparation_complete:false})}}))
+vi.mock('../../api/currentChecks',()=>({currentChecksApi:{history:vi.fn().mockResolvedValue({project_id:'p1',items:[],next_cursor:null})}}))
 
 const experience = {
   available: false, display_name: '协作空间', unavailable_reason: '当前不可用', active: false,
@@ -52,11 +57,21 @@ const workspace: WorkspaceViewDto = {
 const systemStatus = { api: 'available' as const, worker: 'unavailable' as const, browser: 'available' as const }
 
 describe('WorkbenchPage', () => {
+  it('当前版本没有可信结果时仍能回看历史，不把历史结论当成当前通过',async()=>{
+    vi.mocked(currentChecksApi.history).mockResolvedValueOnce({project_id:'p1',items:[{status:status(),action_labels:['历史业务'],change_id:null,source_run_id:null}],next_cursor:null})
+    const onNavigate=vi.fn()
+    render(<WorkbenchPage selected={{project_id:'p1',name:'演示应用'}} workspace={{...workspace,latest_result:null}} systemStatus={systemStatus} experience={experience} onNavigate={onNavigate}/>)
+    expect(await screen.findByRole('heading',{name:'历史业务'})).toBeInTheDocument()
+    expect(screen.getByText(/对应本次冻结的权限与源码；不代表后续修改已通过检查。/)).toBeInTheDocument()
+    expect(screen.getByRole('heading',{name:workspace.primary_task!.title})).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'查看结果与证据 →'}))
+    expect(onNavigate).toHaveBeenCalledWith('/history?run_id=r1')
+  })
   it('陈旧任务不启用主动作，最近结果不能抢占当前任务', () => {
     const latest = { run_id: 'r1', verdict: 'PASS' as const, summary: '上次结果通过', policy_epoch: 1, created_at_us: 1 }
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用' }} workspace={{ ...workspace, primary_task: { ...workspace.primary_task!, can_execute: false }, latest_result: latest }} systemStatus={systemStatus} experience={experience} onNavigate={vi.fn()} />)
     expect(screen.getByRole('button', { name: workspace.primary_task!.title })).toBeDisabled()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('当前工作'); expect(screen.getByText(workspace.primary_task!.why_now)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(workspace.project.name); expect(screen.getByText(workspace.primary_task!.why_now)).toBeInTheDocument()
     expect(document.querySelectorAll('.ant-btn-primary')).toHaveLength(1)
     expect(document.querySelector('.ant-card')).not.toBeInTheDocument()
   })
@@ -76,7 +91,7 @@ describe('WorkbenchPage', () => {
     render(<WorkbenchPage selected={{ project_id: 'p1', name: '演示应用' }} workspace={workspace} systemStatus={systemStatus} experience={experience} onNavigate={vi.fn()} />)
 
     expect(within(screen.getByLabelText('最近可信结果')).getByText('当前没有正式检查结果')).toBeInTheDocument()
-    expect(screen.queryByText('1 项当前业务动作')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('业务检查概况')).toBeInTheDocument()
     expect(screen.queryByLabelText('当前专项摘要')).not.toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: '自由进入相关工作' })).toBeInTheDocument()
   })

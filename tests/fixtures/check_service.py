@@ -1,5 +1,5 @@
 # 经正式录制接受、业务权限与受控注册端口形成可预览/提交的真实应用 fixture。
-from product.backend.core.action_preparation import RegisteredObserverReference
+from product.backend.core.preparation.bindings import RegisteredObserverReference
 from product.backend.workflows.checks.registry import CheckRuntimeRegistration, RegisteredCheckProof
 from product.protocols.observer import ObserverSpec
 from tests.fixtures.action_preparation import add_recording, build_preparation_harness

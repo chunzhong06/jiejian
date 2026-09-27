@@ -168,7 +168,7 @@ def test_product_page_supports_two_real_demo_sessions(
         assert client.get(f"/api/projects/{PROJECT_ID}").status_code == 200
         collaboration = client.get(f"/api/projects/{PROJECT_ID}/collaboration")
         assert collaboration.status_code == 200
-        assert set(collaboration.json()) == {"project_id", "name", "members", "materials"}
+        assert set(collaboration.json()) == {"project_id", "name", "members", "materials", "resource_id", "collaboration_material"}
         assert {item["kind"] for item in collaboration.json()["materials"]} == {
             "APPLICATION_NOTE",
             "BUDGET_SUMMARY",
@@ -578,8 +578,8 @@ def test_owner_revoke_preserves_history_hides_current_resource_and_allows_regene
         audit = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
         queued = [json.loads(line) for line in queue_path.read_text(encoding="utf-8").splitlines()]
         assert [item["event_type"] for item in audit if item["case_tag"] == marker] == [
-            *TRACE_SEMANTIC_KEYS,
-            "EXPORT_REVOKED",
+            *TRACE_SEMANTIC_KEYS[:2], "authorization_decided", "export_request_created", "export_message_sent",
+            *TRACE_SEMANTIC_KEYS[5:], "EXPORT_REVOKED",
         ]
         assert [item["event_type"] for item in queued if item["case_tag"] == marker] == [
             "EXPORT_ENQUEUED",

@@ -28,7 +28,12 @@ from product.backend.infra.runtime.jobs.models import ClaimJob, RequestCancellat
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
-from product.backend.workflows.runs.submission import RunSubmission, SubmitExecution, SubmitExecution
+from product.backend.infra.runtime.jobs.models import SubmitJob
+from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+from tests.fixtures.check_execution import execution_pair
+from product.backend.core.lifecycle import ProjectStatus
+from product.backend.infra.storage import ProjectRecord
+from types import SimpleNamespace
 from product.backend.infra.runtime.runner.supervisor import RunnerSupervisor
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock
@@ -57,8 +62,7 @@ NOW_US = 1_790_000_000_000_000
 class RuntimeParts:
     engine: Engine
     uow_factory: object
-    request_store: ExecutionRequestStore
-    submission: RunSubmission
+    request_store: CheckRequestStore
     queue: JobQueue
     attempts: JobAttempts
 
@@ -69,34 +73,52 @@ def _runtime(var_dir: Path) -> RuntimeParts:
     engine = create_sqlite_engine(database_path)
     factory = create_session_factory(engine)
     uow_factory = partial(StorageUnitOfWork, factory)
-    request_store = ExecutionRequestStore(var_dir)
+    request_store = CheckRequestStore(var_dir)
     return RuntimeParts(
         engine=engine,
         uow_factory=uow_factory,
         request_store=request_store,
-        submission=RunSubmission(uow_factory, request_store),
         queue=JobQueue(uow_factory),
         attempts=JobAttempts(uow_factory, jitter_source=lambda _: 0),
     )
 
 
 def _submit(parts: RuntimeParts, request, suffix: str = "3"):
-    return parts.submission.submit(
-        SubmitExecution(
-            request=request,
-            idempotency_key=f"supervisor-{suffix}",
-            max_attempts=3,
-            available_at_us=NOW_US,
-            now_us=NOW_US,
-            run_id=f"run_{suffix * 32}",
-            job_id=f"job_{suffix * 32}",
-        )
-    )
+    # 控制器级测试冻结当前 CHECK 输入，不依赖已退役的 ACTIVE_RUN 提交。
+    current, bundle = execution_pair(state_changing=True)
+    with parts.uow_factory() as work:
+        if work.projects.get(current.project_id) is None:
+            work.projects.add(ProjectRecord(project_id=current.project_id, name="进程生命周期测试",
+                status=ProjectStatus.READY, created_at_us=NOW_US, updated_at_us=NOW_US))
+        work.commit()
+    job_id = f"job_{suffix * 32}"
+    parts.request_store.write_bundle(job_id, bundle)
+    request_hash, _ = parts.request_store.write(job_id, current)
+    return parts.queue.submit(SubmitJob(project_id=current.project_id, operation_type="CHECK",
+        request_hash=request_hash, plan_fingerprint=current.plan_fingerprint,
+        source_fingerprint=current.source_fingerprint, policy_epoch=current.policy_epoch, engine_version="supervisor-test",
+        idempotency_key=f"supervisor-{suffix}", max_attempts=3, available_at_us=NOW_US,
+        now_us=NOW_US, run_id=f"run_{suffix * 32}", job_id=job_id))
 
 
 def _job(parts: RuntimeParts, job_id: str):
     with parts.uow_factory() as work:
         return work.jobs.get(job_id)
+
+
+@pytest.mark.parametrize('changed', ['lease', 'fence', 'terminal'])
+def test_recovery_candidate_never_reconciles_a_changed_authoritative_job(tmp_path, monkeypatch, changed):
+    candidate = SimpleNamespace(job_id='job_'+'9'*32, lease_owner='old-worker', fencing_token=1)
+    job = SimpleNamespace(lease_owner='old-worker', fencing_token=1, state=JobState.RUNNING)
+    if changed == 'lease': job.lease_owner = 'new-worker'
+    elif changed == 'fence': job.fencing_token = 2
+    else: job.state = JobState.SUCCEEDED
+    manager = object.__new__(LocalWorkerSupervisor)
+    manager.var_dir = tmp_path
+    manager._read_job = lambda job_id: job
+    manager._reconcile_check = lambda job: pytest.fail('stale recovery must not publish another lease')
+    monkeypatch.setattr(WorkerLifetimeLock, 'execution_has_exited', lambda *args: True)
+    manager._confirm_exited_recovery(candidate, NOW_US)
 
 
 class _TerminalJobQueue:
@@ -208,7 +230,7 @@ def test_local_supervisor_bootstrap_failures_finish_waiting_job(
         if failure_point == "request_load":
             monkeypatch.setattr(
                 worker_supervisor_module,
-                "ExecutionRequestStore",
+                "CheckRequestStore",
                 FailingRequestStore,
             )
         else:
@@ -363,7 +385,7 @@ def test_worker_current_bridge_builds_explicit_input_and_submission_command(tmp_
         ),
         project_snapshot=runner_input.project_snapshot,
     )
-    command = SubmitExecution(
+    command = SimpleNamespace(
         request=request,
         idempotency_key="worker-current-bridge",
         available_at_us=NOW_US,

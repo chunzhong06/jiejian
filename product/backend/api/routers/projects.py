@@ -8,11 +8,7 @@ from fastapi import APIRouter
 from pydantic import Field
 
 from product.backend.composition import ApplicationCore
-from product.backend.core.application_understanding import (
-    ActionRiskHint,
-    CandidateDecision,
-    CandidateSelection,
-)
+from product.backend.core.applications.models import ActionRiskHint, CandidateDecision, CandidateSelection
 from product.backend.api.envelope import data_response
 from product.backend.api.envelope import ApiResponse
 from product.backend.api.envelope import ApiModel

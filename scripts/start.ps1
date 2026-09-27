@@ -20,7 +20,7 @@ param(
     [string]$VarDir = "",
     [ValidateRange(1, 65535)][int]$Port = 8765,
     [ValidateSet("Interactive", "Gui", "Cli", "Prepare")]
-    [string]$Mode = "Interactive",
+    [string]$Mode = "Gui",
     [switch]$ForcePrepare,
     [Parameter(DontShow = $true)][switch]$DisplaySpinnerProcess,
     [Parameter(DontShow = $true)][string]$DisplaySpinnerStage = "startup",

@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import Field
 from product.backend.core.lifecycle import RunVerdict
 
-from product.backend.core.check_repair import CurrentRepairContract, CurrentRepairVerification
+from product.backend.core.checks.repair import CurrentRepairContract, CurrentRepairVerification
 from product.backend.workflows.checks.repair_presentation import RepairComparisonRow, build_repair_comparison
 from product.protocols.execution_v3 import Hash, LogicalId, WireModel
 

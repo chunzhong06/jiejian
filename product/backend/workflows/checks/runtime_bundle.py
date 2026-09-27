@@ -5,8 +5,8 @@ import hashlib
 import json
 from urllib.parse import parse_qsl, urlsplit
 
-from product.backend.core.action_preparation import ActionEvidenceKind
-from product.backend.core.check_plan import derive_effect_proof
+from product.backend.core.preparation.bindings import ActionEvidenceKind
+from product.backend.core.checks.plan import derive_effect_proof
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.artifacts.check_packages import read_check_bytes, reject_check_links
 from product.backend.infra.recording.request_store import RecordingRequestStore

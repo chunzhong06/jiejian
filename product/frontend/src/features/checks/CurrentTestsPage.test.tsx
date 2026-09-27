@@ -1,0 +1,183 @@
+// 验证当前检查的显式提交、竞态隔离、服务端结论与两次点击内的证据访问。
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ready, status, observation, outcome, story } from '../results/testing.fixtures'
+import type { ResultStory } from '../../api/currentChecks'
+import { CurrentTestsPage } from './CurrentTestsPage'
+const api = vi.hoisted(() => ({ preview: vi.fn(), list: vi.fn(), status: vi.fn(), submit: vi.fn(), story: vi.fn(), evidence: vi.fn() }))
+vi.mock('../../api/currentChecks', () => ({ currentChecksApi: api }))
+vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: ({ runId }: { runId: string }) => <div>受限结果解释 {runId}</div> }))
+vi.mock('../preparation/PreparationPage', () => ({ PreparationPage: ({ onNavigate }: { onNavigate: (path: string) => void }) => <><input aria-label="当前材料临时输入" defaultValue=""/><button onClick={() => onNavigate('/tests')}>完成材料准备</button></> }))
+const props = () => ({ project: { project_id: 'p1' }, workspace: null, onStateChanged: vi.fn(), onError: vi.fn(), onNavigate: vi.fn() })
+beforeEach(() => {
+  vi.clearAllMocks(); api.preview.mockResolvedValue(ready); api.list.mockResolvedValue([]); api.status.mockResolvedValue(status())
+  api.submit.mockResolvedValue({ run: status().run, job: null }); api.story.mockResolvedValue(story())
+  api.evidence.mockResolvedValue({ schema_version: '1', evidence_id: 'ev1', run_id: 'r1', action_id: 'a1', case: { case_id: 'c1', resource_id: '项目一' }, outcome, observations: [observation], trace: null })
+})
+afterEach(cleanup)
+describe('当前检查工作区', () => {
+  it('执行已结束但结果尚未发布时继续自动读取，结果发布后无需手动刷新', async () => {
+    api.status.mockResolvedValueOnce({...status(),result_integrity:'NOT_PUBLISHED'}).mockResolvedValue(status())
+    render(<CurrentTestsPage {...props()} requestedRunId="r1"/>)
+    expect(await screen.findByRole('heading',{name:'确认禁止的交付包已经生成'},{timeout:5000})).toBeInTheDocument()
+    expect(api.status).toHaveBeenCalledTimes(2)
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+  it('终态结果读取后刷新服务端工作台，同步失败不撤销已发布故事', async () => {
+    const p=props();p.onStateChanged.mockRejectedValueOnce(new Error('workspace unavailable'))
+    render(<CurrentTestsPage {...p} requestedRunId="r1"/>)
+    expect(await screen.findByRole('heading',{name:'确认禁止的交付包已经生成'})).toBeInTheDocument()
+    await waitFor(()=>expect(p.onStateChanged).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText(/本次检查事实已保留，但下一步任务尚未同步/)).toBeInTheDocument()
+    p.onStateChanged.mockResolvedValue({project:{project_id:'p1'}})
+    fireEvent.click(screen.getByRole('button',{name:'重新同步工作台'}))
+    await waitFor(()=>expect(screen.queryByText(/本次检查事实已保留，但下一步任务尚未同步/)).not.toBeInTheDocument())
+    expect(screen.getByRole('heading',{name:'确认禁止的交付包已经生成'})).toBeInTheDocument()
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+
+  it('显式进入新的准备任务时丢弃上一项局部视图，同一任务刷新保留局部输入', async () => {
+    const p=props();const view=render(<CurrentTestsPage {...p} requestedTaskId="task-old"/>)
+    fireEvent.change(await screen.findByRole('textbox',{name:'当前材料临时输入'}),{target:{value:'上一项录制的临时视图'}})
+    view.rerender(<CurrentTestsPage {...p} requestedTaskId="task-old"/>)
+    expect(screen.getByRole('textbox',{name:'当前材料临时输入'})).toHaveValue('上一项录制的临时视图')
+    view.rerender(<CurrentTestsPage {...p} requestedTaskId="task-new"/>)
+    expect(screen.getByRole('textbox',{name:'当前材料临时输入'})).toHaveValue('')
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+
+  it('当前考题分别显示计划账号和资源所有者，未发布观察不变成安全结论', async () => {
+    api.status.mockResolvedValue(status({run:{...status().run,lifecycle:'RUNNING',verdict:null},result_integrity:'NOT_PUBLISHED',progress:{phase:'EXECUTING',completed_cases:2,planned_cases:3,current_case:{case_id:'deny',action_label:'导出项目资料',expectation:'DENY',planned_subject_label:'另一个成员乙',planned_resource_owner_label:'负责人甲',resource_id:'resource-exact',effect_labels:['交付包生成']}}}))
+    render(<CurrentTestsPage {...props()} requestedRunId="r1" />)
+    const question=await screen.findByRole('region',{name:'当前处理的权限考题'})
+    expect(within(question).getByRole('heading',{name:'拒绝验证 · 导出项目资料'})).toBeInTheDocument()
+    expect(within(question).getByText(/计划操作账号：另一个成员乙；资源所有者：负责人甲/)).toBeInTheDocument()
+    expect(screen.getByRole('list',{name:'尚待发布的观察事实'})).toHaveTextContent('页面响应：未确认后台执行：未确认最终业务结果：未确认')
+    expect(screen.queryByText('验证通过')).not.toBeInTheDocument()
+    expect(api.story).not.toHaveBeenCalled();expect(api.submit).not.toHaveBeenCalled()
+  })
+
+  it('证据不足明确缺口与新检查，资源所有者不冒充实际身份', async () => {
+    const value=story();value.verdict='INCONCLUSIVE';value.judgement='关键业务结果尚不能确认'
+    value.actions[0].judgement='缺少完整交付包的决定性事实';value.actions[0].decisive_proof_chain=[]
+    value.actions[0].fact_comparison.planned_resource_owner={identity_id:'owner',actor_id:'owner-role',label:'负责人甲',actor_label:'负责人',verification_status:'PLANNED',namespace:null,application_subject_id:null}
+    value.actions[0].fact_comparison.effects[0].judgement='无法确认最终交付包';value.actions[0].fact_comparison.effects[0].observed_state='UNKNOWN'
+    api.story.mockResolvedValue(value);api.status.mockResolvedValue(status({run:{...status().run,verdict:'INCONCLUSIVE'}}))
+    render(<CurrentTestsPage {...props()} requestedRunId="r1"/>)
+    expect(await screen.findByRole('heading',{name:'关键业务结果尚不能确认'})).toBeInTheDocument()
+    expect(screen.getByText(/补足对应证明后发起新的检查/)).toBeInTheDocument()
+    expect(screen.getByText(/目标独立确认的实际账号：无法独立确认/)).toBeInTheDocument()
+    expect(screen.queryByText('验证通过')).not.toBeInTheDocument()
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+
+  it('主任务深链直接打开准备，返回总览不循环且不自动提交', async () => {
+    render(<CurrentTestsPage {...props()} requestedTaskId="specific-task" />)
+    fireEvent.click(await screen.findByRole('button', { name: '完成材料准备' }))
+    expect(await screen.findByRole('button', { name: '开始检查' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '完成材料准备' })).not.toBeInTheDocument()
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+
+  it('变化深链只携带精确change_id，仍提交完整服务端计划', async () => {
+    render(<CurrentTestsPage {...props()} changeId="chg_exact" />)
+    const button = await screen.findByRole('button', { name: '开始检查' })
+    expect(api.preview).toHaveBeenCalledWith('p1', 'chg_exact')
+    fireEvent.click(button)
+    await waitFor(() => expect(api.submit).toHaveBeenCalledOnce())
+    expect(api.submit.mock.calls[0][3]).toBe('chg_exact')
+    expect(api.submit.mock.calls[0][1]).toBe(ready.plan_fingerprint)
+  })
+  it('精确Run深链只读取指定结果，不新建检查', async () => {
+    render(<CurrentTestsPage {...props()} requestedRunId="r1" />)
+    expect(await screen.findByText('确认禁止的交付包已经生成')).toBeInTheDocument()
+    expect(api.status).toHaveBeenCalledWith('r1')
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+  it('读取预览和历史不创建检查，准备入口可以自由往返', async () => {
+    render(<CurrentTestsPage {...props()} />)
+    expect(await screen.findByRole('button', { name: '开始检查' })).toBeEnabled()
+    expect(api.submit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '管理准备材料' }))
+    fireEvent.click(screen.getByRole('button', { name: '完成材料准备' }))
+    expect(await screen.findByRole('heading', { name: '当前准备条件允许开始检查' })).toBeInTheDocument()
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+  it('服务端不允许时材料齐备也不能提交', async () => {
+    api.preview.mockResolvedValue({ ...ready, can_execute: false })
+    render(<CurrentTestsPage {...props()} />)
+    expect(await screen.findByRole('button', { name: '准备检查材料' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '开始检查' })).not.toBeInTheDocument()
+  })
+  it('显式提交前范围漂移时先展示最新预览，不执行旧计划', async () => {
+    const p = props(); render(<CurrentTestsPage {...p} />)
+    const button = await screen.findByRole('button', { name: '开始检查' })
+    api.preview.mockResolvedValue({ ...ready, plan_fingerprint: 'new-plan' })
+    fireEvent.click(button)
+    await waitFor(() => expect(p.onError).toHaveBeenCalled())
+    expect(api.submit).not.toHaveBeenCalled()
+  })
+  it('未知提交回执重用原幂等键，快速重复点击只提交一次', async () => {
+    const p = props(); api.submit.mockRejectedValueOnce(new Error('connection lost'))
+    render(<CurrentTestsPage {...p} />)
+    const button = await screen.findByRole('button', { name: '开始检查' })
+    fireEvent.click(button); fireEvent.click(button)
+    await waitFor(() => expect(p.onError).toHaveBeenCalled())
+    expect(api.submit).toHaveBeenCalledTimes(1)
+    fireEvent.click(await screen.findByRole('button', { name: '确认上次提交' }))
+    await waitFor(() => expect(api.submit).toHaveBeenCalledTimes(2))
+    expect(api.submit.mock.calls[0]).toEqual(api.submit.mock.calls[1])
+    expect(await screen.findByText('确认禁止的交付包已经生成')).toBeInTheDocument()
+  })
+  it('403和实际身份未知不被前端改成安全，决定性证据可直接打开', async () => {
+    api.list.mockResolvedValue([status()]); render(<CurrentTestsPage {...props()} requestedRunId="r1" />)
+    expect(await screen.findByText('确认禁止的交付包已经生成')).toBeInTheDocument()
+    expect(screen.getByText(/HTTP 403/)).toBeInTheDocument()
+    expect(screen.getByText(/目标独立确认的实际账号：无法独立确认/)).toBeInTheDocument()
+    const evidenceButtons = screen.getAllByRole('button', { name: '为什么这样判断？查看资源状态证据' })
+    fireEvent.click(evidenceButtons[0])
+    const drawer = await screen.findByRole('dialog')
+    expect(await within(drawer).findByText('在哪里看到')).toBeInTheDocument()
+    expect(within(drawer).getByText('不能单独证明接口权限检查正确')).toBeInTheDocument()
+    expect(api.evidence).toHaveBeenCalledWith('r1', 'ev1')
+  })
+  it('完整性失效时不读取故事或展示旧结论', async () => {
+    api.list.mockResolvedValue([status()]); api.status.mockResolvedValue(status({ result_integrity: 'INVALID' }))
+    render(<CurrentTestsPage {...props()} requestedRunId="r1" />)
+    expect(await screen.findByText('结果完整性校验失败，不能展示安全结论')).toBeInTheDocument()
+    expect(api.story).not.toHaveBeenCalled()
+    expect(screen.queryByText('确认禁止的交付包已经生成')).not.toBeInTheDocument()
+  })
+  it('证据完整性读取失败撤下整轮故事', async () => {
+    api.list.mockResolvedValue([status()]); api.evidence.mockRejectedValue(new Error('invalid evidence'))
+    render(<CurrentTestsPage {...props()} requestedRunId="r1" />)
+    fireEvent.click((await screen.findAllByRole('button', { name: '为什么这样判断？查看资源状态证据' }))[0])
+    expect(await screen.findByText('暂时无法读取本次检查')).toBeInTheDocument()
+    expect(screen.queryByText('确认禁止的交付包已经生成')).not.toBeInTheDocument()
+  })
+  it('活动检查只恢复进度，手动刷新后读取正式结果', async () => {
+    const running = status({ run: { ...status().run, lifecycle: 'RUNNING', verdict: null }, result_integrity: 'NOT_PUBLISHED', progress: { phase: 'EXECUTING', completed_cases: 1, planned_cases: 2 } })
+    api.list.mockResolvedValue([running]); api.status.mockResolvedValue(running)
+    render(<CurrentTestsPage {...props()} />)
+    fireEvent.click(await screen.findByRole('button', { name: '查看当前进度' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('已处理 1 / 2')
+    expect(api.story).not.toHaveBeenCalled(); expect(api.submit).not.toHaveBeenCalled()
+    api.status.mockResolvedValue(status())
+    fireEvent.click(screen.getByRole('button', { name: '刷新检查结果' }))
+    expect(await screen.findByText('检查已完成，结果已保存。')).toBeInTheDocument()
+    expect(screen.queryByText('确认禁止的交付包已经生成')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看本轮结果' }))
+    expect(await screen.findByText('确认禁止的交付包已经生成')).toBeInTheDocument()
+  })
+  it('切换项目后忽略前一项目延迟的故事', async () => {
+    let resolveStory!: (value: ResultStory) => void
+    api.list.mockResolvedValue([status()]); api.story.mockImplementationOnce(() => new Promise((resolve) => { resolveStory = resolve }))
+    const p = props(); const view = render(<CurrentTestsPage {...p} requestedRunId="r1" />)
+    await waitFor(() => expect(api.story).toHaveBeenCalled())
+    api.preview.mockResolvedValue({ ...ready, project_id: 'p2' }); api.list.mockResolvedValue([])
+    view.rerender(<CurrentTestsPage {...p} project={{ project_id: 'p2' }} />)
+    resolveStory(story())
+    await waitFor(() => expect(api.preview).toHaveBeenCalledWith('p2', undefined))
+    expect(screen.queryByText('确认禁止的交付包已经生成')).not.toBeInTheDocument()
+  })
+})

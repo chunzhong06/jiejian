@@ -14,7 +14,7 @@ import hashlib
 from uuid import uuid4
 from sqlalchemy import event
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.infra.storage import FlowDraftRevisionRecord
 from product.backend.infra.storage.execution.jobs import JobRecord
 from product.protocols.flow_draft import canonical_flow_draft_json_bytes

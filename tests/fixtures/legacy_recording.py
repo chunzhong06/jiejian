@@ -28,7 +28,7 @@ def _preserved_rows(connection):
 
 def _nonempty_0003(tmp_path):
     from tests.fixtures.action_preparation import build_preparation_harness, add_recording
-    from product.backend.core.recording import RecordingPurpose
+    from product.backend.core.recording.models import RecordingPurpose
     harness = build_preparation_harness(tmp_path)
     target = add_recording(harness)
     final = harness.core.recording_lifecycle.finalize(target.recording_id, var_dir=harness.var_dir, now_us=100)

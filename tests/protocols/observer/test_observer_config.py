@@ -1,54 +1,14 @@
 # 验证 Observer 配置、locator、预算与秘密边界。
 
 from __future__ import annotations
-import hashlib
-import json
-from pathlib import Path
 import pytest
-from product.protocols.observer import (
-    CausalityStatus,
-    Correlation,
-    NormalizedState,
-    ObservationCompleteness,
-    ObservationEnvelope,
-    ObservationPhase,
-    ObservationProvenance,
-    ObservationWindow,
-    ObserverBudget,
-    ObserverInvocation,
-    ObserverOutcomeStatus,
-    ObserverOutcome,
-    ObserverSpec,
-    ObserverTarget,
-    ObserverType,
-    AuditLogObserverInvocation,
-    AuditLogScanBudget,
-    OwnerApiLocator,
-    ProvenanceType,
-    SqliteQueryLocator,
-    StructuredAuditLogLocator,
-    AuditLogStartCursor,
-    AsyncTaskObserverInvocation,
-    AzureBlobObjectLocator,
-    AzureQueuePeekLocator,
-    BlobObjectScanBudget,
-    build_normalized_state,
-    canonical_json_bytes,
-    observer_canonical_sha256,
-    evaluate_observer_outcome,
-    parse_observer_json,
-    QueuePeekBudget,
-)
-from product.backend.infra.observers.owner_api import (
-    OwnerApiObserverAdapter,
-)
-from product.backend.core.redaction import redact_known_secrets
+from product.protocols.observer import Correlation, ObservationPhase, ObserverBudget, ObserverInvocation, ObserverSpec, ObserverTarget, ObserverType, OwnerApiLocator, SqliteQueryLocator, AzureBlobObjectLocator, AzureQueuePeekLocator, BlobObjectScanBudget, canonical_json_bytes, observer_canonical_sha256, QueuePeekBudget
 pytestmark = pytest.mark.essential
 
 
 def test_audit_scope_locator_all_26_fields_are_bound_and_unknown_fields_rejected():
     from product.protocols.observer.config import _AUDIT_ALLOWED_FIELDS
-    from tests.backend.infra.observers.test_audit_log_observer import _spec, FIELDS
+    from tests.backend.infra.observers._support_audit_log_observer import _spec, FIELDS
     fields = tuple(sorted(_AUDIT_ALLOWED_FIELDS))
     assert len(fields) == 26
     spec = _spec(fields=fields)

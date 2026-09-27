@@ -17,15 +17,12 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from product.backend.core.boundaries.proposals import PROPOSAL_ID_PATTERN
 
-from product.backend.core.business_boundary import (
-    BusinessEffectDefinition,
-    BusinessActionRevision,
-    BusinessActorRevision,
-)
+from product.backend.core.boundaries.entities import BusinessEffectDefinition, BusinessActionRevision, BusinessActorRevision
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.permission_intent import PermissionIntentRevision
+from product.backend.core.boundaries.permissions import PermissionIntentRevision
 from product.backend.workflows.business_boundaries.inspection import (
     ActionImplementationInspection,
     ActorImplementationInspection,
@@ -103,6 +100,10 @@ PrimaryTaskKind = Literal[
 class PrimaryTaskView(WorkspaceModel):
     task_id: str = Field(pattern=r"^ptk_[0-9a-f]{32}$")
     task_kind: PrimaryTaskKind
+    proposal_id: str | None = Field(default=None, pattern=PROPOSAL_ID_PATTERN)
+    action_label: str = Field(min_length=1, max_length=64)
+    completion_criteria: str = Field(min_length=1, max_length=1024)
+    unavailable_reason: str | None = Field(default=None, max_length=1024)
     business_action_id: str | None = None
     business_actor_id: str | None = None
     action_revision: int | None = Field(default=None, ge=1)

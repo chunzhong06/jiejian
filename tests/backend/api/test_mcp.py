@@ -5,25 +5,17 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Literal
 
 import anyio
 import httpx2
 import pytest
-from mcp import MCPError
 from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 from pydantic import BaseModel
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.repair import RepairContractReference
-from product.backend.workflows.mcp_access import (
-    MCP_PAIRING_SECRET_REF,
-    MCPAccessController,
-    MCPAccessLevel,
-    MCPConnectionState,
-)
+from product.backend.workflows.agent_access.service import MCP_PAIRING_SECRET_REF, MCPAccessController, MCPAccessLevel, MCPConnectionState
 from tests.fixtures.control_plane import TEST_CONTROL_ORIGIN, TestClient, create_app
 
 
@@ -53,7 +45,7 @@ class _StubRepairContract(BaseModel):
     repair_fingerprint: str
 
 
-from tests.backend.api.test_current_mcp import TOOLS as EXPECTED_MCP_TOOLS
+from tests.backend.api._support_current_mcp import TOOLS as EXPECTED_MCP_TOOLS
 
 
 class _MemorySecretStore:

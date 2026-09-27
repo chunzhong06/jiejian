@@ -25,6 +25,9 @@ def test_old_governance_and_execution_profile_routes_are_absent(tmp_path: Path) 
     assert "/api/projects/{project_id}/permission-intents" not in paths
     assert "/api/projects/{project_id}/permission-drafts" in paths
     assert "/api/projects/{project_id}/runs" in paths
+    for suffix in ("result-status", "result-repair", "presentation", "report", "reports/base", "reports/gate"):
+        assert f"/api/runs/{{run_id}}/{suffix}" not in paths
+    assert "/api/runs/{run_id}/result-story" in paths
 
 
 def test_internal_execution_profile_storage_remains_registered() -> None:

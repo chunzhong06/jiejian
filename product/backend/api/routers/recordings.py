@@ -9,9 +9,9 @@ from fastapi import APIRouter
 
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.business_boundary import ImplementationBindingStatus
+from product.backend.core.boundaries.entities import ImplementationBindingStatus
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.workflows.test_identities import TestIdentityStatus
 from product.protocols import parse_flow_draft_review_command
 from product.backend.api.envelope import data_response

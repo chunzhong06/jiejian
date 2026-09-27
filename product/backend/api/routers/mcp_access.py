@@ -8,7 +8,7 @@ from fastapi import APIRouter
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
-from product.backend.workflows.mcp_access import MCPAccessController, MCPAccessLevel
+from product.backend.workflows.agent_access.service import MCPAccessController, MCPAccessLevel
 
 
 class MCPProjectGrantRequest(ApiModel):

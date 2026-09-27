@@ -317,7 +317,7 @@ class RecordingJobHandler:
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.jobs.targets import JobTargetHandler, JobTargetOutcome
-from product.backend.core.recording import RecordingReasonCode, RecordingState, RecordingTerminalState, transition_recording_state
+from product.backend.core.recording.models import RecordingReasonCode, RecordingState, RecordingTerminalState, transition_recording_state
 from product.backend.infra.storage import JobRecord, RecordingRecord, RunRecord, StorageUnitOfWork
 
 

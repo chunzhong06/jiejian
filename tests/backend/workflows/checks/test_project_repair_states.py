@@ -2,10 +2,10 @@
 from types import SimpleNamespace as N
 import pytest
 
-from product.backend.core.check_repair import repair_context, CurrentRepairVerification
+from product.backend.core.checks.repair import repair_context, CurrentRepairVerification
 from product.backend.workflows.checks.repair import build_current_repair_contract
 from product.backend.workflows.projects.repair import CurrentProjectRepairService
-from tests.backend.core.test_check_repair import package
+from tests.backend.core._support_check_repair import package
 
 
 @pytest.mark.parametrize("state", [None, "REPAIR_REQUIRED", "CHANGE_SUBMITTED", "READY_TO_VERIFY", "VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE", "STALE", "PENDING"])

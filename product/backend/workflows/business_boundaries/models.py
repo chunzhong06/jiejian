@@ -1,38 +1,15 @@
 # Business Boundary API/GUI 共享的命令与只读投影；不暴露 ORM Row。
 
 from __future__ import annotations
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from product.backend.core.boundary_proposal import (
-    ACTION_ITEM_ID_PATTERN,
-    ACTOR_ITEM_ID_PATTERN,
-    EFFECT_ITEM_ID_PATTERN,
-    INTENT_ID_PATTERN,
-    PERMISSION_ITEM_ID_PATTERN,
-    BoundaryProposalBundle,
-    BoundaryProposalDecision,
-    ProposalCandidateKind,
-    ProposedActionItem,
-    ProposedActorItem,
-    ProposedEffectItem,
-    ProposedPermissionItem,
-)
-from product.backend.core.business_boundary import (
-    ACTION_ID_PATTERN,
-    ACTOR_ID_PATTERN,
-    BusinessActionOperationKind,
-    BusinessActionRevision,
-    BusinessActorRevision,
-    BusinessRevisionState,
-)
+from product.backend.core.boundaries.proposals import ACTION_ITEM_ID_PATTERN, ACTOR_ITEM_ID_PATTERN, EFFECT_ITEM_ID_PATTERN, INTENT_ID_PATTERN, PERMISSION_ITEM_ID_PATTERN, BoundaryProposalBundle, BoundaryProposalDecision, ProposalCandidateKind, ProposedActionItem, ProposedActorItem, ProposedEffectItem, ProposedPermissionItem
+from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, BusinessActionOperationKind, BusinessActionRevision, BusinessActorRevision, BusinessRevisionState
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
-from product.backend.core.permission_intent import (
-    PermissionIntentEffectiveState,
-    PermissionIntentRelation,
-    PermissionIntentRevision,
-)
-from product.backend.core.permission_semantics import PermissionExpectation
+from product.backend.core.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation, PermissionIntentRevision
+from product.backend.core.boundaries.semantics import PermissionExpectation
 from product.backend.workflows.business_boundaries.inspection import (
     ActionImplementationInspection,
     ActorImplementationInspection,
@@ -214,10 +191,54 @@ class BoundaryProposalChangeSummary(BoundaryWorkflowModel):
     change_codes: tuple[str, ...] = ()
 
 
+class BoundaryReviewEffect(BoundaryWorkflowModel):
+    business_label: str = Field(min_length=1, max_length=256)
+    effect_kind: str = Field(min_length=1, max_length=64)
+    resource_concept: str = Field(min_length=1, max_length=128)
+    description: str = Field(min_length=1, max_length=1024)
+    expected_state: str | None = None
+    protected_projection: tuple[str, ...] = Field(default=(), max_length=64)
+
+
+# 前后两侧只携带业务语义；审批记录、来源快照与运行信息不混入对照值。
+class BoundaryReviewValue(BoundaryWorkflowModel):
+    display_name: str = Field(min_length=1, max_length=512)
+    description: str = Field(default="", max_length=1024)
+    effective_state: str
+    resource_concept: str | None = None
+    operation_kind: str | None = None
+    state_changing: bool | None = None
+    effects: tuple[BoundaryReviewEffect, ...] = Field(default=(), max_length=16)
+    subject: str | None = None
+    resource_owner: str | None = None
+    action: str | None = None
+    relation: str | None = None
+    expectation: str | None = None
+    protected_effects: tuple[str, ...] = Field(default=(), max_length=16)
+
+
+class BoundaryReviewItem(BoundaryWorkflowModel):
+    entity_kind: Literal["ACTOR", "ACTION", "PERMISSION"]
+    item_id: str
+    entity_id: str | None
+    basis_revision: int | None
+    change_kind: Literal["CREATE", "UPDATE", "RETIRE", "REFERENCE"]
+    basis_available: bool
+    before: BoundaryReviewValue | None
+    after: BoundaryReviewValue
+
+
+class BoundaryProposalReview(BoundaryWorkflowModel):
+    basis_state: Literal["COMPLETE", "UNAVAILABLE"]
+    current_state_changed: bool
+    items: tuple[BoundaryReviewItem, ...] = Field(max_length=1792)
+
+
 class BoundaryProposalView(BoundaryWorkflowModel):
     proposal: BoundaryProposalBundle
     decision: BoundaryProposalDecision | None = None
     change_summary: BoundaryProposalChangeSummary | None = None
+    review: BoundaryProposalReview | None = None
 
 
 class BoundaryProposalListView(BoundaryWorkflowModel):
@@ -280,7 +301,25 @@ class BusinessBoundaryView(BoundaryWorkflowModel):
     permission_statuses: tuple[PermissionBoundaryStatus, ...]
 
 
+class BoundaryPendingProposal(BoundaryWorkflowModel):
+    proposal_id: str
+    created_at_us: int = Field(ge=0)
+    change_summary: BoundaryProposalChangeSummary | None = None
+
+
+class BoundaryEditorView(BoundaryWorkflowModel):
+    project_id: str = Field(pattern=PROJECT_ID_PATTERN)
+    boundary: BusinessBoundaryView
+    preview: BoundaryDraftView
+    maintenance_draft: BoundaryMaintenanceDraftView | None
+    pending_proposals: tuple[BoundaryPendingProposal, ...] = Field(max_length=100)
+    pending_has_more: bool = False
+    boundary_state_fingerprint: str | None = Field(default=None, pattern=SHA256_PATTERN)
+
+
 __all__ = [
+    "BoundaryEditorView", "BoundaryPendingProposal", "BoundaryProposalReview",
+    "BoundaryReviewEffect", "BoundaryReviewItem", "BoundaryReviewValue",
     "BoundaryDraftCandidate", "BoundaryDraftView", "BoundaryMaintenanceActionItem",
     "BoundaryMaintenanceActorItem", "BoundaryMaintenanceCandidateOption",
     "BoundaryMaintenanceCommand", "BoundaryMaintenanceDraftView",

@@ -256,6 +256,9 @@ def test_sample_test_routes_to_real_start_cmd_with_a_fresh_var_directory() -> No
     official_path = package_root / "official.py"
     driver = _text(driver_path)
     official = _text(official_path)
+    lifecycle = _text(package_root / "harness" / "lifecycle.py")
+    state = _text(package_root / "harness" / "state.py")
+    receipt = _text(package_root / "harness" / "receipt.py")
     assert '"sample-test" { Invoke-SampleTest $toolchain }' in dev
     assert "Prepare-SourceRuntime" not in function
     assert "Exit-PrepareLock" in function
@@ -267,29 +270,24 @@ def test_sample_test_routes_to_real_start_cmd_with_a_fresh_var_directory() -> No
     assert '"--source-receipt"' not in function
     assert '"--frontend-dir"' not in function
     assert "_start_product(root, var_dir)" in official
-    assert 'root / "start.cmd"' in official
-    assert 'CONTROL_PORT = 8765' in official
+    assert 'root / "start.cmd"' in lifecycle
+    assert 'CONTROL_PORT = 8765' in state
     assert '"L5_CONTROL_PORT_OCCUPIED"' in official
-    start_product = official[
-        official.index("def _start_product(") : official.index("def _wait_product_ready(")
-    ]
-    run_cli = official[
-        official.index("def _run_cli(") : official.index("def _assert_cli_equivalence(")
-    ]
+    start_product = lifecycle[lifecycle.index("def _start_product("):lifecycle.index("def _wait_source_prepare(")]
     assert '"product.backend.cli"' not in start_product
-    assert '"product.backend.cli"' in run_cli
     assert not (ROOT / "scripts" / "sample_test.py").exists()
     assert driver_path.is_file()
     assert official_path.is_file()
     assert "def _start_product(" not in driver
     assert "def run_suite(" in driver
-    for name in ("adapter", "registry", "oracle", "validation", "windows"):
+    for name in ("adapter", "registry", "oracle", "windows"):
         assert (package_root / f"{name}.py").is_file()
+    assert (package_root / "validation" / "suite.py").is_file()
     assert not tuple(MODULE_ROOT.glob("sample_test*.py"))
     assert "prepare_formal_project" not in function
     assert "_persist_export_recording" not in function
-    assert '"JIEJIAN_VAR_DIR": str(var_dir)' in official
-    assert "require_python_environment(environment)" in official
+    assert '"JIEJIAN_VAR_DIR": str(var_dir)' in receipt
+    assert "require_python_environment(environment)" in receipt
     assert "client.bind_page(page)" in official
     assert "context.cookies" not in official
     assert "prepare_formal_project" not in official

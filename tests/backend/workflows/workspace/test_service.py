@@ -6,30 +6,10 @@ from types import SimpleNamespace
 import pytest
 
 from product.backend.composition import ApplicationCore
-from product.backend.core.application_understanding import (
-    ActionCandidate,
-    ActionRiskHint,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateEvidence,
-    RoleCandidate,
-)
-from product.backend.core.boundary_proposal import (
-    ProposalWriteMode,
-    ProposedActionItem,
-    ProposedActorItem,
-    ProposedEffectItem,
-    ProposedPermissionItem,
-)
-from product.backend.core.business_boundary import (
-    BusinessActionOperationKind,
-    BusinessRevisionState,
-    ImplementationBindingStatus,
-)
-from product.backend.core.permission_intent import (
-    PermissionIntentEffectiveState,
-    PermissionIntentRelation,
-)
+from product.backend.core.applications.models import ActionCandidate, ActionRiskHint, CandidateConfidence, CandidateDecision, CandidateEvidence, RoleCandidate
+from product.backend.core.boundaries.proposals import ProposalWriteMode, ProposedActionItem, ProposedActorItem, ProposedEffectItem, ProposedPermissionItem
+from product.backend.core.boundaries.entities import BusinessActionOperationKind, BusinessRevisionState, ImplementationBindingStatus
+from product.backend.core.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation
 from product.backend.core.verification.permissions import (
     PermissionExpectation,
     SecurityEffectKind,

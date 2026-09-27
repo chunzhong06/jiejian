@@ -4,10 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import pytest
-from product.backend.core.application_understanding import (
-    CandidateConfidence,
-    CandidateDecision,
-)
+from product.backend.core.applications.models import CandidateConfidence, CandidateDecision
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.workflows.application_understanding.analysis import analyzer as analyzer_module
 from product.backend.workflows.application_understanding.analysis.analyzer import (

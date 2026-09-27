@@ -25,7 +25,7 @@ from typing import Any
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording import RecordingPurpose
+from product.backend.core.recording.models import RecordingPurpose
 from product.protocols.flow_draft import (
     FlowDraft,
     FlowDraftResourceCandidate,

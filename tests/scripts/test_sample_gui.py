@@ -1,4 +1,5 @@
 # 验证默认验收GUI写入不会再被API机械步骤重复执行，未知回执仅定位本轮资源供清理。
+import scripts.dev.sample_test.harness.state as sample_harness_state
 from types import SimpleNamespace
 
 import pytest
@@ -16,14 +17,15 @@ def test_gui_run_submission_is_not_repeated_through_api(monkeypatch):
                 return {"can_execute": True, "action_count": 2, "case_count": 3, "plan_fingerprint": "frozen"}
             return []
 
-    def submit(project, body, change):
+    def submit(project, body, change, *, require_repair=False):
+        assert require_repair is True
         submitted.append((project, body, change))
         return {"run": {"run_id": "new-run"}, "job": {"job_id": "owned-job"}}
 
     monkeypatch.setattr(current_api, "wait_published", lambda *args: None)
     monkeypatch.setattr(current_api, "read_result", lambda *args: {"run_id": "new-run"})
     monkeypatch.setattr(current_api, "assert_current_result", lambda *args, **kwargs: None)
-    state = official.HarnessState()
+    state = sample_harness_state.HarnessState()
     result = current_api.run_current(Client(), "project", state, name="fixed", expected="PASS", change_id="exact-change", gui=SimpleNamespace(submit=submit))
     assert result == {"run_id": "new-run"}
     assert len(submitted) == 1 and submitted[0][2] == "exact-change"
@@ -46,10 +48,11 @@ def test_uncertain_gui_submission_reads_owned_run_and_never_resubmits():
             count += 1
             return [] if count == 1 else [{"run": {"run_id": "owned-run"}}]
 
-    def submit(*args):
+    def submit(*args, require_repair=False):
+        assert require_repair is False
         raise TimeoutError("receipt unavailable")
 
-    state = official.HarnessState()
+    state = sample_harness_state.HarnessState()
     with pytest.raises(TimeoutError):
         current_api.run_current(Client(), "project", state, name="problem", expected="BLOCK", gui=SimpleNamespace(submit=submit))
     assert state.active_run_id == "owned-run" and state.active_run_job_id == "owned-job"

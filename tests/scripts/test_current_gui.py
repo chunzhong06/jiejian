@@ -6,7 +6,7 @@ import pytest
 
 from scripts.dev.sample_test.current_gui import CurrentGui
 from scripts.dev.sample_test import current_api
-from scripts.dev.sample_test.official import SampleTestError
+from scripts.dev.sample_test.harness.state import SampleTestError
 
 
 class Node:
@@ -14,7 +14,7 @@ class Node:
         self.page, self.kind, self.name, self.scope = page, kind, name, scope
     def get_by_role(self, kind, *, name, **kwargs):
         if hasattr(name, "pattern"):
-            name = self.page.close_name if "关闭证据" in name.pattern else name.pattern.lstrip("^")
+            name = "确认" if name.pattern == r"^确\s*认$" else self.page.close_name if "关闭证据" in name.pattern else name.pattern.lstrip("^")
         return Node(self.page, kind, name, (*self.scope, self.name))
     def get_by_text(self, name, **kwargs):
         return Node(self.page, "text", name, (*self.scope, self.name))
@@ -89,6 +89,11 @@ class Page:
     def goto(self, url, **kwargs):
         self.url = url
         self.events.append(("goto", url))
+    def reload(self, **kwargs):
+        self.events.append(("reload",))
+        for response in self.responses.get('reload', []):
+            for context in self.pending:
+                if context.predicate(response): context.value = response
     def get_by_role(self, kind, *, name, **kwargs):
         self.events.append(("locate", kind, name, kwargs))
         return Node(self, kind, name)
@@ -135,10 +140,10 @@ def test_normal_pages_propose_and_prepare_once_without_starting_check(tmp_path):
     gui.start(); gui.propose(); gui.prepare()
     assert ("goto", page.origin+"/#/permissions") in page.events
     assert ("goto", page.origin+"/#/tests?task_id=task-exact") in page.events
-    assert ("wait", '[aria-label="权限规则文档"]', {}, ()) in page.events
+    assert ("wait", '[aria-label="当前需要处理的任务"]', {}, ()) in page.events
     assert ("wait", "开始检查", {}, ()) in page.events
     clicks = [item[1] for item in page.events if item[0] == "click"]
-    assert clicks == ["启动官方示例", "启动问题版", "使用已提供的权限提案", "使用已提供的测试材料"]
+    assert clicks == ["启动官方示例", "启动问题版", "使用已提供的权限提案", "使用已提供的测试材料", "返回检查总览"]
     assert all(method == "GET" for method, _, _ in client.calls)
 
 
@@ -160,7 +165,7 @@ def test_switch_uses_neutral_environment_controls_and_exact_original(tmp_path, v
     client.values["/api/runs/run-original"] = {"result_integrity": "VALID", "run": {"verdict": "BLOCK"}}
     page.reply("确认切换", "POST", "/api/experience/official-sample/version", {"scenario_version": version}, {"version": version, "repair_reference": reference})
     gui.switch(version, reference)
-    assert [item[1] for item in page.events if item[0] == "click"] == ["官方环境 · 问题版", label, "确认切换"]
+    assert [item[1] for item in page.events if item[0] == "click"] == [label, "确认切换"]
     assert all(method == "GET" for method, _, _ in client.calls)
 
 
@@ -266,14 +271,15 @@ def test_prepare_structured_pending_is_failure_not_a_second_probe(monkeypatch):
 
 
 def test_ready_fixed_result_original_evidence_and_exit_keep_real_controls(tmp_path):
-    gui, page, _ = context(tmp_path)
+    gui, page, client = context(tmp_path)
+    client.values['/api/projects/project/repair'] = {'tasks': [{'contract': {'source_run_id': 'fixed', 'repair_fingerprint': 'original'}}]}
     for name in ("limited-ready", "fixed-ready"):
         gui.checkpoint(name, {"project_id": "project"})
     fixed = {"run_id": "fixed", "story": {"judgement": "本轮修复结果", "repair_verification": {"status": "VERIFIED"}}}
     action = result_payload()["story"]["actions"][0]
     action["breakpoint"] = {"evidence_refs": ["ev-original"]}
     fixed["story"]["actions"] = [action]
-    page.reply("为什么定位在这里？查看定位证据", "GET", "/api/runs/fixed/evidence/ev-original",
+    page.reply("查看定位证据", "GET", "/api/runs/fixed/evidence/ev-original",
         {"run_id": "fixed", "action_id": "action-original", "case": {"case_id": "case-original"}, "evidence_id": "ev-original"})
     gui.checkpoint("fixed-result", fixed)
     page.rows = ["fixed"]
@@ -283,7 +289,7 @@ def test_ready_fixed_result_original_evidence_and_exit_keep_real_controls(tmp_pa
     gui.shutdown()
     clicks = [item[1] for item in page.events if item[0] == "click"]
     assert "开始检查" not in clicks
-    assert clicks == ["查看原问题", "为什么定位在这里？查看定位证据", "关闭证据并返回事实", "搜索", '[data-run="fixed"]', "返回检查历史",
+    assert clicks == ["查看原问题", "summary", "查看定位证据", "关闭证据并返回事实", "搜索", '[data-run="fixed"]', "返回检查历史",
         "设置与更多", "退出界鉴", "安全退出"]
     assert ("wait", "原问题已经通过复验，要求保留的合法能力未受影响", {}, ()) in page.events
     assert ("wait", "原题复验通过", {}, ()) in page.events
@@ -402,6 +408,16 @@ def test_mcp_pair_and_forget_are_explicit_gui_actions_without_copy(tmp_path):
     assert client.calls == []
 
 
+def test_mcp_connection_is_refreshed_before_permissions_surface(tmp_path):
+    gui, page, client = context(tmp_path)
+    page.reply('reload', 'GET', '/api/mcp/access', {'client_connected': True, 'client_name': '验收客户端'})
+    gui.mcp_connected('验收客户端')
+    assert ('reload',) in page.events
+    assert ('goto', page.origin + '/#/tools') in page.events
+    assert gui.records == [{'event': 'mcp-connected', 'status': 'PASSED'}]
+    assert client.calls == []
+
+
 @pytest.mark.parametrize("lost", [False, True])
 def test_completion_does_not_navigate_until_user_click_and_retains_filter(tmp_path, lost):
     gui, page, _ = context(tmp_path)
@@ -417,13 +433,13 @@ def test_completion_does_not_navigate_until_user_click_and_retains_filter(tmp_pa
         assert gui.records[-1]["run_id"] == "new-run"
 
 
-def test_direct_task_switch_opens_outer_details_once(tmp_path):
+def test_environment_switch_needs_no_nested_disclosures(tmp_path):
     gui, page, _ = context(tmp_path)
     page.outer = True
     page.reply("确认切换", "POST", "/api/experience/official-sample/version", {"scenario_version": "EVIDENCE_LIMITED"},
         {"version": "EVIDENCE_LIMITED", "repair_reference": None})
     gui.switch("EVIDENCE_LIMITED", None)
-    assert [event[1] for event in page.events if event[0] == "click"] == ["summary", "官方环境 · 问题版", "切换到证据受限版", "确认切换"]
+    assert [event[1] for event in page.events if event[0] == "click"] == ["切换到证据受限版", "确认切换"]
 
 
 @pytest.mark.parametrize("opened", [False, True])
@@ -436,7 +452,7 @@ def test_mcp_change_requires_visible_source_and_closed_manual_registration(tmp_p
         assert not gui.records
     else:
         gui.mcp_change(change)
-        assert any(item[0] == "wait" and item[1] == change["submitted_by"] for item in page.events)
+        assert any(item[0] == "wait" and hasattr(item[1], 'pattern') and change["submitted_by"].replace(' ', r'\ ') in item[1].pattern for item in page.events)
         assert gui.records[-1]["change_id"] == "change"
-    assert not any(item[0] == "click" for item in page.events)
+    assert len([item for item in page.events if item[0] == "click"]) == 1
     assert client.calls == []

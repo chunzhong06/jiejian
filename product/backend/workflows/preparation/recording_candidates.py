@@ -9,10 +9,10 @@ from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit
 
 from pydantic import ValidationError
 
-from product.backend.core.action_preparation import RecordedRequestTemplate, ResourceInjection, ResourceInjectionKind
-from product.backend.core.business_boundary import BoundaryModel, boundary_sha256
+from product.backend.core.preparation.bindings import RecordedRequestTemplate, ResourceInjection, ResourceInjectionKind
+from product.backend.core.boundaries.entities import BoundaryModel, boundary_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording import RecordingPurpose
+from product.backend.core.recording.models import RecordingPurpose
 from product.protocols.recording import RecordingEventKind
 from product.protocols.web.workflow import ValueSlotConsumer
 

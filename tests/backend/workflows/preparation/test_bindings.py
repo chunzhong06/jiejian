@@ -7,29 +7,13 @@ import json
 
 import pytest
 
-from product.backend.core.action_preparation import (
-    ActionResourceBinding,
-    ActionEvidenceKind,
-    RegisteredObserverReference,
-)
-from product.backend.core.application_understanding import (
-    ActionCandidate,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateEvidence,
-    CandidateOrigin,
-    candidate_id,
-)
-from product.backend.core.assurance import compile_action_assurance
-from product.backend.core.business_boundary import (
-    ActionImplementationBinding,
-    BusinessAction,
-    BusinessActor,
-    boundary_sha256,
-)
+from product.backend.core.preparation.bindings import ActionResourceBinding, ActionEvidenceKind, RegisteredObserverReference
+from product.backend.core.applications.models import ActionCandidate, CandidateConfidence, CandidateDecision, CandidateEvidence, CandidateOrigin, candidate_id
+from product.backend.core.preparation.requirements import compile_action_assurance
+from product.backend.core.boundaries.entities import ActionImplementationBinding, BusinessAction, BusinessActor, boundary_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.infra.storage import FlowDraftRevisionRecord, RecordingRecord
 from product.backend.infra.storage.action_preparation import ActionPreparationRepository
 from product.backend.infra.storage.projects import ProjectRecord
@@ -213,7 +197,7 @@ def _apply_source_drift(harness: PreparationHarness, recording: RecordingRecord,
                 "source_fingerprint": "c" * 64,
                 "role_candidate_ids": current.role_candidate_ids,
             }
-            from product.backend.core.business_boundary import ActorImplementationBinding
+            from product.backend.core.boundaries.entities import ActorImplementationBinding
 
             work.business_boundaries.replace_actor_binding(
                 ActorImplementationBinding(

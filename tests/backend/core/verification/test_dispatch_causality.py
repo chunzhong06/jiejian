@@ -1,13 +1,13 @@
 # 成功派发与真实后果分开；旧字节兼容、分叉因果和缺口不能制造后果或精确定位。
-from pathlib import Path
 import json
 
 import pytest
 
 from product.backend.core.verification.breakpoints import BreakpointLocator, BreakpointType, BreakpointPrecision
 from product.backend.core.verification.trace import ExecutionTrace, TraceEvent, TraceEventKind, TraceAuthorizationDecision
-from product.protocols.check_result import CheckEvidence, canonical_check_document, parse_check_document
-from tests.backend.core.verification.test_check_breakpoints import inputs
+from product.protocols.check_result import CheckEvidence, CheckCaseOutcome, canonical_check_document, parse_check_document, seal_check_evidence
+from tests.fixtures.check_execution import execution_pair
+from tests.backend.core.verification._support_check_breakpoints import inputs
 
 
 def dispatch_inputs():
@@ -97,10 +97,32 @@ def test_dispatch_cannot_be_a_realized_effect(change):
         TraceEvent.model_validate(dispatch.model_dump(mode="json")|change,strict=False)
 
 
-def test_prior_trace_and_evidence_remain_identical_canonical_bytes():
-    directory=Path(__file__).resolve().parents[4]/"var/coordination/v113-c1-dispatch-causality"
-    raw=(directory/"prior-trace.json").read_bytes()
-    trace=ExecutionTrace.model_validate_json(raw)
-    assert json.dumps(trace.model_dump(mode="json"),ensure_ascii=False,sort_keys=True,separators=(",",":"),allow_nan=False).encode()==raw
-    raw=(directory/"prior-evidence.json").read_bytes()
-    assert canonical_check_document(parse_check_document(raw,CheckEvidence))==raw
+def test_empty_dispatch_preserves_explicit_trace_bytes_and_nested_evidence():
+    # 旧可选字段的字节合同由明确输入固定，不依赖已删除的临时验收目录。
+    request, _ = execution_pair(state_changing=True)
+    action = request.actions[0]
+    case = action.cases[0]
+    payload = {
+        "schema_version": "1", "case_id": case.case_id, "action_id": action.action_id,
+        "planned_subject_id": "test-account", "complete": True, "reason_codes": [],
+        "events": [{"event_id": "entry", "parent_event_ids": [], "case_id": case.case_id,
+            "action_id": action.action_id, "resource_ids": [case.resource_id], "kind": "ENTRY",
+            "semantic_key": "entry", "subject_id": "test-account", "actor_id": "test-account",
+            "credential_source": None, "authority_scope": {"allowed_action_ids": [],
+                "allowed_resource_ids": [], "origin_authorization_event_id": None,
+                "delegated_from_event_id": None}, "authorization_decision": None, "effect_id": None,
+            "source_component": "business", "source_location": "business/handler",
+            "correlation_kind": "EXPLICIT_PARENT", "evidence_refs": [], "recorded_at_us": 1}],
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    trace = ExecutionTrace.model_validate_json(raw)
+    assert trace.events[0].dispatch_effect_ids == ()
+    assert json.dumps(trace.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode() == raw
+    evidence = seal_check_evidence(run_id="run_"+"1"*32, job_id="job_"+"2"*32, attempt=1,
+        action_id=action.action_id, action_revision=action.action_revision, request_hash="a"*64,
+        config_hash="b"*64, case=case, outcome=CheckCaseOutcome(execution_outcome="UNKNOWN",
+            actual_identity_status="UNKNOWN", baseline_trusted=False, recovery_verified=False,
+            run_correlated=False, resource_correlated=False), observations=(), trace=trace)
+    encoded = canonical_check_document(evidence)
+    assert b'"dispatch_effect_ids"' not in encoded
+    assert canonical_check_document(parse_check_document(encoded, CheckEvidence)) == encoded

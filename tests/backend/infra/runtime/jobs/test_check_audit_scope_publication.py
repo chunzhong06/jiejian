@@ -16,8 +16,8 @@ from product.backend.workflows.checks import story as story_module
 from product.protocols.check_result import canonical_check_document
 from product.protocols.check_runtime import canonical_check_runtime_bytes
 from product.protocols.execution_v3 import canonical_execution_request_v3_bytes
-from tests.backend.infra.execution.test_check_executor import check_target, execution_configuration
-from tests.backend.infra.observers.test_audit_log_observer import _spec, _record, _write, TRACE_FIELDS
+from tests.backend.infra.execution._support_check_executor import check_target, execution_configuration
+from tests.backend.infra.observers._support_audit_log_observer import _spec, _record, _write, TRACE_FIELDS
 
 
 @pytest.mark.parametrize("variant", ["expanded", "legal", "missing", "outside_resource", "cross_case", "wrong_ancestor", "invalid"])

@@ -5,6 +5,7 @@ import { ApiError } from '../api/http'
 import { projectsApi, type ProjectDto } from '../api/projects'
 import { workspaceApi, type WorkspaceViewDto } from '../api/workspace'
 import { browserState } from './browserState'
+import { useLiveRead } from './useLiveRead'
 
 export function useProjectWorkspace(onError: (error: ApiError) => void) {
   const [projects, setProjects] = useState<ProjectDto[]>([])
@@ -37,7 +38,7 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
     }
   }, [onError, selectProject])
 
-  const refreshCurrentWorkspace = useCallback(async (project: ProjectDto | null = selected) => {
+  const refreshCurrentWorkspace = useCallback(async (project: ProjectDto | null = selected, quiet = false) => {
     if (!project?.project_id) {
       if (!currentProject.current) setWorkspace(null)
       return undefined
@@ -52,25 +53,24 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
       setWorkspace(current)
       return current
     } catch (error) {
-      if (alive.current && currentProject.current === requestedProject && epoch === requestEpoch.current) onError(error as ApiError)
+      if (alive.current && currentProject.current === requestedProject && epoch === requestEpoch.current && !quiet) onError(error as ApiError)
       return undefined
     }
   }, [onError, selected])
 
   useEffect(() => { void refreshProjects() }, [refreshProjects])
-  useEffect(() => { void refreshCurrentWorkspace() }, [refreshCurrentWorkspace])
-  useEffect(() => {
-    const refresh = () => { if (document.visibilityState === 'visible') void refreshCurrentWorkspace() }
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', refresh)
-    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
-  }, [refreshCurrentWorkspace])
+  const synchronization = useLiveRead(selected?.project_id, async () => {
+    const next = await refreshCurrentWorkspace(selected, true)
+    if (!next) throw new Error('Workspace read unavailable')
+  }, 5000)
+
 
   return {
     projects,
     selected,
     workspace,
     selectProject,
+    synchronization,
     refreshProjects,
     refreshCurrentWorkspace,
   }

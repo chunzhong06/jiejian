@@ -60,6 +60,28 @@ def _proposal_payload() -> dict[str, object]:
     }
 
 
+def test_editor_read_is_stable_and_exposes_exact_proposal_without_writing(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    app = create_app(tmp_path / "var", start_worker=False, environ={})
+    with TestClient(app) as client:
+        connected = client.post("/api/applications/connect", json={"schema_version":"1", "source_root":str(source), "project_name":"编辑快照"})
+        project_id = connected.json()["data"]["project"]["project_id"]
+        prefix = f"/api/projects/{project_id}/business-boundaries"
+        first = client.get(prefix + "/editor")
+        assert first.status_code == 200
+        assert first.json() == client.get(prefix + "/editor").json()
+        assert first.json()["data"]["pending_proposals"] == []
+        created = client.post(prefix + "/proposals", json=_proposal_payload()).json()["data"]
+        view = client.get(prefix + "/editor").json()["data"]
+        assert view["pending_proposals"][0]["proposal_id"] == created["proposal"]["proposal_id"]
+        assert "proposal" not in view["pending_proposals"][0]
+        exact = client.get(prefix + "/proposals/" + created["proposal"]["proposal_id"]).json()["data"]
+        assert exact["review"]["basis_state"] == "COMPLETE"
+        assert all(row["before"] is None and row["change_kind"] == "CREATE" for row in exact["review"]["items"])
+        assert client.get(prefix).json()["data"]["policy_epoch"] == 0
+
+
 def test_business_boundary_api_approves_bundle_and_creates_actor_identity(
     tmp_path: Path,
 ) -> None:
@@ -142,11 +164,12 @@ def test_old_write_surfaces_are_not_registered(tmp_path: Path) -> None:
         for path in (
             "/api/projects/sample-project/permission-intents",
             "/api/projects/sample-project/checks",
-            "/api/projects/sample-project/runs",
             "/api/projects/sample-project/business-boundaries/official-recipe",
             "/api/projects/sample-project/business-boundaries/official-recipe/proposal",
         ):
             assert client.post(path, json={"schema_version": "1"}).status_code == 404
+        # 当前 CHECK 使用 /runs；旧提交格式应被拒绝，而不是要求正式路由消失。
+        assert client.post("/api/projects/sample-project/runs", json={"schema_version": "1"}).status_code == 422
         # 当前 Recording writer 已注册，但必须拒绝缺少正式动作与身份的旧空载荷。
         assert client.post(
             "/api/projects/sample-project/recordings", json={"schema_version": "1"}

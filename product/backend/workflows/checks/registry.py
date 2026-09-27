@@ -5,9 +5,9 @@ from threading import RLock
 
 from pydantic import Field, model_validator
 
-from product.backend.core.action_preparation import RegisteredObserverReference
-from product.backend.core.business_boundary import BusinessEffectDefinition
-from product.backend.core.check_plan import RegisteredEffectProofCapability
+from product.backend.core.preparation.bindings import RegisteredObserverReference
+from product.backend.core.boundaries.entities import BusinessEffectDefinition
+from product.backend.core.checks.plan import RegisteredEffectProofCapability
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.check_runtime import CheckBudget, CheckIdentityVerification, CheckAuxiliarySource, SafeLabel
 from product.protocols.execution_v3 import Hash, IdentityId, LogicalId, WireModel, content_hash

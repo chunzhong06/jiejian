@@ -29,7 +29,7 @@ describe('当前变化与修复', () => {
   it('只在明确提交时登记说明和相对路径', async () => {
     const p = props(); render(<ChangesPage {...p} />)
     await screen.findByRole('heading', {name:'修改导出检查位置'})
-    fireEvent.click(screen.getByText('Agent 连接与手动接管'))
+    fireEvent.click(screen.getByText('手动登记代码变化'))
     fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: ' 调整导出授权 ' } })
     fireEvent.change(screen.getByLabelText('涉及文件（可选，每行一个相对路径）'), { target: { value: 'src/app.py' } })
     fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
@@ -46,7 +46,7 @@ describe('当前变化与修复', () => {
     api.submit.mockRejectedValue(new Error('response unavailable'))
     render(<ChangesPage {...props()} />)
     await screen.findByRole('heading', {name:'修改导出检查位置'})
-    fireEvent.click(screen.getByText('Agent 连接与手动接管'))
+    fireEvent.click(screen.getByText('手动登记代码变化'))
     fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: '修复导出' } })
     fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
     await screen.findByText('上次登记回执未确认。请先查看下方变化记录，避免重复登记。')
@@ -56,7 +56,7 @@ describe('当前变化与修复', () => {
   it('不接受查询参数伪造的原题引用', async () => {
     const p = props(); render(<ChangesPage {...p} requestedRepair="unknown" />)
     await screen.findByRole('heading', {name:'修改导出检查位置'})
-    fireEvent.click(screen.getByText('Agent 连接与手动接管'))
+    fireEvent.click(screen.getByText('手动登记代码变化'))
     fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: '修复导出' } })
     fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
     await waitFor(() => expect(p.onError).toHaveBeenCalled())

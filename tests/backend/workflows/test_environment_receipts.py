@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.workflows.official_sample import OfficialSampleExperience
+from product.backend.workflows.examples.environment import OfficialSampleExperience
 from product.backend.api.routers.experience import build_experience_router
 from tests.fixtures.action_preparation import build_preparation_harness
 

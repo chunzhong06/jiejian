@@ -1,15 +1,9 @@
 # 构造权限编译和准备服务共同使用的正式业务事实，不依赖数据库或真实秘密。
 
-from product.backend.core.approval import HumanApproval, HumanApprovalChannel
-from product.backend.core.business_boundary import (
-    BusinessActionOperationKind, BusinessActionRevision, BusinessActorRevision,
-    BusinessEffectDefinition, BusinessRevisionState, boundary_sha256,
-)
-from product.backend.core.permission_intent import (
-    PermissionIntentEffectiveState, PermissionIntentRelation, PermissionIntentRevision,
-    PermissionIntentSemantic, permission_intent_sha256,
-)
-from product.backend.core.permission_semantics import BusinessEffectKind, PermissionExpectation
+from product.backend.core.boundaries.approval import HumanApproval, HumanApprovalChannel
+from product.backend.core.boundaries.entities import BusinessActionOperationKind, BusinessActionRevision, BusinessActorRevision, BusinessEffectDefinition, BusinessRevisionState, boundary_sha256
+from product.backend.core.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation, PermissionIntentRevision, PermissionIntentSemantic, permission_intent_sha256
+from product.backend.core.boundaries.semantics import BusinessEffectKind, PermissionExpectation
 
 
 PROJECT = "assurance-test"

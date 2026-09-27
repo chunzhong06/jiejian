@@ -10,7 +10,7 @@ from product.backend.infra.runtime.process.environment import ProcessEnvironment
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from tests.fixtures.runtime_environment import runtime_identity_environment
 from tests.fixtures.check_execution import execution_pair
-from tests.backend.infra.observers.test_audit_log_observer import _spec
+from tests.backend.infra.observers._support_audit_log_observer import _spec
 
 
 def test_worker_supervisor_receives_only_requested_secret_names(tmp_path: Path) -> None:

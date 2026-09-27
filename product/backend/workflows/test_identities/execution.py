@@ -20,7 +20,7 @@ import re
 from collections.abc import Mapping, Sequence
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.test_identity import TestIdentity, TestIdentityAuthMethod
+from product.backend.core.identities.models import TestIdentity, TestIdentityAuthMethod
 from product.backend.infra.secrets import SecretStore
 from product.backend.workflows.test_identities.service import (
     TestIdentityService,

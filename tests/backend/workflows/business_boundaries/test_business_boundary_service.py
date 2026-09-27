@@ -1,55 +1,33 @@
 # 验证 Business Boundary Proposal 的原子批准、policy epoch、来源失效与 Actor TestIdentity。
 
 from __future__ import annotations
+from product.backend.workflows.business_boundaries import queries, sources, planning
 
 from pathlib import Path
 
 import pytest
 
 from product.backend.composition import ApplicationCore
-from product.backend.core.application_understanding import (
-    ActionCandidate,
-    ActionRiskHint,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateEvidence,
-    RoleCandidate,
-)
-from product.backend.core.boundary_proposal import (
-    BoundaryProposalBundle,
-    BoundarySourceSnapshot,
-    ProposalCandidateKind,
-    ProposalWriteMode,
-    ProposedActionItem,
-    ProposedActorItem,
-    ProposedEffectItem,
-    ProposedPermissionItem,
-)
-from product.backend.core.business_boundary import (
-    ActorImplementationBinding,
-    BusinessActionOperationKind,
-    BusinessRevisionState,
-    ImplementationBindingStatus,
-    boundary_sha256,
-)
+from product.backend.core.applications.models import ActionCandidate, ActionRiskHint, CandidateConfidence, CandidateDecision, CandidateEvidence, RoleCandidate
+from product.backend.core.boundaries.proposals import BoundaryProposalBundle, BoundarySourceSnapshot, ProposalCandidateKind, ProposalWriteMode, ProposedActionItem, ProposedEffectItem
+from product.backend.core.boundaries.entities import ActorImplementationBinding, BusinessActionOperationKind, BusinessRevisionState, ImplementationBindingStatus, boundary_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.permission_intent import (
-    PermissionIntentEffectiveState,
-    PermissionIntentRevision,
-    PermissionIntentRelation,
-    PermissionIntentSemantic,
-    permission_intent_sha256,
-)
+from product.backend.core.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRevision, PermissionIntentRelation, PermissionIntentSemantic, permission_intent_sha256
 from product.backend.core.verification.permissions import (
     PermissionExpectation,
     SecurityEffectKind,
 )
-from product.backend.workflows.business_boundaries import (
-    BoundaryMaintenanceCommand,
-    BoundaryProposalCommand,
-)
+from product.backend.workflows.business_boundaries import BoundaryProposalCommand
 from product.backend.workflows.business_boundaries.fingerprints import (
     legacy_candidate_source_snapshot,
+)
+from tests.backend.workflows.business_boundaries._support_business_boundary_service import (
+    _action,
+    _actors,
+    _core,
+    _create_proposal,
+    _maintenance_command,
+    _permission,
 )
 
 
@@ -62,11 +40,11 @@ def test_permission_status_excludes_technical_selection_but_keeps_incomplete_all
 
     deny = permission(3, expectation=PermissionExpectation.DENY,
                       relation=PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT)
-    status = BusinessBoundaryService._permission_status(action(), (permission(1), permission(2), deny))
+    status = queries._permission_status(action(), (permission(1), permission(2), deny))
     assert status.permission_semantics_confirmed
     assert status.allow_control_available
     assert status.reason_codes == ()
-    incomplete = BusinessBoundaryService._permission_status(action(), (
+    incomplete = queries._permission_status(action(), (
         permission(1), permission(2, effects=(SECOND_EFFECT,)),
         permission(3, expectation=PermissionExpectation.DENY, effects=(EFFECT, SECOND_EFFECT)),
     ))
@@ -74,56 +52,10 @@ def test_permission_status_excludes_technical_selection_but_keeps_incomplete_all
     assert incomplete.reason_codes == ("ALLOW_CONTROL_REQUIRED",)
 
 
-def _core(tmp_path: Path) -> tuple[ApplicationCore, str]:
-    source = tmp_path / "source"
-    source.mkdir()
-    core = ApplicationCore(tmp_path / "var")
-    connected = core.application_understanding.connect(
-        str(source),
-        project_name="稳定业务边界测试",
-    )
-    return core, connected.project.project_id
 
 
-def _actors(*, member_state: BusinessRevisionState = BusinessRevisionState.ACTIVE):
-    return (
-        ProposedActorItem(
-            item_id="pactr_1111111111111111",
-            write_mode=ProposalWriteMode.CREATE,
-            display_name="项目负责人",
-            description="负责项目交付",
-            effective_state=BusinessRevisionState.ACTIVE,
-        ),
-        ProposedActorItem(
-            item_id="pactr_2222222222222222",
-            write_mode=ProposalWriteMode.CREATE,
-            display_name="普通协作成员",
-            description="参与日常协作",
-            effective_state=member_state,
-        ),
-    )
 
 
-def _action():
-    return ProposedActionItem(
-        item_id="pactn_1111111111111111",
-        write_mode=ProposalWriteMode.CREATE,
-        display_name="导出完整项目交付包",
-        description="形成可交付的完整项目包",
-        primary_resource_concept="项目交付空间",
-        operation_kind=BusinessActionOperationKind.EXPORT,
-        state_changing=True,
-        effect_catalog=(
-            ProposedEffectItem(
-                item_id="peff_1111111111111111",
-                business_label="完整项目交付包真实形成",
-                effect_kind=SecurityEffectKind.OBJECT_CREATION,
-                resource_concept="项目交付包",
-                description="交付包已经形成",
-            ),
-        ),
-        effective_state=BusinessRevisionState.ACTIVE,
-    )
 
 
 def _second_action():
@@ -149,66 +81,10 @@ def _second_action():
     )
 
 
-def _permission(item_id: str, actor_item_id: str, expectation: PermissionExpectation):
-    return ProposedPermissionItem(
-        item_id=item_id,
-        write_mode=ProposalWriteMode.CREATE,
-        effective_state=PermissionIntentEffectiveState.ACTIVE,
-        subject_actor_item_id=actor_item_id,
-        business_action_item_id="pactn_1111111111111111",
-        resource_owner_actor_item_id="pactr_1111111111111111",
-        relation=(
-            PermissionIntentRelation.OWNS
-            if actor_item_id == "pactr_1111111111111111"
-            else PermissionIntentRelation.OTHER_ROLE
-        ),
-        expectation=expectation,
-        protected_effect_item_ids=("peff_1111111111111111",),
-    )
 
 
-def _create_proposal(
-    core: ApplicationCore,
-    project_id: str,
-    *,
-    actors=None,
-    action=None,
-    permissions=None,
-):
-    return core.business_boundaries.create_proposal(
-        project_id,
-        BoundaryProposalCommand(
-            proposed_actors=_actors() if actors is None else actors,
-            proposed_actions=(_action() if action is None else action,),
-            proposed_permissions=(
-                (
-                    _permission(
-                        "pperm_1111111111111111",
-                        "pactr_1111111111111111",
-                        PermissionExpectation.ALLOW,
-                    ),
-                    _permission(
-                        "pperm_2222222222222222",
-                        "pactr_2222222222222222",
-                        PermissionExpectation.DENY,
-                    ),
-                )
-                if permissions is None
-                else permissions
-            ),
-            provenance="本机用户提交业务边界",
-        ),
-    ).proposal
 
 
-def _maintenance_command(draft, *, actors=None, actions=None, permissions=None):
-    return BoundaryMaintenanceCommand(
-        expected_boundary_state_fingerprint=draft.boundary_state_fingerprint,
-        actors=draft.actors if actors is None else actors,
-        actions=draft.actions if actions is None else actions,
-        permissions=draft.permissions if permissions is None else permissions,
-        provenance="本机用户维护业务边界",
-    )
 
 
 def test_multi_effect_approval_normalizes_formal_order_and_preserves_permission_mapping(
@@ -230,7 +106,8 @@ def test_multi_effect_approval_normalizes_formal_order_and_preserves_permission_
         ))
         # 普通审批先分配两个 Actor 和一个 Action，再在实际 UUID 边界固定反序 Effect ID。
         allocated = iter((uuid4(), uuid4(), uuid4(), UUID(hex="f" * 32), UUID(hex="1" * 32)))
-        monkeypatch.setattr(service, "uuid4", lambda: next(allocated, None) or uuid4())
+        for owner in (service, planning):
+            monkeypatch.setattr(owner, "uuid4", lambda: next(allocated, None) or uuid4())
         approved = core.business_boundaries.approve(
             project_id, proposal.proposal_id,
             expected_fingerprint=proposal.proposal_fingerprint, reason="确认多效果正式映射",
@@ -487,13 +364,13 @@ def test_v1_source_snapshot_keeps_global_strict_validation(tmp_path: Path) -> No
             ),
         )
         assert legacy.basis_version == 1
-        core.business_boundaries._validate_source_snapshot(legacy, understanding)
+        sources._validate_source_snapshot(legacy, understanding)
 
         changed = understanding.model_copy(
             update={"source_fingerprint": "f" * 64, "revision": 2}
         )
         with pytest.raises(JiejianError) as error:
-            core.business_boundaries._validate_source_snapshot(legacy, changed)
+            sources._validate_source_snapshot(legacy, changed)
         assert error.value.code == ErrorCode.BOUNDARY_PROPOSAL_SOURCE_STALE.value
     finally:
         core.close()
@@ -593,12 +470,12 @@ def test_current_permission_projection_excludes_noncurrent_latest_revisions(
 
         for updates in invalid_updates:
             latest = permission.model_copy(update=updates)
-            current, stale = core.business_boundaries._current_permission_intents(
+            current, stale = queries.current_permission_intents(
                 (latest,), boundary.actors, boundary.actions
             )
             assert current == ()
             assert stale == (latest,)
-            status = core.business_boundaries._permission_status(
+            status = queries._permission_status(
                 action, current, stale
             )
             assert status.permission_semantics_confirmed is False
@@ -692,7 +569,7 @@ def test_allow_control_uses_a_real_allow_and_covers_every_deny(tmp_path: Path) -
             ((allow, uncovered_deny), False),
         )
         for permissions, expected in cases:
-            status = core.business_boundaries._permission_status(action, permissions)
+            status = queries._permission_status(action, permissions)
             assert status.allow_control_available is expected
         assert allow.protected_effect_ids == (effect,)
     finally:

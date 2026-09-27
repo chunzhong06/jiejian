@@ -1,7 +1,7 @@
 # 从已批准完整 ALLOW 和当前身份槽生成有限录制组合，不能拼接半截权限。
-from product.backend.core.business_boundary import BoundaryModel
-from product.backend.core.assurance import PermissionIdentity
-from product.backend.core.permission_semantics import PermissionExpectation
+from product.backend.core.boundaries.entities import BoundaryModel
+from product.backend.core.preparation.requirements import PermissionIdentity
+from product.backend.core.boundaries.semantics import PermissionExpectation
 from product.backend.workflows.preparation.models import PreparationStatus
 
 

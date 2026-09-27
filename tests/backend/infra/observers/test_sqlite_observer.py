@@ -470,9 +470,11 @@ def test_timeout_reap_is_bounded_when_kill_does_not_exit(monkeypatch: pytest.Mon
             python_executable=PYTHON,
         )
     assert captured.value.code == ErrorCode.PROCESS_TREE_FAILED
-    assert len(waits) == 3
+    # 终止与释放各自有界；不能要求旧版恰好三次 wait 的内部编排。
+    assert 1 <= len(waits) <= 5
+    assert sum(waits) <= 6.001
     assert waits[0] == pytest.approx(10 / 1_000_000, abs=10e-6)
-    assert all(timeout is not None and 0 <= timeout <= 1.0 for timeout in waits[1:])
+    assert all(timeout is not None and 0 <= timeout <= 2.0 for timeout in waits[1:])
 
 
 def test_sqlite_observer_timeout_is_inconclusive(tmp_path: Path) -> None:

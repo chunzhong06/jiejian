@@ -8,6 +8,12 @@ const task = (status: RepairStatus): RepairTask => ({ task_reference: 'task', st
   contract: { project_id: 'p1', source_run_id: 'run-old', source_case_id: 'deny', repair_fingerprint: 'repair', original_policy_epoch: 1, deny: { identity: { action_id: 'action', resource_id: 'resource', subject_test_identity_id: 'subject', resource_owner_test_identity_id: 'owner', protected_effect_ids: ['effect'] }, evidence_refs: [] }, regressions: [{ source_case_id: 'read' }] },
   comparison: [row('DENY', 'deny'), row('SELECTED_ALLOW', 'allow'), row('REGRESSION', 'read')] })
 describe('修复要求与交付', () => {
+  it('服务端允许复验时从原题直接携带精确变化引用，不登记或提交检查', () => {
+    const onNavigate = vi.fn()
+    render(<RepairDelivery task={task('READY_TO_VERIFY')} onNavigate={onNavigate} onBack={vi.fn()} onViewChange={vi.fn()}/>)
+    fireEvent.click(screen.getByRole('button', { name: '复验原题' }))
+    expect(onNavigate).toHaveBeenCalledWith('/tests?change_id=chg')
+  })
   it.each<RepairStatus>(['REPAIR_REQUIRED', 'CHANGE_SUBMITTED', 'READY_TO_VERIFY', 'VERIFIED', 'NOT_VERIFIED', 'INCONCLUSIVE', 'STALE'])('遵守 %s 状态，不从已登记修改推断通过', status => {
     render(<RepairDelivery task={task(status)} onNavigate={vi.fn()} onBack={vi.fn()} onViewChange={vi.fn()}/>)
     expect(screen.getByRole('heading', { name: '需要消除的后果' })).toBeInTheDocument()

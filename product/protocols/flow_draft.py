@@ -35,8 +35,8 @@ from pydantic import (
 )
 
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
-from product.backend.core.business_boundary import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
-from product.backend.core.recording import RecordingPurpose
+from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.core.recording.models import RecordingPurpose
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import REDACTED
 from product.protocols.web.workflow import ValueSlotConsumer

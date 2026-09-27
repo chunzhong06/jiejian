@@ -7,7 +7,7 @@ import { PreparationPage } from './PreparationPage'
 const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn() }))
 vi.mock('../../api/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select, evidence: api.evidence } }))
 vi.mock('../../api/testIdentities', () => ({ testIdentitiesApi: { create: api.create, startPreparation: api.start } }))
-vi.mock('../../components/AssistantPanel', () => ({ AssistantPanel: () => null }))
+vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: () => null }))
 vi.mock('../identities/TestIdentityPage', () => ({ TestIdentityPage: () => <div>登录准备页面</div> }))
 vi.mock('../recording/RecordingPage', () => ({ RecordingPage: ({ task, effectName }: { task: PrimaryTaskDto; effectName?: string }) => <div>录制任务 {task.recording_id ?? task.test_identity_id} {effectName}</div> }))
 const task = (patch: Partial<PrimaryTaskDto> = {}): PrimaryTaskDto => ({ task_id: 't1', task_kind: 'PREPARE_TEST_IDENTITY', business_action_id: 'a1', business_actor_id: 'u1', title: '准备成员账号', why_now: '需要两个独立账号', user_responsibility: '请使用真实账号登录', system_will_do: '保存登录状态', route: '/tests', can_execute: true, stale_fingerprint: 'current', action_revision: 2, identity_slot_id: 'slot2', test_identity_id: null, ...patch })

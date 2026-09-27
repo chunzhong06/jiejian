@@ -19,7 +19,7 @@ from uuid import uuid4
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.protocols.report import ReportDocument, ReportPackageFile, ReportPackageManifest, parse_report_document, parse_report_package_manifest
-from product.backend.core.reporting import render_format
+from product.backend.core.reports.models import render_format
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)

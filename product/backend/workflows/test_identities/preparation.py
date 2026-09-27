@@ -32,8 +32,8 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.business_boundary import BusinessRevisionState, boundary_sha256
-from product.backend.core.test_identity import TestIdentityCookie
+from product.backend.core.boundaries.entities import BusinessRevisionState, boundary_sha256
+from product.backend.core.identities.models import TestIdentityCookie
 from product.backend.infra.identity.control import (
     IdentityPreparationControlPaths,
     identity_preparation_control_paths,

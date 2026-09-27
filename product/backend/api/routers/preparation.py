@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 from product.backend.api.envelope import ApiResponse, data_response
 from product.backend.api.envelope import ApiModel
-from product.backend.core.assurance import PermissionIdentity
+from product.backend.core.preparation.requirements import PermissionIdentity
 from pydantic import Field
 from typing import Literal
 

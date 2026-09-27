@@ -1,14 +1,14 @@
 // 唯一设计令牌：同一语义对象驱动 Ant Design 与 CSS，不保存业务判断。
 export const palettes = {
-  light: { background: '#F5F5F7', surface: '#FFFFFF', subtle: '#ECEEF2', text: '#24262C', secondary: '#686C76', border: '#E0E2E7', strong: '#5C626E', evidenceSurface: '#252D3A', evidenceSubtle: '#343E4E', evidenceText: '#F0F3F8', primary: '#4263D5', fact: '#B4C4E1', ai: '#9E8CBC', warning: '#AD8338', safe: '#458366', danger: '#B75D64' },
-  dark: { background: '#191B20', surface: '#24272D', subtle: '#323640', text: '#E8E9ED', secondary: '#A3A6B1', border: '#393D46', strong: '#A3A6B1', evidenceSurface: '#202938', evidenceSubtle: '#313D50', evidenceText: '#F0F3F8', primary: '#91A8FF', fact: '#B4C4E1', ai: '#BBACD2', warning: '#DBC084', safe: '#8BC5A6', danger: '#ED999D' },
+  light: { background: '#F8F9FB', surface: '#FFFFFF', subtle: '#F1F3F6', text: '#20252D', secondary: '#687180', border: '#E3E6EC', strong: '#5C626E', evidenceSurface: '#FFFFFF', evidenceSubtle: '#F8F9FB', evidenceText: '#20252D', primary: '#385ED1', fact: '#B4C4E1', ai: '#9E8CBC', warning: '#AD8338', safe: '#458366', danger: '#B75D64' },
+  dark: { background: '#171A21', surface: '#1D222A', subtle: '#252C37', text: '#E8E9ED', secondary: '#A3A6B1', border: '#393D46', strong: '#A3A6B1', evidenceSurface: '#1D222A', evidenceSubtle: '#252C37', evidenceText: '#F0F3F8', primary: '#91A8FF', fact: '#B4C4E1', ai: '#BBACD2', warning: '#DBC084', safe: '#8BC5A6', danger: '#ED999D' },
 } as const
 export type ProductTheme = keyof typeof palettes
 export const metrics = {
   layout: { navigation: 200, header: 60, mobileSummary: 52, content: 1460, task: 1120, form: 1240 },
   space: [4, 8, 12, 16, 20, 24, 32, 40, 48],
   font: { body: 15, secondary: 13, label: 12, section: 22, titleMin: 26, titleMax: 34 },
-  radius: { small: 6, medium: 10, large: 16 },
+  radius: { small: 7, medium: 10, large: 12 },
   line: 1, control: { normal: 36, large: 40, small: 28 },
   motion: { instant: 90, fast: 140, normal: 180, slow: 220, emphasis: 280 },
   ease: 'cubic-bezier(.2, 0, 0, 1)',

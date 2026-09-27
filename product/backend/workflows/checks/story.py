@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import Field
 
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
-from product.backend.core.check_repair import CurrentRepairContract, CurrentRepairVerification
+from product.backend.core.checks.repair import CurrentRepairContract, CurrentRepairVerification
 from product.backend.core.verification.breakpoints import BreakpointLocator, BreakpointResult
 from product.backend.core.verification.checks import CheckDecisionInput, project_check_effect_facts
 from product.backend.core.verification.trace import TraceAuthorizationDecision, TraceEventKind

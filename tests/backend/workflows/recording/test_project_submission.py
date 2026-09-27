@@ -6,15 +6,18 @@ from unittest.mock import Mock
 import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording import RecordingPurpose
+from product.backend.core.recording.models import RecordingPurpose
 from product.backend.workflows.recording.project_submission import ProjectRecordingService
 from tests.fixtures.recording import RecordingContext
+from tests.backend.workflows.recording._support_project_submission import (
+    _arguments,
+)
 
 
 def test_other_role_recording_freezes_subject_and_owner_and_requires_confirmation(tmp_path):
     from tests.fixtures.action_preparation import build_preparation_harness
     from tests.fixtures.assurance import permission, ACTOR, OTHER_ACTOR
-    from product.backend.core.permission_intent import PermissionIntentRelation
+    from product.backend.core.boundaries.permissions import PermissionIntentRelation
     from product.backend.workflows.preparation.demonstrations import legal_demonstrations
     harness = build_preparation_harness(tmp_path, identity_count=2, second_actor=True)
     try:
@@ -57,13 +60,6 @@ def test_project_recording_rejects_unbounded_duration_before_side_effects(durati
     assert dependency.mock_calls == []
 
 
-def _arguments(context):
-    position = context.harness.core.preparation.get(context.project_id).actions[0].assurance_contract.identity_requirements.permissions[0]
-    return dict(business_action_id=context.harness.action.action_id, action_revision=1,
-        subject_test_identity_id=context.harness.identities[0].identity_id,
-        resource_owner_test_identity_id=context.harness.identities[0].identity_id,
-        subject_slot_id=position.subject_slot_id, resource_owner_slot_id=position.resource_owner_slot_id,
-        duration_seconds=60, idempotency_key="supplement")
 
 
 def test_supplement_reuses_parent_action_and_identity(tmp_path: Path) -> None:

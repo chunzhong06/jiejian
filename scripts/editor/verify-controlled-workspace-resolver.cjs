@@ -29,7 +29,7 @@ const files = [
     "frontend",
     "src",
     "features",
-    "testing",
+    "history",
     "CheckHistoryPage.tsx",
   ),
   path.join(
@@ -38,7 +38,7 @@ const files = [
     "frontend",
     "src",
     "features",
-    "testing",
+    "history",
     "CheckHistoryPage.test.tsx",
   ),
 ];

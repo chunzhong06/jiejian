@@ -16,10 +16,10 @@ import { ArrowRightOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Collapse, Input, List, Radio, Space, Spin, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import { onboardingApi, type DiscoveryResult } from '../../api/onboarding'
-import { AssistantPanel } from '../../components/AssistantPanel'
-import { TaskActionBar } from '../../components/TaskActionBar'
+import { AssistantPanel } from '../assistant/AssistantPanel'
+import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { CandidateReview } from './CandidateReview'
-import { useTaskGuard } from '../../components/TaskContinuity'
+import { useTaskGuard } from '../../app/tasks/TaskContinuity'
 import {
   projectsApi,
   type ActionCandidateDto,

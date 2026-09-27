@@ -25,7 +25,7 @@ def _function_source(path: str, class_name: str, function_name: str) -> str:
 
 
 def test_permission_draft_has_no_approval_or_persistence_capability() -> None:
-    source = _source("product/backend/workflows/permission_drafting.py")
+    source = _source("product/backend/workflows/business_boundaries/drafting.py")
 
     assert "AssistantCache" not in source
     assert "StorageUnitOfWork" not in source
@@ -46,9 +46,9 @@ def test_old_permission_review_surface_is_absent() -> None:
 
 def test_revalidation_plan_delegates_to_inspection() -> None:
     source = _function_source(
-        "product/backend/workflows/source_changes.py",
-        "SourceChangeService",
-        "revalidation_plan",
+        "product/backend/workflows/changes/service.py",
+        "CurrentSourceChangeService",
+        "view",
     )
 
     assert "self.inspect_revalidation" in source
@@ -57,10 +57,10 @@ def test_revalidation_plan_delegates_to_inspection() -> None:
 
 
 def test_consumers_do_not_restore_parallel_change_judgments() -> None:
-    preparation = _source("product/backend/workflows/projects/preparation.py")
+    preparation = _source("product/backend/workflows/preparation/service.py")
     workspace = _source("product/backend/workflows/workspace/service.py")
     worker = _source("product/backend/composition/worker.py")
-    revalidation = _source("product/backend/workflows/projects/revalidation.py")
+    changes = _source("product/backend/workflows/changes/service.py")
 
     assert "mapping_review_required_count" not in preparation
     assert "latest.complete" not in preparation
@@ -78,4 +78,5 @@ def test_consumers_do_not_restore_parallel_change_judgments() -> None:
     assert fields["can_execute"] == "change.revalidation.can_execute"
     assert "PermissionDraftService" not in worker
     assert "ProjectRevalidationService" not in worker
-    assert "StorageUnitOfWork" not in revalidation
+    assert "def inspect_revalidation(" in changes
+    assert not (ROOT / "product/backend/workflows/source_changes.py").exists()

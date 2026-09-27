@@ -9,9 +9,9 @@ from product.backend.infra.observers.audit_log import run_audit_log_observer
 from product.backend.infra.observers.check_trace import build_check_trace
 from product.backend.infra.observers.effect_projector import EffectProjector
 from product.protocols.observer import Correlation, ObservationPhase
-from tests.backend.infra.observers.test_audit_log_observer import _spec, _record, _write, TRACE_FIELDS
+from tests.backend.infra.observers._support_audit_log_observer import _spec, _record, _write, TRACE_FIELDS
 from tests.fixtures.check_execution import execution_pair
-from tests.backend.infra.execution.test_check_observers import observer_target
+from tests.backend.infra.execution._support_check_observers import observer_target
 
 
 def _row(case, event_id, *, parent=None, kind="ENTRY", sequence=1):

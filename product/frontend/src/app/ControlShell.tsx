@@ -8,19 +8,19 @@ import { ApiError } from '../api/http'
 import { mcpAccessApi, type MCPAccessView } from '../api/mcp'
 import { projectsApi, type ProjectDto } from '../api/projects'
 import { systemApi } from '../api/system'
-import { DesktopModuleNavigation, MobileModuleNavigation } from '../components/ModuleNavigation'
-import { ErrorRecovery } from '../components/ErrorRecovery'
+import { DesktopModuleNavigation, MobileModuleNavigation } from './navigation/ModuleNavigation'
+import { ErrorRecovery } from './shell/ErrorRecovery'
 import { AccessPage } from '../features/access/AccessPage'
-import { CurrentTestsPage } from '../features/testing/CurrentTestsPage'
-import { CheckHistoryPage } from '../features/testing/CheckHistoryPage'
+import { CurrentTestsPage } from '../features/checks/CurrentTestsPage'
+import { CheckHistoryPage } from '../features/history/CheckHistoryPage'
 import { ChangesPage } from '../features/changes/ChangesPage'
-import { OfficialSamplePanel } from '../features/workspace/OfficialSamplePanel'
-import { EnvironmentPage } from '../features/workspace/EnvironmentPage'
+import { OfficialSamplePanel } from '../features/environment/OfficialSamplePanel'
+import { EnvironmentPage } from '../features/environment/EnvironmentPage'
 import { BusinessBoundaryPage } from '../features/boundaries/BusinessBoundaryPage'
 import LLMSettingsDrawer from '../features/settings/LLMSettingsDrawer'
 import { RuntimePage } from '../features/system/RuntimePage'
 import { ToolsPage } from '../features/tools/ToolsPage'
-import { WorkbenchContext, WorkbenchPage } from '../features/workspace/WorkbenchPage'
+import { WorkbenchPage } from '../features/workspace/WorkbenchPage'
 import { aiStatusLabel, AppHeader } from './AppHeader'
 import { NotificationCenter, enqueueNotification, useNotificationExpiry, type NotificationItem } from './NotificationCenter'
 import { normalizeRoute, type AppRoute } from './presentation'
@@ -28,7 +28,7 @@ import { useProjectWorkspace } from './useProjectWorkspace'
 import { useSystemStatus } from './useSystemStatus'
 import { useCheckActivity } from './useCheckActivity'
 import { RetainedWorkPages } from './RetainedWorkPages'
-import { TaskGuardContext, TaskJourney } from '../components/TaskContinuity'
+import { TaskGuardContext } from './tasks/TaskContinuity'
 import type { WorkspaceViewDto } from '../api/workspace'
 import '../styles.css'
 
@@ -182,39 +182,16 @@ function ControlShellContent() {
     }
   }
 
-  // Agent 可以在页面外登记或执行；自由导航期间仍有界回读，更新事实但不切换页面。
-  useEffect(() => {
-    if (!selected || mcpStatus?.connection_state !== 'CONNECTED') return
-    let active = true, pending = false, reads = 0
-    const timer = window.setInterval(async () => {
-      if (!active || pending || document.visibilityState !== 'visible') return
-      if (reads >= 60) { window.clearInterval(timer); return }
-      pending = true; reads += 1
-      try { await workspaceState.refreshCurrentWorkspace() } finally { pending = false }
-    }, 5_000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [route, selected?.project_id, mcpStatus?.connection_state, workspaceState.refreshCurrentWorkspace])
-
   const renderChecks = (runId?: string | null, taskId?: string | null, changeId?: string | null, onBackToHistory?: () => void) => selected && <CurrentTestsPage
     key={`checks-${selected.project_id}-${retryEpoch}-${changeId ?? ''}`} project={selected} workspace={workspace} onError={notifyError}
     onStateChanged={workspaceState.refreshCurrentWorkspace} onBackToHistory={onBackToHistory} onFeedback={rememberReceipt}
     onProvidedMaterials={experience?.active && experience.project_id === selected.project_id ? async () => { const value = await experienceApi.prepare(); setExperience(value); return value } : undefined}
     onNavigate={path => { if (onBackToHistory && path.startsWith('/tests?run_id=')) navigate(path.replace('/tests?', '/history?')); else navigateRecoveryTarget(path) }}
     requestedTaskId={taskId} requestedRunId={runId} requestedCaseId={new URLSearchParams(location.search).get('case_id')} changeId={changeId} />
-  const renderPermissions = () => selected && <BusinessBoundaryPage key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected}
+  const renderPermissions = () => selected && <BusinessBoundaryPage requestedActionId={new URLSearchParams(location.search).get('action_id')} key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected}
+    requestedProposalId={route === '/workspace' ? workspace?.primary_task?.proposal_id : new URLSearchParams(location.search).get('proposal_id')}
     onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onFeedback={rememberReceipt}
     onProvidedProposal={experience?.active && experience.project_id === selected.project_id ? experienceApi.boundaryProposal : undefined} onBack={() => navigate('/workspace')} />
-  const currentTaskContent = () => {
-    const task = workspace?.primary_task
-    if (!selected || !task) return undefined
-    if (task.route === '/permissions') return renderPermissions()
-    if (task.route === '/tests') {
-      const preparing = !['RUN_CURRENT_CHECK', 'VIEW_CURRENT_RESULT', 'VERIFY_REPAIR'].includes(task.task_kind)
-      return renderChecks(workspace?.active_check?.run.run_id ?? task.run_id, preparing ? task.task_id : null, task.change_id)
-    }
-    if (task.route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
-    return undefined
-  }
 
   const samplePanel = <OfficialSamplePanel value={experience} onError={notifyError} onChanged={async (value) => {
       setExperience(value)
@@ -222,14 +199,12 @@ function ControlShellContent() {
       const project = value.active ? items.find(item => item.project_id === value.project_id) : null
       if (project) { workspaceState.selectProject(project); await workspaceState.refreshCurrentWorkspace(project) }
     }} />
-  const directTask = route === '/workspace' ? currentTaskContent() : undefined
 
   const content = () => {
     // 当前任务与自由入口使用相同组件位置，避免从当前工作进入权限页时丢失草稿。
-    if (directTask) return directTask
-    if (route === '/workspace') return <WorkbenchPage selected={selected} workspace={workspace} systemStatus={systemStatus} experience={experience} mcpStatus={mcpStatusFailed ? null : mcpStatus} onNavigate={(path) => navigate(path)} samplePanel={samplePanel} />
+    if (route === '/workspace') return <WorkbenchPage workspaceSyncFailed={workspaceState.synchronization?.retrying} selected={selected} workspace={latestWorkspace} systemStatus={systemStatus} experience={experience} mcpStatus={mcpStatusFailed ? null : mcpStatus} onNavigate={(path) => navigate(path)} samplePanel={samplePanel} />
     if (route === '/tools') return <ToolsPage projects={projects} onError={notifyError} onStatusChange={updateMcpStatus} />
-    if (route === '/environment') return <EnvironmentPage project={selected} workspace={workspace} systemStatus={systemStatus} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async value => { setExperience(value); const items = await workspaceState.refreshProjects(); const next = value.active ? items.find(item => item.project_id === value.project_id) : undefined; if (next) { workspaceState.selectProject(next); await workspaceState.refreshCurrentWorkspace(next) } }}/>
+    if (route === '/environment') return <EnvironmentPage onRemoveCurrent={() => setRemoveConfirmOpen(true)} project={selected} workspace={workspace} systemStatus={systemStatus} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async value => { setExperience(value); const items = await workspaceState.refreshProjects(); const next = value.active ? items.find(item => item.project_id === value.project_id) : undefined; if (next) { workspaceState.selectProject(next); await workspaceState.refreshCurrentWorkspace(next) } }}/>
     if (route === '/application') return <AccessPage selected={selected} endpointStatus={workspace?.connection.endpoint_status} officialSampleAvailable={false} onProvidedBoundary={experience?.active && experience.project_id === selected?.project_id ? () => navigate('/permissions') : undefined} onConnected={connectForAccess} onUnderstandingChanged={async () => { const next = await workspaceState.refreshCurrentWorkspace(); if (!next) throw new ApiError('STATE_PRECONDITION', '下一步任务尚未同步。') }} onBack={() => navigate('/workspace')} onContinue={() => navigate('/permissions')} />
     if (route === '/settings/system') return <RuntimePage status={systemStatus} profiles={llmProfiles} failed={llmLoadFailed} />
     if (!selected) return <MissingApplication onNavigate={() => navigate('/application')} />
@@ -240,21 +215,22 @@ function ControlShellContent() {
     return <CurrentUnavailableArea title="此历史入口当前不可用" description="请从工作台进入当前可用的业务边界或检查准备。" onBack={() => navigate('/workspace')} />
   }
 
-  const retainedRoute = route === '/workspace' && workspace?.primary_task && ['/permissions', '/tests', '/application'].includes(workspace.primary_task.route) ? workspace.primary_task.route : route
+  const retainedRoute = route
   const retainedKey = ['/workspace', '/permissions', '/history', '/tests', '/changes', '/application'].includes(retainedRoute) ? retainedRoute : null
 
+  useEffect(() => { document.getElementById('main-content')?.focus({preventScroll:true}) }, [route])
+
   if (shutdownRequested) return <Result status="success" title="界鉴正在安全退出" subTitle="服务清理完成后，可以关闭此页面。" />
-  return <TaskGuardContext.Provider value={updateGuard}><Layout className="app-shell">
+  return <TaskGuardContext.Provider value={updateGuard}><Layout className="app-shell"><a className="skip-to-content" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById('main-content')?.focus()}}>跳到主要内容</a>
     <DesktopModuleNavigation systemStatus={systemStatus} route={route} areas={workspace?.areas ?? null} onNavigate={(path: AppRoute) => navigate(path)} />
     <Layout className="product-main">
       <MobileModuleNavigation systemStatus={systemStatus} route={route} areas={workspace?.areas ?? null} onNavigate={(path: AppRoute) => navigate(path)} />
-      <AppHeader projects={projects} selected={selected} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onRemoveCurrent={() => setRemoveConfirmOpen(true)} onNavigate={navigate} aiLabel={assistantStatus} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={() => setShutdownConfirmOpen(true)} />
-      <Layout.Content className="content"><div className="content-frame">
-        {route === '/workspace' && <TaskJourney workspace={workspace} pending={pendingTask} />}
+      <AppHeader projects={projects} selected={selected} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onNavigate={navigate} aiLabel={assistantStatus} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={() => setShutdownConfirmOpen(true)} />
+      <Layout.Content className="content"><div className="content-frame" id="main-content" tabIndex={-1}>
         {workReceipt && route === '/workspace' && receiptTask.current !== workspace?.primary_task?.task_id && <div className="work-receipt" role="status"><span>{workReceipt}</span><Button type="text" aria-label="关闭操作完成提示" onClick={() => setWorkReceipt(null)}>×</Button></div>}
         {checkActivity.completed && !['/tests','/workspace'].includes(route) && <div className="check-activity-notice" role="status"><span>{checkActivity.completed.label}</span><Button type="link" onClick={() => navigate(`/history?run_id=${encodeURIComponent(checkActivity.completed!.runId)}`)}>查看结果</Button><Button type="text" aria-label="关闭检查完成提示" onClick={checkActivity.dismiss}>×</Button></div>}
-        {!checkActivity.completed && checkActivity.activeRunId && route !== '/tests' && route !== '/workspace' && <div className="check-activity-notice"><span>{checkActivity.paused ? '检查进度暂未同步' : '有一项检查正在执行'}</span><Button type="link" onClick={() => navigate(`/tests?run_id=${encodeURIComponent(checkActivity.activeRunId!)}`)}>查看当前进度</Button></div>}
-        {error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigateRecoveryTarget(path) }} onClose={clearError} />}<RetainedWorkPages key={`${selected?.project_id ?? 'new'}-${retryEpoch}`} activeKey={retainedKey}>{content()}</RetainedWorkPages>{directTask && <WorkbenchContext workspace={workspace} onNavigate={navigate} />}{(directTask || route === "/changes") && experience?.active && experience.project_id === selected?.project_id && <div className="work-sample-tools">{samplePanel}</div>}</div></Layout.Content>
+        {!checkActivity.completed && checkActivity.activeRunId && route !== '/tests' && route !== '/workspace' && <div className="check-activity-notice"><span>{checkActivity.paused ? '进度暂未同步，正在重试' : '有一项检查正在执行'}</span><Button type="link" onClick={() => navigate(`/tests?run_id=${encodeURIComponent(checkActivity.activeRunId!)}`)}>查看当前进度</Button></div>}
+        {error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigateRecoveryTarget(path) }} onClose={clearError} />}<RetainedWorkPages key={`${selected?.project_id ?? 'new'}-${retryEpoch}`} activeKey={retainedKey}>{content()}</RetainedWorkPages></div></Layout.Content>
     </Layout>
     <NotificationCenter items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigateRecoveryTarget(path) }} />
     <Modal open={removeConfirmOpen} title="移除当前应用？" okText="确认移除" cancelText="取消" okButtonProps={{ danger: true, loading: removeBusy }} onCancel={() => setRemoveConfirmOpen(false)} onOk={() => { void removeCurrentProject() }}>

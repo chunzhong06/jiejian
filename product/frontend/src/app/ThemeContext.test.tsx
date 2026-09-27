@@ -4,6 +4,12 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { palettes } from '../shared/ui/tokens'
 import { ProductThemeProvider, useThemeMode } from './ThemeContext'
+import { Button, theme } from 'antd'
+
+function MotionProbe({loading}:{loading:boolean}) {
+  const {token}=theme.useToken()
+  return <><span>{token.motion?'动效开启':'动效关闭'}</span><Button loading={loading}>准备本机连接</Button></>
+}
 
 function ThemeProbe() {
   const { mode, resolved, setMode } = useThemeMode()
@@ -36,5 +42,14 @@ describe('ProductThemeProvider', () => {
     expect(localStorage.getItem('jiejian.theme')).toBe('dark')
     expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe(palettes.dark.background)
     expect(document.documentElement.style.getPropertyValue('--color-evidence-surface')).toBe(palettes.dark.evidenceSurface)
+  })
+
+  it('减少动态效果同时关闭组件库动效，加载结束后恢复准确按钮名称', async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query)=>({matches:query.includes('reduced-motion'),addEventListener:vi.fn(),removeEventListener:vi.fn()} as unknown as MediaQueryList))
+    const view=render(<ProductThemeProvider><MotionProbe loading/></ProductThemeProvider>)
+    expect(screen.getByText('动效关闭')).toBeInTheDocument()
+    view.rerender(<ProductThemeProvider><MotionProbe loading={false}/></ProductThemeProvider>)
+    expect(await screen.findByRole('button',{name:'准备本机连接'})).toBeEnabled()
+    expect(screen.queryByRole('img',{name:'loading'})).not.toBeInTheDocument()
   })
 })

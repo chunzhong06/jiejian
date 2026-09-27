@@ -17,10 +17,10 @@ import time
 from dataclasses import dataclass
 from uuid import uuid4
 
-from product.backend.core.business_boundary import BusinessActionRevision, ImplementationBindingStatus
+from product.backend.core.boundaries.entities import BusinessActionRevision, ImplementationBindingStatus
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.recording import RecordingPurpose, RecordingState, RecordingStateEvent
+from product.backend.core.recording.models import RecordingPurpose, RecordingState, RecordingStateEvent
 from product.backend.workflows.recording.submission import (
     RecordingSubmission,
     RecordingSubmissionResult,

@@ -10,7 +10,7 @@ RUN_KEY = "official-mcp-responsibility-check"
 
 
 def _error(code):
-    from .official import SampleTestError
+    from .harness.state import SampleTestError
     raise SampleTestError(code) from None
 
 
@@ -122,7 +122,7 @@ def cleanup(client, gui, state):
         except Exception as exc:
             # GUI 回执未知先查持久事实；只有仍存在时才使用公开失败清理入口。
             if client.call("GET", "/api/mcp/access")["paired"]:
-                from .official import SampleTestError
+                from .harness.state import SampleTestError
                 if isinstance(exc, SampleTestError) and str(exc).startswith("GUI_ACTION_REJECTED:"):
                     # 服务端明确拒绝（包括凭据权限阻塞）不是未知回执，不换通道重复写入。
                     raise
@@ -153,6 +153,8 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
         credential = None
         with session_factory(client.origin, token) as session:
             token = None
+            # SDK 建立连接后先让 GUI 读取新状态；未刷新页面尚无授权入口。
+            gui.mcp_connected(CLIENT_NAME)
             gui.mcp_level(project, "READ")
             shown = _call(session, "jiejian_project_show", {"project_id": project})
             preview = _call(session, "jiejian_check_status", {"project_id": project})
@@ -160,7 +162,6 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
                 _error("MCP_READ_PROJECT_MISMATCH")
             if preview.get("action_count") != 2 or preview.get("case_count") != 3 or preview.get("can_execute") is not True:
                 _error("MCP_FULL_PLAN_UNAVAILABLE")
-            gui.mcp_connected(CLIENT_NAME)
             _deny_without_writes(session, client, project, "jiejian_change_submit", {"project_id": project, "reason": REASON, "claimed_paths": []})
             gui.mcp_level(project, "PREPARE")
             _deny_without_writes(session, client, project, "jiejian_check_run", {"project_id": project, "idempotency_key": "official-mcp-denied"})
@@ -221,7 +222,7 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
             verdict="PASS", scope="ordinary-full-check", actual_changed_path_count=0, total_run_count=4,
             pairing="created-and-removed" if state.mcp_created_pairing else "existing-preserved")
     except Exception as exc:
-        from .official import SampleTestError
+        from .harness.state import SampleTestError
         if isinstance(exc, SampleTestError):
             raise
         _error("MCP_SCENARIO_FAILED:" + type(exc).__name__)

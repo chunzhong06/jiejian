@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from product.backend.core.test_identity import TestIdentityAuthMethod as IdentityAuthMethod
+from product.backend.core.identities.models import TestIdentityAuthMethod as IdentityAuthMethod
 from product.protocols import (
     IdentityPreparationRequest,
     IdentityPreparationResult,

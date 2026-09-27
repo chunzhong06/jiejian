@@ -1,12 +1,12 @@
 // 验证产品壳装配工作台、业务边界及当前检查，旧结果深链不恢复旧状态机。
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceViewDto } from '../api/workspace'
 import ControlShell from './ControlShell'
 import { ProductThemeProvider } from './ThemeContext'
 import { useState } from 'react'
-import { useTaskGuard } from '../components/TaskContinuity'
+import { useTaskGuard } from './tasks/TaskContinuity'
 
 vi.mock('../features/boundaries/BusinessBoundaryPage', () => ({ BusinessBoundaryPage: () => {
   const [value, setValue] = useState(''); useTaskGuard(Boolean(value))
@@ -29,7 +29,7 @@ const currentWorkspace: WorkspaceViewDto = {
     route: '/permissions', can_execute: true, stale_fingerprint: 'f'.repeat(64),
   },
   areas: [
-    { key: 'overview', label: '工作台', description: '查看当前工作区', route: '/workspace', status: 'NEEDS_ATTENTION', status_label: '需要处理' },
+    { key: 'overview', label: '工作台', description: '查看工作台区', route: '/workspace', status: 'NEEDS_ATTENTION', status_label: '需要处理' },
     { key: 'permissions', label: '权限', description: '维护业务边界', route: '/permissions', status: 'NEEDS_ATTENTION', status_label: '需要建立' },
     { key: 'changes', label: '变化', description: '当前未接入', route: '/changes', status: 'BLOCKED', status_label: '当前不可用' },
     { key: 'tests', label: '测试', description: '当前未接入', route: '/tests', status: 'BLOCKED', status_label: '当前不可检查' },
@@ -62,25 +62,30 @@ vi.mock('../api/system', () => ({ systemApi: { shutdown: mockApi.shutdown } }))
 describe('CURRENT 应用壳', () => {
   it('后台任务变化保留当前输入，取消后才呈现服务端新任务', async () => {
     const view = render(<ControlShell/>)
+    fireEvent.click(await screen.findByRole('button',{name:/建立当前业务边界/}))
     fireEvent.change(await screen.findByLabelText('未提交的权限输入'), { target: { value: '不要覆盖' } })
     workspaceState.workspace = { ...currentWorkspace, primary_task: { ...currentWorkspace.primary_task!, task_id: 'next', task_kind: 'RUN_CURRENT_CHECK', route: '/tests' } }
     view.rerender(<ControlShell/>)
     expect(screen.getByLabelText('未提交的权限输入')).toHaveValue('不要覆盖')
     fireEvent.click(screen.getByRole('button', { name: '取消编辑' }))
+    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:/工作台，/}))
+    fireEvent.click(await screen.findByRole('button',{name:/建立当前业务边界/}))
     expect(await screen.findByRole('heading', { name: '请先补齐本次检查所需材料' })).toBeInTheDocument()
   })
-  it('从当前工作转到历史再进入权限规则，保留同一份未提交输入', async () => {
+  it('从工作台转到历史再进入权限规则，保留同一份未提交输入', async () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
     render(<ControlShell />)
+    fireEvent.click(await screen.findByRole('button',{name:/建立当前业务边界/}))
     fireEvent.change(await screen.findByLabelText('未提交的权限输入'), {target:{value:'正在整理的资源归属'}})
-    fireEvent.click(screen.getByRole('button',{name:/^检查历史，/}))
+    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:/^记录与证据，/}))
     expect(await screen.findByRole('heading',{name:'检查历史'})).toBeInTheDocument()
     expect(screen.queryByRole('textbox',{name:'未提交的权限输入'})).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button',{name:'权限规则，需要建立'}))
+    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:'权限管理，需要建立'}))
     expect(await screen.findByLabelText('未提交的权限输入')).toHaveValue('正在整理的资源归属')
   })
   afterEach(() => cleanup())
   beforeEach(() => {
+    vi.spyOn(window,'scrollTo').mockImplementation(()=>{})
     window.location.hash = '#/workspace'
     vi.clearAllMocks()
     workspaceState.selected = { project_id: 'p1', name: '演示应用', status: 'READY' }
@@ -101,12 +106,13 @@ describe('CURRENT 应用壳', () => {
     mockApi.shutdown.mockResolvedValue({ status: 'stopping', message: 'stopping' })
   })
 
-  it('当前工作直接装配服务端指定的权限任务，历史有独立导航', async () => {
+  it('工作台用唯一主按钮进入同一权限页面，记录有独立导航', async () => {
     render(<ControlShell />)
-    expect(await screen.findByRole('heading', { name: '当前权限规则编辑区', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /检查历史，/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /当前工作，/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '建立当前业务边界' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '建立当前业务边界', level: 2 })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /记录与证据，/ })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /工作台，/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /建立当前业务边界/ }))
+    expect(await screen.findByRole('heading',{name:'当前权限规则编辑区'})).toBeInTheDocument()
   })
 
   it('变化与检查装配当前入口，准备缺失时不自动执行', async () => {

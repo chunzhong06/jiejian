@@ -6,11 +6,11 @@ import re
 from collections import Counter
 from urllib.parse import urlsplit
 
-from product.backend.core.application_understanding import CandidateDecision
-from product.backend.core.business_boundary import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, BusinessRevisionState, boundary_sha256
+from product.backend.core.applications.models import CandidateDecision
+from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN, BusinessRevisionState, boundary_sha256
 from product.backend.core.identifiers import RECORDING_ID_PATTERN
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording import RecordingState
+from product.backend.core.recording.models import RecordingState
 from product.backend.workflows.assistant.surfaces import ResolvedAssistantSurface, _entity, _short, _unique_short
 from product.backend.workflows.assistant.templates import AssistantEntityType as EntityType, AssistantFact, AssistantTemplateId as Template, build_surface_input
 from product.backend.workflows.preparation.models import PreparationStatus

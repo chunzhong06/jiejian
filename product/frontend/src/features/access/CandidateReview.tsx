@@ -2,7 +2,7 @@
 import { Alert, Button, Checkbox, Input, Popconfirm, Segmented } from 'antd'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { projectsApi, type ApplicationUnderstandingDto, type CandidateSelection } from '../../api/projects'
-import { useTaskGuard, TaskReceipt } from '../../components/TaskContinuity'
+import { useTaskGuard, TaskReceipt } from '../../app/tasks/TaskContinuity'
 
 export function CandidateReview({ value, onApplied, onEditingChange, manual, staleReview }: {
   value: ApplicationUnderstandingDto; onApplied: (value: ApplicationUnderstandingDto) => void

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from product.backend.core.application_understanding import CandidateConfidence
+from product.backend.core.applications.models import CandidateConfidence
 from product.backend.workflows.application_understanding.analysis.analyzer import (
     ApplicationUnderstandingAnalyzer,
 )

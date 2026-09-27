@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.workflows.results.published import PublishedResultReader
+from product.backend.workflows.reports.published import PublishedResultReader
 from product.backend.core.lifecycle import (
     JobState,
     ProjectStatus,
@@ -47,6 +47,7 @@ from product.backend.infra.runtime.jobs.models import (
 )
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.queue import JobQueue
+from product.backend.infra.runtime.jobs.targets import JobTargetRegistry, JobTargetType, RunJobTargetHandler
 
 pytestmark = pytest.mark.database
 from product.backend.infra.runtime.jobs.reconciliation import RunReconciler
@@ -96,14 +97,17 @@ def _claimed_job(
             )
         )
         work.commit()
-    submitted = JobQueue(uow_factory).submit(
+    # 独立报告格式的旧 publication 仍有 reader；测试显式装配其 RUN target，不能接回生产 CHECK。
+    targets = JobTargetRegistry()
+    targets.register(JobTargetType.RUN, RunJobTargetHandler())
+    submitted = JobQueue(uow_factory, targets=targets).submit(
         SubmitJob(
             project_id="publication-project",
             operation_type="ACTIVE_RUN",
             idempotency_key=f"publication-{suffix}",
             request_hash=request_hash or suffix * 64,
-            contract_id="ownership-contract",
-            contract_version=1,
+            policy_epoch=1,
+            plan_fingerprint="a" * 64, source_fingerprint="b" * 64,
             engine_version="0.1.0",
             max_attempts=2,
             available_at_us=NOW_US,
@@ -112,7 +116,7 @@ def _claimed_job(
             job_id=f"job_{suffix * 32}",
         )
     )
-    attempts = JobAttempts(uow_factory, jitter_source=lambda _: 0)
+    attempts = JobAttempts(uow_factory, jitter_source=lambda _: 0, targets=targets)
     claimed = attempts.claim(
         ClaimJob(
             job_id=submitted.job.job_id,

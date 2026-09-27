@@ -3,12 +3,12 @@ import hashlib
 import json
 from uuid import uuid4
 
-from product.backend.core.boundary_proposal import BoundaryProposalBundle
+from product.backend.core.boundaries.proposals import BoundaryProposalBundle
 from product.backend.workflows.business_boundaries.official_recipe import official_boundary_recipe
 
 
 def _error(message):
-    from .official import SampleTestError
+    from .harness.state import SampleTestError
     raise SampleTestError(message)
 
 
@@ -126,7 +126,7 @@ def switch_current(client, project, version, *, reference=None, gui=None):
 
 
 def wait_published(client, run_id, job_id):
-    from .official import _wait_for
+    from .harness.lifecycle import _wait_for
     status = _wait_for(lambda: client.call("GET", f"/api/runs/{run_id}"),
         lambda item: item.get("result_integrity") in {"VALID", "INVALID"} or item.get("run", {}).get("lifecycle") in {"FAILED", "CANCELLED", "SAFETY_STOPPED"},
         timeout=180, label="当前Run发布")

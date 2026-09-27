@@ -4,7 +4,7 @@ from product.backend.api.mcp import _current_change_view
 
 
 def test_receipt_preserves_reference_without_source_hashes_or_verdict():
-    from product.backend.core.check_repair import CurrentRepairReference
+    from product.backend.core.checks.repair import CurrentRepairReference
     from product.backend.workflows.changes.service import SourceRevalidationInspection
     reference = CurrentRepairReference(source_run_id="run", source_case_id="case", repair_fingerprint="f" * 64)
     manifest = SimpleNamespace(project_id="p1", change_id="chg", reason="更新业务判断", submitted_by="MCP Agent",
@@ -23,7 +23,7 @@ def test_receipt_preserves_reference_without_source_hashes_or_verdict():
 
 def test_repair_requirements_keep_selected_control_and_every_regression():
     from product.backend.api.mcp import _current_repair_view
-    from product.backend.core.check_repair import CurrentRepairReference
+    from product.backend.core.checks.repair import CurrentRepairReference
     reference = CurrentRepairReference(source_run_id="run", source_case_id="deny", repair_fingerprint="f" * 64)
     def requirement(case):
         return SimpleNamespace(source_case_id=case, evidence_refs=("evidence",), identity=SimpleNamespace(

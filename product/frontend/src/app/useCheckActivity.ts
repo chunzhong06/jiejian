@@ -34,7 +34,7 @@ export function useCheckActivity(projectId: string | undefined, active: CheckSta
   }, [projectId, workspaceLoaded, latestRunId])
   useEffect(() => {
     if (!projectId || !runId) return
-    let valid = true, reads = 0
+    let valid = true, failures = 0
     let timer: ReturnType<typeof setTimeout> | undefined
     setPaused(false)
     const read = async () => {
@@ -48,12 +48,12 @@ export function useCheckActivity(projectId: string | undefined, active: CheckSta
           setCompleted({ projectId, runId, label })
           // 刷新工作区只更新下一任务，用户当前所在页面和未提交输入保持。
           void refresh.current()
+          window.dispatchEvent(new Event('jiejian:check-updated'))
           return
         }
-        reads += 1
-        if (reads >= 150) { setPaused(true); return }
+        failures = 0; setPaused(false)
         timer = setTimeout(() => { void read() }, 2_000)
-      } catch { if (valid) setPaused(true) }
+      } catch { if (valid) { setPaused(true); failures += 1; timer = setTimeout(() => void read(), Math.min(30000, 2000 * 2 ** Math.min(failures, 3))) } }
     }
     void read()
     return () => { valid = false; if (timer) clearTimeout(timer) }

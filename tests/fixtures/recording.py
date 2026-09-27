@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from pathlib import Path
-from product.backend.core.recording import RecordingState, RecordingStateEvent
+from product.backend.core.recording.models import RecordingState, RecordingStateEvent
 from product.protocols import RecordingCleanupStatus, RecordingEvent, RecordingHeader, RecordingRunnerResult
 from tests.fixtures.action_preparation import build_preparation_harness
 from product.backend.workflows.recording.source import recording_source_fingerprint

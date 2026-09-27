@@ -8,8 +8,8 @@ from fastapi import APIRouter, Query
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
-from product.backend.workflows.official_sample import OfficialScenarioVersion
-from product.backend.core.check_repair import CurrentRepairReference
+from product.backend.workflows.examples.environment import OfficialScenarioVersion
+from product.backend.core.checks.repair import CurrentRepairReference
 
 
 def build_experience_router(context: ApplicationCore) -> APIRouter:

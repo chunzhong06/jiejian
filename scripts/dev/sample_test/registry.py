@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Mapping
 
 
 _PUBLIC_ID = re.compile(r"^[a-z][a-z0-9_-]{0,79}$")

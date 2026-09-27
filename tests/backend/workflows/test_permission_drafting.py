@@ -7,15 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.permission_semantics import PermissionExpectation
-from product.backend.core.business_boundary import BusinessRevisionState
+from product.backend.core.boundaries.permissions import PermissionIntentRelation
+from product.backend.core.boundaries.semantics import PermissionExpectation
+from product.backend.core.boundaries.entities import BusinessRevisionState
 from tests.fixtures.assurance import actor, action, permission
 from product.backend.infra.llm.adapters.base import LLMTransportError
-from product.backend.workflows.permission_drafting import (
-    PermissionDraftService,
-    PermissionDraftStatus,
-)
+from product.backend.workflows.business_boundaries.drafting import PermissionDraftService, PermissionDraftStatus
 
 
 _OPTION_ID = "opt_" + "1" * 32

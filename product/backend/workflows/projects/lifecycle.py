@@ -21,7 +21,7 @@ from collections.abc import Callable
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle
-from product.backend.core.recording import RecordingState
+from product.backend.core.recording.models import RecordingState
 from product.backend.infra.storage import ProjectRecord, StorageUnitOfWork
 from product.backend.workflows.test_identities import TestIdentityService
 

@@ -381,7 +381,13 @@ class LocalWorkerSupervisor:
                 ErrorCode.PROCESS_TREE_FAILED,
                 "Worker 锁或内核进程树退出证明不足，任务不会自动重试",
             )
-        if self._reconcile_check(current):
+        # 恢复扫描只给候选身份；从权威 Job 回读类型，并拒绝已变化的租约或终态。
+        job = self._read_job(current.job_id)
+        if job is None or job.state is not JobState.RUNNING or (
+            job.lease_owner, job.fencing_token
+        ) != (current.lease_owner, current.fencing_token):
+            return
+        if self._reconcile_check(job):
             return
         result = self._recovery.confirm_recovery(
             ConfirmRecovery(

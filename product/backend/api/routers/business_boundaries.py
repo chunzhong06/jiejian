@@ -11,11 +11,7 @@ from pydantic import Field
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
-from product.backend.core.boundary_proposal import (
-    ProposedActionItem,
-    ProposedActorItem,
-    ProposedPermissionItem,
-)
+from product.backend.core.boundaries.proposals import ProposedActionItem, ProposedActorItem, ProposedPermissionItem
 from product.backend.workflows.business_boundaries import (
     BoundaryMaintenanceActionItem,
     BoundaryMaintenanceActorItem,
@@ -118,6 +114,10 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
         return data_response(
             context.business_boundaries.preview_from_discovery(project_id).model_dump(mode="json")
         )
+
+    @router.get(f"{prefix}/editor", response_model=ApiResponse)
+    def editor_boundary(project_id: str):
+        return data_response(context.business_boundaries.editor(project_id).model_dump(mode="json"))
 
     @router.post(f"{prefix}/proposals", response_model=ApiResponse, status_code=201)
     def create_proposal(project_id: str, body: BoundaryProposalCreateRequest):

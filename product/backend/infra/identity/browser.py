@@ -31,7 +31,7 @@ from playwright.sync_api import (
 )
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.test_identity import TestIdentityAuthMethod
+from product.backend.core.identities.models import TestIdentityAuthMethod
 from product.backend.infra.execution.web.adapter import WebTargetGuard
 from product.backend.infra.recording.transport import BoundedRouteTransport
 from product.backend.infra.secrets import SecretStore, credential_ref

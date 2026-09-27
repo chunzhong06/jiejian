@@ -17,7 +17,7 @@ from collections.abc import Mapping, Sequence
 from threading import RLock
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.test_identity import TestIdentityAuthMethod
+from product.backend.core.identities.models import TestIdentityAuthMethod
 from product.backend.infra.secrets import SecretStore
 from product.backend.workflows.test_identities import TestIdentityService, TestIdentityStatus
 from product.protocols import (

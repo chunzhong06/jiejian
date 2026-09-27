@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import pytest
 
-from product.backend.core.recording_sanitization import RecordingSanitizer
+from product.backend.core.recording.sanitization import RecordingSanitizer
 from product.protocols import RecordingBudget
 from product.protocols import RecordingEvent, RecordingEventKind
 

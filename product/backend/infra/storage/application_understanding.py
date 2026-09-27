@@ -33,11 +33,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from product.backend.core.application_understanding import (
-    ActionCandidate,
-    ApplicationUnderstanding,
-    RoleCandidate,
-)
+from product.backend.core.applications.models import ActionCandidate, ApplicationUnderstanding, RoleCandidate
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage.base import (
     Base,

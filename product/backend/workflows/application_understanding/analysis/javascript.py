@@ -17,10 +17,7 @@
 from __future__ import annotations
 
 
-from product.backend.core.application_understanding import (
-    ActionRiskHint,
-    CandidateConfidence,
-)
+from product.backend.core.applications.models import ActionRiskHint, CandidateConfidence
 from product.backend.core.http_routes import safe_route_path
 
 

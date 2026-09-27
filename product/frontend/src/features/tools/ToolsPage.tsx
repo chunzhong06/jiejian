@@ -4,8 +4,8 @@ import { Space } from 'antd'
 import type { MCPAccessView } from '../../api/mcp'
 import type { ProjectDto } from '../../api/projects'
 import type { ApiError } from '../../api/http'
-import { PageTaskHeader } from '../../components/PageTaskHeader'
-import MCPAccessCard from '../settings/MCPAccessCard'
+import { PageTaskHeader } from '../../shared/ui/PageTaskHeader'
+import MCPAccessCard from './MCPAccessCard'
 
 export function ToolsPage({
   projects, onError, onStatusChange,

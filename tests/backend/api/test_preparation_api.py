@@ -2,8 +2,8 @@
 from tests.fixtures.control_plane import TestClient, create_app
 from tests.fixtures.action_preparation import MemorySecretStore, build_preparation_harness
 from tests.fixtures.assurance import permission
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.permission_semantics import PermissionExpectation
+from product.backend.core.boundaries.permissions import PermissionIntentRelation
+from product.backend.core.boundaries.semantics import PermissionExpectation
 
 
 def test_old_prepare_safe_writer_remains_absent(tmp_path):
@@ -103,7 +103,7 @@ def test_evidence_details_exception_does_not_leak_reader_message(tmp_path, monke
 
 
 def test_existing_registered_binding_missing_runtime_is_described_without_repair(tmp_path):
-    from product.backend.core.action_preparation import ActionEvidenceBinding, ActionEvidenceKind, RegisteredObserverReference, seal_binding
+    from product.backend.core.preparation.bindings import ActionEvidenceBinding, ActionEvidenceKind, RegisteredObserverReference, seal_binding
     app = create_app(tmp_path / "var", start_worker=False, secret_store=MemorySecretStore(), environ={})
     core = app.state.context
     harness = build_preparation_harness(tmp_path, core=core)

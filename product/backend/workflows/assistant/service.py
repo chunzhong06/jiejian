@@ -25,7 +25,6 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.llm.adapters.base import LLMTransportError
 from product.backend.infra.llm.profiles import LLMProfileRegistry
 from product.backend.workflows.assistant.cache import AssistantCache
-from product.backend.workflows.assistant.diagnosis import ErrorDiagnosis
 from product.backend.workflows.assistant.surfaces import AssistantSurfaceResolver, ResolvedAssistantSurface
 from product.backend.workflows.assistant.templates import (
     AssistantEntity,
@@ -105,18 +104,6 @@ class AssistantService:
 
     def generate_result(self, run_id: str, *, retry: bool = False) -> AssistantSurfaceView:
         return self._generate_explicit(self._surfaces.resolve_result(run_id), retry=retry)
-
-    def get_error(self, error_code: str, diagnosis: ErrorDiagnosis) -> AssistantSurfaceView:
-        return self._get(self._surfaces.resolve_error(error_code, diagnosis))
-
-    def generate_error(
-        self,
-        error_code: str,
-        diagnosis: ErrorDiagnosis,
-        *,
-        retry: bool = False,
-    ) -> AssistantSurfaceView:
-        return self._generate_explicit(self._surfaces.resolve_error(error_code, diagnosis), retry=retry)
 
     def _get(self, resolved: ResolvedAssistantSurface) -> AssistantSurfaceView:
         if not self._configured():

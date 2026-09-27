@@ -5,13 +5,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from product.backend.core.assurance import (
-    ActionAssuranceContract,
-    AssuranceStatus,
-    compile_action_assurance,
-    ActionAllowControlBinding, PermissionIdentity,
-)
-from product.backend.core.business_boundary import BusinessActionRevision
+from product.backend.core.preparation.requirements import ActionAssuranceContract, AssuranceStatus, compile_action_assurance, ActionAllowControlBinding, PermissionIdentity
+from product.backend.core.boundaries.entities import BusinessActionRevision
 from product.backend.workflows.business_boundaries.models import BusinessBoundaryView
 from product.backend.workflows.preparation.models import (
     ActionPreparationView,

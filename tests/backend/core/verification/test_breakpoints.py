@@ -32,7 +32,7 @@ from product.backend.core.verification.trace import (
     TraceEvent,
     TraceEventKind,
 )
-from product.backend.workflows.results.trace import build_execution_trace
+from product.backend.workflows.reports.trace import build_execution_trace
 from product.protocols import ObservationCompleteness, ObserverType
 from product.protocols.web.profile import WebExecutionProfile
 from tests.fixtures.runner import write_web_test_profile

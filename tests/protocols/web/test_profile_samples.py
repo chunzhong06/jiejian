@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from product.backend.core.verification.permissions import PermissionContract
-from product.backend.workflows.runs.execution import ExecutionWorkflow
+from tests.fixtures.runner import compile_profile_plan
 from product.protocols import (
     ExecutionBudget,
     RunnerInput,
@@ -26,7 +26,7 @@ def test_programmatic_profile_compiles_through_current_execution_types(tmp_path:
     )
     profile = parse_web_execution_profile(path.read_bytes())
     contract = PermissionContract.model_validate_json(contract_path.read_bytes(), strict=True)
-    plan = ExecutionWorkflow._compile_plan(profile, contract)
+    plan = compile_profile_plan(profile, contract)
     assert not plan.gaps
     snapshot = profile.build_snapshot(contract, plan)
     runner_input = RunnerInput(

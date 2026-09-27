@@ -7,11 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from product.backend.core.application_understanding import (
-    ActionRiskHint,
-    CandidateDecision,
-    CandidateOrigin,
-)
+from product.backend.core.applications.models import ActionRiskHint, CandidateDecision, CandidateOrigin
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.workflows.application_understanding.endpoints import (
@@ -77,11 +73,11 @@ def test_connection_and_confirmed_endpoint_recover_after_service_restart(
         recovered = restarted.application_understanding.get(
             connection.project.project_id
         )
-        readiness = restarted.project_readiness.get(connection.project.project_id)
+        workspace = restarted.workspace.get(connection.project.project_id)
         assert recovered.confirmed_endpoint == endpoint
-        assert readiness.application_connected is True
-        assert readiness.endpoint_status == "CONFIRMED"
-        assert readiness.next_required_action == "AUTHORIZE_SOURCE_ANALYSIS"
+        assert workspace.project.project_id == connection.project.project_id
+        assert workspace.connection.endpoint_status == "CONFIRMED"
+        assert workspace.primary_task.task_kind == "AUTHORIZE_SOURCE_ANALYSIS"
     finally:
         restarted.close()
 
@@ -437,8 +433,8 @@ def test_detected_and_manual_candidates_follow_distinct_reversible_states(
         )
         assert manual_after.decision is CandidateDecision.CONFIRMED
         assert manual_after.origin is CandidateOrigin.MANUAL
-        assert application.project_readiness.get(
+        assert application.workspace.get(
             connected.project.project_id
-        ).next_required_action == "REVIEW_DISCOVERY"
+        ).primary_task.task_kind == "REVIEW_APPLICATION_CANDIDATES"
     finally:
         application.close()

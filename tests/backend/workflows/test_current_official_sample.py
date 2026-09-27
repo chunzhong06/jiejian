@@ -5,9 +5,13 @@ import time
 import pytest
 
 from product.backend.composition import ApplicationCore
-from product.backend.workflows.official_scenario import OfficialScenarioInstaller
-from tests.fixtures.collaboration_golden import InMemorySecretStore
+from product.backend.workflows.examples.materials import OfficialScenarioInstaller
+from tests.fixtures.secrets import InMemorySecretStore
 from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.backend.workflows._support_current_official_sample import (
+    prepare_changed_sample,
+    prepare_sample,
+)
 
 
 @pytest.fixture
@@ -49,13 +53,6 @@ def test_sample_requires_human_approval_then_uses_persistent_recordings(current_
     assert core.runtime_secrets.model_dump() == {"session_count": 0}
 
 
-def prepare_sample(core):
-    project = core.official_experience.start(consent=True).project_id
-    proposal = core.official_experience.boundary_proposal()
-    core.business_boundaries.approve(project, proposal.proposal.proposal_id,
-        expected_fingerprint=proposal.proposal.proposal_fingerprint, reason="测试用户确认公开业务规则")
-    assert core.official_experience.prepare().scenario_prepared
-    return project
 
 
 def test_rebuilt_installer_resumes_persistent_review_without_consuming_again(current_sample, monkeypatch):
@@ -143,22 +140,10 @@ def test_sample_problem_reaches_published_current_story(current_sample):
         (case.verdict, case.reason_codes, case.outcome) for case in package.result.case_results]
 
 
-def prepare_changed_sample(core, project):
-    from product.backend.workflows.business_boundaries.models import BoundaryMaintenanceCommand
-    current = core.official_experience.prepare()
-    if "HUMAN_IMPLEMENTATION_REBIND_REQUIRED" in current.pending_tasks:
-        draft = core.business_boundaries.maintenance_draft(project)
-        proposal = core.business_boundaries.create_maintenance_proposal(project, BoundaryMaintenanceCommand(
-            expected_boundary_state_fingerprint=draft.boundary_state_fingerprint, actors=draft.actors,
-            actions=draft.actions, permissions=draft.permissions, provenance="测试用户复核当前实现映射"))
-        core.business_boundaries.approve(project, proposal.proposal.proposal_id,
-            expected_fingerprint=proposal.proposal.proposal_fingerprint, reason="仅复核当前实现，不改业务规则")
-        current = core.official_experience.prepare()
-    assert current.scenario_prepared, current.pending_tasks
 
 
 def test_sample_observer_failure_and_fixed_new_run_preserve_original_question(current_sample):
-    from product.backend.workflows.official_sample import OfficialScenarioVersion
+    from product.backend.workflows.examples.environment import OfficialScenarioVersion
     core = current_sample
     project = prepare_sample(core)
     original, story = execute_published(core, project, key="original")

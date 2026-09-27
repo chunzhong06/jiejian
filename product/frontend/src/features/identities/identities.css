@@ -1,36 +1,216 @@
-/* 测试账号页：统一账号概览、登录步骤和底部动作的纵向节奏。 */
+/* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
+.identity-page {
+  display: grid;
+  gap: var(--space-24);
+}
 
-.identity-page { display: grid; gap: var(--space-24); }
-.identity-overview .ant-card-body { display: grid; gap: var(--space-16); }
-.identity-overview .ant-typography { margin-bottom: 0; }
-.identity-create { align-items: center; display: grid; gap: var(--space-12); grid-template-columns: minmax(160px, .7fr) minmax(260px, 1.3fr) max-content; max-width: 860px; }
-.identity-role-section { background: transparent; border: 0; border-radius: 0; display: grid; gap: var(--space-20); padding: var(--space-24); }
-.identity-role-heading { align-items: flex-start; display: flex; gap: var(--space-16); justify-content: space-between; }
-.identity-role-heading h3, .identity-role-heading p { margin-bottom: 0; }
-.identity-role-grid { display: grid; gap: var(--space-16); grid-template-columns: minmax(0, 1fr); }
-.identity-role-row { background: transparent; border: 0; border-bottom: var(--line-width) solid var(--color-border); border-radius: 0; display: grid; gap: var(--space-16); min-width: 0; padding: var(--space-20); }
-.identity-role-row h4, .identity-role-row p { margin: 0; }
-.identity-role-row-header { align-items: flex-start; display: flex; gap: var(--space-12); justify-content: space-between; }
-.identity-role-row-header > div { display: grid; gap: var(--space-4); }
-.identity-role-kicker { color: var(--color-primary); font-size: 12px; font-weight: 700; letter-spacing: .06em; }
-.identity-role-accounts { border-top: 1px solid var(--color-border); display: grid; gap: var(--space-12); padding-top: var(--space-16); }
-.identity-account-row { display: grid; gap: var(--space-12); }
-.identity-account-row + .identity-account-row { border-top: 1px solid var(--color-border); padding-top: var(--space-12); }
-.identity-account-row > div:first-child { display: grid; gap: var(--space-4); }
-.identity-login-steps { padding-block: var(--space-24); border-top: var(--line-width) solid var(--color-border); }
-.identity-login-step-list { display: grid; gap: 16px; list-style: none; margin: 0; padding: 0; }
-.identity-login-step-list li { align-items: start; display: grid; gap: 10px; grid-template-columns: auto 1fr; }
-.identity-login-step-list li > div { display: grid; gap: 4px; }
-.identity-login-step-list .ant-btn { justify-self: start; margin-top: 4px; }
-.identity-list .ant-list-item { align-items: flex-start; gap: var(--space-16); }
-.identity-list .ant-list-item-meta-description { padding-top: var(--space-4); }
+.identity-overview .ant-card-body {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.identity-overview .ant-typography {
+  margin-bottom: 0;
+}
+
+.identity-create {
+  align-items: center;
+  display: grid;
+  gap: var(--space-12);
+  grid-template-columns: minmax(160px, .7fr) minmax(260px, 1.3fr) max-content;
+  max-width: 860px;
+}
+
+.identity-role-section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  gap: var(--space-20);
+  padding: var(--space-24);
+}
+
+.identity-role-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-16);
+  justify-content: space-between;
+}
+
+.identity-role-heading h3 {
+  margin-bottom: 0;
+}
+
+.identity-role-heading p {
+  margin-bottom: 0;
+}
+
+.identity-role-grid {
+  display: grid;
+  gap: var(--space-16);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.identity-role-row {
+  background: transparent;
+  border: 0;
+  border-bottom: var(--line-width) solid var(--color-border);
+  border-radius: 0;
+  display: grid;
+  gap: var(--space-16);
+  min-width: 0;
+  padding: var(--space-20);
+}
+
+.identity-role-row h4 {
+  margin: 0;
+}
+
+.identity-role-row p {
+  margin: 0;
+}
+
+.identity-role-row-header {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-12);
+  justify-content: space-between;
+}
+
+.identity-role-row-header > div {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.identity-role-kicker {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
+.identity-role-accounts {
+  border-top: 1px solid var(--color-border);
+  display: grid;
+  gap: var(--space-12);
+  padding-top: var(--space-16);
+}
+
+.identity-account-row {
+  display: grid;
+  gap: var(--space-12);
+}
+
+.identity-account-row + .identity-account-row {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-12);
+}
+
+.identity-account-row > div:first-child {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.identity-login-steps {
+  padding-block: var(--space-24);
+  border-top: var(--line-width) solid var(--color-border);
+}
+
+.identity-login-step-list {
+  display: grid;
+  gap: 16px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.identity-login-step-list li {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto 1fr;
+}
+
+.identity-login-step-list li > div {
+  display: grid;
+  gap: 4px;
+}
+
+.identity-login-step-list .ant-btn {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.identity-list .ant-list-item {
+  align-items: flex-start;
+  gap: var(--space-16);
+}
+
+.identity-list .ant-list-item-meta-description {
+  padding-top: var(--space-4);
+}
 
 @media (max-width: 600px) {
-  .identity-role-section { padding: var(--space-16); }
-  .identity-role-heading, .identity-role-row-header { align-items: flex-start; flex-direction: column; }
-  .identity-role-grid { grid-template-columns: 1fr; }
-  .identity-create { align-items: stretch; grid-template-columns: 1fr; }
-  .identity-create .ant-select, .identity-create .ant-input, .identity-create .ant-btn { width: 100%; }
-  .identity-list .ant-list-item { align-items: stretch; display: grid; }
-  .identity-list .ant-list-item-action { justify-content: flex-start; margin-inline-start: 0; }
+  .identity-role-section {
+    padding: var(--space-16);
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-role-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-role-row-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-role-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-create {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-create .ant-select {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-create .ant-input {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-create .ant-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-list .ant-list-item {
+    align-items: stretch;
+    display: grid;
+  }
+}
+
+@media (max-width: 600px) {
+  .identity-list .ant-list-item-action {
+    justify-content: flex-start;
+    margin-inline-start: 0;
+  }
 }

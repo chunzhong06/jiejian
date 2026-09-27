@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from product.backend.core.recording import RecordingState
+from product.backend.core.recording.models import RecordingState
 from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import JiejianError
 from product.protocols import (

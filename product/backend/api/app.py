@@ -38,7 +38,7 @@ from product.backend.api.routers.results import build_results_router
 from product.backend.api.routers.source_changes import build_source_changes_router
 from product.backend.api.local_control import LocalControlGuard
 from product.backend.api.mcp import build_mcp_control
-from product.backend.workflows.mcp_access import MCPAccessController
+from product.backend.workflows.agent_access.service import MCPAccessController
 
 
 logger = logging.getLogger("jiejian.api.startup")

@@ -5,7 +5,7 @@ import pytest
 from mcp import MCPError
 from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
-from product.backend.workflows.mcp_access import MCPAccessLevel
+from product.backend.workflows.agent_access.service import MCPAccessLevel
 from tests.fixtures.action_preparation import MemorySecretStore
 from tests.fixtures.check_service import ready_check_harness
 from tests.fixtures.control_plane import create_app, TEST_CONTROL_ORIGIN

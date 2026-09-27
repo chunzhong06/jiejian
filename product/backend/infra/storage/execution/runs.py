@@ -104,7 +104,7 @@ from product.backend.core.identifiers import EVIDENCE_ID_PATTERN, JOB_ID_PATTERN
 from product.backend.core.lifecycle import JobState, ProjectStatus, RunLifecycle, RunVerdict
 from product.backend.core.lifecycle import ContractStatus
 from product.backend.core.verification.permissions import PermissionContract
-from product.backend.core.recording import Recording, RecordingState, RecordingStateEvent, RecordingTerminalState
+from product.backend.core.recording.models import Recording, RecordingState, RecordingStateEvent, RecordingTerminalState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import STAGED_ARTIFACT_MAX_BYTES, FlowDraft, RecordingEventKind, RecordingEvent, RecordingHeader, StagedArtifact, canonical_flow_draft_json_bytes
 from product.backend.infra.storage.base import MetadataValue, StorageRecord, _METADATA_KEY, _SENSITIVE_METADATA_KEY, _canonical_json, _flush, _scalar, _scalars, ensure_storage_payload_safe

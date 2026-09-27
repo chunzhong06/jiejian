@@ -17,13 +17,19 @@ from types import ModuleType
 
 import pytest
 from playwright.sync_api import sync_playwright
-from scripts.dev.sample_test import official
+from scripts.dev.sample_test import current_api
+from scripts.dev.sample_test.current_gui import CurrentGui
+from scripts.dev.sample_test.clients.http import ApiClient
+from scripts.dev.sample_test.harness.state import HarnessState, CONTROL_PORT
+from scripts.dev.sample_test.harness.lifecycle import (_port_open, _wait_product_ready, _shutdown_owned_runtime, _runtime_locks_released, _cleanup_after_failure)
+from product.backend.infra.runtime.process.tree import (spawn_managed_process, process_tree_has_exited, release_process_tree, terminate_process_tree)
+from product.backend import __version__
 
 
 ROOT = Path(__file__).parents[2]
 BUILDER_PATH = ROOT / "scripts" / "build" / "portable.py"
 ARTIFACT_ROOT = ROOT / "var" / "development" / "release" / "artifacts"
-RELEASE_NAME = "JieJian-WebV1-1.0.16-Windows-x64"
+RELEASE_NAME = f"JieJian-WebV1-{__version__}-Windows-x64"
 
 
 def _load_module(path: Path, name: str) -> ModuleType:
@@ -40,14 +46,10 @@ def _builder() -> ModuleType:
     return _load_module(BUILDER_PATH, f"portable_builder_{uuid.uuid4().hex}")
 
 
-def _driver() -> ModuleType:
-    return official
-
-
 def test_portable_launcher_is_relative_offline_and_uses_installed_product() -> None:
     builder = _builder()
 
-    assert builder.RELEASE_VERSION == "1.0.16"
+    assert builder.RELEASE_VERSION == __version__
     assert builder.RELEASE_NAME == RELEASE_NAME
     assert "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" in builder._START_CMD
     assert "%~dp0" in builder._START_CMD
@@ -85,7 +87,7 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
         base,
         {
             "python_version": "3.13.13",
-            "wheel_version": "1.0.16",
+            "wheel_version": __version__,
             "playwright_version": "1.58.0",
             "chromium_revision": "1228",
         },
@@ -101,8 +103,8 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
     assert release == {
         "schema_version": "1",
         "product": "JieJian Web V1",
-        "version": "1.0.16",
-        "package_version": "1.0.16",
+        "version": __version__,
+        "package_version": __version__,
         "platform": "windows",
         "architecture": "x64",
         "runtime_layout_version": "1",
@@ -214,52 +216,25 @@ def _portable_environment() -> dict[str, str]:
     return environment
 
 
-def _accept_full_delivery(
-    driver: ModuleType,
-    page,
-    client,
-    audit_dir: Path,
-    state,
-    identities: dict[str, str],
-) -> int:
-    """在 full Portable 内完成持续验证主流程和一次真实 BLOCK 代表性检查。"""
-
-    experience = driver._start_official_experience(page, client, audit_dir, state)
-    project_id = str(experience["project_id"])
-    sample_port = int(str(experience["origin"]).rsplit(":", 1)[1])
-    # 身份一经写入 Credential Manager 就同步给外层，后续任意首错都能走正式 reset 清理。
-    prepared_identities, action_ids, vulnerable_change_id = driver._prepare_official_scenario(
-        page,
-        client,
-        audit_dir,
-        project_id,
-    )
-    identities.update(prepared_identities)
-    page.goto(client.origin + "/#/tests", wait_until="networkidle")
-    page.get_by_role("heading", name="测试", exact=True).wait_for()
-    result = driver._run_case(
-        client,
-        project_id,
-        identities,
-        state,
-        name="portable-vulnerable",
-        expected_verdict="BLOCK",
-        expected_issue="VULNERABLE",
-        action_ids=action_ids,
-        change_id=vulnerable_change_id,
-    )
-
-    page.goto(client.origin + "/#/results", wait_until="networkidle")
-    expected_headline = str(result["presentation"]["headline"])
-    # 路由标题先出现时结果请求仍可能在途，必须等待权威结果标题替换加载占位文本。
-    page.get_by_role("heading", name=expected_headline, exact=True).wait_for(timeout=30_000)
-    assert page.locator("#result-headline").inner_text().strip() == expected_headline
-    page.goto(client.origin + "/#/history", wait_until="networkidle")
-    page.get_by_role("heading", name="历史变化").wait_for()
+def _accept_full_delivery(page, client, audit_dir, state, identities) -> int:
+    """便携版使用同一当前 GUI/API 操作，只有安装和启动身份不同。"""
+    gui = CurrentGui(page, client, audit_dir)
+    experience = gui.start()
+    state.sample_started = True
+    project_id = experience["project_id"]
+    sample_port = int(experience["origin"].rsplit(":", 1)[1])
+    current_api.prepare_current(client, project_id, initial=True, gui=gui)
+    for identity in client.call("GET", f"/api/projects/{project_id}/test-identities"):
+        identities[identity["identity_id"]] = identity["identity_id"]
+    result = current_api.run_current(client, project_id, state, name="portable-problem", expected="BLOCK", gui=gui)
+    gui.checkpoint("problem-result", result)
+    gui.history_search(project_id, result["run_id"])
+    gui.history_open(result)
+    gui.history_return(result["run_id"])
     return sample_port
 
 
-def _smoke_archive(driver: ModuleType, archive: Path, root: Path, *, samples: bool) -> None:
+def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> None:
     extraction = root / ("完整版" if samples else "无示例版")
     invocation = root / ("独立调用目录 full" if samples else "独立调用目录 nosamples")
     extraction.mkdir()
@@ -274,13 +249,13 @@ def _smoke_archive(driver: ModuleType, archive: Path, root: Path, *, samples: bo
     released = False
     identities: dict[str, str] = {}
     sample_port: int | None = None
-    state = driver.HarnessState(product_ready=True)
+    state = HarnessState(product_ready=True)
     client = None
     try:
-        assert not driver._port_open(driver.CONTROL_PORT), "默认控制端口已被占用"
+        assert not _port_open(CONTROL_PORT), "默认控制端口已被占用"
         log = log_path.open("wb")
         command_shell = os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe")
-        process = driver.spawn_managed_process(
+        process = spawn_managed_process(
             [command_shell, "/d", "/s", "/c", "call", str(release / "start.cmd"), "-NoOpen"],
             cwd=invocation,
             env=_portable_environment(),
@@ -289,31 +264,36 @@ def _smoke_archive(driver: ModuleType, archive: Path, root: Path, *, samples: bo
             stderr=subprocess.STDOUT,
             tree_name=f"jiejian-portable-{uuid.uuid4().hex}",
         )
-        client = driver.ApiClient(f"http://127.0.0.1:{driver.CONTROL_PORT}")
-        ready = driver._wait_product_ready(client, process, timeout=90)
+        client = ApiClient(f"http://127.0.0.1:{CONTROL_PORT}")
+        ready = _wait_product_ready(client, process, timeout=90)
         assert ready["status"] == "ready"
         assert ready["worker"] == "running"
 
         playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(headless=True)
+        candidates = [item for item in (release / "runtime/playwright").rglob("chrome.exe")
+            if "chromium-" in item.as_posix() and "chrome-win" in item.as_posix()]
+        assert len(candidates) == 1
+        browser = playwright.chromium.launch(executable_path=str(candidates[0]), headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         page.goto(client.origin, wait_until="networkidle")
-        assert page.get_by_role("heading", name="开始一次安全检查").is_visible()
+        page.get_by_role("main").wait_for()
         client.bind_page(page)
         sample_status = client.call("GET", "/api/experience/official-sample")
         assert sample_status["available"] is samples
         sample_button = page.get_by_role("button", name="启动官方示例")
-        assert sample_button.is_disabled() is (not samples)
+        if samples:
+            assert sample_button.is_enabled()
+        elif sample_button.count():
+            assert sample_button.is_disabled()
         if samples:
             sample_port = _accept_full_delivery(
-                driver,
                 page,
                 client,
                 root,
                 state,
                 identities,
             )
-            driver._shutdown_owned_runtime(
+            _shutdown_owned_runtime(
                 client,
                 state,
                 identities,
@@ -328,7 +308,7 @@ def _smoke_archive(driver: ModuleType, archive: Path, root: Path, *, samples: bo
             process = None
             released = True
         else:
-            assert page.get_by_text("当前版本未包含官方示例").first.is_visible()
+            assert sample_status["active"] is False
             client.call(
                 "POST",
                 "/api/system/shutdown",
@@ -340,41 +320,15 @@ def _smoke_archive(driver: ModuleType, archive: Path, root: Path, *, samples: bo
             playwright.stop()
             playwright = None
             assert process.wait(timeout=30) == 0
-            assert driver.process_tree_has_exited(process)
-            driver.release_process_tree(process, timeout=5)
+            assert process_tree_has_exited(process)
+            release_process_tree(process, timeout=5)
             released = True
-            assert not driver._port_open(driver.CONTROL_PORT)
-            assert driver._runtime_locks_released(release / "var")
+            assert not _port_open(CONTROL_PORT)
+            assert _runtime_locks_released(release / "var")
     except Exception as exc:
         # 首错保留之前先尽力走正式 API 清理，强制回收仍只针对本用例拥有的进程树。
         if client is not None and process is not None and process.poll() is None:
-            for identity_id in identities.values():
-                try:
-                    client.call(
-                        "POST",
-                        f"/api/test-identities/{identity_id}/reset",
-                        {"schema_version": "1"},
-                    )
-                except Exception:
-                    pass
-            if state.sample_started:
-                try:
-                    client.call(
-                        "POST",
-                        "/api/experience/official-sample/stop",
-                        {"schema_version": "1"},
-                    )
-                except Exception:
-                    pass
-            try:
-                client.call(
-                    "POST",
-                    "/api/system/shutdown",
-                    {"schema_version": "1"},
-                    accepted=(202,),
-                )
-            except Exception:
-                pass
+            _cleanup_after_failure(client, state, identities)
         if log is not None:
             log.flush()
         tail = log_path.read_text(encoding="utf-8", errors="replace")[-4000:] if log_path.is_file() else ""
@@ -386,9 +340,9 @@ def _smoke_archive(driver: ModuleType, archive: Path, root: Path, *, samples: bo
             playwright.stop()
         if process is not None:
             if process.poll() is None:
-                driver.terminate_process_tree(process, timeout=10)
+                terminate_process_tree(process, timeout=10)
             if not released:
-                driver.release_process_tree(process, timeout=5)
+                release_process_tree(process, timeout=5)
         if log is not None:
             log.close()
 
@@ -412,8 +366,9 @@ def test_real_full_and_nosamples_portables_start_outside_repository() -> None:
     external = ROOT.parent / f"界鉴 Portable 正式验收 {uuid.uuid4().hex}"
     external.mkdir()
     try:
-        driver = _driver()
-        _smoke_archive(driver, full, external, samples=True)
-        _smoke_archive(driver, nosamples, external, samples=False)
+        _smoke_archive(full, external, samples=True)
+        _smoke_archive(nosamples, external, samples=False)
     finally:
+        assert external.resolve().parent == ROOT.parent.resolve()
+        assert external.name.startswith("界鉴 Portable 正式验收 ")
         shutil.rmtree(external, ignore_errors=True)

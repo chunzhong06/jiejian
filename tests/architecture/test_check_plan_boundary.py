@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_check_plan_has_only_pure_dependency_roots():
-    source = Path(__file__).resolve().parents[2] / "product/backend/core/check_plan.py"
+    source = Path(__file__).resolve().parents[2] / "product/backend/core/checks/plan.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
     imports = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
     imports += [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]

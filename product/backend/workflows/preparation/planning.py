@@ -1,5 +1,5 @@
 # 将现场准备检查与当前绑定按指纹相交，装配纯计划；不执行请求或读取认证秘密。
-from product.backend.core.check_plan import PreparedActionInput, PreparedIdentityAssignment, compile_project_check_plan
+from product.backend.core.checks.plan import PreparedActionInput, PreparedIdentityAssignment, compile_project_check_plan
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.workflows.preparation.models import PreparationStatus
 from product.backend.workflows.recording.source import identity_source_fingerprint
@@ -23,7 +23,7 @@ def current_plan(service, project_id, *, engine_version, config_fingerprint):
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
             # 再次读取正式事实，防止前一个只读检查与快照装配之间权限发生漂移。
             permissions = tuple(p for p in boundary.permission_intents if p.business_action_id == action.action_id)
-            from product.backend.core.assurance import compile_action_assurance
+            from product.backend.core.preparation.requirements import compile_action_assurance
             contract = compile_action_assurance(action, permissions, repository.allow_controls(project_id))
             if contract.fingerprint != item.assurance_contract_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")

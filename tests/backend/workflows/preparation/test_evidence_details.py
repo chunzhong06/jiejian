@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from product.backend.core.action_preparation import ActionEvidenceKind
+from product.backend.core.preparation.bindings import ActionEvidenceKind
 from product.backend.workflows.preparation.bindings import PreparationBindingService
 from product.backend.workflows.preparation.evidence_models import EffectMaterialSummary
 from product.backend.workflows.preparation.models import EffectEvidencePreparationView, PreparationStatus

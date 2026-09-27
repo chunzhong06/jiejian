@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording import RecordingPurpose
+from product.backend.core.recording.models import RecordingPurpose
 from product.backend.workflows.preparation.recording_candidates import (
     choose_supplement_candidate,
     flow_resource_injection,

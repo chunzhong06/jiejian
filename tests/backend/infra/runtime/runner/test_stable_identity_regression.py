@@ -11,8 +11,8 @@ from product.backend.core.verification.permissions import (
     PermissionContract,
     permission_model_sha256,
 )
-from product.backend.workflows.runs.execution import ExecutionWorkflow
-from product.backend.workflows.results.findings import finding_inputs
+from tests.fixtures.runner import compile_profile_plan
+from product.backend.workflows.reports.findings import finding_inputs
 from product.protocols.web.profile import (
     parse_web_execution_profile,
     web_execution_profile_sha256,
@@ -29,8 +29,8 @@ from product.protocols.report import (
     report_id_for,
 )
 from product.protocols.execution import ExecutionBudget
-from tests.backend.workflows.results.test_reports import GATE_ID, PROJECT_ID, RUN_ID, _base
-from tests.backend.workflows.results.test_stable_findings import _result, _view
+from tests.backend.workflows.reports._support_reports import GATE_ID, PROJECT_ID, RUN_ID, _base
+from tests.backend.workflows.reports._support_stable_findings import _result, _view
 from tests.fixtures.runner import evidence, runner_input, write_web_test_profile
 
 
@@ -48,7 +48,8 @@ def test_current_web_stable_identities_do_not_drift(tmp_path: Path) -> None:
     contract = PermissionContract.model_validate_json(
         contract_path.read_bytes(), strict=True
     )
-    plan = ExecutionWorkflow._compile_plan(profile, contract)
+    # golden 的计划身份来自提交 a97a1d885 的 1.0.13 输入；发布版本不属于该固定样本。
+    plan = compile_profile_plan(profile, contract, engine_version="1.0.13")
     snapshot = profile.build_snapshot(contract, plan)
     request = PersistedExecutionRequest(
         source_fingerprint="d" * 64,

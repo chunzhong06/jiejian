@@ -17,10 +17,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from product.backend.core.business_boundary import BusinessActorRevision, BusinessRevisionState
+from product.backend.core.boundaries.entities import BusinessActorRevision, BusinessRevisionState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
-from product.backend.core.test_identity import TestIdentity, TestIdentityAuthMethod, TestIdentityCookie
+from product.backend.core.identities.models import TestIdentity, TestIdentityAuthMethod, TestIdentityCookie
 from product.backend.infra.secrets.store import SecretStore
 from product.backend.infra.storage import StorageUnitOfWork
 

@@ -1,10 +1,7 @@
 # 从严格已发布包重建原题合同并派生 NEW Run 复验；不持久化第二套修复结论。
 from __future__ import annotations
 
-from product.backend.core.check_repair import (
-    CurrentRepairContract, CurrentRepairReference, RepairCaseRequirement, current_request_permissions,
-    repair_case_identity, repair_evidence_standards, verify_current_repair,
-)
+from product.backend.core.checks.repair import CurrentRepairContract, CurrentRepairReference, RepairCaseRequirement, current_request_permissions, repair_case_identity, repair_evidence_standards, verify_current_repair
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
 from product.protocols.execution_v3 import CaseRole, content_hash

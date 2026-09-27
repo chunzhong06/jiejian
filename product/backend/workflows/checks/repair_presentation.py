@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from product.backend.core.check_repair import CurrentRepairContract, repair_case_identity, repair_context
+from product.backend.core.checks.repair import CurrentRepairContract, repair_case_identity, repair_context
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict
 from product.protocols.execution_v3 import WireModel

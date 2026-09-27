@@ -6,7 +6,7 @@ import { ApiError } from '../../api/http'
 import { supplementalMaterialsApi as api, type SupplementalDocument, type SupplementalMaterial, type MaterialPreview } from '../../api/supplementalMaterials'
 import { formatTimestamp } from '../../app/presentation'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
-import { useTaskGuard } from '../../components/TaskContinuity'
+import { useTaskGuard } from '../../app/tasks/TaskContinuity'
 import './supplemental-materials.css'
 
 export function SupplementalMaterials({ projectId, actionId, actionRevision, actionLabel, onBack }: {

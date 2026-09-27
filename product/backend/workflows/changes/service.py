@@ -8,13 +8,10 @@ from uuid import uuid4
 
 from pydantic import Field
 
-from product.backend.core.check_plan import CheckPlanGap
-from product.backend.core.check_repair import CurrentRepairReference
+from product.backend.core.checks.plan import CheckPlanGap
+from product.backend.core.checks.repair import CurrentRepairReference
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.source_changes import (
-    CurrentActionChangeImpact, CurrentChangeAssessment, CurrentChangeAssessmentPayload, CurrentChangeManifest,
-    SourceChangeSet, build_current_change_set, change_impact_fingerprint, normalize_relative_source_path,
-)
+from product.backend.core.changes.models import CurrentActionChangeImpact, CurrentChangeAssessment, CurrentChangeAssessmentPayload, CurrentChangeManifest, SourceChangeSet, build_current_change_set, change_impact_fingerprint, normalize_relative_source_path
 from product.protocols.execution_v3 import ChangeContext, LogicalId, PermissionReference, WireModel
 
 

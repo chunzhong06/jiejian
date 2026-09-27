@@ -10,7 +10,7 @@ from threading import RLock
 
 from pydantic import Field
 
-from product.backend.core.check_plan import ActionCheckPlan, CheckPlanGap
+from product.backend.core.checks.plan import ActionCheckPlan, CheckPlanGap
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.artifacts.check_validation import check_publication_budget_reason, validate_check_inputs
 from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
@@ -151,7 +151,7 @@ class CheckService:
             if request.plan_fingerprint != plan.plan_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION, "准备来源已变化")
         if change_id is not None:
-            from product.backend.core.check_repair import repair_context
+            from product.backend.core.checks.repair import repair_context
             if self._changes is None or self._repairs is None:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,"变化复验服务未就绪")
             inspection = self._changes.inspect_revalidation(project_id,change_id)

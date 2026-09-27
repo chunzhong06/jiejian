@@ -26,21 +26,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from product.backend.core.application_understanding import (
-    ActionCandidate,
-    ActionRiskHint,
-    ApplicationUnderstanding,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateOrigin,
-    CandidateSelection,
-    RoleCandidate,
-    candidate_id,
-    canonical_role_key,
-)
+from product.backend.core.applications.models import ActionCandidate, ActionRiskHint, ApplicationUnderstanding, CandidateConfidence, CandidateDecision, CandidateOrigin, CandidateSelection, RoleCandidate, candidate_id, canonical_role_key
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.source_changes import SourceRevisionSnapshot, source_snapshot_id
+from product.backend.core.changes.models import SourceRevisionSnapshot, source_snapshot_id
 from product.backend.infra.storage import ProjectRecord, StorageUnitOfWork
 from product.backend.workflows.application_understanding.endpoints import (
     EndpointDiscoveryResult,

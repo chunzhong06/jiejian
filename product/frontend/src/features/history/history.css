@@ -1,0 +1,247 @@
+/* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
+.history-toolbar {
+  display: flex;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 18px;
+  border-radius: 10px 10px 0 0;
+  margin-bottom: 0;
+}
+
+.history-toolbar>.ant-input-affix-wrapper {
+  width: 300px;
+  max-width: 100%;
+}
+
+.history-toolbar>.ant-select {
+  min-width: 150px;
+}
+
+.history-records {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-top: 0;
+  background: var(--color-surface);
+  border-radius: 0 0 10px 10px;
+  padding: 0 20px;
+}
+
+.history-date {
+  margin: 0;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+  padding: 16px 0 6px;
+  color: var(--color-secondary);
+  font-weight: 500;
+}
+
+.history-record {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 130px 100px 90px;
+  gap: var(--space-20);
+  align-items: center;
+  cursor: pointer;
+  padding: 20px 0;
+  border-radius: 0;
+  background: transparent;
+  min-width: 0;
+}
+
+.history-record:hover {
+  background: var(--color-surface-hover);
+}
+
+.history-record-copy {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.history-record-copy strong {
+  font-weight: 550;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.history-record small {
+  font-size: var(--font-label);
+  color: var(--color-secondary);
+}
+
+.history-lifecycle {
+  font-size: var(--font-label);
+  color: var(--color-secondary);
+}
+
+.history-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  display: none;
+}
+
+.history-verdict {
+  font-size: var(--font-secondary);
+}
+
+.history-open {
+  font-size: var(--font-secondary);
+  color: var(--color-secondary);
+}
+
+.history-verdict.is-pass {
+  color: var(--color-safe);
+}
+
+.history-verdict.is-block {
+  color: var(--color-danger);
+}
+
+.history-verdict.is-inconclusive {
+  color: var(--color-warning);
+}
+
+.history-empty {
+  padding: var(--space-40);
+  text-align: center;
+}
+
+.history-empty h2 {
+  font-size: var(--font-section);
+  font-weight: 500;
+}
+
+.history-empty p {
+  color: var(--color-secondary);
+  font-size: var(--font-secondary);
+}
+
+.history-boundary {
+  color: var(--color-secondary);
+  font-size: var(--font-secondary);
+}
+
+.history-loading {
+  padding: var(--space-24);
+  display: flex;
+  gap: var(--space-12);
+  align-items: center;
+  justify-content: center;
+}
+
+.history-more {
+  justify-self: center;
+}
+
+@media(max-width:1000px) {
+  .history-record {
+    grid-template-columns: minmax(0,1fr) 120px 90px;
+  }
+}
+
+@media(max-width:1000px) {
+  .history-open {
+    display: none;
+  }
+}
+
+@media(max-width:600px) {
+  .history-record {
+    padding: var(--space-16);
+    grid-template-columns: minmax(0,1fr) 92px;
+    gap: var(--space-12);
+  }
+}
+
+@media(max-width:600px) {
+  .history-lifecycle {
+    grid-column: 1/-1;
+  }
+}
+
+@media(max-width:600px) {
+  .history-toolbar>.ant-input-affix-wrapper {
+    width: 100%;
+  }
+}
+
+@media(max-width:600px) {
+  .history-toolbar>.ant-select {
+    flex: 1;
+    min-width: 130px;
+  }
+}
+
+@media(max-width:600px) {
+  .history-empty {
+    padding: var(--space-24);
+  }
+}
+
+.history-record-copy small {
+  font-size: 12px;
+}
+
+@media(max-width:760px) {
+  .history-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+@media(max-width:760px) {
+  .history-record {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+  }
+}
+
+@media(max-width:760px) {
+  .history-record-copy {
+    grid-column: 1/-1;
+  }
+}
+
+@media(max-width:760px) {
+  .history-open {
+    grid-column: 2;
+  }
+}
+
+@media(max-width:760px) {
+  .history-lifecycle {
+    grid-column: 1;
+  }
+}
+
+@media(max-width:760px) {
+  .history-records {
+    padding: 0 16px;
+  }
+}
+
+.history-columns {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 130px 100px 90px;
+  gap: var(--space-20);
+  padding: var(--space-12) 0;
+  font-size: var(--font-label);
+  color: var(--color-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+@media(max-width:1000px) {
+  .history-columns {
+    display: none;
+  }
+}

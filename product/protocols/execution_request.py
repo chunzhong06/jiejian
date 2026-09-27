@@ -38,14 +38,8 @@ from product.backend.core.identifiers import (
     SHA256_PATTERN,
     TEST_IDENTITY_ID_PATTERN,
 )
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.repair import (
-    RepairAllowControlIdentity,
-    RepairContractReference,
-    RepairEvidenceStandard,
-    RepairIntentIdentity,
-    RepairRegressionControlIdentity,
-)
+from product.backend.core.boundaries.permissions import PermissionIntentRelation
+from product.backend.core.reports.repair import RepairAllowControlIdentity, RepairContractReference, RepairEvidenceStandard, RepairIntentIdentity, RepairRegressionControlIdentity
 from product.backend.core.verification.permissions import (
     PermissionExpectation,
     SecurityEffectKind,

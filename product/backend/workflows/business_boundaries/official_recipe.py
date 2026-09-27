@@ -2,25 +2,10 @@
 
 from __future__ import annotations
 
-from product.backend.core.boundary_proposal import (
-    ProposalWriteMode,
-    ProposedActionItem,
-    ProposedActorItem,
-    ProposedEffectItem,
-    ProposedPermissionItem,
-)
-from product.backend.core.business_boundary import (
-    BusinessActionOperationKind,
-    BusinessRevisionState,
-)
-from product.backend.core.permission_intent import (
-    PermissionIntentEffectiveState,
-    PermissionIntentRelation,
-)
-from product.backend.core.permission_semantics import (
-    PermissionExpectation,
-    BusinessEffectKind,
-)
+from product.backend.core.boundaries.proposals import ProposalWriteMode, ProposedActionItem, ProposedActorItem, ProposedEffectItem, ProposedPermissionItem
+from product.backend.core.boundaries.entities import BusinessActionOperationKind, BusinessRevisionState
+from product.backend.core.boundaries.permissions import PermissionIntentEffectiveState, PermissionIntentRelation
+from product.backend.core.boundaries.semantics import PermissionExpectation, BusinessEffectKind
 from product.backend.workflows.business_boundaries.models import (
     BoundaryProposalCommand,
     OfficialBoundaryActionSummary,

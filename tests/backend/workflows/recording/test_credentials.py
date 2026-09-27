@@ -39,7 +39,10 @@ def test_application_context_combines_base_environment_and_vault_then_clears(
         "BASE_ONLY": "base",
         "ONBOARDING_ONLY": "opaque",
     }
-    for names in (("BASE_ONLY", "ONBOARDING_ONLY"), ("JIEJIAN_CONTROL_ORIGIN",)):
+    assert context.environment_for_secret_names(("BASE_ONLY", "ONBOARDING_ONLY")) == {
+        "BASE_ONLY": "base", "ONBOARDING_ONLY": "opaque",
+    }
+    for names in (("JIEJIAN_CONTROL_ORIGIN",),):
         with pytest.raises(JiejianError) as error:
             context.environment_for_secret_names(names)
         assert error.value.code == "TEST_IDENTITY_NOT_READY"

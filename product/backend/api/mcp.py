@@ -28,7 +28,7 @@ from product.backend import __version__
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.runtime.diagnostics import runtime_environment_details
-from product.backend.workflows.mcp_access import MCPAccessController, MCPAccessLevel
+from product.backend.workflows.agent_access.service import MCPAccessController, MCPAccessLevel
 
 
 _T = TypeVar("_T")

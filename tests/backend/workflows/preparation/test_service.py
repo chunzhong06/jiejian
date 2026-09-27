@@ -2,8 +2,8 @@
 
 from types import SimpleNamespace
 
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.test_identity import TestIdentityAuthMethod as AuthMethod
+from product.backend.core.boundaries.permissions import PermissionIntentRelation
+from product.backend.core.identities.models import TestIdentityAuthMethod as AuthMethod
 from product.backend.workflows.business_boundaries.models import BusinessBoundaryView
 from product.backend.workflows.preparation.models import PreparationStatus
 from product.backend.workflows.preparation.service import PreparationService

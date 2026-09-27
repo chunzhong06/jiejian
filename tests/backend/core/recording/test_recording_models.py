@@ -5,13 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from product.backend.core.recording import (
-    Recording,
-    RecordingReasonCode,
-    RecordingState,
-    RecordingTerminalState,
-    transition_recording_state,
-)
+from product.backend.core.recording.models import Recording, RecordingReasonCode, RecordingState, RecordingTerminalState, transition_recording_state
 from product.backend.core.errors import JiejianError
 
 

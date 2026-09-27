@@ -34,15 +34,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.repair import RepairContractReference
-from product.backend.core.source_changes import (
-    ChangeImpactAssessment,
-    ChangeManifest,
-    IntentChangeImpact,
-    SourceChangeSet,
-    SourceFileFingerprint,
-    SourceRevisionSnapshot,
-)
+from product.backend.core.reports.repair import RepairContractReference
+from product.backend.core.changes.models import ChangeImpactAssessment, ChangeManifest, IntentChangeImpact, SourceChangeSet, SourceFileFingerprint, SourceRevisionSnapshot
 from product.backend.infra.storage.base import (
     Base,
     _canonical_json,
@@ -212,7 +205,7 @@ class SourceChangeRepository:
         _flush(self._session)
 
     def current_change(self, project_id: str, change_id: str):
-        from product.backend.core.source_changes import CurrentChangeManifest, CurrentChangeAssessment
+        from product.backend.core.changes.models import CurrentChangeManifest, CurrentChangeAssessment
         row = _scalar(self._session,select(ChangeManifestRow).where(
             ChangeManifestRow.project_id == project_id,ChangeManifestRow.change_id == change_id))
         if row is None:

@@ -12,22 +12,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from product.backend.core.application_understanding import (
-    ApplicationUnderstanding,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateOrigin,
-    RoleCandidate,
-    candidate_id,
-)
+from product.backend.core.applications.models import ApplicationUnderstanding, CandidateConfidence, CandidateDecision, CandidateOrigin, RoleCandidate, candidate_id
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.business_boundary import BusinessActor, BusinessRevisionState, boundary_sha256
+from product.backend.core.boundaries.entities import BusinessActor, BusinessRevisionState, boundary_sha256
 from tests.fixtures.assurance import actor
-from product.backend.core.test_identity import (
-    TestIdentityAuthMethod as IdentityAuthMethod,
-    TestIdentityCookie as IdentityCookie,
-)
+from product.backend.core.identities.models import TestIdentityAuthMethod as IdentityAuthMethod, TestIdentityCookie as IdentityCookie
 from product.backend.infra.secrets import credential_ref
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.storage import (

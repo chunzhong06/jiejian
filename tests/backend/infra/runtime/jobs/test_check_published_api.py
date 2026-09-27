@@ -9,7 +9,7 @@ import sqlite3
 import subprocess
 from unittest.mock import Mock
 
-from product.backend.core.check_repair import repair_context
+from product.backend.core.checks.repair import repair_context
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
 from product.backend.infra.artifacts.check_publication import CheckPublisher
 from product.backend.infra.runtime.jobs.models import ClaimJob

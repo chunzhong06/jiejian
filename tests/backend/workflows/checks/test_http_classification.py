@@ -14,7 +14,7 @@ from product.protocols.check_result import CheckObservation
 from product.protocols.check_runtime import CheckActionConfig, CheckRuntimeBundle, canonical_check_runtime_bytes, parse_check_runtime
 from product.protocols.web.response import HttpOutcomeClassifier
 from tests.fixtures.check_execution import execution_pair
-from tests.backend.infra.execution.test_check_executor import check_target, execution_configuration
+from tests.backend.infra.execution._support_check_executor import check_target, execution_configuration
 
 
 def configuration(count=1):
@@ -218,7 +218,7 @@ def test_consistent_shared_task_is_deduplicated_and_other_action_cannot_supply_b
 def test_observer_private_completion_requires_complete_bound_envelope(tmp_path, monkeypatch, fault):
     from product.backend.infra.observers.check_runtime import CheckObserverRuntime
     from product.protocols.observer import Correlation, ObservationCompleteness, ObservationPhase, ObserverOutcomeStatus
-    from tests.backend.infra.observers.test_async_task_observer import _run_fake, _response
+    from tests.backend.infra.observers._support_async_task_observer import _run_fake, _response
 
     request, payload = configuration()
     bundle = CheckRuntimeBundle.model_validate_json(json.dumps(payload))

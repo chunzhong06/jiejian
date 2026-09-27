@@ -32,14 +32,14 @@ from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
 from product.backend.workflows.business_boundaries import BusinessBoundaryService
 from product.backend.workflows.onboarding.workflow import FolderSelector, OnboardingWorkflow, SystemFolderSelector
-from product.backend.workflows.permission_intents import PermissionIntentService
+from product.backend.workflows.business_boundaries.permissions import PermissionIntentService
 from product.backend.workflows.projects.catalog import ProjectCatalog
 from product.backend.workflows.projects.lifecycle import ProjectLifecycleService
 from product.backend.workflows.test_identities import TestIdentityService
 from product.backend.workflows.test_identities.preparation import IdentityPreparationManager
 from product.backend.workflows.assistant.current_surfaces import PreparationAssistantSurfaceResolver
 from product.backend.workflows.assistant.service import AssistantService
-from product.backend.workflows.permission_drafting import PermissionDraftService
+from product.backend.workflows.business_boundaries.drafting import PermissionDraftService
 from product.backend.workflows.workspace import WorkspaceService
 from product.backend.workflows.preparation.bindings import PreparationBindingService
 from product.backend.workflows.preparation.service import PreparationService
@@ -106,7 +106,7 @@ class ApplicationCore:
             clock_us=clock_us,
         )
         self.business_boundaries = BusinessBoundaryService(factory, clock_us=clock_us)
-        from product.backend.workflows.supplemental_materials import SupplementalMaterialService
+        from product.backend.workflows.preparation.supplemental import SupplementalMaterialService
         from product.backend.workflows.changes.observations import CodeObservationService
         self.supplemental_materials = SupplementalMaterialService(factory, clock_us=clock_us)
         self.code_observations = CodeObservationService(self.application_understanding, clock_us=clock_us)
@@ -223,8 +223,8 @@ class ApplicationCore:
         self.permission_drafts = PermissionDraftService(business_boundaries=self.business_boundaries,
             llm_profiles=self.llm_profiles)
         from product.backend.infra.samples import OfficialSampleManager
-        from product.backend.workflows.official_sample import OfficialSampleExperience
-        from product.backend.workflows.official_scenario import OfficialScenarioInstaller
+        from product.backend.workflows.examples.environment import OfficialSampleExperience
+        from product.backend.workflows.examples.materials import OfficialScenarioInstaller
         self.official_samples = OfficialSampleManager(self.var_dir, official_sample_root, self._base_environment)
         self.official_scenario = OfficialScenarioInstaller(self.project_recordings, self.recording_submission,
             self.job_attempts, var_dir=self.var_dir, recording_credentials=self.recording_credentials,

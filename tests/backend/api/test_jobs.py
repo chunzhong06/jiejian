@@ -8,11 +8,38 @@ import json
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
 
 from product.backend.api.routers.jobs import build_jobs_router
 from product.backend.core.lifecycle import JobState
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.runtime.runner.progress import RunnerProgressReader, RunnerProgressWriter
+
+
+@pytest.mark.parametrize('after, header, expected', [(None, '0', [1, 2]), (None, '1', [2]), (1, '0', [2])])
+def test_independent_event_route_resumes_by_sequence_without_replaying(after, header, expected):
+    """验证未挂载的独立 SSE reader；不将它声明为当前产品 API。"""
+    events = [SimpleNamespace(sequence=number, event_type='JOB_CANCELLED', source_state=JobState.PENDING,
+        target_state=JobState.CANCELLED, occurred_at_us=number, metadata={}) for number in (1, 2)]
+    work = SimpleNamespace(jobs=SimpleNamespace(get=lambda _: SimpleNamespace(state=JobState.CANCELLED)),
+        job_events=SimpleNamespace(list_for_job=lambda _: events))
+
+    @contextmanager
+    def unit_of_work():
+        yield work
+
+    async def connected():
+        return False
+
+    endpoint = next(route.endpoint for route in build_jobs_router(SimpleNamespace(uow_factory=unit_of_work)).routes
+        if route.path == '/api/jobs/{job_id}/events')
+
+    async def read():
+        response = await endpoint('job-test', SimpleNamespace(is_disconnected=connected), after=after, last_event_id=header)
+        return [chunk async for chunk in response.body_iterator]
+
+    chunks = asyncio.run(read())
+    assert [int(chunk.splitlines()[0].removeprefix('id: ')) for chunk in chunks] == expected
 
 
 def test_job_events_stops_before_next_poll_when_client_disconnects() -> None:

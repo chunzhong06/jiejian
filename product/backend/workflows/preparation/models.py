@@ -4,13 +4,9 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from product.backend.core.assurance import (
-    ActionAssuranceContract,
-    AllocationMode,
-    IdentityRequirementSlot,
-)
-from product.backend.core.business_boundary import BoundaryModel
-from product.backend.core.permission_intent import PermissionIntentRevision
+from product.backend.core.preparation.requirements import ActionAssuranceContract, AllocationMode, IdentityRequirementSlot
+from product.backend.core.boundaries.entities import BoundaryModel
+from product.backend.core.boundaries.permissions import PermissionIntentRevision
 
 
 class PreparationStatus(StrEnum):

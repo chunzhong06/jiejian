@@ -9,7 +9,7 @@ import pytest
 
 from product.backend.core.errors import JiejianError
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.infra.storage.execution.jobs import JobRecord
 from tests.fixtures.action_preparation import add_recording, build_preparation_harness
 

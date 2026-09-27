@@ -2,20 +2,9 @@
 
 from __future__ import annotations
 
-from product.backend.core.application_understanding import (
-    ApplicationUnderstanding,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateEvidence,
-    CandidateOrigin,
-    RoleCandidate,
-)
-from product.backend.core.boundary_proposal import ProposalCandidateKind
-from product.backend.core.business_boundary import (
-    ActorImplementationBinding,
-    ImplementationBindingStatus,
-    boundary_sha256,
-)
+from product.backend.core.applications.models import ApplicationUnderstanding, CandidateConfidence, CandidateDecision, CandidateEvidence, CandidateOrigin, RoleCandidate
+from product.backend.core.boundaries.proposals import ProposalCandidateKind
+from product.backend.core.boundaries.entities import ActorImplementationBinding, ImplementationBindingStatus, boundary_sha256
 from product.backend.workflows.business_boundaries.fingerprints import (
     candidate_source_snapshot,
     implementation_candidate_snapshot,

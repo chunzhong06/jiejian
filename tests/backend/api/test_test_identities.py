@@ -8,21 +8,11 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient as RawTestClient
 
-from product.backend.core.application_understanding import (
-    ApplicationUnderstanding,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateOrigin,
-    RoleCandidate,
-    candidate_id,
-)
+from product.backend.core.applications.models import ApplicationUnderstanding, CandidateConfidence, CandidateDecision, CandidateOrigin, RoleCandidate, candidate_id
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.business_boundary import BusinessActor, boundary_sha256
+from product.backend.core.boundaries.entities import BusinessActor, boundary_sha256
 from tests.fixtures.assurance import actor
-from product.backend.core.test_identity import (
-    TestIdentityAuthMethod,
-    TestIdentityCookie,
-)
+from product.backend.core.identities.models import TestIdentityAuthMethod, TestIdentityCookie
 from product.backend.infra.secrets import credential_ref
 from product.backend.infra.storage import ProjectRecord
 from product.backend.workflows.test_identities import PreparedLoginState

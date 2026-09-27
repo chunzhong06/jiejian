@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from product.backend.core.lifecycle import ProjectStatus
-from tests.fixtures.collaboration_golden import InMemorySecretStore
+from tests.fixtures.secrets import InMemorySecretStore
 from tests.fixtures.control_plane import TestClient, create_app
 from tests.fixtures.runtime_environment import runtime_identity_environment
 
@@ -94,7 +94,7 @@ def test_prepare_requires_ordinary_approval_and_never_publishes_result(tmp_path)
 
 
 def test_active_check_blocks_sample_switch_until_public_cancellation(tmp_path):
-    from tests.backend.workflows.test_current_official_sample import prepare_sample
+    from tests.backend.workflows._support_current_official_sample import prepare_sample
     app, _ = _app(tmp_path)
     with TestClient(app) as client:
         core = app.state.context

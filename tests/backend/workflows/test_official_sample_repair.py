@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.core.check_repair import CurrentRepairReference
+from product.backend.core.checks.repair import CurrentRepairReference
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.workflows.official_sample import OfficialSampleExperience, OfficialScenarioVersion, _Experience
+from product.backend.workflows.examples.environment import OfficialSampleExperience, OfficialScenarioVersion, _Experience
 
 
 def test_fixed_version_validates_original_reference_before_mechanical_switch(tmp_path):
@@ -23,7 +23,7 @@ def test_fixed_version_validates_original_reference_before_mechanical_switch(tmp
         return SimpleNamespace(manifest=SimpleNamespace(change_id="chg_" + "4" * 32))
     experience = OfficialSampleExperience(manager, understanding=None, boundaries=None, identities=None, secret_store=None,
         registry=None, installer=None, bindings=None, preparation=None, changes=SimpleNamespace(submit=submit),
-        repairs=SimpleNamespace(resolve=resolve), uow_factory=lambda: nullcontext(SimpleNamespace(jobs=SimpleNamespace(list_for_project=lambda _: ()))),
+        repairs=SimpleNamespace(resolve=resolve), uow_factory=lambda: nullcontext(SimpleNamespace(environment_operations=SimpleNamespace(list=lambda limit: ([], False)), jobs=SimpleNamespace(list_for_project=lambda _: ()))),
         var_dir=tmp_path, archive_project=None)
     experience._current = _Experience(runtime=runtime, project_id="sample-repair", scenario_prepared=True)
     with pytest.raises(JiejianError):

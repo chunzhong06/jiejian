@@ -7,12 +7,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from product.backend.core.application_understanding import CandidateDecision
-from product.backend.core.business_boundary import BusinessRevisionState
+from product.backend.core.applications.models import CandidateDecision
+from product.backend.core.boundaries.entities import BusinessRevisionState
 from product.backend.core.errors import JiejianError
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.permission_semantics import PermissionExpectation
-from product.backend.core.recording import RecordingState
+from product.backend.core.boundaries.permissions import PermissionIntentRelation
+from product.backend.core.boundaries.semantics import PermissionExpectation
+from product.backend.core.recording.models import RecordingState
 from product.backend.infra.storage import FlowDraftRevisionRecord
 from product.backend.workflows.assistant.current_surfaces import CURRENT_ASSISTANT_TEMPLATES
 from product.backend.workflows.assistant.templates import AssistantEntityType as EntityType, AssistantTemplateId as Template, parse_assistant_result, render_assistant_prompt

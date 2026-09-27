@@ -22,6 +22,8 @@ def check_api(tmp_path):
 def test_current_preview_submit_and_status_use_no_target_or_secret_read(check_api, monkeypatch):
     app, harness, client = check_api
     forbidden = Mock(side_effect=AssertionError("API must not execute target or resolve credentials"))
+    # Git 元数据是允许的本地只读观察；隔离它后继续禁止一切目标进程与网络。
+    monkeypatch.setattr("product.backend.infra.source_identity._git", lambda *_args: (128, ""))
     monkeypatch.setattr(socket.socket, "connect", forbidden)
     monkeypatch.setattr(subprocess, "Popen", forbidden)
     monkeypatch.setattr(app.state.context.secret_store, "read", forbidden)

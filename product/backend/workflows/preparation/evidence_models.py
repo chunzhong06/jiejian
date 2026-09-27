@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from product.backend.core.business_boundary import BoundaryModel
+from product.backend.core.boundaries.entities import BoundaryModel
 from product.backend.workflows.preparation.models import PreparationStatus
 
 

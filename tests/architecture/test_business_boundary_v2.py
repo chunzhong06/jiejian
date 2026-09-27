@@ -5,13 +5,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from product.backend.core.business_boundary import (
-    ActionImplementationBinding,
-    ActorImplementationBinding,
-    BusinessRevisionState,
-)
-from product.backend.core.permission_intent import PermissionIntentRevision
-from product.backend.core.test_identity import TestIdentity as IdentityModel
+from product.backend.core.boundaries.entities import ActionImplementationBinding, ActorImplementationBinding, BusinessRevisionState
+from product.backend.core.boundaries.permissions import PermissionIntentRevision
+from product.backend.core.identities.models import TestIdentity as IdentityModel
 from product.backend.infra.storage.business_boundaries import (
     ActionImplementationBindingRow,
     ActorImplementationBindingRow,
@@ -68,11 +64,11 @@ def test_permission_and_identity_models_reference_only_stable_business_ids() -> 
 
 def test_domain_models_do_not_import_discovery_candidates() -> None:
     for relative in (
-        "product/backend/core/business_boundary.py",
-        "product/backend/core/permission_intent.py",
+        "product/backend/core/boundaries/entities.py",
+        "product/backend/core/boundaries/permissions.py",
     ):
         imports = _imported_names(relative)
-        assert "product.backend.core.application_understanding" not in imports
+        assert "product.backend.core.applications.models" not in imports
         assert not {"RoleCandidate", "ActionCandidate"} & imports
 
 
@@ -145,7 +141,7 @@ def test_maintenance_api_keeps_write_modes_server_owned() -> None:
     assert 'f"{prefix}/maintenance-proposals"' in router
     assert "create_initial_proposal" in router
     service = _source("product/backend/workflows/business_boundaries/service.py")
-    assert "write_binding: bool" in service
+    assert "write_binding: bool" in _source("product/backend/workflows/business_boundaries/planning.py")
     assert "if plan.write_binding:" in service
 
 
@@ -203,7 +199,7 @@ def test_mcp_registers_exact_tools_with_project_authorization_and_no_approval() 
 
 
 def test_mcp_restores_only_read_without_persistent_grants() -> None:
-    from product.backend.workflows.mcp_access import MCPAccessController, MCPAccessLevel
+    from product.backend.workflows.agent_access.service import MCPAccessController, MCPAccessLevel
     from unittest.mock import Mock
 
     store = Mock()
@@ -277,6 +273,7 @@ def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
         "0003_action_assurance_recording.py",
         "0004_action_resource_ownership.py",
         "0005_verification_loop_v3.py",
+        "0006_product_provenance.py",
     ]
     revisions = {}
     for path in files:
@@ -294,4 +291,5 @@ def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
         "0003_action_assurance_recording": "0002_business_boundary_maintenance",
         "0004_action_resource_ownership": "0003_action_assurance_recording",
         "0005_verification_loop_v3": "0004_action_resource_ownership",
+        "0006_product_provenance": "0005_verification_loop_v3",
     }

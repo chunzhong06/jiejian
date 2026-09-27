@@ -6,10 +6,10 @@ import time
 import pytest
 
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingState
+from product.backend.core.recording.models import RecordingState
 from product.backend.infra.runtime.jobs.models import ClaimJob
 from tests.fixtures.recording import RecordingContext, captured_result
-from tests.backend.workflows.recording.test_project_submission import _arguments
+from tests.backend.workflows.recording._support_project_submission import _arguments
 
 
 def _capture(context):

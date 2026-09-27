@@ -1,4 +1,4 @@
-# 确定性引导、错误诊断与受限 AI 辅助的公共应用层入口。
+# 错误诊断与受限 AI 辅助的公共应用层入口。
 
 from product.backend.workflows.assistant.diagnosis import (
     ErrorArea,
@@ -8,15 +8,6 @@ from product.backend.workflows.assistant.diagnosis import (
     ErrorPhase,
     RecoveryAction,
     diagnose_error,
-)
-from product.backend.workflows.assistant.guidance import (
-    GuidanceOption,
-    GuidanceOptionKind,
-    GuidancePhase,
-    GuidancePriorityTier,
-    GuidanceQueryService,
-    GuidanceSnapshot,
-    build_guidance_snapshot,
 )
 from product.backend.workflows.assistant.templates import (
     ASSISTANT_SAFETY_INSTRUCTIONS,
@@ -53,15 +44,8 @@ __all__ = [
     "ErrorDiagnosisContext",
     "ErrorIntervention",
     "ErrorPhase",
-    "GuidanceOption",
-    "GuidanceOptionKind",
-    "GuidancePhase",
-    "GuidancePriorityTier",
-    "GuidanceQueryService",
-    "GuidanceSnapshot",
     "RecoveryAction",
     "assistant_result_json_schema",
-    "build_guidance_snapshot",
     "build_surface_input",
     "diagnose_error",
     "parse_assistant_result",

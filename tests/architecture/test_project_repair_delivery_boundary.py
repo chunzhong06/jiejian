@@ -31,7 +31,7 @@ def test_project_repair_uses_published_history_and_exact_original_question_links
 def test_project_repair_has_no_storage_target_or_legacy_result_dependency() -> None:
     forbidden = ("sqlalchemy", "httpx", "playwright", "subprocess", "samples",
                  "product.backend.infra", "product.backend.workflows.control",
-                 "product.backend.workflows.results", "product.backend.workflows.official_sample")
+                 "product.backend.workflows.reports", "product.backend.workflows.examples.environment")
     for node in ast.walk(_tree(REPAIR)):
         names = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module] if isinstance(node, ast.ImportFrom) else []
         assert not any(name and any(name == p or name.startswith(p + ".") for p in forbidden) for name in names)
@@ -57,7 +57,9 @@ def test_current_project_repair_is_composed_once_in_application_only() -> None:
 
 def test_shell_continuation_uses_current_workspace_primary_task() -> None:
     shell = (ROOT / "product/frontend/src/app/ControlShell.tsx").read_text(encoding="utf-8")
-    assert "const task = workspace?.primary_task" in shell
+    workbench = (ROOT / "product/frontend/src/features/workspace/WorkbenchPage.tsx").read_text(encoding="utf-8")
+    assert "workspace?.primary_task" in workbench
+    assert "taskDestination(primary)" in workbench
     assert "workspaceState.refreshCurrentWorkspace" in shell
     for current in ("ChangesPage", "CurrentTestsPage", "CheckHistoryPage", "BusinessBoundaryPage"):
         assert current in shell
@@ -72,6 +74,6 @@ def test_current_checks_and_repair_do_not_use_sample_specific_dependencies() -> 
         assert "official_sample" not in source
         assert "samples." not in source
         assert "sample_repair" not in source
-    page = (ROOT / "product/frontend/src/features/testing/CurrentTestsPage.tsx").read_text(encoding="utf-8")
+    page = (ROOT / "product/frontend/src/features/checks/CurrentTestsPage.tsx").read_text(encoding="utf-8")
     for forbidden in ("experienceApi", "verifyFixedBehavior", "sample_repair", "officialSample"):
         assert forbidden not in page

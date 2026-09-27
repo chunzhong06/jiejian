@@ -180,7 +180,7 @@ def _render_code(root: Path, relatives: tuple[str, ...]) -> str:
 
 def _render_code_document(title: str, generated: str) -> str:
     """渲染整份机器维护文档，避免陈旧文件头在生成区外累积。"""
-    header = f"# 自动代码参考：{title}\n\n> 生成区域只描述当前代码结构；职责与安全理由由模块参考和任务指南维护。"
+    header = f"# 自动代码参考：{title}\n\n> 生成区域只描述当前代码结构；职责与安全理由由能力映射和任务指南维护。"
     return header + "\n\n" + generated.strip() + "\n"
 
 
@@ -252,7 +252,7 @@ def _render_schema_index(root: Path) -> str:
 def generate(root: Path, update: bool) -> list[Path]:
     changed: list[Path] = []
     failures: list[str] = []
-    code_dir = root / "docs/03_参考手册/代码"
+    code_dir = root / "docs/参考/生成"
     for name, (relatives, title) in CODE_GROUPS.items():
         path = code_dir / f"{name}.md"
         document = _render_code_document(title, _render_code(root, relatives))
@@ -265,7 +265,7 @@ def generate(root: Path, update: bool) -> list[Path]:
             failures.append(f"代码参考缺失：{path.relative_to(root)}")
         elif path.read_text(encoding="utf-8") != document:
             failures.append(f"代码参考漂移：{path.relative_to(root)}")
-    protocol = root / "docs/03_参考手册/协议/公共数据与Schema版本.md"
+    protocol = root / "docs/参考/协议/公共数据与Schema版本.md"
     if update:
         before = protocol.read_text(encoding="utf-8")
         _replace_generated(protocol, _render_schema_index(root))

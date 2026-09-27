@@ -1,16 +1,16 @@
 # 构造纯计划的正式权限、双身份和精确受控证明能力，不访问外部服务。
-from product.backend.core.check_plan import PreparedActionInput, PreparedIdentityAssignment, RegisteredEffectProofCapability, compile_project_check_plan
-from product.backend.core.action_preparation import ActionExecutionBinding, ActionResourceBinding, ActionEvidenceBinding, ActionEvidenceKind, ActionRecoveryBinding, RecordedRequestTemplate, RegisteredObserverReference, ResourceInjection, ResourceInjectionKind, seal_binding
-from product.backend.core.assurance import compile_action_assurance
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.permission_semantics import PermissionExpectation
+from product.backend.core.checks.plan import PreparedActionInput, PreparedIdentityAssignment, RegisteredEffectProofCapability, compile_project_check_plan
+from product.backend.core.preparation.bindings import ActionExecutionBinding, ActionResourceBinding, ActionEvidenceBinding, ActionEvidenceKind, ActionRecoveryBinding, RecordedRequestTemplate, RegisteredObserverReference, ResourceInjection, ResourceInjectionKind, seal_binding
+from product.backend.core.preparation.requirements import compile_action_assurance
+from product.backend.core.boundaries.permissions import PermissionIntentRelation
+from product.backend.core.boundaries.semantics import PermissionExpectation
 from tests.fixtures.assurance import action, permission, EFFECT, SECOND_EFFECT, PROJECT
 
 
 def prepared_action(*, superset=False, state_changing=False, action_number=1):
     business_action = action(state_changing=state_changing)
     if action_number != 1:
-        from product.backend.core.business_boundary import boundary_sha256
+        from product.backend.core.boundaries.entities import boundary_sha256
         values = business_action.model_dump()
         values["action_id"] = f"bac_{action_number:032x}"
         provisional = business_action.model_copy(update={"action_id": values["action_id"]})

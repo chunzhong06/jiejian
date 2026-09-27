@@ -6,8 +6,8 @@ import json
 from typing import Literal
 from pydantic import Field, model_validator, ValidationError
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, RECORDING_ID_PATTERN, TEST_IDENTITY_ID_PATTERN
-from product.backend.core.business_boundary import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
-from product.backend.core.recording import RecordingPurpose
+from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.core.recording.models import RecordingPurpose
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols.recording import RecordingProtocolModel, RecordingSessionRef, RecordingBudget, WebTargetScope, _reject_inline_secret_material
 from product.protocols.flow_draft import FlowDraftProtocolModel, FlowDraftStep, FlowDraftVariable, _reject_unredacted_sensitive_values, _strict_json, FLOW_DRAFT_MAX_BYTES

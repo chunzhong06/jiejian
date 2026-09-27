@@ -67,7 +67,7 @@ def test_invalid_claimed_paths_rejected_before_scanning(harness,path,monkeypatch
 
 def test_concurrent_human_policy_change_is_kept_but_change_registration_rolls_back(harness, monkeypatch):
     from product.backend.workflows.business_boundaries.models import BoundaryMaintenanceCommand
-    from product.backend.core.permission_semantics import PermissionExpectation
+    from product.backend.core.boundaries.semantics import PermissionExpectation
     current, service = harness
     core, project = current.core, current.project_id
     before = core.business_boundaries.view(project).policy_epoch

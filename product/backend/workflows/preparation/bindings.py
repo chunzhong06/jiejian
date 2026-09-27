@@ -9,13 +9,10 @@ from pathlib import Path
 from typing import Protocol
 from contextlib import nullcontext
 
-from product.backend.core.action_preparation import (
-    ActionEvidenceBinding, ActionEvidenceKind, ActionExecutionBinding, ActionRecoveryBinding,
-    ActionResourceBinding, RegisteredObserverReference, seal_binding,
-)
-from product.backend.core.business_boundary import BusinessRevisionState, ImplementationBindingStatus
+from product.backend.core.preparation.bindings import ActionEvidenceBinding, ActionEvidenceKind, ActionExecutionBinding, ActionRecoveryBinding, ActionResourceBinding, RegisteredObserverReference, seal_binding
+from product.backend.core.boundaries.entities import BusinessRevisionState, ImplementationBindingStatus
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.workflows.business_boundaries.inspection import inspect_action_binding, inspect_actor_binding
 from product.backend.workflows.preparation.models import (
     ActionTechnicalPreparationView, EffectEvidencePreparationView, PreparationItemView,
@@ -29,7 +26,7 @@ from product.backend.workflows.recording.source import (
     identity_source_fingerprint, recording_endpoint_fingerprint, require_persisted_recording_source,
 )
 from product.backend.workflows.test_identities.service import TestIdentityStatus
-from product.backend.core.check_plan import RegisteredEffectProofCapability
+from product.backend.core.checks.plan import RegisteredEffectProofCapability
 
 
 class RegisteredObserverReader(Protocol):

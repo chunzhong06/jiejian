@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 from pydantic import Field
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
-from product.backend.core.business_boundary import ACTION_ID_PATTERN, ACTOR_ID_PATTERN
+from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, ACTOR_ID_PATTERN
 from product.backend.core.identifiers import RECORDING_ID_PATTERN
 from product.backend.workflows.assistant.templates import AssistantTemplateId
 

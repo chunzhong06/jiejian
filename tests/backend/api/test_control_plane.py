@@ -16,9 +16,9 @@ from product.backend.infra.runtime.serve_lock import ServeLock
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.cli.app import app as cli_app
 from product.backend.core.contracts.models import ContractStatus
-from product.backend.core.application_understanding import ActionCandidate, ApplicationUnderstanding, CandidateConfidence, CandidateDecision, CandidateOrigin, RoleCandidate, candidate_id
+from product.backend.core.applications.models import ActionCandidate, ApplicationUnderstanding, CandidateConfidence, CandidateDecision, CandidateOrigin, RoleCandidate, candidate_id
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.test_identity import TestIdentityAuthMethod, TestIdentityCookie
+from product.backend.core.identities.models import TestIdentityAuthMethod, TestIdentityCookie
 from product.backend.core.errors import JiejianError
 from product.backend.core.verification.permissions import PermissionContract
 from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
@@ -59,7 +59,7 @@ def test_control_plane_health_ready_openapi_and_project_restart(tmp_path: Path) 
         assert status.json()["schema_version"] == "1"
         assert status.json()["data"]["version"] == __version__
         assert status.json()["data"]["api"] == "available"
-        assert status.json()["data"]["worker"] == "unavailable"
+        assert status.json()["data"]["worker"] == "stopped"
         assert status.json()["data"]["browser"] in {"available", "unavailable", "unknown"}
         assert status.json()["data"]["environment"]["python"]["executable"]
         assert status.json()["data"]["recovered_jobs"] == 0
@@ -153,7 +153,10 @@ def test_ready_does_not_wait_for_blocked_local_maintenance(tmp_path: Path) -> No
         assert response.json() == {
             "schema_version": "1",
             "status": "ready",
-            "worker": "unavailable",
+            "worker": "stopped",
+            "worker_capabilities": ["CHECK", "RECORDING"],
+            "check": "available",
+            "recovered_jobs": 0,
         }
         assert not hasattr(app.state, "worker_supervisor")
         assert app.state.local_maintenance_task.done() is False

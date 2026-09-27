@@ -128,7 +128,7 @@ def test_each_dormant_table_with_valid_foreign_keys_refuses_before_ddl(tmp_path,
 
 
 def test_nonempty_0003_through_0005_preserves_four_bindings_and_recording_lease(tmp_path):
-    from tests.backend.infra.storage.test_action_resource_ownership import _nonempty_0003
+    from tests.fixtures.legacy_recording import _nonempty_0003
     database, flow = _nonempty_0003(tmp_path)
     raw_flow = flow.read_bytes()
     command.upgrade(migration_config(database), "0004_action_resource_ownership")

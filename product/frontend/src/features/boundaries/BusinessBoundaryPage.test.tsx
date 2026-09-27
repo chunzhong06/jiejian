@@ -3,11 +3,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BusinessBoundaryPage } from './BusinessBoundaryPage'
-import { BoundaryProposalEditor } from './BoundaryProposalEditor'
+import { BoundaryProposalEditor } from './proposals/BoundaryProposalEditor'
 import type { BoundaryProposalCommandDto, BoundaryDraftViewDto } from '../../api/businessBoundaries'
 
 const mockApi = vi.hoisted(() => ({
-  current: vi.fn(), preview: vi.fn(), proposals: vi.fn(), createProposal: vi.fn(),
+  editor: vi.fn(), proposal: vi.fn(), current: vi.fn(), preview: vi.fn(), proposals: vi.fn(), createProposal: vi.fn(),
   maintenanceDraft: vi.fn(), createMaintenanceProposal: vi.fn(), approve: vi.fn(), reject: vi.fn(),
 }))
 
@@ -62,9 +62,35 @@ approvedBoundary.permission_intents = command.proposed_permissions.map((item, in
 approvedBoundary.permission_statuses = approvedBoundary.actions.map((item: any) => ({ action_id: item.action_id, action_revision: 1, permission_semantics_confirmed: true, active_permission_count: 1, stale_permission_count: 0, allow_control_available: true, reason_codes: [] }))
 
 describe('业务边界页面', () => {
+  it('深链只读取指定提案，不自动取最后一份', async () => {
+    const other = {...proposal,proposal_id:`bpr_${'6'.repeat(32)}`}
+    mockApi.proposals.mockResolvedValue({project_id:'app_demo',proposals:[{proposal,decision:null},{proposal:other,decision:null}]})
+    render(<BusinessBoundaryPage project={project} requestedProposalId={proposal.proposal_id} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    await screen.findByRole('heading',{name:'核对本次业务变更'})
+    expect(mockApi.proposal).toHaveBeenCalledWith('app_demo',proposal.proposal_id)
+    expect(mockApi.proposal).not.toHaveBeenCalledWith('app_demo',other.proposal_id)
+  })
+  it('原始基线不可用时即使填写原因并勾选也不能批准', async () => {
+    mockApi.proposals.mockResolvedValue({project_id:'app_demo',proposals:[{proposal,decision:null,review:{basis_state:'UNAVAILABLE',current_state_changed:false,items:[]}}]})
+    render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
+    fireEvent.change(await screen.findByRole('textbox',{name:'确认或放弃原因'}),{target:{value:'已填写原因'}})
+    fireEvent.click(screen.getByRole('checkbox',{name:'我已核对本次变更和沿用的业务要求'}))
+    expect(screen.getByRole('button',{name:'确认这组业务边界'})).toBeDisabled()
+    expect(mockApi.approve).not.toHaveBeenCalled()
+  })
   afterEach(() => cleanup())
   beforeEach(() => {
     vi.clearAllMocks()
+    // 旧场景数据仍用于构造新editor/proposal响应，不是生产端的并行请求。
+    mockApi.editor.mockImplementation(async () => {
+      const boundary = await mockApi.current(), pending = await mockApi.proposals()
+      return { project_id:'app_demo',boundary,preview:await mockApi.preview(),maintenance_draft:boundary.actors.length?await mockApi.maintenanceDraft():null,
+        pending_proposals:pending.proposals.map((p:any)=>({proposal_id:p.proposal.proposal_id,created_at_us:p.proposal.created_at_us,change_summary:p.change_summary??null})),pending_has_more:false }
+    })
+    mockApi.proposal.mockImplementation(async (_project:string,id:string) => {
+      const item=(await mockApi.proposals()).proposals.find((p:any)=>p.proposal.proposal_id===id)
+      return {...item,review:item.review??{basis_state:'COMPLETE',current_state_changed:false,items:[]}}
+    })
     mockApi.current.mockResolvedValue(emptyBoundary)
     mockApi.preview.mockResolvedValue(preview)
     mockApi.proposals.mockResolvedValue({ project_id: 'app_demo', proposals: [] })
@@ -81,6 +107,7 @@ describe('业务边界页面', () => {
     const onError = vi.fn(), onFeedback = vi.fn()
     render(<BusinessBoundaryPage project={project} onError={onError} onFeedback={onFeedback} onStateChanged={vi.fn().mockResolvedValue({ project })} onBack={vi.fn()}/>)
     fireEvent.change(await screen.findByRole('textbox', { name: '确认或放弃原因' }), { target: { value: '确认这些权限要求' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: '我已核对本次变更和沿用的业务要求' }))
     fireEvent.click(screen.getByRole('button', { name: '确认这组业务边界' }))
     expect(await screen.findByText('批准事实已保留，下一步暂时无法读取。请重试读取，不要重复批准。')).toBeInTheDocument()
     expect(mockApi.approve).toHaveBeenCalledTimes(1)
@@ -97,6 +124,7 @@ describe('业务边界页面', () => {
     mockApi.approve.mockRejectedValue(new Error('lost acknowledgement'))
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()}/>)
     fireEvent.change(await screen.findByRole('textbox', { name: '确认或放弃原因' }), { target: { value: '确认权限要求' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: '我已核对本次变更和沿用的业务要求' }))
     fireEvent.click(screen.getByRole('button', { name: '确认这组业务边界' }))
     const read = await screen.findByRole('button', { name: '核对批准结果' })
     mockApi.proposals.mockResolvedValue({ project_id: 'app_demo', proposals: [{ proposal, decision: { decision: 'APPROVED' } }] })
@@ -113,7 +141,7 @@ describe('业务边界页面', () => {
     const button=await screen.findByRole('button',{name:'使用已提供的权限提案'})
     expect(provided).not.toHaveBeenCalled()
     fireEvent.click(button)
-    expect(await screen.findByRole('heading',{name:'待确认业务边界'})).toBeInTheDocument()
+    expect(await screen.findByRole('heading',{name:'核对本次业务变更'})).toBeInTheDocument()
     expect(provided).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button',{name:'确认这组业务边界'})).toBeDisabled()
     expect(mockApi.approve).not.toHaveBeenCalled()
@@ -147,7 +175,7 @@ describe('业务边界页面', () => {
   it('待审 Proposal 不可编辑，返回修改后进入新本地草稿', async () => {
     mockApi.proposals.mockResolvedValue({ project_id: 'app_demo', proposals: [{ proposal, decision: null }] })
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
-    expect(await screen.findByRole('heading', { name: '待确认业务边界' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '核对本次业务变更' })).toBeInTheDocument()
     expect(screen.queryByLabelText('业务主体名称')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '返回修改' }))
     expect(await screen.findAllByLabelText('业务主体名称')).toHaveLength(2)
@@ -217,7 +245,7 @@ describe('业务边界页面', () => {
 
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: '管理业务对象' }))
-    expect(await screen.findByRole('heading', { name: '管理业务对象' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '权限管理' })).toBeInTheDocument()
     expect(screen.queryByText(/write_mode/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '审阅全部变更' }))
 
@@ -239,9 +267,8 @@ describe('业务边界页面', () => {
 
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
 
-    expect(await screen.findByText('新增 1 个业务主体')).toBeInTheDocument()
-    expect(screen.getByText('导出完整项目交付包 → 更新业务版本')).toBeInTheDocument()
-    expect(screen.getByText('负责人允许导出 → 沿用权限')).toBeInTheDocument()
-    expect(screen.getByText('导出完整项目交付包 → 重新绑定到当前源码证据')).toBeInTheDocument()
+    expect(await screen.findByText('新增 1 个角色、0 个动作。')).toBeInTheDocument()
+    expect(screen.getByText('0 项权限更新，1 项权限沿用。')).toBeInTheDocument()
+    expect(screen.getByText('拟采用的当前定位与来源')).toBeInTheDocument()
   })
 })

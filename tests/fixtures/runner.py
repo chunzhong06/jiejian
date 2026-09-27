@@ -101,29 +101,6 @@ def seed_project_from_generated_profile(app: Any, profile_path: Path) -> dict[st
     return record.model_dump(mode="json")
 
 
-def register_test_generated_profile(app: Any, profile_path: Path):
-    """把测试输入放进正式 generated 边界，再走内部登记服务。"""
-
-    profile = parse_web_execution_profile(profile_path.read_bytes())
-    generated = (
-        app.state.context.paths.data
-        / "projects"
-        / profile.project_id
-        / "execution"
-        / "generated"
-    ).resolve()
-    generated.mkdir(parents=True, exist_ok=True)
-    generated_path = generated / f"{profile.profile_id}.json"
-    generated_path.write_bytes(profile_path.read_bytes())
-
-    def validate_generated(record: Any, current: WebExecutionProfile) -> None:
-        Path(record.source_path).resolve().relative_to(generated)
-        assert current.profile_id == profile.profile_id
-
-    app.state.context.execution.set_generated_profile_validator(validate_generated)
-    return app.state.context.execution.register_generated(generated_path)
-
-
 def contract_and_plan() -> tuple[PermissionContract, object]:
     contract = PermissionContract(
         contract_id="runner-contract",
@@ -537,3 +514,13 @@ def write_web_test_profile(
     profile_path.write_bytes(canonical_web_execution_profile_json_bytes(profile))
     contract_path.write_bytes(canonical_json_bytes(contract))
     return profile_path, contract_path
+
+
+def compile_profile_plan(profile, contract, *, engine_version="runner-test"):
+    """构造独立协议样本；显式固定引擎身份，避免发布版本改变历史 golden 输入。"""
+    return build_permission_coverage_plan(contract, engine_version=engine_version,
+        seed=profile.seed, case_budget=profile.case_budget,
+        available_subject_ids=tuple(item.subject_id for item in profile.subject_bindings),
+        available_resource_ids=tuple(item.resource_id for item in contract.resources),
+        available_observations=tuple(item.requirement_id for item in profile.observer_bindings),
+        max_relation_depth=profile.max_relation_depth)

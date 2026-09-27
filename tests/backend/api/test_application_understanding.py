@@ -10,13 +10,13 @@ from product.backend.workflows.application_understanding.endpoints import (
     EndpointProbeObservation,
     TargetEndpointDiscovery,
 )
-from product.backend.core.test_identity import TestIdentityAuthMethod, TestIdentityCookie
+from product.backend.core.identities.models import TestIdentityAuthMethod, TestIdentityCookie
 from product.backend.infra.secrets import credential_ref
 from product.backend.workflows.test_identities import PreparedLoginState
 from product.backend.workflows.business_boundaries.official_recipe import (
     official_boundary_recipe,
 )
-from tests.fixtures.collaboration_golden import InMemorySecretStore
+from tests.fixtures.secrets import InMemorySecretStore
 
 
 def _reachable_discovery(endpoint: str) -> TargetEndpointDiscovery:

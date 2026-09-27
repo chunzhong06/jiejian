@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Query
 from pydantic import Field
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
-from product.backend.workflows.supplemental_contract import SupplementalDocument
+from product.backend.workflows.preparation.supplemental_contract import SupplementalDocument
 
 
 class MaterialPreviewRequest(ApiModel):

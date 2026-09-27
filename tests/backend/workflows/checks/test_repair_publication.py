@@ -6,8 +6,8 @@ from uuid import uuid4
 
 import pytest
 
-from product.backend.core.check_plan import compile_project_check_plan
-from product.backend.core.check_repair import repair_context, verify_current_repair
+from product.backend.core.checks.plan import compile_project_check_plan
+from product.backend.core.checks.repair import repair_context, verify_current_repair
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.infra.artifacts.check_publication import CheckPublisher
 from product.backend.infra.execution.check_executor import CheckExecutor
@@ -19,18 +19,18 @@ from product.backend.workflows.checks.repair import build_current_repair_contrac
 from product.backend.workflows.checks.results import CheckResultReader
 from product.protocols.check_result import CheckAssetReference, CheckRunnerInput, canonical_check_document
 from product.protocols.check_runtime import CheckRuntimeBundle, check_runtime_fingerprint, canonical_check_runtime_bytes
-from product.protocols.execution_v3 import ChangeContext, PersistedExecutionRequestV3, canonical_execution_request_v3_bytes
+from product.protocols.execution_v3 import PersistedExecutionRequestV3, canonical_execution_request_v3_bytes
 from tests.fixtures.check_execution import execution_pair
 from tests.fixtures.check_plan import prepared_action
 from tests.fixtures.runtime_environment import runtime_identity_environment
-from tests.backend.infra.execution.test_check_executor import check_target
+from tests.backend.infra.execution._support_check_executor import check_target
 
 
 def pair(port, *, contract=None, fault=None):
     prepared = (prepared_action(superset=True, state_changing=True), prepared_action(state_changing=True, action_number=2))
     if fault in {"standard", "identity", "subject", "owner", "resource", "permission", "effect"}:
-        from product.backend.core.action_preparation import seal_binding
-        from product.backend.core.assurance import compile_action_assurance
+        from product.backend.core.preparation.bindings import seal_binding
+        from product.backend.core.preparation.requirements import compile_action_assurance
         changed = []
         for item in prepared:
             def binding(value):

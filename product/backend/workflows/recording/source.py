@@ -1,8 +1,8 @@
 # 在录制写入事务内复核正式动作、角色、实现映射和补录来源，拒绝陈旧提交。
 
-from product.backend.core.business_boundary import BusinessRevisionState, ImplementationBindingStatus, boundary_sha256
+from product.backend.core.boundaries.entities import BusinessRevisionState, ImplementationBindingStatus, boundary_sha256
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.workflows.business_boundaries.inspection import inspect_action_binding, inspect_actor_binding
 
 
@@ -144,15 +144,15 @@ def require_persisted_recording_source(work, recording, var_dir):
 
 def _require_assignment(work, request, action):
     from types import SimpleNamespace
-    from product.backend.core.assurance import compile_action_assurance, AssuranceStatus
-    from product.backend.workflows.business_boundaries.service import BusinessBoundaryService
+    from product.backend.core.preparation.requirements import compile_action_assurance, AssuranceStatus
+    from product.backend.workflows.business_boundaries.queries import current_permission_intents
     from product.backend.workflows.preparation.service import PreparationService
     from product.backend.workflows.preparation.demonstrations import legal_demonstrations
     from product.backend.workflows.test_identities.service import TestIdentityStatus
     actors = tuple(item for root in work.business_boundaries.list_actors(action.project_id)
                    if (item := work.business_boundaries.actor_revision(root.actor_id, root.current_revision)) is not None
                    and item.effective_state is BusinessRevisionState.ACTIVE)
-    permissions, _ = BusinessBoundaryService._current_permission_intents(
+    permissions, _ = current_permission_intents(
         work.permission_intents.list_latest(action.project_id), actors, (action,))
     contract = compile_action_assurance(action, permissions, work.action_preparation.allow_controls(action.project_id))
     identities = tuple(SimpleNamespace(

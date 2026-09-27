@@ -18,9 +18,7 @@ from __future__ import annotations
 
 import ast
 
-from product.backend.core.application_understanding import (
-    CandidateConfidence,
-)
+from product.backend.core.applications.models import CandidateConfidence
 from product.backend.core.http_routes import HTTP_METHODS, safe_route_path
 
 

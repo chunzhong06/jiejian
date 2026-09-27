@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import pytest
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingState
+from product.backend.core.recording.models import RecordingState
 from product.protocols import ConfirmFlowDraftResource, ConfirmFlowDraftTarget, ConfirmFlowDraftVariableChoice, flow_draft_source_choice_id
 from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.infra.runtime.jobs.recording import RecordingJobHandler

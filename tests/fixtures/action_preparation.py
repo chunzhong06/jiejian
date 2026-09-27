@@ -9,27 +9,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from product.backend.composition.application import ApplicationCore
-from product.backend.core.application_understanding import (
-    ActionCandidate,
-    CandidateConfidence,
-    CandidateDecision,
-    CandidateEvidence,
-    CandidateOrigin,
-    RoleCandidate,
-    candidate_id,
-)
-from product.backend.core.business_boundary import (
-    ActionImplementationBinding,
-    ActorImplementationBinding,
-    BusinessAction,
-    BusinessActor,
-    boundary_sha256,
-)
+from product.backend.core.applications.models import ActionCandidate, CandidateConfidence, CandidateDecision, CandidateEvidence, CandidateOrigin, RoleCandidate, candidate_id
+from product.backend.core.boundaries.entities import ActionImplementationBinding, ActorImplementationBinding, BusinessAction, BusinessActor, boundary_sha256
 from product.backend.core.errors import JiejianError
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.core.permission_intent import ProjectPolicyState
-from product.backend.core.recording import RecordingPurpose, RecordingState
-from product.backend.core.test_identity import TestIdentity, TestIdentityAuthMethod
+from product.backend.core.boundaries.permissions import ProjectPolicyState
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
+from product.backend.core.identities.models import TestIdentity, TestIdentityAuthMethod
 from product.backend.infra.storage import FlowDraftRevisionRecord, RecordingRecord
 from product.backend.workflows.recording.source import recording_source_fingerprint
 from product.protocols.flow_draft import (

@@ -5,7 +5,7 @@ from uuid import uuid4
 from pathlib import Path
 import pytest
 from product.backend.core.lifecycle import JobState
-from product.backend.core.recording import RecordingState
+from product.backend.core.recording.models import RecordingState
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RecordingEventKind, RecordingRunnerResultType
 from product.backend.workflows.recording.submission import SubmitRecording
@@ -311,11 +311,11 @@ def test_new_recording_rejects_missing_or_foreign_identity(tmp_path, source):
         if source == "deleted":
             context.harness.core.test_identities.delete(request.subject_test_identity_id)
         else:
-            from product.backend.core.business_boundary import BusinessActor, boundary_sha256
+            from product.backend.core.boundaries.entities import BusinessActor, boundary_sha256
             from product.backend.infra.storage import ProjectRecord
             from product.backend.core.lifecycle import ProjectStatus
             from product.backend.workflows.test_identities import PreparedLoginState
-            from product.backend.core.test_identity import TestIdentityAuthMethod
+            from product.backend.core.identities.models import TestIdentityAuthMethod
             from tests.fixtures.assurance import actor
             # 使用同一数据库中真实存在且已准备的外项目身份，隔离项目所有权拒绝原因。
             revision = actor(actor_id="bar_" + "9" * 32).model_copy(update={"project_id": "foreign-project"})

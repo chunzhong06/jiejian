@@ -1,0 +1,33 @@
+# 修改 Observer
+
+> 状态：CURRENT。适用于当前 CHECK 的真实来源读取、业务效果投影与发布证据。
+
+## 快速找到修改位置
+
+| 任务 | 唯一入口 | 直接验证 |
+| --- | --- | --- |
+| 当前 Case/proof 观察调度 | `product/backend/infra/observers/check_runtime.py` | `tests/backend/infra/observers/` |
+| 只读 SQLite、Owner API、审计、任务、Queue、Blob | `product/backend/infra/observers/`，其中 SQLite 为 `product/backend/infra/observers/sqlite.py` | 同目录适配器测试，必要时真实 Sample |
+| 已授权描述与来源接线 | `product/backend/workflows/checks/local_observer_wiring.py`、`product/backend/workflows/checks/runtime_bundle.py` | `tests/backend/workflows/` 中当前 observer wiring 和 runtime bundle 测试 |
+| Envelope 投影为业务效果 | `product/backend/infra/observers/effect_projector.py` | `tests/backend/infra/observers/` |
+| Trace 与权限范围 | `product/backend/infra/observers/check_trace.py` | `tests/backend/infra/execution/test_check_trace.py` |
+| 观察协议、严格解析与 canonical | `product/protocols/observer/` | `tests/protocols/observer/` |
+| 发布与结果解释 | `product/backend/infra/execution/check_executor.py`、`product/backend/workflows/checks/story.py` | `tests/backend/infra/runtime/jobs/test_check_audit_scope_publication.py` |
+
+## 修改路线
+
+先确认冻结 `CheckRuntimeBundle` 中本 Case 的 proof、scope、来源与角色，再修改 adapter 或 projector。adapter 只形成受预算约束的事实；`EffectProjector.project_check` 解释事实能否证明具体业务效果；只有 `core/verification/checks.py` 裁决三态。来源新增时同步严格模型、接线、准备检查、实际执行、证据发布与只读展示，不能只增加页面标签。
+
+`VERDICT_REQUIRED` 是必需证明，`SUPPORTING` 和 `DIAGNOSIS_REQUIRED` 保持辅助角色。实际身份来自同一会话的独立核验，不从 Trace 或计划身份补值。官方导出的决定性来源是 ZIP；后台任务完成或派发成功不等于 ZIP 已形成。
+
+每个 Case/proof 独立保留游标和观察历史。审计 AFTER/EVENTUAL 回读同一个 BEFORE 锚点；空尾段不是闭合证明。任务可信终态、非空 task_id 和精确关联只能形成私有 execution_completed。只有来源完整、可靠、相关且观察窗口闭合，缺失才可作为不存在证明；观察失败不能解释为安全。辅助来源失败不能抹去独立必需来源已经确认的禁止效果。
+
+结构化 Trace 只接受显式关联与允许字段；范围数组、大小预算和 canonical 规则见[Observer 协议](../../参考/协议/Observer观察协议.md)。不按时间相邻、列表顺序或名称相似补因果边。权限断裂修改见[诊断指南](修改权限断裂诊断.md)。
+
+Queue 只读 Peek，Blob 只读已授权 namespace，SQLite 只读，Owner 只注入精确受控身份。秘密和原始敏感正文不得进入 Envelope、Evidence、日志或异常。Evidence 的事实排序与 canonical/hash 必须遵循同一模型规则，避免跨进程摘要漂移。
+
+## 验证与排障
+
+经 `dev.ps1 test` 选择表中直接测试；公共模型变动再同步 Schema 并验证 reader。403 后 BLOCK 可以是正确结果；先查决定性效果。相同证据摘要漂移查规范排序；NOT_FOUND 异常查闭合、分页和关联；辅助错误盖过 BLOCK 查角色消费。真实进程与来源组合按[验证](../验证.md)选择 L5，不能用预设返回或页面颜色代替证据。
+
+共享 Observer 独立格式及底层消费者仍保留；其 `EffectBinding.required_channels/corroborating_channels` 不是当前 CHECK 页面角色。需要维护该独立格式时才读协议的相应章节，不恢复已退役的 SecuritySetup 装配。

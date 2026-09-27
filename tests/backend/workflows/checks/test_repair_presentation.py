@@ -3,7 +3,7 @@ from types import SimpleNamespace as N
 
 import pytest
 
-from product.backend.core.check_repair import repair_context
+from product.backend.core.checks.repair import repair_context
 from product.backend.core.errors import JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
 from product.backend.workflows.checks.repair import build_current_repair_contract

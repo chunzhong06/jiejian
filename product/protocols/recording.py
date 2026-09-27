@@ -38,8 +38,8 @@ from product.backend.core.identifiers import (
     RECORDING_ID_PATTERN,
     TEST_IDENTITY_ID_PATTERN,
 )
-from product.backend.core.business_boundary import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
-from product.backend.core.recording import RecordingPurpose, RecordingState, RecordingStateEvent
+from product.backend.core.boundaries.entities import ACTION_ID_PATTERN, EFFECT_ID_PATTERN
+from product.backend.core.recording.models import RecordingPurpose, RecordingState, RecordingStateEvent
 from product.protocols.web.target import WebTargetScope
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.redaction import REDACTED

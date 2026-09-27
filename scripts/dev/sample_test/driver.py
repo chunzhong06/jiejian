@@ -20,7 +20,10 @@ if __package__ in {None, ""}:
     __package__ = "scripts.dev.sample_test"
 
 from . import official
-from .validation import build_presentation_summary, run_validation_suite
+from .harness.state import SampleTestError
+from .reporting.diagnostics import _failure_identity
+from .validation.summary import build_presentation_summary
+from .validation.suite import run_validation_suite
 
 
 SUITES = ("official", "validation", "competition", "all")
@@ -55,7 +58,7 @@ def run_suite(
         summary = run_validation_suite(root, validation_dir, repetitions=1)
         _publish_summary(publish_summary, summary)
         return
-    raise official.SampleTestError("SAMPLE_TEST_SUITE_INVALID")
+    raise SampleTestError("SAMPLE_TEST_SUITE_INVALID")
 
 
 def main() -> int:
@@ -76,7 +79,7 @@ def main() -> int:
                 publish_summary=arguments.publish_summary,
             )
     except Exception as exc:
-        code, summary = official._failure_identity(exc)
+        code, summary = _failure_identity(exc)
         print(f"sample-test failed: {code}: {summary}", file=sys.stderr, flush=True)
         return 1
     return 0

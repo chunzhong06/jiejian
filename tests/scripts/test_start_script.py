@@ -78,6 +78,7 @@ def test_product_start_prepares_current_repository_without_wheel() -> None:
     source = _text(START)
     assert '"source.ps1"' in source
     assert "Prepare-SourceRuntime" in source
+    assert '[string]$Mode = "Gui"' in source
     assert "Confirm-SourceFrontend" in source
     assert "Release" not in source
     assert "Wheel" in source

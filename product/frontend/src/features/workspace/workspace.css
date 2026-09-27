@@ -1,0 +1,255 @@
+/* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
+.workbench-context-grid {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: var(--space-40);
+  margin-block: var(--space-32);
+  margin-top: 36px;
+  display: block;
+  border-top: 1px solid var(--color-border);
+  padding-top: 23px;
+}
+
+.workbench-context-grid>section {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.workbench-context-grid>section+section {
+  border-left: 1px solid var(--color-border);
+  padding-left: var(--space-40);
+}
+
+.workbench-context-grid h2 {
+  font-weight: 600;
+  margin: 0 0 var(--space-12);
+  font-size: 15px;
+}
+
+.workbench-context-grid p {
+  margin: var(--space-8) 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.workbench-context-grid .ant-btn-link {
+  padding-left: 0;
+}
+
+.workbench-context-grid small {
+  display: block;
+  color: var(--color-secondary);
+}
+
+@media(max-width:760px) {
+  .workbench-context-grid {
+    grid-template-columns: minmax(0,1fr);
+    gap: var(--space-24);
+  }
+}
+
+@media(max-width:760px) {
+  .workbench-context-grid>section+section {
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+    padding: var(--space-24) 0 0;
+  }
+}
+
+.work-task-grid {
+  display: grid;
+  margin-top: 0;
+  gap: var(--space-32);
+  grid-template-columns: minmax(0,1fr) 228px;
+}
+
+.work-task-sheet {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-large);
+  padding: 28px 30px 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-focus);
+}
+
+.task-responsibility {
+  font-size: 19px;
+  line-height: 1.85;
+  color: var(--color-text);
+  margin: 22px 0 26px;
+}
+
+.task-business-context {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+  border-top: 1px solid var(--color-border);
+  padding: 18px 0;
+}
+
+.task-business-context span {
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.task-completion>span {
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.task-business-context strong {
+  font-size: 16px;
+}
+
+.task-completion {
+  border-top: 1px solid var(--color-border);
+  padding: 18px 0;
+}
+
+.task-completion p {
+  font-size: 13px;
+  margin: 7px 0 0;
+  color: var(--color-secondary);
+}
+
+.work-task-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0 -30px;
+  padding: 20px 30px;
+  background: var(--color-surface-subtle);
+  border-top: 1px solid var(--color-border);
+}
+
+.work-task-footer p {
+  font-size: 12px;
+  line-height: 1.8;
+  flex: 1;
+  min-width: 180px;
+  color: var(--color-secondary);
+  margin: 0;
+}
+
+.task-unavailable {
+  color: var(--color-warning);
+  font-size: 13px;
+}
+
+.work-task-journey .task-journey {
+  padding: 12px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.work-task-journey .task-journey-heading {
+  display: block;
+  margin-bottom: 22px;
+}
+
+.work-task-journey .task-journey-heading strong {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-secondary);
+}
+
+.work-task-journey .task-journey-heading>span {
+  display: none;
+}
+
+.work-task-journey ol {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.work-task-journey li {
+  font-size: 13px;
+  min-height: 40px;
+  position: relative;
+}
+
+.work-task-journey li:not(:last-child):after {
+  content: '';
+  position: absolute;
+  top: 30px;
+  bottom: -10px;
+  left: 11px;
+  width: 1px;
+  background: var(--color-border);
+}
+
+@media(min-width:1900px) {
+  .work-task-grid {
+    grid-template-columns: minmax(0,1fr) 270px;
+    gap: 48px;
+  }
+}
+
+@media(min-width:1900px) {
+  .work-task-sheet {
+    padding: 34px 36px 0;
+  }
+}
+
+@media(min-width:1900px) {
+  .work-task-footer {
+    margin: 0 -36px;
+    padding: 22px 36px;
+  }
+}
+
+@media(max-width:1100px) {
+  .work-task-grid {
+    grid-template-columns: minmax(0,1fr) 185px;
+    gap: 24px;
+  }
+}
+
+@media(max-width:760px) {
+  .work-task-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media(max-width:760px) {
+  .work-task-sheet {
+    padding: 22px 24px 0;
+  }
+}
+
+@media(max-width:760px) {
+  .work-task-footer {
+    margin: 0 -24px;
+    padding: 18px 24px;
+  }
+}
+
+@media(max-width:760px) {
+  .task-responsibility {
+    font-size: 17px;
+  }
+}
+
+@media(max-width:760px) {
+  .work-task-journey ol {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+@media(max-width:760px) {
+  .work-task-journey li:not(:last-child):after {
+    display: none;
+  }
+}
+
+@media(max-width:760px) {
+  .work-task-journey .task-journey-heading {
+    margin-bottom: 14px;
+  }
+}

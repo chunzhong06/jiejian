@@ -66,6 +66,10 @@ export type PrimaryTaskKind =
 export type PrimaryTaskDto = {
   task_id: string
   task_kind: PrimaryTaskKind
+  proposal_id?: string | null
+  action_label?: string
+  completion_criteria?: string
+  unavailable_reason?: string | null
   business_action_id: string | null
   business_actor_id: string | null
   title: string

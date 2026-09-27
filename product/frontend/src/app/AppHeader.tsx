@@ -7,7 +7,7 @@ import type { LLMProfile, AIAssistanceSettings } from '../api/llm'
 import type { MCPAccessView } from '../api/mcp'
 import type { ProjectDto } from '../api/projects'
 import type { SystemStatus } from '../api/system'
-import { ApplicationSwitcher } from '../components/ApplicationSwitcher'
+import { ApplicationSwitcher } from './navigation/ApplicationSwitcher'
 import { useThemeMode, type ThemeMode } from './ThemeContext'
 
 export function aiStatusLabel(
@@ -55,7 +55,6 @@ type AppHeaderProps = {
   systemStatus: SystemStatus
   onSelectProject: (project: ProjectDto) => void
   onConnectNew: () => void
-  onRemoveCurrent: () => void
   onNavigate: (path: string) => void
   aiLabel: string
   onOpenAI: () => void
@@ -70,7 +69,6 @@ export function AppHeader({
   systemStatus,
   onSelectProject,
   onConnectNew,
-  onRemoveCurrent,
   onNavigate,
   aiLabel,
   onOpenAI,
@@ -91,7 +89,7 @@ export function AppHeader({
   const compactMcpLabel = mcpConnected ? `${mcpStatus?.client_name?.trim() || 'Agent'} · 已连接` : 'Agent · 未连接'
   return <Layout.Header className="topbar">
     <div className="topbar-left">
-      <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} onRemoveCurrent={onRemoveCurrent} onEnvironment={() => onNavigate('/environment')} />
+      <ApplicationSwitcher projects={projects} selected={selected} onSelect={onSelectProject} onConnectNew={onConnectNew} />
 
     </div>
     <Space className="topbar-tools" size="small">

@@ -6,7 +6,7 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
-from product.backend.core.check_plan import classify_http_resource_presence
+from product.backend.core.checks.plan import classify_http_resource_presence
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.observers.coordinator import ObserverCoordinator, default_observer_registry
 from product.backend.infra.observers.effect_projector import EffectProjector, _target_projection

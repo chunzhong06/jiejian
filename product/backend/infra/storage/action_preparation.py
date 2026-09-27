@@ -8,11 +8,9 @@ from collections.abc import Sequence
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, ForeignKeyConstraint, Integer, PrimaryKeyConstraint, String, Text, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from product.backend.core.action_preparation import (
-    ActionEvidenceBinding, ActionExecutionBinding, ActionRecoveryBinding, ActionResourceBinding,
-)
+from product.backend.core.preparation.bindings import ActionEvidenceBinding, ActionExecutionBinding, ActionRecoveryBinding, ActionResourceBinding
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.core.assurance import ActionAllowControlBinding
+from product.backend.core.preparation.requirements import ActionAllowControlBinding
 from product.backend.infra.storage.base import Base, _canonical_json, _flush, _scalar, _scalars, ensure_storage_payload_safe
 
 

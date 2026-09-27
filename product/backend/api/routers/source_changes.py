@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query
 
 from pydantic import Field
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
-from product.backend.core.check_repair import CurrentRepairReference
+from product.backend.core.checks.repair import CurrentRepairReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.composition import ApplicationCore
 

@@ -1,7 +1,20 @@
-/* 业务流程页：保持录制选择、当前操作和业务摘要的清晰层级。 */
+/* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
+.recording-summary .ant-card-body {
+  display: grid;
+  gap: var(--space-16);
+}
 
-.recording-summary .ant-card-body { display: grid; gap: var(--space-16); }
-.recording-page .recording-capture-guide { background: transparent; border-color: var(--color-border); }
+.recording-page .recording-capture-guide {
+  background: transparent;
+  border-color: var(--color-border);
+}
 
+.recording-capture {
+  padding-block: var(--space-16);
+  border-top: var(--line-width) solid var(--color-border);
+}
 
-.recording-capture, .recording-review { padding-block: var(--space-16); border-top: var(--line-width) solid var(--color-border); }
+.recording-review {
+  padding-block: var(--space-16);
+  border-top: var(--line-width) solid var(--color-border);
+}

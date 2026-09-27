@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.core.permission_intent import PermissionIntentRelation
-from product.backend.core.permission_semantics import PermissionExpectation
-from product.backend.core.recording import RecordingPurpose, RecordingState
+from product.backend.core.boundaries.permissions import PermissionIntentRelation
+from product.backend.core.boundaries.semantics import PermissionExpectation
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.workflows.preparation.models import PreparationStatus as Status
 from tests.fixtures.action_preparation import add_recording, build_preparation_harness
 from tests.fixtures.assurance import permission
@@ -324,7 +324,7 @@ def test_task_fingerprint_changes_for_endpoint_source_and_recording_state(harnes
 def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
     from product.backend.core.lifecycle import RunVerdict
     from product.backend.workflows.projects.repair import ProjectRepair, CurrentRepairTask
-    from tests.backend.core.test_check_repair import contract_and_new
+    from tests.backend.core._support_check_repair import contract_and_new
     from tests.fixtures.check_service import ready_check_harness
     h = ready_check_harness(tmp_path)
     try:

@@ -46,6 +46,18 @@ def _forbidden_imports(path: Path, prefixes: tuple[str, ...]) -> set[str]:
     }
 
 
+def test_tests_share_support_modules_instead_of_importing_peer_tests() -> None:
+    """测试可共用 fixture/support，但不能依靠另一份测试的加载顺序或内部函数。"""
+    violations = []
+    for path in _python_files(ROOT / "tests"):
+        for imported in _imports(path):
+            if (imported.startswith("tests.") or imported.startswith("test_")) and any(
+                part.startswith("test_") for part in imported.split(".")
+            ):
+                violations.append((path.relative_to(ROOT).as_posix(), imported))
+    assert violations == []
+
+
 def test_core_and_protocol_dependencies_preserve_boundaries() -> None:
     core_forbidden = ("product.backend.workflows", "product.backend.infra", "product.backend.api", "product.backend.cli", "fastapi", "sqlalchemy", "httpx", "playwright")
     for path in _python_files(BACKEND / "core"):
@@ -131,7 +143,7 @@ def test_infrastructure_does_not_construct_concrete_workflow_services() -> None:
 
 
 def test_official_scenario_uses_services_instead_of_storage_records() -> None:
-    installer = BACKEND / "workflows" / "official_scenario.py"
+    installer = BACKEND / "workflows" / "examples" / "materials.py"
 
     assert not _forbidden_imports(
         installer,

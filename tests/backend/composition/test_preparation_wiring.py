@@ -29,7 +29,7 @@ def test_core_constructs_preparation_readers_without_starting_processes(tmp_path
         core.close()
 
 
-@pytest.mark.parametrize("failure", ["worker", "manager", None])
+@pytest.mark.parametrize("failure", ["worker", "sample", "manager", "secrets", None])
 def test_core_close_orders_resources_and_does_not_dispose_after_failure(failure):
     events = []
     core = ApplicationCore.__new__(ApplicationCore)
@@ -40,16 +40,19 @@ def test_core_close_orders_resources_and_does_not_dispose_after_failure(failure)
                 raise JiejianError(ErrorCode.PROCESS_TREE_FAILED, "注入关闭失败")
         return invoke
     core.worker = SimpleNamespace(stop=step("worker"))
+    core.official_experience = SimpleNamespace(close=step("sample"))
+    core.secret_store = SimpleNamespace(clear=step("secrets"))
     core.identity_preparations = SimpleNamespace(close=step("manager"))
     core.runtime_secrets = SimpleNamespace(clear=step("vault"))
     core.engine = SimpleNamespace(dispose=step("engine"))
     if failure:
         with pytest.raises(JiejianError):
             core.close()
-        assert events == (["worker"] if failure == "worker" else ["worker", "manager"])
+        order = ["worker", "sample", "manager", "vault", "secrets", "engine"]
+        assert events == order[:order.index(failure) + 1]
     else:
         core.close()
-        assert events == ["worker", "manager", "vault", "engine"]
+        assert events == ["worker", "sample", "manager", "vault", "secrets", "engine"]
 
 
 def test_manager_cleanup_failure_protects_active_paths_and_engine(tmp_path, monkeypatch):

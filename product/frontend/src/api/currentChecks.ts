@@ -77,6 +77,14 @@ export type CheckHistoryCursor = { created_at_us: number; run_id: string }
 export type CheckHistoryItem = { status: CheckStatus; action_labels: string[]; change_id: string | null; source_run_id: string | null }
 export type CheckHistoryPage = { project_id: string; items: CheckHistoryItem[]; next_cursor: CheckHistoryCursor | null }
 export type CheckHistoryQuery = { query?: string; verdict?: CheckVerdict; lifecycle?: CheckStatus['run']['lifecycle']; cursor?: CheckHistoryCursor | null }
+const statusReads = new Map<string, Promise<CheckStatus>>()
+function readStatus(id: string) {
+  const existing = statusReads.get(id)
+  if (existing) return existing
+  const pending = request<CheckStatus>(runPath(id)).finally(() => { if (statusReads.get(id) === pending) statusReads.delete(id) })
+  statusReads.set(id, pending)
+  return pending
+}
 export const currentChecksApi = {
   history: (id: string, options: CheckHistoryQuery = {}) => {
     const query = new URLSearchParams({ limit: '25' })
@@ -92,7 +100,7 @@ export const currentChecksApi = {
     method: 'POST', body: JSON.stringify({ schema_version: '2', expected_plan_fingerprint: fingerprint, idempotency_key: key, ...(changeId ? { change_id: changeId } : {}) }),
   }),
   cancel: (jobId: string) => request(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
-  status: (id: string) => request<CheckStatus>(runPath(id)),
+  status: readStatus,
   story: (id: string) => request<ResultStory>(`${runPath(id)}/result-story`),
   evidence: async (runId: string, evidenceId: string) => {
     const value = await request<CheckEvidence>(`${runPath(runId)}/evidence/${encodeURIComponent(evidenceId)}`)

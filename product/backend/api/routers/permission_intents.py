@@ -21,7 +21,7 @@ from typing import Literal
 from fastapi import APIRouter
 from pydantic import Field, field_validator
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
-from product.backend.core.permission_intent import PermissionIntentRelation
+from product.backend.core.boundaries.permissions import PermissionIntentRelation
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.composition import ApplicationCore
 
