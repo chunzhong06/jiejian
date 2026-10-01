@@ -1,6 +1,7 @@
 # 唯一 Official 实例的受控 MCP 责任验收；秘密仅在 SDK 会话内存，副作用回执未知不重发。
 from contextlib import ExitStack, asynccontextmanager
 from functools import partial
+from uuid import uuid4
 
 from . import current_api
 
@@ -162,14 +163,25 @@ def run(client, gui, project, runs, state, *, session_factory=SDKSession):
                 _error("MCP_READ_PROJECT_MISMATCH")
             if preview.get("action_count") != 2 or preview.get("case_count") != 3 or preview.get("can_execute") is not True:
                 _error("MCP_FULL_PLAN_UNAVAILABLE")
-            _deny_without_writes(session, client, project, "jiejian_change_submit", {"project_id": project, "reason": REASON, "claimed_paths": []})
+            registration = _call(session, "jiejian_change_registration_preview", {"project_id": project})
+            if registration.get("project_id") != project or registration.get("permission_count") != 3 or not registration.get("fingerprint"):
+                _error("MCP_REGISTRATION_SCOPE_MISMATCH")
+            _deny_without_writes(session, client, project, "jiejian_change_register", {"project_id": project,
+                "operation_id": uuid4().hex, "expected_registration_fingerprint": registration["fingerprint"],
+                "reason": REASON, "claimed_paths": []})
             gui.mcp_level(project, "PREPARE")
             _deny_without_writes(session, client, project, "jiejian_check_run", {"project_id": project, "idempotency_key": "official-mcp-denied"})
             prior = _snapshot(client, project)
-            change = _call(session, "jiejian_change_submit", {"project_id": project, "reason": REASON, "claimed_paths": []})
-            change_id = change.get("change_id")
+            operation_id = uuid4().hex
+            # 默认流程直接登记变化；兼容任务接口另有测试，不恢复手工建任务/接单前置。
+            receipt = _call(session, "jiejian_change_register", {"project_id": project, "reason": REASON, "claimed_paths": [],
+                "expected_registration_fingerprint": registration["fingerprint"], "operation_id": operation_id})
+            change_id = receipt.get("change_id")
+            if receipt.get("operation_id") != operation_id or receipt.get("status") != "SUCCEEDED":
+                _error("MCP_DELIVERY_RECEIPT_MISMATCH")
+            change = _call(session, "jiejian_change_show", {"project_id": project, "change_id": change_id}).get("change") or {}
             if (change.get("project_id") != project or not isinstance(change_id, str)
-                    or change.get("submitted_by") != "MCP · " + CLIENT_NAME or change.get("reason") != REASON
+                    or change.get("submitted_by") not in {"MCP · " + CLIENT_NAME, "MCP Agent"} or change.get("reason") != REASON
                     or any(change.get(key) != [] for key in ("claimed_paths", "added_paths", "modified_paths", "removed_paths"))):
                 _error("MCP_CHANGE_FACTS_MISMATCH")
             current = _snapshot(client, project)

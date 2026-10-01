@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from contextvars import ContextVar
 from typing import Any, TypeVar
 
 from mcp import MCPError
@@ -27,11 +28,14 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from product.backend import __version__
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.development import OperationId, OperationKind
+from product.backend.core.checks.repair import CurrentRepairReference
 from product.backend.infra.runtime.diagnostics import runtime_environment_details
 from product.backend.workflows.agent_access.service import MCPAccessController, MCPAccessLevel
 
 
 _T = TypeVar("_T")
+_REQUEST_CLIENT: ContextVar[str | None] = ContextVar("jiejian_mcp_request_client", default=None)
 _ACCESS_ERROR_CODES = {
     ErrorCode.MCP_DISABLED.value: -32041,
     ErrorCode.MCP_AUTH_REQUIRED.value: -32042,
@@ -138,6 +142,7 @@ def _current_repair_view(contract):
 
 def _current_story_view(story):
     return dict(run_id=story.run_id,project_id=story.project_id,verdict=story.verdict,judgement=story.judgement,
+        runtime_status=story.runtime_status,runtime_instance_id=story.runtime_instance_id,
         actions=[dict(case_id=item.case_id,display_name=item.display_name,judgement=item.judgement,
             permission_expectation=item.permission.expectation,fact_comparison=_json(item.fact_comparison),
             breakpoint=None if item.breakpoint is None else dict(breakpoint_type=item.breakpoint.breakpoint_type,precision=item.breakpoint.precision),
@@ -217,7 +222,13 @@ def build_mcp_control(
             tool = next((item for item in await server.list_tools() if item.name == request.params.get("name")), None)
             if tool is not None and isinstance(arguments, Mapping) and set(arguments) - set(tool.input_schema.get("properties", {})):
                 raise _as_mcp_error(JiejianError(ErrorCode.STATE_PRECONDITION, "MCP 工具包含未声明参数"))
-        result = await call_next(request)
+        # 名称来自当前请求会话；不能把上一位活跃客户端误写为本次交付来源。
+        initial_params = request.session.client_params
+        name_token = _REQUEST_CLIENT.set(None if initial_params is None else initial_params.client_info.name[:122])
+        try:
+            result = await call_next(request)
+        finally:
+            _REQUEST_CLIENT.reset(name_token)
         params = request.session.client_params
         access.note_activity(
             None if params is None else params.client_info.name,
@@ -229,7 +240,10 @@ def build_mcp_control(
         "界鉴 JIEJIAN",
         description="界鉴本地权限检查与代码变化协作入口；权限规则只能由本机GUI批准。",
         instructions=(
-            "READ读取既有事实；PREPARE只登记代码变化声明，界鉴重新核对实际源码；"
+            "READ读取批准权限和既有事实；PREPARE可在原客户端完成修改后登记源码变化。"
+            "先读取 business_boundary 沿用已批准权限；开发需求继续在原客户端沟通。旧 task 工具保留给明确使用任务上下文的兼容流程，不作为日常登记前置。"
+            "日常修改先 change_registration_preview 核对范围，再 change_register 携带返回指纹与 operation_id 一次登记，无需另建任务或接单。响应不明确先 receipt_show 用 DELIVER 查询原键；change_submit 保留给已有明确任务上下文的客户端。"
+            "登记成功不表示检查通过；普通功能目标不纳入权限结论。"
             "EXECUTE按完整当前权限运行检查或取消本项目检查；需要人类决定时返回界鉴，不修改权限或检查结论。"
         ),
         version=__version__,
@@ -312,14 +326,84 @@ def build_mcp_control(
         return {"project_id":project_id,"status":value.status,"tasks":[{"status":item.status,"change_id":item.change_id,
             "run_id":item.run_id,"requirement":_current_repair_view(item.contract)} for item in value.tasks]}
 
+    @server.tool(name="jiejian_change_registration_preview", structured_output=True)
+    def change_registration_preview(ctx: Context, project_id: str) -> dict[str, Any]:
+        """读取登记指纹和当前已批准权限范围；不创建开发任务或执行检查。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        return _json(_invoke(lambda: context.development.registration_preview(project_id)))
+
+    @server.tool(name="jiejian_change_register", structured_output=True)
+    def change_register(ctx: Context, project_id: str, operation_id: OperationId,
+        expected_registration_fingerprint: str, reason: str = "本地源码修改",
+        claimed_paths: list[str] | None = None, repair_reference: CurrentRepairReference | None = None) -> dict[str, Any]:
+        """一次登记修改，无需另行建任务或接单；回执未知时按 DELIVER 与原 operation_id 查询。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
+        name = _REQUEST_CLIENT.get()
+        submitted_by = "MCP Agent" if name is None else "MCP · " + name[:122]
+        return _json(_invoke(lambda: context.development.register_change(project_id, operation_id=operation_id,
+            expected_registration_fingerprint=expected_registration_fingerprint, reason=reason,
+            claimed_paths=claimed_paths or (), repair_reference=repair_reference, submitted_by=submitted_by)))
+
     @server.tool(name="jiejian_change_submit",structured_output=True)
-    def change_submit(ctx: Context, project_id: str, reason: str, claimed_paths: list[str] | None = None,
-        repair_reference: dict[str,str] | None = None) -> dict[str,Any]:
+    def change_submit(ctx: Context, project_id: str, task_id: str, context_id: str,
+        operation_id: OperationId, expected_version: int, reason: str, claimed_paths: list[str] | None = None,
+        repair_reference: CurrentRepairReference | None = None) -> dict[str,Any]:
         require_mcp_level(access,ctx,MCPAccessLevel.PREPARE,project_id=project_id)
-        name = access.view().client_name
+        name = _REQUEST_CLIENT.get()
         submitted_by = "MCP Agent" if name is None else "MCP · "+name[:122]
-        return _current_change_view(_invoke(lambda:context.source_changes.submit(project_id,reason=reason,
-            claimed_paths=claimed_paths or (),repair_reference=repair_reference,submitted_by=submitted_by)))
+        return _json(_invoke(lambda:context.development.deliver(project_id, task_id,
+            operation_id=operation_id, expected_version=expected_version, context_id=context_id, reason=reason,
+            claimed_paths=claimed_paths or (), repair_reference=repair_reference, submitted_by=submitted_by)))
+
+    @server.tool(name="jiejian_task_list", structured_output=True)
+    def task_list(ctx: Context, project_id: str, limit: int = 50) -> dict[str, Any]:
+        """读取应用内已有任务；结束状态不表示安全结论。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        return {"tasks": _json(_invoke(lambda: context.development.list(project_id, limit=limit)))}
+
+    @server.tool(name="jiejian_task_show", structured_output=True)
+    def task_show(ctx: Context, project_id: str, task_id: str | None = None) -> dict[str, Any]:
+        """读取精确任务；未指定时返回当前未结束任务。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        task = _invoke(lambda: context.development.active(project_id) if task_id is None else context.development.task(project_id, task_id))
+        if task is None:
+            return {"task": None, "deliveries": [], "latest_verification": None}
+        view = _invoke(lambda: context.development.view(project_id, task.task_id))
+        verification = view["latest_verification"]
+        return {"task": _json(task), "acceptance": view["acceptance"], "deliveries": [{key: item[key] for key in ("delivery_id", "context_id", "ordinal", "change_id", "created_at_us")} for item in view["deliveries"]],
+            "has_more": view["has_more"], "latest_verification": None if verification is None else {key: verification[key] for key in ("run_id", "lifecycle", "verdict", "runtime_status", "repair_status")}}
+
+    @server.tool(name="jiejian_task_context", structured_output=True)
+    def task_context(ctx: Context, project_id: str, context_id: str) -> dict[str, Any]:
+        """读取不可变开工上下文；权限正文按 intent_id/revision 从既有权限工具回读。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        value = _invoke(lambda: context.development.context(project_id, context_id))
+        payload = value.model_dump(mode="json", exclude={"source_fingerprint", "start_snapshot_id"})
+        payload["boundary"] = "仅列已批准权限引用；目标文本及客户端自测不构成界鉴权限结论。"
+        return payload
+
+    @server.tool(name="jiejian_task_create", structured_output=True)
+    def task_create(ctx: Context, project_id: str, operation_id: OperationId, title: str, goal: str, expected_version: int = 0) -> dict[str, Any]:
+        """登记一个轻量开发任务，不能替代用户批准权限。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
+        return _json(_invoke(lambda: context.development.create(project_id, operation_id=operation_id,
+            expected_version=expected_version, title=title, goal=goal)))
+
+    @server.tool(name="jiejian_task_accept", structured_output=True)
+    def task_accept(ctx: Context, project_id: str, task_id: str, operation_id: OperationId,
+        expected_version: int, context_id: str) -> dict[str, Any]:
+        """客户端确认已读取本次上下文；不会自动开始编码或执行检查。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.PREPARE, project_id=project_id)
+        name = _REQUEST_CLIENT.get()
+        client_name = "MCP Agent" if name is None else "MCP · " + name
+        return _json(_invoke(lambda: context.development.accept(project_id, task_id, operation_id=operation_id,
+            expected_version=expected_version, context_id=context_id, client_name=client_name)))
+
+    @server.tool(name="jiejian_receipt_show", structured_output=True)
+    def receipt_show(ctx: Context, project_id: str, kind: OperationKind, operation_id: OperationId) -> dict[str, Any]:
+        """响应不明确时按原操作键查询；无成功回执不能证明从未开始，勿生成新键重试。"""
+        require_mcp_level(access, ctx, MCPAccessLevel.READ, project_id=project_id)
+        return {"receipt": _json(_invoke(lambda: context.development.receipt(project_id, kind, operation_id)))}
 
     @server.tool(name="jiejian_check_run",structured_output=True)
     def check_run(ctx: Context, project_id: str, idempotency_key: str, change_id: str | None = None) -> dict[str,Any]:

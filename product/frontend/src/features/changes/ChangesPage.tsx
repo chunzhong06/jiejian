@@ -1,162 +1,83 @@
-// 当前变化与原题修复：只展示服务端事实，显式提交声明并保留精确复验关联。
-import { Alert, Button, Empty, Form, Input, Select, Space, Spin, Typography } from 'antd'
-import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+// 修改记录是界鉴的协作入口；不承载开发聊天和接单流程，只读精确变化、检查与原问题。
+import { Button, Empty, Spin } from 'antd'
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { WorkPageVisible } from '../../app/RetainedWorkPages'
+import { useLiveRead } from '../../app/useLiveRead'
 import { ApiError } from '../../api/http'
 import type { ProjectDto } from '../../api/projects'
 import { sourceChangesApi, type SourceChangeViewDto } from '../../api/sourceChanges'
-import { repairsApi, repairLabels, repairReference, type ProjectRepair } from '../../api/repairs'
-import { formatTimestamp } from '../../app/presentation'
-import { workspaceApi } from '../../api/workspace'
-import { taskDestination } from '../../app/taskDestination'
+import { developmentApi, type DeliveryDetails, type DevelopmentView } from '../../api/development'
+import { repairsApi, repairLabels, type ProjectRepair } from '../../api/repairs'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
-import { AgentNavigation } from '../../app/navigation/AgentNavigation'
+import { formatTimestamp } from '../../app/presentation'
+import { DeliveryFacts } from './DeliveryFacts'
 import { RepairDelivery } from './RepairDelivery'
-import { CheckOutlined, FileTextOutlined, CodeOutlined } from '@ant-design/icons'
 import { SourceIdentityPanel } from './SourceIdentityPanel'
+import { ChangeRegistration } from './ChangeRegistration'
+import { ChangeRuntimeAction } from './ChangeRuntimeAction'
 import './delivery.css'
-import '../results/testing.css'
 import './changes.css'
-import { useLiveRead } from '../../app/useLiveRead'
+import './collaboration.css'
+import './lightweight.css'
 
-const revalidationLabels = { READY: '源码与权限仍有效', NO_BASELINE: '缺少可比较的源码基线', SOURCE_STALE: '源码再次变化，请重新登记', POLICY_STALE: '权限已变化，需要重新核对', MAPPING_REVIEW_REQUIRED: '请重新确认代码实现映射' }
-export function ChangesPage({ project, onError, onNavigate, onStateChanged, requestedRepair, developmentJourney }: {
-  project: ProjectDto; onError: (error: ApiError) => void; onNavigate: (path: string) => void; onStateChanged: () => unknown; requestedRepair?: string | null
-  developmentJourney?: ReactNode
-}) {
-  const [selectedChangeId, setSelectedChangeId] = useState<string>()
-  const [detailReference, setDetailReference] = useState<string | undefined>(requestedRepair ?? undefined)
-  const detailReferenceRef = useRef(detailReference)
-  detailReferenceRef.current = detailReference
-  const [sourceOpen, setSourceOpen] = useState(false)
-  const [changes, setChanges] = useState<SourceChangeViewDto[]>([])
-  const [repair, setRepair] = useState<ProjectRepair | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [failed, setFailed] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [uncertain, setUncertain] = useState(false)
-  const [receipt, setReceipt] = useState<string>()
-  const [selectedRepair, setSelectedRepair] = useState<string | undefined>(requestedRepair ?? undefined)
-  const [form] = Form.useForm<{ reason: string; paths?: string }>()
-  const visible = useContext(WorkPageVisible)
-  const epoch = useRef(0)
-  const submitting = useRef(false)
-  const continueWork = async () => {
-    if (submitting.current) return
-    submitting.current = true; setBusy(true)
-    const current = epoch.current
-    try {
-      const next = await workspaceApi.current(project.project_id)
-      if (epoch.current !== current) return
-      if (next.project.project_id !== project.project_id) throw new ApiError('STATE_PRECONDITION', '任务所属应用不一致。')
-      onNavigate(next.primary_task ? taskDestination(next.primary_task) : '/workspace')
-    } catch (error) { if (epoch.current === current) onError(error as ApiError) }
-    finally { submitting.current = false; setBusy(false) }
-  }
-  const refresh = useCallback(async (quiet = false) => {
-    const current = ++epoch.current
-    if (!quiet) setLoading(true)
-    try {
-      const [items, state] = await Promise.all([sourceChangesApi.list(project.project_id), repairsApi.project(project.project_id)])
-      if (selectedChangeId && !items.some(item => item.manifest.change_id === selectedChangeId)) {
-        const selected = await sourceChangesApi.show(project.project_id, selectedChangeId)
-        if (selected.manifest.change_id !== selectedChangeId) throw new ApiError('STATE_PRECONDITION', '所选变化记录关联不一致。')
-        items.push(selected)
-      }
-      if (state.project_id !== project.project_id || items.some(item => item.manifest.project_id !== project.project_id)) throw new ApiError('STATE_PRECONDITION', '变化记录所属应用不一致。')
-      if (epoch.current === current) { setChanges(items); setRepair(state); setFailed(false) }
-    } catch (error) { if (quiet) { if (error instanceof ApiError && error.code === 'STATE_PRECONDITION') { setFailed(true); setChanges([]); setRepair(null) }; throw error }; if (epoch.current === current) { setFailed(true); onError(error as ApiError) } }
-    finally { if (epoch.current === current) setLoading(false) }
-  }, [project.project_id, onError, selectedChangeId])
-  useEffect(() => { if (visible) void refresh(); return () => { epoch.current += 1 } }, [refresh, visible])
-  useEffect(() => { setSelectedRepair(requestedRepair ?? undefined); setDetailReference(requestedRepair ?? undefined); setSelectedChangeId(undefined) }, [requestedRepair])
-  const live = useLiveRead(visible && !busy ? project.project_id + (selectedChangeId ?? '') : undefined, () => refresh(true), 5000, false)
-  const submit = async (values: { reason: string; paths?: string }) => {
-    if (submitting.current || failed || uncertain) return
-    const task = repair?.tasks.find(item => item.contract.repair_fingerprint === selectedRepair)
-    if (selectedRepair && (!task || task.status === 'STALE')) { onError(new ApiError('STATE_PRECONDITION', '原题引用不可用，请刷新后核对。')); return }
-    const paths = (values.paths ?? '').split(/\r?\n/).map(value => value.trim()).filter(Boolean)
-    if (paths.length > 128) { onError(new ApiError('INPUT_INVALID', '最多填写 128 个相对路径。')); return }
-    submitting.current = true; setBusy(true)
-    const current = epoch.current
-    try {
-      const result = await sourceChangesApi.submit(project.project_id, values.reason.trim(), paths, task ? repairReference(task.contract) : null)
-      if (epoch.current !== current) return
-      if (result.manifest.project_id !== project.project_id) throw new ApiError('STATE_PRECONDITION', '登记结果所属应用不一致。')
-      // 登记已经确认；后续只读同步失败不能撤销回执或诱导再次登记。
-      form.resetFields(); setReceipt('代码变化已登记，界鉴将按实际源码继续核对。'); await refresh()
-      try { await onStateChanged() } catch (error) { onError(error as ApiError) }
-    } catch (error) {
-      if (epoch.current === current) { setUncertain(true); onError(error as ApiError); await refresh() }
-    } finally { submitting.current = false; setBusy(false) }
-  }
-  const focusedTask = selectedRepair ? repair?.tasks.find((task) => task.contract.repair_fingerprint === selectedRepair) : repair?.tasks.find((task) => task.task_reference === repair.primary_task_reference)
-  const registration = <section className="change-registration" aria-label="登记代码变化">
-      <Typography.Title level={3}>登记代码变化</Typography.Title>
-      <Typography.Paragraph type="secondary">修改说明与文件路径只是线索，实际变化和完整检查范围由界鉴重新计算。</Typography.Paragraph>
-      {uncertain && <Alert className="flow-feedback" showIcon type="warning" message="上次登记回执未确认。请先查看下方变化记录，避免重复登记。" action={<Button disabled={loading || failed} onClick={() => setUncertain(false)}>已核对记录</Button>} />}
-      <Form form={form} layout="vertical" onFinish={values => void submit(values)} disabled={busy || loading || failed || uncertain}>
-        <Form.Item name="reason" label="修改说明" rules={[{ required: true, whitespace: true, message: '请说明这次修改。' }, { max: 512 }]}><Input.TextArea maxLength={512} autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
-        <Form.Item label="关联原题（可选）"><Select allowClear value={selectedRepair} onChange={setSelectedRepair} placeholder="普通代码变化" options={repair?.tasks.filter(task => task.status !== 'STALE').map((task, index) => ({ value: task.contract.repair_fingerprint, label: `原问题 ${index + 1} · ${repairLabels[task.status]}` }))} /></Form.Item>
-        <Form.Item name="paths" label="涉及文件（可选，每行一个相对路径）"><Input.TextArea maxLength={32768} autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
-        <div className="confirmation-actions"><Button type={focusedTask?.status === 'READY_TO_VERIFY' ? 'default' : 'primary'} htmlType="submit" loading={busy}>登记并核对实际变化</Button></div>
-      </Form>
-    </section>
-  const selectedChange = changes.find(item => item.manifest.change_id === selectedChangeId)
-    ?? changes.find(item => item.manifest.change_id === focusedTask?.change_id) ?? changes[0]
-  const selectedRepairs = repair?.tasks.filter(item => item.change_id === selectedChange?.manifest.change_id) ?? []
-  const detailTask = repair?.tasks.find(task => task.contract.repair_fingerprint === detailReference)
-  const showChange = async (changeId: string) => {
-    if (submitting.current) return
-    if (changes.some(item => item.manifest.change_id === changeId)) { setSelectedChangeId(changeId); setSourceOpen(false); setDetailReference(undefined); return }
-    // 原题可以关联分页窗口外的批次；按精确 ID 补读，失败时留在原题，不能退到最新修改。
-    const current = epoch.current
-    const requestedDetail = detailReference
-    submitting.current = true; setBusy(true)
-    try {
-      const value = await sourceChangesApi.show(project.project_id, changeId)
-      if (current !== epoch.current || requestedDetail !== detailReferenceRef.current) return
-      if (value.manifest.project_id !== project.project_id || value.manifest.change_id !== changeId) throw new ApiError('STATE_PRECONDITION', '变化记录关联不一致。')
-      setChanges(items => [...items.filter(item => item.manifest.change_id !== changeId), value])
-      setSelectedChangeId(changeId); setSourceOpen(false); setDetailReference(undefined)
-    } catch (error) { if (current === epoch.current) onError(error as ApiError) }
-    finally { submitting.current = false; setBusy(false) }
-  }
-  if (detailTask && !failed) return <RepairDelivery task={detailTask} change={changes.find(change => change.manifest.change_id === detailTask.change_id)} onNavigate={onNavigate}
-    loadingChange={busy} onBack={() => { setSourceOpen(false); setDetailReference(undefined) }} onViewChange={() => { if (detailTask.change_id) void showChange(detailTask.change_id) }}/>
-  const selectedStatus = selectedRepairs.length && selectedRepairs.every(task => task.status === 'VERIFIED') ? 'VERIFIED' : selectedRepairs.find(task => task.status === 'NOT_VERIFIED' || task.status === 'STALE')?.status
-  const headline = failed ? '暂时无法读取协作进展' : 'Agent 协作'
-  return <EditorialPage label="变化与原题复验时间流">
-    <EditorialHeader eyebrow="开发协作 / 修复与交付" title={headline}><p className="editorial-muted">明确修复要求 → 查看 Agent 修改 → 核对实际变化 → 按原题复验。</p></EditorialHeader>
-    <AgentNavigation active="delivery" onNavigate={onNavigate}/>
-    {developmentJourney}
-    {receipt && <p className="work-receipt" role="status">{receipt}</p>}
-    {!loading && selectedRepair && !focusedTask && <p role="alert">未找到指定的原题修复要求。请回到原问题重新进入，当前不会替换成另一条原题。</p>}
-    {failed && <p role="alert">无法完整读取变化与原题，暂不能登记或发起复验。</p>}
-    <div className="change-topline">{selectedChange && <ol className="change-milestones" aria-label="本批修改的事实进展"><li className="is-complete"><span aria-hidden><CheckOutlined/></span>修改已登记</li><li className="is-complete"><span aria-hidden><CheckOutlined/></span>{selectedChange.change_set.status === 'COMPARABLE' ? '本批差异已核对' : '首次源码已记录'}</li><li className={selectedStatus === 'VERIFIED' ? 'is-complete' : ''}><span aria-hidden>{selectedStatus === 'VERIFIED' ? <CheckOutlined/> : '3'}</span>{selectedStatus === 'VERIFIED' ? '原题复验已通过' : '修复结论待确认'}</li></ol>}
-    <div className="changes-toolbar"><Button disabled={busy} loading={loading} onClick={() => void refresh()}>刷新变化与修复</Button></div></div>
-    {!!repair?.tasks.length && <section aria-label="修复任务" className="agent-task-list"><h2>修复任务</h2>{repair.tasks.map(task => <section key={task.task_reference} className="repair-context"><div><strong>{task.comparison?.find(row => row.role === 'DENY')?.action_label ?? '原题修复要求'}</strong><p>{repairLabels[task.status]}</p></div><Button type={task.task_reference === repair.primary_task_reference ? 'primary' : 'default'} onClick={() => setDetailReference(task.contract.repair_fingerprint)}>{['REPAIR_REQUIRED','NOT_VERIFIED'].includes(task.status) ? '准备修复任务' : '查看修复与交付'}</Button></section>)}</section>}
-    {!loading && !failed && !changes.length && <Empty description={repair?.tasks.length ? '等待 Agent 登记修改；完成后将在这里显示真实变化。' : '暂无修复任务或修改记录。检查发现问题后，可在这里准备任务并跟踪修复。'} />}
-    {selectedChange && <section className="changes-workspace" aria-label="代码变化记录">
-      <nav className="change-record-index" aria-label="修改记录"><h2>修改记录</h2>{changes.map(change => <button key={change.manifest.change_id} aria-current={change.manifest.change_id === selectedChange.manifest.change_id ? 'true' : undefined} onClick={() => setSelectedChangeId(change.manifest.change_id)}><time>{formatTimestamp(change.manifest.created_at_us)}</time><strong>{change.manifest.reason}</strong><small>{change.manifest.submitted_by || '来源未提供'}</small><span>{repair?.tasks.some(item => item.change_id === change.manifest.change_id) && repair.tasks.filter(item => item.change_id === change.manifest.change_id).every(item => item.status === 'VERIFIED') ? '原题复验已通过' : change.revalidation.can_execute ? '可继续检查' : revalidationLabels[change.revalidation.status]}</span></button>)}</nav>
-      <article className="change-detail" aria-label="所选代码变化">
-        <header><p className="editorial-eyebrow">本批修改</p><h2>{selectedChange.manifest.reason}</h2><p className="editorial-muted">登记来源：{selectedChange.manifest.submitted_by || '来源未提供'} · {formatTimestamp(selectedChange.manifest.created_at_us)}</p></header>
-        <div className="change-fact-pair">
-          <section><FileTextOutlined className="change-fact-icon" aria-hidden/><div><h3>Agent 的修改说明</h3><p>{selectedChange.manifest.reason}</p><p className="editorial-muted">说明只是线索，不能替代实际源码或修复结论。</p></div></section>
-          <section><CodeOutlined className="change-fact-icon" aria-hidden/><div><h3>界鉴核对的实际变化</h3><p>{selectedChange.change_set.status === 'NO_BASELINE' ? '尚无可比较的基线；本次只记录源码，不推算增删改。' : `${selectedChange.change_set.added_paths.length + selectedChange.change_set.modified_paths.length + selectedChange.change_set.removed_paths.length} 个文件发生变化 · ${selectedChange.assessment.payload.action_impacts.filter(item => item.classification === 'DIRECTLY_AFFECTED').length} 项业务动作存在直接关联。`}</p><p className="editorial-muted">{revalidationLabels[selectedChange.revalidation.status]}</p></div></section>
-        </div>
-
-        <section className="change-detail-section"><span className="change-section-number" aria-hidden="true">3</span><div>
-          {selectedRepairs.length ? selectedRepairs.map(task => <section className="change-repair-item" key={task.task_reference}><div className="change-association"><div><span>原问题</span><strong>{task.comparison?.find(row => row.role === 'DENY')?.action_label ?? '原题中的权限问题'}</strong></div><div><span>本批变化</span><strong>修改已登记</strong></div><div><span>原题复验</span><strong>{repairLabels[task.status]}</strong></div></div><Space wrap><Button type="primary" size="large" onClick={() => setDetailReference(task.contract.repair_fingerprint)}>查看修复要求与进展</Button>{task.status === 'READY_TO_VERIFY' && task.change_id && <Button onClick={() => onNavigate(`/tests?change_id=${encodeURIComponent(task.change_id!)}`)}>复验原题</Button>}</Space></section>) : <><p>本次修改未关联原题修复，不能推断任何原问题已经解决。</p>{selectedChange.revalidation.can_execute && <Button type="primary" onClick={() => onNavigate(`/tests?change_id=${encodeURIComponent(selectedChange.manifest.change_id)}`)}>检查这次变化</Button>}</>}
-          <Button type="link" loading={busy} onClick={() => void continueWork()}>核对现有材料</Button>
-        </div></section>
-        <details className="change-paths delivery-technical"><summary>查看实际文件变化</summary>{selectedChange.change_set.status === 'NO_BASELINE' ? <p>缺少基线，本次不展示差异清单。</p> : (['added_paths','modified_paths','removed_paths'] as const).map((key,index) => <section key={key}><h4>{['新增','修改','删除'][index]}</h4>{selectedChange.change_set[key].length ? <ul>{selectedChange.change_set[key].map(path => <li key={path}><code>{path}</code></li>)}</ul> : <p>无</p>}</section>)}</details>
-        <section className="delivery-technical"><Button aria-expanded={sourceOpen} onClick={()=>setSourceOpen(!sourceOpen)}>查看本批源码与当前源码的对应</Button>{sourceOpen && <SourceIdentityPanel key={selectedChange.manifest.change_id} projectId={project.project_id} recordId={selectedChange.manifest.change_id} kind="source-changes" onNavigate={onNavigate}/>}</section>
-        <p className="delivery-footer">这批修改已登记，无需重复填写。登记说明、实际变化和复验结果分别保留。</p>
-      </article>
-    </section>}
-    {live.retrying && <p role="status">变化记录暂未同步，正在自动重试。</p>}
-    <p className="editorial-muted">Agent 通过 MCP 登记后无需重复填写。连接设置位于“连接与授权”。</p>
-    <details className="change-manual-entry"><summary>手动登记代码变化</summary>{registration}</details>
-  </EditorialPage>
+type DetailTab='changes'|'verification'|'rules'|'source'
+const sourceLabel=(value:string|undefined)=>value==='LOCAL_GUI'?'本机登记':value||'来源未提供'
+const statusText=(details:DeliveryDetails|null|undefined)=>!details?'未关联精确检查':!details.verification.run_id?'尚未检查':details.verification.verdict==='PASS'?details.verification.runtime_status==='MATCHED'?'本轮已验证':'已验证，运行对应未确认':details.verification.verdict==='BLOCK'?'发现权限问题':details.verification.verdict==='INCONCLUSIVE'?'证据不足':'尚无已发布结论'
+const tone=(details:DeliveryDetails|null|undefined)=>({PASS:'pass',BLOCK:'block',INCONCLUSIVE:'unknown'}[details?.verification.verdict??'']??'neutral')
+export function ChangesPage({project,onError,onNavigate,onStateChanged,requestedRepair,requestedChange,requestedView,developmentJourney}:{project:ProjectDto;onError:(error:ApiError)=>void;onNavigate:(path:string)=>void;onStateChanged:()=>unknown;requestedRepair?:string|null;requestedChange?:string|null;requestedView?:string|null;developmentJourney?:ReactNode}){
+ const [changes,setChanges]=useState<SourceChangeViewDto[]>([]),[details,setDetails]=useState<Record<string,DeliveryDetails|null>>({})
+ const [current,setCurrent]=useState<DevelopmentView|null>(null),[repair,setRepair]=useState<ProjectRepair|null>(null)
+ const [selected,setSelected]=useState<string|undefined>(requestedChange??undefined),[reference,setReference]=useState<string|undefined>(requestedRepair??undefined)
+ const [tab,setTab]=useState<DetailTab>(requestedView==='acceptance'?'verification':'changes'),[registration,setRegistration]=useState(requestedView==='register'),[journey,setJourney]=useState(false)
+ const [loading,setLoading]=useState(true),[failed,setFailed]=useState(false),[limit,setLimit]=useState(25)
+ const visible=useContext(WorkPageVisible),epoch=useRef(0),requested=useRef(selected),root=useRef<HTMLDivElement>(null),returnId=useRef<string|undefined>(undefined)
+ requested.current=selected
+ useEffect(()=>{setSelected(requestedChange??undefined);setReference(requestedRepair??undefined);setTab(requestedView==='acceptance'?'verification':'changes');setRegistration(requestedView==='register')},[requestedChange,requestedRepair,requestedView])
+ const read=async()=>{const stamp=++epoch.current
+  try{const [items,repairs,active]=await Promise.all([sourceChangesApi.list(project.project_id,limit),repairsApi.project(project.project_id),developmentApi.current(project.project_id)])
+   if(items.some(item=>item.manifest.project_id!==project.project_id)||repairs.project_id!==project.project_id||active&&(active.task.project_id!==project.project_id||active.context.project_id!==project.project_id||active.context.task_id!==active.task.task_id||active.deliveries.some(item=>item.project_id!==project.project_id||item.task_id!==active.task.task_id)))throw new ApiError('STATE_PRECONDITION','修改记录所属应用不一致。')
+   const wanted=requested.current
+   if(wanted&&!items.some(item=>item.manifest.change_id===wanted)){const exact=await sourceChangesApi.show(project.project_id,wanted);if(exact.manifest.change_id!==wanted||exact.manifest.project_id!==project.project_id)throw new ApiError('STATE_PRECONDITION','所选修改关联不一致。');items.push(exact)}
+   const pairs=await Promise.all(items.map(async item=>{const value=await developmentApi.details(project.project_id,item.manifest.change_id)
+    if(value&&(value.project_id!==project.project_id||value.delivery.change_id!==item.manifest.change_id||value.context.project_id!==project.project_id||value.context.task_id!==value.delivery.task_id||value.context.context_id!==value.delivery.context_id))throw new ApiError('STATE_PRECONDITION','修改与检查关联不一致。')
+    return [item.manifest.change_id,value] as const}))
+   if(epoch.current===stamp){setChanges(items);setDetails(Object.fromEntries(pairs));setRepair(repairs);setCurrent(active);setFailed(false)}
+  }catch(error){if(epoch.current===stamp){setFailed(true);setDetails({});onError(error as ApiError)};throw error}finally{if(epoch.current===stamp)setLoading(false)}}
+ const live=useLiveRead(visible?`${project.project_id}:${limit}:${selected??''}`:undefined,read,10000)
+ useEffect(()=>()=>{epoch.current+=1},[project.project_id])
+ useEffect(()=>{if(selected||!returnId.current)return;Array.from(root.current?.querySelectorAll<HTMLElement>('[data-change]')??[]).find(button=>button.dataset.change===returnId.current)?.focus({preventScroll:true})},[selected])
+ const refresh=async()=>{setLoading(true);await read()}
+ const open=(id:string)=>{returnId.current=id;setSelected(id);setReference(undefined);setTab('changes');onNavigate('/changes?change_id='+encodeURIComponent(id))}
+ const back=()=>{setSelected(undefined);setReference(undefined);setRegistration(false);onNavigate('/changes')}
+ const latest=changes[0],change=selected?changes.find(item=>item.manifest.change_id===selected):undefined,linked=selected?details[selected]:latest?details[latest.manifest.change_id]:undefined
+ const issue=reference?repair?.tasks.find(item=>item.contract.repair_fingerprint===reference):undefined
+ const latestIssue=latest?repair?.tasks.find(item=>item.contract.source_run_id===details[latest.manifest.change_id]?.verification.run_id&&item.status!=='VERIFIED'):undefined
+ const primary=(item:SourceChangeViewDto,detail:DeliveryDetails|null|undefined)=>{
+  if(failed)return <Button disabled>无法核对修改状态</Button>
+  if(detail?.verification.run_id)return <Button type="primary" onClick={()=>onNavigate('/history?run_id='+encodeURIComponent(detail.verification.run_id!))}>查看这次检查结果</Button>
+  if(current?.runtime_state==='NOT_LOADED'&&current.deliveries[0]?.change_id===item.manifest.change_id)return <ChangeRuntimeAction projectId={project.project_id} value={current} onChanged={refresh} onError={onError}/>
+  return <Button type="primary" onClick={()=>onNavigate('/tests?change_id='+encodeURIComponent(item.manifest.change_id))}>检查这次修改</Button>
+ }
+ if(issue&&!failed)return <RepairDelivery task={issue} change={changes.find(item=>item.manifest.change_id===issue.change_id)} loadingChange={loading} onNavigate={onNavigate} onBack={back} onViewChange={()=>{if(issue.change_id)open(issue.change_id)}}/>
+ return <div ref={root}><EditorialPage label="修改与验证"><div className="light-page-heading"><EditorialHeader eyebrow="协作空间 / 伴随验证" title="修改与验证"><p className="editorial-muted">继续在原客户端开发，在这里核对修改与权限结果。</p></EditorialHeader><Button onClick={()=>onNavigate('/tools')}>Agent 连接与授权</Button></div>
+  {failed&&<p role="alert">无法完整读取修改与检查，已有说明不能替代当前结论。<Button onClick={()=>void refresh().catch(()=>{})}>重新读取</Button></p>}
+  {loading&&!changes.length&&<Spin aria-label="正在读取修改记录"/>}
+  {reference&&!issue&&!loading&&<p role="alert">未找到指定原问题，当前不会替换为另一条修复要求。</p>}
+  {registration?<ChangeRegistration key={project.project_id} projectId={project.project_id} repair={repair} requestedRepair={reference} onError={onError} onCancel={back} onSaved={async id=>{setRegistration(false);open(id);await read();await onStateChanged()}}/>:selected?<>
+    <Button type="link" className="light-back" onClick={back}>← 返回修改记录</Button>
+    {change&&!failed?<article className="light-detail"><header className="light-detail-heading"><div><p className="editorial-eyebrow">本次修改 · {formatTimestamp(change.manifest.created_at_us)}</p><h2>{change.manifest.reason}</h2><p>登记来源：{sourceLabel(change.manifest.submitted_by)}</p></div><span className={`light-badge is-${tone(linked)}`}>{statusText(linked)}</span></header>
+      <nav className="light-detail-tabs" aria-label="修改详情">{([['changes','修改内容'],['verification','检查结果'],['rules','沿用要求'],['source','源码对应']] as const).map(([key,label])=><button key={key} aria-current={tab===key?'page':undefined} onClick={()=>setTab(key)}>{label}</button>)}</nav>
+      <div className="light-detail-body">{tab==='changes'||tab==='verification'?<DeliveryFacts projectId={project.project_id} change={change} providedDetails={linked} acceptanceOnly={tab==='verification'} changesOnly={tab==='changes'} onNavigate={onNavigate} onError={onError}/>:tab==='source'?<SourceIdentityPanel projectId={project.project_id} recordId={change.manifest.change_id} kind="source-changes" onNavigate={onNavigate}/>:<><h3>这次修改沿用的权限</h3><p>保留 {linked?.context.permission_refs.length??change.assessment.payload.action_impacts.flatMap(item=>item.permission_refs).length} 条权限引用；实际检查仍覆盖完整当前计划。</p>{repair?.tasks.filter(item=>item.change_id===change.manifest.change_id).map(item=><Button key={item.task_reference} type="link" onClick={()=>{setReference(item.contract.repair_fingerprint);onNavigate('/changes?repair_reference='+encodeURIComponent(item.contract.repair_fingerprint))}}>查看修复依据 · {repairLabels[item.status]}</Button>)}<Button type="link" onClick={()=>onNavigate('/permissions')}>查看当前权限要求</Button><p className="light-meta">当前权限可能已更新；本次冻结引用与历史结论保持不变。</p></>}
+      {tab==='changes'&&<div className="light-actions">{primary(change,linked)}</div>}</div></article>:!loading&&!failed?<Empty description="所选修改不可读取，请返回记录重新选择。"/>:null}
+  </>:<>
+    {!failed&&latest&&<section className="light-focus"><div><span className={`light-badge is-${tone(linked)}`}>{statusText(linked)}</span><h2>{linked?.verification.verdict==='BLOCK'?'这次修改发现了权限问题':linked?.verification.verdict==='PASS'?'本轮结果已发布，后续修改需新的检查':linked?.verification.verdict==='INCONCLUSIVE'?'观察证据不足，先核对缺口':linked?.verification.run_id?'本次检查尚无已发布结论':'这次修改，还没有检查结果'}</h2><p>{latest.manifest.reason} · 登记与验证分别保留，开发继续在原客户端进行。</p></div><div>{latestIssue?<Button type="primary" onClick={()=>{setReference(latestIssue.contract.repair_fingerprint);onNavigate('/changes?repair_reference='+encodeURIComponent(latestIssue.contract.repair_fingerprint))}}>查看修复依据</Button>:primary(latest,linked)}</div><footer><span>{linked?`沿用 ${linked.context.permission_refs.length} 条已确认要求`:'保留原权限与源码记录'}</span><Button type="link" onClick={()=>onNavigate('/permissions')}>查看权限要求</Button></footer></section>}
+    <div className="light-section-heading"><div><h2>最近修改</h2><p>每次修改，对应自己的检查</p></div><Button type="link" disabled={failed||loading} onClick={()=>setRegistration(true)}>登记本地修改</Button></div>
+    {!!changes.length?<table className="light-table"><thead><tr><th>修改记录</th><th>实际变化</th><th>关联检查</th><th>查看</th></tr></thead><tbody>{changes.map(item=><tr key={item.manifest.change_id}><td><time>{formatTimestamp(item.manifest.created_at_us)}</time><strong>{item.manifest.reason}</strong><small>{sourceLabel(item.manifest.submitted_by)}</small></td><td data-label="实际变化">{item.change_set.status==='NO_BASELINE'?'缺少可比较基线':`${item.change_set.added_paths.length+item.change_set.modified_paths.length+item.change_set.removed_paths.length} 个文件变化`}<small>由源码快照比较</small></td><td data-label="关联检查"><span className={`light-badge is-${failed?'neutral':tone(details[item.manifest.change_id])}`}>{failed?'当前关联读取失败':statusText(details[item.manifest.change_id])}</span></td><td><Button type="link" data-change={item.manifest.change_id} onClick={()=>open(item.manifest.change_id)}>查看修改</Button></td></tr>)}</tbody></table>:!loading&&!failed?<Empty description="尚无修改记录。连接 Agent 后登记，或直接登记本地修改，无需先建开发任务。"/>:null}
+    {changes.length>=limit&&limit<100&&<Button onClick={()=>setLimit(value=>Math.min(100,value+25))}>读取更多修改</Button>}
+    {changes.length>=100&&<p className="light-meta">当前展示最近 100 条修改；更早记录仍可通过原检查和精确修改引用打开。</p>}
+    {!!repair?.tasks.filter(item=>!['VERIFIED','STALE'].includes(item.status)).length&&<section className="light-open-issues"><h3>待处理的权限问题</h3>{repair!.tasks.filter(item=>!['VERIFIED','STALE'].includes(item.status)).map(item=><Button type="link" key={item.task_reference} onClick={()=>{setReference(item.contract.repair_fingerprint);onNavigate('/changes?repair_reference='+encodeURIComponent(item.contract.repair_fingerprint))}}>{item.comparison?.find(row=>row.role==='DENY')?.action_label??'原问题'} · {repairLabels[item.status]}</Button>)}</section>}
+    {developmentJourney&&<section className="light-sample-entry"><Button type="link" aria-expanded={journey} onClick={()=>setJourney(value=>!value)}>{journey?'收起官方演练':'继续官方示例演练'}</Button>{journey&&developmentJourney}</section>}
+    <p className="light-meta">登记不表示 Agent 正在编码，也不表示修改已通过检查。连接设置只管理工具权限。</p>
+  </>}{live.retrying&&<p role="status">修改记录暂未同步，正在重试。</p>}
+ </EditorialPage></div>
 }

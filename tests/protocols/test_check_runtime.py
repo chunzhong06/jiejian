@@ -13,6 +13,22 @@ from product.protocols.check_runtime import (
 from tests.fixtures.check_runtime import runtime_bundle
 
 
+def test_controlled_runtime_preserves_old_wire_and_rejects_source_mismatch():
+    from product.protocols.check_runtime import ControlledCheckRuntimeBundle
+    from product.protocols.runtime_identity import ControlledRuntimeReference
+    from pydantic import ValidationError
+    old = runtime_bundle()
+    reference = ControlledRuntimeReference(instance_id="rti_" + "1" * 32, manifest_fingerprint="a" * 64,
+        source_fingerprint=old.source_fingerprint, process_id=123, process_created_at=456, owner_id="exp_" + "2" * 32)
+    current = ControlledCheckRuntimeBundle(**old.model_dump(exclude={"schema_version"}), runtime_reference=reference)
+    assert parse_check_runtime(canonical_check_runtime_bytes(current)) == current
+    assert type(parse_check_runtime(canonical_check_runtime_bytes(old))) is type(old)
+    assert check_runtime_fingerprint(current) != check_runtime_fingerprint(old)
+    with pytest.raises(ValidationError):
+        ControlledCheckRuntimeBundle(**old.model_dump(exclude={"schema_version"}),
+            runtime_reference=reference.model_copy(update={"source_fingerprint": "0" * 64}))
+
+
 def test_five_auxiliary_sources_are_supported_but_six_are_rejected():
     from pydantic import ValidationError
     from product.protocols.check_runtime import CheckProofConfig

@@ -1,0 +1,20 @@
+/* 需求、批次与验收分工明确；列表使用轻分隔，主要确认统一靠右。 */
+.collaboration-toolbar, .delivery-file-section > header, .delivery-acceptance > header, .task-history-row { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-24); }
+.collaboration-toolbar h2, .delivery-file-section h3, .delivery-acceptance h3 { margin:0; font-size:var(--font-section); }
+.collaboration-toolbar p, .delivery-file-section header p, .task-history-row p { color:var(--color-secondary); font-size:var(--font-secondary); margin:var(--space-8) 0 0; }
+.collaboration-secondary { display:flex; justify-content:flex-end; gap:var(--space-12); margin-block:var(--space-20); }
+.delivery-facts { display:grid; gap:var(--space-24); }
+.delivery-scope { display:flex; flex-wrap:wrap; gap:var(--space-20); color:var(--color-secondary); font-size:var(--font-secondary); padding-block:var(--space-16); border-block:1px solid var(--color-border); }
+.delivery-file-list { list-style:none; padding:0; margin:var(--space-20) 0; border:1px solid var(--color-border); border-radius:var(--radius-small); }
+.delivery-file-list li { display:flex; gap:var(--space-16); padding:var(--space-12) var(--space-16); border-bottom:1px solid var(--color-border); }
+.delivery-file-list li:last-child { border-bottom:0; }.delivery-file-list span { flex-shrink:0; color:var(--color-secondary); font-size:var(--font-secondary); }
+.delivery-file-list code { overflow-wrap:anywhere; white-space:normal; }.delivery-declaration { padding:var(--space-16); background:var(--color-surface-subtle); border-radius:var(--radius-small); font-size:var(--font-secondary); }
+.delivery-declaration h4 { margin:0 0 var(--space-8); }.delivery-declaration code { display:block; overflow-wrap:anywhere; margin:var(--space-8) 0; }.delivery-declaration p { margin:var(--space-8) 0; }
+.delivery-acceptance { padding-top:var(--space-20); border-top:1px solid var(--color-border); }
+.delivery-acceptance p { line-height:1.75; }.delivery-acceptance header .ant-btn { flex-shrink:0; }
+.task-history { margin-top:var(--space-24); }.task-history h2 { font-size:var(--font-section); }.task-history-row { padding-block:var(--space-20); border-bottom:1px solid var(--color-border); }
+.task-history-row .ant-btn { flex-shrink:0; }.delivery-repair-links { display:grid; gap:var(--space-12); justify-items:start; padding-block:var(--space-20); }
+.changes-workspace .change-detail { min-width:0; }.changes-workspace .change-record-index h2 { font-size:16px; }.changes-workspace .change-record-index > .ant-btn { margin:var(--space-12); }
+.change-registration { padding:var(--space-24); border:1px solid var(--color-border); border-radius:var(--radius-medium); margin-bottom:var(--space-24); }
+@media(max-width:900px){.collaboration-toolbar,.delivery-file-section > header,.delivery-acceptance > header{flex-direction:column;gap:var(--space-16);}.delivery-acceptance header .ant-btn{align-self:flex-end;}}
+@media(max-width:600px){.task-history-row{flex-direction:column;gap:var(--space-12);}.task-history-row .ant-btn{align-self:flex-end;}.collaboration-secondary{flex-wrap:wrap;}.delivery-file-list li{padding:var(--space-12);}}

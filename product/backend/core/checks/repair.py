@@ -189,6 +189,9 @@ def verify_current_repair(contract, *, request, bundle, result, evidence, expect
             if (outcome.actual_identity_status == "MATCH" and outcome.run_correlated and outcome.resource_correlated
                 and any(fact.state == "CONFIRMED" and fact.complete and fact.reliable and fact.correlated and fact.authoritative for fact in facts)):
                 return answer("NOT_VERIFIED","REPAIR_FORBIDDEN_EFFECT_REMAINS")
+    correspondence = getattr(result, "runtime_correspondence", None)
+    if correspondence is not None and (correspondence.before != "MATCHED" or correspondence.after != "MATCHED"):
+        return answer("INCONCLUSIVE", "REPAIR_RUNTIME_NOT_CONFIRMED")
     for requirement in (contract.deny,contract.selected_control,*contract.regressions):
         matches = candidates.get(requirement.identity.fingerprint(),[])
         if len(matches) != 1:

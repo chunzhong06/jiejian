@@ -27,6 +27,7 @@ from product.protocols.execution_v3 import WireModel
 from product.protocols.observer import ObserverSpec
 from product.backend.workflows.preparation.supplemental_contract import request_uuid
 from product.backend.workflows.examples.recovery import SampleRecovery
+from product.backend.workflows.examples.preset_delivery import prepare_preset_task, register_preset_delivery, preset_change_id
 
 
 class OfficialScenarioVersion(StrEnum):
@@ -80,11 +81,12 @@ class _Experience:
 class OfficialSampleExperience:
     def __init__(self, manager: OfficialSampleManager, *, understanding, boundaries, identities, secret_store,
                  registry, installer, bindings, preparation, changes, repairs, uow_factory, var_dir,
-                 archive_project, clock_us=None, reader=None, project_repairs=None):
+                 archive_project, clock_us=None, reader=None, project_repairs=None, development=None):
         self._manager,self._understanding,self._boundaries=manager,understanding,boundaries
         self._identities,self._secrets,self._registry=identities,secret_store,registry
         self._installer,self._bindings,self._preparation=installer,bindings,preparation
         self._changes,self._repairs=changes,repairs
+        self._development = development
         self._reader, self._project_repairs = reader, project_repairs
         self._uow_factory,self._var_dir,self._archive=uow_factory,var_dir,archive_project
         self._clock=clock_us or (lambda:time.time_ns()//1000)
@@ -131,8 +133,8 @@ class OfficialSampleExperience:
             scenario_prepared=bool(current and current.scenario_prepared),
             scenario_version=(None if retained is None else OfficialScenarioVersion(retained["scenario_version"])) if current is None else current.scenario_version,
             scenario_changed_at_us=None if current is None else current.scenario_changed_at_us,
-            vulnerable_change_id=None if current is None else current.vulnerable_change_id,
-            repair_change_id=None if current is None else current.repair_change_id,
+            vulnerable_change_id=None if current is None else current.vulnerable_change_id or preset_change_id(self._development, current, "VULNERABLE"),
+            repair_change_id=None if current is None else current.repair_change_id or preset_change_id(self._development, current, "FIXED"),
             evidence_limited=bool(current and current.evidence_limited),
             pending_tasks=() if current is None else current.pending_tasks,
             lifecycle=lifecycle, history_project_id=None if operation is None else operation["project_id"],
@@ -369,6 +371,11 @@ class OfficialSampleExperience:
             if version is OfficialScenarioVersion.EVIDENCE_LIMITED:
                 return self.set_observation(available=False)
             if version is current.scenario_version:
+                missing = version is OfficialScenarioVersion.VULNERABLE and current.vulnerable_change_id is None or version is OfficialScenarioVersion.FIXED and current.repair_change_id is None
+                if missing:
+                    reference = None if repair_reference is None else CurrentRepairReference.model_validate(repair_reference)
+                    created = prepare_preset_task(self._development, current)
+                    self._record_preset_delivery(current, version, reference, created)
                 return self.status()
             if current.preset_source_fingerprint is not None and self._understanding.inspect_source_fingerprint(current.project_id) != current.preset_source_fingerprint:
                 raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码已有外部修改，预设变更不会覆盖它；请通过普通 Agent 协作登记和验证")
@@ -382,7 +389,8 @@ class OfficialSampleExperience:
                 if reference is None:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION,"修复版需要已发布原题引用")
                 self._repairs.resolve(current.project_id,reference)
-            self._manager.switch_behavior(current.runtime.experience_id,
+            created = prepare_preset_task(self._development, current)
+            current.runtime = self._manager.switch_behavior(current.runtime.experience_id,
                 authorization_order="AUTHORIZE_BEFORE_ENQUEUE" if version is OfficialScenarioVersion.FIXED else "ENQUEUE_BEFORE_AUTHORIZE",
                 owner_observation="UNAVAILABLE" if version is OfficialScenarioVersion.EVIDENCE_LIMITED else "AVAILABLE",
                 blob_observation="UNAVAILABLE" if version is OfficialScenarioVersion.EVIDENCE_LIMITED else "AVAILABLE")
@@ -393,16 +401,42 @@ class OfficialSampleExperience:
             current.scenario_changed_at_us=self._clock()
             current.scenario_prepared=False
             current.evidence_limited=False
-            change=self._changes.submit(current.project_id,reason="预设开发变更：先授权再派发，保留异步导出" if version is OfficialScenarioVersion.FIXED else "预设开发变更：将同步导出改为后台队列处理",
-                repair_reference=reference,submitted_by="预设演示 · 本机用户")
-            if version is OfficialScenarioVersion.FIXED:
-                current.repair_change_id=change.manifest.change_id
-            else:
-                current.vulnerable_change_id=change.manifest.change_id
-            if self._understanding is not None:
-                current.preset_source_fingerprint = self._understanding.get(current.project_id).source_fingerprint
+            current.preset_source_fingerprint = current.runtime.launch_manifest.source_fingerprint
+            self._record_preset_delivery(current, version, reference, created)
             current.pending_tasks=("PREPARE_CURRENT_MATERIALS",)
             return self.status()
+
+    def _record_preset_delivery(self, current, version, reference, created):
+        receipt = register_preset_delivery(self._development, current, version, reference, self._understanding, created)
+        if version is OfficialScenarioVersion.FIXED:
+            current.repair_change_id = receipt.change_id
+        else:
+            current.vulnerable_change_id = receipt.change_id
+
+    def runtime_reference(self, project_id):
+        """为正式检查提供当前拥有的运行对应，历史项目不被当作活动实例。"""
+        with self._lock:
+            current = self._current
+            if current is None or not current.active or current.project_id != project_id:
+                return None
+            reference = self._manager.runtime_reference(current.runtime.experience_id)
+            if reference is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "运行实例尚未核对", details={"reason": "RUNTIME_OWNERSHIP_UNCONFIRMED"})
+            if self._understanding.get(project_id).source_fingerprint != reference.source_fingerprint:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "当前运行尚未加载这批修改", details={"reason": "RUNTIME_SOURCE_NOT_LOADED"})
+            return reference
+
+    def load_delivery_runtime(self, project_id, source_fingerprint):
+        """只加载当前拥有的示例代码；普通外部应用不据端口猜测重启命令。"""
+        with self._lock:
+            current = self._require_active()
+            if current.project_id != project_id:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "当前应用不支持受控加载")
+            self._require_idle(project_id)
+            if self._understanding.get(project_id).source_fingerprint != source_fingerprint:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "交付源码已经过期")
+            current.runtime = self._manager.reload_source(current.runtime.experience_id, expected_source_fingerprint=source_fingerprint)
+            return self.runtime_reference(project_id)
 
     def set_observation(self, *, available):
         """只改变示例观察条件；保留代码、业务数据与变化登记，不制造修复事实。"""
@@ -419,7 +453,7 @@ class OfficialSampleExperience:
     def development_journey(self):
         from product.backend.workflows.examples.journey import build_development_journey
         return build_development_journey(self._require_active(), reader=self._reader,
-            understanding=self._understanding, boundaries=self._boundaries, repairs=self._project_repairs)
+            understanding=self._understanding, boundaries=self._boundaries, repairs=self._project_repairs, development=self._development)
 
     def _require_active(self):
         current=self._current

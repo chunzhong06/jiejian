@@ -1,101 +1,27 @@
-// 当前变化页验证真实diff、精确change关联及未知回执不自动重复写入。
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+// 轻量修改页只展示真实记录和精确检查，不要求用户创建任务或接单。
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChangesPage } from './ChangesPage'
-const api = vi.hoisted(() => ({ list: vi.fn(), show: vi.fn(), submit: vi.fn(), repair: vi.fn(), workspace: vi.fn() }))
-vi.mock('../../api/workspace', () => ({ workspaceApi: { current: api.workspace } }))
-vi.mock('../../api/sourceChanges', () => ({ sourceChangesApi: { list: api.list, show: api.show, submit: api.submit } }))
-vi.mock('../../api/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/repairs')>('../../api/repairs'), repairsApi: { project: api.repair } }))
-const change = { manifest: { change_id: 'chg_one', project_id: 'p1', reason: '修改导出检查位置', submitted_by: 'MCP · Codex', created_at_us: 1, claimed_paths: ['wrong.py'], repair_reference: null }, change_set: { status: 'COMPARABLE', added_paths: [], modified_paths: ['real.py'], removed_paths: [] }, assessment: { payload: { action_impacts: [{ action_id: 'action', classification: 'DIRECTLY_AFFECTED', permission_refs: [], relevant_paths: ['real.py'] }] } }, revalidation: { status: 'READY', can_execute: true, preparation_gaps: [] } }
-const props = () => ({ project: { project_id: 'p1' }, onNavigate: vi.fn(), onError: vi.fn(), onStateChanged: vi.fn() })
-describe('当前变化与修复', () => {
-  beforeEach(() => { vi.clearAllMocks(); api.list.mockResolvedValue([change]); api.repair.mockResolvedValue({ project_id: 'p1', status: null, tasks: [], primary_task_reference: null }); api.submit.mockResolvedValue(change) })
-  it('展示真实文件并把精确变化带到完整检查', async () => {
-    const p = props(); render(<ChangesPage {...p} />)
-    expect(await screen.findByRole('heading', {name:'修改导出检查位置'})).toBeInTheDocument()
-    expect(screen.getByText('real.py')).toBeInTheDocument()
-    expect(screen.queryByText('wrong.py')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '检查这次变化' }))
-    expect(p.onNavigate).toHaveBeenCalledWith('/tests?change_id=chg_one')
-    expect(api.submit).not.toHaveBeenCalled()
-  })
-  it('已有登记只读取当前材料任务，不重复登记或发起检查', async () => {
-    api.workspace.mockResolvedValue({ project: { project_id: 'p1' }, primary_task: { route: '/tests', task_kind: 'PREPARE_TEST_IDENTITY', task_id: 'exact-task' } })
-    const p = props(); render(<ChangesPage {...p}/>)
-    fireEvent.click(await screen.findByRole('button', { name: '核对现有材料' }))
-    await waitFor(() => expect(p.onNavigate).toHaveBeenCalledWith('/tests?task_id=exact-task'))
-    expect(api.submit).not.toHaveBeenCalled()
-  })
-  it('只在明确提交时登记说明和相对路径', async () => {
-    const p = props(); render(<ChangesPage {...p} />)
-    await screen.findByRole('heading', {name:'修改导出检查位置'})
-    fireEvent.click(screen.getByText('手动登记代码变化'))
-    fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: ' 调整导出授权 ' } })
-    fireEvent.change(screen.getByLabelText('涉及文件（可选，每行一个相对路径）'), { target: { value: 'src/app.py' } })
-    fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
-    await waitFor(() => expect(api.submit).toHaveBeenCalledWith('p1', '调整导出授权', ['src/app.py'], null))
-  })
-  it('读取损坏或跨项目事实时关闭写入入口', async () => {
-    api.repair.mockResolvedValue({ project_id: 'other', tasks: [] })
-    const p = props(); render(<ChangesPage {...p} />)
-    expect(await screen.findByText('无法完整读取变化与原题，暂不能登记或发起复验。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '登记并核对实际变化', hidden: true })).toBeDisabled()
-    expect(screen.queryByText('修改导出检查位置')).not.toBeInTheDocument()
-  })
-  it('未知登记回执只回读，不自动重复提交', async () => {
-    api.submit.mockRejectedValue(new Error('response unavailable'))
-    render(<ChangesPage {...props()} />)
-    await screen.findByRole('heading', {name:'修改导出检查位置'})
-    fireEvent.click(screen.getByText('手动登记代码变化'))
-    fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: '修复导出' } })
-    fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
-    await screen.findByText('上次登记回执未确认。请先查看下方变化记录，避免重复登记。')
-    expect(api.submit).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: '登记并核对实际变化', hidden: true })).toBeDisabled()
-  })
-  it('不接受查询参数伪造的原题引用', async () => {
-    const p = props(); render(<ChangesPage {...p} requestedRepair="unknown" />)
-    await screen.findByRole('heading', {name:'修改导出检查位置'})
-    fireEvent.click(screen.getByText('手动登记代码变化'))
-    fireEvent.change(screen.getByLabelText('修改说明'), { target: { value: '修复导出' } })
-    fireEvent.click(screen.getByRole('button', { name: '登记并核对实际变化' }))
-    await waitFor(() => expect(p.onError).toHaveBeenCalled())
-    expect(api.submit).not.toHaveBeenCalled()
-  })
-  it('没有历史变化仍允许显式登记，不伪造安全状态', async () => {
-    api.list.mockResolvedValue([]); render(<ChangesPage {...props()} />)
-    expect(await screen.findByText('暂无修复任务或修改记录。检查发现问题后，可在这里准备任务并跟踪修复。')).toBeInTheDocument()
-    expect(screen.queryByText('原题复验通过')).not.toBeInTheDocument()
-  })
-  it('缺少基线不把文件清单误当成已核实差异', async () => {
-    api.list.mockResolvedValue([{ ...change, change_set: { ...change.change_set, status: 'NO_BASELINE' } }])
-    render(<ChangesPage {...props()}/>)
-    await screen.findByRole('heading', { name: '修改导出检查位置' })
-    expect(screen.getByText('缺少基线，本次不展示差异清单。')).toBeInTheDocument()
-    expect(screen.queryByText('real.py')).not.toBeInTheDocument()
-  })
-  it('同批只有部分原题通过时，不显示整体通过标题', async () => {
-    const contract = { source_run_id: 'run', source_case_id: 'case', repair_fingerprint: 'ref', regressions: [] }
-    api.repair.mockResolvedValue({ project_id: 'p1', primary_task_reference: null, tasks: [
-      { task_reference: 'one', contract, change_id: 'chg_one', status: 'VERIFIED' },
-      { task_reference: 'two', contract: { ...contract, repair_fingerprint: 'two' }, change_id: 'chg_one', status: 'INCONCLUSIVE' },
-    ] })
-    render(<ChangesPage {...props()}/>)
-    await screen.findByRole('heading', { name: '修改导出检查位置' })
-    expect(within(screen.getByRole('list', { name: '本批修改的事实进展' })).getByText('修复结论待确认')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '本批修改的原题复验已通过' })).not.toBeInTheDocument()
-    expect(within(screen.getByRole('navigation', { name: '修改记录' })).queryByText('原题复验已通过')).not.toBeInTheDocument()
-  })
-  it('原题关联较早批次时按精确 ID 补读，刷新后仍保留所选批次', async () => {
-    api.repair.mockResolvedValue({ project_id: 'p1', primary_task_reference: null, tasks: [{ task_reference: 'task', contract: { source_run_id: 'run', source_case_id: 'case', repair_fingerprint: 'ref', regressions: [] }, change_id: 'older', status: 'CHANGE_SUBMITTED' }] })
-    api.show.mockResolvedValue({ ...change, manifest: { ...change.manifest, change_id: 'older', reason: '较早的精确批次' } })
-    render(<ChangesPage {...props()} requestedRepair="ref"/>)
-    fireEvent.click(await screen.findByRole('button', { name: '查看本批修改' }))
-    expect(await screen.findByRole('heading', { name: '较早的精确批次' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: '刷新变化与修复' })).not.toHaveClass('ant-btn-loading'))
-    fireEvent.click(screen.getByRole('button', { name: '刷新变化与修复' }))
-    await waitFor(() => expect(api.show).toHaveBeenCalledWith('p1', 'older'))
-    expect(screen.getByRole('heading', { name: '较早的精确批次' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '修改导出检查位置' })).not.toBeInTheDocument()
-  })
+const api=vi.hoisted(()=>({list:vi.fn(),show:vi.fn(),repair:vi.fn(),current:vi.fn(),details:vi.fn(),preview:vi.fn(),register:vi.fn(),receipt:vi.fn()}))
+vi.mock('../../api/development',async()=>({...await vi.importActual<typeof import('../../api/development')>('../../api/development'),developmentApi:{current:api.current,details:api.details,receipt:api.receipt}}))
+vi.mock('../../api/sourceChanges',()=>({sourceChangesApi:{list:api.list,show:api.show,registrationPreview:api.preview,register:api.register}}))
+vi.mock('../../api/repairs',async()=>({...await vi.importActual<typeof import('../../api/repairs')>('../../api/repairs'),repairsApi:{project:api.repair}}))
+const change={manifest:{change_id:'chg_one',project_id:'p1',reason:'修改导出检查位置',submitted_by:'MCP · Codex',created_at_us:1,claimed_paths:['wrong.py'],repair_reference:null},change_set:{status:'COMPARABLE',added_paths:[],modified_paths:['real.py'],removed_paths:[]},assessment:{payload:{action_impacts:[]}},revalidation:{status:'READY',can_execute:true,preparation_gaps:[]}}
+const props=()=>({project:{project_id:'p1'},onNavigate:vi.fn(),onError:vi.fn(),onStateChanged:vi.fn()})
+const linked={project_id:'p1',delivery:{project_id:'p1',task_id:'t',context_id:'ctx',change_id:'chg_one',ordinal:1},context:{project_id:'p1',task_id:'t',context_id:'ctx',revision:1,permission_refs:[]},relative_change:change.change_set,cumulative_change:change.change_set,verification:{run_id:'exact',verdict:'PASS',runtime_status:'MATCHED',repair_status:null}}
+beforeEach(()=>{vi.clearAllMocks();sessionStorage.clear();api.list.mockResolvedValue([change]);api.show.mockResolvedValue(change);api.current.mockResolvedValue(null);api.details.mockResolvedValue(null);api.repair.mockResolvedValue({project_id:'p1',tasks:[],primary_task_reference:null});api.preview.mockResolvedValue({project_id:'p1',fingerprint:'a'.repeat(64),policy_epoch:1,permission_count:3});api.receipt.mockResolvedValue(null);api.register.mockImplementation((_id,body)=>Promise.resolve({project_id:'p1',operation_id:body.operation_id,change_id:'chg_one',task_id:'internal'}))})
+describe('修改与验证',()=>{
+ it('默认列表不要求任务，点进记录后才显示实际差异',async()=>{const p=props();render(<ChangesPage {...p}/>);await screen.findByText('修改导出检查位置');expect(screen.getByRole('table')).toBeInTheDocument();expect(screen.queryByText('real.py')).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'创建开发任务'})).not.toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'查看修改'}));expect((await screen.findAllByText('real.py')).length).toBeGreaterThan(0);expect(p.onNavigate).toHaveBeenCalledWith('/changes?change_id=chg_one');fireEvent.click(screen.getByRole('button',{name:'← 返回修改记录'}));expect(screen.getByRole('table')).toBeInTheDocument()})
+ it('没有任务也能一次登记，说明为空采用有界默认值',async()=>{const p=props();render(<ChangesPage {...p}/>);fireEvent.click(await screen.findByRole('button',{name:'登记本地修改'}));await screen.findByText(/沿用权限版本 1/);fireEvent.click(screen.getByRole('button',{name:'登记并核对实际变化'}));await waitFor(()=>expect(api.register).toHaveBeenCalledOnce());expect(api.register.mock.calls[0][1]).toMatchObject({reason:'本地源码修改',expected_registration_fingerprint:'a'.repeat(64)});expect(api.register.mock.calls[0][1]).not.toHaveProperty('task_id');await waitFor(()=>expect(p.onNavigate).toHaveBeenCalledWith('/changes?change_id=chg_one'))})
+ it('读取失败撤下可执行状态，不能登记',async()=>{api.list.mockRejectedValue(new Error('offline'));render(<ChangesPage {...props()}/>);await screen.findByRole('alert');expect(screen.getByRole('button',{name:'登记本地修改'})).toBeDisabled();expect(screen.queryByRole('button',{name:'检查这次修改'})).not.toBeInTheDocument()})
+ it('未知回执不重发，重新挂载后按原键读取',async()=>{api.register.mockRejectedValue(new Error('lost'));const p=props();const first=render(<ChangesPage {...p}/>);fireEvent.click(await screen.findByRole('button',{name:'登记本地修改'}));await screen.findByText(/沿用权限版本 1/);fireEvent.change(screen.getByLabelText('修改说明（选填）'),{target:{value:'不应存入会话的说明'}});fireEvent.click(screen.getByRole('button',{name:'登记并核对实际变化'}));await screen.findByText('上次登记回执尚未确认');const id=api.register.mock.calls[0][1].operation_id;expect(sessionStorage.getItem('jiejian.pending-operation.p1.registration')).not.toContain('不应存入');first.unmount();api.receipt.mockResolvedValue({project_id:'p1',operation_id:id,change_id:'chg_one'});render(<ChangesPage {...p} requestedView="register"/>);fireEvent.click(await screen.findByRole('button',{name:'查询登记回执'}));await waitFor(()=>expect(api.receipt).toHaveBeenCalledWith('p1','DELIVER',id));await waitFor(()=>expect(sessionStorage.getItem('jiejian.pending-operation.p1.registration')).toBeNull());expect(api.register).toHaveBeenCalledOnce()})
+ it('查询参数中的未知原题不能登记到另一问题',async()=>{render(<ChangesPage {...props()} requestedView="register" requestedRepair="unknown"/>);await screen.findByText(/沿用权限版本 1/);fireEvent.click(screen.getByRole('button',{name:'登记并核对实际变化'}));await waitFor(()=>expect(api.register).not.toHaveBeenCalled());expect(screen.getByText(/未找到指定原问题/)).toBeInTheDocument()})
+ it('缺少基线不展示伪差异',async()=>{api.list.mockResolvedValue([{...change,change_set:{...change.change_set,status:'NO_BASELINE'}}]);render(<ChangesPage {...props()} requestedChange="chg_one"/>);await screen.findByRole('heading',{name:'修改导出检查位置'});expect(screen.getByText('缺少可比较基线，不推算文件增删改。')).toBeInTheDocument();expect(screen.queryByText('real.py')).not.toBeInTheDocument()})
+ it('已有关联结果直接查看，不重复发起检查',async()=>{api.details.mockResolvedValue(linked);const p=props();render(<ChangesPage {...p}/>);fireEvent.click(await screen.findByRole('button',{name:'查看这次检查结果'}));expect(p.onNavigate).toHaveBeenCalledWith('/history?run_id=exact');expect(screen.queryByRole('button',{name:'检查这次修改'})).not.toBeInTheDocument()})
+ it('深链补读窗口外的修改，不默认跳到最新',async()=>{api.show.mockResolvedValue({...change,manifest:{...change.manifest,change_id:'old',reason:'旧的精确修改'}});render(<ChangesPage {...props()} requestedChange="old"/>);expect(await screen.findByRole('heading',{name:'旧的精确修改'})).toBeInTheDocument();expect(api.show).toHaveBeenCalledWith('p1','old')})
+ it('拒绝跨项目交付关联，不显示已验证',async()=>{api.details.mockResolvedValue({...linked,project_id:'other'});render(<ChangesPage {...props()}/>);await screen.findByRole('alert');expect(screen.queryByText('本轮已验证')).not.toBeInTheDocument()})
+ it('未关联结果如实显示，不能从其它原题通过推算整体',async()=>{api.repair.mockResolvedValue({project_id:'p1',tasks:[{task_reference:'one',status:'VERIFIED',change_id:'chg_one',contract:{repair_fingerprint:'ref',source_run_id:'old'}}]});render(<ChangesPage {...props()}/>);await screen.findByRole('table');expect(screen.queryByText('本轮已验证')).not.toBeInTheDocument();expect(api.register).not.toHaveBeenCalled()})
+ it('回执不存在后显式重试沿用原键和范围，不新建操作',async()=>{api.register.mockRejectedValueOnce(new Error('offline'));render(<ChangesPage {...props()} requestedView="register"/>);await screen.findByText(/沿用权限版本 1/);fireEvent.click(screen.getByRole('button',{name:'登记并核对实际变化'}));await screen.findByText('上次登记回执尚未确认');const original=api.register.mock.calls[0][1];fireEvent.click(screen.getByRole('button',{name:'查询登记回执'}));await screen.findByText(/尚未查到成功回执/);await waitFor(()=>expect(screen.getByRole('button',{name:'重试原登记'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'重试原登记'}));await waitFor(()=>expect(api.register).toHaveBeenCalledTimes(2));expect(api.register.mock.calls[1][1]).toEqual(original)})
+
+ it('详情页签复用精确记录，不再发起第二份交付读取',async()=>{api.details.mockResolvedValue(linked);render(<ChangesPage {...props()} requestedChange="chg_one"/>);await screen.findAllByText('real.py');const before=api.details.mock.calls.length;fireEvent.click(screen.getByRole('button',{name:'检查结果'}));expect(await screen.findByRole('button',{name:'查看本批检查记录'})).toBeInTheDocument();expect(api.details.mock.calls.length).toBe(before)})
 })

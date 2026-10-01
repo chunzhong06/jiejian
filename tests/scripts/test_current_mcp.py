@@ -101,7 +101,7 @@ def scenario(monkeypatch, *, paired=True, fault=None):
         def call(self, name, arguments):
             calls.append((name, arguments))
             assert arguments["project_id"] == "project"
-            denied = name == "jiejian_change_submit" and control.level == "READ" or name == "jiejian_check_run" and control.level == "PREPARE"
+            denied = name == "jiejian_change_register" and control.level == "READ" or name == "jiejian_check_run" and control.level == "PREPARE"
             if denied:
                 if fault == "denial_writes": control.changes.append("illegal")
                 if fault == "wrong_denial": raise MCPError(-32042, "private", dict(error_code="MCP_AUTH_REQUIRED"))
@@ -109,12 +109,17 @@ def scenario(monkeypatch, *, paired=True, fault=None):
                 return N(is_error=False, structured_content={})
             if name in {"jiejian_project_show", "jiejian_check_status"}:
                 return N(is_error=False, structured_content=dict(project_id="other" if fault == "foreign_read" else "project", action_count=2, case_count=3, can_execute=True))
-            if name == "jiejian_change_submit":
-                assert arguments == dict(project_id="project", reason=mcp.REASON, claimed_paths=[])
+            if name == "jiejian_change_registration_preview":
+                return N(is_error=False, structured_content=dict(project_id="project", permission_count=3, fingerprint="a" * 64))
+            if name == "jiejian_change_register":
+                assert arguments["expected_registration_fingerprint"] == "a" * 64
+                assert not {"task_id", "context_id", "expected_version"} & arguments.keys()
                 control.changes.append("change-mcp")
+                return N(is_error=False, structured_content=dict(project_id="project", change_id="change-mcp", status="SUCCEEDED", operation_id=arguments["operation_id"]))
+            if name == "jiejian_change_show":
                 value = dict(project_id="project", change_id="change-mcp", reason=mcp.REASON, submitted_by="MCP · " + mcp.CLIENT_NAME,
                     claimed_paths=[], added_paths=[], modified_paths=["unexpected"] if fault == "changed_source" else [], removed_paths=[])
-                return N(is_error=False, structured_content=value)
+                return N(is_error=False, structured_content={"change": value})
             assert name == "jiejian_check_run" and arguments == dict(project_id="project", idempotency_key=mcp.RUN_KEY, change_id="change-mcp")
             control.runs.append("mcp-new"); control.active = True
             if fault == "run_unknown": raise RuntimeError("Authorization secret must not escape")
@@ -131,7 +136,8 @@ def test_fifth_ordinary_run_keeps_originals_and_pairing_ownership(monkeypatch, p
     assert result["actual_changed_path_count"] == 0 and len(originals) == 4
     assert control.paired == paired and control.level == "READ" and not state.mcp_cleanup_pending
     assert state.active_run_id is None
-    assert [name for name, _ in calls].count("jiejian_change_submit") == 2
+    assert [name for name, _ in calls].count("jiejian_change_register") == 2
+    assert not any(name.startswith("jiejian_task_") for name, _ in calls)
     assert [name for name, _ in calls].count("jiejian_check_run") == 2
     assert gui.events == ([] if paired else ["pair-click"]) + ["connected", "level-READ", "level-PREPARE",
         "change-visible-manual-closed", "level-EXECUTE", "history-filter", "dismiss", "exact-completion-and-return",

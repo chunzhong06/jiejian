@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/http'
+import { experienceApi, type OfficialExperienceDto } from '../api/experience'
 import { projectsApi, type ProjectDto } from '../api/projects'
 import { workspaceApi, type WorkspaceViewDto } from '../api/workspace'
 import { browserState } from './browserState'
@@ -11,7 +12,10 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
   const [projects, setProjects] = useState<ProjectDto[]>([])
   const [selected, setSelected] = useState<ProjectDto | null>(null)
   const [workspace, setWorkspace] = useState<WorkspaceViewDto | null>(null)
+  const [experience, updateExperience] = useState<OfficialExperienceDto | null>(null)
   const currentProject = useRef<string | null>(null)
+  const selectionEpoch = useRef(0)
+  const projectsEpoch = useRef(0)
   const requestEpoch = useRef(0)
   const pendingRead = useRef<{ projectId: string; epoch: number; promise: Promise<WorkspaceViewDto | undefined> } | undefined>(undefined)
   const acceptedRead = useRef<{ projectId: string; epoch: number; value: WorkspaceViewDto } | undefined>(undefined)
@@ -19,6 +23,7 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
   useEffect(() => { alive.current = true; return () => { alive.current = false; requestEpoch.current += 1 } }, [])
 
   const selectProject = useCallback((project: ProjectDto | null) => {
+    selectionEpoch.current += 1
     if (currentProject.current !== (project?.project_id ?? null)) { requestEpoch.current += 1; setWorkspace(null) }
     currentProject.current = project?.project_id ?? null
     setSelected(project)
@@ -26,16 +31,35 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
     else browserState.clearProject()
   }, [])
 
+  const setExperience = useCallback((value: OfficialExperienceDto | null) => {
+    // 启停回执优先于操作前已发出的状态读取。
+    projectsEpoch.current += 1
+    updateExperience(value)
+  }, [])
+
   const refreshProjects = useCallback(async () => {
+    const epoch = ++projectsEpoch.current
+    const selection = selectionEpoch.current
     try {
-      const current = await projectsApi.projects()
+      // 等来源和运行状态一起返回后才恢复，避免旧任务先闪现并触发工作区回读。
+      const [projectRead, environmentRead] = await Promise.allSettled([projectsApi.projects(), experienceApi.status()])
+      if (!alive.current || epoch !== projectsEpoch.current) return []
+      if (projectRead.status === 'rejected') throw projectRead.reason
+      const current = projectRead.value
+      const environment = environmentRead.status === 'fulfilled' ? environmentRead.value : null
+      updateExperience(environment)
       setProjects(current)
-      const recalled = browserState.readProject()
-      const authoritative = current.find((item) => item.project_id === recalled?.project_id) ?? null
-      selectProject(authoritative)
+      if (selection === selectionEpoch.current) {
+        const recalled = browserState.readProject()
+        const authoritative = current.find((item) => item.project_id === recalled?.project_id) ?? null
+        const official = authoritative?.official_sample || (authoritative && [environment?.project_id, environment?.history_project_id].includes(authoritative.project_id))
+        const running = environment?.active && environment.project_id === authoritative?.project_id && environment.lifecycle === 'RUNNING'
+        selectProject(official && !running ? null : authoritative)
+      }
+      if (environmentRead.status === 'rejected') onError(environmentRead.reason as ApiError)
       return current
     } catch (error) {
-      onError(error as ApiError)
+      if (alive.current && epoch === projectsEpoch.current) onError(error as ApiError)
       return []
     }
   }, [onError, selectProject])
@@ -82,6 +106,8 @@ export function useProjectWorkspace(onError: (error: ApiError) => void) {
 
   return {
     projects,
+    experience,
+    setExperience,
     selected,
     workspace,
     selectProject,

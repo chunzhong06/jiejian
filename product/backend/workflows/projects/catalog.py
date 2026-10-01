@@ -29,6 +29,19 @@ class ProjectCatalog:
             raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
         return record
 
+    def list_for_display(self, *, include_archived: bool = False) -> list[dict]:
+        """投影持久来源供界面恢复选择；示例身份不代表实例仍在运行。"""
+
+        with self._uow_factory() as work:
+            return [
+                {
+                    **record.model_dump(mode="json"),
+                    "official_sample": work.sample_workspaces.for_project(record.project_id) is not None,
+                }
+                for record in work.projects.list_all()
+                if include_archived or record.status is not ProjectStatus.ARCHIVED
+            ]
+
     def current_observations(self, project_id: str) -> tuple[str, ...]:
         """为契约治理提供当前项目已经接入的最小观察能力。"""
 

@@ -34,15 +34,26 @@ it('旧记录缺少所有权时给出处理说明，不提供无效的循环核�
   expect(screen.queryByRole('button', { name: '重新核对环境' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: '启动示例' })).toBeDisabled()
 })
-it('停止后只提供全新同步实现入口，明确旧项目归档与材料不继承', async () => {
+it('工作台有已退出的旧示例时保持简洁入口，归档影响在确认框说明', async () => {
   render(<OfficialSamplePanel {...props()} value={{ ...idle, project_id: 'old', lifecycle: 'STOPPED', workspace_retained: true, recovery_state: 'EXITED' }} />)
-  expect(screen.getByRole('heading', { name: '从全新示例开始' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: '从全新示例开始' })).not.toBeInTheDocument()
+  expect(screen.getByText('上次示例已退出，历史记录保留。本次启动将创建全新示例。')).toBeInTheDocument()
+  expect(screen.queryByText('旧项目归档保留')).not.toBeInTheDocument()
+  expect(api.start).not.toHaveBeenCalled()
   expect(screen.queryByText('从上次中断处继续')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '启动示例' }))
   expect(screen.getByText(/旧项目将归档/)).toBeInTheDocument()
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '启动示例' }))
   await waitFor(() => expect(api.start).toHaveBeenCalledTimes(1))
   expect(api.prepare).not.toHaveBeenCalled(); expect(api.boundaryProposal).not.toHaveBeenCalled()
+})
+it('环境管理页保留全新示例的详细归档说明，不因读取状态自动启动', () => {
+  render(<OfficialSamplePanel {...props()} expanded value={{ ...idle, project_id: 'old', lifecycle: 'STOPPED', workspace_retained: true, recovery_state: 'EXITED' }} />)
+  expect(screen.getByRole('heading', { name: '从全新示例开始' })).toBeInTheDocument()
+  expect(screen.getByText('旧项目归档保留')).toBeInTheDocument()
+  expect(screen.getByText('新项目从零开始')).toBeInTheDocument()
+  expect(screen.getAllByRole('button', { name: '启动示例' })).toHaveLength(1)
+  expect(api.start).not.toHaveBeenCalled()
 })
 it('重置先明确确认，确认后只调用重置接口且不写结论', async () => {
   render(<OfficialSamplePanel {...props()} value={active} />)

@@ -75,7 +75,7 @@ def test_current_case_matches_executor_order_and_copies_only_frozen_labels(progr
     # 只运行 execute 的真实排序/进度循环；单题执行和所有 I/O 由无副作用 stub 替代。
     executor = N(request=parts.request, bundle=parts.bundle, input=parts.result, clock=lambda: NOW+12,
         cancelled=lambda: False, progress=progress, _case=case, web=N(close=Mock()),
-        _stopped=None, _first_error=None, _cleanup_issues=[])
+        _stopped=None, _first_error=None, _cleanup_issues=[], _runtime_reference=None)
     CheckExecutor.execute(executor)
     assert [item.case_id for item in projected] == executed
     assert [item.expectation for item in projected] == ["ALLOW", "ALLOW", "DENY"]

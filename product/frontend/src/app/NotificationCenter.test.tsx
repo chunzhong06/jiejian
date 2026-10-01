@@ -1,6 +1,6 @@
 /* 全局通知队列测试：验证结构化诊断驱动的去重、时限、上限和安全结论隔离。 */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/http'
 import { enqueueNotification, NotificationCenter, notificationDurationMs } from './NotificationCenter'
@@ -45,4 +45,14 @@ describe('NotificationCenter', () => {
     expect(screen.getAllByText('结构化标题')).toHaveLength(3)
     expect(screen.queryByText('不应被通知正文消费的错误正文')).not.toBeInTheDocument()
   })
+  it('检查动态进入同一浮层，保留查看和关闭操作，不混入错误队列', () => {
+    const onView=vi.fn(),onDismiss=vi.fn()
+    render(<NotificationCenter items={[]} onDismiss={vi.fn()} onNavigate={vi.fn()} activity={{label:'检查完成，权限验证通过',actionLabel:'查看结果',onView,onDismiss}}/>)
+    const floating=within(screen.getByRole('complementary',{name:'全局通知'}))
+    expect(floating.getByRole('region',{name:'检查动态'})).toBeInTheDocument()
+    fireEvent.click(floating.getByRole('button',{name:'查看结果'}));expect(onView).toHaveBeenCalledOnce()
+    fireEvent.click(floating.getByRole('button',{name:'关闭检查完成提示'}));expect(onDismiss).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
 })

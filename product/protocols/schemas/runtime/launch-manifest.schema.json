@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "RuntimeFile": {
+      "additionalProperties": false,
+      "properties": {
+        "relative_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "maximum": 33554432,
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "relative_path",
+        "sha256",
+        "size"
+      ],
+      "title": "RuntimeFile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "dependency_files": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Dependency Files",
+      "type": "array"
+    },
+    "entry_module": {
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+      "title": "Entry Module",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/RuntimeFile"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    },
+    "instance_id": {
+      "pattern": "^rti_[0-9a-f]{32}$",
+      "title": "Instance Id",
+      "type": "string"
+    },
+    "interpreter_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Interpreter Fingerprint",
+      "type": "string"
+    },
+    "mode": {
+      "const": "CONTROLLED_PYTHON_DIRECTORY",
+      "default": "CONTROLLED_PYTHON_DIRECTORY",
+      "title": "Mode",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "instance_id",
+    "entry_module",
+    "files",
+    "source_fingerprint",
+    "interpreter_fingerprint"
+  ],
+  "title": "RuntimeLaunchManifest",
+  "type": "object"
+}

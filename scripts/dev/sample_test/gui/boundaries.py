@@ -1,4 +1,5 @@
 # 业务提案与人类确认的真实页面操作。
+import re
 from .session import GuiSession
 
 
@@ -23,10 +24,16 @@ class BoundariesActions(GuiSession):
         self._mark("human-approve")
         return result
 
-    def maintenance(self, project):
+    def _open_maintenance(self):
+        """沿权限详情进入代码关联草稿，不从隐藏表单直接提交。"""
         self._goto("/permissions")
-        self.page.get_by_role("button", name="管理业务对象", exact=True).click()
+        self.page.get_by_role("button", name=re.compile(r"^详\s*情$")).first.click()
+        self.page.locator("summary").filter(has_text="当前代码定位").click()
+        self.page.get_by_role("button", name="管理业务对象与代码关联", exact=True).click()
         self.page.get_by_role("button", name="核对代码关联", exact=True).wait_for()
+
+    def maintenance(self, project):
+        self._open_maintenance()
         self.capture("boundary-maintenance-entry")
         result, _ = self._response(f"/api/projects/{project}/business-boundaries/maintenance-proposals",
             lambda: self.page.get_by_role("button", name="核对代码关联", exact=True).click())

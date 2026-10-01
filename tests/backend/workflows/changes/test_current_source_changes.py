@@ -41,6 +41,7 @@ def test_claimed_path_is_only_hint_and_stale_mapping_never_auto_rebinds(harness)
 
 def test_failed_aggregate_transaction_keeps_no_half_change(harness,monkeypatch):
     current,service = harness
+    before = current.core.application_understanding.get(current.project_id)
     original = SourceChangeRepository.add_current_change
     def failed(self,*args):
         original(self,*args)
@@ -52,6 +53,7 @@ def test_failed_aggregate_transaction_keeps_no_half_change(harness,monkeypatch):
     with current.core.uow_factory() as work:
         assert work.source_changes.current_changes(current.project_id)==()
         understanding = work.application_understanding.get(current.project_id)
+        assert understanding == before
         assert work.source_changes.snapshot_for_fingerprint(current.project_id,understanding.source_fingerprint) is not None
 
 
@@ -60,7 +62,7 @@ def test_invalid_claimed_paths_rejected_before_scanning(harness,path,monkeypatch
     current,service = harness
     def forbidden(*args,**kwargs):
         raise AssertionError("invalid input must not scan")
-    monkeypatch.setattr(current.core.application_understanding,"analyze_source_for_change",forbidden)
+    monkeypatch.setattr(current.core.application_understanding,"scan_source",forbidden)
     with pytest.raises((ValueError,JiejianError)):
         service.submit(current.project_id,reason="错误路径",claimed_paths=(path,))
 
@@ -71,7 +73,7 @@ def test_concurrent_human_policy_change_is_kept_but_change_registration_rolls_ba
     current, service = harness
     core, project = current.core, current.project_id
     before = core.business_boundaries.view(project).policy_epoch
-    analyze = core.application_understanding.analyze_source_for_change
+    analyze = core.application_understanding.scan_source
     def changed(*args, **kwargs):
         result = analyze(*args, **kwargs)
         draft = core.business_boundaries.maintenance_draft(project)
@@ -85,7 +87,7 @@ def test_concurrent_human_policy_change_is_kept_but_change_registration_rolls_ba
         core.business_boundaries.approve(project, proposal.proposal.proposal_id,
             expected_fingerprint=proposal.proposal.proposal_fingerprint, reason="确认并发权限变更")
         return result
-    monkeypatch.setattr(core.application_understanding, "analyze_source_for_change", changed)
+    monkeypatch.setattr(core.application_understanding, "scan_source", changed)
     (current.source_root / "new.py").write_text("# 受控源码变更。\nvalue = 2\n", encoding="utf-8")
     with pytest.raises(JiejianError) as error:
         service.submit(project, reason="扫描期间权限发生变化")
@@ -122,6 +124,7 @@ def test_ordinary_check_revalidates_real_source_without_change_id(tmp_path, monk
 def test_missing_complete_snapshot_cannot_register_change(harness, monkeypatch):
     from contextlib import contextmanager
     current, service = harness
+    (current.source_root / "new_snapshot.py").write_text("# 新源码快照必须完整保存。\nvalue = 1\n", encoding="utf-8")
     @contextmanager
     def factory(**kwargs):
         with current.core.uow_factory(**kwargs) as work:

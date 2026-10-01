@@ -32,6 +32,12 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("contracts/normalized-permission-plan.schema.json", "product.backend.core.verification.permissions.contract:NormalizedPermissionPlan"),
     SchemaEntry("contracts/permission-contract.schema.json", "product.backend.core.verification.permissions.contract:PermissionContract"),
     SchemaEntry("contracts/permission-mutation-plan.schema.json", "product.backend.core.verification.permissions.coverage:PermissionMutationPlan"),
+    SchemaEntry("development/acceptance.schema.json", "product.backend.core.development:DevelopmentAcceptance"),
+    SchemaEntry("development/context.schema.json", "product.backend.core.development:DevelopmentContext"),
+    SchemaEntry("development/delivery.schema.json", "product.backend.core.development:DevelopmentDelivery"),
+    SchemaEntry("development/receipt.schema.json", "product.backend.core.development:DevelopmentReceipt"),
+    SchemaEntry("development/runtime-operation.schema.json", "product.backend.core.development:RuntimeActivationReceipt"),
+    SchemaEntry("development/task.schema.json", "product.backend.core.development:DevelopmentTask"),
     SchemaEntry("execution/http.schema.json", "product.protocols.web.request:HttpRequestTemplate"),
     SchemaEntry("execution/web-execution-profile.schema.json", "product.protocols.web.profile:WebExecutionProfile"),
     SchemaEntry("identity/identity-preparation-request.schema.json", "product.protocols.test_identity_preparation:IdentityPreparationRequest"),
@@ -55,7 +61,9 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("runner/check-publication-manifest.schema.json", "product.protocols.check_publication:CheckPublicationManifest"),
     SchemaEntry("runner/check-runner-input.schema.json", "product.protocols.check_result:CheckRunnerInput"),
     SchemaEntry("runner/check-runner-progress.schema.json", "product.protocols.check_result:CheckRunnerProgress"),
+    SchemaEntry("runner/check-runner-result-v2.schema.json", "product.protocols.check_result:ControlledCheckRunnerResult"),
     SchemaEntry("runner/check-runner-result.schema.json", "product.protocols.check_result:CheckRunnerResult"),
+    SchemaEntry("runner/check-runtime-v2.schema.json", "product.protocols.check_runtime:ControlledCheckRuntimeBundle"),
     SchemaEntry("runner/check-runtime.schema.json", "product.protocols.check_runtime:CheckRuntimeBundle"),
     SchemaEntry("runner/evidence.schema.json", "product.protocols.runner.evidence:Evidence"),
     SchemaEntry("runner/persisted-execution-request-v3.schema.json", "product.protocols.execution_v3:PersistedExecutionRequestV3"),
@@ -63,6 +71,8 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("runner/runner-input.schema.json", "product.protocols.runner.input:RunnerInput"),
     SchemaEntry("runner/runner-result.schema.json", "product.protocols.runner.result:RunnerResult"),
     SchemaEntry("runner/trusted-result-receipt.schema.json", "product.backend.infra.artifacts.run_packages:TrustedResultReceipt"),
+    SchemaEntry("runtime/launch-manifest.schema.json", "product.protocols.runtime_identity:RuntimeLaunchManifest"),
+    SchemaEntry("runtime/launch-receipt.schema.json", "product.protocols.runtime_identity:RuntimeLaunchReceipt"),
 )
 
 

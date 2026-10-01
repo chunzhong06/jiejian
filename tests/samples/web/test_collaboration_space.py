@@ -237,6 +237,9 @@ def test_alice_exports_and_all_data_sources_are_real(collaboration_space_factory
             + "&peekonly=true&numofmessages=8"
         )
         assert queue.status_code == 200
+        limited_queue = client.get("/collaboration/export-events/messages?" + sample.queue_sas + "&peekonly=true&numofmessages=1")
+        assert limited_queue.text.count("<QueueMessage>") == 1
+        assert client.get("/collaboration/export-events/messages?" + sample.queue_sas + "&peekonly=true&numofmessages=33").status_code == 400
         assert "QueueMessage" in queue.text
         message_text = re.search(r"<MessageText>([^<]+)</MessageText>", queue.text)
         assert message_text is not None
@@ -555,6 +558,8 @@ def test_owner_revoke_preserves_history_hides_current_resource_and_allows_regene
             "state": "REVOKED",
         }
         assert sample.server.storage.find_job(marker)["state"] == "REVOKED"
+        assert any(row["case_tag"] == marker for row in sample.server.storage.queue_records())
+        assert not any(row["case_tag"] == marker for row in sample.server.storage.queue_records(current_only=True))
 
         project = alice.get(f"/api/projects/{PROJECT_ID}").json()
         assert project["export_state"] == "REVOKED"

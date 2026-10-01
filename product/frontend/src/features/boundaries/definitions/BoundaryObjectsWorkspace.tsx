@@ -15,16 +15,19 @@ let sequence=0
 const localId=(prefix:string)=>`${prefix}_${(Date.now()+ ++sequence).toString(16).padStart(16,'0').slice(-16)}`
 const newEffect=():DraftEffect=>({item_id:localId('peff'),effect_id:null,business_label:'',resource_concept:'',description:'',protected_projection:[]})
 
-export function BoundaryObjectsWorkspace({kind,actors,actions,permissions,draft,copies,setCopies,setActors,setActions,setPermissions,busy}: {
+export function BoundaryObjectsWorkspace({kind,actors,actions,permissions,draft,copies,setCopies,setActors,setActions,setPermissions,busy,createOnOpen,editOnOpen,initialId}: {
+ createOnOpen?:boolean; editOnOpen?:boolean; initialId?:string
  kind:'actions'|'actors';actors:BoundaryMaintenanceActorDto[];actions:DraftAction[];permissions:BoundaryMaintenancePermissionDto[];draft:BoundaryMaintenanceDraftDto
  copies:ObjectDrafts;setCopies:Dispatch<SetStateAction<ObjectDrafts>>
  setActors:Dispatch<SetStateAction<BoundaryMaintenanceActorDto[]>>;setActions:Dispatch<SetStateAction<DraftAction[]>>
  setPermissions:Dispatch<SetStateAction<BoundaryMaintenancePermissionDto[]>>;busy:boolean
 }) {
- const [selected,setSelected]=useState(actions[0]?.item_id ?? '')
+ const [selected,setSelected]=useState(initialId ?? actions[0]?.item_id ?? '')
  const [query,setQuery]=useState('')
- useEffect(()=>{setSelected('');setEditing(false);setQuery('');setError('')},[kind])
- const [editing,setEditing]=useState(false)
+ useEffect(()=>{setSelected(initialId ?? '');setEditing(Boolean(editOnOpen));setQuery('');setError('')},[kind])
+ const [editing,setEditing]=useState(Boolean(editOnOpen))
+ const initialCreated=useRef(false)
+ useEffect(()=>{if(createOnOpen&&!initialCreated.current){initialCreated.current=true;add()}},[createOnOpen])
  const [error,setError]=useState('')
  const workspaceRef=useRef<HTMLElement>(null)
  const restoreEditFocus=useRef(false)

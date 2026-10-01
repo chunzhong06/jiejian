@@ -21,7 +21,7 @@ vi.mock('../../api/mcp', () => ({
 describe('ToolsPage', () => {
   afterEach(() => cleanup())
 
-  it('展示五类正式客户端和固定 Oracle 提示', async () => {
+  it('使用协作统一页头并展示三类客户端和权限边界', async () => {
     status.mockResolvedValue({
       schema_version: '1',
       paired: true,
@@ -40,11 +40,11 @@ describe('ToolsPage', () => {
 
     render(<ToolsPage onNavigate={vi.fn()} projects={[{ project_id: 'project-demo', name: '演示应用', status: 'READY' }]} onError={vi.fn()} />)
 
-    expect(await screen.findByRole('heading', { name: 'Agent 连接与授权' })).toBeInTheDocument()
-    for (const label of ['Codex', 'TRAE', 'Qoder', 'CodeBuddy', 'DSH']) {
+    expect(await screen.findByRole('heading', { name: '连接与授权', level: 1 })).toBeInTheDocument()
+    for (const label of ['Codex', 'DSH', 'ZCode']) {
       expect(screen.getByText(label, { selector: '.ant-segmented-item-label' })).toBeInTheDocument()
     }
-    expect(screen.getByText(/不能确认或更改权限规则，也不能改变界鉴的检查结论/)).toBeInTheDocument()
+    expect(screen.getByText(/不能批准或更改权限规则，也不能改变界鉴的检查结论/)).toBeInTheDocument()
     expect(document.querySelector('.module-navigation')).not.toBeInTheDocument()
   })
 })

@@ -63,29 +63,32 @@
 
 .environment-focus {
   display: grid;
-  grid-template-columns: 160px minmax(0,1fr);
-  gap: var(--space-40);
+  grid-template-columns: 128px minmax(0,1fr);
+  gap: var(--space-32);
   align-items: center;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-large);
   background: var(--color-surface);
   box-shadow: var(--shadow-focus);
-  padding: 28px;
+  padding: var(--space-32);
 }
 
 .environment-illustration {
-  font-size: 80px;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  font-size: 64px;
   color: var(--color-secondary);
 }
 
-.environment-focus>div {
+.environment-focus-body {
   border-left: 1px solid var(--color-border);
-  padding-left: var(--space-40);
+  padding-left: var(--space-32);
   min-width: 0;
 }
 
 .environment-focus h2 {
-  font-size: 26px;
+  font-size: var(--font-section);
   margin: 0 0 var(--space-16);
 }
 
@@ -183,19 +186,19 @@
   .environment-focus {
     grid-template-columns: minmax(0,1fr);
     gap: var(--space-24);
-    padding: 22px;
+    padding: var(--space-20);
   }
 }
 
 @media(max-width:760px) {
   .environment-illustration {
     font-size: 48px;
-    justify-self: start;
+    justify-self: stretch;
   }
 }
 
 @media(max-width:760px) {
-  .environment-focus>div {
+  .environment-focus-body {
     padding: 0;
     border: 0;
   }
@@ -203,7 +206,7 @@
 
 @media(max-width:760px) {
   .environment-focus h2 {
-    font-size: 22px;
+    font-size: var(--font-section);
   }
 }
 
@@ -219,3 +222,9 @@
 .environment-retained{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--color-border);border-bottom:1px solid var(--color-border);margin:24px 0;gap:30px;padding:24px 0}
 .environment-retained>div+div{border-left:1px solid var(--color-border);padding-left:30px}.environment-retained p{color:var(--color-secondary)}
 @media(max-width:650px){.environment-recovery{padding:20px}.environment-retained{grid-template-columns:1fr;gap:16px}.environment-retained>div+div{border-left:0;border-top:1px solid var(--color-border);padding:20px 0 0}.environment-recovery .ant-btn{min-height:44px}}
+
+/* 下一步沿用共用操作层级，次级在左、主操作在右；插图独立居中，不承担按钮装饰。 */
+.environment-focus-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:var(--space-12);margin-top:var(--space-24);}
+.environment-support-link{text-align:right;margin-top:var(--space-12);}
+.environment-focus .workbench-sample-entry{display:grid;justify-items:end;margin-top:var(--space-16);}
+.environment-focus .workbench-sample-entry>.ant-alert{justify-self:stretch;}

@@ -3,13 +3,63 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { WorkspaceViewDto } from '../api/workspace'
 import { useProjectWorkspace } from './useProjectWorkspace'
+import { browserState } from './browserState'
 
-const api = vi.hoisted(() => ({ projects: vi.fn(), current: vi.fn() }))
+const api = vi.hoisted(() => ({ projects: vi.fn(), current: vi.fn(), experience: vi.fn() }))
+vi.mock('../api/experience', () => ({ experienceApi: { status: api.experience } }))
 vi.mock('../api/projects', () => ({ projectsApi: { projects: api.projects } }))
 vi.mock('../api/workspace', () => ({ workspaceApi: { current: api.current } }))
 vi.mock('./browserState', () => ({ browserState: { readProject: () => ({ project_id: 'p1' }), writeProject: vi.fn(), clearProject: vi.fn() } }))
 const workspace = (id: string) => ({ project: { project_id: id }, actors: [], actions: [], areas: [], primary_task: null } as unknown as WorkspaceViewDto)
-beforeEach(() => { vi.clearAllMocks(); api.projects.mockResolvedValue([{ project_id: 'p1' }, { project_id: 'p2' }]); api.current.mockResolvedValue(workspace('p1')) })
+beforeEach(() => { vi.clearAllMocks(); api.experience.mockResolvedValue({ active: false, project_id: null }); api.projects.mockResolvedValue([{ project_id: 'p1' }, { project_id: 'p2' }]); api.current.mockResolvedValue(workspace('p1')) })
+
+it.each(['STOPPED', 'UNKNOWN', 'STARTING'])('不自动恢复%s的旧示例，也不读取旧待办', async lifecycle => {
+  api.projects.mockResolvedValue([{ project_id: 'p1', official_sample: true }])
+  api.experience.mockResolvedValue({ active: false, project_id: 'p1', lifecycle })
+  const onError = vi.fn(); const { result } = renderHook(() => useProjectWorkspace(onError))
+  await waitFor(() => expect(result.current.projects).toHaveLength(1))
+  expect(result.current.selected).toBeNull()
+  expect(browserState.clearProject).toHaveBeenCalled()
+  expect(api.current).not.toHaveBeenCalled()
+})
+
+it('状态读取失败仍恢复普通应用，但不恢复已知示例', async () => {
+  api.projects.mockResolvedValue([{ project_id: 'p1', official_sample: true }])
+  api.experience.mockRejectedValue(new Error('offline'))
+  const onError = vi.fn(); const { result } = renderHook(() => useProjectWorkspace(onError))
+  await waitFor(() => expect(onError).toHaveBeenCalledTimes(1))
+  expect(result.current.selected).toBeNull()
+  api.projects.mockResolvedValue([{ project_id: 'p1', official_sample: false }])
+  await act(async () => { await result.current.refreshProjects() })
+  expect(result.current.selected?.project_id).toBe('p1')
+})
+
+it('等待实时状态后才恢复当前仍在运行的示例', async () => {
+  let resolve!: (value: unknown) => void
+  api.projects.mockResolvedValue([{ project_id: 'p1', official_sample: true }])
+  api.experience.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+  const onError = vi.fn(); const { result } = renderHook(() => useProjectWorkspace(onError))
+  expect(result.current.selected).toBeNull(); expect(api.current).not.toHaveBeenCalled()
+  await act(async () => resolve({ active: true, project_id: 'p1', lifecycle: 'RUNNING' }))
+  await waitFor(() => expect(result.current.workspace?.project.project_id).toBe('p1'))
+})
+
+it('最新实例属于另一项目时不会恢复更早的示例', async () => {
+  api.projects.mockResolvedValue([{ project_id: 'p1', official_sample: true }])
+  api.experience.mockResolvedValue({ active: true, project_id: 'p2', lifecycle: 'RUNNING' })
+  const onError = vi.fn(); const { result } = renderHook(() => useProjectWorkspace(onError))
+  await waitFor(() => expect(result.current.projects).toHaveLength(1))
+  expect(result.current.selected).toBeNull(); expect(api.current).not.toHaveBeenCalled()
+})
+
+it('初始回读不能覆盖用户期间主动选择的应用', async () => {
+  let resolve!: (value: unknown) => void
+  api.experience.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+  const onError = vi.fn(); const { result } = renderHook(() => useProjectWorkspace(onError))
+  act(() => result.current.selectProject({ project_id: 'p2' }))
+  await act(async () => resolve({ active: false, project_id: 'p1', lifecycle: 'STOPPED' }))
+  expect(result.current.selected?.project_id).toBe('p2')
+})
 
 it('切换项目以后，延迟的旧响应不会覆盖新项目', async () => {
   let old!: (value: WorkspaceViewDto) => void

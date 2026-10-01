@@ -40,7 +40,7 @@ from product.backend.infra.storage.orm_registry import load_storage_orm_mappings
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 _BASE_MIGRATION_REVISION = "0001_business_boundary_v2"
 _MAINTENANCE_MIGRATION_REVISION = "0002_business_boundary_maintenance"
-_CURRENT_MIGRATION_REVISION = "0007_preparation_recovery"
+_CURRENT_MIGRATION_REVISION = "0009_delivery_check_links"
 _LEGACY_1_X_MIGRATION_REVISIONS = frozenset(
     {
         "0001_web_v1",
@@ -219,7 +219,7 @@ def _check_database_compatibility(
             revision = revisions[0]
             if revision in _LEGACY_1_X_MIGRATION_REVISIONS:
                 raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)
-            if revision in {"0005_verification_loop_v3", "0006_product_provenance"} and resource_root is not None:
+            if revision in {"0005_verification_loop_v3", "0006_product_provenance", "0007_preparation_recovery", "0008_development_delivery"} and resource_root is not None:
                 # 历史真源是签入迁移链，不以当前 ORM 减表猜测旧结构。
                 if _sqlite_schema_signature(connection) != _legacy_schema_signature(resource_root, revision):
                     raise JiejianError(ErrorCode.STORAGE_MIGRATION, _INCOMPATIBLE_DATABASE_MESSAGE)

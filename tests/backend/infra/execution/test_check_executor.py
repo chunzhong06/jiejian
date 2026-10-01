@@ -65,6 +65,23 @@ def test_real_twin_matrix_and_each_target_executes_once(check_target, tmp_path, 
         for case_id, marker in state["target_calls"])
 
 
+@pytest.mark.parametrize("before,after,calls,verdict", [(False, False, 0, RunVerdict.INCONCLUSIVE), (True, False, 2, RunVerdict.BLOCK)])
+def test_runtime_drift_stops_unstarted_targets_but_preserves_observed_block(check_target, tmp_path, monkeypatch, before, after, calls, verdict):
+    def controlled(payload):
+        payload.update(schema_version="2", runtime_reference=dict(instance_id="rti_" + "1" * 32,
+            manifest_fingerprint="a" * 64, source_fingerprint=payload["source_fingerprint"],
+            process_id=123, process_created_at=456, owner_id="exp_" + "2" * 32))
+    request, bundle, runner_input, environment = execution_configuration(check_target, deny_effect=True, configure=controlled)
+    checks = iter((before, after))
+    monkeypatch.setattr("product.backend.infra.execution.check_executor.runtime_corresponds", lambda *_: next(checks))
+    environment["JIEJIAN_VAR_DIR"] = str(tmp_path)
+    output = CheckExecutor(request, bundle, runner_input, environ=environment, attempt_dir=tmp_path,
+        cancellation_requested=lambda: False).execute()
+    assert len(check_target[1]["target_calls"]) == calls
+    assert output.result.verdict is verdict
+    assert output.result.runtime_correspondence.after == "UNCONFIRMED"
+
+
 def test_recovery_failure_does_not_erase_confirmed_block(check_target, tmp_path):
     output, _input = execute(check_target, tmp_path, deny_effect=True, recovery_fail=True)
     assert output.result.verdict is RunVerdict.BLOCK

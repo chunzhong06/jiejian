@@ -177,7 +177,7 @@ def test_sample_observer_failure_and_fixed_new_run_preserve_original_question(cu
     core = current_sample
     project = prepare_sample(core)
     _apply_optimization_after_baseline(core, project)
-    original, story = execute_published(core, project, key="original")
+    original, story = execute_published(core, project, key="original", change_id=core.official_experience.status().vulnerable_change_id)
     assert story.verdict.value == "BLOCK"
     contract = core.check_repairs.contracts(original.result.run_id)[0]
     assert len(contract.regressions) == 2
@@ -207,8 +207,24 @@ def test_sample_observer_failure_and_fixed_new_run_preserve_original_question(cu
     assert verification.status == "VERIFIED"
     assert core.project_repair.evaluate(project).status == "VERIFIED"
     assert core.official_experience.development_journey().repair_verified
+    task = core.development.active(project)
+    deliveries = core.development.view(project, task.task_id)["deliveries"]
+    assert len(deliveries) == 2
+    assert deliveries[0]["change_id"] == fixed.repair_change_id
+    assert core.development.delivery_details(project, fixed.repair_change_id)["verification"]["run_id"] == repaired.result.run_id
+    repeated = core.official_experience.switch_version(version=OfficialScenarioVersion.FIXED)
+    assert repeated.repair_change_id == fixed.repair_change_id
+    assert len(core.development.view(project, task.task_id)["deliveries"]) == 2
     assert len({original.result.run_id, insufficient.result.run_id, repaired.result.run_id}) == 3
     assert core.check_results.package(original.result.run_id) == original
+    # 多轮演练只观察当前队列窗口；定位记录已采集不等于最终交付物证明。
+    for package in (original, repaired):
+        observations = [item for document in package.evidence for item in document.observations]
+        assert not any("OBSERVER_PHASE_UNAVAILABLE" in item.reason_codes for item in observations)
+        assert not any("AZURE_QUEUE_MESSAGE_LIMIT" in item.reason_codes for item in observations)
+        diagnostic = [item for item in observations if item.level == "DIAGNOSIS_REQUIRED" and item.phase in {"AFTER", "EVENTUAL"}]
+        assert diagnostic and all("SOURCE_RECORDS_AVAILABLE" in item.reason_codes for item in diagnostic)
+        assert all(item.state == "UNKNOWN" for item in diagnostic)
 
 
 def test_current_flow_bytes_and_descriptor_rejections_preserve_frozen_material(current_sample):

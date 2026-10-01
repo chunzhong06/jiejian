@@ -41,6 +41,20 @@ def result_document():
             evidence_ids=(evidence.evidence_id,), outcome=evidence.outcome),))
 
 
+def test_controlled_result_keeps_runtime_applicability_separate_from_verdict():
+    from product.protocols.check_result import ControlledCheckRunnerResult
+    from product.protocols.runtime_identity import ControlledRuntimeReference, RuntimeCorrespondence
+    old = result_document()
+    reference = ControlledRuntimeReference(instance_id="rti_" + "1" * 32, manifest_fingerprint="a" * 64,
+        source_fingerprint="b" * 64, process_id=123, process_created_at=456, owner_id="exp_" + "2" * 32)
+    current = ControlledCheckRunnerResult(**old.model_dump(exclude={"schema_version"}),
+        runtime_correspondence=RuntimeCorrespondence(reference=reference, before="MATCHED", after="UNCONFIRMED"))
+    parsed = parse_check_document(canonical_check_document(current), CheckRunnerResult)
+    assert parsed == current and parsed.verdict == old.verdict
+    assert parsed.runtime_correspondence.after == "UNCONFIRMED"
+    assert type(parse_check_document(canonical_check_document(old), CheckRunnerResult)) is CheckRunnerResult
+
+
 @pytest.mark.parametrize("build", [input_document, evidence_document, result_document])
 def test_check_root_roundtrip(build):
     document = build()

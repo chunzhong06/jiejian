@@ -65,7 +65,7 @@ export type ActionResultStory = {
   execution_path?: StoryExecutionPath | null
   proof_coverage?: StoryProofCoverage[]
 }
-export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null }
+export type ResultStory = { run_id: string; project_id: string; verdict: CheckVerdict; judgement: string; policy_epoch: number; actions: ActionResultStory[]; claim_boundary: string[]; technical_references: string[]; change_context?: { change_id: string } | null; repair_verification?: RepairVerification | null; runtime_status?: 'MATCHED' | 'UNCONFIRMED' | 'UNSUPPORTED'; runtime_instance_id?: string | null }
 export type CheckEvidence = {
   schema_version: '1'; evidence_id: string; run_id: string; action_id: string; case: { case_id: string; resource_id: string }
   outcome: CheckOutcome; observations: CheckObservation[]

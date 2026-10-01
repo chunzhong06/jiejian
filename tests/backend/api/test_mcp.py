@@ -87,7 +87,7 @@ def _token_bytes(token: str) -> bytes:
     return base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
 
 
-def test_mcp_server_instructions_use_one_completed_user_task_as_change_boundary(
+def test_mcp_server_instructions_register_one_change_without_manual_task_setup(
     tmp_path: Path,
 ) -> None:
     app = create_app(
@@ -97,8 +97,10 @@ def test_mcp_server_instructions_use_one_completed_user_task_as_change_boundary(
     )
     instructions = app.state.mcp_server.instructions
 
-    assert "READ读取既有事实" in instructions
-    assert "PREPARE只登记代码变化声明" in instructions
+    assert "READ读取批准权限和既有事实" in instructions
+    assert "change_registration_preview" in instructions and "change_register" in instructions
+    assert "无需另建任务或接单" in instructions
+    assert "响应不明确先 receipt_show 用 DELIVER 查询原键" in instructions
     assert "完整当前权限" in instructions
     assert "不修改权限或检查结论" in instructions
     app.state.context.close()

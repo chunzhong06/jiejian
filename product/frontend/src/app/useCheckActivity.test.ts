@@ -52,3 +52,13 @@ it('卸载后迟到的终态不通知新页面', async () => {
   await act(async () => finish({ ...active, run: { ...active.run, lifecycle: 'COMPLETED', verdict: 'PASS' }, result_integrity: 'VALID' }))
   expect(refresh).not.toHaveBeenCalled()
 })
+
+it('关闭终态通知后不再显示旧进度，新检查仍能跟踪', async()=>{
+ api.status.mockResolvedValue({...active,run:{...active.run,lifecycle:'COMPLETED',verdict:'PASS'},result_integrity:'VALID'})
+ const refresh=vi.fn(),view=renderHook(({value})=>useCheckActivity('p1',value,refresh),{initialProps:{value:active}})
+ await waitFor(()=>expect(view.result.current.completed?.runId).toBe('r1'))
+ act(()=>view.result.current.dismiss());expect(view.result.current.completed).toBeNull();expect(view.result.current.activeRunId).toBeUndefined()
+ const next={...active,run:{...active.run,run_id:'r2'}};api.status.mockResolvedValue(next);view.rerender({value:next})
+ await waitFor(()=>expect(api.status).toHaveBeenLastCalledWith('r2'));expect(view.result.current.activeRunId).toBe('r2')
+ view.unmount()
+})

@@ -25,7 +25,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from threading import RLock
 from typing import Any, Literal
@@ -42,10 +42,15 @@ from product.backend.infra.runtime.process.environment import (
     spawn_python_module,
 )
 from product.backend.infra.runtime.process.tree import (
+    controller_for,
+    kernel_process_created_at,
     process_tree_has_exited,
     release_process_tree,
     terminate_process_tree,
 )
+from product.backend.infra.runtime.process.artifact import create_runtime_artifact, python_runtime_files
+from product.backend.infra.runtime.process.correspondence import runtime_artifact_store, runtime_corresponds
+from product.protocols.runtime_identity import ControlledRuntimeReference, RuntimeLaunchManifest, RuntimeLaunchReceipt, receipt_matches, runtime_manifest_fingerprint, runtime_source_fingerprint
 
 
 AuthorizationOrder = Literal[
@@ -120,6 +125,7 @@ class OfficialSampleRuntime:
     log_path: Path
     process: subprocess.Popen[Any] = field(repr=False, compare=False)
     secrets: dict[str, str] = field(repr=False, compare=False)
+    launch_manifest: RuntimeLaunchManifest | None = None
 
     @property
     def check_descriptor_path(self) -> Path:
@@ -228,17 +234,21 @@ class OfficialSampleManager:
             )
             process: subprocess.Popen[Any] | None = None
             try:
+                launch_root, launch_manifest = create_runtime_artifact(source_root, runtime_artifact_store(self._paths.root),
+                    files=python_runtime_files(source_root), entry_module=installation.entry_module or "server",
+                    interpreter_fingerprint=self._environment.get("JIEJIAN_RUNTIME_FINGERPRINT", "0" * 64))
                 with log_path.open("ab", buffering=0) as log_stream:
                     process = self._process_launcher(
                         child_environment,
-                        installation.entry_module or "",
+                        "product.backend.infra.runtime.process.target",
+                        "--manifest", str(launch_root / "launch.json"), "--",
                         "--runtime-root",
                         str(runtime_root),
                         "--port",
                         "0",
                         role=ProcessEnvironmentRole.SAMPLE,
                         secret_names=_SECRET_NAMES,
-                        cwd=source_root,
+                        cwd=launch_root / "source",
                         stdout=log_stream,
                         stderr=subprocess.STDOUT,
                         stdin=subprocess.DEVNULL,
@@ -249,6 +259,9 @@ class OfficialSampleManager:
                     runtime_root,
                     installation.health_path or "/health",
                 )
+                receipt = RuntimeLaunchReceipt.model_validate_json((launch_root / "started.json").read_bytes())
+                if not receipt_matches(launch_manifest, receipt, owned_process_id=process.pid):
+                    raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_START_FAILED, "受控启动回执不匹配")
                 _write_check_descriptor(descriptor_path, runtime_root, origin)
                 active = OfficialSampleRuntime(
                     experience_id=clean_id,
@@ -263,6 +276,7 @@ class OfficialSampleManager:
                     log_path=log_path,
                     process=process,
                     secrets=secret_values,
+                    launch_manifest=launch_manifest,
                 )
                 self._active = active
                 _append_event(log_path, "OFFICIAL_SAMPLE_STARTED", origin=origin)
@@ -351,7 +365,62 @@ class OfficialSampleManager:
                     "官方示例行为切换失败",
                 ) from exc
             _append_event(runtime.log_path, "OFFICIAL_SAMPLE_BEHAVIOR_CHANGED")
-            return runtime
+            return self.reload_source(experience_id)
+
+    def runtime_reference(self, experience_id: str) -> ControlledRuntimeReference | None:
+        """只在本控制者拥有当前进程、且回执和副本匹配时返回可冻结身份。"""
+        runtime = self._require_active(experience_id)
+        manifest = runtime.launch_manifest
+        controller = controller_for(runtime.process)
+        if manifest is None or controller is None or controller.has_exited():
+            return None
+        created = kernel_process_created_at(controller.kernel_identity, runtime.process.pid)
+        if created is None:
+            return None
+        reference = ControlledRuntimeReference(instance_id=manifest.instance_id,
+            manifest_fingerprint=runtime_manifest_fingerprint(manifest), source_fingerprint=manifest.source_fingerprint,
+            process_id=runtime.process.pid, process_created_at=created, owner_id=runtime.experience_id)
+        return reference if runtime_corresponds(self._paths.root, reference) else None
+
+    def reload_source(self, experience_id: str, *, expected_source_fingerprint: str | None = None) -> OfficialSampleRuntime:
+        """显式加载独立代码副本，确认原进程退出后沿用当前本机端口与业务运行数据。"""
+        with self._lock:
+            runtime = self._require_active(experience_id)
+            controller = controller_for(runtime.process)
+            if controller is None or controller.has_exited():
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "不能确认当前示例进程的控制权")
+            files = python_runtime_files(runtime.source_root)
+            if expected_source_fingerprint is not None and runtime_source_fingerprint(files) != expected_source_fingerprint:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "当前源码与本批交付不一致，不能加载")
+            if runtime.launch_manifest is not None and runtime.launch_manifest.files == files and self.runtime_reference(experience_id) is not None:
+                return runtime
+            launch_root, manifest = create_runtime_artifact(runtime.source_root, runtime_artifact_store(self._paths.root),
+                files=files, entry_module=self.installation.entry_module or "server",
+                interpreter_fingerprint=self._environment.get("JIEJIAN_RUNTIME_FINGERPRINT", "0" * 64))
+            environment = dict(self._environment)
+            environment.update(runtime.secrets)
+            terminate_process_tree(runtime.process, 3.0)
+            self._active = None
+            process = None
+            try:
+                with runtime.log_path.open("ab", buffering=0) as stream:
+                    process = self._process_launcher(environment, "product.backend.infra.runtime.process.target",
+                        "--manifest", str(launch_root / "launch.json"), "--", "--runtime-root", str(runtime.runtime_root),
+                        "--port", str(urlsplit(runtime.origin).port), role=ProcessEnvironmentRole.SAMPLE,
+                        secret_names=_SECRET_NAMES, cwd=launch_root / "source", stdout=stream,
+                        stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, tree_name=f"jiejian-sample-{experience_id}")
+                descriptor, origin = self._wait_until_healthy(process, runtime.runtime_root, self.installation.health_path or "/health")
+                receipt = RuntimeLaunchReceipt.model_validate_json((launch_root / "started.json").read_bytes())
+                if origin != runtime.origin or not receipt_matches(manifest, receipt, owned_process_id=process.pid):
+                    raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_START_FAILED, "新运行实例的地址或回执不一致")
+                _write_check_descriptor(descriptor, runtime.runtime_root, origin)
+                updated = replace(runtime, process=process, launch_manifest=manifest)
+                self._active = updated
+                return updated
+            except Exception:
+                if process is not None:
+                    terminate_process_tree(process, 3.0)
+                raise
 
     def resolve_secret_names(self, names: tuple[str, ...] | list[str]) -> dict[str, str]:
         """只返回当前活跃体验明确请求的观察秘密。"""
@@ -702,6 +771,11 @@ def _write_check_descriptor(descriptor_path: Path, runtime_root: Path, origin: s
         "credential_ref": "env:JIEJIAN_SAMPLE_ALICE_SESSION"}
     # 注册前仍由完整严格 loader 校验全部六来源与实际文件 hash。
     path = runtime_root / "check-environment.json"
+    if path.exists():
+        # 同一业务实例重载代码仍使用原观察描述；只接受完全相同的内容，不覆盖历史引用。
+        if path.is_symlink() or path.stat().st_size > 262_144 or json.loads(path.read_bytes(), object_pairs_hook=unique) != descriptor:
+            raise JiejianError(ErrorCode.OFFICIAL_SAMPLE_START_FAILED, "既有检查环境描述与重载实例不一致")
+        return
     with path.open("x", encoding="utf-8") as stream:
         json.dump(descriptor, stream, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 

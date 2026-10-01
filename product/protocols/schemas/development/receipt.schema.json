@@ -1,0 +1,102 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "change_id": {
+      "anyOf": [
+        {
+          "pattern": "^chg_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Change Id"
+    },
+    "context_id": {
+      "pattern": "^ctx_[0-9a-f]{32}$",
+      "title": "Context Id",
+      "type": "string"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "delivery_id": {
+      "anyOf": [
+        {
+          "pattern": "^dly_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delivery Id"
+    },
+    "kind": {
+      "enum": [
+        "CREATE",
+        "REVISE",
+        "ACCEPT",
+        "DELIVER",
+        "CLOSE",
+        "CANCEL"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation_id": {
+      "pattern": "^[0-9a-f]{32}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "request_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Fingerprint",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "const": "SUCCEEDED",
+      "default": "SUCCEEDED",
+      "title": "Status",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^dvt_[0-9a-f]{32}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_version": {
+      "minimum": 1,
+      "title": "Task Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "project_id",
+    "operation_id",
+    "kind",
+    "request_fingerprint",
+    "task_id",
+    "task_version",
+    "context_id",
+    "created_at_us"
+  ],
+  "title": "DevelopmentReceipt",
+  "type": "object"
+}

@@ -77,6 +77,12 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/contracts/normalized-permission-plan.schema.json`
 - `product/protocols/schemas/contracts/permission-contract.schema.json`
 - `product/protocols/schemas/contracts/permission-mutation-plan.schema.json`
+- `product/protocols/schemas/development/acceptance.schema.json`
+- `product/protocols/schemas/development/context.schema.json`
+- `product/protocols/schemas/development/delivery.schema.json`
+- `product/protocols/schemas/development/receipt.schema.json`
+- `product/protocols/schemas/development/runtime-operation.schema.json`
+- `product/protocols/schemas/development/task.schema.json`
 - `product/protocols/schemas/execution/http.schema.json`
 - `product/protocols/schemas/execution/web-execution-profile.schema.json`
 - `product/protocols/schemas/identity/identity-preparation-request.schema.json`
@@ -100,7 +106,9 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/runner/check-publication-manifest.schema.json`
 - `product/protocols/schemas/runner/check-runner-input.schema.json`
 - `product/protocols/schemas/runner/check-runner-progress.schema.json`
+- `product/protocols/schemas/runner/check-runner-result-v2.schema.json`
 - `product/protocols/schemas/runner/check-runner-result.schema.json`
+- `product/protocols/schemas/runner/check-runtime-v2.schema.json`
 - `product/protocols/schemas/runner/check-runtime.schema.json`
 - `product/protocols/schemas/runner/evidence.schema.json`
 - `product/protocols/schemas/runner/persisted-execution-request-v3.schema.json`
@@ -108,5 +116,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/runner/runner-input.schema.json`
 - `product/protocols/schemas/runner/runner-result.schema.json`
 - `product/protocols/schemas/runner/trusted-result-receipt.schema.json`
+- `product/protocols/schemas/runtime/launch-manifest.schema.json`
+- `product/protocols/schemas/runtime/launch-receipt.schema.json`
 
 <!-- GENERATED:END -->

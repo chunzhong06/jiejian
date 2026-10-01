@@ -7,9 +7,9 @@ import { DesktopModuleNavigation, MobileModuleNavigation } from './ModuleNavigat
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 
 const areas = [
-  { key: 'overview' as const, label: '工作台', description: '查看全局状态', route: '/workspace' as const, status: 'READY' as const, status_label: '持续更新' },
+  { key: 'overview' as const, label: '概览', description: '查看全局状态', route: '/workspace' as const, status: 'READY' as const, status_label: '持续更新' },
   { key: 'changes' as const, label: '变化', description: '核对 Agent 修改', route: '/changes' as const, status: 'NEEDS_ATTENTION' as const, status_label: '需要处理' },
-  { key: 'permissions' as const, label: '权限', description: '维护权限管理', route: '/permissions' as const, status: 'READY' as const, status_label: '规则已建立' },
+  { key: 'permissions' as const, label: '权限', description: '维护权限要求', route: '/permissions' as const, status: 'READY' as const, status_label: '规则已建立' },
   { key: 'tests' as const, label: '测试', description: '准备、运行与结果', route: '/tests' as const, status: 'BLOCKED' as const, status_label: '当前不可检查' },
 ]
 
@@ -17,8 +17,8 @@ describe('Web V1 产品壳共享组件', () => {
   it('区域状态来自统一产品状态，当前 route 只标记页面焦点', () => {
     render(<DesktopModuleNavigation route="/permissions" areas={areas} onNavigate={vi.fn()} />)
     expect(screen.queryByText('专项工作')).not.toBeInTheDocument()
-    expect(Array.from(document.querySelectorAll('.module-navigation-label')).map((el) => el.textContent)).toEqual(['工作台', '权限管理', 'Agent 协作', '记录与证据'])
-    expect(document.querySelector('.module-navigation-list')).toContainElement(screen.getByRole('button', { name: /工作台.*持续更新/ }))
+    expect(Array.from(document.querySelectorAll('.module-navigation-label')).map((el) => el.textContent)).toEqual(['概览', '权限要求', '修改与验证', '检查记录'])
+    expect(document.querySelector('.module-navigation-list')).toContainElement(screen.getByRole('button', { name: /概览.*持续更新/ }))
     expect(screen.queryByText('辅助工具')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /AI 工具/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /运行环境/ })).not.toBeInTheDocument()
@@ -26,7 +26,7 @@ describe('Web V1 产品壳共享组件', () => {
     expect(screen.queryByRole('button', { name: /AI 辅助/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '退出界鉴' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /权限.*规则已建立/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('button', { name: /记录与证据.*当前不可检查/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /检查记录.*当前不可检查/ })).toBeInTheDocument()
     expect(screen.queryByText(/第 .* 步/)).not.toBeInTheDocument()
   })
 
@@ -34,16 +34,16 @@ describe('Web V1 产品壳共享组件', () => {
     const onNavigate=vi.fn()
     render(<MobileModuleNavigation route="/history" areas={areas} onNavigate={onNavigate}/>)
     expect(screen.queryByRole('button',{name:'打开持续验证工作区'})).not.toBeInTheDocument()
-    expect(screen.getByRole('button',{name:/记录与证据.*当前不可检查/})).toHaveAttribute('aria-current','page')
-    const permissions=screen.getByRole('button',{name:/权限管理.*规则已建立/})
+    expect(screen.getByRole('button',{name:/检查记录.*当前不可检查/})).toHaveAttribute('aria-current','page')
+    const permissions=screen.getByRole('button',{name:/权限要求.*规则已建立/})
     permissions.focus();expect(permissions).toHaveFocus();fireEvent.click(permissions)
     expect(onNavigate).toHaveBeenCalledWith('/permissions')
   })
 
-  it('代码变化深链归入 Agent 协作，工作台仍是独立入口', () => {
+  it('代码变化深链归入 修改与验证，概览仍是独立入口', () => {
     render(<MobileModuleNavigation route="/changes" areas={areas} onNavigate={vi.fn()}/>)
-    expect(screen.getByRole('button',{name:/Agent 协作/})).toHaveAttribute('aria-current','page')
-    expect(screen.getByRole('button',{name:/工作台/})).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('button',{name:/修改与验证/})).toHaveAttribute('aria-current','page')
+    expect(screen.getByRole('button',{name:/概览/})).not.toHaveAttribute('aria-current')
   })
 
   it('应用切换只返回服务端列表中的应用，并保留接入新应用入口', async () => {

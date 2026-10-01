@@ -1,4 +1,4 @@
-# 验证文档生成器的 AST 隔离、稳定输出和生成区收敛。
+# 验证文档生成器的 AST 隔离、稳定输出、阅读路由与当前事实检查。
 
 import re
 from pathlib import Path
@@ -19,6 +19,8 @@ _HIGH_VALUE_GUIDES = (
     "修改官方示例与整链验收.md",
     "修改开发环境.md",
     "修改前端.md",
+    "修改数据库.md",
+    "修改Agent变更影响.md",
     "修改Observer.md",
     "修改Worker与Runner.md",
     "修改Web执行.md",
@@ -67,6 +69,60 @@ def _fixture_root(tmp_path: Path) -> Path:
     (tmp_path / "docs/llms.txt").write_text("→ docs/参考/协议/公共数据与Schema版本.md\n", encoding="utf-8")
     (tmp_path / "docs/参考/协议/公共数据与Schema版本.md").write_text("# 协议版本\n", encoding="utf-8")
     return tmp_path
+
+
+def test_chapter_links_and_routes_ignore_fenced_headings(tmp_path: Path) -> None:
+    root = _fixture_root(tmp_path)
+    target = root / "docs/章节.md"
+    target.write_text("# 章节\n## 4. 范围 × 程度\n## 重复\n## 重复\n```md\n## 不存在\n```\n", encoding="utf-8")
+    (root / "docs/llms.txt").write_text("→ docs/章节.md#4-范围--程度\n", encoding="utf-8")
+    link = root / "docs/入口.md"
+    link.write_text("[重复](章节.md#重复-1)\n", encoding="utf-8")
+    generate(root, update=True)
+    assert generate(root, update=False) == []
+    link.write_text("[错误](章节.md#不存在)\n", encoding="utf-8")
+    before = {p: p.read_bytes() for p in (root / "docs").rglob("*") if p.is_file()}
+    with pytest.raises(SystemExit, match="章节锚点不存在"):
+        generate(root, update=False)
+    assert before == {p: p.read_bytes() for p in before}
+
+
+@pytest.mark.parametrize("state", ["提议", "已取代", "已废弃", "已拒绝", "PROPOSED"])
+def test_default_route_rejects_noncurrent_decisions(tmp_path: Path, state: str) -> None:
+    root = _fixture_root(tmp_path)
+    (root / "docs/提议.md").write_text(f"# 设计\n\n> 状态：{state}。\n", encoding="utf-8")
+    (root / "docs/llms.txt").write_text("→ docs/提议.md\n", encoding="utf-8")
+    generate(root, update=True)
+    with pytest.raises(SystemExit, match="默认路由指向非当前内容"):
+        generate(root, update=False)
+
+
+def test_static_source_path_outside_quick_map_is_checked(tmp_path: Path) -> None:
+    root = _fixture_root(tmp_path)
+    guide = root / "docs/说明.md"
+    guide.write_text("# 说明\n\n正文指向 `product/backend/core/missing.py`。\n", encoding="utf-8")
+    generate(root, update=True)
+    with pytest.raises(SystemExit, match="静态源码路径"):
+        generate(root, update=False)
+    (root / "product/backend/core/current.py").write_text("VALUE = 1\n", encoding="utf-8")
+    generate(root, update=True)
+    guide.write_text("# 说明\n\n来源 `product/backend/core/current.py::VALUE`。包内 `./product/frontend/dist`。\n\n示例 `tests/<case>.py` 和 `tests/test_*.py`。\n```text\n`product/missing.py`\n```\n", encoding="utf-8")
+    assert generate(root, update=False) == []
+
+
+def test_database_head_checked_without_executing_module(tmp_path: Path) -> None:
+    root = _fixture_root(tmp_path)
+    source = root / "product/backend/infra/storage/db.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("raise RuntimeError('不得执行')\n_CURRENT_MIGRATION_REVISION = '0007_test'\n", encoding="utf-8")
+    guide = root / "docs/开发/能力/修改数据库.md"
+    guide.parent.mkdir(parents=True)
+    guide.write_text("当前数据库 head 为 `0006_old`。\n", encoding="utf-8")
+    generate(root, update=True)
+    with pytest.raises(SystemExit, match="数据库 head 与源码声明不一致"):
+        generate(root, update=False)
+    guide.write_text("当前数据库 head 为 `0007_test`。\n", encoding="utf-8")
+    assert generate(root, update=False) == []
 
 
 def test_generator_parses_source_without_importing_production(tmp_path: Path) -> None:

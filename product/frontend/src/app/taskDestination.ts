@@ -6,7 +6,7 @@ export function taskDestination(task: PrimaryTaskDto) {
   if (task.proposal_id && task.route === '/permissions') query.set('proposal_id', task.proposal_id)
   if (task.repair_fingerprint && task.route === '/changes') query.set('repair_reference', task.repair_fingerprint)
   else if (task.run_id) query.set('run_id', task.run_id)
-  else if (task.change_id && task.route === '/tests') query.set('change_id', task.change_id)
+  else if (task.change_id && ['/tests', '/changes'].includes(task.route)) query.set('change_id', task.change_id)
   if (task.route === '/tests' && preparationKinds.has(task.task_kind)) query.set('task_id', task.task_id)
   return task.route + (query.size ? `?${query}` : '')
 }

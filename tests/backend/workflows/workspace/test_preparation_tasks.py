@@ -320,7 +320,7 @@ def test_task_fingerprint_changes_for_endpoint_source_and_recording_state(harnes
     assert active.recording_id == pending.recording_id and active.task_id != pending.task_id
 
 
-@pytest.mark.parametrize("kind", ["RUN_CURRENT_CHECK", "REGISTER_SOURCE_CHANGE", "VERIFY_REPAIR", "VIEW_CURRENT_RESULT"])
+@pytest.mark.parametrize("kind", ["RUN_CURRENT_CHECK", "REGISTER_SOURCE_CHANGE", "VERIFY_REPAIR", "VIEW_CURRENT_RESULT", "CURRENT_DELIVERY"])
 def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
     from product.backend.core.lifecycle import RunVerdict
     from product.backend.workflows.projects.repair import ProjectRepair, CurrentRepairTask
@@ -338,14 +338,32 @@ def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
         run_id = "run_" + "9" * 32
         entry = SimpleNamespace(result_integrity="VALID", run=SimpleNamespace(run_id=run_id, policy_epoch=core.business_boundaries.view(project).policy_epoch, verdict=RunVerdict.PASS, created_at_us=1))
         core.workspace.set_current_checks(checks=core.checks,
-            reader=SimpleNamespace(active_for_project=lambda _: None, list_for_project=lambda _: (entry,) if kind == "VIEW_CURRENT_RESULT" else (),
+            reader=SimpleNamespace(active_for_project=lambda _: None, list_for_project=lambda _: (entry,) if kind in {"VIEW_CURRENT_RESULT", "CURRENT_DELIVERY"} else (),
                 package=lambda *args, **kwargs: SimpleNamespace(request=SimpleNamespace(source_fingerprint=understanding.source_fingerprint))),
             changes=SimpleNamespace(latest=lambda _: None), repairs=SimpleNamespace(evaluate=lambda _: repair),
             source_inspector=lambda _: "changed" if kind == "REGISTER_SOURCE_CHANGE" else understanding.source_fingerprint)
-        actual = core.workspace.get(project).primary_task
-        assert actual.task_kind == kind, actual.model_dump_json()
-        assert actual.change_id == (task.change_id if kind == "VERIFY_REPAIR" else None)
+        delivery = None
+        if kind == "CURRENT_DELIVERY":
+            # 本项只验证只读投影的选择规则；任务事务由 development 真实库测试负责。
+            delivery = SimpleNamespace(change_id="chg_" + "8" * 32)
+            active_task = SimpleNamespace(task_id="dvt_" + "1" * 32, context_id="ctx_" + "2" * 32, revision=1, version=3)
+            view = dict(context=dict(title="新一批", goal="不能借用旧结果"), acceptance=None,
+                deliveries=[dict(delivery_id="dly_" + "3" * 32, change_id=delivery.change_id, ordinal=1)],
+                latest_verification=dict(run_id=None), runtime_state="MATCHED")
+            core.workspace.development_service = SimpleNamespace(active=lambda _: active_task, view=lambda *_: view)
+            checks, *rest = core.workspace._current_checks
+            def preview(_project, *, change_id=None):
+                assert change_id in (None, delivery.change_id)
+                return SimpleNamespace(can_execute=True, plan_fingerprint="a" * 64)
+            core.workspace._current_checks = (SimpleNamespace(preview=preview), *rest)
+        workspace = core.workspace.get(project)
+        actual = workspace.primary_task
+        expected = "RUN_CURRENT_CHECK" if kind == "CURRENT_DELIVERY" else kind
+        assert actual.task_kind == expected, actual.model_dump_json()
+        assert actual.change_id == (delivery.change_id if delivery else task.change_id if kind == "VERIFY_REPAIR" else None)
         assert actual.run_id == (run_id if kind == "VIEW_CURRENT_RESULT" else None)
         assert actual.route == ("/changes" if kind == "REGISTER_SOURCE_CHANGE" else "/tests")
+        if kind == "VIEW_CURRENT_RESULT":
+            assert workspace.latest_result.run_id == run_id
     finally:
         h.close()

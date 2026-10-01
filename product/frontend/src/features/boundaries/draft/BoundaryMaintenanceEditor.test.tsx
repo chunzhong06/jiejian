@@ -83,7 +83,7 @@ describe('BoundaryMaintenanceEditor', () => {
     const onSubmit = vi.fn()
     render(<BoundaryMaintenanceEditor draft={draft} focus={{mode:'objects'}} busy={false} onSubmit={onSubmit} />)
 
-    expect(screen.getByRole('heading', { name: '权限管理' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '权限要求' })).toBeInTheDocument()
     expect(screen.queryByText(actorId)).not.toBeInTheDocument()
     expect(screen.queryByText(actionId)).not.toBeInTheDocument()
     expect(screen.queryByText(/write_mode/i)).not.toBeInTheDocument()

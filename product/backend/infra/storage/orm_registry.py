@@ -6,6 +6,7 @@ from importlib import import_module
 
 
 _STORAGE_ORM_MODULES = (
+    "product.backend.infra.storage.development",
     "product.backend.infra.storage.preparation_recovery",
     "product.backend.infra.storage.sample_workspaces",
     "product.backend.infra.storage.supplemental_materials",

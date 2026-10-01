@@ -50,7 +50,7 @@ Portable 主进程和受控子进程必须同时确认：
 
 ## 前端与 Sample 可选层
 
-Portable 的前端由内部 Wheel 的 `product/frontend/dist` 提供，启动时不执行 TypeScript/Vite。full 包把仓库当前 `samples/` 作为只读发行输入复制到根层，并把明确存在的官方 Sample root 传给产品；nosamples 不创建虚假目录，也不启用测试开关，GUI 只如实显示官方 Sample 不可用。
+Portable 的前端由内部 Wheel 的 `./product/frontend/dist`（Wheel 内相对路径） 提供，启动时不执行 TypeScript/Vite。full 包把仓库当前 `samples/` 作为只读发行输入复制到根层，并把明确存在的官方 Sample root 传给产品；nosamples 不创建虚假目录，也不启用测试开关，GUI 只如实显示官方 Sample 不可用。
 
 Sample 是可选体验资产，不是产品依赖。产品包不从 Sample import，nosamples 的项目接入、Recording、Runner、Observer 与结果能力保持完整。
 

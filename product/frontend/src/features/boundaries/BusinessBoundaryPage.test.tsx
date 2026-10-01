@@ -57,6 +57,7 @@ approvedBoundary.permission_intents = command.proposed_permissions.map((item, in
   expectation: item.expectation,
   protected_effect_ids: [approvedBoundary.actions[item.business_action_item_id.endsWith('1') ? 0 : 1].effect_catalog[0].effect_id],
   effective_state: 'ACTIVE',
+  intent_id: `pi_${index}`,
   _test_index: index,
 }))
 approvedBoundary.permission_statuses = approvedBoundary.actions.map((item: any) => ({ action_id: item.action_id, action_revision: 1, permission_semantics_confirmed: true, active_permission_count: 1, stale_permission_count: 0, allow_control_available: true, reason_codes: [] }))
@@ -208,7 +209,6 @@ describe('业务边界页面', () => {
 
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
     expect(await screen.findByText('当前业务版本需要重新确认权限；原权限仍保留为历史。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('navigation', { name: '业务动作索引' }).querySelectorAll('button')[1])
     expect(screen.getByText('当前权限尚未确认')).toBeInTheDocument()
     expect(screen.getByText('需要确认当前权限')).toBeInTheDocument()
   })
@@ -216,7 +216,7 @@ describe('业务边界页面', () => {
   it('已确认权限且完整允许对照存在时不显示旧检查链占位提示', async () => {
     mockApi.current.mockResolvedValue(approvedBoundary)
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
-    await screen.findByRole('button', { name: '管理业务对象' })
+    await screen.findByRole('button', { name: '新增规则' })
     expect(screen.queryByText(/检查主链尚未重新接入/)).not.toBeInTheDocument()
     expect(screen.queryByText('权限已确认，还需完整允许对照')).not.toBeInTheDocument()
   })
@@ -250,9 +250,12 @@ describe('业务边界页面', () => {
     mockApi.createMaintenanceProposal.mockReturnValue(new Promise(() => {}))
 
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: '管理业务对象' }))
-    expect(await screen.findByRole('heading', { name: '权限管理' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: '业务动作' }))
+    expect(screen.queryByRole('button', { name: '核对代码关联' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '编辑动作' }))
+    expect(await screen.findByRole('heading', { name: '权限要求' })).toBeInTheDocument()
     expect(screen.queryByText(/write_mode/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '取消编辑' }))
     fireEvent.click(screen.getByRole('button', { name: '核对代码关联' }))
 
     await waitFor(() => expect(mockApi.createMaintenanceProposal).toHaveBeenCalledOnce())

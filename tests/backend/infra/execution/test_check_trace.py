@@ -127,7 +127,8 @@ def test_auxiliary_runtime_keeps_source_level_and_failed_later_window_is_partial
     executor.observers = runtime
     try:
         baseline = executor._observe_auxiliary(action, case, "BASELINE")
-        assert baseline[0].observation.state == "UNKNOWN"
+        # 此审计来源只声明 AFTER；初始阶段没有采集记录，不应伪造 UNKNOWN。
+        assert baseline == ()
         rows = [_row(case, "entry"), _row(case, "read", parent="entry", kind="FINAL_EFFECT", sequence=2)]
         for row in rows:
             row["case_tag"] = web.request_marker(case.case_id)

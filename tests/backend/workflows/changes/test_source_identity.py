@@ -21,7 +21,7 @@ def identity(monkeypatch):
     understanding = SimpleNamespace(get=Mock(return_value=SimpleNamespace(revision=1, source_root="authorized", source_analysis_authorized=True)),
                                     inspect_source_fingerprint=Mock(return_value="a" * 64))
     changes = SimpleNamespace(get=Mock(return_value=(None, SimpleNamespace(current_snapshot_id="saved"), None)))
-    results = SimpleNamespace(package=Mock(return_value=SimpleNamespace(request=SimpleNamespace(source_fingerprint="a" * 64))))
+    results = SimpleNamespace(package=Mock(return_value=SimpleNamespace(request=SimpleNamespace(source_fingerprint="a" * 64), result=SimpleNamespace())))
     git = Mock(return_value=GitSourceContext(status="AVAILABLE", head="f" * 40, has_local_changes=True))
     monkeypatch.setattr("product.backend.workflows.changes.identity.inspect_git_source", git)
     reader = SourceIdentityReader(uow_factory=lambda: nullcontext(work), understanding=understanding, changes=changes, results=results)
@@ -40,6 +40,15 @@ def test_content_is_authority_even_with_dirty_git_and_missing_historical_git(ide
     assert second.recorded == first.recorded
     assert second.current_git.head == first.current_git.head
     identity.results.package.assert_called_with("run1", project_id="p1")
+
+
+@pytest.mark.parametrize("after,expected", [("MATCHED", "MATCHED_AT_CHECK"), ("UNCONFIRMED", "UNCONFIRMED_AT_CHECK")])
+def test_runtime_correspondence_comes_from_published_run_not_current_git(identity, after, expected):
+    identity.results.package.return_value.result.runtime_correspondence = SimpleNamespace(before="MATCHED", after=after)
+    identity.understanding.inspect_source_fingerprint.return_value = "b" * 64
+    result = identity.reader.for_run("p1", "run1")
+    assert result.target_version == expected and result.comparison == "CHANGED"
+    assert identity.reader.for_change("p1", "change1").target_version == "NOT_INDEPENDENTLY_IDENTIFIED"
 
 
 def test_recorded_git_comes_only_from_exact_run_association(identity):

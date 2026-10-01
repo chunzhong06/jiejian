@@ -99,7 +99,7 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
   return <>
     <div hidden={Boolean(requestedRunId)}>
       <EditorialPage label="项目检查历史">
-        <EditorialHeader eyebrow="记录与证据" title="检查历史"><p className="editorial-muted">回看每一次检查，沿原问题追踪复验结果。</p></EditorialHeader>
+        <EditorialHeader eyebrow="协作空间 / 已发布记录" title="检查记录"><p className="editorial-muted">回看每一次检查，沿原问题追踪复验结果。</p></EditorialHeader>
         <div className="history-surface"><form className="history-toolbar" onSubmit={event => { event.preventDefault(); setOptions(previous => ({ ...previous, query: query.trim() })) }}>
           <Input aria-label="搜索检查历史" placeholder="搜索业务动作或检查编号" maxLength={128} value={query} onChange={event => setQuery(event.target.value)} allowClear />
           <Button htmlType="submit" aria-label="搜索">搜索</Button>

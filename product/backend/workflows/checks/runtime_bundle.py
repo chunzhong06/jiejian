@@ -12,7 +12,7 @@ from product.backend.infra.artifacts.check_packages import read_check_bytes, rej
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.workflows.recording.source import identity_source_fingerprint
-from product.protocols.check_runtime import CheckActionConfig, CheckBudget, CheckRuntimeBundle, async_completion_candidates
+from product.protocols.check_runtime import CheckActionConfig, CheckBudget, CheckRuntimeBundle, ControlledCheckRuntimeBundle, async_completion_candidates
 from product.protocols.observer import ObserverSpec
 from product.protocols.web.response import HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind
 from product.protocols.flow_draft import canonical_flow_draft_json_bytes
@@ -63,6 +63,7 @@ class CheckRuntimeBuilder:
         self._uow_factory, self._var_dir = uow_factory, var_dir.resolve()
         self._preparation, self._boundaries = preparation, business_boundaries
         self._credentials, self._registry = credentials, registry
+        self.runtime_reference_reader = None
 
     def build(self, project_id, *, work=None):
         if work is None:
@@ -184,9 +185,13 @@ class CheckRuntimeBuilder:
                 binding=binding.binding.model_dump(mode="json"), verification=verification[identity_id].model_dump(mode="json") if identity_id in verification else None))
         for config in configs:
             config["steps"] = derive_target_classifiers(config, specs, identities)
-        return CheckRuntimeBundle.model_validate_json(json.dumps(dict(project_id=project_id,
+        bundle = CheckRuntimeBundle.model_validate_json(json.dumps(dict(project_id=project_id,
             source_fingerprint=understanding.source_fingerprint, target=target.model_dump(mode="json"),
             budget=budget.model_dump(mode="json"), identities=identities, actions=configs, observers=list(specs.values()))), strict=True)
+        reference = None if self.runtime_reference_reader is None else self.runtime_reference_reader(project_id)
+        if reference is not None:
+            return ControlledCheckRuntimeBundle(**bundle.model_dump(exclude={"schema_version"}), runtime_reference=reference)
+        return bundle
 
     def _check_binding(self, work, binding, action, understanding):
         reasons = self._preparation._bindings._source_reasons(work, binding, action, understanding)

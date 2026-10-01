@@ -13,6 +13,7 @@ from product.backend.core.verification.trace import ExecutionTrace
 from product.protocols.execution_v3 import ExecutionCase, Hash, LogicalId, WireModel, content_hash
 from product.protocols.check_publication import CheckPublicationManifest
 from product.protocols.check_runtime import check_payload_contains_secret
+from product.protocols.runtime_identity import RuntimeCorrespondence
 
 RunId = Annotated[str, Field(pattern=r"^run_[0-9a-f]{32}$")]
 JobId = Annotated[str, Field(pattern=r"^job_[0-9a-f]{32}$")]
@@ -204,12 +205,17 @@ def seal_check_evidence(**fields) -> CheckEvidence:
     return CheckEvidence.model_validate_json(json.dumps(payload), strict=True)
 
 
+class ControlledCheckRunnerResult(CheckRunnerResult):
+    schema_version: Literal["2"] = "2"
+    runtime_correspondence: RuntimeCorrespondence
+
+
 class CheckResultProtocolError(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
 
 
 CheckDocument = TypeVar("CheckDocument", CheckRunnerInput, CheckEvidence, CheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
-_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, CheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
+_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, CheckRunnerResult, ControlledCheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
 
 
 def canonical_check_document(document: CheckDocument, *, known_secrets: tuple[str, ...] = ()) -> bytes:
@@ -242,8 +248,10 @@ def parse_check_document(raw: bytes, model: type[CheckDocument], *, known_secret
     try:
         if model not in _CHECK_ROOTS or type(raw) is not bytes or len(raw) > CHECK_RESULT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
             raise ValueError("invalid check document")
-        json.loads(raw.decode(), object_pairs_hook=unique,
+        payload = json.loads(raw.decode(), object_pairs_hook=unique,
             parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
+        if model is CheckRunnerResult and isinstance(payload, dict) and payload.get("schema_version") == "2":
+            model = ControlledCheckRunnerResult
         document = model.model_validate_json(raw, strict=True)
         if canonical_check_document(document, known_secrets=known_secrets) != raw:
             raise ValueError("noncanonical check document")

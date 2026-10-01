@@ -98,6 +98,11 @@ def validate_check_package(directory: Path, *, published=False, known_secrets=()
         request = parse_execution_request_v3(raw_files["request.json"])
         bundle = parse_check_runtime(raw_files["runtime.json"])
         validate_check_inputs(request, bundle)
+        runtime_reference = getattr(bundle, "runtime_reference", None)
+        correspondence = getattr(result, "runtime_correspondence", None)
+        if ((runtime_reference is None) != (correspondence is None)
+                or correspondence is not None and correspondence.reference != runtime_reference):
+            raise ValueError("result controlled runtime association")
         if (result.request_hash, result.config_hash) != (
             hashlib.sha256(raw_files["request.json"]).hexdigest(), hashlib.sha256(raw_files["runtime.json"]).hexdigest()
         ):

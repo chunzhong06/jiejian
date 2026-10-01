@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, Layout, Modal, Result } from 'antd'
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom'
-import { experienceApi, type OfficialExperienceDto } from '../api/experience'
+import { experienceApi } from '../api/experience'
 import { ApiError } from '../api/http'
 import { mcpAccessApi, type MCPAccessView } from '../api/mcp'
 import { projectsApi, type ProjectDto } from '../api/projects'
@@ -38,7 +38,7 @@ function MissingApplication({ onNavigate }: { onNavigate: () => void }) {
 }
 
 function CurrentUnavailableArea({ title, description, onBack }: { title: string; description: string; onBack: () => void }) {
-  return <Result status="info" title={title} subTitle={description} extra={<Button onClick={onBack}>返回工作台</Button>} />
+  return <Result status="info" title={title} subTitle={description} extra={<Button onClick={onBack}>返回概览</Button>} />
 }
 
 export default function ControlShell() { return <HashRouter><ControlShellContent /></HashRouter> }
@@ -55,7 +55,6 @@ function ControlShellContent() {
   const [shutdownRequested, setShutdownRequested] = useState(false)
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
   const [removeBusy, setRemoveBusy] = useState(false)
-  const [experience, setExperience] = useState<OfficialExperienceDto | null>(null)
   const [mcpStatus, setMcpStatus] = useState<MCPAccessView | null>(null)
   const [mcpStatusFailed, setMcpStatusFailed] = useState(false)
   const [workReceipt, setWorkReceipt] = useState<{ message: string; projectId: string; locationKey: string } | null>(null)
@@ -74,7 +73,7 @@ function ControlShellContent() {
 
   const workspaceState = useProjectWorkspace(showBlockingError)
   const systemState = useSystemStatus()
-  const { projects, selected, workspace: latestWorkspace } = workspaceState
+  const { projects, selected, experience, setExperience, workspace: latestWorkspace } = workspaceState
   const [guards, setGuards] = useState<Record<string, boolean>>({})
   const updateGuard = useCallback((key: string, blocked: boolean) => setGuards(current => {
     if (Boolean(current[key]) === blocked) return current
@@ -93,16 +92,6 @@ function ControlShellContent() {
   const checkActivity = useCheckActivity(selected?.project_id, latestWorkspace?.active_check, workspaceState.refreshCurrentWorkspace, latestWorkspace?.latest_result?.run_id, Boolean(latestWorkspace))
   const { profiles: llmProfiles, profilesFailed: llmLoadFailed, aiSettings, setAiSettings, aiSettingsFailed, status: systemStatus } = systemState
   const assistantStatus = aiStatusLabel(llmProfiles, aiSettings, llmLoadFailed, aiSettingsFailed)
-
-  useEffect(() => {
-    let active = true
-    void experienceApi.status().then((value) => {
-      if (active) setExperience(value)
-    }).catch((experienceError) => {
-      if (active) notifyError(experienceError as ApiError)
-    })
-    return () => { active = false }
-  }, [notifyError])
 
   useEffect(() => {
     let active = true
@@ -219,9 +208,9 @@ function ControlShellContent() {
     if (route === '/permissions') return renderPermissions()
     if (route === '/history') return <CheckHistoryPage key={`history-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigateRecoveryTarget} requestedRunId={new URLSearchParams(location.search).get('run_id')} renderRun={(runId, onBack) => renderChecks(runId, null, null, onBack)} />
     if (route === '/changes') return <ChangesPage key={`changes-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigate} onStateChanged={workspaceState.refreshCurrentWorkspace} requestedRepair={new URLSearchParams(location.search).get('repair_reference')}
-      developmentJourney={experience?.active && experience.project_id === selected.project_id ? <OfficialDevelopmentJourney key={selected.project_id} value={experience} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async next => { setExperience(next); await workspaceState.refreshCurrentWorkspace() }}/> : undefined}/>
+      requestedView={new URLSearchParams(location.search).get('view')} requestedChange={new URLSearchParams(location.search).get('change_id')} developmentJourney={experience?.active && experience.project_id === selected.project_id ? <OfficialDevelopmentJourney key={selected.project_id} value={experience} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async next => { setExperience(next); await workspaceState.refreshCurrentWorkspace() }}/> : undefined}/>
     if (route === '/tests') { const query = new URLSearchParams(location.search); return renderChecks(query.get('run_id'), query.get('task_id'), query.get('change_id')) }
-    return <CurrentUnavailableArea title="此历史入口当前不可用" description="请从工作台进入当前可用的业务边界或检查准备。" onBack={() => navigate('/workspace')} />
+    return <CurrentUnavailableArea title="此历史入口当前不可用" description="请从概览进入当前可用的业务边界或检查准备。" onBack={() => navigate('/workspace')} />
   }
 
   const retainedRoute = route
@@ -237,11 +226,15 @@ function ControlShellContent() {
       <AppHeader projects={projects} selected={selected} mcpStatus={mcpStatus} mcpStatusFailed={mcpStatusFailed} systemStatus={systemStatus} onSelectProject={choose} onConnectNew={() => navigate('/application')} onNavigate={navigate} aiLabel={assistantStatus} onOpenAI={() => setSettingsOpen(true)} onRequestShutdown={() => setShutdownConfirmOpen(true)} />
       <Layout.Content className="content"><div className="content-frame" id="main-content" tabIndex={-1}>
         {workReceipt && selected?.project_id === workReceipt.projectId && location.key === workReceipt.locationKey && <div className="work-receipt" role="status"><span>{workReceipt.message}</span><Button type="text" aria-label="关闭操作完成提示" onClick={() => setWorkReceipt(null)}>×</Button></div>}
-        {checkActivity.completed && !['/tests','/workspace'].includes(route) && <div className="check-activity-notice" role="status"><span>{checkActivity.completed.label}</span><Button type="link" onClick={() => navigate(`/history?run_id=${encodeURIComponent(checkActivity.completed!.runId)}`)}>查看结果</Button><Button type="text" aria-label="关闭检查完成提示" onClick={checkActivity.dismiss}>×</Button></div>}
-        {!checkActivity.completed && checkActivity.activeRunId && route !== '/tests' && route !== '/workspace' && <div className="check-activity-notice"><span>{checkActivity.paused ? '进度暂未同步，正在重试' : '有一项检查正在执行'}</span><Button type="link" onClick={() => navigate(`/tests?run_id=${encodeURIComponent(checkActivity.activeRunId!)}`)}>查看当前进度</Button></div>}
         {error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigateRecoveryTarget(path) }} onClose={clearError} />}<RetainedWorkPages key={`${selected?.project_id ?? 'new'}-${retryEpoch}`} activeKey={retainedKey}>{content()}</RetainedWorkPages></div></Layout.Content>
     </Layout>
-    <NotificationCenter items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigateRecoveryTarget(path) }} />
+    <NotificationCenter activity={!['/tests','/workspace'].includes(route) ? checkActivity.completed ? {
+      label:checkActivity.completed.label,actionLabel:'查看结果',onDismiss:checkActivity.dismiss,
+      onView:()=>{const run=checkActivity.completed!.runId;checkActivity.dismiss();navigate(`/history?run_id=${encodeURIComponent(run)}`)},
+    } : checkActivity.activeRunId ? {
+      label:checkActivity.paused?'进度暂未同步，正在重试':'有一项检查正在执行',actionLabel:'查看当前进度',
+      onView:()=>navigate(`/tests?run_id=${encodeURIComponent(checkActivity.activeRunId!)}`),
+    } : null : null} items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigateRecoveryTarget(path) }} />
     <Modal open={removeConfirmOpen} title="移除当前应用？" okText="确认移除" cancelText="取消" okButtonProps={{ danger: true, loading: removeBusy }} onCancel={() => setRemoveConfirmOpen(false)} onOk={() => { void removeCurrentProject() }}>
       界鉴会从应用列表中移除当前应用，并清理当前测试账号的安全凭据。属于该应用的官方示例实例会一并停止，无需再次操作；应用源码和历史事实保留。普通应用的外部进程不会被停止。
     </Modal>

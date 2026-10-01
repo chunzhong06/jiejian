@@ -50,9 +50,7 @@ def verify_identity_layout(gui):
 
 
 def verify_maintenance_layout(gui):
-    gui._goto("/permissions")
-    gui.page.get_by_role("button", name="管理业务对象", exact=True).click()
-    gui.page.get_by_role("button", name="核对代码关联", exact=True).wait_for()
+    gui._open_maintenance()
     expect(gui.page.get_by_role("button", name="下一步：核对修改", exact=True)).to_have_count(0)
     _capture_layout(gui, "boundary-maintenance-entry")
     gui._goto("/tests")

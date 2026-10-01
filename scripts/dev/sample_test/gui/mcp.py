@@ -45,20 +45,17 @@ class McpActions(GuiSession):
         view = response.value.json().get("data", {})
         if response.value.status != 200 or not view.get("client_connected") or view.get("client_name") != name:
             raise SampleTestError("GUI_MCP_CLIENT_NOT_CONNECTED")
-        self.page.get_by_text(name + " 已连接到界鉴", exact=True).wait_for()
+        self.page.get_by_role("heading", name=name + " 的连接已验证", exact=True).wait_for()
         self._mark("mcp-connected")
 
     def mcp_change(self, change):
         from scripts.dev.sample_test.harness.state import SampleTestError
-        self._goto("/changes")
-        # 页面会保留原题上下文；先明确选中本次登记记录，不能把默认所选批次当作新回执。
-        self.page.get_by_role("navigation", name="修改记录", exact=True).get_by_role(
-            "button", name=re.compile(re.escape(change["reason"]))).click()
-        entry = self.page.get_by_role("article", name="所选代码变化", exact=True)
+        self._goto("/changes?view=deliveries&change_id=" + change["change_id"])
+        # 精确深链选中本次修改；不再经过已撤掉的手工任务管理入口。
+        entry = self.page.locator("article.light-detail")
         entry.get_by_role("heading", name=change["reason"], exact=True).wait_for()
-        entry.get_by_text(re.compile(r"^登记来源：" + re.escape(change["submitted_by"]) + r" · ")).wait_for()
-        manual = self.page.locator("details").filter(has=self.page.get_by_text("手动登记代码变化", exact=True))
-        if manual.count() != 1 or manual.get_attribute("open") is not None:
+        entry.get_by_text("登记来源：" + change["submitted_by"], exact=True).wait_for()
+        if self.page.get_by_role("region", name="登记本地修改", exact=True).count():
             raise SampleTestError("GUI_MCP_MANUAL_FORM_NOT_CLOSED")
         self.capture("mcp-change")
         self.records.append(dict(event="mcp-change", status="PASSED", project_id=change["project_id"], change_id=change["change_id"]))
@@ -70,7 +67,7 @@ class McpActions(GuiSession):
 
     def mcp_completion(self, result, original_query):
         from scripts.dev.sample_test.harness.state import SampleTestError
-        notice = self.page.locator(".check-activity-notice")
+        notice = self.page.get_by_role("region", name="检查动态", exact=True)
         notice.get_by_role("button", name="查看结果", exact=True).wait_for(timeout=180_000)
         if (urlsplit(self.page.url).fragment != "/history"
                 or self.page.get_by_role("textbox", name="搜索检查历史", exact=True).input_value() != original_query):

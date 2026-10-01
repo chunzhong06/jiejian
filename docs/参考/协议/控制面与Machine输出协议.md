@@ -70,11 +70,11 @@ CLI 与 Machine 输出是控制和投影通道，不是审批人。公开命令�
 
 MCP精确挂载同一loopback FastAPI的/mcp，由官方SDK提供Streamable HTTP，不创建第二个ApplicationCore或端口。当前Worker支持CHECK与RECORDING，System/ready/MCP投影同一真实存活与能力事实；只有Worker running不能证明Plan可执行。长期Bearer只经精确SecretStore保存，启动恢复READ。
 
-GUI 读取的 `MCPAccessView` 明确区分凭据与连接：`DISABLED → CREDENTIAL_READY → AUTHENTICATED → CONNECTED` 是正常建立过程，认证失败投影为 `CREDENTIAL_REJECTED`，人工暂停投影为 `PAUSED`。`last_authenticated_at_us` 只证明 Bearer 通过，`last_seen_at_us` 才代表 SDK 已观测到完成 initialize 的客户端活动；状态页面不能把凭据生成、配置复制或客户端自报当成连接成功。恢复、轮换、暂停和 shutdown 都清除旧活动与逐 Project 提升，避免上一客户端或上一 serve 冒充当前连接。
+GUI 读取的 `MCPAccessView` 明确区分凭据与连接：`DISABLED → CREDENTIAL_READY → AUTHENTICATED → CONNECTED` 是正常建立过程，认证失败投影为 `CREDENTIAL_REJECTED`，人工暂停投影为 `PAUSED`。`last_authenticated_at_us` 只证明 Bearer 通过，`last_seen_at_us` 才代表 SDK 已成功处理的客户端活动；状态页面不能把凭据生成、配置复制或客户端自报当成连接成功。恢复、轮换、暂停和 shutdown 都清除旧活动与逐 Project 提升，避免上一客户端或上一 serve 冒充当前连接。
 
 MCP工具按SDK返回structured content，不套API/CLI envelope；仅独立持久根有schema_version。当前提供有界事实、SourceChange和完整Check提交/取消，不开放Proposal决定、权限writer或任意执行。
 
-长期配对只恢复READ。精确14工具：原7个Project/ApplicationUnderstanding/BusinessBoundary/Intent/Identity/System READ，加change_show/check_status/result_show/repair_show；change_submit为PREPARE，check_run/check_cancel为EXECUTE。GUI对当前项目临时提升，pause/resume/rotate/forget/close清除；令牌、状态和错误继续沿同一受控边界。未声明参数拒绝，不能选择Case/Permission/Effect、提交源码/diff、执行Git/shell/任意HTTP或写权限。
+长期配对只恢复READ。精确20工具：原11个事实查询，加task_list/task_show/task_context/receipt_show四个READ；task_create/task_accept/change_submit为PREPARE，check_run/check_cancel为EXECUTE。任务修订、结束、取消只由GUI操作。变化登记携带任务、上下文、预期版本和稳定操作键，写后不明先读取原回执。GUI对当前项目临时提升，pause/resume/rotate/forget/close清除；令牌、状态和错误继续沿同一受控边界。未声明参数拒绝，不能选择Case/Permission/Effect、提交源码/diff、执行Git/shell/任意HTTP或写权限。
 
 ## ResultStory 与 Evidence
 

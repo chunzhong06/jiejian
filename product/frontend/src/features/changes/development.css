@@ -1,0 +1,11 @@
+/* 任务内容共用一条对齐轴；主操作靠右，宽屏保持可读行长，窄屏自然换行。 */
+.development-task { padding: var(--space-24) var(--space-32); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-large); min-width: 0; }
+.development-task-heading, .development-task-footer { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-24); }
+.development-task-heading h2 { margin: 0; font-size: var(--font-section); line-height: 1.4; overflow-wrap: anywhere; }
+.development-task-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-12); flex-shrink: 0; }
+.development-goal { max-width: 76ch; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--space-16) 0; }
+.development-context-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-12); font-size: var(--font-secondary); color: var(--color-secondary); }
+.development-task-footer { margin-top: var(--space-24); padding-top: var(--space-16); border-top: 1px solid var(--color-border); align-items: center; }
+.development-task-form { margin-top: var(--space-24); max-width: 920px; }
+.development-feedback { margin-block: var(--space-16); color: var(--color-secondary); }
+@media (max-width: 700px) { .development-task { padding: var(--space-20); } .development-task-heading, .development-task-footer { flex-direction: column; gap: var(--space-16); } .development-task-actions { align-self: flex-end; max-width: 100%; } }

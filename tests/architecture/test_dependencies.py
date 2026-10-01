@@ -168,6 +168,9 @@ def test_automated_l5_dependencies_do_not_enter_product_runtime() -> None:
 def test_product_names_do_not_encode_development_generations() -> None:
     generation_name = re.compile(r"(?i)(?:^|[_-])v[12](?:[._-]|$)|(?:^|[_-])stage(?:[._-]|$)|阶段")
     frozen_root_migration = BACKEND / "migrations" / "versions" / "0001_business_boundary_v2.py"
+    # 对外根协议的版本名表示真实 reader 断代，不是开发阶段命名。
+    versioned_protocols = {PROTOCOLS / "schemas" / "runner" / name for name in (
+        "check-runner-result-v2.schema.json", "check-runtime-v2.schema.json")}
     assert frozen_root_migration.is_file()
     product_files = []
     for path in (ROOT / "product").rglob("*"):
@@ -179,7 +182,7 @@ def test_product_names_do_not_encode_development_generations() -> None:
     assert not [
         path
         for path in product_files
-        if path != frozen_root_migration and generation_name.search(path.name)
+        if path != frozen_root_migration and path not in versioned_protocols and generation_name.search(path.name)
     ]
 
     for path in _python_files(ROOT / "product"):
@@ -210,6 +213,14 @@ def test_product_does_not_mutate_python_import_paths() -> None:
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue
             owner = node.func.value
+            # 独立 Target 进程只能加入已经按 manifest 校验的副本目录；产品进程仍禁止改 import path。
+            if path == BACKEND / "infra" / "runtime" / "process" / "target.py" and ast.unparse(node.func) == "sys.path.insert":
+                assert ast.unparse(node) == "sys.path.insert(0, str(source_root.resolve()))"
+                checks = [item for item in ast.walk(tree) if isinstance(item, ast.Call)
+                    and ast.unparse(item.func) == "verify_runtime_artifact"]
+                assert len(checks) == 1 and checks[0].lineno < node.lineno
+                assert ast.unparse(checks[0]) == "verify_runtime_artifact(source_root, manifest)"
+                continue
             assert not (
                 isinstance(owner, ast.Attribute)
                 and isinstance(owner.value, ast.Name)

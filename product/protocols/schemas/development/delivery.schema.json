@@ -1,0 +1,82 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "change_id": {
+      "pattern": "^chg_[0-9a-f]{32}$",
+      "title": "Change Id",
+      "type": "string"
+    },
+    "context_id": {
+      "pattern": "^ctx_[0-9a-f]{32}$",
+      "title": "Context Id",
+      "type": "string"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "current_snapshot_id": {
+      "pattern": "^snp_[0-9a-f]{32}$",
+      "title": "Current Snapshot Id",
+      "type": "string"
+    },
+    "delivery_id": {
+      "pattern": "^dly_[0-9a-f]{32}$",
+      "title": "Delivery Id",
+      "type": "string"
+    },
+    "ordinal": {
+      "minimum": 1,
+      "title": "Ordinal",
+      "type": "integer"
+    },
+    "previous_delivery_id": {
+      "anyOf": [
+        {
+          "pattern": "^dly_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Previous Delivery Id"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "start_snapshot_id": {
+      "pattern": "^snp_[0-9a-f]{32}$",
+      "title": "Start Snapshot Id",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^dvt_[0-9a-f]{32}$",
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "delivery_id",
+    "context_id",
+    "task_id",
+    "project_id",
+    "ordinal",
+    "change_id",
+    "start_snapshot_id",
+    "current_snapshot_id",
+    "created_at_us"
+  ],
+  "title": "DevelopmentDelivery",
+  "type": "object"
+}

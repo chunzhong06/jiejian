@@ -1093,6 +1093,22 @@ samp {
   margin: 4px 0 8px;
 }
 
+.workbench-sample-entry .sample-start-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-16) var(--space-32);
+}
+
+.sample-start-row .sample-start-copy {
+  flex: 1 1 28rem;
+  min-width: 0;
+}
+
+.sample-start-copy p { margin: 0; }
+.sample-start-copy p + p { margin-top: var(--space-8); }
+.sample-start-row > .ant-btn { flex-shrink: 0; margin-inline-start: auto; }
+
 .workbench-system-link {
   margin-left: -15px;
 }
@@ -2739,10 +2755,6 @@ samp {
   max-width: 700px;
 }
 
-.tools-page .page-task-header {
-  margin-bottom: 12px;
-}
-
 @media(max-width:760px) {
   .preparation-current {
     padding: 22px;
@@ -2877,3 +2889,28 @@ samp {
 .history-update{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--color-surface-subtle);border-bottom:1px solid var(--color-border);font-size:13px}
 .switcher-icon-space{width:14px;display:inline-block}
 @media(prefers-reduced-motion:reduce){.editorial-page details>summary::before{transition:none}}
+
+/* 检查动态不占正文空间，与错误通知共用右下角堆栈，保持页面内容与键盘焦点不跳动。 */
+.check-activity-toast {width:min(360px,calc(100vw - 32px));max-width:100%;padding:var(--space-16) var(--space-20);border:1px solid var(--color-border);border-radius:var(--radius-medium);background:var(--color-surface);box-shadow:var(--shadow-focus);}
+.check-activity-toast-heading {display:flex;align-items:center;justify-content:space-between;gap:var(--space-16);font-size:var(--font-label);color:var(--color-secondary);}
+.check-activity-toast-heading .ant-btn {height:24px;width:24px;padding:0;color:var(--color-secondary);}
+.check-activity-toast p {margin:var(--space-8) 0;font-size:var(--font-secondary);line-height:1.7;color:var(--color-text);font-weight:500;}
+.check-activity-toast-actions {display:flex;justify-content:flex-end;}
+.check-activity-toast-actions .ant-btn {height:28px;padding-inline:var(--space-8);font-size:var(--font-secondary);}
+.notification-center {max-height:calc(100dvh - 120px);overflow-y:auto;overscroll-behavior:contain;}
+@media(max-width:600px){.check-activity-toast{width:100%}.notification-center{bottom:max(12px,env(safe-area-inset-bottom));}}
+
+/* 全产品次级操作统一描边和浅色底；主操作、文字链接与危险动作保留各自语义，不由页面单独染色。 */
+:where(.app-shell,.ant-modal) .ant-btn-default:not(.ant-btn-dangerous):not(:disabled){
+ color:var(--color-primary);border-color:color-mix(in srgb,var(--color-primary) 22%,var(--color-border));
+ background:color-mix(in srgb,var(--color-primary) 4%,var(--color-surface));box-shadow:none;
+}
+:where(.app-shell,.ant-modal) .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover{
+ color:var(--color-primary);border-color:var(--color-primary);background:var(--color-primary-light);
+}
+
+/* 文字操作全局一致：鼠标只改变文字和下划线，不制造灰色按钮底；键盘仍显示 focus-visible。 */
+:where(.app-shell,.ant-modal,.notification-center) .ant-btn-link:not(:disabled):is(:hover,:active,:focus){background:transparent;border-color:transparent;box-shadow:none;text-decoration:underline;text-underline-offset:3px;}
+:where(.app-shell,.ant-modal,.notification-center) .ant-btn-link:not(:disabled):focus:not(:focus-visible){outline:none;}
+:where(.app-shell,.ant-modal,.notification-center) .ant-btn-link:focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;}
+.app-shell a:not(.ant-btn):hover{text-decoration:underline;text-underline-offset:3px;}

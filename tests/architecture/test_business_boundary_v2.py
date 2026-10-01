@@ -175,9 +175,16 @@ def test_mcp_registers_exact_tools_with_project_authorization_and_no_approval() 
         "jiejian_check_status",
         "jiejian_result_show",
         "jiejian_repair_show",
+        "jiejian_task_list",
+        "jiejian_task_show",
+        "jiejian_task_context",
+        "jiejian_receipt_show",
+        "jiejian_change_registration_preview",
     }
     expected = {name: "READ" for name in expected_read}
     expected.update(jiejian_change_submit="PREPARE", jiejian_check_run="EXECUTE", jiejian_check_cancel="EXECUTE")
+    expected.update(jiejian_task_create="PREPARE", jiejian_task_accept="PREPARE")
+    expected["jiejian_change_register"] = "PREPARE"
     tools = {}
     for node in ast.walk(ast.parse(source)):
         if not isinstance(node, ast.FunctionDef):
@@ -275,6 +282,8 @@ def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
         "0005_verification_loop_v3.py",
         "0006_product_provenance.py",
         "0007_preparation_recovery.py",
+        "0008_development_delivery.py",
+        "0009_delivery_check_links.py",
     ]
     revisions = {}
     for path in files:
@@ -294,4 +303,6 @@ def test_maintenance_migration_extends_the_frozen_root_revision() -> None:
         "0005_verification_loop_v3": "0004_action_resource_ownership",
         "0006_product_provenance": "0005_verification_loop_v3",
         "0007_preparation_recovery": "0006_product_provenance",
+        "0008_development_delivery": "0007_preparation_recovery",
+        "0009_delivery_check_links": "0008_development_delivery",
     }

@@ -14,7 +14,9 @@ class Node:
         self.page, self.kind, self.name, self.scope = page, kind, name, scope
     def get_by_role(self, kind, *, name, **kwargs):
         if hasattr(name, "pattern"):
-            name = "确认" if name.pattern == r"^确\s*认$" else self.page.close_name if "关闭证据" in name.pattern else name.pattern.lstrip("^")
+            if "继续官方示例演练" in name.pattern:
+                return Node(self.page, kind, "收起官方演练" if self.page.journey_open else "继续官方示例演练", (*self.scope, self.name))
+            name = "确认" if name.pattern == r"^确\s*认$" else self.page.close_name if "事实与证明" in name.pattern else name.pattern.lstrip("^")
         return Node(self.page, kind, name, (*self.scope, self.name))
     def get_by_text(self, name, **kwargs):
         return Node(self.page, "text", name, (*self.scope, self.name))
@@ -25,6 +27,7 @@ class Node:
     def or_(self, other):
         return self if self.page.evidence_role == self.kind else other
     def count(self):
+        if self.name == "登记本地修改": return int(self.page.manual_open)
         if self.name == "示例环境管理": return int(self.page.outer)
         if self.name == ".path-node-breakpoint": return self.page.marks
         if self.name == "关闭检查完成提示": return 0
@@ -50,6 +53,7 @@ class Node:
         self.page.events.append(("fill", self.name, value))
         self.page.inputs[self.name] = value
     def get_attribute(self, name):
+        if name == "aria-expanded": return "true" if self.page.journey_open else "false"
         if name == "open": return "" if (hasattr(self.name, "pattern") or self.name == "手动登记代码变化") and self.page.manual_open else None
         assert name == "aria-current"
         return "true" if self.page.selected else "false"
@@ -59,7 +63,7 @@ class Node:
             self.page.url = self.page.origin + "/#/tests?" + urlencode({"change_id": self.page.target_change})
         if self.name.startswith('[data-run="'):
             self.page.url = self.page.origin + "/#/history?" + urlencode({"run_id": self.name[11:-2]})
-        if self.name == "返回检查历史": self.page.url = self.page.origin + "/#/history"
+        if self.name == "检查历史": self.page.url = self.page.origin + "/#/history"
         if self.name == "查看结果": self.page.url = self.page.origin + "/#/history?run_id=" + self.page.completed
         for response in self.page.responses.get(self.name, []):
             for context in self.page.pending:
@@ -83,8 +87,9 @@ class Page:
         self.events, self.pending, self.responses = [], [], {}
         self.url, self.target_change, self.selected = self.origin, "change-exact", True
         self.inputs, self.rows, self.edges = {}, [], []
-        self.outer, self.marks, self.evidence_role, self.close_name = False, 0, "complementary", "关闭证据并返回事实"
+        self.outer, self.marks, self.evidence_role, self.close_name = False, 0, "region", "← 返回事实与证明"
         self.manual_open = False
+        self.journey_open = False
         self.node_marks = [False, False]
     def goto(self, url, **kwargs):
         self.url = url
@@ -96,6 +101,8 @@ class Page:
                 if context.predicate(response): context.value = response
     def get_by_role(self, kind, *, name, **kwargs):
         self.events.append(("locate", kind, name, kwargs))
+        if hasattr(name, "pattern") and "继续官方示例演练" in name.pattern:
+            name = "收起官方演练" if self.journey_open else "继续官方示例演练"
         return Node(self, kind, name)
     def get_by_text(self, name, **kwargs):
         return Node(self, "text", name)
@@ -157,15 +164,17 @@ def test_prepare_does_not_guess_when_workspace_is_not_preparation(tmp_path, chan
     assert not page.events and all(item[0] == "GET" for item in client.calls)
 
 
+@pytest.mark.parametrize("opened", [False, True])
 @pytest.mark.parametrize("version,label", [("VULNERABLE", "应用预设异步优化"), ("FIXED", "应用预设修复")])
-def test_switch_uses_neutral_environment_controls_and_exact_original(tmp_path, version, label):
+def test_switch_uses_neutral_environment_controls_and_exact_original(tmp_path, version, label, opened):
     gui, page, client = context(tmp_path)
+    page.journey_open = opened
     reference = {"source_run_id": "run-original", "source_case_id": "case-original", "repair_fingerprint": "fingerprint"} if version == "FIXED" else None
     client.values["/api/projects/project/repair"] = {"project_id": "project", "tasks": [{"status": "REPAIR_REQUIRED", "contract": reference}]}
     client.values["/api/runs/run-original"] = {"result_integrity": "VALID", "run": {"verdict": "BLOCK"}}
     page.reply("应用代码变更", "POST", "/api/experience/official-sample/version", {"scenario_version": version}, {"version": version, "repair_reference": reference})
     gui.switch(version, reference)
-    assert [item[1] for item in page.events if item[0] == "click"] == [label, "应用代码变更"]
+    assert [item[1] for item in page.events if item[0] == "click"] == ([] if opened else ["继续官方示例演练"]) + [label, "应用代码变更"]
     assert all(method == "GET" for method, _, _ in client.calls)
 
 
@@ -196,24 +205,22 @@ def test_repair_submission_must_click_changes_action_before_runs_post(tmp_path, 
 
 
 def result_payload():
-    source = {"source_label": "本轮冻结来源", "evidence_refs": ["ev-one", "ev-two"]}
+    source = {"source_label": "本轮冻结来源", "business_label": "受保护结果", "required_level": "VERDICT_REQUIRED", "evidence_refs": ["ev-one", "ev-two"]}
     deny = {"action_id": "action-original", "case_id": "case-original", "display_name": "受保护动作", "permission": {"expectation": "DENY"},
-        "fact_comparison": {"planned_identity": {"label": "操作账号"}}, "decisive_proof_chain": [source]}
+        "fact_comparison": {"planned_identity": {"label": "操作账号"}}, "proof_coverage": [source]}
     return {"run_id": "run-original", "story": {"judgement": "本轮已发布判断", "actions": [deny, {"permission": {"expectation": "ALLOW"}}]}}
 
 
-@pytest.mark.parametrize("selected,operations", [(True, 1), (False, 2)])
-def test_problem_decisive_evidence_is_opened_within_two_actions_and_gets_checked(tmp_path, selected, operations):
+def test_problem_decisive_evidence_is_opened_within_two_actions_and_gets_checked(tmp_path):
     gui, page, client = context(tmp_path)
-    page.selected = selected
     for ref in ("ev-one", "ev-two"):
-        page.reply("为什么这样判断？查看本轮冻结来源证据", "GET", f"/api/runs/run-original/evidence/{ref}", {"run_id": "run-original", "evidence_id": ref, "action_id": "action-original", "case": {"case_id": "case-original"}})
+        page.reply("查看必要证明记录 →", "GET", f"/api/runs/run-original/evidence/{ref}", {"run_id": "run-original", "evidence_id": ref, "action_id": "action-original", "case": {"case_id": "case-original"}})
     gui._decisive_evidence(result_payload())
     record = next(item for item in gui.records if item["event"] == "decisive-evidence")
-    assert record["open_operations"] == operations and record["evidence_refs"] == ["ev-one", "ev-two"]
+    assert record["open_operations"] == 2 and record["evidence_refs"] == ["ev-one", "ev-two"]
     questions = {item[1] for item in page.events if item[0] == "wait" and "已发布证据" in item[3]}
-    assert {"在哪里看到", "看到什么", "因此支持什么", "不能单独证明什么"} <= questions
-    assert ("click", "关闭证据并返回事实") in page.events
+    assert {"来自所选证明要求", "受保护结果", "观察记录"} <= questions
+    assert ("click", "← 返回事实与证明") in page.events
     assert client.calls == []
 
 
@@ -221,10 +228,10 @@ def test_problem_decisive_evidence_is_opened_within_two_actions_and_gets_checked
 def test_problem_evidence_failure_cannot_claim_checkpoint_passed(tmp_path, fault):
     gui, page, _ = context(tmp_path)
     payload = result_payload()
-    if fault == "missing_source": payload["story"]["actions"][0]["decisive_proof_chain"] = []
+    if fault == "missing_source": payload["story"]["actions"][0]["proof_coverage"] = []
     else:
         for ref in ("ev-one", "ev-two"):
-            page.reply("为什么这样判断？查看本轮冻结来源证据", "GET", f"/api/runs/run-original/evidence/{ref}", {"run_id": "other", "evidence_id": ref})
+            page.reply("查看必要证明记录 →", "GET", f"/api/runs/run-original/evidence/{ref}", {"run_id": "other", "evidence_id": ref})
     with pytest.raises(SampleTestError, match="GUI_DECISIVE_EVIDENCE"):
         gui.checkpoint("problem-result", payload)
     assert gui.records == []
@@ -289,10 +296,10 @@ def test_ready_fixed_result_original_evidence_and_exit_keep_real_controls(tmp_pa
     gui.shutdown()
     clicks = [item[1] for item in page.events if item[0] == "click"]
     assert "开始检查" not in clicks
-    assert clicks == ["查看原问题", "summary", "查看定位证据", "关闭证据并返回事实", "搜索", '[data-run="fixed"]', "返回检查历史",
+    assert clicks == ["查看原问题", 'button[data-result-case="case-original"]', "执行过程", "查看定位证据", "← 返回事实与证明", "搜索", '[data-run="fixed"]', "检查历史",
         "设置与更多", "退出界鉴", "安全退出"]
-    assert ("wait", "原问题已经通过复验，要求保留的合法能力未受影响", {}, ()) in page.events
-    assert ("wait", "原题复验通过", {}, ()) in page.events
+    assert ("wait", "原题复验通过", {}, ('[aria-label="权限验证工作区"]:visible',)) in page.events
+    assert ("wait", "原题复验通过", {}, ('[aria-label="修复依据"]:visible',)) in page.events
     assert [record["event"] for record in gui.records] == ["limited-ready", "fixed-ready", "fixed-result", "history-search", "history-return", "evidence-and-repair", "exit"]
 
 
@@ -301,7 +308,7 @@ def test_fixed_result_does_not_display_verified_title_without_backend_verificati
     with pytest.raises(SampleTestError, match="GUI_ORIGINAL_REPAIR_NOT_VERIFIED"):
         gui.checkpoint("fixed-result", {"run_id": "fixed", "story": {"judgement": "普通本轮结果", "repair_verification": {"status": "INCONCLUSIVE"}}})
     assert gui.records == []
-    assert not any(item[0] == "wait" and item[1] == "原问题已经通过复验，要求保留的合法能力未受影响" for item in page.events)
+    assert not any(item[0] == "wait" and item[1] == "原题复验通过" for item in page.events)
 
 
 def test_fixed_submission_requires_unique_original_task_before_any_click(tmp_path):
@@ -347,7 +354,7 @@ def test_prepare_accepts_public_readiness_without_rewriting_sample_marker():
     assert all(method == "GET" for method, _ in calls)
 
 
-@pytest.mark.parametrize("role,close", [("complementary", "关闭证据并返回事实"), ("dialog", "返回检查事实")])
+@pytest.mark.parametrize("role,close", [("region", "← 返回事实与证明"), ("region", "← 返回执行过程")])
 def test_evidence_container_matches_visible_role_and_close_action(tmp_path, role, close):
     gui, page, _ = context(tmp_path)
     page.evidence_role, page.close_name = role, close
@@ -430,7 +437,7 @@ def test_completion_does_not_navigate_until_user_click_and_retains_filter(tmp_pa
         assert ("click", "查看结果") not in page.events
     else:
         gui.mcp_completion(result, "problem")
-        assert [event[1] for event in page.events if event[0] == "click"] == ["查看结果", "返回检查历史"]
+        assert [event[1] for event in page.events if event[0] == "click"] == ["查看结果", "检查历史"]
         assert gui.records[-1]["run_id"] == "new-run"
 
 
@@ -453,7 +460,7 @@ def test_mcp_change_requires_visible_source_and_closed_manual_registration(tmp_p
         assert not gui.records
     else:
         gui.mcp_change(change)
-        assert any(item[0] == "wait" and hasattr(item[1], 'pattern') and change["submitted_by"].replace(' ', r'\ ') in item[1].pattern for item in page.events)
+        assert any(item[0] == "wait" and item[1] == "登记来源：" + change["submitted_by"] for item in page.events)
         assert gui.records[-1]["change_id"] == "change"
-    assert len([item for item in page.events if item[0] == "click"]) == 1
+    assert not [item for item in page.events if item[0] == "click"]
     assert client.calls == []

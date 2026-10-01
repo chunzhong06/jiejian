@@ -1,4 +1,5 @@
 # 官方环境和安全退出的真实页面操作。
+import re
 from .session import GuiSession
 
 
@@ -43,6 +44,10 @@ class EnvironmentActions(GuiSession):
             self._mark("switch-evidence_limited")
             return result
         self._goto("/changes")
+        journey = self.page.get_by_role("button", name=re.compile(r"^(继续官方示例演练|收起官方演练)$"))
+        # 工作面保留展开状态；返回时只在关闭态展开，不能把已打开的演练反向收起。
+        if journey.get_attribute("aria-expanded") != "true":
+            journey.click()
         if repair is not None and len(repair["tasks"]) > 1:
             eligible = [task for task in repair["tasks"] if task["status"] != "STALE"]
             selected = next(index for index, task in enumerate(eligible) if task is matches[0])

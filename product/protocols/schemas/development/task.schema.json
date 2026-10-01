@@ -1,0 +1,67 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "context_id": {
+      "pattern": "^ctx_[0-9a-f]{32}$",
+      "title": "Context Id",
+      "type": "string"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "default": "ACTIVE",
+      "enum": [
+        "ACTIVE",
+        "CLOSED",
+        "CANCELLED"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^dvt_[0-9a-f]{32}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "updated_at_us": {
+      "minimum": 0,
+      "title": "Updated At Us",
+      "type": "integer"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "task_id",
+    "project_id",
+    "version",
+    "revision",
+    "context_id",
+    "created_at_us",
+    "updated_at_us"
+  ],
+  "title": "DevelopmentTask",
+  "type": "object"
+}

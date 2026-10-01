@@ -158,6 +158,15 @@
 - `class ContractVersion`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.verification.permissions`, `pydantic`
 
+### `product/backend/core/development.py`
+- `class DevelopmentTask`
+- `class DevelopmentContext`
+- `class DevelopmentAcceptance`
+- `class DevelopmentDelivery`
+- `class DevelopmentReceipt`
+- `class RuntimeActivationReceipt`
+主要 import / dot-source：`__future__`, `product.protocols.execution_v3`, `product.protocols.runtime_identity`, `pydantic`, `typing`
+
 ### `product/backend/core/errors.py`
 - `class ErrorCode`
 - `class LLMWireErrorCode`

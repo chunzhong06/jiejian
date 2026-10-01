@@ -45,6 +45,8 @@ export function OfficialSamplePanel({ value, onChanged, onError, expanded = fals
     } finally { inFlight.current = false; setBusy(false) }
   }
   const legacyOwnershipMissing = value?.lifecycle === 'UNKNOWN' && value.recovery_state === 'NONE'
+  // 工作台保持同一个启动入口；旧实例已退出只是历史事实，详细归档说明留在环境页。
+  const retainedExited = Boolean(value?.workspace_retained && value.recovery_state === 'EXITED')
   const environmentPending = value?.lifecycle === 'UNKNOWN' || value?.lifecycle === 'STARTING' || value?.lifecycle === 'STOPPING' || ((value?.operation_state === 'PENDING' || value?.operation_state === 'UNKNOWN') && value?.recovery_state !== 'EXITED' && !(value?.active && value.recovery_state === 'OWNED_RUNNING'))
   return <section className="workbench-sample-entry" aria-label="官方环境控制">
     {environmentPending && !uncertain && <Alert className="flow-feedback" type="info" showIcon message={value?.lifecycle === 'STARTING' ? '正在建立新实例' : value?.lifecycle === 'STOPPING' ? '正在停止实例' : '环境状态需要先核对'}
@@ -52,13 +54,14 @@ export function OfficialSamplePanel({ value, onChanged, onError, expanded = fals
       action={legacyOwnershipMissing ? undefined : <Button loading={busy} onClick={() => void reread()}>重新核对环境</Button>}/>}
     {(uncertain || syncFailed) && <Alert className="flow-feedback" type="warning" showIcon message={uncertain ? '环境操作回执尚未确认' : '环境操作已完成，页面尚未同步'} description="先重新读取状态，不重复启动、停止或切换。" action={<Button loading={busy} onClick={() => void reread()}>重新核对环境</Button>}/>}
     {!value ? <p>正在读取官方环境…</p> : !value.available ? <Alert className="flow-feedback" type="info" message={value.unavailable_reason ?? '当前环境无法启动官方示例。'} /> : !value.active ? <>
-      {value.workspace_retained && value.recovery_state === 'EXITED' ? <div className="environment-recovery">
+      {expanded && retainedExited ? <div className="environment-recovery">
         <span className="material-badge">已确认旧实例退出</span><h2>从全新示例开始</h2><p>每次启动都从同步导出开始，创建独立的新项目。确认权限后检查起始实现，再体验一次异步优化与复验。</p>
         <Button type="primary" disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button>
         <div className="environment-retained"><div><strong>旧项目归档保留</strong><p>检查结果与证据</p><p>原问题与修复记录</p><p>历史权限与源码记录</p></div><div><strong>新项目从零开始</strong><p>同步导出的起始源码</p><p>尚未批准的权限提案</p><p>重新准备账号、资源与材料</p></div></div>
         <p className="editorial-muted">旧源码修改、登录状态和材料不带入新实例。启动不会自动批准权限或执行检查。</p>
-      </div> : <><p>协作空间提供待确认的权限提案和测试材料，随后使用普通的验证与修复流程。</p>
-      <Button disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button></>}
+      </div> : <div className="sample-start-row"><div className="sample-start-copy"><p>协作空间提供待确认的权限提案和测试材料，随后使用普通的验证与修复流程。</p>
+      {retainedExited && <p className="editorial-muted">上次示例已退出，历史记录保留。本次启动将创建全新示例。</p>}
+      </div><Button type="primary" disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button></div>}
     </> : <section className="sample-environment" aria-label="示例环境管理" data-expanded={expanded}><h3>示例环境管理</h3>
       <p className="editorial-muted">在 Agent 协作中继续开发与验证。这里仅管理实例和可选观察条件，检查结束不会重置项目。</p>
       <Space wrap>

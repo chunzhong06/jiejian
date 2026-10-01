@@ -43,6 +43,9 @@ from product.backend.workflows.workspace.models import (
 
 
 _TASK_PRESENTATION: dict[str, tuple[str, str]] = {
+    "CREATE_DEVELOPMENT_TASK": ("开始下一项开发", "任务目标和沿用权限已形成可交给客户端的上下文。"),
+    "CONTINUE_DEVELOPMENT_TASK": ("继续开发与交付", "每批修改保留独立交付、检查和后续处理记录。"),
+    "LOAD_DELIVERY_RUNTIME": ("加载本批运行", "受控进程已加载这批源码，随后再进行完整检查。"),
     "CONFIRM_APPLICATION_ENDPOINT": ("核对应用连接", "当前应用的访问地址已经确认。"),
     "AUTHORIZE_SOURCE_ANALYSIS": ("查看源码分析授权", "你已明确授权本次只读源码分析。"),
     "RUN_SOURCE_ANALYSIS": ("开始源码分析", "本次分析完成并形成可审阅的候选。"),
@@ -215,6 +218,42 @@ class WorkspaceService:
                         system_will_do=why,route="/changes" if kind in {"REGISTER_SOURCE_CHANGE", "PREPARE_AGENT_REPAIR"} else "/tests",
                         change_id=change_id,run_id=run_id,repair_fingerprint=repair_fingerprint,
                         facts=dict(change_id=change_id,run_id=run_id,repair_fingerprint=repair_fingerprint))
+        development = None
+        development_service = getattr(self, "development_service", None)
+        if development_service is not None:
+            from product.backend.workflows.workspace.models import WorkspaceDevelopment
+            active_task = development_service.active(project_id)
+            if active_task is not None:
+                view = development_service.view(project_id, active_task.task_id)
+                delivery = view["deliveries"][0] if view["deliveries"] else None
+                verification = view["latest_verification"]
+                development = WorkspaceDevelopment(task_id=active_task.task_id, context_id=active_task.context_id,
+                    title="继续开发，沿用已确认权限", goal=view["context"]["goal"], revision=active_task.revision, version=active_task.version,
+                    client_name=None if view["acceptance"] is None else view["acceptance"]["client_name"],
+                    latest_delivery_id=None if delivery is None else delivery["delivery_id"],
+                    latest_change_id=None if delivery is None else delivery["change_id"],
+                    latest_batch_number=None if delivery is None else delivery["ordinal"],
+                    latest_run_id=None if verification is None else verification["run_id"], runtime_state=view["runtime_state"])
+                if not boundary_attention and active_check is None:
+                    if delivery is not None and view["runtime_state"] == "NOT_LOADED":
+                        primary_task = self._task("LOAD_DELIVERY_RUNTIME", title="让运行实例加载这批修改",
+                            why_now="代码已登记，但现有进程还没有加载本批源码。", user_responsibility="在交付页显式加载，再继续准备与检查。",
+                            system_will_do="保留应用权限和历史，核对新运行实例。", route="/changes", change_id=delivery["change_id"],
+                            facts={"delivery_id": delivery["delivery_id"], "task_version": active_task.version})
+                    elif delivery is not None and verification["run_id"] is None and (primary_task is None or primary_task.task_kind in {"RUN_CURRENT_CHECK", "VIEW_CURRENT_RESULT"}):
+                        preview = self._current_checks[0].preview(project_id, change_id=delivery["change_id"])
+                        primary_task = self._task("RUN_CURRENT_CHECK", title="检查这批交付，沿用全部权限要求",
+                            why_now="这批交付尚无精确关联的检查记录。", user_responsibility="核对本批准备与检查范围。",
+                            system_will_do="结果归入这批交付，不借用其它批次的通过记录。", route="/tests", change_id=delivery["change_id"],
+                            can_execute=preview.can_execute, facts={"delivery_id": delivery["delivery_id"], "plan": preview.plan_fingerprint})
+                    elif primary_task is None or primary_task.task_kind == "VIEW_CURRENT_RESULT":
+                        primary_task = self._task("CONTINUE_DEVELOPMENT_TASK", title="继续开发，沿用已确认权限",
+                            why_now="本次修改与检查已分别保留，可以回原客户端继续开发。", user_responsibility="查看本次记录，或登记下一次修改。",
+                            system_will_do="权限要求沿用；检查结果只关联其实际执行批次。", route="/changes",
+                            facts={"task_id": active_task.task_id, "task_version": active_task.version})
+                    elif delivery is not None and primary_task.route == "/tests" and primary_task.change_id is None and primary_task.run_id is None:
+                        # 材料补齐仍属于本批交付；不能从准备页返回成无关联的普通检查。
+                        primary_task = primary_task.model_copy(update={"change_id": delivery["change_id"]})
         return WorkspaceView(
             project=WorkspaceProjectView(
                 project_id=project.project_id,
@@ -228,6 +267,7 @@ class WorkspaceService:
             primary_task=primary_task,
             areas=self._areas(boundary_attention, preparation.preparation_complete),
             latest_result=latest_result,source_change=source_change,repair=repair,active_check=active_check,
+            development=development,
             journey=self._journey(connection, boundary_attention, preparation.preparation_complete,
                 primary_task, latest_result, source_change, active_check),
         )

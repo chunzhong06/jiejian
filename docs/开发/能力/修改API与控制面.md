@@ -38,11 +38,13 @@ MCP使用官方Python SDK Streamable HTTP，精确挂载同一FastAPI的/mcp，�
 
 `MCPAccessView.connection_state` 是 GUI 的唯一连接阶段事实：`DISABLED` 表示尚无凭据，`CREDENTIAL_READY` 表示凭据已创建但尚未观测到客户端，`AUTHENTICATED` 表示 Bearer 已通过但 SDK 尚未成功处理 MCP 请求，`CONNECTED` 在 SDK 成功处理任一请求后成立，`CREDENTIAL_REJECTED` 表示最近一次认证失败，`PAUSED` 表示当前 serve 不接受连接。无状态 HTTP 请求可以不携带 initialize 客户端身份；名称和版本只用于补充展示，缺失时不能把已经成立的连接降级。创建凭据、复制配置或客户端自称已保存都不能提前显示“连接成功”；恢复连接清除旧活动和临时提升后回到 `CREDENTIAL_READY`。
 
-唯一连接向导位于 GUI“AI 工具连接”，正式提供 Codex、TRAE、Qoder、CodeBuddy 和 DSH 五个客户端选项，但同一时间只展示一个客户端的五步新手流程。全部客户端使用 server name `jiejian` 和 `http://127.0.0.1:8765/mcp`。Codex、CodeBuddy 与 DSH 从用户级 `JIEJIAN_MCP_TOKEN` 读取凭据；DSH 使用 `@deepseek-ai/dsh-mcp-client`。TRAE 与 Qoder 的当前公开 HTTP 配置需要用户在本机请求头中单独填写 Bearer，GUI 分别提供“第 3 步配置”和“第 4 步凭据”的复制按钮，并提示不得同步、提交或分享该配置。普通页面不显示原始配置预览、CLI 备选或协议解释；每步只说明打开位置、粘贴动作、重启要求和成功标志。
+唯一连接页提供 Codex、DeepSeek Harness（DSH）、ZCode 三种指导，使用“准备连接 → 配置客户端 → 验证与授权”三阶段。地址取当前服务返回的 endpoint，不固定端口。配置预览不含秘密，凭据由用户单独复制；Codex/DSH 使用用户级环境变量，ZCode 在本机 Headers 填写 Bearer。步骤来源见 `features/tools/clientGuides.ts` 官方链接；DSH/ZCode 尚未实机验收须明确标记。
+
+教程选择与实际客户端身份独立；旧客户端名称如实展示，不因主引导调整而强行断开。界面使用“连接已验证/最近活动”，不表示实时在线或正在编码。管理连接为页内区域，凭据更新/删除只作最后一次确认；所有客户端共享现有凭据和授权，不能声称支持逐客户端撤权。
 
 MCP instructions明确READ读取事实、PREPARE登记变化声明、EXECUTE运行完整当前权限或取消本项目检查，遇到人类决定返回GUI。基线跨用户任务保存；复制内容不含Bearer正文，也不要求把秘密发进对话。
 
-每个MCP工具先统一连接认证，再按项目require授权。精确14工具包括原7个READ及change_show/check_status/result_show/repair_show，change_submit为PREPARE，check_run/check_cancel为EXECUTE。未声明参数按公开schema拒绝；不提供选Case/Effect/Permission、approval、任意路径/HTTP/shell或原始Evidence/Trace。错误沿既有MCP_DISABLED/MCP_AUTH_REQUIRED/MCP_PERMISSION_REQUIRED映射，不暴露输入秘密。
+每个MCP工具先统一连接认证，再按项目require授权。精确20工具：原有11个READ，加task_list/task_show/task_context/receipt_show四个READ；task_create/task_accept/change_submit为PREPARE，check_run/check_cancel为EXECUTE。任务修订、结束与取消只由GUI执行。未声明参数按公开schema拒绝；不提供选Case/Effect/Permission、approval、任意路径/HTTP/shell或原始Evidence/Trace。错误沿既有MCP_DISABLED/MCP_AUTH_REQUIRED/MCP_PERMISSION_REQUIRED映射，不暴露输入秘密。
 
 Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `schema_version/kind/status/data/next_actions/warnings`，失败增加有界 `error`。默认 Human 只给结论与下一步，只有显式 `--json` 才进入 Machine 模式；两种输出都来自同一产品事实。更完整的关系见[控制面与 Machine 输出协议](../../参考/协议/控制面与Machine输出协议.md)。
 
@@ -68,7 +70,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps
 
 只改一个资源 Router 时不要机械运行整组控制面。改 Machine envelope、ServeLock、启动/关闭或 ApplicationCore 组合时，必须覆盖 CLI/API 同事实、错误通道与单控制者。改 OpenAPI DTO 后再运行 schema/docs 检查；只有入口跨进程行为变化才增加少量 E2E。
 
-MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、精确当前 14 工具及其授权层级、暂停/轮换/忘记、跨启动配对恢复、非秘密投影和唯一 ApplicationCore；同时验证启动默认 READ、逐项目临时提升及审批隔离；检查提交/取消只调用当前 ApplicationCore，不暴露旧结果服务或任意 HTTP/shell。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
+MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、精确当前 20 工具及其授权层级、暂停/轮换/忘记、跨启动配对恢复、非秘密投影和唯一 ApplicationCore；同时验证启动默认 READ、逐项目临时提升及审批隔离；检查提交/取消只调用当前 ApplicationCore，不暴露旧结果服务或任意 HTTP/shell。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
 
 ## 失败先查哪里
 

@@ -381,6 +381,43 @@ def _create_kill_on_close_job(name: str | None = None) -> int | None:
     return int(handle)
 
 
+def kernel_process_created_at(identity: Mapping[str, object], process_id: int) -> int | None:
+    """只读核对存活进程属于指定受控 Job，并返回 OS 创建时间以排除 PID 复用。"""
+    if os.name != "nt" or identity.get("kind") != "windows-job" or type(process_id) is not int or process_id <= 0:
+        return None
+    name = identity.get("name")
+    if not isinstance(name, str) or not name.startswith("jiejian-sample-exp_"):
+        return None
+    job = _open_job(name)
+    if job is None:
+        return None
+    process = None
+    try:
+        # 仅申请只读查询与等待权限，不持有终止或修改外部进程的能力。
+        process = _KERNEL32.OpenProcess(0x1000 | 0x00100000, False, process_id)
+        if not process:
+            return None
+        _KERNEL32.IsProcessInJob.argtypes = [wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)]
+        _KERNEL32.IsProcessInJob.restype = wintypes.BOOL
+        _KERNEL32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        _KERNEL32.WaitForSingleObject.restype = wintypes.DWORD
+        belongs = wintypes.BOOL()
+        if not _KERNEL32.IsProcessInJob(process, job, ctypes.byref(belongs)) or not belongs.value:
+            return None
+        if _KERNEL32.WaitForSingleObject(process, 0) != 0x102:
+            return None
+        _KERNEL32.GetProcessTimes.argtypes = [wintypes.HANDLE, *([ctypes.POINTER(wintypes.FILETIME)] * 4)]
+        _KERNEL32.GetProcessTimes.restype = wintypes.BOOL
+        created, exited, kernel, user = (wintypes.FILETIME() for _ in range(4))
+        if not _KERNEL32.GetProcessTimes(process, ctypes.byref(created), ctypes.byref(exited), ctypes.byref(kernel), ctypes.byref(user)):
+            return None
+        return (created.dwHighDateTime << 32) | created.dwLowDateTime
+    finally:
+        if process:
+            _close_handle(int(process))
+        _close_handle(job)
+
+
 def _open_job(name: str) -> int | None:
     if os.name != "nt":
         return None

@@ -438,19 +438,27 @@ class CollaborationStorage:
             with path.open("a", encoding="utf-8", newline="\n") as stream:
                 stream.write(encoded + "\n")
 
-    def queue_records(self) -> list[dict[str, Any]]:
+    def queue_records(self, *, current_only: bool = False) -> list[dict[str, Any]]:
+        """历史文件始终保留；只读 Peek 只展示尚未撤销任务的当前消息窗口。"""
         path = self.queue_dir / "messages.jsonl"
         if not path.is_file():
             return []
         records: list[dict[str, Any]] = []
         with self.lock:
-            for line in path.read_text(encoding="utf-8").splitlines()[:256]:
-                try:
-                    item = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(item, dict):
-                    records.append(item)
+            active = None
+            if current_only:
+                with self._connect() as connection:
+                    active = {row[0] for row in connection.execute("SELECT case_id FROM export_jobs WHERE state != 'REVOKED'")}
+            with path.open(encoding="utf-8") as stream:
+                for line in stream:
+                    try:
+                        item = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(item, dict) and (active is None or item.get("case_tag") in active):
+                        records.append(item)
+                        if len(records) >= 256:
+                            break
         return records
 
     def create_archive(self, marker: str) -> tuple[str, Path]:

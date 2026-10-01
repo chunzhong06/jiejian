@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "PermissionReference": {
+      "additionalProperties": false,
+      "properties": {
+        "intent_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Intent Hash",
+          "type": "string"
+        },
+        "intent_id": {
+          "pattern": "^pin_[0-9a-f]{32}$",
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent_id",
+        "revision",
+        "intent_hash"
+      ],
+      "title": "PermissionReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "context_id": {
+      "pattern": "^ctx_[0-9a-f]{32}$",
+      "title": "Context Id",
+      "type": "string"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "goal": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Goal",
+      "type": "string"
+    },
+    "permission_refs": {
+      "items": {
+        "$ref": "#/$defs/PermissionReference"
+      },
+      "maxItems": 4096,
+      "minItems": 1,
+      "title": "Permission Refs",
+      "type": "array"
+    },
+    "policy_epoch": {
+      "minimum": 0,
+      "title": "Policy Epoch",
+      "type": "integer"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    },
+    "start_snapshot_id": {
+      "pattern": "^snp_[0-9a-f]{32}$",
+      "title": "Start Snapshot Id",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^dvt_[0-9a-f]{32}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "context_id",
+    "task_id",
+    "project_id",
+    "revision",
+    "title",
+    "goal",
+    "start_snapshot_id",
+    "source_fingerprint",
+    "policy_epoch",
+    "permission_refs",
+    "created_at_us"
+  ],
+  "title": "DevelopmentContext",
+  "type": "object"
+}

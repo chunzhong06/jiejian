@@ -1,0 +1,45 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "instance_id": {
+      "pattern": "^rti_[0-9a-f]{32}$",
+      "title": "Instance Id",
+      "type": "string"
+    },
+    "interpreter_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Interpreter Fingerprint",
+      "type": "string"
+    },
+    "manifest_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Manifest Fingerprint",
+      "type": "string"
+    },
+    "process_id": {
+      "exclusiveMinimum": 0,
+      "title": "Process Id",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "instance_id",
+    "manifest_fingerprint",
+    "process_id",
+    "source_fingerprint",
+    "interpreter_fingerprint"
+  ],
+  "title": "RuntimeLaunchReceipt",
+  "type": "object"
+}

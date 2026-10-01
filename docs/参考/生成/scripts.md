@@ -137,7 +137,7 @@
 - `class SDKSession`
 - `cleanup(client, gui, state)`
 - `run(client, gui, project, runs, state, session_factory)`
-主要 import / dot-source：`.`, `contextlib`, `functools`
+主要 import / dot-source：`.`, `contextlib`, `functools`, `uuid`
 
 ### `scripts/dev/sample_test/driver.py`
 - `SUITES`
@@ -147,7 +147,7 @@
 
 ### `scripts/dev/sample_test/gui/boundaries.py`
 - `class BoundariesActions`
-主要 import / dot-source：`.session`
+主要 import / dot-source：`.session`, `re`
 
 ### `scripts/dev/sample_test/gui/business_review.py`
 - `verify_business_selection(gui, project)`
@@ -161,7 +161,7 @@
 
 ### `scripts/dev/sample_test/gui/environment.py`
 - `class EnvironmentActions`
-主要 import / dot-source：`.session`
+主要 import / dot-source：`.session`, `re`
 
 ### `scripts/dev/sample_test/gui/history.py`
 - `class HistoryActions`
@@ -276,7 +276,7 @@
 - `CODE_GROUPS`
 - `generate(root, update) -> list[Path]`
 - `main() -> int`
-主要 import / dot-source：`__future__`, `argparse`, `ast`, `pathlib`, `re`
+主要 import / dot-source：`__future__`, `argparse`, `ast`, `pathlib`, `re`, `urllib.parse`
 
 ### `scripts/start.ps1`
 - `param $DisplaySpinnerAscii`

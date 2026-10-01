@@ -1,0 +1,50 @@
+/* 连续步骤与配置阅读区使用同一基线；状态、凭据和授权保持各自清晰的层次。 */
+.connection-page { max-width: 1120px; margin-inline: auto; gap: var(--space-24); }
+.connection-header, .connection-setup-heading, .connection-status, .connection-secret { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-24); }
+.connection-page h2, .connection-page h3, .connection-page h4 { margin: 0; color: var(--color-text); }
+.connection-page h2 { font-size: var(--font-titleMin); }
+.connection-page h3 { font-size: 20px; }
+.connection-page h4 { font-size: 16px; }
+.connection-page p { margin: var(--space-8) 0 0; line-height: 1.7; color: var(--color-secondary); }
+.connection-status { padding: var(--space-24); border: 1px solid var(--color-border); border-left: 3px solid var(--color-primary); border-radius: var(--radius-medium); background: var(--color-surface); }
+.connection-status.is-success { border-left-color: var(--color-safe); }
+.connection-status.is-error { border-left-color: var(--color-danger); }
+.connection-status.is-warning { border-left-color: var(--color-warning); }
+.connection-status-label { display: block; margin-bottom: var(--space-8); font-size: var(--font-secondary); color: var(--color-secondary); }
+.connection-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-24); }
+.connection-facts span { display: grid; gap: var(--space-8); overflow-wrap: anywhere; }
+.connection-facts small { color: var(--color-secondary); }
+.connection-tabs { display: flex; gap: var(--space-8); padding-block: var(--space-12); border-block: 1px solid var(--color-border); }
+.connection-setup, .connection-permissions { min-width: 0; }
+.connection-guide-intro { display: flex; align-items: baseline; gap: var(--space-12); flex-wrap: wrap; margin-top: var(--space-20); font-size: var(--font-secondary); }
+.connection-guide-intro a { margin-left: auto; }
+.connection-validation-note { font-size: var(--font-secondary); }
+.connection-steps { list-style: none; padding: 0; margin: var(--space-24) 0 0; }
+.connection-steps > li { padding: var(--space-24) 0; border-top: 1px solid var(--color-border); }
+.connection-step-title { display: flex; gap: var(--space-16); align-items: center; }
+.connection-step-title > span { font-family: var(--font-mono); color: var(--color-secondary); font-size: var(--font-secondary); }
+.connection-step-title h4 { flex: 1; }
+.connection-steps > li > p { margin-left: var(--space-32); }
+.connection-address { display: flex; align-items: center; gap: var(--space-16); margin-block: var(--space-20); padding: var(--space-12) var(--space-16); background: var(--color-surface-subtle); border-radius: var(--radius-small); font-size: var(--font-secondary); }
+.connection-address code { flex: 1; overflow-wrap: anywhere; }
+.connection-code { overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-surface); }
+.connection-code > div { display: flex; justify-content: space-between; align-items: center; gap: var(--space-16); padding: var(--space-8) var(--space-16); border-bottom: 1px solid var(--color-border); font-size: var(--font-secondary); color: var(--color-secondary); }
+.connection-code pre { margin: 0; padding: var(--space-20); overflow-x: auto; font-family: var(--font-mono); font-size: var(--font-secondary); line-height: 1.65; }
+.connection-secret { margin-top: var(--space-20); align-items: center; }
+.connection-secret small { display: block; color: var(--color-secondary); margin-top: var(--space-8); }
+.connection-secret > button, .connection-header > button, .connection-status > button { flex-shrink: 0; }
+.connection-routine { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-24); padding-top: var(--space-24); }
+.connection-routine span { display: grid; gap: var(--space-8); color: var(--color-secondary); font-size: var(--font-secondary); }
+.connection-routine b { color: var(--color-text); }
+.connection-management { border-top: 1px solid var(--color-border); padding-top: var(--space-24); }
+.connection-management .ant-space { margin-top: var(--space-16); }
+.connection-page .connection-boundary { border-top: 1px solid var(--color-border); padding-top: var(--space-20); font-size: var(--font-secondary); }
+@media (max-width: 780px) {
+  .connection-header, .connection-setup-heading, .connection-status, .connection-secret { flex-direction: column; gap: var(--space-16); }
+  .connection-step-title { flex-wrap: wrap; }
+  .connection-step-title > button, .connection-step-title > div { margin-left: auto; }
+  .connection-address { flex-wrap: wrap; }
+  .connection-address code { flex-basis: 65%; }
+  .connection-facts, .connection-routine { grid-template-columns: 1fr; gap: var(--space-16); }
+  .connection-guide-intro a { margin-left: 0; }
+}

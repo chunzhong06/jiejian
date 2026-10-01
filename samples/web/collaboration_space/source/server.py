@@ -929,8 +929,15 @@ class CollaborationRequestHandler(BaseHTTPRequestHandler):
         if not _valid_sas(query, self.server.queue_sas, resource="queue"):
             self._json(HTTPStatus.UNAUTHORIZED if not query else HTTPStatus.FORBIDDEN, {"code": "QUEUE_ACCESS_DENIED"})
             return True
+        try:
+            limit = int(parse_qs(query).get("numofmessages", ["1"])[0])
+            if not 1 <= limit <= 32:
+                raise ValueError("invalid peek count")
+        except (ValueError, IndexError):
+            self._json(HTTPStatus.BAD_REQUEST, {"code": "QUEUE_PEEK_LIMIT_INVALID"})
+            return True
         payload = []
-        for record in self.server.storage.queue_records():
+        for record in self.server.storage.queue_records(current_only=True)[:limit]:
             encoded = base64.b64encode(json.dumps(record, separators=(",", ":"), sort_keys=True).encode("utf-8")).decode("ascii")
             payload.append(f"<QueueMessage><MessageId>{xml_escape(str(record['event_id']))}</MessageId><MessageText>{encoded}</MessageText></QueueMessage>")
         self._bytes(HTTPStatus.OK, ("<QueueMessagesList>" + "".join(payload) + "</QueueMessagesList>").encode("utf-8"), "application/xml; charset=utf-8")

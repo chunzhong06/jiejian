@@ -31,7 +31,7 @@ class SourceIdentityComparison(WireModel):
     current_fingerprint: Hash | None
     current_git: GitSourceContext
     observed_at_us: int = Field(ge=0)
-    target_version: Literal["NOT_INDEPENDENTLY_IDENTIFIED"] = "NOT_INDEPENDENTLY_IDENTIFIED"
+    target_version: Literal["NOT_INDEPENDENTLY_IDENTIFIED", "MATCHED_AT_CHECK", "UNCONFIRMED_AT_CHECK"] = "NOT_INDEPENDENTLY_IDENTIFIED"
 
 
 class SourceIdentityReader:
@@ -50,7 +50,13 @@ class SourceIdentityReader:
 
     def for_run(self, project_id: str, run_id: str) -> SourceIdentityComparison:
         package = self._results.package(run_id, project_id=project_id)
-        return self._compare(project_id, package.request.source_fingerprint, run_id=run_id)
+        comparison = self._compare(project_id, package.request.source_fingerprint, run_id=run_id)
+        runtime = getattr(package.result, "runtime_correspondence", None)
+        # 只描述当时检查的运行对应，不把历史启动回执当作当前服务仍然在线的证明。
+        if runtime is not None:
+            comparison = comparison.model_copy(update={"target_version": "MATCHED_AT_CHECK"
+                if runtime.before == runtime.after == "MATCHED" else "UNCONFIRMED_AT_CHECK"})
+        return comparison
 
     def _compare(self, project_id, fingerprint, *, run_id=None, change_id=None):
         recorded = None

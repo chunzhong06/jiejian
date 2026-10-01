@@ -14,6 +14,12 @@ Observer 公共模型仍由 `product/protocols/observer/` 定义，独立 Invoca
 
 合法委托只能由显式因果 `AUTHORIZATION/ALLOW` 祖先、非空来源范围、范围子集、实际动作/资源覆盖及凭据一致性证明；不能从角色、actor、资源名称或 ALLOW 结果补范围。定位与效果判定分离：诊断不足或合法委托不能抹去独立权威来源已确认的 DENY 禁止效果。相关真源为 `infra/observers/audit_log.py`、`check_trace.py`、`core/verification/trace.py` 和 `breakpoints.py`（均位于 `product/backend/`）。
 
+当前 CHECK 仅调度辅助来源支持的阶段，不为 EVENTUAL-only 的任务或队列生成初始、操作后的失败占位。初始基线与恢复是否完成分别取自 CaseOutcome 的独立核对结果；单点业务效果 UNKNOWN 不等于初始化或恢复失败。
+
+来源采集与业务效果投影分别解释。对于已可信取得的辅助审计或队列记录，CheckObservation 的原因码可标注 `SOURCE_RECORDS_AVAILABLE`；完整队列窗口没有关联消息时标注 `SOURCE_WINDOW_EMPTY`。这些标记不改变 state、证明等级或 Verdict，不将过程记录升级为交付物证明。适配器的公开原因码一并保留，读取上限、来源失败和不支持投影不能都显示成同一未知说明。历史 Evidence 不回写，新检查才生成新增的采集说明。
+
+官方示例的消息历史继续保留在原文件中；Peek 投影只返回未撤销任务的当前消息窗口，并遵守 `numofmessages` 的 1～32 条范围。撤销后的历史不能挤占下一题的有界观察窗口；真实上限仍然报告不完整，不通过扩大预算或删除历史伪造完整性。
+
 ## 保留实现参考（不适用于当前 CHECK 入口）
 
 以下为保留 Observer 独立格式和底层消费者参考，不代表当前 GUI、CLI、MCP 或 sample-test 已装配旧结果链；当前 CHECK 使用首节协议。

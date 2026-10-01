@@ -87,7 +87,7 @@ class ChecksActions(GuiSession):
             if event == "fixed-result":
                 if (payload["story"].get("repair_verification") or {}).get("status") != "VERIFIED":
                     raise SampleTestError("GUI_ORIGINAL_REPAIR_NOT_VERIFIED")
-                self.page.get_by_role("heading", name="原问题已经通过复验，要求保留的合法能力未受影响", exact=True).wait_for()
+                self.page.locator('[aria-label="权限验证工作区"]:visible').get_by_text("原题复验通过", exact=True).wait_for()
             self.page.screenshot(path=str(self.audit_dir / (event + ".png")), full_page=True)
         elif event in {"limited-ready", "fixed-ready"}:
             self._goto("/tests")
@@ -99,7 +99,7 @@ class ChecksActions(GuiSession):
             if not runs:
                 raise SampleTestError("GUI_ORIGINAL_REPAIR_MISSING")
             self._goto("/tests?" + urlencode({"run_id": runs[-1]["run_id"]}))
-            self.page.get_by_role("heading", name="原问题已经通过复验，要求保留的合法能力未受影响", exact=True).wait_for()
+            self.page.locator('[aria-label="权限验证工作区"]:visible').get_by_text("原题复验通过", exact=True).wait_for()
             self.page.get_by_role("button", name="查看原问题", exact=True).click()
             self.page.get_by_role("heading", name=runs[0]["story"]["judgement"], level=1, exact=True).wait_for()
             self._breakpoint_evidence(runs[0])
@@ -111,41 +111,47 @@ class ChecksActions(GuiSession):
             if len(original) != 1:
                 raise SampleTestError("GUI_ORIGINAL_REPAIR_AMBIGUOUS")
             self._goto("/changes?" + urlencode({"repair_reference": original[0]["contract"]["repair_fingerprint"]}))
-            self.page.get_by_role("heading", name="原题复验通过", exact=True).first.wait_for()
+            self.page.get_by_role("heading", name="修复依据", exact=True).wait_for()
+            # 已离开的结果页仍保留在 DOM；只核对当前可见的修复工作面，不能命中隐藏旧结果。
+            self.page.locator('[aria-label="修复依据"]:visible').get_by_text("原题复验通过", exact=True).wait_for()
             self.capture("repair")
         else:
             raise SampleTestError("GUI_CHECKPOINT_UNKNOWN")
         self._mark(event)
 
+    def _select_result_case(self, action):
+        """通过总览的精确 case 引用选中检查项，深链详情先返回总览。"""
+        selected = self.page.locator(f'button[data-result-case="{action["case_id"]}"]')
+        if not selected.count():
+            self.page.get_by_role("button", name=re.compile(r"^← 返回 \d+ 项结果$")).click()
+        selected.click()
+
     def _decisive_evidence(self, payload):
         from scripts.dev.sample_test.harness.state import SampleTestError
         candidates = [(action, source) for action in payload["story"]["actions"]
             if action["permission"]["expectation"] == "DENY"
-            for source in action.get("decisive_proof_chain", []) if source.get("evidence_refs")]
+            for source in action.get("proof_coverage", [])
+            if source.get("required_level") == "VERDICT_REQUIRED" and source.get("evidence_refs")]
         if not candidates:
             raise SampleTestError("GUI_DECISIVE_EVIDENCE_MISSING")
         action, source = candidates[0]
-        operations = 0
-        if len(payload["story"]["actions"]) > 1:
-            label = action["display_name"] + " · " + (action["fact_comparison"]["planned_identity"]["label"] or "计划账号") + " · 应当拒绝"
-            selected = self.page.get_by_role("navigation", name="本轮权限考题", exact=True).get_by_role("button", name=label, exact=True)
-            if selected.get_attribute("aria-current") != "true":
-                selected.click()
-                operations += 1
+        self._select_result_case(action)
+        operations = 1
         refs = list(dict.fromkeys(source["evidence_refs"]))
-        # 所有 GET 等待先注册再点击一次；不使用 API 读取来替代真实 Drawer 动作。
+        # 证明要求的引用是权威范围；先注册全部 GET，再由真实页面一次打开。
         with ExitStack() as stack:
             responses = []
             for reference in refs:
                 url = self.client.origin + f"/api/runs/{quote(payload['run_id'], safe='')}/evidence/{quote(reference, safe='')}"
                 responses.append(stack.enter_context(self.page.expect_response(
                     lambda response, expected=url: response.request.method == "GET" and response.url == expected)))
-            self.page.locator('section[aria-label="最终业务结果"]').get_by_role("button",
-                name="为什么这样判断？查看" + source["source_label"] + "证据", exact=True).first.click()
+            self.page.get_by_role("article", name=source["business_label"] + "的证据对应", exact=True).get_by_role("button",
+                name="查看必要证明记录 →", exact=True).click()
             operations += 1
         drawer = self._evidence_container()
-        for question in ("在哪里看到", "看到什么", "因此支持什么", "不能单独证明什么"):
-            drawer.get_by_text(question, exact=True).wait_for()
+        drawer.get_by_text("来自所选证明要求", exact=True).wait_for()
+        drawer.get_by_role("heading", name=source["business_label"], exact=True).wait_for()
+        drawer.get_by_role("heading", name="观察记录", exact=True).first.wait_for()
         for reference, response in zip(refs, responses):
             actual = response.value
             data = actual.json().get("data", {})
@@ -158,8 +164,7 @@ class ChecksActions(GuiSession):
             "case_id": action["case_id"], "evidence_refs": refs, "open_operations": operations})
 
     def _evidence_container(self):
-        panel = self.page.get_by_role("complementary", name="已发布证据", exact=True).or_(
-            self.page.get_by_role("dialog", name="已发布证据", exact=True))
+        panel = self.page.get_by_role("region", name="已发布证据", exact=True)
         panel.wait_for()
         return panel
 
@@ -170,9 +175,8 @@ class ChecksActions(GuiSession):
             raise SampleTestError("GUI_ORIGINAL_BREAKPOINT_EVIDENCE_MISSING")
         action = actions[0]
         refs = list(dict.fromkeys(action["breakpoint"]["evidence_refs"]))
-        disclosure = self.page.locator("details").filter(has=self.page.get_by_text("核对观察与定位依据", exact=True))
-        if disclosure.get_attribute("open") is None:
-            disclosure.locator("summary").click()
+        self._select_result_case(action)
+        self.page.get_by_role("navigation", name="检查项详情", exact=True).get_by_role("button", name="执行过程", exact=True).click()
         with ExitStack() as stack:
             responses = [stack.enter_context(self.page.expect_response(lambda response, ref=ref:
                 response.request.method == "GET" and response.url == self.client.origin + f"/api/runs/{payload['run_id']}/evidence/{ref}")) for ref in refs]
@@ -191,7 +195,7 @@ class ChecksActions(GuiSession):
         self._close_evidence(panel)
 
     def _close_evidence(self, panel):
-        panel.get_by_role("button", name=re.compile(r"^(关闭证据并返回事实|返回检查事实)$")).click()
+        panel.get_by_role("button", name=re.compile(r"^← 返回(执行过程|事实与证明|证据目录)$")).click()
         panel.wait_for(state="hidden")
 
     def _execution_path(self, payload):
@@ -201,8 +205,8 @@ class ChecksActions(GuiSession):
         if not actions:
             raise SampleTestError("GUI_EXECUTION_PATH_MISSING")
         action = actions[0]
-        label = action["display_name"] + " · " + (action["fact_comparison"]["planned_identity"]["label"] or "计划账号") + " · 应当拒绝"
-        self.page.get_by_role("navigation", name="本轮权限考题", exact=True).get_by_role("button", name=label, exact=True).click()
+        self._select_result_case(action)
+        self.page.get_by_role("navigation", name="检查项详情", exact=True).get_by_role("button", name="执行过程", exact=True).click()
         graph = self.page.locator('section[aria-label="已发布执行路径"]')
         path = action["execution_path"]
         if len(path["events"]) > 32:

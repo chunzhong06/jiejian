@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "ControlledRuntimeReference": {
+      "additionalProperties": false,
+      "properties": {
+        "instance_id": {
+          "pattern": "^rti_[0-9a-f]{32}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "manifest_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Fingerprint",
+          "type": "string"
+        },
+        "owner_id": {
+          "pattern": "^exp_[0-9a-f]{32}$",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "process_created_at": {
+          "exclusiveMinimum": 0,
+          "title": "Process Created At",
+          "type": "integer"
+        },
+        "process_id": {
+          "exclusiveMinimum": 0,
+          "title": "Process Id",
+          "type": "integer"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "instance_id",
+        "manifest_fingerprint",
+        "source_fingerprint",
+        "process_id",
+        "process_created_at",
+        "owner_id"
+      ],
+      "title": "ControlledRuntimeReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "delivery_id": {
+      "pattern": "^dly_[0-9a-f]{32}$",
+      "title": "Delivery Id",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "kind": {
+      "const": "LOAD_RUNTIME",
+      "default": "LOAD_RUNTIME",
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation_id": {
+      "pattern": "^[0-9a-f]{32}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "request_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Fingerprint",
+      "type": "string"
+    },
+    "runtime_reference": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ControlledRuntimeReference"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "PENDING",
+        "SUCCEEDED",
+        "FAILED",
+        "UNKNOWN"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^dvt_[0-9a-f]{32}$",
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "operation_id",
+    "request_fingerprint",
+    "task_id",
+    "delivery_id",
+    "source_fingerprint",
+    "status",
+    "created_at_us"
+  ],
+  "title": "RuntimeActivationReceipt",
+  "type": "object"
+}

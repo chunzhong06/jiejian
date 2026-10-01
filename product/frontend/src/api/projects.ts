@@ -18,6 +18,8 @@ export type ProjectDto = {
   project_id: string
   name?: string
   status?: string
+  // 服务端项目列表提供的持久来源，不表示示例运行状态。
+  official_sample?: boolean
   governed_contract_id?: string | null
   governed_contract_version?: number | null
   created_at_us?: number

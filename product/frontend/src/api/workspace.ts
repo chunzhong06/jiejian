@@ -41,6 +41,7 @@ export type ActionWorkspaceDto = Pick<BusinessActionRevisionDto,
 }
 
 export type PrimaryTaskKind =
+  | 'CREATE_DEVELOPMENT_TASK' | 'CONTINUE_DEVELOPMENT_TASK' | 'LOAD_DELIVERY_RUNTIME'
   | 'CONFIRM_APPLICATION_ENDPOINT'
   | 'AUTHORIZE_SOURCE_ANALYSIS'
   | 'RUN_SOURCE_ANALYSIS'
@@ -106,6 +107,7 @@ export type WorkspaceAreaDto = {
 }
 
 export type WorkspaceViewDto = {
+  development?: { task_id: string; context_id: string; title: string; goal: string; revision: number; version: number; client_name: string | null; latest_delivery_id: string | null; latest_change_id: string | null; latest_batch_number: number | null; latest_run_id: string | null; runtime_state: 'MATCHED' | 'NOT_LOADED' | 'UNCONFIRMED' | 'UNSUPPORTED' } | null
   journey?: {
     title: string; primary_task_id: string | null; action_id: string | null; change_id: string | null; run_id: string | null
     steps: Array<{ key: 'connect' | 'rules' | 'prepare' | 'check'; label: string; status: 'COMPLETE' | 'CURRENT' | 'PENDING' | 'NEEDS_REVIEW' | 'UNKNOWN' }>

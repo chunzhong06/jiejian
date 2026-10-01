@@ -1,4 +1,4 @@
-// AI 工具连接面板：用服务端可观测状态引导五类 MCP 客户端完成连接，并管理逐应用的本次允许范围。
+// AI 工具连接面板：用服务端可观测状态引导三类 MCP 客户端完成连接，并管理逐应用的本次允许范围。
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Card, List, Modal, Radio, Segmented, Space, Tag, Typography } from 'antd'
@@ -10,117 +10,10 @@ import {
   type MCPConnectionState,
 } from '../../api/mcp'
 import { ApiError } from '../../api/http'
+import { clientGuide, clientOptions, type MCPClientKey } from './clientGuides'
+import './connections.css'
 
 type ProjectOption = { project_id: string; name?: string }
-type MCPClientKey = 'codex' | 'trae' | 'qoder' | 'codebuddy' | 'dsh'
-
-type ClientGuide = {
-  label: string
-  description: string
-  openLocation: string
-  configInstruction: string
-  credentialInstruction: string
-  restartInstruction: string
-  config: string
-  secretMode: 'environment' | 'header'
-}
-
-const endpoint = 'http://127.0.0.1:8765/mcp'
-
-const clientGuides: Record<MCPClientKey, ClientGuide> = {
-  codex: {
-    label: 'Codex',
-    description: '适用于 Codex 桌面端、IDE 和命令行。三者读取同一份本机连接设置。',
-    openLocation: '按 Win + R，输入 %USERPROFILE%\\.codex 并回车；用记事本打开 config.toml。',
-    configInstruction: '把第 3 步复制的内容粘贴到文件末尾并保存。若文件不存在，请用记事本新建，并确认文件名是 config.toml。',
-    credentialInstruction: '打开“开始”菜单，搜索 Windows PowerShell；粘贴第 4 步命令并按回车。没有出现红色错误且命令提示符重新出现，即表示保存完成。',
-    config: `[mcp_servers.jiejian]\nurl = "${endpoint}"\nbearer_token_env_var = "JIEJIAN_MCP_TOKEN"`,
-    secretMode: 'environment',
-    restartInstruction: '完全退出 Codex，包括右下角托盘中的 Codex，再重新打开。',
-  },
-  trae: {
-    label: 'TRAE',
-    description: '在 TRAE 的 MCP 设置中添加界鉴，不需要理解连接协议。',
-    openLocation: '打开 TRAE，进入“设置 → MCP → 手动添加”，找到配置编辑区。',
-    configInstruction: '把第 3 步复制的完整配置粘贴到编辑区并保存。',
-    credentialInstruction: '在刚才的配置中找到 Authorization，把整段“Bearer <在第4步复制的连接凭据>”替换为第 4 步复制的内容，然后再次保存。',
-    config: `{
-  "mcpServers": {
-    "jiejian": {
-      "url": "${endpoint}",
-      "headers": {
-        "Authorization": "Bearer <在界鉴中复制的连接凭据>"
-      }
-    }
-  }
-}`,
-    secretMode: 'header',
-    restartInstruction: '在 TRAE 中重新连接 jiejian；如果没有重新连接按钮，请完全退出 TRAE 后再打开。',
-  },
-  qoder: {
-    label: 'Qoder',
-    description: '在 Qoder 的 MCP 设置中添加界鉴，按页面提供的内容粘贴即可。',
-    openLocation: '打开 Qoder，进入“设置 → MCP → 添加服务器”，找到配置编辑区。',
-    configInstruction: '把第 3 步复制的完整配置粘贴到编辑区并保存。',
-    credentialInstruction: '在刚才的配置中找到 Authorization，把整段“Bearer <在第4步复制的连接凭据>”替换为第 4 步复制的内容，然后再次保存。',
-    config: `{
-  "mcpServers": {
-    "jiejian": {
-      "type": "streamable-http",
-      "url": "${endpoint}",
-      "headers": {
-        "Authorization": "Bearer <在界鉴中复制的连接凭据>"
-      }
-    }
-  }
-}`,
-    secretMode: 'header',
-    restartInstruction: '在 Qoder 中重新连接 jiejian；如果没有重新连接按钮，请完全退出 Qoder 后再打开。',
-  },
-  codebuddy: {
-    label: 'CodeBuddy',
-    description: '在 CodeBuddy 的 MCP 设置中添加界鉴，连接凭据单独保存在 Windows。',
-    openLocation: '打开 CodeBuddy 设置，搜索 MCP，进入 MCP 配置编辑区。',
-    configInstruction: '把第 3 步复制的完整配置粘贴到编辑区并保存。',
-    credentialInstruction: '打开“开始”菜单，搜索 Windows PowerShell；粘贴第 4 步命令并按回车。没有出现红色错误且命令提示符重新出现，即表示保存完成。',
-    config: `{
-  "mcpServers": {
-    "jiejian": {
-      "type": "http",
-      "url": "${endpoint}",
-      "headers": {
-        "Authorization": "Bearer \${JIEJIAN_MCP_TOKEN}"
-      }
-    }
-  }
-}`,
-    secretMode: 'environment',
-    restartInstruction: '完全退出 CodeBuddy 后重新打开。',
-  },
-  dsh: {
-    label: 'DSH',
-    description: '把界鉴添加到 DSH 的 MCP 客户端配置中，连接凭据单独保存在 Windows。',
-    openLocation: '打开 DSH 的 MCP 配置页或当前使用的 MCP 配置文件。',
-    configInstruction: '把第 3 步复制的内容作为一个新的 MCP 服务粘贴并保存。',
-    credentialInstruction: '打开“开始”菜单，搜索 Windows PowerShell；粘贴第 4 步命令并按回车。没有出现红色错误且命令提示符重新出现，即表示保存完成。',
-    config: `- id: mcp-jiejian
-  name: '@deepseek-ai/dsh-mcp-client'
-  config:
-    serverName: jiejian
-    transport: streamable-http
-    url: ${endpoint}
-    headers:
-      Authorization: !!js '\`Bearer \${process.env.JIEJIAN_MCP_TOKEN}\`'`,
-    secretMode: 'environment',
-    restartInstruction: '重新启动 DSH，或在 DSH 中重新连接 jiejian。',
-  },
-}
-
-const clientOptions = (Object.entries(clientGuides) as [MCPClientKey, ClientGuide][]).map(([value, guide]) => ({
-  value,
-  label: guide.label,
-}))
-
 const levelLabels: Record<MCPAccessLevel, string> = {
   READ: '只查看',
   PREPARE: '协助整理',
@@ -147,17 +40,7 @@ function environmentCommand(accessToken: string): string {
 }
 
 function connectionTask(client: string): string {
-  return `请使用已经配置好的 jiejian MCP 服务连接界鉴。连接成功后先读取服务说明并调用 jiejian_product_status，向我说明：当前应用是什么、当前判断是什么、下一项需要我处理什么。随后只在界鉴返回的项目范围和本次允许范围内工作。界鉴中的已确认权限基线和历史会跨任务保留，不要为新任务重新建立权限规则。处理任务期间不必因每次保存或单个文件修改反复调用界鉴；当一个完整的用户任务已经完成，且界鉴允许“协助整理”或“执行已确认任务”时，再调用一次 jiejian_change_submit 登记整批变化，并按返回状态决定是否需要回到界鉴。需要人工确认或更高范围时立即停止并提示我回到界鉴。不要在对话中索取、粘贴或回显 JIEJIAN_MCP_TOKEN。当前客户端：${client}。`
-}
-
-function detectedClient(clientName: string | null): MCPClientKey | null {
-  const normalized = clientName?.trim().toLowerCase() ?? ''
-  if (normalized.includes('codex')) return 'codex'
-  if (normalized.includes('trae')) return 'trae'
-  if (normalized.includes('qoder') || normalized.includes('lingma')) return 'qoder'
-  if (normalized.includes('codebuddy')) return 'codebuddy'
-  if (normalized.includes('dsh') || normalized.includes('deepseek')) return 'dsh'
-  return null
+  return `请使用 jiejian MCP 读取 jiejian_business_boundary，沿用我已确认的权限。开发需求继续在当前对话讨论。完成一批修改后，具备 PREPARE 授权时先读取 jiejian_change_registration_preview，再调用 jiejian_change_register，将返回的 fingerprint 作为 expected_registration_fingerprint，并携带稳定 operation_id，无需另建开发任务或接单。响应不明确先用 jiejian_receipt_show 按 DELIVER 查询原键，不创建新键试探。权限只能由我批准；检查按完整现行权限要求显式执行。普通功能目标需要另行验证。不要索取或回显连接凭据。当前客户端：${client}。`
 }
 
 function legacyConnectionState(view: MCPAccessView | null): MCPConnectionState {
@@ -177,13 +60,13 @@ function connectionCopy(view: MCPAccessView | null) {
     type: 'info' as const,
     eyebrow: '尚未开始',
     title: '先选择你的 AI 工具，再准备本机连接',
-    description: '按下方 5 步操作。界鉴只有收到客户端的真实连接后，才会显示连接成功。',
+    description: '先准备本机连接，再配置客户端。界鉴收到有效请求后才会显示验证结果。',
   }
   if (state === 'CREDENTIAL_READY') return {
     type: 'info' as const,
     eyebrow: '界鉴已准备好',
     title: '下一步：在 AI 工具中添加 jiejian',
-    description: '从下方第 3 步继续。添加完成后还需要保存凭据并重新打开客户端。',
+    description: '继续配置客户端：连接地址和配置可以公开查看，凭据单独复制。',
   }
   if (state === 'AUTHENTICATED') return {
     type: 'info' as const,
@@ -193,15 +76,15 @@ function connectionCopy(view: MCPAccessView | null) {
   }
   if (state === 'CONNECTED') return {
     type: 'success' as const,
-    eyebrow: '连接成功',
-    title: `${view?.client_name?.trim() || 'AI 工具'} 已连接到界鉴`,
-    description: '客户端现在只能在界鉴返回的项目和本次允许范围内工作。',
+    eyebrow: '连接已验证',
+    title: `${view?.client_name?.trim() || '客户端'} 的连接已验证`,
+    description: '已收到该客户端的有效请求。最近活动不代表实时在线，也不代表正在修改代码。',
   }
   if (state === 'CREDENTIAL_REJECTED') return {
     type: 'error' as const,
     eyebrow: '凭据需要更新',
     title: '客户端已经找到界鉴，但使用了失效凭据',
-    description: '回到下方第 4 步重新复制当前凭据，保存后完全退出客户端并重新打开。',
+    description: '在配置区域重新复制当前凭据，保存后重新连接客户端。',
   }
   return {
     type: 'warning' as const,
@@ -241,7 +124,7 @@ export function MCPAccessCard({
 
   const state = connectionState(view)
   const copy = connectionCopy(view)
-  const guide = clientGuides[selectedClient]
+  const guide = clientGuide(selectedClient, view?.endpoint ?? '')
   const grants = useMemo(
     () => new Map(view?.project_grants.map((item) => [item.project_id, item.level]) ?? []),
     [view?.project_grants],
@@ -271,8 +154,6 @@ export function MCPAccessCard({
       if (active && requestEpochRef.current === requestEpoch) {
         setView(value)
         setShowSetup(connectionState(value) !== 'CONNECTED')
-        const client = detectedClient(value.client_name)
-        if (client) setSelectedClient(client)
         onStatusChange?.(value)
       }
     }).catch((error) => {
@@ -283,9 +164,6 @@ export function MCPAccessCard({
 
   const acceptView = (next: MCPAccessView) => {
     setView(next)
-    const client = detectedClient(next.client_name)
-    if (client) setSelectedClient(client)
-    if (connectionState(next) === 'CONNECTED') setShowSetup(false)
     onStatusChange?.(next)
   }
 
@@ -349,7 +227,7 @@ export function MCPAccessCard({
         acceptView(latest)
         const latestState = connectionState(latest)
         if (latestState === 'CONNECTED') {
-          setCheckMessage(`${latest.client_name?.trim() || '客户端'} 已完成连接。`)
+          setCheckMessage(`${latest.client_name?.trim() || '客户端'} 的连接已验证。`)
           return
         }
         if (latestState === 'CREDENTIAL_REJECTED') {
@@ -361,7 +239,7 @@ export function MCPAccessCard({
       const latestState = connectionState(latest)
       setCheckMessage(latestState === 'AUTHENTICATED'
         ? `凭据已经通过，但界鉴还没有收到 ${guide.label} 的有效 MCP 请求。请确认 jiejian 已启用；如果刚保存配置，再重新打开客户端后检查。`
-        : `界鉴还没有收到 ${guide.label} 的连接请求。请依次确认：第 3 步配置已经保存、第 4 步凭据已经保存、${guide.label} 已完全退出并重新打开。`)
+        : `界鉴还没有收到 ${guide.label} 的连接请求。请依次确认：配置与凭据已经保存、${guide.label} 已完全退出并重新打开。`)
     } catch (error) {
       if (openRef.current && requestEpochRef.current === requestEpoch) onError(errorValue(error))
     } finally {
@@ -416,115 +294,41 @@ export function MCPAccessCard({
     }
     if (!token) return
     const value = guide.secretMode === 'environment' ? environmentCommand(token) : `Bearer ${token}`
-    await copyValue(value, '第 4 步内容')
+    await copyValue(value, '凭据')
   }
 
-  return <div className="mcp-access-shell">
-    <Card className={`mcp-connection-card is-${copy.type}`}>
-      <div className="mcp-connection-heading">
-        <div>
-          <Typography.Text className="mcp-section-label">{copy.eyebrow}</Typography.Text>
-          <Typography.Title level={2}>{copy.title}</Typography.Title>
-          <Typography.Paragraph>{copy.description}</Typography.Paragraph>
-        </div>
-        <Space wrap>
-          {state === 'PAUSED' && <Button type="primary" loading={busy} onClick={() => void updateView(mcpAccessApi.resume)}>恢复连接</Button>}
-          {state === 'CONNECTED' && <Button type="primary" onClick={() => void copyValue(connectionTask(view?.client_name?.trim() || guide.label), '协作任务')}>复制协作任务</Button>}
-          {view?.paired && <Button onClick={() => setManagementOpen(true)}>管理连接</Button>}
-        </Space>
-      </div>
-
-      {state === 'CONNECTED' && <div className="mcp-connected-facts">
-        <span><small>客户端</small><strong>{view?.client_name?.trim() || '名称未提供'}{view?.client_version ? ` · ${view.client_version}` : ''}</strong></span>
-        <span><small>最近活动</small><strong>{formatActivity(view?.last_seen_at_us ?? null)}</strong></span>
-        <span><small>默认允许范围</small><strong>只查看；更多操作仅本次有效</strong></span>
-        <Button type="link" onClick={() => setShowSetup(!showSetup)}>{showSetup ? '返回权限范围' : '查看客户端配置'}</Button>
-      </div>}
-    </Card>
-
-    {(state !== 'CONNECTED' || showSetup) ? <Card className="mcp-setup-card">
-      <div className="mcp-setup-heading">
-        <div>
-          <Typography.Text className="mcp-section-label">首次连接指引</Typography.Text>
-          <Typography.Title level={3}>跟着 5 步完成连接</Typography.Title>
-          <Typography.Paragraph>不需要理解 MCP 或配置格式。每一步只复制页面准备好的内容，并按说明粘贴到指定位置。</Typography.Paragraph>
-        </div>
-        <Segmented
-          className="mcp-client-selector"
-          aria-label="选择 MCP 客户端"
-          options={clientOptions}
-          value={selectedClient}
-          onChange={(value) => {
-            setSelectedClient(value as MCPClientKey)
-            setCheckMessage(null)
-          }}
-        />
-      </div>
-
-      <Typography.Paragraph className="mcp-client-introduction">当前选择：<strong>{guide.label}</strong>。{guide.description}</Typography.Paragraph>
-
-      <div className="mcp-beginner-guide" aria-label={`${guide.label} 连接步骤`}>
-        <section className="mcp-guide-step is-done">
-          <span className="mcp-guide-number">1</span>
-          <div><strong>确认你正在连接 {guide.label}</strong><p>如果选错了，使用上方选项切换；页面只会展示当前工具的操作。</p><small>完成标志：上方高亮显示 {guide.label}。</small></div>
-        </section>
-        <section className={`mcp-guide-step ${view?.paired ? 'is-done' : 'is-current'}`}>
-          <span className="mcp-guide-number">2</span>
-          <div><strong>让界鉴准备本机连接</strong><p>点击按钮后，界鉴会创建一份只供本机客户端使用的连接凭据。创建完成仍不代表已经连接。</p><small>完成标志：按钮变为“界鉴已准备好”。</small></div>
-          {view?.paired
-            ? <Tag color="green">界鉴已准备好</Tag>
-            : <Button type="primary" loading={busy || view === null} onClick={() => void updateCredential(mcpAccessApi.pair)}>准备本机连接</Button>}
-        </section>
-        <section className={`mcp-guide-step ${view?.paired ? 'is-current' : ''}`}>
-          <span className="mcp-guide-number">3</span>
-          <div><strong>在 {guide.label} 中添加 jiejian</strong><p>{guide.openLocation} {guide.configInstruction}</p><small>完成标志：{guide.label} 中出现名为 jiejian 的服务。</small></div>
-          <Button disabled={!view?.paired} onClick={() => void copyValue(guide.config, '第 3 步内容')}>{copied === '第 3 步内容' ? '第 3 步已复制' : '复制第 3 步内容'}</Button>
-        </section>
-        <section className="mcp-guide-step">
-          <span className="mcp-guide-number">4</span>
-          <div><strong>保存连接凭据</strong><p>{guide.credentialInstruction}</p><small>{guide.secretMode === 'header' ? '这份配置包含本机凭据，不要上传、提交或发送给他人。' : '凭据只保存在当前 Windows 用户下，不需要粘贴到聊天中。'}</small></div>
-          <Button loading={busy} disabled={!view?.paired} onClick={() => void copySecret()}>{copied === '第 4 步内容' ? '第 4 步已复制' : '复制第 4 步内容'}</Button>
-        </section>
-        <section className={`mcp-guide-step ${state === 'AUTHENTICATED' ? 'is-current' : ''}`}>
-          <span className="mcp-guide-number">5</span>
-          <div><strong>打开 {guide.label}，再回到这里检查</strong><p>{guide.restartInstruction} 打开后，点击右侧按钮。</p><small>完成标志：界鉴显示连接成功和最近活动时间；客户端提供身份时还会显示名称与版本。</small></div>
-          <Button type="primary" loading={checking} disabled={!view?.paired || state === 'PAUSED'} onClick={() => void checkConnection()}>检查连接</Button>
-        </section>
-      </div>
-      {checkMessage && <Alert className="mcp-check-result" type={state === 'CONNECTED' ? 'success' : state === 'CREDENTIAL_REJECTED' ? 'error' : 'info'} showIcon message={checkMessage} />}
-    </Card> : <Card className="mcp-permissions-card" title="AI 工具这次可以做什么">
-      <Typography.Paragraph type="secondary">应用的权限规则、代码变化和检查历史会长期保存。连接也会保留，但每次打开界鉴后，AI 工具都只可以查看；你可以按应用临时允许更多操作，关闭界鉴后会自动恢复为只查看。</Typography.Paragraph>
-      <div className="mcp-routine" aria-label="连接后的日常协作方式">
-        <div className="mcp-routine-step"><small>开始一个任务</small><strong>先读取当前基线</strong><span>Codex 了解当前应用、已有判断和下一项工作。</span></div>
-        <div className="mcp-routine-step"><small>完成整个任务</small><strong>一次登记整批变化</strong><span>不会在每次保存或修改单个文件后打断你。</span></div>
-        <div className="mcp-routine-step"><small>界鉴继续跟进</small><strong>核对影响并安排复验</strong><span>需要人确认时停下；确认后才准备或执行检查。</span></div>
-      </div>
-      <List
-        size="small"
-        dataSource={projects}
-        locale={{ emptyText: '尚未接入应用；当前只能读取不依赖应用的产品状态。' }}
-        renderItem={(project) => {
-          const level = grants.get(project.project_id) ?? 'READ'
-          return <List.Item actions={view?.accepting_connections ? [<Button key="grant" size="small" onClick={() => openGrant(project)}>调整这次允许范围</Button>] : undefined}>
-            <List.Item.Meta title={projectLabel(project)} />
-            <div className="mcp-project-access"><Tag className={`mcp-access-tag is-${level.toLowerCase()}`}>{levelLabels[level]}</Tag></div>
-          </List.Item>
-        }}
-      />
-    </Card>}
-
-    <Alert className="mcp-oracle-boundary" type="warning" showIcon message="AI 工具可以读取事实、整理整批变化和执行你已确认的任务，但不能确认或更改权限规则，也不能改变界鉴的检查结论。" />
-
-    <Modal open={managementOpen} title="管理连接" footer={null} onCancel={() => setManagementOpen(false)}>
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-        <Typography.Text type="secondary">这里只处理连接的暂停、更新和删除。需要重新配置客户端时，请关闭窗口并按页面上的第 3～5 步操作。</Typography.Text>
-        {state === 'PAUSED'
-          ? <Button loading={busy} onClick={() => void updateView(mcpAccessApi.resume)}>恢复接受连接</Button>
-          : <Button loading={busy} onClick={() => void updateView(mcpAccessApi.pause, true)}>暂停本次连接</Button>}
-        <Button loading={busy} onClick={() => setConfirmAction('rotate')}>重新生成连接凭据</Button>
-        <Button danger loading={busy} onClick={() => setConfirmAction('forget')}>删除连接凭据</Button>
-      </Space>
-    </Modal>
+  return <div className="mcp-access-shell connection-page">
+    <header className="connection-header"><div><p className="editorial-eyebrow">修改与验证 / 连接</p><h2>把开发工具接入工作流</h2><p>读取权限要求，登记每批修改，带着证据继续验证。</p></div>
+      {view?.paired && <Button aria-expanded={managementOpen} onClick={() => setManagementOpen(!managementOpen)}>{managementOpen ? '收起连接管理' : '管理连接'}</Button>}
+    </header>
+    <section className={`connection-status is-${copy.type}`} aria-label="连接事实">
+      <div><span className="connection-status-label">{view ? copy.eyebrow : '正在读取状态'}</span><h3>{view ? copy.title : '读取本机连接信息'}</h3><p>{view ? copy.description : '尚未取得服务端状态。'}</p></div>
+      {state === 'PAUSED' && <Button type="primary" loading={busy} onClick={() => void updateView(mcpAccessApi.resume)}>恢复连接</Button>}
+      {state === 'CONNECTED' && <Button type="primary" onClick={() => void copyValue(connectionTask(view?.client_name?.trim() || 'MCP Agent'), '使用说明')}>{copied === '使用说明' ? '使用说明已复制' : '复制使用说明'}</Button>}
+    </section>
+    {state === 'CONNECTED' && <div className="connection-facts"><span><small>实际报告的客户端</small><strong>{view?.client_name?.trim() || '名称未提供'}{view?.client_version ? ` · ${view.client_version}` : ''}</strong></span><span><small>最近活动</small><strong>{formatActivity(view?.last_seen_at_us ?? null)}</strong></span><span><small>默认允许范围</small><strong>只查看 · 更多操作仅本次有效</strong></span></div>}
+    <nav className="connection-tabs" aria-label="连接设置内容"><Button type={showSetup ? 'primary' : 'text'} aria-pressed={showSetup} onClick={() => setShowSetup(true)}>客户端配置</Button><Button type={!showSetup ? 'primary' : 'text'} aria-pressed={!showSetup} onClick={() => setShowSetup(false)}>应用授权</Button></nav>
+    {showSetup ? <section className="connection-setup" aria-label="客户端配置">
+      <header className="connection-setup-heading"><div><h3>三步完成连接</h3><p>选择要配置的客户端。这里的选择不会改变实际连接，也不会改写客户端设置。</p></div><Segmented className="mcp-client-selector" aria-label="选择 MCP 客户端" options={clientOptions} value={selectedClient} onChange={value => { setSelectedClient(value as MCPClientKey); setCheckMessage(null) }}/></header>
+      <div className="connection-guide-intro"><strong>{guide.label}</strong><span>{guide.description}</span><a href={guide.source} target="_blank" rel="noreferrer">官方配置说明 ↗</a></div>
+      {selectedClient !== 'codex' && <p className="connection-validation-note">配置依据已核验；此客户端尚未完成本机实测。连接验证以实际请求为准。</p>}
+      <ol className="connection-steps" aria-label={`${guide.label} 连接步骤`}>
+        <li><div className="connection-step-title"><span aria-hidden>01</span><h4>准备本机连接</h4><div>{view?.paired ? <Tag color="green">界鉴已准备好</Tag> : <Button type="primary" loading={busy || view === null} onClick={() => void updateCredential(mcpAccessApi.pair)}>准备本机连接</Button>}</div></div><p>界鉴生成本机连接凭据。准备完成后，仍需客户端发出有效请求。</p></li>
+        <li><div className="connection-step-title"><span aria-hidden>02</span><h4>在 {guide.label} 中添加 jiejian</h4></div><p>{guide.openLocation} {guide.configInstruction}</p>
+          <div className="connection-address"><span>连接地址</span><code>{view?.endpoint ?? '正在读取'}</code><Button disabled={!view?.endpoint} onClick={() => void copyValue(view!.endpoint, '地址')}>{copied === '地址' ? '地址已复制' : '复制地址'}</Button></div>
+          <div className="connection-code"><div><span>配置片段 · 不含凭据</span><Button disabled={!view?.paired || !view.endpoint} onClick={() => void copyValue(guide.config, '配置')}>{copied === '配置' ? '配置已复制' : '复制配置'}</Button></div><pre><code>{view?.endpoint ? guide.config : '正在读取本机地址…'}</code></pre></div>
+          <div className="connection-secret"><div><strong>凭据单独保存</strong><p>{guide.credentialInstruction}</p><small>只在明确点击时复制；请勿粘贴到聊天或提交到代码仓库。</small></div><Button loading={busy} disabled={!view?.paired} onClick={() => void copySecret()}>{copied === '凭据' ? '凭据已复制' : guide.secretMode === 'environment' ? '复制凭据保存命令' : '复制 Bearer 凭据'}</Button></div>
+        </li>
+        <li><div className="connection-step-title"><span aria-hidden>03</span><h4>验证连接，再设置应用授权</h4><Button type="primary" loading={checking} disabled={!view?.paired || state === 'PAUSED'} onClick={() => void checkConnection()}>检查连接</Button></div><p>{guide.restartInstruction} 在客户端启用服务，再回到这里检查。</p>
+          {checkMessage && <Alert className="mcp-check-result" type={state === 'CONNECTED' ? 'success' : state === 'CREDENTIAL_REJECTED' ? 'error' : 'info'} showIcon message={checkMessage}/>}
+        </li>
+      </ol>
+    </section> : <section className="connection-permissions" aria-label="应用授权"><h3>AI 工具这次可以做什么</h3><p>权限要求和历史长期保留。每次打开界鉴后，客户端默认只查看；更多操作由你逐应用授权。</p>
+      <List dataSource={projects} locale={{ emptyText: '尚未接入应用；接入后可设置本次允许范围。' }} renderItem={project => { const level = grants.get(project.project_id) ?? 'READ'; return <List.Item actions={view?.accepting_connections ? [<Button key="grant" onClick={() => openGrant(project)}>调整这次允许范围</Button>] : undefined}><List.Item.Meta title={projectLabel(project)}/><Tag>{levelLabels[level]}</Tag></List.Item> }}/>
+      <div className="connection-routine"><span><b>1. 读取权限要求</b>沿用已批准权限</span><span><b>2. 登记整批修改</b>不因每次保存打断开发</span><span><b>3. 检查与继续开发</b>保留本批证据与原题关联</span></div>
+    </section>}
+    {managementOpen && <section className="connection-management" aria-label="管理连接"><h3>管理本机连接</h3><p>当前连接凭据由所有客户端共用。更新或删除会影响使用此凭据的客户端。</p><Space wrap>{state === 'PAUSED' ? <Button loading={busy} onClick={() => void updateView(mcpAccessApi.resume)}>恢复接受连接</Button> : <Button loading={busy} onClick={() => void updateView(mcpAccessApi.pause, true)}>暂停本次连接</Button>}<Button disabled={busy} onClick={() => setConfirmAction('rotate')}>重新生成连接凭据</Button><Button danger disabled={busy} onClick={() => setConfirmAction('forget')}>删除连接凭据</Button></Space></section>}
+    <p className="connection-boundary">AI 工具不能批准或更改权限规则，也不能改变界鉴的检查结论。复制说明不会发送消息，连接不表示 Agent 正在编码。</p>
 
     <Modal
       open={confirmAction !== null}

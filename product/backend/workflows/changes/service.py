@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import time
-from threading import RLock
-from typing import Literal
+from dataclasses import dataclass
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import Field
@@ -35,62 +35,85 @@ def permission_refs(boundary):
         for item in sorted(boundary.permission_intents,key=lambda item:(item.intent_id,item.revision,item.intent_hash)))
 
 
+@dataclass(frozen=True)
+class PreparedSourceChange:
+    manifest: CurrentChangeManifest
+    before: Any
+    analysis: Any
+    baseline: Any
+    policy: tuple
+    permission_refs: tuple[PermissionReference, ...]
+
+
 class CurrentSourceChangeService:
-    """同实例串行提交；事务重读权限与理解版本，扫描事实不冒充登记成功。"""
+    """扫描不落库，写事务重读权限与理解版本；允许交付与回执加入同一事务。"""
 
     def __init__(self, *, uow_factory, understanding, boundaries, plan_reader=None, repair_resolver=None, clock_us=None):
         self._uow_factory,self._understanding,self._boundaries = uow_factory,understanding,boundaries
         self._plan_reader = plan_reader
         self._repair_resolver = repair_resolver
         self._clock = clock_us or (lambda:time.time_ns()//1000)
-        self._lock = RLock()
         self.code_observations = None
 
     def set_dependencies(self, *, plan_reader, repair_resolver):
         self._plan_reader,self._repair_resolver = plan_reader,repair_resolver
 
     def submit(self, project_id, *, reason, claimed_paths=(), repair_reference=None, submitted_by="LOCAL_GUI"):
-        with self._lock:
-            try:
-                paths = tuple(sorted({normalize_relative_source_path(path) for path in claimed_paths},key=lambda path:(path.casefold(),path)))
-            except (TypeError,ValueError):
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,"代码变化路径必须位于授权源码根内") from None
-            if len(claimed_paths)>128:
-                raise JiejianError(ErrorCode.STATE_PRECONDITION,"代码变化声明超出边界")
-            reference = None if repair_reference is None else CurrentRepairReference.model_validate(repair_reference)
-            if reference is not None:
-                if self._repair_resolver is None:
-                    raise JiejianError(ErrorCode.STATE_PRECONDITION,"修复引用服务尚未就绪")
-                self._repair_resolver(project_id,reference)
-            with self._uow_factory() as work:
-                before = work.application_understanding.get(project_id)
-                if before is None:
-                    raise JiejianError(ErrorCode.APPLICATION_UNDERSTANDING_NOT_FOUND,"应用连接记录不存在")
-                boundary = self._boundaries.view(project_id,work=work)
-                policy = self._policy(work,project_id)
-                baseline = None if before.source_fingerprint is None else work.source_changes.snapshot_for_fingerprint(project_id,before.source_fingerprint)
-            manifest = CurrentChangeManifest(change_id="chg_"+uuid4().hex,project_id=project_id,reason=reason,
-                claimed_paths=paths,repair_reference=reference,submitted_by=submitted_by,created_at_us=self._clock())
-            updated = self._understanding.analyze_source_for_change(project_id,revision=before.revision)
-            with self._uow_factory() as work:
-                actual = work.application_understanding.get(project_id)
-                current_boundary = self._boundaries.view(project_id,work=work)
-                if (actual is None or (actual.revision,actual.source_fingerprint)!=(updated.revision,updated.source_fingerprint)
-                    or self._policy(work,project_id)!=policy or permission_refs(current_boundary)!=permission_refs(boundary)):
-                    raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码分析期间正式权限或理解已变化")
-                snapshot = work.source_changes.snapshot_for_fingerprint(project_id,updated.source_fingerprint)
-                if snapshot is None:
-                    raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码扫描未形成完整快照")
-                change = build_current_change_set(manifest,baseline,snapshot)
-                assessment = self._assess(work,current_boundary,actual,change)
-                work.source_changes.add_current_change(manifest,change,assessment)
-                if self.code_observations is not None:
-                    observation = self.code_observations.capture(project_id, snapshot.source_fingerprint)
-                    work.code_observations.add_link(observation, kind="change", target_id=manifest.change_id,
-                        project_id=project_id, source_fingerprint=snapshot.source_fingerprint)
-                work.commit()
-            # 登记回执和可执行 inspection 分开；准备缺口不撤销已经成功保存的变化事实。
-            return self.view(project_id,manifest.change_id)
+        prepared = self.prepare_change(project_id, reason=reason, claimed_paths=claimed_paths,
+            repair_reference=repair_reference, submitted_by=submitted_by)
+        with self._uow_factory() as work:
+            work.acquire_write_lock()
+            self.write_prepared_change(work, prepared)
+            work.commit()
+        return self.view(project_id, prepared.manifest.change_id)
+
+    def prepare_change(self, project_id, *, reason, claimed_paths=(), repair_reference=None, submitted_by="LOCAL_GUI"):
+        """先验证有界声明，再扫描授权源码；该步骤没有持久化副作用。"""
+        try:
+            paths = tuple(sorted({normalize_relative_source_path(path) for path in claimed_paths}, key=lambda path:(path.casefold(),path)))
+        except (TypeError,ValueError):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,"代码变化路径必须位于授权源码根内") from None
+        if len(claimed_paths)>128:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,"代码变化声明超出边界")
+        reference = None if repair_reference is None else CurrentRepairReference.model_validate(repair_reference)
+        if reference is not None:
+            if self._repair_resolver is None:
+                raise JiejianError(ErrorCode.STATE_PRECONDITION,"修复引用服务尚未就绪")
+            self._repair_resolver(project_id,reference)
+        manifest = CurrentChangeManifest(change_id="chg_"+uuid4().hex, project_id=project_id, reason=reason,
+            claimed_paths=paths, repair_reference=reference, submitted_by=submitted_by, created_at_us=self._clock())
+        with self._uow_factory() as work:
+            before = work.application_understanding.get(project_id)
+            if before is None:
+                raise JiejianError(ErrorCode.APPLICATION_UNDERSTANDING_NOT_FOUND,"应用连接记录不存在")
+            boundary = self._boundaries.view(project_id,work=work)
+            policy = self._policy(work,project_id)
+            baseline = None if before.source_fingerprint is None else work.source_changes.snapshot_for_fingerprint(project_id,before.source_fingerprint)
+        scanned_before, analysis = self._understanding.scan_source(project_id, revision=before.revision)
+        return PreparedSourceChange(manifest, scanned_before, analysis, baseline, policy, permission_refs(boundary))
+
+    def write_prepared_change(self, work, prepared, *, baseline_snapshot_id=None):
+        """调用者取得写锁后保存完整变化；不 commit，使 Delivery/Receipt 可一起回滚。"""
+        project_id = prepared.manifest.project_id
+        boundary = self._boundaries.view(project_id,work=work)
+        if self._policy(work,project_id)!=prepared.policy or permission_refs(boundary)!=prepared.permission_refs:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码分析期间正式权限或理解已变化")
+        updated = self._understanding.apply_source_analysis(work, prepared.before, prepared.analysis)
+        snapshot = work.source_changes.snapshot_for_fingerprint(project_id, updated.source_fingerprint)
+        if snapshot is None:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,"源码扫描未形成完整快照")
+        baseline = prepared.baseline if baseline_snapshot_id is None else work.source_changes.snapshot(baseline_snapshot_id)
+        if baseline_snapshot_id is not None and (baseline is None or baseline.project_id != project_id):
+            raise JiejianError(ErrorCode.STATE_PRECONDITION,"交付比较起点不存在或不属于当前项目")
+        change = build_current_change_set(prepared.manifest, baseline, snapshot)
+        current_boundary = self._boundaries.view(project_id,work=work)
+        assessment = self._assess(work,current_boundary,updated,change)
+        work.source_changes.add_current_change(prepared.manifest,change,assessment)
+        if self.code_observations is not None:
+            observation = self.code_observations.capture(project_id, snapshot.source_fingerprint)
+            work.code_observations.add_link(observation, kind="change", target_id=prepared.manifest.change_id,
+                project_id=project_id, source_fingerprint=snapshot.source_fingerprint)
+        return prepared.manifest, change, assessment
 
     def get(self, project_id, change_id):
         with self._uow_factory() as work:

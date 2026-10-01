@@ -34,7 +34,7 @@ class HistoryActions(GuiSession):
 
     def history_return(self, query):
         from scripts.dev.sample_test.harness.state import SampleTestError
-        self.page.get_by_role("button", name="返回检查历史", exact=True).click()
+        self.page.get_by_role("button", name="检查历史", exact=True).click()
         self.page.get_by_role("textbox", name="搜索检查历史", exact=True).wait_for()
         if (self.page.get_by_role("textbox", name="搜索检查历史", exact=True).input_value() != query
                 or self.page.locator("[data-run]:visible").evaluate_all("nodes => nodes.map(node => node.dataset.run)") != [query]):

@@ -27,12 +27,7 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
 
     @router.get("/api/projects", response_model=ApiResponse)
     async def list_projects(include_archived: bool = False):
-        return data_response(
-            [
-                record.model_dump(mode="json")
-                for record in context.projects.list(include_archived=include_archived)
-            ]
-        )
+        return data_response(context.projects.list_for_display(include_archived=include_archived))
 
     @router.get("/api/projects/{project_id}", response_model=ApiResponse)
     async def get_project(project_id: str):

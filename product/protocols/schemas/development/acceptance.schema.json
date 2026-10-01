@@ -1,0 +1,46 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "accepted_at_us": {
+      "minimum": 0,
+      "title": "Accepted At Us",
+      "type": "integer"
+    },
+    "client_name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Client Name",
+      "type": "string"
+    },
+    "context_id": {
+      "pattern": "^ctx_[0-9a-f]{32}$",
+      "title": "Context Id",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^dvt_[0-9a-f]{32}$",
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "context_id",
+    "task_id",
+    "project_id",
+    "client_name",
+    "accepted_at_us"
+  ],
+  "title": "DevelopmentAcceptance",
+  "type": "object"
+}

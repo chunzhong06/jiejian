@@ -36,6 +36,7 @@ from product.backend.api.routers.checks import build_checks_router
 from product.backend.api.routers.runs import build_runs_router
 from product.backend.api.routers.results import build_results_router
 from product.backend.api.routers.source_changes import build_source_changes_router
+from product.backend.api.routers.development import build_development_router
 from product.backend.api.local_control import LocalControlGuard
 from product.backend.api.mcp import build_mcp_control
 from product.backend.workflows.agent_access.service import MCPAccessController
@@ -131,6 +132,7 @@ def create_app(
     app.include_router(build_runs_router(context))
     app.include_router(build_results_router(context))
     app.include_router(build_source_changes_router(context))
+    app.include_router(build_development_router(context))
     app.include_router(build_mcp_access_router(context, mcp_access))
     app.include_router(build_llm_router(context))
     app.include_router(build_onboarding_router(context))

@@ -1,4 +1,4 @@
-// 验证五类 MCP 客户端共享新手向导和真实状态机，秘密不在页面正文出现。
+// 验证三类 MCP 客户端共享新手向导和真实状态机，秘密不在页面正文出现。
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -52,39 +52,39 @@ describe('MCPAccessCard', () => {
 
   afterEach(() => cleanup())
 
-  it('按五个明确步骤引导首次连接，创建凭据后仍不冒充连接成功', async () => {
+  it('按三个明确阶段引导首次连接，创建凭据后仍不冒充连接成功', async () => {
     mockApi.pair.mockResolvedValue(credential)
     renderCard()
 
-    expect(await screen.findByRole('heading', { name: '跟着 5 步完成连接' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '三步完成连接' })).toBeInTheDocument()
     expect(screen.getByText(/按 Win \+ R，输入 %USERPROFILE%/)).toBeInTheDocument()
     expect(screen.getByText(/打开“开始”菜单，搜索 Windows PowerShell/)).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '准备本机连接' }))
     expect(await screen.findByText('下一步：在 AI 工具中添加 jiejian')).toBeInTheDocument()
-    expect(screen.getAllByText('界鉴已准备好')).toHaveLength(2)
+    expect(screen.getByText('界鉴已准备好', { selector: '.ant-tag' })).toBeInTheDocument()
     expect(screen.queryByText('连接成功')).not.toBeInTheDocument()
     expect(screen.queryByText('mcp-secret-token')).not.toBeInTheDocument()
   })
 
-  it('用一个紧凑选择器提供 Codex、TRAE、Qoder、CodeBuddy 和 DSH', async () => {
+  it('用一个紧凑选择器提供 Codex、DSH 和 ZCode', async () => {
     renderCard()
 
-    await screen.findByText('跟着 5 步完成连接')
-    for (const label of ['Codex', 'TRAE', 'Qoder', 'CodeBuddy', 'DSH']) {
+    await screen.findByText('三步完成连接')
+    for (const label of ['Codex', 'DSH', 'ZCode']) {
       expect(screen.getByText(label, { selector: '.ant-segmented-item-label' })).toBeInTheDocument()
     }
-    expect(document.querySelectorAll('.mcp-beginner-guide')).toHaveLength(1)
+    expect(document.querySelectorAll('.connection-steps')).toHaveLength(1)
   })
 
-  it('对需要本机凭据的客户端分开复制第 3 步配置和第 4 步凭据', async () => {
+  it('对需要本机凭据的客户端分开复制配置和凭据', async () => {
     mockApi.status.mockResolvedValue(waiting)
     mockApi.reveal.mockResolvedValue(credential)
     renderCard()
 
-    fireEvent.click(await screen.findByText('TRAE', { selector: '.ant-segmented-item-label' }))
-    expect(screen.getByText(/进入“设置 → MCP → 手动添加”/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '复制第 3 步内容' }))
-    fireEvent.click(screen.getByRole('button', { name: '复制第 4 步内容' }))
+    fireEvent.click(await screen.findByText('ZCode', { selector: '.ant-segmented-item-label' }))
+    expect(screen.getByText(/进入“设置 → MCP 服务器 → 新建”/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '复制配置' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制 Bearer 凭据' }))
 
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Bearer mcp-secret-token'))
     expect(screen.queryByText('mcp-secret-token')).not.toBeInTheDocument()
@@ -109,22 +109,39 @@ describe('MCPAccessCard', () => {
     })
     renderCard([{ project_id: 'proj-1', name: '示例应用' }])
 
-    expect(await screen.findByRole('heading', { name: 'Codex 已连接到界鉴' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Codex 的连接已验证' })).toBeInTheDocument()
     expect(screen.getByText('Codex · 1.2.3')).toBeInTheDocument()
     expect(screen.getByText('AI 工具这次可以做什么')).toBeInTheDocument()
-    expect(screen.getByText('一次登记整批变化')).toBeInTheDocument()
-    expect(screen.getByText(/不会在每次保存或修改单个文件后打断你/)).toBeInTheDocument()
-    expect(screen.queryByText('跟着 5 步完成连接')).not.toBeInTheDocument()
+    expect(screen.getByText('2. 登记整批修改')).toBeInTheDocument()
+    expect(screen.getByText(/不因每次保存打断开发/)).toBeInTheDocument()
+    expect(screen.queryByText('三步完成连接')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '复制协作任务' }))
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringMatching(/一个完整的用户任务已经完成/)))
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringMatching(/jiejian_change_submit/))
+    fireEvent.click(screen.getByRole('button', { name: '复制使用说明' }))
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringMatching(/完成一批修改后/)))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringMatching(/jiejian_change_register/))
 
     fireEvent.click(screen.getByRole('button', { name: '调整这次允许范围' }))
     expect(screen.getByRole('dialog', { name: '这次允许 AI 工具做到哪一步？' })).toBeInTheDocument()
     expect(screen.getByText(/登记整批代码变化声明，由界鉴重新核对实际源码与权限影响/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '保存这次允许范围' }))
     await waitFor(() => expect(mockApi.setProjectAccess).toHaveBeenCalledWith('proj-1', 'PREPARE'))
+  })
+
+  it('采用当前地址，选择教程不伪造客户端身份，管理不嵌套弹窗', async () => {
+    mockApi.status.mockResolvedValue({ ...connected, endpoint: 'http://127.0.0.1:9011/mcp', client_name: 'TRAE' })
+    renderCard()
+    expect(await screen.findByRole('heading', { name: 'TRAE 的连接已验证' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '客户端配置' }))
+    fireEvent.click(screen.getByText('DSH', { selector: '.ant-segmented-item-label' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制配置' }))
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('http://127.0.0.1:9011/mcp')))
+    fireEvent.click(screen.getByRole('button', { name: '检查连接' }))
+    await screen.findByText('TRAE 的连接已验证。')
+    expect(screen.getByRole('list', { name: 'DSH 连接步骤' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '管理连接' }))
+    expect(screen.queryAllByRole('dialog')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: '重新生成连接凭据' }))
+    expect(await screen.findAllByRole('dialog')).toHaveLength(1)
   })
 
   it('暂停后可在同一连接管理页恢复，不要求重新创建凭据', async () => {

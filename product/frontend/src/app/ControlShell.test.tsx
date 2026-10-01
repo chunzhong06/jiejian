@@ -1,11 +1,12 @@
-// 验证产品壳装配工作台、业务边界及当前检查，旧结果深链不恢复旧状态机。
+// 验证产品壳装配概览、业务边界及当前检查，旧结果深链不恢复旧状态机。
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceViewDto } from '../api/workspace'
 import ControlShell from './ControlShell'
 import { ProductThemeProvider } from './ThemeContext'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { OfficialExperienceDto } from '../api/experience'
 import { useTaskGuard } from './tasks/TaskContinuity'
 
 vi.mock('../features/boundaries/BusinessBoundaryPage', () => ({ BusinessBoundaryPage: ({onFeedback}: {onFeedback?: (message: string) => void}) => {
@@ -29,7 +30,7 @@ const currentWorkspace: WorkspaceViewDto = {
     route: '/permissions', can_execute: true, stale_fingerprint: 'f'.repeat(64),
   },
   areas: [
-    { key: 'overview', label: '工作台', description: '查看工作台区', route: '/workspace', status: 'NEEDS_ATTENTION', status_label: '需要处理' },
+    { key: 'overview', label: '概览', description: '查看概览区', route: '/workspace', status: 'NEEDS_ATTENTION', status_label: '需要处理' },
     { key: 'permissions', label: '权限', description: '维护业务边界', route: '/permissions', status: 'NEEDS_ATTENTION', status_label: '需要建立' },
     { key: 'changes', label: '变化', description: '当前未接入', route: '/changes', status: 'BLOCKED', status_label: '当前不可用' },
     { key: 'tests', label: '测试', description: '当前未接入', route: '/tests', status: 'BLOCKED', status_label: '当前不可检查' },
@@ -43,7 +44,11 @@ const workspaceState = vi.hoisted(() => ({
   selectProject: vi.fn(), refreshProjects: vi.fn(), refreshCurrentWorkspace: vi.fn(),
 }))
 
-vi.mock('./useProjectWorkspace', () => ({ useProjectWorkspace: () => workspaceState }))
+vi.mock('./useProjectWorkspace', () => ({ useProjectWorkspace: () => {
+  const [experience, setExperience] = useState<OfficialExperienceDto | null>(null)
+  useEffect(() => { void mockApi.experienceStatus().then(setExperience) }, [])
+  return { ...workspaceState, experience, setExperience }
+} }))
 vi.mock('./useSystemStatus', () => ({ useSystemStatus: () => ({
   profiles: [], setProfiles: vi.fn(), profilesFailed: false,
   aiSettings: { enabled: false, default_profile_name: null, updated_at_us: 0 },
@@ -51,6 +56,7 @@ vi.mock('./useSystemStatus', () => ({ useSystemStatus: () => ({
   status: { api: 'available', worker: 'unavailable', browser: 'available' }, refresh: vi.fn(),
 }) }))
 vi.mock('../api/sourceChanges', () => ({ sourceChangesApi: { list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../api/development', () => ({ developmentApi: { current: vi.fn().mockResolvedValue(null) }, newOperationId: () => 'a'.repeat(32) }))
 vi.mock('../api/repairs', async () => ({ ...await vi.importActual<typeof import('../api/repairs')>('../api/repairs'), repairsApi: { project: vi.fn().mockResolvedValue({ project_id: 'p1', status: null, tasks: [], primary_task_reference: null }) } }))
 vi.mock('../api/preparation', () => ({ preparationApi: { get: vi.fn().mockResolvedValue({ project_id: 'p1', actions: [], preparation_complete: false }), draft: vi.fn().mockResolvedValue({schema_version:'1',revision:0,action_id:null,material:null}) } }))
 vi.mock('../api/currentChecks', () => ({ currentChecksApi: { history:vi.fn().mockResolvedValue({project_id:'p1',items:[],next_cursor:null}), preview: vi.fn().mockResolvedValue({ project_id: 'p1', can_execute: false, plan_fingerprint: 'f', action_count: 0, case_count: 0, actions: [], gaps: [] }), list: vi.fn().mockResolvedValue([]) } }))
@@ -78,12 +84,12 @@ describe('CURRENT 应用壳', () => {
     expect(screen.queryByRole('button', { name: '停止官方示例' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '启动示例' })).toBeInTheDocument()
   })
-  it('操作成功回执离开原页面后清除，不残留到空工作台', async () => {
+  it('操作成功回执离开原页面后清除，不残留到空概览', async () => {
     const view = render(<ControlShell/>)
     fireEvent.click(await screen.findByRole('button', { name: /建立当前业务边界/ }))
     fireEvent.click(await screen.findByRole('button', { name: '完成当前操作' }))
     expect(await screen.findByText('当前操作已保存')).toBeInTheDocument()
-    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /工作台，/ }))
+    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /概览，/ }))
     expect(screen.queryByText('当前操作已保存')).not.toBeInTheDocument()
     workspaceState.selected = null; workspaceState.workspace = null
     view.rerender(<ControlShell/>)
@@ -97,19 +103,19 @@ describe('CURRENT 应用壳', () => {
     view.rerender(<ControlShell/>)
     expect(screen.getByLabelText('未提交的权限输入')).toHaveValue('不要覆盖')
     fireEvent.click(screen.getByRole('button', { name: '取消编辑' }))
-    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:/工作台，/}))
+    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:/概览，/}))
     fireEvent.click(await screen.findByRole('button',{name:/建立当前业务边界/}))
     expect(await screen.findByRole('heading', { name: '请先补齐本次检查所需材料' })).toBeInTheDocument()
   })
-  it('从工作台转到历史再进入权限规则，保留同一份未提交输入', async () => {
+  it('从概览转到历史再进入权限规则，保留同一份未提交输入', async () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
     render(<ControlShell />)
     fireEvent.click(await screen.findByRole('button',{name:/建立当前业务边界/}))
     fireEvent.change(await screen.findByLabelText('未提交的权限输入'), {target:{value:'正在整理的资源归属'}})
-    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:/^记录与证据，/}))
-    expect(await screen.findByRole('heading',{name:'检查历史'})).toBeInTheDocument()
+    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:/^检查记录，/}))
+    expect(await screen.findByRole('heading',{name:'检查记录'})).toBeInTheDocument()
     expect(screen.queryByRole('textbox',{name:'未提交的权限输入'})).not.toBeInTheDocument()
-    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:'权限管理，需要建立'}))
+    fireEvent.click(within(screen.getByLabelText('界鉴主导航')).getByRole('button',{name:'权限要求，需要建立'}))
     expect(await screen.findByLabelText('未提交的权限输入')).toHaveValue('正在整理的资源归属')
   })
   afterEach(() => cleanup())
@@ -135,11 +141,11 @@ describe('CURRENT 应用壳', () => {
     mockApi.shutdown.mockResolvedValue({ status: 'stopping', message: 'stopping' })
   })
 
-  it('工作台用唯一主按钮进入同一权限页面，记录有独立导航', async () => {
+  it('概览用唯一主按钮进入同一权限页面，记录有独立导航', async () => {
     render(<ControlShell />)
     expect(await screen.findByRole('heading', { name: '建立当前业务边界', level: 2 })).toBeInTheDocument()
-    expect(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /记录与证据，/ })).toBeInTheDocument()
-    expect(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /工作台，/ })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /检查记录，/ })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('界鉴主导航')).getByRole('button', { name: /概览，/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /建立当前业务边界/ }))
     expect(await screen.findByRole('heading',{name:'当前权限规则编辑区'})).toBeInTheDocument()
   })
@@ -147,8 +153,10 @@ describe('CURRENT 应用壳', () => {
   it('变化与检查装配当前入口，准备缺失时不自动执行', async () => {
     window.location.hash = '#/changes'
     const view = render(<ControlShell />)
-    expect(await screen.findByRole('heading', { name: 'Agent 协作' })).toBeInTheDocument()
-    expect(await screen.findByText('暂无修复任务或修改记录。检查发现问题后，可在这里准备任务并跟踪修复。')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '修改与验证' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建开发任务' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '登记本地修改' })).toBeEnabled()
+    expect(await screen.findByText('尚无修改记录。连接 Agent 后登记，或直接登记本地修改，无需先建开发任务。')).toBeInTheDocument()
 
     view.unmount()
     window.location.hash = '#/tests'
@@ -162,7 +170,7 @@ describe('CURRENT 应用壳', () => {
     render(<ControlShell />)
 
     expect(await screen.findByText('此历史入口当前不可用')).toBeInTheDocument()
-    expect(screen.getByText(/请从工作台进入当前可用的业务边界或检查准备/)).toBeInTheDocument()
+    expect(screen.getByText(/请从概览进入当前可用的业务边界或检查准备/)).toBeInTheDocument()
   })
 
   it('视口改变后关闭旧菜单，再次打开仍可退出', async () => {

@@ -164,6 +164,13 @@
 - `_EXPORTS`
 主要 import / dot-source：`importlib`
 
+### `product/backend/infra/runtime/process/artifact.py`
+- `create_runtime_artifact(source_root, artifact_store, files, entry_module, interpreter_fingerprint, dependency_files) -> tuple[Path, RuntimeLaunchManifest]`
+- `verify_runtime_artifact(source_root, manifest) -> None`
+- `read_runtime_manifest(path) -> RuntimeLaunchManifest`
+- `python_runtime_files(source_root) -> tuple[RuntimeFile, ...]`
+主要 import / dot-source：`__future__`, `hashlib`, `pathlib`, `product.protocols.runtime_identity`, `uuid`
+
 ### `product/backend/infra/runtime/process/bootstrap.py`
 - `_GATE_TIMEOUT_SECONDS`
 - `main() -> int`
@@ -176,6 +183,11 @@
 - `force_terminate_process_tree(process, timeout) -> None`
 - `class AttemptProcessControl`
 主要 import / dot-source：`__future__`, `collections.abc`, `logging`, `pathlib`, `product.backend.core.errors`, `product.backend.core.lifecycle`, `product.backend.infra.runtime.jobs.handlers`, `product.backend.infra.runtime.jobs.models`, `product.backend.infra.runtime.process.tree`, `product.backend.infra.storage`, `subprocess`, `time`, `typing`
+
+### `product/backend/infra/runtime/process/correspondence.py`
+- `runtime_artifact_store(var_dir) -> Path`
+- `runtime_corresponds(var_dir, reference) -> bool`
+主要 import / dot-source：`pathlib`, `product.backend.infra.runtime.process.artifact`, `product.backend.infra.runtime.process.tree`, `product.protocols.runtime_identity`
 
 ### `product/backend/infra/runtime/process/environment.py`
 - `class ProcessEnvironmentRole`
@@ -213,6 +225,10 @@
 - `lock_is_available(path) -> bool`
 主要 import / dot-source：`__future__`, `os`, `pathlib`, `typing`
 
+### `product/backend/infra/runtime/process/target.py`
+- `main() -> int`
+主要 import / dot-source：`__future__`, `argparse`, `os`, `pathlib`, `product.backend.infra.runtime.process.artifact`, `product.protocols.runtime_identity`, `runpy`, `sys`
+
 ### `product/backend/infra/runtime/process/tree.py`
 - `_CONTROLLERS`
 - `_NATIVE_POPEN`
@@ -223,6 +239,7 @@
 - `terminate_process_tree(process, timeout) -> None`
 - `process_tree_has_exited(process) -> bool`
 - `kernel_tree_has_exited(identity) -> bool`
+- `kernel_process_created_at(identity, process_id) -> int | None`
 主要 import / dot-source：`__future__`, `collections.abc`, `ctypes`, `ctypes.wintypes`, `os`, `product.backend.core.errors`, `signal`, `subprocess`, `time`, `typing`, `weakref`
 
 ### `product/backend/infra/runtime/runner/__main__.py`

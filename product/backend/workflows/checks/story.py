@@ -122,6 +122,8 @@ class ResultStory(WireModel):
     technical_references: tuple[str, ...]
     change_context: ChangeContext | None = None
     repair_verification: CurrentRepairVerification | None = None
+    runtime_status: Literal["MATCHED", "UNCONFIRMED", "UNSUPPORTED"] = "UNSUPPORTED"
+    runtime_instance_id: str | None = None
 
 
 class CheckStoryBuilder:
@@ -229,7 +231,10 @@ class CheckStoryBuilder:
                 "repair_comparison": build_repair_comparison(contracts[item.case_id], package)
                     if item.case_id in contracts else ()}) for item in stories]
             verification = self.repairs.verification(run_id)
+        correspondence = getattr(package.result, "runtime_correspondence", None)
+        runtime_status = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
         return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
+            runtime_status=runtime_status, runtime_instance_id=None if correspondence is None else correspondence.reference.instance_id,
             judgement=JUDGEMENTS[package.result.verdict.value], policy_epoch=package.request.policy_epoch,
             actions=tuple(stories), claim_boundary=(CLAIM_BOUNDARIES["scope"], CLAIM_BOUNDARIES["immutable"]),
             technical_references=(package.result.request_hash, package.result.config_hash, package.manifest.result_hash),

@@ -428,38 +428,15 @@
   flex-shrink: 0;
 }
 
+/* 规则类型沿用结果标签的柔和语义色；保留允许/禁止文字，不用通过勾号冒充结论。 */
 .permission-badge {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  color: var(--color-text);
-  background: var(--color-surface-subtle);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  font-size: 11px;
-  padding: 2px 7px;
-  white-space: nowrap;
+  display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+  border:0; border-radius:var(--radius-small); padding:var(--space-4) var(--space-8);
+  font-size:var(--font-label); font-weight:600; line-height:1.6; white-space:nowrap;
+  color:var(--color-secondary); background:var(--color-surface-subtle);
 }
-
-.permission-badge.is-allow {
-  color: var(--color-text);
-  background: var(--color-surface-subtle);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  font-size: 11px;
-  padding: 2px 7px;
-  white-space: nowrap;
-}
-
-.permission-badge.is-deny {
-  color: var(--color-text);
-  background: var(--color-surface-subtle);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  font-size: 11px;
-  padding: 2px 7px;
-  white-space: nowrap;
-}
+.permission-badge.is-allow {color:var(--color-safe);background:color-mix(in srgb,var(--color-safe-mark) 10%,var(--color-surface));}
+.permission-badge.is-deny {color:var(--color-danger);background:color-mix(in srgb,var(--color-danger-mark) 10%,var(--color-surface));}
 
 .boundary-supporting {
   margin-top: var(--space-32);
@@ -878,6 +855,7 @@
 }
 
 .permission-summary-row h3 {
+  margin: 0;
   font-size: 17px;
   line-height: 1.7;
 }
@@ -1338,3 +1316,8 @@
 .boundary-draft-main-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.boundary-draft-toolbar p{max-width:62ch;margin:8px 0 0;font-size:13px}.change-support-entry,.preparation-secondary-entry{display:flex;align-items:center;gap:16px;margin-top:24px;font-size:13px;color:var(--color-secondary)}
 
 .boundary-draft-toolbar>div:first-child{flex:1;min-width:0}.boundary-draft-toolbar p{flex-basis:100%}.boundary-draft-toolbar>.boundary-draft-main-actions{flex-shrink:0;justify-content:flex-end;align-self:flex-start;max-width:100%}
+
+/* 三个权限视图共用相同搜索槽位和入口间距，不能因 Input 是否含清除图标而改变宽度。 */
+.boundary-entry-actions{display:flex;flex-wrap:wrap;gap:var(--space-12);margin-top:var(--space-20);}
+.boundary-collection-toolbar>.boundary-search{width:300px;max-width:100%;flex:0 1 300px;}
+@media(max-width:760px){.boundary-collection-toolbar>.boundary-search{flex-basis:100%;width:100%;}}

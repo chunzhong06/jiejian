@@ -318,15 +318,8 @@ class ApplicationUnderstandingService:
             )
         return self.analyzer.analyze(current.project_id, current.source_root).source_fingerprint
 
-    def _analyze_source(
-        self,
-        project_id: str,
-        *,
-        revision: int,
-        refresh_permission_bindings: bool,
-    ) -> ApplicationUnderstanding:
-        """执行同一受控扫描；调用者不能改变扫描根、忽略规则或预算。"""
-
+    def scan_source(self, project_id: str, *, revision: int):
+        """准备受控分析，不持久化；交付事务可与源码理解更新一起提交。"""
         before = self.get(project_id)
         self._require_revision(before, revision)
         if not before.source_analysis_authorized:
@@ -340,55 +333,40 @@ class ApplicationUnderstandingService:
                 "请先确认当前应用的本地访问地址",
             )
         result = self.analyzer.analyze(before.project_id, before.source_root)
+        return before, result
 
+    def apply_source_analysis(self, work, before, result) -> ApplicationUnderstanding:
+        """在调用者写事务中核对扫描起点并保存；不提交，也不自动重绑权限。"""
+        current = work.application_understanding.get(before.project_id)
+        if current is None:
+            raise JiejianError(ErrorCode.APPLICATION_UNDERSTANDING_NOT_FOUND, "当前项目还没有应用连接记录")
+        self._require_revision(current, before.revision)
+        if not current.source_analysis_authorized:
+            raise JiejianError(ErrorCode.APPLICATION_ANALYSIS_NOT_AUTHORIZED, "源码只读分析授权已失效")
+        if current.source_root != before.source_root or current.confirmed_endpoint != before.confirmed_endpoint:
+            raise JiejianError(ErrorCode.STATE_PRECONDITION, "源码分析期间应用连接已变化")
+        now_us = self._clock_us()
+        updated = self._validated_update(current, source_fingerprint=result.source_fingerprint,
+            analysis_completed_at_us=now_us,
+            role_candidates=self._merge_roles(current.role_candidates, result.role_candidates),
+            action_candidates=self._merge_actions(current.action_candidates, result.action_candidates),
+            revision=current.revision + 1, updated_at_us=max(now_us, current.updated_at_us))
+        work.application_understanding.replace(updated)
+        if work.source_changes.snapshot_for_fingerprint(before.project_id, result.source_fingerprint) is None:
+            work.source_changes.add_snapshot(SourceRevisionSnapshot(
+                snapshot_id=source_snapshot_id(before.project_id, result.source_fingerprint),
+                project_id=before.project_id, source_fingerprint=result.source_fingerprint,
+                understanding_revision=updated.revision, files=result.files, created_at_us=now_us))
+        return updated
+
+    def _analyze_source(
+        self, project_id: str, *, revision: int, refresh_permission_bindings: bool,
+    ) -> ApplicationUnderstanding:
+        """执行同一受控扫描；调用者不能改变扫描根、忽略规则或预算。"""
+        before, result = self.scan_source(project_id, revision=revision)
         with self._uow_factory() as work:
-            current = work.application_understanding.get(project_id)
-            if current is None:
-                raise JiejianError(
-                    ErrorCode.APPLICATION_UNDERSTANDING_NOT_FOUND,
-                    "当前项目还没有应用连接记录",
-                )
-            self._require_revision(current, revision)
-            if not current.source_analysis_authorized:
-                raise JiejianError(
-                    ErrorCode.APPLICATION_ANALYSIS_NOT_AUTHORIZED,
-                    "源码只读分析授权已失效",
-                )
-            now_us = self._clock_us()
-            updated = self._validated_update(
-                current,
-                source_fingerprint=result.source_fingerprint,
-                analysis_completed_at_us=now_us,
-                role_candidates=self._merge_roles(
-                    current.role_candidates,
-                    result.role_candidates,
-                ),
-                action_candidates=self._merge_actions(
-                    current.action_candidates,
-                    result.action_candidates,
-                ),
-                revision=current.revision + 1,
-                updated_at_us=max(now_us, current.updated_at_us),
-            )
-            work.application_understanding.replace(updated)
-            existing_snapshot = work.source_changes.snapshot_for_fingerprint(
-                project_id,
-                result.source_fingerprint,
-            )
-            if existing_snapshot is None:
-                work.source_changes.add_snapshot(
-                    SourceRevisionSnapshot(
-                        snapshot_id=source_snapshot_id(
-                            project_id,
-                            result.source_fingerprint,
-                        ),
-                        project_id=project_id,
-                        source_fingerprint=result.source_fingerprint,
-                        understanding_revision=updated.revision,
-                        files=result.files,
-                        created_at_us=now_us,
-                    )
-                )
+            work.acquire_write_lock()
+            updated = self.apply_source_analysis(work, before, result)
             work.commit()
         if refresh_permission_bindings:
             self._refresh_permission_bindings(project_id)

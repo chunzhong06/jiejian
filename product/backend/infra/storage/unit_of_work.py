@@ -27,6 +27,7 @@ from product.backend.infra.storage.supplemental_materials import SupplementalMat
 from product.backend.infra.storage.code_observations import CodeObservationRepository
 from product.backend.infra.storage.environment_operations import EnvironmentOperationRepository
 from product.backend.infra.storage.preparation_recovery import PreparationRecoveryRepository
+from product.backend.infra.storage.development import DevelopmentRepository
 from product.backend.infra.storage.sample_workspaces import SampleWorkspaceRepository
 from product.backend.infra.storage.execution.job_control import JobControlRepository
 from product.backend.infra.storage.application_understanding import ApplicationUnderstandingRepository
@@ -76,6 +77,7 @@ class StorageUnitOfWork:
     test_identities: TestIdentityRepository
     permission_intents: PermissionIntentRepository
     source_changes: SourceChangeRepository
+    development: DevelopmentRepository
 
     def __init__(
         self,
@@ -135,6 +137,7 @@ class StorageUnitOfWork:
             self._known_secrets,
         )
         self.source_changes = SourceChangeRepository(session, self._known_secrets)
+        self.development = DevelopmentRepository(session, self._known_secrets)
         self.supplemental_materials = SupplementalMaterialRepository(session, self._known_secrets)
         self.code_observations = CodeObservationRepository(session, self._known_secrets)
         self.environment_operations = EnvironmentOperationRepository(session, self._known_secrets)

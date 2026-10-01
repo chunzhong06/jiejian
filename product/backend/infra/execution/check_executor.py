@@ -13,7 +13,9 @@ from product.backend.infra.artifacts.check_validation import validate_check_inpu
 from product.backend.infra.execution.web.check_runtime import CheckWebRuntime
 from product.backend.infra.observers.check_runtime import CheckObserverRuntime
 from product.protocols.check_result import (CheckCaseOutcome, CheckCaseResult, CheckEvidence,
-    CheckPrimaryError, CheckRunnerInput, CheckRunnerResult, seal_check_evidence)
+    CheckPrimaryError, CheckRunnerInput, CheckRunnerResult, ControlledCheckRunnerResult, seal_check_evidence)
+from product.protocols.runtime_identity import RuntimeCorrespondence
+from product.backend.infra.runtime.process.correspondence import runtime_corresponds
 
 
 @dataclass(frozen=True)
@@ -40,9 +42,14 @@ class CheckExecutor:
         self._cleanup_issues = []
         self._first_error = None
         self._stopped = None
+        self._runtime_reference = getattr(bundle, "runtime_reference", None)
+        self._var_dir = Path(environ["JIEJIAN_VAR_DIR"]) if self._runtime_reference is not None else None
 
     def execute(self) -> CheckExecutionOutput:
         started = self.clock()
+        runtime_before = None if self._runtime_reference is None else runtime_corresponds(self._var_dir, self._runtime_reference)
+        if runtime_before is False:
+            self._stop("RUNTIME_IDENTITY_UNCONFIRMED", "PREPARING")
         results, evidence = {}, []
         configured = {item.action_id: item for item in self.bundle.actions}
         cases = [(action, case) for action in self.request.actions for case in action.cases]
@@ -70,12 +77,19 @@ class CheckExecutor:
         cancelled = self._stopped == "EXEC_CANCELLED" and not blocked
         result_type = "CANCELLED" if cancelled else "SAFETY_STOPPED" if self._stopped else "SUCCESS"
         lifecycle = RunLifecycle.CANCELLED if cancelled else RunLifecycle.SAFETY_STOPPED if self._stopped else RunLifecycle.COMPLETED
-        return CheckExecutionOutput(CheckRunnerResult(run_id=self.input.run_id, job_id=self.input.job_id,
+        result = CheckRunnerResult(run_id=self.input.run_id, job_id=self.input.job_id,
             attempt=self.input.attempt, lease_owner=self.input.lease_owner, fencing_token=self.input.fencing_token,
             request_hash=self.input.request_hash, config_hash=self.input.config_hash,
             result_type=result_type, lifecycle=lifecycle, case_results=ordered, verdict=None if cancelled else verdict,
             primary_error=self._first_error, cleanup_issues=tuple(dict.fromkeys(self._cleanup_issues)),
-            started_at_us=started, completed_at_us=self.clock()), tuple(evidence))
+            started_at_us=started, completed_at_us=self.clock())
+        if self._runtime_reference is not None:
+            runtime_after = runtime_corresponds(self._var_dir, self._runtime_reference)
+            # 运行适用性单列保存，结束时漂移不改写已经观察到的业务事实和 Verdict。
+            result = ControlledCheckRunnerResult(**result.model_dump(exclude={"schema_version"}),
+                runtime_correspondence=RuntimeCorrespondence(reference=self._runtime_reference,
+                    before="MATCHED" if runtime_before else "UNCONFIRMED", after="MATCHED" if runtime_after else "UNCONFIRMED"))
+        return CheckExecutionOutput(result, tuple(evidence))
 
     def _case(self, action, configured, case, allow_verdict):
         execution, status, identity = "UNKNOWN", None, "UNKNOWN"
@@ -216,7 +230,8 @@ class CheckExecutor:
                 continue
             for source in proof.auxiliary_sources:
                 spec = self.observers.specs[source.observer_id]
-                if phase == "EVENTUAL" and not any(item.value == "EVENTUAL" for item in spec.phases):
+                actual_phase = "BEFORE" if phase in {"BASELINE", "BEFORE"} else "AFTER" if phase == "RECOVERY" else phase
+                if not any(item.value == actual_phase for item in spec.phases):
                     continue
                 # 沿同一冻结 proof 引用采集低权限材料；辅助来源不能升级为决定性证明。
                 auxiliary = proof.model_copy(update=dict(rule="REGISTERED_EFFECT", observer_id=source.observer_id,

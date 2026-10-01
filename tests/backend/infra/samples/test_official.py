@@ -210,6 +210,9 @@ def test_behavior_switch_keeps_origin_and_source_but_resets_sample_state(
     )
     runtime = manager.start()
     try:
+        from product.backend.infra.runtime.process.correspondence import runtime_corresponds
+        before = manager.runtime_reference(runtime.experience_id)
+        assert before is not None and runtime_corresponds(var_dir, before)
         switched = manager.switch_behavior(
             runtime.experience_id,
             authorization_order="AUTHORIZE_BEFORE_ENQUEUE",
@@ -218,6 +221,10 @@ def test_behavior_switch_keeps_origin_and_source_but_resets_sample_state(
         )
         assert switched.origin == runtime.origin
         assert switched.source_root == runtime.source_root
+        after = manager.runtime_reference(switched.experience_id)
+        assert after is not None and after.instance_id != before.instance_id
+        assert not runtime_corresponds(var_dir, before)
+        assert runtime_corresponds(var_dir, after)
         assert json.loads(runtime.control_path.read_text(encoding="utf-8")) == {
             "schema_version": "1",
             "authorization_order": "AUTHORIZE_BEFORE_ENQUEUE",

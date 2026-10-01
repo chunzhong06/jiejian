@@ -13,11 +13,11 @@ describe('修复要求与交付', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     const navigate = vi.fn()
     render(<RepairDelivery task={task('REPAIR_REQUIRED')} onNavigate={navigate} onBack={vi.fn()} onViewChange={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: '复制修复任务' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制修复依据' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
     expect(writeText.mock.calls[0][0]).toContain('run-old')
     expect(writeText.mock.calls[0][0]).toContain('读取资料')
-    expect(writeText.mock.calls[0][0]).toContain('jiejian_change_submit')
+    expect(writeText.mock.calls[0][0]).toContain('jiejian_change_register')
     const referenceLine = writeText.mock.calls[0][0].split('\n').find((line: string) => line.startsWith('repair_reference：'))!
     expect(JSON.parse(referenceLine.slice('repair_reference：'.length))).toEqual({ source_run_id: 'run-old', source_case_id: 'deny', repair_fingerprint: 'repair' })
     expect(await screen.findByRole('status')).toHaveTextContent('尚未发送给 Agent')

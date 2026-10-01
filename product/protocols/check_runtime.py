@@ -14,6 +14,7 @@ from product.protocols.web.identity import BearerIdentityBinding, PreparedCookie
 from product.protocols.web.request import HttpBodyKind, HttpRequestTemplate, ValueSlotConsumer, ValueSlotSource
 from product.protocols.web.response import HttpOutcomeClassifier
 from product.protocols.web.target import WebTargetScope
+from product.protocols.runtime_identity import ControlledRuntimeReference
 
 CHECK_DOCUMENT_MAX_BYTES = 1_048_576
 ActionId = Annotated[str, Field(pattern=r"^bac_[0-9a-f]{32}$")]
@@ -285,6 +286,17 @@ class CheckRuntimeBundle(WireModel):
         return self
 
 
+class ControlledCheckRuntimeBundle(CheckRuntimeBundle):
+    schema_version: Literal["2"] = "2"
+    runtime_reference: ControlledRuntimeReference
+
+    @model_validator(mode="after")
+    def validate_runtime_source(self):
+        if self.runtime_reference.source_fingerprint != self.source_fingerprint:
+            raise ValueError("controlled runtime source differs from check source")
+        return self
+
+
 class CheckRuntimeProtocolError(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
 
@@ -303,7 +315,9 @@ def check_payload_contains_secret(value, known_secrets: tuple[str, ...]) -> bool
 
 def canonical_check_runtime_bytes(bundle: CheckRuntimeBundle) -> bytes:
     try:
-        parsed = CheckRuntimeBundle.model_validate_json(bundle.model_dump_json(), strict=True)
+        if type(bundle) not in (CheckRuntimeBundle, ControlledCheckRuntimeBundle):
+            raise ValueError("unsupported runtime document")
+        parsed = type(bundle).model_validate_json(bundle.model_dump_json(), strict=True)
         payload = parsed.model_dump(mode="json")
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         if len(raw) > CHECK_DOCUMENT_MAX_BYTES or _SECRET.search(raw.decode()):
@@ -328,9 +342,11 @@ def parse_check_runtime(raw: bytes) -> CheckRuntimeBundle:
     try:
         if type(raw) is not bytes or len(raw) > CHECK_DOCUMENT_MAX_BYTES or raw.startswith(b"\xef\xbb\xbf"):
             raise ValueError("invalid runtime bytes")
-        json.loads(raw.decode(), object_pairs_hook=unique,
+        payload = json.loads(raw.decode(), object_pairs_hook=unique,
             parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
-        bundle = CheckRuntimeBundle.model_validate_json(raw, strict=True)
+        # 格式 1 的历史配置仍按其原字节和范围读取，绝不补造受控运行证明。
+        model = ControlledCheckRuntimeBundle if isinstance(payload, dict) and payload.get("schema_version") == "2" else CheckRuntimeBundle
+        bundle = model.model_validate_json(raw, strict=True)
         if canonical_check_runtime_bytes(bundle) != raw:
             raise ValueError("noncanonical runtime")
         return bundle

@@ -4,6 +4,10 @@ import type {PrimaryTaskDto} from '../api/workspace'
 import {taskDestination} from './taskDestination'
 const task={task_id:'current / slot',task_kind:'PREPARE_TEST_IDENTITY',route:'/tests',run_id:null,change_id:null} as PrimaryTaskDto
 it('准备任务把精确任务 ID 带入正式准备页',()=>expect(taskDestination(task)).toBe('/tests?task_id=current+%2F+slot'))
+it('准备与运行加载保留本批交付定位',()=>{
+ expect(taskDestination({...task,change_id:'chg_one'})).toBe('/tests?change_id=chg_one&task_id=current+%2F+slot')
+ expect(taskDestination({...task,route:'/changes',task_kind:'LOAD_DELIVERY_RUNTIME',change_id:'chg_one'})).toBe('/changes?change_id=chg_one')
+})
 it('修复交付直接进入指定原题，不让用户从历史查找',()=>expect(taskDestination({...task,task_kind:'PREPARE_AGENT_REPAIR',route:'/changes',repair_fingerprint:'a'.repeat(64)})).toBe('/changes?repair_reference='+'a'.repeat(64)))
 it('原题复验保留精确变化，结果入口保留原 Run',()=>{
  expect(taskDestination({...task,task_kind:'VERIFY_REPAIR',change_id:'change-one'})).toBe('/tests?change_id=change-one')

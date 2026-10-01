@@ -95,6 +95,9 @@ PrimaryTaskKind = Literal[
     "VERIFY_REPAIR",
     "RUN_CURRENT_CHECK",
     "VIEW_CURRENT_RESULT",
+    "CREATE_DEVELOPMENT_TASK",
+    "CONTINUE_DEVELOPMENT_TASK",
+    "LOAD_DELIVERY_RUNTIME",
 ]
 
 
@@ -174,6 +177,21 @@ class WorkspaceJourney(WorkspaceModel):
     steps: tuple[WorkspaceJourneyStep, ...]
 
 
+class WorkspaceDevelopment(WorkspaceModel):
+    task_id: str
+    context_id: str
+    title: str
+    goal: str
+    revision: int
+    version: int
+    client_name: str | None = None
+    latest_delivery_id: str | None = None
+    latest_change_id: str | None = None
+    latest_batch_number: int | None = None
+    latest_run_id: str | None = None
+    runtime_state: Literal["MATCHED", "NOT_LOADED", "UNCONFIRMED", "UNSUPPORTED"]
+
+
 class WorkspaceView(WorkspaceModel):
     project: WorkspaceProjectView
     connection: WorkspaceConnectionView
@@ -186,6 +204,7 @@ class WorkspaceView(WorkspaceModel):
     repair: ProjectRepair | None = None
     active_check: CheckRunStatus | None = None
     journey: WorkspaceJourney | None = None
+    development: WorkspaceDevelopment | None = None
 
 
 __all__ = [

@@ -149,12 +149,18 @@ class ApplicationCore:
         self.check_repairs = CurrentRepairService(reader=self.check_results,change_context_reader=self.source_changes.context,
             breakpoint_reader=lambda run,case:next(item.breakpoint for item in self.check_story.build(run,include_repair=False).actions if item.case_id==case))
         self.source_changes.set_dependencies(plan_reader=self.checks.preview,repair_resolver=self.check_repairs.resolve)
+        from product.backend.workflows.development import DevelopmentService
+        self.development = DevelopmentService(uow_factory=factory, understanding=self.application_understanding,
+            boundaries=self.business_boundaries, changes=self.source_changes, clock_us=clock_us,
+            results=self.check_results, repairs=self.check_repairs)
+        self.checks.delivery_run_attacher = self.development.attach_check_run
         self.checks.set_revalidation_services(changes=self.source_changes,repairs=self.check_repairs)
         self.check_story.repairs = self.check_repairs
         from product.backend.workflows.projects.repair import CurrentProjectRepairService
         self.project_repair = CurrentProjectRepairService(reader=self.check_results,repairs=self.check_repairs,
             changes=self.source_changes,boundaries=self.business_boundaries,pending_request_reader=self.checks.pending_request)
         self.workspace = WorkspaceService(factory, self.business_boundaries, preparation=self.preparation, var_dir=self.var_dir)
+        self.workspace.development_service = self.development
         self.workspace.set_current_checks(checks=self.checks,reader=self.check_results,changes=self.source_changes,
             repairs=self.project_repair,source_inspector=self.application_understanding.inspect_source_fingerprint)
         self.identity_preparations = IdentityPreparationManager(
@@ -236,7 +242,13 @@ class ApplicationCore:
             registry=self.check_registry, installer=self.official_scenario, bindings=self.preparation_bindings,
             preparation=self.preparation, changes=self.source_changes, repairs=self.check_repairs,
             uow_factory=factory, var_dir=self.var_dir, archive_project=self.project_lifecycle.archive, clock_us=clock_us,
-            reader=self.check_results, project_repairs=self.project_repair)
+            reader=self.check_results, project_repairs=self.project_repair, development=self.development)
+        self.check_runtime_builder.runtime_reference_reader = self.official_experience.runtime_reference
+        self.development.runtime_reader = self.official_experience.runtime_reference
+        from product.backend.workflows.runtime_activation import RuntimeActivationService
+        self.runtime_activation = RuntimeActivationService(uow_factory=factory,
+            loader=self.official_experience.load_delivery_runtime, reader=self.official_experience.runtime_reference,
+            clock=clock_us or (lambda: time.time_ns() // 1000))
 
     def close(self) -> None:
         """先确认录制、登录进程及调度线程退出，再清空短期秘密和释放数据库。"""

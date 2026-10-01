@@ -82,7 +82,7 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
         with engine.connect() as connection:
             assert connection.execute(
                 text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == "0007_preparation_recovery"
+            ).scalar_one() == "0009_delivery_check_links"
         recording_columns = {item["name"] for item in inspector.get_columns("recordings")}
         assert {"purpose", "parent_recording_id"} <= recording_columns
     finally:

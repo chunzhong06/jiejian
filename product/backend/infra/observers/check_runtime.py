@@ -173,10 +173,21 @@ class CheckObserverRuntime:
                 proof=proof, spec=spec, envelopes=tuple(history) if phase != "RECOVERY" else (envelope,), disclosure_proof=disclosure)
             correlated = trusted and (not target_state or (proof.exclusive_resource_window and (
                 baseline_trusted or phase in ("BASELINE", "BEFORE", "RECOVERY"))))
+            # 来源采集和业务效果是两件事：过程记录可用于诊断，但不提升为交付物证明。
+            reasons = list(dict.fromkeys((*fact.reason_codes, *outcome.reason_codes, *envelope.reason_codes)))
+            if requirement.level != "VERDICT_REQUIRED" and trusted and envelope.state is not None:
+                data = envelope.state.canonical_data
+                if spec.observer_type is ObserverType.STRUCTURED_AUDIT_LOG and data.get("records"):
+                    reasons.insert(0, "SOURCE_RECORDS_AVAILABLE")
+                elif spec.observer_type is ObserverType.AZURE_QUEUE_PEEK:
+                    if data.get("matched_count", 0) > 0 and data.get("messages"):
+                        reasons.insert(0, "SOURCE_RECORDS_AVAILABLE")
+                    elif data.get("matched_count") == 0 and data.get("window_complete") is True:
+                        reasons.insert(0, "SOURCE_WINDOW_EMPTY")
             observation = CheckObservation(**common, state=fact.effect.value, closure=fact.temporal_closure.value,
                 complete=fact.complete and trusted, reliable=fact.reliable and trusted,
                 correlated=fact.correlated and correlated, authoritative=True, window_end_us=self.clock(),
-                correlation_refs=(case.case_id, self.web.request_marker(case.case_id)), reason_codes=fact.reason_codes)
+                correlation_refs=(case.case_id, self.web.request_marker(case.case_id)), reason_codes=tuple(reasons[:16]))
             # 非状态来源以完整规范通道的初始状态为基线；不把 task/queue 的 lineage 当业务效果。
             if trusted and not target_state and phase in ("BASELINE", "BEFORE"):
                 projection = (case.resource_id, "CHANNEL_READY")
