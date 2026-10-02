@@ -7,11 +7,13 @@ import json
 from typing import Literal
 
 from fastapi import APIRouter
+from fastapi.encoders import jsonable_encoder
 from pydantic import Field
 
 from product.backend.api.envelope import ApiModel, ApiResponse, data_response
 from product.backend.composition import ApplicationCore
 from product.backend.core.boundaries.proposals import ProposedActionItem, ProposedActorItem, ProposedPermissionItem
+from product.backend.core.boundaries.rule_candidates import RuleCandidateSave
 from product.backend.workflows.business_boundaries import (
     BoundaryMaintenanceActionItem,
     BoundaryMaintenanceActorItem,
@@ -66,6 +68,22 @@ class BoundaryDecisionRequest(ApiModel):
     reason: str = Field(min_length=1, max_length=512)
 
 
+class RuleCandidateSaveRequest(ApiModel):
+    operation_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    expected_basis_id: str = Field(pattern=r"^rb_[0-9a-f]{64}$")
+    candidate_id: str | None = Field(default=None, pattern=r"^rcd_[0-9a-f]{32}$")
+    expected_revision: int | None = Field(default=None, ge=1)
+    content: dict[str, object]
+
+    def to_command(self) -> RuleCandidateSave:
+        return RuleCandidateSave.model_validate_json(self.model_dump_json())
+
+
+class RuleCandidateProposalRequest(ApiModel):
+    operation_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    revision: int = Field(ge=1)
+
+
 class BoundaryMaintenanceCreateRequest(ApiModel):
     schema_version: Literal["1"]
     expected_boundary_state_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -104,6 +122,32 @@ def build_business_boundaries_router(context: ApplicationCore) -> APIRouter:
 
     router = APIRouter()
     prefix = "/api/projects/{project_id}/business-boundaries"
+
+    @router.get(f"{prefix}/rules/{{intent_id}}", response_model=ApiResponse)
+    def rule_details(project_id: str, intent_id: str, revision: int | None = None):
+        return data_response(context.rule_details.read(project_id,intent_id,revision=revision))
+
+    @router.get(f"{prefix}/rule-context", response_model=ApiResponse)
+    def rule_context(project_id: str, offset: int = 0):
+        return data_response(jsonable_encoder(context.rule_candidates.context(project_id, offset=offset)))
+
+    @router.post(f"{prefix}/rule-candidates", response_model=ApiResponse, status_code=201)
+    def save_rule_candidate(project_id: str, body: RuleCandidateSaveRequest):
+        return data_response(jsonable_encoder(context.rule_candidates.save(
+            project_id, body.to_command(), submitted_via="LOCAL_GUI")), status_code=201)
+
+    @router.get(f"{prefix}/rule-candidates/{{candidate_id}}", response_model=ApiResponse)
+    def show_rule_candidate(project_id: str, candidate_id: str, revision: int | None = None):
+        return data_response(jsonable_encoder(context.rule_candidates.show(project_id, candidate_id, revision)))
+
+    @router.post(f"{prefix}/rule-candidates/{{candidate_id}}/proposals", response_model=ApiResponse, status_code=201)
+    def propose_rule_candidate(project_id: str, candidate_id: str, body: RuleCandidateProposalRequest):
+        return data_response(jsonable_encoder(context.rule_candidates.propose(project_id, candidate_id,
+            revision=body.revision, operation_id=body.operation_id)), status_code=201)
+
+    @router.get(f"{prefix}/rule-operations/{{kind}}/{{operation_id}}", response_model=ApiResponse)
+    def rule_operation(project_id: str, kind: Literal["SAVE", "PROPOSE"], operation_id: str):
+        return data_response(jsonable_encoder(context.rule_candidates.operation(project_id, kind, operation_id)))
 
     @router.get(prefix, response_model=ApiResponse)
     def get_boundary(project_id: str):

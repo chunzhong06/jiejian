@@ -1,14 +1,14 @@
 # 验证验收脚本的跨应用事实与聚合。
 from __future__ import annotations
-import scripts.dev.sample_test.validation.suite as sample_validation_suite
-import scripts.dev.sample_test.validation.summary as sample_validation_summary
+import tests.acceptance.sample_test.validation.suite as sample_validation_suite
+import tests.acceptance.sample_test.validation.summary as sample_validation_summary
 import json
 from pathlib import Path
 import pytest
-from scripts.dev.sample_test import adapter as adapter_module
-from scripts.dev.sample_test import driver as suite_driver
-from scripts.dev.sample_test import oracle as oracle_module
-from scripts.dev.sample_test import registry as registry_module
+from tests.acceptance.sample_test import adapter as adapter_module
+from tests.acceptance.sample_test import driver as suite_driver
+from tests.acceptance.sample_test import oracle as oracle_module
+from tests.acceptance.sample_test import registry as registry_module
 from tests.scripts._support_sample_test import ROOT
 
 def test_validation_registry_has_stable_public_cases_and_allow_controls() -> None:
@@ -135,7 +135,7 @@ def test_validation_representatives_run_both_real_apps_without_public_oracle_lea
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from scripts.dev.sample_test.validation import evaluation as validation
+    from tests.acceptance.sample_test.validation import evaluation as validation
     continuity_calls = 0
     breakpoint_calls = 0
     real_assess = validation.assess_authorization_continuity

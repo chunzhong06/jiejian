@@ -1,5 +1,7 @@
 // 历史只消费有界、完整性已核验的读模型；列表与精确 Run 详情共享返回位置，不产生新检查。
-import { Button, Input, Select, Spin } from 'antd'
+import { SearchField } from '../../shared/ui/SearchField'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { Button, Select, Spin } from 'antd'
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError } from '../../api/http'
 import { currentChecksApi, type CheckHistoryCursor, type CheckHistoryItem, type CheckHistoryQuery } from '../../api/currentChecks'
@@ -101,7 +103,7 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
       <EditorialPage label="项目检查历史">
         <EditorialHeader eyebrow="协作空间 / 已发布记录" title="检查记录"><p className="editorial-muted">回看每一次检查，沿原问题追踪复验结果。</p></EditorialHeader>
         <div className="history-surface"><form className="history-toolbar" onSubmit={event => { event.preventDefault(); setOptions(previous => ({ ...previous, query: query.trim() })) }}>
-          <Input aria-label="搜索检查历史" placeholder="搜索业务动作或检查编号" maxLength={128} value={query} onChange={event => setQuery(event.target.value)} allowClear />
+          <SearchField aria-label="搜索检查历史" placeholder="搜索业务动作或检查编号" maxLength={128} value={query} onChange={event => setQuery(event.target.value)} allowClear />
           <Button htmlType="submit" aria-label="搜索">搜索</Button>
           <Select aria-label="筛选检查结论" value={options.verdict ?? ''} options={[{ value: '', label: '全部结论' }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))]} onChange={value => setOptions(previous => ({ ...previous, query: query.trim(), verdict: value ? value as CheckHistoryQuery['verdict'] : undefined }))} />
           <Select aria-label="筛选执行状态" value={options.lifecycle ?? ''} options={[{ value: '', label: '全部执行状态' }, ...['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SAFETY_STOPPED'].map(value => ({ value, label: lifecycleLabel(value) }))]} onChange={value => setOptions(previous => ({ ...previous, lifecycle: value ? value as CheckHistoryQuery['lifecycle'] : undefined }))} />
@@ -118,8 +120,8 @@ export function CheckHistoryPage({ project, onError, onNavigate, requestedRunId,
               {heading && <h2 className="history-date">{date}</h2>}
               <button className="history-record" data-run={run.run_id} onClick={() => open(run.run_id)}>
                 <span className="history-record-copy"><strong>{item.action_labels.join('、') || '权限检查'}</strong><small>{formatTimestamp(run.created_at_us)} · 权限版本 {run.policy_epoch}{item.source_run_id ? ' · 原题复验' : item.change_id ? ' · 关联代码变化' : ''}</small><small className="history-id">{run.run_id}</small></span>
-                <span className={`history-verdict ${verdict ? 'is-' + verdict.toLowerCase() : ''}`}>{result_integrity === 'INVALID' ? '结果完整性校验失败' : verdict ? labels[verdict] : '尚无安全结论'}</span>
-                <span className="history-lifecycle">{lifecycleLabel(run.lifecycle)}</span><span className="history-open">查看{['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '进度' : '结果'} →</span>
+                <StatusBadge kind={verdict ? 'verdict' : 'lifecycle'} tone={result_integrity === 'INVALID' ? 'warning' : verdict === 'PASS' ? 'success' : verdict === 'BLOCK' ? 'danger' : verdict === 'INCONCLUSIVE' ? 'warning' : 'neutral'}>{result_integrity === 'INVALID' ? '结果完整性校验失败' : verdict ? labels[verdict] : '尚无安全结论'}</StatusBadge>
+                <span className="history-lifecycle">{lifecycleLabel(run.lifecycle)}</span><span className="history-open">查看{['QUEUED', 'RUNNING'].includes(run.lifecycle) ? '进度' : '结果'}</span>
               </button>
             </div>
           })}

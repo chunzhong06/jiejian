@@ -36,7 +36,7 @@
 
 MCP使用官方Python SDK Streamable HTTP，精确挂载同一FastAPI的/mcp，不创建第二个ApplicationCore。SDK核验Host/Origin/DNS rebinding，transport只接受Bearer；配对随机令牌只在精确SecretStore引用保存。启动恢复READ，GUI可对当前项目临时提升PREPARE/EXECUTE，pause/resume/rotate/forget/close清除提升，长期凭据与当前会话分开。
 
-`MCPAccessView.connection_state` 是 GUI 的唯一连接阶段事实：`DISABLED` 表示尚无凭据，`CREDENTIAL_READY` 表示凭据已创建但尚未观测到客户端，`AUTHENTICATED` 表示 Bearer 已通过但 SDK 尚未成功处理 MCP 请求，`CONNECTED` 在 SDK 成功处理任一请求后成立，`CREDENTIAL_REJECTED` 表示最近一次认证失败，`PAUSED` 表示当前 serve 不接受连接。无状态 HTTP 请求可以不携带 initialize 客户端身份；名称和版本只用于补充展示，缺失时不能把已经成立的连接降级。创建凭据、复制配置或客户端自称已保存都不能提前显示“连接成功”；恢复连接清除旧活动和临时提升后回到 `CREDENTIAL_READY`。
+`MCPAccessView.connection_state` 是 GUI 的唯一连接阶段事实：`DISABLED` 表示尚无凭据，`CREDENTIAL_READY` 表示凭据已创建但尚未观测到客户端，`AUTHENTICATED` 表示 Bearer 已通过但 SDK 尚未成功处理 MCP 请求，`CONNECTED` 在 SDK 成功处理任一请求后成立，`CREDENTIAL_REJECTED` 表示最近一次认证失败，`PAUSED` 表示当前 serve 不接受连接。Streamable HTTP保留标准初始化会话，后续请求从同一会话读取客户端名称和版本；Bearer与项目授权仍逐请求核验，会话ID不代表授权。未声明客户端信息时只显示已验证连接，不猜测名称。创建凭据、复制配置或客户端自称已保存都不能提前显示“连接成功”；恢复连接清除旧活动和临时提升后回到 `CREDENTIAL_READY`。
 
 唯一连接页提供 Codex、DeepSeek Harness（DSH）、ZCode 三种指导，使用“准备连接 → 配置客户端 → 验证与授权”三阶段。地址取当前服务返回的 endpoint，不固定端口。配置预览不含秘密，凭据由用户单独复制；Codex/DSH 使用用户级环境变量，ZCode 在本机 Headers 填写 Bearer。步骤来源见 `features/tools/clientGuides.ts` 官方链接；DSH/ZCode 尚未实机验收须明确标记。
 
@@ -44,7 +44,7 @@ MCP使用官方Python SDK Streamable HTTP，精确挂载同一FastAPI的/mcp，�
 
 MCP instructions明确READ读取事实、PREPARE登记变化声明、EXECUTE运行完整当前权限或取消本项目检查，遇到人类决定返回GUI。基线跨用户任务保存；复制内容不含Bearer正文，也不要求把秘密发进对话。
 
-每个MCP工具先统一连接认证，再按项目require授权。精确20工具：原有11个READ，加task_list/task_show/task_context/receipt_show四个READ；task_create/task_accept/change_submit为PREPARE，check_run/check_cancel为EXECUTE。任务修订、结束与取消只由GUI执行。未声明参数按公开schema拒绝；不提供选Case/Effect/Permission、approval、任意路径/HTTP/shell或原始Evidence/Trace。错误沿既有MCP_DISABLED/MCP_AUTH_REQUIRED/MCP_PERMISSION_REQUIRED映射，不暴露输入秘密。
+每个MCP工具先统一连接认证，再按项目require授权。当前34工具：原有11个READ，加task_list/task_show/task_context/receipt_show四个READ；task_create/task_accept/change_submit为PREPARE，check_run/check_cancel为EXECUTE。另有rule_context、rule_candidate_show、rule_operation三个READ和rule_candidate_save一个PREPARE，候选不写正式权限；变化登记预览和一次登记分别沿已有READ/PREPARE边界。任务修订、结束与取消只由GUI执行。未声明参数按公开schema拒绝；不提供选Case/Effect/Permission、approval、任意路径/HTTP/shell或原始Evidence/Trace。错误沿既有MCP_DISABLED/MCP_AUTH_REQUIRED/MCP_PERMISSION_REQUIRED映射，不暴露输入秘密。
 
 Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `schema_version/kind/status/data/next_actions/warnings`，失败增加有界 `error`。默认 Human 只给结论与下一步，只有显式 `--json` 才进入 Machine 模式；两种输出都来自同一产品事实。更完整的关系见[控制面与 Machine 输出协议](../../参考/协议/控制面与Machine输出协议.md)。
 
@@ -70,7 +70,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps
 
 只改一个资源 Router 时不要机械运行整组控制面。改 Machine envelope、ServeLock、启动/关闭或 ApplicationCore 组合时，必须覆盖 CLI/API 同事实、错误通道与单控制者。改 OpenAPI DTO 后再运行 schema/docs 检查；只有入口跨进程行为变化才增加少量 E2E。
 
-MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、精确当前 20 工具及其授权层级、暂停/轮换/忘记、跨启动配对恢复、非秘密投影和唯一 ApplicationCore；同时验证启动默认 READ、逐项目临时提升及审批隔离；检查提交/取消只调用当前 ApplicationCore，不暴露旧结果服务或任意 HTTP/shell。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
+MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、Host/Origin、精确当前 34 工具及其授权层级、暂停/轮换/忘记、跨启动配对恢复、非秘密投影和唯一 ApplicationCore；同时验证启动默认 READ、逐项目临时提升及审批隔离；检查提交/取消只调用当前 ApplicationCore，不暴露旧结果服务或任意 HTTP/shell。测试不得通过手写 JSON-RPC 代替 SDK 集成证据。
 
 ## 失败先查哪里
 
@@ -84,8 +84,20 @@ MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、H
 - [工程设计](../../约束/工程设计.md)
 - [验证与测试](../验证.md)
 
-## 人工补充材料
+## 普通运行入口
+
+项目 `/controlled-runtime` 路由提供只读状态与原操作查询，`preview` 经显式源码读取授权生成有限入口/端口/冻结文件预览，`start` 核对预览指纹和稳定操作键后只提交持久 Job，`stop` 只停止当前空闲且归属确定的实例。首次源码读取可先于应用地址连通；它不授予目标访问或执行权限。仍须另行确认启动与被检查地址。
+
+交付页的加载沿用已确认入口与端口，交付回执和运行 Job 在同一事务中形成。响应未知时查询原操作，不能产生另一份加载。API 不运行 Node；目标执行始终由固定 Runtime Worker 承担。普通运行暂限无外部依赖的受控 `.mjs` 静态模块，不接受自由命令、任意环境变量或自行指定解释器。
+
+## 人工补充材料的写入边界
 
 动作级 `supplemental-materials` 路由由 `SupplementalMaterialService` 统一校验和保存。preview 只读；create 绑定 expected_fingerprint 与 UUID request_id；revisions 仅追加说明，withdraw 追加撤回修订。请求 ID 按项目唯一绑定操作、目标和内容，冲突拒绝。所有项目/动作/修订精确核对，新登记必须匹配当前正式动作修订。
 
 导入根 schema_version=1 仅允许项目/动作/动作修订、标题/来源/可选声明资源及1～100条时间/资源/事件记录，UTF-8 canonical 最多64KiB，拒绝额外字段和典型秘密。格式接受不证明真实性；association_status 仅 USER_DECLARED 或 UNCONFIRMED，usage 固定 SUPPLEMENTAL_ONLY。无路径读取、URL采集或脚本执行入口；材料不进入 MCP、Evidence、准备完整性、Plan 或 Verdict。每次列表及修订历史读取最多100项，显式 limit/has_more，不伪造总量；修订历史用正整数 before_revision 继续读取更早记录。直接测试为 `tests/backend/workflows/test_supplemental_materials.py`。
+
+## 普通来源准备工具
+
+新增 preparation_context、proof_source_show、proof_preflight_status、proof_adoption_preview、preparation_receipt 五个 READ；proof_source_save 为 PREPARE；proof_preflight_start/cancel 为 EXECUTE。来源只接受固定 JSON GET、账号/资源引用与有界字段映射，不接受任意 URL、SQL、代码、密码或可信性布尔值。读取范围和采用只由本机会话与同源 GUI 写入。预检查是独立 Job，成功生命周期与 USABLE、正式权限 Verdict 分别表达。
+
+MCP EXECUTE 授权代次绑定每次预检查；降权、暂停、轮换、忘记和控制进程重启使旧任务失效。重新授权不会复活旧 Job。写操作按原操作标识回读；来源修订采用 CAS。

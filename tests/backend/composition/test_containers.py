@@ -1,8 +1,8 @@
-# 验证当前两个组合根的空库装配与惰性 CHECK/Recording 注册，不启动任务进程。
+# 验证当前两个组合根的空库装配与惰性 CHECK/Recording/预检查注册，不启动任务进程。
 from __future__ import annotations
 
 from contextlib import ExitStack, closing
-from types import SimpleNamespace
+from tests.fixtures.current_jobs import current_job
 from unittest.mock import Mock
 
 import pytest
@@ -34,7 +34,7 @@ def test_application_and_worker_containers_are_independent_and_complete(tmp_path
         assert not isinstance(worker, ApplicationCore)
         assert type(application.worker) is LocalWorkerSupervisor
         assert not application.worker.is_running()
-        assert application.worker.capabilities == ("CHECK", "RECORDING")
+        assert application.worker.capabilities == ("CHECK", "PROOF_PREFLIGHT", "RECORDING")
         assert application.check_story._reader is application.check_results
         assert application.check_repairs._reader is application.check_results
         assert application.check_story.repairs is application.check_repairs
@@ -46,7 +46,7 @@ def test_application_and_worker_containers_are_independent_and_complete(tmp_path
         for product_only in ("workspace", "project_repair", "product_status", "result_services",
                              "onboarding", "llm_profiles", "project_preparation"):
             assert not hasattr(worker, product_only)
-        assert set(worker.job_targets.target_types) == {JobTargetType.RUN, JobTargetType.RECORDING}
+        assert set(worker.job_targets.target_types) == {JobTargetType.RUN, JobTargetType.RECORDING, JobTargetType.PROOF_PREFLIGHT}
         assert worker.handler_factory is not None
         assert worker.job_queue is not None
         assert worker.job_attempts is not None
@@ -56,14 +56,15 @@ def test_application_and_worker_containers_are_independent_and_complete(tmp_path
     store.write.assert_not_called()
 
 
-def test_worker_registry_only_allows_check_and_recording_without_constructing_handlers(tmp_path) -> None:
+def test_worker_registry_only_allows_current_targets_without_constructing_handlers(tmp_path) -> None:
     var_dir = tmp_path / "worker-var"
     upgrade_database(default_database_path(var_dir))
     with closing(WorkerContainer(var_dir, environ={})) as worker:
         registry = worker.handler_factory.build_registry("container-test-worker", {})
-        assert set(registry._factories) == {JobTargetType.RUN, JobTargetType.RECORDING}
-        assert registry._operation_types == {JobTargetType.RUN: frozenset({"CHECK"})}
+        assert set(registry._factories) == {JobTargetType.RUN, JobTargetType.RECORDING, JobTargetType.PROOF_PREFLIGHT}
+        assert registry._operation_types == {JobTargetType.RUN: frozenset({"CHECK"}),
+            JobTargetType.PROOF_PREFLIGHT: frozenset({"PROOF_PREFLIGHT"})}
         assert registry._auxiliary_factories == {}
         # 只验证旧 operation 在工厂调用前被拒绝，不解析合法任务或启动 Handler。
         with pytest.raises(JiejianError):
-            registry.resolve(SimpleNamespace(run_id="run-old", recording_id=None, operation_type="RUN"))
+            registry.resolve(current_job(operation_type="RUN"))

@@ -1,10 +1,11 @@
 // 任务目标、接收事实与交付入口就地组织；复制仅复制说明，不伪造派发或接收。
-import { Alert, Button, Form, Input, Popconfirm, Tag } from 'antd'
+import { Alert, Button, Form, Input, Popconfirm } from 'antd'
 import { useMemo, useRef, useState } from 'react'
 import { ApiError } from '../../api/http'
 import { developmentApi, newOperationId, type DevelopmentView, type OperationKind } from '../../api/development'
 import { formatTimestamp } from '../../app/presentation'
 import './development.css'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { clearPendingOperation, readPendingOperation, savePendingOperation } from './pendingOperations'
 
 export function DevelopmentTaskPanel({ projectId, value, disabled, onChanged, onError, onSelectChange, onNavigate }: {
@@ -73,12 +74,15 @@ export function DevelopmentTaskPanel({ projectId, value, disabled, onChanged, on
   const loadRuntime = async () => {
     const delivery = value?.deliveries[0]
     if (!value || !delivery || locked.current) return
+    const queryOnly=runtimePending.current !== null
     runtimePending.current ??= { id: newOperationId(), delivery: delivery.delivery_id, version: value.task.version }
     const operation = runtimePending.current
     if (!savePendingOperation(projectId, 'runtime', { kind: 'LOAD_RUNTIME', operation_id: operation.id, delivery_id: operation.delivery, expected_version: operation.version })) { onError(new ApiError('BROWSER_STORAGE_UNAVAILABLE', '浏览器无法保存操作定位，请允许本页会话存储后重试。')); return }
     locked.current = true; setBusy(true)
     try {
-      const result = await developmentApi.loadRuntime(projectId, operation.delivery, { operation_id: operation.id, expected_version: operation.version })
+      const result = queryOnly ? await developmentApi.runtimeReceipt(projectId,operation.id)
+        : await developmentApi.loadRuntime(projectId, operation.delivery, { operation_id: operation.id, expected_version: operation.version })
+      if(!result) {setRuntimeUncertain(true);setMessage('尚未查到原加载回执，请稍后继续查询。');return}
       if (result.project_id !== projectId || result.operation_id !== operation.id || result.delivery_id !== operation.delivery) throw new ApiError('STATE_PRECONDITION', '运行加载回执关联不一致。')
       if (result.status === 'SUCCEEDED') { clearPendingOperation(projectId, 'runtime', operation.id); runtimePending.current = null; setRuntimeUncertain(false); setMessage('这批代码已加载到受控运行实例。检查结果仍需独立形成。'); await onChanged() }
       else if (result.status === 'FAILED') { clearPendingOperation(projectId, 'runtime', operation.id); runtimePending.current = null; setRuntimeUncertain(false); setMessage('这次加载未完成，请在应用与环境中核对运行状态。'); await onChanged() }
@@ -97,8 +101,8 @@ export function DevelopmentTaskPanel({ projectId, value, disabled, onChanged, on
     <header className="development-task-heading"><div><p className="editorial-eyebrow">当前开发任务</p><h2>{value?.context.title ?? '接下来，准备修改什么？'}</h2></div>
       <div className="development-task-actions">{value && !editing && nextAction}
         {!value && !editing && <Button type="primary" disabled={disabled || busy} onClick={() => { form.resetFields(); setEditing(true) }}>创建开发任务</Button>}</div></header>
-    {value ? <><p className="development-goal">{value.context.goal}</p><div className="development-context-line"><Tag>{value.acceptance ? '已有接收回执' : '等待客户端接收'}</Tag><span>沿用 {value.context.permission_refs.length} 条已批准权限</span><span>目标修订 {value.task.revision}</span>{value.acceptance && <span>{value.acceptance.client_name} · {formatTimestamp(value.acceptance.accepted_at_us)}</span>}</div>
-      {latest && <p className="development-runtime-note">{value.runtime_state === 'MATCHED' ? '当前运行已对应这批源码。' : value.runtime_state === 'NOT_LOADED' ? '修改已登记，当前进程还未加载这批代码。加载时会重启受控示例进程，保留本应用的权限与历史。' : value.runtime_state === 'UNCONFIRMED' ? '暂时无法确认当前运行实例，请先核对应用与环境。' : '当前应用的运行版本尚未独立对应，检查记录不能冒充这批交付已被验证。'}</p>}
+    {value ? <><p className="development-goal">{value.context.goal}</p><div className="development-context-line"><StatusBadge kind="lifecycle">{value.acceptance ? '已有接收回执' : '等待客户端接收'}</StatusBadge><span>沿用 {value.context.permission_refs.length} 条已批准权限</span><span>目标修订 {value.task.revision}</span>{value.acceptance && <span>{value.acceptance.client_name} · {formatTimestamp(value.acceptance.accepted_at_us)}</span>}</div>
+      {latest && <p className="development-runtime-note">{value.runtime_state === 'MATCHED' ? '当前运行已对应这批源码。' : value.runtime_state === 'NOT_LOADED' ? '修改已登记，当前进程还未加载这批代码。加载时会重启本应用的受控进程，保留本应用的权限与历史。' : value.runtime_state === 'UNCONFIRMED' ? '暂时无法确认当前运行实例，请先核对应用与环境。' : '当前应用的运行版本尚未独立对应，检查记录不能冒充这批交付已被验证。'}</p>}
       <p className="editorial-muted">任务说明中的普通功能目标需要另行验证。界鉴检查已确认的权限要求。</p></> : <p className="editorial-muted">明确这次开发目标，沿用已批准权限，让每批修改、检查和修复都能回到同一项任务。</p>}
     {uncertain && <Alert className="flow-feedback" type="warning" showIcon message="本次操作回执尚未确认" description="先查询原回执；如需重试，将沿用同一操作标识和内容。" action={<Button loading={busy} onClick={() => void queryReceipt()}>查询原回执</Button>}/>}
     {message && <p role="status" className="development-feedback">{message}</p>}

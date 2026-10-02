@@ -108,6 +108,7 @@ class FlowDraftProcessor:
         parent_recording_id: str | None = None,
         effect_id: str | None = None,
         known_secrets: Sequence[str] = (),
+        action_path_templates: Sequence[str] = (),
     ) -> FlowDraft:
         """把连续、已脱敏事件确定性整理为只保留业务歧义的首个 revision。"""
 
@@ -132,7 +133,7 @@ class FlowDraftProcessor:
         sources = self._response_sources(steps)
         variables = self._replace_dynamic_values(steps, sources)
         draft_steps = tuple(
-            self._build_step(step)
+            self._build_step(step, action_path_templates)
             for step in steps
         )
         directly_triggered_requests = frozenset(
@@ -169,6 +170,15 @@ class FlowDraftProcessor:
             if target is not None and len(target.resource_candidates) == 1
             else None
         )
+        if resource_candidate_id and target.resource_candidates[0].consumer is ValueSlotConsumer.PATH:
+            candidate = target.resource_candidates[0]
+            source_step = next(step for step in steps if step.step_id == target.id)
+            positions = self._confirmed_path_positions(source_step, action_path_templates)
+            index = int(candidate.location[5:-1])
+            raw_parts = [unquote(part) for part in urlsplit(source_step.request.url).path.split('/') if part]
+            if positions is None and not _OPAQUE_BUSINESS_VALUE.fullmatch(raw_parts[index]):
+                # 普通单词可能是动作名；没有接口模板或明确编号时必须由人确认。
+                resource_candidate_id = None
         draft = FlowDraft(
             schema_version="3",
             recording_id=recording_id,
@@ -398,6 +408,7 @@ class FlowDraftProcessor:
     def _build_step(
         self,
         step: _StepData,
+        action_path_templates: Sequence[str] = (),
     ) -> FlowDraftStep:
         request = step.request
         sequences = [event.sequence for event in step.actions]
@@ -422,12 +433,13 @@ class FlowDraftProcessor:
             source_event_sequences=tuple(sorted(sequences)),
             depends_on_step_ids=tuple(sorted(step.dependencies)),
             sensitive_fields=self._sensitive_fields(step),
-            resource_candidates=self._resource_candidates(step),
+            resource_candidates=self._resource_candidates(step, action_path_templates),
         )
 
     def _resource_candidates(
         self,
         step: _StepData,
+        action_path_templates: Sequence[str] = (),
     ) -> tuple[FlowDraftResourceCandidate, ...]:
         """只列出已录制目标请求中的有界字段位置，不让用户输入任意资源值。"""
 
@@ -438,10 +450,12 @@ class FlowDraftProcessor:
         recorded = urlsplit(step.request.url or "/")
         path_segments = [segment for segment in parsed.path.split("/") if segment]
         recorded_segments = [unquote(segment) for segment in recorded.path.split("/") if segment]
+        # 优先消费当前已批准实现的完整路径模板；固定动作后缀不再冒充资源编号。
+        positions = self._confirmed_path_positions(step, action_path_templates)
         for index, segment in enumerate(path_segments):
             value = recorded_segments[index] if index < len(recorded_segments) else unquote(segment)
             if (
-                value != unquote(segment) or index == len(path_segments) - 1
+                positions is None or index in positions
             ) and self._candidate_value(value):
                 candidates.append(
                     self._resource_candidate(
@@ -484,6 +498,20 @@ class FlowDraftProcessor:
                     )
                 )
         return tuple(candidates[:128])
+
+    @staticmethod
+    def _confirmed_path_positions(step, templates):
+        recorded = [unquote(item) for item in urlsplit(step.request.url or '/').path.split('/') if item]
+        positions = None
+        for canonical in templates:
+            method, separator, template = canonical.partition(' ')
+            parts = [unquote(item) for item in template.split('/') if item]
+            if not separator or method != step.request.method or len(parts) != len(recorded):
+                continue
+            slots = {i for i,part in enumerate(parts) if re.fullmatch(r'\{[A-Za-z_][A-Za-z0-9_]*\}',part)}
+            if all(i in slots or part == recorded[i] for i,part in enumerate(parts)):
+                positions = slots if positions is None else positions | slots
+        return positions
 
     @staticmethod
     def _resource_candidate(

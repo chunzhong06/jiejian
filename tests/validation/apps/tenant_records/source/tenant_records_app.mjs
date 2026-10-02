@@ -37,8 +37,11 @@ const eventPath = join(stateDir, "events.jsonl");
 let records;
 let members;
 let events;
+const pending = new Set();
 
 function resetState() {
+  for (const timer of pending) clearTimeout(timer);
+  pending.clear();
   records = new Map([
     [
       "record-owner",
@@ -152,6 +155,10 @@ const server = createServer(async (request, response) => {
     send(response, 200, { schema_version: "1", status: "ready" });
     return;
   }
+  if (request.method === "GET" && url.pathname === "/_validation/state") {
+    send(response, 200, { records: [...records.entries()], members: [...members].sort(), pending: pending.size, events: events.length });
+    return;
+  }
   if (request.method === "POST" && url.pathname === "/_validation/reset") {
     resetState();
     send(response, 200, { schema_version: "1", status: "reset" });
@@ -215,10 +222,11 @@ const server = createServer(async (request, response) => {
     applyEffect(action, payload, caseId, "validation-service", targetRecord);
   } else if (breakMode === "deny_async_consequence") {
     recordEvent(caseId, "MESSAGE", "denied_work_dispatched", identity);
-    setTimeout(
-      () => applyEffect(action, payload, caseId, "validation-worker", targetRecord),
-      25,
-    );
+    const timer = setTimeout(() => {
+      pending.delete(timer);
+      applyEffect(action, payload, caseId, "validation-worker", targetRecord);
+    }, 25);
+    pending.add(timer);
   }
   send(response, 403, { schema_version: "1", code: "PERMISSION_DENIED" });
 });

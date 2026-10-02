@@ -43,6 +43,7 @@ from product.protocols.web.workflow import (
 
 
 pytestmark = [
+    pytest.mark.l5,
     pytest.mark.browser,
     pytest.mark.process,
     pytest.mark.slow,

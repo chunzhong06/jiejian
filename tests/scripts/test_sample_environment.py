@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 import pytest
 from playwright.sync_api import sync_playwright
-from scripts.dev.sample_test import official
-from scripts.dev.sample_test import windows as windows_module
+from tests.acceptance.sample_test import official
+from tests.acceptance.sample_test import windows as windows_module
 from tests.scripts._support_sample_test import ROOT, _fresh_real_probe_dir
 
 def test_recording_window_requires_a_unique_new_controlled_chromium(
@@ -44,6 +44,7 @@ def test_recording_window_requires_a_unique_new_controlled_chromium(
     with pytest.raises(windows.WindowsL5Error, match="RECORDING_WINDOW_AMBIGUOUS"):
         windows.RecordingWindowDriver(frozenset({11}), chromium).wait_until_ready(timeout=0.1)
 
+@pytest.mark.l5
 @pytest.mark.skipif(
     os.name != "nt" or os.environ.get("JIEJIAN_RUN_WINDOWS_L5") != "1",
     reason="真实 Windows UIA capability 只在明确授权的交互用户环境运行",
@@ -92,6 +93,7 @@ def test_real_uia_capability_invokes_html_button_and_reads_status(tmp_path: Path
         finally:
             context.close()
 
+@pytest.mark.l5
 @pytest.mark.skipif(
     os.name != "nt" or os.environ.get("JIEJIAN_RUN_WINDOWS_L5") != "1",
     reason="真实官方样例准备只在明确授权的交互用户环境运行",

@@ -1,0 +1,57 @@
+# 唯一测试分组目录。分组覆盖现有用例，不复制产品的预期结果。
+schema_version = "1"
+
+[areas.contracts]
+tests = ["tests/contracts", "tests/protocols", "tests/architecture"]
+sources = ["product/protocols"]
+invariants = ["公共格式兼容", "唯一实现与模块边界", "当前任务与迁移合同"]
+
+[areas.core]
+tests = ["tests/backend/core"]
+sources = ["product/backend/core"]
+invariants = ["仅依事实给出三态结论", "HTTP 拒绝不代替业务证明", "证据不闭合不能通过"]
+
+[areas.storage]
+tests = ["tests/backend/infra/storage"]
+sources = ["product/backend/infra/storage", "product/backend/migrations"]
+invariants = ["历史记录不改写", "事务与租约隔离", "未知断代拒绝迁移"]
+
+[areas.runtime]
+tests = ["tests/backend/infra/runtime", "tests/backend/infra/execution", "tests/backend/infra/observers", "tests/backend/composition"]
+sources = ["product/backend/infra/runtime", "product/backend/infra/execution", "product/backend/infra/observers", "product/backend/composition"]
+invariants = ["Worker 隔离执行", "任务取消和资源回收", "秘密不进入公开材料", "真实身份与业务历史独立核对"]
+
+[areas.workflows]
+tests = ["tests/backend/workflows"]
+sources = ["product/backend/workflows"]
+invariants = ["用户采用前不激活", "过期预检查不能采用", "修改后重验及证据保留"]
+
+[areas.interfaces]
+tests = ["tests/backend/api", "tests/backend/cli"]
+sources = ["product/backend/api", "product/backend/cli"]
+invariants = ["GUI CLI MCP 共用核心", "授权级别不能越过人工批准", "错误与结论分离"]
+
+[areas.infrastructure]
+tests = ["tests/backend/infra"]
+sources = ["product/backend/infra"]
+invariants = ["受控路径与凭据引用", "外部失败不伪装为成功"]
+
+[areas.samples]
+tests = ["tests/samples", "tests/validation", "tests/e2e", "tests/acceptance"]
+sources = ["samples", "tests/acceptance/sample_test"]
+invariants = ["独立预期捕获已知缺陷", "官方主故事与算法矩阵区分", "每轮独立资源和恢复"]
+
+[areas.tooling]
+tests = ["tests/scripts"]
+sources = ["scripts"]
+invariants = ["正式入口不绕过", "无测试和强制跳过不算通过", "报告可追溯且不保存秘密"]
+
+[areas.frontend]
+tests = ["product/frontend/src"]
+sources = ["product/frontend"]
+invariants = ["公共组件交互一致", "页面加载空态失败态", "跨页配色布局一致", "过期响应和操作失败可恢复"]
+
+[areas.docs]
+tests = ["tests/docs"]
+sources = ["docs", "README.md", "AGENTS.md"]
+invariants = ["文档链接与代码参考有效", "Schema 与真实导出一致"]

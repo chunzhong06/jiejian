@@ -26,6 +26,17 @@ export function ProductThemeProvider({ children }: { children: ReactNode }) {
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   const resolved: ResolvedTheme = mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
 
+  // Ant Design浮层挂载在body；在文档根标记作用域，使页面和Portal共用交互样式。
+  useEffect(() => {
+    const root = document.documentElement
+    const previous = root.dataset.product
+    root.dataset.product = 'jiejian'
+    return () => {
+      if (previous === undefined) delete root.dataset.product
+      else root.dataset.product = previous
+    }
+  }, [])
+
   useEffect(() => {
     const query = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches)

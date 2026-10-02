@@ -2,7 +2,7 @@
 # Execution Job target 端口
 #
 # 定位
-#   通用 Job 生命周期与 Run/Recording 持久目标之间的适配边界
+#   通用 Job 生命周期与 Run、Recording、RuntimeLoad 持久目标之间的适配边界
 #
 # 职责
 #   定义目标类型和完成结果｜注册目标处理器｜提供 Verification Run 默认实现
@@ -11,7 +11,7 @@
 #   通用队列不猜测目标状态机；每种 target 只能由已注册处理器解释。
 #
 # 调用链
-#   ApplicationCore / JobQueue → JobTargetRegistry → Run or Recording target handler
+#   ApplicationCore / Worker → JobTargetRegistry → 对应目标处理器；各Worker只领取自己注册的类型
 # =============================================================================
 
 from __future__ import annotations
@@ -27,9 +27,15 @@ from product.backend.infra.storage import JobRecord, RecordingRecord, RunRecord,
 class JobTargetType(StrEnum):
     RUN = "RUN"
     RECORDING = "RECORDING"
+    RUNTIME_LOAD = "RUNTIME_LOAD"
+    PROOF_PREFLIGHT = "PROOF_PREFLIGHT"
 
     @classmethod
     def from_job(cls, job: JobRecord) -> JobTargetType:
+        if job.preflight_id is not None:
+            return cls.PROOF_PREFLIGHT
+        if job.runtime_load_id is not None and job.run_id is None and job.recording_id is None:
+            return cls.RUNTIME_LOAD
         if job.run_id is not None and job.recording_id is None:
             return cls.RUN
         if job.recording_id is not None and job.run_id is None:
@@ -202,10 +208,12 @@ class CheckJobTargetHandler(RunJobTargetHandler):
 
 
 def current_check_and_recording_targets() -> JobTargetRegistry:
-    """显式装配当前 v3 检查与录制目标，内部 RUN 名称只用于既有 Job FK。"""
+    """装配短期检查、录制和预检查；长驻运行加载由独立监督器领取。"""
     from product.backend.infra.runtime.jobs.recording import RecordingJobTargetHandler
+    from product.backend.infra.runtime.jobs.proof_preflight import ProofPreflightTargetHandler
 
     registry = JobTargetRegistry()
     registry.register(JobTargetType.RUN, CheckJobTargetHandler())
     registry.register(JobTargetType.RECORDING, RecordingJobTargetHandler())
+    registry.register(JobTargetType.PROOF_PREFLIGHT, ProofPreflightTargetHandler())
     return registry

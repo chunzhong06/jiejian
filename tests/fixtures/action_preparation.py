@@ -262,6 +262,9 @@ def add_recording(
     target_step_id: str | None = None,
     method: str | None = None,
     action_revision: int | None = None,
+    request_path: str | None = None,
+    resource_location: str = "path[1]",
+    request_json: dict | None = None,
 ) -> RecordingRecord:
     """把受控脱敏事件和当前 revision 的 FlowDraft 以真实记录形式落库。"""
 
@@ -294,14 +297,16 @@ def add_recording(
         query = "?view=summary" if index == 0 and purpose is RecordingPurpose.OBSERVATION else (
             f"?view=variant{sequence}" if purpose is RecordingPurpose.OBSERVATION else ""
         )
-        url = f"http://127.0.0.1:8765/docs/doc-123{query}"
+        path = request_path or f"/docs/doc-123{query}"
+        url = understanding.confirmed_endpoint + path
+        body = request_json if request_json is not None else {"title": "fixture"}
         steps.append(
             FlowDraftStep(
                 id=step_id,
                 name="业务请求",
                 method=request_method,
-                path=f"/docs/doc-123{query}",
-                json_body={"title": "fixture"} if request_method != "GET" else {},
+                path=path,
+                json_body=body if request_method != "GET" else {},
                 expected_statuses=(200,),
                 request_id=request_id,
                 source_event_sequences=(sequence * 2 - 1, sequence * 2),
@@ -311,7 +316,7 @@ def add_recording(
                         FlowDraftResourceCandidate(
                             candidate_id="resource-0123456789abcdef",
                             consumer=ValueSlotConsumer.PATH,
-                            location="path[1]",
+                            location=resource_location,
                             label="文档标识",
                         ),
                     )
@@ -331,7 +336,7 @@ def add_recording(
                     url=url,
                     method=request_method,
                     resource_type="document",
-                    body=json.dumps({"title": "fixture"}) if request_method != "GET" else None,
+                    body=json.dumps(body) if request_method != "GET" else None,
                 ),
                 RecordingEvent(
                     sequence=sequence * 2,

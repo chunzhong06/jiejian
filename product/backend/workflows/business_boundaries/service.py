@@ -95,9 +95,9 @@ class BusinessBoundaryService:
             work.commit()
         return view
 
-    def maintenance_draft(self, project_id: str, *, work=None) -> BoundaryMaintenanceDraftView:
+    def maintenance_draft(self, project_id: str, *, work=None, allow_empty: bool = False) -> BoundaryMaintenanceDraftView:
         with (self._uow_factory() if work is None else nullcontext(work)) as work:
-            facts = boundary_queries._maintenance_facts(work, project_id)
+            facts = boundary_queries._maintenance_facts(work, project_id, allow_empty=allow_empty)
         return build_maintenance_draft(
             project_id,
             facts.actor_roots,
@@ -115,11 +115,16 @@ class BusinessBoundaryService:
         self,
         project_id: str,
         command: BoundaryMaintenanceCommand,
+        *,
+        work=None,
+        allow_initial: bool = False,
     ) -> BoundaryProposalView:
         """在同一事务中防 pending、防并发，并把 desired state 冻结为 Proposal。"""
 
-        with self._uow_factory() as work:
-            facts = boundary_queries._maintenance_facts(work, project_id)
+        owns_transaction = work is None
+        with (self._uow_factory() if owns_transaction else nullcontext(work)) as work:
+            # 首条对话候选使用空边界作为明确基线；既有维护API仍拒绝无边界项目。
+            facts = boundary_queries._maintenance_facts(work, project_id, allow_empty=allow_initial)
             pending = next(
                 (
                     item
@@ -152,7 +157,9 @@ class BusinessBoundaryService:
             )
             work.business_boundaries.add_proposal(proposal)
             view = boundary_queries._proposal_view(work, proposal)
-            work.commit()
+            # 候选转提案由调用者同时保存来源关联与回执，不能提前提交半个事务。
+            if owns_transaction:
+                work.commit()
         return view
 
     def proposals(

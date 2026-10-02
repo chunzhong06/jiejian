@@ -1,7 +1,10 @@
 // 运行环境页：展示当前实际运行时，并通过后端同一服务维护三类本地可删除数据。
 
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Col, Collapse, Descriptions, Modal, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
+import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
+import './runtime.css'
+import { Alert, Button, Card, Col, Collapse, Descriptions, Modal, Row, Space, Spin, Statistic, Typography } from 'antd'
 import { LLMProfile } from '../../api/llm'
 import { MaintenanceOperation, MaintenanceOperationResult, MaintenanceStatus, systemApi, SystemStatus } from '../../api/system'
 
@@ -83,19 +86,20 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
     finally { setBusy(false) }
   }
 
-  return <Space direction="vertical" size={16} style={{ width: '100%' }}>
-    <Card title="运行环境">
+  return <EditorialPage label="系统与运行环境">
+    <EditorialHeader eyebrow="系统状态" title="系统与运行环境"><p className="editorial-muted">查看服务是否可用，按明确范围维护本地运行数据。</p></EditorialHeader>
+    <Card title="运行环境" className="runtime-panel">
       <Typography.Paragraph type="secondary">以下信息来自当前服务进程，用于确认界鉴没有误用用户级 Python 包或另一套工具链。</Typography.Paragraph>
       {python?.user_site_on_sys_path && <Alert type="error" showIcon message="检测到用户级 Python 包来源" description="请退出界鉴并重新运行 start.cmd，让启动器恢复项目环境隔离。" />}
-      {issues.length > 0 && <Alert style={{ marginTop: 12 }} type="warning" showIcon message="运行环境存在异常" description={issues.join('；')} />}
-      {status.worker === 'unavailable' && <Alert style={{ marginTop: 12 }} type="info" showIcon message="检查执行器当前不可用。" description="暂时无法开始新的检查。请核对执行器状态，必要时重新启动界鉴。" />}
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      {issues.length > 0 && <Alert type="warning" showIcon message="运行环境存在异常" description={issues.join('；')} />}
+      {status.worker === 'unavailable' && <Alert type="info" showIcon message="检查执行器当前不可用。" description="暂时无法开始新的检查。请核对执行器状态，必要时重新启动界鉴。" />}
+      <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}><Statistic title="服务" value={label(status.api)} /></Col>
         <Col xs={24} sm={12} lg={6}><Statistic title="执行" value={label(status.worker)} /></Col>
         <Col xs={24} sm={12} lg={6}><Statistic title="浏览器" value={label(status.browser)} /></Col>
         <Col xs={24} sm={12} lg={6}><Statistic title="模型" value={model} /></Col>
       </Row>
-      <Descriptions style={{ marginTop: 20 }} bordered size="small" column={1}>
+      <details className="runtime-details"><summary>查看运行版本与组件详情</summary><Descriptions bordered size="small" column={1}>
         <Descriptions.Item label="界鉴版本">{status.version ?? '未提供'}</Descriptions.Item>
         <Descriptions.Item label="运行模式">{environment?.runtime_mode === 'development' ? '源码运行' : environment?.runtime_mode ?? '未提供'} · {environment?.runtime_fingerprint ?? '无指纹'}</Descriptions.Item>
         <Descriptions.Item label="Python">{python?.version ?? '未提供'} · {python?.environment_type ?? '来源未知'}</Descriptions.Item>
@@ -103,7 +107,7 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
         <Descriptions.Item label="Python 环境目录"><Typography.Text copyable>{python?.prefix ?? '未提供'}</Typography.Text></Descriptions.Item>
         <Descriptions.Item label="用户级包">{python?.user_site_on_sys_path === true ? '正在使用' : python?.user_site_on_sys_path === false ? '未使用' : '未知'}</Descriptions.Item>
         <Descriptions.Item label="uv">{environment?.uv?.version ?? '未提供'} · <Typography.Text copyable>{environment?.uv?.executable ?? '未提供'}</Typography.Text></Descriptions.Item>
-        <Descriptions.Item label="Node.js">{`${environment?.node?.version ?? '未提供'} · ${environment?.node?.executable ?? '未提供'}${environment?.node?.required === false ? ' · 仅构建时需要' : ''}`}</Descriptions.Item>
+        <Descriptions.Item label="Node.js">{`${environment?.node?.version ?? '未提供'} · ${environment?.node?.executable ?? '未提供'} · 受控本地应用运行时`}</Descriptions.Item>
         <Descriptions.Item label="pnpm">{`${environment?.pnpm?.version ?? '未提供'} · ${environment?.pnpm?.executable ?? '未提供'}${environment?.pnpm?.required === false ? ' · 仅构建时需要' : ''}`}</Descriptions.Item>
         <Descriptions.Item label="Playwright">{environment?.playwright?.package_version ?? '未提供'} · <Typography.Text copyable>{environment?.playwright?.chromium_executable ?? '未提供'}</Typography.Text></Descriptions.Item>
         <Descriptions.Item label="前端资源">
@@ -112,8 +116,8 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
             : environment?.frontend?.dependencies ?? '前端资源未确认'}
         </Descriptions.Item>
         <Descriptions.Item label="本次自动恢复任务">{status.recovered_jobs ?? '未读取'}</Descriptions.Item>
-      </Descriptions>
-      <Tag style={{ marginTop: 16 }} color={python?.ok === false ? 'red' : 'blue'}>{python?.ok === false ? '环境需要处理' : '状态来自当前运行环境'}</Tag>
+      </Descriptions></details>
+      <StatusBadge kind="lifecycle" tone={python?.ok === false ? 'danger' : 'info'}>{python?.ok === false ? '环境需要处理' : '状态来自当前运行环境'}</StatusBadge>
     </Card>
 
     <Card title="本地运行数据维护" className="runtime-maintenance" extra={<Button loading={reading} disabled={busy} onClick={() => void refreshMaintenance()}>刷新状态</Button>}>
@@ -124,9 +128,9 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       {completed && <Alert type={completed.counts.FAILED > 0 ? 'warning' : 'success'} showIcon message="维护操作已完成" description={`成功清理 ${completed.counts.DELETED} 项，安全跳过 ${completed.counts.ALREADY_MISSING + completed.counts.SKIPPED_IN_USE + completed.counts.SKIPPED_CHANGED} 项，失败 ${completed.counts.FAILED} 项。${completed.requires_restart ? '请重新启动界鉴以重建运行环境。' : ''}`} />}
       {completed?.results.some((item) => item.status !== 'DELETED') && <Collapse items={[{ key: 'maintenance-results', label: '查看跳过与失败原因', children: <Space direction="vertical">{completed.results.filter((item) => item.status !== 'DELETED').map((item) => <Typography.Text key={item.item_id}>{item.label}：{item.reason}</Typography.Text>)}</Space> }]} />}
       <Row gutter={[12, 12]}>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="AI 辅助缓存" value={bytes(maintenance?.entries.assistant.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.assistant.files} 个文件` : '数量未知'}</Typography.Text><div><Button style={{ marginTop: 12 }} disabled={busy || !canMaintain} onClick={() => void showPreview('clear-assistant-cache')}>清空 AI 辅助缓存</Button></div></Card></Col>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="历史运行日志" value={bytes(maintenance?.entries.logs.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.logs.files} 个文件` : '数量未知'}</Typography.Text><div><Button style={{ marginTop: 12 }} disabled={busy || !canMaintain} onClick={() => void showPreview('clear-logs')}>清理历史运行日志</Button></div></Card></Col>
-        <Col xs={24} md={8}><Card size="small"><Statistic title="临时运行文件" value={bytes(maintenance?.entries.temporary.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.temporary.files} 个文件` : '数量未知'}</Typography.Text><div><Button style={{ marginTop: 12 }} disabled={busy || !canMaintain} onClick={() => void showPreview('clear-temporary')}>清理临时运行文件</Button></div></Card></Col>
+        <Col xs={24} md={8}><Card size="small"><Statistic title="AI 辅助缓存" value={bytes(maintenance?.entries.assistant.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.assistant.files} 个文件` : '数量未知'}</Typography.Text><div className="runtime-card-actions"><Button disabled={busy || !canMaintain} onClick={() => void showPreview('clear-assistant-cache')}>清空 AI 辅助缓存</Button></div></Card></Col>
+        <Col xs={24} md={8}><Card size="small"><Statistic title="历史运行日志" value={bytes(maintenance?.entries.logs.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.logs.files} 个文件` : '数量未知'}</Typography.Text><div className="runtime-card-actions"><Button disabled={busy || !canMaintain} onClick={() => void showPreview('clear-logs')}>清理历史运行日志</Button></div></Card></Col>
+        <Col xs={24} md={8}><Card size="small"><Statistic title="临时运行文件" value={bytes(maintenance?.entries.temporary.bytes)} /><Typography.Text type="secondary">{maintenance ? `${maintenance.entries.temporary.files} 个文件` : '数量未知'}</Typography.Text><div className="runtime-card-actions"><Button disabled={busy || !canMaintain} onClick={() => void showPreview('clear-temporary')}>清理临时运行文件</Button></div></Card></Col>
       </Row>
       {maintenance?.entries.logs.categories && <Collapse items={[{ key: 'logs', label: '查看日志分类占用', children: <Descriptions size="small" column={1}>{Object.entries(maintenance.entries.logs.categories).map(([name, entry]) => <Descriptions.Item key={name} label={logCategoryLabels[name] ?? name}>{bytes(entry.bytes)} · {entry.files} 个文件</Descriptions.Item>)}</Descriptions> }]} />}
       <Alert type="info" showIcon message="产品事实始终保留" description={`不受影响：${maintenance?.protected.data ?? 'var/data'}；应用、权限配置、数据库、证据、报告和凭据不会进入普通清理。`} />
@@ -150,5 +154,5 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       {(preview?.targets ?? []).slice(0, 8).map((target) => <Typography.Paragraph key={target.item_id}><Typography.Text>{target.label}</Typography.Text> · {target.relative_path} · {bytes(target.estimated_bytes)}</Typography.Paragraph>)}
       <Alert type="warning" showIcon message="确认范围" description="只处理以上可删除内容；不会删除应用、权限配置、数据库、证据、报告和凭据。" />
     </Modal>
-  </Space>
+  </EditorialPage>
 }

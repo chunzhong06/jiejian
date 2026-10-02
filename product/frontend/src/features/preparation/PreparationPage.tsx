@@ -18,6 +18,7 @@ import { TaskReceipt, useTaskGuard } from '../../app/tasks/TaskContinuity'
 import { MaterialOverview } from './MaterialOverview'
 import { MaterialEditor, materialName } from './MaterialEditor'
 import { EvidenceMaterials } from './EvidenceMaterials'
+import { ProofSourcesPanel } from './ProofSourcesPanel'
 
 function matchesRecordingTask(task: PrimaryTaskDto | null | undefined, ref: MaterialReference) {
   if (!task?.can_execute || task.business_action_id !== ref.action_id || task.action_revision !== ref.action_revision) return false
@@ -27,7 +28,7 @@ function matchesRecordingTask(task: PrimaryTaskDto | null | undefined, ref: Mate
   return ['DEMONSTRATE_ACTION', 'PREPARE_ACTION_RESOURCE'].includes(task.task_kind) || (task.task_kind === 'REVIEW_RECORDING' && task.recording_purpose === 'TARGET')
 }
 
-export function PreparationPage({ project, workspace, onStateChanged, onError, onNavigate, onProvidedMaterials, onFeedback }: {
+export function PreparationPage({ project, workspace, onStateChanged, onError, onNavigate, onProvidedMaterials, onFeedback, requestedProofSources, requestedProofSource, requestedActionId }: {
   project: ProjectDto
   onProvidedMaterials?: () => Promise<unknown>
   workspace: WorkspaceViewDto | null
@@ -35,6 +36,9 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   onError: (error: ApiError) => void
   onNavigate: (path: string) => void
   onFeedback?: (message: string) => void
+  requestedProofSources?: boolean
+  requestedProofSource?: string | null
+  requestedActionId?: string | null
 }) {
   const visible = useContext(WorkPageVisible)
   const [preparation, setPreparation] = useState<PreparationView | null>(null)
@@ -47,6 +51,8 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const [material, setMaterial] = useState<{ reference: MaterialReference; label: string }>()
   const [evidenceAction, setEvidenceAction] = useState<string>()
   const [focusSourceEntry, setFocusSourceEntry] = useState(false)
+  const [proofSources,setProofSources] = useState(Boolean(requestedProofSources))
+  useEffect(() => { setProofSources(Boolean(requestedProofSources)) },[project.project_id,requestedProofSources])
   const draftRef = useRef<PreparationDraft | undefined>(undefined)
   const [returnMaterial, setReturnMaterial] = useState<MaterialReference>()
   useTaskGuard(busy || Boolean(syncError))
@@ -71,16 +77,16 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
       if (!active) return
       if (value.project_id !== project.project_id) throw new ApiError('STATE_PRECONDITION', '材料所属应用不一致，请重新读取。')
       setPreparation(value); draftRef.current = draft
-      const action = value.actions.find(item => item.action_id === draft.action_id && item.action_revision === draft.action_revision)
+      const action = value.actions.find(item => requestedActionId ? item.action_id === requestedActionId : item.action_id === draft.action_id && item.action_revision === draft.action_revision)
       if (action) {
         setSelectedAction(action.action_id)
-        if (draft.material) setMaterial({ reference: draft.material, label: '上次处理的材料' })
+        if (!requestedActionId && draft.material) setMaterial({ reference: draft.material, label: '上次处理的材料' })
       }
     })
       .catch((error) => { if (active) onError(error as ApiError) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [project.project_id, onError])
+  }, [project.project_id, onError, requestedActionId])
 
   // 写动作后先重读页面材料，再同步 Workspace；失败保留已完成动作并阻止使用旧任务。
   const reload = useCallback(async () => {
@@ -217,6 +223,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
         material: null, candidate_recording_id: null, base_fingerprint: null, pending_operation_id: null })
     } catch (error) { onError(error as ApiError) }
   }
+  if (proofSources) return <ProofSourcesPanel projectId={project.project_id} requestedSource={requestedProofSource} onChanged={refresh} onBack={() => { setProofSources(false); if (requestedProofSources) onNavigate(`/tests?materials=1${requestedActionId ? `&action_id=${requestedActionId}` : ''}`) }}/>
   if (evidenceAction) return <EvidenceMaterials projectId={project.project_id} actionId={evidenceAction} onBack={() => { setFocusSourceEntry(true); setEvidenceAction(undefined) }} />
   if (material) return <MaterialEditor key={JSON.stringify(material.reference)} projectId={project.project_id} reference={material.reference}
     onEvidence={() => setEvidenceAction(material.reference.action_id)}
@@ -237,6 +244,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     effectName={currentWorkspace?.actions.find((item) => item.action_id === (materialRecording ?? recordingTask)?.business_action_id)?.effect_catalog.find((item) => item.effect_id === (materialRecording ?? recordingTask)?.effect_id)?.business_label}
     onError={onError} onBack={() => void showMaterials()} onContinuePreparation={showMaterials} onStateChanged={syncChild} />
   if (loading) return <EditorialPage><Spin />正在读取检查准备材料…</EditorialPage>
+  if (requestedActionId && preparation && !preparation.actions.some(item=>item.action_id===requestedActionId)) return <EditorialPage><EditorialHeader title="这项业务的材料已不在当前范围"/><p>原链接指向的动作已经变化，未替换成另一项业务。</p><Button onClick={()=>onNavigate('/permissions')}>核对权限要求</Button></EditorialPage>
   if (!preparation) return <EditorialPage><EditorialHeader eyebrow="工作台 / 检查材料" title="暂时无法读取检查材料"/><p>尚未取得当前材料事实，重新读取后再继续。</p><Button loading={busy} onClick={() => void refresh()}>重新读取材料</Button></EditorialPage>
   const task = currentWorkspace?.primary_task
   const chosenActionId = preparation?.actions.find(action => action.action_id === selectedAction)?.action_id
@@ -250,6 +258,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   </Button> : null
   return <EditorialPage label="检查材料">
     <EditorialHeader eyebrow="工作台 / 检查材料" title="检查材料"><p className="editorial-muted">只更新需要处理的部分</p></EditorialHeader>
+    <div className="proof-toolbar"><p className="editorial-muted">已有材料继续沿用；需要结果证明时，可让 Agent 整理来源。</p><Button onClick={() => setProofSources(true)}>准备证明来源</Button></div>
     {!!preparation?.actions.length && <Select className="materials-action-picker" aria-label="选择业务动作" disabled={busy}
       value={chosenActionId} onChange={id => void selectAction(id)}
       options={preparation.actions.map(action => ({ value: action.action_id, label: action.display_name }))} />}

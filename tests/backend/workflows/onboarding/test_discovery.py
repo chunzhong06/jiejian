@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import subprocess
 
 import pytest
 
@@ -124,12 +126,16 @@ def test_discovery_rejects_root_symlink_and_skips_child_symlink(
         '{"scripts":{"dev":"unsafe"}}', encoding="utf-8"
     )
     root_link = tmp_path / "root-link"
-    try:
-        root_link.symlink_to(real, target_is_directory=True)
-        child_link = real / "linked"
-        child_link.symlink_to(tmp_path, target_is_directory=True)
-    except (OSError, NotImplementedError) as exc:
-        pytest.skip(f"symlink unavailable: {exc}")
+    def make_reparse(link, target):
+        if os.name == "nt":
+            # 目录联接同样经过真实重解析边界，且不要求开发者启用符号链接特权。
+            subprocess.run(["powershell.exe", "-NoLogo", "-NoProfile", "-Command",
+                            "$null=New-Item -ItemType Junction -Path $env:JIEJIAN_TEST_LINK -Value $env:JIEJIAN_TEST_TARGET -ErrorAction Stop"],
+                           env={**os.environ, "JIEJIAN_TEST_LINK": str(link), "JIEJIAN_TEST_TARGET": str(target)}, check=True)
+        else:
+            link.symlink_to(target, target_is_directory=True)
+    make_reparse(root_link, real)
+    make_reparse(real / "linked", tmp_path)
 
     with pytest.raises(JiejianError) as root_error:
         discover_folder(root_link)

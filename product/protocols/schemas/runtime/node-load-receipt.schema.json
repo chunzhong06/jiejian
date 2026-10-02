@@ -1,0 +1,97 @@
+{
+  "$defs": {
+    "NodeRuntimeReference": {
+      "additionalProperties": false,
+      "properties": {
+        "instance_id": {
+          "pattern": "^rti_[0-9a-f]{32}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "manifest_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Fingerprint",
+          "type": "string"
+        },
+        "mode": {
+          "const": "CONTROLLED_NODE_ESM",
+          "default": "CONTROLLED_NODE_ESM",
+          "title": "Mode",
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1024,
+          "title": "Port",
+          "type": "integer"
+        },
+        "process_created_at": {
+          "exclusiveMinimum": 0,
+          "title": "Process Created At",
+          "type": "integer"
+        },
+        "process_id": {
+          "exclusiveMinimum": 0,
+          "title": "Process Id",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "instance_id",
+        "manifest_fingerprint",
+        "source_fingerprint",
+        "process_id",
+        "process_created_at",
+        "port"
+      ],
+      "title": "NodeRuntimeReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "load_id": {
+      "pattern": "^rld_[0-9a-f]{32}$",
+      "title": "Load Id",
+      "type": "string"
+    },
+    "reference": {
+      "$ref": "#/$defs/NodeRuntimeReference"
+    },
+    "request_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Fingerprint",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "started_at_us": {
+      "minimum": 0,
+      "title": "Started At Us",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "load_id",
+    "request_fingerprint",
+    "reference",
+    "started_at_us"
+  ],
+  "title": "NodeRuntimeLoadReceipt",
+  "type": "object"
+}

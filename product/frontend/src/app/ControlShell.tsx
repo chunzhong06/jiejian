@@ -184,11 +184,29 @@ function ControlShellContent() {
     onStateChanged={workspaceState.refreshCurrentWorkspace} onBackToHistory={onBackToHistory} onFeedback={rememberReceipt}
     onProvidedMaterials={experience?.active && experience.project_id === selected.project_id ? async () => { const value = await experienceApi.prepare(); setExperience(value); return value } : undefined}
     onNavigate={path => { if (onBackToHistory && path.startsWith('/tests?run_id=')) navigate(path.replace('/tests?', '/history?')); else navigateRecoveryTarget(path) }}
+    requestedProofSources={new URLSearchParams(location.search).get('proof_sources') === '1'} requestedProofSource={new URLSearchParams(location.search).get('source')}
+    requestedActionId={new URLSearchParams(location.search).get('action_id')}
     requestedMaterials={new URLSearchParams(location.search).get('materials') === '1'} requestedTaskId={taskId} requestedRunId={runId} requestedCaseId={new URLSearchParams(location.search).get('case_id')} changeId={changeId} />
-  const renderPermissions = () => selected && <BusinessBoundaryPage requestedActionId={new URLSearchParams(location.search).get('action_id')} key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected}
+  const renderPermissions = () => {
+    const params = new URLSearchParams(location.search)
+    const candidateProject = params.get('project_id')
+    if ((params.has('candidate') || params.has('intent_id')) && candidateProject && candidateProject !== selected?.project_id) {
+      const target = projects.find(item => item.project_id === candidateProject)
+      return <Result status="info" title="这条规则属于另一个应用" subTitle={target ? `切换到${target.name}后继续审阅，当前应用不受影响。` : '该应用尚未读取或已不可用，请从应用列表核对。'}
+        extra={target && <Button type="primary" onClick={() => workspaceState.selectProject(target)}>切换并查看规则</Button>}/>
+    }
+    const candidateRevision = Number(params.get('revision'))
+    if (params.has('intent_id') && params.has('revision') && (!Number.isInteger(candidateRevision) || candidateRevision < 1)) return <Result status="warning" title="规则修订无效" subTitle="请从权限列表打开准确的规则修订。" extra={<Button onClick={()=>navigate('/permissions')}>返回权限列表</Button>}/>
+    return selected && <BusinessBoundaryPage requestedActionId={params.get('action_id')} key={`permissions-${selected.project_id}-${retryEpoch}`} project={selected}
+    requestedIntentId={params.get('intent_id')} requestedIntentRevision={params.has('revision') ? candidateRevision : undefined} onNavigate={navigateRecoveryTarget}
+    onRuleRoute={(id,revision)=>navigate(id ? `/permissions?project_id=${selected.project_id}&intent_id=${id}&revision=${revision}` : '/permissions')}
+    requestedCandidateId={params.get('candidate')} requestedCandidateRevision={Number.isInteger(candidateRevision) && candidateRevision > 0 ? candidateRevision : undefined}
+    candidateRecoveryOperation={params.get('rule_operation_id')}
+    onCandidateRoute={(id, revision, operation) => { const next = new URLSearchParams(location.search); next.set('project_id', selected.project_id); if(id) {next.set('candidate', id); next.set('revision', String(revision))} else {next.delete('candidate'); next.delete('revision')} if (operation) next.set('rule_operation_id', operation); else next.delete('rule_operation_id'); navigate(`/permissions?${next.toString()}`, {replace:true}) }}
     requestedProposalId={route === '/workspace' ? workspace?.primary_task?.proposal_id : new URLSearchParams(location.search).get('proposal_id')}
     onError={notifyError} onStateChanged={workspaceState.refreshCurrentWorkspace} onFeedback={rememberReceipt}
     onProvidedProposal={experience?.active && experience.project_id === selected.project_id ? experienceApi.boundaryProposal : undefined} onBack={() => navigate('/workspace')} />
+  }
 
   const samplePanel = <OfficialSamplePanel value={experience} onError={notifyError} onChanged={async (value) => {
       setExperience(value)
@@ -209,7 +227,14 @@ function ControlShellContent() {
     if (route === '/history') return <CheckHistoryPage key={`history-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigateRecoveryTarget} requestedRunId={new URLSearchParams(location.search).get('run_id')} renderRun={(runId, onBack) => renderChecks(runId, null, null, onBack)} />
     if (route === '/changes') return <ChangesPage key={`changes-${selected.project_id}-${retryEpoch}`} project={selected} onError={notifyError} onNavigate={navigate} onStateChanged={workspaceState.refreshCurrentWorkspace} requestedRepair={new URLSearchParams(location.search).get('repair_reference')}
       requestedView={new URLSearchParams(location.search).get('view')} requestedChange={new URLSearchParams(location.search).get('change_id')} developmentJourney={experience?.active && experience.project_id === selected.project_id ? <OfficialDevelopmentJourney key={selected.project_id} value={experience} onError={notifyError} onNavigate={navigateRecoveryTarget} onChanged={async next => { setExperience(next); await workspaceState.refreshCurrentWorkspace() }}/> : undefined}/>
-    if (route === '/tests') { const query = new URLSearchParams(location.search); return renderChecks(query.get('run_id'), query.get('task_id'), query.get('change_id')) }
+    if (route === '/tests') {
+      const query = new URLSearchParams(location.search), projectId = query.get('project_id')
+      if (projectId && projectId !== selected.project_id) {
+        const target = projects.find(item => item.project_id === projectId)
+        return <Result status="info" title="这项证明准备属于另一个应用" subTitle={target ? `切换到${target.name}后继续核对。` : '该应用尚未读取或已不可用。'} extra={target && <Button type="primary" onClick={() => workspaceState.selectProject(target)}>切换并查看来源</Button>}/>
+      }
+      return renderChecks(query.get('run_id'), query.get('task_id'), query.get('change_id'))
+    }
     return <CurrentUnavailableArea title="此历史入口当前不可用" description="请从概览进入当前可用的业务边界或检查准备。" onBack={() => navigate('/workspace')} />
   }
 
@@ -231,8 +256,9 @@ function ControlShellContent() {
     <NotificationCenter activity={!['/tests','/workspace'].includes(route) ? checkActivity.completed ? {
       label:checkActivity.completed.label,actionLabel:'查看结果',onDismiss:checkActivity.dismiss,
       onView:()=>{const run=checkActivity.completed!.runId;checkActivity.dismiss();navigate(`/history?run_id=${encodeURIComponent(run)}`)},
-    } : checkActivity.activeRunId ? {
+    } : checkActivity.activeRunId && !checkActivity.progressDismissed ? {
       label:checkActivity.paused?'进度暂未同步，正在重试':'有一项检查正在执行',actionLabel:'查看当前进度',
+      onDismiss:checkActivity.dismissProgress,
       onView:()=>navigate(`/tests?run_id=${encodeURIComponent(checkActivity.activeRunId!)}`),
     } : null : null} items={notifications} onDismiss={dismissNotification} onNavigate={(path, key) => { dismissNotification(key); clearError(); navigateRecoveryTarget(path) }} />
     <Modal open={removeConfirmOpen} title="移除当前应用？" okText="确认移除" cancelText="取消" okButtonProps={{ danger: true, loading: removeBusy }} onCancel={() => setRemoveConfirmOpen(false)} onOk={() => { void removeCurrentProject() }}>

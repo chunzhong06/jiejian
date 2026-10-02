@@ -1,7 +1,13 @@
 // 验证流程只展开指定当前项，AI 采用草稿不会成为权限批准。
 import {fireEvent, render, screen} from '@testing-library/react'
 import {expect, it, vi} from 'vitest'
-import {FlowSpine, MarginNote} from './Editorial'
+import {EditorialHeader, FlowSpine, MarginNote} from './Editorial'
+it('保留页面中的同名页头拥有独立标题引用', () => {
+  render(<><EditorialHeader eyebrow="历史" title="检查结果"/><EditorialHeader eyebrow="当前" title="检查结果"/></>)
+  const headings=screen.getAllByRole('heading',{name:'检查结果',level:1})
+  expect(headings[0].id).not.toBe(headings[1].id)
+  for(const heading of headings) expect(heading.closest('header')).toHaveAttribute('aria-labelledby',heading.id)
+})
 it('保留完成和未来标题，只展开权威当前项', () => {
   render(<FlowSpine label="动作准备" steps={[
     {key:'a',title:'账号仍有效',state:'complete',detail:<button>重做账号</button>},

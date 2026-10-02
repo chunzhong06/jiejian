@@ -11,13 +11,14 @@ const completionLabel = (status: CheckStatus) => {
 export function useCheckActivity(projectId: string | undefined, active: CheckStatus | null | undefined, onRefresh: () => Promise<unknown>, latestRunId?: string | null, workspaceLoaded = false) {
   const [completed, setCompleted] = useState<{ projectId: string; runId: string; label: string } | null>(null)
   const [paused, setPaused] = useState(false)
+  const [dismissedProgress, setDismissedProgress] = useState<{ projectId: string; runId: string } | null>(null)
   const refresh = useRef(onRefresh)
   const settledRun = useRef<string | null>(null)
   const latest = useRef<{ projectId: string; runId: string | null } | null>(null)
   refresh.current = onRefresh
   const runId = active?.run.run_id
   useEffect(() => {
-    setCompleted(null); setPaused(false); latest.current = null; settledRun.current = null
+    setCompleted(null); setPaused(false); setDismissedProgress(null); latest.current = null; settledRun.current = null
   }, [projectId])
   useEffect(() => {
     if (!projectId || !workspaceLoaded) return
@@ -62,5 +63,11 @@ export function useCheckActivity(projectId: string | undefined, active: CheckSta
     return () => { valid = false; if (timer) clearTimeout(timer) }
   }, [projectId, runId])
   // 精确 Run 已读到终态后，陈旧 Workspace 不能让关闭通知退回正在执行。
-  return { activeRunId: settledRun.current === runId ? undefined : runId, paused, completed: completed?.projectId === projectId ? completed : null, dismiss: () => setCompleted(null) }
+  // 关闭只隐藏当前 Run 的进度卡片，不停止轮询，也不消费随后到达的完成通知。
+  return {
+    activeRunId: settledRun.current === runId ? undefined : runId,
+    progressDismissed: Boolean(dismissedProgress && dismissedProgress.projectId === projectId && dismissedProgress.runId === runId),
+    dismissProgress: () => { if (projectId && runId) setDismissedProgress({ projectId, runId }) },
+    paused, completed: completed?.projectId === projectId ? completed : null, dismiss: () => setCompleted(null),
+  }
 }

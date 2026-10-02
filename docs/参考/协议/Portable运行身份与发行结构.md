@@ -16,7 +16,8 @@ JieJian-WebV1-<version>-Windows-x64/
 │   ├── start.ps1
 │   ├── release.json
 │   ├── python/
-│   └── playwright/
+│   ├── playwright/
+│   └── node/        # 固定Node及许可证，支持普通受控应用
 ├── samples/          # 仅 full 包存在
 └── var/              # 首次启动后在发行根内创建
 ```
@@ -27,7 +28,7 @@ full 与 nosamples 从同一个 Base Tree 生成。两包除 `samples/` 外的�
 
 包根 `start.cmd` 只调用系统自带 Windows PowerShell 5.1，并把控制交给 `runtime/start.ps1`。PowerShell 从自己的 `$PSScriptRoot` 反推 release root，所有 Python、Chromium、前端、Sample 和 var 路径都相对发行根解析。
 
-Portable 不读取仓库路径、当前工作目录、用户 PATH、Conda、uv、pip、Node、pnpm、源码 receipt 或 development cache。发行目录整体移动到另一个磁盘、中文或带空格路径后，身份与启动结果应保持一致。包内不存在 `direct_url.json`、editable path、源码绝对路径、node_modules、pycache 或构建临时目录。
+Portable 不读取仓库路径、当前工作目录、用户 PATH、Conda、uv、pip、系统 Node、pnpm、源码 receipt 或 development cache。普通应用使用包内 `runtime/node/node.exe`，启动器与Node定位器核对发行摘要。发行目录整体移动到另一个磁盘、中文或带空格路径后，身份与启动结果应保持一致。包内不存在 `direct_url.json`、editable path、源码绝对路径、node_modules、pycache 或构建临时目录。
 
 ## Portable 运行身份
 
@@ -47,6 +48,8 @@ Portable 主进程和受控子进程必须同时确认：
 `runtime/release.json` 是发行元数据根，记录 schema、产品、产品/包版本、Windows x64、运行布局、CPython、Playwright 与 Chromium revision。产品版本来自 `product.backend.__version__`，Wheel 版本、文件名版本与 release.json 必须一致；不允许在 builder、前端清单或 API 中维护另一份产品版本。
 
 `release.json.schema_version` 表示发行元数据格式，不等于产品版本。普通启动仍由代码内产品版本供 FastAPI、CLI `--version` 与系统设置页消费。
+
+当前元数据为格式2、运行布局2，新增 `node_version` 和 `node_sha256`。`PortableReleaseManifest`严格读取这些字段，Node被替换、缺失或位于发行根之外时拒绝受控启动。包内Node仅用于已明确授权的应用，不能据其存在声称支持任意npm依赖或恶意代码隔离。
 
 ## 前端与 Sample 可选层
 

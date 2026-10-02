@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tests.fixtures.current_jobs import current_job
 from types import SimpleNamespace
 
 import product.backend.infra.runtime.worker.supervisor as worker_supervisor_module
@@ -30,7 +31,7 @@ def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_f
 ) -> None:
     requested: list[tuple[str, ...]] = []
     dispatched: dict[str, object] = {}
-    job = SimpleNamespace(job_id="job-1", run_id="run-1", recording_id=None, operation_type="CHECK", request_hash="hash-1")
+    job = current_job()
     def configure(payload):
         for identity in payload["identities"]:
             identity["binding"]["secret_ref"] = "env:JIEJIAN_TEST_TOKEN"
@@ -44,11 +45,11 @@ def test_worker_loop_resolves_identity_and_observer_secrets_and_keeps_dispatch_f
             assert var_dir == (tmp_path / "var").resolve()
 
         def load(self, job_id: str, *, expected_hash: str):
-            assert (job_id, expected_hash) == ("job-1", "hash-1")
+            assert (job_id, expected_hash) == (job.job_id, job.request_hash)
             return request
 
         def load_bundle(self, job_id: str, *, expected_hash: str):
-            assert (job_id, expected_hash) == ("job-1", request.config_fingerprint)
+            assert (job_id, expected_hash) == (job.job_id, request.config_fingerprint)
             return bundle
 
     class FakeProcess:

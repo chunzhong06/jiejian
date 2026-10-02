@@ -1,0 +1,148 @@
+{
+  "$defs": {
+    "ProofCheckItem": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "mapping_key": {
+          "anyOf": [
+            {
+              "enum": [
+                "resource_id",
+                "owner_id",
+                "state",
+                "version",
+                "effect_count",
+                "history_generation",
+                "operation_id",
+                "operation_resource_id",
+                "operation_subject_id",
+                "operation_before_version",
+                "operation_after_version",
+                "operation_state",
+                "unfinished_effects",
+                "title",
+                "summary",
+                "body"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mapping Key"
+        },
+        "status": {
+          "enum": [
+            "CONFIRMED",
+            "MISSING",
+            "UNAVAILABLE",
+            "UNSUPPORTED"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "status"
+      ],
+      "title": "ProofCheckItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assessment": {
+      "enum": [
+        "USABLE",
+        "NEEDS_CHANGES",
+        "UNSUPPORTED"
+      ],
+      "title": "Assessment",
+      "type": "string"
+    },
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/ProofCheckItem"
+      },
+      "maxItems": 48,
+      "minItems": 1,
+      "title": "Checks",
+      "type": "array"
+    },
+    "completed_at_us": {
+      "minimum": 0,
+      "title": "Completed At Us",
+      "type": "integer"
+    },
+    "fencing_token": {
+      "minimum": 1,
+      "title": "Fencing Token",
+      "type": "integer"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "lease_owner": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Lease Owner",
+      "type": "string"
+    },
+    "preflight_id": {
+      "pattern": "^ppf_[0-9a-f]{32}$",
+      "title": "Preflight Id",
+      "type": "string"
+    },
+    "request_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Fingerprint",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    },
+    "started_at_us": {
+      "minimum": 0,
+      "title": "Started At Us",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "preflight_id",
+    "job_id",
+    "request_fingerprint",
+    "source_fingerprint",
+    "attempt",
+    "fencing_token",
+    "lease_owner",
+    "assessment",
+    "checks",
+    "started_at_us",
+    "completed_at_us"
+  ],
+  "title": "ProofPreflightReport",
+  "type": "object"
+}

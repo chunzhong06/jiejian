@@ -1,5 +1,6 @@
 // 用户提供的材料只供补充阅读；校验、保存和版本事实由服务端形成，不用于安全判断。
 import { Alert, Button, Empty, Input, Popconfirm, Spin } from 'antd'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { ArrowLeftOutlined, CheckCircleOutlined, FileTextOutlined, UploadOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../../api/http'
@@ -111,7 +112,7 @@ export function SupplementalMaterials({ projectId, actionId, actionRevision, act
     {issue && <Alert className="flow-feedback" type="warning" showIcon message={issue}/>}{receipt && <p className="work-receipt" role="status">{receipt}</p>}
     <input ref={fileInput} type="file" accept="application/json,.json" aria-label="选择补充材料文件" hidden onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void readFile(file) }}/>
     {!current && <section className="supplemental-empty"><FileTextOutlined aria-hidden/><h2>添加一份已有材料</h2><p>只接受界鉴补充材料格式的 JSON 文件。材料最多 100 条记录、64 KiB。</p><Button type="primary" size="large" icon={<UploadOutlined aria-hidden/>} loading={busy} onClick={() => fileInput.current?.click()}>选择材料文件</Button><Button type="link" onClick={template}>下载空白格式模板</Button><p className="editorial-muted">模板里的示例占位需要替换为真实记录；读取成功不代表记录已获独立验证。</p></section>}
-    {current && <div className="supplemental-review"><section className="supplemental-main"><header><h2>{current.title}</h2><span className="source-tag">{preview ? '待审阅' : selected?.withdrawn ? '已撤下引用' : `已保存 · 修订 ${selected?.revision}`}</span></header>
+    {current && <div className="supplemental-review"><section className="supplemental-main"><header><h2>{current.title}</h2><StatusBadge kind="preparation" tone={preview ? 'warning' : 'neutral'}>{preview ? '待审阅' : selected?.withdrawn ? '已撤下引用' : `已保存 · 修订 ${selected?.revision}`}</StatusBadge></header>
       <dl className="supplemental-facts"><dt>材料来源</dt><dd>{current.source_label}</dd><dt>业务动作</dt><dd>{actionLabel}</dd><dt>对应资源</dt><dd>{current.claimed_resource_label || '尚待确认'}</dd></dl>
       <h3>材料内容核对</h3><ul className="supplemental-checks"><li><span>文件格式</span><strong><CheckCircleOutlined/> 可以读取</strong></li><li><span>业务对象</span><strong className="needs-review">{current.claimed_resource_label ? '由提供者声明，尚非独立验证' : '需要确认对应关系'}</strong></li><li><span>记录范围</span><strong>{preview?.record_count ?? selected?.record_count} 条用户提供的记录</strong></li></ul>
       {editing && <section className="supplemental-edit" aria-label="修改材料说明"><label>材料名称<Input value={edit.title} maxLength={128} disabled={busy || uncertain} onChange={e => setEdit({ ...edit, title: e.target.value })}/></label><label>来源说明<Input value={edit.source_label} maxLength={128} disabled={busy || uncertain} onChange={e => setEdit({ ...edit, source_label: e.target.value })}/></label><label>声明对应资源<Input value={edit.claimed_resource_label} maxLength={128} disabled={busy || uncertain} onChange={e => setEdit({ ...edit, claimed_resource_label: e.target.value })}/></label><p className="editorial-muted">保存产生新修订，原文件内容保持不变。</p></section>}

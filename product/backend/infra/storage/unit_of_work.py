@@ -32,6 +32,9 @@ from product.backend.infra.storage.sample_workspaces import SampleWorkspaceRepos
 from product.backend.infra.storage.execution.job_control import JobControlRepository
 from product.backend.infra.storage.application_understanding import ApplicationUnderstandingRepository
 from product.backend.infra.storage.business_boundaries import BusinessBoundaryRepository
+from product.backend.infra.storage.rule_candidates import RuleCandidateRepository
+from product.backend.infra.storage.runtime_loads import RuntimeLoadRepository
+from product.backend.infra.storage.proof_sources import ProofSourceRepository
 from product.backend.infra.storage.action_preparation import ActionPreparationRepository
 from product.backend.infra.storage.contracts import ContractVersionRepository
 from product.backend.infra.storage.llm import AIAssistanceSettingsRepository, LLMProfileRepository
@@ -58,6 +61,9 @@ class StorageUnitOfWork:
     projects: ProjectRepository
     application_understanding: ApplicationUnderstandingRepository
     business_boundaries: BusinessBoundaryRepository
+    rule_candidates: RuleCandidateRepository
+    runtime_loads: RuntimeLoadRepository
+    proof_sources: ProofSourceRepository
     action_preparation: ActionPreparationRepository
     contract_versions: ContractVersionRepository
     runs: RunRepository
@@ -108,6 +114,9 @@ class StorageUnitOfWork:
             session,
             self._known_secrets,
         )
+        self.rule_candidates = RuleCandidateRepository(session, self._known_secrets)
+        self.runtime_loads = RuntimeLoadRepository(session, self._known_secrets)
+        self.proof_sources = ProofSourceRepository(session, self._known_secrets)
         self.action_preparation = ActionPreparationRepository(session, self._known_secrets)
         self.contract_versions = ContractVersionRepository(
             session, self._known_secrets

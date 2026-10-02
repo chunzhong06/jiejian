@@ -1,0 +1,87 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "identity_ids": {
+      "items": {
+        "pattern": "^tid_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Identity Ids",
+      "type": "array"
+    },
+    "max_response_bytes": {
+      "maximum": 262144,
+      "minimum": 1024,
+      "title": "Max Response Bytes",
+      "type": "integer"
+    },
+    "origin": {
+      "title": "Origin",
+      "type": "string"
+    },
+    "path_templates": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Path Templates",
+      "type": "array"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "resource_binding_ids": {
+      "items": {
+        "pattern": "^res_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Resource Binding Ids",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "2",
+      "enum": [
+        "1",
+        "2"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope_id": {
+      "pattern": "^prs_[0-9a-f]{32}$",
+      "title": "Scope Id",
+      "type": "string"
+    },
+    "timeout_us": {
+      "maximum": 5000000,
+      "minimum": 1000,
+      "title": "Timeout Us",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "scope_id",
+    "project_id",
+    "origin",
+    "path_templates",
+    "identity_ids",
+    "resource_binding_ids",
+    "max_response_bytes",
+    "timeout_us",
+    "created_at_us"
+  ],
+  "title": "SourceReadScope",
+  "type": "object"
+}

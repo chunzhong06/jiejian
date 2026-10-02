@@ -61,7 +61,7 @@ describe('MCPAccessCard', () => {
     expect(screen.getByText(/打开“开始”菜单，搜索 Windows PowerShell/)).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: '准备本机连接' }))
     expect(await screen.findByText('下一步：在 AI 工具中添加 jiejian')).toBeInTheDocument()
-    expect(screen.getByText('界鉴已准备好', { selector: '.ant-tag' })).toBeInTheDocument()
+    expect(screen.getByText('界鉴已准备好', { selector: '[data-kind="preparation"]' })).toBeInTheDocument()
     expect(screen.queryByText('连接成功')).not.toBeInTheDocument()
     expect(screen.queryByText('mcp-secret-token')).not.toBeInTheDocument()
   })
@@ -112,8 +112,8 @@ describe('MCPAccessCard', () => {
     expect(await screen.findByRole('heading', { name: 'Codex 的连接已验证' })).toBeInTheDocument()
     expect(screen.getByText('Codex · 1.2.3')).toBeInTheDocument()
     expect(screen.getByText('AI 工具这次可以做什么')).toBeInTheDocument()
-    expect(screen.getByText('2. 登记整批修改')).toBeInTheDocument()
-    expect(screen.getByText(/不因每次保存打断开发/)).toBeInTheDocument()
+    expect(screen.getByText('2. 准备可检验的规则')).toBeInTheDocument()
+    expect(screen.getByText('Agent 补缺口，你确认必要范围')).toBeInTheDocument()
     expect(screen.queryByText('三步完成连接')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '复制使用说明' }))
@@ -122,7 +122,7 @@ describe('MCPAccessCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '调整这次允许范围' }))
     expect(screen.getByRole('dialog', { name: '这次允许 AI 工具做到哪一步？' })).toBeInTheDocument()
-    expect(screen.getByText(/登记整批代码变化声明，由界鉴重新核对实际源码与权限影响/)).toBeInTheDocument()
+    expect(screen.getByText(/保存规则与证明来源候选、登记代码变化；正式规则和来源采用仍由你确认/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '保存这次允许范围' }))
     await waitFor(() => expect(mockApi.setProjectAccess).toHaveBeenCalledWith('proj-1', 'PREPARE'))
   })

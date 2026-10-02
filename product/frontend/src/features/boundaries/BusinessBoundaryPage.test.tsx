@@ -12,6 +12,7 @@ const mockApi = vi.hoisted(() => ({
 }))
 
 vi.mock('../../api/businessBoundaries', () => ({ businessBoundariesApi: mockApi }))
+vi.mock('../../api/ruleCandidates', () => ({ruleCandidatesApi:{context:async()=>({candidates:[],next_offset:null})}}))
 
 const project = { project_id: 'app_demo', name: '演示应用' }
 const preview = {
@@ -252,10 +253,11 @@ describe('业务边界页面', () => {
     render(<BusinessBoundaryPage project={project} onError={vi.fn()} onStateChanged={vi.fn()} onBack={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: '业务动作' }))
     expect(screen.queryByRole('button', { name: '核对代码关联' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '编辑动作' }))
+    fireEvent.click(screen.getByText('当前代码定位与关联'))
+    fireEvent.click(screen.getByRole('button', { name: '管理业务对象与代码关联' }))
     expect(await screen.findByRole('heading', { name: '权限要求' })).toBeInTheDocument()
     expect(screen.queryByText(/write_mode/i)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '取消编辑' }))
+    expect(screen.queryByRole('button', { name: '取消编辑' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '核对代码关联' }))
 
     await waitFor(() => expect(mockApi.createMaintenanceProposal).toHaveBeenCalledOnce())

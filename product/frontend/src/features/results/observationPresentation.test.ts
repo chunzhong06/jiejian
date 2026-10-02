@@ -17,3 +17,6 @@ it('消息读取上限、投影能力缺口和未闭合缺失分别说明', () =
   expect(observationStatus({ ...observation, state:'UNKNOWN', reason_codes:['EFFECT_PROJECTOR_UNSUPPORTED'] }).label).toBe('不能用于判断该业务后果')
   expect(observationStatus({ ...observation, state:'ABSENT', closure:'OPEN' }).label).toBe('暂未观察到')
 })
+it('旧响应缺少结构化说明时，不将不可靠的确认状态展示成业务事实', () => {
+  expect(observationStatus({ ...observation, state:'CONFIRMED', reliable:false }).label).toBe('观察依据不完整')
+})

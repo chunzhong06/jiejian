@@ -25,3 +25,11 @@ describe('修改与验证',()=>{
 
  it('详情页签复用精确记录，不再发起第二份交付读取',async()=>{api.details.mockResolvedValue(linked);render(<ChangesPage {...props()} requestedChange="chg_one"/>);await screen.findAllByText('real.py');const before=api.details.mock.calls.length;fireEvent.click(screen.getByRole('button',{name:'检查结果'}));expect(await screen.findByRole('button',{name:'查看本批检查记录'})).toBeInTheDocument();expect(api.details.mock.calls.length).toBe(before)})
 })
+
+it('已有PASS但运行未对应时仍提示复核，不呈现本批已验证的绿色状态',async()=>{
+ api.details.mockResolvedValue({...linked,verification:{...linked.verification,runtime_status:'UNCONFIRMED'}})
+ render(<ChangesPage {...props()}/>)
+ const statuses=await screen.findAllByText('已验证，运行对应未确认')
+ for(const status of statuses) expect(status).toHaveAttribute('data-tone','warning')
+ expect(screen.queryByText('本轮已验证')).not.toBeInTheDocument()
+})

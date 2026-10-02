@@ -1,20 +1,16 @@
 /* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
 .history-toolbar {
   display: flex;
-  gap: var(--space-8);
+  gap: var(--rhythm-actionGap);
   flex-wrap: wrap;
   align-items: center;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  padding: 18px;
+  padding: var(--rhythm-panelPadding);
   border-radius: 10px 10px 0 0;
   margin-bottom: 0;
 }
 
-.history-toolbar>.ant-input-affix-wrapper {
-  width: 300px;
-  max-width: 100%;
-}
 
 .history-toolbar>.ant-select {
   min-width: 150px;
@@ -90,26 +86,16 @@
   display: none;
 }
 
-.history-verdict {
-  font-size: var(--font-secondary);
-}
 
 .history-open {
   font-size: var(--font-secondary);
-  color: var(--color-secondary);
+  color: var(--color-primary);
 }
+.history-record>.product-status { justify-self: start; }
+.history-record:hover .history-open { text-decoration: underline; text-underline-offset: 3px; }
 
-.history-verdict.is-pass {
-  color: var(--color-safe);
-}
 
-.history-verdict.is-block {
-  color: var(--color-danger);
-}
 
-.history-verdict.is-inconclusive {
-  color: var(--color-warning);
-}
 
 .history-empty {
   padding: var(--space-40);
@@ -169,11 +155,6 @@
   }
 }
 
-@media(max-width:600px) {
-  .history-toolbar>.ant-input-affix-wrapper {
-    width: 100%;
-  }
-}
 
 @media(max-width:600px) {
   .history-toolbar>.ant-select {

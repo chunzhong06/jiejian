@@ -11,15 +11,14 @@ import { ProofCoverage } from './ProofCoverage'
 import { DiagnosisSummary } from './DiagnosisSummary'
 import { breakpointLabels, precisionDescriptions, traceEventLabel } from './tracePresentation'
 import { ExecutionPath } from './ExecutionPath'
-import { observationStatus } from './observationPresentation'
+import { observationStatus, phaseLabels, sourceLabels, sourceReading } from './observationPresentation'
+import { ObservationSources } from './ObservationSources'
 import { BusinessEffects, caseJudgement, resourceOwner, ResultBadge, ResultOverviewHeader, ResultScope } from './ResultOverview'
 import './testing.css'
 import './trace-investigation.css'
 import './result-review.css'
 
-const phaseLabels = { BASELINE: '初始状态', BEFORE: '操作前', AFTER: '操作后', EVENTUAL: '最终观察', RECOVERY: '恢复后' }
 const controlLabels = { SAFE: '正常对照已通过', VULNERABLE: '正常对照发现问题', INCONCLUSIVE: '正常对照证据不足' }
-const sourceLabels: Record<string,string> = { OWNER_API: '资源服务', READ_ONLY_SQLITE: '业务数据', STRUCTURED_AUDIT_LOG: '审计记录', ASYNC_TASK_STATUS: '后台任务', AZURE_QUEUE_PEEK: '消息队列' }
 type InvestigationTab = 'facts' | 'trace' | 'records'
 
 export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId, onCaseChange, historicalOnly, embedded = false }: {
@@ -55,6 +54,9 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
     else if (restorePending.current) {
       restorePending.current = false
       const target = Array.from(panel.current?.querySelectorAll<HTMLElement>('button') ?? []).find(button => (button.getAttribute('aria-label') ?? button.textContent) === returnFocus.current?.label)
+      // 证据详情返回时重新展开原来源，避免将焦点还给折叠区内不可见的按钮。
+      const stages = target?.closest('details')
+      if (stages) stages.open = true
       target?.focus({ preventScroll: true })
     }
   }, [detail, tab])
@@ -93,12 +95,15 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
   }
   const evidenceRow = (item: EvidenceExplanation, index: number) => <section className="result-proof-row" key={`${item.observed_fact.observer_id}:${item.observed_fact.phase}:${index}`}>
     <div className="result-proof-title"><h4>{sourceLabels[item.source_label] ?? item.source_label}</h4><span>{item.observed_fact.level === 'VERDICT_REQUIRED' ? '必要证明' : '辅助材料'}</span></div>
-    <p><strong>{observationStatus(item.observed_fact).label}</strong> · {phaseLabels[item.observed_fact.phase]}</p><p className="editorial-muted">{item.supports_claim}</p>
-    {!!item.evidence_refs.length && <div className="result-proof-links"><Button type="link" onClick={() => void openEvidence(item.evidence_refs, item)}>查看{item.source_label}证据 →</Button></div>}
+    <p><strong>{sourceReading(item).label}</strong> · {phaseLabels[item.observed_fact.phase]}</p><p className="editorial-muted">{item.supports_claim}</p>
+    {!!item.evidence_refs.length && <div className="result-proof-links"><Button type="link" onClick={() => void openEvidence(item.evidence_refs, item)}>查看{item.source_label}证据</Button></div>}
   </section>
   const requiredProofs = action?.proof_coverage?.filter(row => row.required_level === 'VERDICT_REQUIRED') ?? []
   const requiredSources = action?.decisive_proof_chain.filter(item => item.observed_fact.level === 'VERDICT_REQUIRED') ?? []
-  const additionalSources = action?.evidence_explanations.filter(item => !['BASELINE','BEFORE','RECOVERY'].includes(item.observed_fact.phase) && !item.observed_fact.reason_codes.includes('OBSERVER_PHASE_UNAVAILABLE') && !requiredSources.some(main => main.observed_fact.observer_id === item.observed_fact.observer_id && main.observed_fact.phase === item.observed_fact.phase && main.observed_fact.effect_id === item.observed_fact.effect_id)) ?? []
+  const publishedReading = (fact: CheckEvidence['observations'][number]) => {
+    const source = action?.evidence_explanations.find(item => item.observed_fact.observer_id === fact.observer_id && item.observed_fact.phase === fact.phase && item.observed_fact.effect_id === fact.effect_id && item.observed_fact.proof_fingerprint === fact.proof_fingerprint && item.observed_fact.window_end_us === fact.window_end_us)
+    return source ? sourceReading(source) : observationStatus(fact)
+  }
   const proofSummary = requiredProofs.length ? <ProofCoverage rows={requiredProofs} onEvidence={(row, refs) => void openEvidence(refs, undefined, undefined, undefined, row)}/> : requiredSources.length ? requiredSources.map(evidenceRow) : <p className="result-proof-missing">必要证明尚不完整。补足对应证明后发起新的检查；不能用缺少记录推断没有发生业务后果。</p>
   const evidenceContent = <>
       {detail?.coverage && <div className="evidence-selection"><p className="editorial-eyebrow">来自所选证明要求</p><h3>{detail.coverage.business_label}</h3><p>{detail.coverage.source_label} · {detail.coverage.required_level === 'VERDICT_REQUIRED' ? '必要证明' : '辅助材料'}</p><p className="editorial-muted">下方只显示对应本项要求的观察；完整文档保留在技术引用中。</p></div>}
@@ -107,8 +112,8 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
       {failed && <Alert showIcon type="error" message="证据未能通过读取或完整性检查，请返回刷新检查结果。" />}
       {!loading && !failed && detail?.source && <Descriptions column={1} layout="vertical" items={[
         { key: 'where', label: '在哪里看到', children: `${detail.source.source_label} · ${detail.source.source_location}` },
-        { key: 'what', label: '看到什么', children: `${phaseLabels[detail.source.observed_fact.phase]}：${observationStatus(detail.source.observed_fact).label}；${detail.source.observed_fact.closure === 'CLOSED' ? '观察窗口已闭合' : '观察窗口尚未闭合'}` },
-        { key: 'reading', label: '这条记录的含义', children: observationStatus(detail.source.observed_fact).detail },
+        { key: 'what', label: '看到什么', children: `${phaseLabels[detail.source.observed_fact.phase]}：${sourceReading(detail.source).label}` },
+        { key: 'reading', label: '这条记录的含义', children: sourceReading(detail.source).detail },
         { key: 'supports', label: '因此支持什么', children: detail.source.supports_claim },
         { key: 'limit', label: '不能单独证明什么', children: detail.source.does_not_prove },
       ]} />}
@@ -121,7 +126,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
           {!document.trace.complete && <Typography.Paragraph type="secondary">执行路径不完整，定位精度以本项判断为准。</Typography.Paragraph>}
         </>}
         {!detail?.event && <><Typography.Title level={5}>观察记录</Typography.Title>
-        {document.observations.filter(item => (!detail?.coverage || (item.effect_id === detail.coverage.effect_id && item.proof_fingerprint === detail.coverage.proof_fingerprint)) && (!detail?.source || (item.observer_id === detail.source.observed_fact.observer_id && item.phase === detail.source.observed_fact.phase && item.effect_id === detail.source.observed_fact.effect_id && item.proof_fingerprint === detail.source.observed_fact.proof_fingerprint))).map((item, index) => <Typography.Paragraph key={index}>{phaseLabels[item.phase]} · {observationStatus(item).label} · {formatTimestamp(item.window_end_us)}</Typography.Paragraph>)}</>}
+        {document.observations.filter(item => (!detail?.coverage || (item.effect_id === detail.coverage.effect_id && item.proof_fingerprint === detail.coverage.proof_fingerprint)) && (!detail?.source || (item.observer_id === detail.source.observed_fact.observer_id && item.phase === detail.source.observed_fact.phase && item.effect_id === detail.source.observed_fact.effect_id && item.proof_fingerprint === detail.source.observed_fact.proof_fingerprint))).map((item, index) => <Typography.Paragraph key={index}>{phaseLabels[item.phase]} · {publishedReading(item).label} · {formatTimestamp(item.window_end_us)}</Typography.Paragraph>)}</>}
         <details><summary>证据文件与技术引用</summary><pre className="check-evidence-json">{JSON.stringify(document, null, 2)}</pre></details>
       </section>)}
   </>
@@ -131,7 +136,7 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
       <div className="result-section-heading"><h2>逐项检查结果</h2><p>已确认的要求与实际结果，对照阅读</p></div>
       {ordered.length ? <><table className="result-overview-table"><thead><tr><th scope="col">业务要求</th><th scope="col">实际结果</th><th scope="col">本项判断</th><th scope="col">依据</th></tr></thead><tbody>{ordered.slice((page-1)*10, page*10).map((item,index) => {
         const judgement = caseJudgement(item)
-        return <tr key={item.case_id} data-tone={judgement.tone}><td><div className="result-requirement-label"><span className="result-case-number">{String((page-1)*10+index+1).padStart(2,'0')}</span><div><strong>{item.permission.expectation === 'DENY' ? '禁止' : '允许'}{item.display_name}</strong><p>{item.fact_comparison.planned_identity.label ?? item.fact_comparison.planned_identity.actor_label ?? '计划账号'} · 资源属于{resourceOwner(item)}</p></div></div></td><td data-label="实际结果"><BusinessEffects action={item}/></td><td data-label="本项判断"><ResultBadge tone={judgement.tone}>{judgement.label}</ResultBadge></td><td><Button type="link" data-result-case={item.case_id} aria-label={`查看第 ${(page-1)*10+index+1} 项依据`} onClick={() => selectCase(item.case_id)}>查看依据 ↗</Button></td></tr>
+        return <tr key={item.case_id} data-tone={judgement.tone}><td><div className="result-requirement-label"><span className="result-case-number">{String((page-1)*10+index+1).padStart(2,'0')}</span><div><strong>{item.permission.expectation === 'DENY' ? '禁止' : '允许'}{item.display_name}</strong><p>{item.fact_comparison.planned_identity.label ?? item.fact_comparison.planned_identity.actor_label ?? '计划账号'} · 资源属于{resourceOwner(item)}</p></div></div></td><td data-label="实际结果"><BusinessEffects action={item}/></td><td data-label="本项判断"><ResultBadge tone={judgement.tone}>{judgement.label}</ResultBadge></td><td><Button type="link" data-result-case={item.case_id} aria-label={`查看第 ${(page-1)*10+index+1} 项依据`} onClick={() => selectCase(item.case_id)}>查看依据</Button></td></tr>
       })}</tbody></table>{ordered.length > 10 && <Pagination className="result-case-pagination" current={page} pageSize={10} total={ordered.length} showSizeChanger={false} showTotal={total => `共 ${total} 项检查`} onChange={setPage}/>}</> : <Empty description="本次没有可展示的检查项"/>}
       <p className="result-reading-note">实际结果来自业务后果观察。点开任一项，可核对账号、接口响应与对应证明。</p>
     </section> : <>
@@ -149,7 +154,8 @@ export function CurrentResultStory({ story, onError, onNavigate, requestedCaseId
           {tab === 'trace' && <>{action.execution_path?.events.length ? <ExecutionPath key={`${story.run_id}:${action.case_id}`} action={action} selectedEvent={detail?.event?.event_id} onSelect={(event,refs) => void openEvidence(refs,undefined,undefined,event)}/> : <p className="result-path-unavailable">本轮没有可展示的明确执行路径；保留已有业务后果证据，不补画因果链。</p>}{action.breakpoint && <DiagnosisSummary action={action} onEvidence={() => void openEvidence(action.breakpoint!.evidence_refs,undefined,action.breakpoint!)}/>}</>}
           {tab === 'records' && (detail ? <section className="result-evidence-document" aria-label="已发布证据" tabIndex={-1} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closeEvidence() } }}><Button type="link" className="result-evidence-back" onClick={closeEvidence}>← 返回{(returnFocus.current?.tab ?? 'records') === 'trace' ? '执行过程' : returnFocus.current?.tab === 'facts' ? '事实与证明' : '证据目录'}</Button>{evidenceContent}</section> : <>
             <h3>必要证明记录</h3>{proofSummary}
-            {(additionalSources.length > 0 || action.proof_coverage?.some(row => row.required_level === 'SUPPORTING')) && <section className="result-auxiliary-sources"><h3>辅助观察与过程记录</h3><p className="editorial-muted">用于解释执行过程，不能替代必要证明。</p><ProofCoverage rows={action.proof_coverage?.filter(row => row.required_level === 'SUPPORTING') ?? []} onEvidence={(row,refs) => void openEvidence(refs,undefined,undefined,undefined,row)}/><ul className="result-source-index">{additionalSources.map((item,index) => <li key={index}><div><strong>{sourceLabels[item.source_label] ?? item.source_label}</strong><span>{phaseLabels[item.observed_fact.phase]} · {observationStatus(item.observed_fact).label}</span><p>{observationStatus(item.observed_fact).detail}</p></div><Button disabled={!item.evidence_refs.length} aria-label={`查看${item.source_label}${phaseLabels[item.observed_fact.phase]}记录`} onClick={() => void openEvidence(item.evidence_refs,item)}>查看</Button></li>)}</ul></section>}
+            <ProofCoverage rows={action.proof_coverage?.filter(row => row.required_level === 'SUPPORTING') ?? []} onEvidence={(row,refs) => void openEvidence(refs,undefined,undefined,undefined,row)}/>
+            <ObservationSources sources={action.evidence_explanations} onEvidence={item => void openEvidence(item.evidence_refs,item)}/>
             {action.claim_boundary.length > 0 && <div className="result-case-boundary"><h3>这项结果的适用边界</h3>{action.claim_boundary.map(text => <p key={text}>{text}</p>)}</div>}
             <details className="result-explanation"><summary>解释已有结果</summary><AssistantPanel runId={story.run_id} title="理解本次检查结果" actionLabel="解释已有结果"/></details>
           </>)}

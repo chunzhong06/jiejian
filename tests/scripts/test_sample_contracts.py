@@ -1,20 +1,20 @@
 # 验证验收脚本的公开请求与业务事实合同。
 from __future__ import annotations
-import scripts.dev.sample_test.clients.http as sample_clients_http
-import scripts.dev.sample_test.harness.lifecycle as sample_harness_lifecycle
-import scripts.dev.sample_test.harness.receipt as sample_harness_receipt
-import scripts.dev.sample_test.harness.state as sample_harness_state
+import tests.acceptance.sample_test.clients.http as sample_clients_http
+import tests.acceptance.sample_test.harness.lifecycle as sample_harness_lifecycle
+import tests.acceptance.sample_test.harness.receipt as sample_harness_receipt
+import tests.acceptance.sample_test.harness.state as sample_harness_state
 import os
 import sys
 from pathlib import Path
 import pytest
 from playwright.sync_api import sync_playwright
-from scripts.dev.sample_test import official
-from scripts.dev.sample_test import windows as windows_module
+from tests.acceptance.sample_test import official
+from tests.acceptance.sample_test import windows as windows_module
 from tests.scripts._support_sample_test import ROOT, _fresh_real_probe_dir
 
 def test_driver_gui_checkpoint_never_claims_api_as_gui():
-    from scripts.dev.sample_test.current_gui import CurrentGui
+    from tests.acceptance.sample_test.current_gui import CurrentGui
     gui = CurrentGui(None, None, None)
     with pytest.raises(sample_harness_state.SampleTestError, match="GUI_CHECKPOINT_UNKNOWN"):
         gui.checkpoint("start", {})
@@ -47,7 +47,7 @@ def test_start_waits_for_source_prepare_before_control_ready(
         sample_harness_lifecycle._wait_product_ready(Client(), PreparedProcess(), timeout=1)
 
 def test_current_driver_read_projection_binds_story_and_evidence():
-    from scripts.dev.sample_test.current_api import read_result
+    from tests.acceptance.sample_test.current_api import read_result
     class Client:
         def call(self, method, path):
             assert method == "GET"
@@ -201,6 +201,7 @@ def test_successful_shutdown_matches_stop_request_contract(monkeypatch, tmp_path
     assert actions == ['/api/experience/official-sample/stop', '/api/system/shutdown']
     assert not state.sample_started
 
+@pytest.mark.l5
 @pytest.mark.skipif(
     os.name != "nt" or os.environ.get("JIEJIAN_RUN_WINDOWS_L5") != "1",
     reason="真实源码启动探针只在明确授权的交互用户环境运行",
@@ -266,7 +267,7 @@ def test_real_start_reaches_workbench_and_shuts_down_safely() -> None:
             log.close()
 
 def test_current_driver_rejects_changed_official_recipe_before_approval(tmp_path):
-    from scripts.dev.sample_test.current_api import assert_official_proposal
+    from tests.acceptance.sample_test.current_api import assert_official_proposal
     from tests.backend.workflows.business_boundaries._support_business_boundary_service import _core
     from product.backend.workflows.business_boundaries.official_recipe import official_boundary_recipe
     from product.backend.core.boundaries.entities import boundary_sha256
@@ -283,7 +284,7 @@ def test_current_driver_rejects_changed_official_recipe_before_approval(tmp_path
         core.close()
 
 def test_current_driver_rebind_accepts_only_unchanged_formal_permissions(tmp_path):
-    from scripts.dev.sample_test.current_api import _assert_rebind
+    from tests.acceptance.sample_test.current_api import _assert_rebind
     from tests.backend.workflows.business_boundaries._support_business_boundary_service import _core, _maintenance_command
     from product.backend.workflows.business_boundaries.official_recipe import official_boundary_recipe
     core, project = _core(tmp_path)
@@ -300,7 +301,7 @@ def test_current_driver_rebind_accepts_only_unchanged_formal_permissions(tmp_pat
         core.close()
 
 def test_current_driver_sequence_uses_original_block_reference_and_distinct_runs(monkeypatch):
-    from scripts.dev.sample_test import current_api as current
+    from tests.acceptance.sample_test import current_api as current
     order = []
     first = {"run_id": "run-first", "story": {"verdict": "BLOCK", "actions": [{"case_id": "case-original", "permission": {"expectation": "DENY"}, "breakpoint": {"breakpoint_type": "AUTHORIZATION_LATE"}}]}}
     limited = {"run_id": "run-limited", "story": {"verdict": "INCONCLUSIVE"}}
@@ -332,7 +333,7 @@ def test_current_driver_sequence_uses_original_block_reference_and_distinct_runs
 
 def test_current_driver_public_fact_checks_require_zip_role_and_normal_business():
     import copy
-    from scripts.dev.sample_test.current_api import assert_current_result
+    from tests.acceptance.sample_test.current_api import assert_current_result
     kinds = ("owner_api", "read_only_sqlite", "structured_audit_log", "async_task_status", "azure_queue_peek", "azure_blob_object")
     levels = ["VERDICT_REQUIRED" if kind == "azure_blob_object" else "DIAGNOSIS_REQUIRED" if kind == "structured_audit_log" else "SUPPORTING" for kind in kinds]
     denial = {"permission": {"expectation": "DENY"}, "evidence_explanations": [{"source_location": "observer/" + kind, "observed_fact": {"level": level}} for kind, level in zip(kinds, levels)]}

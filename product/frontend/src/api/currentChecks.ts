@@ -29,6 +29,11 @@ export type CheckObservation = {
 export type EvidenceExplanation = {
   source_label: string; source_location: string; observed_fact: CheckObservation
   supports_claim: string; does_not_prove: string; evidence_refs: string[]
+  reading?: ObservationReading | null
+}
+export type ObservationReading = {
+  kind: 'REFERENCE' | 'PROCESS' | 'OBSERVED' | 'WAITING' | 'UNSUPPORTED' | 'UNAVAILABLE' | 'INCOMPLETE' | 'NOT_COLLECTED'
+  label: string; detail: string; attention: boolean
 }
 export type StoryIdentity = { identity_id: string | null; label: string | null; actor_id: string | null; actor_label: string | null; verification_status: 'PLANNED' | 'MATCH' | 'MISMATCH' | 'UNKNOWN'; namespace: string | null; application_subject_id: string | null }
 export type CheckOutcome = { execution_outcome: string; http_status: number | null; actual_identity_status: 'MATCH' | 'MISMATCH' | 'UNKNOWN'; baseline_trusted: boolean; recovery_verified: boolean; run_correlated: boolean; resource_correlated: boolean }

@@ -16,7 +16,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 
 class RegisteredEffectProofCapability(WireModel):
-    descriptor_id: str = Field(pattern=r"^exp_[0-9a-f]{32}$")
+    descriptor_id: str = Field(pattern=r"^(exp|psr)_[0-9a-f]{32}$")
     descriptor_fingerprint: Hash
     observer_id: LogicalId
     effect_id: EffectId

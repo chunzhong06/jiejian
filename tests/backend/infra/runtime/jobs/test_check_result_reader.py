@@ -36,6 +36,12 @@ def test_result_reader_only_selects_and_never_recomputes_verdict(package_parts, 
         assert len(index) == len(package.evidence)
         assert reader.evidence(job.run_id, index[0].evidence_id) in package.evidence
         assert "schema_version" not in status.model_dump()
+        from product.backend.workflows.checks.story import CheckStoryBuilder
+        before = {path: path.read_bytes() for path in package.directory.rglob("*.json")}
+        story = CheckStoryBuilder(reader).build(job.run_id)
+        assert story.verdict == result.verdict
+        assert all(source.reading is not None for action in story.actions for source in action.evidence_explanations)
+        assert {path: path.read_bytes() for path in before} == before
     finally:
         event.remove(engine, "before_cursor_execute", capture)
     assert set(statements) <= {"SELECT", "PRAGMA"}
@@ -124,6 +130,8 @@ def test_open_absence_never_claims_closed_window_or_decisive_proof(package_parts
     assert story.verdict.value == "INCONCLUSIVE"
     for action in story.actions:
         assert action.decisive_proof_chain == ()
+        assert action.evidence_explanations
+        assert all(item.reading.kind == "WAITING" for item in action.evidence_explanations)
         assert all("已闭合" not in effect.judgement for effect in action.fact_comparison.effects)
         assert all(item.observed_state == "UNKNOWN" and "观察窗口尚未闭合" in item.limitations
                    for item in action.proof_coverage)

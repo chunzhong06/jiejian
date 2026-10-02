@@ -1,0 +1,291 @@
+{
+  "$defs": {
+    "RecordOperation": {
+      "additionalProperties": false,
+      "properties": {
+        "after_version": {
+          "minimum": 1,
+          "title": "After Version",
+          "type": "integer"
+        },
+        "before_version": {
+          "minimum": 0,
+          "title": "Before Version",
+          "type": "integer"
+        },
+        "collection": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Collection",
+          "type": "string"
+        },
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "owner_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "request_key": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Request Key",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Id"
+        },
+        "state": {
+          "const": "COMMITTED",
+          "default": "COMMITTED",
+          "title": "State",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "transitions": {
+          "items": {
+            "$ref": "#/$defs/RecordTransition"
+          },
+          "maxItems": 8,
+          "title": "Transitions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "operation_id",
+        "generation",
+        "collection",
+        "resource_id",
+        "owner_id",
+        "subject_id",
+        "request_key",
+        "before_version",
+        "after_version",
+        "transitions"
+      ],
+      "title": "RecordOperation",
+      "type": "object"
+    },
+    "RecordRequestScope": {
+      "additionalProperties": false,
+      "description": "宿主独立记录的请求完成边界；应用不能通过业务事务声明完成。",
+      "properties": {
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "request_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Digest",
+          "type": "string"
+        },
+        "request_nonce": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Nonce",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scope_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Scope Id",
+          "type": "string"
+        },
+        "state": {
+          "default": "OPEN",
+          "enum": [
+            "OPEN",
+            "COMPLETE",
+            "INCOMPLETE"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope_id",
+        "generation",
+        "request_nonce",
+        "request_digest"
+      ],
+      "title": "RecordRequestScope",
+      "type": "object"
+    },
+    "RecordSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "collection": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Collection",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "generation": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Generation",
+          "type": "string"
+        },
+        "last_operation_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Operation Id"
+        },
+        "owner_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "resource_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 0,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "generation",
+        "collection",
+        "resource_id",
+        "owner_id",
+        "version",
+        "data"
+      ],
+      "title": "RecordSnapshot",
+      "type": "object"
+    },
+    "RecordTransition": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "additionalProperties": true,
+          "title": "After",
+          "type": "object"
+        },
+        "before": {
+          "additionalProperties": true,
+          "title": "Before",
+          "type": "object"
+        },
+        "ordinal": {
+          "maximum": 7,
+          "minimum": 0,
+          "title": "Ordinal",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ordinal",
+        "before",
+        "after"
+      ],
+      "title": "RecordTransition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RecordOperation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "operations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RecordOperation"
+      },
+      "maxItems": 32,
+      "title": "Operations",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RecordRequestScope"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "snapshot": {
+      "$ref": "#/$defs/RecordSnapshot"
+    }
+  },
+  "required": [
+    "snapshot"
+  ],
+  "title": "RecordProofView",
+  "type": "object"
+}

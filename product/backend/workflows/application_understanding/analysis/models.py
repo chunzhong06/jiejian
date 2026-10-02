@@ -51,7 +51,7 @@ _IGNORED_DIRECTORIES = frozenset(
         "venv",
     }
 )
-_SOURCE_SUFFIXES = frozenset({".py", ".js", ".jsx", ".ts", ".tsx"})
+_SOURCE_SUFFIXES = frozenset({".py", ".js", ".mjs", ".jsx", ".ts", ".tsx"})
 _OPENAPI_NAMES = frozenset(
     {
         "openapi.json",

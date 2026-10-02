@@ -11,6 +11,7 @@
  *   候选不是权限结论；本组件不收集 Profile、资源 ID、恢复路径或测试凭据。
  * ============================================================================= */
 
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRightOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Collapse, Input, List, Radio, Space, Spin, Tag, Typography } from 'antd'
@@ -19,6 +20,7 @@ import { onboardingApi, type DiscoveryResult } from '../../api/onboarding'
 import { AssistantPanel } from '../assistant/AssistantPanel'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { CandidateReview } from './CandidateReview'
+import { ControlledRuntimePanel } from './ControlledRuntimePanel'
 import { useTaskGuard } from '../../app/tasks/TaskContinuity'
 import {
   projectsApi,
@@ -65,10 +67,10 @@ function CandidateRow({ candidate, kind, loading, onDecide }: {
   return <List.Item className="candidate-row">
     <div className="candidate-main">
       <Space wrap>
-        <Tag color="blue">系统发现</Tag>
-        <Tag color={candidate.confidence === 'HIGH' ? 'blue' : candidate.confidence === 'MEDIUM' ? 'cyan' : 'default'}>{confidenceLabel(candidate.confidence)}</Tag>
-        {candidate.stale && <Tag color="orange">源码中未再次发现，请复核</Tag>}
-        {action && <Tag color="gold">{riskLabels[action.risk_hint]}</Tag>}
+        <StatusBadge kind="preparation" tone="info">系统发现</StatusBadge>
+        <StatusBadge kind="preparation" tone={candidate.confidence === 'LOW' ? 'neutral' : 'info'}>{confidenceLabel(candidate.confidence)}</StatusBadge>
+        {candidate.stale && <StatusBadge kind="preparation" tone="warning">源码中未再次发现，请复核</StatusBadge>}
+        {action && <StatusBadge kind="preparation" tone="warning">{riskLabels[action.risk_hint]}</StatusBadge>}
       </Space>
       <Input aria-label={`${noun}显示名称`} value={displayName} maxLength={kind === 'role' ? 128 : 256} onChange={(event) => setDisplayName(event.target.value)} />
       <div className="confirmation-actions">
@@ -318,12 +320,13 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
     {message && <Alert showIcon type="info" message={message} closable onClose={() => setMessage('')} />}
     {error && <Alert showIcon type="error" message={error.message} closable onClose={() => setError(null)} />}
     {syncFailed && <Alert type="warning" showIcon message="本次操作已经保存，下一步尚未同步" description="已保存的信息会保留。重新同步只读取状态，不会重复提交。" action={<Button onClick={() => void syncWorkspace()}>重新同步下一步</Button>}/>}
-    {currentStep === 4 && understanding && !reviewOpen && <section className="access-next-surface" aria-label="接入后的当前任务">
+    {currentStep === 4 && understanding && !reviewOpen && <section className="access-next-surface access-next-layout" aria-label="接入后的当前任务">
+      <div className="access-connection-summary">
       <header><span className="access-app-icon"><AppstoreOutlined aria-hidden/></span><div><h2>{selected?.name?.trim() || '当前应用'}</h2><p className="editorial-muted">连接已确认，接下来整理业务</p></div></header>
       <dl className="access-facts"><div><dt>应用地址</dt><dd>已确认</dd></div><div><dt>源码分析</dt><dd>已完成</dd></div><div><dt>业务建议</dt><dd>{reviewComplete ? '已有确认内容，可继续审阅' : '待你审阅'}</dd></div></dl>
-      <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>审阅业务主体与动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} onClick={() => setReviewOpen(true)}>审阅业务与权限</Button></div>
-      <p className="access-next-note">确认业务与权限后，继续准备账号和业务材料。</p>
       <details><summary>查看接入详情</summary><p>已确认地址：{understanding.confirmed_endpoint}</p><p>源码分析仅产生建议，不会自动批准权限。</p></details>
+      </div>
+      <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>审阅业务主体与动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} onClick={() => setReviewOpen(true)}>审阅业务与权限</Button><p className="access-next-note">确认业务与权限后，继续准备账号和业务材料。</p></div>
     </section>}
     {!understanding && <section className="application-step"><h2>选择应用文件夹</h2>
       <Alert type="info" showIcon message="接入前，请先在本机启动应用" description="界鉴连接的是正在运行的本地 Web 应用。选择目录后，界鉴会读取少量配置推测启动方式，并在 127.0.0.1 的有限候选地址中寻找已经响应的应用；当前不会替你执行未知启动命令。" />
@@ -338,6 +341,9 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
         {discovery.start_candidates.length > 0 && <Typography.Text type="secondary">可能启动方式：{discovery.start_candidates.map((item) => item.label).join('、')}（只作提示，不会执行）</Typography.Text>}
       </div>}
       <Typography.Paragraph>界鉴只探测 127.0.0.1 的少量配置候选，不扫描任意端口。自动发现不等于授权。</Typography.Paragraph>
+      <Collapse ghost items={[{key:'controlled-start',label:'应用尚未启动？查看受支持的启动方式',children:<ControlledRuntimePanel
+        key={understanding.project_id} projectId={understanding.project_id} revision={understanding.revision}
+        sourceAuthorized={understanding.source_analysis_authorized} onChanged={()=>void refreshUnderstanding()} onEndpoint={setEndpoint}/>}]}/>
       {noReachableEndpoint && officialSampleStart}
       <Radio.Group className="endpoint-list" value={endpoint} onChange={(event) => setEndpoint(event.target.value)}>
         <Space direction="vertical">
@@ -345,11 +351,11 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
         </Space>
       </Radio.Group>
       <Input aria-label="手工输入本地地址" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder="没有候选时输入 http://127.0.0.1:端口" />
-      <Checkbox checked={appRunningConfirmed} onChange={(event) => setAppRunningConfirmed(event.target.checked)}>我确认应用已经由我启动，界鉴不需要执行任何启动命令</Checkbox>
+      <Checkbox checked={appRunningConfirmed} onChange={(event) => setAppRunningConfirmed(event.target.checked)}>我确认应用已经启动，并且是本次要检查的应用</Checkbox>
       <Checkbox checked={endpointConfirmed} onChange={(event) => setEndpointConfirmed(event.target.checked)}>确认这是我的本地应用，并允许界鉴访问这个地址</Checkbox>
     </section>}
     {endpointReady && understanding?.confirmed_endpoint && !understanding.source_fingerprint && <section className="application-step"><h2>分析权限组与关键业务动作</h2>
-      <Typography.Paragraph>已确认地址：<Tag color="blue">{understanding.confirmed_endpoint}</Tag></Typography.Paragraph>
+      <Typography.Paragraph>已确认地址：<StatusBadge kind="lifecycle" tone="info">{understanding.confirmed_endpoint}</StatusBadge></Typography.Paragraph>
       <Alert type="warning" showIcon message="需要你单独授权只读源码分析" description="界鉴不会执行或导入源码，不会运行 npm/python 命令，不会联网，不读取 .env、私钥、凭据和生成目录，也不会把源码正文写入报告、日志或发送给模型。" />
       <Checkbox checked={analysisAuthorized} onChange={(event) => setAnalysisAuthorized(event.target.checked)}>我允许界鉴只读分析当前应用源码，用于寻找权限组与关键业务动作</Checkbox>
     </section>}

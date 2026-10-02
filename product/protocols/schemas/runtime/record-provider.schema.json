@@ -1,0 +1,58 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "implementation_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Implementation Fingerprint",
+      "type": "string"
+    },
+    "instance_id": {
+      "pattern": "^rti_[0-9a-f]{32}$",
+      "title": "Instance Id",
+      "type": "string"
+    },
+    "owner_process_created_at": {
+      "exclusiveMinimum": 0,
+      "title": "Owner Process Created At",
+      "type": "integer"
+    },
+    "owner_process_id": {
+      "exclusiveMinimum": 0,
+      "title": "Owner Process Id",
+      "type": "integer"
+    },
+    "owner_tree_name": {
+      "pattern": "^Local\\\\JiejianWorker-[0-9a-f]{64}$",
+      "title": "Owner Tree Name",
+      "type": "string"
+    },
+    "port": {
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "instance_id",
+    "owner_tree_name",
+    "owner_process_id",
+    "owner_process_created_at",
+    "port",
+    "implementation_fingerprint"
+  ],
+  "title": "RecordProviderReference",
+  "type": "object"
+}

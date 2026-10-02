@@ -59,6 +59,9 @@ class _Work:
     def commit(self) -> None:
         self.committed = True
 
+    def acquire_write_lock(self) -> None:
+        self.write_locked = True
+
 
 class _Identities:
     def __init__(self) -> None:

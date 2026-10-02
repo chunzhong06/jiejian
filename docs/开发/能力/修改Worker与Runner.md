@@ -30,6 +30,8 @@ Worker 每次只能处理自己持有且 fencing token 仍有效的 Job。正常
 
 ## 修改子进程环境与隔离
 
+运行引用由`workflows/runtime_ports.py`按持久项目归属选择提供方，检查和交付通过同一窄端口读取；归属冲突或加载失败不得回退到另一提供方。当前仅注册官方示例。普通Node的`protocols/node_runtime.py`、冻结副本写入和`process/node_target.mjs`只有加载器基础及直接验证，尚未接入持久加载Job、所有权回执和正式CHECK，不能当作已可接入的生产能力。
+
 Runner 由正式受控 Python 以模块方式启动，不能继承完整父环境。环境按进程角色明确 allowlist：公共运行变量、该角色声明的额外名称和最小 secret references 可以进入；宿主身份、调试凭据、无关 Token 与完整 PATH 污染必须拒绝。
 
 每次 attempt 需要可校验的 source receipt，证明正在运行的源码/构建身份与 Worker 准备的一致。输入、输出、progress 和临时文件只进入当前 attempt staging；路径必须在 `var/` 运行边界内，不能由请求提供绝对路径逃逸。
@@ -42,7 +44,13 @@ Runner 由正式受控 Python 以模块方式启动，不能继承完整父环�
 
 Worker 发布核对 run/job/attempt/fencing、文档版本与 hash；所有终态写入使用同一所有权条件。发布前失败不暴露临时文件作为结果，已发布结果不可改写。规范排序与 canonical 输入必须一致，避免模型本地通过但跨进程摘要不一致。
 
-## Case 执行与恢复
+## 普通应用运行加载
+
+`RUNTIME_LOAD` 是独立 Job 目标，持久输入和启动回执位于 `runtime_loads`，不创建 Run 或 Verdict。普通 CHECK/Recording Worker 不领取它。`LocalRuntimeSupervisor` 只启动固定 Runtime Worker；Worker 核对冻结 Node ESM 副本、解释器、Windows Job 归属和精确 IPv4 监听者后，以租约和 fencing 条件发布回执，随后继续持有目标进程。历史 SUCCEEDED 仅说明启动曾经完成，当前存活需重新核对。
+
+新控制面会话不重放旧会话待执行加载。关闭或移除项目仅回收界鉴拥有的树，不处理外部占用端口的进程。运行加载复用已有 Job 的取消、租约和恢复，不维护另一套调度生命周期。直接验证见 `test_runtime_load_jobs.py`、`test_runtime_supervisor.py`、`test_node_runtime.py` 与 `test_node_runtime_activation.py`。
+
+## Case 执行与恢复的证据边界
 
 具体顺序、身份、资源、proof 和恢复策略由冻结输入定义，不能从 live 页面状态重建。当前 Observation 角色为 VERDICT_REQUIRED、SUPPORTING、DIAGNOSIS_REQUIRED；必需证据的充分性由 Verification 判定。202 完成要求原响应谓词与精确可信任务终态同时成立，任务缺失、关联冲突或观察不完整不能变为成功，见[Web 执行](修改Web执行.md)。
 

@@ -1,6 +1,6 @@
 /* 验证测试账号页面使用中文解释安全边界，并要求用户显式确认保存登录状态。 */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { businessBoundariesApi } from '../../api/businessBoundaries'
 import { testIdentitiesApi } from '../../api/testIdentities'
@@ -53,6 +53,19 @@ describe('TestIdentityPage', () => {
     expect(screen.getByRole('textbox', { name: '测试账号名称' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '打开登录浏览器' })).toBeInTheDocument()
     expect(screen.queryByText(/Cookie|Bearer|内部标识/)).not.toBeInTheDocument()
+  })
+
+  it.each(['清除登录状态', '删除'])('主题内的%s确认框取消后不操作账号', async action => {
+    vi.mocked(testIdentitiesApi.list).mockResolvedValue([{...identity, status:'PREPARED'}] as never)
+    const view=render(<TestIdentityPage {...pageProps()} />)
+    fireEvent.click(await screen.findByRole('button', {name:new RegExp(`^${action.split('').join('\\s*')}$`)}))
+    const dialog=await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent(action==='删除'?'删除测试账号“普通用户A”？':'清除“普通用户A”的登录状态？')
+    fireEvent.click(within(dialog).getByRole('button', {name:/^取\s*消$/}))
+    await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(testIdentitiesApi.reset).not.toHaveBeenCalled()
+    expect(testIdentitiesApi.delete).not.toHaveBeenCalled()
+    view.unmount()
   })
 
   it('只有用户明确确认后才请求保存测试状态', async () => {

@@ -202,7 +202,8 @@ function Invoke-FrontendBuild([string]$Workspace, [string]$Dist) {
     try {
         $env:JIEJIAN_FRONTEND_OUT_DIR = [IO.Path]::GetFullPath($Dist)
         $env:JIEJIAN_FRONTEND_CACHE_DIR = [IO.Path]::GetFullPath((Join-Path $script:DevelopmentRoot "cache\vite"))
-        Invoke-External "frontend-build" @($script:PnpmRunner + @("build"))
+        # 构建诊断必须立即显示，不能被上层接收 build receipt 的赋值吞掉。
+        Invoke-External "frontend-build" @($script:PnpmRunner + @("build")) | Out-Host
     } finally { Pop-Location }
 }
 

@@ -1,10 +1,10 @@
 # 验证默认验收GUI写入不会再被API机械步骤重复执行，未知回执仅定位本轮资源供清理。
-import scripts.dev.sample_test.harness.state as sample_harness_state
+import tests.acceptance.sample_test.harness.state as sample_harness_state
 from types import SimpleNamespace
 
 import pytest
 
-from scripts.dev.sample_test import current_api, official
+from tests.acceptance.sample_test import current_api, official
 
 
 def test_gui_run_submission_is_not_repeated_through_api(monkeypatch):

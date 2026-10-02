@@ -201,7 +201,7 @@
 
 .path-node-breakpoint {
   border: 2px solid var(--color-danger-mark);
-  background: color-mix(in srgb,var(--color-danger-mark) 12%,var(--path-node-bg));
+  background: var(--color-danger-light);
 }
 
 .path-node-endpoint {

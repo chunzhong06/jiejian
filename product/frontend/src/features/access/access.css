@@ -12,7 +12,7 @@
   box-shadow: var(--shadow-focus);
 }
 
-.access-next-surface>header {
+.access-connection-summary>header {
   display: flex;
   align-items: center;
   gap: var(--space-20);
@@ -63,6 +63,30 @@
 
 .access-next-task h2 {
   font-size: 26px;
+}
+
+/* 宽屏将已确认事实和下一步并排；窄屏按相同阅读顺序恢复上下布局。 */
+.access-next-layout {
+  display: grid;
+  gap: var(--space-32);
+}
+
+.access-connection-summary, .access-next-task { min-width: 0; }
+.access-next-layout .access-next-task {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-32);
+}
+.access-next-layout .access-facts { border-bottom: 0; padding-bottom: 0; }
+.access-next-layout .access-next-note { margin-bottom: 0; font-size: var(--font-secondary); }
+.access-next-layout .access-next-task > .editorial-eyebrow { margin-top: 0; }
+@media(min-width:1100px) {
+  .access-next-layout { grid-template-columns: minmax(0,1fr) minmax(0,1.15fr); gap: var(--space-40); }
+  .access-next-layout .access-next-task {
+    border-top: 0;
+    border-left: 1px solid var(--color-border);
+    padding: var(--space-8) 0 var(--space-8) var(--space-40);
+    align-self: stretch;
+  }
 }
 
 .access-next-task>p:not(.editorial-eyebrow) {

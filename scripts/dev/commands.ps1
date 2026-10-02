@@ -16,8 +16,17 @@ function Invoke-DevelopmentTest {
     $testRoot = Join-Path $script:VarDir "test"
     New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
     $baseTemp = Join-Path $testRoot ("dev-{0}" -f [guid]::NewGuid().ToString("N"))
-    try { Invoke-External "pytest" (@($script:Python, "-B", "-m", "pytest", "-p", "no:cacheprovider", "--basetemp", $baseTemp) + $CommandArguments) }
-    finally { Remove-Item -LiteralPath $baseTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    $previousReport = $env:JIEJIAN_TEST_REPORT
+    if (-not $previousReport) { $env:JIEJIAN_TEST_REPORT = Join-Path $script:VarDir ("audit\testing\pytest-{0}.json" -f [guid]::NewGuid().ToString("N")) }
+    try { Invoke-External "pytest" (@($script:Python, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-p", "tests.support.verification.pytest_reporter", "--basetemp", $baseTemp) + $CommandArguments) }
+    finally {
+        Write-Host ("测试报告：{0}" -f $env:JIEJIAN_TEST_REPORT)
+        $env:JIEJIAN_TEST_REPORT = $previousReport
+        $resolvedTemp = [IO.Path]::GetFullPath($baseTemp)
+        $resolvedRoot = [IO.Path]::GetFullPath($testRoot).TrimEnd('\') + '\'
+        if (-not $resolvedTemp.StartsWith($resolvedRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "测试临时目录越出边界" }
+        if (Test-Path -LiteralPath $resolvedTemp) { Remove-Item -LiteralPath $resolvedTemp -Recurse -Force }
+    }
 }
 
 function Invoke-Schema {
@@ -47,11 +56,20 @@ function Invoke-FrontendTest($Toolchain) {
     Prepare-FrontendWorkspace $Toolchain $inputs $dependencyDigest
     $workspace = Get-FrontendWorkspace
     Invoke-External "frontend-editor" @($script:Node, (Join-Path $script:ProjectRoot "scripts\editor\verify-controlled-workspace-resolver.cjs"), $workspace, $script:ProjectRoot, $script:VarDir)
+    $previousReport = $env:JIEJIAN_TEST_REPORT
+    if (-not $previousReport) { $env:JIEJIAN_TEST_REPORT = Join-Path $script:VarDir ("audit\testing\vitest-{0}.json" -f [guid]::NewGuid().ToString("N")) }
+    $reporter = Join-Path $script:ProjectRoot "tests\support\verification\vitest-reporter.mjs"
     Push-Location -LiteralPath $workspace
     try {
         $env:JIEJIAN_FRONTEND_CACHE_DIR = [IO.Path]::GetFullPath((Join-Path $script:DevelopmentRoot "cache\vite"))
-        Invoke-External "frontend-test" (@($script:PnpmRunner + @("test")) + $CommandArguments)
-    } finally { Pop-Location }
+        # Vitest 不负责类型检查，先拒绝失配的组件 props 和 API 夹具。
+        Invoke-External "frontend-types" @($script:Node, (Join-Path $workspace "node_modules\typescript\bin\tsc"), "-b", "--pretty", "false")
+        Invoke-External "frontend-test" (@($script:PnpmRunner + @("test", "--reporter=default", "--reporter=$reporter")) + $CommandArguments)
+    } finally {
+        Pop-Location
+        Write-Host ("测试报告：{0}" -f $env:JIEJIAN_TEST_REPORT)
+        $env:JIEJIAN_TEST_REPORT = $previousReport
+    }
 }
 
 function Invoke-DevelopmentCli {
@@ -78,4 +96,9 @@ Write-Host '输入 exit 退出命令行；也可以输入 quit。' -ForegroundCo
 "@
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
     & $shell -NoLogo -NoProfile -NoExit -EncodedCommand $encoded
+}
+
+function Invoke-Verification {
+    Exit-PrepareLock
+    Invoke-External "verify" (@($script:Python, "-B", "-m", "tests.support.verification.runner") + $CommandArguments)
 }

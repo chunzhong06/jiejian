@@ -15,6 +15,7 @@ from product.protocols.web.request import HttpBodyKind, HttpRequestTemplate, Val
 from product.protocols.web.response import HttpOutcomeClassifier
 from product.protocols.web.target import WebTargetScope
 from product.protocols.runtime_identity import ControlledRuntimeReference
+from product.protocols.node_runtime import NodeRuntimeReference
 
 CHECK_DOCUMENT_MAX_BYTES = 1_048_576
 ActionId = Annotated[str, Field(pattern=r"^bac_[0-9a-f]{32}$")]
@@ -301,6 +302,19 @@ class CheckRuntimeProtocolError(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
 
 
+class NodeCheckRuntimeBundle(CheckRuntimeBundle):
+    schema_version: Literal['3'] = '3'
+    runtime_reference: NodeRuntimeReference
+
+    @model_validator(mode='after')
+    def validate_node_runtime(self):
+        reference=self.runtime_reference
+        if (reference.project_id!=self.project_id or reference.source_fingerprint!=self.source_fingerprint
+                or self.target.base_url!=f'http://127.0.0.1:{reference.port}'):
+            raise ValueError('Node instance must match the frozen project, source and target origin')
+        return self
+
+
 def check_payload_contains_secret(value, known_secrets: tuple[str, ...]) -> bool:
     """在 JSON 转义前检查字符串叶值，避免引号或换行使已知秘密漏过字节扫描。"""
     if isinstance(value, str):
@@ -314,8 +328,9 @@ def check_payload_contains_secret(value, known_secrets: tuple[str, ...]) -> bool
 
 
 def canonical_check_runtime_bytes(bundle: CheckRuntimeBundle) -> bytes:
+    from product.protocols.json_check_runtime import JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle
     try:
-        if type(bundle) not in (CheckRuntimeBundle, ControlledCheckRuntimeBundle):
+        if type(bundle) not in (CheckRuntimeBundle, ControlledCheckRuntimeBundle, NodeCheckRuntimeBundle, JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle):
             raise ValueError("unsupported runtime document")
         parsed = type(bundle).model_validate_json(bundle.model_dump_json(), strict=True)
         payload = parsed.model_dump(mode="json")
@@ -332,6 +347,7 @@ def check_runtime_fingerprint(bundle: CheckRuntimeBundle) -> str:
 
 
 def parse_check_runtime(raw: bytes) -> CheckRuntimeBundle:
+    from product.protocols.json_check_runtime import JsonCheckRuntimeBundle, ManagedCheckRuntimeBundle
     def unique(pairs):
         values = {}
         for key, value in pairs:
@@ -345,7 +361,9 @@ def parse_check_runtime(raw: bytes) -> CheckRuntimeBundle:
         payload = json.loads(raw.decode(), object_pairs_hook=unique,
             parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
         # 格式 1 的历史配置仍按其原字节和范围读取，绝不补造受控运行证明。
-        model = ControlledCheckRuntimeBundle if isinstance(payload, dict) and payload.get("schema_version") == "2" else CheckRuntimeBundle
+        model = {'1':CheckRuntimeBundle,'2':ControlledCheckRuntimeBundle,'3':NodeCheckRuntimeBundle,'4':JsonCheckRuntimeBundle,'5':ManagedCheckRuntimeBundle}.get(payload.get('schema_version')) if isinstance(payload,dict) else None
+        if model is None:
+            raise ValueError('unsupported runtime version')
         bundle = model.model_validate_json(raw, strict=True)
         if canonical_check_runtime_bytes(bundle) != raw:
             raise ValueError("noncanonical runtime")

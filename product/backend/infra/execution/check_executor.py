@@ -15,6 +15,10 @@ from product.backend.infra.observers.check_runtime import CheckObserverRuntime
 from product.protocols.check_result import (CheckCaseOutcome, CheckCaseResult, CheckEvidence,
     CheckPrimaryError, CheckRunnerInput, CheckRunnerResult, ControlledCheckRunnerResult, seal_check_evidence)
 from product.protocols.runtime_identity import RuntimeCorrespondence
+from product.protocols.node_runtime import NodeRuntimeReference, NodeRuntimeCorrespondence
+from product.protocols.check_result import NodeCheckRunnerResult
+from product.backend.infra.runtime.process.node_owned import node_corresponds
+from product.backend.infra.runtime.process.node_locator import controlled_node_executable
 from product.backend.infra.runtime.process.correspondence import runtime_corresponds
 
 
@@ -44,10 +48,19 @@ class CheckExecutor:
         self._stopped = None
         self._runtime_reference = getattr(bundle, "runtime_reference", None)
         self._var_dir = Path(environ["JIEJIAN_VAR_DIR"]) if self._runtime_reference is not None else None
+        self._runtime_environment = environ
+
+    def _runtime_matches(self):
+        if isinstance(self._runtime_reference,NodeRuntimeReference):
+            try:
+                return node_corresponds(self._var_dir,self._runtime_reference,controlled_node_executable(self._runtime_environment))
+            except (OSError,ValueError,JiejianError):
+                return False
+        return runtime_corresponds(self._var_dir,self._runtime_reference)
 
     def execute(self) -> CheckExecutionOutput:
         started = self.clock()
-        runtime_before = None if self._runtime_reference is None else runtime_corresponds(self._var_dir, self._runtime_reference)
+        runtime_before = None if self._runtime_reference is None else self._runtime_matches()
         if runtime_before is False:
             self._stop("RUNTIME_IDENTITY_UNCONFIRMED", "PREPARING")
         results, evidence = {}, []
@@ -84,10 +97,13 @@ class CheckExecutor:
             primary_error=self._first_error, cleanup_issues=tuple(dict.fromkeys(self._cleanup_issues)),
             started_at_us=started, completed_at_us=self.clock())
         if self._runtime_reference is not None:
-            runtime_after = runtime_corresponds(self._var_dir, self._runtime_reference)
+            runtime_after = self._runtime_matches()
             # 运行适用性单列保存，结束时漂移不改写已经观察到的业务事实和 Verdict。
-            result = ControlledCheckRunnerResult(**result.model_dump(exclude={"schema_version"}),
-                runtime_correspondence=RuntimeCorrespondence(reference=self._runtime_reference,
+            node=isinstance(self._runtime_reference,NodeRuntimeReference)
+            result_model=NodeCheckRunnerResult if node else ControlledCheckRunnerResult
+            correspondence_model=NodeRuntimeCorrespondence if node else RuntimeCorrespondence
+            result = result_model(**result.model_dump(exclude={"schema_version"}),
+                runtime_correspondence=correspondence_model(reference=self._runtime_reference,
                     before="MATCHED" if runtime_before else "UNCONFIRMED", after="MATCHED" if runtime_after else "UNCONFIRMED"))
         return CheckExecutionOutput(result, tuple(evidence))
 

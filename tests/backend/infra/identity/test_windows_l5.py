@@ -21,6 +21,7 @@ from product.protocols.web.target import WebTargetScope
 
 
 pytestmark = [
+    pytest.mark.l5,
     pytest.mark.browser,
     pytest.mark.process,
     pytest.mark.slow,

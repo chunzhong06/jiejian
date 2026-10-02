@@ -1,4 +1,5 @@
 # 验证双身份迁移建立当前结构、拒绝无损降级并保持已有数据库事实。
+from tests.contracts.current import DATABASE_HEAD
 import sqlite3
 from pathlib import Path
 import pytest
@@ -18,7 +19,7 @@ def test_fresh_ownership_database_is_current_and_repeatable(tmp_path):
     upgrade_database(database)
     upgrade_database(database)
     with sqlite3.connect(database) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0009_delivery_check_links"
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == DATABASE_HEAD
         columns = {row[1] for row in connection.execute("PRAGMA table_info(recordings)")}
         assert {"subject_test_identity_id", "resource_owner_test_identity_id"} <= columns
         assert "test_identity_id" not in columns
@@ -51,12 +52,13 @@ def test_nonempty_0003_preserves_raw_drafts_flow_and_current_binding_hashes(tmp_
     upgrade_database(database)
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT recording_id, draft_json, draft_sha256 FROM flow_draft_revisions ORDER BY recording_id").fetchall() == original_drafts
-        preserved = _preserved_rows(connection)
+        preserved = _preserved_rows(connection, business)
         assert {name: preserved[name] for name in business} == business
         assert all(not rows for name, (_columns, rows) in preserved.items() if name not in business)
         # 最终head新增发布收据并替换空旧Run结构；它们不属于原业务数据守恒比较。
         assert connection.execute("SELECT COUNT(*) FROM runs").fetchone() == (0,)
         assert connection.execute("SELECT COUNT(*) FROM check_publications").fetchone() == (0,)
+        assert all(row == (None,None) for row in connection.execute("SELECT runtime_load_id,preflight_id FROM jobs"))
         assert connection.execute("SELECT COUNT(*) FROM recordings WHERE subject_test_identity_id != resource_owner_test_identity_id").fetchone() == (0,)
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     from product.backend.infra.storage.db import _sqlite_schema_signature

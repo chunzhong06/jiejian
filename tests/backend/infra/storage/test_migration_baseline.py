@@ -1,6 +1,7 @@
 # 验证 数据库迁移基线、旧开发库只读拒绝与精确数据库结构。
 
 from __future__ import annotations
+from tests.contracts.current import DATABASE_HEAD
 
 import sqlite3
 from contextlib import closing
@@ -20,7 +21,7 @@ pytestmark = [pytest.mark.database, pytest.mark.essential]
 ROOT = Path(__file__).resolve().parents[4]
 BASE_REVISION = "0001_business_boundary_v2"
 MAINTENANCE_REVISION = "0002_business_boundary_maintenance"
-CURRENT_REVISION = "0009_delivery_check_links"
+CURRENT_REVISION = DATABASE_HEAD
 LEGACY_REVISIONS = (
     "0001_web_v1",
     "0002_remove_contract_workbench",
@@ -185,7 +186,7 @@ def test_fresh_database_reaches_current_head_idempotently(tmp_path: Path) -> Non
     tables = _tables(database)
     assert _revision(database) == CURRENT_REVISION
     assert tables == set(Base.metadata.tables) | {"alembic_version"}
-    assert len(Base.metadata.tables) == 57
+    assert len(Base.metadata.tables) == 66
     assert "check_publications" in tables
     assert BOUNDARY_TABLES <= tables
     assert not (FORBIDDEN_TABLES & tables)
@@ -251,12 +252,16 @@ def test_repository_contains_frozen_migration_chain() -> None:
         "0007_preparation_recovery.py",
         "0008_development_delivery.py",
         "0009_delivery_check_links.py",
+        "0010_rule_candidates.py",
+        "0011_runtime_load_jobs.py",
+        "0012_proof_preparation.py",
     ]
 
 
-def test_0002_business_data_upgrades_in_place_and_preserves_rows(tmp_path: Path) -> None:
+@pytest.mark.parametrize("starting_revision", [MAINTENANCE_REVISION, "0009_delivery_check_links"])
+def test_business_data_upgrades_in_place_and_preserves_rows(tmp_path: Path, starting_revision: str) -> None:
     database = tmp_path / "upgrade-business-data.db"
-    _upgrade_to_revision(database)
+    _upgrade_to_revision(database, starting_revision)
     actor_id = "bar_" + "1" * 32
     action_id = "bac_" + "2" * 32
     intent_id = "pin_" + "3" * 32

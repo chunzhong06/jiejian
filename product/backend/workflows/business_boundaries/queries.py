@@ -71,10 +71,11 @@ def _discovery_preview(project_id: str, understanding: ApplicationUnderstanding)
 
 def _maintenance_facts(work: StorageUnitOfWork,
     project_id: str,
+    *, allow_empty: bool = False,
 ) -> _MaintenanceFacts:
     actor_roots = work.business_boundaries.list_actors(project_id)
     action_roots = work.business_boundaries.list_actions(project_id)
-    if not actor_roots and not action_roots:
+    if not allow_empty and not actor_roots and not action_roots:
         boundary_validation._raise(
             ErrorCode.BOUNDARY_PROPOSAL_REFERENCE_INVALID,
             "项目尚未建立正式业务边界",

@@ -1,0 +1,14 @@
+/* 候选沿用公共正文轴与控件，只安排原约定、例子和单一决定的层次。 */
+.rule-candidates { margin-block: var(--space-24); padding-block: var(--space-24); border-block: var(--line-width) solid var(--color-border); }
+.rule-candidates-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); }
+.rule-candidates-heading h2 { margin: 0; }
+.rule-candidates-heading p { margin-block: var(--space-8); }
+.rule-candidate-original { font-size: 1.25rem; line-height: 1.7; overflow-wrap: anywhere; }
+.rule-candidate-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-16); padding-block: var(--space-16); border-bottom: var(--line-width) solid var(--color-border); }
+.rule-candidate-row p { margin: 0; overflow-wrap: anywhere; }
+.rule-example-table { margin-block: var(--space-24); }
+.rule-candidates .ant-alert { margin-block: var(--space-16); }
+/* 简短审阅按正文顺序放操作区，避免吸底栏遮挡最后一行缺口。 */
+.rule-candidates .task-action-bar:has(.ant-btn-primary) { position: static; margin-block-start: var(--space-16); }
+.rule-candidate-row > .product-status { justify-self: start; }
+@media (max-width: 600px) { .rule-candidates-heading { align-items: flex-start; flex-wrap: wrap; } .rule-candidate-row { grid-template-columns: minmax(0, 1fr); } }

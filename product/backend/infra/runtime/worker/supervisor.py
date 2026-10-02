@@ -64,6 +64,7 @@ class LocalWorkerSupervisor:
         environment_provider=None,
         clock_us=None,
         targets: JobTargetRegistry | None = None,
+        job_authorized=None,
     ) -> None:
         self.var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
@@ -80,6 +81,7 @@ class LocalWorkerSupervisor:
         self._lease_owner: str | None = None
         self._next_recovery_scan_us = 0
         self._recovered_jobs = 0
+        self._job_authorized = job_authorized or (lambda job: job.preflight_id is None)
 
     def start(self) -> None:
         """幂等启动后台调度；已有存活线程时不创建第二个 Worker。"""
@@ -183,6 +185,10 @@ class LocalWorkerSupervisor:
 
         while not self._stop.is_set():
             try:
+                if self._job_id is not None:
+                    current = self._read_job(self._job_id)
+                    if current is not None and not self._job_authorized(current):
+                        self._request_worker_cancellation()
                 self._recover_expired_workers()
                 self._reap_finished_worker()
                 if self._process is None and not self._stop.is_set():
@@ -220,6 +226,8 @@ class LocalWorkerSupervisor:
         self._job_id = job.job_id
         self._lease_owner = f"serve-worker-{uuid4().hex}"
         try:
+            if not self._job_authorized(job):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "预检查执行授权已失效")
             secret_names = ()
             if job.run_id is not None:
                 store = CheckRequestStore(self.var_dir)
@@ -234,6 +242,12 @@ class LocalWorkerSupervisor:
                     expected_hash=job.request_hash,
                 )
                 secret_names = required_recording_secret_names(recording_request)
+            elif job.preflight_id is not None:
+                with self._uow_factory() as work:
+                    request = work.proof_sources.preflight(job.project_id,job.preflight_id)
+                if request is None:
+                    raise JiejianError(ErrorCode.STATE_PRECONDITION, "预检查输入不存在")
+                secret_names = check_secret_names(request)
             environment = self._environment_provider(secret_names)
             self._process = WorkerDispatcher(
                 var_dir=self.var_dir,

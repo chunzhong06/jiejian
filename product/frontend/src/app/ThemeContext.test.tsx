@@ -16,6 +16,11 @@ function ThemeProbe() {
   return <><span>{mode}:{resolved}</span><button onClick={() => setMode('dark')}>使用暗色</button></>
 }
 
+function ColorProbe() {
+  const { token } = theme.useToken()
+  return <output aria-label="组件库实际主色">{token.colorPrimary}</output>
+}
+
 describe('ProductThemeProvider', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -30,6 +35,21 @@ describe('ProductThemeProvider', () => {
     })
   })
   afterEach(() => cleanup())
+
+  it.each(['light', 'dark'] as const)('%s 组件库解析后的主色与已确认色板相同，不再次调暗', mode => {
+    localStorage.setItem('jiejian.theme', mode)
+    render(<ProductThemeProvider><ColorProbe /></ProductThemeProvider>)
+    expect(screen.getByLabelText('组件库实际主色')).toHaveTextContent(palettes[mode].primary)
+  })
+
+  it('产品样式作用域覆盖body浮层，并在卸载后恢复原宿主标记', () => {
+    document.documentElement.dataset.product = 'host'
+    const view = render(<ProductThemeProvider><ThemeProbe /></ProductThemeProvider>)
+    expect(document.documentElement.dataset.product).toBe('jiejian')
+    view.unmount()
+    expect(document.documentElement.dataset.product).toBe('host')
+    delete document.documentElement.dataset.product
+  })
 
   it('默认跟随系统并持久化用户明确选择的暗色主题', () => {
     render(<ProductThemeProvider><ThemeProbe /></ProductThemeProvider>)

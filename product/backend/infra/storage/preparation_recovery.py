@@ -11,10 +11,11 @@ from product.backend.infra.storage.base import Base, _flush, ensure_storage_payl
 class PreparationReceiptRow(Base):
     __tablename__ = "preparation_receipts"
     operation_id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.project_id", ondelete="RESTRICT"))
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.project_id", ondelete="RESTRICT"), primary_key=True)
     request_fingerprint: Mapped[str] = mapped_column(String(64))
     created_at_us: Mapped[int] = mapped_column(BigInteger)
     payload: Mapped[str] = mapped_column(Text)
+    operation_kind: Mapped[str] = mapped_column(String(32), primary_key=True)
 
 
 class PreparationDraftRow(Base):
@@ -41,15 +42,15 @@ class PreparationRecoveryRepository:
     def candidate_recording(self, recording_id):
         return self._session.get(PreparationCandidateRecordingRow, recording_id) is not None
 
-    def receipt(self, operation_id):
-        row = self._session.get(PreparationReceiptRow, operation_id)
+    def receipt(self, operation_id, *, project_id, operation_kind="MATERIAL_CHANGE"):
+        row = self._session.get(PreparationReceiptRow, (operation_id, project_id, operation_kind))
         return None if row is None else json.loads(row.payload)
 
-    def add_receipt(self, value):
+    def add_receipt(self, value, *, operation_kind="MATERIAL_CHANGE"):
         ensure_storage_payload_safe(value, self._secrets)
         self._session.add(PreparationReceiptRow(operation_id=value["operation_id"],
             project_id=value["project_id"], request_fingerprint=value["request_fingerprint"],
-            created_at_us=value["created_at_us"], payload=json.dumps(value, ensure_ascii=False)))
+            operation_kind=operation_kind, created_at_us=value["created_at_us"], payload=json.dumps(value, ensure_ascii=False)))
         _flush(self._session)
 
     def draft(self, project_id):

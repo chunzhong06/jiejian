@@ -31,6 +31,7 @@ from product.backend.infra.secrets import SecretStore, default_secret_store
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.application_understanding.service import ApplicationUnderstandingService
 from product.backend.workflows.business_boundaries import BusinessBoundaryService
+from product.backend.workflows.business_boundaries.rule_candidates import RuleCandidateService
 from product.backend.workflows.onboarding.workflow import FolderSelector, OnboardingWorkflow, SystemFolderSelector
 from product.backend.workflows.business_boundaries.permissions import PermissionIntentService
 from product.backend.workflows.projects.catalog import ProjectCatalog
@@ -106,6 +107,14 @@ class ApplicationCore:
             reserved_control_origin=control_origin,
             clock_us=clock_us,
         )
+        from product.backend.infra.runtime.process.node_locator import controlled_node_executable
+        from product.backend.infra.runtime.worker.runtime_supervisor import LocalRuntimeSupervisor
+        from product.backend.workflows.node_runtime_setup import NodeRuntimeSetup
+        node_provider=lambda:controlled_node_executable(self._base_environment)
+        self.runtime_worker=LocalRuntimeSupervisor(self.var_dir,factory,node_executable_provider=node_provider,
+            environment_provider=lambda:dict(self._base_environment))
+        self.node_runtime=NodeRuntimeSetup(self.var_dir,factory,self.application_understanding,self.runtime_worker,
+            node_executable_provider=node_provider,control_origin=control_origin,clock_us=clock_us)
         self.business_boundaries = BusinessBoundaryService(factory, clock_us=clock_us)
         from product.backend.workflows.preparation.supplemental import SupplementalMaterialService
         from product.backend.workflows.changes.observations import CodeObservationService
@@ -127,7 +136,16 @@ class ApplicationCore:
             self.business_boundaries, self.test_identities, bindings=self.preparation_bindings,
             uow_factory=factory, clock_us=clock_us,
         )
+        self.rule_candidates = RuleCandidateService(factory, self.business_boundaries,
+            preparation=self.preparation, clock_us=clock_us)
         self.preparation_materials = PreparationMaterialService(factory, self.preparation_bindings, self.var_dir, preparation=self.preparation, clock_us=clock_us)
+        from product.backend.workflows.proof_preflight_jobs import ProofPreflightJobs
+        from product.backend.workflows.preparation.proof_sources import ProofPreparationService
+        self.proof_preparation = ProofPreparationService(var_dir=self.var_dir, uow_factory=factory,
+            boundaries=self.business_boundaries, credentials=self.check_credentials, runtime_reader=self.node_runtime.reference,
+            source_inspector=self.application_understanding.inspect_source_fingerprint,
+            jobs=ProofPreflightJobs(self.var_dir,factory), queue=self.job_queue, clock_us=clock_us)
+        self.check_registry.persistent_reader = self.proof_preparation.runtime_registration
         self.check_runtime_builder = CheckRuntimeBuilder(uow_factory=factory, var_dir=self.var_dir,
             preparation=self.preparation, business_boundaries=self.business_boundaries,
             credentials=self.check_credentials, registry=self.check_registry)
@@ -191,11 +209,13 @@ class ApplicationCore:
             self.var_dir, factory, self.job_queue, self.job_attempts,
             targets=self.job_targets, environment_provider=self.environment_for_secret_names,
             clock_us=clock_us,
+            job_authorized=self.proof_preparation.job_authorized,
         )
         self.project_lifecycle = ProjectLifecycleService(
             factory,
             self.test_identities,
             stop_official_sample=lambda project_id: self.official_experience.stop_project(project_id),
+            stop_runtime=self.runtime_worker.stop_project,
             clock_us=clock_us,
         )
         self.maintenance = LocalMaintenanceService(
@@ -243,17 +263,32 @@ class ApplicationCore:
             preparation=self.preparation, changes=self.source_changes, repairs=self.check_repairs,
             uow_factory=factory, var_dir=self.var_dir, archive_project=self.project_lifecycle.archive, clock_us=clock_us,
             reader=self.check_results, project_repairs=self.project_repair, development=self.development)
-        self.check_runtime_builder.runtime_reference_reader = self.official_experience.runtime_reference
-        self.development.runtime_reader = self.official_experience.runtime_reference
+        from product.backend.workflows.runtime_ports import ProjectRuntimePorts, RuntimeProvider
+        def owns_official_project(project_id):
+            with factory() as work:
+                return work.sample_workspaces.for_project(project_id) is not None
+        self.runtime_ports = ProjectRuntimePorts((RuntimeProvider("OFFICIAL_SAMPLE", owns_official_project,
+            self.official_experience.runtime_reference, self.official_experience.load_delivery_runtime),
+            RuntimeProvider('CONTROLLED_NODE_ESM',self.node_runtime.owns_project,self.node_runtime.reference,
+                self.node_runtime.require_loaded_delivery)))
+        self.check_runtime_builder.runtime_reference_reader = self.runtime_ports.reference
+        self.check_runtime_builder.json_sources_reader = self.proof_preparation.frozen_sources
+        from product.backend.workflows.business_boundaries.rule_details import BusinessRuleDetails
+        self.rule_details = BusinessRuleDetails(uow_factory=factory,boundaries=self.business_boundaries,
+            preparation=self.preparation,results=self.check_results,source_inspector=self.application_understanding.inspect_source_fingerprint,
+            runtime_reader=self.runtime_ports.reference)
+        self.development.runtime_reader = self.runtime_ports.reference
         from product.backend.workflows.runtime_activation import RuntimeActivationService
         self.runtime_activation = RuntimeActivationService(uow_factory=factory,
-            loader=self.official_experience.load_delivery_runtime, reader=self.official_experience.runtime_reference,
+            loader=self.runtime_ports.load_delivery, reader=self.runtime_ports.reference,
+            node_runtime=self.node_runtime,
             clock=clock_us or (lambda: time.time_ns() // 1000))
 
     def close(self) -> None:
         """先确认录制、登录进程及调度线程退出，再清空短期秘密和释放数据库。"""
 
         self.worker.stop()
+        self.runtime_worker.stop()
         self.official_experience.close()
         self.identity_preparations.close()
         self.runtime_secrets.clear()

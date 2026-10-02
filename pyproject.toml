@@ -52,6 +52,7 @@ path = "scripts/build/hatch_build.py"
 addopts = "-ra --import-mode=importlib"
 testpaths = ["tests"]
 markers = [
+    "l5: explicit real-runtime acceptance profile; not part of ordinary L4",
     "essential: 跨模块变更必须通过的必要回归门禁",
     "browser: 启动或依赖 Playwright/浏览器边界",
     "process: 拉起独立 Runner、Worker、Recording Runner 或 CLI 子进程",

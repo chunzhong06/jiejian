@@ -6,11 +6,13 @@ import base64
 import json
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 import anyio
 import httpx2
 import pytest
 from mcp.client import Client
+from mcp import MCPError
 from mcp.client.streamable_http import streamable_http_client
 from pydantic import BaseModel
 
@@ -331,6 +333,39 @@ def test_official_sdk_never_exposes_old_or_permission_writer_tools(tmp_path):
                     for name in ("jiejian_intent_propose", "jiejian_check_prepare", "jiejian_official_sample_apply_fix", "jiejian_flow_list"):
                         rejected = await client.call_tool(name, {"project_id": "unknown"})
                         assert rejected.is_error
+    anyio.run(scenario)
+
+
+def test_rule_candidate_sdk_requires_prepare_and_never_approves(tmp_path):
+    app = create_app(tmp_path / "var", start_worker=False, secret_store=_MemorySecretStore())
+    project_id = app.state.context.application_understanding.connect(_source(tmp_path)).project.project_id
+    token = app.state.mcp_access.pair().access_token
+
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=TEST_CONTROL_ORIGIN,
+                    headers={"Authorization": "Bearer " + token}, follow_redirects=True) as http:
+                async with Client(streamable_http_client(TEST_CONTROL_ORIGIN + "/mcp", http_client=http, terminate_on_close=False)) as client:
+                    context = (await client.call_tool("jiejian_rule_context", {"project_id": project_id})).structured_content
+                    assert context is not None
+                    candidate = {"operation_id": uuid4().hex, "expected_basis_id": context["basis_id"],
+                        "content": {"original_text": "同一次预约不能重复创建", "unsupported_constraints": ["本版不覆盖唯一性约束"]}}
+                    with pytest.raises(MCPError) as denied:
+                        await client.call_tool("jiejian_rule_candidate_save", {"project_id": project_id, "candidate": candidate})
+                    assert denied.value.data["error_code"] == "MCP_PERMISSION_REQUIRED"
+                    app.state.mcp_access.set_level(project_id, MCPAccessLevel.PREPARE)
+                    saved = await client.call_tool("jiejian_rule_candidate_save", {"project_id": project_id, "candidate": candidate})
+                    assert not saved.is_error
+                    assert saved.structured_content["candidate"]["submitted_via"] == "MCP"
+                    assert saved.structured_content["assessment"] == "NEEDS_CHANGES"
+                    receipt = await client.call_tool("jiejian_rule_operation", {"project_id": project_id, "operation_id": candidate["operation_id"]})
+                    assert receipt.structured_content["status"] == "FOUND"
+                    invalid = {**candidate, "operation_id": uuid4().hex, "approved_by": "Agent"}
+                    with pytest.raises(MCPError) as rejected:
+                        await client.call_tool("jiejian_rule_candidate_save", {"project_id": project_id, "candidate": invalid})
+                    assert rejected.value.data["error_code"] == "INPUT_INVALID"
+                    boundary = await client.call_tool("jiejian_business_boundary", {"project_id": project_id})
+                    assert boundary.structured_content["policy_epoch"] == 0
     anyio.run(scenario)
 
 

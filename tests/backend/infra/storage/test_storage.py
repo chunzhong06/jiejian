@@ -1,6 +1,7 @@
 # 验证持久化基础设施中的存储装配。
 
 from __future__ import annotations
+from tests.contracts.current import DATABASE_HEAD
 import json
 from collections.abc import Iterator
 from io import StringIO
@@ -82,7 +83,7 @@ def test_blank_database_upgrade_is_repeatable_and_at_head(tmp_path: Path) -> Non
         with engine.connect() as connection:
             assert connection.execute(
                 text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == "0009_delivery_check_links"
+            ).scalar_one() == DATABASE_HEAD
         recording_columns = {item["name"] for item in inspector.get_columns("recordings")}
         assert {"purpose", "parent_recording_id"} <= recording_columns
     finally:

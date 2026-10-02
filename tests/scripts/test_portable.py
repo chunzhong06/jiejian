@@ -8,8 +8,10 @@ import inspect
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -17,11 +19,11 @@ from types import ModuleType
 
 import pytest
 from playwright.sync_api import sync_playwright
-from scripts.dev.sample_test import current_api
-from scripts.dev.sample_test.current_gui import CurrentGui
-from scripts.dev.sample_test.clients.http import ApiClient
-from scripts.dev.sample_test.harness.state import HarnessState, CONTROL_PORT
-from scripts.dev.sample_test.harness.lifecycle import (_port_open, _wait_product_ready, _shutdown_owned_runtime, _runtime_locks_released, _cleanup_after_failure)
+from tests.acceptance.sample_test import current_api
+from tests.acceptance.sample_test.current_gui import CurrentGui
+from tests.acceptance.sample_test.clients.http import ApiClient
+from tests.acceptance.sample_test.harness.state import HarnessState, CONTROL_PORT
+from tests.acceptance.sample_test.harness.lifecycle import (_port_open, _wait_product_ready, _shutdown_owned_runtime, _runtime_locks_released, _cleanup_after_failure)
 from product.backend.infra.runtime.process.tree import (spawn_managed_process, process_tree_has_exited, release_process_tree, terminate_process_tree)
 from product.backend import __version__
 
@@ -59,6 +61,8 @@ def test_portable_launcher_is_relative_offline_and_uses_installed_product() -> N
     assert '$env:JIEJIAN_RUNTIME_MODE = "portable"' in launcher
     assert "$env:JIEJIAN_RELEASE_ROOT = $releaseRoot" in launcher
     assert "$env:JIEJIAN_PLAYWRIGHT_EXECUTABLE" in launcher
+    assert '$env:JIEJIAN_NODE_EXECUTABLE = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "node\\node.exe"))' in launcher
+    assert '$env:JIEJIAN_NODE_VERSION = [string]$release.node_version' in launcher
     assert "$env:PLAYWRIGHT_BROWSERS_PATH" in launcher
     assert 'Lib\\site-packages\\product\\frontend\\dist' in launcher
     assert '"-m", "product.backend.cli"' in launcher
@@ -90,6 +94,8 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
             "wheel_version": __version__,
             "playwright_version": "1.58.0",
             "chromium_revision": "1228",
+            "node_version": "24.19.0",
+            "node_sha256": "a" * 64,
         },
     )
 
@@ -101,16 +107,18 @@ def test_portable_runtime_files_freeze_layout_metadata_and_windows_encoding(tmp_
     assert b"\r\n" in start_ps1
     release = json.loads((base / "runtime" / "release.json").read_text(encoding="utf-8"))
     assert release == {
-        "schema_version": "1",
+        "schema_version": "2",
         "product": "JieJian Web V1",
         "version": __version__,
         "package_version": __version__,
         "platform": "windows",
         "architecture": "x64",
-        "runtime_layout_version": "1",
+        "runtime_layout_version": "2",
         "python_version": "3.13.13",
         "playwright_version": "1.58.0",
         "chromium_revision": "1228",
+        "node_version": "24.19.0",
+        "node_sha256": "a" * 64,
     }
 
 
@@ -226,15 +234,57 @@ def _accept_full_delivery(page, client, audit_dir, state, identities) -> int:
     current_api.prepare_current(client, project_id, initial=True, gui=gui)
     for identity in client.call("GET", f"/api/projects/{project_id}/test-identities"):
         identities[identity["identity_id"]] = identity["identity_id"]
-    result = current_api.run_current(client, project_id, state, name="portable-problem", expected="BLOCK", gui=gui)
-    gui.checkpoint("problem-result", result)
+    # 新实例从同步基线开始；Portable 验证实际完整计划，三阶段回归由唯一 sample-test 负责。
+    result = current_api.run_current(client, project_id, state, name="portable-baseline", expected="PASS", gui=gui)
+    gui.checkpoint("baseline-result", result)
     gui.history_search(project_id, result["run_id"])
     gui.history_open(result)
     gui.history_return(result["run_id"])
     return sample_port
 
 
-def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> None:
+def _accept_node_runtime(client, release: Path, source: Path) -> None:
+    """无示例包以公开加载接口运行新建应用，证明不依赖 PATH 中的系统 Node。"""
+    source.mkdir()
+    (source / "app.mjs").write_text(
+        "import http from 'node:http'; http.createServer((q,r)=>r.end('portable-node-ok'))"
+        ".listen(Number(process.env.PORT),'127.0.0.1');", encoding="utf-8",
+    )
+    connected = client.call("POST", "/api/applications/connect", {
+        "schema_version": "1", "source_root": str(source),
+    }, accepted=(201,))["understanding"]
+    prefix = f"/api/projects/{connected['project_id']}/controlled-runtime"
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    preview = client.call("POST", prefix + "/preview", {
+        "entry": "app.mjs", "port": port, "revision": connected["revision"],
+        "consent_source_read": True,
+    })
+    operation = client.call("POST", prefix + "/start", {
+        **{key: preview[key] for key in ("entry", "port", "revision", "preview_fingerprint")},
+        "operation_id": uuid.uuid4().hex, "consent_execute": True,
+    }, accepted=(202,))
+    deadline = time.monotonic() + 40
+    while time.monotonic() < deadline:
+        current = client.call("GET", prefix)
+        if current["operation"]["state"] in {"SUCCEEDED", "FAILED", "CANCELLED"}:
+            break
+        time.sleep(.1)
+    assert current["operation"]["state"] == "SUCCEEDED", current
+    assert current["running"] and current["source_matches"]
+    # ApiClient 仅用于受控控制面；目标 HTTP 单独读取，不把控制凭据送到应用。
+    from urllib.request import urlopen
+    with urlopen(f"http://127.0.0.1:{port}", timeout=5) as response:
+        assert response.read(256) == b"portable-node-ok"
+    status = client.call("GET", "/api/system/status")
+    assert Path(status["environment"]["node"]["executable"]).resolve() == (release / "runtime/node/node.exe").resolve()
+    stopped = client.call("POST", prefix + "/stop", {"instance_id": operation["instance_id"]})
+    assert not stopped["running"]
+    assert not _port_open(port)
+
+
+def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> dict[str, object]:
     extraction = root / ("完整版" if samples else "无示例版")
     invocation = root / ("独立调用目录 full" if samples else "独立调用目录 nosamples")
     extraction.mkdir()
@@ -280,7 +330,7 @@ def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> None:
         client.bind_page(page)
         sample_status = client.call("GET", "/api/experience/official-sample")
         assert sample_status["available"] is samples
-        sample_button = page.get_by_role("button", name="启动官方示例")
+        sample_button = page.get_by_role("button", name="启动示例", exact=True)
         if samples:
             assert sample_button.is_enabled()
         elif sample_button.count():
@@ -309,6 +359,7 @@ def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> None:
             released = True
         else:
             assert sample_status["active"] is False
+            _accept_node_runtime(client, release, root / "独立 Node 应用")
             client.call(
                 "POST",
                 "/api/system/shutdown",
@@ -345,8 +396,12 @@ def _smoke_archive(archive: Path, root: Path, *, samples: bool) -> None:
                 release_process_tree(process, timeout=5)
         if log is not None:
             log.close()
+    return {"archive": archive.name, "startup": "PASSED", "samples": samples,
+        "business_check": "OFFICIAL_BASELINE_PASS" if samples else "OWNED_NODE_STARTED_AND_STOPPED",
+        "owned_tree_closed": released, "control_port_closed": not _port_open(CONTROL_PORT)}
 
 
+@pytest.mark.l5
 @pytest.mark.skipif(
     os.name != "nt" or os.environ.get("JIEJIAN_RUN_PORTABLE_PROBE") != "1",
     reason="真实 Portable 仓库外验收需要显式启用",
@@ -366,8 +421,14 @@ def test_real_full_and_nosamples_portables_start_outside_repository() -> None:
     external = ROOT.parent / f"界鉴 Portable 正式验收 {uuid.uuid4().hex}"
     external.mkdir()
     try:
-        _smoke_archive(full, external, samples=True)
-        _smoke_archive(nosamples, external, samples=False)
+        checks = [_smoke_archive(full, external, samples=True),
+                  _smoke_archive(nosamples, external, samples=False)]
+        audit = ROOT / "var" / "audit" / f"v{__version__}" / "portable" / uuid.uuid4().hex
+        audit.mkdir(parents=True)
+        (audit / "report.json").write_text(json.dumps({
+            "status": "PASSED", "version": __version__, "sha256": expected, "checks": checks,
+            "scope": "仓库外中文空格路径；包内Python/Chromium/Node；启动不安装或下载；保留正式权限审批与检查链",
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
     finally:
         assert external.resolve().parent == ROOT.parent.resolve()
         assert external.name.startswith("界鉴 Portable 正式验收 ")

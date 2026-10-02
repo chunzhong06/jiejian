@@ -1,7 +1,8 @@
 // AI 辅助设置抽屉；只呈现单一默认模型连接，秘密只短暂驻留表单。
 
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Drawer, Form, Input, Select, Switch, Tag } from 'antd'
+import { Alert, Button, Card, Drawer, Form, Input, Select, Switch } from 'antd'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { llmApi, type AIAssistanceSettings, type LLMModelCatalog, type LLMProfile, type LLMProfileWrite, type LLMProvider } from '../../api/llm'
 import { ApiError } from '../../api/http'
 
@@ -142,7 +143,7 @@ export function LLMSettingsDrawer({
             </div>
             <Button className="llm-settings-discover" loading={discovering} onClick={() => void discover()}>获取当前账号可用模型</Button>
             <Form.Item name="model" label="模型" rules={[{ required: true }]}><Select options={modelOptions} disabled={!catalog} placeholder="先获取当前账号可用模型" /></Form.Item>
-            <div className="llm-settings-actions"><Tag>{statusLabel(currentProfile)}</Tag><Button type="primary" htmlType="submit" loading={saving}>保存并检查连接</Button></div>
+            <div className="llm-settings-actions"><StatusBadge kind="lifecycle" tone={currentProfile?.connection_status === 'unavailable' ? 'warning' : 'neutral'}>{statusLabel(currentProfile)}</StatusBadge><Button type="primary" htmlType="submit" loading={saving}>保存并检查连接</Button></div>
           </div>
         </Card>
       </div>

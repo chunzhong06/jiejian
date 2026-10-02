@@ -1,11 +1,12 @@
 /* 录制采集过程：显示浏览器采集阶段、控制开始/停止并恢复后台事件游标。 */
 
 import { useEffect, useState } from 'react'
-import { Alert, Space, Tag, Typography } from 'antd'
+import { Alert, Space, Typography } from 'antd'
 import type { RecordingDto, RecordingJobDto } from '../../api/recordings'
 import type { JobEventDto } from '../../api/jobs'
 import { browserState } from '../../app/browserState'
 import { lifecycleLabel } from '../../app/presentation'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 
 export function captureLabel(recording: RecordingDto | null) {
   if (!recording) return '尚未开始'
@@ -25,10 +26,10 @@ export function RecordingCaptureCard({ recording, onRefresh }: {
   const captureGuide = phase === 'AWAITING_CAPTURE'
     ? <div className="recording-capture-guide">
       <ol>
-        <li><Tag color="green">1</Tag><div><Typography.Text strong>浏览器已打开</Typography.Text><Typography.Text type="secondary">请进入要执行操作的页面。</Typography.Text><Typography.Text type="secondary">现在的浏览和登录不会写进业务流程。</Typography.Text></div></li>
-        <li><Tag color="blue">2</Tag><div><Typography.Text strong>准备开始记录</Typography.Text><Typography.Text type="secondary">确认浏览器已经停在正确页面后，从页面底部开始记录。</Typography.Text></div></li>
-        <li><Tag>3</Tag><div><Typography.Text strong>在浏览器里正常完成一次“{actionName}”</Typography.Text><Typography.Text type="secondary">完成后不要关闭浏览器。</Typography.Text></div></li>
-        <li><Tag>4</Tag><div><Typography.Text strong>回到界鉴</Typography.Text><Typography.Text type="secondary">完成业务动作后，在这里确认。</Typography.Text></div></li>
+        <li><span className="flow-number">1</span><div><Typography.Text strong>浏览器已打开</Typography.Text><Typography.Text type="secondary">请进入要执行操作的页面。</Typography.Text><Typography.Text type="secondary">现在的浏览和登录不会写进业务流程。</Typography.Text></div></li>
+        <li><span className="flow-number" aria-current="step">2</span><div><Typography.Text strong>准备开始记录</Typography.Text><Typography.Text type="secondary">确认浏览器已经停在正确页面后，从页面底部开始记录。</Typography.Text></div></li>
+        <li><span className="flow-number">3</span><div><Typography.Text strong>在浏览器里正常完成一次“{actionName}”</Typography.Text><Typography.Text type="secondary">完成后不要关闭浏览器。</Typography.Text></div></li>
+        <li><span className="flow-number">4</span><div><Typography.Text strong>回到界鉴</Typography.Text><Typography.Text type="secondary">完成业务动作后，在这里确认。</Typography.Text></div></li>
       </ol>
     </div>
     : phase === 'CAPTURING'
@@ -61,5 +62,5 @@ function RecordingProgress({ job, onRefresh }: { job?: RecordingJobDto; onRefres
     return () => source.close()
   }, [job?.job_id, job?.state])
   if (!job) return null
-  return <Space wrap><Tag>处理状态：{lifecycleLabel(job.state)}</Tag>{event && <Typography.Text type="secondary">状态已更新</Typography.Text>}</Space>
+  return <Space wrap><StatusBadge kind="lifecycle">处理状态：{lifecycleLabel(job.state)}</StatusBadge>{event && <Typography.Text type="secondary">状态已更新</Typography.Text>}</Space>
 }

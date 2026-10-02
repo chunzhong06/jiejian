@@ -11,8 +11,8 @@ export function ProofCoverage({ rows, onEvidence }: { rows: StoryProofCoverage[]
       <p><strong>{labels[row.observed_state]}</strong>{row.source_label !== row.business_label && <span> · {row.source_label}</span>}</p>
       {row.limitations.map(text => <p key={text} className="editorial-muted">{text}</p>)}
       <div className="result-proof-links">
-        {!!row.evidence_refs.length && <Button type="link" onClick={() => onEvidence(row, row.evidence_refs)}>查看必要证明记录 →</Button>}
-        {!!row.supporting_evidence_refs.length && <Button type="link" onClick={() => onEvidence(row, row.supporting_evidence_refs)}>查看辅助观察记录 →</Button>}
+        {!!row.evidence_refs.length && <Button type="link" onClick={() => onEvidence(row, row.evidence_refs)}>查看必要证明记录</Button>}
+        {!!row.supporting_evidence_refs.length && <Button type="link" onClick={() => onEvidence(row, row.supporting_evidence_refs)}>查看辅助观察记录</Button>}
         {!row.evidence_refs.length && !row.supporting_evidence_refs.length && <span className="editorial-muted">本轮没有可查看的对应证据</span>}
       </div>
     </article>)}

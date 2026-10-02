@@ -79,10 +79,13 @@ class CheckObserverRuntime:
         self._cursors = {}
         self._disclosure_key = secrets.token_bytes(32)
         self._trusted_histories = {}
+        self._json_histories = {}
+        self._json_sources = {'json_' + item.source_id[4:]:item for item in getattr(bundle,'json_sources',())}
+        self.var_dir = Path(environ['JIEJIAN_VAR_DIR']) if self._json_sources else None
 
     def restart_case_baseline(self, case_id: str) -> None:
         """恢复后的前置观察重新建窗；已返回的证据保留，内部投影不跨恢复动作拼接。"""
-        for collection in (self._envelopes, self._cursors, self._trusted_histories):
+        for collection in (self._envelopes, self._cursors, self._trusted_histories, self._json_histories):
             for key in tuple(collection):
                 if key[0] == case_id:
                     del collection[key]
@@ -107,6 +110,11 @@ class CheckObserverRuntime:
             if self.cancelled() and not cleanup:
                 raise JiejianError(ErrorCode.EXEC_CANCELLED, "复杂权限执行已取消")
             source_identity = self.web.verify_identity(proof.observation_identity_id, case, cleanup=cleanup)
+            if proof.observer_id in self._json_sources:
+                from product.backend.infra.observers.check_records import observe_records
+                return observe_records(self,source=self._json_sources[proof.observer_id],case=case,action_id=action_id,
+                    requirement=requirement,proof=proof,phase=phase,baseline_trusted=baseline_trusted,
+                    cleanup=cleanup,common=common,source_identity=source_identity)
             if proof.rule != "REGISTERED_EFFECT":
                 response = self.web.request(proof.request, case=case, action_id=action_id,
                     identity_id=proof.observation_identity_id, cleanup=cleanup)

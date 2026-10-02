@@ -251,6 +251,10 @@ class PreparationBindingService:
             binding.project_id, binding.business_action_id, binding.action_revision, binding.action_semantic_fingerprint,
         ) != (action.project_id, action.action_id, action.revision, action.semantic_fingerprint):
             return ("ACTION_BINDING_SOURCE_STALE",)
+        source_reused = False
+        if binding.source_fingerprint != understanding.source_fingerprint:
+            from product.backend.workflows.preparation.proof_reuse import recorded_material_reusable
+            source_reused = recorded_material_reusable(work,binding,understanding,self._var_dir)
         identity = work.test_identities.get(binding.subject_test_identity_id)
         owner = work.test_identities.get(binding.resource_owner_test_identity_id)
         if (owner is None or owner.project_id != action.project_id or owner.prepared_at_us is None
@@ -272,7 +276,7 @@ class PreparationBindingService:
                 or binding.subject_identity_fingerprint != identity_source_fingerprint(identity)
                 or implementation.status is not ImplementationBindingStatus.CURRENT
                 or binding.implementation_fingerprint != implementation.binding_fingerprint
-                or binding.source_fingerprint != understanding.source_fingerprint
+                or (binding.source_fingerprint != understanding.source_fingerprint and not source_reused)
                 or binding.endpoint_fingerprint != recording_endpoint_fingerprint(understanding, controlled_instance_id=current_recording_instance(work, action.project_id))):
             return ("ACTION_BINDING_SOURCE_STALE",)
         actor_root = work.business_boundaries.actor(identity.actor_id)
@@ -303,7 +307,8 @@ class PreparationBindingService:
                 or draft_record.draft_sha256 != binding.source_draft_sha256):
             return ("RECORDING_SOURCE_STALE",)
         try:
-            require_persisted_recording_source(work, recording, self._var_dir)
+            require_persisted_recording_source(work, recording, self._var_dir,
+                reused_source_fingerprint=binding.source_fingerprint if source_reused else None)
         except JiejianError:
             return ("RECORDING_SOURCE_STALE",)
         if isinstance(binding, (ActionExecutionBinding, ActionResourceBinding)):

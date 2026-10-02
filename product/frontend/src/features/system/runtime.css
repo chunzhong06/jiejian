@@ -1,0 +1,15 @@
+/* 系统页只安排运行事实与维护区域，控件外观由公共样式提供。 */
+.runtime-panel,.runtime-maintenance { min-width:0; max-width:100%; }
+/* 标题栏给操作留出垂直空间；窄屏可以换行，按钮不贴分隔线或挤压标题。 */
+.runtime-maintenance > .ant-card-head { padding-block:var(--space-16); }
+.runtime-maintenance > .ant-card-head > .ant-card-head-wrapper { flex-wrap:wrap; gap:var(--space-12) var(--space-24); }
+.runtime-maintenance > .ant-card-head .ant-card-head-title { white-space:normal; }
+.runtime-maintenance > .ant-card-head .ant-card-extra { flex-shrink:0; margin-inline-start:auto; }
+.runtime-panel .ant-card-body { display: grid; grid-template-columns:minmax(0,1fr); gap: var(--rhythm-fieldGap); }
+.runtime-panel .ant-card-body > *, .runtime-maintenance .ant-card-body > * { min-width:0; }
+.runtime-panel .ant-alert-content,.runtime-maintenance .ant-alert-content { min-width:0; overflow-wrap:anywhere; }
+.runtime-panel .ant-typography { margin-bottom: 0; }
+.runtime-panel .product-status { justify-self: start; }
+.runtime-details .ant-descriptions { margin-top: var(--space-16); }
+.runtime-details .ant-descriptions-item-content { overflow-wrap: anywhere; }
+.runtime-card-actions { display: flex; justify-content: flex-end; margin-top: var(--space-16); }

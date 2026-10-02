@@ -1,8 +1,8 @@
 # 验证验收脚本的运行身份与资源生命周期。
 from __future__ import annotations
-import scripts.dev.sample_test.harness.lifecycle as sample_harness_lifecycle
-import scripts.dev.sample_test.harness.receipt as sample_harness_receipt
-import scripts.dev.sample_test.harness.state as sample_harness_state
+import tests.acceptance.sample_test.harness.lifecycle as sample_harness_lifecycle
+import tests.acceptance.sample_test.harness.receipt as sample_harness_receipt
+import tests.acceptance.sample_test.harness.state as sample_harness_state
 import json
 import os
 import subprocess
@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 import pytest
-from scripts.dev.sample_test import official
+from tests.acceptance.sample_test import official
 from tests.scripts._support_sample_test import ROOT, COMMON_IDENTITY_NAMES, _fresh_real_probe_dir, _write_receipt
 
 def test_real_start_receipt_builds_complete_runtime_identity(
@@ -64,12 +64,12 @@ def test_start_product_invokes_root_start_cmd_and_owns_its_process_tree(
     assert process.pid == 123
     command = captured["command"]
     assert str(ROOT / "start.cmd") in command
-    assert command[-4:] == ["-Mode", "Gui", "-VarDir", str(var_dir)]
+    assert command[-6:] == ["-Mode", "Gui", "-VarDir", str(var_dir), "-Port", "8765"]
     assert "product.backend.cli" not in command
     assert str(captured["kwargs"]["tree_name"]).startswith("jiejian-sample-test-")
 
 def test_current_driver_submits_frozen_full_plan_and_reuses_unknown_receipt_key(monkeypatch):
-    from scripts.dev.sample_test import current_api as current
+    from tests.acceptance.sample_test import current_api as current
     calls = []
     responses = 0
     class Client:
@@ -142,6 +142,7 @@ def test_runtime_lock_receipts_do_not_count_as_active_locks(
     assert sample_harness_lifecycle._runtime_locks_released(tmp_path) is True
     assert observed == [serve_lock, worker_lock]
 
+@pytest.mark.l5
 @pytest.mark.skipif(
     os.name != "nt" or os.environ.get("JIEJIAN_RUN_WINDOWS_L5") != "1",
     reason="真实源码准备隔离只在明确授权的交互用户环境运行",

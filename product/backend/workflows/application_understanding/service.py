@@ -249,8 +249,9 @@ class ApplicationUnderstandingService:
         project_id: str,
         *,
         revision: int,
+        for_controlled_start: bool = False,
     ) -> ApplicationUnderstanding:
-        """在 endpoint 已经由用户确认后，单独保存源码只读分析授权。"""
+        """保存源码读取授权；受控启动预览经GUI明确授权可先于地址连通，普通入口前置不变。"""
 
         with self._uow_factory() as work:
             current = work.application_understanding.get(project_id)
@@ -260,7 +261,7 @@ class ApplicationUnderstandingService:
                     "当前项目还没有应用连接记录",
                 )
             self._require_revision(current, revision)
-            if current.confirmed_endpoint is None:
+            if current.confirmed_endpoint is None and not for_controlled_start:
                 raise JiejianError(
                     ErrorCode.APPLICATION_ENDPOINT_INVALID,
                     "请先确认当前应用的本地访问地址",

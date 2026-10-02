@@ -14,6 +14,7 @@ from product.protocols.execution_v3 import ExecutionCase, Hash, LogicalId, WireM
 from product.protocols.check_publication import CheckPublicationManifest
 from product.protocols.check_runtime import check_payload_contains_secret
 from product.protocols.runtime_identity import RuntimeCorrespondence
+from product.protocols.node_runtime import NodeRuntimeCorrespondence
 
 RunId = Annotated[str, Field(pattern=r"^run_[0-9a-f]{32}$")]
 JobId = Annotated[str, Field(pattern=r"^job_[0-9a-f]{32}$")]
@@ -210,12 +211,17 @@ class ControlledCheckRunnerResult(CheckRunnerResult):
     runtime_correspondence: RuntimeCorrespondence
 
 
+class NodeCheckRunnerResult(CheckRunnerResult):
+    schema_version: Literal['3'] = '3'
+    runtime_correspondence: NodeRuntimeCorrespondence
+
+
 class CheckResultProtocolError(ValueError):
     code = "RUNNER_PROTOCOL_INVALID"
 
 
 CheckDocument = TypeVar("CheckDocument", CheckRunnerInput, CheckEvidence, CheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
-_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, CheckRunnerResult, ControlledCheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
+_CHECK_ROOTS = (CheckRunnerInput, CheckEvidence, CheckRunnerResult, ControlledCheckRunnerResult, NodeCheckRunnerResult, CheckPublicationManifest, CheckRunnerProgress)
 
 
 def canonical_check_document(document: CheckDocument, *, known_secrets: tuple[str, ...] = ()) -> bytes:
@@ -250,8 +256,10 @@ def parse_check_document(raw: bytes, model: type[CheckDocument], *, known_secret
             raise ValueError("invalid check document")
         payload = json.loads(raw.decode(), object_pairs_hook=unique,
             parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
-        if model is CheckRunnerResult and isinstance(payload, dict) and payload.get("schema_version") == "2":
-            model = ControlledCheckRunnerResult
+        if model is CheckRunnerResult and isinstance(payload, dict):
+            model = {'1':CheckRunnerResult,'2':ControlledCheckRunnerResult,'3':NodeCheckRunnerResult}.get(payload.get('schema_version'))
+            if model is None:
+                raise ValueError('unsupported result version')
         document = model.model_validate_json(raw, strict=True)
         if canonical_check_document(document, known_secrets=known_secrets) != raw:
             raise ValueError("noncanonical check document")

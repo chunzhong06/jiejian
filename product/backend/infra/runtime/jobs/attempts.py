@@ -289,6 +289,7 @@ class JobAttempts:
                 metadata={
                     "attempt": job.attempt,
                     "reason_code": request.reason_code.value,
+                    **({"error_code": request.error_code} if request.error_code is not None else {}),
                 },
             )
             work.commit()

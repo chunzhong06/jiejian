@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from tests.contracts.current import WORKER_CAPABILITIES
 from threading import Event
 
 import pytest
@@ -146,7 +147,7 @@ def test_application_core_worker_has_current_capabilities_and_idempotent_lifecyc
         core = harness.core
         assert core.worker_status() == {
             "worker": "stopped",
-            "worker_capabilities": ("CHECK", "RECORDING"),
+            "worker_capabilities": WORKER_CAPABILITIES,
             "check": "available",
             "recovered_jobs": 0,
         }
@@ -398,7 +399,7 @@ def test_worker_container_has_current_targets_and_does_not_upgrade_missing_datab
     try:
         container = WorkerContainer(harness.var_dir, environ={})
         try:
-            assert container.job_targets.target_types == (JobTargetType.RECORDING, JobTargetType.RUN)
+            assert container.job_targets.target_types == (JobTargetType.PROOF_PREFLIGHT, JobTargetType.RECORDING, JobTargetType.RUN)
             registry = container.handler_factory.build_registry("recording-worker", {})
             recording_job = JobRecord(
                 job_id="job_" + "b" * 32,
@@ -481,10 +482,10 @@ def test_control_plane_ready_and_status_follow_worker_lifecycle_without_writer(t
         status = client.get("/api/system/status")
         assert ready.status_code == 200
         assert ready.json()["worker"] == "stopped"
-        assert ready.json()["worker_capabilities"] == ["CHECK", "RECORDING"]
+        assert ready.json()["worker_capabilities"] == list(WORKER_CAPABILITIES)
         assert ready.json()["check"] == "available"
         assert status.json()["data"]["worker"] == "stopped"
-        assert status.json()["data"]["worker_capabilities"] == ["CHECK", "RECORDING"]
+        assert status.json()["data"]["worker_capabilities"] == list(WORKER_CAPABILITIES)
         assert status.json()["data"]["check"] == "available"
 
     running_app = create_control_plane_app(tmp_path / "running", start_worker=True)

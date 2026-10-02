@@ -55,6 +55,19 @@ def test_controlled_result_keeps_runtime_applicability_separate_from_verdict():
     assert type(parse_check_document(canonical_check_document(old), CheckRunnerResult)) is CheckRunnerResult
 
 
+def test_node_result_keeps_old_reader_and_separates_runtime_fact():
+    from product.protocols.check_result import NodeCheckRunnerResult
+    from product.protocols.node_runtime import NodeRuntimeReference,NodeRuntimeCorrespondence
+    old=result_document();original=canonical_check_document(old)
+    reference=NodeRuntimeReference(project_id='node-project',instance_id='rti_'+'1'*32,
+        manifest_fingerprint='a'*64,source_fingerprint='b'*64,process_id=123,process_created_at=456,port=3000)
+    current=NodeCheckRunnerResult(**old.model_dump(exclude={'schema_version'}),
+        runtime_correspondence=NodeRuntimeCorrespondence(reference=reference,before='MATCHED',after='UNCONFIRMED'))
+    parsed=parse_check_document(canonical_check_document(current),CheckRunnerResult)
+    assert parsed==current and parsed.verdict==old.verdict
+    assert canonical_check_document(parse_check_document(original,CheckRunnerResult))==original
+
+
 @pytest.mark.parametrize("build", [input_document, evidence_document, result_document])
 def test_check_root_roundtrip(build):
     document = build()

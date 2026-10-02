@@ -1,4 +1,5 @@
 # 验证 0005 的精确预检、录制数据保留、DDL 回滚和新 Run 结论约束。
+from tests.contracts.current import DATABASE_HEAD
 import importlib.util
 import sqlite3
 from pathlib import Path
@@ -43,7 +44,7 @@ def test_fresh_incremental_schema_and_repeat_start_match(tmp_path):
     upgrade_database(incremental)
     with sqlite3.connect(incremental) as left, sqlite3.connect(fresh) as right:
         assert _sqlite_schema_signature(left) == _sqlite_schema_signature(right)
-        assert left.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0009_delivery_check_links"
+        assert left.execute("SELECT version_num FROM alembic_version").fetchone()[0] == DATABASE_HEAD
         columns = {row[1] for row in left.execute("PRAGMA table_info(runs)")}
         assert {"request_hash", "plan_fingerprint", "source_fingerprint", "policy_epoch"} <= columns
         assert {"contract_id", "contract_version"}.isdisjoint(columns)
@@ -51,28 +52,18 @@ def test_fresh_incremental_schema_and_repeat_start_match(tmp_path):
 
 
 def test_nonempty_recording_and_business_rows_remain_identical(tmp_path):
-    harness = build_preparation_harness(tmp_path)
-    recording = add_recording(harness)
-    harness.core.recording_lifecycle.finalize(recording.recording_id, var_dir=harness.var_dir, now_us=100)
-    source_path = harness.var_dir / "data/jiejian.db"
-    harness.close()
-    old = old_database(tmp_path)
-    with sqlite3.connect(source_path) as source, sqlite3.connect(old) as destination:
-        destination.execute("PRAGMA foreign_keys=OFF")
-        tables = [row[0] for row in destination.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'alembic_version'")]
-        for table in tables:
-            if table == "runs":
-                continue
-            rows = source.execute(f'SELECT * FROM "{table}"').fetchall()
-            if rows:
-                placeholders = ",".join("?" for _ in rows[0])
-                destination.executemany(f'INSERT INTO "{table}" VALUES ({placeholders})', rows)
+    from tests.fixtures.legacy_recording import _nonempty_0003
+    old, _ = _nonempty_0003(tmp_path)
+    command.upgrade(migration_config(old), "0004_action_resource_ownership")
+    with sqlite3.connect(old) as destination:
+        tables = [row[0] for row in destination.execute("SELECT name FROM sqlite_master WHERE type='table' AND name!='alembic_version'")]
+        prior_columns = {table: [row[1] for row in destination.execute(f'PRAGMA table_info("{table}")')] for table in tables}
         before = {table: destination.execute(f'SELECT * FROM "{table}"').fetchall() for table in tables if table != "runs"}
         assert before["recordings"] and before["flow_draft_revisions"] and before["test_identities"]
-        destination.commit()
     upgrade_database(old)
     with sqlite3.connect(old) as connection:
-        assert {table: connection.execute(f'SELECT * FROM "{table}"').fetchall() for table in before} == before
+        assert {table: connection.execute('SELECT '+",".join(f'"{name}"' for name in prior_columns[table])+f' FROM "{table}"').fetchall() for table in before} == before
+        assert all(row == (None,None) for row in connection.execute("SELECT runtime_load_id,preflight_id FROM jobs"))
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
@@ -140,12 +131,14 @@ def test_nonempty_0003_through_0005_preserves_four_bindings_and_recording_lease(
         sequence = connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM job_events WHERE job_id=?", (job,)).fetchone()[0]
         connection.execute("INSERT INTO job_events VALUES (?,?,?,?,?,?,?)", (job, sequence, "CLAIMED", "PENDING", "RUNNING", 2, "{}"))
         tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('runs','alembic_version')")]
+        prior_columns = {table:[row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')] for table in tables}
         before = {table: connection.execute(f'SELECT * FROM "{table}"').fetchall() for table in tables}
         for table in ("action_execution_bindings", "action_resource_bindings", "action_evidence_bindings", "action_recovery_bindings", "jobs", "job_events"):
             assert before[table]
     upgrade_database(database)
     with sqlite3.connect(database) as connection:
-        assert {table: connection.execute(f'SELECT * FROM "{table}"').fetchall() for table in before} == before
+        assert {table: connection.execute('SELECT '+",".join(f'"{name}"' for name in prior_columns[table])+f' FROM "{table}"').fetchall() for table in before} == before
+        assert all(row == (None,None) for row in connection.execute("SELECT runtime_load_id,preflight_id FROM jobs"))
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     fresh = tmp_path / "fresh-comparison.db"
     upgrade_database(fresh)

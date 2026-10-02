@@ -1,6 +1,10 @@
 # 所属业务域的共享测试构造器；不导入测试用例。
 
 TOOLS = {"jiejian_project_list","jiejian_project_show","jiejian_application_understanding","jiejian_business_boundary",
+    "jiejian_preparation_context", "jiejian_proof_source_save", "jiejian_proof_source_show",
+    "jiejian_proof_preflight_start", "jiejian_proof_preflight_status", "jiejian_proof_preflight_cancel",
+    "jiejian_proof_adoption_preview", "jiejian_preparation_receipt",
+    "jiejian_rule_context", "jiejian_rule_candidate_save", "jiejian_rule_candidate_show", "jiejian_rule_operation",
     "jiejian_intent_show","jiejian_identity_list","jiejian_system_status","jiejian_change_show","jiejian_check_status",
     "jiejian_result_show","jiejian_repair_show","jiejian_change_submit","jiejian_change_registration_preview","jiejian_change_register","jiejian_check_run","jiejian_check_cancel",
     "jiejian_task_list", "jiejian_task_show", "jiejian_task_context", "jiejian_task_create", "jiejian_task_accept", "jiejian_receipt_show"}

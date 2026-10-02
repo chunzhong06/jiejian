@@ -1,0 +1,487 @@
+{
+  "schema_version": "1",
+  "revision": "0003_action_assurance_recording",
+  "flow": {
+    "action_revision": 1,
+    "business_action_id": "bac_11111111111111111111111111111111",
+    "id": "flow_081a1f1f8468496e8b480c5cc95b2f3c",
+    "schema_version": "2",
+    "steps": [
+      {
+        "classifier": {
+          "accepted": [
+            {
+              "attribute": null,
+              "expected": null,
+              "header_name": null,
+              "json_path": null,
+              "kind": "STATUS_IN",
+              "literal": null,
+              "redirect_path": null,
+              "selector": null,
+              "statuses": [
+                200
+              ],
+              "values": []
+            }
+          ],
+          "completion_binding": null,
+          "denied": []
+        },
+        "depends_on_step_ids": [],
+        "id": "step_000001",
+        "name": "业务请求",
+        "purpose": "TARGET",
+        "request_template": {
+          "body": {
+            "kind": "JSON",
+            "value": {
+              "title": "fixture"
+            }
+          },
+          "headers": [],
+          "input_slots": [
+            {
+              "consumer": "PATH",
+              "consumer_step": null,
+              "consumer_step_id": "step_000001",
+              "literal": null,
+              "max_length": 256,
+              "producer_step": null,
+              "producer_step_id": null,
+              "secret": false,
+              "secret_ref": null,
+              "slot_id": "case_resource_id",
+              "source": "CASE_RESOURCE_ID",
+              "source_path": null,
+              "value_type": "STRING"
+            }
+          ],
+          "method": "POST",
+          "path": "/docs/{case_resource_id}",
+          "query": [],
+          "response_extractors": [],
+          "schema_version": "1"
+        },
+        "sensitive_fields": [],
+        "variable_sources": []
+      }
+    ],
+    "target_step_id": "step_000001",
+    "test_identity_id": "tid_00000000000000000000000000000001"
+  },
+  "tables": {
+    "llm_profiles": [],
+    "projects": [
+      {
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "name": "fixture-app",
+        "status": "READY",
+        "target_type": "WEB",
+        "governed_contract_id": null,
+        "governed_contract_version": null,
+        "created_at_us": 1790929416752922,
+        "updated_at_us": 1790929416752922
+      }
+    ],
+    "ai_assistance_settings": [],
+    "application_understanding": [
+      {
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "source_root": "D:/historical-fixture\\fixture-app",
+        "confirmed_endpoint": "http://127.0.0.1:8765",
+        "endpoint_source_fingerprint": "b7dcd8ee730e3b83acac374318bf51b9ea0be9e5f9ced76039a0ce33a2039a71",
+        "endpoint_confirmed_at_us": 1790929416752922,
+        "endpoint_last_checked_at_us": 1790929416752922,
+        "endpoint_reachable": 1,
+        "source_analysis_authorized": 1,
+        "source_analysis_authorized_at_us": 1790929416752922,
+        "source_fingerprint": "60754dcfaa7564c87a8e54f1548eebc4144467c33e5189888ffaed87775d559b",
+        "analysis_completed_at_us": 1790929416752922,
+        "role_candidates_json": "[{\"candidate_id\":\"role_1f899121fcde4619c89bd6f261415f37\",\"canonical_key\":\"member\",\"confidence\":\"HIGH\",\"decision\":\"CONFIRMED\",\"display_name\":\"普通成员\",\"evidence\":[{\"content_sha256\":\"b85fe69b01108aa99dc014f2064d9251fda1680df08a46da9b6ac4338b07de5a\",\"detector\":\"fixture\",\"line_end\":2,\"line_start\":1,\"relative_path\":\"routes.py\",\"symbol\":\"update_document\"}],\"origin\":\"DETECTED\",\"stale\":false}]",
+        "action_candidates_json": "[{\"candidate_id\":\"action_c5b447e310372824f9189680170d6f1b\",\"canonical_key\":\"update_document\",\"confidence\":\"HIGH\",\"decision\":\"CONFIRMED\",\"display_name\":\"更新文档\",\"evidence\":[{\"content_sha256\":\"b85fe69b01108aa99dc014f2064d9251fda1680df08a46da9b6ac4338b07de5a\",\"detector\":\"fixture\",\"line_end\":2,\"line_start\":1,\"relative_path\":\"routes.py\",\"symbol\":\"update_document\"}],\"origin\":\"DETECTED\",\"risk_hint\":\"UNKNOWN\",\"stale\":false}]",
+        "revision": 3,
+        "created_at_us": 1790929416752922,
+        "updated_at_us": 1790929416752922
+      }
+    ],
+    "boundary_proposals": [],
+    "change_manifests": [],
+    "contract_versions": [],
+    "execution_profiles": [],
+    "findings": [],
+    "project_policy_states": [
+      {
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "policy_epoch": 1,
+        "updated_at_us": 1790929416752922
+      }
+    ],
+    "runs": [],
+    "source_revision_snapshots": [],
+    "boundary_proposal_decisions": [],
+    "business_actions": [
+      {
+        "action_id": "bac_11111111111111111111111111111111",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "current_revision": 1,
+        "created_at_us": 1790929416752922,
+        "updated_at_us": 1790929416752922
+      }
+    ],
+    "business_actors": [
+      {
+        "actor_id": "bar_11111111111111111111111111111111",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "current_revision": 1,
+        "created_at_us": 1790929416752922,
+        "updated_at_us": 1790929416752922
+      }
+    ],
+    "change_impact_assessments": [],
+    "evidence_index": [],
+    "finding_occurrences": [],
+    "flow_draft_revisions": [
+      {
+        "recording_id": "rec_1af61b502a5a492eb99cd77f0be06e0b",
+        "revision": 1,
+        "flow_id": "flow_081a1f1f8468496e8b480c5cc95b2f3c",
+        "draft_json": "{\"action_revision\":1,\"business_action_id\":\"bac_11111111111111111111111111111111\",\"effect_id\":null,\"flow_id\":\"flow_081a1f1f8468496e8b480c5cc95b2f3c\",\"parent_recording_id\":null,\"purpose\":\"TARGET\",\"recommended_target_step_id\":null,\"recording_id\":\"rec_1af61b502a5a492eb99cd77f0be06e0b\",\"resource_candidate_id\":\"resource-0123456789abcdef\",\"revision\":1,\"schema_version\":\"2\",\"steps\":[{\"depends_on_step_ids\":[],\"expected_statuses\":[200],\"id\":\"step_000001\",\"json_body\":{\"title\":\"fixture\"},\"method\":\"POST\",\"name\":\"业务请求\",\"path\":\"/docs/doc-123\",\"request_id\":\"request_000001\",\"resource_candidates\":[{\"candidate_id\":\"resource-0123456789abcdef\",\"consumer\":\"PATH\",\"label\":\"文档标识\",\"location\":\"path[1]\"}],\"sensitive_fields\":[],\"source_event_sequences\":[1,2]}],\"target_step_id\":\"step_000001\",\"test_identity_id\":\"tid_00000000000000000000000000000001\",\"variables\":[]}",
+        "draft_sha256": "135c26dddd9b2ff6a131d9be03beefeb9d2db16b6a11e97ea12291f358a5b0d2",
+        "created_at_us": 3
+      },
+      {
+        "recording_id": "rec_ceec3c232c7f46d68484cefda6d7a5d7",
+        "revision": 1,
+        "flow_id": "flow_087ff2cfb104466ea4b1db940032ef0b",
+        "draft_json": "{\"action_revision\":1,\"business_action_id\":\"bac_11111111111111111111111111111111\",\"effect_id\":\"bef_11111111111111111111111111111111\",\"flow_id\":\"flow_087ff2cfb104466ea4b1db940032ef0b\",\"parent_recording_id\":\"rec_1af61b502a5a492eb99cd77f0be06e0b\",\"purpose\":\"OBSERVATION\",\"recommended_target_step_id\":null,\"recording_id\":\"rec_ceec3c232c7f46d68484cefda6d7a5d7\",\"resource_candidate_id\":null,\"revision\":1,\"schema_version\":\"2\",\"steps\":[{\"depends_on_step_ids\":[],\"expected_statuses\":[200],\"id\":\"step_000001\",\"json_body\":{},\"method\":\"GET\",\"name\":\"业务请求\",\"path\":\"/docs/doc-123?view=summary\",\"request_id\":\"request_000001\",\"resource_candidates\":[],\"sensitive_fields\":[],\"source_event_sequences\":[1,2]}],\"target_step_id\":null,\"test_identity_id\":\"tid_00000000000000000000000000000001\",\"variables\":[]}",
+        "draft_sha256": "d0ed88e2285e0adf2ca4fd20a62853a8861aee5b18374e5ba0caf3858f24707b",
+        "created_at_us": 3
+      },
+      {
+        "recording_id": "rec_bc7ac2fecc644ec7b087099b9e3a08b7",
+        "revision": 1,
+        "flow_id": "flow_2ad6546d03b74ce299fc5b58bb31cdb7",
+        "draft_json": "{\"action_revision\":1,\"business_action_id\":\"bac_11111111111111111111111111111111\",\"effect_id\":null,\"flow_id\":\"flow_2ad6546d03b74ce299fc5b58bb31cdb7\",\"parent_recording_id\":\"rec_1af61b502a5a492eb99cd77f0be06e0b\",\"purpose\":\"RECOVERY\",\"recommended_target_step_id\":null,\"recording_id\":\"rec_bc7ac2fecc644ec7b087099b9e3a08b7\",\"resource_candidate_id\":null,\"revision\":1,\"schema_version\":\"2\",\"steps\":[{\"depends_on_step_ids\":[],\"expected_statuses\":[200],\"id\":\"step_000001\",\"json_body\":{\"title\":\"fixture\"},\"method\":\"POST\",\"name\":\"业务请求\",\"path\":\"/docs/doc-123\",\"request_id\":\"request_000001\",\"resource_candidates\":[],\"sensitive_fields\":[],\"source_event_sequences\":[1,2]}],\"target_step_id\":null,\"test_identity_id\":\"tid_00000000000000000000000000000001\",\"variables\":[]}",
+        "draft_sha256": "683366395100c10128467227447eb0e6e4cd7e261fea7e3e2c8e281efef315a4",
+        "created_at_us": 3
+      }
+    ],
+    "jobs": [
+      {
+        "job_id": "job_4e283dd7b4bd4c6dbb554780addb1def",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "run_id": null,
+        "recording_id": "rec_1af61b502a5a492eb99cd77f0be06e0b",
+        "operation_type": "BROWSER_RECORDING",
+        "state": "SUCCEEDED",
+        "idempotency_key": "rec_1af61b502a5a492eb99cd77f0be06e0b",
+        "request_hash": "bad90c77ae55a97ed2f32f31d0ed41b00e3ab997042b45f8a56d3faa600ca398",
+        "attempt": 1,
+        "max_attempts": 1,
+        "available_at_us": 1,
+        "lease_owner": null,
+        "fencing_token": 1,
+        "lease_expires_at_us": null,
+        "cancel_requested_at_us": null,
+        "created_at_us": 1,
+        "updated_at_us": 3
+      },
+      {
+        "job_id": "job_4bdd01f4bf3242408b7c7eb2ca1095b6",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "run_id": null,
+        "recording_id": "rec_ceec3c232c7f46d68484cefda6d7a5d7",
+        "operation_type": "BROWSER_RECORDING",
+        "state": "SUCCEEDED",
+        "idempotency_key": "rec_ceec3c232c7f46d68484cefda6d7a5d7",
+        "request_hash": "256000f3066c90b06c08bc2f65f8b7506b833c08aa59e3835782fb49a76265ad",
+        "attempt": 1,
+        "max_attempts": 1,
+        "available_at_us": 1,
+        "lease_owner": null,
+        "fencing_token": 1,
+        "lease_expires_at_us": null,
+        "cancel_requested_at_us": null,
+        "created_at_us": 1,
+        "updated_at_us": 3
+      },
+      {
+        "job_id": "job_588e406e69a74bfe9a3fb3322741263b",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "run_id": null,
+        "recording_id": "rec_bc7ac2fecc644ec7b087099b9e3a08b7",
+        "operation_type": "BROWSER_RECORDING",
+        "state": "SUCCEEDED",
+        "idempotency_key": "rec_bc7ac2fecc644ec7b087099b9e3a08b7",
+        "request_hash": "9b491dcf0fd308495ae16324f7d734a328c8d736729669b2263a4548d86555ff",
+        "attempt": 1,
+        "max_attempts": 1,
+        "available_at_us": 1,
+        "lease_owner": null,
+        "fencing_token": 1,
+        "lease_expires_at_us": null,
+        "cancel_requested_at_us": null,
+        "created_at_us": 1,
+        "updated_at_us": 3
+      }
+    ],
+    "permission_intent_revisions": [
+      {
+        "intent_id": "pin_00000000000000000000000000000001",
+        "revision": 1,
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "effective_state": "ACTIVE",
+        "subject_actor_id": "bar_11111111111111111111111111111111",
+        "subject_actor_revision": 1,
+        "business_action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "resource_owner_actor_id": "bar_11111111111111111111111111111111",
+        "resource_owner_actor_revision": 1,
+        "relation": "OWNS",
+        "expectation": "ALLOW",
+        "protected_effect_ids_json": "[\"bef_11111111111111111111111111111111\"]",
+        "intent_hash": "46695618a30b885413896592d327fa4c7dbcf589e3b0d4362c86e1d306409aa5",
+        "policy_epoch": 1,
+        "approval_json": "{\"approved_at_us\":10,\"approved_by\":\"本机界鉴用户\",\"channel\":\"LOCAL_GUI\",\"reason\":\"确认测试业务权限\"}",
+        "created_at_us": 10
+      }
+    ],
+    "regression_baselines": [],
+    "run_finalizations": [],
+    "source_change_sets": [],
+    "test_identities": [
+      {
+        "identity_id": "tid_00000000000000000000000000000001",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "actor_id": "bar_11111111111111111111111111111111",
+        "actor_revision": 1,
+        "label": "测试账号 1",
+        "auth_method": "BEARER",
+        "bearer_secret_ref": "cred:jiejian/test-identity/app_5de8810b6e368476e79e3bf56666993f/tid_00000000000000000000000000000001/bearer",
+        "prepared_at_us": 1790929416752922,
+        "refreshed_at_us": 1790929416752922,
+        "created_at_us": 1790929416752922,
+        "updated_at_us": 1790929416752922
+      }
+    ],
+    "gate_results": [],
+    "job_events": [],
+    "test_identity_cookies": [],
+    "business_actor_revisions": [
+      {
+        "actor_id": "bar_11111111111111111111111111111111",
+        "revision": 1,
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "display_name": "普通成员",
+        "description": "参与业务协作",
+        "semantic_fingerprint": "369dedf39ca5e1a341822fa9f80ef0c84ae934eb60c6f3d0584f5dc4e7cf8dbb",
+        "effective_state": "ACTIVE",
+        "approval_json": "{\"approved_at_us\":10,\"approved_by\":\"本机界鉴用户\",\"channel\":\"LOCAL_GUI\",\"reason\":\"确认测试业务权限\"}",
+        "created_at_us": 10
+      }
+    ],
+    "business_action_revisions": [
+      {
+        "action_id": "bac_11111111111111111111111111111111",
+        "revision": 1,
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "display_name": "更新文档",
+        "description": "修改协作文档",
+        "primary_resource_concept": "文档",
+        "operation_kind": "CHANGE",
+        "state_changing": 1,
+        "effect_catalog_json": "[{\"business_label\":\"文档更新\",\"description\":\"文档更新\",\"effect_id\":\"bef_11111111111111111111111111111111\",\"effect_kind\":\"STATE_MUTATION\",\"expected_state\":null,\"protected_projection\":[],\"resource_concept\":\"文档\"},{\"business_label\":\"审阅更新\",\"description\":\"审阅更新\",\"effect_id\":\"bef_22222222222222222222222222222222\",\"effect_kind\":\"STATE_MUTATION\",\"expected_state\":null,\"protected_projection\":[],\"resource_concept\":\"文档\"}]",
+        "semantic_fingerprint": "9aac8ae1af55d8946bb483bf53255c4ebd080d535edb22aa8b71f25a5523f59a",
+        "effective_state": "ACTIVE",
+        "approval_json": "{\"approved_at_us\":10,\"approved_by\":\"本机界鉴用户\",\"channel\":\"LOCAL_GUI\",\"reason\":\"确认测试业务权限\"}",
+        "created_at_us": 10
+      }
+    ],
+    "actor_implementation_bindings": [
+      {
+        "actor_id": "bar_11111111111111111111111111111111",
+        "actor_revision": 1,
+        "understanding_revision": 3,
+        "source_fingerprint": "60754dcfaa7564c87a8e54f1548eebc4144467c33e5189888ffaed87775d559b",
+        "role_candidate_ids_json": "[\"role_1f899121fcde4619c89bd6f261415f37\"]",
+        "binding_fingerprint": "296c977a16523af9c2c8637da2e830184765e9ad94186f90399db67e128e2586",
+        "updated_at_us": 1790929416752922,
+        "basis_version": 1,
+        "source_proposal_id": null,
+        "confirmed_at_us": null,
+        "candidate_snapshots_json": "[]"
+      }
+    ],
+    "action_implementation_bindings": [
+      {
+        "action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "understanding_revision": 3,
+        "source_fingerprint": "60754dcfaa7564c87a8e54f1548eebc4144467c33e5189888ffaed87775d559b",
+        "action_candidate_ids_json": "[\"action_c5b447e310372824f9189680170d6f1b\"]",
+        "binding_fingerprint": "3122c01edf4f82f2743f17869c24cc531a9da452afd482659e8d854f5bb90de5",
+        "updated_at_us": 1790929416752922,
+        "basis_version": 1,
+        "source_proposal_id": null,
+        "confirmed_at_us": null,
+        "candidate_snapshots_json": "[]"
+      }
+    ],
+    "recordings": [
+      {
+        "recording_id": "rec_1af61b502a5a492eb99cd77f0be06e0b",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "purpose": "TARGET",
+        "parent_recording_id": null,
+        "flow_id": "flow_081a1f1f8468496e8b480c5cc95b2f3c",
+        "state": "COMPLETED",
+        "created_at_us": 1,
+        "updated_at_us": 100,
+        "started_at_us": 1,
+        "capture_finished_at_us": 3,
+        "finished_at_us": 100,
+        "pending_terminal_state": null,
+        "reason_codes_json": "[\"REVIEW_COMPLETED\"]",
+        "state_events_json": "[{\"occurred_at_us\":100,\"operator\":\"RECORDING_SERVICE\",\"reason_code\":\"REVIEW_COMPLETED\",\"sequence\":1,\"source\":\"PENDING_REVIEW\",\"target\":\"COMPLETED\"}]",
+        "browser_events_json": "[{\"action_id\":null,\"body\":\"{\\\"title\\\": \\\"fixture\\\"}\",\"caused_by_action_id\":null,\"element_locator\":null,\"field_name\":null,\"frame_id\":null,\"headers\":[],\"identity_id\":\"tid_00000000000000000000000000000001\",\"input_type\":null,\"kind\":\"REQUEST\",\"message\":null,\"method\":\"POST\",\"occurred_at_us\":2,\"page_id\":null,\"parent_page_id\":null,\"reason_code\":null,\"request_id\":\"request_000001\",\"resource_type\":\"document\",\"schema_version\":\"1\",\"sequence\":1,\"status_code\":null,\"truncated\":false,\"url\":\"http://127.0.0.1:8765/docs/doc-123\"},{\"action_id\":null,\"body\":\"{\\\"ok\\\": true}\",\"caused_by_action_id\":null,\"element_locator\":null,\"field_name\":null,\"frame_id\":null,\"headers\":[],\"identity_id\":\"tid_00000000000000000000000000000001\",\"input_type\":null,\"kind\":\"RESPONSE\",\"message\":null,\"method\":\"POST\",\"occurred_at_us\":3,\"page_id\":null,\"parent_page_id\":null,\"reason_code\":null,\"request_id\":\"request_000001\",\"resource_type\":null,\"schema_version\":\"1\",\"sequence\":2,\"status_code\":200,\"truncated\":false,\"url\":\"http://127.0.0.1:8765/docs/doc-123\"}]",
+        "business_action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "test_identity_id": "tid_00000000000000000000000000000001",
+        "preparation_source_fingerprint": "6cb5eab4001c212d7e1149ad1bc8af80f68cd7d893feb67c4bb157a08ab9b92f",
+        "effect_id": null
+      },
+      {
+        "recording_id": "rec_ceec3c232c7f46d68484cefda6d7a5d7",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "purpose": "OBSERVATION",
+        "parent_recording_id": "rec_1af61b502a5a492eb99cd77f0be06e0b",
+        "flow_id": "flow_087ff2cfb104466ea4b1db940032ef0b",
+        "state": "COMPLETED",
+        "created_at_us": 1,
+        "updated_at_us": 100,
+        "started_at_us": 1,
+        "capture_finished_at_us": 3,
+        "finished_at_us": 100,
+        "pending_terminal_state": null,
+        "reason_codes_json": "[\"REVIEW_COMPLETED\"]",
+        "state_events_json": "[{\"occurred_at_us\":100,\"operator\":\"RECORDING_SERVICE\",\"reason_code\":\"REVIEW_COMPLETED\",\"sequence\":1,\"source\":\"PENDING_REVIEW\",\"target\":\"COMPLETED\"}]",
+        "browser_events_json": "[{\"action_id\":null,\"body\":null,\"caused_by_action_id\":null,\"element_locator\":null,\"field_name\":null,\"frame_id\":null,\"headers\":[],\"identity_id\":\"tid_00000000000000000000000000000001\",\"input_type\":null,\"kind\":\"REQUEST\",\"message\":null,\"method\":\"GET\",\"occurred_at_us\":2,\"page_id\":null,\"parent_page_id\":null,\"reason_code\":null,\"request_id\":\"request_000001\",\"resource_type\":\"document\",\"schema_version\":\"1\",\"sequence\":1,\"status_code\":null,\"truncated\":false,\"url\":\"http://127.0.0.1:8765/docs/doc-123?view=summary\"},{\"action_id\":null,\"body\":\"{\\\"ok\\\": true}\",\"caused_by_action_id\":null,\"element_locator\":null,\"field_name\":null,\"frame_id\":null,\"headers\":[],\"identity_id\":\"tid_00000000000000000000000000000001\",\"input_type\":null,\"kind\":\"RESPONSE\",\"message\":null,\"method\":\"GET\",\"occurred_at_us\":3,\"page_id\":null,\"parent_page_id\":null,\"reason_code\":null,\"request_id\":\"request_000001\",\"resource_type\":null,\"schema_version\":\"1\",\"sequence\":2,\"status_code\":200,\"truncated\":false,\"url\":\"http://127.0.0.1:8765/docs/doc-123?view=summary\"}]",
+        "business_action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "test_identity_id": "tid_00000000000000000000000000000001",
+        "preparation_source_fingerprint": "6cb5eab4001c212d7e1149ad1bc8af80f68cd7d893feb67c4bb157a08ab9b92f",
+        "effect_id": "bef_11111111111111111111111111111111"
+      },
+      {
+        "recording_id": "rec_bc7ac2fecc644ec7b087099b9e3a08b7",
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "purpose": "RECOVERY",
+        "parent_recording_id": "rec_1af61b502a5a492eb99cd77f0be06e0b",
+        "flow_id": "flow_2ad6546d03b74ce299fc5b58bb31cdb7",
+        "state": "COMPLETED",
+        "created_at_us": 1,
+        "updated_at_us": 100,
+        "started_at_us": 1,
+        "capture_finished_at_us": 3,
+        "finished_at_us": 100,
+        "pending_terminal_state": null,
+        "reason_codes_json": "[\"REVIEW_COMPLETED\"]",
+        "state_events_json": "[{\"occurred_at_us\":100,\"operator\":\"RECORDING_SERVICE\",\"reason_code\":\"REVIEW_COMPLETED\",\"sequence\":1,\"source\":\"PENDING_REVIEW\",\"target\":\"COMPLETED\"}]",
+        "browser_events_json": "[{\"action_id\":null,\"body\":\"{\\\"title\\\": \\\"fixture\\\"}\",\"caused_by_action_id\":null,\"element_locator\":null,\"field_name\":null,\"frame_id\":null,\"headers\":[],\"identity_id\":\"tid_00000000000000000000000000000001\",\"input_type\":null,\"kind\":\"REQUEST\",\"message\":null,\"method\":\"POST\",\"occurred_at_us\":2,\"page_id\":null,\"parent_page_id\":null,\"reason_code\":null,\"request_id\":\"request_000001\",\"resource_type\":\"document\",\"schema_version\":\"1\",\"sequence\":1,\"status_code\":null,\"truncated\":false,\"url\":\"http://127.0.0.1:8765/docs/doc-123\"},{\"action_id\":null,\"body\":\"{\\\"ok\\\": true}\",\"caused_by_action_id\":null,\"element_locator\":null,\"field_name\":null,\"frame_id\":null,\"headers\":[],\"identity_id\":\"tid_00000000000000000000000000000001\",\"input_type\":null,\"kind\":\"RESPONSE\",\"message\":null,\"method\":\"POST\",\"occurred_at_us\":3,\"page_id\":null,\"parent_page_id\":null,\"reason_code\":null,\"request_id\":\"request_000001\",\"resource_type\":null,\"schema_version\":\"1\",\"sequence\":2,\"status_code\":200,\"truncated\":false,\"url\":\"http://127.0.0.1:8765/docs/doc-123\"}]",
+        "business_action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "test_identity_id": "tid_00000000000000000000000000000001",
+        "preparation_source_fingerprint": "6cb5eab4001c212d7e1149ad1bc8af80f68cd7d893feb67c4bb157a08ab9b92f",
+        "effect_id": null
+      }
+    ],
+    "action_execution_bindings": [
+      {
+        "business_action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "action_semantic_fingerprint": "9aac8ae1af55d8946bb483bf53255c4ebd080d535edb22aa8b71f25a5523f59a",
+        "implementation_fingerprint": "3122c01edf4f82f2743f17869c24cc531a9da452afd482659e8d854f5bb90de5",
+        "source_fingerprint": "60754dcfaa7564c87a8e54f1548eebc4144467c33e5189888ffaed87775d559b",
+        "endpoint_fingerprint": "e9821b5c3c1fd43fff237b54a80f083690f0c8fc9ef2fee1bd3e335c96dc876d",
+        "test_identity_id": "tid_00000000000000000000000000000001",
+        "identity_fingerprint": "c5f798c3f0ab8f1e9cd9f1b180033f73a198cb8918ca2ac39476df50e55ffe89",
+        "confirmed_at_us": 100,
+        "binding_fingerprint": "41d36ba65baa07f5a1269bca8b450fb6daa2b1f5422a3079735c938bb7acb9f9",
+        "source_recording_id": "rec_1af61b502a5a492eb99cd77f0be06e0b",
+        "source_draft_revision": 1,
+        "source_draft_sha256": "135c26dddd9b2ff6a131d9be03beefeb9d2db16b6a11e97ea12291f358a5b0d2",
+        "flow_id": "flow_081a1f1f8468496e8b480c5cc95b2f3c",
+        "flow_sha256": "e8364ff8e1ebae4b222819868ddbd183c9b04f227385065d271af4361e14ec63",
+        "resource_injection_json": "{\"consumer\":\"PATH\",\"location\":\"path[1]\",\"template_fingerprint\":\"4cc748c5222d7d4bd9d6358fc9ffd252fb4fd67e5fb77c65ca95a6bf3ba60674\"}"
+      }
+    ],
+    "action_resource_bindings": [
+      {
+        "business_action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "action_semantic_fingerprint": "9aac8ae1af55d8946bb483bf53255c4ebd080d535edb22aa8b71f25a5523f59a",
+        "implementation_fingerprint": "3122c01edf4f82f2743f17869c24cc531a9da452afd482659e8d854f5bb90de5",
+        "source_fingerprint": "60754dcfaa7564c87a8e54f1548eebc4144467c33e5189888ffaed87775d559b",
+        "endpoint_fingerprint": "e9821b5c3c1fd43fff237b54a80f083690f0c8fc9ef2fee1bd3e335c96dc876d",
+        "test_identity_id": "tid_00000000000000000000000000000001",
+        "identity_fingerprint": "c5f798c3f0ab8f1e9cd9f1b180033f73a198cb8918ca2ac39476df50e55ffe89",
+        "confirmed_at_us": 100,
+        "binding_fingerprint": "3215a9af436222fb30ad69312fe9242f333613f0821966de73e325fff44c5f00",
+        "source_recording_id": "rec_1af61b502a5a492eb99cd77f0be06e0b",
+        "source_draft_revision": 1,
+        "source_draft_sha256": "135c26dddd9b2ff6a131d9be03beefeb9d2db16b6a11e97ea12291f358a5b0d2",
+        "flow_id": "flow_081a1f1f8468496e8b480c5cc95b2f3c",
+        "flow_sha256": "e8364ff8e1ebae4b222819868ddbd183c9b04f227385065d271af4361e14ec63",
+        "resource_injection_json": "{\"consumer\":\"PATH\",\"location\":\"path[1]\",\"template_fingerprint\":\"4cc748c5222d7d4bd9d6358fc9ffd252fb4fd67e5fb77c65ca95a6bf3ba60674\"}",
+        "owner_test_identity_id": "tid_00000000000000000000000000000001",
+        "actual_resource_id": "doc-123"
+      }
+    ],
+    "action_evidence_bindings": [
+      {
+        "business_action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "action_semantic_fingerprint": "9aac8ae1af55d8946bb483bf53255c4ebd080d535edb22aa8b71f25a5523f59a",
+        "implementation_fingerprint": "3122c01edf4f82f2743f17869c24cc531a9da452afd482659e8d854f5bb90de5",
+        "source_fingerprint": "60754dcfaa7564c87a8e54f1548eebc4144467c33e5189888ffaed87775d559b",
+        "endpoint_fingerprint": "e9821b5c3c1fd43fff237b54a80f083690f0c8fc9ef2fee1bd3e335c96dc876d",
+        "test_identity_id": "tid_00000000000000000000000000000001",
+        "identity_fingerprint": "c5f798c3f0ab8f1e9cd9f1b180033f73a198cb8918ca2ac39476df50e55ffe89",
+        "confirmed_at_us": 100,
+        "binding_fingerprint": "3c39c0d4f008c527f4543aaa838780becddf8c1f49c6d9c789df8afc727c2eb6",
+        "source_recording_id": "rec_ceec3c232c7f46d68484cefda6d7a5d7",
+        "source_draft_revision": 1,
+        "source_draft_sha256": "d0ed88e2285e0adf2ca4fd20a62853a8861aee5b18374e5ba0caf3858f24707b",
+        "effect_id": "bef_11111111111111111111111111111111",
+        "kind": "RECORDED_OBSERVATION",
+        "step_id": "step_000001",
+        "request_template_json": "{\"json_body\":{},\"method\":\"GET\",\"relative_path\":\"/docs/{case_resource_id}?view=summary\"}",
+        "observer_reference_json": null
+      }
+    ],
+    "action_recovery_bindings": [
+      {
+        "business_action_id": "bac_11111111111111111111111111111111",
+        "action_revision": 1,
+        "project_id": "app_5de8810b6e368476e79e3bf56666993f",
+        "action_semantic_fingerprint": "9aac8ae1af55d8946bb483bf53255c4ebd080d535edb22aa8b71f25a5523f59a",
+        "implementation_fingerprint": "3122c01edf4f82f2743f17869c24cc531a9da452afd482659e8d854f5bb90de5",
+        "source_fingerprint": "60754dcfaa7564c87a8e54f1548eebc4144467c33e5189888ffaed87775d559b",
+        "endpoint_fingerprint": "e9821b5c3c1fd43fff237b54a80f083690f0c8fc9ef2fee1bd3e335c96dc876d",
+        "test_identity_id": "tid_00000000000000000000000000000001",
+        "identity_fingerprint": "c5f798c3f0ab8f1e9cd9f1b180033f73a198cb8918ca2ac39476df50e55ffe89",
+        "confirmed_at_us": 100,
+        "binding_fingerprint": "7fabe79e46d69f88194754ec0797b2b7ada5f63809b68d2bf76891590b5ef9c9",
+        "source_recording_id": "rec_bc7ac2fecc644ec7b087099b9e3a08b7",
+        "source_draft_revision": 1,
+        "source_draft_sha256": "683366395100c10128467227447eb0e6e4cd7e261fea7e3e2c8e281efef315a4",
+        "step_id": "step_000001",
+        "request_template_json": "{\"json_body\":{\"title\":\"fixture\"},\"method\":\"POST\",\"relative_path\":\"/docs/{case_resource_id}\"}"
+      }
+    ]
+  }
+}

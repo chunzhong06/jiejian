@@ -1,21 +1,26 @@
-# 显式加载受控示例的一批交付：先保存操作，再执行有界生命周期，未知回执只核对而不重启。
+# 交付加载按持久运行归属分派；普通应用提交Job，官方示例沿用既有生命周期与未知回执恢复。
 from threading import Lock
 
-from product.backend.core.development import RuntimeActivationReceipt
+from product.backend.core.development import RuntimeActivationReceipt,NodeRuntimeActivationReceipt
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.workflows.development import operation_fingerprint, require_active_task_version
 
 
 class RuntimeActivationService:
-    def __init__(self, *, uow_factory, loader, reader, clock):
+    def __init__(self, *, uow_factory, loader, reader, clock, node_runtime=None):
         self._uow = uow_factory
         self._loader, self._reader, self._clock = loader, reader, clock
         self._inflight = set()
         self._guard = Lock()
+        self._node_runtime=node_runtime
+        from product.backend.workflows.node_runtime_activation import NodeRuntimeActivation
+        self._node_activation=None if node_runtime is None else NodeRuntimeActivation(uow_factory,node_runtime,clock)
 
     def receipt(self, project_id, operation_id):
         with self._uow() as work:
             receipt = work.development.runtime_receipt(project_id, operation_id)
+        if isinstance(receipt,NodeRuntimeActivationReceipt):
+            return self._node_activation.receipt(project_id,operation_id)
         with self._guard:
             inflight = (project_id, operation_id) in self._inflight
         if receipt is not None and receipt.status == "PENDING" and not inflight:
@@ -23,6 +28,8 @@ class RuntimeActivationService:
         return receipt
 
     def activate(self, project_id, delivery_id, *, operation_id, expected_version):
+        if self._node_runtime is not None and self._node_runtime.owns_project(project_id):
+            return self._node_activation.activate(project_id,delivery_id,operation_id=operation_id,expected_version=expected_version)
         fingerprint = operation_fingerprint(project_id, "LOAD_RUNTIME", operation_id,
             dict(delivery_id=delivery_id, expected_version=expected_version))
         with self._uow() as work:

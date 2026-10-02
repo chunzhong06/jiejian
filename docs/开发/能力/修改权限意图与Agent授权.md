@@ -86,6 +86,18 @@ BusinessActor / BusinessAction revisions
 
 ## Agent 与自动化边界
 
+### 对话规则候选
+
+`core/boundaries/rule_candidates.py`保存有限原文、结构化建议和具体例子的不可变修订；`workflows/business_boundaries/rule_candidates.py`与`infra/storage/rule_candidates.py`提供同一事务下的追加、CAS、幂等回执和普通Proposal关联。READ读取上下文与候选，PREPARE保存建议；原文只作不可信业务输入，不能成为指令或批准证据。候选修订根有独立Schema，内部例子无重复版本。
+
+GUI将候选增量合入完整当前desired state，再调用既有维护规划器。Agent提供的write_mode不作为写入依据；服务端重新计算。首次空项目使用明确空基线，原维护API默认前置不变。转提案、来源关联和回执一次提交，批准仍只走原LOCAL_GUI接口；旧候选与已生成提案不原地改写。
+
+跨项目、旧基线、并发修订、未覆盖例子及明确不支持约束失败关闭。候选格式可审阅不表示自然语言理解完整，更不表示材料齐备或权限通过。GUI通过项目、候选和修订精确打开；未知提案写回执保留操作引用并只查询原操作。
+
+批准前按精确动作引用读取现有材料库存，只投影“可能沿用/需要核对/缺少”，不靠名称相近合并，不将存在绑定当作可执行。与完整当前边界完全一致的候选返回`ALREADY_CONFIRMED`，不重复创建待批提案。批准后的实际准备通过`rule_context.preparation`复用原Preparation现场读模型；已决定候选保留历史含义，不因自身批准推进基线而要求重新审批。
+
+直接验证：`tests/backend/api/test_rule_candidates.py`、`tests/backend/api/test_mcp.py`、`tests/backend/infra/storage/test_migration_baseline.py`及前端`RuleCandidatesPanel.test.tsx`。普通证明预检查与Agent自动补齐所有准备材料尚不是此候选入口的已实现能力。
+
 Agent/MCP 按当前项目临时 PREPARE/EXECUTE 授权登记代码变化声明、提交完整检查或取消本项目检查；服务端重新扫描真实源码。Agent 不能 approve/reject、直接写 Actor/Action/Permission、修改 `policy_epoch`、选择 Case/Effect 或形成 Verdict。只有普通 LOCAL_GUI Proposal 决定事务可以修改权限；旧 Contract/Profile/Permission writer 不回接。
 
 当前检查使用完整 Permission、CheckPlan、v3 请求与独立 CHECK Worker/Runner；`/tests` 展示已发布 ResultStory，`/changes` 登记真实变化并续接原题复验。不得将当前 Permission 转写回旧表、裁剪完整考题或维护第二套安全结论。

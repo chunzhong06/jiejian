@@ -73,6 +73,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/artifacts/artifact-result-manifest.schema.json`
 - `product/protocols/schemas/artifacts/artifact-scan-result.schema.json`
 - `product/protocols/schemas/artifacts/publication-manifest.schema.json`
+- `product/protocols/schemas/boundaries/rule-candidate-revision.schema.json`
 - `product/protocols/schemas/contracts/differential-experiment-plan.schema.json`
 - `product/protocols/schemas/contracts/normalized-permission-plan.schema.json`
 - `product/protocols/schemas/contracts/permission-contract.schema.json`
@@ -81,6 +82,7 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/development/context.schema.json`
 - `product/protocols/schemas/development/delivery.schema.json`
 - `product/protocols/schemas/development/receipt.schema.json`
+- `product/protocols/schemas/development/runtime-operation-v2.schema.json`
 - `product/protocols/schemas/development/runtime-operation.schema.json`
 - `product/protocols/schemas/development/task.schema.json`
 - `product/protocols/schemas/execution/http.schema.json`
@@ -94,6 +96,12 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/observer/observer-invocation.schema.json`
 - `product/protocols/schemas/observer/observer-outcome.schema.json`
 - `product/protocols/schemas/observer/observer-spec.schema.json`
+- `product/protocols/schemas/preparation/proof-preflight-input.schema.json`
+- `product/protocols/schemas/preparation/proof-preflight-report.schema.json`
+- `product/protocols/schemas/preparation/proof-runner-input.schema.json`
+- `product/protocols/schemas/preparation/source-adoption.schema.json`
+- `product/protocols/schemas/preparation/source-read-scope.schema.json`
+- `product/protocols/schemas/preparation/source-revision.schema.json`
 - `product/protocols/schemas/recording/flow-draft-review-command.schema.json`
 - `product/protocols/schemas/recording/flow-draft.schema.json`
 - `product/protocols/schemas/recording/flow.schema.json`
@@ -107,8 +115,12 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/runner/check-runner-input.schema.json`
 - `product/protocols/schemas/runner/check-runner-progress.schema.json`
 - `product/protocols/schemas/runner/check-runner-result-v2.schema.json`
+- `product/protocols/schemas/runner/check-runner-result-v3.schema.json`
 - `product/protocols/schemas/runner/check-runner-result.schema.json`
 - `product/protocols/schemas/runner/check-runtime-v2.schema.json`
+- `product/protocols/schemas/runner/check-runtime-v3.schema.json`
+- `product/protocols/schemas/runner/check-runtime-v4.schema.json`
+- `product/protocols/schemas/runner/check-runtime-v5.schema.json`
 - `product/protocols/schemas/runner/check-runtime.schema.json`
 - `product/protocols/schemas/runner/evidence.schema.json`
 - `product/protocols/schemas/runner/persisted-execution-request-v3.schema.json`
@@ -118,5 +130,27 @@ AI 模板输入、模型输出、assistant refresh 请求体与 assistant cache 
 - `product/protocols/schemas/runner/trusted-result-receipt.schema.json`
 - `product/protocols/schemas/runtime/launch-manifest.schema.json`
 - `product/protocols/schemas/runtime/launch-receipt.schema.json`
+- `product/protocols/schemas/runtime/node-load-receipt.schema.json`
+- `product/protocols/schemas/runtime/node-load-request.schema.json`
+- `product/protocols/schemas/runtime/node-manifest.schema.json`
+- `product/protocols/schemas/runtime/portable-release-v2.schema.json`
+- `product/protocols/schemas/runtime/record-operation.schema.json`
+- `product/protocols/schemas/runtime/record-proof-request.schema.json`
+- `product/protocols/schemas/runtime/record-proof-view.schema.json`
+- `product/protocols/schemas/runtime/record-provider.schema.json`
+- `product/protocols/schemas/runtime/record-request-scope.schema.json`
+- `product/protocols/schemas/runtime/record-seed.schema.json`
+- `product/protocols/schemas/runtime/record-snapshot.schema.json`
+- `product/protocols/schemas/runtime/record-transaction.schema.json`
 
 <!-- GENERATED:END -->
+
+### 普通 Node 运行与检查格式
+
+`NodeRuntimeManifest`、`NodeRuntimeLoadRequest`、`NodeRuntimeLoadReceipt` 是各自拥有持久 reader 的格式 1 根。实例引用、预览和运行状态投影不重复加版本。`NodeCheckRuntimeBundle` 与 `NodeCheckRunnerResult` 使用格式 3，绑定项目、源码和精确运行端口；原 CHECK 格式 1 与 Python 受控格式 2 继续按原 reader/canonical 读取，不能给旧历史补造运行对应。
+
+普通交付使用 `NodeRuntimeActivationReceipt` 格式 2，增加精确加载 Job 输入关联；旧 `RuntimeActivationReceipt` 格式 1 保留。运行对应仅表示检查前后的实例事实，不能单独产生 PASS，也不能在结束时漂移后抹去已观察的 BLOCK。
+
+普通来源的新执行使用 `ManagedCheckRuntimeBundle` 格式 5，冻结通用受控来源配置、产品组件依据与精确 proof/identity/effect 对应，沿用 Node 结果格式 3。CHECK 格式 4 只保留历史 reader，不补入新来源语义。来源修订、读取范围、预检查输入写入格式 2，保留格式 1 历史读取；报告、采用记录和 Runner 输入仍按各自原格式。旧应用专用合同目录已移出产品。记录组件的业务命令、资源快照、操作记录、请求 scope、来源引用和读取响应分别是拥有独立 reader 的格式 1 根文档；嵌套 DTO 不重复版本。
+
+Portable发行元数据使用格式2、布局2，增加包内Node版本与sha256；产品版本独立读取唯一真源，不与这些格式号绑定。

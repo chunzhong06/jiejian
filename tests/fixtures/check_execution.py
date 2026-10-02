@@ -2,7 +2,7 @@
 import json
 
 from product.backend.core.checks.plan import compile_project_check_plan
-from product.protocols.check_runtime import CheckRuntimeBundle, ControlledCheckRuntimeBundle, check_runtime_fingerprint
+from product.protocols.check_runtime import CheckRuntimeBundle, ControlledCheckRuntimeBundle, NodeCheckRuntimeBundle, check_runtime_fingerprint
 from product.protocols.execution_v3 import PersistedExecutionRequestV3
 from tests.fixtures.check_plan import prepared_action
 from tests.fixtures.check_runtime import runtime_bundle
@@ -58,7 +58,7 @@ def execution_pair(*, port=8765, configure=None, state_changing=False, prepared=
         budget=dict(timeout_us=1_000_000, max_rows=1, max_bytes=262_144))]
     if configure is not None:
         configure(payload)
-    runtime_model = ControlledCheckRuntimeBundle if payload["schema_version"] == "2" else CheckRuntimeBundle
+    runtime_model = {'1':CheckRuntimeBundle,'2':ControlledCheckRuntimeBundle,'3':NodeCheckRuntimeBundle}[payload['schema_version']]
     bundle = runtime_model.model_validate_json(json.dumps(payload))
     config_hash = check_runtime_fingerprint(bundle)
     plan = compile_project_check_plan(prepared.action.project_id, source_fingerprint=bundle.source_fingerprint,

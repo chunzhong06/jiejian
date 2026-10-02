@@ -74,7 +74,7 @@ GUI 读取的 `MCPAccessView` 明确区分凭据与连接：`DISABLED → CREDEN
 
 MCP工具按SDK返回structured content，不套API/CLI envelope；仅独立持久根有schema_version。当前提供有界事实、SourceChange和完整Check提交/取消，不开放Proposal决定、权限writer或任意执行。
 
-长期配对只恢复READ。精确20工具：原11个事实查询，加task_list/task_show/task_context/receipt_show四个READ；task_create/task_accept/change_submit为PREPARE，check_run/check_cancel为EXECUTE。任务修订、结束、取消只由GUI操作。变化登记携带任务、上下文、预期版本和稳定操作键，写后不明先读取原回执。GUI对当前项目临时提升，pause/resume/rotate/forget/close清除；令牌、状态和错误继续沿同一受控边界。未声明参数拒绝，不能选择Case/Permission/Effect、提交源码/diff、执行Git/shell/任意HTTP或写权限。
+长期配对只恢复READ。当前34工具：原11个事实查询，加task_list/task_show/task_context/receipt_show四个READ；task_create/task_accept/change_submit为PREPARE，check_run/check_cancel为EXECUTE。另有rule_context、rule_candidate_show、rule_operation三个READ和rule_candidate_save一个PREPARE；变化登记预览和一次登记复用已有授权。候选不批准正式权限，响应不明查询原操作。任务修订、结束、取消只由GUI操作。变化登记携带任务、上下文、预期版本和稳定操作键，写后不明先读取原回执。GUI对当前项目临时提升，pause/resume/rotate/forget/close清除；令牌、状态和错误继续沿同一受控边界。未声明参数拒绝，不能选择Case/Permission/Effect、提交源码/diff、执行Git/shell/任意HTTP或写权限。
 
 ## ResultStory 与 Evidence
 
@@ -119,3 +119,9 @@ GUI serve 与会创建 ApplicationCore 的 CLI 命令共享 `ServeLock`。同一
 - [修改 API 与控制面](../../开发/能力/修改API与控制面.md)
 - [报告与格式投影协议](报告与格式投影协议.md)
 - [产品入口与控制面边界 ADR](../../决策/ADR-0035-产品入口与控制面边界.md)
+
+## 普通来源准备工具
+
+新增 preparation_context、proof_source_show、proof_preflight_status、proof_adoption_preview、preparation_receipt 五个 READ；proof_source_save 为 PREPARE；proof_preflight_start/cancel 为 EXECUTE。来源只接受固定 JSON GET、账号/资源引用与有界字段映射，不接受任意 URL、SQL、代码、密码或可信性布尔值。读取范围和采用只由本机会话与同源 GUI 写入。预检查是独立 Job，成功生命周期与 USABLE、正式权限 Verdict 分别表达。
+
+MCP EXECUTE 授权代次绑定每次预检查；降权、暂停、轮换、忘记和控制进程重启使旧任务失效。重新授权不会复活旧 Job。写操作按原操作标识回读；来源修订采用 CAS。

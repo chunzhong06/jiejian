@@ -36,6 +36,7 @@ def test_sample_requires_human_approval_then_uses_persistent_recordings(current_
     view = core.official_experience.start(consent=True)
     assert view.active
     project = view.project_id
+    assert core.runtime_ports.reference(project) == core.official_experience.runtime_reference(project)
     assert core.official_experience.prepare().pending_tasks == ("HUMAN_BOUNDARY_APPROVAL_REQUIRED",)
     assert core.test_identities.list(project) == ()
     proposal = core.official_experience.boundary_proposal()

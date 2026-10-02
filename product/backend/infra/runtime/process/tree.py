@@ -19,6 +19,7 @@ import os
 import signal
 import subprocess
 import time
+import re
 import weakref
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -386,7 +387,7 @@ def kernel_process_created_at(identity: Mapping[str, object], process_id: int) -
     if os.name != "nt" or identity.get("kind") != "windows-job" or type(process_id) is not int or process_id <= 0:
         return None
     name = identity.get("name")
-    if not isinstance(name, str) or not name.startswith("jiejian-sample-exp_"):
+    if not isinstance(name, str) or re.fullmatch(r"(?:jiejian-(?:sample-exp_|node-rti_)[0-9a-f]{32}|Local\\JiejianWorker-[0-9a-f]{64})", name) is None:
         return None
     job = _open_job(name)
     if job is None:

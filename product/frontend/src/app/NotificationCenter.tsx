@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Alert, Button, Space, Typography } from 'antd'
+import { CloseOutlined } from '@ant-design/icons'
 import type { ApiError, ErrorDiagnosis } from '../api/http'
 
 const FALLBACK_WINDOW_MS = 10_000
@@ -102,7 +103,7 @@ export function NotificationCenter({
   const overflow = Math.max(0, items.length - visible.length)
   return <aside className="notification-center" aria-label="全局通知" aria-live="polite" aria-relevant="additions">
     {activity && <section className="check-activity-toast" aria-label="检查动态">
-      <div className="check-activity-toast-heading"><span>检查动态</span>{activity.onDismiss && <Button type="text" aria-label="关闭检查完成提示" onClick={activity.onDismiss}>×</Button>}</div>
+      <div className="check-activity-toast-heading"><span>检查动态</span>{activity.onDismiss && <Button type="text" aria-label="关闭检查提示" icon={<CloseOutlined />} onClick={activity.onDismiss} />}</div>
       <p>{activity.label}</p><div className="check-activity-toast-actions"><Button type="link" onClick={activity.onView}>{activity.actionLabel}</Button></div>
     </section>}
     <div className="notification-stack">

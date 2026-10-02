@@ -1,11 +1,11 @@
 /* 工作台突出一个当前工作面，业务进展以稳定行列提供全局位置。 */
 .workbench-heading,.workbench-section-heading,.workbench-latest,.workbench-support{display:flex;align-items:center;justify-content:space-between;gap:24px}
-.workbench-heading h1{font-size:30px;letter-spacing:-.6px;margin:8px 0 12px;line-height:1.3}
+.workbench-heading h1{font-size:var(--font-titleMax);letter-spacing:-.6px;margin:8px 0 12px;line-height:1.3}
 .workbench-meta{display:flex;flex-wrap:wrap;gap:8px 20px;color:var(--color-secondary);font-size:13px;margin:0}
 .workbench-shortcuts{display:flex;gap:32px;border-bottom:1px solid var(--color-border);padding:28px 0 20px;margin-bottom:32px}
 .workbench-shortcuts button{border:0;padding:0;background:none;text-align:left;color:var(--color-text);font:inherit;cursor:pointer;font-size:14px}
 .workbench-shortcuts span{display:block;color:var(--color-secondary);font-size:12px;margin-top:5px}
-.workbench-focus{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(220px,1fr);border:1px solid var(--color-border);background:var(--color-surface);border-radius:16px;overflow:hidden;margin:0 0 40px;box-shadow:0 4px 18px rgb(0 0 0 / 3%)}
+.workbench-focus{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(220px,1fr);border:1px solid var(--color-border);background:var(--color-surface);border-radius:16px;overflow:hidden;margin:0 0 40px;box-shadow:var(--shadow-focus)}
 .workbench-focus-copy{padding:32px 36px}
 .workbench-focus-copy h2{font-size:25px;line-height:1.45;letter-spacing:-.4px;margin:12px 0}
 .workbench-focus-copy>p:not(.editorial-eyebrow){line-height:1.8;color:var(--color-secondary);max-width:58ch;margin:12px 0 24px}
@@ -24,7 +24,7 @@
 .workbench-support{margin-top:20px;font-size:12px;color:var(--color-secondary);justify-content:flex-start;gap:12px}.workbench-support .ant-btn{font-size:12px}
 .workbench-shortcuts button:focus-visible{outline:2px solid var(--color-primary);outline-offset:6px;border-radius:3px}
 @media(min-width:1800px){.workbench-focus-copy{padding:40px 44px}.workbench-focus-context{padding:40px 32px}}
-@media(max-width:760px){.workbench-focus{grid-template-columns:1fr;margin-bottom:28px}.workbench-focus-copy,.workbench-focus-context{padding:24px}.workbench-focus-context{border-left:0;border-top:1px solid var(--color-border)}.workbench-heading{align-items:flex-start}.workbench-heading h1{font-size:24px}.workbench-shortcuts{gap:16px;justify-content:space-between}.workbench-shortcuts button{font-size:13px;min-height:44px}.workbench-shortcuts span{font-size:11px}.workbench-business-columns{display:none}.workbench-business-row{grid-template-columns:1fr 1fr;gap:12px}.workbench-business-row>div{grid-column:1 / -1}.workbench-business-row small{display:block;color:var(--color-secondary);font-size:11px;margin-bottom:4px}.workbench-business-row .ant-btn{grid-column:1 / -1;text-align:left;justify-self:start;min-height:44px}.workbench-section-heading{align-items:stretch;flex-direction:column;gap:16px}.workbench-section-heading .ant-input-affix-wrapper{width:100%;min-height:44px}.workbench-latest{align-items:flex-start;flex-direction:column}.workbench-support{flex-wrap:wrap}.workbench-focus-copy h2{font-size:22px}}
+@media(max-width:760px){.workbench-focus{grid-template-columns:1fr;margin-bottom:28px}.workbench-focus-copy,.workbench-focus-context{padding:24px}.workbench-focus-context{border-left:0;border-top:1px solid var(--color-border)}.workbench-heading{align-items:flex-start}.workbench-heading h1{font-size:var(--font-titleMin)}.workbench-shortcuts{gap:16px;justify-content:space-between}.workbench-shortcuts button{font-size:13px;min-height:44px}.workbench-shortcuts span{font-size:11px}.workbench-business-columns{display:none}.workbench-business-row{grid-template-columns:1fr 1fr;gap:12px}.workbench-business-row>div{grid-column:1 / -1}.workbench-business-row small{display:block;color:var(--color-secondary);font-size:11px;margin-bottom:4px}.workbench-business-row .ant-btn{grid-column:1 / -1;text-align:left;justify-self:start;min-height:44px}.workbench-section-heading{align-items:stretch;flex-direction:column;gap:16px}.workbench-section-heading .ant-input-affix-wrapper{width:100%;min-height:44px}.workbench-latest{align-items:flex-start;flex-direction:column}.workbench-support{flex-wrap:wrap}.workbench-focus-copy h2{font-size:22px}}
 
 /* 验收按同一行比较要求与事实，最近进展不重复放置权限摘要。 */
 .workbench-primary-actions { display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:var(--space-12); margin-top:var(--space-24); }

@@ -3,6 +3,7 @@ import { Alert, Button, Modal, Space } from 'antd'
 import { useRef, useState } from 'react'
 import { experienceApi, type OfficialExperienceDto } from '../../api/experience'
 import { ApiError } from '../../api/http'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 
 export function OfficialSamplePanel({ value, onChanged, onError, expanded = false }: {
   expanded?: boolean
@@ -55,7 +56,7 @@ export function OfficialSamplePanel({ value, onChanged, onError, expanded = fals
     {(uncertain || syncFailed) && <Alert className="flow-feedback" type="warning" showIcon message={uncertain ? '环境操作回执尚未确认' : '环境操作已完成，页面尚未同步'} description="先重新读取状态，不重复启动、停止或切换。" action={<Button loading={busy} onClick={() => void reread()}>重新核对环境</Button>}/>}
     {!value ? <p>正在读取官方环境…</p> : !value.available ? <Alert className="flow-feedback" type="info" message={value.unavailable_reason ?? '当前环境无法启动官方示例。'} /> : !value.active ? <>
       {expanded && retainedExited ? <div className="environment-recovery">
-        <span className="material-badge">已确认旧实例退出</span><h2>从全新示例开始</h2><p>每次启动都从同步导出开始，创建独立的新项目。确认权限后检查起始实现，再体验一次异步优化与复验。</p>
+        <StatusBadge kind="lifecycle">已确认旧实例退出</StatusBadge><h2>从全新示例开始</h2><p>每次启动都从同步导出开始，创建独立的新项目。确认权限后检查起始实现，再体验一次异步优化与复验。</p>
         <Button type="primary" disabled={busy || uncertain || environmentPending} onClick={() => setConfirm('start')}>启动示例</Button>
         <div className="environment-retained"><div><strong>旧项目归档保留</strong><p>检查结果与证据</p><p>原问题与修复记录</p><p>历史权限与源码记录</p></div><div><strong>新项目从零开始</strong><p>同步导出的起始源码</p><p>尚未批准的权限提案</p><p>重新准备账号、资源与材料</p></div></div>
         <p className="editorial-muted">旧源码修改、登录状态和材料不带入新实例。启动不会自动批准权限或执行检查。</p>

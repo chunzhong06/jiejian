@@ -138,6 +138,7 @@ class RequestCancellation(WorkerControlModel):
 class WaitingFatalFailure(WorkerControlModel):
     job_id: str = Field(pattern=JOB_ID_PATTERN)
     now_us: int = Field(ge=0)
+    error_code: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]{0,127}$")
     reason_code: Literal[FatalFailureCode.WORKER_FATAL] = (
         FatalFailureCode.WORKER_FATAL
     )
@@ -210,7 +211,7 @@ class ClaimedJob(WorkerControlModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> ClaimedJob:
-        if (self.run is None) == (self.recording is None):
+        if sum(value is not None for value in (self.run, self.recording, self.job.runtime_load_id, self.job.preflight_id)) != 1:
             raise ValueError("claimed job must expose exactly one target")
         return self
 
@@ -222,7 +223,7 @@ class JobMutationResult(WorkerControlModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> JobMutationResult:
-        if (self.run is None) == (self.recording is None):
+        if sum(value is not None for value in (self.run, self.recording, self.job.runtime_load_id, self.job.preflight_id)) != 1:
             raise ValueError("job mutation must expose exactly one target")
         return self
 
@@ -236,6 +237,8 @@ class RecoveryCandidate(WorkerControlModel):
     job_id: str = Field(pattern=JOB_ID_PATTERN)
     run_id: str | None = Field(default=None, pattern=RUN_ID_PATTERN)
     recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
+    runtime_load_id: str | None = Field(default=None, pattern=r"^rld_[0-9a-f]{32}$")
+    preflight_id: str | None = Field(default=None, pattern=r"^ppf_[0-9a-f]{32}$")
     attempt: int = Field(ge=1)
     max_attempts: int = Field(ge=1)
     lease_owner: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -244,7 +247,7 @@ class RecoveryCandidate(WorkerControlModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> RecoveryCandidate:
-        if (self.run_id is None) == (self.recording_id is None):
+        if sum(value is not None for value in (self.run_id, self.recording_id, self.runtime_load_id, self.preflight_id)) != 1:
             raise ValueError("recovery candidate must reference exactly one target")
         return self
 

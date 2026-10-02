@@ -100,15 +100,15 @@ def test_multiple_owners_reuse_validated_parameterized_materials(state_changing)
     original_owner = next(item for item in identities if item.actor_id == ACTOR)
 
     def rebind(binding, owner):
-        return seal_binding(type(binding), **(binding.model_dump(exclude={"binding_fingerprint"}) | dict(
+        return seal_binding(type(binding), **({name: getattr(binding, name) for name in type(binding).model_fields if name != "binding_fingerprint"} | dict(
             action_semantic_fingerprint=business.semantic_fingerprint,
             subject_test_identity_id=owner.identity_id, subject_identity_fingerprint=owner.identity_fingerprint,
             resource_owner_test_identity_id=owner.identity_id, owner_identity_fingerprint=owner.identity_fingerprint)))
 
     execution = rebind(original.execution, original_owner)
     evidence = tuple(rebind(item, original_owner) for item in original.evidence)
-    resources = tuple(seal_binding(type(original.resources[0]), **(rebind(original.resources[0], owner).model_dump(
-        exclude={"binding_fingerprint"}) | {"actual_resource_id": f"resource-{index}"}))
+    resources = tuple(seal_binding(type(original.resources[0]), **({name: getattr(rebind(original.resources[0], owner), name)
+        for name in type(original.resources[0]).model_fields if name != "binding_fingerprint"} | {"actual_resource_id": f"resource-{index}"}))
         for index, owner in enumerate(identities, 1))
     recovery = None
     if state_changing:

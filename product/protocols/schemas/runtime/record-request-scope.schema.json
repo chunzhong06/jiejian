@@ -1,0 +1,50 @@
+{
+  "additionalProperties": false,
+  "description": "宿主独立记录的请求完成边界；应用不能通过业务事务声明完成。",
+  "properties": {
+    "generation": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Generation",
+      "type": "string"
+    },
+    "request_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Digest",
+      "type": "string"
+    },
+    "request_nonce": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Nonce",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Scope Id",
+      "type": "string"
+    },
+    "state": {
+      "default": "OPEN",
+      "enum": [
+        "OPEN",
+        "COMPLETE",
+        "INCOMPLETE"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scope_id",
+    "generation",
+    "request_nonce",
+    "request_digest"
+  ],
+  "title": "RecordRequestScope",
+  "type": "object"
+}

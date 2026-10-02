@@ -36,7 +36,8 @@ def test_nonempty_prior_upgrade_preserves_history_without_inventing_tasks(tmp_pa
     upgrade_database(path)
     require_current_database(path)
     with sqlite3.connect(path) as connection:
-        assert connection.execute("SELECT * FROM preparation_receipts").fetchall() == before
+        assert connection.execute("SELECT operation_id,project_id,request_fingerprint,created_at_us,payload FROM preparation_receipts").fetchall() == before
+        assert connection.execute("SELECT DISTINCT operation_kind FROM preparation_receipts").fetchall() == [("MATERIAL_CHANGE",)]
         assert connection.execute("SELECT count(*) FROM development_tasks").fetchone() == (0,)
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     saved = path.read_bytes()

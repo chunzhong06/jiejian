@@ -17,6 +17,30 @@ from product.backend.api.envelope import ApiModel
 def build_projects_router(context: ApplicationCore) -> APIRouter:
     router = APIRouter()
 
+    @router.post('/api/projects/{project_id}/controlled-runtime/preview', response_model=ApiResponse)
+    def runtime_preview(project_id: str, body: RuntimePreviewRequest):
+        return data_response(context.node_runtime.preview(project_id,**body.model_dump()).model_dump(mode='json'))
+
+    @router.post('/api/projects/{project_id}/controlled-runtime/start', response_model=ApiResponse)
+    def runtime_start(project_id: str, body: RuntimeStartRequest):
+        return data_response(context.node_runtime.start(project_id,**body.model_dump()),status_code=202)
+
+    @router.get('/api/projects/{project_id}/controlled-runtime', response_model=ApiResponse)
+    def runtime_state(project_id: str):
+        return data_response(context.node_runtime.state(project_id))
+
+    @router.get('/api/projects/{project_id}/controlled-runtime/operations/{operation_id}', response_model=ApiResponse)
+    def runtime_operation(project_id: str, operation_id: str):
+        return data_response(context.node_runtime.operation(project_id,operation_id))
+
+    @router.post('/api/projects/{project_id}/controlled-runtime/operations/{operation_id}/cancel', response_model=ApiResponse)
+    def runtime_cancel(project_id: str, operation_id: str):
+        return data_response(context.node_runtime.cancel(project_id,operation_id))
+
+    @router.post('/api/projects/{project_id}/controlled-runtime/stop', response_model=ApiResponse)
+    def runtime_stop(project_id: str, body: RuntimeStopRequest):
+        return data_response(context.node_runtime.stop(project_id,instance_id=body.instance_id))
+
     @router.post("/api/applications/connect", response_model=ApiResponse)
     def connect_application(body: ApplicationConnectRequest):
         result = context.application_understanding.connect(
@@ -175,6 +199,26 @@ def build_projects_router(context: ApplicationCore) -> APIRouter:
         )
 
     return router
+
+
+class RuntimePreviewRequest(ApiModel):
+    entry: str = Field(min_length=1,max_length=512)
+    port: int = Field(ge=1024,le=65535)
+    revision: int = Field(ge=0)
+    consent_source_read: bool = False
+
+
+class RuntimeStartRequest(ApiModel):
+    entry: str = Field(min_length=1,max_length=512)
+    port: int = Field(ge=1024,le=65535)
+    revision: int = Field(ge=0)
+    preview_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
+    operation_id: str = Field(pattern=r'^[0-9a-f]{32}$')
+    consent_execute: bool
+
+
+class RuntimeStopRequest(ApiModel):
+    instance_id: str = Field(pattern=r'^rti_[0-9a-f]{32}$')
 
 
 class ApplicationConnectRequest(ApiModel):

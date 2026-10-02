@@ -1,12 +1,16 @@
 // 编辑式任务骨架只组织服务端内容；不推导优先级、准备状态或安全结论。
 import { Button } from 'antd'
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 
 export function EditorialPage({ children, label }: { children: ReactNode; label?: string }) {
   return <div className="editorial-page" aria-label={label}>{children}</div>
 }
-export function EditorialHeader({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
-  return <header className="editorial-header"><p className="editorial-eyebrow">{eyebrow}</p><h1>{title}</h1>{children}</header>
+export function EditorialHeader({ eyebrow, title, children, status }: { eyebrow?: string; title: string; children?: ReactNode; status?: ReactNode }) {
+  const titleId = useId()
+  return <header className="editorial-header" aria-labelledby={titleId}>
+    {eyebrow && <p className="editorial-eyebrow">{eyebrow}</p>}
+    <div className="editorial-heading-row"><h1 id={titleId}>{title}</h1>{status}</div>{children}
+  </header>
 }
 export function TaskFocus({ title, responsibility, systemWillDo, action }: {
   title: string; responsibility: string; systemWillDo?: string

@@ -13,6 +13,8 @@ from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.workflows.recording.source import identity_source_fingerprint
 from product.protocols.check_runtime import CheckActionConfig, CheckBudget, CheckRuntimeBundle, ControlledCheckRuntimeBundle, async_completion_candidates
+from product.protocols.check_runtime import NodeCheckRuntimeBundle
+from product.protocols.node_runtime import NodeRuntimeReference
 from product.protocols.observer import ObserverSpec
 from product.protocols.web.response import HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind
 from product.protocols.flow_draft import canonical_flow_draft_json_bytes
@@ -64,6 +66,7 @@ class CheckRuntimeBuilder:
         self._preparation, self._boundaries = preparation, business_boundaries
         self._credentials, self._registry = credentials, registry
         self.runtime_reference_reader = None
+        self.json_sources_reader = None
 
     def build(self, project_id, *, work=None):
         if work is None:
@@ -190,7 +193,18 @@ class CheckRuntimeBuilder:
             budget=budget.model_dump(mode="json"), identities=identities, actions=configs, observers=list(specs.values()))), strict=True)
         reference = None if self.runtime_reference_reader is None else self.runtime_reference_reader(project_id)
         if reference is not None:
-            return ControlledCheckRuntimeBundle(**bundle.model_dump(exclude={"schema_version"}), runtime_reference=reference)
+            if reference.source_fingerprint!=bundle.source_fingerprint:
+                raise _incomplete('RUNTIME_SOURCE_NOT_LOADED')
+            if isinstance(reference,NodeRuntimeReference) and bundle.target.base_url!=f'http://127.0.0.1:{reference.port}':
+                raise _incomplete('RUNTIME_ENDPOINT_MISMATCH')
+            model=NodeCheckRuntimeBundle if isinstance(reference,NodeRuntimeReference) else ControlledCheckRuntimeBundle
+            if isinstance(reference,NodeRuntimeReference) and self.json_sources_reader is not None:
+                sources = self.json_sources_reader(project_id)
+                if sources:
+                    from product.protocols.json_check_runtime import ManagedCheckRuntimeBundle
+                    return ManagedCheckRuntimeBundle(**bundle.model_dump(exclude={'schema_version'}),
+                        runtime_reference=reference,json_sources=sources)
+            return model(**bundle.model_dump(exclude={"schema_version"}), runtime_reference=reference)
         return bundle
 
     def _check_binding(self, work, binding, action, understanding):

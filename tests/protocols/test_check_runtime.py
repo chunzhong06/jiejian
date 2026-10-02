@@ -43,6 +43,25 @@ def test_five_auxiliary_sources_are_supported_but_six_are_rejected():
     assert any(item["type"] == "too_long" for item in error.value.errors(include_input=False))
 
 
+def test_node_runtime_binds_project_source_and_exact_origin_without_changing_old_wire():
+    from urllib.parse import urlsplit
+    from pydantic import ValidationError
+    from product.protocols.check_runtime import NodeCheckRuntimeBundle
+    from product.protocols.node_runtime import NodeRuntimeReference
+    old=runtime_bundle()
+    original=canonical_check_runtime_bytes(old)
+    reference=NodeRuntimeReference(project_id=old.project_id,instance_id='rti_'+'3'*32,
+        manifest_fingerprint='a'*64,source_fingerprint=old.source_fingerprint,
+        process_id=123,process_created_at=456,port=urlsplit(old.target.base_url).port)
+    fields=old.model_dump(exclude={'schema_version'})
+    current=NodeCheckRuntimeBundle(**fields,runtime_reference=reference)
+    assert parse_check_runtime(canonical_check_runtime_bytes(current))==current
+    for field,value in [('project_id','another-project'),('source_fingerprint','0'*64),('port',65530)]:
+        with pytest.raises(ValidationError):
+            NodeCheckRuntimeBundle(**fields,runtime_reference=reference.model_copy(update={field:value}))
+    assert canonical_check_runtime_bytes(parse_check_runtime(original))==original
+
+
 def test_runtime_is_independent_of_backend_and_legacy_contracts():
     result = subprocess.run([sys.executable, "-B", "-c",
         "import sys; import product.protocols.check_runtime; assert not any(n.startswith('product.backend') for n in sys.modules)"],

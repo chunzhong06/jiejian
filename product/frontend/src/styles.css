@@ -1,5 +1,6 @@
 /* 本职责区域的布局与交互样式；颜色与尺度复用统一设计令牌。 */
 @import "./shared/styles/editorial.css";
+@import "./shared/styles/controls.css";
 @import "./features/boundaries/boundaries.css";
 @import "./features/workspace/workspace.css";
 * {
@@ -103,8 +104,8 @@ samp {
 }
 
 .module-navigation {
-  background: color-mix(in srgb,var(--color-surface-subtle) 45%,var(--color-bg));
-  border-right: 1px solid color-mix(in srgb,var(--color-border) 60%,transparent);
+  background: var(--color-navigation);
+  border-right: 1px solid var(--color-border);
   display: flex;
   flex: 0 0 var(--layout-navigation);
   flex-direction: column;
@@ -268,10 +269,10 @@ samp {
 
 .module-navigation-item.is-selected .module-navigation-button {
   font-weight: 600;
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 1px 4px color-mix(in srgb,var(--color-text) 4%,transparent);
+  background: var(--color-primary-light);
+  color: var(--color-primary-ink);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .module-navigation-icon {
@@ -427,7 +428,7 @@ samp {
 .content {
   background: var(--color-bg);
   min-width: 0;
-  padding: var(--space-32) var(--space-40) var(--space-48);
+  padding: var(--rhythm-pagePadding) var(--rhythm-pagePadding) var(--space-48);
 }
 
 .content-frame {
@@ -546,7 +547,7 @@ samp {
 
 @media (max-width: 600px) {
   .content {
-    padding: var(--space-12);
+    padding: var(--rhythm-pagePaddingNarrow);
   }
 }
 
@@ -564,9 +565,9 @@ samp {
 }
 
 .report-view {
-  background: #101828;
+  background: var(--color-evidence-subtle);
   border-radius: 8px;
-  color: #d0d5dd;
+  color: var(--color-evidence-text);
   max-height: 520px;
   overflow: auto;
   padding: var(--space-16);
@@ -578,89 +579,6 @@ samp {
   border-radius: var(--radius-small);
   min-height: 720px;
   width: 100%;
-}
-
-.page-task-header {
-  border-bottom: 1px solid var(--color-border);
-  padding: 0 0 var(--space-16);
-}
-
-.page-task-header-main {
-  align-items: flex-start;
-  display: flex;
-  gap: var(--space-16);
-  justify-content: space-between;
-}
-
-.page-task-header-main h2 {
-  font-size: clamp(24px, 2.5vw, 30px);
-  font-weight: 600;
-  line-height: 1.28;
-  margin: 0 0 4px;
-}
-
-.page-task-header-main p {
-  margin-bottom: 0;
-  max-width: 960px;
-}
-
-.page-task-header-main .ant-typography {
-  min-width: 0;
-}
-
-.page-task-status {
-  align-items: center;
-  color: var(--color-secondary);
-  display: inline-flex;
-  flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 500;
-  gap: 7px;
-  line-height: 1.4;
-}
-
-.semantic-state {
-  align-items: center;
-  color: var(--color-secondary);
-  display: inline-flex;
-  flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 500;
-  gap: 7px;
-  line-height: 1.4;
-  padding: var(--space-4) var(--space-12);
-  border-radius: 999px;
-  background: var(--color-surface-subtle);
-}
-
-.page-task-status i {
-  background: var(--color-evidence);
-  border-radius: 50%;
-  height: 6px;
-  width: 6px;
-}
-
-.semantic-state.is-current {
-  color: var(--color-evidence);
-}
-
-.semantic-state.is-safe {
-  color: var(--color-safe);
-  background: color-mix(in srgb,var(--color-safe-mark) 12%,var(--color-surface));
-}
-
-.semantic-state.is-ready {
-  color: var(--color-safe);
-}
-
-.semantic-state.is-warning {
-  color: var(--color-warning);
-  background: color-mix(in srgb,var(--color-warning-mark) 12%,var(--color-surface));
-}
-
-.semantic-state.is-danger {
-  color: var(--color-danger);
-  background: color-mix(in srgb,var(--color-danger-mark) 12%,var(--color-surface));
 }
 
 .task-page {
@@ -1097,17 +1015,18 @@ samp {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-16) var(--space-32);
+  gap: var(--space-16) var(--space-20);
 }
 
 .sample-start-row .sample-start-copy {
-  flex: 1 1 28rem;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
 }
 
 .sample-start-copy p { margin: 0; }
 .sample-start-copy p + p { margin-top: var(--space-8); }
-.sample-start-row > .ant-btn { flex-shrink: 0; margin-inline-start: auto; }
+.sample-start-row > .ant-btn { flex-shrink: 0; }
 
 .workbench-system-link {
   margin-left: -15px;
@@ -1352,15 +1271,14 @@ samp {
 }
 
 .assistant-assistance-card {
-  border-top: 3px solid var(--color-ai);
+  border-color: var(--color-border);
 }
 
 .assistant-panel {
-  border: 1px solid color-mix(in srgb, var(--color-ai) 32%, var(--color-border));
-  border-top: 3px solid var(--color-ai);
-  border-radius: 8px;
-  background: var(--color-surface);
-  padding: 16px;
+  border: var(--line-width) solid transparent;
+  border-radius: var(--radius-medium);
+  background: var(--color-ai-light);
+  padding: var(--space-16);
 }
 
 .assistant-panel-heading {
@@ -1483,7 +1401,7 @@ samp {
 }
 
 .notification-card {
-  box-shadow: 0 8px 24px rgba(15, 23, 42, .16);
+  box-shadow: var(--shadow-floating);
   width: min(420px, calc(100vw - var(--space-32)));
 }
 
@@ -1674,8 +1592,8 @@ samp {
 }
 
 .mcp-guide-step.is-done .mcp-guide-number {
-  background: color-mix(in srgb, var(--color-safe) 16%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-safe) 48%, var(--color-border));
+  background: var(--color-safe-light);
+  border-color: transparent;
   color: var(--color-safe);
 }
 
@@ -1759,27 +1677,8 @@ samp {
   gap: var(--space-12);
 }
 
-.mcp-access-tag {
-  background: var(--color-surface-subtle);
-  border-color: var(--color-border-strong);
-  color: var(--color-secondary);
-  margin-inline-end: 0;
-}
-
-.mcp-access-tag.is-prepare {
-  background: var(--color-warning-light);
-  border-color: var(--color-warning-border);
-  color: var(--color-warning);
-}
-
-.mcp-access-tag.is-execute {
-  background: var(--color-primary-light);
-  border-color: var(--color-primary-border);
-  color: var(--color-primary);
-}
-
 .mcp-oracle-boundary {
-  background: color-mix(in srgb, var(--color-warning) 7%, var(--color-surface));
+  background: var(--color-warning-light);
 }
 
 .mcp-access-levels .ant-card {
@@ -1909,17 +1808,10 @@ samp {
 }
 
 @media (max-width: 768px) {
-  .page-task-header-main {
-    flex-direction: column;
-    gap: 8px;
   }
-}
 
 @media (max-width: 768px) {
-  .page-task-header {
-    padding-bottom: var(--space-12);
   }
-}
 
 @media (max-width: 768px) {
   .workbench-primary-panel.workbench-empty {
@@ -2432,13 +2324,9 @@ samp {
 }
 
 .task-action-bar:has(.ant-btn-primary) {
-  position: sticky;
-  bottom: var(--space-16);
-  padding: var(--space-12) var(--space-16);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-medium);
-  z-index: 3;
+  /* 普通步骤操作留在内容末尾；不以固定浮条遮住正在阅读的材料或证据。 */
+  padding-top: var(--space-24);
+  border-top: 1px solid var(--color-border);
 }
 
 .work-receipt {
@@ -2449,8 +2337,8 @@ samp {
   margin-bottom: var(--space-20);
   padding: var(--space-12) var(--space-16);
   border-radius: var(--radius-small);
-  background: color-mix(in srgb,var(--color-safe-mark) 6%,var(--color-surface));
-  border: 1px solid color-mix(in srgb,var(--color-safe-mark) 30%,var(--color-border));
+  background: var(--color-safe-light);
+  border: 1px solid transparent;
   color: var(--color-safe);
   font-size: var(--font-secondary);
 }
@@ -2620,7 +2508,7 @@ samp {
 
 @media(max-width:760px) {
   .editorial-header h1 {
-    font-size: 25px;
+    font-size: var(--font-titleMin);
   }
 }
 
@@ -2899,18 +2787,3 @@ samp {
 .check-activity-toast-actions .ant-btn {height:28px;padding-inline:var(--space-8);font-size:var(--font-secondary);}
 .notification-center {max-height:calc(100dvh - 120px);overflow-y:auto;overscroll-behavior:contain;}
 @media(max-width:600px){.check-activity-toast{width:100%}.notification-center{bottom:max(12px,env(safe-area-inset-bottom));}}
-
-/* 全产品次级操作统一描边和浅色底；主操作、文字链接与危险动作保留各自语义，不由页面单独染色。 */
-:where(.app-shell,.ant-modal) .ant-btn-default:not(.ant-btn-dangerous):not(:disabled){
- color:var(--color-primary);border-color:color-mix(in srgb,var(--color-primary) 22%,var(--color-border));
- background:color-mix(in srgb,var(--color-primary) 4%,var(--color-surface));box-shadow:none;
-}
-:where(.app-shell,.ant-modal) .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover{
- color:var(--color-primary);border-color:var(--color-primary);background:var(--color-primary-light);
-}
-
-/* 文字操作全局一致：鼠标只改变文字和下划线，不制造灰色按钮底；键盘仍显示 focus-visible。 */
-:where(.app-shell,.ant-modal,.notification-center) .ant-btn-link:not(:disabled):is(:hover,:active,:focus){background:transparent;border-color:transparent;box-shadow:none;text-decoration:underline;text-underline-offset:3px;}
-:where(.app-shell,.ant-modal,.notification-center) .ant-btn-link:not(:disabled):focus:not(:focus-visible){outline:none;}
-:where(.app-shell,.ant-modal,.notification-center) .ant-btn-link:focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;}
-.app-shell a:not(.ant-btn):hover{text-decoration:underline;text-underline-offset:3px;}

@@ -39,7 +39,12 @@
 - `class MCPPathAdapter`
 - `class MCPControl`
 - `build_mcp_control(context, access, control_origin, control_host) -> MCPControl`
-主要 import / dot-source：`__future__`, `collections.abc`, `contextvars`, `dataclasses`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.composition`, `product.backend.core.checks.repair`, `product.backend.core.development`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `product.backend.workflows.agent_access.service`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `contextvars`, `dataclasses`, `json`, `mcp`, `mcp.server`, `mcp.server.context`, `mcp.server.mcpserver`, `mcp.server.transport_security`, `product.backend`, `product.backend.composition`, `product.backend.core.boundaries.rule_candidates`, `product.backend.core.checks.repair`, `product.backend.core.development`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `product.backend.workflows.agent_access.service`, `pydantic`, `starlette.datastructures`, `starlette.responses`, `starlette.types`, `typing`
+
+### `product/backend/api/mcp_preparation.py`
+- `public_preparation(value)`
+- `register_preparation_tools(server, context, access, require_level, invoke, client_name)`
+主要 import / dot-source：`json`, `mcp.server.mcpserver`, `product.backend.workflows.agent_access.service`, `product.backend.workflows.preparation.proof_commands`, `typing`
 
 ### `product/backend/api/routers/assistant.py`
 - `class ProjectAssistantSurface`
@@ -52,9 +57,11 @@
 ### `product/backend/api/routers/business_boundaries.py`
 - `class BoundaryProposalCreateRequest`
 - `class BoundaryDecisionRequest`
+- `class RuleCandidateSaveRequest`
+- `class RuleCandidateProposalRequest`
 - `class BoundaryMaintenanceCreateRequest`
 - `build_business_boundaries_router(context) -> APIRouter`
-主要 import / dot-source：`__future__`, `fastapi`, `json`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.boundaries.proposals`, `product.backend.workflows.business_boundaries`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `fastapi.encoders`, `json`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.boundaries.proposals`, `product.backend.core.boundaries.rule_candidates`, `product.backend.workflows.business_boundaries`, `pydantic`, `typing`
 
 ### `product/backend/api/routers/checks.py`
 - `build_checks_router(context) -> APIRouter`
@@ -131,6 +138,9 @@
 
 ### `product/backend/api/routers/projects.py`
 - `build_projects_router(context) -> APIRouter`
+- `class RuntimePreviewRequest`
+- `class RuntimeStartRequest`
+- `class RuntimeStopRequest`
 - `class ApplicationConnectRequest`
 - `class EndpointConfirmationRequest`
 - `class SourceAnalysisAuthorizationRequest`
@@ -140,6 +150,11 @@
 - `class ManualRoleRequest`
 - `class ManualActionRequest`
 主要 import / dot-source：`__future__`, `fastapi`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.applications.models`, `pydantic`, `typing`
+
+### `product/backend/api/routers/proof_sources.py`
+- `require_local_proof_session(request)`
+- `build_proof_sources_router(context)`
+主要 import / dot-source：`fastapi`, `product.backend.api.envelope`, `product.backend.workflows.preparation.proof_commands`, `typing`
 
 ### `product/backend/api/routers/recordings.py`
 - `build_recordings_router(context) -> APIRouter`

@@ -1,0 +1,1639 @@
+{
+  "$defs": {
+    "BearerIdentityBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "BEARER",
+          "default": "BEARER",
+          "title": "Kind",
+          "type": "string"
+        },
+        "secret_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Secret Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "secret_ref"
+      ],
+      "title": "BearerIdentityBinding",
+      "type": "object"
+    },
+    "CheckIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "actor_label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Actor Label",
+          "type": "string"
+        },
+        "actor_revision": {
+          "minimum": 1,
+          "title": "Actor Revision",
+          "type": "integer"
+        },
+        "binding": {
+          "discriminator": {
+            "mapping": {
+              "BEARER": "#/$defs/BearerIdentityBinding",
+              "PREPARED_COOKIE_SESSION": "#/$defs/PreparedCookieSessionIdentityBinding"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BearerIdentityBinding"
+            },
+            {
+              "$ref": "#/$defs/PreparedCookieSessionIdentityBinding"
+            }
+          ],
+          "title": "Binding"
+        },
+        "identity_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Identity Fingerprint",
+          "type": "string"
+        },
+        "identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CheckIdentityVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "identity_id",
+        "actor_id",
+        "actor_revision",
+        "identity_fingerprint",
+        "label",
+        "actor_label",
+        "binding"
+      ],
+      "title": "CheckIdentity",
+      "type": "object"
+    },
+    "CheckIdentityVerification": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_actor_id": {
+          "pattern": "^bar_[0-9a-f]{32}$",
+          "title": "Expected Actor Id",
+          "type": "string"
+        },
+        "expected_actor_revision": {
+          "minimum": 1,
+          "title": "Expected Actor Revision",
+          "type": "integer"
+        },
+        "expected_application_subject_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Expected Application Subject Id",
+          "type": "string"
+        },
+        "namespace": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/HttpRequestTemplate"
+        },
+        "subject_json_path": {
+          "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]{0,63}){1,8}$",
+          "title": "Subject Json Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "expected_application_subject_id",
+        "expected_actor_id",
+        "expected_actor_revision",
+        "request",
+        "subject_json_path"
+      ],
+      "title": "CheckIdentityVerification",
+      "type": "object"
+    },
+    "EmptyBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "EMPTY",
+          "default": "EMPTY",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EmptyBody",
+      "type": "object"
+    },
+    "FormUrlEncodedBody": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Fields",
+          "type": "array"
+        },
+        "kind": {
+          "const": "FORM_URLENCODED",
+          "default": "FORM_URLENCODED",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "FormUrlEncodedBody",
+      "type": "object"
+    },
+    "HttpParameter": {
+      "additionalProperties": false,
+      "description": "受控 Query/Header/Form 字段；字段值只能是 literal 或已声明 Slot。",
+      "properties": {
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "HttpParameter",
+      "type": "object"
+    },
+    "HttpRequestTemplate": {
+      "additionalProperties": false,
+      "description": "单请求受控模板；不接受 URL、脚本、任意文件或保留认证头。",
+      "properties": {
+        "body": {
+          "discriminator": {
+            "mapping": {
+              "EMPTY": "#/$defs/EmptyBody",
+              "FORM_URLENCODED": "#/$defs/FormUrlEncodedBody",
+              "JSON": "#/$defs/JsonBody",
+              "MULTIPART": "#/$defs/MultipartBody"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EmptyBody"
+            },
+            {
+              "$ref": "#/$defs/JsonBody"
+            },
+            {
+              "$ref": "#/$defs/FormUrlEncodedBody"
+            },
+            {
+              "$ref": "#/$defs/MultipartBody"
+            }
+          ],
+          "title": "Body"
+        },
+        "headers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Headers",
+          "type": "array"
+        },
+        "input_slots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ValueSlot"
+          },
+          "maxItems": 128,
+          "title": "Input Slots",
+          "type": "array"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "PATCH",
+            "POST",
+            "PUT",
+            "DELETE",
+            "HEAD"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "pattern": "^/[A-Za-z0-9_./{}~:@%+\\-]*$",
+          "title": "Path",
+          "type": "string"
+        },
+        "query": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HttpParameter"
+          },
+          "maxItems": 128,
+          "title": "Query",
+          "type": "array"
+        },
+        "response_extractors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResponseExtractor"
+          },
+          "maxItems": 128,
+          "title": "Response Extractors",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "path"
+      ],
+      "title": "HttpRequestTemplate",
+      "type": "object"
+    },
+    "JsonBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "JSON",
+          "default": "JSON",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "JsonBody",
+      "type": "object"
+    },
+    "ManagedIdentityClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "application_role": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "title": "Application Role",
+          "type": "string"
+        },
+        "application_subject_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "title": "Application Subject Id",
+          "type": "string"
+        },
+        "identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "request_path": {
+          "maxLength": 512,
+          "minLength": 2,
+          "title": "Request Path",
+          "type": "string"
+        },
+        "role_path": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Role Path",
+          "type": "array"
+        },
+        "subject_path": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Subject Path",
+          "type": "array"
+        }
+      },
+      "required": [
+        "identity_id",
+        "application_subject_id",
+        "request_path",
+        "subject_path",
+        "role_path",
+        "application_role"
+      ],
+      "title": "ManagedIdentityClaim",
+      "type": "object"
+    },
+    "ManagedProofSourceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "collection": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+          "title": "Collection",
+          "type": "string"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "identity_claims": {
+          "items": {
+            "$ref": "#/$defs/ManagedIdentityClaim"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Identity Claims",
+          "type": "array"
+        },
+        "mappings": {
+          "additionalProperties": {
+            "items": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "maxProperties": 16,
+          "minProperties": 2,
+          "propertyNames": {
+            "enum": [
+              "resource_id",
+              "owner_id",
+              "state",
+              "version",
+              "effect_count",
+              "history_generation",
+              "operation_id",
+              "operation_resource_id",
+              "operation_subject_id",
+              "operation_before_version",
+              "operation_after_version",
+              "operation_state",
+              "unfinished_effects",
+              "title",
+              "summary",
+              "body"
+            ]
+          },
+          "title": "Mappings",
+          "type": "object"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "observation_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Observation Identity Id",
+          "type": "string"
+        },
+        "protected_projection": {
+          "default": [],
+          "items": {
+            "maxLength": 256,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*){0,7}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Projection",
+          "type": "array"
+        },
+        "read_scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^prs_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Scope Id"
+        },
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path Template",
+          "type": "string"
+        },
+        "resource_binding_id": {
+          "pattern": "^res_[0-9a-f]{32}$",
+          "title": "Resource Binding Id",
+          "type": "string"
+        },
+        "source_contract_id": {
+          "enum": [
+            "TRANSACTION_HISTORY_V1",
+            "RESOURCE_FIELDS_V1"
+          ],
+          "title": "Source Contract Id",
+          "type": "string"
+        },
+        "source_files": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Source Files",
+          "type": "array"
+        },
+        "source_kind": {
+          "const": "MANAGED_TRANSACTION_RECORDS",
+          "default": "MANAGED_TRANSACTION_RECORDS",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "target_data_path": {
+          "default": [
+            "data"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Target Data Path",
+          "type": "array"
+        },
+        "target_operation_path": {
+          "default": [
+            "operation_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Operation Path",
+          "type": "array"
+        },
+        "target_owner_path": {
+          "default": [
+            "owner_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Owner Path",
+          "type": "array"
+        },
+        "target_resource_path": {
+          "default": [
+            "resource_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Resource Path",
+          "type": "array"
+        },
+        "timeout_us": {
+          "default": 5000000,
+          "maximum": 5000000,
+          "minimum": 1000,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_revision",
+        "effect_id",
+        "observation_identity_id",
+        "resource_binding_id",
+        "relative_path_template",
+        "mappings",
+        "source_contract_id",
+        "identity_claims",
+        "collection"
+      ],
+      "title": "ManagedProofSourceConfig",
+      "type": "object"
+    },
+    "MultipartBody": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "MULTIPART",
+          "default": "MULTIPART",
+          "title": "Kind",
+          "type": "string"
+        },
+        "parts": {
+          "items": {
+            "$ref": "#/$defs/MultipartPart"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Parts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "parts"
+      ],
+      "title": "MultipartBody",
+      "type": "object"
+    },
+    "MultipartPart": {
+      "additionalProperties": false,
+      "description": "Multipart 只允许 literal、Slot 或已登记 fixture/artifact 标识。",
+      "properties": {
+        "content_type": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Type"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "fixture_artifact_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixture Artifact Id"
+        },
+        "literal": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Literal"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.~\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "slot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MultipartPart",
+      "type": "object"
+    },
+    "NodeRuntimeReference": {
+      "additionalProperties": false,
+      "properties": {
+        "instance_id": {
+          "pattern": "^rti_[0-9a-f]{32}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "manifest_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Fingerprint",
+          "type": "string"
+        },
+        "mode": {
+          "const": "CONTROLLED_NODE_ESM",
+          "default": "CONTROLLED_NODE_ESM",
+          "title": "Mode",
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1024,
+          "title": "Port",
+          "type": "integer"
+        },
+        "process_created_at": {
+          "exclusiveMinimum": 0,
+          "title": "Process Created At",
+          "type": "integer"
+        },
+        "process_id": {
+          "exclusiveMinimum": 0,
+          "title": "Process Id",
+          "type": "integer"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "source_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "instance_id",
+        "manifest_fingerprint",
+        "source_fingerprint",
+        "process_id",
+        "process_created_at",
+        "port"
+      ],
+      "title": "NodeRuntimeReference",
+      "type": "object"
+    },
+    "PreparedCookieCredential": {
+      "additionalProperties": false,
+      "description": "已准备 Cookie 的非秘密元数据；真实值只通过环境引用注入。",
+      "properties": {
+        "domain": {
+          "maxLength": 253,
+          "minLength": 1,
+          "title": "Domain",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "secure": {
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "value_ref": {
+          "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Value Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "domain",
+        "path",
+        "secure",
+        "value_ref"
+      ],
+      "title": "PreparedCookieCredential",
+      "type": "object"
+    },
+    "PreparedCookieSessionIdentityBinding": {
+      "additionalProperties": false,
+      "description": "把 Credential Manager 中已确认的 Cookie 会话投影到一次隔离 Case。",
+      "properties": {
+        "cookies": {
+          "items": {
+            "$ref": "#/$defs/PreparedCookieCredential"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Cookies",
+          "type": "array"
+        },
+        "kind": {
+          "const": "PREPARED_COOKIE_SESSION",
+          "default": "PREPARED_COOKIE_SESSION",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cookies"
+      ],
+      "title": "PreparedCookieSessionIdentityBinding",
+      "type": "object"
+    },
+    "ProofContractAttestation": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_effect_kind": {
+          "enum": [
+            "STATE_MUTATION",
+            "DATA_DISCLOSURE"
+          ],
+          "title": "Approved Effect Kind",
+          "type": "string"
+        },
+        "contract_id": {
+          "enum": [
+            "SYNC_RESOURCE_HISTORY_V1",
+            "OWNER_RESOURCE_VIEW_V1",
+            "TRANSACTION_HISTORY_V1",
+            "RESOURCE_FIELDS_V1"
+          ],
+          "title": "Contract Id",
+          "type": "string"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "implementation_profile": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Implementation Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract_id",
+        "implementation_profile",
+        "fingerprint",
+        "approved_effect_kind"
+      ],
+      "title": "ProofContractAttestation",
+      "type": "object"
+    },
+    "ProofSourceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^bac_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "action_revision": {
+          "minimum": 1,
+          "title": "Action Revision",
+          "type": "integer"
+        },
+        "effect_id": {
+          "pattern": "^bef_[0-9a-f]{32}$",
+          "title": "Effect Id",
+          "type": "string"
+        },
+        "identity_claims": {
+          "items": {
+            "$ref": "#/$defs/SourceIdentityClaim"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Identity Claims",
+          "type": "array"
+        },
+        "mappings": {
+          "additionalProperties": {
+            "items": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "maxProperties": 16,
+          "minProperties": 2,
+          "propertyNames": {
+            "enum": [
+              "resource_id",
+              "owner_id",
+              "state",
+              "version",
+              "effect_count",
+              "history_generation",
+              "operation_id",
+              "operation_resource_id",
+              "operation_subject_id",
+              "operation_before_version",
+              "operation_after_version",
+              "operation_state",
+              "unfinished_effects",
+              "title",
+              "summary",
+              "body"
+            ]
+          },
+          "title": "Mappings",
+          "type": "object"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "observation_identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Observation Identity Id",
+          "type": "string"
+        },
+        "read_scope_id": {
+          "anyOf": [
+            {
+              "pattern": "^prs_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read Scope Id"
+        },
+        "relative_path_template": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path Template",
+          "type": "string"
+        },
+        "resource_binding_id": {
+          "pattern": "^res_[0-9a-f]{32}$",
+          "title": "Resource Binding Id",
+          "type": "string"
+        },
+        "source_contract_id": {
+          "enum": [
+            "SYNC_RESOURCE_HISTORY_V1",
+            "OWNER_RESOURCE_VIEW_V1",
+            "TRANSACTION_HISTORY_V1",
+            "RESOURCE_FIELDS_V1"
+          ],
+          "title": "Source Contract Id",
+          "type": "string"
+        },
+        "source_files": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Source Files",
+          "type": "array"
+        },
+        "source_kind": {
+          "const": "JSON_HTTP_RESOURCE",
+          "default": "JSON_HTTP_RESOURCE",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "target_operation_path": {
+          "default": [
+            "operation_id"
+          ],
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Target Operation Path",
+          "type": "array"
+        },
+        "timeout_us": {
+          "default": 5000000,
+          "maximum": 5000000,
+          "minimum": 1000,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action_id",
+        "action_revision",
+        "effect_id",
+        "observation_identity_id",
+        "resource_binding_id",
+        "relative_path_template",
+        "mappings",
+        "source_contract_id",
+        "identity_claims",
+        "source_files"
+      ],
+      "title": "ProofSourceConfig",
+      "type": "object"
+    },
+    "ResponseExtractor": {
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "pattern": "^[A-Za-z_:][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribute"
+        },
+        "cookie_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cookie Name"
+        },
+        "extractor_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Extractor Id",
+          "type": "string"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header Name"
+        },
+        "json_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "kind": {
+          "$ref": "#/$defs/ResponseExtractorKind"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "extractor_id",
+        "kind"
+      ],
+      "title": "ResponseExtractor",
+      "type": "object"
+    },
+    "ResponseExtractorKind": {
+      "enum": [
+        "JSON_PATH",
+        "HEADER",
+        "COOKIE",
+        "LOCATION",
+        "HTML_SELECTOR",
+        "HTML_ATTRIBUTE"
+      ],
+      "title": "ResponseExtractorKind",
+      "type": "string"
+    },
+    "SourceIdentityClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "application_subject_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "title": "Application Subject Id",
+          "type": "string"
+        },
+        "identity_id": {
+          "pattern": "^tid_[0-9a-f]{32}$",
+          "title": "Identity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "identity_id",
+        "application_subject_id"
+      ],
+      "title": "SourceIdentityClaim",
+      "type": "object"
+    },
+    "SourceReadScope": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at_us": {
+          "minimum": 0,
+          "title": "Created At Us",
+          "type": "integer"
+        },
+        "identity_ids": {
+          "items": {
+            "pattern": "^tid_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Identity Ids",
+          "type": "array"
+        },
+        "max_response_bytes": {
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "path_templates": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Path Templates",
+          "type": "array"
+        },
+        "project_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "resource_binding_ids": {
+          "items": {
+            "pattern": "^res_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Resource Binding Ids",
+          "type": "array"
+        },
+        "schema_version": {
+          "default": "2",
+          "enum": [
+            "1",
+            "2"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scope_id": {
+          "pattern": "^prs_[0-9a-f]{32}$",
+          "title": "Scope Id",
+          "type": "string"
+        },
+        "timeout_us": {
+          "maximum": 5000000,
+          "minimum": 1000,
+          "title": "Timeout Us",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "scope_id",
+        "project_id",
+        "origin",
+        "path_templates",
+        "identity_ids",
+        "resource_binding_ids",
+        "max_response_bytes",
+        "timeout_us",
+        "created_at_us"
+      ],
+      "title": "SourceReadScope",
+      "type": "object"
+    },
+    "ValueSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "consumer": {
+          "$ref": "#/$defs/ValueSlotConsumer"
+        },
+        "consumer_step": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Step"
+        },
+        "consumer_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer Step Id"
+        },
+        "literal": {
+          "default": null,
+          "title": "Literal"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "producer_step": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Producer Step"
+        },
+        "producer_step_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Producer Step Id"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "secret_ref": {
+          "anyOf": [
+            {
+              "pattern": "^env:[A-Z][A-Z0-9_]{0,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secret Ref"
+        },
+        "slot_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ValueSlotSource"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Path"
+        },
+        "value_type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "STRING"
+        }
+      },
+      "required": [
+        "slot_id",
+        "source",
+        "consumer"
+      ],
+      "title": "ValueSlot",
+      "type": "object"
+    },
+    "ValueSlotConsumer": {
+      "enum": [
+        "PATH",
+        "QUERY",
+        "HEADER",
+        "JSON_BODY",
+        "FORM_FIELD",
+        "MULTIPART_FIELD"
+      ],
+      "title": "ValueSlotConsumer",
+      "type": "string"
+    },
+    "ValueSlotSource": {
+      "enum": [
+        "CASE_SUBJECT_ID",
+        "CASE_RESOURCE_ID",
+        "FIXED_LITERAL",
+        "SECRET_REF",
+        "PRIOR_STEP_JSON_PATH",
+        "PRIOR_STEP_HEADER",
+        "PRIOR_STEP_COOKIE",
+        "PRIOR_STEP_LOCATION"
+      ],
+      "title": "ValueSlotSource",
+      "type": "string"
+    },
+    "ValueType": {
+      "enum": [
+        "STRING",
+        "INTEGER",
+        "BOOLEAN",
+        "JSON"
+      ],
+      "title": "ValueType",
+      "type": "string"
+    },
+    "WebTargetScope": {
+      "additionalProperties": false,
+      "description": "Web 目标的协议级授权范围。",
+      "properties": {
+        "allow_private_network": {
+          "default": false,
+          "title": "Allow Private Network",
+          "type": "boolean"
+        },
+        "allowed_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "allowed_origins": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Origins",
+          "type": "array"
+        },
+        "allowed_ports": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Allowed Ports",
+          "type": "array"
+        },
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
+        },
+        "follow_redirects": {
+          "const": false,
+          "default": false,
+          "title": "Follow Redirects",
+          "type": "boolean"
+        },
+        "max_requests": {
+          "default": 64,
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "max_response_bytes": {
+          "default": 262144,
+          "maximum": 4194304,
+          "minimum": 1,
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Timeout Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "base_url",
+        "allowed_origins",
+        "allowed_hosts",
+        "allowed_ports"
+      ],
+      "title": "WebTargetScope",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "authority_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Authority Id",
+      "type": "string"
+    },
+    "basis_id": {
+      "pattern": "^pb_[0-9a-f]{64}$",
+      "title": "Basis Id",
+      "type": "string"
+    },
+    "config": {
+      "discriminator": {
+        "mapping": {
+          "JSON_HTTP_RESOURCE": "#/$defs/ProofSourceConfig",
+          "MANAGED_TRANSACTION_RECORDS": "#/$defs/ManagedProofSourceConfig"
+        },
+        "propertyName": "source_kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProofSourceConfig"
+        },
+        {
+          "$ref": "#/$defs/ManagedProofSourceConfig"
+        }
+      ],
+      "title": "Config"
+    },
+    "contract": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProofContractAttestation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "control_session_id": {
+      "pattern": "^pcs_[0-9a-f]{32}$",
+      "title": "Control Session Id",
+      "type": "string"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "identities": {
+      "items": {
+        "$ref": "#/$defs/CheckIdentity"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Identities",
+      "type": "array"
+    },
+    "identity_roles": {
+      "patternProperties": {
+        "^tid_[0-9a-f]{32}$": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "title": "Identity Roles",
+      "type": "object"
+    },
+    "owner_subject_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+      "title": "Owner Subject Id",
+      "type": "string"
+    },
+    "preflight_id": {
+      "pattern": "^ppf_[0-9a-f]{32}$",
+      "title": "Preflight Id",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "resource_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Resource Id",
+      "type": "string"
+    },
+    "runtime_reference": {
+      "$ref": "#/$defs/NodeRuntimeReference"
+    },
+    "schema_version": {
+      "default": "2",
+      "enum": [
+        "1",
+        "2"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/SourceReadScope"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    },
+    "source_id": {
+      "pattern": "^psr_[0-9a-f]{32}$",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "source_revision": {
+      "minimum": 1,
+      "title": "Source Revision",
+      "type": "integer"
+    },
+    "target": {
+      "$ref": "#/$defs/WebTargetScope"
+    }
+  },
+  "required": [
+    "preflight_id",
+    "project_id",
+    "source_id",
+    "source_revision",
+    "source_fingerprint",
+    "config",
+    "scope",
+    "basis_id",
+    "control_session_id",
+    "authority_id",
+    "target",
+    "identities",
+    "identity_roles",
+    "resource_id",
+    "owner_subject_id",
+    "runtime_reference",
+    "created_at_us"
+  ],
+  "title": "ProofPreflightInput",
+  "type": "object"
+}

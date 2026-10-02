@@ -81,6 +81,9 @@ def create_app(
         context.secret_store,
         clock_us=clock_us,
     )
+    context.proof_preparation.authority_active = lambda project, authority: (
+        authority == 'LOCAL_GUI' or mcp_access.execution_authority_active(project,authority))
+    mcp_access.on_authority_changed = context.proof_preparation.cancel_unauthorized
     mcp_control = build_mcp_control(
         context,
         mcp_access,
@@ -144,6 +147,7 @@ def create_app(
         await app.state.mcp_lifespan.__aenter__()
         if start_worker:
             context.worker.start()
+            context.runtime_worker.start()
         _log_startup_timing("ready_total", ready_started)
         # 可重建运行数据维护不属于产品可用性的前置条件，放到 ready 后的受控后台线程。
         app.state.local_maintenance_task = asyncio.create_task(
@@ -153,6 +157,7 @@ def create_app(
     @app.on_event("shutdown")
     async def shutdown() -> None:
         await asyncio.to_thread(context.worker.stop)
+        await asyncio.to_thread(context.runtime_worker.stop)
         mcp_access.close()
         mcp_lifespan = getattr(app.state, "mcp_lifespan", None)
         if mcp_lifespan is not None:

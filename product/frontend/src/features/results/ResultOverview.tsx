@@ -4,6 +4,7 @@ import { useContext, useEffect, useState, type ReactNode } from 'react'
 import { WorkPageVisible } from '../../app/RetainedWorkPages'
 import type { ActionResultStory, ResultStory } from '../../api/currentChecks'
 import { repairLabels } from '../../api/repairs'
+import { StatusBadge, type StatusTone } from '../../shared/ui/StatusBadge'
 
 const judgements: Record<string, { label: string; tone: string }> = {
   '本次权限要求已得到验证': { label: '符合要求', tone: 'pass' },
@@ -17,7 +18,8 @@ export function resourceOwner(action: ActionResultStory) {
   return action.fact_comparison.planned_resource_owner?.label ?? (action.permission.relation === 'OWNS' ? '自己' : action.permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? '另一个同权限组账号' : '原资源所有者')
 }
 export function ResultBadge({ tone, children }: { tone: string; children: ReactNode }) {
-  return <span className={`result-badge is-${tone}`}><span aria-hidden="true">{tone === 'pass' ? '✓' : tone === 'block' ? '!' : tone === 'unknown' ? '?' : '·'}</span>{children}</span>
+  const tones: Record<string, StatusTone> = { pass: 'success', block: 'danger', unknown: 'warning' }
+  return <StatusBadge kind="verdict" tone={tones[tone] ?? 'neutral'} className={`result-badge is-${tone}`}>{children}</StatusBadge>
 }
 const effectLabels: Record<string, string> = {
   '已确认这项业务结果发生': '已发生',
@@ -44,7 +46,7 @@ export function ResultOverviewHeader({ story, onNavigate, historicalOnly, action
   const tone = { PASS: 'pass', BLOCK: 'block', INCONCLUSIVE: 'unknown' }[story.verdict]
   return <header className="result-overview-header">
     <div className="result-overview-status"><ResultBadge tone={tone}>{story.verdict === 'PASS' ? '验证通过' : story.verdict === 'BLOCK' ? '发现权限问题' : '证据不足'}</ResultBadge><span>本轮证据已发布</span></div>
-    <div className="result-overview-title"><div><h1>{story.judgement}</h1><p>{summaries[story.verdict]}</p></div>{destination && <Button type="primary" onClick={destination.onClick}>{destination.label} →</Button>}</div>
+    <div className="result-overview-title"><div><h1>{story.judgement}</h1><p>{summaries[story.verdict]}</p></div>{destination && <Button type="primary" onClick={destination.onClick}>{destination.label}</Button>}</div>
     <div className="result-overview-meta"><span><strong>{story.actions.length}</strong> 项实际检查 <span>·</span> 权限版本 {story.policy_epoch}</span><span>{story.change_context ? '已关联本批交付 · ' : ''}{story.runtime_status === 'MATCHED' ? '检查前后运行对应已核对' : story.runtime_status === 'UNCONFIRMED' ? '运行对应未确认' : '运行版本未独立核对'}</span></div>
     {story.runtime_status !== 'MATCHED' && <p className="result-applicability">{story.runtime_status === 'UNCONFIRMED' ? '运行身份未能在检查前后保持对应，不能据此认定当前交付已验收。' : '本轮结论保留其检查范围，尚不能独立证明当前运行加载了哪批代码。'}</p>}
     {story.repair_verification && <div className="result-repair-status"><div><strong>{repairLabels[story.repair_verification.status]}</strong><p>本轮已包含原题复验，不需要重复提交同一检查。</p></div>{onNavigate && <Button type="link" onClick={() => onNavigate(`/history?run_id=${encodeURIComponent(story.repair_verification!.source_run_id)}`)}>查看原问题</Button>}</div>}
@@ -55,7 +57,7 @@ export function ResultScope({ story }: { story: ResultStory }) {
   const visible = useContext(WorkPageVisible)
   useEffect(() => { if (!visible) setOpen(false) }, [visible])
   useEffect(() => setOpen(false), [story.run_id])
-  return <><Button type="text" className="result-scope-button" onClick={() => setOpen(true)}>查看本轮范围 ↗</Button><Modal title="本轮检查范围" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnHidden>
+  return <><Button type="text" className="result-scope-button" onClick={() => setOpen(true)}>查看本轮范围</Button><Modal title="本轮检查范围" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnHidden>
     <dl className="result-scope-record"><dt>权限版本</dt><dd>{story.policy_epoch}</dd><dt>检查范围</dt><dd>{story.actions.length} 项实际检查；每项的计划账号、资源与要求见对应结果。</dd><dt>记录属性</dt><dd>已发布快照，不随当前源码和配置改变。</dd></dl>
     {[...new Set([...story.claim_boundary, ...story.actions.flatMap(item => item.claim_boundary)])].map(text => <p key={text}>{text}</p>)}
     <details><summary>核对精确记录引用</summary><p className="result-technical-id">Run：{story.run_id}</p>{story.change_context && <p className="result-technical-id">交付：{story.change_context.change_id}</p>}</details>

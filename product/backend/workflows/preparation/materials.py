@@ -98,7 +98,7 @@ class PreparationMaterialService:
             if error.code not in {ErrorCode.STORAGE_CONSTRAINT.value, ErrorCode.STORAGE_FAILURE.value}:
                 raise
             with self._uow_factory() as work:
-                receipt = work.preparation_recovery.receipt(command.operation_id)
+                receipt = work.preparation_recovery.receipt(command.operation_id, project_id=project_id)
             if receipt is not None and receipt["project_id"] == project_id and receipt["request_fingerprint"] == boundary_sha256(command.model_dump(mode="json")):
                 return receipt
             raise
@@ -107,7 +107,7 @@ class PreparationMaterialService:
         request_fingerprint = boundary_sha256(command.model_dump(mode="json"))
         with self._uow_factory() as work:
             work.acquire_write_lock()
-            existing = work.preparation_recovery.receipt(command.operation_id)
+            existing = work.preparation_recovery.receipt(command.operation_id, project_id=project_id)
             if existing is not None:
                 if existing["project_id"] != project_id or existing["request_fingerprint"] != request_fingerprint:
                     raise JiejianError(ErrorCode.STATE_PRECONDITION, "操作标识已用于另一项材料操作")
@@ -124,7 +124,7 @@ class PreparationMaterialService:
 
     def receipt(self, project_id, operation_id):
         with self._uow_factory() as work:
-            value = work.preparation_recovery.receipt(operation_id)
+            value = work.preparation_recovery.receipt(operation_id, project_id=project_id)
             if value is None or value["project_id"] != project_id:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND, "尚未找到这次材料保存回执，请核对后再操作")
             return value

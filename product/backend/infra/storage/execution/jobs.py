@@ -21,6 +21,8 @@ class JobRow(Base):
     __table_args__ = (
         UniqueConstraint("run_id", name="uq_jobs_run_id"),
         UniqueConstraint("recording_id", name="uq_jobs_recording_id"),
+        UniqueConstraint("runtime_load_id", name="uq_jobs_runtime_load_id"),
+        UniqueConstraint("preflight_id", name="uq_jobs_preflight_id"),
         UniqueConstraint(
             "project_id",
             "operation_type",
@@ -38,10 +40,11 @@ class JobRow(Base):
             name="operation_type_format",
         ),
         CheckConstraint(
-            "(run_id IS NOT NULL AND recording_id IS NULL) OR "
-            "(run_id IS NULL AND recording_id IS NOT NULL)",
+            "(run_id IS NOT NULL) + (recording_id IS NOT NULL) + (runtime_load_id IS NOT NULL) + (preflight_id IS NOT NULL) = 1",
             name="exactly_one_target",
         ),
+        CheckConstraint("runtime_load_id IS NULL OR operation_type = 'RUNTIME_LOAD'", name="runtime_operation_type"),
+        CheckConstraint("preflight_id IS NULL OR operation_type = 'PROOF_PREFLIGHT'", name="preflight_operation_type"),
         CheckConstraint(
             "state IN ('PENDING', 'RUNNING', 'RETRY_WAIT', 'SUCCEEDED', "
             "'FAILED', 'CANCELLED')",
@@ -121,6 +124,13 @@ class JobRow(Base):
     cancel_requested_at_us: Mapped[int | None] = mapped_column(BigInteger)
     created_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    runtime_load_id: Mapped[str | None] = mapped_column(
+        ForeignKey("runtime_loads.load_id", ondelete="RESTRICT"), nullable=True,
+    )
+    preflight_id: Mapped[str | None] = mapped_column(
+        ForeignKey("proof_preflights.preflight_id", ondelete="RESTRICT"), nullable=True,
+    )
+
 class JobEventRow(Base):
     __tablename__ = "job_events"
     __table_args__ = (
@@ -206,6 +216,8 @@ class JobRecord(StorageRecord):
     project_id: str = Field(pattern=PROJECT_ID_PATTERN)
     run_id: str | None = Field(default=None, pattern=RUN_ID_PATTERN)
     recording_id: str | None = Field(default=None, pattern=RECORDING_ID_PATTERN)
+    runtime_load_id: str | None = Field(default=None, pattern=r"^rld_[0-9a-f]{32}$")
+    preflight_id: str | None = Field(default=None, pattern=r"^ppf_[0-9a-f]{32}$")
     operation_type: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,63}$")
     state: JobState
     idempotency_key: str = Field(min_length=1, max_length=128)
@@ -225,8 +237,12 @@ class JobRecord(StorageRecord):
 
     @model_validator(mode="after")
     def validate_job_fields(self) -> JobRecord:
-        if (self.run_id is None) == (self.recording_id is None):
+        if sum(value is not None for value in (self.run_id, self.recording_id, self.runtime_load_id, self.preflight_id)) != 1:
             raise ValueError("job must reference exactly one execution target")
+        if self.runtime_load_id is not None and self.operation_type != "RUNTIME_LOAD":
+            raise ValueError("runtime load target requires its own operation")
+        if self.preflight_id is not None and self.operation_type != "PROOF_PREFLIGHT":
+            raise ValueError("preflight target requires its own operation")
         if self.attempt > self.max_attempts:
             raise ValueError("job attempt exceeds maximum")
         if self.attempt == 0 and (
@@ -305,6 +321,8 @@ class JobRepository:
                 project_id=record.project_id,
                 run_id=record.run_id,
                 recording_id=record.recording_id,
+                runtime_load_id=record.runtime_load_id,
+                preflight_id=record.preflight_id,
                 operation_type=record.operation_type,
                 state=record.state.value,
                 idempotency_key=record.idempotency_key,
@@ -334,6 +352,8 @@ class JobRepository:
             project_id=row.project_id,
             run_id=row.run_id,
             recording_id=row.recording_id,
+            runtime_load_id=row.runtime_load_id,
+            preflight_id=row.preflight_id,
             operation_type=row.operation_type,
             state=JobState(row.state),
             idempotency_key=row.idempotency_key,
@@ -373,6 +393,14 @@ class JobRepository:
         job_id = _scalar(self._session, select(JobRow.job_id).where(JobRow.recording_id == recording_id))
         return self.get(job_id) if job_id is not None else None
 
+    def get_by_preflight(self, preflight_id: str) -> JobRecord | None:
+        job_id = _scalar(self._session, select(JobRow.job_id).where(JobRow.preflight_id == preflight_id))
+        return self.get(job_id) if job_id is not None else None
+
+    def get_by_runtime_load(self, load_id: str) -> JobRecord | None:
+        job_id = _scalar(self._session, select(JobRow.job_id).where(JobRow.runtime_load_id == load_id))
+        return self.get(job_id) if job_id is not None else None
+
     def list_for_project(self, project_id: str) -> tuple[JobRecord, ...]:
         """返回项目全部 Job，供生命周期门禁从持久化真源判断活动任务。"""
 
@@ -399,7 +427,9 @@ class JobRepository:
                 JobRow.lease_expires_at_us.is_(None),
                 JobRow.attempt < JobRow.max_attempts,
                 or_(and_("RUN" in target_types, JobRow.run_id.is_not(None)),
-                    and_("RECORDING" in target_types, JobRow.recording_id.is_not(None))),
+                    and_("RECORDING" in target_types, JobRow.recording_id.is_not(None)),
+                    and_("RUNTIME_LOAD" in target_types, JobRow.runtime_load_id.is_not(None)),
+                    and_("PROOF_PREFLIGHT" in target_types, JobRow.preflight_id.is_not(None))),
             )
             .order_by(JobRow.available_at_us, JobRow.created_at_us, JobRow.job_id)
             .limit(1),
@@ -415,6 +445,8 @@ class JobRepository:
             project_id=row.project_id,
             run_id=row.run_id,
             recording_id=row.recording_id,
+            runtime_load_id=row.runtime_load_id,
+            preflight_id=row.preflight_id,
             operation_type=row.operation_type,
             state=JobState(row.state),
             idempotency_key=row.idempotency_key,

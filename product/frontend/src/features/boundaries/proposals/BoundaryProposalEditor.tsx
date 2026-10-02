@@ -1,5 +1,6 @@
 // 业务边界本地草稿编辑器：只有“生成待审业务边界”才写入不可变 Proposal。
 
+import { StatusBadge } from '../../../shared/ui/StatusBadge'
 import { Alert, Button, Input, Select, Space, Typography } from 'antd'
 import { useMemo, useState } from 'react'
 import type {
@@ -88,7 +89,7 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
     <div className="boundary-section-heading">
       <div><Typography.Title level={3} id="boundary-editor-title">从当前源码整理业务边界</Typography.Title><Typography.Paragraph type="secondary">源码候选只帮助识别名称。最终业务主体、动作、结果和权限均由你审阅后形成新提案。</Typography.Paragraph></div>
     </div>
-    <nav className="boundary-mode-nav" aria-label="首次建立权限"><Button disabled={Boolean(editingRule)} type={mode === 'objects' ? 'primary' : 'default'} onClick={() => setMode('objects')}>1 · 整理业务对象</Button><Button type={mode === 'rules' ? 'primary' : 'default'} onClick={() => setMode('rules')}>2 · 编写权限规则</Button></nav>
+    <nav className="boundary-mode-nav product-view-tabs" aria-label="首次建立权限"><Button disabled={Boolean(editingRule)} type="text" aria-pressed={mode === 'objects'} onClick={() => setMode('objects')}>1 · 整理业务对象</Button><Button type="text" aria-pressed={mode === 'rules'} onClick={() => setMode('rules')}>2 · 编写权限规则</Button></nav>
     {mode === 'objects' && <div>
     <details><summary>查看源码识别依据</summary><div className="boundary-candidate-basis" aria-label="源码识别依据">
       <Typography.Text strong>当前识别依据</Typography.Text>
@@ -132,7 +133,7 @@ export function BoundaryProposalEditor({ preview, initialCommand, busy, onSubmit
       onCancel={()=>setEditingRule(undefined)}/>
       : <><h3>这项动作的权限规则</h3><p className="editorial-muted">一次编辑一条规则，保存到草稿后，在下一步统一核对修改。</p>
       {permissions.filter(item=>item.business_action_item_id===selectedAction?.item_id).map(permission=><section className="permission-summary-row" key={permission.item_id}>
-        <span className={'permission-badge '+(permission.expectation==='ALLOW'?'is-allow':'is-deny')}>{permission.expectation==='ALLOW'?'允许':'禁止'}</span>
+        <StatusBadge kind="rule" className="permission-badge" tone={permission.expectation === 'ALLOW' ? 'success' : 'danger'}>{permission.expectation==='ALLOW'?'允许':'禁止'}</StatusBadge>
         <RuleSentence>{actors.find(item=>item.item_id===permission.subject_actor_item_id)?.display_name || '操作人'}对{permission.relation==='OWNS'?'自己':actors.find(item=>item.item_id===permission.resource_owner_actor_item_id)?.display_name || '资源所有者'}拥有的资源，{permission.expectation==='ALLOW'?'可以':'不得'}{selectedAction?.display_name}。</RuleSentence>
         <Button onClick={()=>{setEditingRule({...permission});setReceipt(undefined)}}>编辑这条规则</Button><Button type="text" danger onClick={()=>setPermissions(items=>items.filter(item=>item.item_id!==permission.item_id))}>移除权限规则</Button>
       </section>)}<Button onClick={addPermission}>添加权限规则</Button></>}

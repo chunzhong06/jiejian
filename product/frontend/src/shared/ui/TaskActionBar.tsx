@@ -1,6 +1,7 @@
 // 任务局部动作区：加载状态与可访问名称分开，返回和刷新不冒充新的业务提交。
 
 import { Button, Popconfirm, Space } from 'antd'
+import { metrics } from './tokens'
 
 type TaskAction = {
   label: string
@@ -31,7 +32,7 @@ export function TaskActionBar({
 }) {
   if (!back && !refresh && !restart && !primary) return null
   return <footer className="task-action-bar" aria-label="当前步骤操作">
-    <Space className="task-action-group" size={8} wrap>
+    <Space className="task-action-group" size={metrics.rhythm.actionGap} wrap>
       {back && <Button aria-label={back.ariaLabel ?? back.label} aria-busy={Boolean(back.loading)} onClick={back.onClick} disabled={back.disabled} loading={back.loading}>{back.label}</Button>}
       {refresh && <Button aria-label={refresh.ariaLabel ?? refresh.label} aria-busy={Boolean(refresh.loading)} onClick={refresh.onClick} disabled={refresh.disabled} loading={refresh.loading}>{refresh.label}</Button>}
       {restart && (restart.confirm

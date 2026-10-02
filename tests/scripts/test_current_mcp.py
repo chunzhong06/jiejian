@@ -4,9 +4,9 @@ from types import SimpleNamespace as N
 import pytest
 from mcp import MCPError
 
-from scripts.dev.sample_test import current_mcp as mcp
-from scripts.dev.sample_test.harness.state import HarnessState
-from scripts.dev.sample_test.harness.state import SampleTestError
+from tests.acceptance.sample_test import current_mcp as mcp
+from tests.acceptance.sample_test.harness.state import HarnessState
+from tests.acceptance.sample_test.harness.state import SampleTestError
 
 
 class Control:
@@ -181,7 +181,7 @@ def test_new_pairing_is_cleaned_after_unknown_receipt_without_repeat_pair(monkey
 
 @pytest.mark.parametrize("missing", ["execution-path", "history-search", "mcp-connected", "mcp-change", "mcp-completion", "mcp-cleanup"])
 def test_official_requires_gui_records_and_setup_only_skips_mcp(missing):
-    from scripts.dev.sample_test.official import _gui_complete
+    from tests.acceptance.sample_test.official import _gui_complete
     names = {"business-selection-review", "identity-management-layout", "material-reuse-recovery", "environment-restart-recovery", "start", "human-approve", "prepare", "exit", "submit-check", "baseline-result", "problem-result", "limited-result", "fixed-result", "evidence-and-repair",
         "decisive-evidence", "execution-path", "history-search", "history-return", "mcp-connected", "mcp-level-read", "mcp-level-prepare", "mcp-level-execute",
         "mcp-change", "mcp-completion", "mcp-responsibility", "mcp-cleanup"}
@@ -245,7 +245,7 @@ def test_unknown_run_receipt_remains_primary_when_recovery_read_also_fails(monke
 
 
 def test_official_failure_cancels_before_mcp_pairing_cleanup(monkeypatch):
-    from scripts.dev.sample_test.harness.lifecycle import _cleanup_after_failure
+    from tests.acceptance.sample_test.harness.lifecycle import _cleanup_after_failure
     control, gui, state, _, _, _ = scenario(monkeypatch, paired=False)
     control.paired, control.active, control.level = True, True, "EXECUTE"
     control.runs.append("mcp-new")

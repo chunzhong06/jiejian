@@ -85,7 +85,7 @@
   gap: var(--space-12);
   padding: var(--space-16) var(--space-20);
   border-radius: var(--radius-medium);
-  background: color-mix(in srgb,var(--color-safe-mark) 9%,var(--color-surface));
+  background: var(--color-safe-light);
   color: var(--color-safe);
   font-size: var(--font-secondary);
 }
@@ -100,7 +100,7 @@
 }
 
 .task-receipt[data-pending=true] {
-  background: color-mix(in srgb,var(--color-warning-mark) 9%,var(--color-surface));
+  background: var(--color-warning-light);
   color: var(--color-warning);
 }
 
@@ -151,14 +151,14 @@
   min-width: 0;
   color: var(--color-text);
   font-size: var(--font-body);
-  gap: var(--space-20);
+  gap: var(--rhythm-sectionGap);
   padding-block: 0;
 }
 
 .editorial-header h1 {
   max-width: 1100px;
   overflow-wrap: anywhere;
-  font-size: 30px;
+  font-size: var(--font-titleMax);
   line-height: 1.4;
   letter-spacing: -.7px;
   font-weight: 650;
@@ -302,11 +302,6 @@
   margin-top: var(--space-12);
 }
 
-.editorial-page :focus-visible {
-  outline: 3px solid var(--color-primary);
-  outline-offset: 4px;
-}
-
 .editorial-page .editorial-note {
   color: var(--color-secondary);
   font-size: var(--font-secondary);
@@ -427,18 +422,6 @@
   color: var(--color-fact);
 }
 
-.evidence-surface .ant-btn-default {
-  color: var(--color-evidence-text);
-  background: transparent;
-  border-color: var(--color-evidence-text);
-}
-
-.evidence-surface .ant-btn-default:hover {
-  color: var(--color-evidence-text) !important;
-  background: var(--color-evidence-subtle) !important;
-  border-color: var(--color-evidence-text) !important;
-}
-
 .margin-note {
   border-left: 3px solid var(--color-ai);
   padding-left: var(--space-20);
@@ -461,15 +444,6 @@
   .rule-sentence {
     font-size: var(--font-body);
   }
-}
-
-.editorial-page .assistant-panel.margin-note {
-  background: transparent;
-  border: 0;
-  border-left: 3px solid var(--color-ai);
-  border-radius: 0;
-  padding: var(--space-8) 0 var(--space-8) var(--space-20);
-  box-shadow: none;
 }
 
 .preparation-action h2[tabindex="-1"]:focus {

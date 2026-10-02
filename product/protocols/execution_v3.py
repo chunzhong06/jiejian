@@ -77,7 +77,7 @@ class RecordedProofReference(WireModel):
 
 class ObserverProofReference(WireModel):
     kind: Literal["REGISTERED_OBSERVER"] = "REGISTERED_OBSERVER"
-    descriptor_id: Annotated[str, Field(pattern=r"^exp_[0-9a-f]{32}$")]
+    descriptor_id: Annotated[str, Field(pattern=r"^(exp|psr)_[0-9a-f]{32}$")]
     descriptor_fingerprint: Hash
     observer_id: LogicalId
 

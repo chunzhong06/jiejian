@@ -7,6 +7,7 @@ from pydantic import Field, model_validator
 
 from product.protocols.execution_v3 import Hash, LogicalId, PermissionReference, WireModel
 from product.protocols.runtime_identity import ControlledRuntimeReference
+from product.protocols.node_runtime import NodeRuntimeReference
 
 TaskId = Annotated[str, Field(pattern=r"^dvt_[0-9a-f]{32}$")]
 ContextId = Annotated[str, Field(pattern=r"^ctx_[0-9a-f]{32}$")]
@@ -113,4 +114,17 @@ class RuntimeActivationReceipt(WireModel):
     def validate_receipt(self):
         if self.status == "SUCCEEDED" and (self.runtime_reference is None or self.runtime_reference.source_fingerprint != self.source_fingerprint):
             raise ValueError("runtime success requires corresponding source and instance")
+        return self
+
+
+# 普通运行的独立回执版本；旧Python回执按原版本读取，不填造加载Job。
+class NodeRuntimeActivationReceipt(RuntimeActivationReceipt):
+    schema_version: Literal['2'] = '2'
+    runtime_load_id: Annotated[str,Field(pattern=r'^rld_[0-9a-f]{32}$')]
+    runtime_reference: NodeRuntimeReference | None = None
+
+    @model_validator(mode='after')
+    def validate_node_project(self):
+        if self.runtime_reference is not None and self.runtime_reference.project_id!=self.project_id:
+            raise ValueError('runtime receipt project differs')
         return self

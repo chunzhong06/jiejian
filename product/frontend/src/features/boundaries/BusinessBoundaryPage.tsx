@@ -1,6 +1,8 @@
 // 业务边界页面：在现有产品壳内完成候选整理、不可变提案与 LOCAL_GUI 明确批准。
+import { SearchField } from '../../shared/ui/SearchField'
 
-import { Alert, Button, Input, Result, Spin, Typography } from 'antd'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
+import { Alert, Button, Result, Spin, Typography } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import {
   businessBoundariesApi,
@@ -22,18 +24,30 @@ import { TaskReceipt, useTaskGuard } from '../../app/tasks/TaskContinuity'
 import { BoundaryMaintenanceEditor } from './draft/BoundaryMaintenanceEditor'
 import { BoundaryProposalEditor } from './proposals/BoundaryProposalEditor'
 import { BoundaryProposalReview } from './proposals/BoundaryProposalReview'
+import { RuleCandidatesPanel } from './RuleCandidatesPanel'
+import { RuleDetailsPanel } from './RuleDetailsPanel'
 import { effectKindLabels, expectationLabels, relationLabels } from './draft/boundaryLabels'
 
-export function BusinessBoundaryPage({ project, requestedProposalId, requestedActionId, onError, onStateChanged, onBack, onProvidedProposal, onFeedback }: {
+export function BusinessBoundaryPage({ project, requestedIntentId, requestedIntentRevision, onRuleRoute, onNavigate, requestedProposalId, requestedActionId, requestedCandidateId, requestedCandidateRevision, candidateRecoveryOperation, onCandidateRoute, onError, onStateChanged, onBack, onProvidedProposal, onFeedback }: {
   project: ProjectDto
+  requestedIntentId?: string | null
+  requestedIntentRevision?: number
+  onRuleRoute?: (id: string | null, revision?: number) => void
+  onNavigate?: (path: string) => void
   requestedActionId?: string | null
   requestedProposalId?: string | null
+  requestedCandidateId?: string | null
+  requestedCandidateRevision?: number
+  candidateRecoveryOperation?: string | null
+  onCandidateRoute?: (id: string | null, revision: number, operation: string | null) => void
   onProvidedProposal?: () => Promise<BoundaryProposalViewDto>
   onError: (error: ApiError) => void
   onStateChanged: () => Promise<unknown> | unknown
   onBack: () => void
   onFeedback?: (message: string) => void
 }) {
+  const [selectedRule,setSelectedRule] = useState<{id:string;revision?:number} | undefined>(requestedIntentId ? {id:requestedIntentId,revision:requestedIntentRevision} : undefined)
+  useEffect(()=>{setSelectedRule(requestedIntentId ? {id:requestedIntentId,revision:requestedIntentRevision}:undefined)},[project.project_id,requestedIntentId,requestedIntentRevision])
   const providedInFlight = useRef(false)
   const [manualOpen, setManualOpen] = useState(false)
   const [boundary, setBoundary] = useState<BusinessBoundaryViewDto>()
@@ -72,7 +86,7 @@ export function BusinessBoundaryPage({ project, requestedProposalId, requestedAc
     setLoadError(false)
     void businessBoundariesApi.editor(project.project_id).then(async (editor) => {
       if (!active) return
-      const proposalId = requestedProposalId ?? (editor.pending_proposals.length === 1 ? editor.pending_proposals[0].proposal_id : undefined)
+      const proposalId = requestedCandidateId ? undefined : requestedProposalId ?? (editor.pending_proposals.length === 1 ? editor.pending_proposals[0].proposal_id : undefined)
       const selected = proposalId ? await businessBoundariesApi.proposal(project.project_id, proposalId) : undefined
       if (!active) return
       setBoundary(editor.boundary)
@@ -80,10 +94,10 @@ export function BusinessBoundaryPage({ project, requestedProposalId, requestedAc
       setMaintenanceDraft(editor.maintenance_draft ?? undefined)
       setPendingOptions(editor.pending_proposals)
       setProposalView(selected)
-      setEditing(editor.pending_proposals.length || selected ? null : editor.maintenance_draft ? null : 'INITIAL')
+      setEditing(requestedCandidateId || editor.pending_proposals.length || selected ? null : editor.maintenance_draft ? null : 'INITIAL')
     }).catch((error) => { if (active) {setLoadError(true);onError(error as ApiError)} }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [onError, project.project_id, requestedProposalId, loadEpoch])
+  }, [onError, project.project_id, requestedProposalId, requestedCandidateId, loadEpoch])
 
   const loadProvidedProposal = async () => {
     if (!onProvidedProposal || providedInFlight.current || busy) return
@@ -195,7 +209,8 @@ export function BusinessBoundaryPage({ project, requestedProposalId, requestedAc
     } catch (error) { onError(error as ApiError) }
     finally { setBusy(false) }
   }
-  if (loading) return <div className="boundary-page"><PageTaskHeader title="业务边界" description="建立稳定业务主体、动作、结果与权限。" status="正在读取" /><div className="boundary-loading"><Spin /><Typography.Text type="secondary">正在读取当前业务边界和待审提案</Typography.Text></div></div>
+  if (selectedRule && !editing && !proposalView) return <RuleDetailsPanel projectId={project.project_id} intentId={selectedRule.id} revision={selectedRule.revision} onNavigate={onNavigate} onBack={()=>{setSelectedRule(undefined);onRuleRoute?.(null)}} onEdit={(actionId,intentId)=>{setSelectedRule(undefined);onRuleRoute?.(null);setEditFocus({actionId,intentId});setEditing('MAINTENANCE')}}/>
+  if (loading) return <div className="boundary-page"><PageTaskHeader title="权限要求" description="用业务规则说明，谁可以对谁的资源做什么。" status="正在读取" /><div className="boundary-loading"><Spin /><Typography.Text type="secondary">正在读取当前业务边界和待审提案</Typography.Text></div></div>
   if (loadError || !boundary || !preview) return <Result status="warning" title="业务权限暂时无法读取" subTitle="重新读取当前项目与精确提案，不重复提交变更。" extra={<><Button type="primary" onClick={()=>setLoadEpoch(value=>value+1)}>重新读取</Button><Button onClick={onBack}>返回当前工作</Button></>} />
 
   const beginMaintenance = (focus: BoundaryEditFocus) => {
@@ -207,8 +222,12 @@ export function BusinessBoundaryPage({ project, requestedProposalId, requestedAc
     {editing !== 'MAINTENANCE' && <div className="boundary-overview-heading"><EditorialHeader eyebrow="业务权限" title={proposalView ? '审阅权限变更' : editing ? '建立权限规则' : '权限要求'}><p className="editorial-muted">用业务规则说明，谁可以对谁的资源做什么。</p>{!proposalView && <span className="boundary-confirmation">{permissionsComplete ? '当前规则已确认' : '需要确认当前权限'}</span>}</EditorialHeader></div>}
     {success && <TaskReceipt message={success} pending={syncError} onRetry={syncError && !busy ? () => void syncApproved() : undefined}/>}
     {approvalUncertain && <Alert type="warning" message="批准回执尚未确认。请先核对同一提案的决定，不要重复批准。" action={<Button loading={busy} onClick={() => void readApproval()}>核对批准结果</Button>}/>}
+    {!proposalView && editing !== 'MAINTENANCE' && <RuleCandidatesPanel key={project.project_id} projectId={project.project_id} requestedId={requestedCandidateId} requestedRevision={requestedCandidateRevision}
+      recoveryOperation={candidateRecoveryOperation} onRecoveryChange={onCandidateRoute}
+      onExit={() => onCandidateRoute?.(null,0,null)}
+      onSelected={(id,revision) => {setEditing(null); onCandidateRoute?.(id,revision,null)}} onProposal={async id => { const value = await businessBoundariesApi.proposal(project.project_id, id); setProposalView(value); setEditing(null) }}/>}
     {!proposalView && pendingOptions.length > 1 && <section className="boundary-pending-choices"><h2>选择要审阅的提案</h2><p>存在多份待审记录，请明确选择，不自动采用最后一份。</p>{pendingOptions.map((item,index)=><Button key={item.proposal_id} onClick={async()=>{setBusy(true);try{setProposalView(await businessBoundariesApi.proposal(project.project_id,item.proposal_id));setEditing(null)}catch(error){onError(error as ApiError)}finally{setBusy(false)}}}>审阅提案 {index+1}</Button>)}</section>}
-    {!proposalView && !editing && <CurrentBoundary requestedActionId={requestedActionId} boundary={boundary} onEdit={beginMaintenance} />}
+    {!proposalView && !editing && !requestedCandidateId && <CurrentBoundary requestedActionId={requestedActionId} boundary={boundary} onEdit={beginMaintenance} onRule={(id,revision)=>{setSelectedRule({id,revision});onRuleRoute?.(id,revision)}} />}
 
     {proposalView
       ? <BoundaryProposalReview key={proposalView.proposal.proposal_id} proposalView={proposalView} busy={busy || approvalUncertain} onApprove={(reason) => void approveCurrent(reason)} onReturnToEdit={() => { void returnToEdit() }} onReject={(reason) => void rejectCurrent(reason)} />
@@ -220,11 +239,11 @@ export function BusinessBoundaryPage({ project, requestedProposalId, requestedAc
           </section> : <BoundaryProposalEditor key={editorKey} preview={preview} initialCommand={initialCommand} busy={busy} onSubmit={(command) => void createProposal(command)} />
         : editing === 'MAINTENANCE' && maintenanceDraft
           ? <BoundaryMaintenanceEditor key={editorKey} focus={editFocus} draft={maintenanceDraft} initialCommand={initialMaintenanceCommand} busy={busy} onSubmit={(command) => void createMaintenanceProposal(command)} />
-          : <div className="boundary-new-proposal"><Typography.Text type="secondary">修改先进入草稿，审阅并批准后才会生效。</Typography.Text></div>}
+          : !requestedCandidateId && <div className="boundary-new-proposal"><Typography.Text type="secondary">修改先进入草稿，审阅并批准后才会生效。</Typography.Text></div>}
   </EditorialPage>
 }
 
-function CurrentBoundary({ boundary, onEdit, requestedActionId }: { requestedActionId?: string | null; boundary: BusinessBoundaryViewDto; onEdit: (focus: BoundaryEditFocus) => void }) {
+function CurrentBoundary({ boundary, onEdit, requestedActionId, onRule }: { onRule: (id:string,revision:number)=>void; requestedActionId?: string | null; boundary: BusinessBoundaryViewDto; onEdit: (focus: BoundaryEditFocus) => void }) {
   const [selectedId, setSelectedId] = useState<string>(requestedActionId ?? '')
   useEffect(()=>{if(requestedActionId)setSelectedId(requestedActionId)},[requestedActionId])
   const [query, setQuery] = useState('')
@@ -234,7 +253,7 @@ function CurrentBoundary({ boundary, onEdit, requestedActionId }: { requestedAct
   const action = boundary.actions.find((item) => item.action_id === selectedId) ?? boundary.actions[0]
   const actors = new Map(boundary.actors.map((item) => [item.actor_id, item]))
   if (!action) return <p>还没有正式业务边界。先整理一项动作和它必须保护的真实结果。</p>
-  if (!selectedId) return <>{tabs}<div className="boundary-collection-toolbar"><Input className="boundary-search" aria-label="搜索业务动作" placeholder="搜索业务动作" allowClear value={query} onChange={event=>setQuery(event.target.value)}/><Button type="primary" onClick={()=>onEdit({actionId:action.action_id,mode:'new'})}>新增规则</Button></div>
+  if (!selectedId) return <>{tabs}<div className="boundary-collection-toolbar"><SearchField aria-label="搜索业务动作" placeholder="搜索业务动作" allowClear value={query} onChange={event=>setQuery(event.target.value)}/><Button type="primary" onClick={()=>onEdit({actionId:action.action_id,mode:'new'})}>新增规则</Button></div>
     <section className="light-permission-list" aria-label="当前权限清单">{boundary.actions.filter(item=>item.display_name.includes(query.trim())).map(item=>{
       const rules=boundary.permission_intents.filter(rule=>rule.business_action_id===item.action_id&&rule.action_revision===item.revision&&rule.effective_state==='ACTIVE')
       const condition=boundary.permission_statuses.find(value=>value.action_id===item.action_id)
@@ -242,19 +261,19 @@ function CurrentBoundary({ boundary, onEdit, requestedActionId }: { requestedAct
         {condition?.reason_codes.includes('PERMISSION_REVISION_REVIEW_REQUIRED')&&<p role="status">当前业务版本需要重新确认权限；原权限仍保留为历史。</p>}
         {condition?.permission_semantics_confirmed&&condition.reason_codes.includes('ALLOW_CONTROL_REQUIRED')&&<><p role="status">权限已确认，还需完整允许对照</p><p>缺少覆盖同一业务结果的允许对照；已确认的拒绝规则仍然保留。</p></>}
         {condition?.reason_codes.includes('PERMISSION_SEMANTICS_REQUIRED')&&<p role="status">当前权限尚未确认</p>}
-        {rules.length?rules.map((rule,index)=><section className="permission-summary-row" key={rule.intent_id}><span className={`permission-badge ${rule.expectation==='ALLOW'?'is-allow':'is-deny'}`}>{rule.expectation==='ALLOW'?'允许':'禁止'}</span><div><h3>{actors.get(rule.subject_actor_id)?.display_name??'业务主体'}对{rule.relation==='OWNS'?'自己':rule.relation==='SAME_ROLE_OTHER_ACCOUNT'?`另一个${actors.get(rule.resource_owner_actor_id)?.display_name??'同权限组'}账号`:actors.get(rule.resource_owner_actor_id)?.display_name??'资源主体'}拥有的资源，{rule.expectation==='ALLOW'?'可以':'不得'}{item.display_name}。</h3><p>保护结果：{rule.protected_effect_ids.map(id=>item.effect_catalog.find(effect=>effect.effect_id===id)?.business_label??'已确认的业务结果').join('、')}</p></div><div className="light-permission-actions"><Button onClick={()=>setSelectedId(item.action_id)}>详情</Button><Button type="link" aria-label={`编辑${rule.expectation==='ALLOW'?'允许':'禁止'}规则 ${index+1}`} onClick={()=>onEdit({actionId:item.action_id,intentId:rule.intent_id??undefined})}>编辑</Button></div></section>):<div className="permission-summary-row"><div><h3>{item.display_name}</h3><p>这项动作尚无当前权限规则。</p></div><Button type="link" onClick={()=>setSelectedId(item.action_id)}>查看动作</Button></div>}
+        {rules.length?rules.map((rule,index)=><section className="permission-summary-row" key={rule.intent_id}><StatusBadge kind="rule" className="permission-badge" tone={rule.expectation === 'ALLOW' ? 'success' : 'danger'}>{rule.expectation==='ALLOW'?'允许':'禁止'}</StatusBadge><div><h3>{actors.get(rule.subject_actor_id)?.display_name??'业务主体'}对{rule.relation==='OWNS'?'自己':rule.relation==='SAME_ROLE_OTHER_ACCOUNT'?`另一个${actors.get(rule.resource_owner_actor_id)?.display_name??'同权限组'}账号`:actors.get(rule.resource_owner_actor_id)?.display_name??'资源主体'}拥有的资源，{rule.expectation==='ALLOW'?'可以':'不得'}{item.display_name}。</h3><p>保护结果：{rule.protected_effect_ids.map(id=>item.effect_catalog.find(effect=>effect.effect_id===id)?.business_label??'已确认的业务结果').join('、')}</p></div><div className="light-permission-actions"><Button type="link" disabled={!rule.intent_id || !rule.revision} onClick={()=>onRule(rule.intent_id!,rule.revision!)}>详情</Button><Button type="link" aria-label={`编辑${rule.expectation==='ALLOW'?'允许':'禁止'}规则 ${index+1}`} onClick={()=>onEdit({actionId:item.action_id,intentId:rule.intent_id??undefined})}>编辑</Button></div></section>):<div className="permission-summary-row"><div><h3>{item.display_name}</h3><p>这项动作尚无当前权限规则。</p></div><Button type="link" onClick={()=>setSelectedId(item.action_id)}>查看动作</Button></div>}
       </section>
     })}{!boundary.actions.some(item=>item.display_name.includes(query.trim()))&&<p>没有匹配的动作</p>}</section><p className="light-meta">这些是已确认的业务要求，不是安全结论。规则变化仍需独立审阅与批准。</p></>
   const status = boundary.permission_statuses.find((item) => item.action_id === action.action_id)
   const binding = boundary.action_bindings.find((item) => item.action_id === action.action_id)?.status
   const permissions = boundary.permission_intents.filter((item) => item.business_action_id === action.action_id && item.action_revision === action.revision && item.effective_state === 'ACTIVE')
-  return <>{tabs}<Button type="link" onClick={()=>setSelectedId('')}>← 返回全部权限要求</Button><div className="boundary-collection-toolbar"><Input className="boundary-search" aria-label="搜索业务动作" placeholder="搜索业务动作" allowClear value={query} onChange={event=>setQuery(event.target.value)}/><Button type="primary" onClick={()=>onEdit({actionId:action.action_id,mode:'new'})}>新增规则</Button></div><section className="boundary-document" aria-label="当前业务动作与权限">
+  return <>{tabs}<Button type="link" onClick={()=>setSelectedId('')}>← 返回全部权限要求</Button><div className="boundary-collection-toolbar"><SearchField aria-label="搜索业务动作" placeholder="搜索业务动作" allowClear value={query} onChange={event=>setQuery(event.target.value)}/><Button type="primary" onClick={()=>onEdit({actionId:action.action_id,mode:'new'})}>新增规则</Button></div><section className="boundary-document" aria-label="当前业务动作与权限">
     <nav className="action-index" aria-label="业务动作索引"><h3>业务动作</h3>{boundary.actions.filter(item => item.display_name.includes(query.trim())).map((item) => <button key={item.action_id} aria-current={item.action_id === action.action_id ? 'true' : undefined} onClick={() => setSelectedId(item.action_id)}>{item.display_name}<small>{boundary.permission_intents.filter(rule => rule.business_action_id === item.action_id && rule.action_revision === item.revision && rule.effective_state === 'ACTIVE').length} 条规则</small></button>)}{!boundary.actions.some(item => item.display_name.includes(query.trim())) && <p>没有匹配的动作</p>}</nav>
     <article className="boundary-action-document"><div className="boundary-action-heading"><div><h2>{action.display_name}</h2><p className="editorial-muted">{action.description}</p></div></div>
       {status?.reason_codes.includes('PERMISSION_REVISION_REVIEW_REQUIRED') && <p role="status">当前业务版本需要重新确认权限；原权限仍保留为历史。</p>}
       {status?.permission_semantics_confirmed && status.reason_codes.includes('ALLOW_CONTROL_REQUIRED') && <><p role="status">权限已确认，还需完整允许对照</p><p>缺少覆盖同一业务结果的允许对照；已确认的拒绝规则仍然保留。</p></>}
       {status?.reason_codes.includes('PERMISSION_SEMANTICS_REQUIRED') && <p role="status">当前权限尚未确认</p>}
-      {permissions.length ? permissions.map((permission,index) => <section className="permission-summary-row" key={permission.intent_id ?? index}><span className={`permission-badge ${permission.expectation === 'ALLOW' ? 'is-allow' : 'is-deny'}`}>{permission.expectation === 'ALLOW' ? '允许' : '禁止'}</span><div><h3>{actors.get(permission.subject_actor_id)?.display_name ?? '当前业务主体'}对{permission.relation === 'OWNS' ? '自己' : permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `另一个${actors.get(permission.resource_owner_actor_id)?.display_name ?? '同权限组'}账号` : actors.get(permission.resource_owner_actor_id)?.display_name ?? '当前资源主体'}拥有的资源，{permission.expectation === 'ALLOW' ? '可以' : '不得'}{action.display_name}。</h3><p>保护结果：{permission.protected_effect_ids.map(id => action.effect_catalog.find(effect => effect.effect_id === id)?.business_label ?? '已确认的业务结果').join('、')}</p></div><Button type="link" aria-label={`编辑${permission.expectation === 'ALLOW' ? '允许' : '禁止'}规则 ${index+1}`} onClick={() => onEdit({actionId:action.action_id,intentId:permission.intent_id ?? undefined})}>编辑</Button></section>) : <p className="boundary-empty-rules">这项动作还没有当前权限规则。</p>}
+      {permissions.length ? permissions.map((permission,index) => <section className="permission-summary-row" key={permission.intent_id ?? index}><StatusBadge kind="rule" className="permission-badge" tone={permission.expectation === 'ALLOW' ? 'success' : 'danger'}>{permission.expectation === 'ALLOW' ? '允许' : '禁止'}</StatusBadge><div><h3>{actors.get(permission.subject_actor_id)?.display_name ?? '当前业务主体'}对{permission.relation === 'OWNS' ? '自己' : permission.relation === 'SAME_ROLE_OTHER_ACCOUNT' ? `另一个${actors.get(permission.resource_owner_actor_id)?.display_name ?? '同权限组'}账号` : actors.get(permission.resource_owner_actor_id)?.display_name ?? '当前资源主体'}拥有的资源，{permission.expectation === 'ALLOW' ? '可以' : '不得'}{action.display_name}。</h3><p>保护结果：{permission.protected_effect_ids.map(id => action.effect_catalog.find(effect => effect.effect_id === id)?.business_label ?? '已确认的业务结果').join('、')}</p></div><Button type="link" aria-label={`编辑${permission.expectation === 'ALLOW' ? '允许' : '禁止'}规则 ${index+1}`} onClick={() => onEdit({actionId:action.action_id,intentId:permission.intent_id ?? undefined})}>编辑</Button></section>) : <p className="boundary-empty-rules">这项动作还没有当前权限规则。</p>}
       <div className="boundary-supporting"><section className="boundary-effect-overview"><h3>受保护的业务结果</h3>{action.effect_catalog.map(effect => <p key={effect.effect_id}>{effect.business_label} · {effect.resource_concept}</p>)}</section><details className="boundary-secondary"><summary>当前代码定位 · {binding === 'CURRENT' ? '已关联' : '需要确认'}</summary><p>{binding === 'CURRENT' ? '当前代码定位与已确认动作相符。' : binding === 'MISSING' ? '当前代码中还没有可靠定位到这项动作。业务语义仍保留。' : '当前代码定位需要重新确认；它不会自动改写权限。'}</p><Button onClick={() => onEdit({actionId:action.action_id,mode:'objects'})}>管理业务对象与代码关联</Button></details></div>
     </article>
   </section></>

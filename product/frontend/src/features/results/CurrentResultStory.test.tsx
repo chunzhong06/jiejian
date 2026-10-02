@@ -13,7 +13,7 @@ const node: StoryTraceEvent = { event_id:'task',parent_event_ids:[],kind:'MESSAG
 const evidence = () => ({schema_version:'1',run_id:'r1',action_id:'a1',case:{case_id:'c1'},evidence_id:'ev1',outcome,observations:[],trace:null})
 const inspect = () => fireEvent.click(screen.getByRole('button',{name:'查看第 1 项依据'}))
 const inspectTrace = () => { inspect(); fireEvent.click(screen.getByRole('button',{name:'执行过程'})) }
-const openSource = () => { const button=screen.getByRole('button',{name:'查看资源状态证据 →'}); button.focus(); fireEvent.click(button) }
+const openSource = () => { const button=screen.getByRole('button',{name:'查看资源状态证据'}); button.focus(); fireEvent.click(button) }
 
 describe('结果总览与单项调查', () => {
   it('默认总览不展开单项或路径，返回恢复原行焦点并提供精确 Case 回调', () => {
@@ -55,10 +55,10 @@ describe('结果总览与单项调查', () => {
     const value=story();value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof1',required_level:'SUPPORTING',source_label:'历史来源',observed_state:'UNKNOWN',evidence_refs:[],supporting_evidence_refs:['ev1'],limitations:['辅助材料不替代必要证明']}]
     api.evidence.mockResolvedValue(evidence())
     render(<CurrentResultStory story={value} onError={vi.fn()}/>); inspect()
-    expect(screen.queryByRole('button',{name:'查看辅助观察记录 →'})).not.toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'查看辅助观察记录'})).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button',{name:'证据记录'}))
     expect(screen.getByRole('region',{name:'本轮要求与证据对应'})).toHaveTextContent('辅助材料不替代必要证明')
-    fireEvent.click(screen.getByRole('button',{name:'查看辅助观察记录 →'}))
+    fireEvent.click(screen.getByRole('button',{name:'查看辅助观察记录'}))
     expect(await screen.findByText('来自所选证明要求')).toBeInTheDocument()
     expect(api.evidence).toHaveBeenCalledWith('r1','ev1')
   })
@@ -96,10 +96,10 @@ describe('结果总览与单项调查', () => {
     const value=story();value.actions[0].proof_coverage=[{effect_id:'e1',business_label:'导出文件',proof_fingerprint:'proof1',required_level:'VERDICT_REQUIRED',source_label:'资源状态',observed_state:'CONFIRMED',evidence_refs:['ev1'],supporting_evidence_refs:[],limitations:[]}]
     api.evidence.mockResolvedValue(evidence())
     render(<CurrentResultStory story={value} onError={vi.fn()}/>);inspect()
-    const trigger=screen.getByRole('button',{name:'查看必要证明记录 →'});trigger.focus();fireEvent.click(trigger)
+    const trigger=screen.getByRole('button',{name:'查看必要证明记录'});trigger.focus();fireEvent.click(trigger)
     await screen.findByText('来自所选证明要求')
     fireEvent.keyDown(screen.getByRole('region',{name:'已发布证据'}),{key:'Escape'})
-    expect(screen.getByRole('button',{name:'查看必要证明记录 →'})).toHaveFocus()
+    expect(screen.getByRole('button',{name:'查看必要证明记录'})).toHaveFocus()
   })
   it('初始和恢复保持独立核对，不把不适用阶段列成无法确认', () => {
     const value=story(),source=value.actions[0].decisive_proof_chain[0]
@@ -109,7 +109,22 @@ describe('结果总览与单项调查', () => {
     expect(screen.getByText('恢复要求已满足')).toBeInTheDocument()
     expect(screen.getByText('无法独立确认')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button',{name:'证据记录'}))
-    expect(screen.queryByRole('heading',{name:'辅助观察与过程记录'})).not.toBeInTheDocument()
+    expect(screen.getByRole('region',{name:'观察来源与阶段'})).toBeInTheDocument()
+    expect(screen.getByRole('article',{name:'后台任务的阶段记录'})).toHaveTextContent('本阶段不采集')
+  })
+  it('阶段证据返回会展开原来源并恢复焦点', async () => {
+    const value=story(),source=value.actions[0].decisive_proof_chain[0]
+    value.actions[0].evidence_explanations.push({...source,source_label:'STRUCTURED_AUDIT_LOG',reading:{kind:'PROCESS',label:'已取得关联过程记录',detail:'只用于过程追踪。',attention:false},observed_fact:{...source.observed_fact,observer_id:'audit',level:'DIAGNOSIS_REQUIRED',phase:'EVENTUAL'}})
+    api.evidence.mockResolvedValue(evidence())
+    render(<CurrentResultStory story={value} onError={vi.fn()}/>);inspect()
+    fireEvent.click(screen.getByRole('button',{name:'证据记录'}))
+    const group=screen.getByRole('article',{name:'审计记录的阶段记录'})
+    fireEvent.click(group.querySelector('summary')!)
+    const trigger=screen.getByRole('button',{name:'查看审计记录最终观察记录'});trigger.focus();fireEvent.click(trigger)
+    await screen.findByText('在哪里看到')
+    fireEvent.keyDown(screen.getByRole('region',{name:'已发布证据'}),{key:'Escape'})
+    expect(screen.getByRole('button',{name:'查看审计记录最终观察记录'})).toHaveFocus()
+    expect(screen.getByRole('article',{name:'审计记录的阶段记录'}).querySelector('details')).toHaveAttribute('open')
   })
   it('历史路由回退清除选择，大列表返回仍保留原分页和焦点', () => {
     const value=story();value.actions=Array.from({length:12},(_,i)=>({...value.actions[0],case_id:`c${i+1}`,display_name:`操作 ${i+1}`}))

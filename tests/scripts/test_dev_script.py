@@ -66,7 +66,7 @@ def test_command_contract_rejects_unused_options_before_lock() -> None:
     contract = dev[dev.index("function Test-CommandContract") : dev.index("try {")]
     assert '$Command -notin @("schema", "docs")' in contract
     assert '$Command -notin @("prepare", "start", "package")' in contract
-    assert '$Command -notin @("update", "cli", "test", "frontend-test", "sample-test")' in contract
+    assert '$Command -notin @("update", "cli", "test", "frontend-test", "sample-test", "verify")' in contract
     preflight = dev[dev.index("try {") : dev.index("Read-State")]
     assert preflight.index("Test-CommandContract") < preflight.index("Enter-PrepareLock")
 
@@ -248,10 +248,46 @@ def test_frontend_install_build_test_and_package_stay_outside_source_tree() -> N
     assert not (ROOT / "scripts" / "hatch_build.py").exists()
 
 
+def test_frontend_build_failure_keeps_diagnostics_visible_through_receipt_assignment(tmp_path):
+    command = (
+        f". {_powershell_literal(MODULE_ROOT / 'frontend.ps1')};"
+        f"$script:DevelopmentRoot={_powershell_literal(tmp_path)};"
+        "$script:PnpmRunner=@('fixture');"
+        "function Invoke-External { param($Stage,$Invocation) Write-Output 'FIXTURE_TYPE_DIAGNOSTIC';throw 'FIXTURE_BUILD_FAILED' };"
+        f"try {{$receipt=Invoke-FrontendBuild {_powershell_literal(tmp_path)} {_powershell_literal(tmp_path / 'dist')};exit 3}}"
+        "catch {if($_.Exception.Message -ne 'FIXTURE_BUILD_FAILED'){exit 4};Write-Output 'FAILURE_PRESERVED'}"
+    )
+    completed = subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-Command", command],
+                               cwd=ROOT, text=True, capture_output=True, check=False)
+    assert completed.returncode == 0
+    assert "FIXTURE_TYPE_DIAGNOSTIC" in completed.stdout
+    assert "FAILURE_PRESERVED" in completed.stdout
+
+
+def test_frontend_type_failure_stops_vitest_and_restores_location(tmp_path):
+    command = (
+        f". {_powershell_literal(MODULE_ROOT / 'commands.ps1')};"
+        f"$script:DevelopmentRoot={_powershell_literal(tmp_path)};$script:VarDir=$script:DevelopmentRoot;"
+        f"$script:ProjectRoot={_powershell_literal(ROOT)};$script:Node='fixture';$script:PnpmRunner=@('fixture');"
+        "$script:calls=@();$before=(Get-Location).Path;"
+        "function Remove-LegacyFrontendArtifacts {};function Get-FrontendSourceInputs {};"
+        "function Get-FrontendDependencyDigest {'fixture'};function Prepare-FrontendWorkspace {};"
+        f"function Get-FrontendWorkspace {{{_powershell_literal(tmp_path)}}};"
+        "function Invoke-External {param($Stage,$Invocation) $script:calls+=$Stage;if($Stage -eq 'frontend-types'){throw 'TYPE_CONTRACT_FAILED'}};"
+        "try {Invoke-FrontendTest $null;exit 3}catch{if($_.Exception.Message -ne 'TYPE_CONTRACT_FAILED'){exit 4}};"
+        "[pscustomobject]@{calls=$script:calls;location_restored=((Get-Location).Path -eq $before)}|ConvertTo-Json -Compress"
+    )
+    completed = subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-Command", command], cwd=ROOT,
+                               text=True, capture_output=True, check=False)
+    assert completed.returncode == 0, completed.stdout
+    record = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert record == {"calls": ["frontend-editor", "frontend-types"], "location_restored": True}
+
+
 def test_sample_test_routes_to_real_start_cmd_with_a_fresh_var_directory() -> None:
     dev = _text(DEV)
     function = _text(MODULE_ROOT / "sample-test.ps1")
-    package_root = MODULE_ROOT / "sample_test"
+    package_root = ROOT / "tests/acceptance/sample_test"
     driver_path = package_root / "driver.py"
     official_path = package_root / "official.py"
     driver = _text(driver_path)
@@ -263,13 +299,16 @@ def test_sample_test_routes_to_real_start_cmd_with_a_fresh_var_directory() -> No
     assert "Prepare-SourceRuntime" not in function
     assert "Exit-PrepareLock" in function
     assert '"test\\sample-test\\{0}"' in function
-    assert '"scripts\\dev\\sample_test\\driver.py"' in function
-    assert '"official", "validation", "competition", "all"' in function
+    assert '"tests\\acceptance\\sample_test\\driver.py"' in function
+    from tests.acceptance.sample_test.driver import SUITES
+    choices = re.search(r'\$suite -notin @\(([^)]+)\)', function)
+    assert choices is not None
+    assert tuple(re.findall(r'"([a-z]+)"', choices.group(1))) == SUITES
     assert '"--suite"' in function
     assert "Resolve-DevelopmentNode $Toolchain $true" in function
     assert '"--source-receipt"' not in function
     assert '"--frontend-dir"' not in function
-    assert "_start_product(root, var_dir)" in official
+    assert "_start_product(root, var_dir, port=state.control_port)" in official
     assert 'root / "start.cmd"' in lifecycle
     assert 'CONTROL_PORT = 8765' in state
     assert '"L5_CONTROL_PORT_OCCUPIED"' in official

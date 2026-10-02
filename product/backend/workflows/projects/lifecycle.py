@@ -45,11 +45,13 @@ class ProjectLifecycleService:
         test_identities: TestIdentityService,
         *,
         stop_official_sample: Callable[[str], bool],
+        stop_runtime: Callable[[str], None] | None = None,
         clock_us: Callable[[], int] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._test_identities = test_identities
         self._stop_official_sample = stop_official_sample
+        self._stop_runtime = stop_runtime
         self._clock_us = clock_us or (lambda: time.time_ns() // 1_000)
 
     def archive(self, project_id: str) -> ProjectRecord:
@@ -74,11 +76,15 @@ class ProjectLifecycleService:
             )
         )
         with self._uow_factory() as work:
+            work.acquire_write_lock()
+            self._require_archivable(project_id)
             current = work.projects.get(project_id)
             if current is None:
                 raise JiejianError(ErrorCode.PROJECT_NOT_FOUND, "项目不存在")
             if current.status is ProjectStatus.ARCHIVED:
                 return current
+            if self._stop_runtime is not None:
+                self._stop_runtime(project_id)
             work.projects.replace(archived)
             work.commit()
         return archived

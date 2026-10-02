@@ -1,4 +1,6 @@
 // 业务定义先阅读后编辑；每个对象的未保存副本由父级草稿会话持有。
+import { SearchField } from '../../../shared/ui/SearchField'
+import { StatusBadge } from '../../../shared/ui/StatusBadge'
 import { Alert, Button, Checkbox, Input, Select } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
@@ -54,13 +56,13 @@ export function BoundaryObjectsWorkspace({kind,actors,actions,permissions,draft,
   if('effects' in item)setActions(items=>[...items,item]);else setActors(items=>[...items,item])
   setSelected(item.item_id);setCopies(items=>({...items,[item.item_id]:clone(item)}));setEditing(true)
  }
- return <><div className="boundary-collection-toolbar"><Input className="boundary-search" aria-label="搜索业务定义" placeholder={kind==='actions'?'搜索业务动作':'搜索业务角色'} allowClear value={query} onChange={e=>setQuery(e.target.value)}/><Button type="primary" disabled={busy} onClick={add}>{kind==='actions'?'新增业务动作':'新增业务角色'}</Button></div><section ref={workspaceRef} className="boundary-document definition-workspace" aria-label="业务定义">
+ return <><div className="boundary-collection-toolbar"><SearchField aria-label="搜索业务定义" placeholder={kind==='actions'?'搜索业务动作':'搜索业务角色'} allowClear value={query} onChange={e=>setQuery(e.target.value)}/><Button type="primary" disabled={busy} onClick={add}>{kind==='actions'?'新增业务动作':'新增业务角色'}</Button></div><section ref={workspaceRef} className="boundary-document definition-workspace" aria-label="业务定义">
   <aside className="action-index"><h3>{kind==='actions'?'业务动作':'业务角色'}</h3>
    <nav aria-label="业务定义索引" onKeyDown={e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;const buttons=[...e.currentTarget.querySelectorAll('button')];const at=buttons.indexOf(document.activeElement as HTMLButtonElement);if(at<0)return;e.preventDefault();buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(at+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus()}}>{values.filter(item=>item.display_name.includes(query)).map(item=><button key={item.item_id} aria-current={current?.item_id===item.item_id?'true':undefined} onClick={()=>{setSelected(item.item_id);setEditing(false);setError('')}}>{item.display_name||'尚未命名'}<small>{copies[item.item_id]?'有未保存编辑':item.effective_state==='RETIRED'?'已停用':kind==='actions'?'业务动作':'业务角色'}</small></button>)}</nav>
    {!values.some(item=>item.display_name.includes(query))&&<p className="editorial-muted">没有匹配的定义</p>}
   </aside>
   {current&&value?<article className="boundary-action-document definition-document"><div className="boundary-action-heading"><div><p className="editorial-eyebrow">{kind==='actions'?'业务动作':'业务角色'}</p><h2>{current.display_name||'填写业务定义'}</h2></div>{!editing&&<Button disabled={busy} onClick={()=>{setCopies(items=>({...items,[current.item_id]:clone(value)}));setEditing(true)}}>{copies[current.item_id]?'继续编辑':kind==='actions'?'编辑动作':'编辑角色'}</Button>}</div>
-   <span className="semantic-state">{current.effective_state==='RETIRED'?'停用草稿':'当前项目草稿'}</span>
+   <StatusBadge kind="preparation">{current.effective_state==='RETIRED'?'停用草稿':'当前项目草稿'}</StatusBadge>
    {editing?<div className="definition-edit-surface">
     <label>名称<Input autoFocus aria-label={kind==='actions'?'业务动作名称':'业务主体名称'} value={value.display_name} onChange={e=>update({display_name:e.target.value})}/></label>
     <label>业务说明<Input.TextArea aria-label="业务定义说明" value={value.description} autoSize={{minRows:3}} onChange={e=>update({description:e.target.value})}/></label>
@@ -70,7 +72,7 @@ export function BoundaryObjectsWorkspace({kind,actors,actions,permissions,draft,
     {!!linked.length&&<p className="editorial-muted">这项定义被 {linked.length} 条权限引用。停用或调整结果后，需要核对关联规则。</p>}
     {error&&<Alert className="flow-feedback" type="warning" message={error}/>}<div className="definition-edit-actions"><Button disabled={busy} onClick={discard}>取消编辑</Button>{!('effects' in value?value.action_id:value.actor_id)&&<Button type="text" danger onClick={()=>{if('effects' in value)setActions(items=>items.filter(i=>i.item_id!==current.item_id));else setActors(items=>items.filter(i=>i.item_id!==current.item_id));setPermissions(items=>items.filter(i=>i.business_action_item_id!==current.item_id&&i.subject_actor_item_id!==current.item_id&&i.resource_owner_actor_item_id!==current.item_id));discard()}}>移除未保存的新对象</Button>}<Button type="primary" disabled={busy} onClick={save}>保存到草稿</Button></div>
    </div>:<><h3 className="definition-section-label">业务含义</h3><p className="definition-description">{current.description||'尚未填写业务说明'}</p>{'effects' in current?<><dl className="definition-properties"><div><dt>操作类型</dt><dd>{operations.find(i=>i.value===current.operation_kind)?.label}</dd></div><div><dt>资源概念</dt><dd>{current.primary_resource_concept}</dd></div></dl><section className="definition-effect-summary"><h3>需要观察的业务结果</h3>{current.effects.map(effect=><div key={effect.item_id}><strong>{effect.business_label}</strong><p>{effect.description}</p></div>)}</section></>:<p className="editorial-muted">具体测试账号在准备检查时绑定。</p>}
-    <section className="definition-linked"><h3>关联权限 · {linked.length}</h3>{linked.map(rule=><div className="definition-linked-rule" key={rule.item_id}><span className="permission-badge">{rule.expectation==='ALLOW'?'允许':'禁止'}</span><span>{actors.find(a=>a.item_id===rule.subject_actor_item_id)?.display_name}对{actors.find(a=>a.item_id===rule.resource_owner_actor_item_id)?.display_name}的资源，{actions.find(a=>a.item_id===rule.business_action_item_id)?.display_name}</span></div>)}</section>
+    <section className="definition-linked"><h3>关联权限 · {linked.length}</h3>{linked.map(rule=><div className="definition-linked-rule" key={rule.item_id}><StatusBadge kind="rule" className="permission-badge" tone={rule.expectation === 'ALLOW' ? 'success' : 'danger'}>{rule.expectation==='ALLOW'?'允许':'禁止'}</StatusBadge><span>{actors.find(a=>a.item_id===rule.subject_actor_item_id)?.display_name}对{actors.find(a=>a.item_id===rule.resource_owner_actor_item_id)?.display_name}的资源，{actions.find(a=>a.item_id===rule.business_action_item_id)?.display_name}</span></div>)}</section>
    </>}
   </article>:<article className="boundary-action-document"><h2>先建立一项业务定义</h2><p>使用业务名称描述角色与动作，再编写权限要求。</p></article>}
  </section></>

@@ -83,7 +83,7 @@
 - `class DevelopmentReceiptRow`
 - `class DevelopmentCheckRunRow`
 - `class DevelopmentRepository`
-主要 import / dot-source：`product.backend.core.development`, `product.backend.core.errors`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
+主要 import / dot-source：`json`, `product.backend.core.development`, `product.backend.core.errors`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
 
 ### `product/backend/infra/storage/environment_operations.py`
 - `class EnvironmentOperationRow`
@@ -141,6 +141,14 @@
 - `class ProjectRepository`
 主要 import / dot-source：`__future__`, `collections.abc`, `hashlib`, `json`, `product.backend.core.errors`, `product.backend.core.identifiers`, `product.backend.core.lifecycle`, `product.backend.core.recording.models`, `product.backend.core.verification.permissions`, `product.backend.infra.storage.base`, `product.protocols`, `pydantic`, `re`, `sqlalchemy`, `sqlalchemy.exc`, `sqlalchemy.orm`, `time`, `typing`
 
+### `product/backend/infra/storage/proof_sources.py`
+- `class ProofSourceRow`
+- `class ProofSourceRevisionRow`
+- `class ProofReadScopeRow`
+- `class ProofPreflightRow`
+- `class ProofSourceRepository`
+主要 import / dot-source：`product.backend.core.errors`, `product.backend.infra.storage.base`, `product.protocols.proof_sources`, `sqlalchemy`, `sqlalchemy.orm`
+
 ### `product/backend/infra/storage/recordings.py`
 - `class RecordingRow`
 - `class FlowDraftRevisionRow`
@@ -186,6 +194,19 @@
 - `class GatingRepository`
 主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
 
+### `product/backend/infra/storage/rule_candidates.py`
+- `class RuleCandidateRow`
+- `class RuleCandidateRevisionRow`
+- `class RuleCandidateProposalRow`
+- `class RuleCandidateReceiptRow`
+- `class RuleCandidateRepository`
+主要 import / dot-source：`__future__`, `product.backend.core.boundaries.rule_candidates`, `product.backend.core.errors`, `product.backend.infra.storage.base`, `sqlalchemy`, `sqlalchemy.orm`
+
+### `product/backend/infra/storage/runtime_loads.py`
+- `class RuntimeLoadRow`
+- `class RuntimeLoadRepository`
+主要 import / dot-source：`product.backend.core.errors`, `product.backend.infra.storage.base`, `product.protocols.node_runtime`, `sqlalchemy`, `sqlalchemy.orm`
+
 ### `product/backend/infra/storage/sample_workspaces.py`
 - `class SampleWorkspaceRow`
 - `class SampleInstanceRow`
@@ -224,6 +245,6 @@
 
 ### `product/backend/infra/storage/unit_of_work.py`
 - `class StorageUnitOfWork`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.storage.action_preparation`, `product.backend.infra.storage.application_understanding`, `product.backend.infra.storage.business_boundaries`, `product.backend.infra.storage.code_observations`, `product.backend.infra.storage.contracts`, `product.backend.infra.storage.development`, `product.backend.infra.storage.environment_operations`, `product.backend.infra.storage.execution.job_control`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.execution_profiles`, `product.backend.infra.storage.llm`, `product.backend.infra.storage.preparation_recovery`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.check_publications`, `product.backend.infra.storage.results.evidence`, `product.backend.infra.storage.results.finalizations`, `product.backend.infra.storage.results.findings`, `product.backend.infra.storage.results.gating`, `product.backend.infra.storage.sample_workspaces`, `product.backend.infra.storage.setup`, `product.backend.infra.storage.source_changes`, `product.backend.infra.storage.supplemental_materials`, `sqlalchemy.exc`, `sqlalchemy.orm`, `types`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.errors`, `product.backend.infra.storage.action_preparation`, `product.backend.infra.storage.application_understanding`, `product.backend.infra.storage.business_boundaries`, `product.backend.infra.storage.code_observations`, `product.backend.infra.storage.contracts`, `product.backend.infra.storage.development`, `product.backend.infra.storage.environment_operations`, `product.backend.infra.storage.execution.job_control`, `product.backend.infra.storage.execution.jobs`, `product.backend.infra.storage.execution.runs`, `product.backend.infra.storage.execution_profiles`, `product.backend.infra.storage.llm`, `product.backend.infra.storage.preparation_recovery`, `product.backend.infra.storage.projects`, `product.backend.infra.storage.proof_sources`, `product.backend.infra.storage.recordings`, `product.backend.infra.storage.results.check_publications`, `product.backend.infra.storage.results.evidence`, `product.backend.infra.storage.results.finalizations`, `product.backend.infra.storage.results.findings`, `product.backend.infra.storage.results.gating`, `product.backend.infra.storage.rule_candidates`, `product.backend.infra.storage.runtime_loads`, `product.backend.infra.storage.sample_workspaces`, `product.backend.infra.storage.setup`, `product.backend.infra.storage.source_changes`, `product.backend.infra.storage.supplemental_materials`, `sqlalchemy.exc`, `sqlalchemy.orm`, `types`
 
 <!-- GENERATED:END -->

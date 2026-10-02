@@ -1,0 +1,11 @@
+/* 运行准备沿用公共表单、状态和右侧确认动作；窄屏不固定覆盖内容。 */
+.controlled-runtime { display:grid; gap:var(--space-16); padding:var(--space-24); border:var(--line-width) solid var(--color-border); border-radius:var(--radius-large); }
+.controlled-runtime header,.controlled-runtime footer { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-16); }
+.controlled-runtime h3,.controlled-runtime p { margin:0; }
+.controlled-runtime header p,.controlled-runtime-scope,.controlled-runtime footer>span { color:var(--color-secondary); font-size:var(--font-secondary); }
+.controlled-runtime-fields { display:grid; grid-template-columns:minmax(0,1fr) 160px; gap:var(--space-16); }
+.controlled-runtime-fields label { display:grid; gap:var(--space-8); }
+.controlled-runtime-fields .ant-input-number { width:100%; }
+.controlled-runtime-preview { display:grid; gap:var(--space-8); padding:var(--space-16); background:var(--color-surface-subtle); border-radius:var(--radius-small); overflow-wrap:anywhere; }
+.controlled-runtime footer { align-items:center; }
+@media(max-width:640px) { .controlled-runtime header,.controlled-runtime footer { flex-direction:column; } .controlled-runtime-fields { grid-template-columns:1fr; } .controlled-runtime footer .confirmation-actions { width:100%; } }

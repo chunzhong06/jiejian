@@ -4,15 +4,15 @@
 function Invoke-SampleTest($Toolchain) {
     $suite = "official"
     if ($CommandArguments.Count -gt 1) {
-        Fail-Development "sample-test" "sample-test 最多接受一个 suite" "使用 .\scripts\dev.ps1 sample-test [official|validation|competition|all]"
+        Fail-Development "sample-test" "sample-test 最多接受一个 suite" "使用 .\scripts\dev.ps1 sample-test [official|ordinary|validation|competition|portable|windows|all]"
     }
     if ($CommandArguments.Count -eq 1) {
         $suite = [string]$CommandArguments[0]
     }
-    if ($suite -notin @("official", "validation", "competition", "all")) {
-        Fail-Development "sample-test" ("未知 suite：{0}" -f $suite) "使用 official、validation、competition 或 all"
+    if ($suite -notin @("official", "ordinary", "validation", "competition", "portable", "windows", "all")) {
+        Fail-Development "sample-test" ("未知 suite：{0}" -f $suite) "使用 official、ordinary、validation、competition、portable、windows 或 all"
     }
-    if ($suite -ne "official") {
+    if ($suite -in @("ordinary", "validation", "competition", "all")) {
         # validation fixture 使用仓库受控的固定 Node，不依赖用户 PATH 中的偶然版本。
         Resolve-DevelopmentNode $Toolchain $true
     }
@@ -22,7 +22,7 @@ function Invoke-SampleTest($Toolchain) {
     $arguments = @(
         $script:Python,
         "-B",
-        (Join-Path $script:ProjectRoot "scripts\dev\sample_test\driver.py"),
+        (Join-Path $script:ProjectRoot "tests\acceptance\sample_test\driver.py"),
         "--root",
         $script:ProjectRoot,
         "--var-dir",
@@ -30,7 +30,7 @@ function Invoke-SampleTest($Toolchain) {
         "--suite",
         $suite
     )
-    if ($suite -ne "official") {
+    if ($suite -in @("validation", "competition", "all")) {
         $summaryPath = Join-Path $script:VarDir "audit\competition\latest-validation-summary.json"
         $arguments += @("--publish-summary", $summaryPath)
     }

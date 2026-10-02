@@ -1,4 +1,5 @@
 // 先审阅权限，再按需核对业务定义；所有前后对照仍来自服务端冻结提案，不补造历史。
+import { StatusBadge } from '../../../shared/ui/StatusBadge'
 import { Alert, Button, Checkbox } from 'antd'
 import { useEffect, useState } from 'react'
 import type { BoundaryProposalViewDto, BoundaryReviewValueDto, BoundaryProposalReviewDto } from '../../../api/businessBoundaries'
@@ -20,7 +21,7 @@ export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturn
   const permissions=changed.filter(item=>item.entity_kind==='PERMISSION')
   const definitions=changed.filter(item=>item.entity_kind!=='PERMISSION')
   return <section className="permission-review" aria-label="业务边界变更审阅">
-    <header className="permission-review-intro"><div><p className="editorial-eyebrow">本次需要你决定</p><h2>核对本次业务变更</h2><p>确认谁可以做什么、哪些结果必须受到保护。确认后才会改变正式权限。</p></div><span className="semantic-state is-warning">{decision?'已有决定':'等待你的决定'}</span>
+    <header className="permission-review-intro"><div><p className="editorial-eyebrow">本次需要你决定</p><h2>核对本次业务变更</h2><p>确认谁可以做什么、哪些结果必须受到保护。确认后才会改变正式权限。</p></div><StatusBadge kind="preparation" tone="warning">{decision?'已有决定':'等待你的决定'}</StatusBadge>
       <dl className="permission-review-counts"><div><dt>权限变更</dt><dd>{unavailable?'待核对':permissions.length}<small>项</small></dd></div><div><dt>业务定义变更</dt><dd>{unavailable?'待核对':definitions.length}<small>项</small></dd></div><div><dt>继续沿用</dt><dd>{unavailable?'待核对':retained.length}<small>项</small></dd></div></dl>
     </header>
     {unavailable&&<Alert type="warning" showIcon message="无法恢复提案的原始基线" description="暂不提供批准入口。缺失的历史版本不会被当前值或空值替代。"/>}
@@ -40,7 +41,7 @@ export function BoundaryProposalReview({ proposalView, busy, onApprove, onReturn
 function ReviewChange({item}:{item:ReviewItem}) {
   // 只有有可靠原始值的既有对象才做双栏对照；首次新增不重复铺空白基线。
   const compare=item.change_kind!=='CREATE'&&item.change_kind!=='REFERENCE'
-  return <article className="permission-review-change"><header><div>{item.after.expectation&&<span className={`permission-badge ${item.after.expectation==='ALLOW'?'is-allow':'is-deny'}`}>{item.after.expectation==='ALLOW'?'允许':'禁止'}</span>}<h4>{item.after.display_name}</h4></div><span className="permission-review-change-kind">{changeLabels[item.change_kind]}</span></header>
+  return <article className="permission-review-change"><header><div>{item.after.expectation&&<StatusBadge kind="rule" className="permission-badge" tone={item.after.expectation === 'ALLOW' ? 'success' : 'danger'}>{item.after.expectation==='ALLOW'?'允许':'禁止'}</StatusBadge>}<h4>{item.after.display_name}</h4></div><span className="permission-review-change-kind">{changeLabels[item.change_kind]}</span></header>
     <div className={compare?'permission-review-compare':'permission-review-value'}>{compare&&<section><h5>原始要求</h5>{!item.basis_available?<p>原始版本不可用</p>:item.before?<ReviewValue value={item.before}/>:<p>尚未建立这项业务要求</p>}</section>}<section>{compare&&<h5>拟生效要求</h5>}{!item.basis_available&&!compare&&<p role="status">原始版本不可用，请先核对基线。</p>}<ReviewValue value={item.after}/></section></div>
   </article>
 }

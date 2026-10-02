@@ -467,7 +467,7 @@
           "type": "string"
         },
         "descriptor_id": {
-          "pattern": "^exp_[0-9a-f]{32}$",
+          "pattern": "^(exp|psr)_[0-9a-f]{32}$",
           "title": "Descriptor Id",
           "type": "string"
         },

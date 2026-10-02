@@ -1,0 +1,57 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "binding_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Binding Fingerprint",
+      "type": "string"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "preflight_id": {
+      "pattern": "^ppf_[0-9a-f]{32}$",
+      "title": "Preflight Id",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    },
+    "source_id": {
+      "pattern": "^psr_[0-9a-f]{32}$",
+      "title": "Source Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "source_id",
+    "revision",
+    "source_fingerprint",
+    "preflight_id",
+    "binding_fingerprint",
+    "created_at_us"
+  ],
+  "title": "ProofSourceAdoption",
+  "type": "object"
+}

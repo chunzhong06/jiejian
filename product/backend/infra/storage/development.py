@@ -3,6 +3,8 @@ from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, Integer, 
 from sqlalchemy.orm import Mapped, mapped_column
 
 from product.backend.core.development import DevelopmentAcceptance, DevelopmentContext, DevelopmentDelivery, DevelopmentReceipt, DevelopmentTask, RuntimeActivationReceipt
+from product.backend.core.development import NodeRuntimeActivationReceipt
+import json
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage.base import Base, _flush, ensure_storage_payload_safe
 
@@ -182,7 +184,9 @@ class DevelopmentRepository:
             .order_by(DevelopmentCheckRunRow.created_at_us.desc(), DevelopmentCheckRunRow.run_id.desc()).limit(1))
 
     def runtime_receipt(self, project_id, operation_id):
-        return self._read(self._session.get(DevelopmentReceiptRow, (project_id, "LOAD_RUNTIME", operation_id)), RuntimeActivationReceipt)
+        row=self._session.get(DevelopmentReceiptRow,(project_id,'LOAD_RUNTIME',operation_id))
+        model=NodeRuntimeActivationReceipt if row is not None and json.loads(row.payload).get('schema_version')=='2' else RuntimeActivationReceipt
+        return self._read(row,model)
 
     def finish_runtime_receipt(self, before, value):
         if before.status != "PENDING" or (before.project_id, before.operation_id) != (value.project_id, value.operation_id):

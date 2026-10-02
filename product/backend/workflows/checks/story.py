@@ -12,6 +12,7 @@ from product.backend.core.verification.checks import CheckDecisionInput, project
 from product.backend.core.verification.trace import TraceAuthorizationDecision, TraceEventKind
 from product.backend.workflows.checks.repair_presentation import RepairComparisonRow, build_repair_comparison
 from product.backend.workflows.checks.story_text import CLAIM_BOUNDARIES, EFFECT_LABELS, EXECUTION_LABELS, JUDGEMENTS
+from product.backend.workflows.checks.observation_reading import ObservationReading, observation_reading
 from product.protocols.check_result import CheckObservation, CheckCaseOutcome
 from product.protocols.execution_v3 import ChangeContext, FrozenPermission, WireModel
 
@@ -60,6 +61,7 @@ class EvidenceExplanation(WireModel):
     supports_claim: str
     does_not_prove: str
     evidence_refs: tuple[str, ...]
+    reading: ObservationReading | None = None
 
 
 class StoryTraceEvent(WireModel):
@@ -139,6 +141,7 @@ class CheckStoryBuilder:
         evidence = {item.evidence_id: item for item in package.evidence}
         configs = {item.action_id: item for item in package.bundle.actions}
         identities = {item.identity_id: item for item in package.bundle.identities}
+        source_types = {item.observer_id: item.observer_type.value for item in package.bundle.observers}
         stories = []
         for action in package.request.actions:
             config = configs[action.action_id]
@@ -192,13 +195,16 @@ class CheckStoryBuilder:
                         proof = proofs[requirements[item.proof_fingerprint].binding_fingerprint]
                         source = next((source for source in proof.auxiliary_sources if source.observer_id == item.observer_id), proof)
                         trusted = item.complete and item.reliable and item.correlated and item.authoritative
+                        reading = observation_reading(item, source_type=source_types.get(item.observer_id))
                         support = (EFFECT_LABELS[item.state] if item.level == "VERDICT_REQUIRED" and trusted
                             and (item.state != "ABSENT" or item.closure == "CLOSED") else CLAIM_BOUNDARIES["supporting"]
                             if item.level != "VERDICT_REQUIRED" else CLAIM_BOUNDARIES["unknown"])
                         explanation = EvidenceExplanation(source_label=source.source_label, source_location=source.source_location,
                             observed_fact=item, supports_claim=support, does_not_prove=CLAIM_BOUNDARIES["scope"]
                             if trusted and item.level == "VERDICT_REQUIRED" else CLAIM_BOUNDARIES["supporting"],
-                            evidence_refs=(document.evidence_id,))
+                            evidence_refs=(document.evidence_id,), reading=reading)
+                        if item.level != "VERDICT_REQUIRED":
+                            explanation = explanation.model_copy(update={"supports_claim": reading.detail})
                         explanations.append(explanation)
                         # 暂未发现但窗口未闭合只保留在完整来源中，不能提升为决定性证明。
                         if item.level == "VERDICT_REQUIRED" and trusted and item.phase in ("AFTER", "EVENTUAL") and (

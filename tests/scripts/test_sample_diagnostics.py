@@ -1,17 +1,17 @@
 # 验证验收脚本的公开失败诊断。
 from __future__ import annotations
-import scripts.dev.sample_test.harness.lifecycle as sample_harness_lifecycle
-import scripts.dev.sample_test.harness.state as sample_harness_state
-import scripts.dev.sample_test.reporting.diagnostics as sample_reporting_diagnostics
+import tests.acceptance.sample_test.harness.lifecycle as sample_harness_lifecycle
+import tests.acceptance.sample_test.harness.state as sample_harness_state
+import tests.acceptance.sample_test.reporting.diagnostics as sample_reporting_diagnostics
 import json
 from pathlib import Path
 import pytest
-from scripts.dev.sample_test import official
+from tests.acceptance.sample_test import official
 
 
 def test_nested_gui_failure_has_scoped_location_without_private_body(tmp_path):
     from types import SimpleNamespace
-    from scripts.dev.sample_test.current_gui import CurrentGui
+    from tests.acceptance.sample_test.current_gui import CurrentGui
 
     class Pending:
         value = SimpleNamespace(status=503, text='token=never-publish-this')

@@ -64,6 +64,7 @@ function Invoke-Package($Toolchain) {
         "--wheel", $wheels[0].FullName,
         "--python-source", $releasePython,
         "--playwright-source", (Join-Path $script:DevelopmentRoot "tools\playwright"),
+        "--node-executable", $script:Node,
         "--samples-source", (Join-Path $script:ProjectRoot "samples"),
         "--uv", $script:Uv,
         "--uv-cache", (Join-Path $script:DevelopmentRoot "cache\uv"),

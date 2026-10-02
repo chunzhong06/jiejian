@@ -18,6 +18,8 @@ class AllowControlSelectionRequest(ApiModel):
 
 def build_preparation_router(context) -> APIRouter:
     router = APIRouter()
+    from product.backend.api.routers.proof_sources import build_proof_sources_router
+    router.include_router(build_proof_sources_router(context))
 
     @router.get("/api/projects/{project_id}/preparation/materials/{action_id}/{kind}", response_model=ApiResponse)
     async def material_details(project_id: str, action_id: str, kind: Literal["execution", "resource", "evidence", "recovery"], action_revision: int, member_id: str | None = None):

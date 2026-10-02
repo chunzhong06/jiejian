@@ -131,11 +131,14 @@ class JobQueue:
         request: RequestCancellation,
         *,
         known_secrets: Sequence[str] = (),
+        work=None,
     ) -> CancellationResult:
         """请求取消任务，并按当前状态选择立即终止或留给 Worker 协作清理。"""
 
         validate_control_request(request, known_secrets)
-        with self._new_uow(known_secrets) as work:
+        from contextlib import nullcontext
+        owns_transaction = work is None
+        with self._new_uow(known_secrets) if owns_transaction else nullcontext(work) as work:
             initial = self._require_job(work, request.job_id)
             self._targets.resolve(initial)
             if initial.state in _TERMINAL_JOB_STATES:
@@ -181,11 +184,12 @@ class JobQueue:
                     metadata={"attempt": job.attempt},
                 )
             if job.state in {JobState.PENDING, JobState.RETRY_WAIT}:
-                return self._cancel_waiting(work, job, request.now_us)
+                return self._cancel_waiting(work, job, request.now_us, commit=owns_transaction)
             if job.state is not JobState.RUNNING:
                 raise JiejianError(ErrorCode.JOB_CANCEL_CONFLICT, "任务取消请求冲突")
             run, recording = self._targets.load(work, job)
-            work.commit()
+            if owns_transaction:
+                work.commit()
             return CancellationResult(
                 job=job,
                 run=run,
@@ -199,6 +203,7 @@ class JobQueue:
         work: StorageUnitOfWork,
         job: JobRecord,
         now_us: int,
+        *, commit=True,
     ) -> CancellationResult:
         source_state = job.state
         cancelled = work.job_control.cancel_waiting(job.job_id, now_us)
@@ -219,7 +224,8 @@ class JobQueue:
             occurred_at_us=now_us,
             metadata={"attempt": cancelled.attempt},
         )
-        work.commit()
+        if commit:
+            work.commit()
         return CancellationResult(
             job=cancelled,
             run=run,

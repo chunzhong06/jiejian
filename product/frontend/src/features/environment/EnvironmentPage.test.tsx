@@ -27,7 +27,7 @@ it('状态未知不允许反复启动', async () => {
 })
 it('普通应用只给连接核对，不冒充托管进程', async () => {
   render(<EnvironmentPage {...props} project={{ project_id: 'ordinary', name: '文档中心' }}/>)
-  await screen.findByRole('heading', { name: '应用由你启动，界鉴保留已有记录' })
+  await screen.findByRole('heading', { name: '核对当前应用的运行方式' })
   expect(screen.getByRole('button', { name: '核对应用连接' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '启动示例' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '停止官方示例' })).not.toBeInTheDocument()

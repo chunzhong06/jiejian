@@ -25,3 +25,14 @@ def test_javascript_calls_produce_bounded_action_candidates(tmp_path: Path) -> N
     assert roles["member"].confidence is CandidateConfidence.LOW
     assert roles["guest"].confidence is CandidateConfidence.LOW
     assert "DELETE /members/{id}" in actions
+
+
+def test_mjs_is_included_in_source_identity_and_changes_are_detected(tmp_path: Path):
+    entry=tmp_path/'app.mjs'
+    entry.write_text("export const allowed = false;",encoding='utf-8')
+    analyzer=ApplicationUnderstandingAnalyzer()
+    before=analyzer.analyze('esm-project',tmp_path)
+    assert [item.relative_path for item in before.files]==['app.mjs']
+    entry.write_text("export const allowed = true;",encoding='utf-8')
+    after=analyzer.analyze('esm-project',tmp_path)
+    assert before.source_fingerprint != after.source_fingerprint

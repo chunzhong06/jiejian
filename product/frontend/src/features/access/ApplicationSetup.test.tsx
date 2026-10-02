@@ -95,7 +95,7 @@ describe('ApplicationSetup', () => {
     expect(await screen.findByText('Vite')).toBeInTheDocument()
     expect(screen.getByText(/可能启动方式：Vite 开发服务候选/)).toBeInTheDocument()
     expect(screen.getByText(/vite.config.ts/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('checkbox', { name: /应用已经由我启动/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /应用已经启动/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /确认这是我的本地应用/ }))
     fireEvent.click(screen.getByRole('button', { name: '确认本地地址' }))
     expect(await screen.findByText('分析权限组与关键业务动作', { selector: 'h2' })).toBeInTheDocument()
@@ -212,7 +212,7 @@ describe('ApplicationSetup', () => {
     expect(await screen.findByText('确认本地访问地址', { selector: 'h2' })).toBeInTheDocument()
     expect(mockProjects.discoverEndpoints).toHaveBeenCalledWith('app-demo')
     expect(screen.queryByText('确认权限组与业务动作', { selector: 'h2' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('checkbox', { name: /应用已经由我启动/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /应用已经启动/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /确认这是我的本地应用/ }))
     fireEvent.click(screen.getByRole('button', { name: '确认本地地址' }))
 

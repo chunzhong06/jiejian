@@ -25,6 +25,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from product.backend import __version__
+from product.protocols.portable_release import PortableReleaseManifest
 
 
 RELEASE_VERSION = __version__
@@ -61,7 +62,9 @@ $temporary = Join-Path $varDir "temp"
 
 if (-not (Test-Path -LiteralPath $releasePath -PathType Leaf)) { throw "Portable release.json 缺失" }
 $release = Get-Content -LiteralPath $releasePath -Raw -Encoding UTF8 | ConvertFrom-Json
-if ([string]$release.schema_version -ne "1" -or [string]$release.product -ne "JieJian Web V1" -or [string]$release.platform -ne "windows" -or [string]$release.architecture -ne "x64" -or [string]$release.runtime_layout_version -ne "1") { throw "Portable release.json 无效" }
+if ([string]$release.schema_version -ne "2" -or [string]$release.product -ne "JieJian Web V1" -or [string]$release.platform -ne "windows" -or [string]$release.architecture -ne "x64" -or [string]$release.runtime_layout_version -ne "2") { throw "Portable release.json 无效" }
+if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot "node\node.exe") -PathType Leaf)) { throw "Portable Node 缺失" }
+if ((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot "node\node.exe") -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$release.node_sha256) { throw "Portable Node 指纹不一致" }
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "Portable Python 缺失" }
 if (-not (Test-Path -LiteralPath (Join-Path $frontend "index.html") -PathType Leaf)) { throw "Portable 前端缺失" }
 if (-not (Test-Path -LiteralPath $playwrightRoot -PathType Container)) { throw "Portable Playwright 浏览器根缺失" }
@@ -76,6 +79,8 @@ $env:JIEJIAN_RELEASE_ROOT = $releaseRoot
 $env:JIEJIAN_RUNTIME_MODE = "portable"
 $env:JIEJIAN_VAR_DIR = [IO.Path]::GetFullPath($varDir)
 $env:JIEJIAN_FRONTEND_DIST = [IO.Path]::GetFullPath($frontend)
+$env:JIEJIAN_NODE_EXECUTABLE = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "node\node.exe"))
+$env:JIEJIAN_NODE_VERSION = [string]$release.node_version
 $env:JIEJIAN_PLAYWRIGHT_EXECUTABLE = [IO.Path]::GetFullPath($chromium[0].FullName)
 $env:PLAYWRIGHT_BROWSERS_PATH = [IO.Path]::GetFullPath($playwrightRoot)
 $env:PYTHONDONTWRITEBYTECODE = "1"
@@ -107,7 +112,7 @@ exit $LASTEXITCODE
 _README = f"""界鉴 Web V1 {RELEASE_VERSION}（Windows x64 Portable）
 
 启动：双击根目录 start.cmd。首次启动会在同目录创建 var，用于数据库、日志和运行证据。
-本发行包已经包含 Python、产品依赖、前端和 Chromium；启动不需要安装 Conda、uv、Node、pnpm，也不会联网下载依赖。
+本发行包已经包含 Python、Node、产品依赖、前端和 Chromium；启动不需要安装 Conda、uv、Node、pnpm，也不会联网下载依赖。
 请保持 runtime 目录完整。需要迁移时，在界鉴安全退出后整体移动或复制整个 {RELEASE_NAME} 目录。
 完整版包含官方“协作空间”示例；nosamples 版不包含官方示例，但仍可接入你自己的本地 Web 应用。
 """
@@ -120,6 +125,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--wheel", type=Path, required=True)
     parser.add_argument("--python-source", type=Path, required=True)
     parser.add_argument("--playwright-source", type=Path, required=True)
+    parser.add_argument("--node-executable", type=Path, required=True)
     parser.add_argument("--samples-source", type=Path, required=True)
     parser.add_argument("--uv", type=Path, required=True)
     parser.add_argument("--uv-cache", type=Path, required=True)
@@ -303,17 +309,20 @@ def _write_runtime_files(base: Path, metadata: dict[str, str]) -> None:
         b"\xef\xbb\xbf" + _START_PS1.replace("\n", "\r\n").encode("utf-8")
     )
     release = {
-        "schema_version": "1",
+        "schema_version": "2",
         "product": "JieJian Web V1",
         "version": RELEASE_VERSION,
         "package_version": metadata["wheel_version"],
         "platform": "windows",
         "architecture": "x64",
-        "runtime_layout_version": "1",
+        "runtime_layout_version": "2",
         "python_version": metadata["python_version"],
         "playwright_version": metadata["playwright_version"],
         "chromium_revision": metadata["chromium_revision"],
+        "node_version": metadata["node_version"],
+        "node_sha256": metadata["node_sha256"],
     }
+    release = PortableReleaseManifest.model_validate(release).model_dump(mode='json')
     (runtime / "release.json").write_text(
         json.dumps(release, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
         encoding="utf-8",
@@ -394,6 +403,7 @@ def _validate_base(base: Path, project_root: Path) -> None:
         base / "runtime" / "release.json",
         python,
         frontend,
+        base / "runtime" / "node" / "node.exe",
     )
     if not all(path.is_file() for path in required):
         raise RuntimeError("Base Portable Tree 缺少必需文件")
@@ -481,6 +491,7 @@ def build(arguments: argparse.Namespace) -> None:
     artifacts = release_root / "artifacts"
     for path in (
         arguments.wheel,
+        arguments.node_executable,
         arguments.python_source / "python.exe",
         arguments.uv,
         arguments.toolchain,
@@ -490,6 +501,8 @@ def build(arguments: argparse.Namespace) -> None:
             raise RuntimeError(f"Portable 构建输入缺失: {path}")
     if not arguments.playwright_source.resolve().is_dir():
         raise RuntimeError("Portable Playwright 构建输入缺失")
+    if not _inside(arguments.node_executable, project_root / 'var' / 'development' / 'tools' / 'node'):
+        raise RuntimeError('Portable Node 必须来自已固定的构建工具目录')
     if not _inside(release_root, project_root / "var" / "development"):
         raise RuntimeError("Portable release root 必须位于 var/development")
     toolchain = json.loads(arguments.toolchain.read_text(encoding="utf-8"))
@@ -512,6 +525,15 @@ def build(arguments: argparse.Namespace) -> None:
         python_source=arguments.python_source.resolve(),
         playwright_source=arguments.playwright_source.resolve(),
     )
+    node_root = base / 'runtime' / 'node'
+    node_root.mkdir()
+    shutil.copyfile(arguments.node_executable, node_root / 'node.exe')
+    license_path = arguments.node_executable.parent / 'LICENSE'
+    if license_path.is_file():
+        shutil.copyfile(license_path,node_root / 'LICENSE.txt')
+    node_version = _run((node_root / 'node.exe','--version'),cwd=base,environment=environment).strip().removeprefix('v')
+    if node_version != toolchain['node']['build_version']:
+        raise RuntimeError('Portable Node 版本与冻结工具链不一致')
     _progress(2, "安装 frozen 生产依赖与内部 Wheel")
     _install_product(
         project_root=project_root,
@@ -523,6 +545,7 @@ def build(arguments: argparse.Namespace) -> None:
     )
     _progress(3, "生成元数据并校验唯一 Base Tree")
     metadata = _metadata(python, playwright_root, environment)
+    metadata.update(node_version=node_version,node_sha256=_sha256(node_root / 'node.exe'))
     if metadata["wheel_version"] != RELEASE_VERSION:
         raise RuntimeError(
             "Portable Wheel 版本与产品版本真源不一致: "

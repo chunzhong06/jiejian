@@ -171,6 +171,8 @@ def test_product_names_do_not_encode_development_generations() -> None:
     # 对外根协议的版本名表示真实 reader 断代，不是开发阶段命名。
     versioned_protocols = {PROTOCOLS / "schemas" / "runner" / name for name in (
         "check-runner-result-v2.schema.json", "check-runtime-v2.schema.json")}
+    versioned_protocols.update({PROTOCOLS / "schemas" / "development" / "runtime-operation-v2.schema.json",
+        PROTOCOLS / "schemas" / "runtime" / "portable-release-v2.schema.json"})
     assert frozen_root_migration.is_file()
     product_files = []
     for path in (ROOT / "product").rglob("*"):

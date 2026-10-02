@@ -38,12 +38,14 @@ class WorkerHandlerFactory:
         attempts: JobAttempts,
         recording_store: RecordingRequestStore,
         recording_submission_factory: Callable[[], RecordingSubmissionPort],
+        proof_publisher=None,
     ) -> None:
         self._var_dir = var_dir.resolve()
         self._uow_factory = uow_factory
         self._attempts = attempts
         self._recording_submission_factory = recording_submission_factory
         self._recording_store = recording_store
+        self._proof_publisher = proof_publisher
 
     def build_registry(
         self,
@@ -72,4 +74,12 @@ class WorkerHandlerFactory:
             return CheckJobHandler(self._var_dir, lease_owner=lease_owner, uow_factory=self._uow_factory,
                 attempts=self._attempts, environ=environ)
         registry.register(JobTargetType.RUN, build_check_handler, operation_types=frozenset({"CHECK"}))
+        if self._proof_publisher is not None:
+            def build_proof_handler():
+                from product.backend.infra.runtime.proof_runner.supervisor import ProofPreflightHandler
+                return ProofPreflightHandler(self._var_dir, lease_owner=lease_owner,
+                    uow_factory=self._uow_factory, attempts=self._attempts,
+                    publisher=self._proof_publisher, environ=environ)
+            registry.register(JobTargetType.PROOF_PREFLIGHT, build_proof_handler,
+                operation_types=frozenset({"PROOF_PREFLIGHT"}))
         return registry

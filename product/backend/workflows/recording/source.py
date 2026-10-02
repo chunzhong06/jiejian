@@ -51,7 +51,7 @@ def recording_source_fingerprint(action, identity, understanding, action_binding
     })
 
 
-def require_recording_source(work, request, *, historical_source=None):
+def require_recording_source(work, request, *, historical_source=None, reused_source_fingerprint=None):
     """只读取当前事务中的非秘密事实；登录秘密仍由受控凭据服务负责。"""
 
     root = work.business_boundaries.action(request.business_action_id)
@@ -93,7 +93,7 @@ def require_recording_source(work, request, *, historical_source=None):
             or inspect_actor_binding(owner.actor_id, owner.actor_revision, owner_binding, understanding).status is not ImplementationBindingStatus.CURRENT):
         raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "业务动作或测试角色的实现需要重新确认")
     expected = recording_source_fingerprint(
-        action, identity, understanding,
+        action, identity, understanding if reused_source_fingerprint is None else understanding.model_copy(update={'source_fingerprint':reused_source_fingerprint}),
         work.business_boundaries.action_binding(action.action_id, action.revision),
         work.business_boundaries.actor_binding(actor.actor_id, actor.revision),
         owner=owner, owner_actor_binding=owner_binding,
@@ -137,7 +137,7 @@ def require_recording_source(work, request, *, historical_source=None):
     return action, identity, understanding
 
 
-def require_persisted_recording_source(work, recording, var_dir):
+def require_persisted_recording_source(work, recording, var_dir, *, reused_source_fingerprint=None):
     """先按 Job 原始 hash 读取来源格式，再选择唯一明确的来源校验路径。"""
     from product.backend.infra.recording.request_store import RecordingRequestStore
     from product.protocols.recording_legacy import LegacyRecordingRunnerRequest
@@ -151,6 +151,7 @@ def require_persisted_recording_source(work, recording, var_dir):
     )):
         raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制来源无效")
     return require_recording_source(work, source,
+        reused_source_fingerprint=reused_source_fingerprint,
         historical_source=source if isinstance(source, LegacyRecordingRunnerRequest) else None)
 
 

@@ -105,7 +105,7 @@ def contains_resource_slot(value: Any) -> bool:
 
 class RegisteredObserverReference(BoundaryModel):
     # 这是受控注册表内的身份引用；没有路径、URL、查询或脚本字段。
-    descriptor_id: str = Field(pattern=r"^exp_[0-9a-f]{32}$")
+    descriptor_id: str = Field(pattern=r"^(exp|psr)_[0-9a-f]{32}$")
     descriptor_fingerprint: str = Field(pattern=SHA256_PATTERN)
     observer_id: str = Field(pattern=PROJECT_ID_PATTERN)
 

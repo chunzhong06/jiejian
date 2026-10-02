@@ -1,0 +1,39 @@
+/* 证明准备沿用编辑式骨架：低权重来源索引、唯一主任务、对齐的事实与状态；颜色复用全局语义token。 */
+.proof-toolbar,.proof-section-heading { display:flex; align-items:center; justify-content:space-between; gap:var(--space-16); margin-bottom:var(--space-24); flex-wrap:wrap; }
+.proof-workspace { display:grid; grid-template-columns:220px minmax(0,1fr); gap:var(--space-32); margin-top:var(--space-24); }
+.proof-index { min-width:0; border-right:1px solid var(--color-border); padding-right:var(--space-24); }
+.proof-index h2 { font-size:var(--font-body); display:flex; justify-content:space-between; }
+.proof-index h2 span { color:var(--color-secondary); font-weight:400; }
+.proof-index-item { display:grid; gap:var(--space-8); width:100%; text-align:left; background:transparent; color:var(--color-text); border:1px solid transparent; border-radius:var(--radius-small); padding:var(--space-16); cursor:pointer; margin-block:var(--space-8); }
+.proof-index-item span { color:var(--color-secondary); font-size:var(--font-secondary); }
+.proof-index-item[aria-current=true] { border-color:var(--color-primary); background:var(--color-primary-light); }
+.proof-index-item:disabled { cursor:default; }
+.proof-detail { min-width:0; display:flex; flex-direction:column; gap:var(--space-24); }
+.proof-focus { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-24); border-bottom:1px solid var(--color-border); padding-bottom:var(--space-24); }
+.proof-focus h2 { margin:var(--space-8) 0 var(--space-16); font-size:var(--font-section); }
+.proof-focus p { margin-block:var(--space-8); }
+.proof-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-24); margin:0; }
+.proof-facts dt,.proof-technical dt,.proof-confirm dt { color:var(--color-secondary); font-size:var(--font-secondary); margin-bottom:var(--space-8); }
+.proof-facts dd,.proof-technical dd,.proof-confirm dd { margin:0; overflow-wrap:anywhere; }
+.proof-section-heading { margin-bottom:var(--space-8); }
+.proof-section-heading h3 { margin:0; }
+.proof-checks ul { list-style:none; margin:0; padding:0; border:1px solid var(--color-border); border-radius:var(--radius-large); overflow:hidden; }
+.proof-checks li { display:flex; align-items:center; justify-content:space-between; gap:var(--space-24); padding:var(--space-16) var(--space-24); }
+.proof-checks li+li { border-top:1px solid var(--color-border); }
+.proof-checks li p { margin:var(--space-4) 0 0; color:var(--color-secondary); font-size:var(--font-secondary); }
+.proof-checks .product-status { flex-shrink:0; }
+.proof-technical { border-bottom:1px solid var(--color-border); padding-bottom:var(--space-24); }
+.proof-technical summary { color:var(--color-primary); cursor:pointer; }
+.proof-technical dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-16); }
+.proof-agent-return { display:flex; justify-content:space-between; align-items:center; gap:var(--space-24); flex-wrap:wrap; }
+.proof-agent-return p { color:var(--color-secondary); flex:1 1 260px; margin:0; }
+.proof-editor textarea { font-family:monospace; }
+.proof-confirm { margin-block:var(--space-24); }
+.proof-confirm dl { display:grid; grid-template-columns:100px minmax(0,1fr); gap:var(--space-16); }
+@media(max-width:900px) { .proof-workspace { grid-template-columns:minmax(0,1fr); }.proof-index { border-right:0; border-bottom:1px solid var(--color-border); padding:0 0 var(--space-16); }.proof-focus { flex-wrap:wrap; } }
+@media(max-width:600px) { .proof-facts,.proof-technical dl { grid-template-columns:minmax(0,1fr); }.proof-checks li { padding:var(--space-16); gap:var(--space-12); }.proof-confirm dl { grid-template-columns:minmax(0,1fr); }.proof-confirm dt { margin:0; }.proof-index-item { min-height:44px; } }
+
+.rule-detail-axes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-24); padding:var(--space-24) 0; margin-bottom:var(--space-32); border-block:1px solid var(--color-border); }
+.rule-detail-proof,.rule-detail-results { margin-block:var(--space-32); }
+.rule-detail-proof h2,.rule-detail-results h2,.proof-checks h2 { font-size:var(--font-section); }
+@media(max-width:700px) { .rule-detail-axes { grid-template-columns:minmax(0,1fr); }.rule-detail-axes>div+div { border-top:1px solid var(--color-border); padding-top:var(--space-16); } }

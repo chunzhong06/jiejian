@@ -12,7 +12,7 @@
  * ============================================================================= */
 
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Empty, Input, Modal, Select, Space, Spin, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import type { WorkspaceViewDto } from '../../api/workspace'
 import type { ProjectDto } from '../../api/projects'
@@ -26,11 +26,12 @@ import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { TaskReceipt, useTaskGuard } from '../../app/tasks/TaskContinuity'
 import './identities.css'
+import { StatusBadge } from '../../shared/ui/StatusBadge'
 
 function statusTag(identity: TestIdentityDto) {
-  if (identity.status === 'PREPARED') return <Tag color="green">登录状态已准备</Tag>
-  if (identity.status === 'NEEDS_REVIEW') return <Tag color="orange">需要重新确认</Tag>
-  return <Tag>尚未准备登录状态</Tag>
+  if (identity.status === 'PREPARED') return <StatusBadge kind="preparation">登录状态已准备</StatusBadge>
+  if (identity.status === 'NEEDS_REVIEW') return <StatusBadge kind="preparation" tone="warning">需要重新确认</StatusBadge>
+  return <StatusBadge kind="preparation">尚未准备登录状态</StatusBadge>
 }
 
 function preparationStatus(preparation: IdentityPreparationDto | null) {
@@ -50,6 +51,8 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
   onContinuePreparation: () => Promise<void> | void
   onPrepared?: () => void
 }) {
+  // 静态 Modal.confirm 无法继承主题；账号确认框挂在当前上下文，亮暗切换时与正文同步。
+  const [modal, modalContext] = Modal.useModal()
   const [roles, setRoles] = useState<BusinessActorRevisionDto[]>([])
   const [identities, setIdentities] = useState<TestIdentityDto[]>([])
   const [selectedRole, setSelectedRole] = useState('')
@@ -184,7 +187,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     catch (error) { if (alive.current) onError(error as ApiError) } finally { if (alive.current) setBusy(false) }
   }
 
-  const reset = (identity: TestIdentityDto) => Modal.confirm({
+  const reset = (identity: TestIdentityDto) => modal.confirm({
     title: `清除“${identity.label}”的登录状态？`,
     content: '界鉴会精确删除该测试账号保存的登录状态；账号名称与业务主体绑定会保留。',
     okText: '清除登录状态', cancelText: '取消', okButtonProps: { danger: true },
@@ -194,7 +197,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     },
   })
 
-  const remove = (identity: TestIdentityDto) => Modal.confirm({
+  const remove = (identity: TestIdentityDto) => modal.confirm({
     title: `删除测试账号“${identity.label}”？`,
     content: '界鉴会先删除该账号的全部安全登录状态；如果安全存储清理失败，账号信息会保留以便重试。',
     okText: '删除测试账号', cancelText: '取消', okButtonProps: { danger: true },
@@ -207,6 +210,7 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
   if (loading) return <EditorialPage><Spin /> 正在读取测试账号…</EditorialPage>
 
   return <EditorialPage label="测试账号登录准备">
+    {modalContext}
     <EditorialHeader eyebrow="验证 · 真实账号" title={initialPreparation ? `准备“${preparationIdentity?.label ?? '当前测试账号'}”的登录状态` : '管理当前测试账号'}><p className="editorial-muted">{preparation ? preparationStatus(preparation) : '只处理当前账号，其他有效准备仍然保留'}</p></EditorialHeader>
     {!initialPreparation && <><section className="identity-overview"><header><h2>添加测试账号</h2><p className="editorial-muted">选择账号所属角色并起一个便于识别的名称，然后在账号列表中打开登录浏览器。</p></header>
       {roles.length > 0 && <div className="identity-create">
@@ -218,13 +222,13 @@ export function TestIdentityPage({ project, initialPreparation, onError, onBack,
     </section>
 
     <section className="identity-role-section" aria-labelledby="identity-role-section-title">
-      <div className="identity-role-heading"><div><Typography.Title id="identity-role-section-title" level={3}>按业务主体准备</Typography.Title><Typography.Paragraph type="secondary">各业务主体下只展示已有账号与当前登录状态；失效账号单独处理。</Typography.Paragraph></div><Space wrap><Tag>{preparedCount} 个账号已准备</Tag><Button loading={busy} onClick={() => void refresh()}>刷新账号状态</Button></Space></div>
+      <div className="identity-role-heading"><div><Typography.Title id="identity-role-section-title" level={3}>按业务主体准备</Typography.Title><Typography.Paragraph type="secondary">各业务主体下只展示已有账号与当前登录状态；失效账号单独处理。</Typography.Paragraph></div><Space wrap><StatusBadge kind="preparation" tone="info">{preparedCount} 个账号已准备</StatusBadge><Button loading={busy} onClick={() => void refresh()}>刷新账号状态</Button></Space></div>
       {roles.length === 0 && <Empty description="请先在业务边界中确认业务主体" />}
       <div className="identity-role-grid">{roles.map((role) => {
         const roleIdentities = identities.filter((identity) => identity.actor_id === role.actor_id && identity.actor_revision === role.revision)
         const rolePrepared = roleIdentities.filter((identity) => identity.status === 'PREPARED').length
         return <article className="identity-role-row" key={role.actor_id}>
-          <div className="identity-role-row-header"><div><Typography.Text className="identity-role-kicker">业务主体角色</Typography.Text><Typography.Title level={4}>{role.display_name}</Typography.Title></div><Tag color={rolePrepared ? 'green' : 'orange'}>{rolePrepared ? `${rolePrepared} 个已准备` : '需要账号'}</Tag></div>
+          <div className="identity-role-row-header"><div><Typography.Text className="identity-role-kicker">业务主体角色</Typography.Text><Typography.Title level={4}>{role.display_name}</Typography.Title></div><StatusBadge kind="preparation" tone={rolePrepared ? 'neutral' : 'warning'}>{rolePrepared ? `${rolePrepared} 个已准备` : '需要账号'}</StatusBadge></div>
           <Typography.Paragraph>用于验证“{role.display_name}”在合法路径和禁止路径中的真实权限边界。</Typography.Paragraph>
           <div className="identity-role-accounts">{roleIdentities.length === 0
             ? <Typography.Text type="secondary">当前测试账号：尚未添加。请在上方为这个业务主体添加账号。</Typography.Text>

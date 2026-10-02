@@ -1,0 +1,94 @@
+/* 页面与Portal共用控件语义；feature样式只安排布局，不重新定义按钮与状态外观。 */
+[data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled) {
+  color: var(--color-primary-ink);
+  border-color: var(--color-primary-border);
+  background: var(--color-surface);
+  box-shadow: none;
+}
+[data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+[data-product=jiejian] .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):active { background: var(--color-surface-hover); }
+[data-product=jiejian] .ant-btn-link:not(:disabled) { color: var(--color-primary-ink); }
+[data-product=jiejian] .ant-btn-link:not(:disabled):is(:hover,:active,:focus-visible) {
+  color: var(--color-primary-ink);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+[data-product=jiejian] .ant-btn-link.ant-btn-dangerous:not(:disabled):is(:hover,:active,:focus) { color: var(--color-danger); }
+[data-product=jiejian] .ant-btn-link:focus:not(:focus-visible) { outline: none; }
+[data-product=jiejian] :is(button,a,input,textarea,[role=combobox],summary):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+[data-product=jiejian] a:not(.ant-btn):is(:hover,:focus-visible) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+[data-product=jiejian] a:not(.ant-btn) { color: var(--color-primary-ink); }
+/* 信息与状态不借用主按钮色；页面、通知和 body 浮层使用完全相同的成对值。 */
+[data-product=jiejian] .ant-alert-info { background: var(--color-info-light); --alert-ink: var(--color-evidence); }
+[data-product=jiejian] .ant-alert-success { background: var(--color-safe-light); --alert-ink: var(--color-safe); }
+[data-product=jiejian] .ant-alert-warning { background: var(--color-warning-light); --alert-ink: var(--color-warning); }
+[data-product=jiejian] .ant-alert-error { background: var(--color-danger-light); --alert-ink: var(--color-danger); }
+[data-product=jiejian] .ant-alert :is(.ant-alert-message,.ant-alert-description,.ant-alert-icon) { color: var(--alert-ink); }
+[data-product=jiejian] .ant-tag { border-color: transparent; }
+.product-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-4) var(--space-8);
+  border: var(--line-width) solid transparent;
+  border-radius: var(--radius-small);
+  color: var(--color-neutral);
+  background: var(--color-neutral-light);
+  font-size: var(--font-secondary);
+  font-weight: 600;
+  line-height: 1.6;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.product-status[data-tone=success] { color: var(--color-safe); background: var(--color-safe-light); }
+.product-status[data-tone=danger] { color: var(--color-danger); background: var(--color-danger-light); }
+.product-status[data-tone=warning] { color: var(--color-warning); background: var(--color-warning-light); }
+.product-status[data-tone=info] { color: var(--color-evidence); background: var(--color-info-light); }
+.product-status > [aria-hidden=true] { display: inline-flex; align-items: center; justify-content: center; width: 1em; height: 1em; flex: 0 0 1em; line-height: 1; }
+/* 多行提示以标题首行居中图标，不能沿用组件库零行高造成视觉上浮。 */
+[data-product=jiejian] .ant-alert { border-color: transparent; }
+[data-product=jiejian] .ant-alert-with-description .ant-alert-message {
+  font-size: var(--font-local);
+  line-height: 1.6;
+}
+[data-product=jiejian] .ant-alert-with-description > .ant-alert-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: var(--font-local);
+  height: 1.6em;
+  line-height: 1.6;
+  margin-inline-end: var(--space-12);
+}
+.permission-badge { flex-shrink: 0; align-self: start; }
+.flow-number { display: inline-grid; place-items: center; flex: 0 0 var(--space-24); height: var(--space-24); border: var(--line-width) solid var(--color-border); border-radius: 50%; font-size: var(--font-label); color: var(--color-secondary); }
+.flow-number[aria-current=step] { color: var(--color-on-accent); background: var(--color-primary); border-color: var(--color-primary); }
+.editorial-heading-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-24); }
+.editorial-heading-row > .product-status { flex-shrink: 0; }
+.product-search.ant-input-affix-wrapper { width: var(--rhythm-searchWidth); max-width: 100%; flex: 0 1 var(--rhythm-searchWidth); min-height: var(--control-normal); }
+.product-search.ant-input-affix-wrapper input { margin: 0; min-height: 0; }
+.product-search .ant-input-prefix { color: var(--color-secondary); margin-inline-end: var(--space-8); }
+/* 平级内容和步骤入口保留原导航行为，选中使用下划线，不抢占实心主操作层级。 */
+[data-product=jiejian] .product-view-tabs { display: flex; flex-wrap: wrap; gap: var(--space-24); padding: 0; border: 0; border-bottom: var(--line-width) solid var(--color-border); }
+[data-product=jiejian] .product-view-tabs > .ant-btn { padding: var(--space-12) 0; height: auto; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--color-secondary); box-shadow: none; }
+[data-product=jiejian] .product-view-tabs > .ant-btn:not(:disabled):hover { color: var(--color-primary-ink); background: transparent; }
+[data-product=jiejian] .product-view-tabs > .ant-btn[aria-pressed=true] { color: var(--color-text); font-weight: 600; border-bottom-color: var(--color-primary); }
+[data-product=jiejian] .product-view-tabs > .ant-btn:disabled { color: var(--color-disabled); }
+@media(max-width:600px) {
+  .product-search.ant-input-affix-wrapper { width: 100%; flex-basis: 100%; min-height: var(--control-large); }
+  .editorial-heading-row { flex-wrap: wrap; gap: var(--space-8); }
+  [data-product=jiejian] .ant-btn:not(.ant-btn-sm) { min-height: var(--control-large); }
+}

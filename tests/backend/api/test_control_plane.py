@@ -154,7 +154,7 @@ def test_ready_does_not_wait_for_blocked_local_maintenance(tmp_path: Path) -> No
             "schema_version": "1",
             "status": "ready",
             "worker": "stopped",
-            "worker_capabilities": ["CHECK", "RECORDING"],
+            "worker_capabilities": ["CHECK", "PROOF_PREFLIGHT", "RECORDING"],
             "check": "available",
             "recovered_jobs": 0,
         }

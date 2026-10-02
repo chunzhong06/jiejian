@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "RuntimeFile": {
+      "additionalProperties": false,
+      "properties": {
+        "relative_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Relative Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "maximum": 33554432,
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "relative_path",
+        "sha256",
+        "size"
+      ],
+      "title": "RuntimeFile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "entry": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Entry",
+      "type": "string"
+    },
+    "executor_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Executor Fingerprint",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/RuntimeFile"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    },
+    "instance_id": {
+      "pattern": "^rti_[0-9a-f]{32}$",
+      "title": "Instance Id",
+      "type": "string"
+    },
+    "interpreter_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Interpreter Fingerprint",
+      "type": "string"
+    },
+    "mode": {
+      "const": "CONTROLLED_NODE_ESM",
+      "default": "CONTROLLED_NODE_ESM",
+      "title": "Mode",
+      "type": "string"
+    },
+    "port": {
+      "maximum": 65535,
+      "minimum": 1024,
+      "title": "Port",
+      "type": "integer"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "instance_id",
+    "project_id",
+    "entry",
+    "port",
+    "files",
+    "source_fingerprint",
+    "interpreter_fingerprint",
+    "executor_fingerprint"
+  ],
+  "title": "NodeRuntimeManifest",
+  "type": "object"
+}

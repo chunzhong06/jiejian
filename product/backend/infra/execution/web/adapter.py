@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import html.parser
+import hashlib
+import secrets
 import json
 import ipaddress
 import re
@@ -70,6 +72,8 @@ class HttpResponse:
     headers: Mapping[str, str] = field(default_factory=dict)
     body: bytes = b""
     url: str = ""
+    request_nonce: str = ""
+    request_digest: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,6 +341,10 @@ class HttpExecutionAdapter:
         if identity_runtime is not None and not bootstrap_request and auth_scope is None:
             request_headers.update(identity_runtime.headers_for_request(origin=self.guard.scope.base_url))
         request_headers.update(rendered_headers)
+        # 独立随机标记由执行器生成；配置与目标响应均不能替换，用于核对记录宿主的整次请求边界。
+        request_headers = {key:value for key,value in request_headers.items() if key.lower() != 'x-jiejian-request-nonce'}
+        request_nonce = secrets.token_hex(32)
+        request_headers['X-Jiejian-Request-Nonce'] = request_nonce
         if test_mode:
             request_headers["X-Jiejian-Test-Mode"] = "1"
         request_kwargs = _render_body(body, json_body=json_body, data=data, slot_values=slot_values or {}, fixture_artifacts=self.fixture_artifacts)
@@ -374,6 +382,8 @@ class HttpExecutionAdapter:
                     headers={key.lower(): value for key, value in response.headers.items()},
                     body=safe_content,
                     url=target.url,
+                    request_nonce=request_nonce,
+                    request_digest=hashlib.sha256(method.upper().encode('ascii') + b'\n' + response.request.url.raw_path).hexdigest(),
                 )
         except httpx.TimeoutException as exc:
             raise JiejianError(ErrorCode.EXEC_TIMEOUT, "目标请求超时") from exc

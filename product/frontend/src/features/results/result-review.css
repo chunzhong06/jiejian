@@ -1,11 +1,25 @@
-/* R3：总览只展示结论和逐项结果；单项事实、路径与证据共享一块调查工作面。 */
+/* 总览只展示结论和逐项结果；来源按阶段折叠，采集缺口与安全结论分开呈现。 */
+.result-observation-sources{border-top:1px solid var(--color-border);padding-top:var(--space-24);}
+.result-observation-sources>p,.result-observation-source{font-size:var(--font-secondary);}
+.result-observation-source{padding:var(--space-20) 0;border-bottom:1px solid var(--color-border);}
+.result-observation-heading{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-12);}
+.result-observation-heading h4{margin:0;font-size:var(--font-body);font-weight:600;}
+.result-observation-heading>span:not(.product-status){color:var(--color-secondary);font-size:var(--font-label);}
+.result-observation-source>p{margin:var(--space-8) 0;color:var(--color-secondary);}
+.result-observation-source>.result-observation-gap{color:var(--color-warning);font-size:var(--font-label);}
+.result-observation-stages summary{cursor:pointer;color:var(--color-primary);width:fit-content;padding-block:var(--space-4);}
+.result-observation-stages summary:hover{text-decoration:underline;text-underline-offset:3px;}
+.result-observation-stages summary:focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;}
+.result-observation-stages ol{list-style:none;margin:var(--space-12) 0 0;padding:0;border-left:2px solid var(--color-border);}
+.result-observation-stages li{display:grid;grid-template-columns:72px minmax(0,1fr) auto;align-items:start;gap:var(--space-16);padding:var(--space-12) var(--space-16);}
+.result-observation-phase{color:var(--color-secondary);font-size:var(--font-label);line-height:1.8;}
+.result-observation-stages li strong{font-weight:500;line-height:1.8;}
+.result-observation-stages li p{margin:var(--space-4) 0 0;font-size:var(--font-label);color:var(--color-secondary);overflow-wrap:anywhere;}
+.result-observation-stages li .ant-btn{padding:0;height:auto;line-height:1.8;}
+@media(max-width:600px){.result-observation-stages li{grid-template-columns:minmax(0,1fr) auto;gap:var(--space-8);}.result-observation-phase{grid-column:1/-1;}.result-observation-stages li>div{min-width:0;}}
 .result-overview-header{border:1px solid var(--color-border);border-radius:var(--radius-large);background:var(--color-surface);padding:var(--space-24) var(--space-32) 0;box-shadow:var(--shadow-focus);min-width:0;}
 .result-location{display:flex;align-items:center;gap:var(--space-12);color:var(--color-secondary);font-size:var(--font-label);}
 .result-location .ant-btn{padding:0;font-size:inherit;height:auto;}
-.result-badge{display:inline-flex;align-items:center;gap:var(--space-8);font-size:var(--font-label);font-weight:600;padding:var(--space-4) var(--space-8);border-radius:var(--radius-small);line-height:1.6;color:var(--color-secondary);background:var(--color-surface-subtle);}
-.result-badge.is-pass{color:var(--color-safe);background:color-mix(in srgb,var(--color-safe-mark) 10%,var(--color-surface));}
-.result-badge.is-block{color:var(--color-danger);background:color-mix(in srgb,var(--color-danger-mark) 10%,var(--color-surface));}
-.result-badge.is-unknown{color:var(--color-warning);background:color-mix(in srgb,var(--color-warning-mark) 10%,var(--color-surface));}
 .result-overview-status{display:flex;align-items:center;gap:var(--space-12);font-size:var(--font-label);color:var(--color-secondary);margin-bottom:var(--space-12);}
 .result-overview-title{display:flex;align-items:center;justify-content:space-between;gap:var(--space-24);}
 .result-overview-title>div{min-width:0;}.result-overview-title>.ant-btn{flex-shrink:0;}

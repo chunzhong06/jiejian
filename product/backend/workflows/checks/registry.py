@@ -95,6 +95,7 @@ class CheckRuntimeRegistry:
     def __init__(self):
         self._lock = RLock()
         self._snapshots = {}
+        self.persistent_reader = None
 
     def register(self, snapshot: CheckRuntimeRegistration, *, expected_fingerprint: str | None = None):
         snapshot = CheckRuntimeRegistration.model_validate_json(snapshot.model_dump_json(), strict=True)
@@ -109,7 +110,9 @@ class CheckRuntimeRegistry:
 
     def snapshot(self, project_id: str) -> CheckRuntimeRegistration | None:
         with self._lock:
-            return self._snapshots.get(project_id)
+            registered = self._snapshots.get(project_id)
+        # 官方注册与普通持久来源由明确项目所有者分流，不合并冲突配置或互相兜底。
+        return registered if registered is not None or self.persistent_reader is None else self.persistent_reader(project_id)
 
     def unregister(self, project_id: str) -> None:
         with self._lock:

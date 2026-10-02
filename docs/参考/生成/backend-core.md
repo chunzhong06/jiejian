@@ -80,6 +80,16 @@
 - `class BoundaryProposalDecision`
 主要 import / dot-source：`__future__`, `enum`, `product.backend.core.boundaries.entities`, `product.backend.core.boundaries.permissions`, `product.backend.core.boundaries.semantics`, `product.backend.core.identifiers`, `pydantic`, `re`, `typing`
 
+### `product/backend/core/boundaries/rule_candidates.py`
+- `CANDIDATE_ID_PATTERN`
+- `BASIS_ID_PATTERN`
+- `OPERATION_ID_PATTERN`
+- `class RuleExample`
+- `class RuleCandidateContent`
+- `class RuleCandidateRevision`
+- `class RuleCandidateSave`
+主要 import / dot-source：`__future__`, `product.backend.core.boundaries.entities`, `product.backend.core.boundaries.proposals`, `product.backend.core.identifiers`, `pydantic`, `typing`
+
 ### `product/backend/core/boundaries/semantics.py`
 - `class PermissionExpectation`
 - `class BusinessEffectKind`
@@ -165,7 +175,8 @@
 - `class DevelopmentDelivery`
 - `class DevelopmentReceipt`
 - `class RuntimeActivationReceipt`
-主要 import / dot-source：`__future__`, `product.protocols.execution_v3`, `product.protocols.runtime_identity`, `pydantic`, `typing`
+- `class NodeRuntimeActivationReceipt`
+主要 import / dot-source：`__future__`, `product.protocols.execution_v3`, `product.protocols.node_runtime`, `product.protocols.runtime_identity`, `pydantic`, `typing`
 
 ### `product/backend/core/errors.py`
 - `class ErrorCode`

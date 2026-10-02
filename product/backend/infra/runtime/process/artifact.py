@@ -9,6 +9,7 @@ from product.protocols.runtime_identity import (
     MAX_ARTIFACT_BYTES, MAX_MANIFEST_BYTES, RuntimeFile, RuntimeLaunchManifest,
     runtime_source_fingerprint,
 )
+from product.protocols.node_runtime import NodeRuntimeManifest
 
 
 def _regular_file(root: Path, relative: str) -> Path:
@@ -40,6 +41,17 @@ def create_runtime_artifact(
     manifest = RuntimeLaunchManifest(instance_id="rti_" + uuid4().hex, entry_module=entry_module,
         files=files, source_fingerprint=runtime_source_fingerprint(files),
         dependency_files=dependency_files, interpreter_fingerprint=interpreter_fingerprint)
+    return _write_runtime_artifact(source_root, artifact_store, manifest), manifest
+
+
+def create_node_runtime_artifact(source_root: Path, artifact_store: Path, *, manifest: NodeRuntimeManifest) -> Path:
+    """保存已经由受控加载命令冻结的 Node 清单；此处只复制文件，不启动解释器。"""
+    return _write_runtime_artifact(source_root, artifact_store, manifest)
+
+
+def _write_runtime_artifact(source_root: Path, artifact_store: Path, manifest: RuntimeLaunchManifest | NodeRuntimeManifest) -> Path:
+    if source_root.is_symlink() or source_root.is_junction() or not source_root.is_dir():
+        raise ValueError("runtime source root must be a regular directory")
     root = artifact_store / manifest.instance_id
     root.mkdir(parents=True, exist_ok=False)
     copied = root / "source"
@@ -60,10 +72,10 @@ def create_runtime_artifact(
     # 清单最后创建；中途失败不能留下看似完整的启动输入。
     with (root / "launch.json").open("xb") as stream:
         stream.write(encoded)
-    return root, manifest
+    return root
 
 
-def verify_runtime_artifact(source_root: Path, manifest: RuntimeLaunchManifest) -> None:
+def verify_runtime_artifact(source_root: Path, manifest: RuntimeLaunchManifest | NodeRuntimeManifest) -> None:
     """启动前及检查边界复核全部文件；多出文件同样意味着副本已漂移。"""
     if source_root.is_symlink() or source_root.is_junction() or not source_root.is_dir():
         raise ValueError("runtime artifact root unavailable")

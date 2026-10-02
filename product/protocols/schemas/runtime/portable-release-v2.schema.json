@@ -1,0 +1,81 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "architecture": {
+      "const": "x64",
+      "default": "x64",
+      "title": "Architecture",
+      "type": "string"
+    },
+    "chromium_revision": {
+      "pattern": "^\\d+$",
+      "title": "Chromium Revision",
+      "type": "string"
+    },
+    "node_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Node Sha256",
+      "type": "string"
+    },
+    "node_version": {
+      "pattern": "^24\\.\\d+\\.\\d+$",
+      "title": "Node Version",
+      "type": "string"
+    },
+    "package_version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Package Version",
+      "type": "string"
+    },
+    "platform": {
+      "const": "windows",
+      "default": "windows",
+      "title": "Platform",
+      "type": "string"
+    },
+    "playwright_version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Playwright Version",
+      "type": "string"
+    },
+    "product": {
+      "const": "JieJian Web V1",
+      "default": "JieJian Web V1",
+      "title": "Product",
+      "type": "string"
+    },
+    "python_version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Python Version",
+      "type": "string"
+    },
+    "runtime_layout_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Runtime Layout Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2",
+      "default": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "package_version",
+    "python_version",
+    "playwright_version",
+    "chromium_revision",
+    "node_version",
+    "node_sha256"
+  ],
+  "title": "PortableReleaseManifest",
+  "type": "object"
+}

@@ -51,7 +51,7 @@ describe('NotificationCenter', () => {
     const floating=within(screen.getByRole('complementary',{name:'全局通知'}))
     expect(floating.getByRole('region',{name:'检查动态'})).toBeInTheDocument()
     fireEvent.click(floating.getByRole('button',{name:'查看结果'}));expect(onView).toHaveBeenCalledOnce()
-    fireEvent.click(floating.getByRole('button',{name:'关闭检查完成提示'}));expect(onDismiss).toHaveBeenCalledOnce()
+    fireEvent.click(floating.getByRole('button',{name:'关闭检查提示'}));expect(onDismiss).toHaveBeenCalledOnce()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 

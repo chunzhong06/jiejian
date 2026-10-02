@@ -1,0 +1,570 @@
+{
+  "$defs": {
+    "BusinessActionOperationKind": {
+      "enum": [
+        "READ",
+        "CHANGE",
+        "DELETE",
+        "EXPORT",
+        "ADMIN",
+        "CUSTOM"
+      ],
+      "title": "BusinessActionOperationKind",
+      "type": "string"
+    },
+    "BusinessEffectKind": {
+      "enum": [
+        "STATE_MUTATION",
+        "DATA_DISCLOSURE",
+        "OBJECT_CREATION",
+        "EXTERNAL_DISPATCH",
+        "RESTRICTED_FUNCTION_INVOCATION",
+        "CREDENTIAL_ACCESS"
+      ],
+      "title": "BusinessEffectKind",
+      "type": "string"
+    },
+    "BusinessRevisionState": {
+      "enum": [
+        "ACTIVE",
+        "RETIRED"
+      ],
+      "title": "BusinessRevisionState",
+      "type": "string"
+    },
+    "PermissionExpectation": {
+      "enum": [
+        "ALLOW",
+        "DENY"
+      ],
+      "title": "PermissionExpectation",
+      "type": "string"
+    },
+    "PermissionIntentEffectiveState": {
+      "enum": [
+        "ACTIVE",
+        "RETIRED"
+      ],
+      "title": "PermissionIntentEffectiveState",
+      "type": "string"
+    },
+    "PermissionIntentRelation": {
+      "enum": [
+        "OWNS",
+        "SAME_ROLE_OTHER_ACCOUNT",
+        "OTHER_ROLE"
+      ],
+      "title": "PermissionIntentRelation",
+      "type": "string"
+    },
+    "ProposalWriteMode": {
+      "enum": [
+        "CREATE",
+        "REFERENCE",
+        "APPEND_REVISION"
+      ],
+      "title": "ProposalWriteMode",
+      "type": "string"
+    },
+    "ProposedActionItem": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "anyOf": [
+            {
+              "pattern": "^bac_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Id"
+        },
+        "description": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "effect_catalog": {
+          "items": {
+            "$ref": "#/$defs/ProposedEffectItem"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Effect Catalog",
+          "type": "array"
+        },
+        "effective_state": {
+          "$ref": "#/$defs/BusinessRevisionState"
+        },
+        "expected_current_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Current Revision"
+        },
+        "item_id": {
+          "pattern": "^pactn_[0-9a-f]{16}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "operation_kind": {
+          "$ref": "#/$defs/BusinessActionOperationKind"
+        },
+        "primary_resource_concept": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Primary Resource Concept",
+          "type": "string"
+        },
+        "source_candidate_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Source Candidate Ids",
+          "type": "array"
+        },
+        "state_changing": {
+          "title": "State Changing",
+          "type": "boolean"
+        },
+        "write_mode": {
+          "$ref": "#/$defs/ProposalWriteMode"
+        }
+      },
+      "required": [
+        "write_mode",
+        "item_id",
+        "display_name",
+        "description",
+        "primary_resource_concept",
+        "operation_kind",
+        "state_changing",
+        "effect_catalog",
+        "effective_state"
+      ],
+      "title": "ProposedActionItem",
+      "type": "object"
+    },
+    "ProposedActorItem": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "anyOf": [
+            {
+              "pattern": "^bar_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Id"
+        },
+        "description": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "effective_state": {
+          "$ref": "#/$defs/BusinessRevisionState"
+        },
+        "expected_current_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Current Revision"
+        },
+        "item_id": {
+          "pattern": "^pactr_[0-9a-f]{16}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "source_candidate_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Source Candidate Ids",
+          "type": "array"
+        },
+        "write_mode": {
+          "$ref": "#/$defs/ProposalWriteMode"
+        }
+      },
+      "required": [
+        "write_mode",
+        "item_id",
+        "display_name",
+        "description",
+        "effective_state"
+      ],
+      "title": "ProposedActorItem",
+      "type": "object"
+    },
+    "ProposedEffectItem": {
+      "additionalProperties": false,
+      "properties": {
+        "business_label": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Business Label",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "effect_id": {
+          "anyOf": [
+            {
+              "pattern": "^bef_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Id"
+        },
+        "effect_kind": {
+          "$ref": "#/$defs/BusinessEffectKind"
+        },
+        "expected_state": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected State"
+        },
+        "item_id": {
+          "pattern": "^peff_[0-9a-f]{16}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "protected_projection": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Projection",
+          "type": "array"
+        },
+        "resource_concept": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Resource Concept",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "business_label",
+        "effect_kind",
+        "resource_concept",
+        "description"
+      ],
+      "title": "ProposedEffectItem",
+      "type": "object"
+    },
+    "ProposedPermissionItem": {
+      "additionalProperties": false,
+      "properties": {
+        "business_action_item_id": {
+          "pattern": "^pactn_[0-9a-f]{16}$",
+          "title": "Business Action Item Id",
+          "type": "string"
+        },
+        "effective_state": {
+          "$ref": "#/$defs/PermissionIntentEffectiveState"
+        },
+        "expectation": {
+          "$ref": "#/$defs/PermissionExpectation"
+        },
+        "expected_current_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Current Revision"
+        },
+        "intent_id": {
+          "anyOf": [
+            {
+              "pattern": "^pin_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intent Id"
+        },
+        "item_id": {
+          "pattern": "^pperm_[0-9a-f]{16}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "protected_effect_item_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Protected Effect Item Ids",
+          "type": "array"
+        },
+        "relation": {
+          "$ref": "#/$defs/PermissionIntentRelation"
+        },
+        "resource_owner_actor_item_id": {
+          "pattern": "^pactr_[0-9a-f]{16}$",
+          "title": "Resource Owner Actor Item Id",
+          "type": "string"
+        },
+        "subject_actor_item_id": {
+          "pattern": "^pactr_[0-9a-f]{16}$",
+          "title": "Subject Actor Item Id",
+          "type": "string"
+        },
+        "write_mode": {
+          "$ref": "#/$defs/ProposalWriteMode"
+        }
+      },
+      "required": [
+        "item_id",
+        "write_mode",
+        "effective_state",
+        "subject_actor_item_id",
+        "business_action_item_id",
+        "resource_owner_actor_item_id",
+        "relation",
+        "expectation",
+        "protected_effect_item_ids"
+      ],
+      "title": "ProposedPermissionItem",
+      "type": "object"
+    },
+    "RuleCandidateContent": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedActionItem"
+          },
+          "maxItems": 10,
+          "title": "Actions",
+          "type": "array"
+        },
+        "actors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedActorItem"
+          },
+          "maxItems": 20,
+          "title": "Actors",
+          "type": "array"
+        },
+        "examples": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuleExample"
+          },
+          "maxItems": 20,
+          "title": "Examples",
+          "type": "array"
+        },
+        "original_text": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Original Text",
+          "type": "string"
+        },
+        "permissions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProposedPermissionItem"
+          },
+          "maxItems": 10,
+          "title": "Permissions",
+          "type": "array"
+        },
+        "unresolved_questions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Unresolved Questions",
+          "type": "array"
+        },
+        "unsupported_constraints": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Unsupported Constraints",
+          "type": "array"
+        }
+      },
+      "required": [
+        "original_text"
+      ],
+      "title": "RuleCandidateContent",
+      "type": "object"
+    },
+    "RuleExample": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "permission_item_id": {
+          "anyOf": [
+            {
+              "pattern": "^pperm_[0-9a-f]{16}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Permission Item Id"
+        },
+        "uncovered_reason": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncovered Reason"
+        }
+      },
+      "required": [
+        "description"
+      ],
+      "title": "RuleExample",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "basis_id": {
+      "pattern": "^rb_[0-9a-f]{64}$",
+      "title": "Basis Id",
+      "type": "string"
+    },
+    "candidate_id": {
+      "pattern": "^rcd_[0-9a-f]{32}$",
+      "title": "Candidate Id",
+      "type": "string"
+    },
+    "content": {
+      "$ref": "#/$defs/RuleCandidateContent"
+    },
+    "created_at_us": {
+      "minimum": 0,
+      "title": "Created At Us",
+      "type": "integer"
+    },
+    "project_id": {
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "submitted_via": {
+      "enum": [
+        "MCP",
+        "LOCAL_GUI"
+      ],
+      "title": "Submitted Via",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "candidate_id",
+    "revision",
+    "basis_id",
+    "content",
+    "submitted_via",
+    "created_at_us"
+  ],
+  "title": "RuleCandidateRevision",
+  "type": "object"
+}

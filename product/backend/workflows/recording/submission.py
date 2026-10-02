@@ -452,6 +452,15 @@ class RecordingSubmission:
                 existing.preparation_source_fingerprint,
             ):
                 raise JiejianError(ErrorCode.RECORD_PROTOCOL_INVALID, "录制请求与持久来源不一致")
+            templates = ()
+            try:
+                action, _, understanding = require_recording_source(work, request)
+                binding = work.business_boundaries.action_binding(action.action_id, action.revision)
+                templates = tuple(candidate.canonical_key for candidate in understanding.action_candidates
+                    if candidate.candidate_id in binding.action_candidate_ids and not candidate.stale)
+            except JiejianError:
+                # 已录制事实仍进入待审；过期来源不能给草稿提供新的自动资源依据。
+                pass
             draft = self._processor.build(
                 recording_id=result.recording_id,
                 flow_id=existing.flow_id,
@@ -464,6 +473,7 @@ class RecordingSubmission:
                 effect_id=request.effect_id,
                 events=result.events,
                 known_secrets=known_secrets,
+                action_path_templates=templates,
             )
             pending = transition_recording_state(
                 persisted.to_domain(),

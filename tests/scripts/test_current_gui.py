@@ -4,9 +4,9 @@ from urllib.parse import urlencode
 
 import pytest
 
-from scripts.dev.sample_test.current_gui import CurrentGui
-from scripts.dev.sample_test import current_api
-from scripts.dev.sample_test.harness.state import SampleTestError
+from tests.acceptance.sample_test.current_gui import CurrentGui
+from tests.acceptance.sample_test import current_api
+from tests.acceptance.sample_test.harness.state import SampleTestError
 
 
 class Node:
@@ -214,7 +214,7 @@ def result_payload():
 def test_problem_decisive_evidence_is_opened_within_two_actions_and_gets_checked(tmp_path):
     gui, page, client = context(tmp_path)
     for ref in ("ev-one", "ev-two"):
-        page.reply("查看必要证明记录 →", "GET", f"/api/runs/run-original/evidence/{ref}", {"run_id": "run-original", "evidence_id": ref, "action_id": "action-original", "case": {"case_id": "case-original"}})
+        page.reply("查看必要证明记录", "GET", f"/api/runs/run-original/evidence/{ref}", {"run_id": "run-original", "evidence_id": ref, "action_id": "action-original", "case": {"case_id": "case-original"}})
     gui._decisive_evidence(result_payload())
     record = next(item for item in gui.records if item["event"] == "decisive-evidence")
     assert record["open_operations"] == 2 and record["evidence_refs"] == ["ev-one", "ev-two"]
@@ -231,7 +231,7 @@ def test_problem_evidence_failure_cannot_claim_checkpoint_passed(tmp_path, fault
     if fault == "missing_source": payload["story"]["actions"][0]["proof_coverage"] = []
     else:
         for ref in ("ev-one", "ev-two"):
-            page.reply("查看必要证明记录 →", "GET", f"/api/runs/run-original/evidence/{ref}", {"run_id": "other", "evidence_id": ref})
+            page.reply("查看必要证明记录", "GET", f"/api/runs/run-original/evidence/{ref}", {"run_id": "other", "evidence_id": ref})
     with pytest.raises(SampleTestError, match="GUI_DECISIVE_EVIDENCE"):
         gui.checkpoint("problem-result", payload)
     assert gui.records == []

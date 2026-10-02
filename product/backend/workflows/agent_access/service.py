@@ -114,6 +114,8 @@ class MCPAccessController:
         self._last_auth_failure_at_us: int | None = None
         self._last_auth_succeeded: bool | None = None
         self._lock = RLock()
+        self._execution_authorities: dict[str, str] = {}
+        self.on_authority_changed = lambda: None
 
     def view(self) -> MCPAccessView:
         with self._lock:
@@ -189,7 +191,23 @@ class MCPAccessController:
                 self._grants.pop(project_id, None)
             else:
                 self._grants[project_id] = level
+            # 每次明确调整授权都产生新代次；先撤再授也不能复活旧预检查。
+            from uuid import uuid4
+            self._execution_authorities[project_id] = 'mcp_' + uuid4().hex
+            self.on_authority_changed()
             return self._view_locked()
+
+    def execution_authority(self, project_id: str) -> str:
+        with self._lock:
+            if not self._accepting_connections or self._grants.get(project_id) is not MCPAccessLevel.EXECUTE:
+                raise JiejianError(ErrorCode.MCP_PERMISSION_REQUIRED, "当前应用尚未授予执行权限")
+            return self._execution_authorities[project_id]
+
+    def execution_authority_active(self, project_id: str, authority_id: str) -> bool:
+        with self._lock:
+            return (self._accepting_connections and self._token is not None
+                and self._grants.get(project_id) is MCPAccessLevel.EXECUTE
+                and self._execution_authorities.get(project_id) == authority_id)
 
     def level_for(self, project_id: str) -> MCPAccessLevel:
         with self._lock:
@@ -298,6 +316,8 @@ class MCPAccessController:
 
     def _clear_session_locked(self) -> None:
         self._grants.clear()
+        self._execution_authorities.clear()
+        self.on_authority_changed()
         self._client_name = None
         self._client_version = None
         self._last_seen_at_us = None

@@ -173,7 +173,10 @@ export function CurrentTestsPage(props: ComponentProps<typeof PreparationPage> &
   const showMaterials = () => { setMaterials(true); setSelected(undefined); navigateCheck('/tests?materials=1') }
   // 显式切换准备任务只重置页面局部模式；同一任务刷新继续保留当前输入和服务端材料。
   if (materials) return <PreparationPage key={`${project.project_id}:${requestedTaskId ?? "materials"}`} {...props} onNavigate={(path) => {
-    if (path.split('?')[0] === '/tests' && !new URLSearchParams(path.split('?')[1]).has('task_id')) { setMaterials(false); void refresh() }
+    if (path.split('?')[0] === '/tests' && !new URLSearchParams(path.split('?')[1]).has('task_id')) {
+      const keepMaterials = new URLSearchParams(path.split('?')[1]).get('materials') === '1'
+      setMaterials(keepMaterials); if (!keepMaterials) void refresh()
+    }
     navigateCheck(path)
   }} />
   const running = runs.find(active)
