@@ -31,6 +31,10 @@
 - `human_lines(report) -> tuple[str, ...]`
 主要 import / dot-source：`__future__`, `importlib.metadata`, `ipaddress`, `json`, `os`, `pathlib`, `product.backend.core.errors`, `product.backend.core.redaction`, `product.backend.infra.runtime.logging`, `product.backend.infra.runtime.process.identity`, `product.backend.infra.runtime.settings`, `pydantic`, `shutil`, `socket`, `sqlite3`, `subprocess`, `sys`, `tempfile`, `typing`
 
+### `product/backend/infra/runtime/frontend_assets.py`
+- `frontend_asset_identity(directory) -> dict`
+主要 import / dot-source：`hashlib`, `json`, `pathlib`, `product.protocols.frontend_assets`, `pydantic`
+
 ### `product/backend/infra/runtime/jobs/attempts.py`
 - `_TERMINAL_JOB_STATES`
 - `class JobAttempts`

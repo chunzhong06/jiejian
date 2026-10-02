@@ -248,7 +248,7 @@ def build_mcp_control(
             "READ读取批准权限和既有事实；PREPARE可在原客户端完成修改后登记源码变化。"
             "用户要求保留权限约定时，先 rule_context 获取当前基线、支持范围和 candidate_input_schema，再 rule_candidate_save 保存有界原文、结构化建议和具体例子。"
             "候选不等于正式规则；通过返回的 GUI 链接由用户审阅批准，随后 rule_candidate_show 回读。保存响应不明确时仅 rule_operation 查询原操作键，不换键重试。不得上传凭据或整个会话。"
-            "权限确认后读取 preparation_context 的复用材料与 source_input_schema；proof_source_save 只保存来源候选。"
+            "权限确认后读取 preparation_context 的guidance、复用材料与source_input_schema；next_step指向当前精确任务。按handler区分人的确认、Agent配置与系统等待；建议不是执行授权，写入前重新读取依据。proof_source_save只保存来源候选。"
             "读取范围必须由用户在GUI确认，EXECUTE才可 proof_preflight_start；通过 status 读取具体缺口，修正配置形成新修订。"
             "预检查不作安全判断；adoption_preview 仅返回影响与GUI采用入口，Agent不得采用或扩大授权。写回执未知仅 preparation_receipt 查询原键。"
             "先读取 business_boundary 沿用已批准权限；开发需求继续在原客户端沟通。旧 task 工具保留给明确使用任务上下文的兼容流程，不作为日常登记前置。"

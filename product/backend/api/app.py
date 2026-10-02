@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.staticfiles import StaticFiles
+from product.backend.api.frontend import ProductStaticFiles
 from pydantic import ValidationError
 
 from product.backend import __version__
@@ -177,7 +177,7 @@ def create_app(
     if app.state.frontend_dir is not None and app.state.frontend_dir.is_dir():
         app.mount(
             "/",
-            StaticFiles(directory=app.state.frontend_dir, html=True),
+            ProductStaticFiles(directory=app.state.frontend_dir, html=True),
             name="frontend",
         )
 

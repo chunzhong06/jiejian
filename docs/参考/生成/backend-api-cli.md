@@ -11,7 +11,7 @@
 
 ### `product/backend/api/app.py`
 - `create_app(var_dir, control_origin, control_session_token, frontend_dir, start_worker, llm_transport, llm_secret_store, secret_store, environ, clock_us, folder_selector, shutdown_callback, official_sample_root) -> FastAPI`
-主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `fastapi.staticfiles`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.business_boundaries`, `product.backend.api.routers.checks`, `product.backend.api.routers.development`, `product.backend.api.routers.experience`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_drafts`, `product.backend.api.routers.preparation`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.source_changes`, `product.backend.api.routers.supplemental_materials`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.api.routers.workspace`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.workflows.agent_access.service`, `pydantic`, `time`, `uuid`
+主要 import / dot-source：`__future__`, `asyncio`, `fastapi`, `fastapi.exceptions`, `logging`, `pathlib`, `product.backend`, `product.backend.api.errors`, `product.backend.api.frontend`, `product.backend.api.local_control`, `product.backend.api.mcp`, `product.backend.api.routers.assistant`, `product.backend.api.routers.business_boundaries`, `product.backend.api.routers.checks`, `product.backend.api.routers.development`, `product.backend.api.routers.experience`, `product.backend.api.routers.llm`, `product.backend.api.routers.mcp_access`, `product.backend.api.routers.onboarding`, `product.backend.api.routers.permission_drafts`, `product.backend.api.routers.preparation`, `product.backend.api.routers.projects`, `product.backend.api.routers.recordings`, `product.backend.api.routers.results`, `product.backend.api.routers.runs`, `product.backend.api.routers.source_changes`, `product.backend.api.routers.supplemental_materials`, `product.backend.api.routers.system`, `product.backend.api.routers.test_identities`, `product.backend.api.routers.workspace`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.workflows.agent_access.service`, `pydantic`, `time`, `uuid`
 
 ### `product/backend/api/envelope.py`
 - `class ApiModel`
@@ -24,6 +24,10 @@
 - `request_validation_error_handler(request, exc) -> JSONResponse`
 - `validation_error_handler(request, exc) -> JSONResponse`
 主要 import / dot-source：`__future__`, `fastapi`, `fastapi.exceptions`, `fastapi.responses`, `product.backend.core.errors`, `pydantic`
+
+### `product/backend/api/frontend.py`
+- `class ProductStaticFiles`
+主要 import / dot-source：`fastapi.staticfiles`, `re`
 
 ### `product/backend/api/local_control.py`
 - `class LocalControlDecision`
@@ -191,7 +195,7 @@
 - `class HealthResponse`
 - `class ReadyResponse`
 - `class MaintenanceOperationRequest`
-主要 import / dot-source：`__future__`, `fastapi`, `fastapi.responses`, `product.backend`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.storage`, `typing`
+主要 import / dot-source：`__future__`, `fastapi`, `fastapi.responses`, `product.backend`, `product.backend.api.envelope`, `product.backend.composition`, `product.backend.core.errors`, `product.backend.infra.runtime.diagnostics`, `product.backend.infra.runtime.frontend_assets`, `product.backend.infra.storage`, `typing`
 
 ### `product/backend/api/routers/test_identities.py`
 - `class TestIdentityCreateRequest`

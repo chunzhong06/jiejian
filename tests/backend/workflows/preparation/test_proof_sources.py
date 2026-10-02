@@ -17,10 +17,14 @@ def test_candidate_preflight_adoption_and_revocation_use_production_jobs(tmp_pat
         saved = service.save(project,save)
         assert service.save(project,save)==saved
         source = saved['result']['source_id']
+        advice = core.preparation_guidance.context(project)['guidance']
+        assert advice['sources'][0]['next_action']['kind'] == 'CONFIRM_READ_SCOPE'
+        assert any(item['kind']=='execution' and item['status']=='SATISFIED' for item in advice['materials'])
         common = dict(source_id=source,revision=1,basis_id=basis)
         with pytest.raises(JiejianError,match='读取范围'):
             service.start(project,StartProofPreflight(operation_id=uuid4().hex,**common))
         scope = service.grant_scope(project,GrantProofScope(operation_id=uuid4().hex,confirmed=True,**common))
+        assert core.preparation_guidance.context(project)['guidance']['sources'][0]['next_action']['kind']=='RUN_PREFLIGHT'
         request = StartProofPreflight(operation_id=uuid4().hex,**common)
         started = service.start(project,request)
         assert service.start(project,request)==started
@@ -37,6 +41,7 @@ def test_candidate_preflight_adoption_and_revocation_use_production_jobs(tmp_pat
             service.jobs.publish(report.model_copy(update={'checks':report.checks[:1]}))
         assert service.status(project,preflight)==result
         assert service.show(project,source)['adopted'] is False
+        assert core.preparation_guidance.context(project)['guidance']['sources'][0]['next_action']['kind']=='REVIEW_ADOPTION'
         with core.uow_factory() as work:
             assert work.action_preparation.evidence(harness.action.action_id,1,harness.effect_id) is None
         preview = service.adoption_preview(project,source,preflight)
@@ -44,6 +49,7 @@ def test_candidate_preflight_adoption_and_revocation_use_production_jobs(tmp_pat
             source_id=source,revision=1,preflight_id=preflight,confirmed=True)
         adopted = service.adopt(project,adoption_command)
         assert adopted['result']['state']=='ADOPTED'
+        assert core.preparation_guidance.context(project)['guidance']['sources'][0]['state']=='USABLE'
         assert len(service.active_sources(project))==1
         assert core.check_registry.snapshot(project).proofs[0].reference.descriptor_id==source
         # 模拟写入已完成但前端未收到响应：回读原键和同键重试都不产生第二份采用。

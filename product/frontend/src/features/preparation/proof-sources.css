@@ -37,3 +37,9 @@
 .rule-detail-proof,.rule-detail-results { margin-block:var(--space-32); }
 .rule-detail-proof h2,.rule-detail-results h2,.proof-checks h2 { font-size:var(--font-section); }
 @media(max-width:700px) { .rule-detail-axes { grid-template-columns:minmax(0,1fr); }.rule-detail-axes>div+div { border-top:1px solid var(--color-border); padding-top:var(--space-16); } }
+.proof-next-advice { display: flex; align-items: center; justify-content: space-between; gap: var(--space-24); padding: var(--space-24); margin-bottom: var(--space-24); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-large); }
+.proof-next-advice h2 { margin: var(--space-8) 0; font-size: var(--font-section); }
+.proof-next-advice p { margin-bottom: 0; color: var(--color-secondary); }
+.proof-next-advice .editorial-eyebrow { margin-top: 0; }
+.proof-next-advice .ant-btn { flex-shrink: 0; }
+@media(max-width:600px) { .proof-next-advice { align-items: start; flex-direction: column; padding: var(--space-16); } }

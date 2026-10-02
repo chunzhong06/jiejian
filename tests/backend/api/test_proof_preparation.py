@@ -36,5 +36,11 @@ def test_empty_project_preparation_context_is_read_only(tmp_path):
         assert response.status_code == 200,response.text
         assert response.json()['data']['sources'] == []
         assert response.json()['data']['runtime_available'] is False
+        guidance = response.json()['data']['guidance']
+        workspace = client.get(f'/api/projects/{project}/workspace').json()['data']
+        assert guidance['state'] == 'CURRENT'
+        assert guidance['next_action']['kind'] == workspace['primary_task']['task_kind']
+        assert guidance['next_action']['task_id'] == workspace['primary_task']['task_id']
+        assert guidance['materials'] == []
         with client.app.state.context.uow_factory() as work:
             assert work.jobs.list_for_project(project) == ()

@@ -18,7 +18,7 @@ function ThemeProbe() {
 
 function ColorProbe() {
   const { token } = theme.useToken()
-  return <output aria-label="组件库实际主色">{token.colorPrimary}</output>
+  return <><output aria-label="组件库实际主色">{token.colorPrimary}</output><output aria-label="组件库实际分隔色">{token.colorSplit}</output></>
 }
 
 describe('ProductThemeProvider', () => {
@@ -40,6 +40,7 @@ describe('ProductThemeProvider', () => {
     localStorage.setItem('jiejian.theme', mode)
     render(<ProductThemeProvider><ColorProbe /></ProductThemeProvider>)
     expect(screen.getByLabelText('组件库实际主色')).toHaveTextContent(palettes[mode].primary)
+    expect(screen.getByLabelText('组件库实际分隔色')).toHaveTextContent(document.documentElement.style.getPropertyValue('--color-border'))
   })
 
   it('产品样式作用域覆盖body浮层，并在卸载后恢复原宿主标记', () => {

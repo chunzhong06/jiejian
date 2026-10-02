@@ -20,6 +20,7 @@ import { onboardingApi, type DiscoveryResult } from '../../api/onboarding'
 import { AssistantPanel } from '../assistant/AssistantPanel'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { CandidateReview } from './CandidateReview'
+import { ConnectionSupport } from './ConnectionSupport'
 import { ControlledRuntimePanel } from './ControlledRuntimePanel'
 import { useTaskGuard } from '../../app/tasks/TaskContinuity'
 import {
@@ -328,6 +329,7 @@ export function ApplicationSetup({ selected, endpointStatus, officialSampleAvail
       </div>
       <div className="access-next-task"><p className="editorial-eyebrow">现在需要你做</p><h2>审阅业务主体与动作</h2><p>界鉴已整理建议，权限规则仍由你确认。</p><Button type="primary" size="large" icon={<ArrowRightOutlined aria-hidden/>} onClick={() => setReviewOpen(true)}>审阅业务与权限</Button><p className="access-next-note">确认业务与权限后，继续准备账号和业务材料。</p></div>
     </section>}
+    {currentStep < 4 && <ConnectionSupport />}
     {!understanding && <section className="application-step"><h2>选择应用文件夹</h2>
       <Alert type="info" showIcon message="接入前，请先在本机启动应用" description="界鉴连接的是正在运行的本地 Web 应用。选择目录后，界鉴会读取少量配置推测启动方式，并在 127.0.0.1 的有限候选地址中寻找已经响应的应用；当前不会替你执行未知启动命令。" />
       <Typography.Paragraph>如果应用已经启动，直接选择它的源码文件夹。界鉴不会安装依赖、读取秘密或扫描任意端口。</Typography.Paragraph>

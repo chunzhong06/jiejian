@@ -42,7 +42,8 @@ describe('当前检查工作区', () => {
     fireEvent.click(await screen.findByRole('button', { name: '开始检查' }))
     fireEvent.click(await screen.findByRole('button', { name: '确认上次提交' }))
     await waitFor(() => expect(p.onError).toHaveBeenCalledTimes(2))
-    expect(screen.getByRole('button', { name: '确认上次提交' })).toBeInTheDocument()
+    // 错误回调先于界面提交；等待原操作入口恢复，同时验证仍可按原键确认。
+    expect(await screen.findByRole('button', { name: '确认上次提交' })).toBeEnabled()
     expect(api.submit.mock.calls[0]).toEqual(api.submit.mock.calls[1])
   })
   it('退出历史结果后不把该记录的工作台同步失败带到新检查', async () => {

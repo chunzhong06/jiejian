@@ -5,12 +5,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from product.backend import __version__
 from product.backend.composition import ApplicationCore
 from product.backend.infra.runtime.diagnostics import runtime_environment_details
+from product.backend.infra.runtime.frontend_assets import frontend_asset_identity
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage import default_database_path
 from product.backend.api.envelope import ApiResponse, data_response
@@ -39,7 +40,7 @@ def build_system_router(
         }
 
     @router.get("/api/system/status", response_model=ApiResponse)
-    def status() -> JSONResponse:
+    def status(request: Request) -> JSONResponse:
         environment = runtime_environment_details()
         return data_response(
             {
@@ -48,6 +49,7 @@ def build_system_router(
                 **context.worker_status(),
                 "browser": environment["playwright"]["status"],
                 "environment": environment,
+                "frontend_identity": frontend_asset_identity(getattr(request.app.state, 'frontend_dir', None)),
             }
         )
 

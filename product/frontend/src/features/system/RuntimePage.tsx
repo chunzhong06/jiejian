@@ -7,6 +7,7 @@ import './runtime.css'
 import { Alert, Button, Card, Col, Collapse, Descriptions, Modal, Row, Space, Spin, Statistic, Typography } from 'antd'
 import { LLMProfile } from '../../api/llm'
 import { MaintenanceOperation, MaintenanceOperationResult, MaintenanceStatus, systemApi, SystemStatus } from '../../api/system'
+import { frontendBuildId, frontendIdentityState } from '../../app/buildIdentity'
 
 function label(value: unknown) {
   const raw = String(value ?? 'unknown')
@@ -101,6 +102,7 @@ export function RuntimePage({ status, profiles, failed }: { status: SystemStatus
       </Row>
       <details className="runtime-details"><summary>查看运行版本与组件详情</summary><Descriptions bordered size="small" column={1}>
         <Descriptions.Item label="界鉴版本">{status.version ?? '未提供'}</Descriptions.Item>
+        <Descriptions.Item label="页面资源对应">{frontendIdentityState(status.frontend_identity) === 'CURRENT' ? '当前页面与服务资源一致' : frontendIdentityState(status.frontend_identity) === 'UPDATE_AVAILABLE' ? '当前页面需要刷新以加载新资源' : '尚未确认页面资源身份'}<div className="editorial-muted">页面：{frontendBuildId?.slice(0,12) ?? '未提供'} · 服务：{status.frontend_identity?.build_id?.slice(0,12) ?? '未确认'}</div></Descriptions.Item>
         <Descriptions.Item label="运行模式">{environment?.runtime_mode === 'development' ? '源码运行' : environment?.runtime_mode ?? '未提供'} · {environment?.runtime_fingerprint ?? '无指纹'}</Descriptions.Item>
         <Descriptions.Item label="Python">{python?.version ?? '未提供'} · {python?.environment_type ?? '来源未知'}</Descriptions.Item>
         <Descriptions.Item label="Python 可执行文件"><Typography.Text copyable>{python?.executable ?? '未提供'}</Typography.Text></Descriptions.Item>

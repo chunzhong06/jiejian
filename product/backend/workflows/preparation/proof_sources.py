@@ -69,14 +69,14 @@ class ProofPreparationService:
                 resources=[dict(resource_binding_id=self._resource_id(item), action_id=item.business_action_id,
                     action_revision=item.action_revision, resource_id=item.actual_resource_id,
                     owner_identity_id=item.resource_owner_test_identity_id) for item in resources],
-                sources=[self._source_view(work, item, basis) for item in work.proof_sources.list(project_id)],
+                sources=[self._source_view(work, item, basis, runtime) for item in work.proof_sources.list(project_id)],
                 read_scopes=[item.model_dump(mode='json') for item in work.proof_sources.scopes(project_id)],
                 supported_source_kinds=['MANAGED_TRANSACTION_RECORDS'], max_response_bytes=262144, max_path_depth=8,
                 source_contracts=['TRANSACTION_HISTORY_V1','RESOURCE_FIELDS_V1'],
                 source_requirements=['受保护资源通过通用事务记录组件读写','身份接口、角色字段与被保护字段由当前应用配置','普通自报JSON不作为完整历史依据'],
                 gui_url=f'#/tests?materials=1&proof_sources=1&project_id={project_id}')
 
-    def _source_view(self, work, source, basis):
+    def _source_view(self, work, source, basis, runtime=None):
         attempts = work.proof_sources.preflights(source.project_id, source.source_id, source.revision, limit=1)
         attempt = None
         if attempts:
@@ -85,19 +85,22 @@ class ProofPreparationService:
                 current_basis=request.basis_id == basis, report=None if report is None else report.model_dump(mode='json'))
         adoption = work.proof_sources.adoption(source.project_id, source.source_id)
         supported = isinstance(source.config,ManagedProofSourceConfig)
+        scope = next((item for item in work.proof_sources.scopes(source.project_id)
+                      if supported and runtime is not None and self._scope_matches(item, source.config, runtime)), None)
         return dict(source_id=source.source_id, revision=source.revision, config=source.config.model_dump(mode='json'),
             submitted_via=source.submitted_via, client_name=source.client_name,
             adopted=supported and adoption is not None and adoption.revision == source.revision,
             supported=supported, requires_migration=not supported,
+            read_scope_confirmed=scope is not None, matching_read_scope_id=None if scope is None else scope.scope_id,
             preflight=attempt)
 
     def show(self, project_id, source_id):
         with self._uow() as work:
-            *_, basis = self._facts(work, project_id)
+            *_, runtime, basis = self._facts(work, project_id)
             source = work.proof_sources.source(project_id, source_id)
             if source is None:
                 raise JiejianError(ErrorCode.RECORD_NOT_FOUND, '证明来源不存在')
-            return dict(project_id=project_id, basis_id=basis, **self._source_view(work, source, basis))
+            return dict(project_id=project_id, basis_id=basis, **self._source_view(work, source, basis, runtime))
 
     def _operation(self, project_id, kind, command, execute):
         fingerprint = proof_fingerprint(command)

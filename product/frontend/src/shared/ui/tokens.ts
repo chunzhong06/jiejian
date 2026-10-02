@@ -2,7 +2,7 @@
 export const palettes = {
   light: {
     background: '#F6F7FA', surface: '#FFFFFF', elevated: '#FFFFFF', subtle: '#EEF0F5', hover: '#E8ECF4', navigation: '#F4F5F9',
-    text: '#242936', secondary: '#616B7C', border: '#E0E4EB', strong: '#7F8BA0',
+    text: '#242936', secondary: '#616B7C', border: '#C7CFDC', strong: '#7F8BA0',
     evidenceSurface: '#FFFFFF', evidenceSubtle: '#EEF0F5', evidenceText: '#242936',
     primary: '#465BC1', primaryHover: '#394BA5', primaryActive: '#2F3F8B', primaryInk: '#4055A7', primaryLight: '#ECEFF9', primaryBorder: '#BCC6E7', onAccent: '#FFFFFF',
     fact: '#415E99', infoBg: '#EAF0FB', ai: '#75539A', aiBg: '#F1EBF8',

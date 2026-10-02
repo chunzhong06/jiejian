@@ -181,7 +181,7 @@
 
 .task-focus {
   background: var(--color-surface);
-  border: var(--line-width) solid color-mix(in srgb,var(--color-border) 55%,var(--color-surface));
+  border: var(--line-width) solid var(--color-border);
   border-radius: var(--radius-large);
   padding: clamp(var(--space-24),3vw,var(--space-48));
   box-shadow: var(--shadow-focus);

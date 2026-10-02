@@ -336,6 +336,33 @@ def test_official_sdk_never_exposes_old_or_permission_writer_tools(tmp_path):
     anyio.run(scenario)
 
 
+def test_preparation_guidance_is_identical_over_gui_and_official_mcp_sdk(tmp_path):
+    app = create_app(tmp_path/'var', start_worker=False, secret_store=_MemorySecretStore())
+    project = app.state.context.application_understanding.connect(_source(tmp_path)).project.project_id
+    token = app.state.mcp_access.pair().access_token
+    async def scenario():
+        from tests.fixtures.control_plane import TEST_CONTROL_SESSION_TOKEN
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app),base_url=TEST_CONTROL_ORIGIN,
+                    cookies={'jiejian_control_session':TEST_CONTROL_SESSION_TOKEN}) as gui:
+                expected = (await gui.get(f'/api/projects/{project}/proof-preparation')).json()['data']['guidance']
+            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app),base_url=TEST_CONTROL_ORIGIN,
+                    headers={'Authorization':'Bearer '+token},follow_redirects=True) as http:
+                async with Client(streamable_http_client(TEST_CONTROL_ORIGIN+'/mcp',http_client=http,terminate_on_close=False)) as client:
+                    result = await client.call_tool('jiejian_preparation_context',{'project_id':project})
+                    value = result.structured_content
+                    assert value['guidance'] == expected
+                    assert value['next_step'] == expected['next_action']
+                    assert 'identities' not in value and 'available_identities' in value
+                    assert 'fencing_token' not in json.dumps(value)
+                    with pytest.raises(MCPError) as denied:
+                        await client.call_tool('jiejian_proof_preflight_start',{'project_id':project,'request':{}})
+                    assert denied.value.data['error_code']=='MCP_PERMISSION_REQUIRED'
+        with app.state.context.uow_factory() as work:
+            assert work.jobs.list_for_project(project)==()
+    anyio.run(scenario)
+
+
 def test_rule_candidate_sdk_requires_prepare_and_never_approves(tmp_path):
     app = create_app(tmp_path / "var", start_worker=False, secret_store=_MemorySecretStore())
     project_id = app.state.context.application_understanding.connect(_source(tmp_path)).project.project_id

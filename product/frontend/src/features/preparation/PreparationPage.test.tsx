@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PreparationView } from '../../api/preparation'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { PreparationPage } from './PreparationPage'
-const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn(), draft: vi.fn(), saveDraft: vi.fn() }))
+const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), guidance: vi.fn() }))
+vi.mock('../../api/proofSources', () => ({proofSourcesApi: {context: api.guidance}}))
 vi.mock('../../api/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select, evidence: api.evidence, draft: api.draft, saveDraft: api.saveDraft } }))
 vi.mock('../../api/testIdentities', () => ({ testIdentitiesApi: { create: api.create, startPreparation: api.start } }))
 vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: () => null }))
@@ -18,7 +19,7 @@ const material = (patch: Partial<PreparationView> = {}): PreparationView => ({ p
   execution: { status: 'SATISFIED', reason_codes: [] }, resources: [], effect_evidence: [{ effect_id: 'e1', status: 'STALE', reason_codes: [] }], recovery: { status: 'NOT_REQUIRED', reason_codes: [] }, reason_codes: [],
 }], ...patch })
 const props = (current = workspace(task())) => ({ project: { project_id: 'p1' }, workspace: current, onStateChanged: vi.fn().mockResolvedValue(current), onError: vi.fn(), onNavigate: vi.fn() })
-beforeEach(() => { vi.clearAllMocks(); api.draft.mockResolvedValue({schema_version:"1",revision:0,action_id:null,material:null}); api.get.mockResolvedValue(material()); api.create.mockResolvedValue({ identity_id: 'identity2' }); api.start.mockResolvedValue({ preparation_id: 'login2' }) })
+beforeEach(() => { vi.clearAllMocks(); api.guidance.mockResolvedValue({project_id:'p1'}); api.draft.mockResolvedValue({schema_version:"1",revision:0,action_id:null,material:null}); api.get.mockResolvedValue(material()); api.create.mockResolvedValue({ identity_id: 'identity2' }); api.start.mockResolvedValue({ preparation_id: 'login2' }) })
 function selectionMaterial() {
   const value = material()
   const reference = (id: string) => ({ intent_id: id, revision: 1, intent_hash: `${id}-hash` })
@@ -34,6 +35,24 @@ function selectionMaterial() {
   return value
 }
 describe('动作准备', () => {
+  it('采用同一任务的后端建议并保留可沿用材料，不触发准备写入', async () => {
+    api.guidance.mockResolvedValue({project_id:'p1',guidance:{project_id:'p1',state:'CURRENT',materials:[],sources:[],next_action:{task_id:'t1',kind:'PREPARE_TEST_IDENTITY',title:'核对当前成员账号',reason:'只有账号需要处理，其他有效材料保留。'}}})
+    render(<PreparationPage {...props()}/>)
+    expect(await screen.findByRole('heading',{name:'核对当前成员账号'})).toBeInTheDocument()
+    expect(screen.getByText('可沿用：动作录制。')).toBeInTheDocument()
+    expect(api.create).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled()
+  })
+  it('旧任务的建议不能替换当前主任务', async () => {
+    api.guidance.mockResolvedValue({project_id:'p1',guidance:{project_id:'p1',state:'CURRENT',materials:[],sources:[],next_action:{task_id:'old-task',title:'旧账号任务',reason:'旧状态'}}})
+    render(<PreparationPage {...props()}/>)
+    expect(await screen.findByRole('heading',{name:'准备成员账号'})).toBeInTheDocument()
+    expect(screen.queryByText('旧账号任务')).not.toBeInTheDocument()
+  })
+  it('账号诊断深链只打开管理页面，不自动登录或修改材料', async () => {
+    render(<PreparationPage {...props()} requestedIdentities requestedActionId="a1"/>)
+    expect(await screen.findByText('登录准备页面')).toBeInTheDocument()
+    expect(api.create).not.toHaveBeenCalled();expect(api.start).not.toHaveBeenCalled()
+  })
   it('材料保存后的下一步同步失败会自动恢复，不需要离开再回来', async () => {
     const p = props(), provided = vi.fn().mockResolvedValue(undefined)
     render(<PreparationPage {...p} onProvidedMaterials={provided}/>)

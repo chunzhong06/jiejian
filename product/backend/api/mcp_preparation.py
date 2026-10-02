@@ -24,13 +24,14 @@ def register_preparation_tools(server, context, access, *, require_level, invoke
     def preparation_context(ctx:Context, project_id:str)->dict[str,Any]:
         """读取可复用动作、账号、资源与来源缺口；只读，不访问目标。"""
         require_level(access,ctx,MCPAccessLevel.READ,project_id=project_id)
-        value = invoke(lambda:service.context(project_id))
+        value = invoke(lambda:context.preparation_guidance.context(project_id))
         # 身份列表只含界鉴账号ID和标签；不包含CheckIdentity或秘密引用。
         identities = value.pop('identities')
         return public_preparation(value) | {'available_identities':identities,
             'source_input_schema':SaveProofSource.model_json_schema(),
             'preflight_input_schema':StartProofPreflight.model_json_schema(),
-            'next_step':'整理有限来源候选；读取范围确认与采用均在返回的GUI入口完成。'}
+            'next_step':value['guidance']['next_action'],
+            'next_step_note':value['guidance']['note']}
 
     @server.tool(name='jiejian_proof_source_save',structured_output=True)
     def source_save(ctx:Context,project_id:str,candidate:dict[str,Any])->dict[str,Any]:

@@ -181,6 +181,9 @@ class ApplicationCore:
         self.workspace.development_service = self.development
         self.workspace.set_current_checks(checks=self.checks,reader=self.check_results,changes=self.source_changes,
             repairs=self.project_repair,source_inspector=self.application_understanding.inspect_source_fingerprint)
+        from product.backend.workflows.preparation.guidance import PreparationGuidanceService
+        self.preparation_guidance = PreparationGuidanceService(sources=self.proof_preparation,
+            workspace=self.workspace, preparation=self.preparation)
         self.identity_preparations = IdentityPreparationManager(
             self.var_dir, self.test_identities, self.secret_store, self._base_environment,
             application_understanding=self.application_understanding,

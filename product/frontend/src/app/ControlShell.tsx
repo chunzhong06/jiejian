@@ -27,6 +27,7 @@ import { NotificationCenter, enqueueNotification, useNotificationExpiry, type No
 import { normalizeRoute, type AppRoute } from './presentation'
 import { useProjectWorkspace } from './useProjectWorkspace'
 import { useSystemStatus } from './useSystemStatus'
+import { FrontendBuildNotice } from './FrontendBuildNotice'
 import { useCheckActivity } from './useCheckActivity'
 import { RetainedWorkPages } from './RetainedWorkPages'
 import { TaskGuardContext } from './tasks/TaskContinuity'
@@ -186,6 +187,7 @@ function ControlShellContent() {
     onNavigate={path => { if (onBackToHistory && path.startsWith('/tests?run_id=')) navigate(path.replace('/tests?', '/history?')); else navigateRecoveryTarget(path) }}
     requestedProofSources={new URLSearchParams(location.search).get('proof_sources') === '1'} requestedProofSource={new URLSearchParams(location.search).get('source')}
     requestedActionId={new URLSearchParams(location.search).get('action_id')}
+    requestedIdentities={new URLSearchParams(location.search).get('identities') === '1'}
     requestedMaterials={new URLSearchParams(location.search).get('materials') === '1'} requestedTaskId={taskId} requestedRunId={runId} requestedCaseId={new URLSearchParams(location.search).get('case_id')} changeId={changeId} />
   const renderPermissions = () => {
     const params = new URLSearchParams(location.search)
@@ -253,7 +255,7 @@ function ControlShellContent() {
         {workReceipt && selected?.project_id === workReceipt.projectId && location.key === workReceipt.locationKey && <div className="work-receipt" role="status"><span>{workReceipt.message}</span><Button type="text" aria-label="关闭操作完成提示" onClick={() => setWorkReceipt(null)}>×</Button></div>}
         {error && <ErrorRecovery error={error} onRetry={retryCurrentPage} onNavigate={(path) => { clearError(); navigateRecoveryTarget(path) }} onClose={clearError} />}<RetainedWorkPages key={`${selected?.project_id ?? 'new'}-${retryEpoch}`} activeKey={retainedKey}>{content()}</RetainedWorkPages></div></Layout.Content>
     </Layout>
-    <NotificationCenter activity={!['/tests','/workspace'].includes(route) ? checkActivity.completed ? {
+    <NotificationCenter resourceNotice={<FrontendBuildNotice identity={systemStatus.frontend_identity} blocked={editing || Boolean(checkActivity.activeRunId)}/>} activity={!['/tests','/workspace'].includes(route) ? checkActivity.completed ? {
       label:checkActivity.completed.label,actionLabel:'查看结果',onDismiss:checkActivity.dismiss,
       onView:()=>{const run=checkActivity.completed!.runId;checkActivity.dismiss();navigate(`/history?run_id=${encodeURIComponent(run)}`)},
     } : checkActivity.activeRunId && !checkActivity.progressDismissed ? {

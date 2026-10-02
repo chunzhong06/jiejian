@@ -3,6 +3,7 @@
 import { request } from './http'
 
 export type SystemStatus = {
+  frontend_identity?: {status: 'CONFIRMED' | 'UNCONFIRMED'; build_id: string | null; reason: string}
   version?: string
   api: 'available' | 'unknown'
   worker: 'running' | 'stopped' | 'unavailable' | 'unknown'

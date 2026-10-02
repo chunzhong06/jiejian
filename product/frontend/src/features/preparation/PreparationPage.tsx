@@ -19,6 +19,8 @@ import { MaterialOverview } from './MaterialOverview'
 import { MaterialEditor, materialName } from './MaterialEditor'
 import { EvidenceMaterials } from './EvidenceMaterials'
 import { ProofSourcesPanel } from './ProofSourcesPanel'
+import { proofSourcesApi } from '../../api/proofSources'
+import type { PreparationGuidance } from '../../api/preparationGuidance'
 
 function matchesRecordingTask(task: PrimaryTaskDto | null | undefined, ref: MaterialReference) {
   if (!task?.can_execute || task.business_action_id !== ref.action_id || task.action_revision !== ref.action_revision) return false
@@ -28,7 +30,7 @@ function matchesRecordingTask(task: PrimaryTaskDto | null | undefined, ref: Mate
   return ['DEMONSTRATE_ACTION', 'PREPARE_ACTION_RESOURCE'].includes(task.task_kind) || (task.task_kind === 'REVIEW_RECORDING' && task.recording_purpose === 'TARGET')
 }
 
-export function PreparationPage({ project, workspace, onStateChanged, onError, onNavigate, onProvidedMaterials, onFeedback, requestedProofSources, requestedProofSource, requestedActionId }: {
+export function PreparationPage({ project, workspace, onStateChanged, onError, onNavigate, onProvidedMaterials, onFeedback, requestedProofSources, requestedProofSource, requestedActionId, requestedIdentities }: {
   project: ProjectDto
   onProvidedMaterials?: () => Promise<unknown>
   workspace: WorkspaceViewDto | null
@@ -39,6 +41,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   requestedProofSources?: boolean
   requestedProofSource?: string | null
   requestedActionId?: string | null
+  requestedIdentities?: boolean
 }) {
   const visible = useContext(WorkPageVisible)
   const [preparation, setPreparation] = useState<PreparationView | null>(null)
@@ -47,6 +50,8 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   const [busy, setBusy] = useState(false)
   const [syncError, setSyncError] = useState<string>()
   const [receipt, setReceipt] = useState<string>()
+  const [guidance, setGuidance] = useState<PreparationGuidance>()
+  const [guidanceEpoch, setGuidanceEpoch] = useState(0)
   const [selectedAction, setSelectedAction] = useState<string>()
   const [material, setMaterial] = useState<{ reference: MaterialReference; label: string }>()
   const [evidenceAction, setEvidenceAction] = useState<string>()
@@ -72,7 +77,15 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   useEffect(() => { if (workspace?.project.project_id === project.project_id) setCurrentWorkspace(workspace) }, [workspace, project.project_id])
   useEffect(() => {
     let active = true
-    setLoading(true); setPreparation(null); setChoices({}); setMode('materials'); setSyncError(undefined); setMaterial(undefined); setSelectedAction(undefined); setEvidenceAction(undefined)
+    setGuidance(undefined)
+    if (!proofSources) void proofSourcesApi.context(project.project_id).then(value => {
+      if (active && value.project_id === project.project_id && value.guidance?.project_id === project.project_id) setGuidance(value.guidance)
+    }).catch(() => { /* 原材料和Workspace仍可读取；未知建议不替代它们。 */ })
+    return () => { active = false }
+  }, [project.project_id, currentWorkspace?.primary_task?.task_id, currentWorkspace?.primary_task?.stale_fingerprint, guidanceEpoch, proofSources])
+  useEffect(() => {
+    let active = true
+    setLoading(true); setPreparation(null); setChoices({}); setMode(requestedIdentities ? 'identities' : 'materials'); setSyncError(undefined); setMaterial(undefined); setSelectedAction(undefined); setEvidenceAction(undefined)
     void Promise.all([preparationApi.get(project.project_id), preparationApi.draft(project.project_id)]).then(([value, draft]) => {
       if (!active) return
       if (value.project_id !== project.project_id) throw new ApiError('STATE_PRECONDITION', '材料所属应用不一致，请重新读取。')
@@ -86,7 +99,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
       .catch((error) => { if (active) onError(error as ApiError) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [project.project_id, onError, requestedActionId])
+  }, [project.project_id, onError, requestedActionId, requestedIdentities])
 
   // 写动作后先重读页面材料，再同步 Workspace；失败保留已完成动作并阻止使用旧任务。
   const reload = useCallback(async () => {
@@ -98,6 +111,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
     if (!alive.current || projectRef.current !== project.project_id) return
     if (!nextWorkspace) { setSyncError('材料已刷新，但下一步尚未同步，请重试刷新。'); return }
     setCurrentWorkspace(nextWorkspace)
+    setGuidanceEpoch(value => value + 1)
     setSyncError(undefined)
     return { preparation: next, workspace: nextWorkspace }
   }, [project.project_id, onStateChanged])
@@ -113,6 +127,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   }, 5000, false)
   const syncChild = async () => (await reload())?.workspace
   const showMaterials = async () => {
+    if (requestedIdentities) onNavigate(`/tests?materials=1${requestedActionId ? `&action_id=${encodeURIComponent(requestedActionId)}` : ''}`)
     try { await reload(); if (alive.current) { setMode('materials'); if (materialRecording && recordingReturn.current) setMaterial(recordingReturn.current); setMaterialRecording(undefined) } } catch (error) { if (alive.current) onError(error as ApiError) }
   }
   const refresh = async () => {
@@ -223,7 +238,7 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
         material: null, candidate_recording_id: null, base_fingerprint: null, pending_operation_id: null })
     } catch (error) { onError(error as ApiError) }
   }
-  if (proofSources) return <ProofSourcesPanel projectId={project.project_id} requestedSource={requestedProofSource} onChanged={refresh} onBack={() => { setProofSources(false); if (requestedProofSources) onNavigate(`/tests?materials=1${requestedActionId ? `&action_id=${requestedActionId}` : ''}`) }}/>
+  if (proofSources) return <ProofSourcesPanel projectId={project.project_id} requestedSource={requestedProofSource} onChanged={refresh} onNavigate={onNavigate} onBack={() => { setProofSources(false); if (requestedProofSources) onNavigate(`/tests?materials=1${requestedActionId ? `&action_id=${requestedActionId}` : ''}`) }}/>
   if (evidenceAction) return <EvidenceMaterials projectId={project.project_id} actionId={evidenceAction} onBack={() => { setFocusSourceEntry(true); setEvidenceAction(undefined) }} />
   if (material) return <MaterialEditor key={JSON.stringify(material.reference)} projectId={project.project_id} reference={material.reference}
     onEvidence={() => setEvidenceAction(material.reference.action_id)}
@@ -247,13 +262,15 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
   if (requestedActionId && preparation && !preparation.actions.some(item=>item.action_id===requestedActionId)) return <EditorialPage><EditorialHeader title="这项业务的材料已不在当前范围"/><p>原链接指向的动作已经变化，未替换成另一项业务。</p><Button onClick={()=>onNavigate('/permissions')}>核对权限要求</Button></EditorialPage>
   if (!preparation) return <EditorialPage><EditorialHeader eyebrow="工作台 / 检查材料" title="暂时无法读取检查材料"/><p>尚未取得当前材料事实，重新读取后再继续。</p><Button loading={busy} onClick={() => void refresh()}>重新读取材料</Button></EditorialPage>
   const task = currentWorkspace?.primary_task
+  const nextAction = guidance?.state === 'CURRENT' && guidance.next_action?.task_id === task?.task_id ? guidance.next_action : undefined
   const chosenActionId = preparation?.actions.find(action => action.action_id === selectedAction)?.action_id
     ?? preparation?.actions.find(action => action.action_id === task?.business_action_id)?.action_id ?? preparation?.actions[0]?.action_id
   const actorName = (id: string) => currentWorkspace?.actors.find((item) => item.actor_id === id)?.display_name ?? '业务主体'
   const taskStage: Record<string, number> = { PREPARE_TEST_IDENTITY: 0, DEMONSTRATE_ACTION: 1, PREPARE_ACTION_RESOURCE: 2, COMPLETE_EFFECT_EVIDENCE: 3, COMPLETE_RECOVERY: 4 }
   const currentStage = task?.task_kind === 'REVIEW_RECORDING' ? task.recording_purpose === 'OBSERVATION' ? 3 : task.recording_purpose === 'RECOVERY' ? 4 : 1 : task ? taskStage[task.task_kind] : undefined
   const providedAvailable = Boolean(onProvidedMaterials && !preparation?.preparation_complete && task?.route === '/tests' && currentStage !== undefined)
-  const primaryButton = task && task.task_kind !== 'SELECT_ALLOW_CONTROL' ? <Button type={providedAvailable ? 'default' : 'primary'} loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task.can_execute} onClick={() => void proceed()}>
+  const guidedProof = !providedAvailable && task?.task_kind === 'COMPLETE_EFFECT_EVIDENCE' && nextAction?.kind !== task.task_kind ? nextAction : undefined
+  const primaryButton = task && task.task_kind !== 'SELECT_ALLOW_CONTROL' ? guidedProof ? <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying} onClick={() => onNavigate(guidedProof.gui_url.slice(1))}>{guidedProof.handler === 'AGENT' ? '让 Agent 完善这项证明' : '前往处理'}</Button> : <Button type={providedAvailable ? 'default' : 'primary'} loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task.can_execute} onClick={() => void proceed()}>
     {task.task_kind === 'PREPARE_TEST_IDENTITY' ? task.test_identity_id ? '打开登录浏览器' : '创建账号并登录' : task.route === '/tests' && currentStage !== undefined ? '继续准备这项材料' : task.action_label ?? '前往处理'}
   </Button> : null
   return <EditorialPage label="检查材料">
@@ -283,10 +300,11 @@ export function PreparationPage({ project, workspace, onStateChanged, onError, o
           </Radio.Group><div className="confirmation-actions"><Button type="primary" loading={busy} disabled={!choices[control.selection_fingerprint] || !task.can_execute || Boolean(syncError)} onClick={() => void selectControl(control)}>确认正常对照</Button></div>
         </section>)}
         <MaterialOverview action={action} currentStage={current ? currentStage : undefined}
+          advice={guidance?.state === 'CURRENT' && !materialSync.retrying ? guidance.materials : undefined}
           outdated={materialSync.retrying}
           showFocus={!(current && task?.task_kind === 'SELECT_ALLOW_CONTROL')}
           effectName={id => business?.effect_catalog.find(effect => effect.effect_id === id)?.business_label ?? '已确认的业务结果'}
-          taskTitle={syncError ? '材料已保存，正在同步下一步' : current ? task?.title : undefined} taskWhy={syncError ? '正在读取最新任务，不需要重新准备已经保存的材料。' : current ? task?.why_now : undefined}
+          taskTitle={syncError ? '材料已保存，正在同步下一步' : current ? nextAction?.title ?? task?.title : undefined} taskWhy={syncError ? '正在读取最新任务，不需要重新准备已经保存的材料。' : current ? nextAction?.reason ?? task?.why_now : undefined}
           primary={current ? <>{primaryButton}{providedAvailable && <Button type="primary" loading={busy} disabled={Boolean(syncError) || materialSync.retrying || !task?.can_execute} onClick={() => void installProvidedMaterials()}>使用已提供的测试材料</Button>}</> : <Button type="primary" onClick={() => onNavigate('/tests')}>核对检查条件</Button>}
           onIdentity={() => { setLogin(undefined); setMode('identities') }} onMaterial={(reference, label) => void openMaterial(reference, label)} returnKind={returnMaterial?.action_id === action.action_id ? returnMaterial.kind : undefined}>
           <h3>已确认的权限</h3>{action.permissions.map(permission => <p key={permission.intent_id}>{permissionLabel(permission.intent_id ?? '')}</p>)}

@@ -46,7 +46,8 @@ it('历史成功回执与当前未运行分别呈现',async()=>{
   expect(screen.getByText('尚未运行')).toBeInTheDocument()
   expect(screen.queryByText('符合要求')).not.toBeInTheDocument()
   expect(api.start).not.toHaveBeenCalled()
-  expect(screen.getByRole('spinbutton')).toHaveValue('7001')
+  // InputNumber会在收到新属性后同步内部显示；回执文字出现不等于输入已经回填。
+  await waitFor(()=>expect(screen.getByRole('spinbutton')).toHaveValue('7001'))
   expect(screen.getByRole('textbox')).toHaveValue('server.mjs')
 })
 

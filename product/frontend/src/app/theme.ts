@@ -49,6 +49,7 @@ export function createProductTheme(mode: ResolvedTheme): ThemeConfig {
       // 交互控件边界必须可辨；容器分隔使用更轻的 colorBorderSecondary。
       colorBorder: designTokens.strong,
       colorBorderSecondary: designTokens.borderSecondary,
+      colorSplit: designTokens.border,
       colorFillSecondary: designTokens.fillSecondary,
       colorFillTertiary: designTokens.fillTertiary,
       colorTextDisabled: designTokens.disabled,

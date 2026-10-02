@@ -19,7 +19,7 @@ def build_proof_sources_router(context):
 
     @router.get('',response_model=ApiResponse)
     async def preparation_context(project_id:str):
-        return data_response(service.context(project_id))
+        return data_response(context.preparation_guidance.context(project_id))
 
     @router.post('/sources',response_model=ApiResponse)
     async def save_source(project_id:str,body:SaveProofSource):

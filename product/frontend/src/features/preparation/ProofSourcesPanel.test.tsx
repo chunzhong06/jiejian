@@ -34,6 +34,14 @@ it('预检查可用只展示采用入口，不自动采用',async () => {
   expect(api.write).not.toHaveBeenCalled()
 })
 
+it('取消的预检查即使残留可用报告也不显示采用入口',async () => {
+  api.context.mockResolvedValue({...initial(),sources:[{...source,preflight:{preflight_id:'cancelled',state:'CANCELLED',current_basis:true,report:{assessment:'USABLE',checks:[]}}}]})
+  render(<ProofSourcesPanel {...props}/>)
+  await screen.findByRole('heading',{name:'让规则有据可验'})
+  expect(screen.queryByRole('button',{name:'预览采用影响'})).not.toBeInTheDocument()
+  expect(api.write).not.toHaveBeenCalled()
+})
+
 it('网络响应丢失后跨刷新只查询同一回执',async () => {
   api.write.mockRejectedValue(new Error('network'))
   const view = render(<ProofSourcesPanel {...props}/>);
@@ -59,4 +67,24 @@ it('手动新增不会覆盖列表中的第一个来源',async () => {
   fireEvent.click(screen.getByRole('button',{name:'保存来源候选'}))
   await waitFor(() => expect(api.write).toHaveBeenCalled())
   expect(api.write.mock.calls[0][2]).toMatchObject({source_id:null,expected_revision:null})
+})
+
+it('缺口建议携带精确账号入口，点击只导航不执行准备',async () => {
+  const value=initial(), onNavigate=vi.fn()
+  api.context.mockResolvedValue({...value,guidance:{project_id:'app_a',basis_id:'basis',state:'CURRENT',materials:[],sources:[],next_action:{kind:'REVIEW_IDENTITY',handler:'USER',title:'核对测试账号与角色',reason:'实际账号与当前规则不一致。',gui_url:'#/tests?project_id=app_a&materials=1&identities=1&action_id=action'}}})
+  render(<ProofSourcesPanel {...props} onNavigate={onNavigate}/>)
+  fireEvent.click(await screen.findByRole('button',{name:'前往处理'}))
+  expect(onNavigate).toHaveBeenCalledWith('/tests?project_id=app_a&materials=1&identities=1&action_id=action')
+  expect(api.write).not.toHaveBeenCalled()
+})
+
+it('复制准备说明要求重新读取最新依据，不把旧建议当执行命令',async () => {
+  const copy=vi.fn().mockResolvedValue(undefined)
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:copy}})
+  api.context.mockResolvedValue({...initial(),guidance:{project_id:'app_a',basis_id:'basis',state:'CURRENT',materials:[],sources:[],next_action:{kind:'REVIEW_SOURCE',handler:'AGENT',title:'核对状态字段',reason:'没有读到指定字段。'}}})
+  render(<ProofSourcesPanel {...props}/>)
+  fireEvent.click(await screen.findByRole('button',{name:'复制给 Agent 的准备说明'}))
+  expect(copy).toHaveBeenCalledWith(expect.stringContaining('先重新调用 jiejian_preparation_context'))
+  expect(copy).toHaveBeenCalledWith(expect.stringContaining('修订 1，动作 action'))
+  expect(api.write).not.toHaveBeenCalled()
 })

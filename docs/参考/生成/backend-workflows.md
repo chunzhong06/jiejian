@@ -465,6 +465,19 @@
 - `class EvidenceMaterialDetail`
 主要 import / dot-source：`product.backend.core.boundaries.entities`, `product.backend.workflows.preparation.models`, `pydantic`, `typing`
 
+### `product/backend/workflows/preparation/guidance.py`
+- `PREPARATION_TASKS`
+- `REASONS`
+- `class PreparationGuidanceService`
+主要 import / dot-source：`product.backend.workflows.preparation.guidance_models`, `urllib.parse`
+
+### `product/backend/workflows/preparation/guidance_models.py`
+- `class PreparationNextAction`
+- `class PreparationMaterialAdvice`
+- `class ProofSourceAdvice`
+- `class PreparationGuidance`
+主要 import / dot-source：`product.backend.core.boundaries.entities`, `pydantic`, `typing`
+
 ### `product/backend/workflows/preparation/material_models.py`
 - `class MaterialReference`
 - `class MaterialChange`

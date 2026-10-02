@@ -75,7 +75,7 @@
 .path-boundary {
   color: var(--path-secondary);
   margin: 0;
-  border-top: var(--line-width) solid color-mix(in srgb,var(--path-line) 20%,transparent);
+  border-top: var(--line-width) solid var(--color-border);
   padding-top: var(--space-16);
   margin-top: var(--space-20);
   font-size: var(--font-label);
@@ -87,7 +87,7 @@
 
 .path-view-switch {
   display: flex;
-  border: var(--line-width) solid color-mix(in srgb,var(--path-line) 25%,transparent);
+  border: var(--line-width) solid var(--color-border);
   border-radius: var(--radius-small);
   padding: var(--space-4);
   gap: var(--space-4);
@@ -153,7 +153,7 @@
   width: 208px;
   height: 80px;
   text-align: left;
-  border: var(--line-width) solid color-mix(in srgb,var(--path-line) 50%,var(--path-bg));
+  border: var(--line-width) solid var(--path-line);
   border-radius: var(--radius-medium);
   background: var(--path-node-bg);
   color: var(--path-ink);
@@ -243,7 +243,7 @@
   height: 32px;
   display: grid;
   place-items: center;
-  border: var(--line-width) solid color-mix(in srgb,var(--path-line) 25%,transparent);
+  border: var(--line-width) solid var(--color-border);
   border-radius: var(--radius-small);
   background: transparent;
   color: var(--path-ink);
@@ -303,7 +303,7 @@
   min-height: 180px;
   margin-top: var(--space-24);
   padding-block: var(--space-24);
-  border-top: var(--line-width) solid color-mix(in srgb,var(--path-line) 20%,transparent);
+  border-top: var(--line-width) solid var(--color-border);
 }
 
 .path-range small {
@@ -378,7 +378,7 @@
 
 .path-event-list li {
   padding-bottom: var(--space-12);
-  border-bottom: var(--line-width) solid color-mix(in srgb,var(--path-line) 20%,transparent);
+  border-bottom: var(--line-width) solid var(--color-border);
 }
 
 .path-event-list button {

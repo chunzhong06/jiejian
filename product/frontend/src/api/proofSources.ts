@@ -1,5 +1,6 @@
 // 证明准备API只交换有限配置、报告和回执；目标读取由后端独立预检查Job执行。
 import { request } from './http'
+import type { PreparationGuidance } from './preparationGuidance'
 export type ProofConfig = {
   action_id: string; action_revision: number; effect_id: string; observation_identity_id: string
   resource_binding_id: string; read_scope_id: string | null; relative_path_template: string
@@ -10,8 +11,10 @@ export type ProofConfig = {
 }
 export type ProofReport = { assessment: 'USABLE' | 'NEEDS_CHANGES' | 'UNSUPPORTED'; checks: Array<{code: string; status: 'CONFIRMED' | 'MISSING' | 'UNAVAILABLE' | 'UNSUPPORTED'; mapping_key: string | null}> }
 export type ProofSource = { source_id: string; revision: number; config: ProofConfig; submitted_via: string; client_name: string; adopted: boolean
+  read_scope_confirmed?: boolean; matching_read_scope_id?: string | null
   preflight: null | {preflight_id: string; state: string; current_basis: boolean; report: ProofReport | null} }
 export type ProofContext = { project_id: string; basis_id: string; runtime_available: boolean; runtime_origin: string | null
+  guidance?: PreparationGuidance
   actions: Array<{action_id: string; revision: number; label: string; effects: Array<{effect_id: string; label: string; kind: string}>}>
   identities: Array<{identity_id: string; label: string; actor_id: string; prepared: boolean}>
   resources: Array<{resource_binding_id: string; action_id: string; action_revision: number; resource_id: string; owner_identity_id: string}>

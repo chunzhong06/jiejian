@@ -1,0 +1,56 @@
+{
+  "$defs": {
+    "FrontendAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_./-]+$",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "FrontendAsset",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/FrontendAsset"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Assets",
+      "type": "array"
+    },
+    "build_id": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Build Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "build_id",
+    "assets"
+  ],
+  "title": "FrontendAssetManifest",
+  "type": "object"
+}

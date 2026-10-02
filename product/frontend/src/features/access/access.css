@@ -4,6 +4,17 @@
   gap: var(--space-24);
 }
 
+.connection-support { padding: var(--space-24); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-large); }
+.connection-support-heading { display: flex; gap: var(--space-16); align-items: center; justify-content: space-between; }
+.connection-support h2 { margin: 0; font-size: var(--font-local); }
+.connection-support p, .connection-support dd, .connection-support details { color: var(--color-secondary); font-size: var(--font-secondary); }
+.connection-support dl { margin: var(--space-20) 0; display: grid; gap: var(--space-16); }
+.connection-support dl > div { display: grid; grid-template-columns: 84px minmax(0,1fr); gap: var(--space-16); }
+.connection-support dt { font-size: var(--font-secondary); font-weight: 600; }
+.connection-support dd { margin: 0; }
+.connection-support summary { cursor: pointer; }
+@media(max-width:600px) { .connection-support { padding: var(--space-16); } .connection-support-heading { align-items: start; } .connection-support dl > div { grid-template-columns: minmax(0,1fr); gap: var(--space-4); } }
+
 .access-next-surface {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

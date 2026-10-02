@@ -98,6 +98,8 @@ MCP 变化使用官方 SDK 客户端直接验证未配对、错误/旧令牌、H
 
 ## 普通来源准备工具
 
-新增 preparation_context、proof_source_show、proof_preflight_status、proof_adoption_preview、preparation_receipt 五个 READ；proof_source_save 为 PREPARE；proof_preflight_start/cancel 为 EXECUTE。来源只接受固定 JSON GET、账号/资源引用与有界字段映射，不接受任意 URL、SQL、代码、密码或可信性布尔值。读取范围和采用只由本机会话与同源 GUI 写入。预检查是独立 Job，成功生命周期与 USABLE、正式权限 Verdict 分别表达。
+preparation_context、proof_source_show、proof_preflight_status、proof_adoption_preview、preparation_receipt 为 READ；proof_source_save 为 PREPARE；proof_preflight_start/cancel 为 EXECUTE。新完整证明只接受受控记录来源、账号/资源引用与有界字段映射，身份核验使用声明的有限 GET 路径；不接受任意 URL、SQL、代码、密码或可信性布尔值。读取范围和采用只由本机会话与同源 GUI 写入。预检查是独立 Job，成功生命周期与 USABLE、正式权限 Verdict 分别表达。
+
+preparation_context 和 GUI proof-preparation GET 共用 `ApplicationCore.preparation_guidance`。MCP 继续过滤秘密引用及内部依据，输出结构化 `guidance` 和 `next_step`，包含处理者、有限工具/授权级别与精确 GUI 引用；建议不替代工具权限检查，也不增加工具或写入口。跨读依据变化时只提示重读。行为和同事实验证见[修改安全准备](修改安全准备.md)。
 
 MCP EXECUTE 授权代次绑定每次预检查；降权、暂停、轮换、忘记和控制进程重启使旧任务失效。重新授权不会复活旧 Job。写操作按原操作标识回读；来源修订采用 CAS。

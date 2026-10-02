@@ -83,6 +83,7 @@ SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
     SchemaEntry("runner/runner-input.schema.json", "product.protocols.runner.input:RunnerInput"),
     SchemaEntry("runner/runner-result.schema.json", "product.protocols.runner.result:RunnerResult"),
     SchemaEntry("runner/trusted-result-receipt.schema.json", "product.backend.infra.artifacts.run_packages:TrustedResultReceipt"),
+    SchemaEntry("runtime/frontend-manifest.schema.json", "product.protocols.frontend_assets:FrontendAssetManifest"),
     SchemaEntry("runtime/launch-manifest.schema.json", "product.protocols.runtime_identity:RuntimeLaunchManifest"),
     SchemaEntry("runtime/launch-receipt.schema.json", "product.protocols.runtime_identity:RuntimeLaunchReceipt"),
     SchemaEntry("runtime/node-load-receipt.schema.json", "product.protocols.node_runtime:NodeRuntimeLoadReceipt"),
