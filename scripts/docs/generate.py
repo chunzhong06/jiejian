@@ -1,259 +1,130 @@
-# 生成确定性代码参考与协议索引，检查文档路由及静态事实，不执行生产模块。
-
-"""从源码文本与 AST 元数据生成稳定的 Markdown 参考。"""
-
+# 编排确定性文档参考与检查；先解析全体输入，不运行产品。
 from __future__ import annotations
-
 import argparse
-import ast
-import re
+import os
 import sys
 from pathlib import Path
-from urllib.parse import unquote
+if __package__ in {None, ''}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.docs.registrations import api_routes, mcp_tools, migration_rows, schema_entries, worker_branches
+from scripts.docs.sources import ROOT_INPUTS, describe, grouped_sources
+
+START = '<!-- GENERATED:START -->'
+END = '<!-- GENERATED:END -->'
+GENERATED_DIR = 'docs/参考/生成'
 
 
-START = "<!-- GENERATED:START -->"
-END = "<!-- GENERATED:END -->"
-
-CODE_GROUPS = {
-    "backend-core": (("product/backend/core",), "后端 Core"),
-    "backend-workflows": (("product/backend/workflows",), "后端 Workflows"),
-    "backend-infra-runtime": (("product/backend/infra/runtime",), "后端 Runtime"),
-    "backend-infra-storage": (("product/backend/infra/storage",), "后端 Storage"),
-    "backend-api-cli": (("product/backend/api", "product/backend/cli"), "后端 API 与 CLI"),
-    "frontend": (("product/frontend/src",), "前端"),
-    "scripts": (("scripts",), "开发脚本"),
-}
+def _document(title: str, body: str) -> str:
+    return f'# {title}\n\n> 自动生成。当前源码结构与注册投影，不代表运行验收或完整调用图。\n\n{START}\n\n{body.rstrip()}\n\n{END}\n'
 
 
-def _signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-    """不求值注解或默认值，只渲染紧凑签名。"""
-    args = list(node.args.posonlyargs) + list(node.args.args)
-    rendered = [arg.arg for arg in args]
-    if node.args.vararg:
-        rendered.append(f"*{node.args.vararg.arg}")
-    rendered.extend(arg.arg for arg in node.args.kwonlyargs)
-    if node.args.kwarg:
-        rendered.append(f"**{node.args.kwarg.arg}")
-    result = ast.unparse(node.returns) if node.returns else ""
-    suffix = f" -> {result}" if result else ""
-    return f"{node.name}({', '.join(rendered)}){suffix}"
-
-
-def _python_symbols(path: Path) -> list[str]:
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError):
-        return []
-    symbols: list[str] = []
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_"):
-            symbols.append(f"- `{_signature(node)}`")
-        elif isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
-            symbols.append(f"- `class {node.name}`")
-        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            for target in targets:
-                if isinstance(target, ast.Name) and target.id.isupper():
-                    symbols.append(f"- `{target.id}`")
-    return symbols
-
-
-def _python_imports(path: Path) -> list[str]:
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError):
-        return []
-    imports: list[str] = []
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            imports.extend(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            imports.append("." * node.level + (node.module or ""))
-    return sorted(set(imports))
-
-
-def _typescript_symbols(path: Path) -> tuple[list[str], list[str]]:
-    text = path.read_text(encoding="utf-8")
-    symbols = sorted(
-        set(
-            re.findall(
-                r"\bexport\s+(?:default\s+)?(?:async\s+)?(?:function|const|class)\s+([A-Za-z_$][\w$]*)|\bexport\s+(?:type|interface)\s+([A-Za-z_$][\w$]*)",
-                text,
-            )
-        )
-    )
-    names = [next(value for value in item if value) for item in symbols]
-    imports = sorted(set(re.findall(r"from\s+['\"]([^'\"]+)['\"]", text)))
-    return [f"- `{name}`" for name in names], imports
-
-
-def _powershell_param_names(text: str) -> list[str]:
-    names: set[str] = set()
-    for match in re.finditer(r"(?im)^\s*param\s*\(", text):
-        start = match.end()
-        depth = 1
-        cursor = start
-        while cursor < len(text) and depth:
-            if text[cursor] == "(":
-                depth += 1
-            elif text[cursor] == ")":
-                depth -= 1
-            cursor += 1
-        if depth:
-            continue
-        block = text[start : cursor - 1]
-        names.update(re.findall(r"(?m)(?:^|,)\s*(?:\[[^\]]+\]\s*)*\$([A-Za-z_]\w*)", block))
-    return sorted(names)
-
-
-def _powershell_dot_sources(text: str) -> list[str]:
-    dot_sources: set[str] = set()
-    literal_pattern = re.compile(r"^\s*\.\s+(['\"])([^'\"]+)\1\s*(?:#.*)?$", re.I)
-    join_pattern = re.compile(
-        r"^\s*\.\s+\(\s*Join-Path\s+\$PSScriptRoot\s+(['\"])([^'\"$]+)\1\s*\)\s*(?:#.*)?$",
-        re.I,
-    )
-    for line in text.splitlines():
-        literal = literal_pattern.match(line)
-        if literal:
-            dot_sources.add(literal.group(2))
-            continue
-        joined = join_pattern.match(line)
-        if joined:
-            relative = joined.group(2).replace("\\", "/")
-            while relative.startswith("./"):
-                relative = relative[2:]
-            dot_sources.add(f"$PSScriptRoot/{relative}")
-    # 只投影可静态确定的路径；动态表达式若截取半行，会生成不存在的伪入口。
-    return sorted(dot_sources)
-
-
-def _powershell_symbols(path: Path) -> tuple[list[str], list[str]]:
-    text = path.read_text(encoding="utf-8-sig")
-    functions = sorted(set(re.findall(r"(?im)^\s*function\s+([\w-]+)", text)))
-    parameters = _powershell_param_names(text)
-    dot_sources = _powershell_dot_sources(text)
-    symbols = [f"- `function {name}`" for name in functions]
-    symbols.extend(f"- `param ${name}`" for name in parameters)
-    return symbols, dot_sources
-
-
-def _files(root: Path, relative: str) -> list[Path]:
-    base = root / relative
-    if not base.exists():
-        return []
-    return sorted(
-        path
-        for path in base.rglob("*")
-        if path.is_file()
-        and path.suffix.lower() in {".py", ".ts", ".tsx", ".ps1"}
-        and "__pycache__" not in path.parts
-        and "node_modules" not in path.parts
-    )
-
-
-def _render_code(root: Path, relatives: tuple[str, ...]) -> str:
-    sources = "、".join(f"{relative}/" for relative in relatives)
-    blocks: list[str] = [START, "", f"<!-- 此区域由 scripts/docs/generate.py 从 {sources} 读取。 -->", ""]
-    for relative in relatives:
-        for path in _files(root, relative):
-            rel = path.relative_to(root).as_posix()
-            imports: list[str] = []
-            symbols: list[str] = []
-            if path.suffix == ".py":
-                symbols = _python_symbols(path)
-                imports = _python_imports(path)
-            elif path.suffix in {".ts", ".tsx"}:
-                symbols, imports = _typescript_symbols(path)
-            else:
-                symbols, imports = _powershell_symbols(path)
-            if not symbols and not imports:
-                continue
-            blocks.append(f"### `{rel}`")
-            if symbols:
-                blocks.append("\n".join(symbols))
+def render(root: Path) -> dict[str, str]:
+    """在内存完成全部输出；解析失败不会改写原参考。"""
+    outputs = {}
+    groups = grouped_sources(root)
+    index = ['## 如何查询', '', '从功能指南确定owner，用rg搜索本目录的路径或符号，只读取命中的分片。静态import只表示依赖；运行条件和完整业务调用需读源码。', '',
+             '## 覆盖与限制', '', '覆盖product、scripts中的源码、脚本、样式、HTML及JSON/YAML/TOML/INI配置，另含根入口与测试catalog。Schema由注册参考覆盖。依赖锁、二进制资源、缓存、node_modules、dist、coverage不作符号索引；测试按tests/suites.toml及指南定位。', '',
+             'Python使用AST；JS/TS/PowerShell为有限词法提取；配置/样式只记录位置。每个受管文件恰有一个分片，空包仍列出；解析失败拒绝生成。', '',
+             '根输入：' + '、'.join(f'`{name}`' for name in ROOT_INPUTS), '',
+             '## 分片', '', '| 分片 | 文件数 |', '| --- | ---: |']
+    for group, files in groups.items():
+        relative = f'{GENERATED_DIR}/代码/{group}.md'
+        body = []
+        for path in files:
+            name = path.relative_to(root).as_posix()
+            symbols, imports, limit = describe(path)
+            link = os.path.relpath(path, (root / relative).parent).replace('\\', '/')
+            body += [f'### `{name}`', '', f'[打开源码]({link}) · {limit}', '']
+            body += ['- `' + symbol.replace('|', '&#124;') + '`' for symbol in symbols]
             if imports:
-                blocks.append("主要 import / dot-source：" + ", ".join(f"`{item}`" for item in imports))
-            blocks.append("")
-    blocks.extend([END, ""])
-    return "\n".join(blocks)
-
-
-def _render_code_document(title: str, generated: str) -> str:
-    """渲染整份机器维护文档，避免陈旧文件头在生成区外累积。"""
-    header = f"# 自动代码参考：{title}\n\n> 生成区域只描述当前代码结构；职责与安全理由由能力映射和任务指南维护。"
-    return header + "\n\n" + generated.strip() + "\n"
-
-
-def _replace_generated(path: Path, generated: str) -> None:
-    original = path.read_text(encoding="utf-8") if path.exists() else ""
-    pattern = re.compile(re.escape(START) + r".*?" + re.escape(END), re.S)
-    if pattern.search(original):
-        updated = pattern.sub(generated.strip(), original, count=1)
-    else:
-        updated = original.rstrip() + "\n\n" + generated
-    path.write_text(updated.rstrip() + "\n", encoding="utf-8", newline="\n")
-
-
-def _generated_block(path: Path) -> str:
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    match = re.search(re.escape(START) + r".*?" + re.escape(END), text, re.S)
-    return match.group(0).strip() if match else ""
-
-
-def _render_schema_index(root: Path) -> str:
-    schemas = sorted((root / "product/protocols/schemas").rglob("*.json"))
-    lines = [START, "", "<!-- Schema 文件由 product/protocols/schema.py 注册表治理；本区只列当前文件。 -->", ""]
-    for schema in schemas:
-        lines.append(f"- `{schema.relative_to(root).as_posix()}`")
-    lines.extend(["", END, ""])
-    return "\n".join(lines)
+                body += ['', '静态import / dot-source：' + '、'.join(f'`{value}`' for value in imports)]
+            body.append('')
+        outputs[relative] = _document('自动代码参考：' + group, '\n'.join(body))
+        index.append(f'| [{group}](代码/{group}.md) | {len(files)} |')
+    index += ['', f'合计：{sum(map(len, groups.values()))}个文件、{len(groups)}个分片。', '', '[注册与格式](注册与格式.md) · [数据库迁移](数据库迁移.md)。仅读源码文本，不import产品、打开数据库或读取var运行数据。']
+    outputs[f'{GENERATED_DIR}/README.md'] = _document('生成参考入口', '\n'.join(index))
+    api, mcp, workers, schemas = api_routes(root), mcp_tools(root), worker_branches(root), schema_entries(root)
+    registration = ['## API显式装配', '', '只沿create_app和显式include_router工厂展开；未列出的声明不能据此认定不存在，动态表达式标注未静态确定。', '', '| 调用者 | 工厂 | 依据 |', '| --- | --- | --- |']
+    registration += [f'| `{a}` | `{b}` | {c} |' for a, b, c in api]
+    registration += ['', '## MCP已注册工具', '', '从build_mcp_control及显式register函数提取；授权语义仍查MCP指南。', '', '| 工具 | 位置 |', '| --- | --- |']
+    registration += [f'| `{name}` | `{source}` |' for name, source in mcp]
+    registration += ['', '## Worker执行分支', '', '通用Worker与运行加载专用Worker分开；条件装配仍需读源码。', '', '| 分支 | 注册表达式 | 来源 |', '| --- | --- | --- |']
+    registration += [f'| {kind} | `{expression}` | `{source}` |' for kind, expression, source in workers]
+    registration += ['', '## Schema注册与根版本', '', '读取SCHEMA_REGISTRY与签入JSON；只沿根属性和联合提取版本，Schema与Python语义一致性仍由dev.ps1 schema验证。', '', '| Schema（product/protocols/schemas下） | 注册模型/函数 | 根版本 |', '| --- | --- | --- |']
+    registration += [f'| `{path}` | `{target}` | {version} |' for path, target, version in schemas]
+    registration += ['', f'静态投影：{len(api)}条API装配关系、{len(mcp)}项MCP工具、{len(schemas)}项Schema。数量为生成事实，不是验收门槛。']
+    outputs[f'{GENERATED_DIR}/注册与格式.md'] = _document('生产注册与公共格式', '\n'.join(registration))
+    migrations, declared = migration_rows(root)
+    body = [f'源码声明的当前数据库head：`{declared or "未声明"}`。', '', '来源为db.py与签入Alembic元数据；本页不执行DDL。升级与数据保留条件须读具体migration及数据库指南。', '', '| revision | down_revision | 文件 |', '| --- | --- | --- |']
+    body += [f'| `{revision}` | `{parent or "无（基线）"}` | `{path}` |' for revision, parent, path in migrations]
+    outputs[f'{GENERATED_DIR}/数据库迁移.md'] = _document('数据库迁移链', '\n'.join(body))
+    return outputs
 
 
 def generate(root: Path, update: bool) -> list[Path]:
-    """显式更新只写生成区；只读检查失败抛出 SystemExit，不修正文或运行数据。"""
-    changed: list[Path] = []
-    failures: list[str] = []
-    code_dir = root / "docs/参考/生成"
-    for name, (relatives, title) in CODE_GROUPS.items():
-        path = code_dir / f"{name}.md"
-        document = _render_code_document(title, _render_code(root, relatives))
-        if update:
-            before = path.read_text(encoding="utf-8") if path.exists() else ""
-            if before != document:
-                path.write_text(document, encoding="utf-8", newline="\n")
-                changed.append(path)
-        elif not path.exists():
-            failures.append(f"代码参考缺失：{path.relative_to(root)}")
-        elif path.read_text(encoding="utf-8") != document:
-            failures.append(f"代码参考漂移：{path.relative_to(root)}")
-    protocol = root / "docs/参考/协议/公共数据与Schema版本.md"
-    if update:
-        before = protocol.read_text(encoding="utf-8")
-        _replace_generated(protocol, _render_schema_index(root))
-        if protocol.read_text(encoding="utf-8") != before:
-            changed.append(protocol)
-    else:
-        expected = _render_schema_index(root).strip()
-        if _generated_block(protocol) != expected:
-            failures.append(f"协议参考漂移：{protocol.relative_to(root)}")
-        from tests.docs.checks import check_documentation
-        failures.extend(check_documentation(root))
+    """只管理带生成标记的专用目录；检查模式只读，不自动修正。"""
+    root = root.resolve()
+    try:
+        outputs = render(root)
+    except (ValueError, OSError, KeyError) as error:
+        raise SystemExit(f'文档静态提取失败：{error}') from error
+    expected = {root / name: text for name, text in outputs.items()}
+    base = root / GENERATED_DIR
+    if base.is_symlink() or not base.resolve().is_relative_to(root):
+        raise SystemExit('生成目录越出仓库或属于链接')
+    for path in expected:
+        if not path.resolve().is_relative_to(base.resolve()):
+            raise SystemExit('生成目标越出受管目录')
+    actual = set(base.rglob('*.md')) if base.exists() else set()
+    failures, changed = [], []
+    for path in actual:
+        if path.is_symlink() or not path.resolve().is_relative_to(base.resolve()):
+            failures.append(f'生成目录存在链接或越界路径：{path.relative_to(root)}')
+        elif START not in path.read_text(encoding='utf-8'):
+            failures.append(f'生成目录存在非受管文件：{path.relative_to(root)}')
     if failures:
-        raise SystemExit("\n".join(failures))
+        raise SystemExit('\n'.join(failures))
+    for path, document in expected.items():
+        before = path.read_text(encoding='utf-8') if path.exists() else None
+        if before != document:
+            if update:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(document, encoding='utf-8', newline='\n')
+                changed.append(path)
+            else:
+                failures.append(f'代码参考漂移：{path.relative_to(root)}')
+    for path in sorted(actual - set(expected)):
+        if update:
+            path.unlink()
+            changed.append(path)
+        else:
+            failures.append(f'过期生成参考：{path.relative_to(root)}')
+    if update and base.exists():
+        # 文件迁出后的空分片目录没有读者；仅清理已确认在生成边界内的空目录。
+        for directory in sorted((p for p in base.rglob('*') if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+            if not directory.is_symlink() and directory.resolve().is_relative_to(base.resolve()) and not any(directory.iterdir()):
+                directory.rmdir()
+    if not update:
+        from tests.docs.checks import check_documentation
+        notices = []
+        failures.extend(check_documentation(root, notices=notices))
+        if notices:
+            print('测试命令静态检查的跳过项（占位/动态路径，不代表已验证）：')
+            for notice in sorted(set(notices)):
+                print('- ' + notice)
+    if failures:
+        raise SystemExit('\n'.join(failures))
     return changed
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="生成界鉴代码与协议参考")
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
-    parser.add_argument("--update", action="store_true")
+    parser = argparse.ArgumentParser(description='生成界鉴分片参考与注册事实')
+    parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[2])
+    parser.add_argument('--update', action='store_true')
     args = parser.parse_args()
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    generate(args.root.resolve(), args.update)
+    generate(args.root, args.update)
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

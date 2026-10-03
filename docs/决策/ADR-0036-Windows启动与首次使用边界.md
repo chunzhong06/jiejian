@@ -7,9 +7,9 @@
 
 普通用户从 `start.cmd` 进入，依次经 `scripts/start.ps1`、`dev.ps1 prepare` 和受控 serve。启动展示与真实准备分离，六阶段状态、source receipt、ready/failure 文件和退出码由对应脚本负责。动画或自动打开浏览器失败只降低展示，不覆盖已经形成的服务就绪事实；失败应给出可执行的恢复入口与日志位置。
 
-开发工具链、依赖、镜像前端工作区和构建缓存归共享 `var/development`；具体实例的数据库、日志、临时工作与发布前端归它的 VarDir。前端准备按源码和固定工具链指纹复用已验证构建，不将 node_modules、dist 或测试缓存写回源码。准确路径只由 RuntimePaths 和开发脚本维护，见[环境与脚本](../开发/环境与脚本.md)。
+开发工具链、依赖、镜像前端工作区和构建缓存归共享 `var/development`；具体实例的数据库、日志、临时工作与发布前端归它的 VarDir。前端准备按源码和固定工具链指纹复用已验证构建，不将 node_modules、dist 或测试缓存写回源码。准确路径只由 RuntimePaths 和开发脚本维护，见[环境与脚本](../工程/运行与交付/环境与脚本.md)。
 
-主、子进程使用一致的受控解释器和运行身份，不靠 cwd、PYTHONPATH 或用户包碰巧导入。PowerShell 选择与 UTF-8 BOM 边界保持当前启动实现；便携版通过相对发行树和独立 runtime identity 工作，见[Portable 协议](../参考/协议/Portable运行身份与发行结构.md)。
+主、子进程使用一致的受控解释器和运行身份，不靠 cwd、PYTHONPATH 或用户包碰巧导入。PowerShell 选择与 UTF-8 BOM 边界保持当前启动实现；便携版通过相对发行树和独立 runtime identity 工作，见[Portable 协议](../工程/运行与交付/Portable运行身份与发行结构.md)。
 
 ## 首次使用
 

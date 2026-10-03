@@ -12,7 +12,7 @@
 
 ## 当前适用边界
 
-运行目录、维护与进程身份边界仍适用。下文 ResultFinalizer、Finding/Report 与 TargetRuntime 的旧结果实现仅保留独立格式及底层消费者，不属于当前 CHECK 装配；当前主链见[系统全景](../架构/系统边界.md)。
+运行目录、维护与进程身份边界仍适用。下文 ResultFinalizer、Finding/Report 与 TargetRuntime 的旧结果实现仅保留独立格式及底层消费者，不属于当前 CHECK 装配；当前主链见[系统全景](../总览/系统边界.md)。
 
 ## 决策
 
@@ -24,7 +24,9 @@
 
 `start.cmd` 是源码仓库中的正式产品入口，准备项目专用 Conda `jiejian_env`，由受控 uv 按 `uv.lock` frozen 同步并 editable 安装当前仓库。普通启动不改写锁文件，也不安装或运行 Wheel。`scripts/dev.ps1` 提供 bootstrap、sync、update、prepare、start、cli、test、frontend-test、shell 和独立可选的 package；Wheel 只可能由 package 产生，不参与普通启动。
 
-### 3. Node 与 pnpm 只属于前端构建
+### 3. Node 与 pnpm 只属于前端构建（原决策适用范围）
+
+后续普通应用受控Node能力已扩展Node用途；当前边界以[运行加载](../能力/应用接入/修改运行加载.md)为准。下段保留原阶段决定，不表示当前仍只使用Python运行目标。
 
 `product/frontend` 只保存 Git 管理的源码与配置。依赖摘要只由 package/lock、固定 Node/pnpm 与受控编辑器插件形成；普通页面源码变化不重装依赖。pnpm install、TypeScript/Vite build 和 Vitest 都只在 `var/development/frontend/workspace` 运行，pnpm store 与 Vite cache 分别进入 `var/development/cache/pnpm-store` 和 `var/development/cache/vite`。完整网页按 build 摘要不可变保存到 `var/development/frontend/builds/<digest>`，每个产品实例只复制匹配 build 到自己的 `<VarDir>/runtime/frontend`。editable 安装明确跳过前端打包输入；独立 package 命令先验证当前实例网页，再通过 Hatch 构建钩子映射进 Wheel，不回写源码 dist。
 
@@ -68,10 +70,10 @@ Run publication 与 Verdict 先完成。随后唯一、幂等的 `ResultFinalize
 
 ## 相关真源
 
-- [系统总体架构](../架构/系统边界.md)
-- [产品入口与控制面架构](../架构/产品入口与控制面.md)
-- [执行与观察架构](../架构/执行与观察.md)
-- [数据与持久化架构](../架构/数据与持久化.md)
-- [安全意图与验证架构](../架构/权限验证与结果.md)
-- [Runner执行协议](../参考/协议/Runner执行协议.md)
-- [报告与格式投影协议](../参考/协议/报告与格式投影协议.md)
+- [系统总体架构](../总览/系统边界.md)
+- [产品入口与控制面架构](../能力/控制面/控制面与装配.md)
+- [执行与观察架构](../能力/检查执行/执行与观察.md)
+- [数据与持久化架构](../工程/数据与协议/数据与持久化.md)
+- [安全意图与验证架构](../能力/检查执行/权限验证与结果.md)
+- [Runner执行协议](../能力/检查执行/协议/Runner执行协议.md)
+- [报告与格式投影协议](../参考/保留实现/报告与格式投影协议.md)

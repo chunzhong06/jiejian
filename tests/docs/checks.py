@@ -27,7 +27,7 @@ def _anchors(path: Path) -> set[str]:
 
 def _noncurrent(text: str) -> bool:
     """只识别文档自己的状态声明，正文引用历史状态不改变整篇的归属。"""
-    return bool(re.search(r"(?m)^>\s*状态[：:]\s*(?:提议|已取代|已废弃|已拒绝|PROPOSED|DEPRECATED|SUPERSEDED)\b", text))
+    return bool(re.search(r"(?m)^(?:>|-)\s*状态[：:]\s*(?:提议|已取代|已废弃|已拒绝|PROPOSED|DEPRECATED|SUPERSEDED)\b", text))
 
 
 def _link_failure(root: Path, source: Path, target: str) -> str | None:
@@ -99,8 +99,7 @@ def _source_paths(root: Path) -> list[str]:
         for target in pattern.findall(text):
             if any(character in target for character in "*?[]{}<>…") or "..." in target or re.search(r"\s", target):
                 continue
-            # 文档允许 file.py::symbol 定位；这里只验证文件，不猜测符号的运行时定义。
-            target = target.split("::", 1)[0]
+            target, _, symbol = target.partition("::")
             base = root / "product/frontend" if target.startswith("src/") else root
             if target.startswith("features/"):
                 base = root / "product/frontend/src"
@@ -110,13 +109,17 @@ def _source_paths(root: Path) -> list[str]:
                 reason = "源码目录没有文件"
             if reason:
                 failures.append(f"{source.relative_to(root)} -> `{target}`（静态源码路径：{reason}）")
+            elif symbol:
+                problem = _source_symbol(resolved, symbol)
+                if problem:
+                    failures.append(f"{source.relative_to(root)} -> `{target}::{symbol}`（{problem}）")
     return failures
 
 
 def _database_head(root: Path) -> list[str]:
     """只解析声明常量，不导入 Storage 或打开数据库。"""
     source = root / "product/backend/infra/storage/db.py"
-    guide = root / "docs/开发/能力/修改数据库.md"
+    guide = root / "docs/工程/数据与协议/修改数据库.md"
     if not source.exists() or not guide.exists():
         return []
     tree = ast.parse(source.read_text(encoding="utf-8"))
@@ -125,11 +128,80 @@ def _database_head(root: Path) -> list[str]:
         if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "_CURRENT_MIGRATION_REVISION" for target in node.targets):
             head = ast.literal_eval(node.value)
     declared = re.search(r"当前数据库 head 为 `([^`]+)`", guide.read_text(encoding="utf-8"))
-    if head is None or not declared or declared.group(1) != head:
+    # 当前指南链接唯一生成head；旧式明确声明仍严格校验，防止散落的过期值。
+    if head is None or (declared and declared.group(1) != head) or (not declared and "数据库迁移.md" not in guide.read_text(encoding="utf-8")):
         return [f"{guide.relative_to(root)}：数据库 head 与源码声明不一致（当前 {head}）"]
     return []
 
 
 
-def check_documentation(root: Path) -> list[str]:
-    return _markdown_links(root) + _llms_targets(root) + _source_paths(root) + _database_head(root)
+def _source_symbol(path: Path, symbol: str) -> str | None:
+    """只检查明确可静态读取的符号，不调用描述符或import生产模块。"""
+    if path.suffix == '.py':
+        try:
+            nodes = ast.parse(path.read_text(encoding='utf-8-sig')).body
+        except SyntaxError:
+            return '源码无法解析'
+        for part in symbol.split('.'):
+            match = None
+            for node in nodes:
+                if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == part:
+                    match = node
+                    break
+                if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                    if any(isinstance(t, ast.Name) and t.id == part for t in targets):
+                        match = node
+                        break
+            if match is None:
+                return '静态符号不存在'
+            nodes = getattr(match, 'body', [])
+        return None
+    if path.suffix in {'.ts', '.tsx', '.js', '.mjs', '.cjs'}:
+        text = path.read_text(encoding='utf-8-sig')
+        if re.search(r'\bexport\s+(?:default\s+)?(?:async\s+)?(?:function|const|class|type|interface)\s+' + re.escape(symbol) + r'\b', text):
+            return None
+        return 'JS/TS导出符号未静态确定，请引用真实定义'
+    return '该文件类型尚不支持静态符号定位'
+
+
+def _command_examples(root: Path, notices: list[str] | None = None) -> list[str]:
+    """核对正式测试示例的字面路径；绝不执行文档中的命令。"""
+    failures = []
+    for source in sorted((root / 'docs').rglob('*.md')):
+        if any(part in {'生成', '决策'} for part in source.relative_to(root / 'docs').parts):
+            continue
+        text = source.read_text(encoding='utf-8')
+        if _noncurrent(text):
+            continue
+        for language, body in re.findall(r'(?ms)^```([^\n]*)\n(.*?)^```\s*$', text):
+            if language.strip().lower() not in {'powershell', 'ps1', 'pwsh', 'shell', 'bash'}:
+                continue
+            for line in body.splitlines():
+                match = re.search(r'''dev\.ps1["']?\s+(frontend-test|test)\s+(.+)''', line)
+                if not match:
+                    continue
+                # 只检查可识别的路径参数；占位符、变量、筛选表达式不猜测成文件。
+                arguments = re.findall(r'''"[^"]*"|'[^']*'|\S+''', match.group(2))
+                for argument in arguments:
+                    value = argument.strip("\"'").replace('\\', '/')
+                    if value in {'...', '…'} or value.startswith('$') or (value.startswith(('tests/', 'src/', 'product/')) and any(c in value for c in '$*?[]{}<>…')):
+                        if notices is not None:
+                            notices.append(f'{source.relative_to(root)}：{value}')
+                        continue
+                    if not value.startswith(('tests/', 'src/', 'product/')):
+                        continue
+                    filename, _, nodeid = value.partition('::')
+                    base = root / 'product/frontend' if match.group(1) == 'frontend-test' else root
+                    path = (base / filename).resolve()
+                    if not path.is_relative_to(base.resolve()) or not path.exists():
+                        failures.append(f'{source.relative_to(root)} -> {value}（测试命令路径不存在或越界）')
+                    elif nodeid and path.suffix == '.py' and '[' not in nodeid:
+                        problem = _source_symbol(path, nodeid.replace('::', '.'))
+                        if problem:
+                            failures.append(f'{source.relative_to(root)} -> {value}（测试命令：{problem}）')
+    return failures
+
+
+def check_documentation(root: Path, *, notices: list[str] | None = None) -> list[str]:
+    return _markdown_links(root) + _llms_targets(root) + _source_paths(root) + _database_head(root) + _command_examples(root, notices)

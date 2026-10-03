@@ -1,101 +1,122 @@
 # 界鉴任务路由
 
-根 AGENTS.md 管行动授权和硬边界。本文件只选知识：先读命中任务的一篇指南；仅在涉及相应事实、协议或风险时扩展。已读且有效的内容复用，不固定叠加模块参考、全架构或全部 ADR。生成参考按文件查询。链接可定位到章节；先读命中部分及其必要上下文。提议和退役决策不进入默认路由，未来方案由用户明确设计任务再读取。
+根AGENTS管授权和硬边界。本文件只选知识：先读命中的一篇指南；仅在涉及对应事务、进程、协议、风险或用户流程时展开。已读且有效的内容复用；不默认读取整个能力目录、全架构或全部生成参考。
 
-版本任务额外读取用户指定的完整提示词、当前卡、允许章节和机器状态；未接受前不提前加载下一卡。普通任务不强制执行卡、账本或恢复提交。
+版本任务按用户完整提示词、当前卡和机器状态恢复；未接受的未来方案不进入默认知识。普通任务不强制执行卡或账本。
 
-产品流程、PrimaryTask、普通接入
-→ docs/产品/工作流.md
+初次理解项目、有哪些功能、未知所有者
+→ docs/总览/功能地图.md
 
-当前页面入口、折叠区、抽屉与导航清单
-→ docs/产品/入口与导航.md#主模块和有效路径
+项目定位、进程边界、跨模块关系
+→ docs/总览/系统边界.md
 
-跨模块职责、唯一实现与消费者定位
-→ docs/架构/能力映射.md
+概念混淆、事实所有者、身份与状态
+→ docs/总览/概念与事实.md
 
-前端、布局、状态、可访问性
-→ docs/开发/能力/修改前端.md
+产品使用流程、当前页面入口
+→ docs/总览/使用流程.md
 
-业务对象、权限提案、Human Approval、Agent 授权
-→ docs/开发/能力/修改权限意图与Agent授权.md
+应用接入、目录、地址确认、源码分析、角色动作识别
+→ docs/能力/应用接入/修改应用与源码.md
+
+运行加载、Node ESM、旧进程、源码与实例、加载回执
+→ docs/能力/应用接入/修改运行加载.md
+
+官方示例、sample-test、演练、环境重置与退出
+→ docs/能力/应用接入/修改官方示例.md
+
+正式权限、业务角色动作、提案批准、Human Approval、policy_epoch
+→ docs/能力/权限规则/修改规则与批准.md
+
+原Agent规则候选、候选审阅、候选过期与回执
+→ docs/能力/权限规则/修改规则候选.md
 
 权限判断、ALLOW/DENY、PASS/BLOCK/INCONCLUSIVE
-→ docs/开发/能力/修改权限判断.md
+→ docs/能力/检查执行/修改权限判断.md
 
-材料准备、身份与资源缺口、证明与恢复
-→ docs/开发/能力/修改安全准备.md
+测试账号、登录、会话、SecretStore
+→ docs/能力/账号与材料/修改测试账号.md
 
-登录账号、会话、SecretStore
-→ docs/开发/能力/修改测试账号.md
+录制、Recording、FlowDraft、动作审阅
+→ docs/能力/账号与材料/修改录制.md
 
-录制、FlowDraft、动作审阅
-→ docs/开发/能力/修改Recording.md
+材料准备、BindingSourceInspector、草稿、恢复、准备建议
+→ docs/能力/账号与材料/修改材料与恢复.md
 
-Worker、Runner、Job、租约与进程恢复
-→ docs/开发/能力/修改Worker与Runner.md
+证明来源、读取授权、scope、预检查、采用、撤权、USABLE
+→ docs/能力/证明来源/修改证明来源.md
 
-Web 执行、HTTP、scope、冻结输入
-→ docs/开发/能力/修改Web执行.md
+完整检查、计划预览、冻结输入、Run/Job提交
+→ docs/能力/检查执行/修改计划与提交.md
 
-Observer、SQLite、真实副作用与闭合
-→ docs/开发/能力/修改Observer.md
+Worker、Runner、租约、fence、取消、进程恢复
+→ docs/能力/检查执行/修改Worker与Runner.md
 
-Observer 公共格式、canonical 或来源角色变化时再读
-→ docs/参考/协议/Observer观察协议.md
+Web执行、HTTP、重定向、scope、身份、预算
+→ docs/能力/检查执行/修改Web执行.md
 
-结果、历史、证据、原题修复、独立报告
-→ docs/开发/能力/修改结果与报告.md
+Observer、SQLite、真实副作用、观察闭合
+→ docs/能力/检查执行/修改Observer.md
 
-Trace、权限血缘、断裂与降精度
-→ docs/开发/能力/修改权限断裂诊断.md
+结果、历史、Evidence、原题修复、精确复验
+→ docs/能力/结果与变化/修改结果与修复.md
 
-Agent 变化、源码身份、真实 diff 与复验
-→ docs/开发/能力/修改Agent变更影响.md
+Trace、权限血缘、断裂与精度降级
+→ docs/能力/结果与变化/修改权限断裂诊断.md
 
-API、CLI、MCP、ApplicationCore 与控制面
-→ docs/开发/能力/修改API与控制面.md
+登记修改、真实diff、task/context/delivery、变化回执
+→ docs/能力/结果与变化/修改变化登记与交付.md
 
-数据库、Repository、UoW 与 migration
-→ docs/开发/能力/修改数据库.md
+API、CLI、ApplicationCore、装配、启动与关闭
+→ docs/能力/控制面/修改API与装配.md
 
-模型服务、受限解释、自然语言权限草稿
-→ docs/开发/能力/修改模型服务.md
+MCP、原Agent连接、READ/PREPARE/EXECUTE、暂停撤权
+→ docs/能力/控制面/修改MCP与授权.md
 
-公共 Schema、根版本、reader、canonical/hash
-→ docs/开发/能力/修改公共协议.md
+工作台、下一步、PrimaryTask、Workspace、优先级和续接
+→ docs/能力/控制面/修改工作台与任务.md
 
-生产 Target 范围扩展
-→ docs/开发/能力/扩展Target.md
+前端、主题、布局、间距、状态展示、轮询、导航与可访问性
+→ docs/工程/前端/修改前端.md
 
-脚本、开发环境、Windows 启动与依赖
-→ docs/开发/环境与脚本.md
+数据库、Repository、UoW、ORM、migration
+→ docs/工程/数据与协议/修改数据库.md
 
-Portable 打包与发行
-→ docs/开发/能力/修改发布与便携版.md
+公共格式、独立root、strict reader、canonical/hash、Schema
+→ docs/工程/数据与协议/修改公共协议.md
 
-Portable Python 身份或发行结构变化时再读
-→ docs/参考/协议/Portable运行身份与发行结构.md
+模型服务、Provider、受限解释、权限自然语言草稿
+→ docs/能力/控制面/修改模型服务.md
 
-官方示例、sample-test、真实整链验收
-→ docs/开发/能力/修改官方示例与整链验收.md
+Portable、发行结构、构建与打包
+→ docs/工程/运行与交付/修改发布与便携版.md
 
-执行测试、验证范围、提交与最终验收
-→ docs/开发/验证.md#先选择本次验证入口
+Observer公共格式、canonical或来源角色变化时再读
+→ docs/能力/检查执行/协议/Observer观察协议.md
 
-生产职责或架构设计变化
-→ docs/约束/工程设计.md
+Portable Python身份或发行结构变化时再读
+→ docs/工程/运行与交付/Portable运行身份与发行结构.md
 
-版本任务、恢复、验收门禁
-→ docs/约束/任务执行与恢复.md
+脚本、开发环境、Windows启动、依赖与维护
+→ docs/工程/运行与交付/环境与脚本.md
 
-明确授权委派、handoff、共享树所有权
-→ docs/约束/执行线程协作.md
+执行验证、测试等级、检查点复用、提交与验收
+→ docs/工程/验证.md#先选择本次验证入口
 
-Git、ACL、沙箱与权限阻塞
-→ docs/约束/工作区与权限.md
+生产职责、架构设计、Target扩展
+→ docs/工程/规则/工程设计.md
 
-AGENTS、README、文档路由与正文治理
-→ docs/约束/知识与文档治理.md
+版本任务、恢复与接受门禁
+→ docs/工程/规则/任务执行与恢复.md
 
-新增或修改项目源码、测试的注释校准
+已授权委派、handoff、共享树写入权
+→ docs/工程/规则/执行线程协作.md
+
+Git、ACL、沙箱和权限阻塞
+→ docs/工程/规则/工作区与权限.md
+
+AGENTS、README、Docs、文档生成与知识治理
+→ docs/工程/规则/知识与文档治理.md
+
+源码或测试的中文注释校准
 → .agents/skills/jiejian-comments/SKILL.md
