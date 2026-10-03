@@ -28,11 +28,11 @@ Candidate、测试账号、Flow、HTTP 绑定或某次 Run 都不能成为业务
 | 动作准备实时投影 | `product/backend/workflows/preparation/` | `tests/backend/workflows/preparation/` |
 | 不可变 Proposal、指纹与 Decision | `product/backend/core/boundaries/proposals.py` | `tests/backend/workflows/business_boundaries/` |
 | Permission v2 revision 与 policy state | `product/backend/core/boundaries/permissions.py` | `tests/backend/workflows/business_boundaries/` |
-| Proposal/Approval 原子事务 | `product/backend/workflows/business_boundaries/service.py` | `tests/backend/api/test_business_boundaries.py` |
-| Storage 与数据库结构 | `product/backend/infra/storage/business_boundaries.py`、`product/backend/infra/storage/setup/permission_intents.py` | `tests/backend/infra/storage/test_migration_baseline.py` |
-| Human-only loopback API | `product/backend/api/routers/business_boundaries.py` | `tests/backend/api/test_business_boundaries.py` |
-| 当前权限页面 | `product/frontend/src/features/boundaries/`、`product/frontend/src/api/businessBoundaries.ts` | `product/frontend/src/features/boundaries/BusinessBoundaryPage.test.tsx` |
-| Agent/MCP 不变量 | `product/backend/api/mcp.py` | `tests/backend/api/test_permission_oracle_invariant.py`、`tests/architecture/test_business_boundary_v2.py` |
+| Proposal/Approval 原子事务 | `product/backend/workflows/business_boundaries/service.py` | `tests/backend/api/boundaries/test_business_boundaries.py` |
+| Storage 与数据库结构 | `product/backend/infra/storage/boundaries/business_boundaries.py`、`product/backend/infra/storage/boundaries/permission_intents.py` | `tests/backend/infra/storage/test_migration_baseline.py` |
+| Human-only loopback API | `product/backend/api/routers/boundaries/business_boundaries.py` | `tests/backend/api/boundaries/test_business_boundaries.py` |
+| 当前权限页面 | `product/frontend/src/features/boundaries/`、`product/frontend/src/api/boundaries/businessBoundaries.ts` | `product/frontend/src/features/boundaries/BusinessBoundaryPage.test.tsx` |
+| Agent/MCP 不变量 | `product/backend/api/mcp/server.py` | `tests/backend/api/boundaries/test_permission_oracle_invariant.py`、`tests/architecture/test_business_boundary_v2.py` |
 
 ## 正式语义与技术选择
 
@@ -88,7 +88,7 @@ BusinessActor / BusinessAction revisions
 
 ### 对话规则候选
 
-`core/boundaries/rule_candidates.py`保存有限原文、结构化建议和具体例子的不可变修订；`workflows/business_boundaries/rule_candidates.py`与`infra/storage/rule_candidates.py`提供同一事务下的追加、CAS、幂等回执和普通Proposal关联。READ读取上下文与候选，PREPARE保存建议；原文只作不可信业务输入，不能成为指令或批准证据。候选修订根有独立Schema，内部例子无重复版本。
+`core/boundaries/rule_candidates.py`保存有限原文、结构化建议和具体例子的不可变修订；`workflows/business_boundaries/candidates/rule_candidates.py`与`infra/storage/boundaries/rule_candidates.py`提供同一事务下的追加、CAS、幂等回执和普通Proposal关联。READ读取上下文与候选，PREPARE保存建议；原文只作不可信业务输入，不能成为指令或批准证据。候选修订根有独立Schema，内部例子无重复版本。
 
 GUI将候选增量合入完整当前desired state，再调用既有维护规划器。Agent提供的write_mode不作为写入依据；服务端重新计算。首次空项目使用明确空基线，原维护API默认前置不变。转提案、来源关联和回执一次提交，批准仍只走原LOCAL_GUI接口；旧候选与已生成提案不原地改写。
 
@@ -96,7 +96,7 @@ GUI将候选增量合入完整当前desired state，再调用既有维护规划�
 
 批准前按精确动作引用读取现有材料库存，只投影“可能沿用/需要核对/缺少”，不靠名称相近合并，不将存在绑定当作可执行。与完整当前边界完全一致的候选返回`ALREADY_CONFIRMED`，不重复创建待批提案。批准后的实际准备通过`rule_context.preparation`复用原Preparation现场读模型；已决定候选保留历史含义，不因自身批准推进基线而要求重新审批。
 
-直接验证：`tests/backend/api/test_rule_candidates.py`、`tests/backend/api/test_mcp.py`、`tests/backend/infra/storage/test_migration_baseline.py`及前端`RuleCandidatesPanel.test.tsx`。普通证明预检查与Agent自动补齐所有准备材料尚不是此候选入口的已实现能力。
+直接验证：`tests/backend/api/boundaries/test_rule_candidates.py`、`tests/backend/api/system/test_mcp.py`、`tests/backend/infra/storage/test_migration_baseline.py`及前端`RuleCandidatesPanel.test.tsx`。普通证明预检查与Agent自动补齐所有准备材料尚不是此候选入口的已实现能力。
 
 Agent/MCP 按当前项目临时 PREPARE/EXECUTE 授权登记代码变化声明、提交完整检查或取消本项目检查；服务端重新扫描真实源码。Agent 不能 approve/reject、直接写 Actor/Action/Permission、修改 `policy_epoch`、选择 Case/Effect 或形成 Verdict。只有普通 LOCAL_GUI Proposal 决定事务可以修改权限；旧 Contract/Profile/Permission writer 不回接。
 
@@ -111,8 +111,8 @@ Agent/MCP 按当前项目临时 PREPARE/EXECUTE 授权登记代码变化声明�
 优先运行当前直接测试：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/core/boundaries/test_business_boundary.py tests/backend/workflows/business_boundaries tests/backend/api/test_business_boundaries.py tests/architecture/test_business_boundary_v2.py
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 frontend-test src/features/boundaries/BusinessBoundaryPage.test.tsx src/app/ControlShell.test.tsx
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/core/boundaries/test_business_boundary.py tests/backend/workflows/business_boundaries tests/backend/api/boundaries/test_business_boundaries.py tests/architecture/test_business_boundary_v2.py
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 frontend-test src/features/boundaries/BusinessBoundaryPage.test.tsx src/app/shell/ControlShell.test.tsx
 ```
 
 同时检查 Proposal 不可变、Approval 原子、正式 Permission 不含 Candidate、TestIdentity 只引用 Actor revision、旧数据库只读拒绝、旧 writer 路由未注册。公共 Schema 或生成参考发生真实漂移时才使用 `dev.ps1 schema -Update` 或 `docs -Update`；否则只运行只读检查。

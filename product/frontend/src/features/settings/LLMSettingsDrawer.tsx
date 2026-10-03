@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Drawer, Form, Input, Select, Switch } from 'antd'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
-import { llmApi, type AIAssistanceSettings, type LLMModelCatalog, type LLMProfile, type LLMProfileWrite, type LLMProvider } from '../../api/llm'
+import { llmApi, type AIAssistanceSettings, type LLMModelCatalog, type LLMProfile, type LLMProfileWrite, type LLMProvider } from '../../api/assistance/llm'
 import { ApiError } from '../../api/http'
 
 const providerOptions: { label: string; value: LLMProvider }[] = [

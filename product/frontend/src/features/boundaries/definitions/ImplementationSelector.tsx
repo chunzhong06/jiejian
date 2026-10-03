@@ -1,6 +1,6 @@
 // 实现定位单独选择，不改变业务定义与权限语义。
 import { Alert, Select, Typography } from "antd"
-import type { BoundaryMaintenanceDraftDto } from "../../../api/businessBoundaries"
+import type { BoundaryMaintenanceDraftDto } from "../../../api/boundaries/businessBoundaries"
 import { AssistantPanel } from "../../assistant/AssistantPanel"
 import { confidenceLabels } from "../draft/boundaryLabels"
 export function ImplementationSelector({ kind, item, draft, onChange }: {

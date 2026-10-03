@@ -9,10 +9,10 @@ import pytest
 from pydantic import ValidationError
 
 from product.backend.infra.runtime.process import ProcessEnvironmentRole, spawn_python_module
-from product.backend.infra.runtime.process.artifact import create_runtime_artifact, read_runtime_manifest, verify_runtime_artifact
+from product.backend.infra.runtime.process.controlled.artifact import create_runtime_artifact, read_runtime_manifest, verify_runtime_artifact
 from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
-from product.protocols.runtime_identity import RuntimeFile, RuntimeLaunchReceipt, receipt_matches
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from product.protocols.runtime.runtime_identity import RuntimeFile, RuntimeLaunchReceipt, receipt_matches
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 def _fixture(tmp_path: Path):
@@ -31,7 +31,7 @@ def test_frozen_launch_runs_original_code_after_workspace_changes(tmp_path: Path
     source, root, manifest, environment = _fixture(tmp_path)
     (source / "server.py").write_text("raise RuntimeError('new unlaunched code')", encoding="utf-8")
     output = tmp_path / "result.txt"
-    process = spawn_python_module(environment, "product.backend.infra.runtime.process.target",
+    process = spawn_python_module(environment, "product.backend.infra.runtime.process.controlled.target",
         "--manifest", str(root / "launch.json"), "--", str(output),
         role=ProcessEnvironmentRole.SAMPLE, cwd=root / "source",
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -71,7 +71,7 @@ def test_noncanonical_runtime_paths_rejected(path: str):
 
 def test_wrong_instance_and_changed_manifest_cannot_reuse_receipt(tmp_path: Path):
     _, _, manifest, _ = _fixture(tmp_path)
-    from product.protocols.runtime_identity import runtime_manifest_fingerprint
+    from product.protocols.runtime.runtime_identity import runtime_manifest_fingerprint
     receipt = RuntimeLaunchReceipt(instance_id=manifest.instance_id, manifest_fingerprint=runtime_manifest_fingerprint(manifest),
         process_id=123, source_fingerprint=manifest.source_fingerprint, interpreter_fingerprint=manifest.interpreter_fingerprint)
     assert not receipt_matches(manifest.model_copy(update={"instance_id": "rti_" + "0" * 32}), receipt, owned_process_id=123)

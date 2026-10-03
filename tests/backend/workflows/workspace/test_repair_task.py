@@ -1,12 +1,14 @@
 # 验证原题问题的主任务定位，修复入口不能越过现有材料与源码门禁。
 from types import SimpleNamespace
+from dataclasses import replace
+from product.backend.workflows.workspace.reading import WorkspaceCheckReaders
 
 import pytest
 
-from product.backend.workflows.checks.repair import build_current_repair_contract
+from product.backend.workflows.checks.repairs.repair import build_current_repair_contract
 from product.backend.workflows.projects.repair import CurrentRepairTask, ProjectRepair
 from tests.backend.core._support_check_repair import package
-from tests.fixtures.action_preparation import build_preparation_harness
+from tests.fixtures.preparation.action_preparation import build_preparation_harness
 
 pytestmark = [pytest.mark.database, pytest.mark.essential]
 
@@ -37,7 +39,7 @@ def test_repair_primary_task_preserves_exact_reference_and_existing_gates(
             # 只隔离准备状态选择；接入、权限与原题任务选择仍走正式服务。
             monkeypatch.setattr(service, "_preparation_task", lambda *_: None)
         fingerprint = harness.core.application_understanding.get(harness.project_id).source_fingerprint
-        service.set_current_checks(
+        service._reader.current_checks = WorkspaceCheckReaders(
             checks=SimpleNamespace(preview=lambda _: pytest.fail("已有明确修复任务不应重新选择普通检查")),
             reader=SimpleNamespace(active_for_project=lambda _: None, list_for_project=lambda _: ()),
             changes=SimpleNamespace(latest=lambda _: None),

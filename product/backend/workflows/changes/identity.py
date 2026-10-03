@@ -7,7 +7,7 @@ from pydantic import Field
 
 from product.backend.core.errors import JiejianError
 from product.backend.infra.source_identity import GitSourceContext, inspect_git_source
-from product.protocols.execution_v3 import Hash, LogicalId, WireModel
+from product.protocols.checks.execution_request import Hash, LogicalId, WireModel
 
 
 class SourceIdentityRecord(WireModel):

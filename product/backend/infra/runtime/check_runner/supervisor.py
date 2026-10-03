@@ -8,19 +8,19 @@ from pathlib import Path
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import JobState
-from product.backend.infra.artifacts.check_packages import check_final_directory, read_check_bytes, reject_check_links, validate_check_package
-from product.backend.infra.artifacts.check_publication import CheckPublisher
-from product.backend.infra.artifacts.check_validation import validate_check_inputs
+from product.backend.infra.artifacts.checks.check_packages import check_final_directory, read_check_bytes, reject_check_links, validate_check_package
+from product.backend.infra.artifacts.checks.check_publication import CheckPublisher
+from product.backend.infra.artifacts.checks.check_validation import validate_check_inputs
 from product.backend.infra.execution.web.check_runtime import check_secret_names
-from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailure, FatalFailureCode
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.runtime.process.control import (AttemptProcessControl, DEFAULT_LEASE_DURATION_US,
     DEFAULT_POLL_INTERVAL_SECONDS, DEFAULT_TERMINATION_GRACE_SECONDS)
 from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
 from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
-from product.protocols.check_result import CheckAssetReference, CheckRunnerInput, canonical_check_document
-from product.protocols.check_runtime import check_payload_contains_secret
+from product.protocols.checks.check_result import CheckAssetReference, CheckRunnerInput, canonical_check_document
+from product.protocols.checks.check_runtime import check_payload_contains_secret
 
 
 class CheckRunnerSupervisor:

@@ -8,7 +8,7 @@ const mockApi = vi.hoisted(() => ({
   status: vi.fn(), pair: vi.fn(), reveal: vi.fn(), rotate: vi.fn(), resume: vi.fn(), pause: vi.fn(), forget: vi.fn(), setProjectAccess: vi.fn(),
 }))
 
-vi.mock('../../api/mcp', () => ({ mcpAccessApi: mockApi }))
+vi.mock('../../api/system/mcp', () => ({ mcpAccessApi: mockApi }))
 
 const endpoint = 'http://127.0.0.1:8765/mcp'
 const unpaired = {

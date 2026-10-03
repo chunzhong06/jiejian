@@ -8,12 +8,12 @@ from pydantic import ValidationError
 
 from product.backend.core.errors import JiejianError
 from product.backend.infra.execution.check_executor import CheckExecutor
-from product.backend.infra.observers.check_runtime import CheckObservedSource
+from product.backend.infra.observers.checks.check_runtime import CheckObservedSource
 from product.backend.workflows.checks.runtime_bundle import derive_target_classifiers
-from product.protocols.check_result import CheckObservation
-from product.protocols.check_runtime import CheckActionConfig, CheckRuntimeBundle, canonical_check_runtime_bytes, parse_check_runtime
+from product.protocols.checks.check_result import CheckObservation
+from product.protocols.checks.check_runtime import CheckActionConfig, CheckRuntimeBundle, canonical_check_runtime_bytes, parse_check_runtime
 from product.protocols.web.response import HttpOutcomeClassifier
-from tests.fixtures.check_execution import execution_pair
+from tests.fixtures.checks.check_execution import execution_pair
 from tests.backend.infra.execution._support_check_executor import check_target, execution_configuration
 
 
@@ -75,7 +75,7 @@ def test_real_target_response_is_classified_once_after_task_observation(
         check_target, configure=configure, allow_status=status, task_state=task,
     )
     environment["TASK_OBSERVER"] = "test-task-observer"
-    from tests.fixtures.runtime_environment import runtime_identity_environment
+    from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
     environment = runtime_identity_environment(tmp_path / "runtime", extra=environment)
     executor = CheckExecutor(request, bundle, runner_input, environ=environment,
         attempt_dir=tmp_path, cancellation_requested=lambda: False)
@@ -216,7 +216,7 @@ def test_consistent_shared_task_is_deduplicated_and_other_action_cannot_supply_b
 
 @pytest.mark.parametrize("fault", [None, "task_id", "partial", "identity", "unavailable", "correlation", "observer", "phase", "target"])
 def test_observer_private_completion_requires_complete_bound_envelope(tmp_path, monkeypatch, fault):
-    from product.backend.infra.observers.check_runtime import CheckObserverRuntime
+    from product.backend.infra.observers.checks.check_runtime import CheckObserverRuntime
     from product.protocols.observer import Correlation, ObservationCompleteness, ObservationPhase, ObserverOutcomeStatus
     from tests.backend.infra.observers._support_async_task_observer import _run_fake, _response
 

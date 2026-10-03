@@ -5,11 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EnvironmentHistory } from './EnvironmentHistory'
 
 const api = vi.hoisted(() => ({ project: vi.fn(), status: vi.fn(), story: vi.fn() }))
-vi.mock('../../api/projects', () => ({ projectsApi: { project: api.project } }))
-vi.mock('../../api/currentChecks', () => ({ currentChecksApi: { status: api.status, story: api.story } }))
+vi.mock('../../api/applications/projects', () => ({ projectsApi: { project: api.project } }))
+vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: { status: api.status, story: api.story } }))
 vi.mock('../history/CheckHistoryPage', () => ({ CheckHistoryPage: ({ requestedRunId, onNavigate, renderRun }: { requestedRunId?: string; onNavigate: (path: string) => void; renderRun: (id: string, back: () => void) => ReactNode }) => requestedRunId ? renderRun(requestedRunId, () => onNavigate('/history')) : <button onClick={() => onNavigate('/history?run_id=old-run')}>查看原项目结果</button> }))
 vi.mock('../results/CurrentResultStory', () => ({ CurrentResultStory: ({ historicalOnly }: { historicalOnly: boolean }) => <p>{historicalOnly ? '只读历史结论' : '错误的活动操作'}</p> }))
-vi.mock('../changes/SourceIdentityPanel', () => ({ SourceIdentityPanel: ({ projectId, recordId, historicalOnly }: { projectId: string; recordId: string; historicalOnly: boolean }) => <p>{projectId}/{recordId}/{historicalOnly ? '只读源码记录' : '错误的活动操作'}</p> }))
+vi.mock('../changes/delivery/SourceIdentityPanel', () => ({ SourceIdentityPanel: ({ projectId, recordId, historicalOnly }: { projectId: string; recordId: string; historicalOnly: boolean }) => <p>{projectId}/{recordId}/{historicalOnly ? '只读源码记录' : '错误的活动操作'}</p> }))
 
 describe('EnvironmentHistory', () => {
   beforeEach(() => {

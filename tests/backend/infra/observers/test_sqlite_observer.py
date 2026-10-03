@@ -29,16 +29,9 @@ from product.protocols import (
     SqliteQueryLocator,
 )
 from product.protocols.observer import OBSERVER_JSON_MAX_BYTES
-from product.backend.infra.observers.sqlite import (
-    SQLITE_BYTE_LIMIT,
-    SQLITE_QUERY_UNSUPPORTED,
-    SQLITE_ROW_LIMIT,
-    SQLITE_SECRET_MISSING,
-    SQLITE_UNAVAILABLE,
-    run_sqlite_observer,
-)
-import product.backend.infra.observers.sqlite as sqlite_observer
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from product.backend.infra.observers.adapters.sqlite import SQLITE_BYTE_LIMIT, SQLITE_QUERY_UNSUPPORTED, SQLITE_ROW_LIMIT, SQLITE_SECRET_MISSING, SQLITE_UNAVAILABLE, run_sqlite_observer
+import product.backend.infra.observers.adapters.sqlite as sqlite_observer
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 PYTHON = sys.executable

@@ -20,8 +20,8 @@ from product.backend.core.verification.continuity import AuthorizationContinuity
 from product.backend.core.verification.facts import ExecutionOutcome, ObservedEffect
 from product.backend.core.verification.trace import TraceEventKind
 from product.backend.core.reports.models import render_html, render_junit, render_sarif
-from product.backend.infra.artifacts.report_store import ReportStore
-from product.backend.infra.artifacts import report_store as report_store_module
+from product.backend.infra.artifacts.reports.report_store import ReportStore
+from product.backend.infra.artifacts.reports import report_store as report_store_module
 from product.backend.workflows.reports.reporting import ReportBuilder
 from product.backend.workflows.reports.presentation import PresentedCaseVerdict, ResultClaimBoundary, ResultConfirmedImpact, ResultDiagnosis, ResultEvidenceSource, ResultPresentation, ResultPresentationIssue, ResultRelevantIntent, ResultWitnessItem
 from product.protocols import ObserverType

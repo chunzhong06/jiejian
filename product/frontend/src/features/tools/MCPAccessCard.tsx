@@ -9,7 +9,7 @@ import {
   type MCPAccessLevel,
   type MCPAccessView,
   type MCPConnectionState,
-} from '../../api/mcp'
+} from '../../api/system/mcp'
 import { ApiError } from '../../api/http'
 import { clientGuide, clientOptions, type MCPClientKey } from './clientGuides'
 import './connections.css'

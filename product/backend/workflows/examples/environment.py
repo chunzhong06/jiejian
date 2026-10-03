@@ -17,15 +17,15 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.identities.models import TestIdentityAuthMethod, TestIdentityCookie
 from product.backend.infra.samples import OfficialSampleManager, OfficialSampleRuntime
 from product.backend.infra.secrets import credential_ref
-from product.backend.workflows.business_boundaries.official_recipe import official_boundary_recipe
+from product.backend.workflows.business_boundaries.proposals.official_recipe import official_boundary_recipe
 from product.backend.workflows.checks.registry import CheckRuntimeRegistration, RegisteredCheckIdentity, RegisteredCheckProof, RegisteredAuxiliarySource
 from product.backend.workflows.examples.materials import EXPORT_ACTION_KEY, VIEW_ACTION_KEY, SAMPLE_RESOURCE_ID, SAMPLE_PROJECT_ID
 from product.backend.workflows.checks.local_observer_wiring import load_local_observer_wiring
 from product.backend.workflows.test_identities import PreparedLoginState, TestIdentityStatus
-from product.protocols.check_runtime import CheckIdentityVerification, CheckAuxiliarySource
-from product.protocols.execution_v3 import WireModel
+from product.protocols.checks.check_runtime import CheckIdentityVerification, CheckAuxiliarySource
+from product.protocols.checks.execution_request import WireModel
 from product.protocols.observer import ObserverSpec
-from product.backend.workflows.preparation.supplemental_contract import request_uuid
+from product.backend.workflows.preparation.supplemental.contract import request_uuid
 from product.backend.workflows.examples.recovery import SampleRecovery
 from product.backend.workflows.examples.preset_delivery import prepare_preset_task, register_preset_delivery, preset_change_id
 

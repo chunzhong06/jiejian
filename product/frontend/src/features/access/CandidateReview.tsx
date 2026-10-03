@@ -1,8 +1,9 @@
 // 候选选择先留在本地，经完整审阅后原子提交；未知回执只回读，不自动重发。
 import { Alert, Button, Checkbox, Input, Popconfirm, Segmented } from 'antd'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { projectsApi, type ApplicationUnderstandingDto, type CandidateSelection } from '../../api/projects'
-import { useTaskGuard, TaskReceipt } from '../../app/tasks/TaskContinuity'
+import { projectsApi, type ApplicationUnderstandingDto, type CandidateSelection } from '../../api/applications/projects'
+import { useTaskGuard } from '../../shared/runtime/editGuard'
+import { TaskReceipt } from '../../shared/ui/TaskReceipt'
 
 export function CandidateReview({ value, onApplied, onEditingChange, manual, staleReview }: {
   value: ApplicationUnderstandingDto; onApplied: (value: ApplicationUnderstandingDto, confirmed?: boolean) => void

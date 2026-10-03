@@ -1,11 +1,11 @@
 // 预设开发演练复用普通变化、检查与原题事实；复制需求不等于真实 Agent 已接收。
 import { Alert, Button, Modal, Select, Spin } from 'antd'
 import { useContext, useEffect, useRef, useState } from 'react'
-import { experienceApi, type OfficialDevelopmentJourneyDto, type OfficialExperienceDto } from '../../api/experience'
-import { repairsApi, repairReference, type ProjectRepair } from '../../api/repairs'
+import { experienceApi, type OfficialDevelopmentJourneyDto, type OfficialExperienceDto } from '../../api/applications/experience'
+import { repairsApi, repairReference, type ProjectRepair } from '../../api/checks/repairs'
 import { ApiError } from '../../api/http'
-import { WorkPageVisible } from '../../app/RetainedWorkPages'
-import { useLiveRead } from '../../app/useLiveRead'
+import { WorkPageVisible } from '../../shared/runtime/visibility'
+import { useLiveRead } from '../../shared/runtime/useLiveRead'
 import './development.css'
 
 export function OfficialDevelopmentJourney({ value, onChanged, onNavigate, onError }: {

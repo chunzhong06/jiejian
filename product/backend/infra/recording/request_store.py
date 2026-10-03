@@ -131,7 +131,7 @@ class RecordingRequestStore:
 
     def load_history(self, job_id: str, *, expected_hash: str):
         """只读验证已发布 v2 来源；Worker 仍使用只接受 v3 的 load。"""
-        from product.protocols.recording_legacy import read_legacy_document
+        from product.protocols.recording.recording_legacy import read_legacy_document
         try:
             path = self.path_for(job_id)
             if path.stat().st_size > RECORDING_REQUEST_MAX_BYTES:

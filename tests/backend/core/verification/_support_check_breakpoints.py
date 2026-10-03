@@ -5,7 +5,7 @@ from product.backend.core.verification.trace import (
     ExecutionTrace, TraceEvent, TraceEventKind, TraceCorrelationKind,
     TraceAuthorityScope, TraceAuthorizationDecision,
 )
-from tests.fixtures.check_execution import execution_pair
+from tests.fixtures.checks.check_execution import execution_pair
 
 def inputs(kind="AUTHORIZATION_MISSING", *, prefix="event", actual_subject=None):
     request, bundle = execution_pair(state_changing=True)

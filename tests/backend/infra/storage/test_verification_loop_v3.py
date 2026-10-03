@@ -13,7 +13,7 @@ from alembic.operations import Operations
 
 from product.backend.infra.storage import upgrade_database
 from product.backend.infra.storage.db import _sqlite_schema_signature
-from tests.fixtures.action_preparation import build_preparation_harness, add_recording
+from tests.fixtures.preparation.action_preparation import build_preparation_harness, add_recording
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -52,7 +52,7 @@ def test_fresh_incremental_schema_and_repeat_start_match(tmp_path):
 
 
 def test_nonempty_recording_and_business_rows_remain_identical(tmp_path):
-    from tests.fixtures.legacy_recording import _nonempty_0003
+    from tests.fixtures.preparation.legacy_recording import _nonempty_0003
     old, _ = _nonempty_0003(tmp_path)
     command.upgrade(migration_config(old), "0004_action_resource_ownership")
     with sqlite3.connect(old) as destination:
@@ -119,7 +119,7 @@ def test_each_dormant_table_with_valid_foreign_keys_refuses_before_ddl(tmp_path,
 
 
 def test_nonempty_0003_through_0005_preserves_four_bindings_and_recording_lease(tmp_path):
-    from tests.fixtures.legacy_recording import _nonempty_0003
+    from tests.fixtures.preparation.legacy_recording import _nonempty_0003
     database, flow = _nonempty_0003(tmp_path)
     raw_flow = flow.read_bytes()
     command.upgrade(migration_config(database), "0004_action_resource_ownership")

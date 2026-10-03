@@ -5,8 +5,8 @@ import os
 import subprocess
 import sys
 import pytest
-from product.protocols.execution_v3 import PersistedExecutionRequestV3, ExecutionV3Error, canonical_execution_request_v3_bytes, parse_execution_request_v3
-from tests.fixtures.check_plan import plan
+from product.protocols.checks.execution_request import PersistedExecutionRequestV3, ExecutionV3Error, canonical_execution_request_v3_bytes, parse_execution_request_v3
+from tests.fixtures.checks.check_plan import plan
 
 
 def request():
@@ -19,7 +19,7 @@ def request():
 
 def test_execution_v3_import_closure_has_no_backend():
     result = subprocess.run([sys.executable, "-B", "-c",
-        "import sys; import product.protocols.execution_v3; assert not any(n.startswith('product.backend') for n in sys.modules)"],
+        "import sys; import product.protocols.checks.execution_request; assert not any(n.startswith('product.backend') for n in sys.modules)"],
         env=os.environ | {"PYTHONDONTWRITEBYTECODE": "1"}, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
@@ -68,7 +68,7 @@ def test_wire_rejects_broken_case_and_twin_references(mutation):
 
 
 def repair_context(reference, regressions=('b' * 64,)):
-    from product.protocols.execution_v3 import RepairContext
+    from product.protocols.checks.execution_request import RepairContext
     case = request().actions[0].cases[0]
     permission = {key: getattr(case.permission, key) for key in ('intent_id', 'revision', 'intent_hash')}
     return RepairContext.model_validate_json(json.dumps(dict(
@@ -84,7 +84,7 @@ def repair_context(reference, regressions=('b' * 64,)):
 @pytest.mark.parametrize('reference', ['0' * 64, 'a' * 64, 'f' * 64])
 def test_complete_repair_hash_roundtrips_without_widening_logical_ids(reference):
     from pydantic import TypeAdapter, ValidationError
-    from product.protocols.execution_v3 import LogicalId
+    from product.protocols.checks.execution_request import LogicalId
     context = repair_context(reference)
     source = request().model_copy(update={'repair_context': context})
     raw = canonical_execution_request_v3_bytes(source)
@@ -119,7 +119,7 @@ def test_block_without_prior_safe_regression_keeps_explicit_control_in_new_reque
 ])
 def test_empty_regression_does_not_relax_other_required_repair_facts(field, value):
     from pydantic import ValidationError
-    from product.protocols.execution_v3 import RepairContext
+    from product.protocols.checks.execution_request import RepairContext
     payload = repair_context('a' * 64, regressions=()).model_dump(mode='json')
     payload[field] = value
     with pytest.raises(ValidationError):

@@ -146,7 +146,7 @@ function Read-DevelopmentIdentity {
     try {
         # 重新计算身份时不能拿旧指纹自证，但读取动作也不能删除已经确认的父进程身份。
         Remove-Item Env:JIEJIAN_RUNTIME_FINGERPRINT -ErrorAction SilentlyContinue
-        $probe = "import json; from product.backend.infra.runtime.process.identity import python_environment_report; print(json.dumps(python_environment_report(), ensure_ascii=False))"
+        $probe = "import json; from product.backend.infra.runtime.process.controlled.identity import python_environment_report; print(json.dumps(python_environment_report(), ensure_ascii=False))"
         $raw = (& $script:Python -B -c $probe 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { return $null }
         try { return $raw | ConvertFrom-Json } catch { return $null }
@@ -161,7 +161,7 @@ function Confirm-DevelopmentIdentity {
     if ($null -eq $report) { Fail-Development "python-identity" "无法读取 Python 环境身份" "执行 .\scripts\dev.ps1 sync" }
     if (-not $report.ok) { Fail-Development "python-identity" ("Python 环境来源异常：" + (@($report.issues) -join "；")) "执行 .\scripts\dev.ps1 bootstrap" }
     $env:JIEJIAN_RUNTIME_FINGERPRINT = [string]$report.runtime_fingerprint
-    & $script:Python -B -c "from product.backend.infra.runtime.process.identity import require_python_environment; require_python_environment()" 2>$null
+    & $script:Python -B -c "from product.backend.infra.runtime.process.controlled.identity import require_python_environment; require_python_environment()" 2>$null
     if ($LASTEXITCODE -ne 0) { Fail-Development "python-identity" "主进程环境指纹复核失败" "执行 .\scripts\dev.ps1 sync" }
     Set-StateValue "runtime_fingerprint" $env:JIEJIAN_RUNTIME_FINGERPRINT
 }

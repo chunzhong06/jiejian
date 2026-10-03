@@ -3,7 +3,7 @@ from typing import Literal
 from .preset_delivery import preset_change_id
 
 from product.backend.core.errors import JiejianError
-from product.protocols.execution_v3 import WireModel
+from product.protocols.checks.execution_request import WireModel
 
 
 class OfficialDevelopmentJourney(WireModel):

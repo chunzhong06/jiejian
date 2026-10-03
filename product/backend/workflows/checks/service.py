@@ -7,16 +7,23 @@ import logging
 import time
 from uuid import uuid4
 from threading import RLock
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from product.backend.infra.storage import StorageUnitOfWork, RunRecord
+    from product.backend.workflows.changes.observations import CodeObservationService
+    from product.backend.workflows.changes.service import CurrentSourceChangeService
+    from product.backend.workflows.checks.repairs.repair import CurrentRepairService
 
 from pydantic import Field
 
 from product.backend.core.checks.plan import ActionCheckPlan, CheckPlanGap
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.artifacts.check_validation import check_publication_budget_reason, validate_check_inputs
-from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+from product.backend.infra.artifacts.checks.check_validation import check_publication_budget_reason, validate_check_inputs
+from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.jobs.models import SubmitJob
-from product.protocols.check_runtime import check_runtime_fingerprint
-from product.protocols.execution_v3 import Hash, LogicalId, WireModel, canonical_execution_request_v3_bytes, content_hash
+from product.protocols.checks.check_runtime import check_runtime_fingerprint
+from product.protocols.checks.execution_request import Hash, LogicalId, WireModel, canonical_execution_request_v3_bytes, content_hash
 
 
 class CheckPreview(WireModel):
@@ -33,7 +40,7 @@ class CheckService:
     """预览只读；提交重验全部当前事实与 expected plan，幂等性绑定完整请求字节。"""
 
     def __init__(self, *, uow_factory, var_dir, preparation, business_boundaries, runtime_builder,
-                 registry, queue, engine_version, source_inspector, clock_us=None):
+                 registry, queue, engine_version, source_inspector, clock_us=None, code_observations: CodeObservationService | None = None):
         self._uow_factory, self._preparation = uow_factory, preparation
         self._boundaries, self._builder, self._registry = business_boundaries, runtime_builder, registry
         self._queue, self._store = queue, CheckRequestStore(var_dir)
@@ -42,11 +49,24 @@ class CheckService:
         self._submission_lock = RLock()
         self._source_inspector = source_inspector
         self._changes = self._repairs = None
-        self.code_observations = None
-        self.delivery_run_attacher = None
+        self._code_observations = code_observations
+        self._delivery_run_attacher = None
 
-    def set_revalidation_services(self, *, changes, repairs):
+    def set_revalidation_services(self, *, changes: CurrentSourceChangeService, repairs: CurrentRepairService):
+        """连接变化与原题读取；同一对象可重申，不能在装配后替换成另一套服务。"""
+        if (self._changes is not None and self._changes is not changes) or (self._repairs is not None and self._repairs is not repairs):
+            raise ValueError("检查复验服务已经连接")
         self._changes,self._repairs = changes,repairs
+
+    def bind_delivery_recorder(self, recorder: Callable[[StorageUnitOfWork, RunRecord, str | None], None]):
+        """记录器使用 JobQueue 提供的原 UoW；连接时不调用它。"""
+        if self._delivery_run_attacher is not None and self._delivery_run_attacher != recorder:
+            raise ValueError("交付检查记录器已经连接")
+        self._delivery_run_attacher = recorder
+
+    def validate_connections(self):
+        if any(value is None for value in (self._changes, self._repairs, self._delivery_run_attacher, self._code_observations)):
+            raise ValueError("生产检查的变化、修复或记录能力尚未连接")
 
     def pending_request(self, run_id):
         """只读已提交但未发布的冻结请求，供项目修复状态识别正在复验的精确原题。"""
@@ -103,10 +123,10 @@ class CheckService:
             self._store.write_bundle(job_id, bundle)
             self._store.write(job_id, request)
             def attach_created(work, run):
-                if self.code_observations is not None:
-                    self.code_observations.attach_run(work, run)
-                if self.delivery_run_attacher is not None:
-                    self.delivery_run_attacher(work, run, change_id)
+                if self._code_observations is not None:
+                    self._code_observations.attach_run(work, run)
+                if self._delivery_run_attacher is not None:
+                    self._delivery_run_attacher(work, run, change_id)
             result = self._queue.submit(submission, precondition=checkpoint, on_created=attach_created)
             created = result.created
             return result

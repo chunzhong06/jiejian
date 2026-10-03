@@ -22,7 +22,7 @@
 - `_README`
 - `build(arguments) -> None`
 - `main() -> None`
-主要 import / dot-source：`__future__`, `argparse`, `collections.abc`, `hashlib`, `json`, `os`, `pathlib`, `product.backend`, `product.protocols.portable_release`, `shutil`, `subprocess`, `sys`, `zipfile`
+主要 import / dot-source：`__future__`, `argparse`, `collections.abc`, `hashlib`, `json`, `os`, `pathlib`, `product.backend`, `product.protocols.runtime.portable_release`, `shutil`, `subprocess`, `sys`, `zipfile`
 
 ### `scripts/dev/commands.ps1`
 - `function Invoke-DevelopmentCli`

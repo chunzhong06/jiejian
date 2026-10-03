@@ -5,9 +5,9 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from product.protocols.execution_v3 import Hash, LogicalId, PermissionReference, WireModel
-from product.protocols.runtime_identity import ControlledRuntimeReference
-from product.protocols.node_runtime import NodeRuntimeReference
+from product.protocols.checks.execution_request import Hash, LogicalId, PermissionReference, WireModel
+from product.protocols.runtime.runtime_identity import ControlledRuntimeReference
+from product.protocols.runtime.node_runtime import NodeRuntimeReference
 
 TaskId = Annotated[str, Field(pattern=r"^dvt_[0-9a-f]{32}$")]
 ContextId = Annotated[str, Field(pattern=r"^ctx_[0-9a-f]{32}$")]

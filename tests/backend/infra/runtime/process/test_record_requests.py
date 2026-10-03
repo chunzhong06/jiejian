@@ -6,9 +6,9 @@ import secrets
 import httpx
 import pytest
 
-from product.backend.infra.runtime.process.node_owned import start_owned_node
-from product.backend.infra.observers.record_facts import request_fact
-from tests.fixtures.node_runtime import node_runtime_input, free_port
+from product.backend.infra.runtime.process.controlled.node_owned import start_owned_node
+from product.backend.infra.observers.records.record_facts import request_fact
+from tests.fixtures.runtime.node_runtime import node_runtime_input, free_port
 
 pytestmark = pytest.mark.skipif(os.name != 'nt',reason='Windows owned runtime')
 

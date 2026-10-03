@@ -35,7 +35,7 @@ from product.protocols import (
     ObserverOutcome,
     RunnerFailurePhase,
 )
-from product.protocols.execution import ObserverRequirementBinding
+from product.protocols.runner.execution import ObserverRequirementBinding
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,6 +1,11 @@
 # 从已检查的当前绑定冻结运行配置；原 Flow/Draft/模板先验 hash，秘密仅保留 env 引用。
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from product.backend.workflows.runtime.ports import RuntimeReference
+    from product.protocols.checks.json_check_runtime import FrozenJsonProofSource
 import hashlib
 import json
 from urllib.parse import parse_qsl, urlsplit
@@ -8,17 +13,17 @@ from urllib.parse import parse_qsl, urlsplit
 from product.backend.core.preparation.bindings import ActionEvidenceKind
 from product.backend.core.checks.plan import derive_effect_proof
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.artifacts.check_packages import read_check_bytes, reject_check_links
+from product.backend.infra.artifacts.checks.check_packages import read_check_bytes, reject_check_links
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.workflows.recording.source import identity_source_fingerprint
-from product.protocols.check_runtime import CheckActionConfig, CheckBudget, CheckRuntimeBundle, ControlledCheckRuntimeBundle, async_completion_candidates
-from product.protocols.check_runtime import NodeCheckRuntimeBundle
-from product.protocols.node_runtime import NodeRuntimeReference
+from product.protocols.checks.check_runtime import CheckActionConfig, CheckBudget, CheckRuntimeBundle, ControlledCheckRuntimeBundle, async_completion_candidates
+from product.protocols.checks.check_runtime import NodeCheckRuntimeBundle
+from product.protocols.runtime.node_runtime import NodeRuntimeReference
 from product.protocols.observer import ObserverSpec
 from product.protocols.web.response import HttpOutcomeClassifier, HttpPredicate, HttpPredicateKind
-from product.protocols.flow_draft import canonical_flow_draft_json_bytes
-from product.protocols.recording_flow import Flow
+from product.protocols.recording.flow_draft import canonical_flow_draft_json_bytes
+from product.protocols.recording.recording_flow import Flow
 from product.protocols.web.request import HttpRequestTemplate
 
 
@@ -61,12 +66,24 @@ def recorded_request_template(template) -> HttpRequestTemplate:
 
 
 class CheckRuntimeBuilder:
-    def __init__(self, *, uow_factory, var_dir, preparation, business_boundaries, credentials, registry):
+    def __init__(self, *, uow_factory, var_dir, preparation, business_boundaries, credentials, registry, source_inspector):
         self._uow_factory, self._var_dir = uow_factory, var_dir.resolve()
         self._preparation, self._boundaries = preparation, business_boundaries
         self._credentials, self._registry = credentials, registry
-        self.runtime_reference_reader = None
-        self.json_sources_reader = None
+        self._source_inspector = source_inspector
+        self._runtime_reference_reader = None
+        self._json_sources_reader = None
+
+    def bind_runtime_readers(self, *, reference_reader: Callable[[str], RuntimeReference | None],
+                             sources_reader: Callable[[str], tuple[FrozenJsonProofSource, ...]]):
+        """运行 provider 完成后连接唯一读取关系；不查询运行或冻结材料。"""
+        if (self._runtime_reference_reader is not None and self._runtime_reference_reader != reference_reader) or (self._json_sources_reader is not None and self._json_sources_reader != sources_reader):
+            raise ValueError("检查运行读取者已经连接")
+        self._runtime_reference_reader, self._json_sources_reader = reference_reader, sources_reader
+
+    def validate_connections(self):
+        if self._runtime_reference_reader is None or self._json_sources_reader is None:
+            raise ValueError("生产检查的运行与来源读取者尚未连接")
 
     def build(self, project_id, *, work=None):
         if work is None:
@@ -191,24 +208,24 @@ class CheckRuntimeBuilder:
         bundle = CheckRuntimeBundle.model_validate_json(json.dumps(dict(project_id=project_id,
             source_fingerprint=understanding.source_fingerprint, target=target.model_dump(mode="json"),
             budget=budget.model_dump(mode="json"), identities=identities, actions=configs, observers=list(specs.values()))), strict=True)
-        reference = None if self.runtime_reference_reader is None else self.runtime_reference_reader(project_id)
+        reference = None if self._runtime_reference_reader is None else self._runtime_reference_reader(project_id)
         if reference is not None:
             if reference.source_fingerprint!=bundle.source_fingerprint:
                 raise _incomplete('RUNTIME_SOURCE_NOT_LOADED')
             if isinstance(reference,NodeRuntimeReference) and bundle.target.base_url!=f'http://127.0.0.1:{reference.port}':
                 raise _incomplete('RUNTIME_ENDPOINT_MISMATCH')
             model=NodeCheckRuntimeBundle if isinstance(reference,NodeRuntimeReference) else ControlledCheckRuntimeBundle
-            if isinstance(reference,NodeRuntimeReference) and self.json_sources_reader is not None:
-                sources = self.json_sources_reader(project_id)
+            if isinstance(reference,NodeRuntimeReference) and self._json_sources_reader is not None:
+                sources = self._json_sources_reader(project_id)
                 if sources:
-                    from product.protocols.json_check_runtime import ManagedCheckRuntimeBundle
+                    from product.protocols.checks.json_check_runtime import ManagedCheckRuntimeBundle
                     return ManagedCheckRuntimeBundle(**bundle.model_dump(exclude={'schema_version'}),
                         runtime_reference=reference,json_sources=sources)
             return model(**bundle.model_dump(exclude={"schema_version"}), runtime_reference=reference)
         return bundle
 
     def _check_binding(self, work, binding, action, understanding):
-        reasons = self._preparation._bindings._source_reasons(work, binding, action, understanding)
+        reasons = self._source_inspector.reasons(work, binding, action, understanding)
         if reasons:
             raise _incomplete(reasons[0])
         if getattr(binding, "source_recording_id", None) is not None:

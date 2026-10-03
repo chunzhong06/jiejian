@@ -13,7 +13,7 @@ from product.protocols import CleanupResult, CleanupStatus, ObserverOutcomeStatu
 from product.backend.workflows.reports.gating import RegressionGate
 from product.backend.workflows.reports.findings import FindingQueries
 from product.backend.infra.storage import ProjectRecord, RunRecord, StorageUnitOfWork, create_session_factory, create_sqlite_engine, upgrade_database
-from tests.fixtures.runner import evidence as make_evidence, rehash_evidence, runner_input
+from tests.fixtures.runtime.runner import evidence as make_evidence, rehash_evidence, runner_input
 
 
 PROJECT_ID = "project-gating"

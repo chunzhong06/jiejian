@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { Alert, Space, Typography } from 'antd'
-import type { RecordingDto, RecordingJobDto } from '../../api/recordings'
-import type { JobEventDto } from '../../api/jobs'
-import { browserState } from '../../app/browserState'
-import { lifecycleLabel } from '../../app/presentation'
+import type { RecordingDto, RecordingJobDto } from '../../api/preparation/recordings'
+import type { JobEventDto } from '../../api/preparation/jobs'
+import { browserState } from '../../shared/runtime/browserState'
+import { lifecycleLabel } from '../../shared/presentation/execution'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 
 export function captureLabel(recording: RecordingDto | null) {

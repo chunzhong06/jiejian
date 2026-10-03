@@ -10,9 +10,10 @@ import type {
   ProposedActionDto,
   ProposedActorDto,
   ProposedPermissionDto,
-} from '../../../api/businessBoundaries'
+} from '../../../api/boundaries/businessBoundaries'
 import { PermissionRuleForm } from '../rules/PermissionRuleForm'
-import { TaskReceipt, useTaskGuard } from '../../../app/tasks/TaskContinuity'
+import { TaskReceipt } from '../../../shared/ui/TaskReceipt'
+import { useTaskGuard } from '../../../shared/runtime/editGuard'
 import { RuleSentence } from '../../../shared/ui/Editorial'
 import { confidenceLabels, effectKindLabels } from '../draft/boundaryLabels'
 

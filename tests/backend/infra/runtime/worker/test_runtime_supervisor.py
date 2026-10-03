@@ -8,13 +8,13 @@ import httpx
 import pytest
 
 from product.backend.core.lifecycle import JobState, ProjectStatus
-from product.backend.infra.runtime.process.node_owned import node_reference_matches
+from product.backend.infra.runtime.process.controlled.node_owned import node_reference_matches
 from product.backend.infra.runtime.worker.runtime_supervisor import LocalRuntimeSupervisor
 from product.backend.infra.storage import (ProjectRecord,StorageUnitOfWork,create_session_factory,
     create_sqlite_engine,default_database_path,upgrade_database)
-from product.backend.workflows.runtime_load_jobs import RuntimeLoadJobs
-from tests.fixtures.node_runtime import node_runtime_input
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from product.backend.workflows.runtime.load_jobs import RuntimeLoadJobs
+from tests.fixtures.runtime.node_runtime import node_runtime_input
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 pytestmark=pytest.mark.skipif(os.name!='nt',reason='Windows runtime ownership boundary')
 

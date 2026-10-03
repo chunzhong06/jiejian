@@ -1,0 +1,316 @@
+# 从完整性已验证的发布包生成只读结果说明；固定文案与安全结论均不由解释器创造。
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import Field
+
+from product.backend.core.lifecycle import CaseVerdict, RunVerdict
+from product.backend.core.checks.repair import CurrentRepairContract, CurrentRepairVerification
+from product.backend.core.verification.breakpoints import BreakpointLocator, BreakpointResult
+from product.backend.core.verification.checks import CheckDecisionInput, project_check_effect_facts
+from product.backend.core.verification.trace import TraceAuthorizationDecision, TraceEventKind
+from product.backend.workflows.checks.repairs.repair_presentation import RepairComparisonRow, build_repair_comparison
+from product.backend.workflows.checks.reading.story_text import CLAIM_BOUNDARIES, EFFECT_LABELS, EXECUTION_LABELS, JUDGEMENTS
+from product.backend.workflows.checks.reading.observation_reading import ObservationReading, observation_reading
+from product.protocols.checks.check_result import CheckObservation, CheckCaseOutcome
+from product.protocols.checks.execution_request import ChangeContext, FrozenPermission, WireModel
+
+
+class StoryIdentity(WireModel):
+    identity_id: str | None
+    label: str | None
+    actor_id: str | None
+    actor_label: str | None
+    verification_status: Literal["PLANNED", "MATCH", "MISMATCH", "UNKNOWN"]
+    namespace: str | None = None
+    application_subject_id: str | None = None
+
+
+class StoryEffect(WireModel):
+    effect_id: str
+    business_label: str
+    resource_concept: str
+    observed_state: Literal["CONFIRMED", "ABSENT", "UNKNOWN"]
+    judgement: str
+    evidence_refs: tuple[str, ...]
+
+
+class StoryControl(WireModel):
+    case_id: str
+    verdict: CaseVerdict
+    evidence_refs: tuple[str, ...]
+
+
+class FactComparison(WireModel):
+    permission_requirement: FrozenPermission
+    planned_identity: StoryIdentity
+    planned_resource_owner: StoryIdentity | None = None
+    resource_id: str | None = None
+    verified_actual_identity: StoryIdentity
+    http_surface: CheckCaseOutcome
+    http_explanation: str
+    effects: tuple[StoryEffect, ...]
+    allow_control: StoryControl | None
+
+
+class EvidenceExplanation(WireModel):
+    source_label: str
+    source_location: str
+    observed_fact: CheckObservation
+    supports_claim: str
+    does_not_prove: str
+    evidence_refs: tuple[str, ...]
+    reading: ObservationReading | None = None
+
+
+class StoryTraceEvent(WireModel):
+    event_id: str
+    parent_event_ids: tuple[str, ...]
+    kind: TraceEventKind
+    authorization_decision: TraceAuthorizationDecision | None
+    effect_id: str | None
+    dispatch_effect_ids: tuple[str, ...]
+    source_component: str
+    source_location: str
+
+
+class StoryExecutionPath(WireModel):
+    complete: bool
+    reason_codes: tuple[str, ...]
+    events: tuple[StoryTraceEvent, ...] = Field(max_length=512)
+    evidence_refs: tuple[str, ...]
+
+
+class StoryProofCoverage(WireModel):
+    effect_id: str
+    business_label: str
+    proof_fingerprint: str
+    required_level: Literal["VERDICT_REQUIRED", "SUPPORTING"]
+    source_label: str
+    observed_state: Literal["CONFIRMED", "ABSENT", "UNKNOWN"]
+    evidence_refs: tuple[str, ...]
+    supporting_evidence_refs: tuple[str, ...]
+    limitations: tuple[str, ...]
+
+
+class ActionResultStory(WireModel):
+    action_id: str
+    action_revision: int = Field(ge=1)
+    display_name: str
+    case_id: str
+    permission: FrozenPermission
+    judgement: str
+    fact_comparison: FactComparison
+    breakpoint: BreakpointResult | None
+    decisive_proof_chain: tuple[EvidenceExplanation, ...] = Field(max_length=4)
+    evidence_explanations: tuple[EvidenceExplanation, ...]
+    claim_boundary: tuple[str, ...]
+    repair_requirement: CurrentRepairContract | None = None
+    repair_comparison: tuple[RepairComparisonRow, ...] = ()
+    technical_references: tuple[str, ...]
+    execution_path: StoryExecutionPath | None = None
+    proof_coverage: tuple[StoryProofCoverage, ...] = ()
+
+
+class ResultStory(WireModel):
+    run_id: str
+    project_id: str
+    verdict: RunVerdict
+    judgement: str
+    policy_epoch: int = Field(ge=0)
+    actions: tuple[ActionResultStory, ...]
+    claim_boundary: tuple[str, ...]
+    technical_references: tuple[str, ...]
+    change_context: ChangeContext | None = None
+    repair_verification: CurrentRepairVerification | None = None
+    runtime_status: Literal["MATCHED", "UNCONFIRMED", "UNSUPPORTED"] = "UNSUPPORTED"
+    runtime_instance_id: str | None = None
+
+
+class CheckStoryBuilder:
+    """只消费 Reader 已验证的同 Run 事实；定位和解释不会重算或改写已发布 Verdict。"""
+
+    def __init__(self, reader):
+        self._reader = reader
+        self._repairs = None
+
+    def bind_repairs(self, repairs):
+        """原题服务装配后连接解释读取；历史结果仍由原 reader 校验。"""
+        if self._repairs is not None and self._repairs is not repairs:
+            raise ValueError("结果故事的原题读取者已经连接")
+        self._repairs = repairs
+
+    def validate_connections(self):
+        if self._repairs is None:
+            raise ValueError("生产结果故事尚未连接原题读取者")
+
+    def build(self, run_id: str, *, include_repair=True) -> ResultStory:
+        package = self._reader.package(run_id)
+        results = {item.case_id: item for item in package.result.case_results}
+        evidence = {item.evidence_id: item for item in package.evidence}
+        configs = {item.action_id: item for item in package.bundle.actions}
+        identities = {item.identity_id: item for item in package.bundle.identities}
+        source_types = {item.observer_id: item.observer_type.value for item in package.bundle.observers}
+        stories = []
+        for action in package.request.actions:
+            config = configs[action.action_id]
+            proofs = {item.binding_fingerprint: item for item in config.proofs}
+            cases = {item.case_id: item for item in action.cases}
+            twins = {item.deny_case_id: item for item in action.twins}
+            for case in action.cases:
+                result = results[case.case_id]
+                documents = tuple(evidence[ref] for ref in result.evidence_ids)
+                observations = tuple(item for document in documents for item in document.observations)
+                facts = project_check_effect_facts(case, observations)
+                identity = identities[case.subject_test_identity_id]
+                planned = StoryIdentity(identity_id=identity.identity_id, label=identity.label,
+                    actor_id=identity.actor_id, actor_label=identity.actor_label, verification_status="PLANNED")
+                # 资源归属同样来自本轮冻结身份，不能冒充目标实际识别的操作人。
+                owner = identities[case.resource_owner_test_identity_id]
+                planned_owner = StoryIdentity(identity_id=owner.identity_id, label=owner.label,
+                    actor_id=owner.actor_id, actor_label=owner.actor_label, verification_status="PLANNED")
+                status = result.outcome.actual_identity_status
+                verification = identity.verification if status == "MATCH" else None
+                actual = planned.model_copy(update=dict(verification_status=status,
+                    identity_id=identity.identity_id if verification is not None else None,
+                    label=identity.label if verification is not None else None,
+                    actor_id=identity.actor_id if verification is not None else None,
+                    actor_label=identity.actor_label if verification is not None else None,
+                    namespace=verification.namespace if verification is not None else None,
+                    application_subject_id=verification.expected_application_subject_id if verification is not None else None))
+                control, breakpoint = None, None
+                twin = twins.get(case.case_id)
+                if twin is not None:
+                    allow_result = results[twin.allow_case_id]
+                    control = StoryControl(case_id=allow_result.case_id, verdict=allow_result.verdict,
+                        evidence_refs=allow_result.evidence_ids)
+                    if result.verdict is CaseVerdict.VULNERABLE:
+                        allow_docs = tuple(evidence[ref] for ref in allow_result.evidence_ids)
+                        allow_case = cases[twin.allow_case_id]
+                        allow_facts = project_check_effect_facts(allow_case,
+                            tuple(item for document in allow_docs for item in document.observations))
+                        namespaces = {source.trace_namespace for proof in config.proofs for source in proof.auxiliary_sources
+                                      if source.trace_namespace is not None}
+                        breakpoint = BreakpointLocator().locate_current(action=action, twin=twin,
+                            allow_facts=_decision_input(allow_case, allow_result, allow_facts, None),
+                            deny_facts=_decision_input(case, result, facts, allow_result.verdict),
+                            allow_trace=_single_trace(allow_docs), deny_trace=_single_trace(documents),
+                            identities=package.bundle.identities, trace_namespace=next(iter(namespaces)) if len(namespaces) == 1 else None,
+                            allow_evidence_refs=allow_result.evidence_ids, deny_evidence_refs=result.evidence_ids)
+                requirements = {proof.proof_fingerprint: proof for proof in case.proof_requirements}
+                explanations, decisive = [], []
+                for document in documents:
+                    for item in document.observations:
+                        proof = proofs[requirements[item.proof_fingerprint].binding_fingerprint]
+                        source = next((source for source in proof.auxiliary_sources if source.observer_id == item.observer_id), proof)
+                        trusted = item.complete and item.reliable and item.correlated and item.authoritative
+                        reading = observation_reading(item, source_type=source_types.get(item.observer_id))
+                        support = (EFFECT_LABELS[item.state] if item.level == "VERDICT_REQUIRED" and trusted
+                            and (item.state != "ABSENT" or item.closure == "CLOSED") else CLAIM_BOUNDARIES["supporting"]
+                            if item.level != "VERDICT_REQUIRED" else CLAIM_BOUNDARIES["unknown"])
+                        explanation = EvidenceExplanation(source_label=source.source_label, source_location=source.source_location,
+                            observed_fact=item, supports_claim=support, does_not_prove=CLAIM_BOUNDARIES["scope"]
+                            if trusted and item.level == "VERDICT_REQUIRED" else CLAIM_BOUNDARIES["supporting"],
+                            evidence_refs=(document.evidence_id,), reading=reading)
+                        if item.level != "VERDICT_REQUIRED":
+                            explanation = explanation.model_copy(update={"supports_claim": reading.detail})
+                        explanations.append(explanation)
+                        # 暂未发现但窗口未闭合只保留在完整来源中，不能提升为决定性证明。
+                        if item.level == "VERDICT_REQUIRED" and trusted and item.phase in ("AFTER", "EVENTUAL") and (
+                            item.state == "CONFIRMED" or (item.state == "ABSENT" and item.closure == "CLOSED")
+                        ):
+                            decisive.append(explanation)
+                effects = []
+                for fact in facts:
+                    proof = proofs[requirements[fact.proof_fingerprint].binding_fingerprint]
+                    effects.append(StoryEffect(effect_id=fact.effect_id, business_label=proof.business_label,
+                        resource_concept=proof.resource_concept, observed_state=fact.state,
+                        judgement=CLAIM_BOUNDARIES["unknown"] if fact.state == "ABSENT" and fact.closure != "CLOSED"
+                        else EFFECT_LABELS[fact.state], evidence_refs=tuple(document.evidence_id for document in documents
+                            if any(item.proof_fingerprint == fact.proof_fingerprint for item in document.observations))))
+                judgement = JUDGEMENTS[{CaseVerdict.SAFE: "PASS", CaseVerdict.VULNERABLE: "BLOCK"}.get(result.verdict, "INCONCLUSIVE")]
+                stories.append(ActionResultStory(action_id=action.action_id, action_revision=action.action_revision,
+                    display_name=config.display_name, case_id=case.case_id, permission=case.permission, judgement=judgement,
+                    fact_comparison=FactComparison(permission_requirement=case.permission, planned_identity=planned,
+                        planned_resource_owner=planned_owner, resource_id=case.resource_id,
+                        verified_actual_identity=actual, http_surface=result.outcome,
+                        http_explanation=EXECUTION_LABELS[result.outcome.execution_outcome], effects=tuple(effects), allow_control=control),
+                    breakpoint=breakpoint, decisive_proof_chain=tuple(decisive[:4]), evidence_explanations=tuple(explanations),
+                    claim_boundary=tuple(CLAIM_BOUNDARIES[key] for key in ("execution", "identity", "scope", "immutable")),
+                    technical_references=(case.case_id, *result.evidence_ids), execution_path=_execution_path(documents),
+                    proof_coverage=_proof_coverage(case, proofs, documents, facts)))
+        verification = None
+        if include_repair and self._repairs is not None:
+            contracts = {item.source_case_id:item for item in self._repairs.contracts(run_id)}
+            stories = [item.model_copy(update={"repair_requirement": contracts.get(item.case_id),
+                "repair_comparison": build_repair_comparison(contracts[item.case_id], package)
+                    if item.case_id in contracts else ()}) for item in stories]
+            verification = self._repairs.verification(run_id)
+        correspondence = getattr(package.result, "runtime_correspondence", None)
+        runtime_status = "UNSUPPORTED" if correspondence is None else "MATCHED" if correspondence.before == correspondence.after == "MATCHED" else "UNCONFIRMED"
+        return ResultStory(run_id=run_id, project_id=package.request.project_id, verdict=package.result.verdict,
+            runtime_status=runtime_status, runtime_instance_id=None if correspondence is None else correspondence.reference.instance_id,
+            judgement=JUDGEMENTS[package.result.verdict.value], policy_epoch=package.request.policy_epoch,
+            actions=tuple(stories), claim_boundary=(CLAIM_BOUNDARIES["scope"], CLAIM_BOUNDARIES["immutable"]),
+            technical_references=(package.result.request_hash, package.result.config_hash, package.manifest.result_hash),
+            change_context=package.request.change_context,repair_verification=verification)
+
+
+def _proof_coverage(case, proofs, documents, facts):
+    """复制同包已投影事实；引用按观察级别分组，不以文档 ID 合并提升证明等级。"""
+    projected = {(item.proof_fingerprint, item.effect_id): item for item in facts}
+    coverage = []
+    for requirement in case.proof_requirements:
+        proof = proofs[requirement.binding_fingerprint]
+        matched = tuple((document.evidence_id, observation) for document in documents
+            for observation in document.observations
+            if (observation.proof_fingerprint, observation.effect_id) ==
+               (requirement.proof_fingerprint, requirement.effect_id))
+        fact = projected.get((requirement.proof_fingerprint, requirement.effect_id))
+        limitations = []
+        state = "UNKNOWN" if fact is None or not matched else fact.state
+        if not matched:
+            limitations.append("本轮没有对应观察")
+        if fact is not None and fact.state == "ABSENT" and fact.closure != "CLOSED":
+            state = "UNKNOWN"
+            limitations.append("观察窗口尚未闭合")
+        if requirement.level == "SUPPORTING":
+            limitations.append("辅助材料不替代必要证明")
+        if state == "UNKNOWN" and matched:
+            limitations.append("现有观察不足以确认业务结果")
+        coverage.append(StoryProofCoverage(effect_id=requirement.effect_id, business_label=proof.business_label,
+            proof_fingerprint=requirement.proof_fingerprint, required_level=requirement.level,
+            source_label=proof.source_label, observed_state=state,
+            evidence_refs=tuple(dict.fromkeys(ref for ref, item in matched if item.level == "VERDICT_REQUIRED")),
+            supporting_evidence_refs=tuple(dict.fromkeys(ref for ref, item in matched if item.level != "VERDICT_REQUIRED")),
+            limitations=tuple(limitations)))
+    return tuple(coverage)
+
+
+def _decision_input(case, result, facts, control):
+    outcome = result.outcome
+    return CheckDecisionInput(case=case, execution=outcome.execution_outcome, actual_identity=outcome.actual_identity_status,
+        run_correlated=outcome.run_correlated, resource_correlated=outcome.resource_correlated,
+        baseline_trusted=outcome.baseline_trusted, recovery_verified=outcome.recovery_verified,
+        allow_control_verdict=control, effects=facts)
+
+
+def _single_trace(documents):
+    traces = tuple(document.trace for document in documents if document.trace is not None)
+    # 多份不相等 Trace 不拼接因果；保持违规事实并降低定位精度。
+    return traces[0] if traces and all(trace == traces[0] for trace in traces) else None
+
+
+def _execution_path(documents) -> StoryExecutionPath | None:
+    """只投影本 Case 一致的已发布 Trace；不拼图、补边或把事件来源引用当证据文件。"""
+    trace = _single_trace(documents)
+    if trace is None:
+        return None
+    # 保留既有拓扑顺序及全部节点；部分/空路径也必须照录完整性与原因。
+    return StoryExecutionPath(complete=trace.complete, reason_codes=trace.reason_codes,
+        events=tuple(StoryTraceEvent(event_id=event.event_id, parent_event_ids=event.parent_event_ids,
+            kind=event.kind, authorization_decision=event.authorization_decision, effect_id=event.effect_id,
+            dispatch_effect_ids=event.dispatch_effect_ids, source_component=event.source_component,
+            source_location=event.source_location) for event in trace.events),
+        evidence_refs=tuple(dict.fromkeys(document.evidence_id for document in documents if document.trace == trace)))

@@ -1,9 +1,9 @@
 // 只读取指定 Run 的已发布事实；不以相同源码、最近时间或准备状态替代本批检查。
 import { Button } from 'antd'
 import { useEffect, useRef, useState } from 'react'
-import { currentChecksApi, type ResultStory } from '../../api/currentChecks'
+import { currentChecksApi, type ResultStory } from '../../api/checks/currentChecks'
 import { ApiError } from '../../api/http'
-import { useLiveRead } from '../../app/useLiveRead'
+import { useLiveRead } from '../../shared/runtime/useLiveRead'
 
 export function PermissionAcceptance({ projectId, runId, onNavigate }: { projectId: string; runId: string | null; onNavigate: (path: string) => void }) {
   const [story, setStory] = useState<ResultStory | null>(null)

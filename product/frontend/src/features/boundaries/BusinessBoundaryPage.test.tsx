@@ -4,15 +4,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BusinessBoundaryPage } from './BusinessBoundaryPage'
 import { BoundaryProposalEditor } from './proposals/BoundaryProposalEditor'
-import type { BoundaryProposalCommandDto, BoundaryDraftViewDto } from '../../api/businessBoundaries'
+import type { BoundaryProposalCommandDto, BoundaryDraftViewDto } from '../../api/boundaries/businessBoundaries'
 
 const mockApi = vi.hoisted(() => ({
   editor: vi.fn(), proposal: vi.fn(), current: vi.fn(), preview: vi.fn(), proposals: vi.fn(), createProposal: vi.fn(),
   maintenanceDraft: vi.fn(), createMaintenanceProposal: vi.fn(), approve: vi.fn(), reject: vi.fn(),
 }))
 
-vi.mock('../../api/businessBoundaries', () => ({ businessBoundariesApi: mockApi }))
-vi.mock('../../api/ruleCandidates', () => ({ruleCandidatesApi:{context:async()=>({candidates:[],next_offset:null})}}))
+vi.mock('../../api/boundaries/businessBoundaries', () => ({ businessBoundariesApi: mockApi }))
+vi.mock('../../api/boundaries/ruleCandidates', () => ({ruleCandidatesApi:{context:async()=>({candidates:[],next_offset:null})}}))
 
 const project = { project_id: 'app_demo', name: '演示应用' }
 const preview = {

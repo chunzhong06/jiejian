@@ -8,10 +8,7 @@ from pydantic import Field, model_validator
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
 from product.backend.core.verification.breakpoints import BreakpointResult
 from product.backend.core.verification.checks import project_check_effect_facts
-from product.protocols.execution_v3 import (
-    ActorId, EffectId, FrozenPermission, Hash, IdentityId, LogicalId, PermissionReference,
-    RepairContext, WireModel, content_hash,
-)
+from product.protocols.checks.execution_request import ActorId, EffectId, FrozenPermission, Hash, IdentityId, LogicalId, PermissionReference, RepairContext, WireModel, content_hash
 
 
 class CurrentRepairReference(WireModel):

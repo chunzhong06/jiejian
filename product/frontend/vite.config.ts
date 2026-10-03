@@ -37,5 +37,5 @@ export default defineConfig({
   }],
   cacheDir: process.env.JIEJIAN_FRONTEND_CACHE_DIR || '.vite',
   server: { port: 5173, strictPort: true },
-  test: { environment: 'jsdom', setupFiles: './src/test-setup.ts' },
+  test: { environment: 'jsdom', setupFiles: './src/testing/setup.ts' },
 })

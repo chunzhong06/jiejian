@@ -1,8 +1,8 @@
 # 验证纯计划保留完整回归、有限对照和证据缺口，并按冻结语义解释资源存在。
 import pytest
 from product.backend.core.checks.plan import classify_http_resource_presence
-from product.protocols.execution_v3 import CaseRole
-from tests.fixtures.check_plan import prepared_action, plan
+from product.protocols.checks.execution_request import CaseRole
+from tests.fixtures.checks.check_plan import prepared_action, plan
 
 
 def test_plan_reuses_full_allow_case_and_preserves_distinct_subject_same_owner():
@@ -88,7 +88,7 @@ def test_multiple_owners_reuse_validated_parameterized_materials(state_changing)
     from product.backend.core.preparation.requirements import compile_action_assurance
     from product.backend.core.checks.plan import PreparedIdentityAssignment
     from product.backend.core.preparation.bindings import ActionRecoveryBinding, RecordedRequestTemplate, seal_binding
-    from tests.fixtures.assurance import ACTOR, OTHER_ACTOR, action, permission
+    from tests.fixtures.checks.assurance import ACTOR, OTHER_ACTOR, action, permission
 
     original = prepared_action()
     business = action(state_changing=state_changing)

@@ -1,8 +1,8 @@
 # 验证只读观察解释区分过程、阶段和真实缺口，保留原始证据及结论语义。
 import pytest
 
-from product.backend.workflows.checks.observation_reading import observation_reading
-from product.protocols.check_result import CheckObservation
+from product.backend.workflows.checks.reading.observation_reading import observation_reading
+from product.protocols.checks.check_result import CheckObservation
 
 
 def observation(**changes):

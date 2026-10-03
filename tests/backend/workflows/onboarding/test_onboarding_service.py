@@ -13,7 +13,7 @@ import pytest
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.workflows.onboarding.models import FolderSelectionResult
 from product.backend.workflows.onboarding.workflow import OnboardingWorkflow, SystemFolderSelector
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 class FakeFolderSelector:

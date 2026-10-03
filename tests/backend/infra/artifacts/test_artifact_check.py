@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from product.backend.infra.artifacts.scan_job import ArtifactCheckJobHandler
+from product.backend.infra.artifacts.scans.scan_job import ArtifactCheckJobHandler
 from product.protocols.artifacts import (
     ArtifactCheckRequest,
     ArtifactScanStatus,
     ArtifactVerdict,
     ScanBudget,
 )
-from product.backend.infra.artifacts.scanner import scan_artifact
+from product.backend.infra.artifacts.scans.scanner import scan_artifact
 from product.backend.infra.runtime.jobs.handlers import JobHandlerRegistry
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.artifacts.run_packages import PublicationManifest

@@ -9,8 +9,8 @@ from product.backend.core.verification.checks import (
     CheckDecisionInput, CheckEffectFact, aggregate_check_verdict, evaluate_check_case,
     project_check_effect_facts,
 )
-from product.protocols.execution_v3 import ExecutionCase
-from tests.fixtures.check_plan import plan, prepared_action
+from product.protocols.checks.execution_request import ExecutionCase
+from tests.fixtures.checks.check_plan import plan, prepared_action
 
 
 def decision_input(*, deny=True, superset=False, effect="ABSENT", **overrides):
@@ -35,7 +35,7 @@ def test_explicit_denial_with_authoritative_forbidden_effect_blocks():
 
 @pytest.mark.parametrize("later_state", ["ABSENT", "UNKNOWN"])
 def test_later_observation_does_not_erase_confirmed_effect(later_state):
-    from product.protocols.check_result import CheckObservation
+    from product.protocols.checks.check_result import CheckObservation
     facts = decision_input(effect="CONFIRMED")
     proof = facts.case.proof_requirements[0]
     observation = CheckObservation(effect_id=proof.effect_id, proof_fingerprint=proof.proof_fingerprint,
@@ -48,7 +48,7 @@ def test_later_observation_does_not_erase_confirmed_effect(later_state):
 
 
 def test_partial_final_observation_cannot_prove_absence():
-    from product.protocols.check_result import CheckObservation
+    from product.protocols.checks.check_result import CheckObservation
     facts = decision_input()
     proof = facts.case.proof_requirements[0]
     observation = CheckObservation(effect_id=proof.effect_id, proof_fingerprint=proof.proof_fingerprint,

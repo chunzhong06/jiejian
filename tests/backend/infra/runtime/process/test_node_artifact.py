@@ -8,12 +8,12 @@ from uuid import uuid4
 
 import pytest
 
-from product.backend.infra.runtime.process.artifact import create_node_runtime_artifact, verify_runtime_artifact
-from product.protocols.node_runtime import NodeRuntimeManifest
-from product.protocols.runtime_identity import RuntimeFile, runtime_source_fingerprint
+from product.backend.infra.runtime.process.controlled.artifact import create_node_runtime_artifact, verify_runtime_artifact
+from product.protocols.runtime.node_runtime import NodeRuntimeManifest
+from product.protocols.runtime.runtime_identity import RuntimeFile, runtime_source_fingerprint
 
 ROOT = Path(__file__).resolve().parents[5]
-EXECUTOR = ROOT / 'product/backend/infra/runtime/process/node_target.mjs'
+EXECUTOR = ROOT / 'product/backend/infra/runtime/process/controlled/node_target.mjs'
 
 
 def _artifact(tmp_path, modules):

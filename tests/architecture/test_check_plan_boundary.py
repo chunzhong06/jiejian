@@ -9,5 +9,5 @@ def test_check_plan_has_only_pure_dependency_roots():
     imports = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
     imports += [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
     assert imports
-    assert all(name.startswith(("product.backend.core", "product.protocols.execution_v3"))
+    assert all(name.startswith(("product.backend.core", "product.protocols.checks.execution_request"))
                or name in {"__future__", "pydantic", "typing", "json", "urllib.parse"} for name in imports)

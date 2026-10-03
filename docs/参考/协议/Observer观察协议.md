@@ -12,7 +12,7 @@ Observer 公共模型仍由 `product/protocols/observer/` 定义，独立 Invoca
 
 出现范围键必须同时满足既有完整 Trace 必需字段。缺失保持缺失，空数组保持空数组；两者均不证明授权范围。记录 canonical、冲突检测和 provenance hash 保留源数组顺序，经校验投影到 `TraceAuthorityScope` 后集合才规范排序。不改原始日志或旧发布文件，无新增字段的字节规则不变。行、文件、字节、时间、游标、关联和闭合预算不变，Trace 仍最多 512 事件、256 KiB。
 
-合法委托只能由显式因果 `AUTHORIZATION/ALLOW` 祖先、非空来源范围、范围子集、实际动作/资源覆盖及凭据一致性证明；不能从角色、actor、资源名称或 ALLOW 结果补范围。定位与效果判定分离：诊断不足或合法委托不能抹去独立权威来源已确认的 DENY 禁止效果。相关真源为 `infra/observers/audit_log.py`、`check_trace.py`、`core/verification/trace.py` 和 `breakpoints.py`（均位于 `product/backend/`）。
+合法委托只能由显式因果 `AUTHORIZATION/ALLOW` 祖先、非空来源范围、范围子集、实际动作/资源覆盖及凭据一致性证明；不能从角色、actor、资源名称或 ALLOW 结果补范围。定位与效果判定分离：诊断不足或合法委托不能抹去独立权威来源已确认的 DENY 禁止效果。相关真源为 `infra/observers/adapters/audit_log.py`、`check_trace.py`、`core/verification/trace.py` 和 `breakpoints.py`（均位于 `product/backend/`）。
 
 当前 CHECK 仅调度辅助来源支持的阶段，不为 EVENTUAL-only 的任务或队列生成初始、操作后的失败占位。初始基线与恢复是否完成分别取自 CaseOutcome 的独立核对结果；单点业务效果 UNKNOWN 不等于初始化或恢复失败。
 
@@ -54,7 +54,7 @@ Observer 的价值不是“多看几个日志”，而是让安全结论依赖�
 | Async Task | 读取对应 marker/task 的终态 | 异步副作用是否完成、失败或撤销 | Blob 当前是否可见 |
 | Azure Queue | 只读 Peek 有界关联消息 | 调度链是否曾发生且关联唯一 | 当前最终资源状态 |
 
-六个生产 adapter 的当前入口依次是 `product/backend/infra/observers/owner_api.py`、`azure_blob.py`、`sqlite.py`、`audit_log.py`、`async_task.py`、`azure_queue.py`。先按来源进入唯一文件，不在 Runner 中复制 adapter。
+六个生产 adapter 的当前入口依次是 `product/backend/infra/observers/adapters/owner_api.py`、`azure_blob.py`、`sqlite.py`、`audit_log.py`、`async_task.py`、`azure_queue.py`。先按来源进入唯一文件，不在 Runner 中复制 adapter。
 
 在以下独立格式示例中，Owner API 与 Blob 是 OBJECT_CREATION 的关键来源，因为一个代表业务所有者的当前有效状态，另一个代表交付物对象的当前有效 namespace。SQLite、Audit、Task 与 Queue 解释过程、关联和限制，属于佐证；它们不能在两个关键来源都确认 ABSENT 时仅凭历史事件把已撤销对象解释为仍存在，也不能在关键来源失败时替代不存在证明。
 
@@ -108,13 +108,13 @@ Execution Case
 修改或查询时按职责进入：
 
 - 公共模型、codec、canonical：`product/protocols/observer/`
-- EffectBinding 的 `required_channels` / `corroborating_channels`：`product/protocols/execution.py`
+- EffectBinding 的 `required_channels` / `corroborating_channels`：`product/protocols/runner/execution.py`
 - Schema：`product/protocols/schemas/observer/`
-- SQLite adapter：`product/backend/infra/observers/sqlite.py`；其余五类位于同一 `product/backend/infra/observers/` 边界
+- SQLite adapter：`product/backend/infra/observers/adapters/sqlite.py`；其余五类位于同一 `product/backend/infra/observers/` 边界
 - Runner 调度与投影：`product/backend/infra/runtime/runner/`
 - 当前 CHECK 的本地描述解析（不负责独立格式的运行提交）：`product/backend/workflows/checks/local_observer_wiring.py`
 - Observer outcome：`product/protocols/observer/result.py`；权限三态消费：`product/backend/core/verification/permissions/evaluation.py`
-- 结果展示：`product/backend/workflows/results/presentation/`
+- 结果展示：`product/backend/workflows/reports/presentation/`
 - 路径构建：`product/backend/workflows/reports/trace.py`；只消费冻结 request snapshot 与已发布 Evidence
 - Adapter 直接测试：`tests/backend/infra/observers/`
 - outcome/INCONCLUSIVE 直接测试：`tests/protocols/observer/test_observer_result.py`、`tests/backend/core/verification/permissions/test_evaluation.py`

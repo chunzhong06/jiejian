@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.workflows.preparation.guidance import PreparationGuidanceService, _source_advice
+from product.backend.workflows.preparation.guidance.service import PreparationGuidanceService, _source_advice
 from product.backend.workflows.workspace.models import PrimaryTaskView
 
 

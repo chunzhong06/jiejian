@@ -3,9 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChangesPage } from './ChangesPage'
 const api=vi.hoisted(()=>({list:vi.fn(),show:vi.fn(),repair:vi.fn(),current:vi.fn(),details:vi.fn(),preview:vi.fn(),register:vi.fn(),receipt:vi.fn()}))
-vi.mock('../../api/development',async()=>({...await vi.importActual<typeof import('../../api/development')>('../../api/development'),developmentApi:{current:api.current,details:api.details,receipt:api.receipt}}))
-vi.mock('../../api/sourceChanges',()=>({sourceChangesApi:{list:api.list,show:api.show,registrationPreview:api.preview,register:api.register}}))
-vi.mock('../../api/repairs',async()=>({...await vi.importActual<typeof import('../../api/repairs')>('../../api/repairs'),repairsApi:{project:api.repair}}))
+vi.mock('../../api/changes/development',async()=>({...await vi.importActual<typeof import('../../api/changes/development')>('../../api/changes/development'),developmentApi:{current:api.current,details:api.details,receipt:api.receipt}}))
+vi.mock('../../api/changes/sourceChanges',()=>({sourceChangesApi:{list:api.list,show:api.show,registrationPreview:api.preview,register:api.register}}))
+vi.mock('../../api/checks/repairs',async()=>({...await vi.importActual<typeof import('../../api/checks/repairs')>('../../api/checks/repairs'),repairsApi:{project:api.repair}}))
 const change={manifest:{change_id:'chg_one',project_id:'p1',reason:'修改导出检查位置',submitted_by:'MCP · Codex',created_at_us:1,claimed_paths:['wrong.py'],repair_reference:null},change_set:{status:'COMPARABLE',added_paths:[],modified_paths:['real.py'],removed_paths:[]},assessment:{payload:{action_impacts:[]}},revalidation:{status:'READY',can_execute:true,preparation_gaps:[]}}
 const props=()=>({project:{project_id:'p1'},onNavigate:vi.fn(),onError:vi.fn(),onStateChanged:vi.fn()})
 const linked={project_id:'p1',delivery:{project_id:'p1',task_id:'t',context_id:'ctx',change_id:'chg_one',ordinal:1},context:{project_id:'p1',task_id:'t',context_id:'ctx',revision:1,permission_refs:[]},relative_change:change.change_set,cumulative_change:change.change_set,verification:{run_id:'exact',verdict:'PASS',runtime_status:'MATCHED',repair_status:null}}

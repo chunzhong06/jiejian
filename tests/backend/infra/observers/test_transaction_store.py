@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from product.backend.infra.observers.transaction_store import RecordStoreError, TransactionRecordStore
-from product.protocols.transaction_records import RecordChange, RecordSeed, RecordTransaction
+from product.backend.infra.observers.records.transaction_store import RecordStoreError, TransactionRecordStore
+from product.protocols.runtime.transaction_records import RecordChange, RecordSeed, RecordTransaction
 
 
 def store(tmp_path: Path):

@@ -38,12 +38,7 @@ from product.protocols import (
     ObserverType,
     ProvenanceType,
 )
-from product.protocols.execution_request import (
-    ChangeVerificationContext,
-    PermissionPolicySnapshotEntry,
-    ProtectedEffect,
-    build_permission_policy_snapshot,
-)
+from product.protocols.runner.execution_request import ChangeVerificationContext, PermissionPolicySnapshotEntry, ProtectedEffect, build_permission_policy_snapshot
 
 
 RUN_ID = "run_" + "1" * 32

@@ -22,7 +22,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from product.protocols.recording import RecordingBudget, RecordingEvent, RecordingHeader
+from product.protocols.recording.events import RecordingBudget, RecordingEvent, RecordingHeader
 from product.backend.core.redaction import REDACTED, redact_known_secrets
 
 _MAX_STRUCTURED_DEPTH = 16

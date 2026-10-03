@@ -100,7 +100,7 @@ def require_recording_source(work, request, *, historical_source=None, reused_so
         controlled_instance_id=current_recording_instance(work, action.project_id),
     )
     if historical_source is not None:
-        from product.protocols.recording_legacy import LegacyRecordingRunnerRequest
+        from product.protocols.recording.recording_legacy import LegacyRecordingRunnerRequest
         if (not isinstance(historical_source, LegacyRecordingRunnerRequest)
                 or identity.identity_id != owner.identity_id
                 or any(getattr(historical_source, name) != getattr(request, name)
@@ -140,7 +140,7 @@ def require_recording_source(work, request, *, historical_source=None, reused_so
 def require_persisted_recording_source(work, recording, var_dir, *, reused_source_fingerprint=None):
     """先按 Job 原始 hash 读取来源格式，再选择唯一明确的来源校验路径。"""
     from product.backend.infra.recording.request_store import RecordingRequestStore
-    from product.protocols.recording_legacy import LegacyRecordingRunnerRequest
+    from product.protocols.recording.recording_legacy import LegacyRecordingRunnerRequest
     job = work.jobs.get_by_recording(recording.recording_id)
     if job is None:
         raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "录制来源已失效")
@@ -158,7 +158,7 @@ def require_persisted_recording_source(work, recording, var_dir, *, reused_sourc
 def _require_assignment(work, request, action):
     from types import SimpleNamespace
     from product.backend.core.preparation.requirements import compile_action_assurance, AssuranceStatus
-    from product.backend.workflows.business_boundaries.queries import current_permission_intents
+    from product.backend.workflows.business_boundaries.reading.queries import current_permission_intents
     from product.backend.workflows.preparation.service import PreparationService
     from product.backend.workflows.preparation.demonstrations import legal_demonstrations
     from product.backend.workflows.test_identities.service import TestIdentityStatus

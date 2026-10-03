@@ -12,7 +12,7 @@ from product.backend.core.verification.behavior_differential import (
     normalize_evidence_behavior,
 )
 from product.backend.core.verification.permissions import permission_model_sha256
-from tests.fixtures.runner import evidence
+from tests.fixtures.runtime.runner import evidence
 
 
 def _snapshot() -> BehaviorSnapshot:

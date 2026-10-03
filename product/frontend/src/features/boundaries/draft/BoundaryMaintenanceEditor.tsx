@@ -10,11 +10,11 @@ import type {
   BoundaryMaintenanceCommandDto,
   BoundaryMaintenanceDraftDto,
   BoundaryMaintenancePermissionDto,
-} from '../../../api/businessBoundaries'
+} from '../../../api/boundaries/businessBoundaries'
 import { PermissionRuleForm } from '../rules/PermissionRuleForm'
-import { useTaskGuard } from '../../../app/tasks/TaskContinuity'
+import { useTaskGuard } from '../../../shared/runtime/editGuard'
 import { PermissionDraftAssist } from './PermissionDraftAssist'
-import type { PermissionDraftSuggestion } from '../../../api/permissionDrafts'
+import type { PermissionDraftSuggestion } from '../../../api/boundaries/permissionDrafts'
 
 import type { BoundaryEditFocus } from '../definitions/CurrentBoundaryObjects'
 import { BoundaryObjectsWorkspace, type DraftAction, type ObjectDrafts } from '../definitions/BoundaryObjectsWorkspace'

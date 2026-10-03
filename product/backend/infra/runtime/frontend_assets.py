@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from product.protocols.frontend_assets import FrontendAssetManifest
+from product.protocols.runtime.frontend_assets import FrontendAssetManifest
 
 
 def _unique_members(pairs):

@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from product.protocols import AuditLogStartCursor, Correlation, ObservationCompleteness, ObservationPhase, ObserverOutcomeStatus, ObserverSpec, StructuredAuditLogLocator
-from product.backend.infra.observers.audit_log import AUDIT_FILE_CHANGED, AUDIT_LINE_BYTES_LIMIT, AUDIT_RECORD_LIMIT, AUDIT_CHAIN_INVALID, AUDIT_EVENT_CONFLICT, AUDIT_INVALID_UTF8, AUDIT_PARTIAL_LINE, AUDIT_TAG_NOT_FOUND, run_audit_log_observer
-import product.backend.infra.observers.audit_log as audit_module
+from product.backend.infra.observers.adapters.audit_log import AUDIT_FILE_CHANGED, AUDIT_LINE_BYTES_LIMIT, AUDIT_RECORD_LIMIT, AUDIT_CHAIN_INVALID, AUDIT_EVENT_CONFLICT, AUDIT_INVALID_UTF8, AUDIT_PARTIAL_LINE, AUDIT_TAG_NOT_FOUND, run_audit_log_observer
+import product.backend.infra.observers.adapters.audit_log as audit_module
 from tests.backend.infra.observers._support_audit_log_observer import (
     FIELDS,
     TRACE_FIELDS,

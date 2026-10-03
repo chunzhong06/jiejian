@@ -5,9 +5,9 @@ from sqlalchemy import event
 from product.backend.core.errors import JiejianError
 from product.backend.core.preparation.bindings import RegisteredObserverReference
 from product.backend.core.checks.plan import RegisteredEffectProofCapability
-from product.backend.workflows.preparation.bindings import PreparationBindingService
-from product.protocols.execution_v3 import canonical_execution_request_v3_bytes, parse_execution_request_v3
-from tests.fixtures.action_preparation import build_preparation_harness, add_recording
+from product.backend.workflows.preparation.bindings.service import PreparationBindingService
+from product.protocols.checks.execution_request import canonical_execution_request_v3_bytes, parse_execution_request_v3
+from tests.fixtures.preparation.action_preparation import build_preparation_harness, add_recording
 
 
 def test_current_plan_keeps_gaps_and_builder_rejects_without_writing(tmp_path):

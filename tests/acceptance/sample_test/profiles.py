@@ -11,13 +11,13 @@ from .harness.state import SampleTestError
 PROFILES = {
     "windows": {
         "selectors": ["tests/e2e/test_recording_action_windows_l5.py", "tests/backend/infra/identity/test_windows_l5.py",
-                      "tests/scripts/test_sample_environment.py", "tests/scripts/test_sample_contracts.py",
-                      "tests/scripts/test_sample_lifecycle.py"],
+                      "tests/scripts/sample_test/test_sample_environment.py", "tests/scripts/sample_test/test_sample_contracts.py",
+                      "tests/scripts/sample_test/test_sample_lifecycle.py"],
         "scope": "显式 Windows 交互能力探针：UIA、录制、临时凭据的写入与回收、真实启动；需交互桌面",
         "environment": {"JIEJIAN_RUN_WINDOWS_L5": "1", "JIEJIAN_RUN_RECORDING_WINDOWS_L5": "1"},
     },
     "ordinary": {
-        "selectors": ["tests/backend/workflows/preparation/test_proof_check.py", "tests/backend/workflows/preparation/test_proof_fail_closed.py"],
+        "selectors": ["tests/backend/workflows/preparation/proofs/test_proof_check.py", "tests/backend/workflows/preparation/proofs/test_proof_fail_closed.py"],
         "scope": "普通协议驱动：ApplicationCore、受控 Node、预检查、采用、真实 CHECK Worker/Runner；不声称真人 GUI 接入",
         "environment": {},
     },

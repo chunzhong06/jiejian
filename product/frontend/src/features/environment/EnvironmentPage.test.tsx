@@ -3,8 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { EnvironmentPage } from './EnvironmentPage'
 const api = vi.hoisted(() => ({ status: vi.fn(), history: vi.fn(), start: vi.fn(), project: vi.fn() }))
-vi.mock('../../api/experience', () => ({ experienceApi: api }))
-vi.mock('../../api/repairs', () => ({ repairsApi: { project: api.project }, repairReference: vi.fn() }))
+vi.mock('../../api/applications/experience', () => ({ experienceApi: api }))
+vi.mock('../../api/checks/repairs', () => ({ repairsApi: { project: api.project }, repairReference: vi.fn() }))
 vi.mock('./EnvironmentHistory', () => ({ EnvironmentHistory: ({ projectId }: {projectId:string}) => <div>历史项目 {projectId}</div> }))
 const system = { api: 'available' as const, worker: 'running' as const, browser: 'available' as const }
 const stopped = { available: true, active: false, display_name: '协作空间', project_id: 'old', history_project_id: 'old', lifecycle: 'STOPPED', scenario_prepared: false, scenario_version: null }

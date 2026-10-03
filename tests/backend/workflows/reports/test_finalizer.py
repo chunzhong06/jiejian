@@ -16,7 +16,7 @@ from product.backend.infra.artifacts.run_packages import PublicationManifest, St
 from product.backend.infra.artifacts.run_publication import publication_manifest_sha256
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.runtime.process.lock import try_lock_stream, unlock_stream
-from product.backend.infra.runtime.jobs.verification import VerificationRunJobHandler
+from product.backend.infra.runtime.jobs.target_handlers.verification import VerificationRunJobHandler
 from product.backend.infra.storage import (
     BaseReportFinalizationState,
     FindingFinalizationState,
@@ -32,7 +32,7 @@ from product.backend.workflows.reports.finalizer import ResultFinalizer
 from product.backend.workflows.reports.findings import FindingMaterializer, FindingQueries
 from product.backend.workflows.reports.published import PublishedRunView
 from product.protocols import CleanupResult, CleanupStatus, RunnerResult, RunnerResultType
-from tests.fixtures.runner import evidence as make_evidence, rehash_evidence, runner_input
+from tests.fixtures.runtime.runner import evidence as make_evidence, rehash_evidence, runner_input
 
 
 pytestmark = pytest.mark.database

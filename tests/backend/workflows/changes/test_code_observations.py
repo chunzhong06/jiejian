@@ -6,8 +6,8 @@ import pytest
 from product.backend.core.errors import JiejianError
 from product.backend.infra.source_identity import GitSourceContext
 from product.backend.workflows.changes.observations import CodeObservationService
-from product.backend.infra.storage.code_observations import CodeObservationRepository
-from tests.fixtures.action_preparation import build_preparation_harness
+from product.backend.infra.storage.changes.code_observations import CodeObservationRepository
+from tests.fixtures.preparation.action_preparation import build_preparation_harness
 
 
 @pytest.mark.parametrize("status", ["AVAILABLE", "NOT_A_REPOSITORY", "UNBORN", "UNAVAILABLE"])

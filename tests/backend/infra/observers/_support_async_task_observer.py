@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json
 import pytest
-import product.backend.infra.observers.async_task as async_module
+import product.backend.infra.observers.adapters.async_task as async_module
 from product.protocols import AsyncTaskApiLocator, AsyncTaskObserverInvocation, AsyncTaskPollBudget, Correlation, ObservationPhase, ObserverBudget, ObserverSpec, ObserverTarget, ObserverType
 
 def _spec(*, base_url: str = "https://127.0.0.1:8443", allow_loopback_http: bool = False, max_polls: int = 4, poll_interval_us: int = 0, timeout_us: int = 5_000_000, max_response_bytes: int = 8192, common_max_bytes: int | None = None) -> ObserverSpec:

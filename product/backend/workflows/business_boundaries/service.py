@@ -25,12 +25,12 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.boundaries.permissions import PermissionIntentRevision, ProjectPolicyState, permission_intent_sha256
 from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.business_boundaries.inspection import inspect_action_binding, inspect_actor_binding
-from product.backend.workflows.business_boundaries.maintenance import build_maintenance_draft, maintenance_to_proposal_command
+from product.backend.workflows.business_boundaries.proposals.maintenance import build_maintenance_draft, maintenance_to_proposal_command
 from product.backend.workflows.business_boundaries.models import BoundaryDraftView, BoundaryEditorView, BoundaryPendingProposal, BoundaryMaintenanceCommand, BoundaryMaintenanceDraftView, BoundaryProposalCommand, BoundaryProposalListView, BoundaryProposalView, BusinessBoundaryView
-from . import planning as boundary_planning
-from . import queries as boundary_queries
-from . import sources as boundary_sources
-from . import validation as boundary_validation
+from product.backend.workflows.business_boundaries.proposals import planning as boundary_planning
+from product.backend.workflows.business_boundaries.reading import queries as boundary_queries
+from product.backend.workflows.business_boundaries.proposals import sources as boundary_sources
+from product.backend.workflows.business_boundaries.proposals import validation as boundary_validation
 
 
 

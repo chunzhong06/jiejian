@@ -6,11 +6,9 @@ import httpx
 import pytest
 
 from product.backend.core.errors import JiejianError
-from product.backend.infra.runtime.process.node_owned import (
-    node_reference_matches, start_owned_node,
-)
+from product.backend.infra.runtime.process.controlled.node_owned import node_reference_matches, start_owned_node
 from product.backend.infra.runtime.process.tree import kernel_tree_has_exited
-from tests.fixtures.node_runtime import node_runtime_input as _input
+from tests.fixtures.runtime.node_runtime import node_runtime_input as _input
 
 pytestmark = pytest.mark.skipif(os.name != 'nt',reason='Windows kernel ownership boundary')
 

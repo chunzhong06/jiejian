@@ -2,7 +2,7 @@
 import { StatusBadge } from '../../../shared/ui/StatusBadge'
 import { Alert, Button, Checkbox } from 'antd'
 import { useEffect, useState } from 'react'
-import type { BoundaryProposalViewDto, BoundaryReviewValueDto, BoundaryProposalReviewDto } from '../../../api/businessBoundaries'
+import type { BoundaryProposalViewDto, BoundaryReviewValueDto, BoundaryProposalReviewDto } from '../../../api/boundaries/businessBoundaries'
 import { effectKindLabels, expectationLabels, relationLabels } from '../draft/boundaryLabels'
 import './proposal-review.css'
 

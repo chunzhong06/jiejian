@@ -37,10 +37,10 @@ from product.backend.infra.runtime.process.environment import (
     minimal_process_environment,
 )
 from product.backend.infra.storage import JobRecord, RunRecord, default_database_path
-from tests.fixtures.action_preparation import PreparationHarness, build_preparation_harness
+from tests.fixtures.preparation.action_preparation import PreparationHarness, build_preparation_harness
 from tests.fixtures.control_plane import TestClient as ControlPlaneTestClient
 from tests.fixtures.control_plane import create_app as create_control_plane_app
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 def _wait_until(predicate, *, timeout: float = 2.0) -> None:

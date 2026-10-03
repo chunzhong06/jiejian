@@ -44,7 +44,7 @@ from product.protocols.observer import (
     ObserverOutcome,
     ObserverSpec,
 )
-from product.protocols.execution import EffectBinding, ObserverRequirementBinding
+from product.protocols.runner.execution import EffectBinding, ObserverRequirementBinding
 from product.protocols.runner import CleanupIssueCode
 
 

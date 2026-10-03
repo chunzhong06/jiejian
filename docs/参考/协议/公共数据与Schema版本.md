@@ -28,7 +28,7 @@
 | `ArtifactCheckRequest`、`ArtifactScanResult`、`ArtifactResultManifest`、`PublicationManifest` | `artifacts.py`、`run_packages.py` | `schemas/artifacts/` | 1 |
 | `BaseRunReport`、`GateRunReport` | `report.py` | `schemas/reports/report.schema.json` | 5 |
 | `ReportPackageManifest` | `report.py` | `schemas/reports/report-package-manifest.schema.json` | 1 |
-| `SupplementalDocument` | `product/backend/workflows/preparation/supplemental_contract.py` | `schemas/materials/supplemental-document.schema.json` | 1 |
+| `SupplementalDocument` | `product/backend/workflows/preparation/supplemental/contract.py` | `schemas/materials/supplemental-document.schema.json` | 1 |
 | `TrustedResultReceipt` | `product/backend/infra/artifacts/run_packages.py` | `schemas/runner/trusted-result-receipt.schema.json` | 1 |
 | `RunnerProgressEvent` | `product/backend/infra/runtime/runner/progress.py` | 无；内部有界 JSONL reader | 1 |
 

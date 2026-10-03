@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from tests.fixtures.current_jobs import current_job
+from tests.fixtures.runtime.current_jobs import current_job
 from types import SimpleNamespace
 
 import product.backend.infra.runtime.worker.supervisor as worker_supervisor_module
 from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, minimal_process_environment
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
-from tests.fixtures.runtime_environment import runtime_identity_environment
-from tests.fixtures.check_execution import execution_pair
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
+from tests.fixtures.checks.check_execution import execution_pair
 from tests.backend.infra.observers._support_audit_log_observer import _spec
 
 

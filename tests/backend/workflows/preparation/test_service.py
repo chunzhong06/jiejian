@@ -10,7 +10,7 @@ from product.backend.workflows.preparation.service import PreparationService
 from product.backend.workflows.test_identities.service import (
     TestIdentityStatus as IdentityStatus, TestIdentityView as IdentityView,
 )
-from tests.fixtures.assurance import ACTOR, OTHER_ACTOR, PROJECT, action, actor, permission
+from tests.fixtures.checks.assurance import ACTOR, OTHER_ACTOR, PROJECT, action, actor, permission
 
 
 def _identity(number, *, status=IdentityStatus.PREPARED, created=10, actor_id=ACTOR, actor_revision=1):

@@ -21,7 +21,7 @@ from product.protocols import (
     canonical_runner_json_bytes,
     parse_runner_result,
 )
-from tests.fixtures.runner import evidence, runner_input
+from tests.fixtures.runtime.runner import evidence, runner_input
 
 
 def _write_input(path: Path) -> None:

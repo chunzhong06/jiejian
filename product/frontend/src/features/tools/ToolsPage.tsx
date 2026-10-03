@@ -1,11 +1,11 @@
 /* 协作模块连接子页：复用模块页头，再完成连接和逐应用授权。 */
 
-import type { MCPAccessView } from '../../api/mcp'
-import type { ProjectDto } from '../../api/projects'
+import type { MCPAccessView } from '../../api/system/mcp'
+import type { ProjectDto } from '../../api/applications/projects'
 import type { ApiError } from '../../api/http'
 import { EditorialPage } from '../../shared/ui/Editorial'
 import MCPAccessCard from './MCPAccessCard'
-import { AgentPageHeader } from '../../app/navigation/AgentPageHeader'
+import { AgentPageHeader } from './AgentPageHeader'
 
 export function ToolsPage({
   projects, onError, onStatusChange, onNavigate,
@@ -16,7 +16,7 @@ export function ToolsPage({
   onNavigate: (path: string) => void
 }) {
   return <EditorialPage label="Agent 连接与授权">
-    <AgentPageHeader active="connection" onNavigate={onNavigate}/>
+    <AgentPageHeader onNavigate={onNavigate}/>
     <MCPAccessCard open projects={projects} onError={onError} onStatusChange={onStatusChange} />
   </EditorialPage>
 }

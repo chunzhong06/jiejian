@@ -23,7 +23,7 @@ from product.protocols.web.profile import (
     canonical_web_execution_profile_json_bytes,
     parse_web_execution_profile,
 )
-from tests.fixtures.runner import execution_snapshot
+from tests.fixtures.runtime.runner import execution_snapshot
 
 
 def _profile(profile_id: str = "profile-runner") -> WebExecutionProfile:

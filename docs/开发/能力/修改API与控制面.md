@@ -8,23 +8,29 @@
 
 当前 GUI 工作台只消费 `WorkspaceView`：`WorkspaceService` 组合 Project、ApplicationUnderstanding、Business Boundary、Permission、实时 implementation inspection 与 PreparationView，并按固定优先级生成唯一 `PrimaryTask`。当前结果由 CheckResultReader/CheckStoryBuilder 提供；旧 ProductStatus、Delivery 和 History 服务已移除，独立报告格式不属于当前控制面结果入口。
 
+工作区的 `service.py` 保持按条件读取的编排，`reading.py` 核对持久事实与录制来源，`tasks.py` 只依据输入选择任务，`presentation.py` 组织展示与任务指纹。任务选择不接收 Repository 或服务，不能把为了展示而进行的读取提前成全量预取。
+
 ## 快速找到修改位置
 
 | 要改什么 | 先看哪里 | 事实所有者或直接测试 |
 | --- | --- | --- |
-| FastAPI 组合、启动/关闭、Worker 生命周期 | `product/backend/api/app.py` | `tests/backend/api/test_control_plane.py` |
+| FastAPI 组合、启动/关闭、Worker 生命周期 | `product/backend/api/app.py` | `tests/backend/api/system/test_control_plane.py` |
 | 资源路由与 DTO 映射 | `product/backend/api/routers/` | `tests/backend/api/` |
-| API envelope、异常与 trace | `product/backend/api/envelope.py`、`product/backend/api/errors.py` | `tests/backend/api/test_control_plane.py` |
-| Host、session、Origin 控制 | `product/backend/api/local_control.py` | `tests/backend/api/test_control_plane.py` |
-| MCP Streamable HTTP、固定工具白名单 | `product/backend/api/mcp.py` | `tests/backend/api/test_mcp.py` |
-| Human GUI 权限草稿、审批与 Agent proposal 路由 | `product/backend/api/routers/permission_intents.py` | `tests/backend/api/test_business_boundaries.py`、权限草稿 API 测试 |
-| MCP 长期配对与逐 Project 临时权限 | `product/backend/workflows/agent_access/service.py`、`product/backend/api/routers/mcp_access.py` | `tests/backend/api/test_mcp.py` |
+| API envelope、异常与 trace | `product/backend/api/envelope.py`、`product/backend/api/errors.py` | `tests/backend/api/system/test_control_plane.py` |
+| Host、session、Origin 控制 | `product/backend/api/local_control.py` | `tests/backend/api/system/test_control_plane.py` |
+| MCP Streamable HTTP、固定工具白名单 | `product/backend/api/mcp/server.py` | `tests/backend/api/system/test_mcp.py` |
+| Human GUI 权限草稿、审批与 Agent proposal 路由 | `product/backend/api/routers/boundaries/permission_intents.py` | `tests/backend/api/boundaries/test_business_boundaries.py`、权限草稿 API 测试 |
+| MCP 长期配对与逐 Project 临时权限 | `product/backend/workflows/agent_access/service.py`、`product/backend/api/routers/system/mcp_access.py` | `tests/backend/api/system/test_mcp.py` |
 | ApplicationCore 组合 | `product/backend/composition/application.py` | `tests/backend/composition/`、`tests/architecture/test_storage_composition.py` |
 | Action Workspace、唯一 PrimaryTask 与动作级权限/实现摘要 | `product/backend/workflows/workspace/` | `tests/backend/workflows/workspace/test_service.py`、`tests/backend/api/test_workspace.py` |
 | 普通 CLI 命令与 Machine 输出 | `product/backend/cli/app.py`、`product/backend/cli/commands/system.py`、`product/backend/cli/presentation.py` | `tests/backend/cli/test_current_cli.py` |
-| 同一 VarDir 单控制者 | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` | `tests/backend/api/test_control_plane.py`、`tests/backend/cli/test_current_cli.py` |
+| 同一 VarDir 单控制者 | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` | `tests/backend/api/system/test_control_plane.py`、`tests/backend/cli/test_current_cli.py` |
 
 ## 正常修改路线
+
+ApplicationCore 对无环依赖使用构造注入；变化/原题、运行提供方和交付关联使用具名连接方法，最后只检查生产所需连接，不执行回调。MCP 撤权回调在控制器构造时传入，证明准备的授权查询由控制面明确连接。连接整理不得改变原 UoW、关闭顺序或失败后保留资源的条件。
+
+MCP 的工具注册入口仍为 `product/backend/api/mcp/server.py`；`mcp/errors.py` 统一分级授权与净化错误，`mcp/transport.py` 处理 Bearer 和 ASGI 挂载，`mcp/views.py` 维护给 Agent 的有限事实投影。修改工具业务先核对原 workflow，不能在投影或传输模块执行事务。
 
 先确定变化属于 transport 还是应用服务。只是新增查询或写入入口时，先在已有 workflow/application service 中确认唯一职责，再让 Router 完成 strict DTO 解析、调用和 envelope 映射。需要 GUI 与 CLI 同时展示的新事实，应先进入共享只读投影，再由两端分别做格式投影；不要先改页面或 CLI 字符串，再回填后端。
 
@@ -65,7 +71,7 @@ Machine 输出是 CLI 的稳定自动化表面，成功 envelope 固定为 `sche
 优先运行受影响 Router 的直接测试，再按变化补以下最小邻域：
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/test_control_plane.py tests/backend/cli/test_current_cli.py
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/api/system/test_control_plane.py tests/backend/cli/test_current_cli.py
 ```
 
 只改一个资源 Router 时不要机械运行整组控制面。改 Machine envelope、ServeLock、启动/关闭或 ApplicationCore 组合时，必须覆盖 CLI/API 同事实、错误通道与单控制者。改 OpenAPI DTO 后再运行 schema/docs 检查；只有入口跨进程行为变化才增加少量 E2E。

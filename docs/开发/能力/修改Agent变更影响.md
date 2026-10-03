@@ -2,16 +2,18 @@
 
 > 状态：CURRENT。用于真实变化登记、修复引用、源码对应和检查续接。普通未关联 PASS 不能作为修复通过。
 
+开发任务入口为 `workflows/development/`：`service.py` 拥有命令与回执事务，`reading.py` 读取历史、交付差异和精确检查关联，`operations.py` 供开发与运行加载共用操作指纹及版本检查。`DevelopmentService` 保留稳定入口；查询不能扫描源码或创建交付，`write_prepared_change` 继续复用命令持有的 UoW。
+
 ## 快速找到修改位置
 
 | 要改什么 | 实现入口 | 直接测试 |
 | --- | --- | --- |
 | 变化模型、真实扫描与原子登记 | `product/backend/core/changes/models.py`、`product/backend/workflows/changes/service.py` | `tests/backend/workflows/changes/test_current_source_changes.py` |
 | 源码身份与历史观察 | `product/backend/workflows/changes/identity.py`、`product/backend/workflows/changes/observations.py` | `tests/backend/workflows/changes/test_source_identity.py`、`tests/backend/workflows/changes/test_code_observations.py` |
-| 原题合同与复验语义 | `product/backend/core/checks/repair.py`、`product/backend/workflows/checks/repair.py` | `tests/backend/core/checks/test_check_repair.py`、`tests/backend/workflows/checks/test_repair_publication.py` |
+| 原题合同与复验语义 | `product/backend/core/checks/repair.py`、`product/backend/workflows/checks/repairs/repair.py` | `tests/backend/core/checks/test_check_repair.py`、`tests/backend/workflows/checks/test_repair_publication.py` |
 | 项目修复七态与唯一主任务 | `product/backend/workflows/projects/repair.py`、`product/backend/workflows/workspace/service.py` | `tests/backend/workflows/checks/test_project_repair_states.py`、`tests/backend/workflows/workspace/test_repair_task.py` |
-| 完整请求冻结与元数据回调 | `product/backend/workflows/checks/service.py` | `tests/backend/infra/runtime/jobs/test_provenance_callback.py` |
-| 控制面与界面交付 | `product/backend/api/routers/source_changes.py`、`product/backend/api/mcp.py`、`product/frontend/src/features/changes/` | `tests/backend/api/test_current_mcp.py`；对应前端组件测试 |
+| 完整请求冻结与元数据回调 | `product/backend/workflows/checks/service.py` | `tests/backend/infra/runtime/jobs/control/test_provenance_callback.py` |
+| 控制面与界面交付 | `product/backend/api/routers/changes/source_changes.py`、`product/backend/api/mcp/server.py`、`product/frontend/src/features/changes/` | `tests/backend/api/system/test_current_mcp.py`；对应前端组件测试 |
 
 ## 修改与直接验证
 

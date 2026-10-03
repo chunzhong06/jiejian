@@ -11,7 +11,7 @@ from product.protocols import (
 )
 from product.backend.workflows.reports.published import PublishedRunView
 from product.backend.infra.artifacts.run_packages import PublicationManifest, StagedArtifact, ValidatedPublication
-from tests.fixtures.runner import evidence, runner_input
+from tests.fixtures.runtime.runner import evidence, runner_input
 
 PROJECT_ID = "runner-project"
 

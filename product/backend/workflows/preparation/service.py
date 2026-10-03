@@ -54,7 +54,7 @@ class PreparationService:
 
     def evidence_details(self, project_id: str, action_id: str):
         """只解释已保存材料及能力声明；不改变准备状态或创建执行计划。"""
-        from product.backend.workflows.preparation.evidence import evidence_details
+        from product.backend.workflows.preparation.materials.evidence import evidence_details
         return evidence_details(self, project_id, action_id)
 
     def current_plan(self, project_id: str, *, engine_version: str, config_fingerprint: str):
@@ -68,7 +68,7 @@ class PreparationService:
                                    change_context=None, repair_context=None):
         """只构造完整快照；有缺口时拒绝，不生成会话、Job 或 Run。"""
         import json
-        from product.protocols.execution_v3 import PersistedExecutionRequestV3
+        from product.protocols.checks.execution_request import PersistedExecutionRequestV3
         plan = self.current_plan(project_id, engine_version=engine_version,
                                  config_fingerprint=config_fingerprint)
         if plan.gaps or not plan.actions or any(not item.cases for item in plan.actions):

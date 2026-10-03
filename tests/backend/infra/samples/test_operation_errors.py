@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.samples.official import OfficialSampleManager
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 def test_stop_keeps_first_termination_error_and_attempts_existing_cleanup(tmp_path, monkeypatch):

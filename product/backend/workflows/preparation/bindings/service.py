@@ -1,0 +1,257 @@
+# 在录制接受事务中保存技术绑定，并从当前业务、身份、来源与文件事实实时检查有效性。
+# 检查路径只读；注册 Observer 只能通过注入的受控引用检查器，不接收地址或查询正文。
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from typing import Protocol
+from product.backend.workflows.preparation.bindings.sources import BindingSourceInspector, RegisteredObserverReader, binding_source_fields
+from contextlib import nullcontext
+
+from product.backend.core.preparation.bindings import ActionEvidenceBinding, ActionEvidenceKind, ActionExecutionBinding, ActionRecoveryBinding, ActionResourceBinding, RegisteredObserverReference, seal_binding
+from product.backend.core.boundaries.entities import BusinessRevisionState, ImplementationBindingStatus
+from product.backend.core.errors import ErrorCode, JiejianError
+from product.backend.core.recording.models import RecordingPurpose, RecordingState
+from product.backend.workflows.business_boundaries.inspection import inspect_action_binding, inspect_actor_binding
+from product.backend.workflows.preparation.models import (
+    ActionTechnicalPreparationView, EffectEvidencePreparationView, PreparationItemView,
+    PreparationStatus, ResourcePreparationView,
+)
+from product.backend.workflows.preparation.bindings.recording_candidates import choose_supplement_candidate, flow_resource_injection, request_event, resource_value, supplement_candidates
+from product.backend.workflows.recording.source import (
+    identity_source_fingerprint, recording_endpoint_fingerprint, require_persisted_recording_source, current_recording_instance,
+)
+from product.backend.workflows.test_identities.service import TestIdentityStatus
+from product.backend.core.checks.plan import RegisteredEffectProofCapability
+
+
+
+
+class RegisteredEffectProofReader(Protocol):
+    def capability(self, project_id: str, reference: RegisteredObserverReference,
+                   effect_id: str) -> RegisteredEffectProofCapability | None: ...
+
+
+class PreparationBindingService:
+    """接受有明确来源的技术事实；准备状态始终现场计算，不形成权限或 Run。"""
+
+    def __init__(self, uow_factory, var_dir: Path, *, test_identities=None, registered_observers: RegisteredObserverReader | None = None,
+                 effect_proofs: RegisteredEffectProofReader | None = None, source_inspector: BindingSourceInspector | None = None):
+        self._uow_factory = uow_factory
+        self._var_dir = var_dir.resolve()
+        self._test_identities = test_identities
+        self._registered_observers = registered_observers
+        self._effect_proofs = effect_proofs
+        self.source_inspector = source_inspector or BindingSourceInspector(var_dir, registered_observers)
+
+    def describe_evidence(self, action, views):
+        """仅描述当前已绑定材料；指纹漂移时不拼接旧状态和新来源。"""
+        from product.backend.workflows.preparation.materials.evidence_models import EffectMaterialSummary
+        effects = {item.effect_id: item for item in action.effect_catalog}
+        result = []
+        with self._uow_factory() as work:
+            for view in views:
+                effect = effects[view.effect_id]
+                binding = work.action_preparation.evidence(action.action_id, action.revision, view.effect_id)
+                fields = dict(effect_id=effect.effect_id, business_label=effect.business_label,
+                    resource_concept=effect.resource_concept, material_status=view.status,
+                    binding_fingerprint=view.binding_fingerprint, reason_codes=view.reason_codes)
+                if (None if binding is None else binding.binding_fingerprint) != view.binding_fingerprint or (
+                    binding is not None and (binding.project_id, binding.business_action_id,
+                    binding.action_revision, binding.effect_id) !=
+                    (action.project_id, action.action_id, action.revision, view.effect_id)
+                ):
+                    fields.update(material_status=PreparationStatus.STALE, binding_fingerprint=None,
+                                  reason_codes=("EVIDENCE_SNAPSHOT_CHANGED",))
+                elif binding is not None:
+                    fields.update(source_kind=binding.kind.value, source_label="已保存的观察材料")
+                    if binding.kind is ActionEvidenceKind.REGISTERED_OBSERVER:
+                        reference = binding.observer_reference
+                        available = None if self._registered_observers is None else self._registered_observers.contains(
+                            action.project_id, reference)
+                        fields.update(source_label="已绑定的受控来源", registered_source_available=available)
+                        reasons = list(view.reason_codes)
+                        if available is False:
+                            reasons.append("REGISTERED_OBSERVER_UNAVAILABLE")
+                        capability = None if self._effect_proofs is None or not available else self._effect_proofs.capability(
+                            action.project_id, reference, effect.effect_id)
+                        # Reader 声明仍须对应精确来源与效果；不能按名称或另一效果兜底。
+                        if capability is not None and (capability.descriptor_id, capability.descriptor_fingerprint,
+                            capability.observer_id, capability.effect_id) == (reference.descriptor_id,
+                            reference.descriptor_fingerprint, reference.observer_id, effect.effect_id):
+                            fields.update(closure_supported=capability.closure_supported,
+                                          resource_correlation_supported=capability.resource_correlation_supported)
+                        else:
+                            reasons.append("PROOF_CAPABILITY_UNAVAILABLE")
+                        fields["reason_codes"] = tuple(dict.fromkeys(reasons))
+                result.append(EffectMaterialSummary(**fields))
+        return tuple(result)
+
+    def proof_capabilities(self, project_id, evidence):
+        """只询问已绑定 descriptor；未注入能力 reader 时不推断证明能力。"""
+        if self._effect_proofs is None:
+            return ()
+        result = []
+        for binding in evidence:
+            if binding.kind is not ActionEvidenceKind.REGISTERED_OBSERVER:
+                continue
+            capability = self._effect_proofs.capability(project_id, binding.observer_reference, binding.effect_id)
+            if capability is not None:
+                result.append(RegisteredEffectProofCapability.model_validate(capability))
+        return tuple(result)
+
+    def accept_recording(self, work, recording, draft_record, *, flow=None, now_us: int):
+        """由生命周期服务在同一完成事务调用，候选不明确时整个事务不生效。"""
+        for binding in self.build_recording_bindings(work, recording, draft_record, flow=flow, now_us=now_us):
+            work.action_preparation.replace(binding)
+
+    def build_recording_bindings(self, work, recording, draft_record, *, flow=None, now_us: int):
+        """复核不可变捕获来源后构造绑定；预览与接受共用此路径，构造本身不写库。"""
+        action, identity, understanding = require_persisted_recording_source(work, recording, self._var_dir)
+        draft = draft_record.draft
+        if draft.resource_owner_test_identity_id != recording.resource_owner_test_identity_id:
+            raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "草稿与录制业务来源不一致")
+        if (draft.business_action_id, draft.action_revision, draft.subject_test_identity_id,
+            draft.recording_id, draft.purpose, draft.parent_recording_id, draft.effect_id) != (
+            recording.business_action_id, recording.action_revision, recording.subject_test_identity_id,
+            recording.recording_id, recording.purpose, recording.parent_recording_id, recording.effect_id,
+        ):
+            raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "草稿与录制业务来源不一致")
+        common = binding_source_fields(work, action, identity, understanding, now_us, recording.resource_owner_test_identity_id)
+        source = {
+            "source_recording_id": recording.recording_id, "source_draft_revision": draft.revision,
+            "source_draft_sha256": draft_record.draft_sha256,
+        }
+        if recording.purpose is RecordingPurpose.TARGET:
+            if flow is not None and flow.resource_owner_test_identity_id != recording.resource_owner_test_identity_id:
+                raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "最终 Flow 的业务身份不一致")
+            if flow is None or (flow.business_action_id, flow.action_revision, flow.subject_test_identity_id) != (
+                action.action_id, action.revision, identity.identity_id,
+            ):
+                raise JiejianError(ErrorCode.RECORD_DRAFT_REFERENCE, "最终 Flow 的业务身份不一致")
+            target = next((item for item in draft.steps if item.id == draft.target_step_id), None)
+            candidate = None if target is None else next((item for item in target.resource_candidates
+                                                         if item.candidate_id == draft.resource_candidate_id), None)
+            if candidate is None:
+                raise JiejianError(ErrorCode.RECORD_DRAFT_UNCONFIRMED, "请确认业务动作和具体资源")
+            injection = flow_resource_injection(flow, candidate)
+            flow_facts = {"flow_id": flow.id, "flow_sha256": _flow_sha256(flow), "resource_injection": injection}
+            resource = seal_binding(
+                ActionResourceBinding, **common, **source, **flow_facts,
+                actual_resource_id=resource_value(request_event(recording, target), candidate),
+            )
+            execution = seal_binding(ActionExecutionBinding, **common, **source, **flow_facts)
+            return (execution, resource)
+        resource = work.action_preparation.resource(action.action_id, action.revision, recording.resource_owner_test_identity_id)
+        if (resource is None or resource.source_recording_id != recording.parent_recording_id
+                or self.source_inspector.reasons(work, resource, action, understanding)):
+            raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "补录需要原业务演示中仍有效的具体资源")
+        chosen = choose_supplement_candidate(recording, draft, resource.actual_resource_id)
+        if recording.purpose is RecordingPurpose.OBSERVATION:
+            binding = seal_binding(
+                ActionEvidenceBinding, **common, **source, effect_id=recording.effect_id,
+                kind=ActionEvidenceKind.RECORDED_OBSERVATION, step_id=chosen.step_id,
+                request_template=chosen.request_template,
+            )
+        else:
+            binding = seal_binding(ActionRecoveryBinding, **common, **source,
+                                   step_id=chosen.step_id, request_template=chosen.request_template)
+        return (binding,)
+
+    def candidates(self, recording_id: str):
+        """为补录审阅返回现有有限候选；读取不会自动接受或调用外部服务。"""
+        with self._uow_factory() as work:
+            recording = work.recordings.get(recording_id)
+            draft = work.flow_drafts.latest(recording_id)
+            if recording is None or draft is None:
+                raise JiejianError(ErrorCode.RECORD_NOT_FOUND, "录制草稿不存在")
+            if recording.purpose is RecordingPurpose.TARGET:
+                return ()
+            action, _, understanding = require_persisted_recording_source(work, recording, self._var_dir)
+            resource = work.action_preparation.resource(action.action_id, action.revision, recording.resource_owner_test_identity_id)
+            if resource is None or self.source_inspector.reasons(work, resource, action, understanding):
+                return ()
+            return supplement_candidates(recording, draft.draft, resource.actual_resource_id)
+
+    def register_observer(self, recording_id: str, *, effect_id: str, reference: RegisteredObserverReference, now_us: int):
+        """仅供受控组合使用的窄引用写入；普通 API 不暴露此操作。"""
+        with self._uow_factory() as work:
+            recording = work.recordings.get(recording_id)
+            if recording is None or recording.state is not RecordingState.COMPLETED or recording.purpose is not RecordingPurpose.TARGET:
+                raise JiejianError(ErrorCode.RECORD_STATE_PRECONDITION, "Observer 引用需要已完成的业务演示")
+            action, identity, understanding = require_persisted_recording_source(work, recording, self._var_dir)
+            if (effect_id not in {item.effect_id for item in action.effect_catalog}
+                    or self._registered_observers is None
+                    or not self._registered_observers.contains(action.project_id, reference)):
+                raise JiejianError(ErrorCode.STATE_PRECONDITION, "受控 Observer 或当前业务效果不可用")
+            binding = seal_binding(
+                ActionEvidenceBinding, **binding_source_fields(work, action, identity, understanding, now_us, recording.resource_owner_test_identity_id),
+                kind=ActionEvidenceKind.REGISTERED_OBSERVER, effect_id=effect_id, observer_reference=reference,
+            )
+            work.action_preparation.replace(binding)
+            work.commit()
+            return binding
+
+    def inspect(self, action, contract, identities, *, work=None) -> ActionTechnicalPreparationView:
+        with (self._uow_factory() if work is None else nullcontext(work)) as work:
+            understanding = work.application_understanding.get(action.project_id)
+            repository = work.action_preparation
+            execution = repository.execution(action.action_id, action.revision)
+            execution_view = self.inspect_item(work, execution, action, understanding, "ACTION_EXECUTION_REQUIRED")
+            assignments = {item.requirement.slot_id: item.test_identity_id for item in identities.slots}
+            resources = []
+            for requirement in contract.resources:
+                owner = assignments.get(requirement.owner_slot_id)
+                binding = None if owner is None else repository.resource(action.action_id, action.revision, owner)
+                view = self.inspect_item(work, binding, action, understanding, "ACTION_RESOURCE_REQUIRED")
+                if binding is not None and (
+                    execution is None or execution_view.status is not PreparationStatus.SATISFIED
+                    or binding.resource_injection != execution.resource_injection
+                ):
+                    view = _stale(binding, "RESOURCE_INJECTION_STALE")
+                resources.append(ResourcePreparationView(**view.model_dump(), owner_slot_id=requirement.owner_slot_id,
+                                                         owner_test_identity_id=owner))
+            evidence = []
+            for requirement in contract.effect_evidence:
+                binding = repository.evidence(action.action_id, action.revision, requirement.effect_id)
+                view = self.inspect_item(work, binding, action, understanding, "EFFECT_EVIDENCE_REQUIRED")
+                evidence.append(EffectEvidencePreparationView(**view.model_dump(), effect_id=requirement.effect_id))
+            recovery = (self.inspect_item(work, repository.recovery(action.action_id, action.revision), action,
+                                   understanding, "ACTION_RECOVERY_REQUIRED") if contract.recovery_required else
+                        PreparationItemView(status=PreparationStatus.NOT_REQUIRED))
+            return ActionTechnicalPreparationView(execution=execution_view, resources=tuple(resources),
+                                                  effect_evidence=tuple(evidence), recovery=recovery)
+
+    def inspect_item(self, work, binding, action, understanding, missing_reason):
+        """在调用者事务内投影单项材料，并核对当前账号可用性；不写入准备状态。"""
+        if binding is None:
+            return PreparationItemView(status=PreparationStatus.NEEDS_USER, reason_codes=(missing_reason,))
+        reasons = self.source_inspector.reasons(work, binding, action, understanding)
+        if self._test_identities is None:
+            reasons += ("TEST_IDENTITY_INSPECTION_UNAVAILABLE",)
+        else:
+            try:
+                identity = self._test_identities.get(binding.subject_test_identity_id)
+                owner = self._test_identities.get(binding.resource_owner_test_identity_id)
+                if any(item.project_id != action.project_id or item.status is not TestIdentityStatus.PREPARED for item in (identity, owner)):
+                    reasons += ("TEST_IDENTITY_LOGIN_REQUIRED",)
+            except JiejianError:
+                reasons += ("TEST_IDENTITY_REQUIRED",)
+        return PreparationItemView(
+            status=PreparationStatus.STALE if reasons else PreparationStatus.SATISFIED,
+            binding_fingerprint=binding.binding_fingerprint, reason_codes=tuple(dict.fromkeys(reasons)),
+        )
+
+
+
+
+def _flow_sha256(flow):
+    return hashlib.sha256(json.dumps(flow.model_dump(mode="json"), ensure_ascii=False, sort_keys=True,
+                                    separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()
+
+
+def _stale(binding, reason):
+    return PreparationItemView(status=PreparationStatus.STALE, reason_codes=(reason,),
+                               binding_fingerprint=binding.binding_fingerprint)

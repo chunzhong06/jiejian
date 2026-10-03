@@ -11,7 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-import product.backend.infra.observers.azure_queue as queue_module
+import product.backend.infra.observers.adapters.azure_queue as queue_module
 from product.protocols import (
     AzureQueuePeekLocator,
     Correlation,
@@ -25,7 +25,7 @@ from product.protocols import (
     QueuePeekBudget,
 )
 from product.protocols.observer import OBSERVER_JSON_MAX_BYTES
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 SAS = "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=r&sr=q&sig=opaque-signature"
@@ -198,7 +198,7 @@ def test_queue_sas_boundary_is_strict(value: str) -> None:
 
 
 def test_queue_process_entry_delegates_to_core(monkeypatch: pytest.MonkeyPatch) -> None:
-    import product.backend.infra.observers.azure_queue as process_module
+    import product.backend.infra.observers.adapters.azure_queue as process_module
 
     monkeypatch.setattr(process_module, "child_main", lambda input_path, output_path: 7)
     monkeypatch.setattr(sys, "argv", ["azure_queue_observer_process", "--input", "input.json", "--output", "output.json"])

@@ -7,7 +7,7 @@ import pytest
 from product.backend.composition import ApplicationCore
 from product.backend.workflows.examples.materials import OfficialScenarioInstaller
 from tests.fixtures.secrets import InMemorySecretStore
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 from tests.backend.workflows._support_current_official_sample import (
     prepare_changed_sample,
     prepare_sample,
@@ -89,13 +89,13 @@ def test_rebuilt_installer_resumes_persistent_review_without_consuming_again(cur
 
 def execute_published(core, project, *, key, change_id=None):
     from product.backend.infra.runtime.jobs.models import ClaimJob
-    from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+    from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
     from product.backend.infra.execution.web.check_runtime import check_secret_names
     from product.backend.infra.execution.check_executor import CheckExecutor
-    from product.backend.infra.artifacts.check_publication import CheckPublisher
-    from product.protocols.check_result import CheckRunnerInput, CheckAssetReference, canonical_check_document
-    from product.protocols.check_runtime import canonical_check_runtime_bytes
-    from product.protocols.execution_v3 import canonical_execution_request_v3_bytes
+    from product.backend.infra.artifacts.checks.check_publication import CheckPublisher
+    from product.protocols.checks.check_result import CheckRunnerInput, CheckAssetReference, canonical_check_document
+    from product.protocols.checks.check_runtime import canonical_check_runtime_bytes
+    from product.protocols.checks.execution_request import canonical_execution_request_v3_bytes
     preview = core.checks.preview(project, change_id=change_id)
     assert preview.can_execute, preview
     submitted = core.checks.submit(project, expected_plan_fingerprint=preview.plan_fingerprint,

@@ -5,12 +5,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from product.backend.infra.observers.audit_log import run_audit_log_observer
-from product.backend.infra.observers.check_trace import build_check_trace
+from product.backend.infra.observers.adapters.audit_log import run_audit_log_observer
+from product.backend.infra.observers.checks.check_trace import build_check_trace
 from product.backend.infra.observers.effect_projector import EffectProjector
 from product.protocols.observer import Correlation, ObservationPhase
 from tests.backend.infra.observers._support_audit_log_observer import _spec, _record, _write, TRACE_FIELDS
-from tests.fixtures.check_execution import execution_pair
+from tests.fixtures.checks.check_execution import execution_pair
 from tests.backend.infra.execution._support_check_observers import observer_target
 
 
@@ -106,7 +106,7 @@ def test_dispatch_projection_is_explicit_and_rejects_other_case_effects():
 def test_auxiliary_runtime_keeps_source_level_and_failed_later_window_is_partial(observer_target, tmp_path):
     from product.backend.infra.execution.check_executor import CheckExecutor
     from product.backend.infra.execution.web.check_runtime import CheckWebRuntime
-    from product.backend.infra.observers.check_runtime import CheckObserverRuntime
+    from product.backend.infra.observers.checks.check_runtime import CheckObserverRuntime
 
     port, state, _ = observer_target
     spec = _spec(fields=TRACE_FIELDS)

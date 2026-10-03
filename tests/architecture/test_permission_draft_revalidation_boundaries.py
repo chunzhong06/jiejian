@@ -25,7 +25,7 @@ def _function_source(path: str, class_name: str, function_name: str) -> str:
 
 
 def test_permission_draft_has_no_approval_or_persistence_capability() -> None:
-    source = _source("product/backend/workflows/business_boundaries/drafting.py")
+    source = _source("product/backend/workflows/business_boundaries/candidates/drafting.py")
 
     assert "AssistantCache" not in source
     assert "StorageUnitOfWork" not in source
@@ -37,7 +37,7 @@ def test_permission_draft_has_no_approval_or_persistence_capability() -> None:
 def test_old_permission_review_surface_is_absent() -> None:
     templates = _source("product/backend/workflows/assistant/templates.py")
     surfaces = _source("product/backend/workflows/assistant/surfaces.py")
-    router = _source("product/backend/api/routers/assistant.py")
+    router = _source("product/backend/api/routers/system/assistant.py")
 
     assert "PERMISSION_REVIEW" not in templates
     assert "permission_review" not in surfaces
@@ -59,6 +59,7 @@ def test_revalidation_plan_delegates_to_inspection() -> None:
 def test_consumers_do_not_restore_parallel_change_judgments() -> None:
     preparation = _source("product/backend/workflows/preparation/service.py")
     workspace = _source("product/backend/workflows/workspace/service.py")
+    workspace_reading = _source("product/backend/workflows/workspace/reading.py")
     worker = _source("product/backend/composition/worker.py")
     changes = _source("product/backend/workflows/changes/service.py")
 
@@ -67,10 +68,11 @@ def test_consumers_do_not_restore_parallel_change_judgments() -> None:
     assert "latest_change_unverified" not in workspace
     assert "workflows.control" not in workspace
     assert "ProductStatus" not in workspace
+    assert "self._reader.checks(" in workspace
     assert any(isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "change" for target in node.targets)
                and isinstance(node.value, ast.Call) and ast.unparse(node.value.func) == "changes.latest"
-               for node in ast.walk(ast.parse(workspace)))
-    projections = [node for node in ast.walk(ast.parse(workspace))
+               for node in ast.walk(ast.parse(workspace_reading)))
+    projections = [node for node in ast.walk(ast.parse(workspace_reading))
                    if isinstance(node, ast.Call) and ast.unparse(node.func) == "WorkspaceSourceChange"]
     assert len(projections) == 1
     fields = {item.arg: ast.unparse(item.value) for item in projections[0].keywords}

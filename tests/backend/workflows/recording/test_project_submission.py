@@ -8,15 +8,15 @@ import pytest
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.recording.models import RecordingPurpose
 from product.backend.workflows.recording.project_submission import ProjectRecordingService
-from tests.fixtures.recording import RecordingContext
+from tests.fixtures.preparation.recording import RecordingContext
 from tests.backend.workflows.recording._support_project_submission import (
     _arguments,
 )
 
 
 def test_other_role_recording_freezes_subject_and_owner_and_requires_confirmation(tmp_path):
-    from tests.fixtures.action_preparation import build_preparation_harness
-    from tests.fixtures.assurance import permission, ACTOR, OTHER_ACTOR
+    from tests.fixtures.preparation.action_preparation import build_preparation_harness
+    from tests.fixtures.checks.assurance import permission, ACTOR, OTHER_ACTOR
     from product.backend.core.boundaries.permissions import PermissionIntentRelation
     from product.backend.workflows.preparation.demonstrations import legal_demonstrations
     harness = build_preparation_harness(tmp_path, identity_count=2, second_actor=True)

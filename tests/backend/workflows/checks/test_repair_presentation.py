@@ -6,10 +6,10 @@ import pytest
 from product.backend.core.checks.repair import repair_context
 from product.backend.core.errors import JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
-from product.backend.workflows.checks.repair import build_current_repair_contract
-from product.backend.workflows.checks.repair_presentation import build_repair_comparison
-from product.protocols.execution_v3 import ChangeContext
-from tests.fixtures.check_execution import execution_pair
+from product.backend.workflows.checks.repairs.repair import build_current_repair_contract
+from product.backend.workflows.checks.repairs.repair_presentation import build_repair_comparison
+from product.protocols.checks.execution_request import ChangeContext
+from tests.fixtures.checks.check_execution import execution_pair
 
 
 def source_package(*, safe=True, extra=0):

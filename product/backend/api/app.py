@@ -18,25 +18,25 @@ from product.backend import __version__
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import JiejianError
 from product.backend.api.errors import jiejian_error_handler, request_validation_error_handler, validation_error_handler
-from product.backend.api.routers.llm import build_llm_router
-from product.backend.api.routers.onboarding import build_onboarding_router
-from product.backend.api.routers.projects import build_projects_router
-from product.backend.api.routers.system import build_system_router
-from product.backend.api.routers.test_identities import build_test_identities_router
-from product.backend.api.routers.business_boundaries import build_business_boundaries_router
-from product.backend.api.routers.experience import build_experience_router
-from product.backend.api.routers.supplemental_materials import build_supplemental_material_router
-from product.backend.api.routers.mcp_access import build_mcp_access_router
+from product.backend.api.routers.system.llm import build_llm_router
+from product.backend.api.routers.applications.onboarding import build_onboarding_router
+from product.backend.api.routers.applications.projects import build_projects_router
+from product.backend.api.routers.system.system import build_system_router
+from product.backend.api.routers.preparation.test_identities import build_test_identities_router
+from product.backend.api.routers.boundaries.business_boundaries import build_business_boundaries_router
+from product.backend.api.routers.applications.experience import build_experience_router
+from product.backend.api.routers.preparation.supplemental_materials import build_supplemental_material_router
+from product.backend.api.routers.system.mcp_access import build_mcp_access_router
 from product.backend.api.routers.workspace import build_workspace_router
-from product.backend.api.routers.recordings import build_recordings_router
-from product.backend.api.routers.preparation import build_preparation_router
-from product.backend.api.routers.assistant import build_assistant_router
-from product.backend.api.routers.permission_drafts import build_permission_drafts_router
-from product.backend.api.routers.checks import build_checks_router
-from product.backend.api.routers.runs import build_runs_router
-from product.backend.api.routers.results import build_results_router
-from product.backend.api.routers.source_changes import build_source_changes_router
-from product.backend.api.routers.development import build_development_router
+from product.backend.api.routers.preparation.recordings import build_recordings_router
+from product.backend.api.routers.preparation.preparation import build_preparation_router
+from product.backend.api.routers.system.assistant import build_assistant_router
+from product.backend.api.routers.boundaries.permission_drafts import build_permission_drafts_router
+from product.backend.api.routers.checks.checks import build_checks_router
+from product.backend.api.routers.checks.runs import build_runs_router
+from product.backend.api.routers.checks.results import build_results_router
+from product.backend.api.routers.changes.source_changes import build_source_changes_router
+from product.backend.api.routers.changes.development import build_development_router
 from product.backend.api.local_control import LocalControlGuard
 from product.backend.api.mcp import build_mcp_control
 from product.backend.workflows.agent_access.service import MCPAccessController
@@ -80,10 +80,10 @@ def create_app(
         f"{local_control_guard.origin}/mcp",
         context.secret_store,
         clock_us=clock_us,
+        on_authority_changed=context.proof_preparation.cancel_unauthorized,
     )
-    context.proof_preparation.authority_active = lambda project, authority: (
-        authority == 'LOCAL_GUI' or mcp_access.execution_authority_active(project,authority))
-    mcp_access.on_authority_changed = context.proof_preparation.cancel_unauthorized
+    context.proof_preparation.bind_authority_checker(lambda project, authority: (
+        authority == 'LOCAL_GUI' or mcp_access.execution_authority_active(project,authority)))
     mcp_control = build_mcp_control(
         context,
         mcp_access,

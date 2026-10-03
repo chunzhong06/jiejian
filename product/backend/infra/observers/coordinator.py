@@ -22,12 +22,12 @@ from pydantic import ValidationError
 from product.backend.core.errors import ErrorCode, JiejianError
 if TYPE_CHECKING:
     from product.backend.infra.execution.port import TargetCaseSession
-from product.backend.infra.observers.async_task import run_async_task_observer
-from product.backend.infra.observers.audit_log import run_audit_log_observer
-from product.backend.infra.observers.azure_blob import run_azure_blob_observer
-from product.backend.infra.observers.azure_queue import run_azure_queue_observer
+from product.backend.infra.observers.adapters.async_task import run_async_task_observer
+from product.backend.infra.observers.adapters.audit_log import run_audit_log_observer
+from product.backend.infra.observers.adapters.azure_blob import run_azure_blob_observer
+from product.backend.infra.observers.adapters.azure_queue import run_azure_queue_observer
 from product.backend.infra.observers.registry import ObserverRegistry
-from product.backend.infra.observers.sqlite import run_sqlite_observer
+from product.backend.infra.observers.adapters.sqlite import run_sqlite_observer
 from product.protocols import AuditLogStartCursor, Correlation, ObservationEnvelope, ObservationPhase, ObserverOutcome, ObserverOutcomeStatus, ObserverSpec, ObserverType
 
 

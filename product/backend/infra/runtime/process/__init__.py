@@ -10,9 +10,9 @@ _EXPORTS = {
     "force_terminate_process_tree": (".control", "force_terminate_process_tree"),
     "lock_is_available": (".lock", "lock_is_available"),
     "minimal_process_environment": (".environment", "minimal_process_environment"),
-    "python_environment_report": (".identity", "python_environment_report"),
+    "python_environment_report": (".controlled.identity", "python_environment_report"),
     "python_module_command": (".environment", "python_module_command"),
-    "require_python_environment": (".identity", "require_python_environment"),
+    "require_python_environment": (".controlled.identity", "require_python_environment"),
     "run_python_module": (".environment", "run_python_module"),
     "spawn_python_module": (".environment", "spawn_python_module"),
     "try_lock_stream": (".lock", "try_lock_stream"),
@@ -22,7 +22,7 @@ _EXPORTS = {
 
 def __getattr__(name: str):
     if name in {"bootstrap", "control", "environment", "identity", "lock", "tree"}:
-        return import_module(f".{name}", __name__)
+        return import_module(f".controlled.{name}" if name in {"bootstrap", "identity"} else f".{name}", __name__)
     module_name, attribute = _EXPORTS[name]
     value = getattr(import_module(module_name, __name__), attribute)
     globals()[name] = value

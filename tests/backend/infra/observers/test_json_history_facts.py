@@ -2,7 +2,7 @@
 import json
 from types import SimpleNamespace
 import pytest
-from product.backend.infra.observers.json_source import mapped_values, project_history, SourceReadError
+from product.backend.infra.observers.adapters.json_source import mapped_values, project_history, SourceReadError
 
 
 def _records():

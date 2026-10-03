@@ -38,7 +38,7 @@ from product.protocols import (
     WorkflowStepPurpose,
 )
 from product.protocols.web.workflow import CASE_SUBJECT_IDENTITY
-from tests.fixtures.runner import runner_input
+from tests.fixtures.runtime.runner import runner_input
 
 
 class _WorkflowHandler(BaseHTTPRequestHandler):

@@ -2,12 +2,12 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BoundaryMaintenanceDraftDto } from '../../../api/businessBoundaries'
+import type { BoundaryMaintenanceDraftDto } from '../../../api/boundaries/businessBoundaries'
 import { BoundaryMaintenanceEditor } from './BoundaryMaintenanceEditor'
 
 const ai = vi.hoisted(() => ({ generate: vi.fn(), maintenanceDraft: vi.fn() }))
-vi.mock('../../../api/permissionDrafts', () => ({ permissionDraftsApi: { generate: ai.generate } }))
-vi.mock('../../../api/businessBoundaries', () => ({ businessBoundariesApi: { maintenanceDraft: ai.maintenanceDraft } }))
+vi.mock('../../../api/boundaries/permissionDrafts', () => ({ permissionDraftsApi: { generate: ai.generate } }))
+vi.mock('../../../api/boundaries/businessBoundaries', () => ({ businessBoundariesApi: { maintenanceDraft: ai.maintenanceDraft } }))
 vi.mock('../../assistant/AssistantPanel', () => ({ AssistantPanel: () => null }))
 const actorId = `bar_${'1'.repeat(32)}`
 const actionId = `bac_${'2'.repeat(32)}`

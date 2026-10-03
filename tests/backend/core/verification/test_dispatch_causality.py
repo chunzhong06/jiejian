@@ -5,8 +5,8 @@ import pytest
 
 from product.backend.core.verification.breakpoints import BreakpointLocator, BreakpointType, BreakpointPrecision
 from product.backend.core.verification.trace import ExecutionTrace, TraceEvent, TraceEventKind, TraceAuthorizationDecision
-from product.protocols.check_result import CheckEvidence, CheckCaseOutcome, canonical_check_document, parse_check_document, seal_check_evidence
-from tests.fixtures.check_execution import execution_pair
+from product.protocols.checks.check_result import CheckEvidence, CheckCaseOutcome, canonical_check_document, parse_check_document, seal_check_evidence
+from tests.fixtures.checks.check_execution import execution_pair
 from tests.backend.core.verification._support_check_breakpoints import inputs
 
 

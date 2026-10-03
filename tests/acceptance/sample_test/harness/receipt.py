@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from product.backend.core.errors import JiejianError
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.backend.infra.runtime.process.identity import require_python_environment
+from product.backend.infra.runtime.process.controlled.identity import require_python_environment
 import tests.acceptance.sample_test.harness.state as sample_harness_state
 
 

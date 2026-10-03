@@ -35,10 +35,7 @@ from product.backend.core.errors import JiejianError
 from product.backend.core.redaction import redact
 from product.backend.infra.runtime.settings import Settings, load_settings
 from product.backend.infra.runtime.logging import configure_logging
-from product.backend.infra.runtime.process.identity import (
-    SUPPORTED_PYTHON,
-    python_environment_report,
-)
+from product.backend.infra.runtime.process.controlled.identity import SUPPORTED_PYTHON, python_environment_report
 
 
 class DoctorCheck(BaseModel):

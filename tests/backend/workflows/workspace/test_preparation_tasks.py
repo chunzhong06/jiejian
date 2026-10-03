@@ -1,6 +1,8 @@
 # 验证准备任务的全局优先级、真实账号分配和严格录制来源定位。
 
 from types import SimpleNamespace
+from dataclasses import replace
+from product.backend.workflows.workspace.reading import WorkspaceCheckReaders
 
 import pytest
 
@@ -8,8 +10,8 @@ from product.backend.core.boundaries.permissions import PermissionIntentRelation
 from product.backend.core.boundaries.semantics import PermissionExpectation
 from product.backend.core.recording.models import RecordingPurpose, RecordingState
 from product.backend.workflows.preparation.models import PreparationStatus as Status
-from tests.fixtures.action_preparation import add_recording, build_preparation_harness
-from tests.fixtures.assurance import permission
+from tests.fixtures.preparation.action_preparation import add_recording, build_preparation_harness
+from tests.fixtures.checks.assurance import permission
 
 pytestmark = [pytest.mark.database, pytest.mark.essential]
 
@@ -119,14 +121,14 @@ def test_historical_recordings_do_not_block_new_demonstration(harness, history):
                {"preparation_source_fingerprint": "f" * 64} if history == "stale_source" else
                {"state": RecordingState(history)})
     # 固定历史行作为查询输入，避免建立不存在的业务版本根；来源判断仍使用真实 UoW。
-    original_factory = harness.core.workspace._uow_factory
+    original_factory = harness.core.workspace._reader._uow_factory
     from contextlib import contextmanager
     @contextmanager
     def with_history():
         with original_factory() as work:
             work.recordings.list_for_project = lambda _: (recording.model_copy(update=updates),)
             yield work
-    harness.core.workspace._uow_factory = with_history
+    harness.core.workspace._reader._uow_factory = with_history
     assert _task(harness).task_kind == "DEMONSTRATE_ACTION"
 
 
@@ -153,7 +155,7 @@ def test_current_parent_effect_recovery_and_complete_projection(tmp_path, state_
         assert workspace.primary_task is None
         tests = next(item for item in workspace.areas if item.key == "tests")
         assert (tests.status, tests.status_label) == ("READY", "材料已准备")
-        from product.backend.workflows.checks.repair_text import CURRENT_TASK_TEXT
+        from product.backend.workflows.checks.repairs.repair_text import CURRENT_TASK_TEXT
         assert tests.description == CURRENT_TASK_TEXT["RUN_CURRENT_CHECK"][1]
         assert next(item for item in workspace.areas if item.key == "changes").status == "READY"
         assert h.core.preparation.get(h.project_id).preparation_complete
@@ -264,7 +266,7 @@ def test_second_slot_selects_distinct_recorded_account_for_login(harness):
 @pytest.mark.parametrize("change", ["failed", "wrong_identity", "stale_source", "wrong_purpose"])
 def test_unusable_resource_parent_is_never_offered(harness, change):
     target = _finish(harness)
-    original_factory = harness.core.workspace._uow_factory
+    original_factory = harness.core.workspace._reader._uow_factory
     from contextlib import contextmanager
     updates = {"failed": {"state": RecordingState.FAILED},
         "wrong_identity": {"subject_test_identity_id": "tid_" + "f" * 32},
@@ -276,7 +278,7 @@ def test_unusable_resource_parent_is_never_offered(harness, change):
             original_get = work.recordings.get
             work.recordings.get = lambda recording_id: original_get(recording_id).model_copy(update=updates) if recording_id == target.recording_id else original_get(recording_id)
             yield work
-    harness.core.workspace._uow_factory = factory
+    harness.core.workspace._reader._uow_factory = factory
     task = _task(harness)
     assert task.task_kind == "COMPLETE_EFFECT_EVIDENCE"
     assert task.parent_recording_id is None and task.test_identity_id is None and not task.can_execute
@@ -325,7 +327,7 @@ def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
     from product.backend.core.lifecycle import RunVerdict
     from product.backend.workflows.projects.repair import ProjectRepair, CurrentRepairTask
     from tests.backend.core._support_check_repair import contract_and_new
-    from tests.fixtures.check_service import ready_check_harness
+    from tests.fixtures.checks.check_service import ready_check_harness
     h = ready_check_harness(tmp_path)
     try:
         core, project = h.core, h.project_id
@@ -337,7 +339,7 @@ def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
             tasks=(task,) if kind == "VERIFY_REPAIR" else (), primary_task_reference=task.task_reference if kind == "VERIFY_REPAIR" else None)
         run_id = "run_" + "9" * 32
         entry = SimpleNamespace(result_integrity="VALID", run=SimpleNamespace(run_id=run_id, policy_epoch=core.business_boundaries.view(project).policy_epoch, verdict=RunVerdict.PASS, created_at_us=1))
-        core.workspace.set_current_checks(checks=core.checks,
+        core.workspace._reader.current_checks = WorkspaceCheckReaders(checks=core.checks,
             reader=SimpleNamespace(active_for_project=lambda _: None, list_for_project=lambda _: (entry,) if kind in {"VIEW_CURRENT_RESULT", "CURRENT_DELIVERY"} else (),
                 package=lambda *args, **kwargs: SimpleNamespace(request=SimpleNamespace(source_fingerprint=understanding.source_fingerprint))),
             changes=SimpleNamespace(latest=lambda _: None), repairs=SimpleNamespace(evaluate=lambda _: repair),
@@ -350,12 +352,11 @@ def test_current_workspace_four_tasks_carry_exact_context(tmp_path, kind):
             view = dict(context=dict(title="新一批", goal="不能借用旧结果"), acceptance=None,
                 deliveries=[dict(delivery_id="dly_" + "3" * 32, change_id=delivery.change_id, ordinal=1)],
                 latest_verification=dict(run_id=None), runtime_state="MATCHED")
-            core.workspace.development_service = SimpleNamespace(active=lambda _: active_task, view=lambda *_: view)
-            checks, *rest = core.workspace._current_checks
+            core.workspace._reader.development = SimpleNamespace(active=lambda _: active_task, view=lambda *_: view)
             def preview(_project, *, change_id=None):
                 assert change_id in (None, delivery.change_id)
                 return SimpleNamespace(can_execute=True, plan_fingerprint="a" * 64)
-            core.workspace._current_checks = (SimpleNamespace(preview=preview), *rest)
+            core.workspace._reader.current_checks = replace(core.workspace._reader.current_checks, checks=SimpleNamespace(preview=preview))
         workspace = core.workspace.get(project)
         actual = workspace.primary_task
         expected = "RUN_CURRENT_CHECK" if kind == "CURRENT_DELIVERY" else kind

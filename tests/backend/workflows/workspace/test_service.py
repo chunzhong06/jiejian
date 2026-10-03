@@ -1,4 +1,5 @@
 # 验证动作级 Workspace 唯一主任务优先级、实时实现检查与无 Binding 允许状态。
+from product.backend.workflows.workspace.tasks import boundary_task
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -388,7 +389,7 @@ def test_permission_revision_review_precedes_stale_binding(tmp_path: Path) -> No
                 "reason_codes": ("PERMISSION_REVISION_REVIEW_REQUIRED",),
             }
         )
-        task = core.workspace._primary_task(
+        task = boundary_task(
             core.application_understanding.get(project_id),
             boundary.model_copy(update={"permission_statuses": (review_status,)}),
             (),

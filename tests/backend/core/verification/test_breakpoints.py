@@ -35,7 +35,7 @@ from product.backend.core.verification.trace import (
 from product.backend.workflows.reports.trace import build_execution_trace
 from product.protocols import ObservationCompleteness, ObserverType
 from product.protocols.web.profile import WebExecutionProfile
-from tests.fixtures.runner import write_web_test_profile
+from tests.fixtures.runtime.runner import write_web_test_profile
 
 
 EVIDENCE_REF = "ev_bbbbbbbbbbbbbbbbbbbb"

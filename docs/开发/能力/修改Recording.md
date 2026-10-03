@@ -15,12 +15,12 @@ Recording 把“用户在已登录网页里完成一次真实业务动作”转�
 | 要改什么 | 先看哪里 | 直接测试 |
 | --- | --- | --- |
 | Recording 提交、状态与 result 消费 | `product/backend/workflows/recording/project_submission.py`、`product/backend/workflows/recording/processing.py` | `tests/backend/workflows/recording/` |
-| capture start/stop 与当前 attempt 控制 | `product/backend/workflows/recording/lifecycle.py`、`product/backend/workflows/recording/run_service.py`、`product/backend/infra/recording/control.py` | `tests/backend/api/test_recordings.py` |
+| capture start/stop 与当前 attempt 控制 | `product/backend/workflows/recording/lifecycle.py`、`product/backend/workflows/recording/run_service.py`、`product/backend/infra/recording/control.py` | `tests/backend/api/preparation/test_recordings.py` |
 | 独立 Recording Process | `product/backend/infra/recording/process.py`、`product/backend/infra/recording/browser.py` | `tests/backend/infra/recording/test_process.py`、`tests/backend/infra/recording/test_browser_boundary.py` |
 | 脱敏事件收集 | `product/backend/infra/recording/events.py` | `tests/backend/infra/recording/` |
-| FlowDraft 审阅与 revision | `product/backend/workflows/recording/review.py`、`product/protocols/flow_draft.py` | `tests/backend/workflows/recording/`、`tests/protocols/test_recording.py` |
-| Flow 编译 | `product/backend/workflows/recording/flow_compiler.py`、`product/protocols/recording_flow.py` | `tests/backend/workflows/recording/test_flow_compiler.py` |
-| 正式 API 与展示消费者 | `product/backend/api/routers/recordings.py`、`product/frontend/src/features/recording/` | 对应 API 与前端直接测试 |
+| FlowDraft 审阅与 revision | `product/backend/workflows/recording/review.py`、`product/protocols/recording/flow_draft.py` | `tests/backend/workflows/recording/`、`tests/protocols/test_recording.py` |
+| Flow 编译 | `product/backend/workflows/recording/flow_compiler.py`、`product/protocols/recording/recording_flow.py` | `tests/backend/workflows/recording/test_flow_compiler.py` |
+| 正式 API 与展示消费者 | `product/backend/api/routers/preparation/recordings.py`、`product/frontend/src/features/recording/` | 对应 API 与前端直接测试 |
 
 ## 正常修改路线
 
@@ -54,7 +54,7 @@ Recording 应根据录制顺序自动采用唯一且可执行的业务解释；�
 先运行修改点的 workflow/protocol/infra 直接测试。涉及 API 控制再补 recordings Router；涉及页面只跑对应前端文件。真实录制与进程退出按已装配能力和明确授权验证。当前 CHECK 与官方环境复用普通链；局部录制验证不自动扩大为 sample-test，L5 入口与边界见验证规范。
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/workflows/recording tests/backend/infra/recording tests/backend/api/test_recordings.py tests/protocols/test_recording.py
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 test tests/backend/workflows/recording tests/backend/infra/recording tests/backend/api/preparation/test_recordings.py tests/protocols/test_recording.py
 ```
 
 命令只是覆盖面示例；实际选择最小受影响路径。修改 Python 后仍需按项目规则检查中文职责头和 AST。

@@ -1,19 +1,19 @@
 // 概览集中显示下一步与权限、材料、最近结果；推荐动作来自服务端。
 import { Button } from 'antd'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { OfficialExperienceDto } from '../../api/experience'
-import type { ProjectDto } from '../../api/projects'
+import type { OfficialExperienceDto } from '../../api/applications/experience'
+import type { ProjectDto } from '../../api/applications/projects'
 import type { WorkspaceViewDto } from '../../api/workspace'
-import type { SystemStatus } from '../../api/system'
-import type { MCPAccessView } from '../../api/mcp'
+import type { SystemStatus } from '../../api/system/system'
+import type { MCPAccessView } from '../../api/system/mcp'
 import { ApiError } from '../../api/http'
-import { preparationApi, type PreparationView } from '../../api/preparation'
-import { currentChecksApi, type CheckHistoryItem } from '../../api/currentChecks'
-import { taskDestination } from '../../app/taskDestination'
-import { useLiveRead } from '../../app/useLiveRead'
+import { preparationApi, type PreparationView } from '../../api/preparation/preparation'
+import { currentChecksApi, type CheckHistoryItem } from '../../api/checks/currentChecks'
+import { taskDestination } from '../../shared/navigation/taskDestination'
+import { useLiveRead } from '../../shared/runtime/useLiveRead'
 import { EditorialHeader, EditorialPage, TaskFocus } from '../../shared/ui/Editorial'
 import './workbench.css'
-import '../changes/lightweight.css'
+import '../changes/styles/lightweight.css'
 
 const verdictLabel = { PASS: '本次范围内的权限要求已验证', BLOCK: '发现权限问题', INCONCLUSIVE: '证据不足，暂不能判断' }
 

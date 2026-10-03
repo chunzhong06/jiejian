@@ -33,7 +33,7 @@ from product.backend.cli.commands.system import (
 )
 from product.backend.cli.presentation import configure_presentation
 from product.backend.core.errors import JiejianError
-from product.backend.infra.runtime.process.identity import require_python_environment
+from product.backend.infra.runtime.process.controlled.identity import require_python_environment
 
 
 configure_cli_localization()

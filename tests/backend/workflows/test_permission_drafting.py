@@ -10,9 +10,9 @@ import pytest
 from product.backend.core.boundaries.permissions import PermissionIntentRelation
 from product.backend.core.boundaries.semantics import PermissionExpectation
 from product.backend.core.boundaries.entities import BusinessRevisionState
-from tests.fixtures.assurance import actor, action, permission
+from tests.fixtures.checks.assurance import actor, action, permission
 from product.backend.infra.llm.adapters.base import LLMTransportError
-from product.backend.workflows.business_boundaries.drafting import PermissionDraftService, PermissionDraftStatus
+from product.backend.workflows.business_boundaries.candidates.drafting import PermissionDraftService, PermissionDraftStatus
 
 
 _OPTION_ID = "opt_" + "1" * 32

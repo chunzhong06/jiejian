@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from product.backend.core.errors import JiejianError, ErrorCode
 from product.backend.infra.source_identity import GitSourceContext
 from product.backend.workflows.changes.identity import SourceIdentityReader
-from product.backend.api.routers.source_changes import build_source_changes_router
+from product.backend.api.routers.changes.source_changes import build_source_changes_router
 
 
 @pytest.fixture

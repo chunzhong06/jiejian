@@ -1,9 +1,9 @@
 // 单条规则使用独立编辑副本；保存只交回本地草稿，取消不会修改其他规则或正式权限。
 import { Alert, Button, Checkbox, Select, Segmented } from 'antd'
 import { useId, useState } from 'react'
-import type { BoundaryMaintenancePermissionDto } from '../../../api/businessBoundaries'
+import type { BoundaryMaintenancePermissionDto } from '../../../api/boundaries/businessBoundaries'
 import { relationLabels } from '../draft/boundaryLabels'
-import { useTaskGuard } from '../../../app/tasks/TaskContinuity'
+import { useTaskGuard } from '../../../shared/runtime/editGuard'
 
 type NamedItem = { item_id: string; display_name: string }
 export function PermissionRuleForm({ initial, actors, action: initialAction, actions, busy, onSave, onCancel }: {

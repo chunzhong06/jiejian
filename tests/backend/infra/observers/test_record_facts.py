@@ -2,9 +2,9 @@
 
 import pytest
 
-from product.backend.infra.observers.record_facts import transaction_fact
-from product.backend.infra.observers.transaction_store import TransactionRecordStore
-from product.protocols.transaction_records import RecordSeed, RecordChange, RecordTransaction
+from product.backend.infra.observers.records.record_facts import transaction_fact
+from product.backend.infra.observers.records.transaction_store import TransactionRecordStore
+from product.protocols.runtime.transaction_records import RecordSeed, RecordChange, RecordTransaction
 
 
 def example(tmp_path, changes):

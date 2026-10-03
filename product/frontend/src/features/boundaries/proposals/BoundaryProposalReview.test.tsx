@@ -2,7 +2,7 @@
 import { fireEvent,render,screen,within } from '@testing-library/react'
 import { expect,it,vi } from 'vitest'
 import { BoundaryProposalReview } from './BoundaryProposalReview'
-import type { BoundaryProposalViewDto,BoundaryReviewValueDto } from '../../../api/businessBoundaries'
+import type { BoundaryProposalViewDto,BoundaryReviewValueDto } from '../../../api/boundaries/businessBoundaries'
 const value:BoundaryReviewValueDto={display_name:'成员导出',description:'规则说明',effective_state:'ACTIVE',resource_concept:null,operation_kind:null,state_changing:null,effects:[],subject:'成员',resource_owner:'负责人',action:'导出项目包',relation:'OTHER_ROLE',expectation:'DENY',protected_effects:['完整项目包形成']}
 const data=():BoundaryProposalViewDto=>({proposal:{proposal_id:'p1',project_id:'project',source_snapshot:{},proposal_fingerprint:'a'.repeat(64),created_at_us:1,proposed_permissions:[],proposed_actors:[],proposed_actions:[],unresolved_questions:[],provenance:'公开提案'},decision:null,change_summary:null,review:{basis_state:'COMPLETE',current_state_changed:false,items:[{entity_kind:'ACTOR',item_id:'actor',entity_id:null,basis_revision:null,change_kind:'CREATE',basis_available:true,before:null,after:{...value,expectation:null,relation:null,display_name:'成员定义',description:'只能查看本人的资料'}},{entity_kind:'PERMISSION',item_id:'rule',entity_id:null,basis_revision:null,change_kind:'CREATE',basis_available:true,before:null,after:value}]}} )
 const props=()=>({busy:false,onApprove:vi.fn(),onReject:vi.fn(),onReturnToEdit:vi.fn()})

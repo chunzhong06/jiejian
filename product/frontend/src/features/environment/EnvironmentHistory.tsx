@@ -2,11 +2,11 @@
 import { Button, Spin } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError } from '../../api/http'
-import { projectsApi, type ProjectDto } from '../../api/projects'
-import { currentChecksApi, type ResultStory } from '../../api/currentChecks'
+import { projectsApi, type ProjectDto } from '../../api/applications/projects'
+import { currentChecksApi, type ResultStory } from '../../api/checks/currentChecks'
 import { CheckHistoryPage } from '../history/CheckHistoryPage'
 import { CurrentResultStory } from '../results/CurrentResultStory'
-import { SourceIdentityPanel } from '../changes/SourceIdentityPanel'
+import { SourceIdentityPanel } from '../changes/delivery/SourceIdentityPanel'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 
 export function EnvironmentHistory({ projectId, onBack, onError }: { projectId: string; onBack: () => void; onError: (error: ApiError) => void }) {

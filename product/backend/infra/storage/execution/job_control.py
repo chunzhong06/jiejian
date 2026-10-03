@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from product.backend.core.lifecycle import JobState, RunLifecycle, RunVerdict
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.storage.execution.jobs import JobRow
-from product.backend.infra.storage.recordings import RecordingRow
+from product.backend.infra.storage.preparation.recordings import RecordingRow
 from product.backend.infra.storage.execution.runs import RunRow
 from product.backend.infra.storage.execution.jobs import JobRecord, JobRepository
 from product.backend.infra.storage.execution.runs import RunRecord, RunRepository

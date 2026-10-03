@@ -7,9 +7,9 @@ import pytest
 
 from product.backend.core.errors import JiejianError
 from product.backend.infra.execution.web.check_runtime import CheckWebRuntime
-from product.protocols.check_runtime import CheckRuntimeBundle
-from tests.fixtures.check_plan import plan
-from tests.fixtures.check_runtime import runtime_bundle
+from product.protocols.checks.check_runtime import CheckRuntimeBundle
+from tests.fixtures.checks.check_plan import plan
+from tests.fixtures.checks.check_runtime import runtime_bundle
 
 
 @pytest.fixture

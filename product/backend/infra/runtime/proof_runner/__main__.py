@@ -4,11 +4,11 @@ import os
 from pathlib import Path
 from functools import partial
 
-from product.backend.infra.artifacts.check_packages import read_check_bytes, reject_check_links
+from product.backend.infra.artifacts.checks.check_packages import read_check_bytes, reject_check_links
 from product.backend.infra.storage import StorageUnitOfWork, create_session_factory, create_sqlite_engine, default_database_path
 from product.backend.infra.storage.db import require_current_database
 from product.backend.infra.runtime.proof_runner.executor import execute_preflight
-from product.protocols.proof_sources import ProofRunnerInput, proof_bytes
+from product.protocols.preparation.proof_sources import ProofRunnerInput, proof_bytes
 
 
 def main():

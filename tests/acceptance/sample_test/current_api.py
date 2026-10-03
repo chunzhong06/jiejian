@@ -4,7 +4,7 @@ import json
 from uuid import uuid4
 
 from product.backend.core.boundaries.proposals import BoundaryProposalBundle
-from product.backend.workflows.business_boundaries.official_recipe import official_boundary_recipe
+from product.backend.workflows.business_boundaries.proposals.official_recipe import official_boundary_recipe
 
 
 def _error(message):

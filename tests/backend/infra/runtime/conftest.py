@@ -6,9 +6,9 @@ from collections.abc import Callable
 
 import pytest
 
-from product.backend.infra.runtime.jobs.requests import PersistedExecutionRequest
-from product.protocols.execution_request import build_permission_policy_snapshot
-from tests.fixtures.runner import runner_input
+from product.backend.infra.runtime.jobs.requests.execution import PersistedExecutionRequest
+from product.protocols.runner.execution_request import build_permission_policy_snapshot
+from tests.fixtures.runtime.runner import runner_input
 
 
 @pytest.fixture

@@ -8,10 +8,7 @@ from pathlib import Path
 from product.backend.core.boundaries.entities import ActionImplementationBinding, ActorImplementationBinding, BusinessRevisionState
 from product.backend.core.boundaries.permissions import PermissionIntentRevision
 from product.backend.core.identities.models import TestIdentity as IdentityModel
-from product.backend.infra.storage.business_boundaries import (
-    ActionImplementationBindingRow,
-    ActorImplementationBindingRow,
-)
+from product.backend.infra.storage.boundaries.business_boundaries import ActionImplementationBindingRow, ActorImplementationBindingRow
 from product.backend.workflows.business_boundaries import (
     BoundaryMaintenanceActionItem,
     BoundaryMaintenanceActorItem,
@@ -100,12 +97,12 @@ def test_binding_persists_provenance_not_live_status() -> None:
         "product/backend/workflows/business_boundaries/service.py"
     )
     assert "SUPERSEDED" not in _source(
-        "product/frontend/src/api/businessBoundaries.ts"
+        "product/frontend/src/api/boundaries/businessBoundaries.ts"
     )
 
 
 def test_proposal_repository_has_no_mutation_entrypoint() -> None:
-    source = _source("product/backend/infra/storage/business_boundaries.py")
+    source = _source("product/backend/infra/storage/boundaries/business_boundaries.py")
     assert "def add_proposal(" in source
     assert "def add_decision(" in source
     assert "def replace_proposal(" not in source
@@ -136,12 +133,12 @@ def test_maintenance_api_keeps_write_modes_server_owned() -> None:
         BoundaryMaintenancePermissionItem,
     ):
         assert "write_mode" not in item_type.model_fields
-    router = _source("product/backend/api/routers/business_boundaries.py")
+    router = _source("product/backend/api/routers/boundaries/business_boundaries.py")
     assert 'f"{prefix}/maintenance-draft"' in router
     assert 'f"{prefix}/maintenance-proposals"' in router
     assert "create_initial_proposal" in router
     service = _source("product/backend/workflows/business_boundaries/service.py")
-    assert "write_binding: bool" in _source("product/backend/workflows/business_boundaries/planning.py")
+    assert "write_binding: bool" in _source("product/backend/workflows/business_boundaries/proposals/planning.py")
     assert "if plan.write_binding:" in service
 
 
@@ -162,7 +159,7 @@ def test_current_cli_does_not_register_deferred_product_commands() -> None:
 
 
 def test_mcp_registers_exact_tools_with_project_authorization_and_no_approval() -> None:
-    source = _source("product/backend/api/mcp.py")
+    source = _source("product/backend/api/mcp/server.py")
     expected_read = {
         "jiejian_project_list",
         "jiejian_project_show",
@@ -206,7 +203,7 @@ def test_mcp_registers_exact_tools_with_project_authorization_and_no_approval() 
             called = {ast.unparse(item.func) for item in ast.walk(node) if isinstance(item, ast.Call)}
             assert not any(item.endswith((".approve_proposal", ".reject_proposal", ".add_decision")) for item in called)
     assert tools == expected
-    assert "HumanApproval" not in _imported_names("product/backend/api/mcp.py")
+    assert "HumanApproval" not in _imported_names("product/backend/api/mcp/server.py")
 
 
 def test_mcp_restores_only_read_without_persistent_grants() -> None:
@@ -225,13 +222,13 @@ def test_mcp_restores_only_read_without_persistent_grants() -> None:
 def test_current_control_plane_does_not_import_or_construct_fake_worker() -> None:
     for relative in (
         "product/backend/api/app.py",
-        "product/backend/api/mcp.py",
-        "product/backend/api/routers/system.py",
+        "product/backend/api/mcp/server.py",
+        "product/backend/api/routers/system/system.py",
     ):
         source = _source(relative)
         assert "CurrentWorkerSupervisor" not in source
         assert "infra.runtime.worker.current" not in source
-    assert "context.worker_status()" in _source("product/backend/api/mcp.py")
+    assert "context.worker_status()" in _source("product/backend/api/mcp/server.py")
     assert "LocalWorkerSupervisor(" in _source("product/backend/composition/application.py")
     assert not (
         ROOT / "product/backend/infra/runtime/worker/current.py"
@@ -239,11 +236,11 @@ def test_current_control_plane_does_not_import_or_construct_fake_worker() -> Non
 
 
 def test_current_workspace_replaces_status_and_dormant_frontend_state_machines() -> None:
-    projects_router = _source("product/backend/api/routers/projects.py")
+    projects_router = _source("product/backend/api/routers/applications/projects.py")
     workspace_router = _source("product/backend/api/routers/workspace.py")
     workspace_service = _source("product/backend/workflows/workspace/service.py")
-    frontend_projects = _source("product/frontend/src/api/projects.ts")
-    shell = _source("product/frontend/src/app/ControlShell.tsx")
+    frontend_projects = _source("product/frontend/src/api/applications/projects.ts")
+    shell = _source("product/frontend/src/app/shell/ControlShell.tsx")
 
     assert '"/api/projects/{project_id}/workspace"' in workspace_router
     assert '/api/projects/{project_id}/status' not in projects_router
@@ -265,13 +262,13 @@ def test_current_workspace_replaces_status_and_dormant_frontend_state_machines()
 
 
 def test_official_recipe_is_not_an_ordinary_product_surface() -> None:
-    router = _source("product/backend/api/routers/business_boundaries.py")
+    router = _source("product/backend/api/routers/boundaries/business_boundaries.py")
     service = _source("product/backend/workflows/business_boundaries/service.py")
     assert "official-recipe" not in router
     assert "def official_recipe(" not in service
     assert "def create_official_proposal(" not in service
     assert "def official_boundary_recipe(" in _source(
-        "product/backend/workflows/business_boundaries/official_recipe.py"
+        "product/backend/workflows/business_boundaries/proposals/official_recipe.py"
     )
 
 

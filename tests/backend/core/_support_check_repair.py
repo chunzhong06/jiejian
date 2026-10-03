@@ -2,10 +2,10 @@
 from types import SimpleNamespace
 from product.backend.core.checks.repair import repair_context
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
-from product.backend.workflows.checks.repair import build_current_repair_contract
-from product.protocols.check_result import CheckCaseOutcome, CheckObservation
-from product.protocols.execution_v3 import ChangeContext
-from tests.fixtures.check_execution import execution_pair
+from product.backend.workflows.checks.repairs.repair import build_current_repair_contract
+from product.protocols.checks.check_result import CheckCaseOutcome, CheckObservation
+from product.protocols.checks.execution_request import ChangeContext
+from tests.fixtures.checks.check_execution import execution_pair
 
 def package(*, allow_safe=True, forbidden=True, run_id="run_"+"1"*32):
     request,bundle = execution_pair(state_changing=True)

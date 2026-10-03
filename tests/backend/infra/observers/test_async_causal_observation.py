@@ -28,9 +28,9 @@ from product.protocols import (
     SqliteQueryLocator,
     StructuredAuditLogLocator,
 )
-from product.backend.infra.observers.async_task import run_async_task_observer
-from product.backend.infra.observers.audit_log import run_audit_log_observer
-from product.backend.infra.observers.sqlite import run_sqlite_observer
+from product.backend.infra.observers.adapters.async_task import run_async_task_observer
+from product.backend.infra.observers.adapters.audit_log import run_audit_log_observer
+from product.backend.infra.observers.adapters.sqlite import run_sqlite_observer
 
 
 PYTHON = sys.executable

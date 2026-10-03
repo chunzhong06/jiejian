@@ -1,11 +1,11 @@
 // 规则候选按原文和具体情形审阅；未知写回执只查询，陈旧响应不得跨项目覆盖。
 import { Alert, Button, Spin } from 'antd'
 import { useEffect, useRef, useState } from 'react'
-import { ruleCandidatesApi, type RuleCandidateContext, type RuleCandidateView } from '../../api/ruleCandidates'
+import { ruleCandidatesApi, type RuleCandidateContext, type RuleCandidateView } from '../../api/boundaries/ruleCandidates'
 import type { ApiError } from '../../api/http'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
-import { useTaskGuard } from '../../app/tasks/TaskContinuity'
+import { useTaskGuard } from '../../shared/runtime/editGuard'
 import './rule-candidates.css'
 
 export function RuleCandidatesPanel({ projectId, requestedId, requestedRevision, recoveryOperation, onProposal, onSelected, onRecoveryChange, onExit }: {

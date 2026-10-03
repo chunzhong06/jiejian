@@ -46,7 +46,7 @@ from product.backend.infra.runtime.process.tree import release_process_tree, ter
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.artifacts.run_packages import AttemptPaths, StagedAttempt, TrustedResultReceipt, attempt_paths_for, validate_runner_staging
-from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore, PersistedExecutionRequest, required_secret_names
+from product.backend.infra.runtime.jobs.requests.execution import ExecutionRequestStore, PersistedExecutionRequest, required_secret_names
 
 logger = logging.getLogger("jiejian.runtime.runner_supervisor")
 

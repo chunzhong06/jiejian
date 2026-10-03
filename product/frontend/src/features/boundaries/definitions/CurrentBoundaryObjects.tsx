@@ -3,7 +3,7 @@ import { SearchField } from '../../../shared/ui/SearchField'
 import { StatusBadge } from '../../../shared/ui/StatusBadge'
 import { Button } from 'antd'
 import { useState } from 'react'
-import type { BusinessBoundaryViewDto } from '../../../api/businessBoundaries'
+import type { BusinessBoundaryViewDto } from '../../../api/boundaries/businessBoundaries'
 export type BoundaryEditFocus = { actionId?: string; actorId?: string; intentId?: string; mode?: 'objects' | 'actors' | 'new'; createObject?: boolean; editObject?: boolean }
 
 export function CurrentBoundaryObjects({ boundary, kind, onEdit }: { boundary: BusinessBoundaryViewDto; kind: 'actions' | 'actors'; onEdit: (focus: BoundaryEditFocus) => void }) {

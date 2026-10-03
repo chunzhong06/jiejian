@@ -10,14 +10,14 @@ import httpx
 import pytest
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.observers.azure_blob import _parse_sas as parse_blob_sas
-from product.backend.infra.observers.azure_queue import _parse_sas as parse_queue_sas
+from product.backend.infra.observers.adapters.azure_blob import _parse_sas as parse_blob_sas
+from product.backend.infra.observers.adapters.azure_queue import _parse_sas as parse_queue_sas
 from product.backend.infra.samples import OfficialSampleManager
 from product.backend.infra.samples.official import _new_secret_values
 from product.backend.infra.runtime.process.environment import (
     minimal_process_environment,
 )
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -210,7 +210,7 @@ def test_behavior_switch_keeps_origin_and_source_but_resets_sample_state(
     )
     runtime = manager.start()
     try:
-        from product.backend.infra.runtime.process.correspondence import runtime_corresponds
+        from product.backend.infra.runtime.process.controlled.correspondence import runtime_corresponds
         before = manager.runtime_reference(runtime.experience_id)
         assert before is not None and runtime_corresponds(var_dir, before)
         switched = manager.switch_behavior(

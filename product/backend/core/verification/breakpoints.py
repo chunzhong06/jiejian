@@ -19,8 +19,8 @@ from product.backend.core.verification.continuity import (
     assess_check_authorization_continuity,
 )
 from product.backend.core.verification.checks import CheckDecisionInput
-from product.protocols.execution_v3 import ExecutionAction, ExecutionTwin
-from product.protocols.check_runtime import CheckIdentity
+from product.protocols.checks.execution_request import ExecutionAction, ExecutionTwin
+from product.protocols.checks.check_runtime import CheckIdentity
 from product.backend.core.verification.facts import ObservedEffect, SecurityEffectFact
 from product.backend.core.verification.permissions import (
     PermissionContract,

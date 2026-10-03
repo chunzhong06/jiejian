@@ -5,14 +5,14 @@ import time
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import JobState
-from product.backend.infra.artifacts.check_packages import read_check_bytes, reject_check_links
+from product.backend.infra.artifacts.checks.check_packages import read_check_bytes, reject_check_links
 from product.backend.infra.execution.web.check_runtime import check_secret_names
 from product.backend.infra.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailure, FatalFailureCode
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.runtime.process.control import AttemptProcessControl, DEFAULT_LEASE_DURATION_US, DEFAULT_POLL_INTERVAL_SECONDS, DEFAULT_TERMINATION_GRACE_SECONDS
 from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
 from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
-from product.protocols.proof_sources import ProofRunnerInput, ProofPreflightReport, proof_bytes
+from product.protocols.preparation.proof_sources import ProofRunnerInput, ProofPreflightReport, proof_bytes
 
 
 class ProofPreflightHandler:

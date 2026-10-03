@@ -48,9 +48,9 @@ from product.backend.infra.runtime.process.tree import (
     release_process_tree,
     terminate_process_tree,
 )
-from product.backend.infra.runtime.process.artifact import create_runtime_artifact, python_runtime_files
-from product.backend.infra.runtime.process.correspondence import runtime_artifact_store, runtime_corresponds
-from product.protocols.runtime_identity import ControlledRuntimeReference, RuntimeLaunchManifest, RuntimeLaunchReceipt, receipt_matches, runtime_manifest_fingerprint, runtime_source_fingerprint
+from product.backend.infra.runtime.process.controlled.artifact import create_runtime_artifact, python_runtime_files
+from product.backend.infra.runtime.process.controlled.correspondence import runtime_artifact_store, runtime_corresponds
+from product.protocols.runtime.runtime_identity import ControlledRuntimeReference, RuntimeLaunchManifest, RuntimeLaunchReceipt, receipt_matches, runtime_manifest_fingerprint, runtime_source_fingerprint
 
 
 AuthorizationOrder = Literal[
@@ -240,7 +240,7 @@ class OfficialSampleManager:
                 with log_path.open("ab", buffering=0) as log_stream:
                     process = self._process_launcher(
                         child_environment,
-                        "product.backend.infra.runtime.process.target",
+                        "product.backend.infra.runtime.process.controlled.target",
                         "--manifest", str(launch_root / "launch.json"), "--",
                         "--runtime-root",
                         str(runtime_root),
@@ -404,7 +404,7 @@ class OfficialSampleManager:
             process = None
             try:
                 with runtime.log_path.open("ab", buffering=0) as stream:
-                    process = self._process_launcher(environment, "product.backend.infra.runtime.process.target",
+                    process = self._process_launcher(environment, "product.backend.infra.runtime.process.controlled.target",
                         "--manifest", str(launch_root / "launch.json"), "--", "--runtime-root", str(runtime.runtime_root),
                         "--port", str(urlsplit(runtime.origin).port), role=ProcessEnvironmentRole.SAMPLE,
                         secret_names=_SECRET_NAMES, cwd=launch_root / "source", stdout=stream,

@@ -105,6 +105,9 @@ def _source_paths(root: Path) -> list[str]:
             if target.startswith("features/"):
                 base = root / "product/frontend/src"
             reason = _link_failure(root, base / "_paths", target)
+            resolved = (base / target).resolve()
+            if reason is None and resolved.is_dir() and not any(path.is_file() for path in resolved.rglob("*")):
+                reason = "源码目录没有文件"
             if reason:
                 failures.append(f"{source.relative_to(root)} -> `{target}`（静态源码路径：{reason}）")
     return failures

@@ -24,7 +24,7 @@ from product.protocols import (
     ObserverType,
     SqliteQueryLocator,
 )
-from product.backend.infra.observers.sqlite import run_sqlite_observer
+from product.backend.infra.observers.adapters.sqlite import run_sqlite_observer
 from product.backend.core.verification.permissions.coverage import (
     BatchAuthorizationMode,
     CoverageGapCode,

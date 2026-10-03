@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from product.backend.infra.runtime.process.identity import python_environment_report
+from product.backend.infra.runtime.process.controlled.identity import python_environment_report
 from product.backend.infra.runtime.serve_lock import ServeLock
 from product.backend.infra.runtime.service_lifetime import serve_owner_is_alive
 from product.backend.infra.runtime.worker.lifetime import (
@@ -30,7 +30,7 @@ def test_python_environment_accepts_matching_editable_development_environment(
     monkeypatch.setenv("PYTHONNOUSERSITE", "1")
     monkeypatch.delenv("JIEJIAN_RUNTIME_FINGERPRINT", raising=False)
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._project_distribution",
+        "product.backend.infra.runtime.process.controlled.identity._project_distribution",
         lambda: {
             "installed": True,
             "version": "0.1.0",
@@ -40,7 +40,7 @@ def test_python_environment_accepts_matching_editable_development_environment(
         },
     )
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._module_origin",
+        "product.backend.infra.runtime.process.controlled.identity._module_origin",
         lambda name: str(product_origin)
         if name == "product"
         else str(Path(sys.prefix) / "Lib" / "site-packages" / f"{name}.py"),
@@ -59,7 +59,7 @@ def test_development_fingerprint_ignores_role_specific_browser_environment(
     project_root = tmp_path / "project"
     product_origin = project_root / "product" / "__init__.py"
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._project_distribution",
+        "product.backend.infra.runtime.process.controlled.identity._project_distribution",
         lambda: {
             "installed": True,
             "version": "1.0.0",
@@ -69,7 +69,7 @@ def test_development_fingerprint_ignores_role_specific_browser_environment(
         },
     )
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._module_origin",
+        "product.backend.infra.runtime.process.controlled.identity._module_origin",
         lambda name: str(product_origin)
         if name == "product"
         else str(Path(sys.prefix) / "Lib" / "site-packages" / f"{name}.py"),
@@ -122,11 +122,11 @@ def test_python_environment_accepts_relocated_non_editable_portable(
     monkeypatch.setattr(sys, "prefix", str(python_root))
     monkeypatch.setattr(sys, "base_prefix", str(python_root))
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._user_site_path",
+        "product.backend.infra.runtime.process.controlled.identity._user_site_path",
         lambda: None,
     )
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._project_distribution",
+        "product.backend.infra.runtime.process.controlled.identity._project_distribution",
         lambda: {
             "installed": True,
             "version": "1.0.0",
@@ -136,7 +136,7 @@ def test_python_environment_accepts_relocated_non_editable_portable(
         },
     )
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._module_origin",
+        "product.backend.infra.runtime.process.controlled.identity._module_origin",
         lambda name: str(site_packages / name / "__init__.py"),
     )
     environment = {
@@ -171,11 +171,11 @@ def test_python_environment_rejects_portable_product_outside_release_root(
     monkeypatch.setattr(sys, "prefix", str(python_root))
     monkeypatch.setattr(sys, "base_prefix", str(python_root))
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._user_site_path",
+        "product.backend.infra.runtime.process.controlled.identity._user_site_path",
         lambda: None,
     )
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._project_distribution",
+        "product.backend.infra.runtime.process.controlled.identity._project_distribution",
         lambda: {
             "installed": True,
             "version": "1.0.0",
@@ -185,7 +185,7 @@ def test_python_environment_rejects_portable_product_outside_release_root(
         },
     )
     monkeypatch.setattr(
-        "product.backend.infra.runtime.process.identity._module_origin",
+        "product.backend.infra.runtime.process.controlled.identity._module_origin",
         lambda name: str(tmp_path / "outside" / "product" / "__init__.py")
         if name == "product"
         else str(site_packages / name / "__init__.py"),

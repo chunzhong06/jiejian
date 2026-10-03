@@ -9,7 +9,7 @@ from product.backend.core.verification.differential import DifferentialExperimen
 from product.backend.core.verification.permissions.coverage import build_permission_coverage_plan
 from product.backend.core.verification.permissions import PermissionContract
 from product.protocols.web.profile import WebExecutionProfile
-from tests.fixtures.runner import write_web_test_profile
+from tests.fixtures.runtime.runner import write_web_test_profile
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]

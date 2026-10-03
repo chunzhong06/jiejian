@@ -19,8 +19,8 @@ const mockProjects = vi.hoisted(() => ({
 }))
 const mockOnboarding = vi.hoisted(() => ({ selectFolder: vi.fn() }))
 
-vi.mock('../../api/projects', () => ({ projectsApi: mockProjects }))
-vi.mock('../../api/onboarding', () => ({ onboardingApi: mockOnboarding }))
+vi.mock('../../api/applications/projects', () => ({ projectsApi: mockProjects }))
+vi.mock('../../api/applications/onboarding', () => ({ onboardingApi: mockOnboarding }))
 
 const baseUnderstanding = {
   project_id: 'app-demo',

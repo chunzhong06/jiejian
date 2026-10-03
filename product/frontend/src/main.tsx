@@ -2,7 +2,7 @@
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import ControlShell from './app/ControlShell'
-import { ProductThemeProvider } from './app/ThemeContext'
+import ControlShell from './app/shell/ControlShell'
+import { ProductThemeProvider } from './app/theme/ThemeContext'
 
 createRoot(document.getElementById('root')!).render(<StrictMode><ProductThemeProvider><ControlShell /></ProductThemeProvider></StrictMode>)

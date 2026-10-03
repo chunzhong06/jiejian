@@ -19,10 +19,7 @@ from pathlib import Path
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
 from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.handlers import JobHandlerRegistry
-from product.backend.infra.runtime.jobs.recording import (
-    RecordingJobHandler,
-    RecordingSubmissionPort,
-)
+from product.backend.infra.runtime.jobs.target_handlers.recording import RecordingJobHandler, RecordingSubmissionPort
 from product.backend.infra.runtime.jobs.targets import JobTargetType
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.backend.infra.storage import StorageUnitOfWork

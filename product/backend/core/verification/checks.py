@@ -7,7 +7,7 @@ from typing import Literal, Protocol
 from pydantic import Field, model_validator
 
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
-from product.protocols.execution_v3 import EffectId, ExecutionCase, Hash, WireModel
+from product.protocols.checks.execution_request import EffectId, ExecutionCase, Hash, WireModel
 
 
 class CheckEffectFact(WireModel):

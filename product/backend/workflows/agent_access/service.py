@@ -95,6 +95,7 @@ class MCPAccessController:
         secret_store: SecretStore,
         *,
         clock_us: Callable[[], int] | None = None,
+        on_authority_changed: Callable[[], None] | None = None,
     ) -> None:
         self._endpoint = endpoint
         self._secret_store = secret_store
@@ -115,7 +116,7 @@ class MCPAccessController:
         self._last_auth_succeeded: bool | None = None
         self._lock = RLock()
         self._execution_authorities: dict[str, str] = {}
-        self.on_authority_changed = lambda: None
+        self._on_authority_changed = on_authority_changed or (lambda: None)
 
     def view(self) -> MCPAccessView:
         with self._lock:
@@ -194,7 +195,7 @@ class MCPAccessController:
             # 每次明确调整授权都产生新代次；先撤再授也不能复活旧预检查。
             from uuid import uuid4
             self._execution_authorities[project_id] = 'mcp_' + uuid4().hex
-            self.on_authority_changed()
+            self._on_authority_changed()
             return self._view_locked()
 
     def execution_authority(self, project_id: str) -> str:
@@ -317,7 +318,7 @@ class MCPAccessController:
     def _clear_session_locked(self) -> None:
         self._grants.clear()
         self._execution_authorities.clear()
-        self.on_authority_changed()
+        self._on_authority_changed()
         self._client_name = None
         self._client_version = None
         self._last_seen_at_us = None

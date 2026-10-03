@@ -2,11 +2,11 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { OfficialSamplePanel } from './OfficialSamplePanel'
-import type { OfficialExperienceDto } from '../../api/experience'
+import type { OfficialExperienceDto } from '../../api/applications/experience'
 
 const api = vi.hoisted(() => ({ start: vi.fn(), reset: vi.fn(), reconcile: vi.fn(), prepare: vi.fn(), status: vi.fn(), boundaryProposal: vi.fn(), switchVersion: vi.fn(), project: vi.fn() }))
-vi.mock('../../api/experience', () => ({ experienceApi: api }))
-vi.mock('../../api/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/repairs')>('../../api/repairs'), repairsApi: { project: api.project } }))
+vi.mock('../../api/applications/experience', () => ({ experienceApi: api }))
+vi.mock('../../api/checks/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/checks/repairs')>('../../api/checks/repairs'), repairsApi: { project: api.project } }))
 const idle: OfficialExperienceDto = { available: true, display_name: '协作空间', unavailable_reason: null, active: false, experience_id: null, project_id: null, origin: null, scenario_prepared: false, scenario_version: null, vulnerable_change_id: null, repair_change_id: null }
 const active: OfficialExperienceDto = { ...idle, active: true, project_id: 'p1', experience_id: 'experience', scenario_version: 'VULNERABLE', pending_tasks: ['HUMAN_BOUNDARY_APPROVAL_REQUIRED'] }
 const props = () => ({ value: idle, onChanged: vi.fn().mockResolvedValue(undefined), onError: vi.fn(), onNavigate: vi.fn() })

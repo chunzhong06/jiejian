@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ToolsPage } from './ToolsPage'
 
 const status = vi.hoisted(() => vi.fn())
-vi.mock('../../api/mcp', () => ({
+vi.mock('../../api/system/mcp', () => ({
   mcpAccessApi: {
     status,
     pair: vi.fn(),

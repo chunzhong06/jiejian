@@ -39,9 +39,7 @@ from product.protocols.observer import (
     parse_observer_json,
     QueuePeekBudget,
 )
-from product.backend.infra.observers.owner_api import (
-    OwnerApiObserverAdapter,
-)
+from product.backend.infra.observers.adapters.owner_api import OwnerApiObserverAdapter
 from product.backend.core.redaction import redact_known_secrets
 pytestmark = pytest.mark.essential
 

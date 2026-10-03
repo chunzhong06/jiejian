@@ -24,8 +24,8 @@ from urllib.parse import parse_qsl, urlsplit
 from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.recording_flow import Flow, FlowStep, FlowVariableSource
-from product.protocols.flow_draft import FlowDraft, FlowDraftResourceCandidate, FlowDraftVariableStatus
+from product.protocols.recording.recording_flow import Flow, FlowStep, FlowVariableSource
+from product.protocols.recording.flow_draft import FlowDraft, FlowDraftResourceCandidate, FlowDraftVariableStatus
 from product.protocols.web.workflow import (
     EmptyBody,
     HttpOutcomeClassifier,

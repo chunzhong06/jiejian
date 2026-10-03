@@ -2,10 +2,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { CandidateReview } from './CandidateReview'
-import type { ApplicationUnderstandingDto } from '../../api/projects'
+import type { ApplicationUnderstandingDto } from '../../api/applications/projects'
 
 const api = vi.hoisted(() => ({ decideCandidates: vi.fn(), understanding: vi.fn() }))
-vi.mock('../../api/projects', () => ({ projectsApi: api }))
+vi.mock('../../api/applications/projects', () => ({ projectsApi: api }))
 const value = {
   project_id: 'p1', revision: 3, role_candidates: [
     { candidate_id: `role_${'1'.repeat(32)}`, display_name: '成员', confidence: 'HIGH', decision: 'PROPOSED', origin: 'DETECTED', stale: false, evidence: [] },

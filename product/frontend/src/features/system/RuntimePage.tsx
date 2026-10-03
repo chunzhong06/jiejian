@@ -5,9 +5,9 @@ import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import './runtime.css'
 import { Alert, Button, Card, Col, Collapse, Descriptions, Modal, Row, Space, Spin, Statistic, Typography } from 'antd'
-import { LLMProfile } from '../../api/llm'
-import { MaintenanceOperation, MaintenanceOperationResult, MaintenanceStatus, systemApi, SystemStatus } from '../../api/system'
-import { frontendBuildId, frontendIdentityState } from '../../app/buildIdentity'
+import { LLMProfile } from '../../api/assistance/llm'
+import { MaintenanceOperation, MaintenanceOperationResult, MaintenanceStatus, systemApi, SystemStatus } from '../../api/system/system'
+import { frontendBuildId, frontendIdentityState } from '../../shared/runtime/buildIdentity'
 
 function label(value: unknown) {
   const raw = String(value ?? 'unknown')

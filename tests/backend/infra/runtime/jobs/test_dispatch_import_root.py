@@ -11,7 +11,7 @@ import pytest
 from product.backend.infra.runtime.jobs.dispatch import WORKER_LOG_MAX_BYTES, WorkerDispatcher
 from product.backend.infra.runtime.paths import RuntimePaths
 from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, run_python_module
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 class _FakeProcess:
@@ -47,7 +47,7 @@ def test_worker_dispatch_uses_import_root_for_child_cwd(tmp_path: Path) -> None:
     assert command[1:4] == [
         "-B",
         "-m",
-        "product.backend.infra.runtime.process.bootstrap",
+        "product.backend.infra.runtime.process.controlled.bootstrap",
     ]
     module_index = command.index("--module")
     assert command[module_index + 1] == "product.backend.infra.runtime.worker.process"

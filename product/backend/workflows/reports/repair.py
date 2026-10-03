@@ -32,11 +32,7 @@ from product.backend.core.verification.facts import ObservedEffect
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.workflows.reports.presentation import locate_published_breakpoints
 from product.backend.workflows.reports.trace import build_execution_traces
-from product.protocols.execution_request import (
-    PermissionPolicySnapshotEntry,
-    PersistedExecutionRequest,
-    RepairVerificationContext,
-)
+from product.protocols.runner.execution_request import PermissionPolicySnapshotEntry, PersistedExecutionRequest, RepairVerificationContext
 
 
 class RepairContractService:

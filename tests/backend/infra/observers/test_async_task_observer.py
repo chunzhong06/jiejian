@@ -8,9 +8,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-import product.backend.infra.observers.async_task as async_module
+import product.backend.infra.observers.adapters.async_task as async_module
 from product.protocols import AsyncTaskApiLocator, AsyncTaskObserverInvocation, AsyncTaskPollBudget, Correlation, ObservationCompleteness, ObservationPhase, ObserverOutcomeStatus
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 from tests.backend.infra.observers._support_async_task_observer import (
     _invocation,
     _response,

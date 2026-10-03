@@ -56,7 +56,7 @@ def test_current_project_repair_is_composed_once_in_application_only() -> None:
 
 
 def test_shell_continuation_uses_current_workspace_primary_task() -> None:
-    shell = (ROOT / "product/frontend/src/app/ControlShell.tsx").read_text(encoding="utf-8")
+    shell = (ROOT / "product/frontend/src/app/shell/ControlShell.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "product/frontend/src/features/workspace/WorkbenchPage.tsx").read_text(encoding="utf-8")
     assert "workspace?.primary_task" in workbench
     assert "taskDestination(primary)" in workbench
@@ -69,7 +69,7 @@ def test_shell_continuation_uses_current_workspace_primary_task() -> None:
 
 
 def test_current_checks_and_repair_do_not_use_sample_specific_dependencies() -> None:
-    for path in (REPAIR, BACKEND / "workflows/checks/repair.py"):
+    for path in (REPAIR, BACKEND / "workflows/checks/repairs/repair.py"):
         source = path.read_text(encoding="utf-8")
         assert "official_sample" not in source
         assert "samples." not in source

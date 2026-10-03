@@ -9,17 +9,16 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle
 from product.backend.core.verification.checks import (CheckDecisionInput, aggregate_check_verdict,
     evaluate_check_case, project_check_effect_facts)
-from product.backend.infra.artifacts.check_validation import validate_check_inputs
+from product.backend.infra.artifacts.checks.check_validation import validate_check_inputs
 from product.backend.infra.execution.web.check_runtime import CheckWebRuntime
-from product.backend.infra.observers.check_runtime import CheckObserverRuntime
-from product.protocols.check_result import (CheckCaseOutcome, CheckCaseResult, CheckEvidence,
-    CheckPrimaryError, CheckRunnerInput, CheckRunnerResult, ControlledCheckRunnerResult, seal_check_evidence)
-from product.protocols.runtime_identity import RuntimeCorrespondence
-from product.protocols.node_runtime import NodeRuntimeReference, NodeRuntimeCorrespondence
-from product.protocols.check_result import NodeCheckRunnerResult
-from product.backend.infra.runtime.process.node_owned import node_corresponds
-from product.backend.infra.runtime.process.node_locator import controlled_node_executable
-from product.backend.infra.runtime.process.correspondence import runtime_corresponds
+from product.backend.infra.observers.checks.check_runtime import CheckObserverRuntime
+from product.protocols.checks.check_result import CheckCaseOutcome, CheckCaseResult, CheckEvidence, CheckPrimaryError, CheckRunnerInput, CheckRunnerResult, ControlledCheckRunnerResult, seal_check_evidence
+from product.protocols.runtime.runtime_identity import RuntimeCorrespondence
+from product.protocols.runtime.node_runtime import NodeRuntimeReference, NodeRuntimeCorrespondence
+from product.protocols.checks.check_result import NodeCheckRunnerResult
+from product.backend.infra.runtime.process.controlled.node_owned import node_corresponds
+from product.backend.infra.runtime.process.controlled.node_locator import controlled_node_executable
+from product.backend.infra.runtime.process.controlled.correspondence import runtime_corresponds
 
 
 @dataclass(frozen=True)

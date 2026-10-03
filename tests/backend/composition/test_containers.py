@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, closing
-from tests.fixtures.current_jobs import current_job
+from tests.fixtures.runtime.current_jobs import current_job
 from unittest.mock import Mock
 
 import pytest
@@ -37,7 +37,7 @@ def test_application_and_worker_containers_are_independent_and_complete(tmp_path
         assert application.worker.capabilities == ("CHECK", "PROOF_PREFLIGHT", "RECORDING")
         assert application.check_story._reader is application.check_results
         assert application.check_repairs._reader is application.check_results
-        assert application.check_story.repairs is application.check_repairs
+        assert application.check_story._repairs is application.check_repairs
         assert application.project_repair._reader is application.check_results
         assert application.project_repair._repairs is application.check_repairs
         assert application.project_repair._changes is application.source_changes

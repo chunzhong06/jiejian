@@ -16,7 +16,7 @@ from product.backend.infra.runtime.process.environment import (
     process_environment_failure_summary,
     spawn_python_module,
 )
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 _MAIN_PROCESS_ONLY = {

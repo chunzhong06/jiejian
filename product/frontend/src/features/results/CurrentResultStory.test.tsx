@@ -1,12 +1,12 @@
 // 验证 R3 总览、单项导航与证据归属隔离；重排界面不能改变服务端结论。
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { StoryTraceEvent } from '../../api/currentChecks'
+import type { StoryTraceEvent } from '../../api/checks/currentChecks'
 import { CurrentResultStory } from './CurrentResultStory'
-import { story, outcome } from './testing.fixtures'
-import { WorkPageVisible } from '../../app/RetainedWorkPages'
+import { story, outcome } from '../../testing/fixtures/results'
+import { WorkPageVisible } from '../../shared/runtime/visibility'
 const api = vi.hoisted(() => ({ evidence: vi.fn() }))
-vi.mock('../../api/currentChecks', () => ({ currentChecksApi: api }))
+vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: api }))
 vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: () => null }))
 beforeEach(() => { vi.clearAllMocks(); vi.spyOn(window,'scrollTo').mockImplementation(() => {}) })
 const node: StoryTraceEvent = { event_id:'task',parent_event_ids:[],kind:'MESSAGE',authorization_decision:null,effect_id:null,dispatch_effect_ids:[],source_component:'应用服务',source_location:'task-record' }

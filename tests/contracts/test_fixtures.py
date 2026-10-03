@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from product.backend.infra.storage import JobRecord
 from tests.contracts.current import JOB_TARGET_FIELDS
-from tests.fixtures.current_jobs import current_job, invalid_job_payload
+from tests.fixtures.runtime.current_jobs import current_job, invalid_job_payload
 
 
 @pytest.mark.parametrize("target,operation", [("run_id", "CHECK"), ("recording_id", "RECORDING"),
@@ -26,7 +26,7 @@ def test_invalid_wire_is_rejected_instead_of_bypassing_validation():
 
 
 def test_frozen_history_does_not_import_current_application_or_builders():
-    path = Path(__file__).resolve().parents[1] / "fixtures/legacy_recording.py"
+    path = Path(__file__).resolve().parents[1] / "fixtures/preparation/legacy_recording.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     imports = [n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
-    assert not any(name and (name.startswith("product.") or name.startswith("tests.fixtures.action_preparation")) for name in imports)
+    assert not any(name and (name.startswith("product.") or name.startswith("tests.fixtures.preparation.action_preparation")) for name in imports)

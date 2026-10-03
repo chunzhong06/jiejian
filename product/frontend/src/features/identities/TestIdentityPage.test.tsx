@@ -2,12 +2,12 @@
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { businessBoundariesApi } from '../../api/businessBoundaries'
-import { testIdentitiesApi } from '../../api/testIdentities'
+import { businessBoundariesApi } from '../../api/boundaries/businessBoundaries'
+import { testIdentitiesApi } from '../../api/preparation/testIdentities'
 import { TestIdentityPage } from './TestIdentityPage'
 
-vi.mock('../../api/businessBoundaries', () => ({ businessBoundariesApi: { current: vi.fn() } }))
-vi.mock('../../api/testIdentities', () => ({ testIdentitiesApi: {
+vi.mock('../../api/boundaries/businessBoundaries', () => ({ businessBoundariesApi: { current: vi.fn() } }))
+vi.mock('../../api/preparation/testIdentities', () => ({ testIdentitiesApi: {
   list: vi.fn(), create: vi.fn(), reset: vi.fn(), delete: vi.fn(),
   startPreparation: vi.fn(), preparation: vi.fn(), confirmPreparation: vi.fn(), cancelPreparation: vi.fn(),
 } }))

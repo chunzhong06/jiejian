@@ -6,14 +6,14 @@ from product.backend.core.lifecycle import JobState, ProjectStatus
 from product.backend.infra.execution.web.adapter import HttpExecutionAdapter
 from product.backend.infra.execution.web.identity import HttpIdentityRuntime
 from product.backend.infra.execution.web.check_runtime import check_secret_names
-from product.backend.infra.observers.json_source import strict_json, SourceReadError
-from product.backend.infra.observers.source_contracts import audit_source_contract
-from product.backend.infra.observers.record_source import read_record_source
-from product.backend.infra.observers.record_preflight import managed_source_checks
-from product.backend.infra.observers.record_facts import record_value
-from product.backend.infra.runtime.process.node_owned import node_corresponds
-from product.backend.infra.runtime.process.node_locator import controlled_node_executable
-from product.protocols.proof_sources import ProofCheckItem, ProofPreflightReport, proof_fingerprint, ManagedProofSourceConfig
+from product.backend.infra.observers.adapters.json_source import strict_json, SourceReadError
+from product.backend.infra.observers.records.source_contracts import audit_source_contract
+from product.backend.infra.observers.records.record_source import read_record_source
+from product.backend.infra.observers.records.record_preflight import managed_source_checks
+from product.backend.infra.observers.records.record_facts import record_value
+from product.backend.infra.runtime.process.controlled.node_owned import node_corresponds
+from product.backend.infra.runtime.process.controlled.node_locator import controlled_node_executable
+from product.protocols.preparation.proof_sources import ProofCheckItem, ProofPreflightReport, proof_fingerprint, ManagedProofSourceConfig
 from product.protocols.web.request import HttpRequestTemplate
 
 

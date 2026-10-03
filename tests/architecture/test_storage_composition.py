@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "product" / "backend"
 STORAGE = BACKEND / "infra" / "storage"
 PEER_MODULES = {
-    "product.backend.infra.storage.projects": STORAGE / "projects.py",
-    "product.backend.infra.storage.recordings": STORAGE / "recordings.py",
+    "product.backend.infra.storage.applications.projects": STORAGE / "applications" / "projects.py",
+    "product.backend.infra.storage.preparation.recordings": STORAGE / "preparation" / "recordings.py",
     "product.backend.infra.storage.execution.jobs": STORAGE / "execution" / "jobs.py",
     "product.backend.infra.storage.execution.runs": STORAGE / "execution" / "runs.py",
     "product.backend.infra.storage.results.evidence": STORAGE / "results" / "evidence.py",

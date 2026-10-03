@@ -16,7 +16,7 @@ from product.backend.infra.storage import (
     create_sqlite_engine,
     upgrade_database,
 )
-from tests.fixtures.runner import evidence, rehash_evidence, runner_input
+from tests.fixtures.runtime.runner import evidence, rehash_evidence, runner_input
 from tests.backend.workflows.reports._support_stable_findings import PROJECT_ID, RUN_ONE, _result, _view
 
 

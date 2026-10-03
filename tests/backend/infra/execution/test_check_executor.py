@@ -4,7 +4,7 @@ import pytest
 
 from product.backend.core.lifecycle import CaseVerdict, RunVerdict
 from product.backend.infra.execution.check_executor import CheckExecutor
-from product.protocols.check_result import check_request_marker
+from product.protocols.checks.check_result import check_request_marker
 from tests.backend.infra.execution._support_check_executor import (
     check_target,
     execution_configuration,
@@ -25,9 +25,9 @@ def execute(check_target, tmp_path, **changes):
 @pytest.mark.parametrize("failure", ["model", "file"])
 def test_runner_progress_failure_does_not_change_result_or_call_legacy_evaluator(check_target, tmp_path, monkeypatch, failure):
     from product.backend.infra.runtime.check_runner import executor as runner
-    from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+    from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
     from product.backend.infra.runtime.paths import RuntimePaths
-    from product.protocols.check_result import canonical_check_document, parse_check_document, CheckRunnerResult
+    from product.protocols.checks.check_result import canonical_check_document, parse_check_document, CheckRunnerResult
     request, bundle, input, environment = execution_configuration(check_target, deny_effect=True)
     store = CheckRequestStore(tmp_path)
     store.write(input.job_id, request)
@@ -116,13 +116,13 @@ def test_independent_worker_runner_real_http_and_fenced_publication(check_target
     import time
     from product.backend.composition.worker import WorkerContainer
     from product.backend.core.lifecycle import JobState, ProjectStatus
-    from product.backend.infra.artifacts.check_packages import check_final_directory, validate_check_package
-    from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+    from product.backend.infra.artifacts.checks.check_packages import check_final_directory, validate_check_package
+    from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
     from product.backend.infra.runtime.jobs.models import SubmitJob
     from product.backend.infra.runtime.process.environment import ProcessEnvironmentRole, spawn_python_module
     from product.backend.infra.runtime.process.tree import release_process_tree, terminate_process_tree
     from product.backend.infra.storage import ProjectRecord, default_database_path, upgrade_database
-    from tests.fixtures.runtime_environment import runtime_identity_environment
+    from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
     request, bundle, input, secrets = execution_configuration(check_target, deny_effect=forbidden_effect)
     var_dir = tmp_path / "var"
@@ -164,8 +164,8 @@ def test_independent_worker_runner_real_http_and_fenced_publication(check_target
             assert len(work.evidence.list_for_run(input.run_id)) == 2
         package = validate_check_package(check_final_directory(var_dir, request.project_id, input.run_id), published=True)
         assert package.result.verdict is expected
-        from product.backend.workflows.checks.results import CheckResultReader
-        from product.backend.workflows.checks.story import CheckStoryBuilder
+        from product.backend.workflows.checks.reading.results import CheckResultReader
+        from product.backend.workflows.checks.reading.story import CheckStoryBuilder
         reader = CheckResultReader(var_dir=var_dir, uow_factory=container.uow_factory)
         story = CheckStoryBuilder(reader).build(input.run_id)
         assert story.verdict is expected

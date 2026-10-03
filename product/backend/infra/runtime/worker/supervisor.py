@@ -39,7 +39,7 @@ from product.backend.infra.runtime.jobs.models import (
 )
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.runtime.jobs.targets import JobTargetRegistry, current_check_and_recording_targets
-from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.execution.web.check_runtime import check_secret_names
 from product.backend.infra.recording.request_store import RecordingRequestStore
 from product.protocols import required_recording_secret_names
@@ -428,8 +428,8 @@ class LocalWorkerSupervisor:
     def _reconcile_check(self, job) -> bool:
         if job.operation_type != "CHECK" or job.run_id is None:
             return False
-        from product.backend.infra.artifacts.check_packages import check_final_directory
-        from product.backend.infra.artifacts.check_publication import CheckPublisher
+        from product.backend.infra.artifacts.checks.check_packages import check_final_directory
+        from product.backend.infra.artifacts.checks.check_publication import CheckPublisher
         final = check_final_directory(self.var_dir, job.project_id, job.run_id)
         if not final.exists():
             return False

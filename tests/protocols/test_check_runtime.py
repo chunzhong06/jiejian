@@ -7,15 +7,13 @@ import sys
 
 import pytest
 
-from product.protocols.check_runtime import (
-    CheckRuntimeProtocolError, canonical_check_runtime_bytes, check_runtime_fingerprint, parse_check_runtime,
-)
-from tests.fixtures.check_runtime import runtime_bundle
+from product.protocols.checks.check_runtime import CheckRuntimeProtocolError, canonical_check_runtime_bytes, check_runtime_fingerprint, parse_check_runtime
+from tests.fixtures.checks.check_runtime import runtime_bundle
 
 
 def test_controlled_runtime_preserves_old_wire_and_rejects_source_mismatch():
-    from product.protocols.check_runtime import ControlledCheckRuntimeBundle
-    from product.protocols.runtime_identity import ControlledRuntimeReference
+    from product.protocols.checks.check_runtime import ControlledCheckRuntimeBundle
+    from product.protocols.runtime.runtime_identity import ControlledRuntimeReference
     from pydantic import ValidationError
     old = runtime_bundle()
     reference = ControlledRuntimeReference(instance_id="rti_" + "1" * 32, manifest_fingerprint="a" * 64,
@@ -31,7 +29,7 @@ def test_controlled_runtime_preserves_old_wire_and_rejects_source_mismatch():
 
 def test_five_auxiliary_sources_are_supported_but_six_are_rejected():
     from pydantic import ValidationError
-    from product.protocols.check_runtime import CheckProofConfig
+    from product.protocols.checks.check_runtime import CheckProofConfig
     proof = runtime_bundle().actions[0].proofs[0].model_dump(mode="json")
     proof["auxiliary_sources"] = [dict(observer_id=f"aux-{index}", descriptor_fingerprint="a" * 64,
         observation_identity_id=proof["observation_identity_id"], level="SUPPORTING",
@@ -46,8 +44,8 @@ def test_five_auxiliary_sources_are_supported_but_six_are_rejected():
 def test_node_runtime_binds_project_source_and_exact_origin_without_changing_old_wire():
     from urllib.parse import urlsplit
     from pydantic import ValidationError
-    from product.protocols.check_runtime import NodeCheckRuntimeBundle
-    from product.protocols.node_runtime import NodeRuntimeReference
+    from product.protocols.checks.check_runtime import NodeCheckRuntimeBundle
+    from product.protocols.runtime.node_runtime import NodeRuntimeReference
     old=runtime_bundle()
     original=canonical_check_runtime_bytes(old)
     reference=NodeRuntimeReference(project_id=old.project_id,instance_id='rti_'+'3'*32,
@@ -64,7 +62,7 @@ def test_node_runtime_binds_project_source_and_exact_origin_without_changing_old
 
 def test_runtime_is_independent_of_backend_and_legacy_contracts():
     result = subprocess.run([sys.executable, "-B", "-c",
-        "import sys; import product.protocols.check_runtime; assert not any(n.startswith('product.backend') for n in sys.modules)"],
+        "import sys; import product.protocols.checks.check_runtime; assert not any(n.startswith('product.backend') for n in sys.modules)"],
         env=os.environ | {"PYTHONDONTWRITEBYTECODE": "1"}, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
@@ -112,7 +110,7 @@ def test_presence_proof_accepts_one_whole_query_value():
     request = payload["actions"][0]["proofs"][0]["request"]
     request.update(path="/objects", query=[dict(name="resource", slot_id="resource")])
     request["input_slots"][0]["consumer"] = "QUERY"
-    from product.protocols.check_runtime import CheckRuntimeBundle
+    from product.protocols.checks.check_runtime import CheckRuntimeBundle
     bundle = CheckRuntimeBundle.model_validate_json(json.dumps(payload))
     assert parse_check_runtime(canonical_check_runtime_bytes(bundle)) == bundle
 

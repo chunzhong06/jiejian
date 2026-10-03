@@ -20,7 +20,7 @@ from product.backend.core.verification.permissions.coverage import (
     build_permission_coverage_plan,
 )
 from product.protocols.web.profile import WebExecutionProfile
-from tests.fixtures.runner import write_web_test_profile
+from tests.fixtures.runtime.runner import write_web_test_profile
 
 
 @pytest.fixture()

@@ -1,16 +1,16 @@
 // 验证当前检查的显式提交、竞态隔离、服务端结论与两次点击内的证据访问。
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ready, status, observation, outcome, story } from '../results/testing.fixtures'
+import { ready, status, observation, outcome, story } from '../../testing/fixtures/results'
 import type { WorkspaceViewDto } from '../../api/workspace'
-import type { ResultStory } from '../../api/currentChecks'
+import type { ResultStory } from '../../api/checks/currentChecks'
 import { CurrentTestsPage } from './CurrentTestsPage'
 import { ApiError } from '../../api/http'
 const api = vi.hoisted(() => ({ preview: vi.fn(), list: vi.fn(), status: vi.fn(), submit: vi.fn(), story: vi.fn(), evidence: vi.fn() }))
-vi.mock('../../api/currentChecks', () => ({ currentChecksApi: api }))
+vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: api }))
 vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: ({ runId }: { runId: string }) => <div>受限结果解释 {runId}</div> }))
 vi.mock('../preparation/PreparationPage', () => ({ PreparationPage: ({ onNavigate }: { onNavigate: (path: string) => void }) => <><input aria-label="当前材料临时输入" defaultValue=""/><button onClick={() => onNavigate('/tests')}>完成材料准备</button></> }))
-vi.mock('../changes/SourceIdentityPanel', () => ({ SourceIdentityPanel: () => <section>本轮源码对应内容</section> }))
+vi.mock('../changes/delivery/SourceIdentityPanel', () => ({ SourceIdentityPanel: () => <section>本轮源码对应内容</section> }))
 const props = () => ({ project: { project_id: 'p1' }, workspace: null, onStateChanged: vi.fn(), onError: vi.fn(), onNavigate: vi.fn() })
 beforeEach(() => {
   vi.clearAllMocks(); api.preview.mockResolvedValue(ready); api.list.mockResolvedValue([]); api.status.mockResolvedValue(status())

@@ -1,0 +1,47 @@
+# 验证后端 API中的结果闸门接口。
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from product.backend.api.routers.checks.gating import build_gating_router
+
+
+BASELINE_ID = "baseline_" + "a" * 32
+RUN_ID = "run_" + "b" * 32
+GATE_ID = "gate_" + "c" * 32
+
+
+class _FakeGating:
+    def accept_baseline(self, run_id: str, **kwargs):
+        return {"schema_version": "1", "baseline_id": BASELINE_ID, "project_id": "project-api", "accepted_run_id": run_id, "actor": kwargs["actor"], "reason": kwargs["reason"]}
+
+    def get_baseline(self, baseline_id: str):
+        return {"schema_version": "1", "baseline_id": baseline_id}
+
+    def evaluate(self, baseline_id: str, run_id: str, *, policy):
+        return {"schema_version": "1", "gate_result_id": GATE_ID, "baseline_id": baseline_id, "run_id": run_id, "policy_version": policy.policy_version, "decision": "PASS", "reasons": [], "input_hash": "d" * 64, "evaluated_at_us": 1}
+
+    def latest_gate_result(self, baseline_id: str, run_id: str):
+        return {"schema_version": "1", "gate_result_id": GATE_ID, "baseline_id": baseline_id, "run_id": run_id, "decision": "PASS"}
+
+    def get_gate_result(self, gate_result_id: str):
+        return {"schema_version": "1", "gate_result_id": gate_result_id, "decision": "PASS"}
+
+
+def test_api_uses_explicit_baseline_and_gate_paths() -> None:
+    app = FastAPI()
+    app.include_router(build_gating_router(SimpleNamespace(gating=_FakeGating())))
+    with TestClient(app) as client:
+        accepted = client.post(
+            "/api/projects/project-api/baselines",
+            json={"schema_version": "1", "accepted_run_id": RUN_ID, "actor": "operator", "reason": "fixed run"},
+        )
+        evaluated = client.post(
+            f"/api/baselines/{BASELINE_ID}/runs/{RUN_ID}/gate",
+            json={"schema_version": "1", "minimum_severity": "low"},
+        )
+        read = client.get(f"/api/gates/{GATE_ID}")
+    assert accepted.status_code == evaluated.status_code == read.status_code == 200
+    assert evaluated.json()["data"]["decision"] == read.json()["data"]["decision"] == "PASS"

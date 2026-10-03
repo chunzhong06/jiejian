@@ -5,10 +5,10 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from product.backend.core.errors import JiejianError
-from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
-from product.protocols.execution_v3 import PersistedExecutionRequestV3
-from tests.fixtures.check_plan import plan
-from tests.fixtures.check_runtime import runtime_bundle
+from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
+from product.protocols.checks.execution_request import PersistedExecutionRequestV3
+from tests.fixtures.checks.check_plan import plan
+from tests.fixtures.checks.check_runtime import runtime_bundle
 
 
 def frozen_request():

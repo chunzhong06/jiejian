@@ -3,8 +3,8 @@
 import pytest
 
 from product.backend.infra.execution.web.check_runtime import CheckWebRuntime
-from product.backend.infra.observers.check_runtime import CheckObserverRuntime
-from tests.fixtures.check_execution import execution_pair
+from product.backend.infra.observers.checks.check_runtime import CheckObserverRuntime
+from tests.fixtures.checks.check_execution import execution_pair
 from tests.backend.infra.execution._support_check_observers import (
     observer_target,
 )
@@ -92,7 +92,7 @@ def test_disclosure_uses_owner_projection_and_actual_target_response(observer_ru
 
 
 def test_disclosure_empty_or_redacted_baseline_cannot_confirm():
-    from product.backend.infra.observers.check_disclosure import disclosure_proof
+    from product.backend.infra.observers.checks.check_disclosure import disclosure_proof
     for value in (None, "[REDACTED]", "<redacted>"):
         proof = disclosure_proof(owner={"value": value}, response={"value": value}, fields=("value",), key=b"ephemeral", marker="case")
         assert not proof.projection_complete and not proof.matched

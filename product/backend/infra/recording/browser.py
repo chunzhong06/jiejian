@@ -28,7 +28,7 @@ from playwright.sync_api import (
 
 from product.backend.core.recording.models import Recording, RecordingReasonCode, RecordingState, RecordingTerminalState, transition_recording_state
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.recording import RecordingAuthMethod, RecordingCleanupStatus, RecordingRunnerError, RecordingRunnerRequest, RecordingRunnerResultType, RecordingRunnerResult, required_recording_secret_names
+from product.protocols.recording.events import RecordingAuthMethod, RecordingCleanupStatus, RecordingRunnerError, RecordingRunnerRequest, RecordingRunnerResultType, RecordingRunnerResult, required_recording_secret_names
 from product.backend.infra.recording.events import RecordingEventCollector
 
 

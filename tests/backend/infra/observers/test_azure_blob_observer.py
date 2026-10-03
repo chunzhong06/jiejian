@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 import pytest
 
-import product.backend.infra.observers.azure_blob as blob_module
+import product.backend.infra.observers.adapters.azure_blob as blob_module
 from product.protocols import (
     AzureBlobObjectLocator,
     BlobObjectScanBudget,
@@ -25,7 +25,7 @@ from product.protocols import (
     ObserverTarget,
     ObserverType,
 )
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 SAS = "sv=2023-11-03&se=2099-01-01T00%3A00%3A00Z&sp=rl&sr=c&sig=opaque-signature"
@@ -347,7 +347,7 @@ def test_blob_parent_timeout_and_corrupt_output_are_bounded(tmp_path: Path, monk
 
 
 def test_blob_process_entry_delegates_to_core(monkeypatch: pytest.MonkeyPatch) -> None:
-    import product.backend.infra.observers.azure_blob as process_module
+    import product.backend.infra.observers.adapters.azure_blob as process_module
 
     monkeypatch.setattr(process_module, "child_main", lambda input_path, output_path: 9)
     monkeypatch.setattr(sys, "argv", ["azure_blob_observer_process", "--input", "input.json", "--output", "output.json"])

@@ -9,13 +9,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from product.backend.api.routers.results import build_results_router
+from product.backend.api.routers.checks.results import build_results_router
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "product/backend"
 READ_MODELS = tuple(BACKEND / path for path in (
-    "workflows/checks/results.py", "workflows/checks/story.py",
-    "workflows/checks/repair.py", "workflows/projects/repair.py",
+    "workflows/checks/reading/results.py", "workflows/checks/reading/story.py",
+    "workflows/checks/repairs/repair.py", "workflows/projects/repair.py",
 ))
 
 

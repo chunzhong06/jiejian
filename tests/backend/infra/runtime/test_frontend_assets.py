@@ -5,7 +5,7 @@ import json
 import pytest
 
 from product.backend.infra.runtime.frontend_assets import frontend_asset_identity
-from product.protocols.frontend_assets import FrontendAssetManifest
+from product.protocols.runtime.frontend_assets import FrontendAssetManifest
 
 
 def write_frontend(root):

@@ -16,10 +16,7 @@ from pydantic import Field, model_validator
 from product.backend.core.identifiers import JOB_ID_PATTERN, RUN_ID_PATTERN
 
 
-from product.protocols.execution import (
-    ExecutionBudget,
-    ProtocolModel,
-)
+from product.protocols.runner.execution import ExecutionBudget, ProtocolModel
 from product.protocols.web.profile import WebExecutionSnapshot
 
 

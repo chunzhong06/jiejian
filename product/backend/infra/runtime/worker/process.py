@@ -79,7 +79,7 @@ def main() -> int:
     watchdog_stop = threading.Event()
     watchdog_thread: threading.Thread | None = None
     try:
-        from product.backend.infra.runtime.process.identity import require_python_environment
+        from product.backend.infra.runtime.process.controlled.identity import require_python_environment
         from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock
         from product.backend.composition.worker import WorkerContainer
         from product.backend.core.lifecycle import JobState

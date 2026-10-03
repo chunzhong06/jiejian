@@ -7,7 +7,7 @@ from product.backend.core.verification.continuity import (
     AuthorizationContinuityState as State,
     assess_check_authorization_continuity,
 )
-from tests.fixtures.check_execution import execution_pair
+from tests.fixtures.checks.check_execution import execution_pair
 
 
 def current_facts(state="CONFIRMED", **changes):

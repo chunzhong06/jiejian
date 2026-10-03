@@ -10,7 +10,7 @@ import pytest
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import ErrorCode, JiejianError
 import product.backend.workflows.test_identities.preparation as preparation_module
-from tests.fixtures.action_preparation import MemorySecretStore, build_preparation_harness
+from tests.fixtures.preparation.action_preparation import MemorySecretStore, build_preparation_harness
 
 
 def test_core_constructs_preparation_readers_without_starting_processes(tmp_path, monkeypatch):

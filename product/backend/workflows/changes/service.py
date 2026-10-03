@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
+from collections.abc import Callable
+if TYPE_CHECKING:
+    from product.backend.workflows.changes.observations import CodeObservationService
+    from product.backend.workflows.checks.service import CheckPreview
+    from product.backend.core.checks.repair import CurrentRepairContract
 from uuid import uuid4
 
 from pydantic import Field
@@ -12,7 +17,7 @@ from product.backend.core.checks.plan import CheckPlanGap
 from product.backend.core.checks.repair import CurrentRepairReference
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.changes.models import CurrentActionChangeImpact, CurrentChangeAssessment, CurrentChangeAssessmentPayload, CurrentChangeManifest, SourceChangeSet, build_current_change_set, change_impact_fingerprint, normalize_relative_source_path
-from product.protocols.execution_v3 import ChangeContext, LogicalId, PermissionReference, WireModel
+from product.protocols.checks.execution_request import ChangeContext, LogicalId, PermissionReference, WireModel
 
 
 class SourceRevalidationInspection(WireModel):
@@ -48,15 +53,23 @@ class PreparedSourceChange:
 class CurrentSourceChangeService:
     """扫描不落库，写事务重读权限与理解版本；允许交付与回执加入同一事务。"""
 
-    def __init__(self, *, uow_factory, understanding, boundaries, plan_reader=None, repair_resolver=None, clock_us=None):
+    def __init__(self, *, uow_factory, understanding, boundaries, plan_reader=None, repair_resolver=None, clock_us=None, code_observations: CodeObservationService | None = None):
         self._uow_factory,self._understanding,self._boundaries = uow_factory,understanding,boundaries
         self._plan_reader = plan_reader
         self._repair_resolver = repair_resolver
         self._clock = clock_us or (lambda:time.time_ns()//1000)
-        self.code_observations = None
+        self._code_observations = code_observations
 
-    def set_dependencies(self, *, plan_reader, repair_resolver):
+    def set_dependencies(self, *, plan_reader: Callable[[str], CheckPreview],
+                         repair_resolver: Callable[[str, CurrentRepairReference], CurrentRepairContract]):
+        """连接纯预览与原题解析；已接好的生产关系不能被另一来源静默覆盖。"""
+        if (self._plan_reader is not None and self._plan_reader != plan_reader) or (self._repair_resolver is not None and self._repair_resolver != repair_resolver):
+            raise ValueError("源码变化的预览与修复读取者已经连接")
         self._plan_reader,self._repair_resolver = plan_reader,repair_resolver
+
+    def validate_connections(self):
+        if any(value is None for value in (self._plan_reader, self._repair_resolver, self._code_observations)):
+            raise ValueError("生产变化的预览、修复或观察能力尚未连接")
 
     def submit(self, project_id, *, reason, claimed_paths=(), repair_reference=None, submitted_by="LOCAL_GUI"):
         prepared = self.prepare_change(project_id, reason=reason, claimed_paths=claimed_paths,
@@ -109,8 +122,8 @@ class CurrentSourceChangeService:
         current_boundary = self._boundaries.view(project_id,work=work)
         assessment = self._assess(work,current_boundary,updated,change)
         work.source_changes.add_current_change(prepared.manifest,change,assessment)
-        if self.code_observations is not None:
-            observation = self.code_observations.capture(project_id, snapshot.source_fingerprint)
+        if self._code_observations is not None:
+            observation = self._code_observations.capture(project_id, snapshot.source_fingerprint)
             work.code_observations.add_link(observation, kind="change", target_id=prepared.manifest.change_id,
                 project_id=project_id, source_fingerprint=snapshot.source_fingerprint)
         return prepared.manifest, change, assessment

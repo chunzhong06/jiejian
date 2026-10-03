@@ -199,7 +199,8 @@ def test_product_names_do_not_encode_development_generations() -> None:
             and ("V1" in node.name or "V2" in node.name or "_v1" in node.name or "_v2" in node.name)
         }
         assert not definitions, (path, relative, definitions)
-    assert not any("_new" in path.name or "_latest" in path.name for path in ROOT.rglob("*.py"))
+    # 命名约束覆盖产品源码；运行证据和审计快照位于 var，不属于产品模块。
+    assert not any("_new" in path.name or "_latest" in path.name for path in _python_files(ROOT / "product"))
 
 
 def test_public_api_does_not_reintroduce_generation_paths() -> None:
@@ -216,7 +217,7 @@ def test_product_does_not_mutate_python_import_paths() -> None:
                 continue
             owner = node.func.value
             # 独立 Target 进程只能加入已经按 manifest 校验的副本目录；产品进程仍禁止改 import path。
-            if path == BACKEND / "infra" / "runtime" / "process" / "target.py" and ast.unparse(node.func) == "sys.path.insert":
+            if path == BACKEND / "infra" / "runtime" / "process" / "controlled" / "target.py" and ast.unparse(node.func) == "sys.path.insert":
                 assert ast.unparse(node) == "sys.path.insert(0, str(source_root.resolve()))"
                 checks = [item for item in ast.walk(tree) if isinstance(item, ast.Call)
                     and ast.unparse(item.func) == "verify_runtime_artifact"]

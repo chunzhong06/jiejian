@@ -33,7 +33,7 @@ from playwright.sync_api import (
 from product.backend.core.recording.models import RecordingReasonCode
 from product.protocols.web.target import WebTargetDefinition, WebTargetScope
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.recording import RECORDING_EVENT_MAX_BYTES, RecordingBudget, RecordingEventKind, RecordingEvent
+from product.protocols.recording.events import RECORDING_EVENT_MAX_BYTES, RecordingBudget, RecordingEventKind, RecordingEvent
 from product.backend.infra.execution.web.adapter import WebTargetGuard
 from product.backend.core.recording.sanitization import RecordingSanitizer
 from product.backend.infra.recording.transport import BoundedRouteTransport

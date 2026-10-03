@@ -28,7 +28,7 @@ from product.backend.infra.storage import StorageUnitOfWork
 from product.backend.workflows.recording.submission import RecordingSubmission
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
 from product.backend.infra.storage.db import require_current_database
-from product.backend.workflows.proof_preflight_jobs import ProofPreflightJobs
+from product.backend.workflows.preparation.proofs.jobs import ProofPreflightJobs
 
 
 class WorkerContainer:
@@ -60,8 +60,8 @@ class WorkerContainer:
         self.job_targets = current_check_and_recording_targets()
         self.job_attempts = JobAttempts(self.uow_factory, targets=self.job_targets)
         self.job_queue = JobQueue(self.uow_factory, targets=self.job_targets)
-        from product.backend.infra.runtime.jobs.runtime_load import runtime_load_targets
-        from product.backend.workflows.runtime_load_jobs import RuntimeLoadJobs
+        from product.backend.infra.runtime.jobs.target_handlers.runtime_load import runtime_load_targets
+        from product.backend.workflows.runtime.load_jobs import RuntimeLoadJobs
         self.runtime_attempts = JobAttempts(self.uow_factory,targets=runtime_load_targets())
         self.runtime_load_jobs = RuntimeLoadJobs(self.uow_factory)
         self.recording_request_store = RecordingRequestStore(self.var_dir)

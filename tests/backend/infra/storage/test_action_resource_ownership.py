@@ -9,7 +9,7 @@ from product.backend.infra.storage import upgrade_database
 import hashlib
 import json
 
-from tests.fixtures.legacy_recording import _canonical, _preserved_rows, _nonempty_0003
+from tests.fixtures.preparation.legacy_recording import _canonical, _preserved_rows, _nonempty_0003
 
 ROOT = Path(__file__).resolve().parents[4]
 

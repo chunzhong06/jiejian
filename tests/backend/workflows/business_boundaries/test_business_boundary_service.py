@@ -1,7 +1,8 @@
 # 验证 Business Boundary Proposal 的原子批准、policy epoch、来源失效与 Actor TestIdentity。
 
 from __future__ import annotations
-from product.backend.workflows.business_boundaries import queries, sources, planning
+from product.backend.workflows.business_boundaries.reading import queries
+from product.backend.workflows.business_boundaries.proposals import sources, planning
 
 from pathlib import Path
 
@@ -36,7 +37,7 @@ pytestmark = [pytest.mark.database, pytest.mark.essential]
 
 def test_permission_status_excludes_technical_selection_but_keeps_incomplete_allow():
     from product.backend.workflows.business_boundaries.service import BusinessBoundaryService
-    from tests.fixtures.assurance import action, permission, EFFECT, SECOND_EFFECT
+    from tests.fixtures.checks.assurance import action, permission, EFFECT, SECOND_EFFECT
 
     deny = permission(3, expectation=PermissionExpectation.DENY,
                       relation=PermissionIntentRelation.SAME_ROLE_OTHER_ACCOUNT)

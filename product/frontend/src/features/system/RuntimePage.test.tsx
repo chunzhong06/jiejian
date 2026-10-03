@@ -2,7 +2,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { systemApi, SystemStatus } from '../../api/system'
+import { systemApi, SystemStatus } from '../../api/system/system'
 import { RuntimePage } from './RuntimePage'
 
 const maintenanceStatus = {

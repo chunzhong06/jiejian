@@ -38,11 +38,7 @@ from product.backend.core.verification.facts import (
 )
 from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
 from product.backend.workflows.reports.trace import build_execution_traces
-from product.protocols.execution_request import (
-    ChangeVerificationContext,
-    PermissionPolicySnapshot,
-    build_permission_policy_snapshot,
-)
+from product.protocols.runner.execution_request import ChangeVerificationContext, PermissionPolicySnapshot, build_permission_policy_snapshot
 from product.protocols.observer import ObserverOutcomeStatus, ObserverType
 
 

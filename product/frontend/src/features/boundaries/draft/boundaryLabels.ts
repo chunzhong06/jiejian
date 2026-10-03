@@ -1,6 +1,6 @@
 // Business Boundary 用户语言映射：普通页面不直接显示协议 token。
 
-import type { BusinessEffectKind, ProposedPermissionDto } from '../../../api/businessBoundaries'
+import type { BusinessEffectKind, ProposedPermissionDto } from '../../../api/boundaries/businessBoundaries'
 
 export const effectKindLabels: Record<BusinessEffectKind, string> = {
   STATE_MUTATION: '业务状态发生变化',

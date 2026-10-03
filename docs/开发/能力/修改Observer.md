@@ -6,13 +6,13 @@
 
 | 任务 | 唯一入口 | 直接验证 |
 | --- | --- | --- |
-| 当前 Case/proof 观察调度 | `product/backend/infra/observers/check_runtime.py` | `tests/backend/infra/observers/` |
-| 只读 SQLite、Owner API、审计、任务、Queue、Blob | `product/backend/infra/observers/`，其中 SQLite 为 `product/backend/infra/observers/sqlite.py` | 同目录适配器测试，必要时真实 Sample |
+| 当前 Case/proof 观察调度 | `product/backend/infra/observers/checks/check_runtime.py` | `tests/backend/infra/observers/` |
+| 只读 SQLite、Owner API、审计、任务、Queue、Blob | `product/backend/infra/observers/`，其中 SQLite 为 `product/backend/infra/observers/adapters/sqlite.py` | 同目录适配器测试，必要时真实 Sample |
 | 已授权描述与来源接线 | `product/backend/workflows/checks/local_observer_wiring.py`、`product/backend/workflows/checks/runtime_bundle.py` | `tests/backend/workflows/` 中当前 observer wiring 和 runtime bundle 测试 |
 | Envelope 投影为业务效果 | `product/backend/infra/observers/effect_projector.py` | `tests/backend/infra/observers/` |
-| Trace 与权限范围 | `product/backend/infra/observers/check_trace.py` | `tests/backend/infra/execution/test_check_trace.py` |
+| Trace 与权限范围 | `product/backend/infra/observers/checks/check_trace.py` | `tests/backend/infra/execution/test_check_trace.py` |
 | 观察协议、严格解析与 canonical | `product/protocols/observer/` | `tests/protocols/observer/` |
-| 发布与结果解释 | `product/backend/infra/execution/check_executor.py`、`product/backend/workflows/checks/story.py` | `tests/backend/infra/runtime/jobs/test_check_audit_scope_publication.py` |
+| 发布与结果解释 | `product/backend/infra/execution/check_executor.py`、`product/backend/workflows/checks/reading/story.py` | `tests/backend/infra/runtime/jobs/publication/test_check_audit_scope_publication.py` |
 
 ## 修改路线
 

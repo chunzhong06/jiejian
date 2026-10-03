@@ -24,18 +24,7 @@ from urllib.parse import parse_qsl, urlsplit
 from pydantic import ValidationError
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.flow_draft import (
-    ConfirmFlowDraftResource,
-    ConfirmFlowDraftTarget,
-    ConfirmFlowDraftVariableChoice,
-    FlowDraft,
-    FlowDraftResourceCandidate,
-    FlowDraftReviewCommand,
-    FlowDraftStep,
-    FlowDraftVariable,
-    FlowDraftVariableStatus,
-    flow_draft_source_choice_id,
-)
+from product.protocols.recording.flow_draft import ConfirmFlowDraftResource, ConfirmFlowDraftTarget, ConfirmFlowDraftVariableChoice, FlowDraft, FlowDraftResourceCandidate, FlowDraftReviewCommand, FlowDraftStep, FlowDraftVariable, FlowDraftVariableStatus, flow_draft_source_choice_id
 from product.protocols.web.workflow import ValueSlotConsumer
 
 

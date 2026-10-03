@@ -11,7 +11,7 @@ from product.backend.core.boundaries.semantics import BusinessEffectKind, Permis
 from product.backend.core.verification.permissions import (
     PermissionExpectation as LegacyExpectation, SecurityEffectKind,
 )
-from tests.fixtures.assurance import ACTOR, OTHER_ACTOR, EFFECT, SECOND_EFFECT, action, permission
+from tests.fixtures.checks.assurance import ACTOR, OTHER_ACTOR, EFFECT, SECOND_EFFECT, action, permission
 
 
 def test_canonical_enums_keep_one_object_and_persistent_values():

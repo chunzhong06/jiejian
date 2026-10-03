@@ -26,16 +26,8 @@ from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.recording.models import RecordingPurpose
-from product.protocols.flow_draft import (
-    FlowDraft,
-    FlowDraftResourceCandidate,
-    FlowDraftStep,
-    FlowDraftVariable,
-    FlowDraftVariableSource,
-    FlowDraftVariableStatus,
-    canonical_flow_draft_json_bytes,
-)
-from product.protocols.recording import RecordingEventKind, RecordingEvent
+from product.protocols.recording.flow_draft import FlowDraft, FlowDraftResourceCandidate, FlowDraftStep, FlowDraftVariable, FlowDraftVariableSource, FlowDraftVariableStatus, canonical_flow_draft_json_bytes
+from product.protocols.recording.events import RecordingEventKind, RecordingEvent
 from product.protocols.web.workflow import ValueSlotConsumer
 from product.backend.core.redaction import REDACTED
 

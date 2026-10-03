@@ -39,6 +39,6 @@ Recording Runner 每次只执行一次录制或回放；每个 identity 使用�
 - [执行与观察架构](../架构/执行与观察.md)
 - [安全意图与验证架构](../架构/权限验证与结果.md)
 - [录制与Flow协议](../参考/协议/录制与Flow协议.md)
-- `product/protocols/recording.py`
-- `product/protocols/flow_draft.py`
-- `product/protocols/recording_flow.py`
+- `product/protocols/recording/events.py`
+- `product/protocols/recording/flow_draft.py`
+- `product/protocols/recording/recording_flow.py`

@@ -3,7 +3,7 @@ from pathlib import Path
 from product.backend.composition import ApplicationCore
 from product.backend.core.lifecycle import ProjectStatus
 from tests.fixtures.secrets import InMemorySecretStore
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 
 def test_stop_restart_creates_clean_project_and_archives_history(tmp_path):

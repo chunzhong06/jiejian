@@ -14,7 +14,7 @@ Worker/Runner只消费冻结输入，秘密按受控引用最小注入。CheckEv
 
 ## 独立保留格式
 
-`WebExecutionProfile`、`WebExecutionSnapshot` 与早期 PersistedExecutionRequest 的严格模型、codec 和直接 reader 仍位于 `product/protocols/web/`、`product/protocols/execution.py`、`product/protocols/execution_request.py`。独立 Web runtime 和直接协议测试消费这些格式；它们不是当前 ApplicationCore 提交入口，不再存在 SecuritySetupCompiler 或 ExecutionWorkflow 的产品装配。
+`WebExecutionProfile`、`WebExecutionSnapshot` 与早期 PersistedExecutionRequest 的严格模型、codec 和直接 reader 仍位于 `product/protocols/web/`、`product/protocols/runner/execution.py`、`product/protocols/runner/execution_request.py`。独立 Web runtime 和直接协议测试消费这些格式；它们不是当前 ApplicationCore 提交入口，不再存在 SecuritySetupCompiler 或 ExecutionWorkflow 的产品装配。
 
 Profile 只含引用、scope、受控请求模板、身份、bindings、预算与指纹，不含秘密值；Snapshot 表示不可变执行输入。唯一 TARGET、身份与业务 scope 分离、Cookie jar 按 identity 隔离、明确恢复策略、有限完成绑定仍由严格模型和 runtime 校验。旧格式的兼容范围由对应 reader 与 Schema 决定，不以当前 GUI 可读为依据。
 

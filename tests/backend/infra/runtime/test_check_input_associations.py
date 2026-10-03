@@ -2,8 +2,8 @@
 import pytest
 
 from product.backend.core.errors import JiejianError
-from product.backend.infra.artifacts.check_validation import validate_check_inputs
-from tests.fixtures.check_execution import execution_pair
+from product.backend.infra.artifacts.checks.check_validation import validate_check_inputs
+from tests.fixtures.checks.check_execution import execution_pair
 
 
 def test_current_plan_and_frozen_runtime_are_consistent():
@@ -39,7 +39,7 @@ def test_hash_valid_bundle_cannot_replace_frozen_case_facts(configure):
 
 
 def test_publication_budget_rejects_plan_that_cannot_fit_result_before_target_io():
-    from product.backend.infra.artifacts.check_validation import check_publication_budget_reason
+    from product.backend.infra.artifacts.checks.check_validation import check_publication_budget_reason
     request, bundle = execution_pair(configure=lambda payload: payload["budget"].update(max_cases=8192))
     action = request.actions[0]
     expanded = action.model_copy(update={"cases": action.cases * 128})

@@ -5,12 +5,9 @@ import pytest
 from pydantic import ValidationError
 
 from product.backend.core.lifecycle import CaseVerdict, RunLifecycle, RunVerdict
-from product.protocols.check_result import (
-    CheckAssetReference, CheckCaseOutcome, CheckCaseResult, CheckEvidence, CheckRunnerInput,
-    CheckRunnerResult, CheckResultProtocolError, canonical_check_document, parse_check_document, seal_check_evidence,
-)
-from product.protocols.execution_v3 import ExecutionCase
-from tests.fixtures.check_plan import plan
+from product.protocols.checks.check_result import CheckAssetReference, CheckCaseOutcome, CheckCaseResult, CheckEvidence, CheckRunnerInput, CheckRunnerResult, CheckResultProtocolError, canonical_check_document, parse_check_document, seal_check_evidence
+from product.protocols.checks.execution_request import ExecutionCase
+from tests.fixtures.checks.check_plan import plan
 
 
 def input_document():
@@ -42,8 +39,8 @@ def result_document():
 
 
 def test_controlled_result_keeps_runtime_applicability_separate_from_verdict():
-    from product.protocols.check_result import ControlledCheckRunnerResult
-    from product.protocols.runtime_identity import ControlledRuntimeReference, RuntimeCorrespondence
+    from product.protocols.checks.check_result import ControlledCheckRunnerResult
+    from product.protocols.runtime.runtime_identity import ControlledRuntimeReference, RuntimeCorrespondence
     old = result_document()
     reference = ControlledRuntimeReference(instance_id="rti_" + "1" * 32, manifest_fingerprint="a" * 64,
         source_fingerprint="b" * 64, process_id=123, process_created_at=456, owner_id="exp_" + "2" * 32)
@@ -56,8 +53,8 @@ def test_controlled_result_keeps_runtime_applicability_separate_from_verdict():
 
 
 def test_node_result_keeps_old_reader_and_separates_runtime_fact():
-    from product.protocols.check_result import NodeCheckRunnerResult
-    from product.protocols.node_runtime import NodeRuntimeReference,NodeRuntimeCorrespondence
+    from product.protocols.checks.check_result import NodeCheckRunnerResult
+    from product.protocols.runtime.node_runtime import NodeRuntimeReference, NodeRuntimeCorrespondence
     old=result_document();original=canonical_check_document(old)
     reference=NodeRuntimeReference(project_id='node-project',instance_id='rti_'+'1'*32,
         manifest_fingerprint='a'*64,source_fingerprint='b'*64,process_id=123,process_created_at=456,port=3000)

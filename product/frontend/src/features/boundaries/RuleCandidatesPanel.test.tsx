@@ -5,7 +5,7 @@ import { RuleCandidatesPanel } from './RuleCandidatesPanel'
 import { ApiError } from '../../api/http'
 
 const api = vi.hoisted(() => ({context: vi.fn(), show: vi.fn(), propose: vi.fn(), receipt: vi.fn()}))
-vi.mock('../../api/ruleCandidates', () => ({ruleCandidatesApi: api}))
+vi.mock('../../api/boundaries/ruleCandidates', () => ({ruleCandidatesApi: api}))
 const item = {
   candidate: {project_id:'app_a', candidate_id:'rcd_a', revision:1, submitted_via:'MCP', content:{
     original_text:'成员不得导出他人的项目包', actors:[], actions:[], permissions:[{item_id:'p1', expectation:'DENY'}],

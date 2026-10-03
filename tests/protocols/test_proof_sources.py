@@ -2,7 +2,7 @@
 import json
 import pytest
 from pydantic import ValidationError
-from product.protocols.proof_sources import ProofSourceConfig,SourceReadScope
+from product.protocols.preparation.proof_sources import ProofSourceConfig, SourceReadScope
 
 
 def config():

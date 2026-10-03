@@ -3,7 +3,7 @@ import {cleanup,render,screen,waitFor} from '@testing-library/react'
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {RuleDetailsPanel} from './RuleDetailsPanel'
 const api = vi.hoisted(()=>({read:vi.fn()}))
-vi.mock('../../api/ruleDetails',()=>({ruleDetailsApi:api}))
+vi.mock('../../api/boundaries/ruleDetails',()=>({ruleDetailsApi:api}))
 const value = {project_id:'app_a',intent_id:'intent_a',revision:2,current:true,expectation:'DENY',sentence:'普通成员不得发布他人的资料。',action_id:'action',action_label:'发布资料',effects:[{effect_id:'effect',label:'资料被发布',description:'持久保存的发布事实'}],approval:{approved_at_us:1000000,reason:'保留所有者边界',approved_by:'本机界鉴用户'},preparation_complete:false,materials:[{key:'proof',label:'结果证明',status:'STALE',reason_codes:[]}],latest_result:{run_id:'run_old',created_at_us:1000000,applies_to_current_implementation:false,cases:[{case_id:'case_a',verdict:'SAFE',reason_codes:[]}]},history_has_more:false,unreadable_history:false,preparation_url:'/tests?materials=1',check_url:'/tests',history_url:'/history'}
 const props = {projectId:'app_a',intentId:'intent_a',revision:2,onBack:vi.fn(),onEdit:vi.fn(),onNavigate:vi.fn()}
 beforeEach(()=>{vi.resetAllMocks();api.read.mockResolvedValue(value)})

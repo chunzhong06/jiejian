@@ -39,7 +39,7 @@ from product.backend.infra.runtime.runner.case_orchestrator import CaseExecution
 from product.backend.infra.runtime.runner.executor import RunnerExecutor
 from product.backend.infra.runtime.runner.progress import RunnerProgressEvent, RunnerProgressWriter
 from product.backend.infra.runtime.runner.result_builder import evidence_from_case
-from tests.fixtures.runner import runner_input
+from tests.fixtures.runtime.runner import runner_input
 
 
 class _FakeHttp:

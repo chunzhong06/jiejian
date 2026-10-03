@@ -36,7 +36,7 @@ from product.backend.infra.storage.db import _migration_resource_root
 from product.backend.infra.storage import Base
 from product.backend.infra.storage.execution.jobs import JobRow
 from product.backend.infra.storage.execution.runs import RunRow
-from product.backend.infra.storage.projects import ProjectRow
+from product.backend.infra.storage.applications.projects import ProjectRow
 from product.backend.infra.storage.results.evidence import EvidenceIndexRow
 PROJECT_ID = "storage-project"
 RECORDING_ID = "rec_" + "0" * 32
@@ -184,7 +184,7 @@ def test_committed_records_survive_engine_restart_with_exact_values(
     expected_evidence = _evidence()
     with StorageUnitOfWork(factory) as work:
         work.projects.add(expected_project)
-        from tests.fixtures.assurance import action
+        from tests.fixtures.checks.assurance import action
         from product.backend.core.boundaries.entities import BusinessAction, boundary_sha256
         revision = action().model_copy(update={"project_id": PROJECT_ID})
         revision = revision.model_copy(update={"semantic_fingerprint": boundary_sha256(revision.semantic_payload())})

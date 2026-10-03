@@ -1,18 +1,18 @@
 // 当前检查工作区：准备、显式提交、有限状态刷新和只读故事共享同一项目事实。
 import { Alert, Button, Space, Spin, Typography } from 'antd'
 import { useCallback, useContext, useEffect, useRef, useState, type ComponentProps } from 'react'
-import { useLiveRead } from '../../app/useLiveRead'
-import { WorkPageVisible } from '../../app/RetainedWorkPages'
+import { useLiveRead } from '../../shared/runtime/useLiveRead'
+import { WorkPageVisible } from '../../shared/runtime/visibility'
 import { ApiError } from '../../api/http'
-import { currentChecksApi, type CheckPreview, type CheckStatus, type ResultStory } from '../../api/currentChecks'
-import { lifecycleLabel } from '../../app/presentation'
+import { currentChecksApi, type CheckPreview, type CheckStatus, type ResultStory } from '../../api/checks/currentChecks'
+import { lifecycleLabel } from '../../shared/presentation/execution'
 import { EditorialHeader, EditorialPage, FlowSpine } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
-import { useTaskGuard } from '../../app/tasks/TaskContinuity'
+import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { PreparationPage } from '../preparation/PreparationPage'
 import { CurrentResultStory } from '../results/CurrentResultStory'
-import { ResultOverviewHeader, ResultScope } from '../results/ResultOverview'
-import { SourceIdentityPanel } from '../changes/SourceIdentityPanel'
+import { ResultOverviewHeader, ResultScope } from '../results/overview/ResultOverview'
+import { SourceIdentityPanel } from '../changes/delivery/SourceIdentityPanel'
 
 const verdictLabels = { PASS: '本次权限要求已得到验证', BLOCK: '已确认不应发生的业务后果', INCONCLUSIVE: '现有证据不足以完成判断' }
 const progressLabels = { PREPARING: '正在准备本次执行', EXECUTING: '正在执行并观察业务结果', FINALIZING: '正在核验并保存结果' }

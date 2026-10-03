@@ -1,12 +1,12 @@
 // 单规则工作面分开呈现规则、材料与已发生检查；历史修订不冒充当前有效规则。
 import {Alert,Button,Spin} from 'antd'
 import {useEffect,useState} from 'react'
-import {ruleDetailsApi,type RuleDetails} from '../../api/ruleDetails'
+import {ruleDetailsApi,type RuleDetails} from '../../api/boundaries/ruleDetails'
 import {EditorialHeader,EditorialPage} from '../../shared/ui/Editorial'
 import {StatusBadge} from '../../shared/ui/StatusBadge'
 import {TaskActionBar} from '../../shared/ui/TaskActionBar'
-import {formatTimestamp} from '../../app/presentation'
-import '../preparation/proof-sources.css'
+import { formatTimestamp } from '../../shared/format/time'
+import '../../shared/styles/proof-details.css'
 
 const materialLabels:Record<string,string> = {SATISFIED:'已具备',NEEDS_USER:'待补齐',STALE:'需要更新',BLOCKED:'需要处理',NOT_REQUIRED:'无需准备'}
 const verdictLabels:Record<string,string> = {SAFE:'符合要求',VULNERABLE:'发现禁止后果',INCONCLUSIVE:'证据尚不足',SKIPPED:'本项未执行',ERROR:'执行未完成'}

@@ -4,9 +4,9 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
-from product.protocols.check_result import CheckAssetReference, CheckRunnerInput
-from product.protocols.execution_v3 import canonical_execution_request_v3_bytes
-from tests.fixtures.check_execution import execution_pair
+from product.protocols.checks.check_result import CheckAssetReference, CheckRunnerInput
+from product.protocols.checks.execution_request import canonical_execution_request_v3_bytes
+from tests.fixtures.checks.check_execution import execution_pair
 
 @pytest.fixture
 def check_target():

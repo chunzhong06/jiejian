@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from product.backend.core.verification.permissions import PermissionContract
-from tests.fixtures.runner import compile_profile_plan
+from tests.fixtures.runtime.runner import compile_profile_plan
 from product.protocols import (
     ExecutionBudget,
     RunnerInput,
@@ -14,7 +14,7 @@ from product.protocols.web.profile import (
     canonical_web_execution_profile_json_bytes,
     parse_web_execution_profile,
 )
-from tests.fixtures.runner import write_web_test_profile
+from tests.fixtures.runtime.runner import write_web_test_profile
 
 
 ACTION_CANDIDATE_ID = "action_0123456789abcdef0123456789abcdef"

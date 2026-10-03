@@ -87,6 +87,19 @@ def test_chapter_links_and_routes_ignore_fenced_headings(tmp_path: Path) -> None
     assert before == {p: p.read_bytes() for p in before}
 
 
+def test_source_directory_reference_requires_actual_files(tmp_path: Path) -> None:
+    """迁移后残留的空目录不能继续为失效实现说明提供存在性证明。"""
+    root = _fixture_root(tmp_path)
+    empty = root / "product/backend/workflows/obsolete"
+    empty.mkdir(parents=True)
+    (root / "docs/入口.md").write_text("实现：`product/backend/workflows/obsolete/`\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="源码目录没有文件"):
+        generate(root, update=False)
+    (empty / "service.py").write_text("# 提供此夹具声明的实现。\n", encoding="utf-8")
+    generate(root, update=True)
+    assert generate(root, update=False) == []
+
+
 @pytest.mark.parametrize("state", ["提议", "已取代", "已废弃", "已拒绝", "PROPOSED"])
 def test_default_route_rejects_noncurrent_decisions(tmp_path: Path, state: str) -> None:
     root = _fixture_root(tmp_path)
@@ -276,7 +289,7 @@ def test_observer_sqlite_knowledge_route_reaches_current_owner() -> None:
     assert "docs/开发/能力/修改Observer.md" in routes
     assert "docs/参考/协议/Observer观察协议.md" in routes
     for value in (
-        "product/backend/infra/observers/sqlite.py",
+        "product/backend/infra/observers/adapters/sqlite.py",
         "tests/backend/infra/observers/",
     ):
         assert value in guide or value in reference
@@ -290,7 +303,7 @@ def test_observer_reference_exposes_corroborating_channels_owner() -> None:
     reference = (root / "docs/参考/协议/Observer观察协议.md").read_text(encoding="utf-8")
     assert "corroborating_channels" in reference
     for value in (
-        "product/protocols/execution.py",
+        "product/protocols/runner/execution.py",
         "product/backend/workflows/checks/local_observer_wiring.py",
     ):
         assert value in reference
@@ -326,7 +339,7 @@ def test_portable_python_knowledge_route_reaches_builder_and_identity() -> None:
         assert fact in reference
     for value in (
         "scripts/build/portable.py",
-        "product/backend/infra/runtime/process/identity.py",
+        "product/backend/infra/runtime/process/controlled/identity.py",
         "product/backend/infra/runtime/process/environment.py",
         "tests/scripts/test_portable.py",
     ):

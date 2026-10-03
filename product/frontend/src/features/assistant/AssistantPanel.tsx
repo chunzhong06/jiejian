@@ -2,7 +2,7 @@
 
 import { Button, List, Space, Tag, Typography } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { assistantApi, type AssistantFocus, type AssistantSurfaceView, type ProjectAssistantSurface } from '../../api/assistant'
+import { assistantApi, type AssistantFocus, type AssistantSurfaceView, type ProjectAssistantSurface } from '../../api/assistance/assistant'
 import type { ErrorDiagnosis } from '../../api/http'
 
 type AssistantSubject =

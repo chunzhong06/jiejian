@@ -11,9 +11,9 @@ from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import RecordingRunnerResult, canonical_recording_json_bytes, parse_recording_result
 from product.backend.workflows.recording.submission import SubmitRecording
 from product.backend.infra.recording.process import execute_recording_runner
-from product.backend.infra.runtime.jobs.recording import RecordingJobHandler
+from product.backend.infra.runtime.jobs.target_handlers.recording import RecordingJobHandler
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
-from tests.fixtures.recording import RecordingContext as _Context, runner_request as _request, captured_result as _captured_result
+from tests.fixtures.preparation.recording import RecordingContext as _Context, runner_request as _request, captured_result as _captured_result
 pytestmark = pytest.mark.database
 NOW_US = 1_820_000_000_000_000
 PROJECT_ID = "recording-project"

@@ -2,7 +2,7 @@
 
 import { CheckOutlined, DownOutlined, PlusOutlined } from '@ant-design/icons'
 import { Button, Dropdown } from 'antd'
-import type { ProjectDto } from '../../api/projects'
+import type { ProjectDto } from '../../api/applications/projects'
 
 export function ApplicationSwitcher({
   projects,

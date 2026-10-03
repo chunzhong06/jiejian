@@ -15,16 +15,17 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Input, Modal, Select, Space, Spin, Typography } from 'antd'
 import { ApiError } from '../../api/http'
 import type { WorkspaceViewDto } from '../../api/workspace'
-import type { ProjectDto } from '../../api/projects'
-import { businessBoundariesApi, type BusinessActorRevisionDto } from '../../api/businessBoundaries'
+import type { ProjectDto } from '../../api/applications/projects'
+import { businessBoundariesApi, type BusinessActorRevisionDto } from '../../api/boundaries/businessBoundaries'
 import {
   testIdentitiesApi,
   type IdentityPreparationDto,
   type TestIdentityDto,
-} from '../../api/testIdentities'
+} from '../../api/preparation/testIdentities'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
-import { TaskReceipt, useTaskGuard } from '../../app/tasks/TaskContinuity'
+import { TaskReceipt } from '../../shared/ui/TaskReceipt'
+import { useTaskGuard } from '../../shared/runtime/editGuard'
 import './identities.css'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 

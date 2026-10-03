@@ -9,9 +9,9 @@ import time
 from product.backend.core.errors import JiejianError
 from product.backend.core.lifecycle import JobState
 from product.backend.infra.runtime.jobs.models import ClaimJob, CompleteCancellation, FatalFailure, FatalFailureCode
-from product.backend.infra.runtime.process.node_owned import start_owned_node
+from product.backend.infra.runtime.process.controlled.node_owned import start_owned_node
 from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock, worker_tree_name
-from product.protocols.node_runtime import NodeRuntimeLoadReceipt
+from product.protocols.runtime.node_runtime import NodeRuntimeLoadReceipt
 
 
 def run(var_dir: Path, job_id: str, lease_owner: str, control_session_id: str, node_executable: Path) -> int:
@@ -92,7 +92,7 @@ def main():
     parser.add_argument('--control-session-id',required=True)
     parser.add_argument('--node-executable',type=Path,required=True)
     args=parser.parse_args()
-    from product.backend.infra.runtime.process.identity import require_python_environment
+    from product.backend.infra.runtime.process.controlled.identity import require_python_environment
     require_python_environment()
     return run(args.var_dir.resolve(),args.job_id,args.lease_owner,args.control_session_id,args.node_executable)
 

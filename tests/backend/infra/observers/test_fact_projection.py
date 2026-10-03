@@ -36,7 +36,7 @@ from product.protocols import (
     ProvenanceType,
     build_normalized_state,
 )
-from tests.fixtures.runner import runner_input
+from tests.fixtures.runtime.runner import runner_input
 
 
 _PROVENANCE_TYPES = {

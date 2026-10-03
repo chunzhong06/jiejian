@@ -2,7 +2,7 @@
 
 import { ApplicationSetup } from './ApplicationSetup'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
-import type { ProjectDto } from '../../api/projects'
+import type { ProjectDto } from '../../api/applications/projects'
 import type { WorkspaceConnectionDto } from '../../api/workspace'
 import './access.css'
 import { Button } from 'antd'

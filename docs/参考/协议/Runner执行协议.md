@@ -43,7 +43,7 @@ scope、重定向、私网、请求与响应预算由 Web Adapter 强制执行�
 
 CURRENT Check writer/reader/factory 只使用 v3 request 和 Check 根模型，没有旧 v2 request、Contract/Profile 或旧 RunnerInput fallback。旧协议可服务保留实现，不能重新进入当前执行入口。schema_version 表示独立文档格式，嵌套 DTO 不重复版本。
 
-唯一模型位于 product/protocols/execution_v3.py、check_runtime.py、check_result.py、check_publication.py；Schema 由 product/protocols/schema.py 生成到 schemas/runner/。
+唯一模型位于 product/protocols/checks/execution_request.py、check_runtime.py、check_result.py、check_publication.py；Schema 由 product/protocols/schema.py 生成到 schemas/runner/。
 
 ## 查询入口
 
@@ -52,7 +52,7 @@ CURRENT Check writer/reader/factory 只使用 v3 request 和 Check 根模型，�
 | 冻结提交与读取 | product/backend/workflows/checks/ |
 | Worker/Runner 监督与入口 | product/backend/infra/runtime/check_runner/ |
 | Web/Observer 编排 | product/backend/infra/execution/check_executor.py |
-| 文件校验与 fenced publication | product/backend/infra/artifacts/check_packages.py、check_publication.py |
+| 文件校验与 fenced publication | product/backend/infra/artifacts/checks/check_packages.py、check_publication.py |
 | 真实跨进程测试 | tests/backend/infra/execution/test_check_executor.py |
 
 ## 相关真源

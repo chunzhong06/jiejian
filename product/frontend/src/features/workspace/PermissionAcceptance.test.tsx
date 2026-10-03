@@ -2,9 +2,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { PermissionAcceptance } from './PermissionAcceptance'
-import { story } from '../results/testing.fixtures'
+import { story } from '../../testing/fixtures/results'
 const api = vi.hoisted(() => ({ story: vi.fn() }))
-vi.mock('../../api/currentChecks', () => ({ currentChecksApi: api }))
+vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: api }))
 beforeEach(() => { vi.clearAllMocks(); api.story.mockResolvedValue({ ...story(), runtime_status: 'MATCHED' }) })
 it('同一行对照要求和实际后果，证据入口携带精确 Run 和 Case', async () => {
   const navigate = vi.fn()

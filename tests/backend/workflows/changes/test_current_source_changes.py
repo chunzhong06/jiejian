@@ -2,9 +2,9 @@
 import pytest
 
 from product.backend.core.errors import JiejianError
-from product.backend.infra.storage.source_changes import SourceChangeRepository
+from product.backend.infra.storage.changes.source_changes import SourceChangeRepository
 from product.backend.workflows.changes.service import CurrentSourceChangeService
-from tests.fixtures.action_preparation import build_preparation_harness
+from tests.fixtures.preparation.action_preparation import build_preparation_harness
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def test_concurrent_human_policy_change_is_kept_but_change_registration_rolls_ba
 
 @pytest.mark.parametrize("during_commit", [False, True])
 def test_ordinary_check_revalidates_real_source_without_change_id(tmp_path, monkeypatch, during_commit):
-    from tests.fixtures.check_service import ready_check_harness
+    from tests.fixtures.checks.check_service import ready_check_harness
     current = ready_check_harness(tmp_path)
     core, project = current.core, current.project_id
     try:

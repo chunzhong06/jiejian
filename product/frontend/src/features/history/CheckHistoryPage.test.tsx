@@ -2,12 +2,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CheckHistoryItem, CheckHistoryPage as HistoryPage } from '../../api/currentChecks'
+import type { CheckHistoryItem, CheckHistoryPage as HistoryPage } from '../../api/checks/currentChecks'
 import { CheckHistoryPage } from './CheckHistoryPage'
-import { WorkPageVisible } from '../../app/RetainedWorkPages'
+import { WorkPageVisible } from '../../shared/runtime/visibility'
 
 const api = vi.hoisted(() => ({ history: vi.fn(), submit: vi.fn() }))
-vi.mock('../../api/currentChecks', () => ({ currentChecksApi: api }))
+vi.mock('../../api/checks/currentChecks', () => ({ currentChecksApi: api }))
 const item = (id: string, project = 'p1'): CheckHistoryItem => ({ status: { run: { run_id: id, project_id: project, lifecycle: 'COMPLETED', verdict: 'PASS', plan_fingerprint: 'f'.repeat(64), policy_epoch: 1, created_at_us: 1780000000000000, finished_at_us: 1780000000000001 }, job: null, progress: null, result_integrity: 'VALID' }, action_labels: ['完整导出'], change_id: null, source_run_id: null })
 const page = (items = [item('r1')], next_cursor: HistoryPage['next_cursor'] = null): HistoryPage => ({ project_id: 'p1', items, next_cursor })
 const error = vi.fn()

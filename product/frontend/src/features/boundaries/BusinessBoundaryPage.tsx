@@ -12,15 +12,16 @@ import {
   type BoundaryProposalDto,
   type BoundaryProposalViewDto,
   type BusinessBoundaryViewDto,
-} from '../../api/businessBoundaries'
+} from '../../api/boundaries/businessBoundaries'
 import type { ApiError } from '../../api/http'
-import type { ProjectDto } from '../../api/projects'
+import type { ProjectDto } from '../../api/applications/projects'
 import { EditorialHeader, EditorialPage } from '../../shared/ui/Editorial'
 import './boundary.css'
-import '../changes/lightweight.css'
+import '../changes/styles/lightweight.css'
 import { CurrentBoundaryObjects, type BoundaryEditFocus } from './definitions/CurrentBoundaryObjects'
 import { PageTaskHeader } from '../../shared/ui/PageTaskHeader'
-import { TaskReceipt, useTaskGuard } from '../../app/tasks/TaskContinuity'
+import { TaskReceipt } from '../../shared/ui/TaskReceipt'
+import { useTaskGuard } from '../../shared/runtime/editGuard'
 import { BoundaryMaintenanceEditor } from './draft/BoundaryMaintenanceEditor'
 import { BoundaryProposalEditor } from './proposals/BoundaryProposalEditor'
 import { BoundaryProposalReview } from './proposals/BoundaryProposalReview'

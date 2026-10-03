@@ -16,9 +16,9 @@ from product.backend.core.recording.models import RecordingState
 from product.backend.infra.storage import FlowDraftRevisionRecord
 from product.backend.workflows.assistant.current_surfaces import CURRENT_ASSISTANT_TEMPLATES
 from product.backend.workflows.assistant.templates import AssistantEntityType as EntityType, AssistantTemplateId as Template, parse_assistant_result, render_assistant_prompt
-from product.protocols.flow_draft import canonical_flow_draft_json_bytes
-from tests.fixtures.action_preparation import add_recording, build_preparation_harness
-from tests.fixtures.assurance import permission
+from product.protocols.recording.flow_draft import canonical_flow_draft_json_bytes
+from tests.fixtures.preparation.action_preparation import add_recording, build_preparation_harness
+from tests.fixtures.checks.assurance import permission
 
 
 @pytest.fixture

@@ -27,7 +27,7 @@ from product.protocols import (
     parse_runner_input,
 )
 from product.protocols.runner.result import _reject_secret_material
-from tests.fixtures.runner import evidence, runner_input
+from tests.fixtures.runtime.runner import evidence, runner_input
 pytestmark = pytest.mark.essential
 
 def test_current_evidence_carries_execution_and_observation_facts() -> None:

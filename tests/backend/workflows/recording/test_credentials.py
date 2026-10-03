@@ -8,7 +8,7 @@ import pytest
 from product.backend.composition import ApplicationCore
 from product.backend.core.errors import JiejianError
 from product.backend.workflows.recording.credentials import RuntimeSecretVault
-from tests.fixtures.action_preparation import MemorySecretStore
+from tests.fixtures.preparation.action_preparation import MemorySecretStore
 
 
 def test_runtime_secret_vault_is_opaque_and_clears_by_session() -> None:

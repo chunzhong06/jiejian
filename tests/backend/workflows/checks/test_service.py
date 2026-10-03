@@ -5,11 +5,11 @@ import pytest
 from sqlalchemy import event
 
 from product.backend.core.errors import JiejianError
-from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.protocols.execution_v3 import canonical_execution_request_v3_bytes
-from tests.fixtures.action_preparation import build_preparation_harness
-from tests.fixtures.check_service import ready_check_harness
+from product.protocols.checks.execution_request import canonical_execution_request_v3_bytes
+from tests.fixtures.preparation.action_preparation import build_preparation_harness
+from tests.fixtures.checks.check_service import ready_check_harness
 
 
 def test_unprepared_preview_keeps_all_actions_and_never_submits(tmp_path):

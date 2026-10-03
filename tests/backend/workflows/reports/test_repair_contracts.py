@@ -24,11 +24,7 @@ from product.backend.core.verification.facts import ObservedEffect
 from product.backend.core.verification.permissions import PermissionExpectation
 from product.backend.workflows.reports import repair as repair_module
 from product.backend.workflows.reports.repair import RepairContractService
-from product.protocols.execution_request import (
-    PermissionPolicySnapshot,
-    PermissionPolicySnapshotEntry,
-    build_permission_policy_snapshot,
-)
+from product.protocols.runner.execution_request import PermissionPolicySnapshot, PermissionPolicySnapshotEntry, build_permission_policy_snapshot
 
 
 PROJECT_ID = "repair-project"

@@ -16,13 +16,13 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRightOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Collapse, Input, List, Radio, Space, Spin, Tag, Typography } from 'antd'
 import { ApiError } from '../../api/http'
-import { onboardingApi, type DiscoveryResult } from '../../api/onboarding'
+import { onboardingApi, type DiscoveryResult } from '../../api/applications/onboarding'
 import { AssistantPanel } from '../assistant/AssistantPanel'
 import { TaskActionBar } from '../../shared/ui/TaskActionBar'
 import { CandidateReview } from './CandidateReview'
 import { ConnectionSupport } from './ConnectionSupport'
 import { ControlledRuntimePanel } from './ControlledRuntimePanel'
-import { useTaskGuard } from '../../app/tasks/TaskContinuity'
+import { useTaskGuard } from '../../shared/runtime/editGuard'
 import {
   projectsApi,
   type ActionCandidateDto,
@@ -30,7 +30,7 @@ import {
   type EndpointDiscoveryDto,
   type ProjectDto,
   type RoleCandidateDto,
-} from '../../api/projects'
+} from '../../api/applications/projects'
 import type { WorkspaceConnectionDto } from '../../api/workspace'
 
 const FOLDER_SELECTOR_TIMEOUT_MS = 125_000

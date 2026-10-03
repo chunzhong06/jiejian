@@ -6,11 +6,7 @@ from product.backend.core.boundaries.entities import BoundaryModel, BusinessActi
 from product.backend.core.preparation.requirements import ActionAssuranceContract
 from product.backend.core.preparation.bindings import ActionExecutionBinding, ActionResourceBinding, ActionEvidenceBinding, ActionRecoveryBinding
 from product.backend.core.boundaries.permissions import PermissionIntentRevision
-from product.protocols.execution_v3 import (
-    WireModel, Hash, LogicalId, ActorId, EffectId, IdentityId, CaseRole, FrozenPermission,
-    PermissionReference, ExecutionAssetReference, RecordedProofReference, ObserverProofReference,
-    EffectProofRequirement, RecoveryReference, ExecutionCase, ExecutionTwin, case_invariants, content_hash,
-)
+from product.protocols.checks.execution_request import WireModel, Hash, LogicalId, ActorId, EffectId, IdentityId, CaseRole, FrozenPermission, PermissionReference, ExecutionAssetReference, RecordedProofReference, ObserverProofReference, EffectProofRequirement, RecoveryReference, ExecutionCase, ExecutionTwin, case_invariants, content_hash
 from typing import Literal
 from urllib.parse import parse_qsl, urlsplit
 

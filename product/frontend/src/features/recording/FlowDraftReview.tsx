@@ -1,7 +1,7 @@
 /* Recording 业务解释确认：只呈现真正无法自动消解的业务选择。 */
 
 import { Alert, Divider, Radio, Space, Tag, Typography } from 'antd'
-import type { FlowDraftDto, RecordingReviewCommand } from '../../api/recordings'
+import type { FlowDraftDto, RecordingReviewCommand } from '../../api/preparation/recordings'
 
 export function FlowDraftReview({ draft, actionName, sources, canFinalize, onSourcesChange, onReview }: {
   draft: FlowDraftDto

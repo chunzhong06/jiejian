@@ -11,27 +11,23 @@ from product.backend.core.verification.permissions import (
     PermissionContract,
     permission_model_sha256,
 )
-from tests.fixtures.runner import compile_profile_plan
+from tests.fixtures.runtime.runner import compile_profile_plan
 from product.backend.workflows.reports.findings import finding_inputs
 from product.protocols.web.profile import (
     parse_web_execution_profile,
     web_execution_profile_sha256,
 )
-from product.protocols.execution_request import (
-    PersistedExecutionRequest,
-    build_permission_policy_snapshot,
-    canonical_execution_request_bytes,
-)
+from product.protocols.runner.execution_request import PersistedExecutionRequest, build_permission_policy_snapshot, canonical_execution_request_bytes
 from product.protocols.report import (
     GateRunReport,
     ReportGate,
     gate_semantic_input_sha256,
     report_id_for,
 )
-from product.protocols.execution import ExecutionBudget
+from product.protocols.runner.execution import ExecutionBudget
 from tests.backend.workflows.reports._support_reports import GATE_ID, PROJECT_ID, RUN_ID, _base
 from tests.backend.workflows.reports._support_stable_findings import _result, _view
-from tests.fixtures.runner import evidence, runner_input, write_web_test_profile
+from tests.fixtures.runtime.runner import evidence, runner_input, write_web_test_profile
 
 
 ROOT = Path(__file__).resolve().parents[5]

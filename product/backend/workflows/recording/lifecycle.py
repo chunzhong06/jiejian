@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from product.backend.core.lifecycle import JobState
 from product.backend.core.recording.models import RecordingPurpose, RecordingState, transition_recording_state
-from product.protocols.recording_flow import Flow
+from product.protocols.recording.recording_flow import Flow
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.protocols import FlowDraftReviewCommand, FlowDraft, canonical_flow_draft_json_bytes
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
@@ -256,7 +256,7 @@ class RecordingLifecycle:
     ) -> RecordingFinalizationView:
         """原子接受录制和技术绑定；目标录制发布 Flow，补录只形成明确目的的模板。"""
 
-        from product.backend.workflows.preparation.bindings import PreparationBindingService
+        from product.backend.workflows.preparation.bindings.service import PreparationBindingService
         from product.backend.workflows.recording.source import require_persisted_recording_source
 
         bindings = self._bindings or PreparationBindingService(self._uow_factory, var_dir)
@@ -338,12 +338,12 @@ class RecordingLifecycle:
     def load_final_flow(path: Path, *, expected_hash: str | None = None) -> Flow:
         try:
             raw = path.read_bytes()
-            from product.protocols.flow_draft import _strict_json, FLOW_DRAFT_MAX_BYTES
+            from product.protocols.recording.flow_draft import _strict_json, FLOW_DRAFT_MAX_BYTES
             parsed = _strict_json(raw, FLOW_DRAFT_MAX_BYTES, ())
             if expected_hash is not None and hashlib.sha256(raw).hexdigest() != expected_hash:
                 raise ValueError("flow hash mismatch")
             if isinstance(parsed, dict) and parsed.get("schema_version") == "2":
-                from product.protocols.recording_legacy import read_legacy_document
+                from product.protocols.recording.recording_legacy import read_legacy_document
                 return read_legacy_document(raw, "flow", expected_hash=expected_hash)
             if not isinstance(parsed, dict) or parsed.get("schema_version") != "3":
                 raise ValueError("unsupported flow schema version")

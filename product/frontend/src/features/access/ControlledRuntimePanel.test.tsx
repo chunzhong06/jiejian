@@ -3,7 +3,7 @@ import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react'
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {ControlledRuntimePanel} from './ControlledRuntimePanel'
 const api=vi.hoisted(()=>({state:vi.fn(),preview:vi.fn(),start:vi.fn(),operation:vi.fn(),stop:vi.fn(),cancel:vi.fn()}))
-vi.mock('../../api/controlledRuntime',()=>({controlledRuntimeApi:api}))
+vi.mock('../../api/applications/controlledRuntime',()=>({controlledRuntimeApi:api}))
 const preview={project_id:'app_a',entry:'app.mjs',port:3000,revision:1,preview_fingerprint:'a'.repeat(64),files:[{relative_path:'app.mjs'}]}
 beforeEach(()=>{vi.resetAllMocks();sessionStorage.clear();api.state.mockResolvedValue({project_id:'app_a',operation:null,running:false,source_matches:false});api.preview.mockResolvedValue(preview)})
 afterEach(cleanup)

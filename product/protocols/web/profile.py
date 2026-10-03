@@ -33,13 +33,7 @@ from product.backend.core.verification.differential import (
 from product.backend.core.verification.facts import TargetType
 from product.backend.core.verification.permissions.coverage import PermissionMutationPlan
 from product.backend.core.verification.permissions import PermissionContract, permission_model_sha256
-from product.protocols.execution import (
-    EffectBinding,
-    ObserverRequirementBinding,
-    ObserverRequirementKind,
-    ProtocolModel,
-    SubjectExecutionBinding,
-)
+from product.protocols.runner.execution import EffectBinding, ObserverRequirementBinding, ObserverRequirementKind, ProtocolModel, SubjectExecutionBinding
 from product.protocols.observer import ObserverSpec, ObserverType, ObservationPhase
 from product.protocols.web.identity import WebExecutionIdentity, binding_secret_refs
 from product.protocols.web.target import WebTargetDefinition

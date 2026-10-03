@@ -12,12 +12,12 @@ const mockMcpApi = vi.hoisted(() => ({
   pair: vi.fn(), reveal: vi.fn(), rotate: vi.fn(), resume: vi.fn(), pause: vi.fn(), forget: vi.fn(), setProjectAccess: vi.fn(),
 }))
 
-vi.mock('../../api/llm', async () => {
-  const actual = await vi.importActual<typeof import('../../api/llm')>('../../api/llm')
+vi.mock('../../api/assistance/llm', async () => {
+  const actual = await vi.importActual<typeof import('../../api/assistance/llm')>('../../api/assistance/llm')
   return { ...actual, llmApi: mockApi }
 })
-vi.mock('../../api/mcp', async () => {
-  const actual = await vi.importActual<typeof import('../../api/mcp')>('../../api/mcp')
+vi.mock('../../api/system/mcp', async () => {
+  const actual = await vi.importActual<typeof import('../../api/system/mcp')>('../../api/system/mcp')
   return { ...actual, mcpAccessApi: mockMcpApi }
 })
 

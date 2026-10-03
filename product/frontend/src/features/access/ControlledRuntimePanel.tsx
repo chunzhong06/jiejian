@@ -1,8 +1,8 @@
 // 应用运行属于环境准备；预览、启动回执和当前进程分开，不把启动成功表示为安全通过。
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Input, InputNumber, Spin } from 'antd'
-import {projectsApi,type ApplicationUnderstandingDto} from '../../api/projects'
-import { controlledRuntimeApi as api, type RuntimePreview, type RuntimeState } from '../../api/controlledRuntime'
+import {projectsApi,type ApplicationUnderstandingDto} from '../../api/applications/projects'
+import { controlledRuntimeApi as api, type RuntimePreview, type RuntimeState } from '../../api/applications/controlledRuntime'
 import { ApiError } from '../../api/http'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import './controlled-runtime.css'

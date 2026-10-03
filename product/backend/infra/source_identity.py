@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
-from product.protocols.execution_v3 import WireModel
+from product.protocols.checks.execution_request import WireModel
 
 
 class GitSourceContext(WireModel):

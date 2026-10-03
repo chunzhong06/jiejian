@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from product.backend.core.identifiers import PROJECT_ID_PATTERN, SHA256_PATTERN
 from product.backend.core.reports.repair import RepairContractReference
 from product.backend.core.checks.repair import CurrentRepairReference
-from product.protocols.execution_v3 import Hash, LogicalId, PermissionReference
+from product.protocols.checks.execution_request import Hash, LogicalId, PermissionReference
 
 
 _SNAPSHOT_ID_PATTERN = r"^snp_[0-9a-f]{32}$"

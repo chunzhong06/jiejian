@@ -9,20 +9,20 @@ import pytest
 from product.backend.core.checks.plan import compile_project_check_plan
 from product.backend.core.checks.repair import repair_context, verify_current_repair
 from product.backend.core.lifecycle import ProjectStatus
-from product.backend.infra.artifacts.check_publication import CheckPublisher
+from product.backend.infra.artifacts.checks.check_publication import CheckPublisher
 from product.backend.infra.execution.check_executor import CheckExecutor
-from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.jobs.models import ClaimJob, SubmitJob
 from product.backend.infra.storage import ProjectRecord
 from product.backend.composition.worker import WorkerContainer
-from product.backend.workflows.checks.repair import build_current_repair_contract
-from product.backend.workflows.checks.results import CheckResultReader
-from product.protocols.check_result import CheckAssetReference, CheckRunnerInput, canonical_check_document
-from product.protocols.check_runtime import CheckRuntimeBundle, check_runtime_fingerprint, canonical_check_runtime_bytes
-from product.protocols.execution_v3 import PersistedExecutionRequestV3, canonical_execution_request_v3_bytes
-from tests.fixtures.check_execution import execution_pair
-from tests.fixtures.check_plan import prepared_action
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from product.backend.workflows.checks.repairs.repair import build_current_repair_contract
+from product.backend.workflows.checks.reading.results import CheckResultReader
+from product.protocols.checks.check_result import CheckAssetReference, CheckRunnerInput, canonical_check_document
+from product.protocols.checks.check_runtime import CheckRuntimeBundle, check_runtime_fingerprint, canonical_check_runtime_bytes
+from product.protocols.checks.execution_request import PersistedExecutionRequestV3, canonical_execution_request_v3_bytes
+from tests.fixtures.checks.check_execution import execution_pair
+from tests.fixtures.checks.check_plan import prepared_action
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 from tests.backend.infra.execution._support_check_executor import check_target
 
 
@@ -51,7 +51,7 @@ def pair(port, *, contract=None, fault=None):
             if fault == "permission":
                 permissions = tuple(value.model_copy(update={"revision": 2}) for value in permissions)
             elif fault == "effect" and len(item.evidence) == 2:
-                from tests.fixtures.assurance import permission, SECOND_EFFECT
+                from tests.fixtures.checks.assurance import permission, SECOND_EFFECT
                 permissions = (item.permissions[0], permission(2, relation=item.permissions[1].relation,
                     expectation=item.permissions[1].expectation, effects=(SECOND_EFFECT,), business_action_id=item.action.action_id))
             assurance = compile_action_assurance(item.action, permissions)

@@ -2,11 +2,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { OfficialDevelopmentJourney } from './OfficialDevelopmentJourney'
-import type { OfficialExperienceDto } from '../../api/experience'
+import type { OfficialExperienceDto } from '../../api/applications/experience'
 
 const api = vi.hoisted(() => ({ development: vi.fn(), project: vi.fn(), switchVersion: vi.fn(), status: vi.fn() }))
-vi.mock('../../api/experience', () => ({ experienceApi: api }))
-vi.mock('../../api/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/repairs')>('../../api/repairs'), repairsApi: { project: api.project } }))
+vi.mock('../../api/applications/experience', () => ({ experienceApi: api }))
+vi.mock('../../api/checks/repairs', async () => ({ ...await vi.importActual<typeof import('../../api/checks/repairs')>('../../api/checks/repairs'), repairsApi: { project: api.project } }))
 const value = { project_id: 'p', active: true, scenario_version: 'BASELINE' } as OfficialExperienceDto
 const facts = { project_id: 'p', implementation: 'BASELINE', delivery_source: 'PRESET_DEMONSTRATION', can_optimize: false, repair_verified: false, verdict: null, run_id: null, evidence_limited: false, reason: '先检查起始实现' }
 const props = () => ({ value, onChanged: vi.fn().mockResolvedValue(undefined), onNavigate: vi.fn(), onError: vi.fn() })

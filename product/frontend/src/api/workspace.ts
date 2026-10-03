@@ -6,10 +6,10 @@ import type {
   ImplementationInspectionDto,
   PermissionBoundaryStatusDto,
   PermissionIntentRevisionDto,
-} from './businessBoundaries'
+} from './boundaries/businessBoundaries'
 import { request } from './http'
-import type { CheckStatus } from './currentChecks'
-import type { ProjectRepair } from './repairs'
+import type { CheckStatus } from './checks/currentChecks'
+import type { ProjectRepair } from './checks/repairs'
 
 export type WorkspaceProjectDto = {
   project_id: string

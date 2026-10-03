@@ -119,7 +119,7 @@
 - `class CurrentChangeAssessmentPayload`
 - `class CurrentChangeAssessment`
 - `build_current_change_set(manifest, baseline, current) -> SourceChangeSet`
-主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.checks.repair`, `product.backend.core.identifiers`, `product.backend.core.reports.repair`, `product.protocols.execution_v3`, `pydantic`, `re`, `typing`
+主要 import / dot-source：`__future__`, `hashlib`, `json`, `product.backend.core.checks.repair`, `product.backend.core.identifiers`, `product.backend.core.reports.repair`, `product.protocols.checks.execution_request`, `pydantic`, `re`, `typing`
 
 ### `product/backend/core/checks/plan.py`
 - `class RegisteredEffectProofCapability`
@@ -133,7 +133,7 @@
 - `classify_http_resource_presence(status, same_resource, same_run, redirected)`
 - `derive_effect_proof(effect, binding, resource_id, capabilities)`
 - `compile_project_check_plan(project_id, source_fingerprint, policy_epoch, engine_version, config_fingerprint, actions)`
-主要 import / dot-source：`__future__`, `product.backend.core.boundaries.entities`, `product.backend.core.boundaries.permissions`, `product.backend.core.preparation.bindings`, `product.backend.core.preparation.requirements`, `product.protocols.execution_v3`, `pydantic`, `typing`, `urllib.parse`
+主要 import / dot-source：`__future__`, `product.backend.core.boundaries.entities`, `product.backend.core.boundaries.permissions`, `product.backend.core.preparation.bindings`, `product.backend.core.preparation.requirements`, `product.protocols.checks.execution_request`, `pydantic`, `typing`, `urllib.parse`
 
 ### `product/backend/core/checks/repair.py`
 - `class CurrentRepairReference`
@@ -146,7 +146,7 @@
 - `current_request_permissions(request) -> tuple[PermissionReference, ...]`
 - `class CurrentRepairVerification`
 - `verify_current_repair(contract, request, bundle, result, evidence, expected_change_context) -> CurrentRepairVerification`
-主要 import / dot-source：`__future__`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.checks`, `product.protocols.execution_v3`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `product.backend.core.lifecycle`, `product.backend.core.verification.breakpoints`, `product.backend.core.verification.checks`, `product.protocols.checks.execution_request`, `pydantic`, `typing`
 
 ### `product/backend/core/contracts/execution_binding.py`
 - `resolve_execution_contract(record, governed) -> PermissionContract`
@@ -176,7 +176,7 @@
 - `class DevelopmentReceipt`
 - `class RuntimeActivationReceipt`
 - `class NodeRuntimeActivationReceipt`
-主要 import / dot-source：`__future__`, `product.protocols.execution_v3`, `product.protocols.node_runtime`, `product.protocols.runtime_identity`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `product.protocols.checks.execution_request`, `product.protocols.runtime.node_runtime`, `product.protocols.runtime.runtime_identity`, `pydantic`, `typing`
 
 ### `product/backend/core/errors.py`
 - `class ErrorCode`
@@ -272,7 +272,7 @@
 - `_MAX_CAPTURED_HEADER_VALUE_CHARS`
 - `_SENSITIVE_FIELD`
 - `class RecordingSanitizer`
-主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.redaction`, `product.protocols.recording`, `re`, `typing`, `urllib.parse`
+主要 import / dot-source：`__future__`, `collections.abc`, `json`, `product.backend.core.redaction`, `product.protocols.recording.events`, `re`, `typing`, `urllib.parse`
 
 ### `product/backend/core/redaction.py`
 - `REDACTED`
@@ -331,7 +331,7 @@
 - `class BreakpointPrecision`
 - `class BreakpointResult`
 - `class BreakpointLocator`
-主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.verification.checks`, `product.backend.core.verification.continuity`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.trace`, `product.protocols.check_runtime`, `product.protocols.execution_v3`, `pydantic`, `re`
+主要 import / dot-source：`__future__`, `dataclasses`, `enum`, `product.backend.core.verification.checks`, `product.backend.core.verification.continuity`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.backend.core.verification.trace`, `product.protocols.checks.check_runtime`, `product.protocols.checks.execution_request`, `pydantic`, `re`
 
 ### `product/backend/core/verification/checks.py`
 - `class CheckEffectFact`
@@ -341,7 +341,7 @@
 - `class CheckDecision`
 - `evaluate_check_case(facts) -> CheckDecision`
 - `aggregate_check_verdict(verdicts, planned_case_count, has_gaps) -> RunVerdict`
-主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.lifecycle`, `product.protocols.execution_v3`, `pydantic`, `typing`
+主要 import / dot-source：`__future__`, `collections.abc`, `product.backend.core.lifecycle`, `product.protocols.checks.execution_request`, `pydantic`, `typing`
 
 ### `product/backend/core/verification/continuity.py`
 - `_PUBLIC_ID`
@@ -351,7 +351,7 @@
 - `class AuthorizationContinuityAssessment`
 - `assess_check_authorization_continuity(action, facts) -> AuthorizationContinuityAssessment`
 - `assess_authorization_continuity(contract, twin, effect_facts) -> AuthorizationContinuityAssessment`
-主要 import / dot-source：`__future__`, `enum`, `product.backend.core.verification.checks`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.protocols.execution_v3`, `pydantic`, `re`
+主要 import / dot-source：`__future__`, `enum`, `product.backend.core.verification.checks`, `product.backend.core.verification.differential`, `product.backend.core.verification.facts`, `product.backend.core.verification.permissions`, `product.protocols.checks.execution_request`, `pydantic`, `re`
 
 ### `product/backend/core/verification/differential.py`
 - `class TwinPlanGapCode`

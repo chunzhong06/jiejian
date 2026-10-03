@@ -1,13 +1,13 @@
 // 动作准备页验证：服务端唯一主任务、真实身份槽位、写后刷新与失效响应隔离。
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PreparationView } from '../../api/preparation'
+import type { PreparationView } from '../../api/preparation/preparation'
 import type { PrimaryTaskDto, WorkspaceViewDto } from '../../api/workspace'
 import { PreparationPage } from './PreparationPage'
 const api = vi.hoisted(() => ({ get: vi.fn(), create: vi.fn(), start: vi.fn(), select: vi.fn(), evidence: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), guidance: vi.fn() }))
-vi.mock('../../api/proofSources', () => ({proofSourcesApi: {context: api.guidance}}))
-vi.mock('../../api/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select, evidence: api.evidence, draft: api.draft, saveDraft: api.saveDraft } }))
-vi.mock('../../api/testIdentities', () => ({ testIdentitiesApi: { create: api.create, startPreparation: api.start } }))
+vi.mock('../../api/preparation/proofSources', () => ({proofSourcesApi: {context: api.guidance}}))
+vi.mock('../../api/preparation/preparation', () => ({ preparationApi: { get: api.get, selectAllowControl: api.select, evidence: api.evidence, draft: api.draft, saveDraft: api.saveDraft } }))
+vi.mock('../../api/preparation/testIdentities', () => ({ testIdentitiesApi: { create: api.create, startPreparation: api.start } }))
 vi.mock('../assistant/AssistantPanel', () => ({ AssistantPanel: () => null }))
 vi.mock('../identities/TestIdentityPage', () => ({ TestIdentityPage: () => <div>登录准备页面</div> }))
 vi.mock('../recording/RecordingPage', () => ({ RecordingPage: ({ task, effectName }: { task: PrimaryTaskDto; effectName?: string }) => <div>录制任务 {task.recording_id ?? task.test_identity_id} {effectName}</div> }))

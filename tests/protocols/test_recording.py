@@ -35,7 +35,7 @@ pytestmark = pytest.mark.essential
 
 def test_v2_request_is_history_only_and_retains_original_hash():
     import hashlib
-    from product.protocols.recording_legacy import read_legacy_document
+    from product.protocols.recording.recording_legacy import read_legacy_document
     from product.backend.core.errors import JiejianError
     payload = recording_request().model_dump(mode="json")
     payload["schema_version"] = "2"

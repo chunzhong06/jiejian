@@ -83,7 +83,7 @@ Portable 第一次启动在 release root 内创建自己的 `var/`，其中 data
 | 要查什么 | 当前真源 |
 | --- | --- |
 | 产品版本 | `product/backend/__init__.py` |
-| Portable identity | `product/backend/infra/runtime/process/identity.py`、`product/backend/infra/runtime/process/environment.py` |
+| Portable identity | `product/backend/infra/runtime/process/controlled/identity.py`、`product/backend/infra/runtime/process/environment.py` |
 | 打包总入口 | `scripts/dev/package.ps1` |
 | Base Tree/双 ZIP/release.json | `scripts/build/portable.py` |
 | Wheel 前端映射 | `scripts/build/hatch_build.py` |

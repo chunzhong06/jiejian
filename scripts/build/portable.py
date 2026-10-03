@@ -25,7 +25,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from product.backend import __version__
-from product.protocols.portable_release import PortableReleaseManifest
+from product.protocols.runtime.portable_release import PortableReleaseManifest
 
 
 RELEASE_VERSION = __version__
@@ -96,7 +96,7 @@ Remove-Item Env:JIEJIAN_PROJECT_ROOT -ErrorAction SilentlyContinue
 Remove-Item Env:JIEJIAN_RUNTIME_FINGERPRINT -ErrorAction SilentlyContinue
 Set-Location -LiteralPath $varDir
 
-$identityProbe = "from product.backend.infra.runtime.process.identity import python_environment_report; r=python_environment_report(); assert r['ok'], r['issues']; print(r['runtime_fingerprint'])"
+$identityProbe = "from product.backend.infra.runtime.process.controlled.identity import python_environment_report; r=python_environment_report(); assert r['ok'], r['issues']; print(r['runtime_fingerprint'])"
 $fingerprint = (& $python -B -c $identityProbe | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $fingerprint -notmatch "^[0-9a-f]{64}$") { throw "Portable Python 运行身份校验失败" }
 $env:JIEJIAN_RUNTIME_FINGERPRINT = $fingerprint
@@ -412,7 +412,7 @@ def _validate_base(base: Path, project_root: Path) -> None:
     environment = _portable_environment(base, python, playwright_root)
     probe = (
         "import json; from pathlib import Path;"
-        "from product.backend.infra.runtime.process.identity import python_environment_report;"
+        "from product.backend.infra.runtime.process.controlled.identity import python_environment_report;"
         "r=python_environment_report(); root=Path(r['release_root']);"
         "assert r['ok'], r['issues'];"
         "assert all(Path(v).resolve().is_relative_to(root) for v in r['package_origins'].values() if v);"

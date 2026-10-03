@@ -14,13 +14,13 @@ from product.backend.infra.recording.control import (
     write_control_marker,
 )
 from product.backend.infra.recording.browser import BrowserRecordingAdapter, RecordingBrowserSession
-from product.backend.infra.runtime.jobs.recording import RecordingJobHandler
+from product.backend.infra.runtime.jobs.target_handlers.recording import RecordingJobHandler
 from product.backend.infra.runtime.jobs.models import ClaimJob
 from product.backend.infra.runtime.jobs.models import RequestCancellation
 from product.backend.infra.runtime.jobs.queue import JobQueue
 from product.backend.infra.artifacts.run_packages import attempt_paths_for
 from product.backend.workflows.recording.lifecycle import RecordingLifecycle
-from tests.fixtures.recording import COOKIE_ENV_NAME, browser_server, recording_request, RecordingContext as _Context, runner_request as _request
+from tests.fixtures.preparation.recording import COOKIE_ENV_NAME, browser_server, recording_request, RecordingContext as _Context, runner_request as _request
 pytestmark = pytest.mark.database
 NOW_US = 1_820_000_000_000_000
 PROJECT_ID = "recording-project"
@@ -316,7 +316,7 @@ def test_new_recording_rejects_missing_or_foreign_identity(tmp_path, source):
             from product.backend.core.lifecycle import ProjectStatus
             from product.backend.workflows.test_identities import PreparedLoginState
             from product.backend.core.identities.models import TestIdentityAuthMethod
-            from tests.fixtures.assurance import actor
+            from tests.fixtures.checks.assurance import actor
             # 使用同一数据库中真实存在且已准备的外项目身份，隔离项目所有权拒绝原因。
             revision = actor(actor_id="bar_" + "9" * 32).model_copy(update={"project_id": "foreign-project"})
             revision = revision.model_copy(update={"semantic_fingerprint": boundary_sha256(revision.semantic_payload())})

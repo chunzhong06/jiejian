@@ -53,7 +53,7 @@ from product.backend.infra.execution.web.adapter import (
     extract_response_value,
 )
 from product.backend.infra.execution.web.identity import HttpIdentityRuntime
-from product.backend.infra.observers.owner_api import OwnerApiObserverAdapter
+from product.backend.infra.observers.adapters.owner_api import OwnerApiObserverAdapter
 from product.protocols import (
     BearerIdentityBinding,
     CausalityStatus,

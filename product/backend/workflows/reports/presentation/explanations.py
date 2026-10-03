@@ -9,7 +9,7 @@ from product.backend.core.reports.repair import RepairVerificationStatus
 from product.backend.core.verification.breakpoints import BreakpointPrecision
 from product.backend.core.verification.facts import ExecutionOutcome, ObservedEffect
 from product.backend.core.verification.trace import ExecutionTrace, TraceEventKind
-from product.protocols.execution_request import PermissionPolicySnapshot
+from product.protocols.runner.execution_request import PermissionPolicySnapshot
 from product.protocols.observer import ObserverType
 
 from product.backend.workflows.reports.presentation.models import PresentedCaseVerdict, ResultClaimBoundary, ResultDiagnosis, ResultEvidenceExplanation, ResultEvidenceSource

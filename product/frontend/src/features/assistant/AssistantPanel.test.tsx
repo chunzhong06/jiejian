@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AssistantPanel } from './AssistantPanel'
 
 const mockAssistant = vi.hoisted(() => ({ project: vi.fn(), generateProject: vi.fn(), result: vi.fn(), generateResult: vi.fn(), generateError: vi.fn() }))
-vi.mock('../../api/assistant', () => ({ assistantApi: mockAssistant }))
+vi.mock('../../api/assistance/assistant', () => ({ assistantApi: mockAssistant }))
 
 const coldView = {
   status: 'REFRESH_NEEDED' as const,

@@ -7,14 +7,14 @@ import time
 from pathlib import Path
 
 from product.backend.core.errors import JiejianError
-from product.backend.infra.artifacts.check_packages import read_check_bytes, reject_check_links
+from product.backend.infra.artifacts.checks.check_packages import read_check_bytes, reject_check_links
 from product.backend.infra.execution.check_executor import CheckExecutor
 from product.backend.infra.execution.web.check_runtime import check_secret_names
-from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
+from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
 from product.backend.infra.runtime.paths import RuntimePaths
-from product.protocols.check_result import CheckRunnerInput, CheckRunnerProgress, canonical_check_document, parse_check_document
-from product.protocols.check_runtime import canonical_check_runtime_bytes, check_payload_contains_secret
-from product.protocols.execution_v3 import canonical_execution_request_v3_bytes
+from product.protocols.checks.check_result import CheckRunnerInput, CheckRunnerProgress, canonical_check_document, parse_check_document
+from product.protocols.checks.check_runtime import canonical_check_runtime_bytes, check_payload_contains_secret
+from product.protocols.checks.execution_request import canonical_execution_request_v3_bytes
 
 
 def _write_new(path: Path, raw: bytes) -> None:

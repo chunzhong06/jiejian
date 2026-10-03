@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICE = ROOT / "product/backend/workflows/preparation/service.py"
-BINDINGS = ROOT / "product/backend/workflows/preparation/bindings.py"
+BINDINGS = ROOT / "product/backend/workflows/preparation/bindings/service.py"
 APPLICATION = ROOT / "product/backend/composition/application.py"
 WORKER = ROOT / "product/backend/composition/worker.py"
 STORAGE = ROOT / "product/backend/infra/storage"
@@ -100,7 +100,7 @@ def test_preparation_consumes_action_asset_inspection_without_storage_internals(
 
 
 def test_binding_inspection_has_no_runtime_observer_llm_or_health_storage() -> None:
-    imports = _imports(BINDINGS)
+    imports = _imports(BINDINGS) | _imports(BINDINGS.with_name("sources.py"))
     assert not any(
         name.startswith(
             (
@@ -139,3 +139,9 @@ def test_current_preparation_has_one_binding_owner_and_no_legacy_safety_shell() 
             or name.endswith("safety_setup") or name.endswith("core.test_setup")
             for name in _imports(path)
         )
+
+
+def test_workspace_task_selection_has_no_infrastructure_dependency() -> None:
+    imports = _imports(ROOT / "product/backend/workflows/workspace/tasks.py")
+    forbidden = ("product.backend.infra", "sqlalchemy", "httpx", "playwright", "subprocess")
+    assert not any(name == prefix or name.startswith(prefix + ".") for name in imports for prefix in forbidden)

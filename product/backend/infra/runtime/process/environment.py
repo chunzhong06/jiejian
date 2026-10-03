@@ -481,7 +481,7 @@ def spawn_python_module(
         executable,
         "-B",
         "-m",
-        "product.backend.infra.runtime.process.bootstrap",
+        "product.backend.infra.runtime.process.controlled.bootstrap",
         "--gate",
         str(gate_path),
         "--module",

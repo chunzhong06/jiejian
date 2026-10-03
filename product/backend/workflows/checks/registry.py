@@ -9,8 +9,8 @@ from product.backend.core.preparation.bindings import RegisteredObserverReferenc
 from product.backend.core.boundaries.entities import BusinessEffectDefinition
 from product.backend.core.checks.plan import RegisteredEffectProofCapability
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.protocols.check_runtime import CheckBudget, CheckIdentityVerification, CheckAuxiliarySource, SafeLabel
-from product.protocols.execution_v3 import Hash, IdentityId, LogicalId, WireModel, content_hash
+from product.protocols.checks.check_runtime import CheckBudget, CheckIdentityVerification, CheckAuxiliarySource, SafeLabel
+from product.protocols.checks.execution_request import Hash, IdentityId, LogicalId, WireModel, content_hash
 from product.protocols.observer import ObserverSpec
 from product.protocols.web.target import WebTargetScope
 
@@ -95,7 +95,7 @@ class CheckRuntimeRegistry:
     def __init__(self):
         self._lock = RLock()
         self._snapshots = {}
-        self.persistent_reader = None
+        self._persistent_reader = None
 
     def register(self, snapshot: CheckRuntimeRegistration, *, expected_fingerprint: str | None = None):
         snapshot = CheckRuntimeRegistration.model_validate_json(snapshot.model_dump_json(), strict=True)
@@ -108,11 +108,21 @@ class CheckRuntimeRegistry:
             self._snapshots[snapshot.project_id] = snapshot
         return snapshot.fingerprint
 
+    def bind_persistent_reader(self, reader):
+        """组合根连接持久来源投影；仅保存读取能力，不重建或激活来源。"""
+        if self._persistent_reader is not None and self._persistent_reader != reader:
+            raise ValueError("持久来源读取者已经连接")
+        self._persistent_reader = reader
+
+    def validate_connections(self):
+        if self._persistent_reader is None:
+            raise ValueError("生产来源注册表尚未连接持久读取者")
+
     def snapshot(self, project_id: str) -> CheckRuntimeRegistration | None:
         with self._lock:
             registered = self._snapshots.get(project_id)
         # 官方注册与普通持久来源由明确项目所有者分流，不合并冲突配置或互相兜底。
-        return registered if registered is not None or self.persistent_reader is None else self.persistent_reader(project_id)
+        return registered if registered is not None or self._persistent_reader is None else self._persistent_reader(project_id)
 
     def unregister(self, project_id: str) -> None:
         with self._lock:

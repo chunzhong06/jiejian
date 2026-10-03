@@ -10,8 +10,8 @@ from typing import Callable
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.infra.execution.web.adapter import HttpExecutionAdapter, HttpResponse, extract_response_value
 from product.backend.infra.execution.web.identity import HttpIdentityRuntime
-from product.protocols.check_runtime import CheckActionConfig, CheckRuntimeBundle
-from product.protocols.execution_v3 import ExecutionCase
+from product.protocols.checks.check_runtime import CheckActionConfig, CheckRuntimeBundle
+from product.protocols.checks.execution_request import ExecutionCase
 from product.protocols.web.request import HttpRequestTemplate, ValueSlotSource
 from product.protocols.web.response import ResponseExtractor, ResponseExtractorKind, _read_json_path
 
@@ -34,7 +34,7 @@ class CheckWebRuntime:
     def request_marker(self, case_id: str) -> str:
         if self._request_scope is None:
             return case_id
-        from product.protocols.check_result import check_request_marker
+        from product.protocols.checks.check_result import check_request_marker
         return check_request_marker(*self._request_scope, case_id)
 
     def close(self):

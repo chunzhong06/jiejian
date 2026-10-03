@@ -2,10 +2,10 @@
 
 import { AppstoreOutlined, HistoryOutlined, SafetyCertificateOutlined, BranchesOutlined, RightOutlined } from '@ant-design/icons'
 import { Button } from 'antd'
-import type { SystemStatus } from '../../api/system'
-import { systemStatusLabel } from '../AppHeader'
+import type { SystemStatus } from '../../api/system/system'
+import { systemStatusLabel } from '../shell/AppHeader'
 import type { WorkspaceAreaDto } from '../../api/workspace'
-import { productAreas, type AppRoute, type ProductAreaRoute } from '../presentation'
+import { productAreas, type AppRoute, type ProductAreaRoute } from './routes'
 
 type ProductAreas = WorkspaceAreaDto[] | null
 type AreaStatus = WorkspaceAreaDto['status'] | 'EMPTY'

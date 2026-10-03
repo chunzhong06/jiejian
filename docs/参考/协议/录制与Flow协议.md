@@ -51,9 +51,9 @@ TargetScope、身份、协议、主机、端口、私网、重定向、响应大
 
 当前 `RecordingRunnerRequest`、`FlowDraft` 与最终 `Flow` 的根 `schema_version` 为字符串 3；`RecordingEvent`、`RecordingRunnerResult` 与审阅命令仍为字符串 1。只升级发生不兼容变化的独立根，不按产品版本机械同步。模型、required 和 strict parsing 以：
 
-- `product/protocols/recording.py`
-- `product/protocols/flow_draft.py`
-- `product/protocols/recording_flow.py`
+- `product/protocols/recording/events.py`
+- `product/protocols/recording/flow_draft.py`
+- `product/protocols/recording/recording_flow.py`
 - `product/protocols/schemas/recording/`
 
 为准。版本号只表示机器格式。
@@ -64,10 +64,10 @@ TargetScope、身份、协议、主机、端口、私网、重定向、响应大
 
 | 要查什么 | 当前真源 |
 | --- | --- |
-| Recording/FlowDraft/Flow 根模型 | `product/protocols/recording.py`、`product/protocols/flow_draft.py`、`product/protocols/recording_flow.py` |
+| Recording/FlowDraft/Flow 根模型 | `product/protocols/recording/events.py`、`product/protocols/recording/flow_draft.py`、`product/protocols/recording/recording_flow.py` |
 | 提交、生命周期与结果消费 | `product/backend/workflows/recording/` |
 | capture 标记、浏览器和事件收集 | `product/backend/infra/recording/` |
-| API 与 GUI | `product/backend/api/routers/recordings.py`、`product/frontend/src/features/recording/` |
+| API 与 GUI | `product/backend/api/routers/preparation/recordings.py`、`product/frontend/src/features/recording/` |
 | 直接测试 | `tests/backend/workflows/recording/`、`tests/backend/infra/recording/`、`tests/protocols/test_recording.py` |
 
 ## 相关真源

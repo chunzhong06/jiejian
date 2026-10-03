@@ -5,7 +5,7 @@ import pytest
 
 from tests.fixtures.secrets import InMemorySecretStore
 from tests.fixtures.control_plane import TestClient, create_app
-from tests.fixtures.runtime_environment import runtime_identity_environment
+from tests.fixtures.runtime.runtime_environment import runtime_identity_environment
 
 pytestmark = [pytest.mark.e2e, pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 

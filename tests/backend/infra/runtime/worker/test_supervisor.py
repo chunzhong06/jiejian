@@ -27,18 +27,18 @@ from product.backend.infra.runtime.jobs.attempts import JobAttempts
 from product.backend.infra.runtime.jobs.models import ClaimJob, RequestCancellation, WaitingFatalFailure
 from product.backend.infra.artifacts.run_publication import RunPublisher
 from product.backend.infra.runtime.jobs.queue import JobQueue
-from product.backend.infra.runtime.jobs.requests import ExecutionRequestStore
+from product.backend.infra.runtime.jobs.requests.execution import ExecutionRequestStore
 from product.backend.infra.runtime.jobs.models import SubmitJob
-from product.backend.infra.runtime.jobs.check_requests import CheckRequestStore
-from tests.fixtures.check_execution import execution_pair
+from product.backend.infra.runtime.jobs.requests.checks import CheckRequestStore
+from tests.fixtures.checks.check_execution import execution_pair
 from product.backend.core.lifecycle import ProjectStatus
 from product.backend.infra.storage import ProjectRecord
 from types import SimpleNamespace
 from product.backend.infra.runtime.runner.supervisor import RunnerSupervisor
 from product.backend.infra.runtime.worker.supervisor import LocalWorkerSupervisor
 from product.backend.infra.runtime.worker.lifetime import WorkerLifetimeLock
-from product.backend.infra.runtime.jobs.requests import PersistedExecutionRequest
-from product.protocols.execution_request import build_permission_policy_snapshot
+from product.backend.infra.runtime.jobs.requests.execution import PersistedExecutionRequest
+from product.protocols.runner.execution_request import build_permission_policy_snapshot
 from product.protocols import (
     CleanupIssue,
     CleanupIssueCode,
@@ -51,7 +51,7 @@ from product.protocols import (
     RunnerResult,
     canonical_runner_json_bytes,
 )
-from tests.fixtures.runner import runner_input as make_runner_input
+from tests.fixtures.runtime.runner import runner_input as make_runner_input
 
 pytestmark = [pytest.mark.database, pytest.mark.process, pytest.mark.slow]
 

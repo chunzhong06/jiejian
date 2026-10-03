@@ -37,9 +37,9 @@ GUI 通过固定 loopback API 读取 envelope。当前工作区入口只有 `GET
 
 ## 当前 CHECK 历史与执行路径
 
-`GET /api/projects/{project_id}/check-history` 只读当前 CHECK，保留原 `/runs` 列表契约。默认 limit 25、最大 50；query 最长 128，trim 后大小写不敏感的字面子串匹配 run_id 和已验证冻结动作名，可按 verdict/lifecycle 筛选。成对 cursor 使用 created_at_us 降序与 run_id 升序的严格 keyset，项目条件在 SQL 中限制；每次最多校验 250 条候选，返回最后实际扫描键之后的继续位置，只有后面仍有候选才提供 cursor。因此空 items 加非空 cursor 合法，不提供 total 或跨请求快照保证。INVALID 不使用数据库 Verdict、未知标签或上下文冒充已发布事实；NOT_PUBLISHED 原义保持。精确 DTO 由 `workflows/checks/results.py` 和自动代码参考维护。
+`GET /api/projects/{project_id}/check-history` 只读当前 CHECK，保留原 `/runs` 列表契约。默认 limit 25、最大 50；query 最长 128，trim 后大小写不敏感的字面子串匹配 run_id 和已验证冻结动作名，可按 verdict/lifecycle 筛选。成对 cursor 使用 created_at_us 降序与 run_id 升序的严格 keyset，项目条件在 SQL 中限制；每次最多校验 250 条候选，返回最后实际扫描键之后的继续位置，只有后面仍有候选才提供 cursor。因此空 items 加非空 cursor 合法，不提供 total 或跨请求快照保证。INVALID 不使用数据库 Verdict、未知标签或上下文冒充已发布事实；NOT_PUBLISHED 原义保持。精确 DTO 由 `workflows/checks/reading/results.py` 和自动代码参考维护。
 
-`ActionResultStory.execution_path` 是同 Case 的只读嵌套投影，不写回发布包，不携带 schema_version。没有非空 Trace 或多个 Trace 冲突时为 null；相同 Trace 保留一份完整拓扑图，partial/空 partial 的 complete/reasons 原样保持。全部最多 512 个节点与显式 parent_event_ids 逐项复制，不按时间补边；文档引用只包含实际承载该 Trace 的 CheckEvidence ID，保序去重，不混用事件的其他来源引用。节点不包含时间、凭据、authority scope、semantic_key 或原始正文；字段真源为 `workflows/checks/story.py`。完整性错误仍传播，不能以空图吞错。
+`ActionResultStory.execution_path` 是同 Case 的只读嵌套投影，不写回发布包，不携带 schema_version。没有非空 Trace 或多个 Trace 冲突时为 null；相同 Trace 保留一份完整拓扑图，partial/空 partial 的 complete/reasons 原样保持。全部最多 512 个节点与显式 parent_event_ids 逐项复制，不按时间补边；文档引用只包含实际承载该 Trace 的 CheckEvidence ID，保序去重，不混用事件的其他来源引用。节点不包含时间、凭据、authority scope、semantic_key 或原始正文；字段真源为 `workflows/checks/reading/story.py`。完整性错误仍传播，不能以空图吞错。
 
 Workspace 的 active_check 只表示本项目最新 QUEUED/RUNNING，终态后为空不代表 PASS；source_change.submitted_by 直接复制登记来源。三个一级入口、会话保留、结果通知和局部证据区的详细消费职责见[交互与视觉](../../产品/交互与视觉.md)。这些读取不改变 PrimaryTask、修复合同或安全结论，也不恢复旧 History/Report writer。
 
@@ -102,12 +102,12 @@ GUI serve 与会创建 ApplicationCore 的 CLI 命令共享 `ServeLock`。同一
 | --- | --- |
 | WorkspaceView / PrimaryTask | `product/backend/workflows/workspace/` |
 | API envelope 与 LocalControl | `product/backend/api/envelope.py`、`product/backend/api/local_control.py` |
-| MCP transport、工具与授权 | `product/backend/api/mcp.py`、`product/backend/workflows/agent_access/service.py` |
+| MCP transport、工具与授权 | `product/backend/api/mcp/server.py`、`product/backend/workflows/agent_access/service.py` |
 | CLI 命令与 Machine renderer | `product/backend/cli/app.py`、`product/backend/cli/presentation.py`、`product/backend/cli/commands/system.py` |
-| 当前结果/执行路径/检查历史 | `product/backend/workflows/checks/story.py`、`product/backend/workflows/checks/results.py` |
+| 当前结果/执行路径/检查历史 | `product/backend/workflows/checks/reading/story.py`、`product/backend/workflows/checks/reading/results.py` |
 | ServeLock 与 CLI bootstrap | `product/backend/infra/runtime/serve_lock.py`、`product/backend/cli/bootstrap.py` |
 | GUI API/控制壳 | `product/frontend/src/api/`、`product/frontend/src/app/` |
-| 直接测试 | `tests/backend/cli/test_current_cli.py`、`tests/backend/api/test_control_plane.py`、`tests/backend/api/test_mcp.py`、对应前端测试 |
+| 直接测试 | `tests/backend/cli/test_current_cli.py`、`tests/backend/api/system/test_control_plane.py`、`tests/backend/api/system/test_mcp.py`、对应前端测试 |
 
 ## 版本边界
 

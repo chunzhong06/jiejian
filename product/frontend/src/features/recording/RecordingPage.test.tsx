@@ -10,13 +10,13 @@ const api = vi.hoisted(() => ({
   reviewRecording: vi.fn(), finalizeRecording: vi.fn(), cancel: vi.fn(), discard: vi.fn(), material: vi.fn(),
 }))
 
-vi.mock('../../api/recordings', () => ({ recordingsApi: {
+vi.mock('../../api/preparation/recordings', () => ({ recordingsApi: {
   setup: api.setup, recordings: api.recordings, recording: api.recording, createRecording: api.createRecording,
   startCapture: api.startCapture, stopCapture: api.stopCapture, reviewRecording: api.reviewRecording,
   finalizeRecording: api.finalizeRecording, discard: api.discard,
 } }))
-vi.mock('../../api/preparation', () => ({ preparationApi: { material: api.material } }))
-vi.mock('../../api/jobs', () => ({ jobsApi: { cancel: api.cancel } }))
+vi.mock('../../api/preparation/preparation', () => ({ preparationApi: { material: api.material } }))
+vi.mock('../../api/preparation/jobs', () => ({ jobsApi: { cancel: api.cancel } }))
 
 const action = { business_action_id: `bac_${'1'.repeat(32)}`, display_name: '修改资源', action_revision: 3 }
 const identity = { test_identity_id: `tid_${'2'.repeat(32)}`, label: '普通成员账号 A', actor_display_name: '普通成员' }

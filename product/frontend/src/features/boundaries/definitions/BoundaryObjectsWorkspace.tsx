@@ -4,7 +4,7 @@ import { StatusBadge } from '../../../shared/ui/StatusBadge'
 import { Alert, Button, Checkbox, Input, Select } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { BoundaryMaintenanceActorDto, BoundaryMaintenanceActionDto, BoundaryMaintenancePermissionDto, BoundaryMaintenanceDraftDto, BusinessEffectKind, ProposedEffectDto } from '../../../api/businessBoundaries'
+import type { BoundaryMaintenanceActorDto, BoundaryMaintenanceActionDto, BoundaryMaintenancePermissionDto, BoundaryMaintenanceDraftDto, BusinessEffectKind, ProposedEffectDto } from '../../../api/boundaries/businessBoundaries'
 import { effectKindLabels } from '../draft/boundaryLabels'
 import { ImplementationSelector } from './ImplementationSelector'
 

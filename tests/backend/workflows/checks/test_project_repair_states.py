@@ -3,7 +3,7 @@ from types import SimpleNamespace as N
 import pytest
 
 from product.backend.core.checks.repair import repair_context, CurrentRepairVerification
-from product.backend.workflows.checks.repair import build_current_repair_contract
+from product.backend.workflows.checks.repairs.repair import build_current_repair_contract
 from product.backend.workflows.projects.repair import CurrentProjectRepairService
 from tests.backend.core._support_check_repair import package
 
@@ -51,7 +51,7 @@ def test_project_repair_invalid_publication_is_not_silently_no_task():
 
 
 def test_project_repair_multiple_original_families_preserve_priority():
-    from product.protocols.execution_v3 import content_hash
+    from product.protocols.checks.execution_request import content_hash
     source = package()
     deny = next(item for item in source.result.case_results if item.verdict == "VULNERABLE")
     first = build_current_repair_contract(source, deny.case_id)

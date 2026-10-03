@@ -2,6 +2,8 @@
 
 > 状态：CURRENT。当前装配 CHECK 与 RECORDING，以下入口优先指向实际生产链。
 
+普通运行准备通过 `infra/runtime/process/controlled/artifact.py:inspect_runtime_files` 核对既有扫描文件，通过 `node_owned.py:node_execution_identity` 核对解释器和固定执行器。加载回执使用 `RuntimeLoadJobs.read_in_work` 复用调用方事务读取；这些入口不启动目标、不另开提交边界，实际加载仍归 Runtime Worker。
+
 ## 快速找到修改位置
 
 | 任务 | 唯一入口 | 直接验证 |
@@ -10,8 +12,8 @@
 | Worker 进程与受控角色环境 | `product/backend/infra/runtime/worker/process.py`、`product/backend/infra/runtime/process/` | 进程身份、退出与租约测试 |
 | 当前 CHECK 子进程监管 | `product/backend/infra/runtime/check_runner/supervisor.py` | `tests/backend/infra/runtime/jobs/` |
 | 当前 Case 执行与验证 | `product/backend/infra/execution/check_executor.py` | `tests/backend/infra/execution/` |
-| 来源观察 | `product/backend/infra/observers/check_runtime.py` | `tests/backend/infra/observers/` |
-| 请求持久化与严格发布 | `product/backend/infra/runtime/jobs/check_requests.py`、`product/backend/infra/artifacts/check_publication.py` | `tests/backend/infra/runtime/jobs/`、`tests/backend/infra/artifacts/` |
+| 来源观察 | `product/backend/infra/observers/checks/check_runtime.py` | `tests/backend/infra/observers/` |
+| 请求持久化与严格发布 | `product/backend/infra/runtime/jobs/requests/checks.py`、`product/backend/infra/artifacts/checks/check_publication.py` | `tests/backend/infra/runtime/jobs/`、`tests/backend/infra/artifacts/` |
 | 录制子进程 | `product/backend/infra/recording/` | `tests/backend/infra/recording/` |
 
 API 接受和查询请求；Worker 持有 Job 租约与 fencing，启动独立 Runner；Runner 消费冻结 request/bundle，在受控范围内执行并形成 CheckEvidence/CheckRunnerResult；Worker 验证发布，再由 Reader/Story 只读投影。进度、退出码与日志不是安全结论。
@@ -30,7 +32,7 @@ Worker 每次只能处理自己持有且 fencing token 仍有效的 Job。正常
 
 ## 修改子进程环境与隔离
 
-运行引用由`workflows/runtime_ports.py`按持久项目归属选择提供方，检查和交付通过同一窄端口读取；归属冲突或加载失败不得回退到另一提供方。当前仅注册官方示例。普通Node的`protocols/node_runtime.py`、冻结副本写入和`process/node_target.mjs`只有加载器基础及直接验证，尚未接入持久加载Job、所有权回执和正式CHECK，不能当作已可接入的生产能力。
+运行引用由`workflows/runtime/ports.py`按持久项目归属选择提供方，检查和交付通过同一窄端口读取；归属冲突或加载失败不得回退到另一提供方。当前注册官方示例和受支持的普通 Node 应用；普通 Node 通过冻结副本、持久 RUNTIME_LOAD Job 与所有权回执接入，具体加载与存活核对见下文。
 
 Runner 由正式受控 Python 以模块方式启动，不能继承完整父环境。环境按进程角色明确 allowlist：公共运行变量、该角色声明的额外名称和最小 secret references 可以进入；宿主身份、调试凭据、无关 Token 与完整 PATH 污染必须拒绝。
 

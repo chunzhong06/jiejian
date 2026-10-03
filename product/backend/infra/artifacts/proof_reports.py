@@ -5,8 +5,8 @@ import re
 from pathlib import Path
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.artifacts.check_packages import reject_check_links, read_check_bytes
-from product.protocols.proof_sources import ProofPreflightReport, proof_bytes
+from product.backend.infra.artifacts.checks.check_packages import reject_check_links, read_check_bytes
+from product.protocols.preparation.proof_sources import ProofPreflightReport, proof_bytes
 
 
 class ProofReportStore:

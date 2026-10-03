@@ -23,36 +23,34 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from product.backend.core.errors import ErrorCode, JiejianError
-from product.backend.infra.storage.supplemental_materials import SupplementalMaterialRepository
-from product.backend.infra.storage.code_observations import CodeObservationRepository
-from product.backend.infra.storage.environment_operations import EnvironmentOperationRepository
-from product.backend.infra.storage.preparation_recovery import PreparationRecoveryRepository
-from product.backend.infra.storage.development import DevelopmentRepository
-from product.backend.infra.storage.sample_workspaces import SampleWorkspaceRepository
+from product.backend.infra.storage.preparation.supplemental_materials import SupplementalMaterialRepository
+from product.backend.infra.storage.changes.code_observations import CodeObservationRepository
+from product.backend.infra.storage.runtime.environment_operations import EnvironmentOperationRepository
+from product.backend.infra.storage.preparation.preparation_recovery import PreparationRecoveryRepository
+from product.backend.infra.storage.changes.development import DevelopmentRepository
+from product.backend.infra.storage.runtime.sample_workspaces import SampleWorkspaceRepository
 from product.backend.infra.storage.execution.job_control import JobControlRepository
-from product.backend.infra.storage.application_understanding import ApplicationUnderstandingRepository
-from product.backend.infra.storage.business_boundaries import BusinessBoundaryRepository
-from product.backend.infra.storage.rule_candidates import RuleCandidateRepository
-from product.backend.infra.storage.runtime_loads import RuntimeLoadRepository
-from product.backend.infra.storage.proof_sources import ProofSourceRepository
-from product.backend.infra.storage.action_preparation import ActionPreparationRepository
-from product.backend.infra.storage.contracts import ContractVersionRepository
-from product.backend.infra.storage.llm import AIAssistanceSettingsRepository, LLMProfileRepository
-from product.backend.infra.storage.execution_profiles import ExecutionProfileRepository
+from product.backend.infra.storage.applications.application_understanding import ApplicationUnderstandingRepository
+from product.backend.infra.storage.boundaries.business_boundaries import BusinessBoundaryRepository
+from product.backend.infra.storage.boundaries.rule_candidates import RuleCandidateRepository
+from product.backend.infra.storage.runtime.runtime_loads import RuntimeLoadRepository
+from product.backend.infra.storage.preparation.proof_sources import ProofSourceRepository
+from product.backend.infra.storage.preparation.action_preparation import ActionPreparationRepository
+from product.backend.infra.storage.boundaries.contracts import ContractVersionRepository
+from product.backend.infra.storage.settings.llm import AIAssistanceSettingsRepository, LLMProfileRepository
+from product.backend.infra.storage.execution.profiles import ExecutionProfileRepository
 from product.backend.infra.storage.results.evidence import EvidenceIndexRepository
 from product.backend.infra.storage.results.check_publications import CheckPublicationRepository
 from product.backend.infra.storage.results.findings import FindingRepository
 from product.backend.infra.storage.results.finalizations import RunFinalizationRepository
 from product.backend.infra.storage.results.gating import GatingRepository
 from product.backend.infra.storage.execution.jobs import JobEventRepository, JobRepository
-from product.backend.infra.storage.projects import ProjectRepository
-from product.backend.infra.storage.recordings import FlowDraftRevisionRepository, RecordingRepository
-from product.backend.infra.storage.source_changes import SourceChangeRepository
+from product.backend.infra.storage.applications.projects import ProjectRepository
+from product.backend.infra.storage.preparation.recordings import FlowDraftRevisionRepository, RecordingRepository
+from product.backend.infra.storage.changes.source_changes import SourceChangeRepository
 from product.backend.infra.storage.execution.runs import RunRepository
-from product.backend.infra.storage.setup import (
-    PermissionIntentRepository,
-    TestIdentityRepository,
-)
+from product.backend.infra.storage.boundaries.permission_intents import PermissionIntentRepository
+from product.backend.infra.storage.preparation.test_identities import TestIdentityRepository
 
 
 class StorageUnitOfWork:

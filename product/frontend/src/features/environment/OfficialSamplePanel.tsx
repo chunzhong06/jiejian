@@ -1,7 +1,7 @@
 // 官方环境只控制本机示例生命周期和源码条件；审批、材料与结果走普通产品页面。
 import { Alert, Button, Modal, Space } from 'antd'
 import { useRef, useState } from 'react'
-import { experienceApi, type OfficialExperienceDto } from '../../api/experience'
+import { experienceApi, type OfficialExperienceDto } from '../../api/applications/experience'
 import { ApiError } from '../../api/http'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 

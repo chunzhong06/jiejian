@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from product.backend.core.verification.differential import PermissionTwin
 from product.backend.core.verification.checks import CheckDecisionInput
-from product.protocols.execution_v3 import ExecutionAction
+from product.protocols.checks.execution_request import ExecutionAction
 from product.backend.core.verification.facts import (
     ObservedEffect,
     SecurityEffectFact,

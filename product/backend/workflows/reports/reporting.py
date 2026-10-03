@@ -19,8 +19,8 @@ from typing import Any
 from product.backend.core.errors import ErrorCode, JiejianError
 from product.backend.core.lifecycle import RunLifecycle
 from product.backend.core.verification.gating import GateResult
-from product.backend.infra.artifacts.report_reader import ArtifactResultReader
-from product.backend.infra.artifacts.report_store import ReportStore
+from product.backend.infra.artifacts.reports.report_reader import ArtifactResultReader
+from product.backend.infra.artifacts.reports.report_store import ReportStore
 from product.backend.infra.storage import BaseReportFinalizationState
 from product.backend.workflows.reports.published import PublishedResultReader
 from product.protocols import RunnerResult
